@@ -1,269 +1,521 @@
-# The semantic layer: one graph of stories, happenings, entities and claims (design, 2026-11-20)
+# The semantic layer: one main point per story, and fewer searches per run (design, 2026-11-20, cut 2026-11-21)
 
-**Status: a proposal, not ratified.** Written 2026-11-20 between 22:30Z and
-24:00Z by a design agent (Opus, no code, no production access) for the owner's
-request of the same day. Nothing here is built unless
-[current-architecture.md](../current-architecture.md) says so. It replaces the
-plan of [entity-layer-2026-11-20.md](entity-layer-2026-11-20.md) from station
-E3 on, and the graph half of
-[corpus-first-retrieval-and-research-2026-11-18.md](corpus-first-retrieval-and-research-2026-11-18.md).
-Owner decisions with defaults are in section F3; claims to precommit in F4.
+**Status.** Proposal, revised once after two reviews of 57c9ef106 (both REVISE
+FIRST). Nothing here is built unless
+[current-architecture.md](../current-architecture.md) says so. Part 1 is what
+the two landings built tonight, in parallel, need: A, the main-point judgment
+at management's open-or-feed decision; B, fewer searches per run with the read
+before a search on the tape. Part 2, below the line marked **Later**, follows
+and gates neither.
 
-**Owner ruling after this was written (2026-11-20T23:00Z).** "for stories with significant
-overlap we should be revising not making new stories. This way we will
-develop fewer deep stories on key topics rather than many shallow stories
-that cover parts of it... Choir should instead build a singular narrative
-that incorporates all the article as they accumulate over time." This
-overrules decision 2 of section F3 (a development older than 24 hours opens a
-new story linked by `follows`): a development revises the story that holds
-the topic. The boundary, in the owner's words (2026-11-20T23:05Z): "a story stops growing when the
-main point, the main beat changes... before the election, the story could be
-about momentum or ads or debate or what someone said. These are all different
-stories. Then election night, the story is the election results as they're
-coming in. Then the next day, the story is who won and who lost... the point
-is not to put everything in the same story, but that we can use natural
-reasoning to cluster things so that we aren't making new stories every time a
-newspaper has a new story." So the unit of a story is its main point, the
-join is a reasoned judgment and not a threshold, and this document is to be
-amended on that basis before any landing after L2.
+**Rulings worked in.** 2026-11-20: a story is one main point; material on the
+same point revises it; a changed point starts a new story; the boundary is
+judged by reasoning; RLM agents decide, System 1 is a tool. 2026-11-21 (owner,
+verbatim): "raw duplicates may be only 17% but we can probably do more story
+clustering for where they overlap"; of the search levers, "Fewer searches per
+run"; on an unclear pair, "Lean to revising"; on pace, "no, it shouldnt take
+days or weeks to build. you can do this all overnight". Not chosen and deleted
+here: waiting before a story's first search, researching fewer stories,
+relaxing the 1,000 target, any ceiling.
 
-Evidence tags. **M** measured, with the file it comes from. **C** read from
-code at `origin/main` 3620f9232, with file and line. **A** assumed or
-estimated by me. **U** not verified. Ground truth for what exists is
-[semantic-layer-as-built-2026-11-20.md](../evidence/semantic-layer-as-built-2026-11-20.md)
-("the survey"). The prior-art record is used only as a list of ways such
-systems failed; none of its numbers is cited here as fact.
+Tags: **M** measured, **C** code at origin/main db31a7cd1, **E** an evidence
+record, **A** assumed or estimated.
 
 ---
 
-## The design on one page
+## 1. The design on one page
 
-**What the thing is.** The semantic layer is the paper's belief store about
-the world. Every belief is a judgment: someone (System 1, a research agent,
-the owner) decided that a capture reports a happening, that a story is about
-an entity, that two names are one thing. Each judgment has a probability,
-the evidence it read, and a time. The objects the judgments connect
-(captures, stories, happenings, entities, claims, outlets) are nodes in one
-graph, under one id scheme, in one database. Today the judgments are scattered
-over ten homes in six shapes, the events live on a different computer from
-everything they should join, and the agents cannot read any of it.
+**The story.** A story is one main point: one sentence, written at the level
+of the beat, saying what the story is for ("Who won the election and by how
+much", not "the election"). Material that serves the point revises the story;
+when the point moves on, a new story begins and records the one it succeeds.
+On an unclear case the judge leans to revising (owner). So the paper builds a
+few deep stories that take in every article as it arrives, where a newspaper
+prints one per beat.
 
-**The model in five sentences.** A **happening** (the code calls it an event)
-is one occurrence at one place and time; a development is a new happening that
-`follows` the old one, and a long-running situation (a war, a trial) is a
-parent happening that others are `part_of`. An **entity** is a named,
-persistent thing, and an **outlet** is simply an entity of type organization
-whose key is its web domain. A **story** reports happenings (one primary) and
-is about entities; its **claims** are the cited sentences the publish path
-already checks against their captures. Every one of these is an object in the
-Autopaper object graph, so one SQL statement can walk from a capture to its
-happening to the other stories on it, with vectors in the same statement.
-The judgments are records on the deciding computer's tape; the graph rows are
-their projection, and any change (a merge, a split, a retirement) is a new
-record that supersedes the old one and can itself be undone.
+**Where the judgment is made.** In the management task that already decides
+open, feed or decline for every captured poll (model `swe-2-flash`). No new
+run, no new desk, no new model call. The task is shown, for each capture, the
+held stories its nearest captures already belong to (by vector, and by the
+search leads a story's research turned up), each with its main point, plus the
+whole 8-hour page that the stopgap C1b ships. Title words are dropped: the
+stopgap's title-word offer fired on 2 or 3 of about 37 opens and every verdict
+was "different", while showing the whole page moved feeds from 51% to about
+63% of decisions (**E**, the lead's reading of the paper's console,
+2026-11-21).
 
-**What changes for the paper.** The paper opened 982 real stories in one day
-(988 less six test documents). Of them, 171 (17.4%) were a true duplicate of a story opened in the 72 hours before;
-197 (20.1%) were the second or later story on a happening (**M**,
-[duplicate-stories-on-the-paper-2026-11-20.md](../evidence/duplicate-stories-on-the-paper-2026-11-20.md)
-section 2). It happens because nothing checks: management's model is shown the
-50 most recently updated stories, which reach back a median 27 minutes, while
-the earlier story was over 8 hours old for half the duplicates (**M**, same
-file, section 4). With this layer, a new capture is resolved onto a happening
-**before** management sees it; if a live story already reports that happening,
-the capture goes to that story as new material for its next version, by rule,
-and no second story opens. Captures of new happenings still go to management.
-A story whose happening already holds two independent outlets in the corpus
-does not need the web to find its second source. Agents get a typed Go library
-in their cell (`choir.World`) to ask these questions themselves.
+**The search.** A research run sends 3.92 searches; 44% of its later ones go
+out with no page read since the one before (**M**, section 4.1). The fix is the
+caller: a run reads what its last search returned, and what the paper already
+held, before it sends another; its prompt says when to stop; each send records
+what the run held and had read when it asked.
 
-**What I would build first.** Two landings that can start tomorrow, in
-parallel. **L1** (orange) is station C1b, which is already being built. It
-changes management's page from the newest 50 stories to the stories of the
-last 72 hours by time, headlines only. Then the one model that decides open or
-feed can see the earlier story. Today it saw the earlier story for 6 of 171
-duplicates; an 8-hour page would reach 68 (**M**). This design builds on C1b
-and does not redo it. **L2** (red): the event flush records what it was shown
-and what it answered on the tape, reads its work from the ready list instead
-of a memory queue, and widens its shortlist where the hand read found the
-misses. L2 changes no model-call count. Then **L3** moves the happenings into
-the Autopaper object graph and links every story to its happenings at open
-and at publish. It absorbs the `story-events-e5` lane, changed: the lane
-should not land as it stands (section E4).
-
-**What it will not do by itself.** Consolidation saves about 10% to 15% of
-web searches (**M**-based estimate, duplicates file section 3). On its own it
-leaves about 2,800 to 3,200 searches a day, against a target of 1,000. The road to
-under 1,000 searches a day runs through the second outlet: 90% of research runs
-are a story's first run (**E**,
-[research-runs-with-nothing-new-2026-11-20.md](../evidence/research-runs-with-nothing-new-2026-11-20.md)),
-and a first run exists mainly to find a second outlet for the opening claim.
-This design makes "do we already hold two outlets on this happening" a
-lookup. It does not show that the lookup will answer yes often enough to reach
-1,000; section D3 says what would.
+**The numbers.** About 690 research runs a day at 3.92 is about 2,700
+searches. 1,000 a day needs about 1.45 a run. My central estimate after A and
+B is about 1,250 a day (range 1,000 to 1,700), section 4. Reaching under 1,000
+is a bet at p 0.2, not a plan.
 
 ---
 
-## 0. How the problem was reframed (cognitive transforms)
+## 2. The story judgment
 
-1. **Ask what the thing is.** It is not a schema; it is a set of judgments
-   about the world, each with its evidence and probability, plus the objects
-   they connect. That makes provenance, reversibility and calibration
-   properties of the one record kind, not features added later.
-2. **Redefine the problem.** "Every story needs a semantic representation"
-   becomes "every story, capture, happening, entity, claim and outlet must
-   join to the others in one expression". The failing today is the joins, not
-   the extraction: entities exist for 5,775 stories (**M**, survey 6.1),
-   events exist for about 10,153 occurrences (**E**, survey 6.3), citations
-   exist for 202,741 story-capture pairs (**M**). They do not meet.
-3. **Physical bounds.** A join across the paper's SQLite file and corpusd's
-   PostgreSQL cannot be one expression, so the events must move to where the
-   captures, stories, vectors and entities already are. Volumes are small for
-   PostgreSQL: about 237,000 captures, 10,900 stories, 10,150 events, 7,000
-   entities, 1.73 million edges today (**M**, survey 6.1); new per day about
-   10,000 captures and 300 to 560 published stories (**M**, survey 6.2), 982
-   opened stories (**M**, duplicates file). One Jev call per flush, with every
-   question about the flush's captures, is an owner rule. The cheapest unit
-   of model work is a System 1 question at about $0.042 per million input
-   tokens (**A**, derived in the entity design section 8 from SYSTEM1.md
-   surprise 15).
-4. **Map the options for the event home** (section A7): keep events on the
-   computer with a public projection (the E5 lane); move them to the Autopaper
-   object graph with the judgment on the tape (chosen); move everything to the
-   computer (rejected: captures and vectors are shared).
-5. **One mechanism, several jobs.** One flush call per minute answers, for
-   each new capture: its happening, its entities, and, through the happening,
-   which live story it belongs to. It replaces the intake labeller's separate
-   call over the same captures. One record kind (`choir.ontology_act`) carries
-   every change of identity for happenings and entities. One read path
-   (`choir.World`) serves the research desk, management, Texture's scoped
-   reads, the brief and the public pages.
+### 2.1 The answers
+
+For each capture the task holds, one question: which held story's main point
+does it serve?
+
+| Answer | Meaning | What happens |
+|---|---|---|
+| `same S` | serves S's main point | the capture is fed to S (`choir.Feed`, a feed disposition to S's inbox); no story opens |
+| `next S` | about what S is about, but the point has moved on (the count after the campaign, the verdict after the hearing) | a new story opens with its own main point and `succeeds: S` |
+| `new` | a different matter | a new story opens |
+| `decline` | not news for the paper | as today |
+
+Two captures of one task with one new point open one story (the second is fed
+to it in the same task). An unclear case is `same` (owner, 2026-11-21: "Lean
+to revising"), with the reason written.
+
+### 2.2 The main point: one writer, written once
+
+The custodian rule (CLAUDE.md: each data kind has one custodian with sole
+write) decides it. **The main point is a field of the opening cast**, the
+`texture:new` Cast that management's task writes: management's own
+precommitment record, its kind. The open path copies it into the story
+trajectory's subject refs (`store/story_open.go:199-204` already copies the
+opening record's id there, `types.StoryRefOpeningRecord`), and nothing ever
+writes it again. Texture never writes it. That settles seat 2's "two writers"
+and seat 1's drift: there is no rewording, so there is no drift of the
+statement. A story opened before landing A has no main point; the judge is
+shown its headline and lede instead.
+
+**A changed point is refused, not absorbed.** Texture's story has a fixed
+point. When a capture fed to it carries a new point, Texture rejects it
+(`choir.Reject`, `yaegikernel/choir.go:1669-1704`, which today commits a free
+reason with the turn and routes nowhere) with the reason beginning `main point
+moved:` and the new point in one sentence; or `not this main point:` when it
+was fed to the wrong story. Landing A2 (red, after A) makes the host turn
+those two reasons into a record to management, and management's own turn
+re-disposes the capture: a task cannot dispose a capture twice
+(`store/management_tasks.go:458-460`) and `captureDelegable` skips disposed
+captures (`agentcore/management_tasks.go:774-781`), but management's parent
+turn can, and the replaced disposition is kept as an override
+(`store/management_tasks.go:466-475`). For `main point moved` it opens the
+successor with that point and `succeeds: S`. The story itself never changes
+its point.
+
+### 2.3 The two zoom cases
+
+- **One remark against the whole press conference.** A story's point is never
+  widened. A capture of the whole press conference feeds the remark's story
+  only when the remark is what the capture leads with. Otherwise it opens its
+  own story; the remark's story stays, and later captures about the remark
+  feed it.
+- **A second country's reaction.** Words (a condemnation, "an intentional
+  provocation") feed the incident's story. An act with its own consequences
+  (sanctions, an expulsion, a formal request to an alliance, a court filing)
+  is a new story, unless the held story's point already names that act (the
+  UK sanctions story whose point is "the UK and allies sanction settlement
+  firms" takes Australia's sanctions).
 
 ---
 
-## A. What the thing is
+## 3. Landing A: the main-point judgment at the open-or-feed decision
 
-### A1. A story's semantic representation
+**Class: red** (run acceptance of management's casts; the story open path
+writes the story trajectory). Protected surfaces: the `texture:new` Cast
+refusal in `inbox_records.go`, the story trajectory's subject refs, the
+management task's first message. Evidence class: the paper's console and
+ledger after deploy. Rollback: revert (the new subject refs are inert without
+the reader). Review: two seats. `Ring-Expedite`: one published story in five
+repeats one the paper holds.
 
-A published story is represented by the graph facts that hang off its id. All
-of them are already produced somewhere; the design gives them one home and
-one id space.
+**Files and functions (origin/main db31a7cd1).**
 
-- **The happenings it reports.** A `reports_event` edge to each, with a role:
-  `primary` (the occurrence the story is about) or `secondary` (another
-  occurrence it tells, such as background or a related incident). One primary,
-  ties allowed (a roundup).
-- **Its participants.** A `mentions_entity` edge to each entity with the role
-  the story layer already records: `central` or `incidental` (**C**,
-  `types/story_entity.go:30-47`). Finer roles inside a happening (who did what
-  to whom) are not a closed code book; fixed role schemas are one of the
-  prior-art failures. When a question needs one, a research agent writes it
-  as a claim.
-- **Its claims.** Each cited sentence of a version is already an object: a
-  `choir.publication_check` keyed by version and anchor, with one
-  `choir.support_judgement` per cited capture (**C**,
-  `platform/publication_checks.go:42-57`; 506,987 and 305,454 rows, **M**,
-  survey 1.3). That is the claim and its evidence. Nothing new is extracted.
-- **Time.** When we learned it: the capture's `fetched_at`, the happening's
-  `first_seen`, the version's time. When it happened: the capture's
-  `published_at`, and a happening's `occurred`, derived as the earliest
-  publication time of its counted members (no model call).
-- **Place.** A place entity central to the story. There is no separate
-  geography.
-- **Relation to earlier stories.** Same happening: they share a primary
-  `reports_event`. A development: the new story's primary happening
-  `follows` the earlier one's. Background: a `secondary` report of an older
-  happening. A correction: a later version whose claim supersedes the earlier
-  version's claim (versions already carry `supersedes`, 25,557 rows, **M**).
+1. `internal/agentcore/management_opening_page.go`
+   - Delete the title-word matcher: `heldIndex`, `heldStory`,
+     `unspacedScript`, `titleStems`, `newHeldIndex`, `find` (:173-314) and the
+     constants `heldMinShared`, `heldMinOverlap` (:49-52).
+   - Replace `buildHeldSection` (:344-381) with `buildCandidateSection`: per
+     arrival, up to 6 candidate stories, each `{inbox, headline, main_point (or
+     lede when empty), age, version, found_by: ["near:<n>", "lead"]}`, ranked
+     by the number of the arrival's nearest captures the story holds, ties to
+     the newest. Keep the section bound (`managementTaskOpeningSectionTokens`)
+     and its "not listed" note.
+   - Replace `heldVerdicts` (:385) and `requireHeldVerdicts` (:447-503) with
+     `requireJudgment`, refusing a `texture:new` Cast (each refusal a
+     correctness refusal naming the shape, nothing sent) when: `main_point` is
+     missing or under 20 or over 240 characters; a candidate offered for its
+     captures has no answer in `judgment: [{story, answer: same|next|new,
+     why}]`; an answer is `same` (feed S instead); `succeeds` is set without a
+     `next` answer for that story, or two `next` answers are given.
+   - `detailOfDecision` and `choiceDetail` (:505-571) carry the answers and
+     sources for the log line.
+2. `internal/agentcore/management_tasks.go`
+   - `storiesOpeningPage` (:172-205): build candidates from (a) one
+     `CaptureNeighbours` request for the arrivals (the path
+     `eventNeighbours` uses, `event_layer.go:858-900`; limit 12, horizon 14
+     days, timeout 8 s, on failure the section says so and the page alone is
+     shown); (b) each neighbour mapped to its story by its local
+     `CaptureDispositionOf` (`store/management_tasks.go:794`; a feed or open
+     disposition names the story's inbox); (c) each arrival and neighbour
+     mapped by the search leads that returned it (below).
+   - `managementTaskPrompt` (:70): rewritten for the answers, the main point
+     and the two zoom rules, inside the 12,100-character task bound.
+   - The heading `openingHeldHeading` (`management_opening_page.go:57`).
+3. `internal/platform/search_leads.go` and corpusd's route table: a route
+   returning, for capture ids, the story conversations whose searches returned
+   them (`conversation_ids` where `capture_id` is in the list; the columns
+   exist, :80-96; `markSearchLeadsTried` sets `capture_id` when a research run
+   reads a lead). Add `idx_sl_capture` on `(owner_id, computer_id,
+   capture_id)` where not null, built like the others (:103-107). A
+   researchtools client method beside `WriteSearchLeads`
+   (`researchtools/search_leads.go:44`).
+4. `internal/store/story_open.go` `planStoryObjects` (:191): copy the cast's
+   `main_point` and `succeeds` into `subjectRefs` (`types.StoryRefMainPoint`,
+   `types.StoryRefSucceeds`, new constants in `internal/types`).
+   `internal/store/stories.go` `StorySummary` (:23) gains `MainPoint`,
+   read from the trajectory.
+5. `internal/agentcore/management_story_choice.go` (:78): the log line gains
+   `answers=<doc>:<answer>,...`, `sources=near:<n>,lead:<n>`, `main_point=<chars>`
+   and `succeeds=<doc|->`; `scripts/status-story-choice` reads them.
 
-### A2. What "event" means here, and at what grain
+**Entities.** Captures have no entity links today (station E3 stopped; the
+capture side of `mentions_entity` holds no rows, **M**, survey 6.1), so an
+entity candidate would be title words again. Entities join the candidate read
+when captures carry them (Part 2, L4).
 
-**An event is a happening: one occurrence, at one place, at one time.** The
-event layer's definition stays word for word (**C**, `event_layer.go:959`):
-"the occurrence itself, however many outlets report it ... A later
-development of it, another incident of the same story, place or actors, a live
-blog or roundup spanning several incidents, and an opinion or analysis piece
-about a topic are each a different event."
+**Record shapes.**
 
-Why this grain and not a storyline or a topic:
+```json
+// the texture:new Cast's spec (management's precommitment record)
+{"captures": ["<capture id>"],
+ "main_point": "Who won the 2026 election and by how much",
+ "judgment": [{"story": "texture:<doc>", "answer": "next", "why": "the count is over; this is the result"}],
+ "succeeds": "texture:<doc>"}
+// story trajectory subject refs, written once at open
+{"main_point": "Who won the 2026 election and by how much", "succeeds": "<doc>",
+ "opening_record": "<cast record id>"}
+```
 
-- **Corroboration is counted per occurrence.** Two outlets confirm a fact only
-  if they report the same occurrence. A coarser grain fakes corroboration,
-  which is the false-merge history the 0.92 threshold came from (**C**,
-  `event_layer.go:72-77`).
-- **The measured misses were same-occurrence pairs, not grain disputes.** Of 10
-  "should have joined" events in the hand read, all were the same occurrence
-  (the India-Japan 2+2 meeting, the Bukele candidacy) (**E**,
-  [event-join-rate-hand-read-2026-11-20.md](../evidence/event-join-rate-hand-read-2026-11-20.md)
-  section 2a).
-- **The storyline already has a home: the story.** A Texture story is the
-  editorial view over happenings. It reports a primary happening and, by
-  `follows`, its developments. A separate storyline kind would be a second
-  home for what the story already is.
-- **A topic is not an object.** "Energy", "Health" are what vectors and front
-  sections are for. The entity hand read found topics attached as entities
-  (**E**, `entity-layer-baseline-hand-read-2026-11-20.md` section 2); this
-  design keeps them out of both kinds.
+A feed carries no judgment field: its disposition's inbox is the story, and
+the log line records the candidates offered.
 
-How the two hard shapes are held:
+**Prompt and every test tied to it.** `managementTaskPrompt` is bounded by
+`taskPromptBound = 12100` in `internal/agentcore/prompt_cut_test.go:36`; the
+role test is `internal/yaegikernel/management_task_role_test.go`; the overlay
+is `internal/runtimeprompts/overlays/rlm_management_task_runtime.yaml` (read
+by `runtimeprompts/prompts.go`); `management_opening_page_test.go` and
+`inbox_records.go` name `held_check`. Grep every test for `held_check`,
+`held_stories`, `same, follow_up` and the overlay's basename, and run those
+packages (`internal/agentcore` through `scripts/go-test-runtime-shards`,
+`internal/yaegikernel`, `internal/runtimeprompts`, `internal/store`,
+`internal/platform`).
 
-- **A development** (a reaction, a ruling after a hearing, a death toll
-  revised) is a new happening with a `follows` edge to the earlier one. Today
-  `follows` is a field on the event (**C**, `store/world_event.go:34-44`); it
-  becomes an edge so it can be read in both directions and superseded.
-- **An ongoing situation** (the war in Ukraine, the French lycée movement, a
-  trial) is a parent happening with no single time or place, and each
-  occurrence is `part_of` it. The flush never mints a parent. A research
-  agent mints one through `choir.World.Judge` when it sees a recurring pattern
-  (section B4), which is the "promote a recurring pattern" act.
+**Tests first.**
 
-### A3. What an entity is
+1. A capture whose nearest capture was fed to story S gets S as a candidate,
+   S published or not; one whose only link is a search lead of S's run gets S.
+2. No candidate is built from title words: two stories with identical titles
+   and no shared neighbour or lead offer nothing.
+3. Refusals: missing or out-of-bound `main_point`; an offered candidate
+   unanswered; a `same` answer on an open; `succeeds` without `next`; two
+   `next`. Each names the shape and sends nothing.
+4. An open writes `main_point` and `succeeds` into the trajectory's subject
+   refs, and `StorySummary` returns them; a story without them shows its lede.
+5. A neighbours request that fails or times out leaves the page and a note,
+   never a refused open.
+6. The prompt fits 12,100 characters; the role test passes.
 
-The entity design's definition stands (**C**, its section 2): a named,
-persistent person, organization, place, or named product, work or law. Not a
-topic, not an event, not a demonym, not a role without its holder, not the
-capture's own byline outlet. The six types stay; removing one would orphan
-rows.
+**Deployed proof.** `scripts/status-story-choice --since <deploy>` on the
+paper's console: every open carries a main point and an answer for each
+candidate; the share of decisions that are feeds; candidates offered per
+arrival by source. Then the duplicates method re-run on one day's opens by a
+reader who did not build A (C-A1). Numbers the author cannot write: the
+console's lines and the second reader's labels.
 
-Two changes:
+**Claim.** C-A1: on the first full UTC day after A, opened stories that a
+reader who did not build A judges to serve the main point of a story already
+held are at most 8% of opens (from 17.4% exact duplicates, and 24.2% second or
+later, before C1b), and stories first published that day do not fall more than
+10% against the week before. p 0.45. Settle by A's deploy plus 2 days.
 
-- **An outlet is an entity.** An outlet (Reuters, the BBC) is an organization.
-  Its key is `outlet:<registrable domain>`, so a capture's outlet id is a pure
-  function of its URL, with no lookup. When a story is about the BBC, its
-  `mentions_entity` edge points at the same object a BBC capture's outlet
-  does, after one merge of the name-minted "BBC" row into it. The two outlet
-  functions that disagree today (`outlet.Of` and `registrableDomain`, **C**,
-  survey item 8) become one: the registrable domain is the key, and the folds
-  `outlet.Of` hard-codes (`bbc.co.uk` into `bbc.com`) become recorded
-  `merge` acts. Wire services stay what they are: an `origin` field, so two
-  outlets carrying one Reuters story count as one origin (**C**,
-  `event_layer.go:303-321`).
-- **Identity is opaque and stable once minted.** The first entity of a name
-  keeps today's key `ent:<24 hex of the normalised name>` (**C**,
-  `types/story_entity.go:125-133`). A second, different entity with the same
-  normalised name gets `ent:<hash of the name and its opening mention's id>`
-  (the entity design's qualified-id rule). A Wikidata id is a `same_as` act
-  with evidence, not the identity; the four `wd:Q` keyed rows stay valid.
+---
 
-### A4. Claims: first-class, at the cost the publish path already pays
+## 4. The search: the caller fixed
 
-Claims are first-class objects at the grain of a published version's cited
-sentence, because that object already exists (A1) and costs nothing more to
-keep. What is new is one edge, `contradicts`, between two claims, written only
-by a research agent's judgment (section C) or by the correction path (D6).
+### 4.1 What a run does today (M, tonight, 705 searches, 180 runs, 6.3 hours)
 
-Not built, and why. Claims are not extracted from captures. System 1 cannot
-write text, and extraction by a generative model over 10,000 captures a day is
-the "LLM-extracted triples" failure the prior art lists, at a model cost this
-design does not need for any of the owner's goals. A claim with no story
-behind it has no reader yet.
+- 3.92 searches a run; runs sending 1, 2, 3 and 4 or more: 46, 35, 31, 68.
+  The 30 runs that send 7 or more send 45% of all searches. 93% of searches
+  are a story's first run.
+- The median gap before the next search is 32 seconds (25th percentile 5 s).
+  44% of later searches (58 of 133 sampled) go out with no page read since the
+  previous one. Of 6,040 pages returned to 46 ended runs, 547 were read (9%).
+- What later searches ask for, against the one before: a different need 35%,
+  middling overlap 33%, a `site:` hunt for one outlet 19%, a rewording 13%.
+- The need test (`refuseForUnread`, `yaegikernel/search_need.go:138`) refuses
+  at 15 or more unread pages (`searchEnoughUnread`, :24) and refused 47% of
+  attempts (136 of 142 refusals were `holds_unread`; 15 sent over it with
+  `fresh`). `SearchAll` counts unread pages per question key
+  (`search_all.go:176`), so a question worded differently starts at zero and
+  passes with nothing read; the plain verbs count run-wide
+  (`search_store.go:558`). `mostly_seen` caught 0 of 151.
+- The research prompt (`runtimeprompts/overlays/rlm_research_runtime.yaml`)
+  never says when to stop: it says to write the analysed packet "with the next
+  round of searches", its worked cell sends two wordings, and the cast's
+  criterion is "a second independent outlet".
 
-### A5. Kinds and edges: the smallest set
+So a run searches before it has read what it got, and nothing says it is done.
+Not a quota: a run that has read and still lacks something sends the search.
+
+### 4.2 The rule
+
+1. **Read the last search first.** A web search is sent only when, for every
+   earlier search of the run, the run has tried its top 5 pages new to the run
+   (fewer if it returned fewer), or has read from it a page of an outlet new to
+   the story. Tried means read or attempted (a dead link counts once tried, as
+   today). The count is run-wide for every verb, `SearchAll` included. This
+   replaces the 15-unread line.
+2. **The pages the paper already held count first.** The brief already reads
+   the corpus for every research run (`agentcore/research_brief.go:386`,
+   `buildResearchBrief`). Its captures enter the run's search store as search
+   zero, marked held, so rule 1 applies to them: a run's first web search waits
+   until it has tried the top held pages, when there are any. That is the read
+   before a search.
+3. **No `site:` hunt for an outlet the run already holds.** A query naming
+   `site:<domain>` is refused when the run's earlier results or held pages
+   include an untried page from that domain, and the refusal lists those pages.
+4. **Override with a reason.** `choir.SearchFresh(query, why)` sends over rules
+   1 to 3 with a reason of at least 20 characters, recorded.
+   `choir.Search(query, true)` is refused with the message to use
+   `SearchFresh`. No count of sends is limited.
+5. **The stop rule in the prompt.** "Your objective is met when you have read
+   a page from a second independent outlet that supports the claim. Then
+   report; do not search again." The worked cell sends one wording, reads its
+   top pages and stops on that test. "With the next round of searches" is
+   deleted.
+
+### 4.3 The record: what the run held and had read when it asked
+
+The guest passes, with each search start (`yaegikernel.SearchStartPayload`),
+the need state: earlier searches; pages returned, tried and read run-wide;
+held pages from the brief, tried; the outlets read; the verb; `fresh_why`. The
+host writes a run event `search.decision` before it opens the stream
+(`agentcore/desk_search.go:113`, `startSearch`, before `client.Stream` at
+:146), and `search.result` when the stream ends (the `record` callback in
+`forwardSearch`, :178): pages returned, pages new to the corpus, outlets new to
+the story. Refusals stay counted in the guest's summary counts by rule
+(`read_first`, `held_first`, `site_held`). The decision is written before the
+search and the search's leads after it, so a search cannot count its own
+results as held: the failure that stopped the side measurement three times
+([problem record](../problems/search-sufficiency-measurement-three-reviews-no-landing-2026-11-20.md)).
+
+### 4.4 The arithmetic
+
+Base: about 690 runs a day at 3.92 is about 2,700 searches (**M**, tonight's
+rate; the day of 2026-11-20 counted 3,557, **M**). 1,000 a day is about 1.45 a
+run at today's runs.
+
+| Change | What it acts on | Effect (A) |
+|---|---|---|
+| Read the last search first, run-wide (rule 1) | later searches are 2.92 of 3.92 a run; 44% go with no read; rewordings 13% | later searches fall 40% to 55% |
+| Stop rule and one-wording cell (rule 5) | the 7-or-more tail: 30 of 180 runs, 45% of searches | the tail falls to about 3 a run; overlaps the line above |
+| No `site:` hunt for a held outlet (rule 3) | 19% of later searches | most become reads; overlaps rule 1 |
+| Held pages first (rule 2) | first searches, 1.0 a run | unmeasured; 0% to 15% of first searches |
+| Fewer stories open (landing A) | runs: 20.7% of searches went to second-or-later stories | runs fall 10% to 20% |
+
+Together, my central estimate is 2.0 searches a run (range 1.7 to 2.5) on 550
+to 620 runs a day: about 1,250 a day (range 1,000 to 1,700). Under 1,000 needs
+about 1.6 a run with A's fewer runs, or 1.45 without them. Clustering alone
+(A) leaves about 2,200 to 2,400. B does most of the work, and only if runs do
+stop after reading. Claim C-B2 states the bet.
+
+### 4.5 Landing B
+
+**Class: red** (provider calls; the run's tape). Protected surfaces: the search
+verbs' need test, the research prompt, the gateway attribution path, run
+events. Rollback: revert. Review: two seats. `Ring-Expedite`: the paper sends
+about 2,700 web searches a day against 1,000.
+
+**Files and functions.**
+
+1. `internal/yaegikernel/search_need.go`: `searchEnoughUnread` (:24) and
+   `refuseForUnread` (:138) replaced by `refuseUntilRead`: rule 1 per earlier
+   search (top 5 new-to-run pages tried, or a read page from an outlet new to
+   the story); rule 3 for `site:` queries; the refusal texts
+   `unreadRefusal` (:152) rewritten to list the untried pages.
+2. `internal/yaegikernel/search_all.go`: the per-question count at :176 becomes
+   run-wide; `SearchAll` sends one wording per call (its worked use already
+   does, 79 of 79, **E**).
+3. `internal/yaegikernel/search_store.go`: `SearchStart` (:501, need test at
+   :558) and `research_read.go:167` `Search`: the new test; `SearchFresh(query,
+   why)`; `Search(query, true)` refused with the pointer; the need state on
+   `SearchStartPayload`; search zero (held pages from the brief) seeded into
+   the store, marked `Held`.
+4. `internal/agentcore/research_brief.go`: hand the brief's captures (ids, URL,
+   outlet) to the run's search store as search zero.
+5. `internal/agentcore/desk_search.go`: `startSearch` (:113) writes
+   `search.decision`; `forwardSearch` (:178) writes `search.result` through
+   `record`.
+6. `internal/runtimeprompts/overlays/rlm_research_runtime.yaml`: the stop rule;
+   the worked cell with one wording and the stop test; "with the next round of
+   searches" deleted; `SearchFresh` named.
+7. `scripts/status-hourly` and `scripts/status-corpus-reuse`: searches a run by
+   gateway `run=`, the share of later searches with zero reads since the last,
+   the tail of 7 or more, refusals by rule, `fresh_why` sends.
+
+**Tests first.**
+
+1. A second search with the first search's top 5 untried is refused, listing
+   them; trying them lets it through; so does reading one page from an outlet
+   new to the story.
+2. `SearchAll` with a new wording is refused when another question's pages are
+   untried (run-wide).
+3. A first search with held pages from the brief untried is refused; with none
+   held it passes.
+4. `site:example.com` is refused when an untried result from example.com is
+   held; it passes when none is.
+5. `SearchFresh` with a reason under 20 characters is refused; with one, it is
+   sent and the reason is in `search.decision`; `Search(q, true)` is refused.
+6. `search.decision` is written before the stream opens and `search.result`
+   after; a search's own leads never appear as held in its decision.
+7. Every test tied to the research overlay by path: grep the basename over
+   test files; the prompt size and byte-stability tests in
+   `internal/agentcore`; the role tests in `internal/yaegikernel`.
+
+**Deployed proof.** `scripts/status-hourly --history` over the first full UTC
+day after B: gateway search lines a day; searches a run by `run=`; the share of
+later searches sent with zero reads since the previous; stories first
+published that day against the week before. The gateway's lines and the
+publication count are numbers the author cannot write.
+
+**Claims.** C-B1: on the first full UTC day after B, research searches a run
+fall from 3.92 to at most 2.2, and stories first published that day do not
+fall more than 10% against the week before. p 0.55. C-B2: with A and B both
+deployed, one full UTC day has fewer than 1,000 web searches with stories first
+published not more than 10% lower. p 0.20. C-B3: after B, under 10% of later
+searches are sent with no page read since the previous one (from 44%). p 0.70.
+Settle each by its deploy plus 2 days.
+
+---
+
+## 5. After A and B: over-merges and the clustering measure
+
+### 5.1 An over-merged story: seen, and split
+
+Leaning to revising will sometimes blend two points in one story's prose.
+
+- **Seen.** Once a day management casts research (its world-evidence desk; a
+  different desk from the one judged, learning engine rule 1b) to read every
+  story revised that day that took three or more fed captures, up to 40: its
+  main point, its latest version and the fed captures. The run reports, per
+  story, `one point` or `blends`, naming the captures that belong elsewhere.
+  That report is the outcome that settles the task's forecasts for those
+  feeds. The status script prints the day's count; the owner can read any.
+- **Split.** On `blends`, management's parent turn re-disposes the named
+  captures (override kept) into a new story opened with its own point and
+  `split_from: S`, and casts S's Texture desk: "remove the material of
+  captures X and Y; your point is P". Texture writes a new revision; the
+  blended revision stays in the history, superseded. Unblending prose costs one
+  Texture turn. That is the price of leaning to revise, and the daily count is
+  how the owner sees whether it is worth it.
+
+The daily read and the split are landing A3, after A2. Landing A records what
+they need.
+
+### 5.2 Clustering past exact duplicates
+
+The owner expects more than the 17% exact duplicates. What the evidence
+supports: of 982 stories opened in a day, 17.4% repeated a held story, 2.6%
+were clear follow-ups and 4.2% borderline follow-ups, so 24.2% were the second
+or later story on a happening already covered; they took 20.7% of the day's
+searches (**M**, duplicates file sections 2 and 3). The reader of that file
+counted as distinct some stories that overlap in substance without sharing a
+happening (successive Houthi strikes, successive ransomware claims, a carrier
+arriving and another leaving); how many such stories a "lean to revising"
+judge would fold is not measured. Of 22 titled pairs judged under the rule
+(Part 2, section 9), 11 revise, 6 open a successor, 1 is new and 4 are unclear, which the
+owner's ruling now folds. My estimate is that 20% to 30% of opens fold (**A**).
+The measure: the duplicates method re-run on one day after A, labelled by main
+point, counting stories that overlap in substance whether or not they share a
+happening (claim C-A1).
+
+---
+
+## 6. The owner's decisions, with defaults
+
+1. **Settled (2026-11-20 and 2026-11-21).** One main point per story; revise on
+   the same point; a successor on a changed point; no time window; unclear
+   leans to revising.
+2. **Settled (2026-11-21).** Fewer searches per run is the search lever; no
+   wait before a first search, no fewer stories researched, no ceiling, the
+   1,000 target kept.
+3. **The main point is written once, by management, in the opening cast; Texture
+   never rewrites it.** Default: yes. (The alternative, Texture rewording it,
+   is what both reviewers showed drifts.)
+4. **A daily read of over-merges by research, and splits by management (A3,
+   section 5.1).**
+   Default: yes, daily, up to 40 stories.
+5. **Happenings move to the Autopaper object graph later, with research as
+   their judgment authority (Part 2).** Default: yes, after A and B.
+6. **Spending.** A and B add no model call; about 14,000 input tokens a
+   management task for the page (landed) and a few hundred for candidates.
+   Default: proceed.
+
+## 7. What I am least sure of
+
+- Whether runs stop after reading. B removes the excuse to search before
+  reading; whether the read then satisfies the objective is the bet (C-B1,
+  C-B2). If the 7-or-more tail keeps searching with `SearchFresh` reasons, the
+  prompt's stop test is not enough.
+- Whether `swe-2-flash` at low reasoning writes main points at the level of the
+  beat. A point written too narrow makes every detail a new story; too broad,
+  and a story swallows a war. The daily read (5.1) is how it is seen.
+- Whether vectors and leads find the earlier story. The candidate read's recall
+  on the 238 labelled pairs of the duplicates file is measurable before A
+  lands (replay the pairs' opening captures through `buildCandidateSection`);
+  it is not yet measured.
+
+Facts where the reviewers differed, read from code: a vendor's refusal for
+size reaches the caller as a gateway 502, not as a size refusal
+(`agentcore/jev_failure.go:9-14`; the 32,000-token limit for state plus one
+question is `jevbudget.VendorQuestionTokens`, `jevbudget/jevbudget.go:28`).
+Landings A and B add no Jev question, so the flush's size is a question for
+Part 2's L5, to be measured on a real burst flush before the story question
+rides it. Unpublished stories have no row in corpusd (both reviewers), so A's
+candidate read is a host join over the computer's own dispositions, not a
+corpusd story search.
+
+---
+
+**Later.** Everything below follows A and B and gates neither.
+
+---
+
+## 8. The layer after A and B
+
+### 8.1 The model in brief
+
+A **happening** (the code calls it an event) is one occurrence at one place and
+time; a development is a new happening that `follows` the old one; an ongoing
+situation is a parent happening others are `part_of`. An **entity** is a
+named, persistent thing; an **outlet** is an entity of type organization keyed
+by its web domain. A **story** is one main point and reports the happenings
+that serve it. Every judgment (a capture reports a happening, two names are one
+thing) is a record on the deciding computer's tape with its probability and
+evidence; the rows in the Autopaper object graph are their projection, and a
+change is a new record that supersedes the old. Today the judgments sit in ten
+homes in six shapes and events live on the paper computer, apart from the
+captures, stories and vectors they should join (**M**,
+[semantic-layer-as-built-2026-11-20.md](../evidence/semantic-layer-as-built-2026-11-20.md)).
+Prior art is read only for how such systems failed.
+
+### 8.2 Kinds and edges: the smallest set
 
 Every kind below lives in the Autopaper object graph (corpusd's `graph`
 database). Row custodian is the corpusd kernel service, as it already is for
 `choir.entity` (**C**, `kernelservice/kernelservice.go:103-110`). Judgment
-authority is the desk whose tape records the rows project (section A7).
+authority is the desk whose tape records the rows project (section 8.3).
 
 | Kind | What it is | Judgment authority | Id rule (key; canonical is `obj:<kind>:<b64 owner>:key-<sha256 of key>`) | Status |
 |---|---|---|---|---|
@@ -286,14 +538,14 @@ topic answers are absorbed by the flush, L4), and `choir.event_projection`
 | `in_event` | capture, happening | `{"role": opened\|member\|tentative, "record": <tape id>}` | the flush's export | registered, 0 rows; first written in L3 |
 | `reports_event` | publication, happening | `{"role": primary\|secondary, "basis": opened\|cited\|judged}` | the host at open and at publish | **new** (the E5 lane) |
 | `follows` | happening, earlier happening | `{"record": <tape id>}` | flush or Judge | **new** (today a field) |
+| `succeeds` | publication, earlier publication | `{"record": <opening cast id>}` | exported from the story trajectory's `succeeds` ref (landing A) | **new** |
 | `part_of` | happening, parent happening | `{"record": <tape id>}` | Judge only | **new** |
 | `mentions_entity` | publication or capture, entity | `{"role": central\|incidental\|tentative}` | story export; flush export for captures | kept; capture side new |
-| `contradicts` | claim, claim | `{"record": <tape id>}` | Judge only | **new** |
 | `supersedes` | version, version | as today | publish | kept |
 
 Deleted edges: `related_story` (4 rows; its relations `same_incident`,
-`later_development`, `same_subject` are a shared happening, `follows`, and a
-shared central entity), `relies_on` (1 row; "ranks nothing and no desk sees
+`later_development`, `same_subject` are a shared happening, `succeeds` (or no
+second story at all), and a shared central entity), `relies_on` (1 row; "ranks nothing and no desk sees
 it", **C**, `registry.go:357-359`). The eight provenance edges written and
 never read (`was_derived_from`, `was_associated_with`, `attested`,
 `granted_consent`, `authored_review`, `derived_from_proposal`, `owns`,
@@ -304,30 +556,7 @@ parses them (**U**).
 Net: one new object kind, four new edge kinds; three object kinds and two edge
 kinds deleted, eight more edge kinds reviewed for deletion.
 
-### A6. One identity space: today's id forms collapse
-
-Every object has exactly two forms: its canonical id (graph, vectors, edges)
-and its short key (what people and public URLs use). The key determines the
-canonical id given the owner, by `StableSuffixFromKey` (**C**,
-`objectgraph/object.go:124-135, 214`). The verb surface accepts either and
-returns both.
-
-| Concept | Forms today | After |
-|---|---|---|
-| story | `pub-<32 hex>`; canonical `...key-<64 hex>`; Texture `doc_id`; route path; a podcast clip's `story_route` string | canonical plus `pub-` key; `doc_id` maps by the pure `StoryPublicationID` (**C**, `types/story_entity.go:135-140`); a clip's route string becomes a `clip_of` edge later (residual R5) |
-| capture | canonical; a frame handle `r1.c1` in a Texture cell | canonical; the frame handle stays a cell-local alias, never stored |
-| happening | `ev-<20 hex>`, computer-scoped, on the computer only | canonical in the Autopaper object graph; `ev-` key kept, so existing ids survive |
-| entity | `ent:`/`wd:` key; canonical | unchanged |
-| outlet | two functions' strings; `host`, `source_id` | the entity `outlet:<registrable domain>`; `proj_capture_index` gains a derived `outlet_id` column |
-
-The owner part of every id stays. A page captured by two owners is two
-objects, and so is "Anthropic" in two owners' graphs (**C**, survey 1.1).
-That is the privacy boundary, not a defect. The paper's objects are public
-because the paper publishes; another owner's computer reads them as
-candidates and mints its own objects only for what it alone holds (F3,
-decision 7).
-
-### A7. Where it lives, who decides, and the doctrine tension
+### 8.3 Where it lives, who decides
 
 **Decision: happenings move from the paper computer's own store to the
 Autopaper object graph, beside the captures, stories, vectors and entities.**
@@ -335,7 +564,7 @@ Autopaper object graph, beside the captures, stories, vectors and entities.**
 | Option | Joins in one expression | Who can read | Cost |
 |---|---|---|---|
 | Keep events on the computer, corpusd holds a projection (the E5 lane, the entity design 3.3) | only the projection joins; the home does not | the paper, through a key; the public through the projection | two copies of every event; memberships immutable, so no correction; the computer's index is capped at 10,000 events and already drops the oldest (**C**, `event_layer.go:85-86`; about 10,153 events, **E**) |
-| **Move them to the Autopaper object graph; the judgment stays on the tape** | yes | as captures and entities: public objects for all, owner-private ones for their owner | a migration of about 10,000 events and their memberships (section E5) |
+| **Move them to the Autopaper object graph; the judgment stays on the tape** | yes | as captures and entities: public objects for all, owner-private ones for their owner | a migration of about 10,000 events and their memberships (section 10.1) |
 | Move everything to the computer | no: captures and vectors are shared across 35 owners (**M**, survey 1.1) | the computer only | not possible without copying the corpus |
 
 Doctrine allows it. I27 says "the Autopaper object graph and a computer's graph
@@ -361,15 +590,16 @@ is by what the judgment is about:
   happenings, memberships, entity links and ontology acts.
 - **Management decides what the paper does about it.** Open a story, feed it,
   decline it: `choir.capture_disposition` and `choir.management_task` stay
-  management's (**C**, `manifest.go:360-362`). Routing a capture to the story
-  that already reports its happening is a disposition made by rule, so it is
-  management's kind, written by management's rule (section D1). That is the
-  coherence role I26 gives management.
+  management's (**C**, `manifest.go:360-362`). Deciding which story's main
+  point a capture serves is a disposition, so it is management's kind, made by
+  management's task by reasoning (section 2). That is the coherence role I26
+  gives management. The main point itself is part of the story, so its
+  custodian is Texture, which holds the document.
 
 This moves no authority to a new desk and adds no desk. It is a custody change
-of two kinds (red, in L3), and the owner's to ratify (F3, decision 1).
+of two kinds (red, in L3), and the owner's to ratify (section 6, decision 5).
 
-### A8. Canonical and derived, and what records each judgment
+### 8.4 Canonical and derived, and what records each judgment
 
 | Thing | Canonical or derived | Record that made it |
 |---|---|---|
@@ -377,7 +607,10 @@ of two kinds (red, in L3), and the owner's to ratify (F3, decision 1).
 | a happening's membership, mint, `follows` | **canonical: the judgment** | `semantic.flush` tape record (new, L2), on its own channel `semantic:<computer>` |
 | an entity link from a capture | canonical: the judgment | the same `semantic.flush` record (L4) |
 | an entity link from a story | canonical: the judgment | `story.entities` (exists) |
-| a merge, split, retirement, retype, `part_of`, `same_as`, `contradicts` | canonical: the judgment | `semantic.act` tape record (new, L8), citing a `system1.judgment` receipt |
+| which story a capture serves (same, next, new) and `succeeds` | **canonical: the judgment** | the opening cast's `judgment`, or the feed disposition (landing A) |
+| a story's main point | canonical: the statement, written once | management's opening cast (section 2.2) |
+| what a search held and had read when it was sent | canonical: the decision | `search.decision` run event (landing B) |
+| a merge, split, retirement, retype, `part_of`, `same_as`, `contradicts` | canonical: the judgment | `semantic.act` tape record (new; deferred), citing a `system1.judgment` receipt |
 | the graph rows for all of the above | derived: a one-way, re-runnable export of the records | the export carries the record id in the edge metadata |
 | `reports_event` with basis `cited` | derived deterministically from `cites_capture` and memberships | none needed |
 | `reports_event` with basis `opened` | derived from the opening capture's membership | none needed |
@@ -415,22 +648,26 @@ longer holds. It is named, not built in these landings.
 
 ---
 
-## B. Identity and change as judgments
-
-### B1. Three tiers, each where it is cheapest
+### 8.5 Three tiers, each where it is cheapest
 
 | Tier | Used for | Cost | Recorded as |
 |---|---|---|---|
 | Vectors and code (no model) | finding candidates: a capture's nearest captures and their happenings; entity lexicon and token, initials and neighbour lookups (built in E2, **C**, current-architecture "Entity layer ... E2" row); the outlet key; occurred times; counts | an index read | nothing: a candidate is not a belief |
 | System 1 (Jev) | typed questions over candidates with a recorded distribution: which happening, which entity, same thing or not | one call per flush, every question in it | `semantic.flush`, or a `system1.judgment` receipt a `semantic.act` cites |
-| RLM agents (research) | hard cases and the ontology itself: split a conflated entity, mint a parent happening, re-type, decide a contradiction, audit a sample | a research run | `semantic.act`, citing receipts and evidence ids |
+| RLM agents (research; management for stories) | hard cases and the ontology itself: split a conflated entity, mint a parent happening, re-type, decide a contradiction, audit a sample; and every story judgment (section 2), in the management task that already runs | a research run; the management task's existing turn | `semantic.act`, citing receipts and evidence ids; the story judgment in `choir.capture_disposition` |
+
+The order follows the owner's word (2026-11-20): "We're using RLM. We have a
+whole ontology built in" and "we do have the System 1 models as a tool as
+well." Reasoning agents make the judgments that need reasoning; System 1 is
+the cheap first pass whose answer they read. Prior art is read only for how
+such systems failed.
 
 A vector score is never a decision. The duplicates file shows why: story-vector
 cosine 0.85 finds 93 of 100 published duplicate pairs with precision 0.46, and
 0.92 has precision 0.71 (**M**, duplicates file 4.2). Vectors propose; a judge
 decides.
 
-### B2. The flush: one call, every question about its captures
+### 8.6 The flush: one call, every question about its captures
 
 What a flush is today: a minute after the first queued capture, one Jev call
 asks, for each capture, which of up to 30 recent events and 3 vector-neighbour
@@ -442,7 +679,7 @@ captures are the defect SYSTEM1 rule 2 names.
 
 After L4, one flush call asks, for each capture in it:
 
-1. **its happening**: the candidates (B3), each listed once in `state.events`
+1. **its happening**: the candidates (8.7), each listed once in `state.events`
    with its headline, its newest member titles and, when a story reports it,
    that story's headline; plus `after_<e>` for a development, `k<n>` for a
    sibling capture, and `new`;
@@ -452,7 +689,11 @@ After L4, one flush call asks, for each capture in it:
 3. **merge questions** for each pair of candidate happenings or entities the
    flush exposed as possible duplicates ("do these name the same real
    occurrence / thing?"), so a duplicate is asked about exactly when it would
-   split a new link, with no sweep and no schedule.
+   split a new link, with no sweep and no schedule;
+4. **the story question** (from L5): for each intake capture, which candidate
+   story's main point it serves, with choices `same_<s>` and `next_<s>` per
+   candidate story (section 2), `with_k<n>` for a sibling capture of the same flush,
+   and `new`. This is System 1's first pass; the management task decides.
 
 Questions are answered blind to each other (SYSTEM1 rule 1). A split is made
 only where a vendor limit forces it (64,000 tokens a request, 32,000 for the
@@ -464,7 +705,7 @@ state plus one question, 255 options a choice question, **C**, SYSTEM1.md
 for a poll's captures starts when the flush has resolved them. That adds about
 one to two minutes to intake (**A**: the 60-second timer plus one call). It is
 the price of knowing the happening before the open-or-feed choice, and it is
-the owner's call (F3, decision 3).
+the owner's call.
 
 **Work list, retries and restarts** come from the entity design section 4.1,
 unchanged: the flush reads the ready list (captures with a vector, or that will
@@ -476,7 +717,21 @@ up, not resumed work (the entity design's owner question 2, default kept).
 Research reads join happenings (for corroboration and the search state) but
 never route anything: a page research read is not news to the paper.
 
-### B3. What makes a singleton join
+**Before any of this is built (both reviews).** (1) Do not delete the
+in-memory event index in L2: `SearchWireCorpus` and the events route read it
+until L3 and L6. (2) Write an export-pending marker with each `semantic.flush`
+record and replay unexported records before the next Jev call, so a failed
+export does not cause a second, different answer for the same captures.
+(3) Measure the token size of a real burst flush (27 captures were seen)
+before the story question rides it: the vendor's 32,000-token limit for state
+plus one question is real, a size refusal reaches the caller as a gateway 502
+(`agentcore/jev_failure.go:9-14`), and `eventPrepareChunk` trims candidates
+when a one-capture chunk does not fit (`event_layer.go:540-547`), which
+SYSTEM1 rule 6 forbids. Relay the vendor's size reason through
+`gateway/jev.go` and remove the trim in the same landing. (4) Store each
+flush's candidate list once, by short keys, not per capture.
+
+### 8.7 What makes a singleton join
 
 The measured state: 84.1% of questions minted a new event and 2.8% joined
 (**E**, join-rate file section 1); 282 of the 300 newest events had one member
@@ -488,7 +743,7 @@ The measured state: 84.1% of questions minted a new event and 2.8% joined
 | No vector at flush: 78% of questions had none (03:28Z to 05:12Z) | 1 certain, others unknown | the embed kick on capture write (landed 2026-11-20 as E1; effect unmeasured, **U**) plus the ready list, which waits for the vector | E1 done; L2 |
 | Same-flush siblings: the only link is a `k<n>` answer at p of at least 0.92 | 6 | cluster the flush's captures by vector before asking; list each capture's near siblings first among its `k` choices (Jev leans to the first option, **E**, SYSTEM1.md surprise 6); give sibling answers the same three bands as event answers | L2 |
 | The recent slot is the 30 newest events, about 3 minutes of a burst | 4 to 5 | candidates from every distinct happening among the capture's 50 nearest captures within 14 days (today 12 neighbours, at most 3 events, **C**, `event_layer.go:55-59`), bounded only by the vendor's 255 options and token budget | L2 |
-| A neighbour in no event offers nothing (1,074 unmapped in 100 minutes, **E**) | unknown | falls as joins rise; the L10 backfill gives old captures entities, which feed the next slot | L4, L10 |
+| A neighbour in no event offers nothing (1,074 unmapped in 100 minutes, **E**) | unknown | falls as joins rise; a later backfill gives old captures entities, which feed the next slot | L4 |
 | Entities unused for events | unknown | a slot of recent happenings whose members share at least two central entities with the capture (instant from the lexicon, works when the vector is late) | L4 |
 | Fragments minted before their partner existed | unknown | merge questions ride the flush for pairs of recent happenings whose members are near (B2 item 3) | L4 |
 
@@ -498,85 +753,32 @@ and each reader applies its own bar:
 
 - **counted toward corroboration** (outlets, origins): p of at least 0.92, as
   today, because a false merge here fakes a second source;
-- **routes a capture to a live story** (D1): starts at the same 0.92, and is
-  lowered only when the audit (B6) shows precision of at least 0.9 at the lower
-  band, because a wrong feed costs one Texture turn while a duplicate story
-  costs a research run and a public repeat;
-- **shown to management as a likely story**: 0.5 to the routing bar, the
-  tentative band of today (**C**, `event_layer.go:78-79`).
+- **offers a story as a candidate to the story judge** (section 2): any member or
+  tentative (p of at least 0.5, the tentative band of today, **C**,
+  `event_layer.go:78-79`). A membership never routes a capture by itself: two
+  stories with different main points can report one happening.
 
 No new threshold is invented on day one. The record makes each one movable
 later with no re-ask (SYSTEM1.md 5.4: "keep stored answers so re-routing under
 a new threshold costs no calls").
 
-### B4. Changing the ontology: merge, split, retire, re-type, promote
-
-Every change is a `choir.ontology_act`, recorded on the tape first as a
-`semantic.act`, and exported. Nothing is overwritten.
-
-- **Merge** (two ids, one thing): the act names the merged id and the
-  survivor (the one with more central story mentions, ties to the older:
-  deterministic, so a replay chooses the same). Edges are never rewritten.
-  Every read resolves the chain of merges when it reads, so a merged id stays a
-  valid address that answers with its survivor. Cycles are refused at write.
-  Automatic at p of at least 0.92 when the question rode the flush; otherwise
-  a research agent's act.
-- **Retire** (not an entity: "Chinese", "Markets"): a merge into nothing. A
-  retired id answers "retired", never 404. Its name goes on the stoplist. This
-  is how the 29% of story attachments that are not entities (**E**, baseline
-  section 2) stop attaching.
-- **Split** (one id, two things: the second John Smith; Parliament on four
-  countries' parliaments, **E**, baseline section 4): a research agent names
-  the new entity and the mentions it takes. The moved edges are tombstoned and
-  re-created on the new id under one act. A split detector (an entity whose
-  mentions' neighbourhoods fall into two disjoint groups) lists candidates in
-  the status read; it never splits by itself.
-- **Re-type** (a person filed as an organization): an act that changes the
-  type the reads return.
-- **Promote a pattern** (`part_of`): when a research agent sees three or more
-  happenings of one ongoing situation, it mints the parent happening and links
-  the children. The same act kind can later promote a new entity type when the
-  category-gap counter shows demand ("Ebola is a disease", the entity design
-  section 2); adding a type is a registry change and the owner's.
-- **Undo** is a later act that supersedes the earlier one (`superseded_by`
-  exists on every object, **C**, `objectgraph/object.go:36`). History stays;
-  the reads follow the newest act. An owner undo is an owner act on the tape.
-
-A person merge needs stronger evidence than other kinds (same-name conflation
-is the documented failure for people): the flush never merges two people; only
-a research agent's act with at least two pieces of distinguishing evidence
-(different outlets' captures naming the same role and place) can.
-
-### B5. Time: only as far as it pays
-
-- **When we learned it** is on everything: `fetched_at`, the record's time,
-  `first_seen`. It is what "new since T" and "what did we believe at T" read.
-  It pays at once: the search state (D3), the story diff (C, question 2) and
-  the audit all need it.
-- **When it was true** is kept only where a reader exists: a capture's
-  `published_at`, a happening's derived `occurred`. Validity intervals on
-  facts between entities (who held which office when) are not built: no
-  question the paper asks today needs them, and they would need relation
-  facts this design does not extract.
-- **Superseding, never overwriting** holds for judgments (acts and re-asked
-  memberships tombstone the old edge and point at the new record), for
-  claims (versions supersede versions), and for ids (merges resolve at read).
-
-### B6. Quality, measured continuously by someone other than the writer
+### 8.8 Quality, measured by someone other than the writer
 
 Each judgment is a forecast with a probability: the learning engine's first
 stroke (**C**, `learning-engine.md` sections 1 to 3). The design gives it
 three teachers, none of which is the flush:
 
-1. **Texture, on every routed feed.** When a capture is routed to a story by
-   rule, Texture either uses it (cites it, or revises from it) or marks it
-   unused with a reason (I15: every source is cited, toolbar or marked unused,
-   **C**, `choir-doctrine.md:333-339`). That is an outcome the flush cannot
-   write. Each routed feed settles its membership forecast true or false. How
-   cleanly the mark-unused reason can be read as "wrong story" is **U**; L5
-   adds the reason code if it is not there.
-2. **An audit sample, judged by a research run.** A uniform 3% of each day's
-   flush decisions (memberships, mints, entity links), seeded so anyone can
+1. **Texture, on every feed.** When management judges that a capture serves a
+   story's main point, Texture either uses it (cites it, or revises from it)
+   or marks it unused with a reason (I15: every source is cited, toolbar or
+   marked unused, **C**, `choir-doctrine.md:333-339`). That is an outcome
+   neither the flush nor management can write. Each feed settles management's
+   story forecast and the flush's story answer true or false. L5 adds two
+   reason codes, `not this main point` and `main point moved` (section 2); whether
+   today's reasons can be read that way is **U**.
+2. **An audit sample, judged by a desk that did not make it.** A uniform 3% of each day's
+   flush decisions (memberships, mints, entity links) and of management's
+   story judgments, seeded so anyone can
    redraw it, is cast to a research run once a day by management (the first
    management turn after 00:00Z; a crashed audit run is not resumed, the next
    day's covers it). The run reads the captures themselves, never System 1's
@@ -593,823 +795,125 @@ Rule 1b note: the audit run is research, and research is also the judgment
 authority for the flush. The flush is System 1 driven by a host loop; the
 audit is an RLM run that reads the evidence afresh. They are different
 actors, but the same desk. If the owner wants a stricter separation, the audit
-can be a Texture-free management task instead (F3, decision 9).
+can be a Texture-free management task instead, as 8.8 now says.
 
 ---
 
-## C. The agent's side: `choir.World`
+Seat 1's point is taken: the flush declares research, so its audit is a
+management task; research audits management's story judgments (section 5.1).
 
-### C1. What it is
-
-A typed Go library in the cell: one value `choir.World` with six methods, in
-the pattern `choir.Searches` already uses (**C**, `yaegikernel/choir.go:457`).
-Each method is one host action over the frame protocol, answered by one corpusd
-request. The agent composes them in Go. There is no query language: a free
-query language invites invented ids and malformed joins, and the agent already
-writes Go. Every result is a struct with ids and provenance, never prose.
-
-Design rules:
-
-- **Ids in, ids out.** Every object carries its canonical id and its key.
-  `choir.Ref` turns any public form into an id without a read.
-- **Vector and graph in one call.** `Find` runs the vector search, the BM25
-  half and the graph filters (in this happening, about this entity, from this
-  outlet, cited by no story) in one corpusd statement, as the ranked corpus
-  answer already joins vectors to `cites_capture` (**C**, survey section 3,
-  `capture_rank.go:629`).
-- **Bounds are part of the type.** Every read takes a `Limit` (default 25, at
-  most 200) and returns a `Bound` with `Complete` and a cursor. `Walk` takes at
-  most four hops. Every read has a deadline (4 s for the vector half, as today;
-  8 s for the request). These bound a read, not a model call.
-- **No cap on System 1 questions.** `Ask` sends every question in one call and
-  splits only where a vendor limit refuses, naming the limit. The 12-question
-  cap of today's verb (**C**, `yaegikernel/system1.go:26`) and the story
-  analysis's two calls that follow from it (**C**, `story_analysis.go:322-347`)
-  are deleted (SYSTEM1 rule 7).
-- **Custody by the surface, not by the agent.** The host runs every read as
-  the run's owner and computer (C5).
-
-### C2. The types
-
-```go
-package choir // what a cell sees; served by the host action "world"
-
-type ID string // always canonical: "obj:<kind>:<b64 owner>:<suffix>"
-
-// Ref turns a public form into an ID with no read: "pub-…", "ev-…",
-// "ent:…", "wd:Q…", "outlet:bbc.com", a held capture's URL, or an ID.
-func Ref(s string) (ID, error)
-
-type Prov struct {
-	By     string    // "research:flush", "research:run-…", "owner", "rule"
-	Record string    // the tape record of the judgment
-	P      float64   // the probability the decision rested on; 0 for a rule
-	Rule   string    // "member p>=0.92", "cited>=2 or 30%", "opened"
-	At     time.Time // when we learned it
-}
-
-type Bound struct {
-	Complete bool     // false: more exists past Limit or the deadline
-	Next     string   // cursor for the next page
-	Ms       int      // time the read took
-	Labels   []string // labels this read added to the run
-}
-
-type Link struct {
-	To   ID
-	Role string // member|tentative|opened, primary|secondary, central|incidental
-	Prov Prov
-}
-
-type Capture struct {
-	ID, Outlet                 ID
-	URL, Title, Lead, Language string
-	Published, Fetched         time.Time
-	Intake                     bool  // a source poll's, not a research read
-	Event                      *Link // nil until a flush resolved it
-	Labels                     []string
-}
-
-type Event struct {
-	ID                            ID
-	Key, Headline                 string // Key is "ev-…"
-	FirstSeen, LastSeen, Occurred time.Time
-	Members, Intake               int  // counted members; of them, from polls
-	Outlets                       []ID // distinct outlets of counted members
-	Origins                       int  // distinct origins: a wire story counts once
-	Follows, PartOf, Into         ID   // Into is set when merged
-	Prov                          Prov
-}
-
-type Story struct {
-	ID              ID
-	Key, Title      string // Key is "pub-…"
-	Route           string
-	Published       bool
-	Latest          ID // latest version
-	LatestAt        time.Time
-	Events          []Link // reports_event
-}
-
-type Entity struct {
-	ID                  ID
-	Key, Name, Type     string
-	Aliases             []string
-	Into                ID   // set when merged
-	Retired, Public     bool // Public: a person served on public pages (C5)
-	Prov                Prov
-}
-
-type Claim struct {
-	ID, Story, Version ID
-	Text               string
-	Cites              []ID
-	Support            string // the support verdict
-}
-
-type Objects struct {
-	Captures []Capture
-	Events   []Event
-	Stories  []Story
-	Entities []Entity
-	Claims   []Claim
-	Missing  []ID // not found, or not visible to this run
-	Bound    Bound
-}
-
-type Edge struct {
-	From, To ID
-	Rel      Rel
-	Role     string
-	Prov     Prov
-}
-type Edges struct {
-	Edges []Edge
-	Bound Bound
-}
-
-type Hit struct {
-	ID             ID
-	Kind           string   // capture|story|event|entity|claim
-	Score          float64  // cosine for the vector half, else BM25 rank
-	Why            []string // text, meaning, story, event, entity
-	Title, Passage string
-	At             time.Time
-}
-type Hits struct {
-	Hits  []Hit
-	Bound Bound
-}
-
-type Query struct {
-	Text                  string // embedded once; also searched as words
-	Like                  ID     // or: near this object's vector
-	Kinds                 []string
-	Since, Until          time.Time
-	Event, Entity, Outlet ID   // graph filters, joined in the same statement
-	Uncited               bool // captures no story version cites
-	Limit                 int  // 0 means 25; at most 200
-}
-
-type Opt struct {
-	Since, Until time.Time
-	Role         string
-	MinP         float64
-	Within       ID  // required to read a non-public person's mentions (C5)
-	Limit        int // 0 means 25; at most 200
-}
-
-type Hop struct {
-	Rel   Rel
-	Role  string
-	Since time.Time
-	Limit int // per node at this hop; at most 200
-}
-type Paths struct {
-	Paths [][]Edge
-	Bound Bound
-}
-
-type Rel string
-
-const (
-	Members     Rel = "members"      // event -> captures
-	EventOf     Rel = "event_of"     // capture -> event
-	ReportedBy  Rel = "reported_by"  // event -> stories
-	Reports     Rel = "reports"      // story -> events
-	Cites       Rel = "cites"        // version -> captures
-	CitedBy     Rel = "cited_by"     // capture -> stories (Prov names the version)
-	Mentions    Rel = "mentions"     // story or capture -> entities
-	MentionedIn Rel = "mentioned_in" // entity -> stories and captures
-	Follows     Rel = "follows"      // event -> the earlier event
-	FollowedBy  Rel = "followed_by"  // event -> later events
-	PartOf      Rel = "part_of"      // event -> parent event
-	Parts       Rel = "parts"        // parent event -> events
-	Published   Rel = "published"    // outlet -> captures
-	Claims      Rel = "claims"       // story -> its latest version's claims
-	Contradicts Rel = "contradicts"  // claim -> claims
-)
-
-type Question struct {
-	ID, Text string
-	Choices  []string
-	About    []ID     // any objects; the host renders each one itself
-	Passages []string // text the cell read, as today's verb allows
-}
-type Answer struct {
-	ID string
-	P  map[string]float64 // the distribution, as the judge gave it
-}
-type Answers struct {
-	Receipt string   // "system1:<record id>"
-	Answers []Answer
-	Split   string   // empty, or the vendor limit that forced a second call
-}
-
-type Act struct {
-	Op              string // merge|split|retire|retype|part_of|follows|same_as|not_same|contradicts|audit
-	Subject, Object ID
-	Type            string // for retype, and split's new entity
-	Moves           []ID   // for split: the mentions that move
-	Receipt, Question string // the System 1 answer the act rests on
-	Reason          string   // at least 20 characters when the act goes against the top answer
-	Evidence        []ID
-}
-type Receipts struct {
-	Recorded []string // tape record ids
-	Exported bool
-	Error    string
-}
-```
-
-### C3. The verbs, their cost and their custodian
+### 8.9 `choir.World`: the verbs
 
 | Verb | Signature | One call does | Cost | Custodian of what it reads or writes | Grant and holders |
 |---|---|---|---|---|---|
-| `Get` | `Get(ids ...ID) (Objects, error)` | reads up to 200 objects of any kind by id, merges resolved | one corpusd read by exact ids; tens of ms (**A**) | rows: corpusd | `semantic.read`: research, management; Texture scoped to its own story's events |
+| `Get` | `Get(ids ...ID) (Objects, error)` | reads up to 200 objects of any kind by id, merges resolved | one corpusd read by exact ids; tens of ms (**A**) | rows: corpusd | `semantic.read`: research, management (Texture gets no world read: it "never fetches the world", `deskmanifest/manifest.go:372-373`) |
 | `Find` | `Find(q Query) (Hits, error)` | hybrid search with graph filters | one query embed (median 0.26 s for longer queries, **M**, current-architecture "Vector index" row) plus one statement; 4 s vector deadline | corpusd | `semantic.read` |
 | `Neighbors` | `Neighbors(id ID, rel Rel, o Opt) (Edges, error)` | one typed hop with filters | one indexed edge read | corpusd | `semantic.read` |
 | `Walk` | `Walk(from ID, hops ...Hop) (Paths, error)` | up to four hops in one request | one request; at most 200 per node a hop and 2,000 nodes in all; 8 s | corpusd | `semantic.read` |
 | `Ask` | `Ask(qs ...Question) (Answers, error)` | System 1 over any objects, every question in one call | one Jev call; tokens by the rendered objects (about $0.0001 for a 2,000-token call, **A**) | the System 1 kernel service; `system1.judgment` on the tape | `system1.call`: research (as today, **C**, `deskmanifest/grants.go:144`) |
 | `Judge` | `Judge(acts ...Act) (Receipts, error)` | records ontology acts and exports them | a tape append and one corpusd export; no model call | research is the authority; rows corpusd | `semantic.judge`: research only |
+| `Held` | `Held(story ID, objective string) (Held, error)` | what the paper holds on the story's main point, as of one corpus sequence, with a verdict on whether a web search would bring anything new (section 4) | one corpusd request; no model call | corpusd rows; the run's own tape for the decision | `semantic.read`; the host's search path calls the same read itself |
 
 The reads replace the event half of `SearchWireCorpus`, which is an in-memory
 substring match over the newest 3,000 events (**C**,
 `researchtools/corpus_events.go:54`). `SearchWireCorpus` keeps its capture and
 published halves until `Find` has carried a week of research runs, then folds
-into it. `Relate` and `RelateStories` stay until `Judge` covers them (L8,
-L9).
-
-### C4. Ten questions, as the agent would write them
-
-Helpers an agent defines once in its cell are written inline. Errors are
-printed, not hidden.
-
-**1. Which published stories already report this happening?** (consolidation)
-
-```go
-r, err := choir.World.Get(capID)
-if err != nil || len(r.Captures) == 0 {
-	fmt.Println("no capture:", err, r.Missing)
-	return
-}
-c := r.Captures[0]
-if c.Event == nil {
-	fmt.Println("not resolved yet; the next flush answers it")
-	return
-}
-er, _ := choir.World.Get(c.Event.To)
-ev := er.Events[0]
-look := []choir.ID{ev.ID}
-if ev.Follows != "" { // a development belongs with the story of what it follows
-	look = append(look, ev.Follows)
-}
-for _, id := range look {
-	rs, err := choir.World.Neighbors(id, choir.ReportedBy, choir.Opt{Since: time.Now().Add(-72 * time.Hour)})
-	if err != nil {
-		fmt.Println(err)
-		continue
-	}
-	for _, e := range rs.Edges {
-		fmt.Println(e.From, e.Role, e.Prov.Rule, "via", id, "p", c.Event.Prov.P)
-	}
-}
-```
-
-**2. What is new about this happening since the story's last version?**
-
-```go
-sr, _ := choir.World.Get(storyID)
-s := sr.Stories[0]
-var primary choir.ID
-for _, l := range s.Events {
-	if l.Role == "primary" {
-		primary = l.To
-	}
-}
-cited := map[choir.ID]bool{}
-cs, _ := choir.World.Neighbors(s.Latest, choir.Cites, choir.Opt{Limit: 200})
-for _, e := range cs.Edges {
-	cited[e.To] = true
-}
-ms, _ := choir.World.Neighbors(primary, choir.Members, choir.Opt{Since: s.LatestAt, Role: "member", Limit: 200})
-var fresh []choir.ID
-for _, e := range ms.Edges {
-	if !cited[e.From] {
-		fresh = append(fresh, e.From)
-	}
-}
-got, _ := choir.World.Get(fresh...)
-for _, c := range got.Captures {
-	fmt.Println(c.Fetched.Format(time.RFC3339), c.Outlet, c.Intake, c.Title)
-}
-fmt.Println(len(fresh), "new since", s.LatestAt.Format(time.RFC3339), "complete:", ms.Bound.Complete)
-```
-
-**3. Everything we hold about this entity since T, with sources.**
-
-```go
-hs, _ := choir.World.Find(choir.Query{Text: "Pete Hegseth", Kinds: []string{"entity"}, Limit: 3})
-ent := hs.Hits[0].ID
-since := time.Now().Add(-48 * time.Hour)
-ed, err := choir.World.Neighbors(ent, choir.MentionedIn, choir.Opt{Since: since, Limit: 200})
-if err != nil {
-	fmt.Println(err) // a non-public person needs Opt.Within (C5)
-	return
-}
-for _, e := range ed.Edges {
-	fmt.Println(e.From, e.Role, e.Prov.By, e.Prov.P, e.Prov.At.Format(time.RFC3339))
-}
-// and the happenings it is central to, in the same request
-ps, _ := choir.World.Walk(ent,
-	choir.Hop{Rel: choir.MentionedIn, Role: "central", Since: since, Limit: 100},
-	choir.Hop{Rel: choir.Reports, Role: "primary", Limit: 2})
-for _, p := range ps.Paths {
-	fmt.Println(p[0].To, "->", p[1].To)
-}
-```
-
-**4. Which stories contradict each other on this happening?**
-
-```go
-rs, _ := choir.World.Neighbors(ev, choir.ReportedBy, choir.Opt{})
-var ids []choir.ID
-for _, r := range rs.Edges {
-	cl, _ := choir.World.Neighbors(r.From, choir.Claims, choir.Opt{Limit: 40})
-	for _, e := range cl.Edges {
-		ids = append(ids, e.To)
-	}
-}
-got, _ := choir.World.Get(ids...)
-cls := got.Claims
-var qs []choir.Question
-for i := range cls {
-	for j := i + 1; j < len(cls); j++ {
-		if cls[i].Story == cls[j].Story {
-			continue
-		}
-		qs = append(qs, choir.Question{
-			ID:      fmt.Sprintf("p%d_%d", i, j),
-			Text:    "Do these two statements disagree about a fact of the same occurrence?",
-			Choices: []string{"contradict", "agree", "different facts", "cannot tell"},
-			About:   []choir.ID{cls[i].ID, cls[j].ID},
-		})
-	}
-}
-ans, err := choir.World.Ask(qs...) // one call, every pair
-if err != nil {
-	fmt.Println(err)
-	return
-}
-var acts []choir.Act
-for k, a := range ans.Answers {
-	if a.P["contradict"] >= 0.8 {
-		acts = append(acts, choir.Act{Op: "contradicts", Subject: qs[k].About[0], Object: qs[k].About[1],
-			Receipt: ans.Receipt, Question: a.ID})
-	}
-}
-rec, err := choir.World.Judge(acts...)
-fmt.Println(len(acts), "contradictions recorded", rec.Recorded, err)
-```
-
-**5. Who are the central entities across the stories citing this outlet this week?**
-
-```go
-o, _ := choir.Ref("outlet:reuters.com")
-ps, _ := choir.World.Walk(o,
-	choir.Hop{Rel: choir.Published, Since: time.Now().AddDate(0, 0, -7), Limit: 200},
-	choir.Hop{Rel: choir.CitedBy, Limit: 5},
-	choir.Hop{Rel: choir.Mentions, Role: "central", Limit: 12})
-stories := map[choir.ID]map[choir.ID]bool{} // entity -> stories
-for _, p := range ps.Paths {
-	story, ent := p[1].To, p[2].To
-	if stories[ent] == nil {
-		stories[ent] = map[choir.ID]bool{}
-	}
-	stories[ent][story] = true
-}
-type row struct {
-	id choir.ID
-	n  int
-}
-var rows []row
-for id, s := range stories {
-	rows = append(rows, row{id, len(s)})
-}
-sort.Slice(rows, func(i, j int) bool { return rows[i].n > rows[j].n })
-for i := 0; i < len(rows) && i < 10; i++ {
-	fmt.Println(rows[i].n, rows[i].id)
-}
-fmt.Println("complete:", ps.Bound.Complete)
-```
-
-**6. Captures like this text that belong to no story.**
-
-```go
-h, _ := choir.World.Find(choir.Query{
-	Text: passage, Kinds: []string{"capture"}, Uncited: true,
-	Since: time.Now().Add(-48 * time.Hour), Limit: 20,
-})
-for _, x := range h.Hits {
-	fmt.Printf("%.3f %s %s %v\n", x.Score, x.ID, x.Title, x.Why)
-}
-```
-
-**7. Walk from a capture to its happening, to the happening's other captures, to their stories.**
-
-```go
-ps, _ := choir.World.Walk(capID,
-	choir.Hop{Rel: choir.EventOf},
-	choir.Hop{Rel: choir.Members, Role: "member", Limit: 50},
-	choir.Hop{Rel: choir.CitedBy, Limit: 5})
-for _, p := range ps.Paths {
-	fmt.Println(p[0].To, p[1].To, p[2].To, p[2].Prov.Rule)
-}
-```
-
-**8. Are these two entities the same thing? If so, merge them.**
-
-```go
-a, _ := choir.Ref("ent:5d0c2f6e1a9b3c7d8e4f0a12") // "U.S."
-b, _ := choir.Ref("ent:9a1b2c3d4e5f60718293a4b5") // "United States"
-ans, _ := choir.World.Ask(choir.Question{
-	ID: "same", Text: "Do these two entries name the same real thing?",
-	Choices: []string{"same", "different", "first is not an entity", "second is not an entity"},
-	About:   []choir.ID{a, b},
-})
-if p := ans.Answers[0].P["same"]; p >= 0.92 {
-	rec, err := choir.World.Judge(choir.Act{Op: "merge", Subject: a, Object: b,
-		Receipt: ans.Receipt, Question: "same"})
-	fmt.Println(rec.Recorded, err)
-} else {
-	fmt.Println("not merged; p(same) =", p)
-}
-```
-
-**9. What happened after this happening?** (its follow-up chain)
-
-```go
-cur, seen := ev, map[choir.ID]bool{}
-for depth := 0; depth < 6 && cur != "" && !seen[cur]; depth++ {
-	seen[cur] = true
-	nx, _ := choir.World.Neighbors(cur, choir.FollowedBy, choir.Opt{Limit: 5})
-	if len(nx.Edges) == 0 {
-		break
-	}
-	er, _ := choir.World.Get(nx.Edges[0].To)
-	fmt.Println(depth, er.Events[0].FirstSeen.Format("01-02 15:04"), er.Events[0].Headline)
-	cur = nx.Edges[0].To
-}
-```
-
-**10. Do we already hold two independent outlets on this happening, so the
-web is not needed?**
-
-```go
-er, _ := choir.World.Get(ev)
-e := er.Events[0]
-if e.Origins >= 2 {
-	ms, _ := choir.World.Neighbors(e.ID, choir.Members, choir.Opt{Role: "member", Limit: 50})
-	for _, m := range ms.Edges {
-		fmt.Println("held:", m.From) // read these with ReadCapture; no web search for a second source
-	}
-} else {
-	fmt.Println("one origin held:", e.Outlets, "- search the web for what is new since", e.LastSeen.Format(time.RFC3339))
-}
-```
-
-### C5. Custody and privacy, enforced by the surface
-
-- **Owner and computer.** Every read runs as the run's owner and computer.
-  Corpusd returns public objects (the paper's, publishers') and the owner's
-  own objects, and nothing else. A private computer's objects never reach
-  another owner's run. This is the capture rule today (**C**, survey section
-  5), applied to every kind.
-- **Labels.** Each returned object carries its labels. The host adds their
-  union to the run's label set, as `SearchWireCorpus` does (**C**,
-  `types/labels.go:8-25`: "a derived value carries the union of its inputs'
-  labels"). The disclosure gate then treats the run as it does today; the
-  surface removes nothing from it.
-- **Grants.** `semantic.read` for research, management, and Texture with
-  every read forced to `Within` its own story's happenings (Texture "reads the
-  captures its frame names; it never fetches the world", **C**,
-  `manifest.go:367-370`). `semantic.judge` for research only. `Ask` keeps
-  `system1.call`, research only.
-- **People.** A person entity is public when it has a Wikidata id or is
-  central in two public stories (the E2 rule, **C**, current-architecture "E2"
-  row). For a person who is not public, `Neighbors(person, MentionedIn, …)`
-  answers only with `Opt.Within` set to a happening or a story, and refuses
-  otherwise with the reason. That is a correctness refusal, not a switch: it
-  stops any desk, or any page built on the surface, from assembling a dossier
-  on a private person across stories. The public entity page keeps the same
-  rule.
-
-### C6. What the surface costs a day
-
-Reads cost no model call. Their load is index reads on tables that hold 2.3
-million objects and 1.7 million edges (**M**, survey 6.1). The new indexes are
-`og_edges (from_id, kind)` for forward hops, and `proj_capture_index (outlet_id,
-fetched_at)` for the outlet hop, both built concurrently (as the E2 index is,
-**C**, current-architecture "E2" row). `Ask` costs one Jev call per use. How
-many a research run makes is unknown (**U**); the owner rule is to fix a caller
-that asks too often, not to cap it.
-
----
-
-## D. What it makes possible
-
-### D1. Consolidating overlapping stories, end to end
-
-What happens to a polled capture after L5:
-
-1. **Arrival.** A source poll writes captures. The embed worker is woken
-   (landed, E1). The flush timer arms.
-2. **The flush.** One call resolves each capture onto a happening, its
-   entities, and merge questions (B2). The `semantic.flush` record is written;
-   the rows are exported.
-3. **The route, by rule, as management's disposition.**
-   - The capture is a counted member (p at least the routing bar) of a
-     happening H, or of a development of H (`after_H`), and a live story S
-     reports H as primary. "Live" means S was revised in the last 72 hours,
-     published or not. Then the host writes a `choir.capture_disposition` of
-     kind feed to S, as management's rule, and delivers the capture to S's
-     Texture inbox as a feed. Management's task does not see it as an open
-     candidate; its records list it as "routed to S by rule".
-   - The capture is tentative on such an H (0.5 to the bar). Management's
-     task gets it with "likely story S (p)" beside it, and decides.
-   - Otherwise (a new happening, or one no live story reports): management
-     decides open, feed or decline, as today.
-4. **The open.** When management opens a story from a capture, the host
-   writes `reports_event` (role primary, basis `opened`) from the opening
-   capture's happening. So a story is linked to its happening from its first
-   minute, published or not. That matters: the earlier story was unpublished
-   in 39% of the duplicate pairs (**M**, duplicates file 4.2).
-5. **The publish.** At each publish the host recomputes `reports_event` with
-   basis `cited` by the E5 rule (two cited captures or 30% are counted
-   members; primary has the most) (**C**, E5 lane `story_events_source.go`).
-   An `opened` primary that the cited rule disagrees with stays, as
-   `secondary`, until Texture's next version.
-6. **Texture decides.** A fed capture is evidence. Texture uses it in the next
-   version or marks it unused with a reason (I15). Either way the routing
-   forecast is settled (B6).
-
-**Developments.** A capture whose answer is `after_H` (a development) routes to
-H's story only when that story was revised in the last 24 hours; otherwise it
-opens a new story, linked by `follows`. Follow-ups sit a median 26.6 hours
-after the earlier story (**M**, duplicates file 2), and a real development
-can deserve its own headline (Huang resigned; the Senate passed the bill,
-same file, option 4's risk). This window is the owner's call (F3, decision
-2).
-
-**What sets the routing threshold.** Three things, in order:
-
-1. **The labelled pairs.** The duplicates file's appendix gives 238 later and
-   earlier story pairs (171 duplicates, 26 clear and 41 borderline follow-ups)
-   and 744 distinct stories (**M**). Replaying their opening captures through
-   the L2 flush's recorded distributions gives precision and recall of
-   routing per probability band before anything routes.
-2. **The cost asymmetry.** A wrong feed costs Texture one turn and is visible
-   as a marked-unused source. A duplicate costs about 3.1 searches, a research
-   run of about 1.0 million input tokens, and, in 53% of cases, a repeat on the
-   public page (**M**, duplicates file 2 and 3). So the bar can sit where
-   routing precision is 0.9, not 0.99.
-3. **The audit and Texture's verdicts** after it ships, by band (B6).
-
-It starts at 0.92 (the join bar) and moves only on those numbers.
-
-**What it saves.** Of the day's 3,557 web searches, 528 went to duplicates and
-86 to clear follow-ups (**M**, duplicates file 3). The file's own estimate of
-the saving is 7% to 21%, most likely 10% to 15% (**M**-based). This design
-routes only captures whose happening is joined, so its reach depends on the
-join rate. Until L2 and L4 lift it, L1 (management's page by time) carries most
-of the gain: it raises the page's reach from 6 to 68 of 171 duplicates (**M**,
-duplicates file 4.2), at zero model calls.
-
-### D2. Duplicates already published
-
-At each publish, corpusd checks whether another published story from the last
-72 hours shares the new version's primary happening. When one does, the host
-writes a record to the **newer** story's Texture desk: "story S reports the
-same happening; fold your findings into S, or keep". Texture decides, because
-it is the custodian of its document. On fold, the newer story's route answers
-"continued in S" and leaves the front; its findings go to S's desk as a cast
-with its captures, the path management tasks already use. Merging published
-text is not built. The front shows at most one story per primary happening in a
-window; the others appear as its related stories.
-
-### D3. Only search for what is new to us
-
-Base: 3,557 web searches in the 24 hours to 22:18Z (**M**, duplicates file 3);
-the gateway's counter read 2,764 by 20:26Z (**E**, research-runs file 7). 90%
-of research runs and 94% of searches were a story's first run (**E**, same).
-The owner's target is under 1,000.
-
-The happening state makes three tests lookups:
-
-1. **Second outlet held.** A story publishes only with citations from two
-   distinct outlets (**C**, `story_publish.go:263`), and 34 of 41 research
-   objectives asked for a second source of one captured claim (**E**,
-   [corpus-first-search-one-verb-2026-11-19.md](../definitions/corpus-first-search-one-verb-2026-11-19.md),
-   its 2026-11-20 note). When the story's primary happening already has two or
-   more origins among held captures, the brief says so with the capture ids,
-   and the one verb holds sends for that objective unless the run gives a
-   reason. Today 14 of 300 events have two or more intake members (**E**,
-   research-runs file 3), so this test fires rarely now; it grows with the
-   join rate.
-2. **Nothing new since the last run.** For a repeat run, the brief states the
-   happening's intake members newer than the story's last research run
-   (intake only: a research read is not news). Repeats are 9.5% of runs at
-   most (**E**), so this is small.
-3. **The story should not exist.** Consolidation (D1) removes the first run of
-   a duplicate story entirely.
-
-| Lever | Searches a day removed | Basis |
-|---|---|---|
-| Consolidation (L1, L5) | 350 to 530 | 10% to 15% of 3,557 (**M**-based, duplicates file) |
-| Second outlet held at open (L7) | 300 to 1,300 | **A**: 10% to 40% of the about 3,300 first-run searches, depending on how many new stories open with two origins once joins work; unmeasured |
-| Stop when the objective holds two outlets, during the run (one-verb landing 3) | 200 to 500 | that note's estimate (**A**) |
-| Repeats with nothing new | 0 to 180 | research-runs file 7 (**E**) |
-
-The levers overlap, so their sum is not valid. My central guess is that they
-leave 1,500 to 2,300 searches a day (**A**). **Under 1,000 needs the
-second-outlet test to fire on about half of new stories**, which needs a join
-rate this design aims for but has not shown. The precommit C-S6 states it.
-
-**What consolidation alone leaves.** Duplicates and clear follow-ups took 614
-of 3,557 searches (17.3%, **M**, duplicates file 3). Removing all of them
-would leave about 2,900. At the realistic 10% to 15% it leaves about 2,800 to
-3,200 a day. So consolidation by itself does not reach 1,000, and this design
-does not claim it does.
-
-**Where the rest would have to come from.** It would come from the first run of
-a story that is not a duplicate. That run is about 94% of searches (**E**). It
-would have to start from what the corpus already holds about the happening:
-its members, their outlets and origins, and what is new since the last run.
-Today it starts from the opening capture alone and searches the web for a
-second outlet. The levers that do this are L7 (the brief carries the happening
-state) and the one verb's stop-at-need. Both depend on the happening holding
-the outlets the corpus really has. That is the join rate, which L2 and L4 aim
-to raise. If C-S1 fails (minting stays above 65%), the corpus-first first run
-cannot work through happenings. Then the design does not reach 1,000. The
-fallback would be the one verb's own corpus retrieval by vector and words,
-with no happening.
-
-### D4. Related coverage
-
-The related answer's `basis.events` is always 0 today (**M**, survey item 1).
-After L3, related stories are: same primary happening; happenings linked by
-`follows`; shared central entities (after merges resolve); shared cited
-captures. The walk that exists is extended (`publication_related.go:593`), not
-rewritten. Autoradio tells a follow-up when a candidate's happening `follows`
-a heard story's happening.
-
-### D5. Entity pages, and the rule for private people
-
-The public entity read exists (E2). After L4 it gains capture-side mentions
-and resolved merges. The rule for people stays: a person page is served only
-with a Wikidata id or as central in two public stories (C5). A private person
-(a pedestrian struck, a victim) is named only inside the story that names
-them, never on an aggregating page, and an agent's read of their mentions is
-scoped to one happening or story. Organizations and places are always served.
-
-### D6. Corrections
-
-A correction is a later version whose claim supersedes an earlier claim.
-What the layer adds: when a capture joins a happening that a live story
-reports, the flush can ask, in the same call, whether the capture contradicts
-any of that story's claims (one question per claim of the reporting story).
-At a high bar, the host writes a record to the story's Texture: "capture X on
-your happening appears to contradict your claim Y". Texture decides. This is
-L11, last, because the question's accuracy is unmeasured and claims per story
-make it the largest token increase in the plan (**A**: 10 to 30 claims a
-reporting story).
-
----
-
-## E. The path from here
-
-### E1. Kept, replaced, deleted
-
-**Kept:** the registry, write gate, custody derivation and id shape
-(`objectgraph`); corpusd as row custodian; captures, publications, citations,
-checks and support judgements; `choir.entity` rows and ids, `mentions_entity`
-edges, the lexicon and its learning loop; the E2 ready list and candidate
-lookups; the vector index and ranked answer; the event layer's definition, its
-three probability bands and its wire-origin rule; the System 1 kernel service
-and its tape records; the E5 lane's routes, edges, public event read,
-consolidation read and collation test.
-
-**Replaced:** the event layer's memory queue and capped index (by the ready
-list and corpusd); events and memberships on the computer (by the Autopaper
-object graph); immutable memberships (by superseding edges); the intake
-labeller's event and topic call (by the flush); the event substring search in
-research (by `Find`); the two outlet functions (by one key and merge acts);
-the 12-question System 1 cap and the story analysis's two calls (by one call);
-management's newest-50 page (by a 72-hour page by time, then by retrieval);
-`choir.event_projection` (by the event itself).
-
-**Deleted:** the setting `research.related_story` (a switch, **C**,
-`store/computer_setting.go:190`) and the environment switches
-`CORPUSD_RELATED`, `CORPUSD_RELATED_STORY`, `CORPUSD_RELATED_ENTITIES` (**C**,
-`publication_related.go:60-64`); `RelateStories`, the `related_story` and
-`relies_on` edges and the `story.relation` record's export; the kinds
-`choir.event_membership`, `choir.capture_label`, `choir.capture_label_override`;
-`intakeOverlapPicks`; the related walk's title-word filler. Reviewed for
-deletion: the eight provenance edges no one reads.
-
-**Side tables with no custodian entry.** `vec_*`, `proj_capture_*` and the
-lexicon are derived indexes under I27's named exception and stay so, with
-corpusd as their only writer. `search_leads` is not derivable (it holds
-provider results kept nowhere else), so under I27 it is a home without a kind.
-It carries no semantic fact and this design leaves it; it is named as residual
-R6 for the owner.
-
-### E2. The landings
-
-Review tiers by the contract: orange one seat (seat 2); red two seats (seat 1, a
-Claude Sonnet subagent that did not write the change, plus seat 2). Drills on d@e only; the paper changes only by deploy. Every
-non-docs landing carries `Ring-Expedite`.
-
-| # | Landing | Class | Review | Proof on staging | Rollback | Model calls and money a day |
-|---|---|---|---|---|---|---|
-| **L1** | **Management's page by time** (station C1b, already being built ahead of this design; this design depends on it and does not redo it). Today the page is the newest 50 stories, about 27 minutes back, though the prompt promises 8 hours (**C**, `agentcore/management_tasks.go:68, 73, 107, 153, 157`). The target is the stories updated in the last 72 hours, headline and id only (about 30 tokens a story, **A**), inside the 20,000-token bound. If C1b ships a shorter window, L5's routing covers the rest | orange | one seat | `management story choice` lines show the page reaching 72 hours; the duplicates method re-run on the next day's opens (C-S3) | revert | 0 calls; about 5,000 more input tokens per management task (**A**) |
-| **L2** | **Flush provenance and reach.** The ready list replaces the memory queue; `proj_capture_resolution` written; the `semantic.flush` tape record on channel `semantic:<computer>`; candidates from every distinct event among 50 vector neighbours; same-flush siblings clustered and listed first, banded like events; the memory index and its caps deleted. Starts tomorrow, parallel to L1 | red (tape, provider call content) | two seats | `op=event_flush` lines over a day (C-S1); a hand read of 50 mints through the record by a reader who did not build it (C-S2); a crash drill on d@e shows unresolved captures answered by the next flush | revert; the record is inert without the code | same call count; about 30% more tokens a call (**A**), under $0.10 a day |
-| **L3** | **Happenings move to the Autopaper object graph** (absorbs the E5 lane). A corpusd commit route for flush results; `choir.world_event` re-registered under corpusd; `in_event` edges with role and record; `follows` as an edge; the paper's events migrated (E5); the VM kinds and `choir.event_membership` deleted; custody of judgments to research; `reports_event` at open and at publish; the public event read, consolidation read and `basis.events` | red (custody, export, tape, public projection) | two seats | on d@e a polled capture's event readable at `/api/platform/events/{id}`; on the paper, share of new stories with a `reports_event` edge (C-S8); migration counts equal the paper's old totals | revert; the cleanup script tombstones exported rows (E5 lane's `scripts/cleanup-story-events`); the paper's state.db rows are tombstoned, not deleted, until the next landing | 0 calls |
-| **L4** | **Entities and merges in the flush** (absorbs E3, E4's flush half). Mentions from captures; outlet entities and the one outlet key; the qualified-id rule; merge and retire questions ride the flush; `choir.ontology_act`; the intake labeller's call deleted, its questions absorbed | red (tape, provider calls, export) | two seats | C-S7 (entity links), C-S9 (Jev calls fall); a d@e drill of a forced merge and its undo read back publicly | revert; tombstone capture-sourced edges and acts (re-export restores them) | calls fall (one call replaces two per poll); about 12 million more tokens, about $0.50 (**A**, entity design 8) |
-| **L5** | **Routing and published duplicates.** Counted members of a happening a live story reports are fed by management's rule; tentatives named in management's records; the published-duplicate record to the newer story's Texture; front one story per primary happening | red (crosses management dispositions and Texture's inbox) | two seats | C-S4 (second-or-later share of opens), C-S5 (Texture uses routed feeds); stories first published a day does not fall over 10% | revert | 0 calls |
-| **L6** | **`choir.World` reads** for research, management, and Texture scoped; labels; the person rule; the event substring search deleted | orange | one seat | a d@e research run answering questions 1, 2, 6 and 7 of C4; the person refusal; recall at ten of the 200-question set does not fall | revert | 0 calls |
-| **L7** | **The brief and the one verb read the happening state** (changes search station L3): origins held and new intake since the last run | orange; red for the held-run path | one seat; two for the held run | C-S6 (searches a day); stories first published a day does not fall over 10% | revert | 0 calls |
-| **L8** | **`Ask` and `Judge`.** No 12-question cap; the story analysis in one call; ontology acts by research; owner undo; the daily audit run | red (tape) | two seats | a d@e drill of each act and its undo; the first day's audit settles the flush's forecasts by band | revert; acts are superseded, not deleted | `Ask` per use; the story analysis halves its calls; one audit run a day (**A**: about 1 million input tokens, from the 1.0 million mean of a research run, duplicates file 3) |
-| **L9** | **Deletions**: `research.related_story` with its finish-rule fix (E6), the three `CORPUSD_RELATED*` switches, `RelateStories`, `related_story`, `relies_on`, the provenance edges once the read shows no reader | red (desk finish rule) for the setting; orange for the rest | two seats; one | on d@e a story run records entities with no setting | revert | 0 calls |
-| **L10** | **Backfill**: entity questions for old captures ride the ready list (E7) | orange | one seat | resolved count reaches the capture total in the growth read; gateway call counts | revert; links stay valid | about 5,600 calls once, about $13 (**A**, entity design 9) |
-| **L11** | **Corrections**: contradiction questions for captures joining a reported happening | red (provider call content, Texture inbox) | two seats | a hand read of 50 flagged contradictions | revert | **A**: 10 to 30 more questions a routed capture; cost unknown until L2's records show routed volume |
-
-The first three to build are L1, L2 and L3. L1 and L2 can start tomorrow in
-parallel; L3 waits for L2's record so its migration carries provenance
-forward.
-
-### E3. Today's stations: absorbed, changed or dropped
-
-| Station | Fate |
-|---|---|
-| E3 (captures get entity ids in the flush; stopped today) | absorbed into L4, changed: rows go to the corpusd home; its `capture.entities` tape record becomes part of `semantic.flush`; `choir.entity_merge` becomes `choir.ontology_act` |
-| E4 (merges and retirements) | split: merges that ride the flush go in L4; research acts, splits and the owner undo in L8 |
-| E5 and the lane `story-events-e5` | absorbed into L3; see E4 below |
-| E6 (remove `research.related_story`) | L9, unchanged in substance |
-| E7 (backfill) | L10, unchanged |
-| E8 (corpus search expands an entity) | absorbed into `Find` (L6): an entity filter and the entity's merged ids |
-| Search station L3 (the one verb) | changed: kept as designed, and it reads the happening state from L7 |
-| Corpus-first S9 (neighbourhood read for management), S10 (fold at first publish), S11, S12 | S9 and S12 into L5; S10 replaced by routing before research (L5) and the published-duplicate record (D2); S11 into L4 and L8 |
-
-### E4. The `story-events-e5` lane: does its shape survive?
-
-The lane holds one unpushed commit, `6dcb04e4f` (**M**, read with `git show
---stat`): 28 files, 2,852 lines, red. It writes `choir.event_projection`,
-`in_event` and `reports_event` at publish, by the rule "two cited captures or
-30% are counted members", with no model call; it serves a public event read and
-a consolidation read; it pins the non-C collation in a test.
-
-**Ruling: change it; do not land it as it stands, and do not replace it.** Most
-of its shape survives. The edges, the deterministic rule, the routes, the
-public read, the consolidation read, the collation test and the cleanup script
-are what L3 needs. Its weak point is where it reads events from. It derives a
-story's events from the event layer's in-memory index, which holds at most
-10,000 events and 20,000 memberships (**C**, `event_layer.go:85-86`). The paper
-already has about 10,153 events (**E**), so the oldest are already dropped. A
-story that cites an older capture would silently get no event. After L3 the
-lane reads the corpusd rows instead, and the index is deleted (L2). Five
-changes:
-
-0. **Read events from corpusd, not from the index in memory.** This is the
-   cap above.
-
-1. **No projection kind.** The event in corpusd is the event, not a copy:
-   `choir.event_projection` becomes `choir.world_event` under corpusd, which
-   needs the VM registration removed in the same landing. So the lane should
-   not land alone; it lands as the corpusd half of L3.
-2. **Link at open, not only at publish.** `reports_event` with basis `opened`
-   when management opens a story, so unpublished stories (39% of the earlier
-   partners in duplicate pairs, **M**) can be matched.
-3. **Memberships are judgments that can change.** The lane's commit message
-   says "memberships are immutable and are the authority". After L2 and L4 a
-   membership can be superseded by a merge or a re-judgment, so the edge carries
-   its record id and reads resolve merges.
-4. **A tape record, not none.** The lane follows the entity design's "no tape
-   record for events". The judgments now have one (`semantic.flush`), so the
-   exported edges cite it. The publish-time derivation itself stays
-   record-free, because it is deterministic from facts already recorded.
-
-If the owner wants story-event links before L2 lands, the lane can land as
-written; the cost is a second red migration of its projection rows in L3 (a
-few thousand rows, **A**). I would not take it: its coverage is low while 84%
-of questions mint (its own claim C-E7 says so).
-
-### E5. Migrating 7,000 entities and 10,000 events without a risky rewrite
+into it. `Relate` and `RelateStories` stay until `Judge` covers them (deferred).
+
+## 9. The rule against 22 real pairs (evidence for section 2)
+
+The duplicates file names its pairs by title
+in section 2.2 (25 rows), section 4.3 (6 traced openings) and three
+look-alikes; its appendix gives the 238 labelled pairs as ids only, and the
+titles are on the paper, which this pass did not read. So I had 34 titled
+pairs and judged 22 of them; the evidence label is the file's (D duplicate, F
+follow-up, X counted distinct).
+
+| # | Earlier, later (gap h) | Label | Rule | Why |
+|---|---|---|---|---|
+| 1 | Six killed in Georgia gas explosion, the same title (5.4) | D | same | identical point |
+| 2 | Pew: Islam largest religion by 2035, the same (20.2) | D | same | identical point |
+| 3 | UK sanctions eight Israeli settlement firms, the same (47.7) | D | same | same point two days on; a 24-hour window would have opened a story |
+| 4 | UK sanctions firms, "Australia joins"; Australia sanctions settler leader Weiss (50.4) | D | same | Australia's act is part of the point the earlier headline already holds |
+| 5 | Russia's mass missile strike on Ukraine; massive overnight attack (3.5) | D | same | one strike |
+| 6 | Russian missiles and a drone land in Poland; Polish PM calls it "intentional provocation" (9.5) | D | unclear | is a government's charge a new point, or a reaction inside the incident? |
+| 7 | Nikhil Gupta sentenced to 19 years 7 months; the same (1.3) | D | same | one sentencing |
+| 8 | ICJ to deliver verdict Thursday on Myanmar; ICJ finds genocide (36.0) | D | **next** | the point moved from "a verdict is due" to "what the court found" |
+| 9 | First deep-sea mining lease auction off American Samoa (route says "schedules", headline says "one company wins rights"); US sells first leases for $6m (40.9) | D | same, with drift | the later serves the earlier's current point, but the earlier story already crossed from "scheduled" to "held" inside itself: under the rule that was a `next` |
+| 10 | US loses measles-free status; the same with a German ex-minister's warning (54.2) | D | same | the loss is the point; the warning is a side |
+| 11 | Google adds an AI sidebar to search; Google redesigns its search page (25.9) | D | same | one redesign; the earlier story was 25 hours old and on no page |
+| 12 | Trump calls Miller "the most powerful man in the world"; Trump's press conference after Asia, hails Miller (2.2) | D | unclear | a remark's story against the event that holds the remark; the task judged them different |
+| 13 | Kynev arrested; Moscow extends his detention to December 24 (42.3) | F | same | his detention is the point; the extension serves it |
+| 14 | Eight killed in Brooklyn collapse; new video of the collapse (20.1) | F | same | new material, same point |
+| 15 | India and Japan set to review defence ties at 2+2; they agree to expand cooperation (44.8) | F | **next** | a meeting due, then what it agreed |
+| 16 | Senate clears the way for the permitting bill; Senate passes it 62-33 (39.8) | F | **next** | the point moved from the vote's prospects to passage |
+| 17 | Kress passes first test as interim CEO, board keeps Huang out; Nvidia confirms Huang resigned (46.6) | F | **next** | an interim arrangement, then a resignation |
+| 18 | Nations League draw set for Friday; England drawn against Norway (3.1) | F | **next** | a draw due, then the draw |
+| 19 | French Senate delays police firearms vote; Parliament approves it (20.0) | F | **next** | delay, then passage |
+| 20 | Bukele due to register for a third term; Bukele registers (4.5) | F | unclear | "seeks a third term" holds both; "registers today" does not |
+| 21 | Philippine charge against Thomas Markle; US judge finds him fit for trial (48) | X | unclear | two jurisdictions: one prosecution's beats, or two matters? |
+| 22 | A third US carrier reaches the Middle East; USS George Washington leaves | X | new | different points under one situation, which is a `part_of` parent happening, not one story |
+
+Tally: 11 same, 6 next, 1 new, 4 unclear. Of the 12 duplicates, 9 revise, 1
+is a successor (the ICJ) and 2 are unclear. Of the 8 follow-ups, 2 revise and
+5 are successors. What the pairs teach:
+
+- **A follow-up is not the same as a changed point.** The file's follow-up
+  label meant "a real development". Under the rule some developments revise
+  (Kynev, the Brooklyn video) and most open a successor.
+- **The commonest successor is preview, then outcome** (rows 8, 15, 16, 18, 19):
+  "is due", "is set", "delays", then "did". A preview's main point should say
+  it is a preview, so the judge sees the change when the outcome arrives.
+- **Time windows are wrong.** Six of the eleven `same` answers are 25 to 54
+  hours apart. The earlier draft's 24-hour development window would have
+  opened a second story for row 13, and its 72-hour live window works for
+  these only because the earlier stories were revised recently; a story still
+  growing three days after its last revision would be missed. Candidates are
+  found at any age; recency only ranks them.
+- **The unclear cases are decided by how the main point was written.** Rows
+  12 and 20 turn on the level of the sentence ("Trump's post-Asia press
+  conference" holds the Miller remark; "Trump praises Miller" does not), and
+  rows 6 and 21 on whether a reaction or a second proceeding is a new beat. So
+  the main point is the thing to write well, to show the judge, and to audit;
+  and the judge needs a default for unclear. The owner has ruled `same` (lean to revising), with the
+  reason recorded: the owner wants fewer, deeper stories; a wrong revise is
+  undone by Texture's `main point moved` at the cost of one Texture turn, while
+  a wrong open costs a research run (about 3.1 searches, **M**) and, in 53% of
+  duplicates, a public repeat.
+- **Drift happens inside one story today** (row 9). Without a recorded main
+  point Texture revised "an auction is scheduled" into "a company won it". The
+  recorded point makes the crossing visible to the next judgment and to the
+  audit.
+
+This sample is the evidence file's own examples, chosen to show its labels, so
+it over-represents clear cases; 22 pairs measure nothing. It is a first
+reading of the rule, and C-A1 asks for a proper sample.
+
+## 10. Landings after A and B
+
+| # | Landing | Class | Notes |
+|---|---|---|---|
+| L1 | Management's page by time | orange | **landed** as C1b (d8367e2c8, repaired by 2b862a00e and e33533850); its page stays, its title-word offer is deleted by A |
+| A, A2, A3 | The main-point judgment; Texture's two reasons routed to management; the daily over-merge read and split | red | sections 2, 3 and 5 |
+| B | Fewer searches per run and the read before a search | red | section 4 |
+| L2 | Flush provenance and reach: the ready list, `semantic.flush` on `semantic:<computer>`, 50 vector neighbours, siblings clustered by vector; the four conditions of 8.6 | red, two seats | C-S1: intake mints fall from 84% to at most 65% in a day, p 0.55; it serves corroboration, not consolidation |
+| L3 | Happenings move to the Autopaper object graph (absorbs the `story-events-e5` lane, changed: read events from corpusd, not the capped index; no projection kind; link at open; memberships carry their record) | red, two seats | after L2; adds happening candidates to A's read |
+| L4 | Entities and merges in the flush; outlets as entities; the intake labeller's call absorbed (kept until A's candidate read no longer needs its labels) | red, two seats | adds entity candidates to A's read |
+| L5 | The story question in the flush as System 1's first pass, shown to the task as advice | red, two seats | only after the flush size of 8.6 (3) is measured |
+| L6 | `choir.World` reads for research and management | orange | when a run needs graph walks the brief does not give |
+
+Deferred, to be designed again from A's and B's readings: ontology acts by
+research agents (`Ask`, `Judge`, entity splits, parent happenings), the
+`research.related_story` switch's removal with its finish-rule fix, the
+entity backfill, contradiction checks on claims, entity pages, and the
+published-duplicate fold and the front chain.
+
+### 10.1 Migrating entities and events without a risky rewrite
 
 - **Entities: no rewrite.** Ids stay. Merges, retirements and splits are new
   `choir.ontology_act` rows layered on top, resolved at read. The 23,966
   `mentions_entity` edges are untouched (**M**, survey 6.1). Capture-side
-  mentions are new rows written by the flush and the L10 backfill.
+  mentions are new rows written by the flush and a later backfill.
 - **Events: one import that empties the old home.** At L3's deploy the paper's
   flush loop, on its first run, reads its own `choir.world_event` and
   `choir.event_membership` objects (about 10,153 and their memberships, **E**)
@@ -1430,117 +934,14 @@ of questions mint (its own claim C-E7 says so).
   then an index built concurrently. `og_edges` gains one index built
   concurrently. No column changes type.
 
-### E6. Cost per day, all landings
+The imported events carry one `semantic.act` per batch citing their ids, so a
+rebuild from the tape keeps them (seat 2).
 
-Model calls: fewer than today after L4 (the intake labeller's call per poll
-is gone). Tokens: about 12 to 15 million more a day (**A**), about $0.50 to
-$0.70 at the derived price. One audit run a day. One backfill of about $13
-(**A**). No new model, no new service, no new database.
+### 10.2 Residuals
 
----
-
-## F. Honest limits
-
-### F1. What I could not verify
-
-- **Events in production.** Like the survey, I read no event: the store is the
-  paper's and the route needs its key. Every event number is **E**, from
-  records of 05:26Z and 19:40Z to 20:18Z.
-- **The join rate since the embed kick (E1).** Unmeasured. If E1 already
-  lifted joins a lot, L2's gain is smaller than B3 implies.
-- **Whether `intake.labels` and `research.related_story` are on for the
-  paper.** Inferred by the survey, not read.
-- **Whether Texture's mark-unused reason can be read as "wrong story".** B6's
-  first teacher depends on it.
-- **Whether the eight provenance edges have an outside reader.**
-- **Token and cost figures** are estimates from SYSTEM1's figures and the
-  entity design, not measurements.
-- **The cost of `Walk` at four hops on production data.** The bounds are
-  designed; the latency is not measured.
-- **Whether yaegi handles the struct types as written.** `choir.Searches`
-  returns typed values through a handle, so the pattern exists (**C**,
-  `yaegikernel/choir.go:457`); the exact types are untested.
-
-### F2. Where I am guessing
-
-- That widening the shortlist and clustering siblings lifts joins enough for
-  routing to matter (C-S1 states it with a number).
-- That 72 hours and 24 hours are the right windows for live stories and
-  developments (the duplicates file's 72-hour lookback and its follow-up
-  gaps are the only basis).
-- That the second-outlet test can fire for a large share of new stories once
-  joins work. Nothing measures it today.
-- That research is the right judgment authority rather than a new desk. I chose
-  it because it adds nothing and fits I26's words; a panel might disagree.
-
-### F3. The owner's decisions, each with the default I would take
-
-1. **Happenings move to the Autopaper object graph, and research becomes the
-   judgment authority for happenings, memberships, entity links and ontology
-   acts; management keeps dispositions.** Default: yes.
-2. **A development of a happening that a live story reports becomes a new
-   version of that story if the story was revised in the last 24 hours;
-   otherwise a new story linked by `follows`.** Default: yes, with those
-   windows, revisited after a week of L5 data.
-3. **Arrival waits for the flush (about one to two minutes) so the route knows
-   the happening.** Default: yes.
-4. **Captures of a reported happening are fed by rule, without a management
-   model turn.** Default: yes, for counted members only; tentatives go to
-   management.
-5. **A published duplicate is marked "continued in" and leaves the front;
-   published text is never merged automatically.** Default: yes.
-6. **People: public page only with a Wikidata id or central in two public
-   stories; agent reads of a private person scoped to one happening or
-   story.** Default: yes.
-7. **Other computers mint happenings and entities in their own owner's scope
-   and read the paper's as candidates; nothing crosses owners.** Default: yes.
-8. **Spending: about $0.50 to $0.70 a day more and about $13 once, with no
-   grant.** Default: proceed, and report the day's cost in the status read.
-9. **The audit is run by research.** Default: yes; the alternative is a
-   management task, if the owner reads rule 1b as forbidding the same desk.
-10. **`search_leads` stays a table without a kind (residual R6).** Default:
-    leave it; it carries no semantic fact.
-
-### F4. Claims worth precommitting
-
-Ids are provisional; the ledger assigns them at entry. Each outcome is a count
-or a hand read by someone other than the forecaster.
-
-| Id | Claim | p | Test | Settle by |
-|---|---|---|---|---|
-| C-S1 | After L2, intake questions that mint a new event fall from 84% to at most 65% over a day | 0.55 | `op=event_flush` lines, intake only | L2 deploy + 1 day |
-| C-S2 | After L2, of 50 hand-read mints, at most 5 should have joined (from 10 of 50) | 0.50 | hand read through the `semantic.flush` record by a reader who did not build L2 | L2 deploy + 2 days |
-| C-S3 | After L1, true duplicates fall from 17.4% to at most 12% of a day's opened stories | 0.45 | the duplicates file's method re-run on one day | L1 deploy + 2 days |
-| C-S4 | After L5, second-or-later stories on a happening fall from 20.1% to at most 10% of opens, and stories first published a day does not fall over 10% | 0.40 | the same method; publication counts | L5 deploy + 3 days |
-| C-S5 | Of 100 rule-routed feeds after L5, Texture uses at least 75 | 0.50 | the stories' revisions and source marks | L5 deploy + 3 days |
-| C-S6 | After L5 and L7, web searches a day fall to at most 2,400; to under 1,000 | 0.50; 0.10 | gateway `search request` lines | L7 deploy + 7 days |
-| C-S7 | After L4, at least 70% of resolved intake captures carry a counted entity link, and at least 90 of 100 sampled links are right | 0.55 | growth read; hand read | L4 deploy + 2 days |
-| C-S8 | After L3, at least 80% of stories opened in a day carry a `reports_event` edge | 0.60 | public story reads | L3 deploy + 1 day |
-| C-S9 | After L4, Jev calls of the sites `intake_labels` and `event_layer` together fall by at least 30% at equal captures | 0.60 | gateway site counts, a day before and after | L4 deploy + 1 day |
-
-### F5. What would falsify the design
-
-- **Happenings stay singletons.** If after L2 and L4, with vectors present,
-  more than 70% of intake questions still mint, happening-keyed routing will
-  not carry consolidation. Then the open decision should be a retrieval of
-  candidate stories (story and opening-capture vectors, entities, 72 hours)
-  judged by System 1 at open, the duplicates file's option 2, and happenings
-  stay for corroboration only.
-- **Texture rejects the routes.** If Texture marks more than 40% of routed
-  feeds unused as the wrong story, the grain (occurrence, not storyline) or
-  the bar is wrong.
-- **Agents do not use the surface.** If a week of research ledgers after L6
-  shows `choir.World` in under 10% of runs, the library is the wrong shape for
-  how the agents work, and the brief should carry the answers instead.
-- **The second outlet does not stop searches.** If briefs that show two held
-  origins are followed by web searches for a second source at the same rate
-  as briefs that do not, the search hypothesis in D3 is false.
-
-### F6. Residuals
-
-R1, the restore gap (A8). R2, two new same-name entities in one flush are
+R1, the restore gap (8.4). R2, two new same-name entities in one flush are
 joined (entity design 4.3), undone by a split. R3, OpenRouter's long-context
 line above about 32,000 bytes may change answers (SYSTEM1 section 10). R4, a
 private computer's objects are never compared with another owner's. R5, a
 podcast clip names its story by a route string until a `clip_of` edge exists.
-R6, `search_leads` is a home without a kind.
+R6, `search_leads` is a home without a kind. R7, a `next` story does not yet close its predecessor's open research; the predecessor may keep searching on a stale point until A2's record closes it.
