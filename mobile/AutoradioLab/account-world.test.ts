@@ -255,6 +255,15 @@ describe('C9b seat 2\'s second round, under the world mechanism', () => {
     expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).not.toContain('ember');      // not shown while owed
     m.faults.hangRm.clear(); m.faults.releaseRm(); await out; await idle();
   });
+  test('C9.texture-theme-loaded A\'s Texture theme already in memory is not shown the moment a sign-out begins (before any wipe step runs)', async () => {
+    const T = await import('./themes.ts');
+    const ember = JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme);
+    boot({ 'app:/data/themes/texture-ember.json': ember }); T.resetThemes();
+    expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).toContain('ember');
+    W.signOut = 'hang'; const out = signOut(); await wait(20);                                           // the world is closed and owed; native has not answered; no wipe has run
+    expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).not.toContain('ember');
+    W.signOut = 'ok'; W.release?.(); await out;
+  });
   test('C9.poster-batch work held outside a chain (a queue of posts) carries its world: once that world is closed the request is refused, and nothing is sent', async () => {
     boot({});
     const sent: string[] = [];

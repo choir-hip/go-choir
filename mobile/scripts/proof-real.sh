@@ -70,7 +70,7 @@ data_dir() { # the app's data folder: where the record is, else the folder an ag
   if [ -n "$f" ]; then dirname "$f"; return; fi
   ls -dt "$CONT"/Library/Caches/exact/*/agent/*/data "$CONT"/Library/Application\ Support/exact/*/data 2>/dev/null | head -1
 }
-record_now() { d=$(data_dir); [ -n "$d" ] && cat "$d/account-stamp" 2>/dev/null; }   # the record's text now, or nothing; each drive's value is taken RIGHT AFTER that drive (a later drive changes it)
+record_now() { d=$(data_dir); if [ -n "$d" ] && [ -e "$d/account-stamp" ]; then cat "$d/account-stamp"; else echo ABSENT; fi; }   # the record's text now, or nothing; each drive's value is taken RIGHT AFTER that drive (a later drive changes it)
 stamp_eq() { # name expected actual: a record captured after its own drive
   if [ -n "$3" ] && [ "$3" = "$2" ]; then echo "ok: $1"; else echo "MISSING: $1"; FAILS="$FAILS [$1]"; fi
 }
@@ -611,7 +611,7 @@ else
   chk "D2: the key went: the account page says signed out" '\[settings-account-signed\][^"]*"No"' "$D2"
   bad "D2: the key went: no Files rows on screen" '\[files-row-/' "$D2"
   bad "D2: the key went: no Mail rows on screen" '\[mail-row-' "$D2"
-  [ -z "$D2_DATA" ] || { [ -z "$D2_STAMP" ] && [ "$D2_PAPER" = gone ] && echo "ok: D2: the key went: the record and the paper's copy are gone from the files" || { echo "MISSING: D2: the key went but the record or the old data is on disk"; FAILS="$FAILS [D2 files]"; }; }
+  { [ -n "$D2_DATA" ] && [ "$D2_STAMP" = ABSENT ] && [ "$D2_PAPER" = gone ] && echo "ok: D2: the key went: the record and the paper's copy are gone from the files" || { echo "MISSING: D2: the key went but the record or the old data is on disk"; FAILS="$FAILS [D2 files]"; }; }
 fi
 # D3: the marked old file is gone, the record is the new digest, the banner offers Clear this phone and not Sign in
 [ "$D3_PLANTED" = yes ] && echo "ok: D3: the old account's marker was planted before the key change" || { echo "MISSING: D3: the marker could not be planted (the check below would pass for nothing)"; FAILS="$FAILS [D3 plant]"; }
@@ -625,7 +625,7 @@ bad "D4: a refused key: the banner does not offer Sign in" '\[signedout-signin\]
 chk "D4: after Clear this phone the page is asked again and says the signed-out words" 'Sign in to read your mail' "$SHOTS/seg-d4-cleared.txt"
 chk "D4: after Clear this phone the banner offers Sign in" '\[signedout-signin\]' "$SHOTS/seg-d4-cleared.txt"
 bad "D4: after Clear this phone no Mail rows" '\[mail-row-' "$SHOTS/seg-d4-cleared.txt"
-[ -z "$D4_STAMP" ] && echo "ok: D4: the record is gone after Clear this phone" || { echo "MISSING: D4: the record is still there after Clear this phone"; FAILS="$FAILS [D4 record]"; }
+[ "$D4_STAMP" = ABSENT ] && echo "ok: D4: the record is gone after Clear this phone" || { echo "MISSING: D4: the record is still there after Clear this phone"; FAILS="$FAILS [D4 record]"; }
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"

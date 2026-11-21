@@ -107,3 +107,8 @@ cache (`sameAccount()` in `api.ts`, one helper; files recents, podcast library a
 alias and saved drafts, demo leftovers' write); the proof's D3 plants in a file `reset_state` leaves; a Clear the card
 has seen running for six reads is abandoned on a fresh chain (no clock is read); `survivors` stats `content.db-wal`
 and `-shm`; Texture-installed themes are wiped; the card never waits on a running job; sign-out forgets a refused key.
+
+Mechanism change after the second review round (2026-11-21): the per-site guards and the abandon rule are deleted.
+The boundary moving closes the account's world (`api.ts`); every I/O choke point is inert for a closed world; the
+Clear drains started writes before it wipes; a timed-out Clear stays CLEARING with the close-and-reopen words. See
+the design section "The mechanism: the world". Named regressions: `account-world.test.ts` (C8, C9, C9b, M1 to M4).
