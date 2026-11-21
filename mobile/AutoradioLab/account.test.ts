@@ -439,7 +439,7 @@ describe('S18 the sign-out counter (round 6)', () => {
   });
   test('the contracts pass the epoch and the sign-in state to the shared notebook', async () => {
     const c = await Bun.file(new URL('./members-notebook.contract', import.meta.url)).text();
-    expect(c).toContain('notebookPageShared("", 0, noNative, signedOutTick, au.signedIn)');
+    expect(c).toContain('notebookPageShared(nbSel, nbTick, pg.top == "notebook:", signedOutTick, au.signedIn)');
     expect(await Bun.file(new URL('./account-types.contract', import.meta.url)).text()).toContain('epoch: number');
   });
 });

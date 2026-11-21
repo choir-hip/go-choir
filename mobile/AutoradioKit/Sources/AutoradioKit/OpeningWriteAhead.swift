@@ -116,28 +116,3 @@ import Foundation
     }
 }
 
-
-/// What plays when the desk cannot be reached: the newest stories whose bodies the phone holds (the ContentStore), not already on the sheet.
-public enum LocalStories {
-    @MainActor public static func entries(from content: ContentStore, sheet: RunSheetStore, limit: Int = 5) -> [RunSheetEntry] {
-        let told = Set(sheet.sheet.entries.map { $0.title.lowercased() })
-        var out: [RunSheetEntry] = []
-        for item in content.items(.story).sorted(by: { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }) {
-            let title = RunSheetEntry.cleanTitle(item.title)
-            let body = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !title.isEmpty, !body.isEmpty, !told.contains(title.lowercased()) else { continue }
-            var id = "s-"
-            for u in item.id.unicodeScalars where id.utf8.count < 64 {
-                let ok = (u.value >= 0x30 && u.value <= 0x39) || (u.value >= 0x41 && u.value <= 0x5a) || (u.value >= 0x61 && u.value <= 0x7a) || u == "_" || u == "." || u == "-"
-                id.append(ok ? Character(u) : "-")
-            }
-            guard sheet.entry(id) == nil else { continue }
-            let text = StretchCandidates.cut(ChoirText.paragraphs(body, maxChars: ChoirText.speechChars).joined(separator: "\n\n"), bytes: RunSheetBounds.maxTextBytes)
-            var e = RunSheetEntry(id: id, kind: .story, placedBy: .phone, title: title, text: text, estSeconds: RunSheetEntry.estimateSeconds(words: text))
-            e.source = RunSheetSource(ref: item.address, label: title)
-            out.append(e)
-            if out.count >= limit { break }
-        }
-        return out
-    }
-}

@@ -38,16 +38,13 @@ public enum NotebookText {
     public static let title = "My notebook"
     public static let askedHeading = "What you asked for"
 
-    /// Letters and digits only, lower case: "U.S." and "us" are one topic (the shared code's `key`, edition-model.ts).
-    static func topicKey(_ s: String) -> String { String(s.lowercased().filter { $0.isLetter || $0.isNumber }) }
-
     static func sectionKey(_ heading: String) -> String {
         let h = heading.lowercased()
         if h.contains("asked") || h.contains("edition") { return "asked" }
         if h.contains("learned") { return "learned" }
         if h.contains("trying") { return "trying" }
         if h.contains("steering") { return "steering" }
-        return "other-" + NotebookText.topicKey(heading)
+        return "other-" + EditionTopics.key(heading)
     }
 
     /// The first 8 hex digits of the SHA-256 of the line's trimmed text: the design's `mine:` ref.
@@ -95,12 +92,12 @@ public enum NotebookText {
     /// otherwise (the listener's lines and every other section untouched), the same text back when nothing is missing.
     public static func merging(topics: [String], into md: String?) -> String {
         var wanted: [String] = [], seen = Set<String>()
-        for t in topics { let k = NotebookText.topicKey(t); if !k.isEmpty, seen.insert(k).inserted { wanted.append(t.trimmingCharacters(in: .whitespacesAndNewlines)) } }
+        for t in topics { let k = EditionTopics.key(t); if !k.isEmpty, seen.insert(k).inserted { wanted.append(t.trimmingCharacters(in: .whitespacesAndNewlines)) } }
         guard let md, !md.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return "# \(title)\n\n## \(askedHeading)\n" + wanted.map { "- \($0)\n" }.joined()
         }
-        let have = Set(parse(md).sections.filter { $0.key == "asked" }.flatMap(\.lines).map { NotebookText.topicKey($0.text) })
-        let add = wanted.filter { !have.contains(NotebookText.topicKey($0)) }
+        let have = Set(parse(md).sections.filter { $0.key == "asked" }.flatMap(\.lines).map { EditionTopics.key($0.text) })
+        let add = wanted.filter { !have.contains(EditionTopics.key($0)) }
         guard !add.isEmpty else { return md }
         var lines = md.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         if let h = lines.firstIndex(where: { $0.hasPrefix("## ") && sectionKey(String($0.dropFirst(3))) == "asked" }) {
@@ -128,8 +125,9 @@ public enum EditionText {
         guard !t.isEmpty else { return nil }
         return StretchCandidates.cut("What the listener follows:\n" + t.map { "- \($0)" }.joined(separator: "\n"), bytes: maxBytes)
     }
+    nonisolated(unsafe) static var topicsFile: URL? = TakeFiles.url("edition-topics.json")
     public static func current() -> String? {
-        make(notebook: NotebookCache.shared.text, topics: EditionPicksMirror.shared.topics)    // the picks are shared code's; this is its pushed copy (EditionSetup.swift)
+        make(notebook: NotebookCache.shared.text, topics: EditionSetupSession.load(topicsFile)?.topics ?? [])
     }
 }
 
@@ -157,160 +155,13 @@ public final class NotebookCache: @unchecked Sendable {
     }
 }
 
-// MARK: The page
-
-public enum NotebookDocLoad {
-    case loading
-    case found(address: String, notebook: NotebookDoc)
-    /// The computer answered and there is no notebook yet.
-    case none
-    /// No answer.
-    case unavailable
-}
-
-public struct NotebookPageInput {
-    public var doc: NotebookDocLoad
-    public var learning: LearningLoad?
-    public var selected = ""
-    public var steerQueued = 0
-    public init(doc: NotebookDocLoad, learning: LearningLoad?, selected: String = "", steerQueued: Int = 0) {
-        self.doc = doc; self.learning = learning; self.selected = selected; self.steerQueued = steerQueued
-    }
-}
-
-public struct NotebookLineRow: Codable, Sendable, Equatable { public var id = "", text = "", tag = "", canWhy = false, selected = false; public init() {} }
-public struct NotebookSectionRow: Codable, Sendable, Equatable { public var key = "", heading = "", lines: [NotebookLineRow] = []; public init() {} }
-public struct NotebookPair: Codable, Sendable, Equatable { public var label = "", value = ""; public init(label: String = "", value: String = "") { self.label = label; self.value = value } }
-public struct NotebookEvidenceRow: Codable, Sendable, Equatable { public var title = "", outcome = "", detail = ""; public init() {} }
-public struct NotebookHeldRow: Codable, Sendable, Equatable {
-    public var what = "", whereRead = ""
-    public init(_ what: String, _ whereRead: String) { self.what = what; self.whereRead = whereRead }
-}
-
-public struct NotebookPageInfo: Codable, Sendable, Equatable {
-    /// loading | ready | none | offline
-    public var docState = "loading"
-    public var docAddress = "", docNotice = ""
-    public var sections: [NotebookSectionRow] = []
-    /// loading | ready | notyet | offline | signedout
-    public var scoreState = "loading"
-    public var scoreNotice = ""
-    public var score: [NotebookPair] = []
-    public var byKind: [NotebookPair] = []
-    public var noVerdict = ""
-    public var selectedText = "", evidenceNote = ""
-    public var evidence: [NotebookEvidenceRow] = []
-    public var held: [NotebookHeldRow] = []
-    public var steerLine = ""
-    public init() {}
-}
-
-public enum NotebookPage {
-    public static let held: [NotebookHeldRow] = [
-        NotebookHeldRow("autoradio.turn: what you said to the radio, and what it answered", "On your computer's tape. This page does not list turns yet: the server's wider ledger route is not built."),
-        NotebookHeldRow("autoradio.request, autoradio.stretch_start, autoradio.segment, autoradio.stretch: what was written for you", "On your computer's tape. The title of each is in the rows behind a notebook line; the full text is not listed yet."),
-        NotebookHeldRow("autoradio.forecast and autoradio.settlement: each guess the DJ made, and how it came out", "The scorecard and the rows behind a line, on this page."),
-        NotebookHeldRow("autoradio.sheet_op and autoradio.sheet_snapshot: the air log (what played, skipped, cut or left, and where)", "The Heard list on the Autoradio page; the op that settled a forecast is on its row here."),
-        NotebookHeldRow("autoradio.no_verdict: a forecast that settled nothing because you left or the app could not play it", "The scorecard's line about forecasts with no verdict, and the row."),
-        NotebookHeldRow("autoradio.lesson, autoradio.strike and autoradio.notebook_patch: what was learned, struck or written into the notebook", "The notebook lines on this page; tap a line for the forecasts behind it."),
-        NotebookHeldRow("autoradio.note: your more and less taps, as sent to your computer", "Recent steering in the notebook, once the server writes it; taps waiting to be sent are counted on this page."),
-        NotebookHeldRow("autoradio.take: takes you recorded", "Takes, on the Autoradio page."),
-        NotebookHeldRow("Model call traces (the assembled prompt for a stretch)", "Held on your computer's trace surfaces, not on this page."),
-        NotebookHeldRow("More and less taps (a record on this phone)", "Settings, What I've told the paper. Only on this phone, apart from the copy sent as a steer."),
-        NotebookHeldRow("Topics you follow (edition-topics.json on this phone; the notebook gets them when you finish editing your edition)", "Edit my edition, and \"What you asked for\" on this page."),
-        NotebookHeldRow("The run sheet: what is on air, ahead and heard", "The Autoradio page. A copy is on your computer."),
-        NotebookHeldRow("Muted voices", "Takes, on the Autoradio page. Only on this phone, apart from the steer sent for a mute."),
-        NotebookHeldRow("Mail", "The Mail page; only on this phone. It is never sent to the DJ or the scorecard."),
-    ]
-
-    static func kindLabel(_ s: String) -> String {
-        let w = s.replacingOccurrences(of: "_", with: " ")
-        return w.prefix(1).uppercased() + w.dropFirst()
-    }
-
-    static func outcomeWords(_ r: LearningRow) -> String {
-        switch r.status {
-        case "open": return "Not yet heard"
-        case "overdue": return "Not heard in time"
-        case "settled":
-            if r.heardThrough == true { return "Heard through" }
-            return r.op?.outcome == "cut" ? "Cut off" : "Skipped"
-        case "no_verdict":
-            switch r.noVerdictReason { case "left": return "You left"; case "failed": return "The app could not play it"; case "late": return "Settled too late"; default: return "No verdict" }
-        default: return "Not yet heard"
-        }
-    }
-
-    public static func make(_ i: NotebookPageInput) -> NotebookPageInfo {
-        var o = NotebookPageInfo()
-        o.held = held
-        var doc: NotebookDoc?
-        switch i.doc {
-        case .loading: o.docState = "loading"
-        case .found(let a, let nb): o.docState = "ready"; o.docAddress = a; doc = nb
-        case .none: o.docState = "none"; o.docNotice = "You have no notebook yet. It is started when you choose your topics, and Autoradio adds to it as it learns."
-        case .unavailable: o.docState = "offline"; o.docNotice = "Your notebook could not be reached right now."
-        }
-        if let doc {
-            o.sections = doc.sections.map { s in
-                var r = NotebookSectionRow(); r.key = s.key; r.heading = s.heading
-                r.lines = s.lines.map { l in
-                    var x = NotebookLineRow(); x.id = l.id; x.text = l.text
-                    if let h = l.heard, let m = l.of { x.tag = "heard \(h) of \(m)" }
-                    x.canWhy = l.ref != nil; x.selected = l.id == i.selected
-                    return x
-                }
-                return r
-            }
-        }
-        var read: LearningRead?
-        switch i.learning {
-        case .none: o.scoreState = "loading"
-        case .some(.ready(let r)): o.scoreState = "ready"; read = r
-        case .some(.notYet): o.scoreState = "notyet"; o.scoreNotice = "The scorecard is not available yet. Your computer does not have it, so nothing is shown rather than a guess."
-        case .some(.offline): o.scoreState = "offline"; o.scoreNotice = "The scorecard could not be reached. It will show when your computer answers."
-        case .some(.signedOut): o.scoreState = "signedout"; o.scoreNotice = "Sign in to see the scorecard."
-        }
-        if let read {
-            let c = read.card
-            if c.settled == 0 { o.score = [NotebookPair(label: "Forecasts settled", value: "0"), NotebookPair(label: "Still open", value: "\(c.open)")] }
-            else {
-                let pct = c.heardThroughRate.map { " (\(Int(($0 * 100).rounded()))%)" } ?? ""
-                o.score = [NotebookPair(label: "Forecasts settled", value: "\(c.settled)"), NotebookPair(label: "Heard through", value: "\(c.heardThrough) of \(c.settled)\(pct)"),
-                           NotebookPair(label: "Still open", value: "\(c.open)")]
-            }
-            o.byKind = c.byKind.map { NotebookPair(label: kindLabel($0.label), value: $0.resolved == 0 ? "none settled yet" : "\($0.heard) of \($0.resolved) heard through") }
-            if c.noVerdict > 0 { o.noVerdict = "\(c.noVerdict) forecast\(c.noVerdict == 1 ? "" : "s") with no verdict: you left, or the app could not play it." }
-        }
-        if let line = doc?.line(i.selected) {
-            o.selectedText = line.text
-            if let ref = line.ref, let read {
-                o.evidence = read.rows.filter { $0.causedBy == ref }.map { r in
-                    var e = NotebookEvidenceRow(); e.title = r.title.isEmpty ? "A segment" : r.title; e.outcome = outcomeWords(r)
-                    if let p = r.pHeard { e.detail = "The desk forecast \(Int((p * 100).rounded())) in 100." }
-                    return e
-                }
-                if o.evidence.isEmpty { o.evidenceNote = "No forecast has been made from this line yet." }
-            } else if line.ref == nil { o.evidenceNote = "This line is not one the desk cites, so no forecast is listed for it." }
-            else { o.evidenceNote = "The forecasts behind a line are not available yet." }
-        }
-        if i.steerQueued > 0 { o.steerLine = "\(i.steerQueued) more or less tap\(i.steerQueued == 1 ? "" : "s") waiting to reach your computer." }
-        return o
-    }
-}
-
-// MARK: The store behind the page
+// MARK: The topics write: the one part of the notebook that stays native
+// The page, the scorecard and the learning route are shared code (AutoradioLab/notebook.ts, notebook-run.ts). What stays here is the WRITE of the listener's topics into the notebook:
+// a Texture canonical write through TextureEditor (Swift until the texture edit page moves), so it is a red surface and the shared code asks for it through the one native call
+// `notebookState` (AutoradioModule+Notebook.swift). The text read and the cache below feed the DJ's request (RadioProgramme.swift), which is built natively.
 
 @MainActor public final class NotebookStore {
     public static let shared = NotebookStore()
-    public var doc: NotebookDocLoad = .loading
-    public var learning: LearningLoad?
-    public var selected = ""
-    public var onChange: (() -> Void)?
-    /// Injected for tests; the defaults ask the computer.
-    public var loadDoc: () async -> NotebookDocLoad = { await NotebookStore.defaultLoadDoc() }
-    public var loadLearning: () async -> LearningLoad = { await LearningClient(client: ChoirEnvironment.shared.client()).read(limit: 200) }
-    public var steerQueued: () -> Int = { SteerQueue.shared.taps.count }
     /// nil when the server cannot say (a timeout, a 401, a 5xx): that is not "there is no notebook".
     public var lookupEdition: () async -> EditionInfo? = { await EditionLookup.fetch() }
     /// Makes the notebook document; its id, or nil when it could not be made.
@@ -327,53 +178,14 @@ public enum NotebookPage {
         } catch { return nil }
     }
 
-    /// Sign-out: what the page holds belongs to the account.
-    public func wipe() {
-        writing?.cancel(); writing = nil; refreshRunning = false
-        doc = .loading; learning = nil; selected = ""; lastRefresh = nil; refreshing = false
-        onChange?()
-    }
-
-    public func info() -> NotebookPageInfo { NotebookPage.make(NotebookPageInput(doc: doc, learning: learning, selected: selected, steerQueued: steerQueued())) }
-
-    private var refreshRunning = false
     private var writing: Task<Bool, Never>?
-    public func refresh() async {
-        guard !refreshRunning else { return }          // one at a time: two would each see "no notebook" and make one
-        refreshRunning = true; defer { refreshRunning = false }
-        // The topics written on this phone and not yet in the notebook (the marker says when they are): written now, once.
-        let gen = AccountWipe.generation                       // bound WITH the topics: a sign-out after this line refuses the write
-        let topics = EditionPicksMirror.shared.topics
-        if EditionPicksMirror.shared.known, !topics.isEmpty { await writeTopics(topics, generation: gen) }
-        doc = await loadDoc(); onChange?()
-        learning = await loadLearning(); onChange?()
-        await SteerQueue.shared.flush()
-        onChange?()
-    }
+    /// Sign-out: a write in flight is cancelled.
+    public func wipe() { writing?.cancel(); writing = nil }
 
-    private var lastRefresh: Date?
-    private var refreshing = false
-    /// Called when the page is read: the first read, and one a minute after, ask the computer. Never two at once.
-    public func refreshIfStale(now: Date = Date()) {
-        guard !refreshing, lastRefresh.map({ now.timeIntervalSince($0) > 60 }) ?? true else { return }
-        refreshing = true; lastRefresh = now
-        Task { @MainActor in await self.refresh(); self.refreshing = false }
-    }
-
-    public func select(_ id: String) { selected = selected == id ? "" : id; onChange?() }
-
-    static func defaultLoadDoc() async -> NotebookDocLoad {
-        guard ChoirEnvironment.shared.client().hasKey else { return .unavailable }
-        guard let ed = await EditionLookup.fetch() else {
-            if let t = NotebookCache.shared.text { return .found(address: "", notebook: NotebookText.parse(t)) }
-            return .unavailable
-        }
-        guard ed.found else { return .none }
-        let address = "texture:" + ed.docID
-        let d = await ReaderStore.shared.doc(address)
-        guard d.status == "ready" else { return NotebookCache.shared.text.map { .found(address: address, notebook: NotebookText.parse($0)) } ?? .unavailable }
-        NotebookCache.shared.set(d.source)
-        return .found(address: address, notebook: NotebookText.parse(d.source))
+    /// The topics written on this phone and not yet in the notebook (the marker says when they are): written now, once. Asked for by the shared page on every read.
+    public func writePendingTopics() async {
+        let topics = EditionPicksMirror.shared.topics      // the picks are shared code's; this is its pushed copy (EditionSetup.swift)
+        if EditionPicksMirror.shared.known, !topics.isEmpty { await writeTopics(topics) }
     }
 
     // MARK: The topics move in (design 2, "The topic list")
@@ -381,30 +193,28 @@ public enum NotebookPage {
     /// Writes the listener's topics as lines of "What you asked for", once: through the ordinary owner revision route (an edit by the listener), creating
     /// the document first when there is none. The local topics file stays as a cache. True when the notebook holds them afterwards.
     @discardableResult
-    public func writeTopics(_ topics: [String], marker: URL? = nil, generation: Int? = nil) async -> Bool {
-        if let g = generation, g != AccountWipe.generation { return false }        // the account moved on between reading the topics and now: they are not this account's to write
+    public func writeTopics(_ topics: [String], marker: URL? = nil) async -> Bool {
         if let w = writing { return await w.value }      // one in flight: a second would also find nothing and make a second document
-        let t = Task { @MainActor in await self.writeTopicsNow(topics, marker: marker, generation: generation) }
+        let t = Task { @MainActor in await self.writeTopicsNow(topics, marker: marker) }
         writing = t
         let r = await t.value
         writing = nil
         return r
     }
 
-    private func writeTopicsNow(_ topics: [String], marker: URL?, generation: Int?) async -> Bool {
+    private func writeTopicsNow(_ topics: [String], marker: URL?) async -> Bool {
         let marker = marker ?? TakeFiles.url("notebook-topics-written")
-        let key = topics.map { NotebookText.topicKey($0) }.sorted().joined(separator: ",")
+        let key = topics.map { EditionTopics.key($0) }.sorted().joined(separator: ",")
         guard !key.isEmpty else { return true }
         if let marker, (try? String(contentsOf: marker, encoding: .utf8)) == key { return true }
         let client = ChoirEnvironment.shared.client()
         guard client.hasKey else { return false }
         var address = "", current: String?
-        let gen = generation ?? AccountWipe.generation          // every write below is dropped if the account was wiped meanwhile (the generation the topics were read under, when given)
-        guard gen == AccountWipe.generation else { return false }
+        let gen = AccountWipe.generation          // every write below is dropped if the account was wiped meanwhile
         guard let ed = await lookupEdition(), gen == AccountWipe.generation else { return false }        // the server cannot say: try later, never create on a guess
         if ed.found {
             address = "texture:" + ed.docID
-            let d = await ReaderStore.shared.doc(address)
+            let d = await ReaderStore.shared.doc(address, force: true)
             guard d.status == "ready", gen == AccountWipe.generation else { return false }
             current = d.source
         } else {

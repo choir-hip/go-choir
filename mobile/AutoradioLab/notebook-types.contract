@@ -1,0 +1,47 @@
+// My notebook's shapes. Declared here and answered by app.ts (notebook-run.ts `notebookShared`); they were the Swift package's (interface/notebook.json) before the page moved to shared code.
+
+shape NotebookLineRow
+  id: string
+  text: string
+  tag: string
+  canWhy: bool
+  selected: bool
+
+shape NotebookSectionRow
+  key: string
+  heading: string
+  lines: NotebookLineRow[]
+
+shape NotebookPair
+  label: string
+  value: string
+
+shape NotebookEvidenceRow
+  title: string
+  outcome: string
+  detail: string
+
+shape NotebookHeldRow
+  what: string
+  whereRead: string
+
+shape NotebookPageInfo
+  docState: string
+  docAddress: string
+  docNotice: string
+  sections: NotebookSectionRow[]
+  scoreState: string
+  scoreNotice: string
+  score: NotebookPair[]
+  byKind: NotebookPair[]
+  noVerdict: string
+  selectedText: string
+  evidenceNote: string
+  evidence: NotebookEvidenceRow[]
+  held: NotebookHeldRow[]
+  steerLine: string
+
+// What the content sync answers (content-run.ts `syncContent`): done | signedout | offline | unavailable, and one line of counts.
+shape ContentSyncInfo
+  state: string
+  line: string

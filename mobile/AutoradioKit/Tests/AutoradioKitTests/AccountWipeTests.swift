@@ -89,7 +89,7 @@ final class AccountWipeTests: XCTestCase {
         let cache = NotebookCache(file: root.appendingPathComponent("notebook-cache.md")); cache.set(m)
         let legacyTopics = root.appendingPathComponent("edition-topics.json"), topicsMarker = root.appendingPathComponent("notebook-topics-written")
         write("edition-topics.json", "{\"topics\":[\"\(m)\"]}"); write("notebook-topics-written", m)
-        let notebook = NotebookStore(); notebook.doc = .found(address: "texture:x", notebook: NotebookText.parse("# My notebook\n\n## What you asked for\n- \(m)\n")); notebook.selected = m
+        let notebook = NotebookStore()
         let steerSent = Recorder()
         let steer = SteerQueue(file: root.appendingPathComponent("steer-queue.json"), send: { _ in .offline })
         steer.enqueue(SteerTap(id: "s-1", entryID: "e1", direction: "more", stories: [m], title: m, handle: nil, at: "2026-11-18T00:00:00Z"))
@@ -109,8 +109,6 @@ final class AccountWipeTests: XCTestCase {
         await texture.edit(address: "texture:d1", markdown: m); await texture.flush(address: "texture:d1")
         XCTAssertEqual(texture.pending["d1"], m)
         let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
-        let content = ContentStore(root: root.appendingPathComponent("content"))
-        content.put(StoredItem(id: "mail:1", kind: .mail, title: m, text: m, address: "mail:1")); content.flush()
 
         // What the second review found: the spoken words and the files of the app target.
         let mailReading = MailReading(); mailReading.request(address: m, text: m)
@@ -134,7 +132,7 @@ final class AccountWipeTests: XCTestCase {
         }
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
                               takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
-                              texture: texture, environment: env, content: content,
+                              texture: texture, environment: env,
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
                               deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
@@ -145,12 +143,10 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertEqual(markerInFiles(), [], "files still holding the account's words")
         // (b) every in-memory store answers empty
         XCTAssertTrue(turns.snapshot().isEmpty); XCTAssertNil(cache.text)
-        if case .loading = notebook.doc {} else { XCTFail("the notebook page still holds the document") }
-        XCTAssertNil(notebook.learning); XCTAssertEqual(notebook.selected, "")
         XCTAssertTrue(steer.taps.isEmpty); XCTAssertEqual(own.handle, ""); XCTAssertTrue(mutes.all.isEmpty); XCTAssertNil(takes.take(m))
         XCTAssertTrue(sheet.sheet.entries.isEmpty); XCTAssertTrue(sheet.pending.isEmpty); XCTAssertNil(sheet.poster, "the poster is rebuilt at the next sign-in")
         XCTAssertNil(opening.opening(voice: "v"))
-        XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1")); XCTAssertNil(content.get("mail:1"))
+        XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1"))
         XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned); XCTAssertTrue(signals.recent(limit: 10).isEmpty)
         XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")

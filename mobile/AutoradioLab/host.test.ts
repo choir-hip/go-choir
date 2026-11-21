@@ -34,7 +34,7 @@ describe('hostMode', () => {
   test('H4 the contracts read only "none" as no native (unknown is native)', async () => {
     const spine = await Bun.file(new URL('./spine.contract', import.meta.url)).text();
     expect(spine).toContain('derive noNative = hc.mode == "none"');
-    for (const f of ['members-notebook.contract']) expect(await Bun.file(new URL(`./${f}`, import.meta.url)).text()).toContain('noNative');
+    for (const f of ['members-reader.contract']) expect(await Bun.file(new URL(`./${f}`, import.meta.url)).text()).toContain('noNative');
     expect(spine).not.toContain('derive pg = pgn.top');          // the SET is never chosen by the native set's content; the native set's top page only tells the host fact that the package answered (hostCaps(pgn.top != ""))
   });
 });

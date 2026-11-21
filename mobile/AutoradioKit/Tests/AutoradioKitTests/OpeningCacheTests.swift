@@ -259,21 +259,5 @@ final class OpeningCacheTests: XCTestCase {
         _ = await ready.start(reason: .launch)
         XCTAssertEqual(s2, 0, "nothing to wait for: no wait")
     }
-
-    // 11
-    func testOfflineTheStoriesHeldOnThePhonePlayNext() async {
-        let content = ContentStore(root: dir.appendingPathComponent("content"))
-        for (i, t) in ["Tide tables", "Harbour lights", "Market hours"].enumerated() {
-            content.put(StoredItem(id: "story:\(i)", kind: .story, title: t, text: "\(t) are changing this week. The council met on Tuesday.", date: Date(timeIntervalSince1970: 1000 + Double(i)), address: "pub:s\(i)"))
-        }
-        let store = RunSheetStore()
-        let f = FakeFeed(); f.failure = ChoirError.transport("offline")
-        let w = RunSheetWriter(store: store, feed: { f })
-        w.offlineFill = { LocalStories.entries(from: content, sheet: store, limit: 2) }
-        store.place(story("d-s1"), at: .end, by: .desk)               // one playable entry ahead: the desk is still asked, then the fill adds
-        w.open(); await w.settle()
-        let titles = store.ahead(limit: 10).map(\.title)
-        XCTAssertEqual(titles, ["Tide tables", "Market hours", "Harbour lights"], "the held story first, then the two newest held stories")
-        XCTAssertEqual(f.calls.count, 1, "one request, no loop")
-    }
+    // 11 (the stories held on the phone play next when the desk cannot be reached) is a bun test now: content-run.test.ts S7, `localStories`.
 }

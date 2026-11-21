@@ -178,7 +178,6 @@ public final class ChoirApp: @unchecked Sendable {
             }
             me.writer = w
             me.accountWipe.register("writer") { await MainActor.run { w.stop() } }
-            w.offlineFill = { LocalStories.entries(from: .shared, sheet: .shared) }       // the desk cannot be reached: stories held on the phone
             let wa = OpeningWriteAhead(cache: me.openingCache, store: .shared,
                                        feed: { [weak me] in me.map { ProgrammeRouteFeed(source: $0.stretchSource?() ?? RouteStretchSource(baseURL: $0.frontBaseURL())) } },
                                        voice: { [weak me] in me?.runtime.player.voiceKey ?? "" },
@@ -262,7 +261,8 @@ public final class ChoirApp: @unchecked Sendable {
             let list = try await ChoirFront.stories(client: ChoirEnvironment.shared.client(baseURL: base), limit: 30)
             lock.lock(); stories = list; lock.unlock()
             saveFrontCache(list)
-            ContentSync.kick()          // stories, mail, documents, files into the phone's own store, in the background
+            // The headlines and deks the phone now holds are part of what it can answer from first.
+            for s in list { StoryDates.shared.note("pub:" + s.route, PaperStory.date(s.updated)) }
             ClipStore.shared.markStale()                          // the front is fresh: the next write asks for the clips again, once
             if list.isEmpty { say("The front page is empty right now.") }
         } catch { say(Self.plain(stage: "programme", message: "\(error)")) }

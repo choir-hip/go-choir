@@ -345,6 +345,185 @@ step logs
 run_drive picks light "" --touch platform
 unset SEED_PICKS
 
+CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
+MIGRATED_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CHK"/Library/Application\ Support/exact/*/data/theme-choice.json 2>/dev/null | head -1)
+[ -n "$MIGRATED_FILE" ] && cp "$MIGRATED_FILE" "$SHOTS/migrated-theme-choice.json"
+ls "$CHK"/Library/Caches/exact/*/agent/*/data/themes/ "$CHK"/Library/Application\ Support/exact/*/data/themes/ 2>/dev/null > "$SHOTS/migrated-themes-dir.txt"
+legacy_clean
+
+# ---- 3a4. TAKES drill. Nothing is carried from the pre-release build (owner's ruling, 2026-11-20): its two files (takes-own.json with a handle and own ids, takes-muted.json with two muted voices) are SEEDED by
+# reset_state (SEED_TAKES, TAKES_SEED_IDS) in the drive that is the first signed-in launch to see them, and the build must neither read, adopt from nor delete them: no muted voice is listed, nothing of them is
+# in the kept file (app:/data/takes.json, which exists only when the server's `mine` gave this account a live take) or in the programme's copy (pushed by shared code, so it exists after the first refresh), and both
+# old files are still there with their contents. The account wipe (the sign-out drill below) is what removes them.
+# NOT covered: Record, Stop, Preview, Publish. The simulator has no microphone input the scripts can drive (the agent's microphone track is unused: testing-and-debugging.md, "Voice flows for agent tests"), and
+# Publish would write a take to d@e. Those are in take-session.test.ts (S1 to S8, U3, B1) against a fake recorder, and on a phone by hand. The account-change case cannot be driven with one key.
+SEED_TAKES=1; export SEED_TAKES
+TAKES_SEED_IDS='"take-drilla","take-drillb"'; export TAKES_SEED_IDS
+step "clock data"; wait_ 5000
+place radio 1500
+wait_ 9000                                            # the refresh runs apart from the first paint (a task, then the signed-in request)
+for i in 1 2 3; do step "tap radio-scroll drag 0 -1500"; wait_ 300; done
+view real-46-takes-old-files 900
+step logs
+run_drive takes light "" --touch platform
+unset SEED_TAKES TAKES_SEED_IDS
+CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
+TKS="$CHK/Library/Application Support/Autoradio"
+TK_FILE=$(ls -t "$CHK"/Library/Caches/exact/*/agent/*/data/takes.json "$CHK"/Library/Application\ Support/exact/*/data/takes.json 2>/dev/null | head -1)
+rm -f "$SHOTS/takes-data.json" "$SHOTS/takes-copy-own.json" "$SHOTS/takes-copy-muted.json" "$SHOTS/takes-old-own.json" "$SHOTS/takes-old-muted.json"
+[ -n "$TK_FILE" ] && cp "$TK_FILE" "$SHOTS/takes-data.json"
+cp "$TKS/takes-copy-own.json" "$SHOTS/takes-copy-own.json" 2>/dev/null
+cp "$TKS/takes-copy-muted.json" "$SHOTS/takes-copy-muted.json" 2>/dev/null
+cp "$TKS/takes-own.json" "$SHOTS/takes-old-own.json" 2>/dev/null
+cp "$TKS/takes-muted.json" "$SHOTS/takes-old-muted.json" 2>/dev/null
+tseg() { awk -v m="$2" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$1"; }
+tseg "$SHOTS/drive-takes.txt" real-46-takes-old-files > "$SHOTS/seg-takes.txt"
+
+# Fail loudly rather than quietly tour nothing: no story card at all means the paper page did not draw, which the tour must not pass over.
+grep -q '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" || fail "survey" "no paper-story- line in the survey tree: the paper page showed no story card"
+# (Stories and the play button are NOT taken from the survey: it is minutes old by the time they are tapped. Each drive that taps paper content picks it fresh: fresh_paper.)
+DOC1=$(ids "$SHOTS/drive-survey.txt" "textures-doc-" | sed -n 3p)
+# a document by its title: the id of the row whose card holds the title text (the tree lists the row, then its texts)
+docid() { awk -v t="$2" '/\[textures-doc-texture:/ { match($0, /\[textures-doc-texture:[^]]*\]/); id=substr($0, RSTART+1, RLENGTH-2) } index($0, "\"" t "\"") && id != "" { print id; exit }' "$1"; }
+THEME_ROW=$(docid "$SHOTS/drive-survey.txt" "Autoradio theme test")
+BIG_ROW=$(docid "$SHOTS/drive-survey.txt" "Master document")
+DIR1=$(ids "$SHOTS/drive-survey.txt" "files-row-" | sed -n 1p)
+MAIL1=$(ids "$SHOTS/drive-survey.txt" "mail-row-" | sed -n 1p)
+# a file that opens WITHOUT writing anything: a table or a picture (a text or Markdown file is opened as a Texture document by the computer, which writes; a PDF the same)
+FILE1=$(ids "$SHOTS/drive-survey.txt" "files-row-" | grep -iE '\.(csv|tsv|png|jpe?g|gif)$' | sed -n 1p)
+POD1=$(ids "$SHOTS/drive-survey.txt" "podcast-row-" | sed -n 1p)
+THEME_DOC=${THEME_ROW#textures-doc-texture:}
+echo "picked: file=${FILE1:+yes} podcast=${POD1:+yes} theme=${THEME_DOC:+yes} big=${BIG_ROW:+yes} doc=${DOC1:+yes} dir=${DIR1:+yes} mail=${MAIL1:+yes}"
+
+# Rows of the live front page sit wherever today's page puts them, and the bar's text field can cover one. Before a row is tapped the
+# list is dragged back to its top (twice, so a long page is covered), where the first card is clear of the bar; the second card's title sits under the bar there, so its tap scrolls it up first.
+to_top() { step "tap paper-scroll drag 0 700"; wait_ 400; step "tap paper-scroll drag 0 700"; wait_ 600; }
+
+# ---- 3b. READ drive: two real stories in the reader, one played, one Texture, a folder, a message
+fresh_paper pick-read
+STORY1=$F_STORY1; STORY2=$F_STORY2; PLAY1=$F_PLAY
+echo "picked (just before the read drive): story1=${STORY1:+yes} story2=${STORY2:+yes} play=${PLAY1:+yes}"
+step "clock data"; wait_ 6000
+place paper 2500
+[ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-11-story-1 4000; step "tap reader-scroll drag 0 -600"; view real-12-story-1-scrolled 900; step "tap reader-scroll drag 0 -900"; view real-13-story-1-more 900; }
+goto "paper:front"; wait_ 1200
+[ -n "$STORY2" ] && { to_top; step "tap paper-scroll drag 0 -350"; wait_ 1800; step "tap \"$STORY2\""; view real-14-story-2 4000; step "tap reader-scroll drag 0 -2500"; view real-15-story-2-end 900; }
+goto "paper:front"; wait_ 1200
+[ -n "$PLAY1" ] && { to_top; step "tap \"$PLAY1\""; wait_ 5000; step tree; shot real-16-playing; step "tap bar-now"; view real-17-radio-page 1200; }
+place textures 900; wait_ 2500
+[ -n "$DOC1" ] && { step "tap \"$DOC1\""; view real-18-texture-document 4000; }
+place files 900; wait_ 2500
+[ -n "$DIR1" ] && { step "tap \"$DIR1\""; view real-19-files-folder 3500; }
+place mail 900; wait_ 2500
+[ -n "$MAIL1" ] && { step "tap \"$MAIL1\""; view real-20-mail-message 3500; }
+step logs
+run_drive read light "" --touch platform
+
+# ---- 3b2. READER drive (shared code, reader.ts): one real story read twice. Part one opens it and dumps the page (title, text, citation marks, the Sources list, related); part two opens it again, reads which citation
+# marks part one found, taps the first one (its card opens under the paragraph), then the page menu and its Versions sheet. Nothing is written to the computer. The ids tapped come from part one's own tree, not from a guess.
+READER_STORY=${STORY1:-$STORY2}
+if [ -n "$READER_STORY" ]; then
+  step "clock data"; wait_ 6000
+  place paper 2500; to_top; step "tap \"$READER_STORY\""; view real-r1-reader-story 5000
+  step "tap reader-scroll drag 0 -1500"; view real-r2-reader-sources 1200
+  step logs
+  run_drive reader1 light "" --touch platform
+  CITE1=$(ids "$SHOTS/drive-reader1.txt" "reader-cite-" | sed -n 1p)
+  # Part two: where the citation sits. The agent's tap does not scroll a target into view at this pin (the drive failed twice on "outside the viewport", with and without a real touch), so the page is scrolled
+  # explicitly, by the distance read from the node's own frame: `layout <id>` prints its "space viewport X,Y WxH" at the scroll the page opens at.
+  CITE_SCROLL=""
+  if [ -n "$CITE1" ]; then
+    step "clock data"; wait_ 6000
+    place paper 2500; to_top; step "tap \"$READER_STORY\""; wait_ 5000
+    step "layout \"$CITE1\""
+    run_drive reader1b light "" --touch platform
+    CITE_SCROLL=$(layout_scroll "$SHOTS/drive-reader1b.txt" "$CITE1" 320) || fail "reader" "the layout of $CITE1 in $SHOTS/drive-reader1b.txt has no viewport frame (or the node is more than 30000 points down): the drive cannot scroll to the citation"
+  fi
+  step "clock data"; wait_ 6000
+  place paper 2500; to_top; step "tap \"$READER_STORY\""; wait_ 5000
+  [ -n "$CITE1" ] && { step "tap reader-scroll wheel 0 $CITE_SCROLL"; step "clock settle"; step "tap \"$CITE1\""; view real-r3-reader-citation-card 1500; step "tap reader-scroll wheel 0 -30000"; step "clock settle"; }
+  step "tap reader-menu"; view real-r4-reader-menu 1200
+  step "tap reader-menu-versions"; view real-r5-reader-versions 1500
+  step logs
+  run_drive reader2 light "" --touch platform
+fi
+
+# ---- 3c. THEME drive: a theme from a Texture, loaded through Settings (the document "Autoradio theme test" on d@e holds one choir-theme block)
+if [ -n "$THEME_DOC" ]; then
+  step "clock data"; wait_ 5000
+  place paper 2000
+  place settings 900
+  step "tap settings-nav-appearance"; wait_ 700
+  step "type settings-theme-doc $THEME_DOC"; wait_ 500
+  step "tap settings-theme-load"; view real-21-theme-loaded 3500
+  step "tap settings-back"; wait_ 600; view real-22-settings-with-theme 700
+  step logs
+  run_drive theme light "" --touch platform
+fi
+
+# ---- 3d. BIG drive: the largest document on d@e (hundreds of versions) opens, or says plainly why not
+if [ -n "$BIG_ROW" ]; then
+  step "clock data"; wait_ 5000
+  place paper 2000
+  place textures 900; wait_ 6000        # the list of hundreds of documents is slow on a cold launch (the drive tapped it at 2.5 s and found no row)
+  step "tap \"$BIG_ROW\""; view real-23-big-document 9000
+  step logs
+  run_drive big light "" --touch platform
+fi
+
+# ---- 3e. ASK drive (REAL_PROMPT=1 only: it is a model call on d@e): a typed question in the bar runs one turn on the computer
+if [ -n "${REAL_PROMPT:-}" ]; then
+  step "clock data"; wait_ 5000
+  place paper 2000
+  step "type bar-field \"What is the top story on the front page right now?\""; wait_ 500
+  view real-24-asked 400
+  step "tap bar-send"; wait_ 4000; step tree; shot real-25-asked-sent
+  step "clock +40000 real"; step "clock data"; step tree; shot real-26-answer
+  step "tap bar-answer-text"; wait_ 1500; view real-27-conversation 600       # the conversation page (conversation.ts rows over the native entries)
+  step logs
+  run_drive ask light "" --touch platform
+fi
+
+# ---- 3f. TOUR drive: a file that opens read only, the podcasts list and a show (no Subscribe), the notebook, the Settings account page once more
+step "clock data"; wait_ 5000
+place files 900; wait_ 2500
+[ -n "$FILE1" ] && { step "tap \"$FILE1\""; view real-30-files-file 4000; }
+place podcasts 900; view real-31-podcasts 3500
+[ -n "$POD1" ] && { step "tap \"$POD1\""; view real-32-podcast-show 3500; }
+place notebook 900; view real-33-notebook 4000
+place settings 900; step "tap settings-nav-account"; view real-34-settings-account 3500
+step "tap settings-back"; wait_ 500
+step "tap settings-nav-about"; view real-35-settings-about 1500
+step "tap settings-back"; wait_ 500
+step "tap settings-nav-activity"; view real-36-settings-activity 3500
+place mail 900; wait_ 2500
+step "tap mail-folder-sent"; view real-37-mail-sent 3000
+step "tap mail-folder-quarantine"; view real-38-mail-quarantine 3000
+step logs
+run_drive tour light "" --touch platform
+
+# ---- 3f1. EDITION PICKS drive (shared code, edition-picks.ts; local writes only on the phone: nothing is written to the computer). The OLD Swift file is SEEDED with one topic and must come out
+# of the drive UNREAD and still there (the build never reads or deletes it; an upgraded phone starts with no picks). The topic screen is opened from My edition (the page, not an assumption, says which
+# control: with no picks it is "Choose topics"), three picks are made (a category, a subtopic under another, a typed one) and one is taken off. The stored file is copied out and read.
+SEED_PICKS=1; export SEED_PICKS
+step "clock data"; wait_ 6000
+place paper 2500
+step "tap paper-section-mine"; view real-70-edition-mine 1500
+step "tap paper-choose-topics"; view real-71-topics-empty 1500
+# A tap needs its target in the viewport (the driver cannot tap what the bar or the fold covers): Science sits near the top; after Culture opens the list is dragged up before Film, the field and Done are tapped,
+# and dragged back up before Science is tapped again. Each target is also asserted to be in the dumped tree below, so a row that was off screen fails there, not silently.
+step "tap ob-topic-Science"; wait_ 700
+step "tap ob-topic-open-Culture"; wait_ 700; step "tap edit-edition-scroll drag 0 -300"; wait_ 500; step tree; step "tap ob-topic-Film"; wait_ 700
+step "tap edit-edition-scroll drag 0 -700"; wait_ 500
+step "type ob-topic-input Zzdrillchess"; step "tap ob-topic-add"; view real-72-topics-picked 1200
+step "tap edit-edition-scroll drag 0 1500"; wait_ 500; step "tap ob-topic-Science"; view real-73-topics-one-off 1200
+step "tap edit-edition-scroll drag 0 -1500"; wait_ 500; step tree; step "tap edit-edition-done"; wait_ 2500
+place paper 2000
+step "tap paper-section-mine"; view real-74-edition-mine-after 2500
+step logs
+run_drive picks light "" --touch platform
+unset SEED_PICKS
+
 # ---- 3d2. FIRST RUN, COMPUTER, ACTIVITY AND ABOUT: shared code over the native facts (onboarding.ts, computer.ts, activity.ts, settings.ts aboutPage). A fresh app; the Settings pages once each, then the edit page.
 step "clock data"; wait_ 6000
 place settings 900
@@ -374,6 +553,14 @@ PICKS_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/edition-topics.json "
 [ -n "$PICKS_FILE" ] && cp "$PICKS_FILE" "$SHOTS/picks-stored.json"
 OLD_FILE="$CHK/Library/Application Support/Autoradio/edition-topics.json"
 if [ -n "$CHK" ] && [ -f "$OLD_FILE" ]; then cp "$OLD_FILE" "$SHOTS/picks-old-file.json"; else rm -f "$SHOTS/picks-old-file.json"; fi
+
+# ---- 3f1. NOTEBOOK drive (lane exact-notebook-content): the notebook page and the scorecard from shared code under app:/data, a Refresh press that reads again, and the content sync that
+# starts at launch (shared code: content-run.ts logs one line per kind, counts only). Reads nothing it writes: no tap on a line, whose ids depend on the account's own notebook.
+step "clock data"; wait_ 6000
+place notebook 900; view real-47-notebook 5000
+step "tap notebook-refresh"; view real-48-notebook-refreshed 5000
+step logs
+run_drive notebook light "" --touch platform
 
 # ---- 3f2. SPINE drive (local UI only, nothing is written to the computer): the bar, the launcher and its deck, the default themes and the mode switch.
 # Ported from the demo-mode proofs (proof-sim, proof-lane1, proof-lane4, proof-lane7, proof-default-themes, proof-app), which are deleted with demo mode.
@@ -613,6 +800,14 @@ chk "themes: Newsprint dark" 'Showing Newsprint in dark' "$SP"
 [ -n "$FILE1" ] && chk "files: a file opened" '\[(page-title|viewer-[a-z]+|csv-card|image-view)\]' "$SHOTS/drive-tour.txt"
 chk "podcasts: the place opened" '\[(podcasts-[a-z]+|podcast-row-[^]]*)\]' "$SHOTS/drive-tour.txt"
 chk "notebook: the page opened" '\[notebook-(page|title)\]' "$SHOTS/drive-tour.txt"
+NB="$SHOTS/drive-notebook.txt"
+chk "notebook: the page, from shared code" '\[notebook-page\]' "$NB"
+chk "notebook: the held list is complete (its last row, 13)" '\[notebook-held-13\]' "$NB"
+chk "notebook: the notebook was read (a section, or a plain notice that there is none or it is offline)" '\[notebook-(section-[a-z-]+|doc-notice)\]' "$NB"
+bad "notebook: the notebook is not stuck loading after the refresh" '\[notebook-loading\]' "$NB"
+bad "notebook: the scorecard is not stuck reading" '\[notebook-score-state\][^"]*"Reading the scorecard' "$NB"
+chk "content sync: the shared sync ran at launch (stories)" 'console: content sync story: fetched' "$NB"
+chk "content sync: documents" 'console: content sync document: fetched' "$NB"
 chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' "$SHOTS/drive-tour.txt"
 # the first shared answer after a launch must not run over the device's 100 ms turn (the app logs the failure that says so)
 bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"

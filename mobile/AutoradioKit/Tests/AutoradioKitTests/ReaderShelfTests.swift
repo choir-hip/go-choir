@@ -191,7 +191,7 @@ final class ShelfStoreTests: XCTestCase {
             XCTAssertEqual(a[.protectionKey] as? FileProtectionType, .completeUntilFirstUserAuthentication, u.lastPathComponent)
         }
         #endif
-        XCTAssertTrue(ContentStore.writeOptions.contains(.completeFileProtectionUntilFirstUserAuthentication))
+        XCTAssertTrue(ShelfFiles.writeOptions.contains(.completeFileProtectionUntilFirstUserAuthentication))
     }
     func testOpenDocumentsInMemoryAreBounded() throws {
         let (lib, dir) = make(); defer { try? FileManager.default.removeItem(at: dir) }
