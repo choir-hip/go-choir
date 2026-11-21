@@ -121,6 +121,18 @@ var searchLeadIndexes = []struct{ name, ddl string }{
 	// failed build). The table grows about 190,000 rows a day against a 30-day
 	// retention; the build happens once, at first start after this lands.
 	{"idx_sl_capture", `CREATE INDEX idx_sl_capture ON search_leads(owner_id, computer_id, capture_id) WHERE capture_id IS NOT NULL`},
+	// idx_sl_conv serves SearchLeadPagesOfConversation, which every story
+	// research run starts with, under a timeout that drops the story's context
+	// when missed: a partial GIN index on conversation_ids over the same rows
+	// (those with a capture). Measured on the paper's corpusd (graph database,
+	// read only; the index built on a session-private copy of the table,
+	// 2026-11-21): 94,308 rows, 6,815 with a capture; the read takes 29.7 ms
+	// with a sequential scan today (14,662 buffers read) and 0.23 ms with the
+	// index; the GIN build over the 6,815 takes 49 ms and the index is 136 kB
+	// (idx_sl_capture's 310 ms and 1.8 MB for comparison). A plain CREATE INDEX
+	// takes a SHARE lock: lead writes and the prune wait for that 0.05 to 0.3 s
+	// (the routes answer 503 for it) once, at first start after this lands.
+	{"idx_sl_conv", `CREATE INDEX idx_sl_conv ON search_leads USING GIN (conversation_ids) WHERE capture_id IS NOT NULL`},
 }
 
 // SearchLeadHit is one result of a provider's arrival.
@@ -301,6 +313,13 @@ type LeadPage struct {
 	Title     string `json:"title,omitempty"`
 }
 
+// searchLeadPagesSQL is the by-conversation read. Its array containment
+// predicate and its capture filter are the ones idx_sl_conv (a partial GIN
+// index) serves.
+const searchLeadPagesSQL = `SELECT capture_id, url, title FROM search_leads
+		WHERE owner_id = ? AND computer_id = ? AND capture_id IS NOT NULL AND conversation_ids @> ARRAY[?::text]
+		ORDER BY last_returned_at DESC, url_key LIMIT ?`
+
 // SearchLeadPagesOfConversation returns the pages read from leads that the
 // named conversation's searches returned (a story's research searches in its
 // story's conversation), newest return first, at most limit. A lead nobody
@@ -313,9 +332,7 @@ func (s *Store) SearchLeadPagesOfConversation(ctx context.Context, ownerID, comp
 	if conversationID == "" || limit <= 0 {
 		return nil, nil
 	}
-	rows, err := s.corpus().QueryContext(ctx, `SELECT capture_id, url, title FROM search_leads
-		WHERE owner_id = ? AND computer_id = ? AND capture_id IS NOT NULL AND ?::text = ANY(conversation_ids)
-		ORDER BY last_returned_at DESC, url_key LIMIT ?`, ownerID, computerID, conversationID, limit)
+	rows, err := s.corpus().QueryContext(ctx, searchLeadPagesSQL, ownerID, computerID, conversationID, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -689,14 +689,6 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, routeErr)
 		}
 		toInbox, onRoute := route.Inbox, route.OnRoute
-		if deskProfile == deskmanifest.DocumentCustodianName() && (in.Kind == yaegikernel.IntentCast || in.Kind == yaegikernel.IntentAsk) && deskmanifest.IsResearchInbox(toInbox) {
-			// Read what you were fed before you research again: a correctness
-			// refusal, never a prompt wish (story_research_context.go).
-			doc := storyDocOfDeskAgent(r.scope.DeskAgentID)
-			if err := rt.requireFedCapturesRead(ctx, r.scope.OwnerID, r.scope.ComputerID, doc, r.scope.RunID); err != nil {
-				return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
-			}
-		}
 		if recordsIntent(in) && strings.TrimSpace(in.ToDesk) != "" && !onRoute {
 			return nil, fmt.Errorf("reduce: %s: %q is not on the records path from %s", in.LocalID, in.ToDesk, r.scope.DeskAgentID)
 		}
@@ -858,7 +850,6 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		seq, opened := int64(0), ""
 		if i < len(committed.Records) {
 			rt.logManagementStoryChoice(r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i], in)
-			rt.logStoryResearchCast(ctx, r.scope.OwnerID, r.scope.ComputerID, r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i])
 			seq = committed.Records[i].InboxSeq
 			if committed.Records[i].OpenedStory || in.Kind == yaegikernel.IntentDelegate {
 				// The receipt names the story a Cast to texture:new opened,

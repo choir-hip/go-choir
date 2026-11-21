@@ -56,11 +56,21 @@ const (
 	// storyMaterialMaxRecords is how many of a story's newest inbox records its
 	// material reads.
 	storyMaterialMaxRecords = 300
-	// storyContextReadTimeout bounds each capture read of the context and
-	// storyContextReadTotal all of them: the context never delays a research
-	// start by more than that.
+	// storyContextMaxPredecessorPages is the share of the section a predecessor
+	// story's pages take (a story's own take storyContextMaxPages).
+	storyContextMaxPredecessorPages = 20
+	// storyContextReadTimeout bounds each capture read of the context,
+	// storyContextReadTotal the capture reads of one story and
+	// storyContextLeadTimeout its one lead read; storyContextTotal bounds the
+	// whole section, the successor's part included: the context never delays a
+	// research start by more than storyContextTotal, and what it did not reach
+	// in time is left out (the lead read logs a timeout).
 	storyContextReadTimeout = 2 * time.Second
 	storyContextReadTotal   = 6 * time.Second
+	storyContextLeadTimeout = 3 * time.Second
+	storyContextTotal       = 10 * time.Second
+	// storyContextURLRunes clips a page's URL.
+	storyContextURLRunes = 200
 	// storyContextMaxFed bounds the fed captures the section names.
 	storyContextMaxFed = 10
 	// storyContextTitleRunes clips a provider's title.
@@ -190,47 +200,52 @@ func storyResearchRefusedLine(runID, story string, unread int) string {
 	return fmt.Sprintf("story research refused run=%s story=%s unread=%d", runID, story, unread)
 }
 
-// storyPages gathers the pages a story holds: the leads its conversation's
-// searches returned and a run read, and the captures it was opened with or
-// fed (their URLs read from the capture store, private ones left out).
-func (rt *Runtime) storyPages(ctx context.Context, ownerID, computerID, doc string) (pages []storyHeldPage, held int, fed []string) {
-	seen := map[string]bool{}
+// storyPages gathers the pages a story holds, at most max: the captures it was
+// opened with or fed (newest first, their URLs read from the capture store,
+// private ones left out) and the leads its conversation's searches returned and
+// a run read. The budget is shared: leads take at most half of it while the
+// story has captures to show, so pages read earlier never push out what the
+// story was just fed.
+func (rt *Runtime) storyPages(ctx context.Context, ownerID, computerID, doc string, max int) (pages []storyHeldPage, held int, fed []string) {
 	var captures any
 	if rt.researchDeps != nil {
 		captures = rt.researchDeps.Captures
 	}
+	var leads []storyHeldPage
 	if lr, ok := captures.(researchtools.SearchLeadPageReader); ok {
-		callCtx, cancel := context.WithTimeout(ctx, candidateNeighboursTimeout)
-		got, err := lr.SearchLeadPages(callCtx, ownerID, computerID, doc, storyContextMaxPages)
+		start := time.Now()
+		callCtx, cancel := context.WithTimeout(ctx, storyContextLeadTimeout)
+		got, err := lr.SearchLeadPages(callCtx, ownerID, computerID, doc, max)
 		cancel()
 		if err != nil {
-			log.Printf("story research context: lead pages failed: %v", err)
+			// A timeout drops the story's read pages from the section: it is
+			// logged as one, so a read that grows past its bound is seen.
+			log.Printf("story research context: lead pages failed story=%s elapsed=%s timeout=%t: %v", doc, time.Since(start).Round(time.Millisecond), callCtx.Err() != nil, err)
 		}
 		for _, p := range got {
-			if p.CaptureID == "" || seen[p.CaptureID] || len(pages) >= storyContextMaxPages {
-				continue
+			if p.CaptureID != "" {
+				leads = append(leads, storyHeldPage{URL: p.URL, Title: p.Title, CaptureID: p.CaptureID})
 			}
-			seen[p.CaptureID] = true
-			pages = append(pages, storyHeldPage{URL: p.URL, Title: p.Title, CaptureID: p.CaptureID})
 		}
 	}
 	m, err := rt.storyMaterialOf(ctx, ownerID, computerID, doc)
 	if err != nil {
-		return pages, len(pages), nil
+		return takePages(nil, leads, max), len(leads), nil
 	}
 	cr, _ := captures.(interface {
 		ReadCapture(ctx context.Context, captureID string, fromBlock, maxChars int) (json.RawMessage, error)
 	})
 	readCtx, cancelReads := context.WithTimeout(ctx, storyContextReadTotal)
 	defer cancelReads()
-	// Newest first, and only as many as the section shows: the pages the story
+	// Newest first, and only as many as the share allows: the pages the story
 	// holds beyond that are found with choir.SearchWireCorpus.
-	for i := len(m.Captures) - 1; i >= 0 && len(pages) < storyContextMaxPages; i-- {
+	slots := max - len(leads)
+	if half := max / 2; slots < half {
+		slots = half
+	}
+	var own []storyHeldPage
+	for i := len(m.Captures) - 1; i >= 0 && len(own) < slots; i-- {
 		id := m.Captures[i]
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
 		page := storyHeldPage{CaptureID: id}
 		if cr != nil && readCtx.Err() == nil {
 			callCtx, cancel := context.WithTimeout(readCtx, storyContextReadTimeout)
@@ -249,9 +264,32 @@ func (rt *Runtime) storyPages(ctx context.Context, ownerID, computerID, doc stri
 				}
 			}
 		}
-		pages = append(pages, page)
+		own = append(own, page)
 	}
+	pages = takePages(own, leads, max)
 	return pages, len(pages), m.FedSince
+}
+
+// takePages is the story's own captures, then as many leads as the budget has
+// left, each capture once.
+func takePages(own, leads []storyHeldPage, max int) []storyHeldPage {
+	var out []storyHeldPage
+	seen := map[string]bool{}
+	for _, p := range own {
+		if !seen[p.CaptureID] && len(out) < max {
+			seen[p.CaptureID] = true
+			out = append(out, p)
+		}
+	}
+	room := max - len(out)
+	var fill []storyHeldPage
+	for _, p := range leads {
+		if !seen[p.CaptureID] && len(fill) < room {
+			seen[p.CaptureID] = true
+			fill = append(fill, p)
+		}
+	}
+	return append(fill, out...)
 }
 
 func outletOf(raw string) string {
@@ -293,7 +331,7 @@ func describeStoryPages(b *strings.Builder, pages []storyHeldPage) {
 	for _, p := range shown {
 		fmt.Fprintf(b, "- capture_id %s", p.CaptureID)
 		if p.URL != "" {
-			fmt.Fprintf(b, " %s", p.URL)
+			fmt.Fprintf(b, " %s", intakeClip(p.URL, storyContextURLRunes))
 		}
 		if t := clipTitle(p.Title); t != "" {
 			fmt.Fprintf(b, " (%s)", t)
@@ -342,7 +380,9 @@ func (rt *Runtime) storyResearchContextOpening(ctx context.Context, rec *types.R
 		return nil
 	}
 	ctx = withDeskReader(ctx, rec.AgentProfile)
-	pages, _, fed := rt.storyPages(ctx, rec.OwnerID, rec.ComputerID, doc)
+	ctx, cancelTotal := context.WithTimeout(ctx, storyContextTotal)
+	defer cancelTotal()
+	pages, _, fed := rt.storyPages(ctx, rec.OwnerID, rec.ComputerID, doc, storyContextMaxPages)
 	var b strings.Builder
 	found := false
 	mainPoint, succeeds := rt.store.StoryPointOf(ctx, rec.OwnerID, rec.ComputerID, doc)
@@ -366,7 +406,7 @@ func (rt *Runtime) storyResearchContextOpening(ctx context.Context, rec *types.R
 		}
 	}
 	if succeeds != "" {
-		prior, _, _ := rt.storyPages(ctx, rec.OwnerID, rec.ComputerID, succeeds)
+		prior, _, _ := rt.storyPages(ctx, rec.OwnerID, rec.ComputerID, succeeds, storyContextMaxPredecessorPages)
 		if len(prior) > 0 {
 			pm, _ := rt.store.StoryPointOf(ctx, rec.OwnerID, rec.ComputerID, succeeds)
 			b.WriteString("\nThis story succeeds an earlier one (its main beat moved on); the earlier story's research read and holds these pages, so start from them.\n")

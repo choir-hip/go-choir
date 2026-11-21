@@ -259,8 +259,9 @@ func candidateOf(sum store.StorySummary, now time.Time, near int, lead bool) can
 // buildCandidateSection offers, for each arrival with a candidate, up to
 // candidatesPerCapture stories, within budgetTokens (an arrival whose stories
 // do not fit is said to be left out, and nothing is owed for it). Candidates
-// are ranked by how many of the arrival's nearest captures (and leads) the
-// story holds, then by version (the context the trajectory has accumulated on
+// are ranked by how many of the arrival's nearest captures the story holds,
+// a search lead counting as one more (so a story found only by a lead ranks
+// level with one holding a single near capture), then by version (the context the trajectory has accumulated on
 // the matter), then newest. Nothing here reads a title.
 func buildCandidateSection(arrivals []types.CaptureArrival, links map[string]arrivalLinks, byDoc map[string]store.StorySummary, now time.Time, budgetTokens int) (*openingCandidateSection, *openingOffer, candidateSources, int) {
 	section := &openingCandidateSection{Captures: []openingCandidateCapture{}}
@@ -429,10 +430,9 @@ func judgmentShape() string {
 // refusal is a correctness refusal naming the shape; nothing is sent. It
 // refuses nothing for what the answer is beyond that: the lean is the prompt's.
 func requireJudgment(offer *openingOffer, packet string) error {
-	p, ok := parseJudgmentPacket(packet)
-	if !ok {
-		return nil
-	}
+	// A packet that is empty or not JSON is a Cast with no main point (the
+	// zero packet fails the size check below), never one the rule skips.
+	p, _ := parseJudgmentPacket(packet)
 	shape := judgmentShape()
 	leased := ""
 	if offer != nil {
@@ -581,8 +581,9 @@ func (rt *Runtime) detailOfDecision(runID string, in stagedDecision) choiceDetai
 	captures := in.captures
 	if in.packet != "" {
 		if p, ok := parseJudgmentPacket(in.packet); ok {
-			captures = p.Captures
-			d.Captures = len(p.Captures)
+			if len(p.Captures) > 0 {
+				captures, d.Captures = p.Captures, len(p.Captures)
+			}
 			d.MainPoint = len([]rune(strings.TrimSpace(p.MainPoint)))
 			d.Succeeds = docOfStoryRef(p.Succeeds)
 			d.Answers = map[string]string{}

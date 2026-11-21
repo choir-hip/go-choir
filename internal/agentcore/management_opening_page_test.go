@@ -699,3 +699,57 @@ func TestOneHugeHeadlineIsClippedNotDroppingThePage(t *testing.T) {
 		t.Fatalf("R7: page over its bound")
 	}
 }
+
+// A packet that is not JSON, or is empty, is a Cast with no main point and no
+// captures, not a Cast the rule does not read (review round 3, finding 5:
+// choir.Cast("texture:new", headline, nil) opened a story with neither).
+func TestAnOpenWithNoPacketIsRefusedAsHavingNoMainPoint(t *testing.T) {
+	for _, packet := range []string{"", "   ", "not json at all", `["a","b"]`, `null`} {
+		err := requireJudgment(nil, packet)
+		if err == nil || !strings.Contains(err.Error(), "main point") || !strings.Contains(err.Error(), "nothing was sent") {
+			t.Errorf("packet %q: err = %v, want a refusal naming the main point", packet, err)
+		}
+	}
+	offer := &openingOffer{ByCapture: map[string][]string{"cap-1": {"docA"}}, Leased: []string{"cap-1"}}
+	if err := requireJudgment(offer, ""); err == nil || !strings.Contains(err.Error(), "main point") {
+		t.Errorf("a task's empty packet: err = %v", err)
+	}
+}
+
+// The parent's open, on the real records route (a woken management run, its
+// cell, its commit), is refused without a main point and opens nothing, as a
+// task's is (seat 1, review of 9630efefe: the missing test).
+func TestParentOpenWithoutAMainPointIsRefusedOnTheRealRoute(t *testing.T) {
+	f := newDelegationFixtureWith(t, "owner-parent-open", false)
+	ctx := context.Background()
+	seedArrival(t, f.s, f.owner, f.computer, "rss:p0", []types.CaptureArrival{{CaptureID: "cap-p0", Title: "Rotterdam dockers strike", URL: "https://p.example/0"}})
+	cast := func(fields string) string {
+		return `choir.Cast("texture:new", "Rotterdam dock strike", map[string]any{"captures": []string{"cap-p0"}, "publish": "auto"` + fields + `, "hypotheses": []any{map[string]any{"statement": "the strike ends", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`
+	}
+	turn := func(cell string) {
+		t.Helper()
+		f.model.mu.Lock()
+		f.model.parentCell = cell
+		f.model.mu.Unlock()
+		rec, err := f.rt.WakeRecordsInbox(ctx, f.owner, f.computer, f.management())
+		if err != nil || rec == nil {
+			t.Fatalf("wake management: %v, %v", rec, err)
+		}
+		waitForStoredRunTerminalState(t, f.s, rec.RunID, 60*time.Second)
+	}
+	turn(cast(""))
+	if out := f.model.lastOutput(); !strings.Contains(out, "main point") || !strings.Contains(out, "nothing was sent") {
+		t.Fatalf("a parent open with no main point was not refused on the route: %s", out)
+	}
+	if docs, _ := f.s.ListStoryDocuments(ctx, f.owner, f.computer, time.Time{}, "", 0); len(docs) != 0 {
+		t.Fatalf("the refused parent open opened %d stories", len(docs))
+	}
+	// No packet at all (finding 5): the same refusal, nothing opened.
+	turn(`choir.Cast("texture:new", "Rotterdam dock strike", nil, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
+	if out := f.model.lastOutput(); !strings.Contains(out, "main point") {
+		t.Fatalf("a parent open with no packet was not refused for its main point: %s", out)
+	}
+	if docs, _ := f.s.ListStoryDocuments(ctx, f.owner, f.computer, time.Time{}, "", 0); len(docs) != 0 {
+		t.Fatalf("an open with no packet opened %d stories", len(docs))
+	}
+}

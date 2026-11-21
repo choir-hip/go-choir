@@ -628,3 +628,55 @@ func TestSearchLeadPagesOfConversationAreReadPagesOfThatConversationOnly(t *test
 		t.Fatalf("route answer: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// The by-conversation read runs at the start of every story research run, under
+// an 8 s timeout that drops the story's context when it is missed; at the
+// table's growth (190,000 rows a day, 30 days kept) a read that scans the
+// computer's read leads would miss it unseen (review round 3, finding 4). The
+// predicate is the one the GIN index on conversation_ids serves, and the
+// planner uses that index for it (measured on the paper: 29.7 ms with a
+// sequential scan of 94,308 rows, 0.23 ms with the index).
+func TestPagesOfConversationReadIsServedByTheConversationIndex(t *testing.T) {
+	f := leadFixture(t)
+	ctx := context.Background()
+	var exists bool
+	if err := f.store.corpus().QueryRowContext(ctx, `SELECT to_regclass('idx_sl_conv') IS NOT NULL`).Scan(&exists); err != nil || !exists {
+		t.Fatalf("idx_sl_conv is not made: %v, %v", exists, err)
+	}
+	// A computer with thousands of read leads, three of them this conversation's:
+	// the planner, with statistics, takes the conversation index, not the
+	// computer's whole captured set.
+	if _, err := f.store.corpus().ExecContext(ctx, `INSERT INTO search_leads (owner_id, computer_id, url_key, url, first_returned_at, last_returned_at, conversation_ids, capture_id)
+		SELECT 'o1', 'c1', 'k' || g, 'https://example.com/' || g, now(), now() - make_interval(secs => g),
+			CASE WHEN g <= 3 THEN ARRAY['doc-one', 'doc-x' || g] ELSE ARRAY['doc-x' || g] END, 'cap-' || g
+		FROM generate_series(1, 4000) g`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.corpus().ExecContext(ctx, `ANALYZE search_leads`); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := f.store.corpus().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `EXPLAIN `+searchLeadPagesSQL, "o1", "c1", "doc-one", 10)
+	if err != nil {
+		t.Fatalf("explain: %v", err)
+	}
+	defer rows.Close()
+	var plan strings.Builder
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatal(err)
+		}
+		plan.WriteString(line + "\n")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("explain rows: %v", err)
+	}
+	if !strings.Contains(plan.String(), "idx_sl_conv") {
+		t.Fatalf("the read does not use idx_sl_conv:\n%s", plan.String())
+	}
+}

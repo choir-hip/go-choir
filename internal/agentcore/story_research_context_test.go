@@ -294,3 +294,62 @@ func TestStoryContextReadsAtMostWhatItShows(t *testing.T) {
 		t.Fatalf("the newest captures are not the ones listed:\n%s", c.text)
 	}
 }
+
+// The section's page budget is shared, not first come: forty lead pages must
+// not push out the captures the story was just fed (review round 3, finding 8),
+// a predecessor's pages take a smaller share than the story's own, one URL
+// cannot fill the section, and the whole build has one deadline.
+func TestStoryContextKeepsTheNewestCapturesWhenLeadsFillTheSection(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer := "owner-story-share", rt.cfg.ComputerID
+	t0 := time.Now().UTC().Add(-time.Hour)
+	doc := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Big story", "A story with many pages read and a few just fed", "", []string{"old-1", "old-2"}, t0)
+	researchCastAt(t, s, owner, computer, doc, "texture-cell:cast:r1", t0.Add(10*time.Minute))
+	feedCastAt(t, s, owner, computer, doc, "cell-2:cast:f1", []string{"fed-1", "fed-2", "fed-3"}, t0.Add(20*time.Minute))
+	var leads []researchtools.LeadPage
+	for i := 0; i < 60; i++ {
+		leads = append(leads, researchtools.LeadPage{CaptureID: fmt.Sprintf("lead-%02d", i), URL: fmt.Sprintf("https://lead%d.example/p", i)})
+	}
+	long := "https://long.example/" + strings.Repeat("x", 3000)
+	sink := &ctxSink{pages: map[string][]researchtools.LeadPage{doc: leads}, urls: map[string]string{"fed-1": long, "fed-2": "https://f.example/2", "fed-3": "https://f.example/3", "old-1": "https://o.example/1"}}
+	rt.researchDeps = &researchtools.Dependencies{Captures: sink}
+	c := rt.storyResearchContextOpening(context.Background(), briefRunRecord(owner, computer, doc, "run-share"))
+	if c == nil {
+		t.Fatal("no context")
+	}
+	for _, want := range []string{"capture_id fed-1", "capture_id fed-2", "capture_id fed-3", "capture_id old-1", "Fed since the last research round: fed-1, fed-2, fed-3"} {
+		if !strings.Contains(c.text, want) {
+			t.Errorf("60 lead pages pushed out %q:\n%s", want, c.text)
+		}
+	}
+	if n := strings.Count(c.text, "- capture_id "); n != storyContextMaxPages {
+		t.Errorf("listed %d pages, want exactly the bound %d", n, storyContextMaxPages)
+	}
+	if strings.Contains(c.text, strings.Repeat("x", 300)) {
+		t.Errorf("a 3,000-character URL was listed whole")
+	}
+}
+
+func TestStoryContextPredecessorTakesASmallerShare(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer := "owner-story-pred", rt.cfg.ComputerID
+	t0 := time.Now().UTC().Add(-time.Hour)
+	first := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "First", "The first main point of a story that moved on", "", []string{"p1"}, t0)
+	succ := openStoryOf(t, s, owner, computer, "cell-2:cast:c1", "Second", "The second main point after it moved on", "texture:"+first, []string{"s1"}, t0.Add(time.Minute))
+	var leads []researchtools.LeadPage
+	for i := 0; i < 60; i++ {
+		leads = append(leads, researchtools.LeadPage{CaptureID: fmt.Sprintf("pred-%02d", i), URL: fmt.Sprintf("https://pred%d.example/p", i)})
+	}
+	rt.researchDeps = &researchtools.Dependencies{Captures: &ctxSink{pages: map[string][]researchtools.LeadPage{first: leads}, urls: map[string]string{"s1": "https://s.example/1"}}}
+	c := rt.storyResearchContextOpening(context.Background(), briefRunRecord(owner, computer, succ, "run-pred"))
+	if c == nil {
+		t.Fatal("no context")
+	}
+	// The predecessor's share is 20 pages: its own capture p1 and 19 of its 60 leads.
+	if n := strings.Count(c.text, "- capture_id pred-"); n != storyContextMaxPredecessorPages-1 || !strings.Contains(c.text, "capture_id p1") {
+		t.Errorf("the predecessor's leads listed = %d, want %d beside its own capture:\n%s", n, storyContextMaxPredecessorPages-1, c.text)
+	}
+	if !strings.Contains(c.text, "capture_id s1") {
+		t.Errorf("the story's own capture is missing:\n%s", c.text)
+	}
+}

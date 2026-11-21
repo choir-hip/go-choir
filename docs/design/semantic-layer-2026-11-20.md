@@ -281,7 +281,8 @@ host-side, no model call (`agentcore/story_research_context.go`):
   `rt.noteBriefHeld(runID, pages)`, once it is on main. I did not edit its files.
 - A research Cast from a story's Texture is refused while captures fed since its
   last research Cast are unread by it (`requireFedCapturesRead`, called from
-  `inbox_records.go` where the route is resolved), naming the captures to read;
+  `rlm_reduce.go` `commitTray`, after the Texture's dispatches are folded into its
+  turn and before anything commits; see the third note below), naming the captures to read;
   a read counts when asked, refused or not, so no deadlock. A story with no
   earlier research is never refused. Counted by `story research refused`.
 - Where the design did not foresee: the web searches are run by research
@@ -292,6 +293,38 @@ host-side, no model call (`agentcore/story_research_context.go`):
   pages read after deploy. The Texture-read marks are in memory, so a restart
   asks one re-read, never a missed one. No schema change, no Texture canonical
   record.
+
+**Third note, 2026-11-21: the review of 9630efefe, and what it found.** One seat
+accepted; the other sent it back, correctly. The refusal and the research-Cast
+log had been written on the records route (`commitRecordsRoute`), which a
+Texture run never takes: its Casts are folded into its `TextureTurn` first
+(`rlm_reduce.go` `commitTray`, `texture_dispatch_fold.go`) and commit through
+`ApplyTextureTurn`. They were dead code for the one desk they were for, and the
+tests that called them directly could not fail; so the status script's research
+numbers would have read 0 on the paper. Fixed on the real path: `commitTray`
+runs `requireFedCapturesRead` for a folded Cast or Ask whose resolved inbox is a
+research inbox, before the fold commits, and the refusal reaches the cell as its
+error ("nothing was sent"); the textureowner committer's receipt now names the
+records its turn sent with their round and whether each opened it
+(`inbox_records`), and `commitTextureAuthorIntent` logs each research Cast from
+it (a replayed turn names none). The proof is
+`TestTextureResearchCastIsGatedLoggedAndFollowedByContextOnTheRealFold`, through a
+real cell, the real fold and the store's records commit, with
+`TestTurnReceiptNamesTheInboxRecordsItSent` for the committer's half. Also: a
+feed sent as a Cast logs its captures from the spec (it logged `captures=0`); an
+empty or non-JSON open is a missing main point (it opened a story with neither);
+the by-conversation read uses array containment served by a new partial GIN index
+`idx_sl_conv` (measured on the paper, read only: 94,308 rows, 6,815 with a
+capture; the read 29.7 ms by sequential scan, 0.23 ms with the index; the
+build 49 ms, 136 kB, a SHARE lock for that long, once) and logs a timeout when
+it misses its 3 s; the context's page budget is shared (the story's own
+captures keep half before leads fill the rest, a predecessor takes 20 pages,
+URLs clipped to 200 characters, the whole section built within 10 s); a lead
+counts as one near capture in a candidate's rank; and the status script prints
+the share of opens with a main point and of opens that answered every candidate.
+Left as they are: an owner's research button and the entity backfill write their
+own Casts directly (`store/story_research_request.go`); they are owner acts, not
+gated and not counted, and the script says so.
 
 **Claim C-A2.** Research rounds per capture fall: `story research cast` lines
 per decision on the paper, first full UTC day after A against the 0.68 research

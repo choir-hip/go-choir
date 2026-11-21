@@ -920,6 +920,10 @@ check "S5 --history prints the widened file with the new columns" 'head -n1 "$ro
 #  C5  research runs are not counted by cause (a successor's first round, an open's first
 #      round, a later round), or captures per trajectory are not bucketed
 #  C6  a line from before the judgment (no captures=) does not count one capture
+#  C7  the judgment is not printed: the share of opens with a main point, and the share of
+#      opens with an offer that answered every candidate offered (answers= next or new for
+#      each doc in offered=; none or missing is unanswered); lines without main_point= are
+#      from before the judgment and are in neither denominator
 storychoice="$here/status-story-choice"
 python3 - "$root" <<'PY'
 import sys
@@ -956,6 +960,28 @@ check "C5 research: 4 runs in the window: open 1 (s1), successor 1 (s2), feed 2;
 check "C5b research refusals: 2 in the window owing 3 captures (the 20:30 one is out)" 'python3 -c "import json,sys; t=json.load(open(sys.argv[1]))[\"summary\"]; assert (t[\"research_refused_unread\"],t[\"research_refused_captures\"])==(2,3), t" "$root/out"'
 env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc.log" --since 2026-11-20T21:00Z --until 2026-11-20T23:00Z >"$root/out" 2>&1
 check "C6 the text table prints the answers and the research causes" 'grep -q "same 4, next 1, same_as_batch 2, new 1, decline 4" "$root/out" && grep -q "research Casts 4 (4 opened a round), by cause as logged at the source: open 1, successor 1, feed or later round 2, continue (inside an open round) 0" "$root/out" && grep -q "refused because fed captures were unread: 2 (3 captures" "$root/out"'
+
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+P = "[ 1.0] runtime[1]: "
+def op(ts, point, offered, answers, extra=" main_point=%d"):
+    mp = (" main_point=%d" % point) if point is not None else ""
+    return (f"{P}{ts} management story choice run=r-1 choice=open story=s-{ts[-2:]} opening_shown=5 verb_shown=0 candidates_shown=5 "
+            f"window=8h page_in_window=30 page_left_out=0 offered={offered}" + (f" answers={answers}" if answers is not None else "") + f" captures=1 sources=near:1,lead:0{mp} succeeds=-\n")
+lines = [
+  op("2026/11/20 21:10:10", 40, "dA,dB", "dA:new,dB:next"),
+  op("2026/11/20 21:10:20", 40, "-", "-"),
+  op("2026/11/20 21:10:30", 0, "dA", "dA:none"),
+  op("2026/11/20 21:10:40", 40, "dA,dB", "dA:new"),
+  op("2026/11/20 21:10:50", None, "dA", None),
+]
+open(root + "/sc2.log", "w").write("".join(lines))
+PY
+env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc2.log" --json >"$root/out" 2>&1
+check "C7 opens judged 4 (the old-format open is out), with a main point 3, with an offer 3, answering every candidate 1" 'python3 -c "import json,sys; t=json.load(open(sys.argv[1]))[\"summary\"]; assert (t[\"opens\"],t[\"opens_judged\"],t[\"opens_with_main_point\"],t[\"opens_with_offer\"],t[\"opens_answering_every_candidate\"])==(5,4,3,3,1), t" "$root/out"'
+env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc2.log" >"$root/out" 2>&1
+check "C7 the text table prints both shares" 'grep -q "opens with a main point: 3 of 4 (75.0%)" "$root/out" && grep -q "opens that answered every candidate offered: 1 of 3 (33.3%)" "$root/out"'
 
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

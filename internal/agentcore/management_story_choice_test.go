@@ -129,3 +129,38 @@ func TestStoryResearchCastLineCarriesItsCauseAtTheSource(t *testing.T) {
 		t.Fatalf("lines = %q\nwant   %q", lines, want)
 	}
 }
+
+// A feed sent as a Cast (choir.Cast("texture:<doc>", ...)) carries its captures
+// in the spec, not in the intent's Captures: the line counts them from the
+// packet, and names the candidates offered for them (review round 3, finding 2:
+// it logged captures=0 and every candidate).
+func TestFeedSentAsACastLogsItsCapturesFromThePacket(t *testing.T) {
+	rt := &Runtime{}
+	rt.noteOpeningOffer("run-f", &openingOffer{
+		ByCapture: map[string][]string{"c1": {"docA"}, "c2": {"docA", "docB"}, "c9": {"docZ"}},
+		Found:     map[string]map[string][]string{"c1": {"docA": {"near:1"}}, "c2": {"docA": {"lead"}}},
+	})
+	var out strings.Builder
+	prev := log.Writer()
+	log.SetOutput(&out)
+	defer log.SetOutput(prev)
+	rec := types.InboxRecordReceipt{Inbox: deskmanifest.DocumentInbox("docA")}
+	rt.logManagementStoryChoice("run-f", deskmanifest.AdmitterName(), rec, yaegikernel.StagedIntent{
+		Kind: yaegikernel.IntentCast, ToDesk: deskmanifest.DocumentInbox("docA"), Statement: `{"captures":["c1","c2"]}`})
+	line := out.String()
+	for _, want := range []string{"choice=feed", "story=docA", "captures=2", "offered=docA,docB", "sources=near:1,lead:1"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("a feed sent as a Cast: the line lacks %q: %q", want, line)
+		}
+	}
+	if strings.Contains(line, "docZ") {
+		t.Errorf("a candidate offered for a capture the feed does not name is in the line: %q", line)
+	}
+	// choir.Feed carries its captures on the intent and no packet.
+	out.Reset()
+	rt.logManagementStoryChoice("run-f", deskmanifest.AdmitterName(), rec, yaegikernel.StagedIntent{
+		Kind: yaegikernel.IntentFeed, Captures: []string{"c1"}})
+	if !strings.Contains(out.String(), "captures=1") {
+		t.Errorf("a Feed verb's captures are not counted: %q", out.String())
+	}
+}

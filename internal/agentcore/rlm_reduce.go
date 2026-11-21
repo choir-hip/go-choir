@@ -1156,6 +1156,9 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 		if err != nil {
 			return err
 		}
+		if err := r.requireFedCapturesReadBeforeResearch(ctx, folded); err != nil {
+			return err
+		}
 		for _, in := range folded {
 			// The folded Cast or Ask never reaches the act path, so it is
 			// gated here as a desk message (MA3.7b, MA3.6 N1); a built-in
@@ -1425,8 +1428,47 @@ func (r *rlmCallReduction) commitTextureAuthorIntent(ctx context.Context, in yae
 	}
 	if strings.TrimSpace(receipt) != "" {
 		log.Printf("runtime: texture cell authored turn (run %s): %s", r.scope.RunID, receipt)
+		// Each Cast the turn sent to its story's research desk leaves its
+		// line, from the records' receipts (round, opened): the Texture's
+		// Casts commit here, with the turn, never on the records route.
+		var sent struct {
+			InboxRecords []types.InboxRecordReceipt `json:"inbox_records"`
+		}
+		if json.Unmarshal([]byte(receipt), &sent) == nil {
+			for _, rec := range sent.InboxRecords {
+				rt.logStoryResearchCast(ctx, r.scope.OwnerID, r.scope.ComputerID, r.scope.RunID, deskmanifest.DocumentCustodianName(), rec)
+			}
+		}
 	}
 	return 0, nil
+}
+
+// requireFedCapturesReadBeforeResearch refuses a story Texture's turn whose
+// folded Cast or Ask goes to its research desk while captures fed since its last
+// research Cast are unread by it. The fold is where a Texture's dispatches are
+// resolved, so the refusal runs here, before anything commits: the cell is told
+// nothing was sent, as a refusal on the records route tells it.
+func (r *rlmCallReduction) requireFedCapturesReadBeforeResearch(ctx context.Context, folded []yaegikernel.StagedIntent) error {
+	rt := r.rt()
+	if rt == nil || rt.store == nil {
+		return nil
+	}
+	for _, in := range folded {
+		if in.Kind != yaegikernel.IntentCast && in.Kind != yaegikernel.IntentAsk {
+			continue
+		}
+		route, err := ResolveAddress(r.scope.DeskAgentID, r.scope.OwnerID, in.ToDesk)
+		if err != nil || !deskmanifest.IsResearchInbox(route.Inbox) {
+			continue
+		}
+		// Read what you were fed before you research again: a correctness
+		// refusal, never a prompt wish (story_research_context.go).
+		if err := rt.requireFedCapturesRead(ctx, r.scope.OwnerID, r.scope.ComputerID, storyDocOfDeskAgent(r.scope.DeskAgentID), r.scope.RunID); err != nil {
+			return fmt.Errorf("reduce: %s: %w", in.LocalID, err)
+		}
+		return nil
+	}
+	return nil
 }
 
 func isSemanticActKind(kind string) bool {

@@ -17,19 +17,23 @@ It reads two console lines, written by internal/agentcore management_story_choic
       candidates_shown= window= page_in_window= page_left_out= offered=(-|doc,doc)
       answers=(-|doc:(next|new|none),...) captures=<n> sources=near:<n>,lead:<n>
       main_point=<chars> succeeds=(-|doc)
-  story research cast run= story= round= opened= cause=   (every Cast a story's Texture sends to research;
-      cause is open, successor, feed or continue, decided where the Cast commits)
+  story research cast run= story= round= opened= cause=   (every Cast a story's Texture sends to research,
+      logged where its turn commits; cause is open, successor, feed or continue. An owner's research
+      button and the entity backfill write their own Casts and are not counted)
   story research refused run= story= unread=<n>   (its Cast was refused: n fed captures unread)
 and prints, per hour and for the window: decisions; captures judged; answers by kind (a
 feed is `same`; an open's first capture is `next` when it names a succeeds, else `new`, and
 its other captures are `same_as_batch`; a decline is `decline`); candidates offered by
 source (vector, entity, lead; entity is not built, captures carry none); stories opened and
-fed; successor links written; the share of captures sent to an existing trajectory; research
+fed; successor links written; the share of opens with a main point and of opens with an offer
+that answered every candidate offered (an open from before the judgment has no main_point= and
+is in neither count); the share of captures sent to an existing trajectory; research
 runs started by cause (a story's first round after an open, after a successor's open, or a
 later round after a feed); and how many captures each trajectory took. A line from before
-the judgment has no captures= and counts one capture.
+the judgment has no captures= and counts one capture; so does a parent's open (captures=0).
+stories opened and fed are sets, so a replayed commit is one story there and two decisions.
 
-Reading the counts: research Casts are every Cast to research in the window, not runs confirmed started (each wakes
+Reading the counts: research Casts are every Cast a story's Texture sends to research in the window, not runs confirmed started (each wakes
 the research reader; opened=true is a new round); a Cast is counted in the window of its own line, so a story's first
 round before the window is not seen as an open;  a commit the runtime replays writes its line again and is counted again
 (a replayed open or feed counts twice); candidates by source count each (capture, candidate) pair
@@ -79,7 +83,7 @@ def bucket(n):
 def new_counts():
     return {"decisions": 0, "opens": 0, "feeds": 0, "declines": 0, "captures": 0,
             "same": 0, "next": 0, "same_as_batch": 0, "new": 0, "decline": 0,
-            "opens_with_offer": 0, "cand_near": 0, "cand_lead": 0, "cand_entity": 0,
+            "opens_judged": 0, "opens_with_main_point": 0, "opens_with_offer": 0, "opens_answering_every_candidate": 0, "cand_near": 0, "cand_lead": 0, "cand_entity": 0,
             "left_out": 0, "pages": []}
 
 
@@ -145,8 +149,18 @@ def compute(text, since=None, until=None):
             else:
                 c["next" if succeeds else "new"] += 1
                 c["same_as_batch"] += n - 1
-                if kv.get("offered", "-") not in ("-", ""):
-                    c["opens_with_offer"] += 1
+                if "main_point" in kv:
+                    # An open from after the judgment: it carries its main
+                    # point's length and, for each candidate offered, an answer.
+                    c["opens_judged"] += 1
+                    if int(kv.get("main_point", "0") or 0) > 0:
+                        c["opens_with_main_point"] += 1
+                    offered = [d for d in kv.get("offered", "-").split(",") if d not in ("-", "")]
+                    if offered:
+                        c["opens_with_offer"] += 1
+                        answers = dict(a.partition(":")[::2] for a in kv.get("answers", "-").split(",") if ":" in a)
+                        if all(answers.get(d) in ("next", "new") for d in offered):
+                            c["opens_answering_every_candidate"] += 1
         if choice == "open":
             opened.add(story)
             story_captures[story] = story_captures.get(story, 0) + n
@@ -184,6 +198,10 @@ def compute(text, since=None, until=None):
     return {"hours": rows, "summary": total}
 
 
+def pct(n, d):
+    return "-" if not d else "%.1f%%" % (100.0 * n / d)
+
+
 def render(res):
     rows, t = res["hours"], res["summary"]
     out = ["hour           decisions  captures  opens  feeds  declines  same  next  same_as_batch  new  decline  cand_near  cand_lead  page_cut  median_page"]
@@ -200,6 +218,9 @@ def render(res):
             "window: decisions %d, captures judged %d" % (t["decisions"], t["captures"]),
             "answers by kind: same %d, next %d, same_as_batch %d, new %d, decline %d" % (t["same"], t["next"], t["same_as_batch"], t["new"], t["decline"]),
             "candidates offered by source: vector %d, entity %d (not built: captures carry no entities), lead %d" % (t["cand_near"], t["cand_entity"], t["cand_lead"]),
+            "opens with a main point: %d of %d (%s); opens that answered every candidate offered: %d of %d (%s)" % (
+                t["opens_with_main_point"], t["opens_judged"], pct(t["opens_with_main_point"], t["opens_judged"]),
+                t["opens_answering_every_candidate"], t["opens_with_offer"], pct(t["opens_answering_every_candidate"], t["opens_with_offer"])),
             "stories opened %d, stories fed %d, successor links written %d" % (t["stories_opened"], t["stories_fed"], t["successor_links"]),
             "share of captures sent to an existing trajectory: %s (with captures sharing a new one: %s)" % (
                 "-" if share is None else "%.1f%%" % (100 * share), "-" if both is None else "%.1f%%" % (100 * both)),

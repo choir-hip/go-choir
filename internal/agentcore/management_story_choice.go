@@ -105,7 +105,9 @@ func (rt *Runtime) logManagementStoryChoice(runID, profile string, rec types.Inb
 		d := rt.detailOfDecision(runID, stagedDecision{captures: in.Captures})
 		log.Print(managementStoryChoiceLine(runID, "decline", "", rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
 	case strings.HasPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"):
-		d := rt.detailOfDecision(runID, stagedDecision{captures: in.Captures})
+		// A feed sent as a Cast names its captures in the spec (the packet);
+		// choir.Feed names them on the intent.
+		d := rt.detailOfDecision(runID, stagedDecision{captures: in.Captures, packet: in.Statement})
 		log.Print(managementStoryChoiceLine(runID, "feed", strings.TrimPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"), rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
 	}
 }
