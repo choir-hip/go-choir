@@ -274,11 +274,13 @@ run_drive spine light "" --touch platform
 
 # ---- 3f3. BAR drive (reads only: it plays and pauses a real story): the bar's page model is shared code (bar.ts) over the native facts. On a page: the aim line names the page and the deck count; one story plays: the
 # bar says NOW PLAYING with the story's title and a progress rule; play pauses it (PAUSED, same title); play resumes it; the run sheet page (the radio) lists the entry on air.
+fresh_paper pick-bar
+PLAY_BAR=$F_PLAY
 step "clock data"; wait_ 6000
 place paper 2500
 step tree
 view real-66-bar-on-page 600
-[ -n "$PLAY1" ] && { to_top; step "tap \"$PLAY1\""; wait_ 5000; view real-67-bar-playing 800; step "tap bar-play"; wait_ 1500; view real-68-bar-paused 800; step "tap bar-play"; wait_ 3000; view real-69-bar-resumed 800; step "tap bar-now"; view real-70-bar-run-sheet 1500; }
+[ -n "$PLAY_BAR" ] && { to_top; step "tap \"$PLAY_BAR\""; wait_ 5000; view real-67-bar-playing 800; step "tap bar-play"; wait_ 1500; view real-68-bar-paused 800; step "tap bar-play"; wait_ 3000; view real-69-bar-resumed 800; step "tap bar-now"; view real-70-bar-run-sheet 1500; }
 step logs
 run_drive bar light "" --touch platform
 
@@ -387,14 +389,15 @@ bad "mail: Sent and Quarantine show no error screen" '\[mail-error\]' "$SHOTS/dr
 # the bar drive (bar.ts over the native facts)
 BR="$SHOTS/drive-bar.txt"
 chk "bar: on a page the line names the page and counts the deck" '\[page-indicator\] "On: [^"]+ · [0-9]+ in the deck"' "$BR"
-[ -n "$PLAY1" ] || fail "bar" "the survey found no paper-play- id: the bar's playing, pausing and run sheet checks would be skipped"
-if [ -n "$PLAY1" ]; then
+[ -n "$PLAY_BAR" ] || fail "bar" "no paper-play- id was picked just before the bar drive: the bar's playing, pausing and run sheet checks would be skipped"
+if [ -n "$PLAY_BAR" ]; then
   chk "bar: a story is playing (NOW PLAYING with a title)" 'NOW PLAYING|Now playing, [^.]{3,}' "$BR"
   chk "bar: the progress rule is drawn" '\[bar-progress\]' "$BR"
   chk "bar: play pauses it (the bar says PAUSED)" 'PAUSED|Paused, [^.]{3,}' "$BR"
   chk "bar: the run sheet page shows the entry on air" '\[radio-onair-title\] "[^"]{3,}"' "$BR"
   # the run sheet page (radio-page.ts over the native facts): the date line, the status line while a story plays
-  chk "radio page: a date line is drawn (Mon 5 Jan form)" '\[radio-date\] "(Mon|Tue|Wed|Thu|Fri|Sat|Sun) [0-9]{1,2} [A-Z][a-z]{2}"' "$BR"
+  TODAY=$(date '+%a %-d %b')   # the simulator shares the Mac's clock and zone: a date from 1970 (no clock) or the wrong day fails
+  chk "radio page: the date line is today ($TODAY)" "\\[radio-date\\] \"$TODAY\"" "$BR"
   bad "radio page: the on-air title is not the kind word (a title the play dropped)" '\[radio-onair-title\] "(Story|Opening|Page|Podcast|Take|Book|Mail|Result|Answer|Transition|Audio|Clip)"' "$BR"
   bad "radio page: Built on does not show a raw route" 'radio-builton-0\] label="Open /?pub/' "$BR"
   chk "radio page: the status line says On air or Paused" '\[radio-status\] "(On air|Paused)"' "$BR"
