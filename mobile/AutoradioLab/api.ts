@@ -169,7 +169,7 @@ export function bindStorage<S extends { fs: object }>(raw: S, w: World = world):
       return inert(w, p);
     };
   } });
-  return Object.assign(Object.create(raw), { fs }) as S;
+  return Object.create(raw, { fs: { value: fs, enumerable: true } }) as S;      // defineProperty, not assignment: the host's storage object has a read-only `fs`
 }
 /** Wait (up to `ms`) for every write that a closed world started to finish. True when none is left. */
 export async function drainClosed(ms: number): Promise<boolean> {
