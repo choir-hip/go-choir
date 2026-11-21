@@ -135,6 +135,7 @@ describe('G3 the card: what it says and which button, per state', () => {
   });
   test('the epoch is stable while nothing changes and moves when a wipe completes', async () => {
     boot('A', 'B'); W.wipe = 'hang';
+    await card(); await wait(15);                                                                     // the first read starts the Clear, which ends the world once
     const a = await card(); const a2 = await card(); expect(a2.epoch).toBe(a.epoch);
     W.wipe = 'ok'; W.release?.(); await idle();
     const b = await card(); expect(b.epoch).not.toBe(a.epoch); expect(b.state).toBe('signedIn');

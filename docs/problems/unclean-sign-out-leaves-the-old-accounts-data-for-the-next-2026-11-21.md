@@ -118,3 +118,12 @@ settles blocked every later page change). Module state now lives in the world (`
 world `enter` confirmed; native calls of account chains are inert for a closed world. Residual: the exempt theme sources
 can show a Texture theme between a key swap and the card's next read (at most a few seconds); `opts.world` has no caller
 until the run sheet's poster uses it (the train).
+
+Fourth round (seat 2 on c222cbf80): the old-theme carry-over no longer writes a Texture theme once the boundary moved;
+a host download is tracked by the drain and its cleanup uses the raw storage; the record write and removal have
+deadlines and run on the current world's storage (a late landing is waited for by the next boundary move); the card's
+epoch carries the world's number; `authedJSON`, `authedBytes` and `authedToFile` take the world as a required field of
+their options (the type checker lists every caller); the takes session's requests belong to the world its answer began
+in, and the Texture theme install carries the world it began in. Every remaining raw native op is listed with its reason
+in the M3 test. Not verified: the real host's `fs.rm` on a non-empty folder (every Clear removes folders); a Clear would
+stay CLEARING if the device refuses it.

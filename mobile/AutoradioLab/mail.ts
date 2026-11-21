@@ -12,7 +12,7 @@
 // Logs carry ids and counts only: never a sender, a subject, an address or a word of a message.
 
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, accountGeneration, SignedOutError, scoped } from './api.ts';
+import { authedJSON, accountGeneration, SignedOutError, scoped, currentWorld } from './api.ts';
 import * as M from './mail-model.ts';
 import { sanitized } from './mail-sanitize.ts';
 import * as C from './mail-store.ts';
@@ -74,7 +74,7 @@ class StatusError extends Error { status: number; constructor(status: number, me
 type Call = { method?: 'GET' | 'POST'; query?: Record<string, string | number>; body?: unknown };
 
 async function call(path: string, opts: Call = {}): Promise<unknown> {
-  const r = await authedJSON(path, opts);
+  const r = await authedJSON(path, { ...opts, world: currentWorld() });
   if (r.serverTime !== null && r.serverTime > 0) S().clock = r.serverTime;
   return r.body;
 }

@@ -2,7 +2,7 @@
 // from GET /api/texture/documents, with the edition pinned first, and the server's own answer to "which document is my edition" (GET /api/texture/edition) applied to it.
 // Nothing here is native: the signed-in client (api.ts) is the whole platform need, and the words for "no key", "locked" and "refused" are the app's one list (words.ts).
 // Opening a document (`texture:<id>`) is still the Swift reader's (readerDoc): a later move.
-import { authedJSON, accountGeneration, SignedOutError, HTTPError, type Reply, scoped } from './api.ts';
+import { authedJSON, accountGeneration, SignedOutError, HTTPError, type Reply, scoped, currentWorld } from './api.ts';
 import { WORDS } from './words.ts';
 
 export type TextureRow = { address: string; title: string; updated: string; meta: string; edition: boolean };
@@ -87,7 +87,7 @@ export async function loadTextures(net: Net): Promise<TextureList> {
   } catch (e) { return failure(e); }
 }
 
-const real: Net = { json: (path, opts) => authedJSON(path, opts) };
+const real: Net = { json: (path, opts) => authedJSON(path, { ...opts, world: currentWorld() }) };
 // The last list, kept in memory for the pages that are not the Textures place (the list stays while the place is behind another page); another account never sees it, and it is dropped
 // (not just hidden) the first time anything asks under a new account generation.
 const S = scoped(() => ({ last: null as { gen: number; list: TextureList } | null }));      // module state belongs to the world (api.ts `scoped`)

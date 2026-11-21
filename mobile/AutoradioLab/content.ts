@@ -26,7 +26,7 @@
 //
 // Time arrives as an argument (epoch milliseconds); nothing here reads a clock.
 
-import { authedJSON, authedBytes, getJSON, SignedOutError } from './api.ts';
+import { authedJSON, authedBytes, getJSON, SignedOutError, currentWorld } from './api.ts';
 import { parseDate } from './paper-model.ts';
 import type { Doc } from './search.ts';
 
@@ -398,7 +398,7 @@ export async function textureSource(id: string, get: (path: string) => Promise<u
 
 /** The real routes. Mail, documents and files need the listener's session; a signed-out phone throws `SignedOutError` from the first page, and nothing is changed. */
 export function liveFetchers(o: { podcasts?: () => Doc[]; transcriptTargets?: Fetchers['transcriptTargets']; transcript?: Fetchers['transcript']; runSheet?: Fetchers['runSheet']; audioBusy?: Fetchers['audioBusy'] } = {}): Fetchers {
-  const j = async (path: string, query: Record<string, string | number> = {}): Promise<unknown> => (await authedJSON(path, { query })).body;
+  const j = async (path: string, query: Record<string, string | number> = {}): Promise<unknown> => (await authedJSON(path, { query, world: currentWorld() })).body;
   const base = noFetchers();
   return {
     ...base,
@@ -422,7 +422,7 @@ export function liveFetchers(o: { podcasts?: () => Doc[]; transcriptTargets?: Fe
         name: s(x, 'name'), path: (path === '/' ? '' : path) + '/' + s(x, 'name'), isDirectory: s(x, 'type') === 'directory', size: typeof x.size === 'number' ? x.size : 0, modified: parseDate(x.modified) }));
     },
     fileText: async (path) => {
-      const r = await authedBytes('/api/files' + path.split('/').map((p) => encodeURIComponent(p)).join('/'), { query: { disposition: 'inline' } });
+      const r = await authedBytes('/api/files' + path.split('/').map((p) => encodeURIComponent(p)).join('/'), { query: { disposition: 'inline' }, world: currentWorld() });
       if (r.bytes.length > MAX_FILE_BYTES) return null;
       return new TextDecoder().decode(r.bytes);
     },

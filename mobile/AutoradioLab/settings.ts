@@ -10,7 +10,7 @@
 //  A6 an owner-wide key answers `computer_id: ""`: the Keychain's stored computer id fills it (the computer the phone found); a bound id wins.
 // Dropped: the "loading" status and the generation guard (A3 in Swift): a source answers once per ask, so a late answer cannot land.
 
-import { authedJSON, HTTPError, keptComputerId, ORIGIN, SignedOutError } from './api.ts';
+import { authedJSON, HTTPError, keptComputerId, ORIGIN, SignedOutError, currentWorld } from './api.ts';
 
 export type SettingsAccount = {
   status: string; signedIn: boolean; handle: string; keyID: string; keyLabel: string; scopes: string; computerID: string; message: string; baseURL: string;
@@ -45,7 +45,7 @@ export async function settingsAccount(args: AccountArgs): Promise<SettingsAccoun
   const base = empty();
   if (!args.signedIn) return { ...base, message: 'Not signed in.' };
   try {
-    const r = await authedJSON(WHOAMI_PATH);
+    const r = await authedJSON(WHOAMI_PATH, { world: currentWorld() });
     const w = parseWhoami(r.body);
     if (!w) return { ...base, signedIn: true, status: 'failed', message: "The server's answer was not what was expected." };
     const kept = w.computerID === '' ? await keptComputerId().catch(() => null) : null;

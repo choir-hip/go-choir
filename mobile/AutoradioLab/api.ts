@@ -65,9 +65,9 @@ export class HTTPError extends Error {
   constructor(status: number, message: string, retryAfter: number | null = null) { super(message); this.name = 'HTTPError'; this.status = status; this.retryAfter = retryAfter; }
 }
 
-/** `world`: the world the request BELONGS to, for work held outside a chain (a queue of batches to post, a retry): captured with `currentWorld()` when the work was made. A closed world's request is refused (a rejection
- * the holder can drop the work on), and one of an open world is signed only with that world's key. Without it the request belongs to the world that is current when it is made. */
-export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string>; world?: World };
+/** `world`: the world the request BELONGS to, REQUIRED so the type checker lists every caller: a chain that captured account data before an await passes the world it began in (`const w = currentWorld()` at its
+ * start); a caller with nothing captured passes `currentWorld()`. A closed world's request is refused (a rejection the holder can drop the work on), and one of an open world is signed only with that world's key. */
+export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string>; world: World };
 const ended = (): Promise<never> => Promise.reject(new SignedOutError('the account this request belongs to has ended', 'none'));
 
 /** The three accounts today's sign-in keeps; the native reader answers no other name. */
@@ -165,6 +165,9 @@ export function inert<T>(w: World, p: Promise<T>): Promise<T> {
 }
 /** A chain's own timer: it fires for an open world only. */
 export function inertTimeout(ms: number, w: World = world): Promise<void> { return inert(w, new Promise<void>((r) => { setTimeout(r, ms); })); }
+const RAW = Symbol('raw-storage');
+/** The storage a bound one was made from (a cleanup that must run whether or not the world is still open: a download the host wrote after the boundary moved). */
+export const unbound = <S,>(s: S): S => ((s as unknown as Record<symbol, S> | undefined)?.[RAW] ?? s);
 const READS = new Set(['readFile', 'stat', 'readdir', 'exists', 'readText', 'open']);
 /** The storage a source is handed: every call is inert for a closed world (not even started; an answer that comes after the close never arrives), and a write, a removal or a folder started while the world
  * is open is tracked, so the Clear can wait for it (`drainClosed`) and no write lands after the wipe. Reads of a world still open pass through. */
@@ -182,7 +185,7 @@ export function bindStorage<S extends { fs: object }>(raw: S, w: World = world):
       return inert(w, p);
     };
   }
-  return Object.create(raw, { fs: { value: fs, enumerable: true } }) as S;      // defineProperty, not assignment: the host's storage object has a read-only `fs`
+  return Object.create(raw, { fs: { value: fs, enumerable: true }, [RAW]: { value: raw } }) as S;      // defineProperty, not assignment: the host's storage object has a read-only `fs`
 }
 /** The app module's `later` for a chain that works on an account's data (the mail seal, the voice's takes): inert for a closed world like every other choke point, so a native answer that arrives after the
  * boundary moved never resumes the chain. Null when there is no module. (`nativeLater` stays raw for the boundary's own machinery, the host fact and the device-level themes.) */
@@ -262,7 +265,7 @@ function scrub(text: string, key: string): string { return key ? text.split(key)
 async function send(w: World, path: string, opts: Authed, accept: string, extra: Record<string, unknown> = {}): Promise<{ r: Response; key: string }> {
   if (!plainPath(path)) throw new Error('refused: a signed-in path is a plain absolute path on the server');
   const sess = await keptSession();
-  if (w.closed) await NEVER;                                 // the boundary moved while the key was read: this chain is over, nothing is signed
+  if (w.closed) throw new SignedOutError('the account this request belongs to has ended');      // the boundary moved while the key was read: nothing is signed (the chain above is inert)
   if (!sess) throw new SignedOutError('not signed in', await noSessionReason());
   const key = sess.key;
   if (w.digest !== undefined && (await digestOf(key)) !== w.digest) throw new SignedOutError('the stored key is not the key of the account this request belongs to');       // a request is signed only with the key of its world
@@ -277,7 +280,7 @@ async function send(w: World, path: string, opts: Authed, accept: string, extra:
   if (!path.startsWith('/auth/') && path !== STATUS_PATH) {
     try { headers['X-Choir-Computer'] = await computerId(key, sess.computerId, w); } catch (e) { console.log(`api: computer id failed: ${e instanceof Error ? e.name : 'error'}`); throw e; }
   }
-  if (w.closed) await NEVER;
+  if (w.closed) throw new SignedOutError('the account this request belongs to has ended');
   try {
     return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS, redirect: 'manual', ...extra } as RequestInit), key };
   } catch (e) {
@@ -296,7 +299,7 @@ async function computerId(key: string, kept: string, w: World): Promise<string> 
     let mine!: Promise<string>;
     mine = (async () => {
       try {
-        const { r, key: used } = await send(w, STATUS_PATH, {}, 'application/json');
+        const { r, key: used } = await send(w, STATUS_PATH, { world: w }, 'application/json');
         if (used !== key) throw new SignedOutError();       // the account changed while this was asked
         await check(r, STATUS_PATH, key);
         const o = (await r.json()) as { computers?: { computer_id?: string; kind?: string; current?: boolean }[]; warnings?: string[] };
@@ -332,7 +335,7 @@ async function check(r: Response, path: string, key: string): Promise<void> {
 }
 
 /** A signed-in JSON request to the listener's own computer. Throws SignedOutError when there is no session. */
-export function authedJSON(path: string, opts: Authed = {}): Promise<Reply> { const w = opts.world ?? world; return w.closed ? ended() : inert(w, authedJSONImpl(w, path, opts)); }
+export function authedJSON(path: string, opts: Authed): Promise<Reply> { const o = opts ?? ({} as Authed); const w = o.world ?? world; return w.closed ? ended() : inert(w, authedJSONImpl(w, path, o)); }
 async function authedJSONImpl(w: World, path: string, opts: Authed): Promise<Reply> {
   const gen = world.id;
   const { r, key } = await send(w, path, opts, 'application/json');
@@ -347,7 +350,7 @@ async function authedJSONImpl(w: World, path: string, opts: Authed): Promise<Rep
 }
 
 /** The same, for bytes (a file, a PDF, audio). */
-export function authedBytes(path: string, opts: Authed = {}): Promise<{ bytes: Uint8Array; contentType: string }> { const w = opts.world ?? world; return w.closed ? ended() : inert(w, authedBytesImpl(w, path, opts)); }
+export function authedBytes(path: string, opts: Authed): Promise<{ bytes: Uint8Array; contentType: string }> { const o = opts ?? ({} as Authed); const w = o.world ?? world; return w.closed ? ended() : inert(w, authedBytesImpl(w, path, o)); }
 async function authedBytesImpl(w: World, path: string, opts: Authed): Promise<{ bytes: Uint8Array; contentType: string }> {
   const gen = world.id;
   const { r, key } = await send(w, path, opts, '*/*');
@@ -361,15 +364,21 @@ async function authedBytesImpl(w: World, path: string, opts: Authed): Promise<{ 
  * a 300 MB recording costs neither the engine's 64 MiB heap nor the turn's 100 ms. The file appears whole or not at all (the host stages it beside the
  * target); a reply that is not 2xx writes nothing and is an error as in `authedBytes`. `dest` is under `app:/cache/`, plain. A sign-out in flight
  * removes the file and drops the reply; a host that wrote nothing (it read the body into memory) is an error and the file is removed. */
-export function authedToFile(path: string, dest: string, storage: Storage | undefined, opts: Authed = {}): Promise<{ bytes: number; contentType: string }> { const w = opts.world ?? world; return w.closed ? ended() : inert(w, authedToFileImpl(w, path, dest, storage, opts)); }
+export function authedToFile(path: string, dest: string, storage: Storage | undefined, opts: Authed): Promise<{ bytes: number; contentType: string }> {
+  const o = opts ?? ({} as Authed); const w = o.world ?? world;
+  if (w.closed) return ended();
+  // A download is written by the HOST, not through `storage`: the Clear must wait for it (and for its cleanup) like a write, or its bytes land after the wipe.
+  const p = authedToFileImpl(w, path, dest, storage, o);
+  w.pending.add(p); void p.then(() => w.pending.delete(p), () => w.pending.delete(p));
+  return inert(w, p);
+}
 async function authedToFileImpl(w: World, path: string, dest: string, storage: Storage | undefined, opts: Authed): Promise<{ bytes: number; contentType: string }> {
   if (!/^app:\/cache\/[^\s?#\\]+$/.test(dest) || dest.split('/').some((s) => s === '.' || s === '..')) throw new Error('refused: a download goes to a plain file under app:/cache/');
-  const gen = world.id;
-  const drop = async () => { try { await storage?.fs.rm(dest); } catch { /* absent */ } };
+  const drop = async () => { try { await unbound(storage)?.fs.rm(dest); } catch { /* absent */ } };
   const { r, key } = await send(w, path, opts, '*/*', { exactBodyTo: dest });
   try { await check(r, path, key); } catch (e) { await drop(); throw e; }
   const wrote = (r as unknown as { exactBodyTo?: { bytes?: unknown } | null }).exactBodyTo;
-  if (gen !== world.id) { await drop(); throw new SignedOutError('signed out while the request was in flight'); }
+  if (w.closed) { await drop(); throw new SignedOutError('signed out while the request was in flight'); }
   if (!wrote || typeof wrote.bytes !== 'number') { await drop(); throw new Error('the host did not write the file'); }
   return { bytes: wrote.bytes, contentType: r.headers.get('content-type') ?? '' };
 }

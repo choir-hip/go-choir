@@ -154,6 +154,17 @@ describe('M3 module state belongs to the world: no module-level mutable state ou
     S().n = 5; const w1 = api.currentWorld(); api.nextGeneration();
     expect(S().n).toBe(0); expect(api.currentWorld()).not.toBe(w1); S().n = 2; S.reset(); expect(S().n).toBe(0);
   });
+  // The native ops that are NOT inert for a closed world, each with why a late answer cannot carry account content into the next world (everything an account chain asks native goes through nativeInert).
+  const NATIVE_RAW: Record<string, string> = {
+    'api.ts': 'the Keychain: keystate, session, get. An answer is the key or a digest of it; every request then checks the key against its world\'s digest, and a late one is for a world that is closed',
+    'account.ts': 'the boundary\'s own wipe and signOut: the answer is done or failed, no account content',
+    'host.ts': 'the host probe (is there a native package): a device fact',
+    'themes.ts': 'themeLegacy: the old build\'s device theme files; a texture-* file is not written once the world is closed or owed',
+  };
+  test('every module that calls the raw native `later` is listed with its reason, and no other', () => {
+    const using = files.filter((f) => /\bnativeLater\(\)/.test(readFileSync(dir + f, 'utf8').replace(/\/\/.*$/gm, ''))).sort();
+    expect(using).toEqual(Object.keys(NATIVE_RAW).sort());
+  });
   test('raw fetch, raw native calls and the Keychain session read stay in their choke points', () => {
     const bad: string[] = [];
     for (const f of files) {
@@ -216,7 +227,6 @@ describe('C9 named regressions', () => {
   });
   test('C9.take-session A\'s kept takes, read late, are not B\'s: no ids, handle or muted list, and nothing mirrored to native', async () => {
     boot({ 'app:/data/takes.json': JSON.stringify({ ids: ['take-of-a'], handle: 'a-handle-0001', muted: ['voice-muted-a1'] }) });
-    const mirrored: string[] = [];
     const rec = { phase: 'idle', ended: '', seconds: 0, level: 0, transcript: '', canRecord: true, reason: '' };
     let release: () => void = () => undefined; m.faults.hold.set('app:/data/takes.json', new Promise<void>((r) => { release = r; }));
     const a = call('takesPage', [rec, 'x']).then(() => 'answered', (e) => (e as Error).name);
@@ -226,7 +236,7 @@ describe('C9 named regressions', () => {
     expect(await a).toBe('AccountClosedError'); await wait(30);
     const b = JSON.stringify(await call('takesPage', [rec, 'y']));
     expect(b).not.toContain('take-of-a'); expect(b).not.toContain('a-handle-0001'); expect(b).not.toContain('voice-muted-a1');
-    expect(mirrored).toEqual([]); expect(m.files.has('app:/data/takes.json')).toBe(false);
+    expect(W.mirrors.join('')).not.toContain('take-of-a'); expect(W.mirrors.join('')).not.toContain('a-handle-0001'); expect(W.mirrors.join('')).not.toContain('voice-muted-a1'); expect(m.files.has('app:/data/takes.json')).toBe(false);
   });
 });
 
@@ -360,6 +370,52 @@ describe('C10 seat 1\'s round on c222cbf80: module state belongs to the world, t
     for (let i = 0; i < 20 && r !== 'wrote'; i++) { r = await call('pagesOpen', ['mail:b2', 'B2']).then(() => 'wrote', (e) => (e as Error).name); await wait(25); await idle(); }
     expect(r).toBe('wrote'); await wait(150); await idle();
     expect(m.text(PAGES_FILE)).toContain('mail:b2');
+  });
+});
+
+describe('C11 seat 2\'s third round', () => {
+  test('C11.migrate-texture the old-theme carry-over (exempt, raw storage) writes no Texture theme once the boundary moved: A\'s Texture theme does not reach B', async () => {
+    const T = await import('./themes.ts');
+    const ember = JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme);
+    boot({}); T.resetThemes(); W.legacy = { 'texture-ember.json': ember }; let go: () => void = () => undefined; W.legacyGate = new Promise<void>((r) => { go = r; });
+    const held = call('themeMigrate', ['native', 0]).catch(() => undefined); await wait(20);
+    expect((await signOut()).done).toBe(true);
+    go(); await held; await wait(30);
+    expect(m.files.has('app:/data/themes/texture-ember.json')).toBe(false);
+  });
+  test('C11.download a download in flight when the world closes: the Clear waits for it and the file does not stay (a host download is not a storage write)', async () => {
+    boot({}); account.timing.sharedMs = 2000;
+    const dest = 'app:/cache/files/x/a.bin'; let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    globalThis.fetch = (async (u: string) => {
+      if (String(u).endsWith('/api/compute/status')) return new Response(JSON.stringify({ computers: [{ computer_id: 'c', current: true }] }), { status: 200 });
+      await gate; m.files.set(dest, new TextEncoder().encode('A-BYTES'));                                 // the host writes the file as the body arrives
+      const r = new Response('', { status: 200 }); Object.defineProperty(r, 'exactBodyTo', { value: { path: dest, bytes: 7 } }); return r;
+    }) as never;
+    await call('pagesView', [0]);
+    const bound = api.bindStorage(m.storage);
+    void api.authedToFile('/api/files/a.bin', dest, bound, { world: api.currentWorld() }).catch(() => undefined); await wait(20);
+    const out = signOut(); await wait(30); release();
+    expect((await out).done).toBe(true); await idle();
+    expect(m.files.has(dest)).toBe(false);
+  });
+  test('C11.record-write the record write and the record removal have deadlines: a hung one is a failed job, never a wedged writer', async () => {
+    boot({ 'app:/data/takes.json': 'x' }, false); account.timing.recordMs = 40;
+    let rel: () => void = () => undefined; m.faults.writeHold.set(STAMP, new Promise<void>((r) => { rel = r; }));
+    const a = await Promise.race([call('pagesView', [0]).then(() => 'answered', (e) => (e as Error).name), wait(500).then(() => 'hung')]);
+    expect(a).toBe('AccountClosedError');                                                                // the Adopt timed out: refused, not wedged
+    const card = await Promise.race([account.peek(m.storage, undefined).then((p) => p.state), wait(500).then(() => 'hung')]); expect(card).not.toBe('hung');
+    const so = await Promise.race([signOut().then((r) => r.done), wait(1500).then(() => 'hung')]); expect(so).not.toBe('hung');   // and the person's way out still runs
+    rel();
+    boot({ 'app:/data/takes.json': 'x' }); W = newWorld('absent'); n = phone(() => W); api.bindNative(n as never); account.timing.recordMs = 40; account.timing.sharedMs = 200; m.faults.hangRm.add(STAMP);
+    await call('pagesView', [0]).catch(() => undefined); await wait(400); await idle();
+    expect(m.files.has(STAMP)).toBe(true);                                                               // a hung removal: the record stays, the state still refuses
+    const so2 = await Promise.race([signOut().then((r) => r.done), wait(1500).then(() => 'hung')]); expect(so2).not.toBe('hung');
+    m.faults.hangRm.clear(); m.faults.releaseRm();
+  });
+  test('C11.epoch a world close with no state change (a sign-out that did not finish) moves the card\'s epoch, so refused pages are asked again', async () => {
+    boot({}); const e0 = (await account.peek(m.storage, undefined)).epoch;
+    api.nextGeneration(); const e1 = (await account.peek(m.storage, undefined)).epoch;
+    expect(e1).not.toBe(e0);
   });
 });
 

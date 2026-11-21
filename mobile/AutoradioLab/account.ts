@@ -134,7 +134,8 @@ async function survivors(storage: Storage | undefined): Promise<string[]> {
 
 /** The record removed, and confirmed: it reads ENOENT afterwards. */
 async function removeRecord(storage: Storage): Promise<boolean> {
-  try { await storage.fs.rm(STAMP_FILE); } catch { /* the check below decides */ }
+  // On the storage of the world this attempt began, under a deadline: a hung removal is a failed attempt (the record stays), and one that lands late is waited for by the next Clear (drain), never a wedged writer.
+  try { await withDeadline(bindStorage(storage, currentWorld()).fs.rm(STAMP_FILE).then(() => undefined, () => undefined), undefined, timing.recordMs); } catch { /* the check below decides */ }
   return (await readRecord(storage)).k === 'none';
 }
 
@@ -188,7 +189,9 @@ export function resetBoundary(): void { boundaryId += 1; chain = Promise.resolve
 async function adoptBody(storage: Storage | undefined): Promise<State> {
   const f = await readFacts(storage);
   if (stateOf(f) === 'adopt' && storage && f.key.state === 'present') {
-    try { await storage.fs.atomicWriteFile(STAMP_FILE, new TextEncoder().encode(f.key.digest)); closeWorld(); } catch { console.log('account: could not record the account'); }      // the new account's world begins here (its requests are signed with this key only)
+    // The record write is on the storage of the current world and under a deadline: a hung write leaves the state ADOPT (refusing); a late landing is waited for by the next boundary move (drain).
+    const wrote = await withDeadline<boolean>(bindStorage(storage, currentWorld()).fs.atomicWriteFile(STAMP_FILE, new TextEncoder().encode(f.key.digest)).then(() => true, () => false), false, timing.recordMs);
+    if (wrote) closeWorld(); else console.log('account: could not record the account');      // the new account's world begins here (its requests are signed with this key only)
   }
   return stateOf(await readFacts(storage));
 }
@@ -249,7 +252,7 @@ export async function peek(storage: Storage | undefined, store: Store | undefine
   // The card never waits on a running job (a hung sign-out or Clear would leave the banner blank): while one runs, ADOPT is reported as the wipe it is part of; with none, the one write is awaited.
   if (state === 'adopt') state = active > 0 ? 'clearing' : ((await job(() => adoptBody(storage), { skipIfMoved: true })) ?? 'adopt');
   if (state === 'clearing') startClear(storage, store);
-  return { state, epoch: `${state}|${wipes}`, failed: lastFailed, key: f.key };
+  return { state, epoch: `${state}|${wipes}|${accountGeneration()}`, failed: lastFailed, key: f.key };
 }
 
 // ---- sign-out
