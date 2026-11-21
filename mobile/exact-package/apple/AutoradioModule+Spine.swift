@@ -60,7 +60,7 @@ extension AutoradioModule {
                     switch name {
                     case "choirPlayPause": await self.choir.playPause()
                     case "choirStartRadio": await self.choir.startRadio()
-                    default: await self.choir.play(route: args["route"] as? String ?? "")
+                    default: await self.choir.play(route: args["route"] as? String ?? "", title: args["title"] as? String ?? "")   // the title goes with the route: without it the entry was placed with none
                     }
                     DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
                 }

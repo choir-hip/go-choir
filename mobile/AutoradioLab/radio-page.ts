@@ -12,11 +12,12 @@ import { relative } from './paper-model.ts';
 export type RadioFacts = {
   at: number; sheet: string; playing: boolean; sentences: string[]; sentenceIndex: number; progress: number;
   remoteAudio: boolean; remoteElapsed: number; remoteDuration: number; wants: boolean; message: string; notice: string; writing: boolean; dry: boolean;
-  publishedAt: number; versionRoutes: string[]; versionNumbers: number[]; stale: string[]; takeTranscript: string; takeRecord: string;
+  /** The title of the programme on air (the headline being read); "" when none. */
+  airTitle: string; publishedAt: number; versionRoutes: string[]; versionNumbers: number[]; stale: string[]; takeTranscript: string; takeRecord: string;
 };
 export const EMPTY_FACTS: RadioFacts = {
   at: 0, sheet: '', playing: false, sentences: [], sentenceIndex: 0, progress: 0, remoteAudio: false, remoteElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
-  publishedAt: 0, versionRoutes: [], versionNumbers: [], stale: [], takeTranscript: '', takeRecord: '',
+  airTitle: '', publishedAt: 0, versionRoutes: [], versionNumbers: [], stale: [], takeTranscript: '', takeRecord: '',
 };
 
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
@@ -27,6 +28,18 @@ const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is st
 function readSheet(text: string): Sheet {
   if (text === '') return emptySheet();
   try { return decodeSheet(JSON.parse(text)); } catch { return emptySheet(); }
+}
+
+/** An entry placed by a play that carried no title (the native play took only the route) has an empty title and label; the programme on air has the headline. The on-air entry of a story or
+ * a paper page takes it, for its title and its source label (the small line and the built-on row). Nothing else is renamed, and nothing is invented when there is no programme title. */
+function namedOnAir(sheet: Sheet, airTitle: string, remote: boolean): Sheet {
+  const t = airTitle.trim();
+  if (t === '' || remote) return sheet;
+  const i = sheet.entries.findIndex((e) => e.state === 'on_air');
+  const e = sheet.entries[i];
+  if (!e || (e.kind !== 'page' && e.kind !== 'story') || e.title.trim() !== '' || (e.source?.label ?? '') !== '' || e.source?.ref.startsWith('url:')) return sheet;
+  const named = { ...e, title: t, source: e.source ? { ...e.source, label: t } : e.source };
+  return { ...sheet, entries: sheet.entries.map((x, k) => (k === i ? named : x)) };
 }
 
 /** The listener's zone as minutes east of UTC, read from the platform (a date made from a given time, never the clock). */
@@ -44,7 +57,7 @@ export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknow
   const published = num(f.publishedAt);
   const takeTranscript = str(f.takeTranscript), takeRecord = str(f.takeRecord);
   return make({
-    sheet: readSheet(str(f.sheet)),
+    sheet: namedOnAir(readSheet(str(f.sheet)), str(f.airTitle), remote),
     barState: b.state, heardWords: b.text,
     playing: f.playing === true || b.state === 'playing',
     sentences: strs(f.sentences), sentenceIndex: Math.trunc(num(f.sentenceIndex)), progress: num(f.progress),

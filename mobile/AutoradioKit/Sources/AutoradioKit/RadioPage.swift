@@ -22,7 +22,7 @@ public struct RadioPageFacts: Codable, Sendable, Equatable {
     public var notice = ""
     public var writing = false
     public var dry = false
-    public var publishedAt = 0.0
+    public var airTitle = "", publishedAt = 0.0   // airTitle: the headline being read; the page names an on-air entry that carries none by it
     public var versionRoutes: [String] = []
     public var versionNumbers: [Int] = []
     public var stale: [String] = []
