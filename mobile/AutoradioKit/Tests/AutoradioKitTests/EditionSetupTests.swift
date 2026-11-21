@@ -1,216 +1,77 @@
 import XCTest
 @testable import AutoradioKit
 
-// The failure list is at the top of EditionSetup.swift (E1..E9).
+// The topics, the tree, the saved file and the spoken edits are shared code now (AutoradioLab/edition.test.ts, edition-picks.test.ts). What is tested here is what stayed native:
+// the voice desk's mailbox (the words wait for shared code, its answer is the line said back), the pushed copy of the picks, the old file's read and drop, and the edition writer.
 final class EditionSetupTests: XCTestCase {
-    let sug = EditionTopics.suggestions()
-
-    func tmp() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("edition-\(UUID().uuidString).json") }
-
-    func testSuggestionsAreGenerousAndStartWithTheHouseSections() {
-        XCTAssertGreaterThanOrEqual(sug.count, 18)
-        XCTAssertEqual(EditionTopics.tree.count, 10, "ten top-level rows when collapsed")
-        XCTAssertEqual(Array(sug.prefix(10)), ["World", "U.S.", "Politics", "Business", "Technology", "Science", "Health", "Climate", "Culture", "Sports"])
-        XCTAssertEqual(Set(sug.map(EditionTopics.key)).count, sug.count, "no duplicates")
-    }
-
-    func testLiveSectionsAreMergedWithoutDuplicates() {
-        let s = EditionTopics.suggestions(liveSections: ["tech_ai", "world", "housing_market"])
-        XCTAssertEqual(s.filter { $0 == "Technology" }.count, 1)
-        XCTAssertTrue(s.contains("Housing market"))
-        XCTAssertEqual(EditionTopics.label(forSectionID: "us"), "U.S.")
-    }
-
-    func testNoSuggestionOrLineAsksWhatTheReaderDoesNotWant() {
-        let words = (sug + [EditionSetupText.explainer, EditionSetupText.voiceHint, EditionSetupText.emptyLine, EditionSetupText.spokenOpen]).joined(separator: " ").lowercased()
-        for bad in ["tired of", "do not want", "don't want", "avoid", "less of", "anything you"] { XCTAssertFalse(words.contains(bad), bad) }
-        XCTAssertTrue(EditionSetupText.explainer.contains("any time"))
-    }
-
-    func rows(_ exp: [String], _ sel: [String], live: [String] = []) -> [TopicRow] {
-        TopicTree.rows(liveSections: live, expanded: Set(exp.map(EditionTopics.key)), selection: EditionSelection(topics: sel), own: [])
-    }
-
-    func testT2TheGraphIsSound() {
-        let tops = EditionTopics.tree.map(\.label)
-        XCTAssertEqual(Set(tops.map(EditionTopics.key)).count, tops.count)
-        for c in EditionTopics.tree {
-            XCTAssertEqual(Set(c.children.map(EditionTopics.key)).count, c.children.count, "no child twice under \(c.label)")
-            for k in c.children { XCTAssertFalse(tops.contains(k), "\(k) is both a category and a subtopic: a cycle risk"); XCTAssertFalse(EditionTopics.parents(of: k).isEmpty) }
+    /// Shared code, on its own timer: takes what was heard and answers each once.
+    func sharedCode(line: String, finish: Bool) -> Task<Void, Never> {
+        Task {
+            for _ in 0..<200 {
+                if let i = (EditionNative.op(["op": "editionHeard"])["items"] as? [[String: String]] ?? []).first {
+                    _ = EditionNative.op(["op": "editionSaid", "id": i["id"] ?? "", "line": line, "finish": finish]); return
+                }
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
         }
-        XCTAssertEqual(Set(EditionTopics.parents(of: "AI")), ["Technology", "Business"])
-        XCTAssertEqual(Set(EditionTopics.parents(of: "Public health")), ["Health", "Politics"])
-        XCTAssertEqual(Set(EditionTopics.parents(of: "Energy")), ["Climate", "Business"])
-        XCTAssertEqual(Set(EditionTopics.parents(of: "Security")), ["Technology", "World"])
-        XCTAssertEqual(EditionTopics.parents(of: "ai"), EditionTopics.parents(of: "AI"))
-        XCTAssertEqual(sug.filter { EditionTopics.key($0) == "ai" }.count, 1, "one AI in the universe")
-        var s = EditionSelection(); XCTAssertEqual(s.add("add ai".replacingOccurrences(of: "add ", with: ""), among: sug), "AI")
-        var v = EditionSelection(); XCTAssertEqual(v.apply(spoken: "add AI", among: sug).added, ["AI"])
+    }
+    func say(_ words: String) async throws -> [String] {
+        var lines: [String] = []
+        for try await r in EditionSetupDesk(StageParams()).submit(DeskTurn(turnID: "t", programmeID: "p", blockIndex: 0, listenerWords: words)) { lines += r.blocks.compactMap(\.spokenText) }
+        return lines
     }
 
-    func testT1ASharedSubtopicIsOneTopicLitEverywhere() {
-        let r = rows(["Technology", "Business"], ["AI"])
-        let ai = r.filter { $0.label == "AI" }
-        XCTAssertEqual(ai.count, 2)
-        XCTAssertTrue(ai.allSatisfy { $0.selected })
-        XCTAssertEqual(ai.map(\.note), ["also in Technology", "also in Business"])
-        XCTAssertEqual(EditionSelection(topics: ["AI", "ai", "AI"]).topics, ["AI"])
-        XCTAssertEqual(r.first { $0.label == "Technology" }?.note, "1 picked")
-        XCTAssertEqual(r.first { $0.label == "Business" }?.note, "1 picked")
-    }
-
-    func testT3PartialSelectionAndNothingMovesOnPicking() {
-        XCTAssertEqual(rows([], []).count, 10)
-        let before = rows(["Culture"], []).map(\.key)
-        let after = rows(["Culture"], ["Film", "Music", "Culture", "Sports"]).map(\.key)
-        XCTAssertEqual(before, after, "picking changes no row")
-        let r = rows([], ["Film"])
-        XCTAssertEqual(r.first { $0.label == "Culture" }?.partial, true)
-        XCTAssertEqual(r.first { $0.label == "Culture" }?.selected, false, "a child does not pick its parent")
-        let p = rows([], ["Culture"])
-        XCTAssertEqual(p.first { $0.label == "Culture" }?.selected, true)
-        XCTAssertEqual(p.first { $0.label == "Culture" }?.partial, false)
-        XCTAssertTrue(rows(["Culture"], ["Culture"]).filter { $0.kind == "sub" }.allSatisfy { !$0.selected }, "a parent does not pick its children")
-        XCTAssertEqual(rows(["Sports"], []).count, 10, "Sports has nothing to open")
-        XCTAssertEqual(rows(["Culture"], []).count, 10 + 7)
-        XCTAssertFalse(rows([], []).first { $0.label == "Sports" }!.expandable)
-    }
-
-    func testSessionExpandAndLiveSections() {
-        let s = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: nil)
-        s.toggleExpanded("Business"); XCTAssertEqual(s.treeRows().count, 10 + 7)
-        s.toggleExpanded("business"); XCTAssertEqual(s.treeRows().count, 10)
-        s.setLiveSections(["housing_market", "world"])
-        XCTAssertEqual(s.treeRows().last?.label, "Housing market")
-        XCTAssertEqual(s.treeRows().count, 11)
-    }
-
-    func testE1TheSameTopicTwiceIsOne() {
-        var s = EditionSelection()
-        s.toggle("Space", among: sug); XCTAssertEqual(s.topics, ["Space"])
-        XCTAssertNil(s.add("space", among: sug)); XCTAssertNil(s.add(" SPACE ", among: sug))
-        XCTAssertEqual(s.add("tech", among: sug), "Technology")
-        XCTAssertNil(s.add("technology", among: sug)); XCTAssertNil(s.add("Spaces", among: sug))
-        XCTAssertEqual(s.topics, ["Space", "Technology"])
-        s.toggle("space", among: sug); XCTAssertFalse(s.contains("Space"), "a second tap deselects")
-        var u = EditionSelection(); _ = u.add("us", among: sug); XCTAssertEqual(u.topics, ["U.S."]); XCTAssertNil(u.add("U.S.", among: sug))
-        var c = EditionSelection(); _ = c.add("Chess", among: sug); XCTAssertNil(c.add("chess", among: sug))
-    }
-
-    func testE2SpeechNamesTopicsNotInTheSuggestions() {
-        var s = EditionSelection()
-        let o = s.apply(spoken: "add space and chess", among: sug)
-        XCTAssertEqual(o.added, ["Space", "Chess"])
-        XCTAssertEqual(o.reply, "Added Space and Chess.")
-        XCTAssertEqual(s.topics, ["Space", "Chess"])
-        let o2 = s.apply(spoken: "also sourdough baking, and the tech", among: sug)
-        XCTAssertEqual(o2.added, ["Sourdough baking", "Technology"], "\(o2)")
-    }
-
-    func testSpokenForms() {
-        XCTAssertEqual(SpokenTopics.parse("I'd like to hear about space").adds, ["space"])
-        XCTAssertEqual(SpokenTopics.parse("Space.").adds, ["space"])
-        XCTAssertEqual(SpokenTopics.parse("please add the U.S. and politics").adds, ["us", "politics"])
-        XCTAssertEqual(SpokenTopics.parse("drop chess").removes, ["chess"])
-        XCTAssertEqual(SpokenTopics.parse("take off sports and music").removes, ["sports", "music"])
-        XCTAssertTrue(SpokenTopics.parse("continue").finish)
-        XCTAssertTrue(SpokenTopics.parse("that's all").finish)
-        XCTAssertTrue(SpokenTopics.parse("tell me about science, health and film").adds == ["science", "health", "film"])
-    }
-
-    func testE5QuestionsAndLongSentencesAreNotTopics() {
-        XCTAssertTrue(SpokenTopics.parse("what is this for?").isEmpty)
-        XCTAssertTrue(SpokenTopics.parse("how does this work").isEmpty)
-        XCTAssertTrue(SpokenTopics.parse("I was thinking about whether the weather today will affect anything at all").isEmpty)
-        XCTAssertTrue(SpokenTopics.parse("").isEmpty)
-        XCTAssertTrue(SpokenTopics.parse("um").isEmpty)
-        var s = EditionSelection()
-        XCTAssertTrue(s.apply(spoken: "what is this", among: sug).reply.contains("Tell me a topic"))
-        XCTAssertTrue(s.topics.isEmpty)
-    }
-
-    func testE8NegativeWordsOnlyTakeOffWhatIsThere() {
-        var s = EditionSelection(topics: ["Sports", "Music"])
-        _ = s.apply(spoken: "not sports", among: sug)
-        XCTAssertEqual(s.topics, ["Music"])
-        let o = s.apply(spoken: "no gossip", among: sug)
-        XCTAssertEqual(s.topics, ["Music"]); XCTAssertTrue(o.added.isEmpty)
-        XCTAssertTrue(s.apply(spoken: "nothing", among: sug).added.isEmpty)
-        XCTAssertTrue(s.apply(spoken: "none", among: sug).removed.isEmpty)
-    }
-
-    func testE3LongOrEmptyTypedTopics() {
-        var s = EditionSelection()
-        XCTAssertTrue(s.addTyped("   ", among: sug).isEmpty)
-        XCTAssertTrue(s.addTyped("...,;!", among: sug).isEmpty)
-        let long = Array(repeating: "harbour", count: 40).joined(separator: " ")
-        let added = s.addTyped(long, among: sug)
-        XCTAssertEqual(added.count, 1)
-        XCTAssertLessThanOrEqual(added[0].count, EditionTopics.maxTopicLength)
-        XCTAssertFalse(added[0].hasSuffix(" "))
-        XCTAssertEqual(s.addTyped("space, chess; Arts and crafts", among: sug), ["Space", "Chess", "Arts and crafts"])
-        XCTAssertEqual(s.addTyped("a\u{0007}b", among: sug), ["Ab"], "control characters are dropped")
-    }
-
-    func testE4NoMinimumAndNoMaximum() {
-        let w = LocalEditionWriter.edition(topics: [])
-        XCTAssertEqual(w.sections.first?.lines, ["The whole paper, until I say otherwise."])
-        XCTAssertTrue(EditionSetupText.selectionLine([]).contains("general edition"))
-        var s = EditionSelection()
-        for t in sug { s.toggle(t, among: sug) }
-        XCTAssertEqual(s.topics.count, sug.count, "every suggestion can be selected")
-        XCTAssertEqual(LocalEditionWriter.edition(topics: s.topics).sections[0].lines.count, sug.count)
-        XCTAssertTrue(EditionSetupText.selectionLine(["Space"]).contains("Space"))
-        XCTAssertTrue(EditionSetupText.selectionLine(["Space", "Chess", "Film"]).contains("3 topics"))
-    }
-
-    func testE6E7SavedLocallyAndShownAgain() {
-        let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }
-        let a = EditionSetupSession(suggestions: sug, file: f)
-        XCTAssertFalse(a.hasSaved)
-        a.toggle("Space"); _ = a.addTyped("Chess"); _ = a.hear("add film")
-        XCTAssertTrue(a.hasSaved)
-        let b = EditionSetupSession(suggestions: sug, file: f)        // coming back to the step
-        XCTAssertEqual(b.topics, ["Space", "Chess", "Film"])
-        let rows = b.treeRows()
-        XCTAssertEqual(rows.first { $0.kind == "yours" }?.label, "Chess", "the reader's own topic is under Yours")
-        XCTAssertEqual(rows.first { $0.label == "Science" }?.partial, true, "Space is picked under Science")
-        XCTAssertEqual(rows.first { $0.label == "World" }?.selected, false)
-    }
-
-    func testE7CorruptFileStartsEmpty() throws {
-        let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }
-        try Data("{not json".utf8).write(to: f)
-        XCTAssertEqual(EditionSetupSession(suggestions: sug, file: f).topics, [])
-        try Data().write(to: f)
-        XCTAssertEqual(EditionSetupSession(suggestions: sug, file: f).topics, [])
-    }
-
-    func testE9ADeselectedOwnTopicStaysAsAChip() {
-        let s = EditionSetupSession(suggestions: sug, file: nil)
-        _ = s.addTyped("Chess"); s.toggle("Chess")
-        XCTAssertEqual(s.topics, [])
-        let c = s.treeRows().first { $0.label == "Chess" }
-        XCTAssertNotNil(c); XCTAssertFalse(c!.selected); XCTAssertEqual(c!.kind, "yours")
-    }
-
-    func testFinishByVoiceCallsBack() {
-        let s = EditionSetupSession(suggestions: sug, file: nil)
-        nonisolated(unsafe) var done = false
-        s.onFinish = { done = true }
-        XCTAssertEqual(s.hear("continue"), "Okay.")
-        XCTAssertTrue(done)
-    }
-
-    func testTheProgrammeAndTheDeskUseTheSession() async throws {
-        let s = EditionSetupSession(suggestions: sug, file: nil)
-        EditionSetupSession.shared = s; defer { EditionSetupSession.shared = nil }
+    func testTheDeskPutsTheWordsInTheMailboxAndSaysWhatSharedCodeAnswers() async throws {
+        let talk = EditionTalk.shared; talk.clear(); defer { talk.clear() }
         let doc = try await EditionSetupProgramme(StageParams()).load()
-        XCTAssertEqual(doc.blocks.compactMap(\.spokenText), [EditionSetupText.spokenOpen])
-        var got: [Revision] = []
-        for try await r in EditionSetupDesk(StageParams()).submit(DeskTurn(turnID: "t1", programmeID: "p", blockIndex: 0, listenerWords: "add space and chess")) { got.append(r) }
-        XCTAssertEqual(s.topics, ["Space", "Chess"])
-        XCTAssertEqual(got.first?.blocks.compactMap(\.spokenText), ["Added Space and Chess."])
+        XCTAssertEqual(doc.blocks.compactMap(\.spokenText), ["Tap the topics you want, or tell me. Say, add space and chess."])
+        let t = sharedCode(line: "Added Space and Chess.", finish: false)
+        let lines = try await say("add space and chess"); await t.value
+        XCTAssertEqual(lines, ["Added Space and Chess."])
+    }
+
+    func testFinishByVoiceCallsBackAndAnUnansweredTurnIsSilentButEnds() async throws {
+        let talk = EditionTalk.shared; talk.clear(); defer { talk.clear(); talk.onFinish = nil }
+        let done = expectation(description: "finish"); talk.onFinish = { done.fulfill() }
+        let t = sharedCode(line: "Okay.", finish: true)
+        let lines = try await say("done"); await t.value
+        await fulfillment(of: [done], timeout: 2)
+        XCTAssertEqual(lines, ["Okay."])
+        let none = await talk.say("add chess", deadline: 0.05)
+        XCTAssertNil(none); talk.clear()
+        XCTAssertEqual((EditionNative.op(["op": "editionHeard"])["items"] as? [[String: String]])?.count, 0, "clear() drops what was never taken")
+    }
+
+    func testTheMirrorIsACopyInMemoryThatTheWipeEmptiesAndForgets() {
+        EditionPicksMirror.shared.reset(); defer { EditionPicksMirror.shared.reset() }
+        XCTAssertFalse(EditionPicksMirror.shared.known, "nothing pushed yet: an empty copy is not the listener's choice")
+        _ = EditionNative.op(["op": "editionMirror", "topics": ["Space", "Chess"]])
+        XCTAssertEqual(EditionPicksMirror.shared.topics, ["Space", "Chess"]); XCTAssertTrue(EditionPicksMirror.shared.known)
+        _ = EditionNative.op(["op": "editionMirror", "topics": [String]()])
+        XCTAssertEqual(EditionPicksMirror.shared.topics, []); XCTAssertTrue(EditionPicksMirror.shared.known, "pushed empty IS the listener's choice")
+        _ = EditionNative.op(["op": "editionMirrorReset"])
+        XCTAssertFalse(EditionPicksMirror.shared.known); XCTAssertEqual(EditionPicksMirror.shared.topics, [])
+    }
+
+    func testTheOldFileIsNeitherReadNorDeletedByTheEditionCalls() throws {
+        guard let f = TakeFiles.url("edition-topics.json") else { return XCTFail("no Application Support") }
+        let had = try? Data(contentsOf: f); defer { if let had { try? had.write(to: f) } else { try? FileManager.default.removeItem(at: f) } }
+        try FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{\"topics\":[\"Space\"]}".utf8).write(to: f)
+        XCTAssertEqual(EditionNative.op(["op": "editionLegacy"]).count, 0, "no read op")
+        XCTAssertEqual(EditionNative.op(["op": "editionLegacyDrop"]).count, 0, "no drop op")
+        XCTAssertEqual(try String(contentsOf: f, encoding: .utf8), "{\"topics\":[\"Space\"]}", "left where it is, unread")
+    }
+
+    @MainActor func testTheNotebookWriteRefusesTopicsReadUnderAnEarlierAccount() async {
+        let store = NotebookStore(); var asked = 0
+        store.lookupEdition = { asked += 1; return nil }
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("topics-marker-\(UUID().uuidString)")
+        let stale = AccountWipe.generation
+        _ = AccountWipe.bumpGeneration()                      // the account changed after the topics were read
+        let wrote = await store.writeTopics(["Space"], marker: marker, generation: stale)
+        XCTAssertFalse(wrote); XCTAssertEqual(asked, 0, "the server is not even asked")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
     }
 
     func testTheEditionIsWrittenWithoutANetworkFromTheChoices() async throws {

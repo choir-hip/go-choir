@@ -87,7 +87,7 @@ final class AccountWipeTests: XCTestCase {
         // The stores, each in its own place under the temporary root.
         let turns = TurnHistory(); turns.add(listener: m, radio: [m])
         let cache = NotebookCache(file: root.appendingPathComponent("notebook-cache.md")); cache.set(m)
-        let topics = root.appendingPathComponent("edition-topics.json"), topicsMarker = root.appendingPathComponent("notebook-topics-written")
+        let legacyTopics = root.appendingPathComponent("edition-topics.json"), topicsMarker = root.appendingPathComponent("notebook-topics-written")
         write("edition-topics.json", "{\"topics\":[\"\(m)\"]}"); write("notebook-topics-written", m)
         let notebook = NotebookStore(); notebook.doc = .found(address: "texture:x", notebook: NotebookText.parse("# My notebook\n\n## What you asked for\n- \(m)\n")); notebook.selected = m
         let steerSent = Recorder()
@@ -121,8 +121,7 @@ final class AccountWipeTests: XCTestCase {
         write("MikeVoice/speaker.json", m); let voice = SpeakerGate(url: root.appendingPathComponent("MikeVoice/speaker.json"))
         let signals = FileSignals(file: root.appendingPathComponent("signals.jsonl")); signals.record(SignalEvent(kind: "ask", subject: m, detail: m))
         let openPages = OpenPages(file: root.appendingPathComponent("open-pages.json")); openPages.open("mailbox:inbox", title: m)
-        let session = EditionSetupSession(suggestions: [], file: root.appendingPathComponent("edition-selection.json"))
-        EditionSetupSession.shared = session; write("edition-selection.json", "{\"topics\":[\"\(m)\"]}")
+        EditionPicksMirror.shared.set([m])        // the native copy of the picks (the file is shared code's)
         write("onboarding.json", m); write("books/b1/text.txt", m); write("cache/files/f1.txt", m)
 
         let wipe = AccountWipe()
@@ -133,7 +132,7 @@ final class AccountWipeTests: XCTestCase {
             AccountWipe.removeFiles([rootRef.appendingPathComponent("onboarding.json")])
             AccountWipe.removeContents(of: rootRef.appendingPathComponent("books")); AccountWipe.removeContents(of: rootRef.appendingPathComponent("cache/files"))
         }
-        wipe.registerStandard(turnHistory: turns, notebookCache: cache, topicsFile: topics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
+        wipe.registerStandard(turnHistory: turns, notebookCache: cache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
                               takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
                               texture: texture, environment: env, content: content, corpus: SavedCorpus(),
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
@@ -154,12 +153,12 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1")); XCTAssertNil(content.get("mail:1"))
         XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned); XCTAssertTrue(signals.recent(limit: 10).isEmpty)
-        XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertNil(EditionSetupSession.shared); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
+        XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
 
         // (c) the next sign-in: the first request of each kind carries nothing of the old account.
         let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""
         XCTAssertFalse(body.contains(m), "turn")
-        XCTAssertNil(EditionText.make(notebook: cache.text, topics: EditionSetupSession.load(topics)?.topics ?? []), "programme: edition_text")
+        XCTAssertNil(EditionText.make(notebook: cache.text, topics: EditionPicksMirror.shared.topics), "programme: edition_text")
         let sent = steerSent
         steer.setSender { t in sent.add(t.title); return .sent }
         await steer.flush(); XCTAssertEqual(sent.all, [], "steer flush")
