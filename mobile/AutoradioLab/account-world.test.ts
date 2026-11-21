@@ -82,6 +82,14 @@ describe('M1 a chain of a closed world does nothing more', () => {
   });
 });
 
+describe('M1c bindStorage on the host\'s storage', () => {
+  test('a storage object whose `fs` is read-only (the host\'s, found by `test web`) is bound without assignment', async () => {
+    const raw = Object.freeze({ fs: Object.freeze({ readFile: async () => new Uint8Array([1]), atomicWriteFile: async () => undefined }) });
+    const bound = api.bindStorage(raw as never) as typeof raw;
+    expect((await bound.fs.readFile()).length).toBe(1);
+  });
+});
+
 describe('M2 a request is signed only with the key of its world', () => {
   test('the Keychain changed under a live world: the chain\'s next request is refused, nothing is sent', async () => {
     boot({});
