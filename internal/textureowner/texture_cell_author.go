@@ -69,6 +69,8 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 			return "", err
 		}
 		h.recordCellAuthorReceipt(ctx, rec, revisionIdentity, receipt)
+	} else {
+		receipt = replayedReceipt(receipt)
 	}
 	// The backstop runs on a replay too: an Idle turn whose request close
 	// failed after the turn committed closes it on the retry.
@@ -85,6 +87,23 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 		}
 	}
 	return receipt, nil
+}
+
+// replayedReceipt is a turn's stored receipt as a replay answers it: it says it
+// is one and names no records, which were named when the turn first committed
+// (the runtime logs a research Cast once).
+func replayedReceipt(receipt string) string {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal([]byte(receipt), &fields) != nil {
+		return receipt
+	}
+	delete(fields, "inbox_records")
+	fields["replay"] = json.RawMessage("true")
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return receipt
+	}
+	return string(out)
 }
 
 // textureTurnDocID is the document a Texture run's turn commits on.

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
@@ -174,13 +175,28 @@ func (rt *Runtime) storyCaptureWasRead(ownerID, computerID, doc, captureID strin
 	return ok && v.(*syncSet).has(strings.TrimSpace(captureID))
 }
 
-// requireFedCapturesRead refuses a story Texture's Cast to research while
-// captures fed since its last research Cast are unread by it. A story with no
-// earlier research is never refused (its opening captures are its first
-// material, and the open path's Texture reads them as it writes V1).
-func (rt *Runtime) requireFedCapturesRead(ctx context.Context, ownerID, computerID, doc, runID string) error {
+// storyResearchRefusalLimit bounds how often one set of unread fed captures
+// refuses a story's research Cast. A refusal is a correctness check, not a
+// switch, but a Texture that is told and never reads would be woken again by
+// the fed record it left unread and refused again for ever: the refusal after
+// the limit is released (and logged), so the worst case for one fed set is this
+// many refused attempts.
+const storyResearchRefusalLimit = 3
+
+// unreadFedCaptures is the captures fed to a story since its last research
+// Cast that its Texture has not read, nil when there is no earlier research,
+// when none is unread, when the refusal limit for this set is spent, or when
+// the store could not be read (the gate then fails open, because a store blip
+// must not block a story, and says so in a "story research gate skipped" line
+// that the status script counts). A non-empty result is a refusal: it is
+// counted, logged and told the model.
+func (rt *Runtime) unreadFedCaptures(ctx context.Context, ownerID, computerID, doc, runID string) []string {
 	m, err := rt.storyMaterialOf(ctx, ownerID, computerID, doc)
-	if err != nil || !m.HasResearch {
+	if err != nil {
+		log.Print(storyResearchGateSkippedLine(runID, doc, err))
+		return nil
+	}
+	if !m.HasResearch {
 		return nil
 	}
 	var unread []string
@@ -192,8 +208,34 @@ func (rt *Runtime) requireFedCapturesRead(ctx context.Context, ownerID, computer
 	if len(unread) == 0 {
 		return nil
 	}
+	key := ownerID + "\x00" + computerID + "\x00" + doc + "\x00" + strings.Join(unread, ",")
+	v, _ := rt.storyRefusals.LoadOrStore(key, new(atomic.Int32))
+	if n := v.(*atomic.Int32).Add(1); n > storyResearchRefusalLimit {
+		log.Printf("story research gate released run=%s story=%s unread=%d refused=%d", runID, doc, len(unread), n-1)
+		return nil
+	}
 	log.Print(storyResearchRefusedLine(runID, doc, len(unread)))
-	return fmt.Errorf("research for this story was last asked before %d captures were fed to it that you have not read: read what you were fed before you research again (choir.ReadCapture on each of %s), revise from them, and cast research only for what they leave open (nothing was sent)", len(unread), strings.Join(unread, ", "))
+	return unread
+}
+
+func storyResearchGateSkippedLine(runID, story string, err error) string {
+	return fmt.Sprintf("story research gate skipped run=%s story=%s err=%q", runID, story, err.Error())
+}
+
+func unreadFedMessage(unread []string) string {
+	return fmt.Sprintf("research for this story was last asked before %d captures were fed to it that you have not read: read what you were fed before you research again (choir.ReadCapture on each of %s), revise from them, and cast research only for what they leave open", len(unread), strings.Join(unread, ", "))
+}
+
+// requireFedCapturesRead refuses a story Texture's Cast to research while
+// captures fed since its last research Cast are unread by it. A story with no
+// earlier research is never refused (its opening captures are its first
+// material, and the open path's Texture reads them as it writes V1).
+func (rt *Runtime) requireFedCapturesRead(ctx context.Context, ownerID, computerID, doc, runID string) error {
+	unread := rt.unreadFedCaptures(ctx, ownerID, computerID, doc, runID)
+	if len(unread) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s (nothing was sent)", unreadFedMessage(unread))
 }
 
 func storyResearchRefusedLine(runID, story string, unread int) string {
@@ -216,11 +258,12 @@ func (rt *Runtime) storyPages(ctx context.Context, ownerID, computerID, doc stri
 		start := time.Now()
 		callCtx, cancel := context.WithTimeout(ctx, storyContextLeadTimeout)
 		got, err := lr.SearchLeadPages(callCtx, ownerID, computerID, doc, max)
+		timedOut := callCtx.Err() == context.DeadlineExceeded
 		cancel()
 		if err != nil {
 			// A timeout drops the story's read pages from the section: it is
 			// logged as one, so a read that grows past its bound is seen.
-			log.Printf("story research context: lead pages failed story=%s elapsed=%s timeout=%t: %v", doc, time.Since(start).Round(time.Millisecond), callCtx.Err() != nil, err)
+			log.Printf("story research context: lead pages failed story=%s elapsed=%s timeout=%t: %v", doc, time.Since(start).Round(time.Millisecond), timedOut, err)
 		}
 		for _, p := range got {
 			if p.CaptureID != "" {
@@ -289,7 +332,8 @@ func takePages(own, leads []storyHeldPage, max int) []storyHeldPage {
 			fill = append(fill, p)
 		}
 	}
-	return append(fill, out...)
+	// The story's own captures, the newest fed among them, come first.
+	return append(out, fill...)
 }
 
 func outletOf(raw string) string {

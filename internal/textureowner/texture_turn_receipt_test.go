@@ -56,3 +56,30 @@ func TestTurnReceiptNamesTheInboxRecordsItSent(t *testing.T) {
 		t.Fatalf("a Write turn's receipt lacks its Cast's record: %s (%v)", out, err)
 	}
 }
+
+// A replayed turn (the same body and identity) names no records: they were named
+// when it first committed, and the runtime logs a research Cast once.
+func TestReplayedTurnReceiptNamesNoRecords(t *testing.T) {
+	type receipt struct {
+		InboxRecords []types.InboxRecordReceipt `json:"inbox_records"`
+		Replay       bool                       `json:"replay"`
+	}
+	h, s, rec := cellAuthorSetup(t, "turn-replay")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	body := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "asked research", InboxRecords: []types.CommitmentRecord{researchCast(rec, "texture-cell:cast:replay-1")}})
+	first, err := h.CommitCellTextureAuthor(ctx, &rec, body, "replay-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := h.CommitCellTextureAuthor(ctx, &rec, body, "replay-1")
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	var a, b receipt
+	_ = json.Unmarshal([]byte(first), &a)
+	_ = json.Unmarshal([]byte(second), &b)
+	if len(a.InboxRecords) != 1 || !b.Replay || len(b.InboxRecords) != 0 {
+		t.Fatalf("first = %s\nreplay = %s\nwant one record, then a replay naming none", first, second)
+	}
+}

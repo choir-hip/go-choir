@@ -900,7 +900,18 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				// (answerIdleTextureTrigger): a read-only cell that committed a
 				// turn consumed reports the model had not read yet (rerun 12).
 				if deskCommits(deskRole, TextureRevisionKind) {
-					rt.noteTextureCell(execCtx.RunID, result.Intents)
+					// A research dispatch dropped from the tray was not sent:
+					// the activation's turn is what its other intents made.
+					noted := result.Intents
+					if len(reduction.droppedLocalIDs) > 0 {
+						noted = nil
+						for _, in := range result.Intents {
+							if !reduction.droppedLocalIDs[in.LocalID] {
+								noted = append(noted, in)
+							}
+						}
+					}
+					rt.noteTextureCell(execCtx.RunID, noted)
 				}
 			}
 			// What a cell printed after it read outside content is data, not
@@ -918,6 +929,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				"diag":     result.DiagKind,
 				"receipts": result.Receipts,
 				"intents":  len(result.Intents),
+			}
+			if reduction.active && reduction.researchNotice != "" {
+				cell["research_not_sent"] = reduction.researchNotice
 			}
 			if reduction.active && reduction.restateNotice != "" {
 				cell["calibration_restate"] = reduction.restateNotice

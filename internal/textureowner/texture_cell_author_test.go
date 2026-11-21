@@ -168,8 +168,10 @@ func TestWriteCommitsACitedParagraphAndKeepsUntouchedBlocks(t *testing.T) {
 	if v1.RevisionID == base.RevisionID || v1.AuthorKind != types.AuthorAppAgent || !strings.Contains(receipt, v1.RevisionID) {
 		t.Fatalf("first Write did not commit an appagent revision: %s", receipt)
 	}
-	if again, err := h.CommitCellTextureAuthor(ctx, &rec, first, "write-1"); err != nil || again != receipt {
-		t.Fatalf("replay = %q, %v; want the first receipt", again, err)
+	// A replay answers the first receipt, marked as a replay and naming no
+	// records (they were named when the turn first committed).
+	if again, err := h.CommitCellTextureAuthor(ctx, &rec, first, "write-1"); err != nil || again != replayedReceipt(receipt) {
+		t.Fatalf("replay = %q, %v; want the first receipt as a replay", again, err)
 	}
 
 	second := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v1.RevisionID, Wait: "the court's schedule", Write: &yaegikernel.TextureWrite{

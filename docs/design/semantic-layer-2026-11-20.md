@@ -326,6 +326,23 @@ Left as they are: an owner's research button and the entity backfill write their
 own Casts directly (`store/story_research_request.go`); they are owner acts, not
 gated and not counted, and the script says so.
 
+**Fourth note, 2026-11-21: the second read of a0a8ba96b (accept, two High risks
+decided).** A research refusal no longer discards the tray: `dropResearchUntilRead`
+(`rlm_reduce.go`, before the fold) takes only the research Cast/Ask out, the
+rest of the turn (a page Write, Done, Wait) commits, and the cell's result
+carries `research_not_sent` saying the page was written at revision N and the
+Cast was NOT sent, naming the captures to read. A cell with no turn to commit
+without its Cast is refused whole and says "nothing was committed". The trigger
+is consumed by the turn the rest made (the dropped Cast is not noted as an
+applied act). Where a whole-tray refusal leaves a fed record unread, the
+controller can wake the Texture again; the worst case is bounded by
+`storyResearchRefusalLimit` (3): the same unread set is refused three times and
+then released with a `story research gate released` line. A store error in the
+gate still fails open and is logged as `story research gate skipped`; both are
+counted by `scripts/status-story-choice`. The test of the replay branch found a
+real defect: a replayed turn's receipt was the stored one, records and all, so
+the runtime would have logged its research Cast twice; a replay now names none.
+
 **Claim C-A2.** Research rounds per capture fall: `story research cast` lines
 per decision on the paper, first full UTC day after A against the 0.68 research
 briefs per decision seen on 2026-11-21 05Z to 07Z (77 runs, 114 decisions).

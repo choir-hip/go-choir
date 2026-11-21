@@ -184,6 +184,9 @@ type Runtime struct {
 	// fed (story_research_context.go). A restart forgets them, which asks one
 	// re-read, never a missed one.
 	storyReads sync.Map
+	// storyRefusals counts, for each story and set of unread fed captures, the
+	// research Casts refused for it (storyResearchRefusalLimit).
+	storyRefusals sync.Map
 	// pollSources serializes choir.PollSource per source within a run.
 	pollSources pollSourceLocks
 	// calibration caches each computer's calibration snapshot for the

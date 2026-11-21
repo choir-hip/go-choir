@@ -21,6 +21,8 @@ It reads two console lines, written by internal/agentcore management_story_choic
       logged where its turn commits; cause is open, successor, feed or continue. An owner's research
       button and the entity backfill write their own Casts and are not counted)
   story research refused run= story= unread=<n>   (its Cast was refused: n fed captures unread)
+  story research gate skipped|released run= story= ...   (the check failed open on a store error; or a set refused
+      its limit of times and was let through)
 and prints, per hour and for the window: decisions; captures judged; answers by kind (a
 feed is `same`; an open's first capture is `next` when it names a succeeds, else `new`, and
 its other captures are `same_as_batch`; a decline is `decline`); candidates offered by
@@ -73,6 +75,7 @@ def hour_label(t):
 
 RESEARCH_RE = re.compile(STAMP + r" story research cast (.*)$")
 REFUSED_RE = re.compile(STAMP + r" story research refused (.*)$")
+GATE_RE = re.compile(STAMP + r" story research gate (skipped|released) (.*)$")
 BUCKETS = ("1", "2", "3", "4-5", "6+")
 
 
@@ -96,11 +99,17 @@ def compute(text, since=None, until=None):
     main-point judgment have no captures= and count one capture each."""
     hours, total = {}, new_counts()
     story_captures, opened, succ, fed = {}, set(), set(), set()
-    research, refused = [], []
+    research, refused, gate = [], [], {"skipped": 0, "released": 0}
     for ln in text.splitlines():
         m = LINE_RE.search(ln)
         r = RESEARCH_RE.search(ln) if not m else None
         x = REFUSED_RE.search(ln) if not m and not r else None
+        g = GATE_RE.search(ln) if not m and not r and not x else None
+        if g:
+            t = stamp_epoch(g.group(1))
+            if (since is None or t >= since) and (until is None or t < until):
+                gate[g.group(2)] += 1
+            continue
         if x:
             t = stamp_epoch(x.group(1))
             if (since is None or t >= since) and (until is None or t < until):
@@ -191,6 +200,7 @@ def compute(text, since=None, until=None):
     total["research_refused_unread"] = len(refused)
     total["research_refused_captures"] = sum(refused)
     total["research_by_cause"] = cause
+    total["research_gate_skipped"], total["research_gate_released"] = gate["skipped"], gate["released"]
     dist = dict.fromkeys(BUCKETS, 0)
     for n in story_captures.values():
         dist[bucket(n)] += 1
@@ -228,6 +238,7 @@ def render(res):
                 t["research_runs"], t["research_opened_rounds"], t["research_by_cause"]["open"], t["research_by_cause"]["successor"],
                 t["research_by_cause"]["feed"], t["research_by_cause"]["continue"]),
             "research Casts refused because fed captures were unread: %d (%d captures owed a read)" % (t["research_refused_unread"], t["research_refused_captures"]),
+            "research gate: %d skipped (a store read failed, research went unchecked), %d released (the same unread set refused its limit)" % (t["research_gate_skipped"], t["research_gate_released"]),
             "captures per trajectory (stories opened or fed in the window): " + ", ".join("%s: %d" % (k, t["captures_per_trajectory"][k]) for k in BUCKETS)]
     return "\n".join(out)
 
@@ -237,7 +248,7 @@ dir=/var/lib/go-choir/vm-state/@VM@
 sudo -n true 2>/dev/null || echo "##NOSUDO"
 echo "##CONSOLE"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
-  grep -a -E 'management story choice run=|story research cast run=|story research refused run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} (management story choice|story research cast|story research refused))/\1/'
+  grep -a -E 'management story choice run=|story research cast run=|story research refused run=|story research gate (skipped|released) run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} (management story choice|story research cast|story research refused|story research gate (skipped|released)))/\1/'
 echo "##END"
 """.replace("@VM@", PAPER_VM)
 

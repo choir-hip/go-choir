@@ -77,6 +77,9 @@ func (c *storeTurnCommitter) Commit(ctx context.Context, rec *types.RunRecord, b
 		}
 		out["inbox_records"] = receipt.Records
 	}
+	if turn.Write != nil {
+		out["revision_id"] = "rev-written"
+	}
 	raw, _ := json.Marshal(out)
 	return string(raw), nil
 }
@@ -221,5 +224,122 @@ func TestTextureResearchCastIsGatedLoggedAndFollowedByContextOnTheRealFold(t *te
 		if !strings.Contains(text, w) {
 			t.Errorf("P6: the context lacks %q:\n%s", w, text)
 		}
+	}
+}
+
+// A research refusal never loses a revision (review round 4, finding 1): a cell
+// that writes its page and casts research after an unread feed commits the Write
+// and not the Cast, and is told both. The activation's turn is what the rest
+// made, so its trigger is consumed in the normal way (finding 2); a cell with no
+// turn to commit without its Cast is refused whole and told so.
+func TestAResearchRefusalCommitsThePageWriteAndDropsOnlyTheCast(t *testing.T) {
+	deskTestWorkerBin(t)
+	rt, s := testRuntime(t)
+	com := &storeTurnCommitter{s: s}
+	bindTextureCommitter(t, rt, com)
+	ctx := context.Background()
+	owner, computer := "owner-texture-write", rt.cfg.ComputerID
+	t0 := time.Now().UTC().Add(-time.Hour)
+	doc := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Dock strike", "Whether the dock strike ends and on what terms", "", []string{"c1"}, t0)
+	rt.researchDeps = &researchtools.Dependencies{Captures: &ctxSink{urls: map[string]string{"c4": "https://port.example/4"}}}
+	rec := types.RunRecord{
+		RunID: "run-texture-write", AgentID: "texture:" + doc, OwnerID: owner, ComputerID: computer,
+		ChannelID: doc, AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, State: types.RunRunning,
+		Metadata: map[string]any{"doc_id": doc},
+	}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+	execCtx := toolregistry.ExecutionContext{
+		RunID: rec.RunID, AgentID: rec.AgentID, OwnerID: owner, ChannelID: doc, ComputerID: computer,
+		Profile: agentprofile.Texture, Role: agentprofile.Texture, RunRecord: &rec,
+	}
+	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Texture)
+	cellCtx := toolregistry.WithExecutionContext(ctx, execCtx)
+	run := func(src string) string {
+		t.Helper()
+		payload, _ := json.Marshal(map[string]any{"source": src, "timeout_ms": 15000})
+		out, err := tool.Func(cellCtx, payload)
+		if err != nil {
+			return out + err.Error()
+		}
+		return out
+	}
+	var logs bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	run(textureResearchCast)
+	closeResearchRound(t, s, owner, computer, doc)
+	feedCastAt(t, s, owner, computer, doc, "cell-2:cast:f1", []string{"c4"}, time.Now().UTC().Add(2*time.Second))
+	before := com.turns()
+	logs.Reset()
+	out := run(`choir.Write("@insert end\nv2 of the page", "revise from what was fed")
+` + textureResearchCast)
+	if com.turns() != before+1 {
+		t.Fatalf("W1: the page write was lost to the research refusal: turns %d -> %d: %s", before, com.turns(), out)
+	}
+	var turn yaegikernel.TextureTurn
+	if err := json.Unmarshal([]byte(com.seen[len(com.seen)-1]), &turn); err != nil || turn.Write == nil || len(turn.InboxRecords) != 0 {
+		t.Fatalf("W1: the committed turn = %+v (%v), want the Write and no research record", turn, err)
+	}
+	for _, w := range []string{"research_not_sent", "NOT sent", "revision rev-written", "c4", "choir.ReadCapture"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("W2: the cell is not told %q: %s", w, out)
+		}
+	}
+	if strings.Contains(logs.String(), "story research cast") {
+		t.Errorf("W1: a dropped Cast logged as sent: %s", logs.String())
+	}
+	// The activation's turn is what the rest made: its trigger is consumed by
+	// the Write's turn, not left for an idle turn or a re-wake (finding 2).
+	if cells, ran := rt.takeTextureActivationCells(rec.RunID); !ran || !cells.applied {
+		t.Fatalf("W3: the activation recorded cells=%+v ran=%v, want a turn applied", cells, ran)
+	}
+	// A cell whose only act is the research Cast has nothing to commit without it: refused whole, and it says so.
+	before = com.turns()
+	out = run(textureResearchCast)
+	if com.turns() != before || !strings.Contains(out, "nothing was committed") || !strings.Contains(out, "c4") {
+		t.Fatalf("W4: a Cast-only cell: turns %d -> %d: %s", before, com.turns(), out)
+	}
+	if cells, ran := rt.takeTextureActivationCells(rec.RunID); ran && cells.applied {
+		t.Fatalf("W4: a refused cell counted as an applied turn: %+v", cells)
+	}
+}
+
+// The refusal for one set of unread captures is bounded, and a store that cannot
+// be read does not block a story but says so (finding 2's worst case; finding 3).
+func TestUnreadFedCapturesRefusalIsBoundedAndAStoreErrorIsLogged(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer := "owner-gate-bound", rt.cfg.ComputerID
+	t0 := time.Now().UTC().Add(-time.Hour)
+	doc := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Dock strike", "Whether the dock strike ends and on what terms", "", []string{"c1"}, t0)
+	researchCastAt(t, s, owner, computer, doc, "texture-cell:cast:r1", t0.Add(10*time.Minute))
+	feedCastAt(t, s, owner, computer, doc, "cell-2:cast:f1", []string{"c4"}, t0.Add(20*time.Minute))
+	var logs bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(prev) })
+	ctx := context.Background()
+	for i := 1; i <= storyResearchRefusalLimit; i++ {
+		if got := rt.unreadFedCaptures(ctx, owner, computer, doc, "run-b"); len(got) != 1 {
+			t.Fatalf("refusal %d of %d: unread = %v", i, storyResearchRefusalLimit, got)
+		}
+	}
+	if got := rt.unreadFedCaptures(ctx, owner, computer, doc, "run-b"); got != nil || !strings.Contains(logs.String(), "story research gate released run=run-b story="+doc) {
+		t.Fatalf("the refusal past its limit: unread = %v, log = %s", got, logs.String())
+	}
+	// A new feed is a new set: refused again.
+	feedCastAt(t, s, owner, computer, doc, "cell-3:cast:f2", []string{"c5"}, time.Now().UTC().Add(2*time.Second))
+	if got := rt.unreadFedCaptures(ctx, owner, computer, doc, "run-b"); len(got) != 2 {
+		t.Fatalf("a new feed was not refused: %v", got)
+	}
+	// A store that cannot be read: the gate opens and a line says why.
+	logs.Reset()
+	dead, cancel := context.WithCancel(ctx)
+	cancel()
+	if got := rt.unreadFedCaptures(dead, owner, computer, doc, "run-b"); got != nil || !strings.Contains(logs.String(), "story research gate skipped run=run-b story="+doc+" err=") {
+		t.Fatalf("a store error: unread = %v, log = %q", got, logs.String())
 	}
 }

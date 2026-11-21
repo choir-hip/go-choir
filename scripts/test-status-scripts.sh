@@ -983,5 +983,11 @@ check "C7 opens judged 4 (the old-format open is out), with a main point 3, with
 env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc2.log" >"$root/out" 2>&1
 check "C7 the text table prints both shares" 'grep -q "opens with a main point: 3 of 4 (75.0%)" "$root/out" && grep -q "opens that answered every candidate offered: 1 of 3 (33.3%)" "$root/out"'
 
+printf '%s\n' "[ 1.0] runtime[1]: 2026/11/20 21:10:00 story research gate skipped run=t-1 story=s1 err=\"context canceled\"" "[ 1.0] runtime[1]: 2026/11/20 21:11:00 story research gate skipped run=t-1 story=s2 err=\"x\"" "[ 1.0] runtime[1]: 2026/11/20 19:11:00 story research gate skipped run=t-1 story=s3 err=\"out of window\"" "[ 1.0] runtime[1]: 2026/11/20 21:12:00 story research gate released run=t-1 story=s1 unread=1 refused=3" >"$root/sc3.log"
+env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc3.log" --since 2026-11-20T21:00Z --until 2026-11-20T23:00Z --json >"$root/out" 2>&1
+check "C8 the gate's failing open and its release are counted: 2 skipped in the window, 1 released" 'python3 -c "import json,sys; t=json.load(open(sys.argv[1]))[\"summary\"]; assert (t[\"research_gate_skipped\"],t[\"research_gate_released\"])==(2,1), t" "$root/out"'
+env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc3.log" --since 2026-11-20T21:00Z --until 2026-11-20T23:00Z >"$root/out" 2>&1
+check "C8 the text table prints them" 'grep -q "research gate: 2 skipped (a store read failed, research went unchecked), 1 released" "$root/out"'
+
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
