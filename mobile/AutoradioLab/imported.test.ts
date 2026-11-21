@@ -271,3 +271,16 @@ describe('I14 and I15 the original and the words', () => {
     }
   });
 });
+
+describe('I16 the search sees the documents the phone holds the text of', () => {
+  test('a read document is a Doc with a part per section and the block it starts at; an unread one is not indexed', async () => {
+    const S = await import('./imported-search.ts');
+    put('b.epub', 500, BOOK); put('r.pdf', 1000, PDF);
+    await open('b.epub');
+    const docs = await S.importedDocs(storage, net);
+    expect(docs.map((d) => d.title)).toEqual(['b']);
+    expect(docs[0]).toMatchObject({ kind: 'document', address: 'doc:' + id('b.epub'), source: 'Imported documents' });
+    expect(docs[0].parts!.map((p) => [p.label, p.block])).toEqual([['chapter 1: One', 0], ['chapter 2: Two', 3]]);
+    expect(await S.importedDocs(undefined, net)).toEqual([]);
+  });
+});

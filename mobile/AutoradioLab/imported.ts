@@ -102,6 +102,8 @@ async function entries(net: F.Net): Promise<FM.Entry[]> {
   for (const e of docs) known.set(M.idOf(e.name), e);
   return docs;
 }
+/** The documents of the folder (for the search's document source, imported-search.ts). */
+export const entriesOf = entries;
 async function entryOf(id: string, net: F.Net, refresh = false): Promise<FM.Entry | null> {
   const name = M.nameOfId(id);
   if (name === null || M.kindOfName(name) === null) return null;
