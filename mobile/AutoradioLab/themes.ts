@@ -22,7 +22,7 @@
 //  F10 A chosen theme that has only one scheme meets a mode control that asks for the other: the control shows the one scheme and refuses the other; the "default" id clears the choice.
 //  F11 The lens is a style (A native glass, B no material with a wash, C ultra-thin) and a wash of the page colour: a theme without a "lens" key shows the native glass; an unknown style or a wash outside 0...1 is refused.
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, HTTPError, SignedOutError, nativeLater, type Reply } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, nativeLater, currentWorld, type Reply } from './api.ts';
 import { WORDS } from './words.ts';
 import { BUNDLED } from './themes-bundled.ts';
 
@@ -413,6 +413,13 @@ export class ThemeStore {
     if (this.chosenID === id) this.chosenID = null;
     return true;
   }
+  /** The same store without what came from a Texture document (a copy: the real store keeps them for when the boundary is open again). */
+  withoutTexture(): ThemeStore {
+    const t = new ThemeStore();
+    for (const id of this.order) { const o = this.origins.get(id); const d = this.docs.get(id); if (d && o && o !== 'bundled' && o !== 'texture') t.put(d, o); }
+    t.chosenID = this.chosenID; t.mode = this.mode;
+    return t;
+  }
   originOf(id: string): string | undefined { return this.origins.get(id); }
   has(id: string): boolean { return this.docs.has(id); }
 
@@ -594,13 +601,13 @@ export function themeStore(storage: Storage | undefined): Promise<ThemeStore> {
   if (current) return Promise.resolve(current);
   if (!loading) {
     loading = (async () => {
-      const s = new ThemeStore();
+      const s = new ThemeStore(); const w = currentWorld();
       const kept = await readJSON(storage, CHOICE_FILE);
       const choice = isObj(kept) ? kept : null;
       let names: string[] = [];
       try { names = storage ? (await storage.fs.readdir(THEMES_DIR)).filter((n) => n.endsWith('.json')).sort() : []; } catch { /* no folder yet */ }
       for (const n of names) {
-        try { s.add(new TextDecoder().decode(await storage!.fs.readFile(`${THEMES_DIR}/${n}`)), n, n.startsWith('texture-') ? 'texture' : 'file'); }
+        try { const body = new TextDecoder().decode(await storage!.fs.readFile(`${THEMES_DIR}/${n}`)); if (n.startsWith('texture-') && w.closed) continue; s.add(body, n, n.startsWith('texture-') ? 'texture' : 'file'); }      // a Texture theme read across a boundary move carries the old account's document: not restored
         catch { /* a file that cannot be read is skipped */ }
       }
       s.restore(choice?.theme, choice?.mode);
@@ -622,14 +629,16 @@ function saveChoice(storage: Storage | undefined, s: ThemeStore): Promise<void> 
 // ---- The sources (app.ts). `host` is [prefersColorScheme, prefersReducedMotion] from `exactViewport()`.
 
 const hostOf = (scheme: string, reduce: boolean): Host => ({ scheme, reduceMotion: reduce === true });
-export async function themeShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<Theme> { return (await themeStore(storage)).current(hostOf(scheme, reduce)); }
-export async function themeExtrasShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<ThemeExtras> { return (await themeStore(storage)).extras(hostOf(scheme, reduce)); }
+/** What the exempt theme sources show: a Texture theme carries an account's document, so while the boundary is owed (a sign-out or a Clear began and no gate has confirmed it open) it is not shown. */
+async function shownStore(storage: Storage | undefined): Promise<ThemeStore> { const s = await themeStore(storage); return currentWorld().owed ? s.withoutTexture() : s; }
+export async function themeShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<Theme> { return (await shownStore(storage)).current(hostOf(scheme, reduce)); }
+export async function themeExtrasShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<ThemeExtras> { return (await shownStore(storage)).extras(hostOf(scheme, reduce)); }
 export async function themeListShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<ThemeList> {
-  const s = await themeStore(storage), h = hostOf(scheme, reduce);
+  const s = await shownStore(storage), h = hostOf(scheme, reduce);
   return { rows: s.list(h), mode: s.schemeMode, themeID: s.themeID(h), scheme: s.effectiveScheme(h), problems: s.problems, locked: s.lockedScheme ?? '' };
 }
 export async function themeCardsShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<ThemeCards> {
-  const s = await themeStore(storage), h = hostOf(scheme, reduce);
+  const s = await shownStore(storage), h = hostOf(scheme, reduce);
   return { rows: s.cards(h), mode: s.schemeMode, scheme: s.effectiveScheme(h), themeID: s.themeID(h), problems: s.problems, status };
 }
 

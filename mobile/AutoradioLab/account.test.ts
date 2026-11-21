@@ -403,21 +403,6 @@ describe('E2: survivors, a stuck Clear, and the card never waiting', () => {
       expect([f, m.files.has(STAMP), await stateNow()]).toEqual([f, true, 'clearing']);
     }
   });
-  test('a native wipe that never returns, with a timer that never fires, does not hold the one writer forever: the card\'s re-reads abandon it, and the next attempt runs on a fresh chain', async () => {
-    boot('A', 'absent'); W.wipe = 'hang';
-    const real = globalThis.setTimeout; globalThis.setTimeout = ((() => 0) as unknown) as typeof setTimeout;     // Exact timers end with the answer that made them
-    try {
-      expect((await probe()).threw).toBe('AccountClosedError');
-      for (let i = 0; i < 5; i++) await account.peek(m.storage, undefined);                           // the same Clear, still running, five card reads in a row
-      W.wipe = 'ok';
-      await account.peek(m.storage, undefined);                                                       // the sixth abandons it; the new attempt asks native again and it answers
-      const done = await Promise.race([idle().then(() => 'idle'), new Promise((r) => real(() => r('stuck'), 300))]);
-      expect(done).toBe('idle');
-    } finally { globalThis.setTimeout = real; }
-    expect(dataLeft()).toEqual([]); expect(await stateNow()).toBe('empty');
-    W.release?.();                                                                                    // the zombie's native call answers late: it changes nothing
-    await wait(20); expect(await stateNow()).toBe('empty');
-  });
   test('the card does not wait on a running job in ADOPT (it answers while a sign-out hangs in native)', async () => {
     boot('none', 'A'); W.signOut = 'hang';
     const out = signOut(); await wait(15);
@@ -451,7 +436,9 @@ describe('E: the epoch, and a hung shared wipe', () => {
     expect(r).not.toBe('hung');
     expect((r as { done: boolean }).done).toBe(true); expect((r as { failed: string }).failed).not.toBe('');
     expect(m.files.has(STAMP)).toBe(true); expect(await stateNow()).toBe('clearing');                  // the record stays: nothing was marked clean
-    m.faults.hangRm.clear(); await probe(); await idle();
+    // The hung removal is still in flight: the next Clear cannot finish while a write or removal of the ended world may yet land (drain), so the phone stays CLEARING until the host lets go of it.
+    await probe(); await idle(); expect(await stateNow()).toBe('clearing');
+    m.faults.hangRm.clear(); m.faults.releaseRm(); await wait(10); await probe(); await idle();
     expect(dataLeft()).toEqual([]); expect(await stateNow()).toBe('empty');
   });
 });
@@ -583,7 +570,7 @@ describe('S9 sign out A, sign in B', () => {
     const gen0 = content.generation;
     const r = await signOut();
     expect(r.done).toBe(true); expect([...m.files.keys()]).toEqual([]); expect(content.generation).toBeGreaterThan(gen0);
-    release(); expect(await late).toBe('dropped');
+    release(); expect(await Promise.race([late, wait(60).then(() => 'never')])).toBe('never');      // the late reply of A never reaches a caller (the chain stays pending: api.ts, the world)
     W.key = 'present'; W.value = KEY_B;
     await authedJSON('/api/two');
     expect(seen[0]).not.toBe(seen[seen.length - 1]);

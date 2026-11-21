@@ -30,7 +30,7 @@ import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
 import { wipePages, PAGES_FILE } from './pages.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
+import { nextGeneration, closeWorld, drainClosed, bindStorage, currentWorld, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
 import { originalsLeft } from './mail-store.ts';
 import { wipeTextureThemes, textureThemesLeft } from './themes.ts';
 
@@ -162,33 +162,33 @@ let chain: Promise<unknown> = Promise.resolve();
 let clearing: Promise<void> | null = null;
 let wipes = 0;                                   // completed Clear attempts: the card's epoch moves with it
 let boundaryId = 0;                              // moved by resetBoundary: a job of an earlier process (a test) does not touch this one
-let clearPeeks = 0;                              // card reads while one Clear has been running: with no clock to read, this is how a stuck Clear is told from a slow one
 let lastFailed: string[] = [];                   // what the last Clear could not clear, for the card's words
-/** After this many card reads (3 s apart, bounded to five tries by the contract, then the person's Try again) find the same Clear still running, it is abandoned: the native call never returned and the timer
- * that should have ended it ended with its answer (Exact). Wipes are idempotent; the abandoned job stops at its next check (the generation moved) and a late answer changes nothing. */
-const ABANDON_PEEKS = 5;
-function abandonClear(): void { boundaryId += 1; chain = Promise.resolve(); clearing = null; clearPeeks = 0; active = 0; console.log('account: a Clear that never ended was abandoned'); }
 /** Counts every completed Clear attempt (monotonic): the sources that keep state in memory are asked again when it changes. */
 export const wipeEpoch = (): number => wipes;
 export const lastFailure = (): string[] => lastFailed;
 
+let adopting: Promise<State | undefined> | null = null;
 let active = 0;                                  // jobs queued or running
-function job<T>(fn: () => Promise<T>): Promise<T> {
+/** The one chain. `skipIfMoved`: a job that was queued for one boundary does not run if the boundary moved before its turn (an Adopt or a Clear re-reads the facts anyway; the next answer asks again). A
+ * sign-out is the person's act and always runs. There is no way to abandon a running job: a hung one ends by its deadline (a failed Clear), and the person's way out is on the card (close and reopen). */
+export function job<T>(fn: () => Promise<T>, o: { skipIfMoved?: boolean } = {}): Promise<T | undefined> {
   active += 1;
-  const p = chain.then(fn, fn).finally(() => { active -= 1; });
+  const at = accountGeneration();
+  const run = async (): Promise<T | undefined> => (o.skipIfMoved && accountGeneration() !== at ? undefined : fn());
+  const p = chain.then(run, run).finally(() => { active -= 1; });
   chain = p.then(() => undefined, () => undefined);
   return p;
 }
 /** Resolves when no job is queued or running (a Clear started by an answer is awaited here: tests, and nothing else). */
 export async function idle(): Promise<void> { for (;;) { const c = chain; await c; if (c === chain) return; } }
 /** For tests: a process that has just started. */
-export function resetBoundary(): void { boundaryId += 1; chain = Promise.resolve(); clearing = null; clearPeeks = 0; active = 0; wipes = 0; lastFailed = []; timing.nativeMs = 30000; timing.recordMs = 5000; timing.sharedMs = 30000; }
+export function resetBoundary(): void { boundaryId += 1; chain = Promise.resolve(); clearing = null; adopting = null; active = 0; wipes = 0; lastFailed = []; timing.nativeMs = 30000; timing.recordMs = 5000; timing.sharedMs = 30000; }
 
 /** ADOPT: no record and a key. Write the key's digest; the state after is read again. A failed write leaves it closed. */
 async function adoptBody(storage: Storage | undefined): Promise<State> {
   const f = await readFacts(storage);
   if (stateOf(f) === 'adopt' && storage && f.key.state === 'present') {
-    try { await storage.fs.atomicWriteFile(STAMP_FILE, new TextEncoder().encode(f.key.digest)); } catch { console.log('account: could not record the account'); }
+    try { await storage.fs.atomicWriteFile(STAMP_FILE, new TextEncoder().encode(f.key.digest)); closeWorld(); } catch { console.log('account: could not record the account'); }      // the new account's world begins here (its requests are signed with this key only)
   }
   return stateOf(await readFacts(storage));
 }
@@ -197,14 +197,17 @@ async function adoptBody(storage: Storage | undefined): Promise<State> {
 async function clearBody(storage: Storage | undefined, store: Store | undefined): Promise<void> {
   const id = boundaryId;
   if (stateOf(await readFacts(storage)) !== 'clearing' || !storage) return;       // a job that finds the state changed does nothing
-  const g = nextGeneration(); resetSession();                                      // moved once per attempt, by nothing else
+  const g = nextGeneration(); resetSession();                                      // the world ends here: moved once per attempt, by nothing else
+  const drained = await drainClosed(timing.sharedMs);                              // every write the ended world STARTED lands (or fails) before anything is wiped: none lands after the wipe
   const nativeOk = await nativeCall('wipe', g);                                    // a wipe, never a sign-out: it keeps whatever key is stored
-  if (id !== boundaryId || accountGeneration() !== g) return;                      // abandoned (or a newer attempt began): a stale job wipes nothing and removes no record
   // A shared half that outlives its deadline is a failed Clear: nothing is marked clean, the record stays, the next attempt runs every store again.
-  const shared = await withDeadline<string[]>((async () => [...(await wipeAll(storage, store, WIPES)), ...(await survivors(storage))])(), ['shared (timed out)'], timing.sharedMs);
+  // The shared half runs on the storage of the world this attempt began: when the deadline ends the attempt, the half that is still running is DETACHED, not cancelled; it can do nothing later, because the next
+  // boundary move (the next attempt, or an Adopt) closes that world and every call of its storage then never arrives. A timed-out Clear leaves the phone in CLEARING with the record kept.
+  const mine = bindStorage(storage, currentWorld());
+  const shared = await withDeadline<string[]>((async () => [...(await wipeAll(mine, store, WIPES)), ...(await survivors(mine))])(), ['shared (timed out)'], timing.sharedMs);
   const failed = [...shared];
   if (!nativeOk) failed.push('native');
-  if (id !== boundaryId || accountGeneration() !== g) return;
+  if (!drained) failed.push('writes in flight');
   let removed = false;
   if (failed.length === 0) { removed = await removeRecord(storage); if (!removed) failed.push('account-stamp'); }
   if (id !== boundaryId) return;
@@ -216,18 +219,22 @@ async function clearBody(storage: Storage | undefined, store: Store | undefined)
 /** Start a Clear unless one is queued or running. Never waited on by an answer. */
 function startClear(storage: Storage | undefined, store: Store | undefined): void {
   if (clearing) return;
-  clearPeeks = 0;
-  const p: Promise<void> = job(() => clearBody(storage, store)).catch(() => undefined).finally(() => { if (clearing === p) clearing = null; });
+  const p: Promise<void> = job(() => clearBody(storage, store), { skipIfMoved: true }).then(() => undefined, () => undefined).finally(() => { if (clearing === p) clearing = null; });
   clearing = p;
 }
 
 /** The gate's one question, asked before every page answer that touches account data. OPEN and EMPTY pass; ADOPT writes the record and waits for that one write; CLEARING refuses at once
  * and starts a wipe if none runs; LOCKED refuses. */
-export async function enter(storage: Storage | undefined, store: Store | undefined): Promise<{ readable: boolean; state: State }> {
-  let state = stateOf(await readFacts(storage));
-  if (state === 'adopt') state = await job(() => adoptBody(storage));
+export async function enter(storage: Storage | undefined, store: Store | undefined): Promise<{ readable: boolean; state: State; digest: string }> {
+  const f0 = await readFacts(storage);
+  let state = stateOf(f0);
+  if (state === 'adopt') {
+    // One Adopt at a time, awaited by every answer that finds it (a single write). Another job running (a hung sign-out) is never waited for: the page is refused and asked again.
+    if (!adopting && active === 0) { const a: Promise<State | undefined> = job(() => adoptBody(storage), { skipIfMoved: true }).finally(() => { if (adopting === a) adopting = null; }); adopting = a; }
+    state = adopting ? (await adopting) ?? 'adopt' : 'adopt';
+  }
   if (state === 'clearing') startClear(storage, store);
-  return { readable: state === 'open' || state === 'empty', state };
+  return { readable: state === 'open' || state === 'empty', state, digest: f0.key.state === 'present' ? f0.key.digest : '' };
 }
 
 export type Peek = { state: State; epoch: string; failed: string[]; key: KeyFact };
@@ -236,9 +243,8 @@ export type Peek = { state: State; epoch: string; failed: string[]; key: KeyFact
 export async function peek(storage: Storage | undefined, store: Store | undefined): Promise<Peek> {
   const f = await readFacts(storage);
   let state = stateOf(f);
-  if (clearing && ++clearPeeks > ABANDON_PEEKS) abandonClear();
   // The card never waits on a running job (a hung sign-out or Clear would leave the banner blank): while one runs, ADOPT is reported as the wipe it is part of; with none, the one write is awaited.
-  if (state === 'adopt') state = active > 0 ? 'clearing' : await job(() => adoptBody(storage));
+  if (state === 'adopt') state = active > 0 ? 'clearing' : ((await job(() => adoptBody(storage), { skipIfMoved: true })) ?? 'adopt');
   if (state === 'clearing') startClear(storage, store);
   return { state, epoch: `${state}|${wipes}`, failed: lastFailed, key: f.key };
 }
@@ -250,11 +256,16 @@ export type SignOutResult = { done: boolean; failed: string; message: string; ep
 /** The person's tap, never behind the gate: "delete the key, then settle". The result follows from the facts afterwards, not from the native answer. */
 export async function accountSignOut(storage: Storage | undefined, store: Store | undefined): Promise<SignOutResult> {
   if (!nativeLater()) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.', epoch: wipes };
-  const r = await job(() => signOutBody(storage, store));
+  // The tap is for the account on the phone NOW. A tap that waits behind another job must not delete the key of an account that arrived meanwhile: the key it sees at its turn must be the one it saw here.
+  const tap = (await readFacts(storage)).key;
+  const at = tap.state === 'present' ? tap.digest : tap.state === 'absent' ? '' : undefined;
+  const r = (await job(() => signOutBody(storage, store, at))) ?? { done: false, failed: '', message: 'Nothing was signed out.' };
   return { ...r, epoch: wipes };
 }
 
-async function signOutBody(storage: Storage | undefined, store: Store | undefined): Promise<Omit<SignOutResult, 'epoch'>> {
+async function signOutBody(storage: Storage | undefined, store: Store | undefined, at: string | undefined): Promise<Omit<SignOutResult, 'epoch'>> {
+  const now = (await readFacts(storage)).key;
+  if (at !== undefined && now.state === 'present' && now.digest !== at) return { done: false, failed: '', message: 'The account on this phone changed while this waited. Nothing was signed out. Try again.' };
   await beginSignOut();                                                            // the generation moves and sealing stops BEFORE the native call
   await nativeCall('signOut', accountGeneration());                                // the key delete, then the native wipe: its answer is not trusted, the facts are read
   let f = await readFacts(storage);

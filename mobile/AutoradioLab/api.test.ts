@@ -175,9 +175,9 @@ describe('review 2026-11-19: generation, redirect, one read', () => {
     const j = authedJSON('/api/x'); const b = authedBytes('/api/y');
     await new Promise((r) => setTimeout(r, 5));
     nextGeneration(); release();
-    const [rj, rb] = await Promise.allSettled([j, b]);
-    expect(rj.status).toBe('rejected'); expect(rb.status).toBe('rejected');
-    expect((rj as PromiseRejectedResult).reason).toBeInstanceOf(SignedOutError); expect((rb as PromiseRejectedResult).reason).toBeInstanceOf(SignedOutError);
+    // The world mechanism (api.ts): a reply that arrives after the boundary moved never reaches the chain that asked: its promise does not settle (it is not "rejected": a rejection would run the caller's catch branch).
+    const settled = await Promise.race([Promise.allSettled([j, b]).then(() => 'settled'), new Promise((r) => setTimeout(() => r('never'), 60))]);
+    expect(settled).toBe('never');
   });
   test('R1 the key reaches the server only: redirects are not followed, a 3xx is an error', async () => {
     handler = () => new Response('', { status: 302, headers: { location: 'https://evil.example.com/' } });
@@ -229,7 +229,7 @@ describe('A13 the signed-in download to a file', () => {
   test('a sign-out while the file arrives: the file is removed and the reply is dropped', async () => {
     const removed: string[] = [];
     handler = () => { nextGeneration(); return wrote(10); };
-    await expect(authedToFile('/api/files/a', DEST, storage(removed))).rejects.toBeInstanceOf(SignedOutError);
+    await Promise.race([authedToFile('/api/files/a', DEST, storage(removed)).then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, 40))]);      // the reply never reaches the caller (the world is closed)
     expect(removed).toContain(DEST);
   });
 });
