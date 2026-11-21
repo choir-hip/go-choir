@@ -1,54 +1,50 @@
 import Foundation
 // The Swift callers that still need a document's text read it here: the notebook (the edition's Markdown) and the content sync (a document's text). The reader PAGE does not: it is shared code
-// (AutoradioLab/reader.ts, reader-parse.ts), which also hands the page in front to the voice (HeldPages). GET /api/texture/documents/{id}, /revisions, /api/texture/revisions/{rev}.
-//
-// WAYS THIS CAN FAIL: not signed in or the key is refused: a failed document that says so, never another account's data; a revision list that is not there: the document still opens with no versions;
-// an answer wrapped in {document:...} or bare: both are read; a cancelled read is "loading"; any other address is an error (only Texture documents are read here).
+// (AutoradioLab/reader.ts, reader-parse.ts), which also hands the page in front to the voice (HeldPages). Nothing here parses a document: the revision's own Markdown (`content`) is the text.
+// GET /api/texture/documents/{id}, /api/texture/revisions/{rev}. Not signed in or a refused key: a failed result that says so, never another account's data.
 
-public final class ReaderStore: @unchecked Sendable {
-    public static let shared = ReaderStore()
-    public init() {}
-
+public struct TextureText: Sendable {
+    public var status = "loading", message = "", source = ""
     /// The document at a `texture:` address, read now. Nothing is held: a caller that needs it again asks again.
-    public func doc(_ address: String) async -> ReaderDoc {
-        do { return try await fetch(address) }
-        catch is CancellationError { return .loading(address) }
-        catch ChoirError.notSignedIn { return .failed(address, "Sign in to open your documents.") }
-        catch { return .failed(address, "Could not open this page. \(Self.describe(error))") }
+    public static func fetch(_ address: String) async -> TextureText {
+        do { return try await read(address) }
+        catch is CancellationError { return TextureText() }
+        catch ChoirError.notSignedIn { return TextureText(status: "error", message: "Sign in to open your documents.") }
+        catch { return TextureText(status: "error", message: "Could not open this page. \((error as? ChoirError).map { "\($0)" } ?? error.localizedDescription)") }
     }
-
-    static func describe(_ e: Error) -> String {
-        if let c = e as? ChoirError { return "\(c)" }
-        return e.localizedDescription
-    }
-
-    func fetch(_ address: String) async throws -> ReaderDoc {
+    static func read(_ address: String) async throws -> TextureText {
         let a = TextureAddress.parse(address)
+        guard a.kind == .document else { return TextureText(status: "error", message: "This address does not name a document.") }
         let client = ChoirEnvironment.shared.client()
-        guard a.kind == .document else { return .failed(address, "This address does not name a document.") }
-        let docResp = try await client.send("GET", "/api/texture/documents/\(enc(a.doc))", route: "/api/texture/documents/{id}")
-        var docObj = try docResp.object()
-        if let inner = docObj["document"] as? [String: Any] { docObj = inner }
-        let rid = a.rev.isEmpty ? ((docObj["current_revision_id"] as? String) ?? "") : a.rev
-        var revObj: [String: Any] = [:]
+        func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? s }
+        var doc = try await client.send("GET", "/api/texture/documents/\(enc(a.doc))", route: "/api/texture/documents/{id}").object()
+        if let inner = doc["document"] as? [String: Any] { doc = inner }
+        let rid = a.rev.isEmpty ? ((doc["current_revision_id"] as? String) ?? "") : a.rev
+        var rev: [String: Any] = [:]
         if !rid.isEmpty {
-            let rr = try await client.send("GET", "/api/texture/revisions/\(enc(rid))", route: "/api/texture/revisions/{id}")
-            revObj = try rr.object()
-            if let inner = revObj["revision"] as? [String: Any] { revObj = inner }
+            rev = try await client.send("GET", "/api/texture/revisions/\(enc(rid))", route: "/api/texture/revisions/{id}").object()
+            if let inner = rev["revision"] as? [String: Any] { rev = inner }
         }
-        var revisions: [[String: Any]] = []
-        if let lr = try? await client.send("GET", "/api/texture/documents/\(enc(a.doc))/revisions", route: "/api/texture/documents/{id}/revisions"),
-           let o = try? lr.object() {
-            revisions = (o["revisions"] as? [[String: Any]]) ?? []
-        }
-        var d = TextureDocParser.parseRevision(revObj, document: docObj, address: address, revisions: revisions)
-        d.docId = a.doc
-        d.source = (revObj["content"] as? String) ?? ""
-        d.editable = a.rev.isEmpty && d.status == "ready"
-        return d
+        return TextureText(status: "ready", source: (rev["content"] as? String) ?? "")
     }
+}
 
-    func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? s }
+/// `pub:<route>[@..]` and `texture:<doc>[@<rev>]`: the parts native callers need (the editor's document id, the learning loop's story route, the sync's route).
+public struct TextureAddress: Equatable, Sendable {
+    public enum Kind: Sendable { case publication, document, none }
+    public var kind: Kind, route = "", doc = "", rev = ""
+    public static func parse(_ address: String) -> TextureAddress {
+        let rest = PageAddress.rest(of: address)
+        if address.hasPrefix("pub:") { return rest.isEmpty ? TextureAddress(kind: .none) : TextureAddress(kind: .publication, route: rest) }
+        guard address.hasPrefix("texture:") else { return TextureAddress(kind: .none) }
+        let parts = rest.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        return (parts.first ?? "").isEmpty ? TextureAddress(kind: .none) : TextureAddress(kind: .document, doc: parts[0], rev: parts.count > 1 ? parts[1] : "")
+    }
+    /// "slug/v3" -> ("slug", 3); a bare route -> (route, 0)
+    public static func splitRoute(_ route: String) -> (bare: String, version: Int) {
+        guard let r = route.range(of: "/v", options: .backwards), let n = Int(route[r.upperBound...]), n > 0 else { return (route, 0) }
+        return (String(route[..<r.lowerBound]), n)
+    }
 }
 
 // The Textures place's list (TextureRow, TextureList: parse, the pinned edition, the words) is shared code now: AutoradioLab/textures.ts. What stays here is the edition lookup below, which the
@@ -111,14 +107,14 @@ public final class ReaderFollow: @unchecked Sendable {
 
     /// The block whose text contains the spoken text, and the sentence that contains its start. Nil when nothing matches.
     public static func locate(spoken: String, in doc: HeldPage?) -> (block: String, sentence: Int)? {
-        guard let doc, !spoken.rdTrim.isEmpty else { return nil }
-        let key = Citations.normalised(String(spoken.rdTrim.prefix(60))).text
+        guard let doc, !spoken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let key = HeldPages.normalised(String(spoken.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60)))
         if key.count < 6 { return nil }
         for b in doc.blocks where !b.text.isEmpty {
-            let nb = Citations.normalised(b.text).text
+            let nb = HeldPages.normalised(b.text)
             guard nb.contains(key) else { continue }
             var best = 0
-            for (i, s) in b.sentences.enumerated() where Citations.normalised(s).text.contains(String(key.prefix(24))) { best = i; break }
+            for (i, s) in b.sentences.enumerated() where HeldPages.normalised(s).contains(String(key.prefix(24))) { best = i; break }
             return (b.id, best)
         }
         return nil

@@ -139,3 +139,7 @@ The shared page hands the page in front to the voice (`reader.ts` `hand`, the ap
 - `ReaderStore`: the same three callers (Notebook twice, ContentSync once).
 - `ReaderPageSource`: gone. `HeldPageSource` (not a parser) answers the voice's page text.
 They go with the notebook and the content store, which are other pages' moves. Offline with nothing held the reader says "Could not open this page. Check the connection and try again."; nothing is read from the old content store.
+
+## Update 2026-11-21 (reader, the rest): the Swift document parser is deleted
+
+`TextureDoc.swift` (the model and `TextureDocParser`), `TextureMarkdown.swift` and `Citations.swift`, with `TextureDocTests`, `GoldenDocumentsTests`, `WebParityTests` and `proof-golden.sh`, are gone; `reader-parity.test.ts` carries the six web-parity rules and `reader-parse.test.ts` P13 the golden documents. `ReaderStore` became `TextureText`, a fetch of a document's Markdown with no parsing, for `Notebook.swift` (two calls) and `ContentSync.swift` (a document's text); `StoryBodies.plain` gives the sync a story's text from the bundle's Markdown. Left in Swift with reasons: `TextureAddress` (a 20-line address splitter: `TextureEditor`, `Learning.swift`, `StoryBodies`), `HeldPages` (the voice's page), `ListenText` (what the voice speaks for Listen), `Pages.swift`/`OpenPagesUI.swift` (the native open-page set the voice's front page, the cards and the other native page sources still use).

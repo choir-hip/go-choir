@@ -164,8 +164,8 @@ public extension ContentSync.Fetchers {
             return (docs, o["next_cursor"] as? String)
         }
         f.documentBody = { id in
-            let d = try await ReaderStore.shared.fetch("texture:" + id)
-            return d.source.isEmpty ? (d.lines.isEmpty ? nil : d.lines.joined(separator: "\n")) : d.source
+            let d = try await TextureText.read("texture:" + id)
+            return d.source.isEmpty ? nil : d.source
         }
         f.stories = {
             try await ChoirFront.stories(client: client(), limit: 100).map { StoryBodies.Story(route: $0.route, title: $0.title, date: PaperStory.date($0.updated)) }
