@@ -30,6 +30,7 @@ component Autoradio
   members "./members-books.contract"
   members "./members-content.contract"        // the content row above the bar (owner, 2026-11-16)
   members "./members-talk.contract"
+  members "./members-retrieval.contract"     // lane exact-retrieval: the voice turn's ask, the launcher's paper search
   // ---- lane autoradio-podcasts ----
   members "./members-podcasts.contract"
   // ---- lane autoradio-joins ----
@@ -143,6 +144,8 @@ component Autoradio
     // ---- lane 4 (round 3): launcher search, the page deck ----
     lq
     lnc
+    shownHits
+    shownNote
     editLq
     moreFor
     moreOfThis

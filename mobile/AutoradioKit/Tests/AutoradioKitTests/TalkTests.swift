@@ -12,53 +12,6 @@ import XCTest
 //  engine:       no network (the desk throws) -> a plain line is spoken and kept with a retry; the server answer never arrives -> Cancel
 //                leaves a cancelled entry, not a failure; two questions in quick succession -> the first is cancelled, the second answered.
 
-final class RetrievalIndexPortedTests: XCTestCase {      // the old PassageIndexTests, on the one index
-    func makeIndex() -> RetrievalIndex {
-        let i = RetrievalIndex()
-        i.upsert(RetrievalDoc(id: "a", kind: "story", title: "Harbor strike ends after nine days",
-              text: "Dock workers at the harbor voted on Tuesday to end a nine day strike over pay and shift lengths.\nThe union said talks with the port authority resume Monday.", address: "pub:a"))
-        i.upsert(RetrievalDoc(id: "b", kind: "story", title: "Central bank holds interest rates",
-              text: "The central bank left interest rates unchanged on Wednesday, citing steady inflation and a cooling labour market.", address: "pub:b"))
-        return i
-    }
-    func search(_ i: RetrievalIndex, _ q: String, page: String? = nil) -> [RetrievalItem] { i.retrieve(.init(words: q, pageID: page), record: false).items }
-    func testFindsTheRightStory() { XCTAssertEqual(search(makeIndex(), "what happened with the harbor strike").first?.id, "a") }
-    func testPluralAndSingularMatch() { XCTAssertEqual(search(makeIndex(), "what did the bank do about interest rate").first?.id, "b") }
-    func testAQuestionTheCorpusCannotAnswerReturnsNothing() {
-        XCTAssertTrue(search(makeIndex(), "what is the weather on Mars today").isEmpty)
-        XCTAssertTrue(search(makeIndex(), "who won the football match").isEmpty)
-    }
-    func testOneSharedCommonWordIsNotRelevance() { XCTAssertTrue(search(makeIndex(), "lightning strike survivors in Peru").isEmpty) }
-    func testStopWordsOnlyAndEmpty() {
-        XCTAssertTrue(search(makeIndex(), "what about it").isEmpty)
-        XCTAssertTrue(search(makeIndex(), "").isEmpty)
-        XCTAssertTrue(search(RetrievalIndex(), "harbor strike").isEmpty)
-    }
-    func testIndexingADocumentAgainReplacesIt() {
-        let i = makeIndex(); let n = i.count
-        i.upsert(RetrievalDoc(id: "a", kind: "story", title: "Harbor strike ends after nine days", text: "Dock workers ended the harbor strike on Tuesday after nine days of talks and pay.", address: "pub:a"))
-        XCTAssertLessThanOrEqual(i.count, n)
-        XCTAssertEqual(search(i, "harbor strike").filter { $0.id == "a" }.count, 1)
-    }
-    func testAHugeLineIsCutIntoBoundedPassages() {
-        let line = (0..<400).map { "word\($0) harbor" }.joined(separator: " ")
-        let parts = RetrievalText.passages(line)
-        XCTAssertGreaterThan(parts.count, 1)
-        XCTAssertTrue(parts.allSatisfy { $0.count <= 2000 })
-    }
-    func testNonASCIITextIsIndexed() {
-        let i = RetrievalIndex()
-        i.upsert(RetrievalDoc(id: "c", kind: "story", title: "Café reopens", text: "The café on rue Saint-Honoré reopens after the renovation, with a new espresso menu.", address: "pub:c"))
-        XCTAssertEqual(search(i, "café renovation reopens").first?.id, "c")
-    }
-    func testThePageInFrontIsPreferred() {
-        let i = RetrievalIndex()
-        i.upsert(RetrievalDoc(id: "x", kind: "story", title: "Rates", text: "Interest rates stayed unchanged at the central bank this week.", address: "pub:x"))
-        i.upsert(RetrievalDoc(id: "page:y", kind: "page", title: "Rates", text: "Interest rates stayed unchanged at the central bank this week.", address: "pub:y"))
-        XCTAssertEqual(search(i, "central bank interest rates", page: "page:y").first?.id, "page:y")
-    }
-}
-
 final class ConversationTests: XCTestCase {
     func testTheAnswerIsKeptAsItIsSpoken() {
         let c = Conversation()
@@ -122,13 +75,11 @@ final class SavedAnswerTests: XCTestCase {
     override func setUp() { Conversation.shared.clear(); AckHistory.shared.clear(); TurnHistory.shared.clear() }
     override func tearDown() { LocalLanguage.model = nil }
 
-    func corpus() -> SavedCorpus {
-        let c = SavedCorpus(heldPages: nil)
-        c.setSource("t") { [SavedCorpus.Document(id: "pub:a", title: "Harbor strike ends after nine days", address: "pub:a",
-            text: "Dock workers at the harbor voted on Tuesday to end a nine day strike over pay and shift lengths.\nThe union said talks with the port authority resume Monday.")] }
-        return c
+    func corpus() -> [FakeDoc] {
+        [FakeDoc(id: "pub:a", title: "Harbor strike ends after nine days", address: "pub:a",
+            text: "Dock workers at the harbor voted on Tuesday to end a nine day strike over pay and shift lengths.\nThe union said talks with the port authority resume Monday.")]
     }
-    func holder(_ m: LocalLanguageModel?, _ c: SavedCorpus) -> SavedAnswerHolder { SavedAnswerHolder(StageParams(), corpus: c, model: { m }) }
+    func holder(_ m: LocalLanguageModel?, _ c: [FakeDoc]) -> SavedAnswerHolder { SavedAnswerHolder(StageParams(), retrieval: FakeRetrieval.provider(c), model: { m }) }
     func collect(_ s: AsyncStream<String>) async -> [String] { var out: [String] = []; for await l in s { out.append(l) }; return out }
 
     func testAnswersFromTheSavedStoryAndNamesIt() async {
@@ -185,7 +136,7 @@ final class SavedAnswerTests: XCTestCase {
 
     // MARK: engine
 
-    func engine(desk: String, model: LocalLanguageModel?, corpus c: SavedCorpus, deskParams: [String: JSONValue] = [:]) throws -> (TurnEngine, EventLog, Locked<TurnRecord?>) {
+    func engine(desk: String, model: LocalLanguageModel?, corpus c: [FakeDoc], deskParams: [String: JSONValue] = [:]) throws -> (TurnEngine, EventLog, Locked<TurnRecord?>) {
         LocalLanguage.model = model
         let r = StageRegistry.builtIn()
         r.register(.system1, StubS1.self) { StubS1($0) }
@@ -193,7 +144,7 @@ final class SavedAnswerTests: XCTestCase {
         r.register(.transcriber, StubTranscriber.self) { StubTranscriber($0) }
         r.register(.desk, ScriptedStreamingDesk.self) { ScriptedStreamingDesk($0) }
         r.register(.desk, FailingStreamingDesk.self) { FailingStreamingDesk($0) }
-        r.register(.holder, SavedAnswerHolder.self) { SavedAnswerHolder($0, corpus: c, model: { LocalLanguage.model }) }
+        r.register(.holder, SavedAnswerHolder.self) { SavedAnswerHolder($0, retrieval: FakeRetrieval.provider(c), model: { LocalLanguage.model }) }
         var cfg = StageRegistry.defaultConfiguration()
         cfg.set(.system1, .init(id: "stub-s1", params: ["delay": .number(0.02), "asks": .string("yes")]))
         cfg.set(.voice, .init(id: "stub-voice")); cfg.set(.transcriber, .init(id: "stub-tr")); cfg.set(.holder, .init(id: "saved-answer"))

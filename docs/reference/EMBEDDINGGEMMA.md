@@ -176,6 +176,16 @@ card's sentence-similarity prompt, so a floor below 0.65 would let anything thro
 
 ### 0.7 What is wired (lane `embed-trial`, class orange)
 
+**Moved 2026-11-21 (lane `exact-retrieval`).** The index, BM25, the vector store, the work list, the job, the fusion and the launcher's paper-wide
+search are shared code: `AutoradioLab/search.ts` (ranking, store, job, fusion: unchanged arithmetic) and `retrieval-run.ts` (the runtime: sources,
+the embedding pass, the answer to the voice turn's ask), tested by `search.test.ts` and `retrieval-run.test.ts` (the Swift `RetrievalTests`,
+`HybridRetrievalTests`, `EmbedderTests`, `CorpusSearchTests` and `EmbeddingServiceTests` were ported and deleted). What stays native is the model and
+what only the platform knows (`AutoradioKit/EmbedDevice.swift`: the ops `embedState`, `embedEnsure`, `embed`). The voice turn asks shared code through one
+source and one op (`AutoradioKit/RetrievalFacts.swift`, `retrievalAsk` and `retrievalAnswer`). The text below describes the Swift that was; read it
+as the history of the choices. Two behaviours did not move and are named residuals: the vectors folder is no longer marked excluded from backup
+(it is under `app:/data/vectors`, written by shared code), and a kill loses up to about forty slices of embedding work (the app going to the background
+no longer flushes). The vector scan was measured in `retrieval-run.test.ts` (R7): 20,000 x 768 in TypeScript, median about 40 ms on the Mac, so it did not stay native.
+
 - `EmbeddingService` (`AutoradioKit/EmbeddingService.swift`): attached at launch where the content store opens (`AutoradioModule.swift`), it sets
   `SavedCorpus.retriever` to a `FusedRetriever` straight away (BM25 alone, nothing said about vectors, until the model is on the phone and 90
   percent of the items hold a vector), waits 15 s after launch, then runs a pass on every store change (3 s settle): it reads the index, makes

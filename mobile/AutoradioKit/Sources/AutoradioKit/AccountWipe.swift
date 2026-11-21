@@ -55,7 +55,6 @@ public final class AccountWipe: @unchecked Sendable {
         texture: TextureEditor = .shared,
         environment: ChoirEnvironment = .shared,
         content: ContentStore = .shared,
-        corpus: SavedCorpus = .shared,
         mailReading: MailReading = .shared,
         conversation: Conversation = .shared,
         acks: AckHistory = .shared,
@@ -96,7 +95,7 @@ public final class AccountWipe: @unchecked Sendable {
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
         register("held-rest") { heldRest.wipe() }
-        register("content") { ContentSync.wipeAccount(store: content, corpus: corpus) }
+        register("content") { ContentSync.wipeAccount(store: content) }
     }
 
     /// For the app target's stores that are files (one-line registrations in AutoradioModule): delete these paths.

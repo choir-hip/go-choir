@@ -1,0 +1,14 @@
+// Lane members file (retrieval): the voice turn's ask and the launcher's paper-wide search. Both answered by app.ts (retrieval-live.ts).
+// The ask is raised by the native voice turn (source `retrievalAsk`, interface/retrieval.json: Exact has no call from native into shared code,
+// the way back is a source asked again); the resource below reads it and answers it through the native op `retrievalAnswer`. It must stay in the
+// root: a resource here is read as long as the app runs, with no page needing it.
+use retrievalAsk, RetrievalAsk from "@choir/autoradio"
+use RetrievalServed, PaperSearch from "./retrieval-types.contract"
+
+members Autoradio
+  resource rask = retrievalAsk() as shape RetrievalAsk else empty()
+  resource rserved = retrievalServe(rask.id, rask.words, rask.pageTitle, rask.pageAddress, rask.now, rask.facts) as shape RetrievalServed else empty()
+  resource psr = paperSearch(lq, lnc.hits) as shape PaperSearch else empty()
+  // What the launcher lists: the local rows at once, the paper's rows when the answer for THIS query lands.
+  derive shownHits = psr.query == lq ? psr.hits : lnc.hits
+  derive shownNote = psr.query == lq ? psr.note : (lnc.hits.length == 0 ? "Searching the paper\u2026" : "")

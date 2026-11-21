@@ -31,6 +31,8 @@ path mobile/AutoradioKit/Sources/AutoradioKit/VoiceSampler.swift the voice cards
 path mobile/AutoradioKit/Sources/AutoradioKit/VoiceSetup.swift voice setup: the models and checks of this phone's voice pipeline
 path mobile/AutoradioKit/Sources/AutoradioKit/TurnTimeline.swift the timing trace of a voice turn
 path mobile/AutoradioKit/Sources/AutoradioKit/MailReading.swift hands the text of a message to the radio's voice (speakText); the mail pages themselves are shared code
+path mobile/AutoradioKit/Sources/AutoradioKit/RetrievalFacts.swift the voice turn's one ask for passages: it raises the ask and waits for shared code's answer with a deadline (Exact has no call from native into shared code); decides nothing
+path mobile/AutoradioKit/Sources/AutoradioKit/EmbedDevice.swift the on-device embedding model, Wi-Fi, Low Power Mode, thermal state and what the radio holds the processor for: three answers to shared code
 path mobile/AutoradioKit/Sources/AutoradioKit/KeptTurns.swift kept microphone turns
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurn.swift generated microphone-turn fixture for voice setup and the model proof
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurnAudio.swift the fixture utterance read by voice setup and the model proof
@@ -61,10 +63,12 @@ path mobile/AutoradioKit/Sources/AutoradioKit/Choir/MailSeal.swift NOT VOICE: a 
 # --- the host: what binds the native side to Exact
 path mobile/AutoradioKit/Package.swift the Swift package manifest of the native side
 path mobile/exact-package/apple/AutoradioModule.swift the module class that registers the native names with Exact
+path mobile/exact-package/apple/AutoradioModule+Retrieval.swift the native side of the voice turn's ask: gathers the facts only native holds (the Swift run sheet, open pages, the page's text) and raises the ask
 path mobile/exact-package/apple/AutoradioModule+Voice.swift the voice cards' native side
 path mobile/exact-package/apple/AutoradioModule+Onboarding.swift first run's voice side: the models' setup, the microphone check, the hearing sentence and the voice at the topic screen, as facts and narrow calls (the steps are AutoradioLab/onboarding.ts)
 
 # --- interface names
+name retrievalAsk the voice turn's ask for passages, raised by the native turn engine and answered by shared code (RetrievalFacts.swift)
 name voice* the voice cards and the speaker profile
 name choirTalkCancel cancels the open microphone turn
 name choirHandsFreeToggle opens and closes the microphone

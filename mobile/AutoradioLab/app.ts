@@ -22,6 +22,7 @@ import { notebookPage, page as notebookIdlePage } from './notebook.ts';
 import * as mail from './mail.ts';
 import { barInfo } from './bar.ts';
 import { radioPage } from './radio-page.ts';
+import { retrievalServe, paperSearch } from './retrieval-live.ts';
 import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveEnv as takesEnv } from './take-session.ts';
 import * as picks from './edition-picks.ts';
 
@@ -66,6 +67,8 @@ fs.read app:/data/notebook-cache.md
 fs.write app:/data/notebook-cache.md
 fs.read app:/data/takes.json
 fs.write app:/data/takes.json
+fs.read app:/data/vectors
+fs.write app:/data/vectors
 fs.read app:/data/theme-choice.json
 fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
@@ -161,6 +164,9 @@ const sources: Sources = {
   mailSaveDraft: ([address, to, subject, body]) => mail.mailSaveDraft(address, to, subject, body),
   mailApprovalEmail: ([address, draft]) => mail.mailApprovalEmail(address, draft),
   mailMarkUnread: ([address]) => mail.mailMarkUnread(address),
+  // Retrieval (retrieval-live.ts): the voice turn's ask (native raises it, the answer goes back through one native op) and the launcher's paper-wide search.
+  retrievalServe: ([id, words, pageTitle, pageAddress, now, facts], _s, storage) => retrievalServe({ id, words, pageTitle, pageAddress, now, facts }, storage),
+  paperSearch: ([q, local]) => paperSearch(q, local),
 };
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
 export const answer: Answer = async (source, args, store, storage, native) => {
