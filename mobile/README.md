@@ -572,7 +572,7 @@ integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ..
 | Lane | Owns | The shared edit it may make |
 |---|---|---|
 | 1 Bar, radio, talk | `bar.contract`, `player.contract`, `members-bar.contract`, `AutoradioModule+Bar.swift`, `Kit/BarState.swift`, `exact-package/interface/bar.json` | its band in `provide` (app.contract) |
-| 2 Paper layout | `paper.contract`, `members-paper.contract`, `AutoradioModule+Paper.swift`, `Kit/Layout/*.swift`, `mobile/layouts/default.json`, `interface/paper.json` | its band in `provide` |
+| 2 Paper layout | `paper.contract`, `members-paper.contract`, `AutoradioModule+Paper.swift`, `Kit/Layout/*.swift`, `mobile/layouts/default.json` | its band in `provide` |
 | 3 Texture reader | `reader.contract`, `textures.contract`, `members-reader.contract`, `AutoradioModule+Reader.swift`, `Kit/TextureDoc.swift`, `Kit/Citations.swift`, `interface/reader.json` | its band in `provide` |
 | 4 Cards, launcher, signals | `cards.contract`, `launcher.contract`, `members-cards.contract`, `AutoradioModule+Cards.swift`, `Kit/OpenPagesUI.swift`, `Kit/Signals.swift`, `Kit/Preferences.swift`, `interface/cards.json` | its band in `provide` |
 | 5 Files and viewers | `files.contract`, `viewers.contract`, `members-files.contract`, `AutoradioLab/files.ts` and `files-model.ts` (shared code; Swift's Files service is gone), `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift` | its band in `provide` |

@@ -1,18 +1,11 @@
 // Lane file: paper. Owned by the paper lane (mobile/README.md, "File ownership").
-// The paper page is shared logic now: `paperFront` is answered by app.ts (AutoradioLab/paper.ts), not by this package. What stays here is the one thing
-// only Swift knows until the edition setup moves: the reader's saved topics (`edition-topics.json`, written by the topic screens). `editionPicks`
-// answers them, one per line, every time it is asked; the contract passes `focus` (paper, article or away) so it is asked again when the reader
-// comes back from editing. Names are declared in interface/paper.json.
+// The paper page is shared logic: `paperFront` and `editionPicks` are answered by app.ts (AutoradioLab/paper.ts, edition-picks.ts), not by this package. What stays here is the native
+// retrieval corpus's source for the listener's topics: the picks are shared code's (the file `app:/data/edition-topics.json`), and this reads their pushed copy in memory
+// (`EditionPicksMirror`, EditionSetup.swift), because the on-device retrieval (voice) is native and cannot read shared code's file.
 import Foundation
 
 extension AutoradioModule {
     func registerPaper() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
-        let topicsFile = support.appendingPathComponent("edition-topics.json")
-        SavedCorpus.shared.setSource("edition-topics") { RetrievalSources.editionTopics(EditionSetupSession.load(topicsFile)?.topics ?? []) }
-        handle("editionPicks") { _, reply in
-            let picks = (EditionSetupSession.load(topicsFile)?.topics ?? []).joined(separator: "\n")
-            DispatchQueue.main.async { reply(["picks": picks]) }
-        }
+        SavedCorpus.shared.setSource("edition-topics") { RetrievalSources.editionTopics(EditionPicksMirror.shared.topics) }
     }
 }

@@ -1,0 +1,26 @@
+// The shapes of the edition picks and their screen. Answered by `app.ts` (edition-picks.ts); they were the Swift package's (interface/paper.json, interface/onboarding.json) before the
+// picks and the topic tree moved to shared code.
+
+shape EditionPicks
+  picks: string
+
+shape TopicRowView
+  key: string
+  label: string
+  kind: string
+  selected: bool
+  partial: bool
+  expandable: bool
+  expanded: bool
+  note: string
+
+shape EditionPage
+  tree: TopicRowView[]
+  pickedCount: number
+  selectionLine: string
+  explainer: string
+  voiceHint: string
+  message: string
+  picks: string
+  rev: number
+  loaded: bool

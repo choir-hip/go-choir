@@ -258,7 +258,7 @@ export const HELD: HeldRow[] = [
   { what: 'autoradio.take: takes you recorded', whereRead: 'Takes, on the Autoradio page.' },
   { what: 'Model call traces (the assembled prompt for a stretch)', whereRead: "Held on your computer's trace surfaces, not on this page." },
   { what: 'More and less taps (a record on this phone)', whereRead: "Settings, What I've told the paper. Only on this phone, apart from the copy sent as a steer." },
-  { what: 'Topics you follow (edition-topics.json, a cache of the first lines of the notebook)', whereRead: 'Edit my edition, and "What you asked for" on this page.' },
+  { what: 'Topics you follow (edition-topics.json on this phone; the notebook gets them when you finish editing your edition)', whereRead: 'Edit my edition, and "What you asked for" on this page.' },
   { what: 'The run sheet: what is on air, ahead and heard', whereRead: 'The Autoradio page. A copy is on your computer.' },
   { what: 'Muted voices', whereRead: 'Takes, on the Autoradio page. Only on this phone, apart from the steer sent for a mute.' },
   { what: 'Mail', whereRead: 'The Mail page; only on this phone. It is never sent to the DJ or the scorecard.' },
