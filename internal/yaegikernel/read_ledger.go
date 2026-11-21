@@ -54,6 +54,10 @@ type readLedger struct {
 	// ReadCapture: a capture made from a returned page counts as that page
 	// tried (search_need.go).
 	captureURLs []string
+	// attempted is the searchHitKey of every page a Read or ReadAll was
+	// started on, recorded BEFORE the call: tried means attempted, so a read
+	// that hangs until the cell dies, or a capture that is gone, still counts.
+	attempted []string
 	// saved holds the state of runs this session served and left, so a run
 	// whose cell returns after another run's finds its reads again (a desk
 	// session serves runs in turn). savedOrder is oldest first; memory is
@@ -74,6 +78,7 @@ type ledgerState struct {
 	nudged              map[string]bool
 	warnings            []string
 	captureURLs         []string
+	attempted           []string
 }
 
 // beginRun resets the ledger when a cell of a new run binds. An empty run id
@@ -94,7 +99,7 @@ func (l *readLedger) beginRun(runID string) (changed bool) {
 		if _, ok := l.saved[l.runID]; !ok {
 			l.savedOrder = append(l.savedOrder, l.runID)
 		}
-		l.saved[l.runID] = ledgerState{l.reads, l.noted, l.packetSent, l.packedID, l.packedURL, l.nudged, l.warnings, l.captureURLs}
+		l.saved[l.runID] = ledgerState{l.reads, l.noted, l.packetSent, l.packedID, l.packedURL, l.nudged, l.warnings, l.captureURLs, l.attempted}
 		for len(l.savedOrder) > savedRunsMax {
 			delete(l.saved, l.savedOrder[0])
 			l.savedOrder = l.savedOrder[1:]
@@ -102,7 +107,7 @@ func (l *readLedger) beginRun(runID string) (changed bool) {
 	}
 	l.runID = runID
 	st := l.saved[runID] // zero when the run is new to this session
-	l.reads, l.noted, l.packetSent, l.packedID, l.packedURL, l.nudged, l.warnings, l.captureURLs = st.reads, st.noted, st.packetSent, st.packedID, st.packedURL, st.nudged, st.warnings, st.captureURLs
+	l.reads, l.noted, l.packetSent, l.packedID, l.packedURL, l.nudged, l.warnings, l.captureURLs, l.attempted = st.reads, st.noted, st.packetSent, st.packedID, st.packedURL, st.nudged, st.warnings, st.captureURLs, st.attempted
 	return true
 }
 
@@ -168,6 +173,9 @@ func (s *ChoirScope) triedKeys() map[string]bool {
 	for _, u := range l.captureURLs {
 		keys[searchHitKey(u)] = true
 	}
+	for _, u := range l.attempted {
+		keys[searchHitKey(u)] = true
+	}
 	return keys
 }
 
@@ -185,6 +193,19 @@ func (s *ChoirScope) noteCaptureRead(out JSON) {
 	l := &s.ledger
 	l.mu.Lock()
 	l.captureURLs = append(l.captureURLs, strings.TrimSpace(r.URL))
+	l.mu.Unlock()
+}
+
+// noteAttempt records, before the call, that the run is about to try to read
+// the page at url.
+func (s *ChoirScope) noteAttempt(url string) {
+	url = strings.TrimSpace(url)
+	if s == nil || url == "" {
+		return
+	}
+	l := &s.ledger
+	l.mu.Lock()
+	l.attempted = append(l.attempted, url)
 	l.mu.Unlock()
 }
 

@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"encoding/json"
+	"log"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -60,4 +61,14 @@ func searchDecisionOf(payload json.RawMessage) map[string]any {
 		d["fresh_why"] = why
 	}
 	return d
+}
+
+// logSearchFresh writes one console line per SearchFresh send with the reason
+// the run gave, so the proof script (scripts/status-search-reads) can count the
+// reasons by distinct text and boilerplate shows. The reason is the run's own
+// sentence, never the query.
+func logSearchFresh(runID string, decision map[string]any) {
+	if why, _ := decision["fresh_why"].(string); why != "" {
+		log.Printf("runtime: search fresh run=%s why=%q", runID, why)
+	}
 }

@@ -694,6 +694,7 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 // An unchanged page re-read returns its existing capture.
 func (s *ChoirScope) Read(url string) (JSON, error) {
 	var out JSON
+	s.noteAttempt(url)
 	err := s.call(ActionRead, ReadPayload{URL: url}, &out)
 	s.recordRead(url, out, err)
 	return out, err
@@ -825,6 +826,9 @@ func (s *ChoirScope) ReadCapture(captureID string, fromBlock, maxChars int) (JSO
 		captureID = id
 	}
 	var out JSON
+	// A held page of the corpus brief read by its capture id is tried by the
+	// attempt, whether or not the capture is still there.
+	s.noteAttempt(s.searches.heldURLForCapture(strings.TrimSpace(captureID)))
 	err := s.call(ActionReadCapture, ReadCapturePayload{CaptureID: captureID, FromBlock: fromBlock, MaxChars: maxChars}, &out)
 	if err == nil {
 		s.noteCaptureRead(out)

@@ -686,6 +686,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 						// payload before the stream opens, so a search cannot count its own
 						// results as held; it rides the search_start row (search_decision.go).
 						decision = searchDecisionOf(payload)
+						logSearchFresh(cellExec.RunID, decision)
 						// An async search belongs to this desk session: its
 						// stream outlives the cell and ends with the session.
 						out, err = workers.startSearch(search.WithAttribution(egrCtx, search.Attribution{RunID: cellExec.RunID, Desk: deskRole, Conversation: cellExec.ChannelID}), sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, func(done searchDone) {

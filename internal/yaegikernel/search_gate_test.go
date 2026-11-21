@@ -76,7 +76,7 @@ fmt.Println(s)`)
 	if f.searchCalls.Load() != 1 {
 		t.Fatalf("the provider was asked %d times, want 1 (the seed only):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
-	for _, want := range []string{"err: <nil>", "id: \n", "not sent", "not read yet", "5 of them", "a.example (5)", "https://a.example/p1", "SearchFresh"} {
+	for _, want := range []string{"err: <nil>", "id: \n", "not sent", "not read yet", "5 of them", "https://a.example/p1", "https://a.example/p5", "SearchFresh"} {
 		if !strings.Contains(out.Stdout, want) {
 			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
 		}

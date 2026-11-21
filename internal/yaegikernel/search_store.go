@@ -178,6 +178,10 @@ func (s SearchStub) String() string {
 	if s.Refused != "" {
 		var b strings.Builder
 		fmt.Fprintf(&b, "not sent: %s\n", s.Refused)
+		if s.Reason == reasonReadFirst || s.Reason == reasonHeldFirst || s.Reason == reasonSiteHeld {
+			// The refusal names the pages itself, before its last line.
+			return b.String()
+		}
 		writeHostGroups(&b, groupByHost(s.Unread), func(n int) string {
 			return fmt.Sprintf("... %d more hosts; they are in the Unread of this value\n", n)
 		})
@@ -257,7 +261,7 @@ type SearchStore struct {
 	judged map[string]bool
 	// heldRun is, per run, the pages the paper held for it when it began: search
 	// zero (seedHeld).
-	heldRun map[string][]SearchHit
+	heldRun map[string][]HeldPage
 }
 
 func newSearchStore() *SearchStore {
@@ -594,9 +598,8 @@ func (s *ChoirScope) startSearch(query string, o searchOpts) (SearchStub, error)
 		}
 		// A hunt for an outlet the run already holds untried pages of.
 		for _, host := range searchquery.SiteRestrictions(query) {
-			outlet := outletOf("https://" + host)
-			if pages := s.searches.untriedOfOutlet(outlet); len(pages) > 0 {
-				return refuse(reasonSiteHeld, siteHeldRefusal(outlet, len(pages)), pages)
+			if pages := s.searches.untriedOfOutlet(siteMatcher(host)); len(pages) > 0 {
+				return refuse(reasonSiteHeld, siteHeldRefusal(host, pages), pages)
 			}
 		}
 		// The web has shown what it has for this question (search_hold.go).

@@ -124,6 +124,7 @@ func (s *ChoirScope) ReadAll(urls []string) []Page {
 				err error
 			}
 			ch := make(chan outcome, 1)
+			s.noteAttempt(u)
 			go func() {
 				var out JSON
 				err := s.call(ActionRead, ReadPayload{URL: u}, &out)

@@ -2,6 +2,7 @@ package yaegikernel
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/searchquery"
@@ -84,22 +85,94 @@ func (st *SearchStore) seedHeld(runID string, pages []HeldPage) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if st.heldRun == nil {
-		st.heldRun = map[string][]SearchHit{}
+		st.heldRun = map[string][]HeldPage{}
 	}
 	if _, ok := st.heldRun[runID]; ok {
 		return
 	}
+	// A run this store no longer holds searches for is gone: its pages are not
+	// kept (the session serves runs in turn; the guest never sees a run end).
+	live := map[string]bool{runID: true}
+	for _, sr := range st.searches {
+		live[sr.run] = true
+	}
+	for k := range st.heldRun {
+		if !live[k] {
+			delete(st.heldRun, k)
+		}
+	}
 	seen := map[string]bool{}
-	var hits []SearchHit
+	var kept []HeldPage
 	for _, p := range pages {
 		key := searchHitKey(p.URL)
 		if key == "" || seen[key] {
 			continue
 		}
 		seen[key] = true
-		hits = append(hits, SearchHit{Title: p.Title, URL: p.URL, Held: true})
+		kept = append(kept, p)
 	}
-	st.heldRun[runID] = hits
+	st.heldRun[runID] = kept
+}
+
+// heldHit is a held page as a search hit: the capture id rides the snippet, so
+// the surface of SearchHit does not move.
+func heldHit(p HeldPage) SearchHit {
+	h := SearchHit{Title: p.Title, URL: p.URL, Held: true}
+	if p.CaptureID != "" {
+		h.Snippet = "capture_id=" + p.CaptureID
+	}
+	return h
+}
+
+// heldURLForCapture is the URL of the held page of this run with that capture
+// id, or "": a ReadCapture of it is an attempt on that page.
+func (st *SearchStore) heldURLForCapture(id string) string {
+	if st == nil || id == "" {
+		return ""
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	for _, p := range st.heldRun[st.run] {
+		if p.CaptureID == id {
+			return p.URL
+		}
+	}
+	return ""
+}
+
+// windowLocked lists the pages the rule looks at, in order: the first
+// readFirstPages of search zero, then, for each earlier search of the run, the
+// first readFirstPages pages new to the run. zero marks search zero's.
+type windowHit struct {
+	hit  SearchHit
+	zero bool
+}
+
+func (st *SearchStore) windowLocked(read map[string]bool) []windowHit {
+	var out []windowHit
+	for i, p := range st.heldRun[st.run] {
+		if i == readFirstPages {
+			break
+		}
+		out = append(out, windowHit{heldHit(p), true})
+	}
+	for i := range st.order {
+		if !st.inRun(i) {
+			continue
+		}
+		top := 0
+		for _, h := range st.markOneLocked(i, read).Results {
+			if h.Held {
+				continue
+			}
+			if top == readFirstPages {
+				break
+			}
+			top++
+			out = append(out, windowHit{h, false})
+		}
+	}
+	return out
 }
 
 // readNeed is what the run holds and has not tried: the first readFirstPages
@@ -121,47 +194,31 @@ func (st *SearchStore) readNeed() readNeed {
 	if st.triedKeys != nil {
 		tried = st.triedKeys()
 	}
-	read := st.readSet()
 	seen := map[string]bool{}
 	var zero, rest []SearchHit
-	for i, h := range st.heldRun[st.run] {
-		if i == readFirstPages {
-			break
+	for _, w := range st.windowLocked(st.readSet()) {
+		key := searchHitKey(w.hit.URL)
+		if tried[key] || seen[key] {
+			continue
 		}
-		if key := searchHitKey(h.URL); !tried[key] && !seen[key] {
-			seen[key] = true
-			zero = append(zero, h)
+		seen[key] = true
+		if w.zero {
+			zero = append(zero, w.hit)
+		} else {
+			rest = append(rest, w.hit)
 		}
 	}
 	if len(zero) > 0 {
 		return readNeed{held: true, pages: zero}
 	}
-	for i := range st.order {
-		if !st.inRun(i) {
-			continue
-		}
-		top := 0
-		for _, h := range st.markOneLocked(i, read).Results {
-			if h.Held {
-				continue
-			}
-			if top == readFirstPages {
-				break
-			}
-			top++
-			if key := searchHitKey(h.URL); !tried[key] && !seen[key] {
-				seen[key] = true
-				rest = append(rest, h)
-			}
-		}
-	}
 	return readNeed{pages: rest}
 }
 
-// untriedOfOutlet lists the pages of this run (search zero and every search's
-// results) from the outlet that the run has not tried to read.
-func (st *SearchStore) untriedOfOutlet(outlet string) []SearchHit {
-	if st == nil || outlet == "" {
+// untriedOfOutlet lists the pages in the rule's window (search zero's first
+// five and each search's first five new pages) that match the site: term and
+// that the run has not tried to read.
+func (st *SearchStore) untriedOfOutlet(match func(pageURL string) bool) []SearchHit {
+	if st == nil || match == nil {
 		return nil
 	}
 	st.mu.Lock()
@@ -172,28 +229,46 @@ func (st *SearchStore) untriedOfOutlet(outlet string) []SearchHit {
 	}
 	seen := map[string]bool{}
 	var out []SearchHit
-	add := func(h SearchHit) {
-		key := searchHitKey(h.URL)
-		if tried[key] || seen[key] || outletOf(key) != outlet {
-			return
-		}
-		seen[key] = true
-		out = append(out, h)
-	}
-	for _, h := range st.heldRun[st.run] {
-		add(h)
-	}
-	for i := range st.order {
-		if !st.inRun(i) {
+	for _, w := range st.windowLocked(st.readSet()) {
+		key := searchHitKey(w.hit.URL)
+		if tried[key] || seen[key] || !match(key) {
 			continue
 		}
-		for _, a := range st.searches[st.order[i]].Arrivals {
-			for _, h := range a.Results {
-				add(h)
-			}
-		}
+		seen[key] = true
+		out = append(out, w.hit)
 	}
 	return out
+}
+
+// aggregatorHosts are hosts that republish other outlets' stories: a page from
+// one is not an outlet's own page, so it never makes a site: hunt "held" (and
+// google.com or msn.com is not the outlet of news.google.com or msn.com's
+// stories). There was no such list in the search code before; it is a short
+// list of the hosts the paper's searches return, not a registry.
+var aggregatorHosts = map[string]bool{
+	"news.google.com": true, "msn.com": true, "news.yahoo.com": true, "flipboard.com": true,
+	"newsbreak.com": true, "smartnews.com": true, "ground.news": true, "allsides.com": true,
+	"news.apple.com": true, "bing.com": true, "dailyhunt.in": true, "newsnow.co.uk": true,
+}
+
+// siteMatcher returns the test a page URL must pass to be "of" the outlet a
+// site: term names. A term naming a registrable domain (nytimes.com) matches
+// every host of that domain; a term naming a subdomain (sports.nytimes.com)
+// matches that host and its subdomains only. An aggregator's page never
+// matches.
+func siteMatcher(host string) func(pageURL string) bool {
+	host = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(host)), "www.")
+	registrable := outletOf("https://"+host) == host
+	return func(pageURL string) bool {
+		ph := hostOf(pageURL)
+		if ph == "" || aggregatorHosts[ph] {
+			return false
+		}
+		if registrable {
+			return outletOf(pageURL) == host
+		}
+		return ph == host || strings.HasSuffix(ph, "."+host)
+	}
 }
 
 // needState is what the run held and had read when it asked, for the host's
@@ -295,20 +370,47 @@ func questionKey(question string) string {
 	return searchquery.Key(question)
 }
 
+// refusalListMax is how many pages a refusal lists by name; the rest are in the
+// stub's Unread.
+const refusalListMax = 10
+
+// pageLines lists pages one to a line, a held page with its capture id.
+func pageLines(pages []SearchHit) string {
+	var b strings.Builder
+	for i, h := range pages {
+		if i == refusalListMax {
+			fmt.Fprintf(&b, "\n  ... and %d more (they are in the Unread of this value)", len(pages)-i)
+			break
+		}
+		if id := strings.TrimPrefix(h.Snippet, "capture_id="); id != h.Snippet && id != "" {
+			fmt.Fprintf(&b, "\n  %s  %s", id, h.URL)
+		} else {
+			fmt.Fprintf(&b, "\n  %s", h.URL)
+		}
+	}
+	return b.String()
+}
+
+// freshException is the last line of every read-first refusal: the exception,
+// after the pages to read.
+func freshException() string {
+	return fmt.Sprintf("\nOnly if none of these pages can bear on what you lack: choir.SearchFresh(query, why), with a reason of at least %d characters, which is recorded.", freshWhyMin)
+}
+
 // readFirstRefusal is what the desk is told when a search is not sent for the
-// pages the run holds: why, which pages, and the one way past. The pages
-// themselves ride on the stub (SearchStub and Search carry them).
+// pages the run holds: why, the pages (a held page with its capture id), and
+// last the one way past. The pages ride on the stub too (Unread).
 func readFirstRefusal(n readNeed) string {
 	if n.held {
-		return fmt.Sprintf("the paper already holds %d of the pages for this run's objective (the corpus brief) that you have not tried to read. Read the ones that bear on it (choir.ReadAll on their URLs, or choir.ReadCapture(capture_id)), then search the web for what is still missing, naming it. A page that will not load counts once you have tried it. If these pages cannot bear on what you lack, say why: choir.SearchFresh(query, why) sends the search with a reason of at least %d characters, which is recorded", len(n.pages), freshWhyMin)
+		return fmt.Sprintf("the paper already holds %d of the pages for this run's objective (the corpus brief) that you have not tried to read. Read them from the corpus, with no web fetch: choir.ReadCapture(capture_id, 0, 0). A page that will not load, or a capture that is gone, counts once you have tried it. Then search the web for what is still missing, naming it.%s%s", len(n.pages), pageLines(n.pages), freshException())
 	}
-	return fmt.Sprintf("the top pages of this run's earlier searches are not read yet: %d of them, listed here. Read them first (choir.ReadAll on their URLs), then search again for what is still missing, naming it: a search that has read what the last one returned asks a sharper question. A page that will not load counts once you have tried it. If these pages cannot bear on what you lack, say why: choir.SearchFresh(query, why) sends the search with a reason of at least %d characters, which is recorded", len(n.pages), freshWhyMin)
+	return fmt.Sprintf("the top pages of this run's earlier searches are not read yet: %d of them. Read them first (choir.ReadAll on their URLs; ReadAll takes at most 24 URLs a call, and a URL past the 24th is not read and stays on this list), then search again for what is still missing, naming it: a search that has read what the last one returned asks a sharper question. A page that will not load counts once you have tried it.%s%s", len(n.pages), pageLines(n.pages), freshException())
 }
 
 // siteHeldRefusal is what the desk is told when a site: hunt names an outlet
 // the run already holds an untried page of.
-func siteHeldRefusal(outlet string, n int) string {
-	return fmt.Sprintf("this run already holds %d page(s) of %s that you have not tried to read, listed here. Read them (choir.ReadAll on their URLs): a search restricted to that outlet would return pages you hold. If they cannot bear on what you lack, say why: choir.SearchFresh(query, why) sends the search with a reason of at least %d characters, which is recorded", n, outlet, freshWhyMin)
+func siteHeldRefusal(outlet string, pages []SearchHit) string {
+	return fmt.Sprintf("this run already holds %d page(s) of %s among the top of its searches that you have not tried to read. Read them (choir.ReadAll on their URLs, or choir.ReadCapture for a held page): a search restricted to that outlet would return pages you hold.%s%s", len(pages), outlet, pageLines(pages), freshException())
 }
 
 // runningRefusal is what the desk is told when a search is started while another

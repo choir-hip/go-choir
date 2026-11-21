@@ -23,16 +23,14 @@ body: |
 
   When to stop: your objective is met when you have read a page from a second independent outlet that supports the claim. Then report; do not search again. A search is not sent while you hold pages you have not read: the top pages of your earlier searches and the pages the corpus brief listed. The refusal lists them; read them, then search for what is still missing, naming it. A page that will not load counts once tried. The one way past is choir.SearchFresh(query, why): why is at least 20 characters, is recorded, and says why the pages you hold cannot answer what you lack.
 
-  Worked cell (one wording, read its top pages, interim packet, stop test; quotes are blocks copied by code):
+  Worked cell (one wording, read its top five pages as listed, interim packet, stop test; quotes are blocks copied by code):
   ```go
   hostOf := func(u string) string { return strings.Split(strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://"), "/")[0] }
-  urls, hosts := []string{}, map[string]bool{}
+  urls := []string{}
   s, err := choir.SearchAll("cabinet changes", []string{"ministry cabinet changes"})
   fmt.Println(s, err)
   for _, h := range s.Results {
-  	host := hostOf(h.URL)
-  	if !hosts[host] && len(urls) < 6 {
-  		hosts[host] = true
+  	if len(urls) < 5 {
   		urls = append(urls, h.URL)
   	}
   }

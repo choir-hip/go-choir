@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A run reads what it holds before it searches again (owner, 2026-11-21: "on
@@ -36,6 +37,18 @@ import (
 //  8. The refusal is a quota in disguise: a run that reads between searches
 //     is stopped after N searches. It must not be: eight searches, each after
 //     the reads, are all sent.
+// Follow-ups (seat 1, 2026-11-21), failure list written before the code:
+// 10. A brief page is shown without its capture id, or only ReadAll(url) clears
+//     it (a live web fetch of a page the corpus holds), or ReadCapture(id) of a
+//     page whose capture is gone leaves it untried.
+// 11. A site: hunt is refused for untried pages of the outlet beyond the top-5
+//     window the rest of the rule uses.
+// 12. site:sports.nytimes.com is refused for any nytimes.com page; a page of an
+//     aggregator host counts as the outlet.
+// 13. A Read that hangs until the cell dies leaves the page untried.
+// 14. The SearchFresh pointer comes before the pages to read, or reads as the
+//     rule instead of the exception.
+// 15. A finished run's brief pages stay in the store.
 //  9. A refusal is not counted by its reason (read_first, held_first,
 //     site_held), or a SearchFresh send is not counted (fresh_sent).
 
@@ -276,5 +289,119 @@ func TestAnyNumberOfSearchesIsSentWhenTheRunReadsBetween(t *testing.T) {
 	}
 	if f.searchCalls.Load() != 9 {
 		t.Fatalf("a run that reads between searches was stopped at %d of 9: the refusal must not be a quota", f.searchCalls.Load())
+	}
+}
+
+func heldPages(n int) []HeldPage {
+	var held []HeldPage
+	for i := 1; i <= n; i++ {
+		held = append(held, HeldPage{URL: fmt.Sprintf("https://h.example/p%d", i), CaptureID: fmt.Sprintf("cap-h-%d", i)})
+	}
+	return held
+}
+
+func TestABriefPageIsShownWithItsCaptureIDAndClearedByReadCaptureWithNoWebFetch(t *testing.T) {
+	f := newResearchFixture(t)
+	f.urlsFor = map[string][]string{"qq": pagesN("n", 1, 10)}
+	f.captureErr = map[string]string{"cap-h-3": "capture not found"}
+	cell, hooks := searchCell(t, f)
+	hooks.Begin(SessionFrame{RunID: "run-1", Held: heldPages(8)})
+	out := cell(`s, _ := choir.Search("qq")
+fmt.Println(s.Refused)`)
+	for i := 1; i <= 5; i++ {
+		if want := fmt.Sprintf("cap-h-%d  https://h.example/p%d", i, i); !strings.Contains(out.Stdout, want) {
+			t.Fatalf("the refusal does not list %q:\n%s", want, out.Stdout)
+		}
+	}
+	// The pointer is the last line, after the pages, and reads as the exception.
+	at, last := strings.Index(out.Stdout, "Only if none of these pages can bear on what you lack"), strings.LastIndex(out.Stdout, "https://h.example/p5")
+	if at < 0 || at < last || !strings.Contains(out.Stdout[at:], "choir.SearchFresh(query, why)") {
+		t.Fatalf("SearchFresh must be the exception after the pages:\n%s", out.Stdout)
+	}
+	if strings.Contains(out.Stdout[:last], "SearchFresh") {
+		t.Fatalf("SearchFresh named before the list of pages:\n%s", out.Stdout)
+	}
+	// ReadCapture by id clears a page with no web fetch; a capture that is gone
+	// is released by the attempt.
+	cell(`for i := 1; i <= 5; i++ { choir.ReadCapture(fmt.Sprintf("cap-h-%d", i), 0, 0) }`)
+	if f.reads.Load() != 0 || f.captureReads.Load() != 5 {
+		t.Fatalf("web fetches %d, capture reads %d: want 0 and 5", f.reads.Load(), f.captureReads.Load())
+	}
+	cell(`choir.Search("qq")`)
+	if f.searchCalls.Load() != 1 {
+		t.Fatalf("the five held pages were attempted (one capture gone) and the search was not sent")
+	}
+}
+
+func TestASiteHuntLooksOnlyAtTheTopFivePagesOfASearch(t *testing.T) {
+	f := newResearchFixture(t)
+	busy := []string{"https://a.example/1", "https://a.example/2", "https://a.example/3"}
+	for i := 1; i <= 8; i++ {
+		busy = append(busy, fmt.Sprintf("https://busy.example/s%d", i))
+	}
+	f.urlsFor = map[string][]string{"one": busy, "site:busy.example one": pagesN("z", 1, 3)}
+	cell, _ := searchCell(t, f)
+	cell(`choir.Search("one")`)
+	out := cell(`s, _ := choir.Search("site:busy.example one")
+fmt.Println(len(s.Results), s.Refused != "")`)
+	if f.searchCalls.Load() != 1 || !strings.Contains(out.Stdout, "2 true") {
+		t.Fatalf("the hunt must list the 2 busy.example pages of the top five, not all 8:\n%s", out.Stdout)
+	}
+	// The top five tried: the other six busy.example pages do not hold the hunt.
+	cell(`choir.Read("https://a.example/1"); choir.Read("https://a.example/2"); choir.Read("https://a.example/3")
+choir.Read("https://busy.example/s1"); choir.Read("https://busy.example/s2")`)
+	cell(`choir.Search("site:busy.example one")`)
+	if f.searchCalls.Load() != 2 {
+		t.Fatalf("pages of the outlet beyond the top five held the hunt")
+	}
+}
+
+func TestSiteTermsMatchTheHostTheyNameAndNeverAnAggregator(t *testing.T) {
+	cases := []struct {
+		site, page string
+		want       bool
+	}{
+		{"nytimes.com", "https://www.nytimes.com/a", true},
+		{"nytimes.com", "https://sports.nytimes.com/a", true},
+		{"sports.nytimes.com", "https://sports.nytimes.com/a", true},
+		{"sports.nytimes.com", "https://www.nytimes.com/a", false},
+		{"sports.nytimes.com", "https://news.nytimes.com/a", false},
+		{"sports.nytimes.com", "https://x.sports.nytimes.com/a", true},
+		{"google.com", "https://news.google.com/rss/a", false},
+		{"msn.com", "https://www.msn.com/en-us/news/a", false},
+		{"news.google.com", "https://news.google.com/rss/a", false},
+		{"bbc.co.uk", "https://www.bbc.co.uk/news/a", true},
+	}
+	for _, c := range cases {
+		if got := siteMatcher(c.site)(c.page); got != c.want {
+			t.Errorf("site:%s against %s = %v, want %v", c.site, c.page, got, c.want)
+		}
+	}
+}
+
+func TestAReadThatHangsIsAlreadyAnAttempt(t *testing.T) {
+	f := newResearchFixture(t)
+	f.scope.BindCell().Begin(SessionFrame{RunID: "run-1"})
+	const u = "https://hang.example/p1"
+	f.hang[u] = true
+	go func() { _, _ = f.scope.Read(u) }()
+	deadline := time.Now().Add(1500 * time.Millisecond)
+	for !f.scope.triedKeys()[searchHitKey(u)] {
+		if time.Now().After(deadline) {
+			t.Fatal("a Read in flight is not yet an attempt: a read that hangs until the cell dies leaves the page untried")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestAFinishedRunsBriefPagesAreNotKept(t *testing.T) {
+	f := newResearchFixture(t)
+	f.scope.BindCell().Begin(SessionFrame{RunID: "run-1", Held: heldPages(3)})
+	f.scope.BindCell().Begin(SessionFrame{RunID: "run-2", Held: heldPages(2)})
+	st := f.scope.searches
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if _, ok := st.heldRun["run-1"]; ok || len(st.heldRun["run-2"]) != 2 {
+		t.Fatalf("heldRun = %v: run-1's pages must be dropped when run-2 begins", st.heldRun)
 	}
 }

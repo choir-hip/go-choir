@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"testing"
 	"time"
@@ -89,6 +90,10 @@ func decNum(m map[string]any, k string) int {
 }
 
 func TestSearchDecisionRidesTheSearchRowAndNeverCountsItsOwnResults(t *testing.T) {
+	var logged strings.Builder
+	prev := log.Writer()
+	log.SetOutput(&logged)
+	t.Cleanup(func() { log.SetOutput(prev) })
 	tool, ctx, _, rows := decisionRig(t, manyPagesClient{pages: 6}, nil)
 	out := evalDeskCell(t, tool, ctx, `import "time"
 s, _ := choir.Search("alpha query")
@@ -126,6 +131,9 @@ time.Sleep(300 * time.Millisecond)`)
 				t.Fatalf("a decision names the query: %v", d)
 			}
 		}
+	}
+	if !strings.Contains(logged.String(), `runtime: search fresh run=run-desk-eval why="the first answer is about another harbor"`) || strings.Count(logged.String(), "runtime: search fresh") != 1 {
+		t.Fatalf("the SearchFresh reason is not on the console, once: %q", logged.String())
 	}
 	if len(dones) < 1 || decNum(dones[0], "pages_returned") != 6 {
 		t.Fatalf("search_done lacks pages_returned: %v", dones)

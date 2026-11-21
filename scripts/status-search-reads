@@ -41,6 +41,7 @@ PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
 NODE = "node-b"
 STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
 GW_RE = re.compile("^" + STAMP + r" gateway: search request from autoputer \S+ \(.*?run=(\S+) desk=research ")
+FRESH_RE = re.compile(STAMP + r' runtime: search fresh run=(\S+) why=("(?:[^"\\]|\\.)*")')
 READ_RE = re.compile(STAMP + r" corpus read run=(\S+) ")
 SUM_RE = re.compile(STAMP + r" runtime: search run=(\S+) desk=research (.*)$")
 KV_RE = re.compile(r"(\w+)=(\d+)")
@@ -58,6 +59,7 @@ def arg_time(s):
 def compute(text, since, until):
     sec = ""
     gw, reads, sums = [], {}, []
+    fresh_texts = {}
     first_read = None
     for ln in text.splitlines():
         if ln.startswith("##"):
@@ -76,6 +78,16 @@ def compute(text, since, until):
                 if first_read is None or t < first_read:
                     first_read = t
                 reads.setdefault(m.group(2), []).append(t)
+        elif sec == "##FRESH":
+            m = FRESH_RE.search(ln)
+            if m:
+                t = epoch(m.group(1))
+                if t >= since and t < until:
+                    try:
+                        why = json.loads(m.group(3))
+                    except ValueError:
+                        why = m.group(3)
+                    fresh_texts[why] = fresh_texts.get(why, 0) + 1
         elif sec == "##SUM":
             m = SUM_RE.search(ln)
             if m:
@@ -123,7 +135,9 @@ def compute(text, since, until):
         "since": time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(since)),
         "runs": runs, "searches": n, "mean_per_run": round(n / runs, 2) if runs else None,
         "runs_by_searches": dist, "runs_7plus": tail_runs, "searches_from_7plus": tail_searches,
-        "console_span_runs": win_runs, "later_searches": later, "later_zero_reads": zero,
+        "console_empty": first_read is None,
+        "console_span_runs": win_runs, "later_searches": later, "later_no_successful_read": zero,
+        "fresh_reasons": sorted(fresh_texts.items(), key=lambda kv: (-kv[1], kv[0])),
         "ended_runs": len(sums), "ended_runs_started": tot["started"],
         "pages_returned": tot["returned"], "pages_read": tot["read"],
         "refusals": refusals, "refused": sum(refusals.values()), "search_fresh": tot["fresh"],
@@ -138,12 +152,20 @@ def render(r):
     o.append("runs sending 7+: %d, %d searches (%s of all)" % (
         r["runs_7plus"], r["searches_from_7plus"],
         "%.0f%%" % (100.0 * r["searches_from_7plus"] / r["searches"]) if r["searches"] else "n/a"))
-    o.append("console span: %d runs; later searches %d, sent with zero reads since the run's previous search: %d" % (
-        r["console_span_runs"], r["later_searches"], r["later_zero_reads"]))
+    if r["console_empty"]:
+        o.append("console window empty: the guest console holds no read line, so the read figures (later searches with no successful read, pages read) are unavailable, not zero")
+    else:
+        o.append("console span: %d runs; later searches %d, sent with no SUCCESSFUL read since the run's previous search: %d (the corpus read line is written only when a read succeeds; a failed attempt is not counted)" % (
+            r["console_span_runs"], r["later_searches"], r["later_no_successful_read"]))
     o.append("ended runs %d (console span): searches started %d, pages returned %d, pages read %d" % (
         r["ended_runs"], r["ended_runs_started"], r["pages_returned"], r["pages_read"]))
     o.append("refusals %d by reason: %s" % (r["refused"], " ".join("%s=%d" % kv for kv in sorted(r["refusals"].items())) or "-"))
     o.append("SearchFresh sends (ended runs): %d" % r["search_fresh"])
+    reasons = r["fresh_reasons"]
+    o.append("SearchFresh reasons by distinct text (console, %d sends, %d distinct)%s" % (
+        sum(n for _, n in reasons), len(reasons), ":" if reasons else ": none"))
+    for why, n in reasons[:10]:
+        o.append("  %4d  %s" % (n, (why if len(why) <= 80 else why[:77] + "...")))
     return "\n".join(o)
 
 
@@ -152,10 +174,12 @@ dir=/var/lib/go-choir/vm-state/@VM@
 sudo -n true 2>/dev/null || echo "##NOSUDO"
 echo "##READS"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
-  grep -a -E 'corpus read run=|runtime: search run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} (corpus read run=[^ ]*|runtime: search run=.*))$/\1/; s/^([0-9\/]+ [0-9:]+ corpus read run=[^ ]*) .*$/\1 /' > /tmp/.ssr.$$
+  grep -a -E 'corpus read run=|runtime: search run=|runtime: search fresh run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} (corpus read run=[^ ]*|runtime: search run=.*))$/\1/; s/^([0-9\/]+ [0-9:]+ corpus read run=[^ ]*) .*$/\1 /' > /tmp/.ssr.$$
 grep -a ' corpus read run=' /tmp/.ssr.$$
 echo "##SUM"
 grep -a ' runtime: search run=' /tmp/.ssr.$$
+echo "##FRESH"
+grep -a ' runtime: search fresh run=' /tmp/.ssr.$$
 rm -f /tmp/.ssr.$$
 echo "##GW"
 sudo -n journalctl --no-pager -o cat --utc --since "@DAY@ 00:00:00 UTC" -u go-choir-gateway 2>/dev/null |

@@ -449,6 +449,21 @@ Built in lane `search-read-first`; the code wins where it differs.
   stop test is not enough (section 7); `scripts/status-search-reads` prints the
   tail (runs with 7 or more, their share of searches) and the `SearchFresh`
   count.
+- **Follow-ups after review (2026-11-21).** A brief page is listed in the refusal
+  with its capture id (it rides `SearchHit.Snippet` as `capture_id=...`, so the
+  surface of `SearchHit` does not move) and `choir.ReadCapture(id)` clears it with
+  no web fetch; every read is an attempt recorded BEFORE the call (`Read`,
+  `ReadAll`, `ReadCapture` of a held page), so a hung read or a deleted capture
+  releases the page. A `site:` hunt looks only at the same top-5 window as the
+  rest of the rule; a term naming a subdomain matches that host and its
+  subdomains, a term naming a registrable domain matches its hosts, and a page of
+  an aggregator host (a short list in `search_need.go`; none existed before)
+  never counts as the outlet. The refusal lists the pages, then the exception
+  ("Only if none of these pages can bear on what you lack: SearchFresh"). A
+  `SearchFresh` send writes `runtime: search fresh run= why=` on the console so
+  the proof script counts reasons by distinct text. `choirFunctionDocs` Args keep
+  `fresh` because the signature keeps the variadic argument (it is refused with a
+  pointer, and the surface test requires docs to equal the source).
 - **Deployed proof:** `scripts/status-search-reads --since T`.
 
 ---

@@ -963,6 +963,10 @@ out = ["##READS\n", R("2026/11/21 04:59:00", "other"), R("2026/11/21 05:00:30", 
        "##SUM\n",
        S("2026/11/21 05:05:00", "r1", "started=3 from_held=0 not_sent=3 (read_first=2 held_first=1) search_all_calls=1 wordings_offered=1 wordings_sent=1 fresh_sent=1 untagged=0 wordings_running=0 pages_returned=100 pages_new=90 pages_read=12"),
        S("2026/11/21 05:06:00", "r2", "started=1 from_held=0 not_sent=1 (holds_unread=1 site_held=2) fresh_sent=0 pages_returned=40 pages_new=40 pages_read=8"),
+       "##FRESH\n",
+       f"[ 1.0] runtime[1]: 2026/11/21 05:07:00 runtime: search fresh run=r1 why=\"the held pages are about another harbor\"\n",
+       f"[ 1.0] runtime[1]: 2026/11/21 05:08:00 runtime: search fresh run=r2 why=\"the held pages are about another harbor\"\n",
+       f"[ 1.0] runtime[1]: 2026/11/21 05:09:00 runtime: search fresh run=r2 why=\"a different reason, long enough\"\n",
        "##GW\n",
        G("2026/11/21 04:00:00", "early"),
        G("2026/11/21 05:00:00", "r1"), G("2026/11/21 05:01:00", "r1"), G("2026/11/21 05:02:00", "r1"),
@@ -975,9 +979,15 @@ PY
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
 check "W1 3 runs, 11 searches (the management line and the 04:00 search are out), mean 3.67" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"runs\"],d[\"searches\"],d[\"mean_per_run\"])==(3,11,3.67), d" "$root/out"'
 check "W2 runs by searches 1:1 2:0 3:1 4+:1; one run of 7 with 7 searches" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"runs_by_searches\"]=={\"1\":1,\"2\":0,\"3\":1,\"4+\":1} and (d[\"runs_7plus\"],d[\"searches_from_7plus\"])==(1,7), d" "$root/out"'
-check "W3 8 later searches in the console span, 7 with no read since the previous one (r1 read once, between its first two)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_zero_reads\"])==(8,7), d" "$root/out"'
+check "W3 8 later searches in the console span, 7 with no successful read since the previous one (r1 read once, between its first two)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_no_successful_read\"])==(8,7), d" "$root/out"'
 check "W4 refusals by reason are summed from the run lines" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"refusals\"]=={\"read_first\":2,\"held_first\":1,\"holds_unread\":1,\"site_held\":2} and d[\"refused\"]==6, d" "$root/out"'
 check "W5 fresh_sent 1; pages returned 140, read 20" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"search_fresh\"],d[\"pages_returned\"],d[\"pages_read\"])==(1,140,20), d" "$root/out"'
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T04:00Z >"$root/out" 2>&1
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
+check "W7 SearchFresh reasons are counted by distinct text: 3 sends, 2 distinct, the repeated one first" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"fresh_reasons\"][0]==[\"the held pages are about another harbor\",2] and len(d[\"fresh_reasons\"])==2, d" "$root/out"'
+printf '##READS\n##SUM\n##FRESH\n##GW\n2026/11/21 05:00:00 gateway: search request from autoputer vm-x ( max_results=40 run=r1 desk=research conv=c)\n2026/11/21 05:01:00 gateway: search request from autoputer vm-x ( max_results=40 run=r1 desk=research conv=c)\n' >"$root/sr_empty.txt"
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_empty.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
+check "W8 an empty console window says so instead of printing zeros" 'grep -q "console window empty" "$root/out" && ! grep -q "no SUCCESSFUL read since the run" "$root/out"'
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T04:00Z >"$root/out" 2>&1
 check "W6 the text report prints the runs line and the SearchFresh count" 'grep -q "^runs 4  searches 12  mean per run 3.0" "$root/out" && grep -q "SearchFresh sends (ended runs): 1" "$root/out"'
 
