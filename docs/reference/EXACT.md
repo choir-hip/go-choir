@@ -565,6 +565,7 @@ Full list with fixes: `exact/gaps.md`.
 - [exact/capabilities.md](exact/capabilities.md): the on-demand capabilities: the wgpu GPU module (with the full how-to for writing one in Rust), Canvas 2D, textflow, Markdown, the game add-on, native modules; what our build needs (Metal Toolchain); iOS and Android status.
 - [exact/native-modules.md](exact/native-modules.md): app module vs package, calling convention, streams out, threading, errors, third-party libraries.
 - [exact/audio.md](exact/audio.md): the session owner, claims, modes, background, Now Playing, interruptions.
+- [exact/audio-and-voice.md](exact/audio-and-voice.md): what of audio and voice Exact can carry at `f53347503` (playback, chunked speech, lock screen, microphone, recognition, models, native-code cost), with a verdict per capability and per native file.
 - [exact/build-and-ship.md](exact/build-and-ship.md): what each edit costs per host, layout, CLI, build scripts, kit sync, xcframeworks, signing, install, pinning, build discipline, the Android build.
 - [exact/testing-and-debugging.md](exact/testing-and-debugging.md): what each check can see, the driver, its limits, logs, failure messages, the Android drive.
 - [exact/internals.md](exact/internals.md): architecture, execution, rendering, measured numbers.
