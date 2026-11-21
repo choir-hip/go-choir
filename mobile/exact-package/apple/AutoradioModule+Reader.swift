@@ -103,7 +103,6 @@ extension AutoradioModule {
             let info = ReaderAimInfo(address: args["address"] as? String ?? "", blockId: args["blockId"] as? String ?? "", label: args["label"] as? String ?? "")
             if info.address.isEmpty { ReaderAim.shared.clear() } else {
                 ReaderAim.shared.set(info)
-                signals.record(SignalEvent(kind: "aim", subject: info.address, detail: info.blockId))
             }
             touch(["readerAim"])
             reply(json(ReaderAim.shared.info))

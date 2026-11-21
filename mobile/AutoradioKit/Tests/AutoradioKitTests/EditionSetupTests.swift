@@ -151,24 +151,4 @@ final class EditionAddressTests: XCTestCase {
         XCTAssertEqual(PageAddress.kind(of: PageAddress.edition), "onboarding", "a page the onboarding source serves, not the reader")
         XCTAssertEqual(PageAddress.defaultTitle("onboarding:edit"), "My edition")
     }
-
-    func testOpeningTheOldAddressOpensTheLocalPageOnce() {
-        let p = OpenPages(file: nil)
-        let a = p.open("texture:my-edition", title: "My edition")
-        XCTAssertEqual(a.address, "onboarding:edit"); XCTAssertEqual(a.kind, "onboarding")
-        _ = p.open("onboarding:edit")
-        XCTAssertEqual(p.list().filter { $0.address.contains("edition") || $0.address.contains("edit") }.count, 1)
-        XCTAssertFalse(p.list().contains { $0.address == "texture:my-edition" }, "no path leaves the 404 address in the deck")
-    }
-
-    func testASavedDeckWithTheOldAddressIsRepaired() throws {
-        let f = FileManager.default.temporaryDirectory.appendingPathComponent("pages-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: f) }
-        let old = #"{"pages":[{"address":"paper:front","kind":"paper","title":"Paper","opener":"","pinned":false},{"address":"texture:my-edition","kind":"reader","title":"My edition","opener":"","pinned":false}],"recency":["texture:my-edition","paper:front"]}"#
-        try Data(old.utf8).write(to: f)
-        let p = OpenPages(file: f)
-        XCTAssertEqual(p.list().map(\.address).sorted(), ["onboarding:edit", "paper:front", "radio:"], "the Autoradio page is always open")
-        XCTAssertEqual(p.list().first?.address, "radio:", "every launch lands on the Autoradio page")
-        XCTAssertEqual(p.list().first { $0.address == "onboarding:edit" }?.kind, "onboarding")
-    }
 }

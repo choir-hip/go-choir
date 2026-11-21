@@ -94,6 +94,12 @@ final class ModelsModule: ExactModule {
             Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
             return
         }
+        if op == "pagesMirror" {
+            // Shared code (AutoradioLab/pages.ts) owns the open pages and hands the voice their facts after every change (AutoradioModule+Spine.swift `holdPages`). Only native code can use them: the
+            // voice engine, the local model's warm-up and the Texture editor's flush on leaving a page are native. Answers {ok}.
+            Task { @MainActor in reply.send(["ok": await AutoradioModule.current?.holdPages(request) ?? false]) }
+            return
+        }
         if op == "pageText" {
             // The shared reader hands over the page in front (AutoradioLab/reader.ts `hand`); the voice turn reads it. Only native code can: the voice engine is native. Answers {ok}.
             reply.send(["ok": AutoradioModule.current?.holdPage(request) ?? false])

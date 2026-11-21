@@ -24,7 +24,7 @@ extension AutoradioModule {
                 guard let feedURL else { return }
                 let enclosure = PodcastKey.webURL(enclosureURL.absoluteString)
                 let address = PodcastKey.episodeAddress(feed: feedURL.absoluteString, id: episodeId ?? enclosure, enclosure: enclosure, at: at)   // no guid: the enclosure is the id (the feed's own rule)
-                DispatchQueue.main.async { self?.pages.open(address, title: "Episode") }
+                DispatchQueue.main.async { self?.requestPage(address, title: "Episode") }
             }
         }
 

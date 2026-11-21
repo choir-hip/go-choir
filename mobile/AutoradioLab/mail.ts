@@ -365,6 +365,12 @@ export async function mailApprovalEmail(address: string, draft: string): Promise
   return v;
 }
 
+/** "Summarise this thread", "Reply to ...": the prompt aimed at a message. The words it asks go to the radio as a turn aimed at the page (the contract's `choirAsk`); this is the page's own
+ * acknowledgement. Nothing is posted here and the words are not logged. */
+export function mailAsk(address: string, question: string): Ack {
+  return address === '' || question.trim() === '' ? { status: 'error', message: 'There is nothing to ask.' } : { status: 'asked', message: `Asked: ${question}` };
+}
+
 export async function mailMarkUnread(address: string): Promise<Ack> {
   const ok = await setRead(M.rest(address), false);
   return { status: ok ? 'ok' : 'error', message: ok ? '' : 'Could not mark it unread.' };

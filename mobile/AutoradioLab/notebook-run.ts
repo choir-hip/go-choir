@@ -9,9 +9,10 @@
 import type { Storage } from './app.contract.d.ts';
 import { accountGeneration, nativeLater } from './api.ts';
 import { picksText } from './edition-picks.ts';
+import { queued as steerQueued } from './steer.ts';
 import { loadDoc, readLearning, page, seamGet, type Get, type PageInfo } from './notebook.ts';
 
-export interface Device { state(): Promise<number>; text(text: string): Promise<void>; }
+export interface Device { state(): Promise<void>; text(text: string): Promise<void>; }
 export type Env = { get: Get; device: Device | null; deviceDeadlineMs?: number };
 export const DEVICE_DEADLINE_MS = 20000;
 /** The page waits at most this long for the native steer count (the topics write is native's and may take longer: the page is not held for it). */
@@ -22,7 +23,7 @@ export function nativeDevice(): Device | null {
   if (!raw) return null;
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   return {
-    async state() { const r = (await later({ op: 'notebookState' })) as { steerQueued?: unknown } | null; return r && typeof r.steerQueued === 'number' ? Math.max(0, Math.trunc(r.steerQueued)) : 0; },
+    async state() { await later({ op: 'notebookState' }); },
     async text(text) { await later({ op: 'notebookText', text }); },
   };
 }
@@ -43,7 +44,9 @@ const within = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
 
 async function readAll(storage: Storage | undefined, env: Env, gen: number): Promise<Read> {
   const d = env.device, ms = env.deviceDeadlineMs ?? DEVICE_DEADLINE_MS;
-  const steer = d ? await within(d.state(), Math.min(ms, STATE_WAIT_MS), 0) : 0;       // first: the topics are in the notebook before it is read (when native is quick)
+  if (d) await picksText(storage).catch(() => undefined);                     // the picks reach the native copy first (the topics write reads it)
+  if (d) await within(d.state(), Math.min(ms, STATE_WAIT_MS), undefined);   // first: the topics are in the notebook before it is read (when native is quick; the page is not held for it)
+  const steer = await steerQueued(storage);                                   // the waiting more / less taps are shared code's (steer.ts)
   const [{ load, text }, learning] = await Promise.all([loadDoc(env.get, storage), readLearning(env.get)]);
   if (d && text !== null && text !== pushed && text !== pushing && gen === accountGeneration()) {
     // The DJ's copy: handed over in the background, never waited for. `pushed` says "native has it" only after the call succeeded, so a timeout is tried again at the next read.

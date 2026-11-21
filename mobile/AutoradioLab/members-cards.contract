@@ -1,12 +1,11 @@
 // Lane members file (cards, round 3): what is left of the old pile is the launcher's search and "More of this". The pile, the
 // story stack, the card drags, the Undo pill and the swipe meanings are gone (owner ruling 19, 2026-11-11: the page stack is the
 // main view; closing a page and "more of this" are visible buttons). The Kit's other card sources stay in the module, unused.
-use launcherData, storyMore from "@choir/autoradio"
 use LauncherData, CardAck from "@choir/autoradio"
 
 members Autoradio
   state lq = ""
-  resource lnc = launcherData(q=lq) as shape LauncherData else empty()
+  resource lnc = launcherData(lq, pg.count, rpfacts.at) as shape LauncherData else empty()
   mutation cm as shape CardAck
   // The story the listener asked for more of (the button then says "Noted").
   state moreFor = ""
@@ -14,4 +13,4 @@ members Autoradio
     lq = v
   action moreOfThis(address: string)
     moreFor = address
-    send cm = storyMore(address=address, surface="page")
+    send cm = storyMore(address, "page", rpfacts.sheet, rpfacts.at)

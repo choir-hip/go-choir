@@ -103,22 +103,6 @@
    "options": {
     "tick": "number"
    }
-  },
-  {
-   "source": "learnedInfo",
-   "live": true,
-   "answers": "LearnedInfo",
-   "substitute": {
-    "default": {
-     "rows": [],
-     "count": 0,
-     "message": ""
-    }
-   }
-  },
-  {
-   "send": "learnedReset",
-   "answers": "SettingsAck"
   }
  ]
 }

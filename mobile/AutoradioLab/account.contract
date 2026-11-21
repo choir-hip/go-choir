@@ -1,8 +1,8 @@
 // The integrator's members of the root: the Choir sign-in and the player (the voice lab page, its stages, parameters, trace and
 // audio switch are gone: owner, 2026-11-19, "get rid of lab pages").
-use choirAuth, choirPlayer, choirStories from "@choir/autoradio"
+use choirAuth, choirPlayer from "@choir/autoradio"
 use choirSignIn, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirPlay, choirListen from "@choir/autoradio"
-use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
+use ChoirAuth, ChoirPlayer from "@choir/autoradio"
 use LabState from "@choir/autoradio"
 use SignOutResult from "./account-types.contract"
 use AccountView, HostPage from "./account-state-types.contract"
@@ -10,7 +10,6 @@ use AccountView, HostPage from "./account-state-types.contract"
 members Autoradio
   resource au = choirAuth() as shape ChoirAuth else empty()
   resource pl = choirPlayer() as shape ChoirPlayer else empty()
-  resource sl = choirStories() as shape StoryList else empty()
   // What the app says about the account (account-state.ts): asked again when anything that can change it happened: a sign-in or a sign-out, a page change, the app coming back to the front (the phone
   // unlocked: a key that could not be read yet is read again). An unreadable key is "locked", never "signed out".
   resource hpg = exactPage() as shape HostPage else empty()

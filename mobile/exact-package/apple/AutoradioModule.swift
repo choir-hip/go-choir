@@ -88,9 +88,9 @@ public final class AutoradioModule: ExactPackage {
     var owner: PlatformSessionOwner!
     var choir: ChoirApp!
     /// The spine's shared kit objects: every lane reads these and none replaces them.
-    var pages: OpenPages!
-    var signals: Signals!
     let pageSources = PageSources()
+    /// The last page a native module asked to open (see `requestPage`).
+    var pageRequestState: (id: Int, address: String, title: String) = (0, "", "")
     /// name -> handler. Looked up first in `later`; the integrator's switch below answers the rest.
     var handlers: [String: AutoradioHandler] = [:]
     private var dirty = Set<String>()
@@ -124,8 +124,6 @@ public final class AutoradioModule: ExactPackage {
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barFacts"], now: true) } }
         // The listener path: sign-in (Keychain), the front page, the real stages.
         let appKeys: KeyStore = KeychainKeyStore()
-        Demo.clearLeftovers(support: support)   // a phone that was in demo mode (removed 2026-11-20): once
-        Demo.clearMoreLeftovers(support: support)   // the rest of what demo left (its own marker: the first pass's is already set on some phones)
         #if targetEnvironment(simulator)
         // Real-data proof only (compiled out of device builds): a `proof-key` file in Documents becomes the stored key, then is deleted.
         if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
@@ -135,35 +133,29 @@ public final class AutoradioModule: ExactPackage {
         choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
         choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
         // The spine's objects.
-        signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
-        pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
         // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
         Task { @MainActor in
             while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
         }
         // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store); the stores below live in this target.
-        // Kit methods called: Signals.wipe(), OpenPages.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
+        // Kit methods called: OpenPageFacts.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
         let filesCache = filesCacheDisk
         // The folder the old lookup fell back to: copies no page could read. Removed once; nothing writes there now.
         try? FileManager.default.removeItem(at: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files"))
-        choir.accountWipe.register("signals") { [signals] in signals?.wipe() }
-        choir.accountWipe.register("open-pages") { [pages] in pages?.wipe() }
+        choir.accountWipe.register("open-pages") { OpenPageFacts.shared.wipe() }
         choir.accountWipe.register("app-files") {
             AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })
             AccountWipe.removeContents(of: support.appendingPathComponent("books")); AccountWipe.removeContents(of: filesCache)
             AccountWipe.removeContents(of: support.appendingPathComponent("content"))      // the pre-release content store's folder (the phone's copy is shared code's app:/data/content.db now): never read, only removed
         }
-        pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         pageSources.register(NotYetPageSource())
         // Registration: the spine, then one line per lane (each defined in that lane's own file).
         registerSpine()
         registerBar()
         registerReader()
-        registerCards()
         registerMail()
         registerSettings()
         registerOnboarding()
-        registerMark()
         registerVoice()
         registerQueue()          // lane autoradio-queue
         registerDeck()           // the deck: shared code commands it and reads its journal (Deck.swift)
@@ -225,7 +217,6 @@ public final class AutoradioModule: ExactPackage {
         switch name {
         case "choirAuth": reply(json(choir.authView()))
         case "choirPlayer": reply(json(choir.playerView()))
-        case "choirStories": reply(["rows": choir.storyRows().map { json($0) }])
         case "choirSignIn": Task { [choir] in _ = await choir?.signIn.begin() }; reply(state())
         case "choirCancelSignIn": choir.signIn.cancel(); reply(state())
         case "choirOpenApproval":

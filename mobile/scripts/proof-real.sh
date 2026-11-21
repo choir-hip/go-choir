@@ -428,6 +428,23 @@ step "type launcher-search \"zzqxjvwk\""; wait_ 4500; step tree; shot real-72-se
 step logs
 run_drive search-none light "" --touch platform
 
+# ---- 3f2c. CARDS drive (writes only on this phone and one steer tap to the computer): the story cards and the launcher are shared code (cards.ts). "More of this" on a story in front says "Noted" and the paper's
+# learned list holds the act; the launcher finds the Paper place by a typed word; Reset empties the list. Its own fresh story: no other drive's pick.
+fresh_paper pick-cards
+STORY_CARDS=$F_STORY1
+if [ -n "$STORY_CARDS" ]; then
+  step "clock data"; wait_ 4000
+  place paper 2500
+  to_top; step "tap \"$STORY_CARDS\""; wait_ 3500
+  step "tap story-more"; wait_ 1500; step tree
+  step "tap bar-mark"; wait_ 900; step "type launcher-search Paper"; view real-66-launcher-search 1200
+  step "tap \"launcher-open-paper:front\""; wait_ 600
+  place settings 900; step "tap settings-nav-learned"; view real-67-learned 1500
+  step "tap settings-learned-reset"; view real-68-learned-reset 1200
+  step logs
+  run_drive cards light "" --touch platform
+fi
+
 # ---- 3f3. BAR drive (reads only: it plays and pauses a real story): the bar's page model is shared code (bar.ts) over the native facts. On a page: the aim line names the page and the deck count; one story plays: the
 # bar says NOW PLAYING with the story's title and a progress rule; play pauses it (PAUSED, same title); play resumes it; the run sheet page (the radio) lists the entry on air.
 fresh_paper pick-bar
@@ -642,6 +659,14 @@ chk "bar: play is there" '\[bar-play\]' "$SP"
 chk "launcher: the mark opens the layer" '\[launcher-layer\]' "$SP"
 chk "launcher: the paper is in the deck" '\[launcher-open-paper:front\]' "$SP"
 chk "launcher: places" '\[place-settings\]' "$SP"
+# the cards drive: each check reads this drive's own log and fails on the screen it names
+CD="$SHOTS/drive-cards.txt"
+if [ -n "$STORY_CARDS" ]; then
+  chk "cards: More of this on the story in front says Noted (a story-more tap that recorded nothing says More of this)" 'Noted' "$CD"
+  chk "cards: the launcher finds the Paper place by a typed word (search-hit row, not the places grid)" '\[search-hit-paper:front\]' "$CD"
+  chk "cards: what the paper has learned holds the act (a story-more that wrote nothing leaves no row)" '\[settings-learned-row\]' "$CD"
+  chk "cards: Reset empties the list (the empty line appears only with no rows)" '\[settings-learned-empty\]' "$CD"
+fi
 chk "themes: a fresh install shows the default pair, light (Chrome Pastel)" 'Showing Chrome Pastel in light' "$SP"
 chk "themes: the default pair, dark (Liquid Metal)" 'Showing Liquid Metal in dark' "$SP"
 chk "themes: Newsprint light" 'Showing Newsprint in light' "$SP"

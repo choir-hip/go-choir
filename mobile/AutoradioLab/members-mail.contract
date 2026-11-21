@@ -1,13 +1,12 @@
 // Lane members file (mail): this lane's states, derives, resources, mutations and actions, as if written in the root.
 // The sources are answered by app.ts (mail.ts), with positional arguments (named ones belong to a package's sources): the shapes are in mail-types.contract.
-// Three names are still the Swift package's (mailOpenReview opens the approval page in the app's own web view, mailRead hands the text to the radio's voice, mailAsk
-// records the ask for the bar); their shape, MailAck, stays in exact-package/interface/mail.json.
+// Two names are still the Swift package's (mailOpenReview opens the approval page in the app's own web view, mailRead hands the text to the radio's voice); their shape, MailAck, stays in exact-package/interface/mail.json.
 //
 // One resource per page family, each asked for the top page's address and answering "idle" at once for any other
 // address, so only the page in front does any work: mbx (a mailbox), mmsg (a message), mcmp (a compose page: a reply,
 // a new message, or an existing draft). The compose fields are local state that takes the resource's seed (the
 // reply's recipient, subject and quoted text) the first time the person edits; after that the person's words win.
-use mailOpenReview, mailRead, mailAsk, MailAck from "@choir/autoradio"
+use mailOpenReview, mailRead, choirAsk, MailAck from "@choir/autoradio"
 use MailBoxView, MailMessageView, MailComposeView, MailSyncView from "./mail-types.contract"
 
 members Autoradio
@@ -103,7 +102,8 @@ members Autoradio
     send mun = mailMarkUnread(pg.top)
   action askMail(q: string)
     mailNoteFor = pg.top
-    send mak = mailAsk(address=pg.top, question=q)
+    send mak = mailAsk(pg.top, q)
+    send acct = choirAsk(text=q, aim=pg.top)
   // Tap a tab: synchronous. The direction is the new tab's side of the old one; the outgoing content leaves at once.
   action mailTab(name: string)
     mboxDir = (["inbox", "drafts", "sent", "quarantine"].indexOf(name) > ["inbox", "drafts", "sent", "quarantine"].indexOf(mboxName)) ? 1 : -1

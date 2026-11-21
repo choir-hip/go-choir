@@ -20,14 +20,6 @@
     "text": "string"
    },
    "answers": "MailAck"
-  },
-  {
-   "send": "mailAsk",
-   "options": {
-    "address": "string",
-    "question": "string"
-   },
-   "answers": "MailAck"
   }
  ]
 }

@@ -1,6 +1,6 @@
 // The take RECORDER's native side (the voice): the radio's gate, the microphone, the file, the recogniser, the preview. The Takes section is shared code (AutoradioLab/take-session.ts); this file hands it
 // one snapshot (source `takesRecorder`, interface/takes.json) and answers its ops (`takeOp`, public: ModelsEntry.swift calls it) and fetches another listener's take for the run sheet.
-//   ops: takeState | takeStart(min/maxSeconds, maxBytes) | takeStop | takePreview(mode) | takePublishing(on) | takeDiscard | takeDone | takeAudio | takeSteerMute (the steer queue is native)
+//   ops: takeState | takeStart(min/maxSeconds, maxBytes) | takeStop | takePreview(mode) | takePublishing(on) | takeDiscard | takeDone | takeAudio
 //        takeMirror (the Swift programme still filters takes by the listener's own ids and muted voices; shared code owns them and pushes a copy, with its account generation: a push older than one already taken was in flight when the account changed and is dropped). The pre-release build's old files are never read.
 import AVFoundation
 import Foundation
@@ -82,7 +82,6 @@ extension AutoradioModule {
     /// The shared code's calls on the recorder (take-session.ts `nativeDevice`). Each answers the snapshot, except the ones that answer their own thing.
     @MainActor public func takeOp(_ r: [String: Any]) async -> [String: Any] {
         switch r["op"] as? String ?? "" {      // the ops that need no recorder never depend on it being up
-        case "takeSteerMute": if let h = r["handle"] as? String, !h.isEmpty { SteerQueue.shared.enqueue(.mute(handle: h)); await SteerQueue.shared.flush() }; return [:]
         case "takeMirror": if TakeMirror.accept((r["gen"] as? NSNumber)?.intValue ?? 0) { TakeOwn.shared.replace(ids: r["ids"] as? [String] ?? [], handle: r["handle"] as? String ?? ""); TakeMutes.shared.replace(r["muted"] as? [String] ?? []) }; return [:]
         default: break
         }

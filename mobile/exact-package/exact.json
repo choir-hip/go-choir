@@ -38,16 +38,6 @@
       "heard": "string",
       "message": "string"
     },
-    "StoryRow": {
-      "title": "string",
-      "dek": "string",
-      "route": "string",
-      "section": "string",
-      "current": "bool"
-    },
-    "StoryList": {
-      "rows": "StoryRow[]"
-    },
     "RadioItem": {
       "i": "number",
       "text": "string",
@@ -599,6 +589,11 @@
     "SignalList": {
       "rows": "SignalRow[]"
     },
+    "PageRequest": {
+      "id": "number",
+      "address": "string",
+      "title": "string"
+    },
     "TakesRecorder": {
       "phase": "string",
       "elapsed": "number",
@@ -696,16 +691,6 @@
           "talking": false,
           "heard": "",
           "message": ""
-        }
-      }
-    },
-    {
-      "source": "choirStories",
-      "live": true,
-      "answers": "StoryList",
-      "substitute": {
-        "default": {
-          "rows": []
         }
       }
     },
@@ -862,33 +847,6 @@
       "answers": "RadioInfo"
     },
     {
-      "source": "launcherData",
-      "live": true,
-      "answers": "LauncherData",
-      "options": {
-        "q": "string"
-      },
-      "substitute": {
-        "default": {
-          "query": "",
-          "hasQuery": false,
-          "places": [],
-          "recent": [],
-          "hits": [],
-          "stories": 0,
-          "searchNote": ""
-        }
-      }
-    },
-    {
-      "send": "storyMore",
-      "options": {
-        "address": "string",
-        "surface": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
       "source": "deckState",
       "live": true,
       "answers": "DeckState",
@@ -992,14 +950,6 @@
       "options": {
         "address": "string",
         "text": "string"
-      },
-      "answers": "MailAck"
-    },
-    {
-      "send": "mailAsk",
-      "options": {
-        "address": "string",
-        "question": "string"
       },
       "answers": "MailAck"
     },
@@ -1223,36 +1173,6 @@
       }
     },
     {
-      "source": "learnedInfo",
-      "live": true,
-      "answers": "LearnedInfo",
-      "substitute": {
-        "default": {
-          "rows": [],
-          "count": 0,
-          "message": ""
-        }
-      }
-    },
-    {
-      "send": "learnedReset",
-      "answers": "SettingsAck"
-    },
-    {
-      "source": "openPages",
-      "live": true,
-      "answers": "PageList",
-      "substitute": {
-        "default": {
-          "rows": [],
-          "top": "",
-          "topKind": "",
-          "topTitle": "",
-          "count": 0
-        }
-      }
-    },
-    {
       "source": "pageModel",
       "live": true,
       "answers": "PageModel",
@@ -1271,56 +1191,16 @@
       }
     },
     {
-      "source": "signalList",
+      "source": "pageRequest",
       "live": true,
-      "answers": "SignalList",
+      "answers": "PageRequest",
       "substitute": {
         "default": {
-          "rows": []
+          "id": 0,
+          "address": "",
+          "title": ""
         }
       }
-    },
-    {
-      "send": "pageOpen",
-      "options": {
-        "address": "string",
-        "title": "string"
-      },
-      "answers": "PageList"
-    },
-    {
-      "send": "pageClose",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PageList"
-    },
-    {
-      "send": "pageFocus",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PageList"
-    },
-    {
-      "send": "pagePin",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PageList"
-    },
-    {
-      "send": "pageReopen",
-      "answers": "PageList"
-    },
-    {
-      "send": "signalRecord",
-      "options": {
-        "kind": "string",
-        "subject": "string",
-        "detail": "string"
-      },
-      "answers": "PageList"
     },
     {
       "source": "takesRecorder",

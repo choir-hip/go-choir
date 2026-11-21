@@ -21,7 +21,7 @@ extension AutoradioModule {
                 guard e.state == .onAir || e.state == .ahead else { return nil }
                 return ["id": e.id, "title": e.title, "text": e.text ?? "", "state": e.state == .onAir ? "on_air" : "ahead", "ref": e.source?.ref ?? ""]
             }
-            let pages = (self.pages?.list() ?? []).map { ["address": $0.address, "title": $0.title, "kind": $0.kind] }
+            let pages = OpenPageFacts.shared.list().map { ["address": $0.address, "title": $0.title, "kind": $0.kind] }
             let topics = EditionPicksMirror.shared.topics      // the picks are shared code's (edition-picks.ts); this is its pushed copy (EditionSetup.swift)
             let text = address.isEmpty ? "" : await self.runtime.pageTextProvider?(address) ?? ""
             let o: [String: Any] = ["runSheet": entries, "pages": pages, "topics": topics, "pageText": String(text.prefix(20_000))]
