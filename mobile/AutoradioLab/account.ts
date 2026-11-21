@@ -30,7 +30,7 @@ import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
 import { wipePages, PAGES_FILE } from './pages.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { type World, rmTree, nextGeneration, closeWorld, drainClosed, bindStorage, currentWorld, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
+import { type World, confirmed, rmTree, nextGeneration, closeWorld, drainClosed, bindStorage, currentWorld, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
 import { originalsLeft } from './mail-store.ts';
 import { wipeTextureThemes, TEXTURE_DIR } from './themes.ts';
 
@@ -195,7 +195,7 @@ async function adoptBody(storage: Storage | undefined): Promise<State> {
   if (stateOf(f) === 'adopt' && storage && f.key.state === 'present') {
     // The record write is on the storage of the current world and under a deadline: a hung write leaves the state ADOPT (refusing); a late landing is waited for by the next boundary move (drain).
     const wrote = await withDeadline<boolean>(bindStorage(storage, currentWorld()).fs.atomicWriteFile(STAMP_FILE, new TextEncoder().encode(f.key.digest)).then(() => true, () => false) as Promise<boolean>, false, timing.recordMs);
-    if (wrote) { adoptedDigest = f.key.digest; closeWorld(); } else console.log('account: could not record the account');      // the new account's world begins here (its requests are signed with this key only)
+    if (wrote) { adoptedDigest = f.key.digest; closeWorld(); currentWorld().digest = f.key.digest; } else console.log('account: could not record the account');      // the new account's world begins here (its requests are signed with this key only)
   }
   return stateOf(await readFacts(storage));
 }
@@ -251,12 +251,16 @@ export type Peek = { state: State; epoch: string; failed: string[]; key: KeyFact
 /** The card's question: the same facts, never waiting on a wipe. CLEARING starts a wipe if none runs; ADOPT retries its one write and answers with the result. The epoch moves when a
  * wipe completes or the boundary closes, so a page that refused is asked again (the contracts' acctTick). */
 export async function peek(storage: Storage | undefined, store: Store | undefined): Promise<Peek> {
+  const w0 = currentWorld();
   const f = await readFacts(storage);
   let state = stateOf(f);
   // The card never waits on a running job (a hung sign-out or Clear would leave the banner blank): while one runs, ADOPT is reported as the wipe it is part of; with none, the one write is awaited.
   if (state === 'adopt') state = active > 0 ? 'clearing' : ((await job(() => adoptBody(storage), { skipIfMoved: true })) ?? 'adopt');
   if (state === 'clearing') startClear(storage, store);
-  return { state, epoch: `${state}|${wipes}|${accountGeneration()}`, failed: lastFailed, key: f.key };
+  // The card CONFIRMS the world as a gate does (the same facts say OPEN or EMPTY, and the boundary has not moved while they were read): what belongs to an account is shown only through a confirmed world,
+  // and the epoch carries that, so the theme sources, which are exempt and take no gate, are asked again when it happens.
+  if ((state === 'open' || state === 'empty') && currentWorld() === w0 && !w0.closed) { w0.digest ??= f.key.state === 'present' ? f.key.digest : ''; w0.owed = false; }
+  return { state, epoch: `${state}|${wipes}|${accountGeneration()}|${confirmed(currentWorld()) ? 'c' : 'u'}`, failed: lastFailed, key: f.key };
 }
 
 // ---- sign-out

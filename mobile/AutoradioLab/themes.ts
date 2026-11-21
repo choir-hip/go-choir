@@ -22,7 +22,7 @@
 //  F10 A chosen theme that has only one scheme meets a mode control that asks for the other: the control shows the one scheme and refuses the other; the "default" id clears the choice.
 //  F11 The lens is a style (A native glass, B no material with a wash, C ultra-thin) and a wash of the page colour: a theme without a "lens" key shows the native glass; an unknown style or a wash outside 0...1 is refused.
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, HTTPError, SignedOutError, nativeLater, currentWorld, unbound, scoped, bindStorage, rmTree, type Reply, type World } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, nativeLater, currentWorld, unbound, scoped, bindStorage, rmTree, confirmed, type DevicePaths, type Reply, type World } from './api.ts';
 import { WORDS } from './words.ts';
 import { BUNDLED } from './themes-bundled.ts';
 
@@ -514,6 +514,9 @@ export const CHOICE_FILE = 'app:/data/theme-choice.json';
 export const THEMES_DIR = 'app:/data/themes';
 /** Themes installed from a Texture document: account data, their own folder, on the wipe list. */
 export const TEXTURE_DIR = 'app:/data/theme-textures';
+/** THE DEVICE PATHS: what the exempt theme sources may reach (api.ts `deviceStorage`, handed to them by app.ts): the choice file and the person's own themes folder. The Texture folder is an ACCOUNT path: reachable only through a
+ * world the boundary has confirmed. Nothing else on the phone is reachable from a theme source. */
+export const DEVICE_PATHS: DevicePaths = { files: [CHOICE_FILE], dirs: [THEMES_DIR], accountDirs: [TEXTURE_DIR] };
 const enc = (o: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(o));
 const fileName = (id: string): string => `texture-${id}.json`;
 
@@ -629,7 +632,7 @@ export function themeStore(bound: Storage | undefined): Promise<ThemeStore> {
 const TX = scoped(() => ({ loading: null as Promise<Map<string, string>> | null, status: '' }));      // `status` is the line "Added <theme> from the Texture": it names an account's document, so it is the world's
 async function textureEntries(storage: Storage | undefined): Promise<Map<string, string>> {
   const w = currentWorld();
-  if (w.owed || !storage) return new Map();
+  if (!confirmed(w) || !storage) return new Map();         // a Texture theme belongs to an account: read only through a world the boundary has confirmed (a gate or the card read the facts for it). A cold launch with a changed key is not confirmed.
   const st = TX();
   if (!st.loading) {
     const bound = bindStorage(unbound(storage), w);
@@ -706,7 +709,7 @@ export async function themeRemove(id: string, storage: Storage | undefined): Pro
   const w = currentWorld();
   const dev = await themeStore(storage);
   const tx = await textureEntries(storage);
-  if (w.closed || w.owed || currentWorld() !== w) return { ok: true, message: '' };      // the boundary moved while this waited: a Remove of the old account's does nothing, device theme or Texture theme
+  if (!confirmed(w) || currentWorld() !== w) return { ok: true, message: '' };      // the boundary moved while this waited: a Remove of the old account's does nothing, device theme or Texture theme
   if (tx.has(fileName(id))) {
     try { await bindStorage(unbound(storage) as Storage, w).fs.rm(`${TEXTURE_DIR}/${fileName(id)}`); } catch { /* not there */ }
     tx.delete(fileName(id));

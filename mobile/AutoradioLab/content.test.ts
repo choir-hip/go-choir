@@ -13,6 +13,8 @@
 //  C14 two runs at once are one run.  C15 a failing list is "error", never a throw; nothing is changed when signed out.
 //  C16 the real routes' shapes: a mail row, a mail body, a document's Markdown through its revision, a story's text.
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { dig } from './account-phone.ts';
+import { currentWorld as theWorld } from './api.ts';
 import { Database } from 'bun:sqlite';
 import {
   ContentStore, syncAll, noFetchers, newItem, bytesOf, STANDARD_BUDGET, toDoc, storyText, textureSource, liveFetchers, fileVersion,
@@ -177,7 +179,7 @@ describe('C16 the real routes\' shapes', () => {
   let calls: string[];
   beforeEach(() => {
     calls = [];
-    resetSession(); bindNative(signedIn as never);
+    resetSession(); bindNative(signedIn as never); theWorld().digest = dig('test-key-0001-not-real');
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const u = new URL(String(input)); calls.push(u.pathname + u.search);
       const j = (b: unknown): Response => new Response(JSON.stringify(b), { status: 200, headers: { date: new Date(NOW).toUTCString() } });

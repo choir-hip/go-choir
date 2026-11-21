@@ -412,7 +412,7 @@ describe('E2: survivors, a stuck Clear, and the card never waiting', () => {
     W.signOut = 'ok'; W.release?.(); await out;
   });
   test('a sign-out clears the refused-key note (sign out, sign in with the same key: no "no longer accepted")', async () => {
-    boot('A', 'A');
+    boot('A', 'A'); await probe();                                                                    // the gate confirms the world
     globalThis.fetch = (async (u: string) => (String(u).endsWith('/api/compute/status') ? new Response(JSON.stringify({ computers: [{ computer_id: 'c', current: true }] }), { status: 200 }) : new Response('{}', { status: 401 }))) as never;
     await authedJSON('/api/x').catch(() => undefined);
     expect(api.rejectedDigest()).toBe(dig(KEY_A));
@@ -536,7 +536,7 @@ describe('W: the wipes', () => {
   test('S19b a Texture theme loaded in memory is not listed to the next account after a Clear, and a surviving texture file keeps the phone in CLEARING', async () => {
     const T = await import('./themes.ts'); const ember = JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme);
     boot('A', 'absent', { ...SEED_FILES, 'app:/data/theme-textures/texture-ember.json': ember });
-    T.resetThemes();
+    T.resetThemes(); api.currentWorld().digest = dig(KEY_A); api.currentWorld().owed = false;                // a world the boundary has confirmed (stamped by hand: the phone is CLEARING here)
     expect(JSON.stringify(await T.themeListShared('light', false, m.storage))).toContain('ember');
     m.faults.rmSilently.add('app:/data/theme-textures/texture-ember.json'); m.faults.rmSilently.add('app:/data/theme-textures');
     await probe(); await idle(); expect(await stateNow()).toBe('clearing');
@@ -553,7 +553,7 @@ describe('W: the wipes', () => {
 
 describe('S9 sign out A, sign in B', () => {
   test('B sees nothing of A: files, a live content store, a live vector store, the remembered computer; a reply in flight is dropped', async () => {
-    boot('A', 'A');
+    boot('A', 'A'); await probe();
     const seen: string[] = [];
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
     globalThis.fetch = (async (u: string, init: RequestInit) => {
@@ -572,7 +572,7 @@ describe('S9 sign out A, sign in B', () => {
     const r = await signOut();
     expect(r.done).toBe(true); expect([...m.files.keys()]).toEqual([]); expect(content.generation).toBeGreaterThan(gen0);
     release(); expect(await Promise.race([late, wait(60).then(() => 'never')])).toBe('never');      // the late reply of A never reaches a caller (the chain stays pending: api.ts, the world)
-    W.key = 'present'; W.value = KEY_B;
+    W.key = 'present'; W.value = KEY_B; await probe();
     await authedJSON('/api/two');
     expect(seen[0]).not.toBe(seen[seen.length - 1]);
     const p = await probe(); expect(p.threw).toBeNull(); expect(p.leaked).toBe(false);

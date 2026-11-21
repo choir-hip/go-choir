@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import * as T from './themes.ts';
 import { BUNDLED } from './themes-bundled.ts';
-import { resetSeam, bindNative, HTTPError, SignedOutError, type Reply } from './api.ts';
+import { resetSeam, bindNative, currentWorld, HTTPError, SignedOutError, type Reply } from './api.ts';
 import { WORDS } from './words.ts';
 import demoJSON from './fixtures/texture/theme-ember.json';
 
@@ -43,7 +43,7 @@ function memFs(failWrites = false) {
 const demo = (): Record<string, unknown> => JSON.parse(JSON.stringify(demoJSON));
 const reply = (body: unknown): Reply => ({ body, serverTime: 0, raw: '' });
 const kept = (m: ReturnType<typeof memFs>) => JSON.parse(m.text(T.CHOICE_FILE) ?? 'null');
-beforeEach(() => { resetSeam(); T.resetThemes(); });
+beforeEach(() => { resetSeam(); currentWorld().digest = ''; T.resetThemes(); });      // a world the boundary has confirmed (a Texture theme is shown only through one); the gate and the card stamp it from the facts
 const store = (bundled?: Record<string, unknown>) => new T.ThemeStore(bundled);
 const tview = (bundled?: Record<string, unknown>) => new T.ThemeStore(bundled).withTextures([]);      // the copy a page is shown: the only store that may hold a Texture theme
 

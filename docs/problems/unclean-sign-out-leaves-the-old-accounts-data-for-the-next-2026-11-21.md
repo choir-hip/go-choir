@@ -153,3 +153,28 @@ a leftover mail original is counted as "mail copies", never named. Remaining, st
 account change the theme sources can still answer with the previous account's colours before the new answer (the contract
 re-asks them with `acctTick`); a download that lands after the Clear stays under the old account's digest folder until the
 next Clear removes the whole cache.
+
+Round six (seat 1 on fad376d02, sent back). Fixed in this commit: (1) an exempt source is handed a DEVICE storage handle
+(`deviceStorage` in `api.ts`, paths in `themes.ts` `DEVICE_PATHS`): only the choice file and the person's themes folder, any
+other path or function throws, the Texture folder only through a world the boundary has confirmed
+(`confirmed(w)`: digest set, not owed, not closed); the card (`peek`) confirms a world as the gate does, and the epoch
+carries it so the theme sources are asked again. Cold launch with a changed key: nothing of A's Texture themes is listed,
+choosable or removable (test C16.cold-launch). (3) An unstamped world refuses a signed request (after the key read, so
+the reason stays `locked` or `none` when that is true); an Adopt stamps its world itself. (5) `closeWorld` resets the
+computer-id lookup. (6) `lastTarget` in `mail-sanitize.ts` is deleted (the target is returned). (7) The M3 scanner is a
+small lexer (`module-scan.ts`): Exact's TypeScript is the native 7.x, which gives a bun test no parser. Every top-level
+binding is provably immutable, an unchanged literal table (checked in every importing file), or listed with its reason.
+Limits of the scanner: it does not follow an alias (`const m = TABLE; m.set()`), sees only a module's top level, and
+trusts its mask of regular expressions by the previous token.
+Found, not fixed (moot if the Clear is removed): a Clear that keeps failing restarts itself without bound. Each attempt
+moves the generation and the epoch; every gated page re-asks when the epoch moves; a refused gated page calls `enter`,
+which starts a Clear when none runs (`account.ts` `enter`, `startClear`); only the card's re-read is capped. Not
+reproduced by a test. Also not fixed: a choice write on the device store (`saving`) or a first load (`loading`) that began
+before a Clear is not drained by it, so a Texture choice with A's id can land after `wipeTextureThemes` rewrote the
+choice file.
+Residuals, stated: a late download can leave A's bytes under `app:/cache/files/<digestA>/` until the next Clear (B never
+reads that path); an Adopt is refused after a hung host write until the app restarts (the card says so); a chain resumed
+from a non-I/O await after the close still starts its I/O in the new world.
+Native wipe and the run sheet: covered. `AccountWipe.swift:83` registers `run-sheet` and `RunSheetStore.wipe()`
+(`RunSheetStore.swift:323-328`) cancels the retry, empties the sheet and pending ops, drops the poster and removes the file.
+The shared `runsheet-store.ts` keeps no file under `app:/` and its state is scoped to the world.

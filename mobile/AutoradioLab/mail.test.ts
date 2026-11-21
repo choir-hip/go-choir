@@ -17,6 +17,8 @@ process.env.TZ = 'UTC';   // dates are the listener's wall clock; the tests fix 
 //  W1  the old copy: leftover `app:/cache/mail-*.html` are removed at first use; `wipeMail` removes every file and the key; the old Swift store is deleted by ContentStore.swift (its own test).
 //  L1  logs carry counts and ids only (14).   A1  the grants match the paths the modules use.
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { dig } from './account-phone.ts';
+import { currentWorld as theWorld } from './api.ts';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import * as M from './mail-model.ts';
 import { sanitized, clean, decodeAttr } from './mail-sanitize.ts';
@@ -105,7 +107,7 @@ const env = (): C.Env => ({ storage });
 let logs: string[] = [];
 const realLog = console.log;
 beforeEach(() => {
-  resetSeam(); bindNative(reader as never); stubFetch();
+  resetSeam(); theWorld().digest = dig('test-key-0001-not-real'); bindNative(reader as never); stubFetch();
   mail.forget(); calls = []; files.clear(); mtimes.clear(); nativeKey = null; refuses = false; forgets = 0; sealCalls = 0; locked = false; noPair = false; signedOutNative = false; sealGate = null; sealStarted = null; writeGate = null; readdirGate = null; logs = []; forgetProbe();
   route = () => ({ status: 404, body: { error: 'not found' } });
   console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };

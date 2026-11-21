@@ -7,7 +7,7 @@ import { adoptNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
 import { aboutBuild } from './about.ts';
 import { accountSignOut, enter, AccountClosedError } from './account.ts';
-import { currentWorld, bindStorage, scoped, type World } from './api.ts';
+import { currentWorld, bindStorage, deviceStorage, scoped, type World } from './api.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
@@ -161,7 +161,9 @@ const guarded = <T,>(w: World, p: Promise<T> | T): Promise<T> => new Promise<T>(
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
   if (source === 'accountState' || source === 'accountSignOut') return sources[source](args, store, storage, native);
-  if (Object.hasOwn(EXEMPT, source)) return guarded(currentWorld(), sources[source](args, store, storage, native));      // the phone's own facts, on the raw storage; a public fetch of a closed world never arrives, so the answer ends refused and the resource is asked again (acctTick)
+  // An exempt source is handed the DEVICE handle (api.ts `deviceStorage`), never the host's storage: it reaches only the device paths (themes.ts DEVICE_PATHS), and an account's path only through a confirmed world.
+  // The one place an exempt source gets a storage; the card and the sign-out above are the boundary's own machinery and take the raw one.
+  if (Object.hasOwn(EXEMPT, source)) { const w = currentWorld(); return guarded(w, sources[source](args, store, deviceStorage(storage, w, themes.DEVICE_PATHS), native)); }      // a public fetch of a closed world never arrives, so the answer ends refused and the resource is asked again (acctTick)
   const b = await enter(storage, store);
   if (!b.readable) throw new AccountClosedError(b.state);
   const w = b.world; w.digest ??= b.digest; w.owed = false;                                               // requests of this world are signed with this key only

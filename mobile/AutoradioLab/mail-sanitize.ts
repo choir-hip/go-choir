@@ -195,18 +195,17 @@ function escapeAttr(s: string): string {
   return out;
 }
 
-/** A link's target, as the sender wrote it and the checker allowed it ('' when it allowed none). Set by `open`. */
-let lastTarget = '';
 const SHOWN_TARGET = 90;
 
-function open(tag: Tag): string {
-  lastTarget = '';
+/** The opening tag as cleaned, and a link's target as the sender wrote it and the checker allowed it ('' when it allowed none): returned, not kept in a variable (the target is the sender's text, an account's). */
+function open(tag: Tag): { html: string; target: string } {
+  let target = '';
   const parts = ['<' + tag.name];
   const seen = new Set<string>();
   for (const [name, rawValue] of tag.attrs) {
     if (seen.has(name)) continue;
     let value: string | null;
-    if (name === 'href' && tag.name === 'a') { const t = safeLink(rawValue); if (t !== null && lastTarget === '') lastTarget = t; value = null; }   // inert: a tap goes nowhere, the target is written after the link
+    if (name === 'href' && tag.name === 'a') { const t = safeLink(rawValue); if (t !== null && target === '') target = t; value = null; }   // inert: a tap goes nowhere, the target is written after the link
     else if (name === 'src' && tag.name === 'img') value = safeImage(rawValue);
     else if (name === 'style') value = safeStyle(rawValue);
     else if (GLOBAL_ATTRS.has(name)) value = stripControls(decodeAttr(rawValue));
@@ -216,7 +215,7 @@ function open(tag: Tag): string {
     parts.push(`${name}="${escapeAttr(value)}"`);
   }
   if (tag.name === 'a') parts.push('rel="noopener noreferrer nofollow"');
-  return parts.join(' ') + '>';
+  return { html: parts.join(' ') + '>', target };
 }
 
 /** The cleaned fragment: only allowlisted markup, no script, no remote load. */
@@ -274,7 +273,7 @@ export function clean(input: string): string {
       continue;
     }
     if (DROP_WITH_CONTENT.has(tag.name)) { skipName = tag.name; skipDepth = 1; continue; }
-    if (ALLOWED_TAGS.has(tag.name)) { out += open(tag); if (tag.name === 'a') links.push(lastTarget); }
+    if (ALLOWED_TAGS.has(tag.name)) { const o = open(tag); out += o.html; if (tag.name === 'a') links.push(o.target); }
     // any other tag (html, body, form, input, base, meta, link, unknowns): the tag goes, its text stays
   }
   return out;

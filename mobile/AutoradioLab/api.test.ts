@@ -16,6 +16,8 @@
 //  A13 authedToFile: the body goes to the named app file by the host (`exactBodyTo`), the reply is never read, a path outside app:/cache is refused before the key is read,
 //      a refusal is an error with no file, a sign-out in flight removes the file and drops the reply, a host that wrote nothing is an error.
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { dig } from './account-phone.ts';
+import { currentWorld as theWorld } from './api.ts';
 import { SignedOutError, HTTPError, bindNative, resetSession, resetSeam, nextGeneration, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
 // A signed-in request states its world (api.ts: a missing one throws): the tests state the one current when they ask.
 import * as apiReal from './api.ts';
@@ -38,7 +40,7 @@ const header = (c: Call, n: string) => (c.init.headers as Record<string, string>
 beforeEach(() => {
   kept = { 'api-key': KEY, 'computer-id': 'comp-1' };
   reads = []; calls = []; resetSeam();
-  bindNative(native as never);
+  bindNative(native as never); theWorld().digest = dig(KEY);      // the boundary stamps a world with the key it read; a test does it by hand
   handler = () => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } });
   globalThis.fetch = (async (u: string, init: RequestInit) => { const c = { url: String(u), init }; calls.push(c); return handler(c); }) as never;
 });
@@ -146,7 +148,7 @@ describe('signed-in seam', () => {
     handler = (c) => c.url.endsWith('/api/compute/status') ? new Response(JSON.stringify({ computers: [{ computer_id: header(c, 'Authorization').includes(KEY2) ? 'c-two' : 'c-one' }] }), { status: 200 }) : new Response('{}', { status: 200 });
     await authedJSON('/api/x');
     expect(header(calls[1], 'X-Choir-Computer')).toBe('c-one');
-    kept = { 'api-key': KEY2 };
+    kept = { 'api-key': KEY2 }; apiReal.closeWorld(); theWorld().digest = dig(KEY2);      // another account is another world, stamped with its own key
     await authedJSON('/api/x');
     expect(header(calls[calls.length - 1], 'X-Choir-Computer')).toBe('c-two');
   });
@@ -164,7 +166,7 @@ describe('signed-in seam', () => {
 describe('review 2026-11-19: generation, redirect, one read', () => {
   test('N1 a source answered WITHOUT a usable native handle does not unbind the one that works (the signed-out screens of the first real run)', async () => {
     const { adoptNative } = await import('./api.ts');
-    resetSeam(); adoptNative(native as never, 'paperFront');
+    resetSeam(); theWorld().digest = dig(KEY); adoptNative(native as never, 'paperFront');
     adoptNative(undefined, 'mailBox'); adoptNative({ available: false, later: native.later } as never, 'filesList');
     const r = await authedJSON('/api/x');
     expect(r.body).toEqual({ ok: true }); expect(header(calls[0], 'Authorization')).toBe(`Bearer ${KEY}`);

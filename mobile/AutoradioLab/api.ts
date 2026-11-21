@@ -150,7 +150,7 @@ const closedWorlds: World[] = [];
 export const currentWorld = (): World => world;
 export const accountGeneration = (): number => world.id;
 /** The boundary moved: the world ends, the next begins. Returns the one that ended. */
-export function closeWorld(owed = false): World { const old = world; old.close(); world = new World(old.id + 1); world.owed = owed; closedWorlds.push(old); return old; }
+export function closeWorld(owed = false): World { const old = world; old.close(); world = new World(old.id + 1); world.owed = owed; closedWorlds.push(old); resetSession(); return old; }      // resetSession at EVERY move: a computer-id lookup the closed world began is never joined by the next
 /** A sign-out or a Clear begins: the world ends and the next is OWED until a gate confirms the boundary open. */
 export function nextGeneration(): number { closeWorld(true); return world.id; }
 /** MODULE STATE BELONGS TO THE WORLD. A module that keeps anything account-scoped (a cache, a loaded flag, a single-flight promise, a mutex chain) declares it once as
@@ -169,7 +169,39 @@ export function inert<T>(w: World, p: Promise<T>): Promise<T> {
 }
 /** A chain's own timer: it fires for an open world only. */
 export function inertTimeout(ms: number, w: World = world): Promise<void> { return inert(w, new Promise<void>((r) => { setTimeout(r, ms); })); }
+/** A world the boundary has CONFIRMED open: a gate (or the card) read the facts for it and they said OPEN or EMPTY (`digest` is set), and nothing has moved since. What belongs to an account (a Texture theme) is read only through such a world. */
+export const confirmed = (w: World): boolean => w.digest !== undefined && !w.owed && !w.closed;
 const RAW = Symbol('raw-storage');
+const DEVICE = Symbol('device-storage');
+/** Which paths a device-level source may reach: `files` and `dirs` always (the phone's own settings); `accountDirs` only through a world the boundary has confirmed (and bound to it). */
+export type DevicePaths = { files: string[]; dirs: string[]; accountDirs: string[] };
+const DEVICE_FNS = new Set(['readFile', 'readdir', 'stat', 'exists', 'readText', 'atomicWriteFile', 'writeFile', 'rm', 'mkdir']);
+const denied = (what: string): Promise<never> => Promise.reject(Object.assign(new Error(`refused: ${what} is not a device path`), { code: 'denied' }));
+/** THE STORAGE OF AN EXEMPT SOURCE (a source that answers while the boundary is closed). It is a handle, not the host's storage: only the listed device paths pass; every other path, and every function that
+ * is not a plain single-path one (rename, copy, anything unknown), is refused; a path of an account (`accountDirs`) is reachable only through a world the boundary has confirmed, and then through the storage of
+ * that world (inert once it closes). So an exempt source cannot reach an account's store whatever it asks. Built here, beside `bindStorage`; app.ts hands it to every exempt source and to nothing else. */
+export function deviceStorage<S extends { fs: object }>(raw: S, w: World, spec: DevicePaths): S {
+  if (!raw || !raw.fs) return raw;
+  const src = raw.fs as Record<string, unknown>; const fs: Record<string, unknown> = {};
+  const names = new Set<string>(); for (let o: object | null = src; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) for (const k of Object.getOwnPropertyNames(o)) if (k !== 'constructor') names.add(k);
+  const inside = (p: string, f: string[], d: string[]): boolean => f.includes(p) || d.some((x) => p === x || p.startsWith(x + '/'));
+  const plain = (p: unknown): p is string => typeof p === 'string' && p.startsWith('app:/') && !p.split('/').some((s) => s === '.' || s === '..' || /^%2e/i.test(s)) && !/[\\\s]/.test(p);
+  const bound = bindStorage(raw, w);
+  for (const k of names) {
+    const v = src[k];
+    if (typeof v !== 'function') { fs[k] = v; continue; }
+    fs[k] = (...a: unknown[]) => {
+      if (!DEVICE_FNS.has(k)) return denied(`${k}()`);
+      const p = a[0];
+      if (!plain(p)) return denied(String(p).slice(0, 60));
+      if (inside(p, spec.files, spec.dirs)) return Promise.resolve((v as (...x: unknown[]) => unknown).apply(src, a));
+      if (inside(p, [], spec.accountDirs)) return confirmed(w) ? (bound.fs as unknown as Record<string, (...x: unknown[]) => Promise<unknown>>)[k](...a) : denied(p);
+      return denied(p);
+    };
+  }
+  return Object.create(raw, { fs: { value: fs, enumerable: true }, [DEVICE]: { value: true } }) as S;
+}
+export const isDeviceStorage = (s: unknown): boolean => !!s && (s as Record<symbol, unknown>)[DEVICE] === true;
 /** The storage a bound one was made from (a cleanup that must run whether or not the world is still open: a download the host wrote after the boundary moved). */
 export const unbound = <S,>(s: S): S => ((s as unknown as Record<symbol, S> | undefined)?.[RAW] ?? s);
 const READS = new Set(['readFile', 'stat', 'readdir', 'exists', 'readText', 'open']);
@@ -290,7 +322,8 @@ async function send(w: World, path: string, opts: Authed, accept: string, extra:
   if (w.closed) throw new SignedOutError('the account this request belongs to has ended');      // the boundary moved while the key was read: nothing is signed (the chain above is inert)
   if (!sess) throw new SignedOutError('not signed in', await noSessionReason());
   const key = sess.key;
-  if (w.digest !== undefined && (await digestOf(key)) !== w.digest) throw new SignedOutError('the stored key is not the key of the account this request belongs to');       // a request is signed only with the key of its world
+  if (w.digest === undefined) throw new SignedOutError('the boundary has not confirmed the account of this request yet', 'unknown');      // an unconfirmed world signs nothing (the gate, the card and the Adopt stamp the world with the key they read); this fails closed where it used to skip the check
+  if ((await digestOf(key)) !== w.digest) throw new SignedOutError('the stored key is not the key of the account this request belongs to');       // a request is signed only with the key of its world
   if (blockedDigest !== null && (await digestOf(key)) !== blockedDigest) blockedDigest = null;      // another account signed in: a new session
   const headers: Record<string, string> = { ...(opts.headers ?? {}), Accept: accept, Authorization: `Bearer ${key}` };
   const method = opts.method ?? 'GET';

@@ -446,6 +446,7 @@ unset NOKEY
 D4="$SHOTS/drive-refused.txt"
 tseg "$D4" real-d4-refused > "$SHOTS/seg-d4-refused.txt"; tseg "$D4" real-d4-cleared > "$SHOTS/seg-d4-cleared.txt"
 D4_STAMP=$(record_now)
+D4_DATA=$(data_dir)                                     # empty when the app's folder cannot be found: then ABSENT below would pass for nothing
 
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
@@ -602,8 +603,8 @@ chk "drill: the account page says signed out after" '\[settings-account-signed\]
 bad "drill: no failure note on the account page" '\[settings-signout-message\]' "$AFTER"
 bad "drill: Files shows no rows after sign-out" '\[files-row-/' "$AFTER"
 bad "drill: Mail shows no rows after sign-out" '\[mail-row-' "$AFTER"
-[ "$LEFT" = 0 ] && echo "ok: D1: the record is gone from the app's files after the sign-out" || { echo "MISSING: D1: the record is left ($LEFT)"; FAILS="$FAILS [drill files]"; }
-[ "$MARKER" = 0 ] && echo "ok: D1: no signout-pending marker is written" || { echo "MISSING: D1: a signout-pending marker exists ($MARKER)"; FAILS="$FAILS [drill marker]"; }
+[ -n "$CONT" ] && [ "$LEFT" = 0 ] && echo "ok: D1: the record is gone from the app's files after the sign-out" || { echo "MISSING: D1: the record is left ($LEFT)"; FAILS="$FAILS [drill files]"; }
+[ -n "$CONT" ] && [ "$MARKER" = 0 ] && echo "ok: D1: no signout-pending marker is written" || { echo "MISSING: D1: a signout-pending marker exists ($MARKER)"; FAILS="$FAILS [drill marker]"; }
 # D2: the relaunch after the kill. Signed in (the key survived the crash): the record must be the key's digest. Signed out (the key went): no old data on screen or in the files, and no record.
 if grep -qE '\[settings-account-signed\][^"]*"Yes"' "$D2"; then
   stamp_eq "D2 (proves only that a kill is survived, not the crash window): the kill came before the key delete: still signed in, the record is the key's digest" "$KEYDIG" "$D2_STAMP"
@@ -615,7 +616,7 @@ else
 fi
 # D3: the marked old file is gone, the record is the new digest, the banner offers Clear this phone and not Sign in
 [ "$D3_PLANTED" = yes ] && echo "ok: D3: the old account's marker was planted before the key change" || { echo "MISSING: D3: the marker could not be planted (the check below would pass for nothing)"; FAILS="$FAILS [D3 plant]"; }
-[ "$D3_LEFT" = 0 ] && echo "ok: D3: the old account's marked file is gone after the key changed" || { echo "MISSING: D3: the old account's data survived the key change ($D3_LEFT)"; FAILS="$FAILS [D3 data]"; }
+[ -n "$CONT" ] && [ "$D3_LEFT" = 0 ] && echo "ok: D3: the old account's marked file is gone after the key changed" || { echo "MISSING: D3: the old account's data survived the key change ($D3_LEFT)"; FAILS="$FAILS [D3 data]"; }
 stamp_eq "D3: the record is the new key's digest" "$FAKEDIG" "$D3_STAMP"
 chk "D3: the card offers Clear this phone for the refused key" '\[signedout-clear\]' "$D3"
 bad "D3: the card does not offer Sign in over the refused key" '\[signedout-signin\]' "$D3"
@@ -625,7 +626,7 @@ bad "D4: a refused key: the banner does not offer Sign in" '\[signedout-signin\]
 chk "D4: after Clear this phone the page is asked again and says the signed-out words" 'Sign in to read your mail' "$SHOTS/seg-d4-cleared.txt"
 chk "D4: after Clear this phone the banner offers Sign in" '\[signedout-signin\]' "$SHOTS/seg-d4-cleared.txt"
 bad "D4: after Clear this phone no Mail rows" '\[mail-row-' "$SHOTS/seg-d4-cleared.txt"
-[ "$D4_STAMP" = ABSENT ] && echo "ok: D4: the record is gone after Clear this phone" || { echo "MISSING: D4: the record is still there after Clear this phone"; FAILS="$FAILS [D4 record]"; }
+[ -n "$D4_DATA" ] && [ -n "$CONT" ] && [ "$D4_STAMP" = ABSENT ] && echo "ok: D4: the record is gone after Clear this phone" || { echo "MISSING: D4: the record is still there after Clear this phone"; FAILS="$FAILS [D4 record]"; }
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"

@@ -13,6 +13,7 @@ import { adoptNative, resetSeam } from './api.ts';
 import * as apiReal from './api.ts';
 const authedJSON = (p: string, o: object = {}) => apiReal.authedJSON(p, { ...o, world: apiReal.currentWorld() } as never);
 import { resetBoundary, STAMP_FILE } from './account.ts';
+import { dig } from './account-phone.ts';
 
 let reply: { state: string; found?: boolean; value?: string; throws?: boolean; throwsKey?: boolean } = { state: 'absent' };
 const handle = () => ({ available: true, later: async (r: { op: string }) => {
@@ -83,7 +84,7 @@ describe('round 8 (seat 1 on 43200f9a7)', () => {
     const e = await authedJSON('/api/x').catch((x) => x);
     expect(e).toBeInstanceOf(SignedOutError); expect((e as { reason: string }).reason).toBe('locked');
     reply = { state: 'absent' }; expect(((await authedJSON('/api/x').catch((x) => x)) as { reason: string }).reason).toBe('none');
-    globalThis.fetch = (async () => new Response('', { status: 401 })) as never; reply = { state: 'present' };
+    globalThis.fetch = (async () => new Response('', { status: 401 })) as never; reply = { state: 'present' }; apiReal.currentWorld().digest = dig('test-key-A-not-real'); 
     expect(((await authedJSON('/api/x').catch((x) => x)) as { reason: string }).reason).toBe('refused');
   });
   test('K2 every page model says the unlock sentence when locked, and "Sign in" only when there is no key', async () => {
@@ -110,7 +111,7 @@ describe('round 8 (seat 1 on 43200f9a7)', () => {
     expect((await card('', 'radio:', 'native')).state).toBe('signedIn');
   });
   test('R1 a later success with the same key clears "rejected"', async () => {
-    reply = { state: 'present' };
+    reply = { state: 'present' }; apiReal.currentWorld().digest = dig('test-key-A-not-real'); 
     globalThis.fetch = (async () => new Response('', { status: 401 })) as never; await authedJSON('/api/x').catch(() => undefined);
     expect((await card('a')).state).toBe('rejected');
     globalThis.fetch = (async () => new Response('{}', { status: 200 })) as never; await authedJSON('/api/x');
@@ -139,7 +140,7 @@ describe('round 8b (seat 2)', () => {
     expect((await card('', 'radio:', m)).state).toBe('signedIn');
   });
   test('F1 a refusal seen by a page shows the card at once: the 401 is recorded, and the next answer of the card is rejected with the action', async () => {
-    reply = { state: 'present' };
+    reply = { state: 'present' }; apiReal.currentWorld().digest = dig('test-key-A-not-real'); 
     globalThis.fetch = (async () => new Response('no', { status: 401 })) as never;
     await authedJSON('/x').catch(() => undefined);
     const v = await card('after-401', 'mail:', 'native');
@@ -169,7 +170,7 @@ describe('follow-up 2 (seat 2 on d237ff989)', () => {
     expect(await hostMode(20, 400)).toBe('native');                 // the decided-none re-check has its own budget; it was 0 and lost to any real round trip
   });
   test('Z1 the rejected digest is cleared by a later 200 with the same key, and the card is signedIn', async () => {
-    reply = { state: 'present' };
+    reply = { state: 'present' }; apiReal.currentWorld().digest = dig('test-key-A-not-real'); 
     globalThis.fetch = (async () => new Response('no', { status: 401 })) as never;
     await authedJSON('/x').catch(() => undefined);
     expect((await card('a', 'mail:', 'native')).state).toBe('rejected');

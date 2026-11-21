@@ -10,6 +10,8 @@
 //  8 a damaged file: empty.      9 the feed parser: enclosures, durations, notes, dates, ids, not-a-feed, 300 items, hostile text and depth.
 // 10 the grants and the files in app.ts agree.        11 play hands the deck data; keep listening does not restart; the key is the position's key.
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { dig } from './account-phone.ts';
+import { currentWorld as theWorld } from './api.ts';
 import { readFileSync } from 'node:fs';
 import { parseFeed, NotAFeed } from './podcast-feed.ts';
 import * as M from './podcast-model.ts';
@@ -48,7 +50,7 @@ const ok = (): Record<string, (u: URL, i?: RequestInit) => Response> => ({
   'choir.news/api/platform/podcast-transcript': () => reply('', 404),
 });
 const signIn = (on: boolean): void => {
-  resetSession();
+  resetSession(); theWorld().digest = dig('test-key');
   bindNative(on ? { later: async ({ op, account }: { op?: string; account?: string }) => (op === 'session' ? { found: true, value: 'test-key', computerId: 'computer-1' } : account === 'api-key' ? { found: true, value: 'test-key' } : account === 'computer-id' ? { found: true, value: 'computer-1' } : { found: false }) } : null);
 };
 const count = (needle: string): number => calls.filter((c) => c.url.includes(needle)).length;

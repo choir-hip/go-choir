@@ -20,6 +20,7 @@ import * as PC from './podcast.ts';
 import * as ML from './mail.ts';
 import * as CL from './clips.ts';
 import { answer } from './app.ts';
+import { bindings, isTable, mutations, provablyImmutable, type Binding } from './module-scan.ts';
 const PAGES_FILE = 'app:/data/open-pages-shared.json';
 import { dig, events, KEY_A, KEY_B, memFs, newWorld, phone, STAMP, type Mem, type World as PhoneWorld } from './account-phone.ts';
 
@@ -110,47 +111,79 @@ describe('M2 a request is signed only with the key of its world', () => {
 
 describe('M3 module state belongs to the world: no module-level mutable state outside a short allow-list', () => {
   const dir = new URL('.', import.meta.url).pathname;
-  const files = readdirSync(dir).filter((f) => f.endsWith('.ts') && !/\.test\.ts$|\.d\.ts$|^account-phone\.ts$|^build-info\.gen\.ts$/.test(f));
-  // What the test SEES: every top-level `let`/`var`, and every top-level `const` whose initializer builds something that can change (new X(...), [], {}, an object or array literal), ALL-CAPS names included.
-  const seen = (): Record<string, string[]> => {
-    const found: Record<string, string[]> = {};
-    for (const f of files) for (const line of readFileSync(dir + f, 'utf8').split('\n')) {
-      const mm = /^(?:export )?(?:let|var) ([A-Za-z_]\w*)/.exec(line) ?? /^(?:export )?const ([A-Za-z_]\w*)(?:: [^=]+)? = (?:new [A-Z]\w*(?:<[^(]*>)?\(|\[\]|\{\}|\{|\[)/.exec(line);
-      if (mm) (found[f] ??= []).push(mm[1]);
-    }
-    return found;
+  const files = readdirSync(dir).filter((f) => f.endsWith('.ts') && !/\.test\.ts$|\.d\.ts$|^account-phone\.ts$|^module-scan\.ts$|^gen-build-info-preload\.ts$|^build-info\.gen\.ts$/.test(f));
+  // What the test SEES (module-scan.ts: a small lexer, not a line regex): EVERY top-level binding of every non-test module: `let`, `var`, every `const` declarator (an initialiser on the next line, a call, an IIFE, a destructuring), a top-level class's
+  // `static` fields, and top-level statements that are not declarations. Each is (a) provably immutable by its text (a primitive, a regular expression, a function or arrow, a symbol, `scoped(...)`: the world's own state),
+  // (b) a literal table (an array, object, Set or Map written out) that nothing changes, in its own file or in any file that imports it, or (c) on the allow-list below with the reason it cannot hold a string, id or object derived
+  // from account data. Anything else fails here until someone lists it.
+  const sourceFiles = files.filter((f) => f !== 'module-scan.ts');
+  const text = (f: string): string => readFileSync(dir + f, 'utf8');
+  const seen = (): { found: Record<string, Binding[]>; unbalanced: string[] } => {
+    const found: Record<string, Binding[]> = {}; const unbalanced: string[] = [];
+    for (const f of sourceFiles) { const r = bindings(text(f)); if (!r.balanced) unbalanced.push(f); found[f] = r.found; }
+    return { found, unbalanced };
   };
   // STATEFUL: allowed, each with the reason it is not the world's. Every reason answers: "can this variable ever hold a string, id or object derived from account data?" (checked again in round five: `themes.status`, which could, moved into the world).
   // account.ts lastFailed holds fixed store names and the words "mail copies", never a name from the account.
   // Not listed because not module state: the per-world state of every module that keeps any is declared with `scoped`. A module that keeps account-scoped state uses `scoped()` (api.ts) instead and shows up nowhere here.
   const STATEFUL: Record<string, Record<string, string>> = {
-    'account.ts': { adoptedDigest: 'the one writer: the digest the last Adopt wrote', chain: 'the boundary\'s own machinery: the one writer', clearing: 'the one writer', wipes: 'the one writer', boundaryId: 'the one writer', lastFailed: 'the one writer', adopting: 'the one writer', active: 'the one writer', timing: 'deadlines (tests shorten them)' },
-    'api.ts': { reader: 'the seam: the native handle', nativeAnswered: 'the seam', lastNative: 'the seam (a log line)', lastFlags: 'the seam (a log line)', world: 'THE WORLD', closedWorlds: 'the worlds whose started writes a Clear waits for', blockedDigest: 'the seam: sealing block', discovered: 'a computer id of the account, returned only for the same key digest and dropped at every boundary move (resetSession)', discovering: 'the same, in flight', rejected: 'the refused key digest (cleared at sign-out)', keyTiming: 'deadline (tests shorten it)', keyReads: 'a counter for the log' },
-    'demo-leftovers.ts': { attempt: 'keyed by world: an attempt of a closed world is replaced' },
-    'host.ts': { decided: 'the host fact (is there a native package): the device\'s', inflight: 'the host probe' }, 'mail-sanitize.ts': { lastTarget: 'the last link target the sanitizer allowed: not read across answers' },
-    'mail-seal.ts': { sealable: 'whether the platform can seal: the device\'s' },
+    'account.ts': { adoptedDigest: 'the one writer: the digest the last Adopt wrote', chain: 'the boundary\'s own machinery: the one writer', clearing: 'the one writer', wipes: 'the one writer', boundaryId: 'the one writer', lastFailed: 'the one writer: fixed store names', adopting: 'the one writer', active: 'the one writer', timing: 'deadlines (tests shorten them)', WIPES: 'the list of wipes: functions, never changed (the test below checks no file changes it)' },
+    'api.ts': { NEVER: 'a promise that never settles: holds no value', DEVICE_FNS: 'a literal Set of function names, never changed', READS: 'a literal Set of function names, never changed', reader: 'the seam: the native handle', nativeAnswered: 'the seam', lastNative: 'the seam (a log line)', lastFlags: 'the seam (a log line)', world: 'THE WORLD', closedWorlds: 'the worlds whose started writes a Clear waits for', blockedDigest: 'the seam: sealing block', discovered: 'a computer id of the account, returned only for the same key digest and dropped at every boundary move (resetSession)', discovering: 'the same, in flight', rejected: 'the refused key digest (cleared at sign-out)', keyTiming: 'deadline (tests shorten it)', keyReads: 'a counter for the log' },
+    'demo-leftovers.ts': { FILES: 'a literal table of the demo\'s files; nothing changes it', attempt: 'once per PROCESS, not per world: a single flight of the one-time clean of the demo\'s files (a marker file says it is done); it holds no account data, and an attempt of a world that closed before it finished is replaced' },
+    'host.ts': { decided: 'the host fact (is there a native package): the device\'s', inflight: 'the host probe' },
+    'mail-seal.ts': { MAGIC: 'the three-byte file magic: read only', sealable: 'whether the platform can seal: the device\'s' },
     'paper-model.ts': { KEYS: 'a memo of a pure function of its argument', PADDED: 'a memo of a pure function of its argument' },
     'podcast.ts': { search: 'a test knob (the pause before a search)' },
-    'search.ts': { liveVectors: 'live stores wipe themselves (wipeLiveVectors)', embedPrompt: 'a function', f32: 'a function' },
+    'search.ts': { BUDGET_CHARS: 'a number computed from the budget table at load', u32: 'with f32: a scratch float converter, set and read inside one synchronous function; holds one number, never data', liveVectors: 'live stores wipe themselves (wipeLiveVectors)', embedPrompt: 'a function', f32: 'a function' },
     'content.ts': { liveStores: 'live stores wipe themselves (wipeLiveContent)' },
-    'themes.ts': { loading: 'the DEVICE theme store (bundled themes, the person\'s own theme files, the choice): it cannot hold a Texture theme (add refuses one, the loader skips texture- names); a choice that names one is cleared at the Clear (by its recorded origin)', current: 'the device theme store', saving: 'a write chain of the device choice file', dirty: 'a flag', migrated: 'a flag of the old-build carry-over', hadChoiceFile: 'a flag', choiceTouched: 'a flag', migrating: 'the old-build carry-over single-flight (raw storage, never inert)', migrateTries: 'a counter', rev: 'a counter' },
+    'themes.ts': { TYPE_SCALES: 'a literal table of type scales; nothing changes it', CHAN: 'a regular expression source template', loading: 'the DEVICE theme store (bundled themes, the person\'s own theme files, the choice): it cannot hold a Texture theme (add refuses one, the loader skips texture- names); a choice that names one is cleared at the Clear (by its recorded origin)', current: 'the device theme store', saving: 'a write chain of the device choice file', dirty: 'a flag', migrated: 'a flag of the old-build carry-over', hadChoiceFile: 'a flag', choiceTouched: 'a flag', migrating: 'the old-build carry-over single-flight (raw storage, never inert)', migrateTries: 'a counter', rev: 'a counter' },
+    'notebook.ts': { K: 'the SHA-256 round constants: a read-only typed-array table, nothing writes it' },
+    'app.ts': { grants: 'the grant text: a template of the origin constant' },
+    'contract-rules.ts': { lab: 'the folder of the contract rules (a path)' },
+    'paper-layout.ts': { DEFAULT_DOC: 'the bundled layout document (JSON import, cast): read only', DISTANT_PAST: 'a number' },
+    'podcast-model.ts': { decode: 'an alias of a function' },
+    'mail-store.ts': { STATE_FILE: 'a path template' },
   };
-  // CONSTANTS: read-only tables and objects. The test checks that nothing in their own file changes them.
-  const CONSTANTS: Record<string, string[]> = {"account.ts": ["WIPES"], "activity.ts": ["LABELS", "MONTHS"], "api.ts": ["KEYCHAIN_ACCOUNTS", "NEVER", "READS"], "app.ts": ["sources", "EXEMPT"], "clips.ts": ["NONE"], "content.ts": ["KINDS", "KIND_LABEL", "STANDARD_BUDGET", "TEXT_EXTENSIONS"], "contract-rules.ts": ["roleFaces"], "deck.ts": ["DECK_NAMES", "EMPTY_ITEM"], "demo-leftovers.ts": ["STORIES", "TEXTURES", "MAILBOXES", "MESSAGES", "FILES"], "edition-model.ts": ["HOUSE", "TREE", "ALIASES", "TRIM", "FILLERS", "ADD_VERBS", "REMOVE_VERBS", "FINISH", "QUESTION_LEAD", "NOTHING", "NEGATIVE_LEAD"], "files-model.ts": ["IMAGE", "VIDEO", "AUDIO", "MARKDOWN", "TEXT", "CSV", "CODE", "LABELS", "SYMBOLS", "MIME", "MONTHS"], "files.ts": ["realNet"], "mail-model.ts": ["FOLDERS", "ENTITIES", "DROPPED", "BLOCK_END", "DAYS", "MONTHS", "OFFLINE"], "mail-sanitize.ts": ["ALLOWED_TAGS", "VOID_TAGS", "RAW_TEXT", "DROP_WITH_CONTENT", "GLOBAL_ATTRS", "NAMED"], "mail-seal.ts": ["MAGIC"], "notebook.ts": ["HELD"], "paper-layout.ts": ["FALLBACK_STEP"], "paper-model.ts": ["DAYS", "MONTHS", "HOUSE", "FINER", "ALIASES", "TERMS", "STOP"], "podcast-feed.ts": ["INLINE"], "podcast-model.ts": ["LINEBREAK", "MONTHS", "MONTH_NAMES", "ZONES"], "podcast.ts": ["enc", "NO_PLAY", "zone"], "programme-model.ts": ["SEGMENT_LABELS", "STRIPPED"], "radio-director.ts": ["SESSION_RETRY_DELAYS"], "radio-model.ts": ["SMALL", "TENS", "DAYS", "MONTHS"], "radio-page.ts": ["EMPTY_FACTS"], "runsheet-entries.ts": ["enc"], "runsheet-model.ts": ["KINDS", "BYS", "STATES", "OUTCOMES", "ROLES", "OPS", "ATS", "Dropped", "Bounds", "enc"], "runsheet-store.ts": ["NO_REPORT"], "search.ts": ["BUDGET", "STOP", "PRONOUNS", "JOB_BUDGET"], "take-session.ts": ["IDLE", "PHASES", "ENDED", "RECORDER_OPS"], "takes.ts": ["BOUNDS", "STRIPPED", "enc", "NEW"], "textures.ts": ["MONTHS", "real"], "themes-bundled.ts": ["BUNDLED"], "themes.ts": ["FACES", "GENERIC", "TYPE_SCALES", "UNSAFE", "RGB_COMMA", "RGB_SPACE", "MODES", "realNet"], "words.ts": ["WORDS"], "xml.ts": ["NAMED"]};
-  test('every module-level mutable-looking name is allowed, and the allow-list has no stale entry', () => {
-    const found = seen(); const unlisted: string[] = []; const stale: string[] = [];
-    for (const [f, names] of Object.entries(found)) for (const nm of names) if (!(nm in (STATEFUL[f] ?? {})) && !(CONSTANTS[f] ?? []).includes(nm)) unlisted.push(`${f}: ${nm}`);
-    for (const [f, m] of Object.entries(STATEFUL)) for (const nm of Object.keys(m)) if (!(found[f] ?? []).includes(nm)) stale.push(`${f}: ${nm}`);
-    for (const [f, a] of Object.entries(CONSTANTS)) for (const nm of a) if (!(found[f] ?? []).includes(nm)) stale.push(`${f}: ${nm}`);
-    expect(unlisted).toEqual([]); expect(stale).toEqual([]);
+  const reasonFor = (f: string, nm: string): string | undefined => STATEFUL[f]?.[nm];
+  test('the scanner sees the shapes seat 1 named (round six): a call, an initialiser on the next line, an IIFE-held Map, a class static, a destructuring, a mutated export', () => {
+    const names = (src: string): string[] => bindings(src).found.filter((b) => !(b.kind === 'const' && provablyImmutable(b.init))).map((b) => b.name);
+    expect(names('const x = factory();')).toEqual(['x']);
+    expect(names('const cache =\n  new Map<string, string>();')).toEqual(['cache']);
+    expect(names('const held = (() => { const m = new Map(); return m; })();')).toEqual(['held']);
+    expect(names('class Box {\n  static seen = new Set<string>();\n  static make() { return 1; }\n}')).toEqual(['Box.seen']);
+    expect(names('const { a, b: c } = load();\nlet p, q = 1;')).toEqual(['a', 'c', 'p', 'q']);
+    expect(names('export const N = 5;\nconst RE = /a`b/g;\nconst f = (v: unknown): v is X => v === 1;\nconst s = scoped(() => ({}));\nconst t = `a ${1}`;')).toEqual(['t']);
+    expect(names('const a = `x ${y(\'}\')} z`;\nconst b = 1;')).toEqual(['a']);
+    expect(bindings('const a = {\n};\nfoo();\n').found.map((b) => b.kind)).toEqual(['const', 'statement']);
+    expect(mutations("import { TABLE } from './t.ts';\nTABLE.set('k', 1);", 'TABLE')).not.toEqual([]);                     // an exported constant changed from another file
+    expect(mutations("import * as T from './t.ts';\nT.TABLE.length = 0;", 'TABLE', 'T')).not.toEqual([]);
+    expect(mutations("import { TABLE } from './t.ts';\nconst n = TABLE.size == 1;", 'TABLE')).toEqual([]);
+    expect(isTable("new Set(['a'])")).toBe(true); expect(isTable('new Set()')).toBe(false); expect(isTable('{}')).toBe(false); expect(isTable('make()')).toBe(false);
   });
-  test('a name allowed as a constant is never changed in its own file', () => {
-    const changed: string[] = [];
-    for (const [f, names] of Object.entries(CONSTANTS)) {
-      const src = readFileSync(dir + f, 'utf8');
-      for (const nm of names) if (new RegExp(`\\b${nm}\\.(set|add|push|pop|shift|splice|delete|clear|sort|reverse)\\(|\\b${nm}\\s*(=|\\+=)[^=>]|\\b${nm}\\[[^\\]]+\\]\\s*=[^=]|\\b${nm}\\.\\w+\\s*=[^=>]`).test(src.replace(/^(?:export )?const [^\n]*\n/gm, (l) => (l.includes(' ' + nm + ' ') || l.includes(' ' + nm + ':') ? '' : l)))) changed.push(`${f}: ${nm}`);
+  test('every top-level binding is provably immutable, an unchanged literal table, or allowed with its reason; the allow-list has no stale entry', () => {
+    const { found, unbalanced } = seen(); expect(unbalanced).toEqual([]);
+    const unlisted: string[] = []; const stale: string[] = []; const changed: string[] = [];
+    for (const [f, bs] of Object.entries(found)) for (const b of bs) {
+      if (b.kind === 'const' && provablyImmutable(b.init)) continue;
+      if (reasonFor(f, b.name) !== undefined) continue;
+      if (b.kind === 'const' && isTable(b.init)) {
+        const mod = f.replace(/\.ts$/, '');
+        for (const g of sourceFiles) {
+          const src = text(g); let hits: string[] = [];
+          if (g === f) hits = mutations(src, b.name);
+          else {
+            const named = new RegExp(`import\\s*(?:type\\s*)?\\{[^}]*\\b${b.name}\\b[^}]*\\}\\s*from\\s*['"]\\./${mod}(?:\\.ts)?['"]`).test(src);
+            const ns = new RegExp(`import\\s*\\*\\s*as\\s+(\\w+)\\s+from\\s*['"]\\./${mod}(?:\\.ts)?['"]`).exec(src);
+            if (named) hits = mutations(src, b.name); if (ns) hits = hits.concat(mutations(src, b.name, ns[1]));
+          }
+          if (hits.length) changed.push(`${f}: ${b.name} is changed in ${g} (${hits[0]})`);
+        }
+        continue;
+      }
+      unlisted.push(`${f}: ${b.kind} ${b.name}`);
     }
-    expect(changed).toEqual([]);
+    for (const [f, m] of Object.entries(STATEFUL)) for (const nm of Object.keys(m)) if (!(found[f] ?? []).some((b) => b.name === nm)) stale.push(`${f}: ${nm}`);
+    expect(unlisted).toEqual([]); expect(changed).toEqual([]); expect(stale).toEqual([]);
   });
   test('the scoped state of a module is what a new world starts without: a world\'s bag is fresh and a closed one is unreachable', () => {
     api.resetSeam(); const S = api.scoped(() => ({ n: 0 }));
@@ -280,7 +313,7 @@ describe('C9b seat 2\'s second round, under the world mechanism', () => {
   test('C9.texture-theme A\'s Texture theme is not shown while the boundary is owed, and a load held across the Clear does not bring it back', async () => {
     const T = await import('./themes.ts');
     const ember = JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme);
-    boot({ 'app:/data/theme-textures/texture-ember.json': ember }); T.resetThemes();
+    boot({ 'app:/data/theme-textures/texture-ember.json': ember }); T.resetThemes(); await call('pagesView', [0]);      // a gate confirms the world
     expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).toContain('ember');          // an open boundary shows it
     T.resetThemes();
     let release: () => void = () => undefined; m.faults.hold.set('app:/data/theme-textures/texture-ember.json', new Promise<void>((r) => { release = r; }));
@@ -294,7 +327,7 @@ describe('C9b seat 2\'s second round, under the world mechanism', () => {
   test('C9.texture-theme-loaded A\'s Texture theme already in memory is not shown the moment a sign-out begins (before any wipe step runs)', async () => {
     const T = await import('./themes.ts');
     const ember = JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme);
-    boot({ 'app:/data/theme-textures/texture-ember.json': ember }); T.resetThemes();
+    boot({ 'app:/data/theme-textures/texture-ember.json': ember }); T.resetThemes(); await call('pagesView', [0]);      // a gate confirms the world
     expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).toContain('ember');
     W.signOut = 'hang'; const out = signOut(); await wait(20);                                           // the world is closed and owed; native has not answered; no wipe has run
     expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).not.toContain('ember');
@@ -497,7 +530,7 @@ describe('C13 themes as two stores (seat 2, round four)', () => {
   });
   test('C13.choice a choice that named a Texture theme falls back to the default at the Clear (the file, and the device store in memory)', async () => {
     const T = await import('./themes.ts'); const ember = await emberText();
-    boot({ 'app:/data/theme-textures/texture-ember.json': ember, 'app:/data/theme-choice.json': JSON.stringify({ theme: 'ember', mode: 'dark', origin: 'texture' }) }); T.resetThemes();
+    boot({ 'app:/data/theme-textures/texture-ember.json': ember, 'app:/data/theme-choice.json': JSON.stringify({ theme: 'ember', mode: 'dark', origin: 'texture' }) }); T.resetThemes(); await call('pagesView', [0]);
     expect(JSON.parse(JSON.stringify(await call('themeList', ['light', false, 'x']))).themeID).toBe('ember');
     expect((await signOut()).done).toBe(true);
     expect(JSON.parse(m.text('app:/data/theme-choice.json') ?? '{}').theme ?? null).toBeNull();
@@ -615,5 +648,88 @@ describe('C8 a late read plants nothing after the wipe (now by the mechanism, wi
     void clearDemoLeftovers(api.bindStorage(m.storage)); await wait(15);
     api.nextGeneration(); m.files.delete('app:/data/recent-files.json'); m.faults.hold.clear(); release(); await wait(20);
     expect(m.files.has('app:/data/recent-files.json')).toBe(false);
+  });
+});
+
+describe('C16 seat 1, round six', () => {
+  const emberText = async (): Promise<string> => { const T = await import('./themes.ts'); return JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme); };
+  const CHOICE = 'app:/data/theme-choice.json'; const TEXDIR = 'app:/data/theme-textures';
+  const asks = (): Array<[string, unknown[]]> => [['theme', ['light', false, 'x']], ['themeList', ['light', false, 'x']], ['themeCards', ['light', false, 'x']], ['themeExtras', ['light', false, 'x']]];
+  test('C16.cold-launch (blocking 1) the app was closed, the Keychain item replaced by B\'s key, the record still names A: before any gated page, A\'s Texture themes are not returned, removable or choosable', async () => {
+    const T = await import('./themes.ts'); const ember = await emberText();
+    boot({ [`${TEXDIR}/texture-ember.json`]: ember, [CHOICE]: JSON.stringify({ theme: 'ember', mode: 'dark', origin: 'texture' }) }); T.resetThemes();
+    W = newWorld('present', KEY_B); n = phone(() => W); api.bindNative(n as never);                     // a fresh process: World(0), nothing confirmed; the record names A and the key is B
+    for (const [s, a] of asks()) expect(JSON.stringify(await call(s, a))).not.toMatch(/ember|Ember/);
+    const choice0 = m.text(CHOICE);
+    await call('themeSet', ['ember']); expect(m.text(CHOICE)).toBe(choice0);                            // not choosable
+    await call('themeRemove', ['ember']); expect(m.files.has(`${TEXDIR}/texture-ember.json`)).toBe(true);   // not removable
+    expect(JSON.parse(JSON.stringify(await call('themeList', asks()[1][1]))).themeID).not.toBe('ember');  // a chosen Texture theme shows as the default
+  });
+  test('C16.confirmed (blocking 1b) Texture themes are shown only through a world the gate (or the card) has confirmed; the card confirming moves the epoch so the themes are asked again', async () => {
+    const T = await import('./themes.ts'); const ember = await emberText();
+    boot({ [`${TEXDIR}/texture-ember.json`]: ember }); T.resetThemes();
+    expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).not.toContain('ember');       // nothing has confirmed the boundary yet
+    const e0 = (await account.peek(m.storage, undefined)).epoch;                                         // the card reads the facts: record A, key A: open
+    expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).toContain('ember');
+    expect((await account.peek(m.storage, undefined)).epoch).toBe(e0);                                   // and nothing moves once it is confirmed
+    const T0 = (await import('./account-state.ts')); void T0;
+  });
+  test('C16.epoch-confirm the epoch of the card before and after the first confirmation differs (a theme resource asked before it is asked again)', async () => {
+    boot({}); api.resetSeam(); api.bindNative(n as never);
+    const w = api.currentWorld(); expect(w.digest).toBeUndefined();
+    const before = (await account.peek(m.storage, undefined)).epoch; void before;
+    expect(api.confirmed(api.currentWorld())).toBe(true);
+  });
+  test('C16.device-handle (blocking 1a) an exempt source\'s storage reaches only the device paths: any other path throws, and a Texture path only through a confirmed world', async () => {
+    const T = await import('./themes.ts'); boot({ 'app:/data/mail/m1.bin': 'M', [STAMP]: dig(KEY_A), [`${TEXDIR}/texture-ember.json`]: await emberText() });
+    const h = api.deviceStorage({ fs: { ...(m.storage as unknown as { fs: object }).fs, rename: async () => undefined, copy: async () => undefined } } as never, api.currentWorld(), T.DEVICE_PATHS) as unknown as { fs: Record<string, (...a: unknown[]) => Promise<ArrayBuffer>> };
+    for (const p of ['app:/data/mail/m1.bin', STAMP, 'app:/data/takes.json', 'app:/data/themes/../mail/m1.bin', 'app:/data/themes-evil/x.json']) {
+      await expect(h.fs.readFile(p)).rejects.toBeDefined(); await expect(h.fs.rm(p)).rejects.toBeDefined(); await expect(h.fs.atomicWriteFile(p, new Uint8Array(1))).rejects.toBeDefined();
+    }
+    await expect(h.fs.readFile(`${TEXDIR}/texture-ember.json`)).rejects.toBeDefined();                    // the world is not confirmed
+    await expect(h.fs.rename('app:/data/themes/a.json', 'app:/data/themes/b.json')).rejects.toBeDefined(); await expect(h.fs.copy('app:/data/themes/a.json', 'app:/data/mail/x')).rejects.toBeDefined();   // functions that are not on the list
+    expect(m.files.has('app:/data/mail/m1.bin')).toBe(true);
+    await h.fs.atomicWriteFile('app:/data/themes/mine.json', new Uint8Array(1)); expect(m.files.has('app:/data/themes/mine.json')).toBe(true);
+    await h.fs.readFile(CHOICE).catch(() => undefined);
+    const w = api.currentWorld(); w.digest = dig(KEY_A); w.owed = false;
+    expect((await h.fs.readFile(`${TEXDIR}/texture-ember.json`)).byteLength).toBeGreaterThan(0);         // confirmed: allowed
+    api.closeWorld(); await expect(Promise.race([h.fs.readFile(`${TEXDIR}/texture-ember.json`).then(() => 'read', () => 'refused'), wait(30).then(() => 'never')])).resolves.not.toBe('read');   // and not once the world is closed
+  });
+  test('C16.exempt-handle (blocking 1a) every exempt source (but the boundary\'s own two) is handed a device storage, nothing else', async () => {
+    boot({}); const app = await import('./app.ts'); const seen: Record<string, unknown> = {};
+    const names = Object.keys(app.EXEMPT).filter((k) => k !== 'accountState' && k !== 'accountSignOut');
+    expect(names.length).toBeGreaterThan(5);
+    const real = { ...app.sources };
+    try {
+      for (const k of names) (app.sources as Record<string, unknown>)[k] = (_a: unknown, _s: unknown, storage: unknown) => { seen[k] = storage; return {}; };
+      for (const k of names) await call(k, [[], [], []]);
+    } finally { Object.assign(app.sources, real); }
+    for (const k of names) expect([k, api.isDeviceStorage(seen[k])]).toEqual([k, true]);
+    const gated = Object.keys(app.sources).filter((k) => !(k in app.EXEMPT));
+    expect(gated.length).toBeGreaterThan(10);
+  });
+  test('C16.unstamped (blocking 3) a world no gate has confirmed refuses a signed request, and nothing is sent', async () => {
+    boot({}); const sent: string[] = [];
+    globalThis.fetch = (async (u: string) => { sent.push(String(u)); return new Response('{}', { status: 200 }); }) as never;
+    expect(api.currentWorld().digest).toBeUndefined();
+    expect(await api.authedJSON('/api/one', { world: api.currentWorld() }).then(() => 'sent', (e) => (e as Error).name)).toBe('SignedOutError');
+    expect(sent).toEqual([]);
+  });
+  test('C16.adopt-stamps the Adopt\'s new world is stamped by the Adopt itself (there is no window between the close and the gate\'s stamp)', async () => {
+    boot({}, false); W = newWorld('present', KEY_B); n = phone(() => W); api.bindNative(n as never);
+    await account.enter(m.storage, undefined);
+    expect(api.currentWorld().digest).toBe(dig(KEY_B));
+  });
+  test('C16.discovering (5) after a boundary move a new world does not join the computer-id lookup a closed world began', async () => {
+    boot({}); let calls = 0; let gate: () => void = () => undefined; const hold = new Promise<void>((r) => { gate = r; });
+    globalThis.fetch = (async (u: string) => {
+      if (String(u).endsWith('/api/compute/status')) { if (calls++ === 0) await hold; return new Response(JSON.stringify({ computers: [{ computer_id: 'c', current: true }] }), { status: 200 }); }
+      return new Response('{}', { status: 200 });
+    }) as never;
+    const w0 = api.currentWorld(); w0.digest = dig(KEY_A);
+    void api.authedJSON('/api/one', { world: w0 }).catch(() => undefined); await wait(15);
+    api.closeWorld(); const w1 = api.currentWorld(); w1.digest = dig(KEY_A);
+    const r = await Promise.race([api.authedJSON('/api/two', { world: w1 }).then(() => 'sent', (e) => (e as Error).name), wait(80).then(() => 'hung')]);
+    gate(); expect(r).toBe('sent');
   });
 });

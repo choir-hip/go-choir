@@ -65,7 +65,7 @@ async function rewrite(storage: Storage, file: string, change: (v: unknown) => u
 }
 
 let attempt: { w: unknown; p: Promise<void>; done: boolean } | null = null;
-/** One attempt per process: every caller gets the same promise. (For tests: `resetDemoLeftovers`.) */
+/** One attempt per process, NOT per world (its files are cleaned once, behind the first open boundary): every caller gets the same promise, unless the attempt's own world closed before it finished (then the next world's caller runs it again). (For tests: `resetDemoLeftovers`.) */
 export function clearDemoLeftovers(storage: Storage | undefined, w: unknown = currentWorld()): Promise<void> {
   // Once per process; but an attempt whose world closed before it finished never ends (api.ts, the world), so the next world's runs it again.
   if (!attempt || (attempt.w !== w && !attempt.done)) { const a = { w, p: run(storage).then(() => { a.done = true; }), done: false }; attempt = a; }
