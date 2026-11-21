@@ -49,3 +49,25 @@ describe('activity', () => {
     expect(view([], 'loading', '', [], []).blank).toBe(false); expect(view([], 'ok', '', [], []).blank).toBe(true);
   });
 });
+
+import { radioItems, liveItems, activityPage, noFacts } from './activity.ts';
+describe('the rows from native facts', () => {
+  test('a turn is its outcome and its words; none heard says so', () => {
+    const r = radioItems({ ...noFacts(), turns: [{ id: '1', outcome: 'answered', transcript: 'hello', configName: 'c1' }, { id: '2', outcome: '', transcript: '', configName: '' }] });
+    expect(r[0]).toMatchObject({ id: 'turn-1', group: 'radio', label: 'Answered', detail: '“hello”', title: 'c1' });
+    expect(r[1]).toMatchObject({ label: 'A turn', detail: '(no words heard)' });
+  });
+  test('the now lines: radio by phase, computer only when known', () => {
+    const f = { ...noFacts(), radio: { known: true, running: true, phase: 'listening' } };
+    expect(liveItems(f, null).map((i) => i.detail)).toEqual(['The radio is in a turn (listening).']);
+    expect(liveItems({ ...f, radio: { known: true, running: false, phase: '' } }, null)[0].detail).toBe('The radio is stopped.');
+    expect(liveItems({ ...f, radio: { known: true, running: true, phase: 'playing' } }, { state: 'running', updateAvailable: true }).map((i) => i.detail))
+      .toEqual(['The radio is playing.', 'Your computer is running. An update is waiting.']);
+    expect(liveItems(noFacts(), { state: '', updateAvailable: false })[0].detail).toBe('Status is not known yet.');
+    expect(liveItems(noFacts(), null)).toEqual([]);
+  });
+  test('signed out, the page still shows the radio and says nothing of the changelog', async () => {
+    const v = await activityPage({ ...noFacts(), turns: [{ id: '1', outcome: 'answered', transcript: 'x', configName: '' }] }, false, 0, '', false, false);
+    expect(v.status).toBe('idle'); expect(v.radio.length).toBe(1); expect(v.blank).toBe(false);
+  });
+});

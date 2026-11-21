@@ -342,6 +342,31 @@ step "tap paper-section-mine"; view real-74-edition-mine-after 2500
 step logs
 run_drive picks light "" --touch platform
 unset SEED_PICKS PICKS_SEED_JSON
+
+# ---- 3d2. FIRST RUN, COMPUTER, ACTIVITY AND ABOUT: shared code over the native facts (onboarding.ts, computer.ts, activity.ts, settings.ts aboutPage). A fresh app; the Settings pages once each, then the edit page.
+step "clock data"; wait_ 6000
+place settings 900
+step "tap settings-nav-computer"; view real-80-computer 4500
+step "tap settings-back"; wait_ 500
+step "tap settings-nav-activity"; view real-81-activity 3500
+step "tap settings-back"; wait_ 500
+step "tap settings-nav-about"; view real-82-about 1500
+step "tap settings-back"; wait_ 500
+place paper 2500
+step "tap paper-section-mine"; wait_ 1500
+step "tap paper-choose-topics"; view real-83-edit-page 1500
+step "tap ob-topic-Science"; wait_ 700
+step "tap edit-edition-done"; wait_ 2500
+step logs
+run_drive firstrun light "" --touch platform
+FR="$SHOTS/drive-firstrun.txt"
+chk "settings computer (shared code): the computer's id is shown" '\[settings-computer-id\] "[^-"]' "$FR"
+bad "settings computer: the state is not still checking" '\[settings-computer-state\] "Checking' "$FR"
+bad "settings computer: no failure message" '\[settings-computer-message\] "(Could|Not signed|This phone|Your account)' "$FR"
+chk "settings activity (shared code, native facts): the radio's now line is listed" '\[activity-row-now-radio\]' "$FR"
+chk "settings activity: the Now section is there" '\[activity-section-now\]' "$FR"
+chk "settings about: the app's version is the bundle's (a native fact), not a dash" '\[settings-about-app\] "[^-"]' "$FR"
+chk "first run: the edit page lists the topic tree (onboarding.ts editing)" '\[ob-topic-Science\]' "$FR"
 CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
 PICKS_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/edition-topics.json "$CHK"/Library/Application\ Support/exact/*/data/edition-topics.json 2>/dev/null | head -1)
 [ -n "$PICKS_FILE" ] && cp "$PICKS_FILE" "$SHOTS/picks-stored.json"

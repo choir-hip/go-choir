@@ -70,6 +70,11 @@ final class ModelsModule: ExactModule {
         }
         // The edition picks' native calls (EditionSetup.swift `EditionNative`), each with the reason only native code can meet: the old file in Application Support, the voice's copy of the picks, the words the voice heard.
         if let op = op, op.hasPrefix("edition") { reply.send(EditionNative.op(request)); return }
+        // First run's voice side (AutoradioModule+Onboarding.swift `onboardingOp`; each op's reason is in that file's header): the models' setup, the microphone check, the hearing sentence, the voice at the topic screen.
+        if let op = op, op.hasPrefix("ob") {
+            Task { @MainActor in reply.send(await AutoradioModule.current?.onboardingOp(request) ?? [:]) }
+            return
+        }
         if let op = op, op.hasPrefix("take") {
             Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
             return

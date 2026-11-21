@@ -62,12 +62,10 @@ path mobile/AutoradioKit/Sources/AutoradioKit/Choir/MailSeal.swift NOT VOICE: a 
 path mobile/AutoradioKit/Package.swift the Swift package manifest of the native side
 path mobile/exact-package/apple/AutoradioModule.swift the module class that registers the native names with Exact
 path mobile/exact-package/apple/AutoradioModule+Voice.swift the voice cards' native side
+path mobile/exact-package/apple/AutoradioModule+Onboarding.swift first run's voice side: the models' setup, the microphone check, the hearing sentence and the voice at the topic screen, as facts and narrow calls (the steps are AutoradioLab/onboarding.ts)
 
 # --- interface names
 name voice* the voice cards and the speaker profile
-name onboardingMic the microphone check
-name onboardingMicNext the microphone check
-name onboardingHearing the microphone check's hearing level
 name choirTalkCancel cancels the open microphone turn
 name choirHandsFreeToggle opens and closes the microphone
 name choirListen starts a spoken turn

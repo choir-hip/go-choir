@@ -4,7 +4,10 @@ import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue
 import { clipAct, showClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { adoptNative } from './api.ts';
-import { settingsAccount } from './settings.ts';
+import { settingsAccount, aboutPage } from './settings.ts';
+import { settingsComputer, computerAct } from './computer.ts';
+import { activityPage } from './activity.ts';
+import { onboardingPage, onboardingAct, liveEnv as onboardingEnv } from './onboarding.ts';
 import { aboutBuild } from './about.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
@@ -68,7 +71,9 @@ fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
 fs.write app:/data/themes
 fs.read app:/data/edition-topics.json
-fs.write app:/data/edition-topics.json`;
+fs.write app:/data/edition-topics.json
+fs.read app:/data/onboarding.json
+fs.write app:/data/onboarding.json`;
 
 let takesOverlay: ReturnType<typeof newTakes> | undefined;
 const takes = (): ReturnType<typeof newTakes> => (takesOverlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
@@ -76,6 +81,14 @@ const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // The About page's build rows (about.ts): the app's baked-in commit and the server's, from /health.
   aboutBuild: ([tick]) => aboutBuild({ tick }),
+  // Settings: the Computer page (computer.ts), Activity (activity.ts) and About's app rows over the native facts (`settingsFacts`).
+  settingsComputer: ([signedIn, tick]) => settingsComputer({ signedIn, tick }),
+  computerAct: ([op, signedIn]) => computerAct(op, signedIn),
+  activityPage: ([facts, signedIn, tick, state, updateAvailable, checked]) => activityPage(facts, signedIn, tick, state, updateAvailable, checked),
+  aboutPage: ([facts, signedIn]) => aboutPage(facts, signedIn),
+  // First run (onboarding.ts): the step machine over the voice side's facts (`voiceSetupFacts`); one send per button.
+  onboardingPage: ([voice, tick, top], _s, storage) => onboardingPage(voice, tick, top, onboardingEnv(storage)),
+  onboardingAct: ([op, arg, topics, top], _s, storage) => onboardingAct(op, arg, topics, top, onboardingEnv(storage)),
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   conversationInfo: ([raw]) => conversationInfo(raw),

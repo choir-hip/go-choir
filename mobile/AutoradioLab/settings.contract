@@ -12,8 +12,8 @@
 //   settings-choice-<setting>-<option>, settings-wake, settings-update, settings-computer-*, settings-learned-reset, settings-learned-row,
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
-use Theme, ThemeList, ThemeCard, ThemeExtras, SettingsComputer, LearnedInfo, AboutInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
-use SettingsAccount, AboutBuild from "./settings-types.contract"
+use Theme, ThemeList, ThemeCard, ThemeExtras, LearnedInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
+use SettingsAccount, AboutBuild, SettingsComputer, AboutInfo from "./settings-types.contract"
 use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
