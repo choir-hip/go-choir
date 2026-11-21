@@ -229,7 +229,7 @@ extension AutoradioModule {
     }
 
     /// The narrow calls shared code (onboarding.ts) makes; see the header of this file for each one's reason.
-    @MainActor func onboardingOp(_ r: [String: Any]) async -> [String: Any] {
+    @MainActor public func onboardingOp(_ r: [String: Any]) async -> [String: Any] {
         guard let c = OnboardingController.shared else { return [:] }
         switch r["op"] as? String ?? "" {
         case "obFacts": return c.facts()

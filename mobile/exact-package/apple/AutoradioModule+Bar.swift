@@ -122,7 +122,7 @@ extension AutoradioModule {
 
     /// What only the audio code knows, for the radio's pump (shared code: radio-bridge.ts `readFacts`), and the inbox of what native callers and the voice turn handed over (RadioBridge). It decides nothing.
     /// `at` is the device's time in milliseconds (a data source may not read the clock); `ready`: onboarding is complete and no other audio holds the phone, so the radio may start by itself.
-    @MainActor func radioFacts(peek: Bool) -> [String: Any] {
+    @MainActor public func radioFacts(peek: Bool) -> [String: Any] {
         let s = runtime.snapshot(), tracker = BarTracker.shared, deck = Deck.shared
         let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
         let info = tracker.radioInfo(player: choir.playerView(), snapshot: s, document: runtime.player.document, route: route, nextTitle: "")

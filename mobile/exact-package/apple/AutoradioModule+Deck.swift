@@ -17,7 +17,7 @@ extension AutoradioModule {
 
     /// The deck's five names for shared code, through the app module's one `deck` op (ModelsEntry.swift): `{op: "deck", name, args}` answers the deck's state. Native because only native code
     /// plays an item and keeps the journal; the names are item-shaped (docs/reference/exact/deck.md), nothing here decides what plays next.
-    @MainActor func deckCall(name: String, args: [String: Any]) async -> [String: Any] {
+    @MainActor public func deckCall(name: String, args: [String: Any]) async -> [String: Any] {
         switch name {
         case "deckPlay":
             if !runtime.snapshot().running { await runtime.start(virtual: virtualEngine) }
