@@ -86,13 +86,8 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
       const text = htmlToText(await res.text()).split(/\n{2,}/).map((p) => p.replace(/\s+/g, ' ').trim()).filter((p) => p !== '');
       return text.length ? { title, paragraphs: text } : undefined;
     },
-    // Native because the shelf is (Books): the text of a book from a block, by the one native op until the shelf moves.
-    book: async (id, at) => {
-      const later = nativeLater(); if (!later) return undefined;
-      const o = obj(await later({ op: 'bookText', id, at }));
-      const ps = Array.isArray(o.paragraphs) ? o.paragraphs.filter((p): p is string => typeof p === 'string') : [];
-      return ps.length ? { title: str(o.title), paragraphs: ps } : undefined;
-    },
+    // A book's words come with its entry (imported.ts hands them through radioHandWords): the sheet holds no way to read one by id.
+    book: async () => undefined,
     take: async (id) => {
       const dest = `app:/cache/files/take-${id}/audio.m4a`;
       try { await authedToFile(`/api/platform/takes/${encodeURIComponent(id)}/audio`, dest, storage as never); return { url: dest }; } catch { return undefined; }

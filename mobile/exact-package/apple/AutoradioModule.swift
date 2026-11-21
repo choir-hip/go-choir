@@ -160,7 +160,6 @@ public final class AutoradioModule: ExactPackage {
         registerVoice()
         registerQueue()          // lane autoradio-queue
         registerDeck()           // the deck: shared code commands it and reads its journal (Deck.swift)
-        registerRadioPage()      // the Autoradio page
         registerTakes()          // takes: record, review, publish (station L7)
         registerNotebook()       // my notebook (station L6)
         registerImported()

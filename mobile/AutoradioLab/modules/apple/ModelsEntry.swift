@@ -77,11 +77,11 @@ final class ModelsModule: ExactModule {
             return
         }
         // The radio's mailbox (AutoradioModule+Queue.swift): `radioFacts` (what only the audio code knows, and the inbox of what native handed over), `radioSet` (the turn route's queue and the entry on air, pushed by shared
-        // code) and `bookText` (the shelf is native until it moves). Native because the voice turn and the audio are; they decide nothing.
-        if op == "radioFacts" || op == "radioSet" || op == "bookText" {
+        // code). Native because the voice turn and the audio are; they decide nothing.
+        if op == "radioFacts" || op == "radioSet" {
             Task { @MainActor in
                 guard let m = AutoradioModule.current else { reply.send([:]); return }
-                switch op { case "radioFacts": reply.send(m.radioFacts(peek: (request["peek"] as? Bool) ?? false)); case "radioSet": reply.send(m.radioSet(request)); default: reply.send(m.bookText(request)) }
+                switch op { case "radioFacts": reply.send(m.radioFacts(peek: (request["peek"] as? Bool) ?? false)); default: reply.send(m.radioSet(request)) }
             }
             return
         }
