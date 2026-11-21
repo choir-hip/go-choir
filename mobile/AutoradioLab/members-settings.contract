@@ -1,7 +1,7 @@
 // Lane members file (settings): this lane's states, derives, resources, mutations and actions, as if written in the root.
 // Owned by the settings lane (lane 7). Shapes are in exact-package/interface/settings.json; the theme sources are answered by app.ts (themes.ts); the module is
 // exact-package/apple/AutoradioModule+Settings.swift. Every name a child component injects is in the lane 7 band of `provide`.
-use settingsFacts, learnedInfo, learnedReset from "@choir/autoradio"
+use settingsFacts from "@choir/autoradio"
 use ThemeCards, ThemeExtras, SettingsAck, LearnedInfo, SettingsFacts from "@choir/autoradio"
 
 use SettingsAccount, AboutBuild, SettingsComputer, ActivityInfo, AboutInfo from "./settings-types.contract"
@@ -19,8 +19,8 @@ members Autoradio
   state actTick = 0
   // What only native code knows for these pages (the clock, the app's version, the radio engine's phase and kept turns): one source.
   resource sfacts = settingsFacts(tick=actTick) as shape SettingsFacts else empty()
-  // "What the paper has learned" reads the cards' Preferences (native until the cards move: AutoradioModule+Cards.swift).
-  resource learnt = learnedInfo() as shape LearnedInfo else empty()
+  // "What the paper has learned" (cards.ts): the acts the listener told the paper, kept under app:/data.
+  resource learnt = learnedInfo(0) as shape LearnedInfo else empty()
   // Activity (activity.ts): the changelog, with the radio's rows from the native facts and the computer's line from computer.ts.
   resource act = activityPage(sfacts, au.signedIn, actTick, cmpt.state, cmpt.updateAvailable, cmpt.checked) as shape ActivityInfo else empty()
   resource about = aboutPage(sfacts, au.signedIn) as shape AboutInfo else empty()
@@ -52,8 +52,9 @@ members Autoradio
   // Restart to update: look at the update signal again every 1.5 s while it runs (computer.ts C3; at most 40 looks).
   task computerPoll when cmpt.phase == "updating" key=cpTick
     after(1500, pollComputer)
+  mutation lm as shape SettingsAck refreshes learnt
   action resetLearned
-    send sm = learnedReset()
+    send lm = learnedReset()
   action refreshActivity
     actTick = actTick + 1
     send cmm = computerAct("refresh", au.signedIn)

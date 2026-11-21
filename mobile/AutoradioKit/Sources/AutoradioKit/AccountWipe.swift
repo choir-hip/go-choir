@@ -43,7 +43,6 @@ public final class AccountWipe: @unchecked Sendable {
         legacyTopicsFile: URL? = TakeFiles.url("edition-topics.json"),
         topicsMarker: URL? = TakeFiles.url("notebook-topics-written"),
         notebook: NotebookStore = .shared,
-        steer: SteerQueue = SteerQueue.shared,
         takeOwn: TakeOwn = .shared,
         takeMutes: TakeMutes = .shared,
         takeStore: TakeStore = .shared,
@@ -71,7 +70,6 @@ public final class AccountWipe: @unchecked Sendable {
             if let f = topicsMarker { try? FileManager.default.removeItem(at: f) }
             await MainActor.run { notebook.wipe() }
         }
-        register("steer") { steer.wipe() }
         register("takes") {
             await MainActor.run { TakeSession.live?.discard() }      // the account CHANGED path has no signOut() above it
             TakeMirror.invalidate(); takeOwn.wipe(); takeMutes.wipe(); takeStore.wipe()      // first: a push of the old account landing from here on is refused

@@ -8,6 +8,7 @@ import { settingsAccount, aboutPage } from './settings.ts';
 import { settingsComputer, computerAct } from './computer.ts';
 import { activityPage } from './activity.ts';
 import { onboardingPage, onboardingAct, liveEnv as onboardingEnv } from './onboarding.ts';
+import * as cards from './cards.ts';
 import { aboutBuild } from './about.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
@@ -61,6 +62,12 @@ fs.read app:/data/signout-pending
 fs.write app:/data/signout-pending
 fs.read app:/data/account-stamp
 fs.write app:/data/account-stamp
+fs.read app:/data/what-i-told-the-paper.json
+fs.write app:/data/what-i-told-the-paper.json
+fs.read app:/data/recent-pages.json
+fs.write app:/data/recent-pages.json
+fs.read app:/data/steer-queue.json
+fs.write app:/data/steer-queue.json
 fs.read app:/data/open-pages-shared.json
 fs.write app:/data/open-pages-shared.json
 fs.read app:/data/demo-leftovers-cleared
@@ -129,6 +136,11 @@ const sources: Sources = {
   contentSync: ([key], _store, storage) => syncContent(key, storage),
   accountState: ([tick, top, host]) => accountState(tick, top, host),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),
+  // The story cards and the launcher (cards.ts): the places, recent pages and local hits; "more of this" and the steering tap; what the paper has learned.
+  launcherData: ([q, _pages, now], _s, storage) => cards.launcherData({ q, now }, storage),
+  storyMore: ([address, surface, sheet, now], _s, storage) => cards.storyMore({ address, surface, sheet, now }, storage),
+  learnedInfo: ([_tick], _s, storage) => cards.learnedInfo(storage),
+  learnedReset: (_a, _s, storage) => cards.learnedReset(storage),
   pagesView: ([_tick], _store, storage) => pages.pagesView(storage),
   pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
@@ -184,6 +196,7 @@ const sources: Sources = {
   // Retrieval (retrieval-live.ts): the voice turn's ask (native raises it, the answer goes back through one native op) and the launcher's paper-wide search.
   retrievalServe: ([id, words, pageTitle, pageAddress, now, facts], _s, storage) => retrievalServe({ id, words, pageTitle, pageAddress, now, facts }, storage),
   paperSearch: ([q, local]) => paperSearch(q, local),
+  mailAsk: ([address, question]) => mail.mailAsk(address, question),
 };
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
 export const answer: Answer = async (source, args, store, storage, native) => {

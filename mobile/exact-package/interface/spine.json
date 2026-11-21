@@ -136,16 +136,6 @@
    }
   },
   {
-   "source": "signalList",
-   "live": true,
-   "answers": "SignalList",
-   "substitute": {
-    "default": {
-     "rows": []
-    }
-   }
-  },
-  {
    "send": "pageOpen",
    "options": {
     "address": "string",
@@ -176,15 +166,6 @@
   },
   {
    "send": "pageReopen",
-   "answers": "PageList"
-  },
-  {
-   "send": "signalRecord",
-   "options": {
-    "kind": "string",
-    "subject": "string",
-    "detail": "string"
-   },
    "answers": "PageList"
   }
  ]

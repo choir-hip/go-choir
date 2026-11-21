@@ -4,6 +4,7 @@
 // Sign-out: only the radio stays and the file goes (account.ts wipes it). Logs carry counts only.
 import type { Storage } from './app.contract.d.ts';
 import { accountGeneration, writeCurrent } from './api.ts';
+import { note as noteRecent } from './recent-pages.ts';
 
 export const PAGES_FILE = 'app:/data/open-pages-shared.json';
 export const RADIO = 'radio:';
@@ -139,6 +140,7 @@ export async function pagesOpen(storage: Storage | undefined, rawAddress: string
   const address = canonical(rawAddress);
   openLocked({ address, kind: kindOf(address), title: title !== '' ? title : defaultTitle(address), opener: recency[0] ?? '', pinned: false });
   await save(storage, gen);
+  await noteRecent(storage, 'open', address);                              // the launcher's Recent rows (recent-pages.ts)
   return view();
 }
 export async function pagesFocus(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
@@ -156,6 +158,7 @@ export async function pagesClose(storage: Storage | undefined, rawAddress: strin
     const wasFront = recency[0] === address;
     pages = pages.filter((x) => x.address !== address); recency = recency.filter((a) => a !== address);
     lastClosed = p;
+    await noteRecent(storage, 'close', address);
     if (wasFront && p.opener !== '' && pages.some((x) => x.address === p.opener)) focusLocked(p.opener);
   }
   await save(storage, gen); return view();

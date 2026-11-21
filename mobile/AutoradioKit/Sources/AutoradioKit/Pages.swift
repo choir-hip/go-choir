@@ -113,12 +113,11 @@ public final class OpenPages: @unchecked Sendable {
     private var recency: [String] = []      // most recently focused first
     private var lastClosedPage: Page?
     private let file: URL?
-    public var signals: Signals?
     public var onChange: (@Sendable () -> Void)?
 
     /// `file` nil keeps the set in memory only (tests).
-    public init(file: URL?, signals: Signals? = nil) {
-        self.file = file; self.signals = signals
+    public init(file: URL?) {
+        self.file = file
         load()
         openLocked(Page(address: PageAddress.radio, kind: "radio", title: "Autoradio"), record: false)   // every launch lands on the radio
     }
@@ -167,7 +166,6 @@ public final class OpenPages: @unchecked Sendable {
               let oldest = recency.reversed().first(where: { a in pages.first { $0.address == a }?.pinned == false }) {
             pages.removeAll { $0.address == oldest }; recency.removeAll { $0 == oldest }
         }
-        if record { signals?.record(SignalEvent(kind: "open", subject: page.address, detail: page.kind)) }
         return page
     }
 
@@ -192,7 +190,6 @@ public final class OpenPages: @unchecked Sendable {
         lastClosedPage = p
         if wasFront, !p.opener.isEmpty, pages.contains(where: { $0.address == p.opener }) { focusLocked(p.opener) }
         lock.unlock()
-        signals?.record(SignalEvent(kind: "close", subject: address, detail: p.kind))
         changed()
     }
 

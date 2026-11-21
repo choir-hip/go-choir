@@ -2,7 +2,7 @@
 // a lane does not edit this file (its own members go in members-<lane>.contract). The page stack (open, close, jump, the
 // pager) is in members-stack.contract.
 use openPages, pageModel, barFacts from "@choir/autoradio"
-use pageOpen, pageClose, pageFocus, pagePin, pageReopen, signalRecord from "@choir/autoradio"
+use pageOpen, pageClose, pageFocus, pagePin, pageReopen from "@choir/autoradio"
 use PageList, PageModel, Theme, ThemeList, SettingsAck, BarFacts from "@choir/autoradio"
 use BarInfo from "./bar-types.contract"
 use HostCaps from "./host-types.contract"
@@ -77,15 +77,11 @@ members Autoradio
     // The system's scheme follows the mode the store ACCEPTED: a theme that has one scheme refuses the other (thl.locked), and then the system's scheme is left alone.
     if thl.locked == "" or thl.locked == mode
       setScheme(mode)
-  action record(kind: string, subject: string, detail: string)
-    send pm = signalRecord(kind=kind, subject=subject, detail=detail)
-
   action editAsk(v: string)
     ask = v
   // A typed ask is aimed at the page in front: its address goes with the turn (`aim`). The engine side reads `args["aim"]` of
   // choirAsk and puts the page's address, title and text in the Autoradio desk request.
   action sendAsk
-    send pm = signalRecord(kind="ask", subject=pg.top, detail=ask)
     send acct = choirAsk(text=ask, aim=pg.top)
     ask = ""
   // The microphone button is the hands-free switch (owner, 2026-11-15): ON, the microphone is open and turns open and close by

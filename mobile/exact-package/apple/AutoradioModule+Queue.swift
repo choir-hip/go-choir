@@ -75,7 +75,6 @@ extension AutoradioModule {
                     case "next": RunSheetPlayer.shared.playNext(entry)
                     default: RunSheetPlayer.shared.queue(entry)
                     }
-                    self.signals.record(SignalEvent(kind: "queue", subject: ref, detail: mode))
                 }
                 self.touch(["queueView", "radioView", "barFacts"], now: true)
                 reply(self.json(self.queueInfo()))

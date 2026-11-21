@@ -1,4 +1,4 @@
-// The spine's sources and sends: open pages, the page model, themes, the bar's state and signals.
+// The spine's sources and sends: open pages, the page model, themes and the bar's state.
 // Owned by the spine. A lane does not edit this file; it registers its own handlers in AutoradioModule+<Lane>.swift.
 import Foundation
 
@@ -30,7 +30,6 @@ extension AutoradioModule {
                 DispatchQueue.main.async { reply(self?.json(m) ?? [:]) }
             }
         }
-        handle("signalList") { [unowned self] _, reply in reply(["rows": signals.recent(limit: 30).map { json($0) }]) }
 
         // The radio's buttons start the engine on first use; under the simulator's agent that engine must be the virtual one
         // (no microphone: proof runs), as `labStart` already does. Start it virtually, then run the original action.
@@ -93,7 +92,6 @@ extension AutoradioModule {
                 let name = title.isEmpty ? paras.first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? "" : title
                 // Listen is a play: `place now` of the page in front, with the words the page held. What was ahead stays ahead.
                 await MainActor.run { RunSheetPlayer.shared.playNow(.readAloud(address: address, title: name), words: (name, paras)) }
-                self.signals.record(SignalEvent(kind: "read-aloud", subject: address, detail: "listen"))
                 DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
             }
         }
@@ -130,9 +128,5 @@ extension AutoradioModule {
         handle("pageFocus") { [unowned self] args, reply in Task { @MainActor in await TextureEditor.shared.flushAll() }; pages.focus(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
         handle("pagePin") { [unowned self] args, reply in pages.togglePin(args["address"] as? String ?? ""); touch(["openPages"]); reply(pageList()) }
         handle("pageReopen") { [unowned self] _, reply in pages.reopenLastClosed(); touch(["openPages"]); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
-        handle("signalRecord") { [unowned self] args, reply in
-            signals.record(SignalEvent(kind: args["kind"] as? String ?? "", subject: args["subject"] as? String ?? "", detail: args["detail"] as? String ?? ""))
-            touch(["signalList"]); reply(pageList())
-        }
     }
 }

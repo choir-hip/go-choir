@@ -8,9 +8,10 @@
 // With no module (Android, the web) there is no call and no steer line.
 import type { Storage } from './app.contract.d.ts';
 import { nativeLater } from './api.ts';
+import { queued as steerQueued } from './steer.ts';
 import { loadDoc, readLearning, page, seamGet, type Get, type PageInfo } from './notebook.ts';
 
-export interface Device { state(): Promise<number>; text(text: string): Promise<void>; }
+export interface Device { state(): Promise<void>; text(text: string): Promise<void>; }
 export type Env = { get: Get; device: Device | null; deviceDeadlineMs?: number };
 export const DEVICE_DEADLINE_MS = 20000;
 
@@ -19,7 +20,7 @@ export function nativeDevice(): Device | null {
   if (!raw) return null;
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   return {
-    async state() { const r = (await later({ op: 'notebookState' })) as { steerQueued?: unknown } | null; return r && typeof r.steerQueued === 'number' ? Math.max(0, Math.trunc(r.steerQueued)) : 0; },
+    async state() { await later({ op: 'notebookState' }); },
     async text(text) { await later({ op: 'notebookText', text }); },
   };
 }
@@ -39,7 +40,8 @@ const within = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
 
 async function readAll(storage: Storage | undefined, env: Env): Promise<Read> {
   const d = env.device, ms = env.deviceDeadlineMs ?? DEVICE_DEADLINE_MS;
-  const steer = d ? await within(d.state(), ms, 0) : 0;                       // first: the topics are in the notebook before it is read
+  if (d) await within(d.state(), ms, undefined);                              // first: the topics are in the notebook before it is read
+  const steer = await steerQueued(storage);                                   // the waiting more / less taps are shared code's (steer.ts)
   const [{ load, text }, learning] = await Promise.all([loadDoc(env.get, storage), readLearning(env.get)]);
   if (d && text !== null && text !== pushed) { pushed = text; await within(d.text(text), ms, undefined); }
   return { doc: load, learning, steer };

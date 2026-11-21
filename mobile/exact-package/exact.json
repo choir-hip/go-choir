@@ -38,16 +38,6 @@
       "heard": "string",
       "message": "string"
     },
-    "StoryRow": {
-      "title": "string",
-      "dek": "string",
-      "route": "string",
-      "section": "string",
-      "current": "bool"
-    },
-    "StoryList": {
-      "rows": "StoryRow[]"
-    },
     "RadioItem": {
       "i": "number",
       "text": "string",
@@ -700,16 +690,6 @@
       }
     },
     {
-      "source": "choirStories",
-      "live": true,
-      "answers": "StoryList",
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
       "send": "choirSignIn",
       "answers": "LabState"
     },
@@ -862,33 +842,6 @@
       "answers": "RadioInfo"
     },
     {
-      "source": "launcherData",
-      "live": true,
-      "answers": "LauncherData",
-      "options": {
-        "q": "string"
-      },
-      "substitute": {
-        "default": {
-          "query": "",
-          "hasQuery": false,
-          "places": [],
-          "recent": [],
-          "hits": [],
-          "stories": 0,
-          "searchNote": ""
-        }
-      }
-    },
-    {
-      "send": "storyMore",
-      "options": {
-        "address": "string",
-        "surface": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
       "source": "deckState",
       "live": true,
       "answers": "DeckState",
@@ -992,14 +945,6 @@
       "options": {
         "address": "string",
         "text": "string"
-      },
-      "answers": "MailAck"
-    },
-    {
-      "send": "mailAsk",
-      "options": {
-        "address": "string",
-        "question": "string"
       },
       "answers": "MailAck"
     },
@@ -1223,22 +1168,6 @@
       }
     },
     {
-      "source": "learnedInfo",
-      "live": true,
-      "answers": "LearnedInfo",
-      "substitute": {
-        "default": {
-          "rows": [],
-          "count": 0,
-          "message": ""
-        }
-      }
-    },
-    {
-      "send": "learnedReset",
-      "answers": "SettingsAck"
-    },
-    {
       "source": "openPages",
       "live": true,
       "answers": "PageList",
@@ -1267,16 +1196,6 @@
           "status": "loading",
           "lines": [],
           "message": ""
-        }
-      }
-    },
-    {
-      "source": "signalList",
-      "live": true,
-      "answers": "SignalList",
-      "substitute": {
-        "default": {
-          "rows": []
         }
       }
     },
@@ -1311,15 +1230,6 @@
     },
     {
       "send": "pageReopen",
-      "answers": "PageList"
-    },
-    {
-      "send": "signalRecord",
-      "options": {
-        "kind": "string",
-        "subject": "string",
-        "detail": "string"
-      },
       "answers": "PageList"
     },
     {

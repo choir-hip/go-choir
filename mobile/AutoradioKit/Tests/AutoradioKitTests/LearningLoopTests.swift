@@ -146,42 +146,4 @@ final class LearningLoopTests: XCTestCase {
         let body = AutoradioDeskStage.body(turn, id: "t1", history: [])
         XCTAssertNil(body["on_air"], "the turn's top level gains no field (the route refuses unknown ones)"); XCTAssertNotNil((body["queue"] as? [String: Any])?["on_air"])
     }
-
-    // F10
-    func tap(_ d: String = "less") -> SteerTap { SteerTap(id: "s-" + UUID().uuidString.prefix(8).lowercased(), entryID: "d-s7-1", direction: d, stories: ["harbor-fees"], title: "Harbor fees rise", handle: nil, at: "2026-11-17T21:00:00Z") }
-    func testF10TheTapGoesWithTheEntryAndItsStories() async throws {
-        let q = SteerQueue(file: nil, send: SteerClient(client: stub { _ in .init(json: ["ok": true]) }).send)
-        q.enqueue(tap()); await q.flush()
-        let r = try XCTUnwrap(StubProtocol.seen.last)
-        XCTAssertEqual(r.method, "POST"); XCTAssertEqual(r.path, "/api/autoradio/steer")
-        XCTAssertEqual(r.body["entry_id"] as? String, "d-s7-1"); XCTAssertEqual(r.body["direction"] as? String, "less"); XCTAssertEqual(r.body["stories"] as? [String], ["harbor-fees"])
-        XCTAssertTrue(q.taps.isEmpty); XCTAssertEqual(q.state, "sent")
-        await q.flush(); XCTAssertEqual(StubProtocol.seen.filter { $0.path == "/api/autoradio/steer" }.count, 1, "never sent twice")
-    }
-    func testF10WhileTheRouteIsAbsentTheTapStaysQueuedAndSurvivesARelaunch() async throws {
-        let f = FileManager.default.temporaryDirectory.appendingPathComponent("steer-\(UUID().uuidString).json")
-        let c = SteerClient(client: stub { _ in .init(status: 404) })
-        let q = SteerQueue(file: f, send: c.send); let t = tap(); q.enqueue(t); await q.flush()
-        XCTAssertEqual(q.taps.map(\.id), [t.id]); XCTAssertEqual(q.state, "notyet")
-        let q2 = SteerQueue(file: f, send: SteerClient(client: stub { _ in .init(json: [:]) }).send)
-        XCTAssertEqual(q2.taps.map(\.id), [t.id], "a relaunch finds it"); await q2.flush(); XCTAssertTrue(q2.taps.isEmpty)
-    }
-    func testF10ARefusedBodyIsRetriedBareOnceThenDropped() async {
-        var n = 0
-        let c = SteerClient(client: stub { r in n += 1; return (r.body["stories"] != nil) ? .init(status: 400) : .init(json: [:]) })
-        let q = SteerQueue(file: nil, send: c.send); q.enqueue(tap()); await q.flush()
-        XCTAssertEqual(n, 2); XCTAssertTrue(q.taps.isEmpty); XCTAssertNil(StubProtocol.seen.last?.body["stories"])
-        let always = SteerClient(client: stub { _ in .init(status: 400) }); let q2 = SteerQueue(file: nil, send: always.send); q2.enqueue(tap()); await q2.flush()
-        XCTAssertTrue(q2.taps.isEmpty, "a correctness refusal is not retried for ever")
-    }
-    func testF10AMuteCarriesTheHandleAndTheQueueIsBoundedAndLogsHoldNoWords() async {
-        let m = SteerTap(id: "s-m", entryID: "", direction: "mute", stories: [], title: "", handle: "voice-3fa2c1", at: "2026-11-17T21:00:00Z")
-        let q = SteerQueue(file: nil, send: { _ in .offline })
-        for _ in 0..<(SteerQueue.maxTaps + 5) { q.enqueue(tap()) }
-        XCTAssertEqual(q.taps.count, SteerQueue.maxTaps)
-        let c = SteerClient(client: stub { _ in .init(json: [:]) }); _ = await c.send(m)
-        XCTAssertEqual(StubProtocol.seen.last?.body["handle"] as? String, "voice-3fa2c1"); XCTAssertNil(StubProtocol.seen.last?.body["entry_id"])
-        let line = SteerQueue.logLine(sent: 1, kept: 2)
-        XCTAssertEqual(line, "AUTORADIO steer sent=1 queued=2"); XCTAssertFalse(line.contains("Harbor"))
-    }
 }

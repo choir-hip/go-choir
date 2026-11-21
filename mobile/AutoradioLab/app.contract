@@ -67,13 +67,11 @@ component Autoradio
     heardNow
     setTheme
     setMode
-    record
     editAsk
     sendAsk
     // ---- integrator (Choir sign-in, player) ----
     au
     pl
-    sl
     signIn
     cancelSignIn
     openApproval
