@@ -208,15 +208,23 @@ if [ -n "$READER_STORY" ]; then
   step logs
   run_drive reader1 light "" --touch platform
   CITE1=$(ids "$SHOTS/drive-reader1.txt" "reader-cite-" | sed -n 1p)
+  # Part two: where the citation sits. The agent's tap does not scroll a target into view at this pin (the drive failed twice on "outside the viewport", with and without a real touch), so the page is scrolled
+  # explicitly, by the distance read from the node's own frame: `layout <id>` prints its "space viewport X,Y WxH" at the scroll the page opens at.
+  CITE_SCROLL=""
+  if [ -n "$CITE1" ]; then
+    step "clock data"; wait_ 6000
+    place paper 2500; to_top; step "tap \"$READER_STORY\""; wait_ 5000
+    step "layout \"$CITE1\""
+    run_drive reader1b light "" --touch platform
+    CITE_SCROLL=$(layout_scroll "$SHOTS/drive-reader1b.txt" "$CITE1" 320) || fail "reader" "the layout of $CITE1 in $SHOTS/drive-reader1b.txt has no viewport frame (or the node is more than 30000 points down): the drive cannot scroll to the citation"
+  fi
   step "clock data"; wait_ 6000
   place paper 2500; to_top; step "tap \"$READER_STORY\""; wait_ 5000
-  [ -n "$CITE1" ] && { step "tap \"$CITE1\""; view real-r3-reader-citation-card 1500; }
+  [ -n "$CITE1" ] && { step "tap reader-scroll wheel 0 $CITE_SCROLL"; step "clock settle"; step "tap \"$CITE1\""; view real-r3-reader-citation-card 1500; step "tap reader-scroll wheel 0 -30000"; step "clock settle"; }
   step "tap reader-menu"; view real-r4-reader-menu 1200
   step "tap reader-menu-versions"; view real-r5-reader-versions 1500
   step logs
-  # Not `--touch platform`: a real touch refuses a point outside the viewport ("scroll it into view first": the first citation is below the first screen, and so are the menu and the page after the card opens), while the agent's own tap scrolls its target into view
-  # (docs/reference/exact: "`tap` and `type` scroll their target into view"; recipes/ios-driving.md: a row scrolled out of view takes a drive without the flag). Reader one, which taps nothing below the fold, keeps the real touch.
-  run_drive reader2 light ""
+  run_drive reader2 light "" --touch platform
 fi
 
 # ---- 3c. THEME drive: a theme from a Texture, loaded through Settings (the document "Autoradio theme test" on d@e holds one choir-theme block)
