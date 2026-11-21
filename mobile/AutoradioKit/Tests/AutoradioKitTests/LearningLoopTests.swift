@@ -124,6 +124,12 @@ final class LearningLoopTests: XCTestCase {
     }
     // F6, F7, F8 (the learning route, the page, the held list) moved to AutoradioLab/notebook.test.ts (N4 to N6); the code they tested is shared TypeScript now.
 
+    func stub(_ h: @escaping (StubProtocol.Req) -> StubProtocol.Resp, key: Bool = true) -> ChoirClient {
+        let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubProtocol.self]
+        StubProtocol.seen = []; StubProtocol.handler = h
+        return ChoirClient(baseURL: "https://choir.test", keys: key ? InMemoryKeyStore([KeyAccount.apiKey: "k", KeyAccount.computerID: "c"]) : InMemoryKeyStore([:]), session: URLSession(configuration: cfg), log: nil)
+    }
+
     // F9
     func testF9ATurnNamesTheEntryOnAirItsClaimAndItsStories() async throws {
         let s = RunSheetStore(storage: nil); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
