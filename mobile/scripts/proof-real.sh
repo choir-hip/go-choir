@@ -200,12 +200,12 @@ cp "$TKS/takes-muted.json" "$SHOTS/takes-old-muted.json" 2>/dev/null
 tseg() { awk -v m="$2" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$1"; }
 tseg "$SHOTS/drive-takes.txt" real-46-takes-old-files > "$SHOTS/seg-takes.txt"
 
-# ---- 3a5. IMPORTED DOCUMENTS (the PDFs and e-books the person imports; files on their computer, AutoradioLab/imported.ts). Open the place from the launcher: the list comes from the computer (the Imported
+# ---- 3a5. IMPORTED DOCUMENTS (the PDFs and e-books the person imports; files on their computer, AutoradioLab/imported.ts). Open the place from the launcher (its place-imported key): the list comes from the computer (the Imported
 # documents folder, through the Files client), so on d@e it is empty or lists what is there; either way the page must draw its title and the import button, and say none of the old Reader's words.
 # NOT covered: the system file picker (the simulator's picker cannot be driven by the scripts) and reading aloud (no audio); imported.test.ts drives the import, the open, the search and the words handed to the player
 # against a fake computer, and the open of a real document is checked by hand on a phone.
 step "clock data"; wait_ 5000
-goto "imported:"
+place imported 900
 view real-47-imported 2500
 step logs
 run_drive imported light "" --touch platform
