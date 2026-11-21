@@ -345,11 +345,12 @@ step "tap paper-choose-topics"; view real-71-topics-empty 1500
 # A tap needs its target in the viewport (the driver cannot tap what the bar or the fold covers): Science sits near the top; after Culture opens the list is dragged up before Film, the field and Done are tapped,
 # and dragged back up before Science is tapped again. Each target is also asserted to appear in the drive's dumped trees below (presence in the log, not proof of the viewport at the tap: a tap that missed shows up as a pick that is not stored).
 step "tap ob-topic-Science"; wait_ 700
-step "tap ob-topic-open-Culture"; wait_ 700; step "tap edit-edition-scroll drag 0 -300"; wait_ 500; step tree; step "tap ob-topic-Film"; wait_ 700
-step "tap edit-edition-scroll drag 0 -700"; wait_ 500
+# `clock settle` after each drag: a real touch played while the list is still moving was lost ("no touch reached the app's window", the picks drive, tap Film); `layout` says where the target is if a tap is lost again.
+step "tap ob-topic-open-Culture"; wait_ 700; step "tap edit-edition-scroll drag 0 -300"; wait_ 500; step "clock settle"; step tree; step "layout ob-topic-Film"; step "tap ob-topic-Film"; wait_ 700
+step "tap edit-edition-scroll drag 0 -700"; wait_ 500; step "clock settle"
 step "type ob-topic-input Zzdrillchess"; step "tap ob-topic-add"; view real-72-topics-picked 1200
-step "tap edit-edition-scroll drag 0 1500"; wait_ 500; step "tap ob-topic-Science"; view real-73-topics-one-off 1200
-step "tap edit-edition-scroll drag 0 -1500"; wait_ 500; step tree; step "tap edit-edition-done"; wait_ 2500
+step "tap edit-edition-scroll drag 0 1500"; wait_ 500; step "clock settle"; step "tap ob-topic-Science"; view real-73-topics-one-off 1200
+step "tap edit-edition-scroll drag 0 -1500"; wait_ 500; step "clock settle"; step tree; step "tap edit-edition-done"; wait_ 2500
 place paper 2000
 step "tap paper-section-mine"; view real-74-edition-mine-after 2500
 step logs
