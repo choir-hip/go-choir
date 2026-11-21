@@ -15,7 +15,7 @@ members Autoradio
   action answerRetry(id: string)
     send tk = answerAction(action="retry", id=id)
   action answerDismiss
-    send tk = answerAction(action="dismiss", id="")
+    send tk = answerAction(action="dismiss", id=bi.answerId)
   action answerCancel
     send tk = answerAction(action="cancel", id="")
   // Settings, Listening: the learned voice (kept on this phone only).

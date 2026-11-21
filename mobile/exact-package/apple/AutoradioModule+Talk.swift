@@ -32,7 +32,7 @@ extension AutoradioModule {
         handle("answerAction") { [unowned self] args, reply in
             let action = args["action"] as? String ?? "", id = args["id"] as? String ?? ""
             switch action {
-            case "dismiss": Conversation.shared.dismiss()
+            case "dismiss": Conversation.shared.dismiss(id: id)
             case "cancel": runtime.cancelTalk()
             case "retry":
                 let q = (id.isEmpty ? Conversation.shared.entries().last : Conversation.shared.entry(id))?.question ?? ""
