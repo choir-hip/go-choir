@@ -63,21 +63,15 @@ func captureLabelView(l store.CaptureLabel) yaegikernel.CaptureLabelView {
 	return v
 }
 
-// storiesEgress serves ActionStories for a cell whose desk holds the
-// intake.read grant (management and its task today; MA4.9: the grant, not the
-// desk's name, admits it). The grant is the session's desk's, the worker the
-// frame came from, never the role of the run whose context the cell carries
-// (MA6.3: the run's role is not the frame's authority).
-func (rt *Runtime) storiesEgress(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
-	return rt.storiesEgressWithin(ctx, deskRole, exec, payload, 0)
-}
-
-// storiesEgressWithin is storiesEgress for a page that, when window is set,
-// also holds every story updated within window (at most storiesMaxLimit),
-// not only the newest limit: a window of time, not a count, so a busy hour
-// does not push a story out of what management sees. The page is never
-// shorter than the limit asks.
-func (rt *Runtime) storiesEgressWithin(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage, window time.Duration) (json.RawMessage, error) {
+// storyIndexRead is the read both story pages stand on: the grant check, the
+// owner's intake.labels switch (a setting that long predates this code), the
+// Texture custodian's reconcile of the story index and the index itself, every
+// non-archived story newest first, after the cursor (before, beforeDoc) and at
+// most limit (0: all). The grant is the session's desk's, the worker the frame
+// came from, never the role of the run whose context the cell carries (MA6.3:
+// the run's role is not the frame's authority). Management reads the story
+// index Texture publishes, never Texture's documents or revisions (X8).
+func (rt *Runtime) storyIndexRead(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, before time.Time, beforeDoc string, limit int) ([]store.StorySummary, error) {
 	role := strings.TrimSpace(deskRole)
 	if !deskmanifest.Holds(role, "intake.read") {
 		return nil, fmt.Errorf("the story library is read under the intake.read grant, which %q does not hold", role)
@@ -89,6 +83,23 @@ func (rt *Runtime) storiesEgressWithin(ctx context.Context, deskRole string, exe
 	if !rt.intakeLabelsEnabled(ctx, owner, computer) {
 		return nil, fmt.Errorf("choir.Stories is off on this computer (the owner's intake.labels setting); list documents with choir.ProductAPI(\"GET\", \"/api/texture/documents\", \"\")")
 	}
+	if err := rt.store.PublishStoryIndex(ctx, owner, computer); err != nil {
+		return nil, fmt.Errorf("publish the story index: %w", err)
+	}
+	if before.IsZero() {
+		// The newest page: the run has now seen the library's head, which
+		// its texture:new commits carry (management delegation R2-5). It is
+		// marked before the list is read, so a story opened meanwhile is
+		// never hidden; a read with no run id marks nothing.
+		rt.noteStoryLibraryShown(ctx, exec.RunID, owner, computer)
+	}
+	return rt.store.ListStoryIndex(ctx, owner, computer, before, beforeDoc, limit)
+}
+
+// storiesEgress serves ActionStories for a cell whose desk holds the
+// intake.read grant (management and its task today; MA4.9: the grant, not the
+// desk's name, admits it).
+func (rt *Runtime) storiesEgress(ctx context.Context, deskRole string, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
 	var req yaegikernel.StoriesPayload
 	if len(payload) > 0 {
 		if err := json.Unmarshal(payload, &req); err != nil {
@@ -115,31 +126,9 @@ func (rt *Runtime) storiesEgressWithin(ctx context.Context, deskRole string, exe
 		}
 		beforeDoc = doc
 	}
-	// Management reads the story index Texture publishes, never Texture's
-	// documents or revisions (X8): the custodian reconciles it first.
-	if err := rt.store.PublishStoryIndex(ctx, owner, computer); err != nil {
-		return nil, fmt.Errorf("publish the story index: %w", err)
-	}
-	if before.IsZero() {
-		// The newest page: the run has now seen the library's head, which
-		// its texture:new commits carry (management delegation R2-5).
-		rt.noteStoryLibraryShown(ctx, exec.RunID, owner, computer)
-	}
-	read := limit + 1
-	if window > 0 {
-		read = storiesMaxLimit + 1
-	}
-	sums, err := rt.store.ListStoryIndex(ctx, owner, computer, before, beforeDoc, read)
+	sums, err := rt.storyIndexRead(ctx, deskRole, exec, before, beforeDoc, limit+1)
 	if err != nil {
 		return nil, err
-	}
-	if window > 0 {
-		cutoff := time.Now().UTC().Add(-window)
-		in := 0
-		for in < len(sums) && !sums[in].UpdatedAt.Before(cutoff) {
-			in++
-		}
-		limit = min(max(limit, in), storiesMaxLimit)
 	}
 	page := yaegikernel.StoriesPage{Stories: []yaegikernel.StoryEntry{}}
 	more := len(sums) > limit

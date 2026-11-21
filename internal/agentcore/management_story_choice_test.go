@@ -37,10 +37,10 @@ func TestStoriesShownCountsPerRunAndIsForgotten(t *testing.T) {
 }
 
 func TestManagementStoryChoiceLine(t *testing.T) {
-	if got := managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25); got != "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75" {
+	if got := managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{}); got != "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=- page_in_window=0 page_left_out=0 offered=- verdicts=-" {
 		t.Fatalf("feed line = %q", got)
 	}
-	if got := managementStoryChoiceLine("run-9", "open", "", 0, 0); got != "management story choice run=run-9 choice=open story=- opening_shown=0 verb_shown=0 candidates_shown=0" {
+	if got := managementStoryChoiceLine("run-9", "open", "", 0, 0, choiceDetail{}); got != "management story choice run=run-9 choice=open story=- opening_shown=0 verb_shown=0 candidates_shown=0 window=- page_in_window=0 page_left_out=0 offered=- verdicts=-" {
 		t.Fatalf("open line = %q", got)
 	}
 }
@@ -49,9 +49,8 @@ func TestManagementStoryChoiceLine(t *testing.T) {
 // choir.Stories calls, not the page the task's opening delivered.
 func TestOpeningStoriesShownIsCountedSeparately(t *testing.T) {
 	rt := &Runtime{}
-	page, _ := json.Marshal(yaegikernel.StoriesPage{Stories: make([]yaegikernel.StoryEntry, 50)})
-	rt.noteOpeningStoriesShown("run-1", page)
-	rt.noteOpeningStoriesShown("run-2", json.RawMessage(`not json`))
+	rt.noteOpeningOffer("run-1", &openingOffer{Shown: 50})
+	rt.noteOpeningOffer("run-2", nil)
 	rt.noteStoriesShown("run-1", 7)
 	if got := rt.openingShownCount("run-1"); got != 50 {
 		t.Fatalf("opening shown = %d, want 50", got)
