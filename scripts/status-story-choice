@@ -16,7 +16,8 @@ It reads one console line per decision, written by internal/agentcore
 management_story_choice.go:
   management story choice run= choice=(open|feed) story= opening_shown= verb_shown=
       candidates_shown= window= page_in_window= page_left_out= offered=(-|doc,doc)
-      verdicts=(-|doc:(same|follow_up|different|none),...)
+      verdicts=(-|doc:(same|follow_up|different|none),...)   none: no verdict for an offered story, which the host's check
+      refuses for a task opening, so it is expected to read 0 after the change
 and prints, per hour: decisions, opens, feeds, opens where a held story was offered,
 the verdicts of those opens (same / follow_up / different / none), decisions whose page
 left stories out, and the median page size. A line without window= is from before the

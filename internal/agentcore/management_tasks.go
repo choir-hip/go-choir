@@ -70,8 +70,9 @@ var managementTaskCallTimeout = 3 * time.Minute
 var managementTaskPrompt = fmt.Sprintf("Management delegated captures to you. Your records come with this message, as choir.Records() returns them, and so does the story library: every story updated in the last %d hours, as headlines only (inbox, headline, age since its last version, v the version number), newest first; left_out and next say when the bound cut the list and how to read the rest with choir.Stories(50, next), which returns ledes. Under it, held_stories lists, for a capture, the held stories of the last 72 hours that may already cover it, with a line of lead; a note says so when a section did not fit. The Cast from management names your objective and the captures you lease (r.Cast.Captures); each captures record shows them (r.Captures.Items) with Jev's label (r.Labels). Open, feed or decline every one of them, then end with choir.Done(note). A Cast to texture:new must answer for each held story offered for its captures: held_check, same, follow_up or different.", openingWindowHours)
 
 // managementTaskOpeningSectionTokens bounds each handed section (the records,
-// the story page): prompts stay within 100,000 tokens, and a section over the
-// bound is not delivered at all (never cut), so the task reads it with the verb.
+// the story page): prompts stay within 100,000 tokens. The records over the
+// bound are not delivered at all (never cut), so the task reads them with the
+// verb; the story page is built to the bound and says what it left out.
 var managementTaskOpeningSectionTokens = 20000
 
 // taskOpening is the host-delivered first look of a management task: what its
@@ -89,6 +90,10 @@ type taskOpening struct {
 	text     string
 	records  cellRecords
 	hasRecs  bool
+	// arrivals are the captures of the loaded records, delivered or not: the
+	// held stories offered, and the held check, do not depend on the records
+	// section fitting.
+	arrivals []types.CaptureArrival
 	storyHd  int64
 	storyOut json.RawMessage
 	offer    *openingOffer
@@ -121,6 +126,11 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 	o := &taskOpening{rt: rt, rec: rec}
 	var b strings.Builder
 	if records, err := rt.loadCellRecords(ctx, rec.OwnerID, rec.ComputerID, strings.TrimSpace(rec.AgentID), rec.RunID); err == nil && len(records.view) > 0 {
+		for _, r := range records.view {
+			if r.Captures != nil {
+				o.arrivals = append(o.arrivals, r.Captures.Items...)
+			}
+		}
 		if recordsJSON, err := json.Marshal(records.view); err == nil && estimateTextTokens(string(recordsJSON)) <= managementTaskOpeningSectionTokens {
 			o.records, o.hasRecs = records, true
 			b.WriteString("\n\nYour records:\n")
@@ -136,15 +146,7 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 	exec := toolregistry.ExecutionContext{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID}
 	storiesIn := false
 	if head, headErr := rt.store.StoryLibraryHeadOf(ctx, rec.OwnerID, rec.ComputerID); headErr == nil {
-		var arrivals []types.CaptureArrival
-		if o.hasRecs {
-			for _, r := range o.records.view {
-				if r.Captures != nil {
-					arrivals = append(arrivals, r.Captures.Items...)
-				}
-			}
-		}
-		if page, held, offer, err := rt.storiesOpeningPage(ctx, exec, arrivals); err == nil {
+		if page, held, offer, err := rt.storiesOpeningPage(ctx, exec, o.arrivals); err == nil {
 			o.storyHd, o.storyOut, o.offer, storiesIn = head, page, offer, true
 			b.WriteString("\n\n" + openingStoriesHeading + "\n")
 			b.WriteString(frameOpeningSection(openingStoryLabels, string(page)))
@@ -180,7 +182,13 @@ func (rt *Runtime) storiesOpeningPage(ctx context.Context, exec toolregistry.Exe
 	if page, err = json.Marshal(built); err != nil {
 		return nil, nil, nil, err
 	}
-	offer = &openingOffer{Window: info.Window, InWindow: info.InWindow, Shown: info.Shown, LeftOut: info.LeftOut, ByCapture: map[string][]string{}}
+	var leased []string
+	for _, a := range arrivals {
+		if id := strings.TrimSpace(a.CaptureID); id != "" {
+			leased = append(leased, id)
+		}
+	}
+	offer = &openingOffer{Leased: leased, Window: info.Window, InWindow: info.InWindow, Shown: info.Shown, LeftOut: info.LeftOut, ByCapture: map[string][]string{}}
 	if len(arrivals) > 0 {
 		var byCapture map[string][]string
 		var unlisted int

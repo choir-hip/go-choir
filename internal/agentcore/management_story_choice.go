@@ -69,7 +69,7 @@ func (rt *Runtime) forgetStoriesShown(runID string) {
 // managementStoryChoiceLine: candidates_shown stays the sum of the two, for
 // readers of the line from before the split. The page's window, its stories in
 // that window and how many it left out, the held stories offered for the
-// decision's captures and the verdicts given (none: asked and not answered; -:
+// decision's captures and the verdicts given (none: an offered story with no verdict, which a run before this check or a Cast the host did not check may leave; -:
 // not asked) follow. Ids and counts only.
 func managementStoryChoiceLine(runID, choice, storyID string, opening, verb int, d choiceDetail) string {
 	if storyID == "" {
@@ -89,7 +89,7 @@ func (rt *Runtime) logManagementStoryChoice(runID, profile string, rec types.Inb
 	switch {
 	case rec.OpenedStory:
 		d := rt.detailOfDecision(runID, stagedDecision{packet: in.Statement})
-		log.Print(managementStoryChoiceLine(runID, "open", "", rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
+		log.Print(managementStoryChoiceLine(runID, "open", strings.TrimPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"), rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
 	case strings.HasPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"):
 		d := rt.detailOfDecision(runID, stagedDecision{captures: in.Captures})
 		log.Print(managementStoryChoiceLine(runID, "feed", strings.TrimPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"), rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
