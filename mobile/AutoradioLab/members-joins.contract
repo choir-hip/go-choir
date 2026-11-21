@@ -6,7 +6,7 @@ use ClipRows from "./podcast-types.contract"
 use PodAck from "./podcast-types.contract"
 
 members Autoradio
-  resource shClips = showClips(pg.top, podTick) as shape ClipRows else empty()
+  resource shClips = showClips(pg.top, podTick, acctTick) as shape ClipRows else empty()
   mutation clipAck as shape PodAck then afterClip
   mutation clipHanded as shape PodDone
 

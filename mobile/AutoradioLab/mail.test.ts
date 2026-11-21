@@ -44,7 +44,8 @@ let nativeKey: Buffer | null = null; let refuses = false; let forgets = 0; let s
 let locked = false; let noPair = false; let signedOutNative = false; let sealGate: Promise<void> | null = null; let sealStarted: (() => void) | null = null;
 const b64of = (b: Uint8Array): string => Buffer.from(b).toString('base64');
 const reader = { available: true, later: async (r: { op?: string; account?: string; b64?: string; aad?: string }) => {
-  if (r.op === 'session') return { found: true, value: 'test-key-0001-not-real', computerId: 'comp-1' };
+  if (r.op === 'keystate') return { state: signedOutNative ? 'absent' : 'present' };               // the Keychain item is gone once the native sign-out ran
+  if (r.op === 'session') return signedOutNative ? { found: false } : { found: true, value: 'test-key-0001-not-real', computerId: 'comp-1' };
   if (r.op === 'mailCan') return noPair ? { found: false } : { ok: true };
   if (r.op === 'mailForget') { nativeKey = null; forgets += 1; return { ok: true }; }
   if (r.op === 'signOut') { signedOutNative = true; nativeKey = null; forgets += 1; return { done: true }; }
@@ -634,7 +635,7 @@ describe('R3 a sign-out while mail is being written', () => {
     const pending = mail.mailMessage('mail:em_01hz0a', false, env());
     await started;                                                         // the message was fetched and its first seal is in the native module
     const { accountSignOut } = await import('./account.ts');
-    const out = await accountSignOut(storage, undefined, reader as never);
+    const out = await accountSignOut(storage, undefined);
     expect(out.done).toBe(true);
     release();
     await pending.catch(() => undefined);

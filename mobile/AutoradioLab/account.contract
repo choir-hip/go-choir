@@ -19,8 +19,20 @@ members Autoradio
   action bumpLock
     lockTick = lockTick + 1
   // Also re-asked (with the host fact, spine.contract hc) while the answer is open: an unreadable key, a handle not bound yet, a host with no sign-in: a native module that arrives late corrects the state without a page change.
-  task rereadLocked when acs.state == "locked" or acs.state == "unknown" key=lockTick
+  task rereadLocked when acs.state == "unknown" key=lockTick
     after(3000, bumpLock)
+  // The refusing states of the account boundary (account.ts): a wipe owed (clearing), a record that could not be written (adopt), a key or record that cannot be read (locked). Re-read every 3 s, at most five
+  // times (like rereadRejected): each read starts a wipe if none runs, and the epoch the card carries moves when it heals, which asks every gated page again. After five the card shows Try again and
+  // Clear this phone; Try again restarts the count.
+  state bndTries = 0
+  action bumpBnd
+    bndTries = bndTries + 1
+    lockTick = lockTick + 1
+  action retryAccount
+    bndTries = 0
+    lockTick = lockTick + 1
+  task rereadBoundary when (acs.state == "clearing" or acs.state == "adopt" or acs.state == "locked") and bndTries < 5 key=bndTries
+    after(3000, bumpBnd)
   // A host with no native package: a module may still load late, so the re-probe runs a few times (15 s) and then stops; the decision is then final for this launch.
   state lateTicks = 0
   action bumpLate
@@ -45,14 +57,16 @@ members Autoradio
   // The card is the first thing in the bar's own column (bar.contract), so it sits whole above the bar at every bar height (the "On:" line, the now-playing strip, the answer card). Not over the code screen, a
   // sheet, the launcher, the bar's field or any keyboard (exactViewport: the one general keyboard fact), the content controls, the reader's aim row or a web layer.
   derive bannerOn = acs.message != "" and au.status != "pending" and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
-  resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}`, pg.top, hc.mode) as shape AccountView else empty()
+  resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${soTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}`, pg.top, hc.mode, bndTries) as shape AccountView else empty(epoch="0")
+  // THE tick of every gated resource: the account boundary's epoch (account-state.ts). It moves when the boundary closes or a wipe completes, not when nothing changed, so a page that refused is asked again when
+  // the boundary heals and a healthy one is not asked twice. (It replaced the tick that moved only on a sign-out result.)
+  derive acctTick = acs.epoch
   mutation acct as shape LabState
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult
   derive signOutNote = match so { case some(a) => a.message, case none => "" }
-  // The wipe counter as the last sign-out answered it (account.ts wipeEpoch: bumped by every ATTEMPTED wipe, failed ones too, and by a late continuation's wipe); "" before any sign-out answered. It changes with
-  // each sign-out result, so the shared sources that keep state in memory (the open pages, the notebook) are asked again. A late wipe bumps the counter but has no event that carries it here (a residual).
-  derive signedOutTick = match so { case some(a) => `${a.epoch}`, case none => "" }
+  // The wipe counter as the last sign-out answered it (account.ts: completed Clear attempts); "" before any sign-out answered. It asks the card again when a sign-out result lands; the gated pages take acctTick.
+  derive soTick = match so { case some(a) => `${a.epoch}`, case none => "" }
   mutation ctl as shape LabState
   mutation down as shape LabState
   mutation up as shape LabState

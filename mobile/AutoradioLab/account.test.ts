@@ -123,7 +123,7 @@ describe('CELLS: record x key', () => {
     expect(r).toBe('AccountClosedError');
   });
   test('a native module that answered before and is missing now is "unreadable", never "absent": nothing is wiped', async () => {
-    boot('A', 'present');
+    boot('A', 'A');
     await probe();                                                                                    // the module answered: the seam knows it is expected
     bindNative(undefined);
     expect((await facts()).key.state).toBe('unreadable');
@@ -431,7 +431,8 @@ describe('O: sign-out is "delete the key, then settle"', () => {
   });
   test('the epoch of a result is larger for each sign-out, and moves for a wipe', async () => {
     boot('A', 'A'); const a = await signOut();
-    boot('A', 'A'); const b = await signOut();
+    W.key = 'present'; W.value = KEY_A; m.files.set(STAMP, new TextEncoder().encode(dig(KEY_A))); await probe();          // the same phone signs in again
+    const b = await signOut();
     expect(a.done && b.done).toBe(true); expect(b.epoch).toBeGreaterThan(a.epoch);
   });
 });
@@ -533,7 +534,7 @@ describe('S16 the paper page passes the story title with the route (the loss the
 describe('S18 the epoch', () => {
   test('the contracts pass the one tick (acctTick) to the shared notebook, and the sign-out result carries the epoch', async () => {
     const c = await Bun.file(new URL('./members-notebook.contract', import.meta.url)).text();
-    expect(c).toContain('notebookPageShared("", 0, noNative, acctTick, au.signedIn)');
+    expect(c).toContain('notebookPageShared("", 0, noNative, au.signedIn, acctTick)');
     expect(await Bun.file(new URL('./account-types.contract', import.meta.url)).text()).toContain('epoch: number');
   });
 });

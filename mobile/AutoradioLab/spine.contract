@@ -16,7 +16,7 @@ members Autoradio
   // The open pages. The Swift package's set (pgn) where there is a package; the SHARED set (pgs, pages.ts, kept in storage.fs) where there is none, so the deck mounts a page with no native code.
   // Every open, close, pin and reopen is sent to both; on iOS the shared set is kept but never read. A failed or empty native answer keeps its last value (the slot keeps what it had).
   resource pgn = openPages() as shape PageList else empty()
-  resource pgs = pagesView(signedOutTick) as shape PageList else empty()
+  resource pgs = pagesView(acctTick) as shape PageList else empty()
   derive pg = noNative ? pgs : pgn
   resource pmod = pageModel(address=pg.top) as shape PageModel else empty()
   // The themes are shared code (themes.ts, both platforms). The system's scheme and Reduce Motion are Exact's own facts (`vp`, members-stack.contract); the first frame shows the whole bundled light default (every field; themes.test.ts P1 keeps it in step) until the answer lands.
@@ -41,7 +41,7 @@ members Autoradio
     barTick = barTick + 1
   task barTimed when bi.until > 0 key=barTick
     after(250, barBump)
-  resource bi = barInfo(bf, cvraw, `${barTick}|${signedOutTick}`) as shape BarInfo else empty()
+  resource bi = barInfo(bf, cvraw, `${barTick}|${acctTick}`) as shape BarInfo else empty()
   mutation pm as shape PageList
   // A second handle, for an action that opens one page and closes another in the same step.
   mutation pc as shape PageList

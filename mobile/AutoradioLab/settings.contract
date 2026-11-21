@@ -316,6 +316,7 @@ component AccountScreen
     refreshAccount: action
     signOut: action
     signIn: action
+    retryAccount: action
     acs: AccountView
   view
     ToolScroll(id="settings")
@@ -353,10 +354,17 @@ component AccountScreen
         if acs.action == "signIn"
           button press=signIn testId="settings-signin" appearance="none"
             ActionButton(label="Sign in", testId="settings-signin-box", primary=false, danger=false)
-        // one Sign in and one Sign out, worded so they do not contradict: a refused phone signs in again, or clears its stored key (sign-out is local first: it removes the key and this phone's data)
-        if au.signedIn
+        // Try again and Clear this phone come from the card (acs.action, account-state.ts), not from au.signedIn: once the key is gone `au.signedIn` is false, and a phone with a wipe owed still needs its way out.
+        // Clear this phone IS the sign-out (sign-out is local first: it removes the key and this phone's data). A signed-in phone with nothing wrong has Sign out.
+        if acs.action == "retry"
+          button press=retryAccount testId="settings-retry" appearance="none"
+            ActionButton(label="Try again", testId="settings-retry-box", primary=false, danger=false)
+        if acs.action == "clear" or acs.alsoClear
+          button press=signOut testId="settings-clear" appearance="none"
+            ActionButton(label="Clear this phone", testId="settings-clear-box", primary=false, danger=true)
+        if au.signedIn and acs.action != "clear" and acs.alsoClear == false
           button press=signOut testId="settings-signout" appearance="none"
-            ActionButton(label=(acs.state == "rejected" ? "Clear this phone" : "Sign out"), testId="settings-signout-box", primary=false, danger=true)
+            ActionButton(label="Sign out", testId="settings-signout-box", primary=false, danger=true)
 
 // ---------------------------------------------------------------- voice and models
 
