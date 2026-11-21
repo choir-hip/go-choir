@@ -177,6 +177,17 @@ public final class TakeOwn: @unchecked Sendable {
     }
 }
 
+/// The programme's copy accepts a push only from the account generation that is current (take-session.ts sends its account generation with every push). A push older than one already seen is refused, and
+/// after the account wipe so is every push of a generation already seen (an old account's push still in flight); the new account's first push, of a newer generation, is accepted. Exact's TS hot reload does not
+/// restart this module and restarts the generation at 0, so after one every push is refused for the rest of that development session: relaunch.
+public enum TakeMirror {
+    nonisolated(unsafe) static var floor = 0, seen = -1
+    private static let lock = NSLock()
+    public static func accept(_ gen: Int) -> Bool { lock.lock(); defer { lock.unlock() }; let ok = gen >= max(floor, seen); seen = max(seen, gen); return ok }
+    public static func invalidate() { lock.lock(); floor = seen + 1; lock.unlock() }
+    static func reset() { lock.lock(); floor = 0; seen = -1; lock.unlock() }
+}
+
 /// Voices the listener will not hear: a READ-ONLY copy of shared code's list (app:/data/takes.json), pushed with `replace`, kept in `takes-copy-muted.json`
 /// (not the old muted file, which nothing reads).
 public final class TakeMutes: @unchecked Sendable {

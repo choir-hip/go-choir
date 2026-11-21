@@ -62,7 +62,6 @@ import Foundation
 }
 
 extension AutoradioModule {
-    nonisolated(unsafe) static var mirrorGen = -1
     func takesSnapshot() -> [String: Any] { onMainThread { TakesHost.shared?.session.snapshot ?? [:] } }
 
     func registerTakes() {
@@ -84,7 +83,7 @@ extension AutoradioModule {
     @MainActor public func takeOp(_ r: [String: Any]) async -> [String: Any] {
         switch r["op"] as? String ?? "" {      // the ops that need no recorder never depend on it being up
         case "takeSteerMute": if let h = r["handle"] as? String, !h.isEmpty { SteerQueue.shared.enqueue(.mute(handle: h)); await SteerQueue.shared.flush() }; return [:]
-        case "takeMirror": let g = (r["gen"] as? NSNumber)?.intValue ?? 0; if g >= Self.mirrorGen { Self.mirrorGen = g; TakeOwn.shared.replace(ids: r["ids"] as? [String] ?? [], handle: r["handle"] as? String ?? ""); TakeMutes.shared.replace(r["muted"] as? [String] ?? []) }; return [:]
+        case "takeMirror": if TakeMirror.accept((r["gen"] as? NSNumber)?.intValue ?? 0) { TakeOwn.shared.replace(ids: r["ids"] as? [String] ?? [], handle: r["handle"] as? String ?? ""); TakeMutes.shared.replace(r["muted"] as? [String] ?? []) }; return [:]
         default: break
         }
         guard let s = TakesHost.shared?.session else { return (r["op"] as? String) == "takeStart" ? ["ended": "open"] : [:] }

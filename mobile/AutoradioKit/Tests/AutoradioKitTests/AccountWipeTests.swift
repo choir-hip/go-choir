@@ -54,26 +54,27 @@ final class AccountWipeTests: XCTestCase {
         try? Data(text.utf8).write(to: u)
     }
 
-    /// Row 1 of the takes state table (docs/reference/AUTORADIO-TAKES.md): a take in review is the account's; after sign-out (or an account change) the recorder is idle, its file is gone and the radio is
-    /// given back, so the next account is never shown it and can never publish it.
-    /// The default names the two files of the pre-release build, in the app's own folder (the tests below pass their own, or none, so they never touch a developer's real files).
+    /// The default names the two files of the pre-release build, in the app's own folder (the takes and deck tests pass their own stores and no legacy files, so they delete none of a developer's).
     func testTheDefaultLegacyFilesAreTheTwoPreReleaseNames() {
         XCTAssertEqual(TakeFiles.legacy.compactMap { $0?.lastPathComponent }, ["takes-own.json", "takes-muted.json"])
         XCTAssertTrue(TakeFiles.legacy.allSatisfy { $0?.deletingLastPathComponent().lastPathComponent == "Autoradio" })
     }
 
+    /// Row 1 of the takes state table (docs/reference/AUTORADIO-TAKES.md): a take in review is the account's; after sign-out (or an account change) the recorder is idle, its file is gone and the radio is
+    /// given back, so the next account is never shown it and can never publish it. Row 4: a mirror push of the old account that lands after the wipe is refused.
     func testATakeInReviewIsGoneAfterTheWipe() async {
         let rec = FakeRecorder(), gate = FakeGate(), clock = Date(timeIntervalSince1970: 1000)
         let dir = root.appendingPathComponent("takes-live")
         let s = TakeSession(recorder: rec, transcriber: FakeTranscriber(words: Self.marker), gate: gate, preview: FakePreview(), micAllowed: { true }, responds: { TakeResponds(route: "r", title: Self.marker) },
                             dir: dir, now: { clock })
-        TakeSession.live = s
+        TakeSession.live = s; TakeMirror.reset(); XCTAssertTrue(TakeMirror.accept(7))
         let limits = TakeLimits(minSeconds: 0, maxSeconds: 59.5, maxBytes: 512 * 1024)
         await s.start(limits); await s.stop(); XCTAssertEqual(s.state, .review); XCTAssertEqual(s.transcript, Self.marker)
         let oldOwn = root.appendingPathComponent("takes-own.json"), oldMuted = root.appendingPathComponent("takes-muted.json")
         write("takes-own.json", Self.marker); write("takes-muted.json", "[\"\(Self.marker)\"]")
         let wipe = AccountWipe(); wipe.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), legacyTakeFiles: [oldOwn, oldMuted], tempDirectory: root.appendingPathComponent("tmp2"))
         await wipe.run()
+        XCTAssertFalse(TakeMirror.accept(7), "the old account's push in flight at the wipe"); XCTAssertTrue(TakeMirror.accept(8)); TakeMirror.reset()
         XCTAssertEqual(s.state, .idle); XCTAssertEqual(s.transcript, ""); XCTAssertNil(s.audio); XCTAssertEqual(gate.given, 1)
         XCTAssertEqual(s.snapshot["respondsTitle"] as? String, "", "the story the old account answered is not carried either")
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [], [])
@@ -135,7 +136,8 @@ final class AccountWipeTests: XCTestCase {
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, topicsFile: topics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
                               takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
                               texture: texture, environment: env, content: content, corpus: SavedCorpus(),
-                              mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice)
+                              mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
+                              deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
 
         await wipe.run()

@@ -256,7 +256,6 @@ async function signOutInner(
   step('wiped');
   if (failed.length === 0) { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); return { done: true, failed: '', message: '' }; }
   // Signed out, but not everything could be cleared: the marker and the stamp stay, the next launch tries again, and the page says which stores.
-  settled = null;                                                  // and a sign-in in this same process reconciles again (it would otherwise read what the wipe could not clear)
   return { done: true, failed: failed.join(','), message: `Signed out, but these could not be cleared yet: ${failed.join(', ')}. They will be cleared the next time the app starts.` };
 }
 

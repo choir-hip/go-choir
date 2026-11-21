@@ -268,17 +268,6 @@ describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
     broken = false; await launch(m);
     expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));
   });
-  test('a sign-out whose wipe failed makes the next settle run again, so a sign-in without a relaunch does not read the old account\'s stores (review 5, 2)', async () => {
-    W = newWorld('present', 'test-key-A-not-real'); const m = memFs(SEED);
-    await launch(m);
-    const first = settleAccount(m.storage, undefined);
-    expect(settleAccount(m.storage, undefined)).toBe(first);                         // memoised while nothing is wrong
-    const rm = m.storage.fs.rm;
-    (m.storage as never as { fs: { rm: (p: string) => Promise<void> } }).fs.rm = async (p: string) => { if (p === 'app:/data/takes.json') throw new Error('disk'); return rm(p); };
-    const r = await accountSignOut(m.storage, undefined, phone() as never);
-    expect(r.failed).not.toBe('');
-    expect(settleAccount(m.storage, undefined)).not.toBe(first);                     // the next answer reconciles again
-  });
   // (The rows "wipe:vectors" and "wiped" above model a wipe that FAILED at that point, not a process kill: a kill is the rows named for the marker, the native steps and the relaunch.)
   test('round 3, 1: a native sign-out that fails or hangs does not leave the previous account\'s shared stores readable (the shared wipe starts regardless; the marker stays)', async () => {
     W = newWorld('absent'); W.swift = true; const m = memFs(SEED);

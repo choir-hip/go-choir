@@ -565,6 +565,7 @@ describe('nothing is carried from the pre-release build: the kept data is only w
     const h = setup(mineOnly);
     const p = await act(h.env, h.o, 'refresh', '');
     expect((await loadKept(storage)).ids).toEqual([OLD_LIVE]); expect(p.muted).toEqual([]); expect(p.handle).toBe('voice-me0001');
+    expect(h.dev.mirrored.every((m) => m.muted.length === 0 && m.ids.every((id) => id === OLD_LIVE))).toBe(true);     // the pushed copy holds only what the server says
     const g = setup(() => ({ status: 200, json: { takes: [] } }));
     expect((await act(g.env, g.o, 'refresh', '')).muted).toEqual([]);
     expect((await act(g.env, g.o, 'mute', 'voice-mine')).muted.map((m) => m.handle)).toEqual(['voice-mine']);
@@ -684,6 +685,7 @@ describe('review 5: a mirror in flight when the account changes is refused nativ
     await pageFor(h.env, h.o, IDLE);                      // the next account's first page: sync pushes the empty copy with the new generation
     release(); await mute;
     expect(h.dev.refusedMirrors).toBe(1); expect(h.dev.mirrored.at(-1)).toEqual({ ids: [], handle: '', muted: [] });
+    expect(h.dev.mirrored.every((m, i) => i < 1 || (m.muted.length === 0 && m.ids.length === 0))).toBe(true);       // after the account changed, nothing of the old account is ever pushed
   });
   test('5 a delete answered after the account changed writes no notice and drops no row of the next account', async () => {
     let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
