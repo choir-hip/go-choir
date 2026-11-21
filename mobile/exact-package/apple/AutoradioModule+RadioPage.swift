@@ -17,7 +17,7 @@ extension AutoradioModule {
         f.at = Date().timeIntervalSince1970
         var sheet = player.store.sheet; sheet.appliedOps = []
         f.sheet = (try? JSONEncoder().encode(sheet)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
-        f.playing = radio.playing
+        f.playing = radio.playing; f.airTitle = radio.title
         f.sentences = radio.sentences; f.sentenceIndex = radio.sentenceIndex; f.progress = radio.progress
         f.remoteAudio = q.audio; f.remoteElapsed = q.elapsed; f.remoteDuration = q.duration
         f.wants = player.wantsToPlay; f.message = q.message; f.notice = q.notice; f.writing = q.writing; f.dry = q.dry

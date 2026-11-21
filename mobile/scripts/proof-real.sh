@@ -395,6 +395,8 @@ if [ -n "$PLAY1" ]; then
   chk "bar: the run sheet page shows the entry on air" '\[radio-onair-title\] "[^"]{3,}"' "$BR"
   # the run sheet page (radio-page.ts over the native facts): the date line, the status line while a story plays
   chk "radio page: a date line is drawn (Mon 5 Jan form)" '\[radio-date\] "(Mon|Tue|Wed|Thu|Fri|Sat|Sun) [0-9]{1,2} [A-Z][a-z]{2}"' "$BR"
+  bad "radio page: the on-air title is not the kind word (a title the play dropped)" '\[radio-onair-title\] "(Story|Opening|Page|Podcast|Take|Book|Mail|Result|Answer|Transition|Audio|Clip)"' "$BR"
+  bad "radio page: Built on does not show a raw route" 'radio-builton-0\] label="Open /?pub/' "$BR"
   chk "radio page: the status line says On air or Paused" '\[radio-status\] "(On air|Paused)"' "$BR"
   bad "radio page: the status line is not an error" '\[radio-status\] "Can.t speak' "$BR"
   bad "bar: no error line held the bar" '\[bar-text\] "(Could not|Something went wrong|The voice stopped)' "$BR"
