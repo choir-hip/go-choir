@@ -92,6 +92,16 @@ describe('R4 to R7 the native fact and call', () => {
     await notebookShared(args(), storage, { get: down, device });
     expect(texts).toEqual([]);
   });
+  test('R5b a push that failed or hangs never holds the page and is tried again at the next read', async () => {
+    let n = 0; const sent: string[] = [];
+    const flaky: Device = { state: async () => 0, text: async (t) => { n++; if (n === 1) return new Promise(() => undefined); sent.push(t); } };
+    const first = await notebookShared(args(), storage, { ...env(flaky), deviceDeadlineMs: 30 });
+    expect(first.docState).toBe('ready');                    // answered while the push hangs
+    await new Promise((r) => setTimeout(r, 60));
+    await notebookShared(args({ tick: 1 }), storage, { ...env(flaky), deviceDeadlineMs: 30 });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sent).toEqual([notebookMd]);                      // the timed-out push was not counted as done
+  });
   test('R6 a sign-out reads again; an old read never answers the new key', async () => {
     await notebookShared(args(), storage, env());
     const n = calls.length;

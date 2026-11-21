@@ -35,7 +35,7 @@ public enum PodcastBridge {
 
 /// Play and Add to queue of a clip. The rows of "Hear it" and a show's "Clips" are shared code (AutoradioLab/clips.ts).
 public enum HearIt {
-    /// Play: the clip when it can be found in the served file (the player locates it); else the episode from its start (the row then says "Open episode").
+    /// Play: the clip when it can be found in the served file (the player locates it); else the episode from its start. (The shared row offers Play only for a usable fingerprint; the phone no longer marks a mismatch from any live path.)
     @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) async {
         guard let c = store.clip(clipID) else { return }
         player.playNow(c.isRelocatable && !store.isMismatch(clipID) ? c.clipEntry : c.episodeEntry)

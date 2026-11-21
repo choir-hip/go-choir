@@ -72,8 +72,8 @@ describe('round 7', () => {
   });
 });
 
-describe('the twins are idle where there is a native package', () => {
-  test('H5 with the flag false (iOS) the notebook twin does not fetch', async () => {
+describe('the notebook page is idle when it is not on top', () => {
+  test('H5 with the page not on top (active false) the notebook source does not fetch', async () => {
     let fetches = 0; globalThis.fetch = (async () => { fetches++; return new Response('{}', { status: 200 }); }) as never;
     const { answer } = await import('./app.ts');
     const storage = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => undefined } } as never;

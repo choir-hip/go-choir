@@ -96,9 +96,9 @@ export function nativeDevice(): Device | null {
   };
 }
 
-type Mem = { loaded: boolean; p: Progress; step: string; askMobile: boolean; message: string; hearingOK: boolean; edition: Edition | null; status: string; writingLine: string; error: string; mirrored: boolean | null; picked: number };
+type Mem = { gen: number; loaded: boolean; p: Progress; step: string; askMobile: boolean; message: string; hearingOK: boolean; edition: Edition | null; status: string; writingLine: string; error: string; mirrored: boolean | null; picked: number };
 let mem: Mem | null = null;
-const blank = (): Mem => ({ loaded: false, p: fresh(), step: 'welcome', askMobile: false, message: '', hearingOK: false, edition: null, status: '', writingLine: '', error: '', mirrored: null, picked: 0 });
+const blank = (): Mem => ({ gen: accountGeneration(), loaded: false, p: fresh(), step: 'welcome', askMobile: false, message: '', hearingOK: false, edition: null, status: '', writingLine: '', error: '', mirrored: null, picked: 0 });
 /** For tests: a new process. */
 export function forgetOnboarding(): void { mem = null; }
 
@@ -107,17 +107,19 @@ export const liveEnv = (storage: Storage | undefined): Env => ({ storage, device
   closePage: async (a) => { await pages.pagesClose(storage, a); }, openPage: async (a, t) => { await pages.pagesOpen(storage, a, t); } });
 
 async function load(env: Env): Promise<Mem> {
-  const m = (mem ??= blank());
+  if (!mem || mem.gen !== accountGeneration()) mem = blank();          // the memory belongs to the account generation it was made in
+  const m = mem;
   if (m.loaded) return m;
   m.loaded = true;
   let text: string | undefined;
   try { if (env.storage) text = new TextDecoder().decode(await env.storage.fs.readFile(PROGRESS_FILE)); } catch { text = undefined; }
+  if (m.gen !== accountGeneration()) return load(env);                 // the account moved while the file was read: that text is not the new account's
   m.p = parseProgress(text); m.step = startStep(m.p); m.picked = m.p.voicePicked;
   return m;
 }
 async function save(env: Env, m: Mem): Promise<void> {
   if (!env.storage) return;
-  await writeCurrent(accountGeneration(), env.storage, PROGRESS_FILE, new TextEncoder().encode(JSON.stringify(m.p)));     // a refused or failed write leaves the step in memory; the next change writes again
+  await writeCurrent(m.gen, env.storage, PROGRESS_FILE, new TextEncoder().encode(JSON.stringify(m.p)));     // a refused or failed write leaves the step in memory; the next change writes again
 }
 /** Sign-out (account.ts WIPES): the memory, the file, and the voice side. Throws when the file could not be removed and is not empty. */
 export async function wipeOnboarding(storage: Storage | undefined): Promise<void> {
@@ -182,7 +184,8 @@ async function writeEdition(env: Env, m: Mem, topics: string[], edit: boolean): 
   if (m.status === 'writing') return;                                                                                       // O9
   if (!edit) m.step = 'writing';
   m.status = 'writing'; m.writingLine = 'Writing your edition…'; m.error = ''; m.message = '';
-  const out = await complete(topics, env.writer ?? localWriter, (line) => { m.writingLine = line; }, env.deadlineSeconds);
+  const out = await complete(topics, env.writer ?? localWriter, (line) => { if (m.gen === accountGeneration()) m.writingLine = line; }, env.deadlineSeconds);
+  if (m.gen !== accountGeneration()) return;                                                                                // another account now: nothing of this edition is theirs
   if (out.kind === 'written') {
     await ready(env, m, out.edition, edit);
     await dev(env, 'obNotebookTopics', { topics });                                                                        // the first lines of the notebook (native: Notebook.swift writes it)
@@ -256,6 +259,7 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
 async function offer(env: Env, m: Mem): Promise<void> {
   if (m.p.offered || m.p.editionDone || m.p.skipped) return;
   const ed = await lookupEdition(env.get);
+  if (m.gen !== accountGeneration()) return;
   if (ed?.found) { m.p.editionDone = true; m.step = 'done'; await save(env, m); return; }
   m.p.offered = true; await save(env, m);
   await env.openPage?.(SETUP, 'Make it yours');

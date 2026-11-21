@@ -144,9 +144,10 @@ async function cachedFeed(feedURL: string, storage: Storage | undefined): Promis
   const have = feeds.get(n);
   if (have) return have;
   if (!storage) return null;
+  const gen = generation;                                                    // a file read that lands after a sign-out is not kept
   try {
     const f = JSON.parse(dec.decode(await storage.fs.readFile(feedFile(n)))) as Feed;
-    if (f && f.show && Array.isArray(f.episodes)) { feeds.set(n, f); return f; }
+    if (f && f.show && Array.isArray(f.episodes)) { if (gen === generation) feeds.set(n, f); return gen === generation ? f : null; }
   } catch { /* none */ }
   return null;
 }
@@ -261,9 +262,11 @@ async function syncIfDue(storage: Storage | undefined, l: Library): Promise<void
   if (syncAt >= 0 && t > 0 && t - syncAt < 600) return;
   if (syncAt >= 0 && t === 0) return;
   syncAt = t;
+  const gen = generation;                                                    // the answer of an account that was signed out meanwhile is dropped
   let list: Show[];
   try { list = decodeSubscriptions((await authedJSON('/api/podcast/subscriptions', { query: { limit: 200 } })).body); }
-  catch (e) { syncNote = e instanceof SignedOutError ? '' : "Not in step with your computer's podcasts yet: it did not answer. Subscriptions here are kept on this phone."; return; }
+  catch (e) { if (gen !== generation) return; syncNote = e instanceof SignedOutError ? '' : "Not in step with your computer's podcasts yet: it did not answer. Subscriptions here are kept on this phone."; return; }
+  if (gen !== generation) return;
   const removed = new Set(l.removed.map(feedKey));
   const added: Show[] = [];
   for (const s of list) {
@@ -277,7 +280,9 @@ async function syncIfDue(storage: Storage | undefined, l: Library): Promise<void
   const toPush = l.subscriptions.map((s) => s.show).filter((s) => !onServer.has(feedKey(s.feedURL)));
   let failedPush = 0;
   for (const s of toPush) { if (await pushShow(s)) { const n = feedKey(s.feedURL); if (!l.synced.includes(n)) l.synced.push(n); } else failedPush++; }
+  if (gen !== generation) return;
   await saveLibrary(storage);
+  if (gen !== generation) return;
   syncNote = failedPush === 0 ? "In step with your computer's podcasts." : 'Some shows could not be sent to your computer yet.';
 }
 
@@ -285,6 +290,7 @@ async function loadSuggestions(): Promise<void> {
   const t = now();
   if (suggestionsAt >= 0 && (t === 0 || t - suggestionsAt < 600)) return;
   suggestionsAt = t;
+  const gen = generation;
   let out: Show[] = [];
   try { const r = await getJSON('/api/platform/podcast-popular', { limit: 30 }); sawTime(r.serverTime); out = decodePopular(r.body); } catch { /* 404 or offline: the chart */ }
   if (out.length === 0) {
@@ -293,6 +299,7 @@ async function loadSuggestions(): Promise<void> {
       if (chart.length > 0) out = decodeSearch(await fetchJSON(lookupURL(chart.map((c) => c.id))));
     } catch { out = []; }
   }
+  if (gen !== generation) return;                                           // the chart is public, but the held list belongs to this account's session
   suggestions = out;
   for (const x of out) if (!known.has(feedKey(x.feedURL))) known.set(feedKey(x.feedURL), x);
 }
@@ -301,9 +308,10 @@ async function runSearch(q: string): Promise<void> {
   if (searches.has(q)) return;
   if (search.pause > 0) await new Promise<void>((r) => setTimeout(r, search.pause));
   if (q !== latestQuery) return;                                            // a newer query was typed while this one waited: dropped
+  const gen = generation;
   try {
     const shows = decodeSearch(await fetchJSON(searchURL(q)));
-    if (q !== latestQuery) return;
+    if (q !== latestQuery || gen !== generation) return;
     searches.set(q, shows);
     for (const x of shows) if (!known.has(feedKey(x.feedURL))) known.set(feedKey(x.feedURL), x);
   } catch { if (q === latestQuery) searches.set(q, 'failed'); }
@@ -472,9 +480,10 @@ export async function podcastEpisode(a: EpisodeArgs, storage: Storage | undefine
   // The shared transcript: shown when the platform has one; "on its way" only for an episode that was played here.
   if (!transcripts.has(key) && !transcriptAsked.has(key)) {
     transcriptAsked.add(key);
+    const gen = generation;
     try {
       const t = decodeTranscript((await authedJSON('/api/platform/podcast-transcript', { query: { feed, guid: id } })).body);
-      if (t) transcripts.set(key, t);
+      if (t && gen === generation) transcripts.set(key, t);
     } catch { /* 404, signed out or offline: none */ }
   }
   const tr = transcripts.get(key);

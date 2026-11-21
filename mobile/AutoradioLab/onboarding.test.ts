@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { onboardingAct, onboardingPage, forgetOnboarding, wipeOnboarding, parseProgress, startStep, noVoice, PROGRESS_FILE, EDIT, SETUP,
   MIC_REFUSED_LINE, MIC_SILENT_LINE, TALK_REFUSED_LINE, HEARING_AGAIN_LINE, type Env, type VoiceFacts, type Device } from './onboarding.ts';
-import { resetSeam } from './api.ts';
+import { resetSeam, nextGeneration } from './api.ts';
 import { FAILED_LINE, type Writer } from './edition-writer.ts';
 
 const files = new Map<string, Uint8Array>();
@@ -135,6 +135,17 @@ describe('the edition', () => {
     const never: Writer = (_t, _p, signal) => new Promise((_r, rej) => { signal.addEventListener('abort', () => rej(new Error('aborted'))); });
     const slow = await act('editionRetry', '', 'Space', SETUP, env({ writer: never, deadlineSeconds: 0.05 })); expect(slow.editionStatus).toBe('failed'); expect(slow.editionError).toContain('too long');
     expect((await act('editionRetry', '', 'Space')).step).toBe('done');                              // Retry from the failed state succeeds
+  });
+  test('O15 an edition that finishes after the account moved on is dropped: no file, no notebook write, no memory for the next account', async () => {
+    await act('topics');
+    let release: () => void = () => undefined;
+    const slow: Writer = async (topics) => { await new Promise<void>((r) => { release = r; }); return { title: 'T', intro: '', writingLines: [], sections: [{ heading: 'H', lines: topics }] }; };
+    const pending = act('topicsDone', '', 'Space', SETUP, env({ writer: slow }));
+    await new Promise((r) => setTimeout(r, 10));
+    nextGeneration(); files.clear(); calls = [];
+    release(); await pending;
+    expect(ops()).not.toContain('obNotebookTopics'); expect(files.has(PROGRESS_FILE)).toBe(false);
+    expect((await onboardingPage(v, 0, SETUP, env())).step).toBe('welcome');
   });
   test('O9 a Continue while one is writing is ignored; Continue anyway is the general edition', async () => {
     await act('topics');

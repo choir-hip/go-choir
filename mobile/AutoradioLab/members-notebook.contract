@@ -19,8 +19,12 @@ members Autoradio
 
   // The phone's copy of what the computer holds (stories, documents, files): once per launch and per return to the front, only while signed in.
   mutation csync as shape ContentSyncInfo
+  // The gate holds only while the app is in front, so the task fires once on each return to the front (the key changes when the gate turns true again), never on the way to the background.
   derive csKey = `${hpg.visibilityState}|${signedOutTick}`
+  // Each kick gets its own run number, so a return to the front is a new key for the sync (the same visibility value would otherwise answer the last result).
+  state csRun = 0
   action contentKick
-    send csync = contentSync(csKey)
-  task contentSyncKick when acs.state == "signedIn" key=csKey
+    csRun = csRun + 1
+    send csync = contentSync(`${csKey}|${csRun + 1}`)
+  task contentSyncKick when acs.state == "signedIn" and hpg.visibilityState == "visible" key=csKey
     after(1, contentKick)

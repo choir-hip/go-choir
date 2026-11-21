@@ -103,6 +103,17 @@ final class JoinClipRecordTests: XCTestCase {
         XCTAssertNotNil(s.clip(hex(1))); XCTAssertNotNil(s.clip(hex(2)))
         XCTAssertEqual(s.all.count, 2, "a clip handed twice is held once")
     }
+    func testJ6_AClipHandedOverReplacesTheRowHeldForItsId() {
+        let old = clipRow(hex(1))                                   // no fingerprint: held as the episode
+        var withPrint = clipRow(hex(1)); withPrint["fingerprint"] = testFingerprintJSON()
+        let s = ClipStore(); s.replace([old].compactMap(PodcastClip.parse))
+        XCTAssertEqual(s.clip(hex(1))?.isRelocatable, false, "held without a usable fingerprint")
+        let fresh = PodcastClip.parse(record: record(withPrint))
+        XCTAssertNotNil(fresh); XCTAssertEqual(fresh?.isRelocatable, true)
+        s.put(fresh!); s.put(fresh!)
+        XCTAssertEqual(s.clip(hex(1))?.isRelocatable, true, "the page's record replaced the stale one")
+        XCTAssertEqual(s.all.count, 1); XCTAssertEqual(s.clips(forRoute: fresh!.route).count, 1)
+    }
     func testJ6_ABadRecordIsNoClip() {
         for r in ["not json", "{}", "[]", "", record(["clip_id": ""])] { XCTAssertNil(PodcastClip.parse(record: r)) }
     }

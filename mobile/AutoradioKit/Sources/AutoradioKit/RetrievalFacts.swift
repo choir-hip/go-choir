@@ -90,6 +90,7 @@ public final class RetrievalBridge: @unchecked Sendable {
 
     /// Ask shared code for the passages of this question. nil: it did not answer in time, or answered something that is not a context.
     public func ask(words: String, pageTitle: String, pageAddress: String, now: Date = Date()) async -> RetrievalContext? {
+        lock.lock(); last = nil; lock.unlock()      // this turn's record only: a turn that times out never inherits the last turn's
         let factsJSON = await facts(pageAddress)
         let a: RetrievalAsk = {
             lock.lock(); defer { lock.unlock() }

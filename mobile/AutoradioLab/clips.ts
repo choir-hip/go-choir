@@ -10,10 +10,12 @@
 //  1. A row with no id, no http(s) audio, or an empty or negative range: dropped.        2. A bad body, a 404 or a failure: no rows, silently.
 //  3. The same clip twice: held once.         4. A show's feed asked for at most once per session or retry, never on every draw.
 //  5. A clip the phone does not have (gone, never fetched): "That clip is not available any more."     6. A clip with no fingerprint: the episode.
-//  7. Open episode for a clip with no feed: nothing happens.     8. A show lists at most ten clips, ordered by clip id.
+//  7. Open episode for a clip with no feed: nothing happens.     8. A show lists at most ten clips, ordered by clip id; a story lists at most three, in the server's order (best first).
+//  9. A fetch that lands after the account changed is dropped (the generation is taken before the request).   10. A fetched clip replaces the held one with the same id (a repaired fingerprint
+//     or range is picked up); ids absent from a response are kept.   11. The whole set is asked again each time a story page is reached from another page and on a retry tick; a failed ask is retried then.
 
 import type { Result } from './app.contract.d.ts';
-import { getJSON } from './api.ts';
+import { accountGeneration, getJSON } from './api.ts';
 import { episodeAddress, feedKey, parseShow } from './podcast-model.ts';
 
 export const CLIPS_PATH = '/api/platform/podcast-clips';
@@ -27,6 +29,8 @@ export type Clip = {
   start: number; end: number; quote: string; fingerprint: Fingerprint | null;
   /** The server's row as it came: handed whole to the native player, which finds the clip in the served file by its fingerprint. */
   raw: Record<string, unknown>;
+  /** The position in the server's answer (best first within a story); the later fetch's order replaces the earlier one's. */
+  rank: number;
 };
 
 const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -57,7 +61,7 @@ export function parseClip(o: unknown): Clip | null {
     ? { version: num(f.version), head: f.head, tail: f.tail, start: num(f.start), end: num(f.end), bitrateKbps: num(f.bitrate_kbps), seekable: f.seekable_by_bitrate === true } : null;
   return {
     clipID: id, route: str(story.route).replace(/^\//, ''), storyTitle: str(story.title), show: str(o.show), episodeTitle: str(o.episode_title), episodeGUID: str(o.episode_guid),
-    feedURL: str(o.feed_url), audioURL: audio, start, end, quote: str(o.quote), fingerprint, raw: o,
+    feedURL: str(o.feed_url), audioURL: audio, start, end, quote: str(o.quote), fingerprint, raw: o, rank: 0,
   };
 }
 
@@ -81,13 +85,16 @@ const byID = new Map<string, Clip>();
 const askedFeeds = new Set<string>();
 let asked = false, asking: Promise<void> | null = null;
 let lastTick = 0;
+let seq = 0;
+/** The story page last asked for ('' when the last page asked was not a story): a story reached from another page asks the whole set again. */
+let lastStory = '';
 
 /** For the sign-out test: how many clips are held in memory. */
 export const remembered = (): number => byID.size;
 
-export function forget(): void { byID.clear(); askedFeeds.clear(); asked = false; asking = null; lastTick = 0; }
+export function forget(): void { byID.clear(); askedFeeds.clear(); asked = false; asking = null; lastTick = 0; lastStory = ''; }
 
-function merge(clips: Clip[]): void { for (const c of clips) if (!byID.has(c.clipID)) byID.set(c.clipID, c); }
+function merge(clips: Clip[]): void { for (const c of clips) byID.set(c.clipID, { ...c, rank: ++seq }); }
 
 /** A retry resets what was asked, so the next draw asks again. */
 function tickOver(tick: number): void { if (tick !== lastTick) { lastTick = tick; askedFeeds.clear(); asked = false; } }
@@ -96,8 +103,10 @@ function tickOver(tick: number): void { if (tick !== lastTick) { lastTick = tick
 function ensureAll(): Promise<void> {
   if (asked) return asking ?? Promise.resolve();
   asked = true;                                                       // once a retry: a failure is asked again by the next one, never on every draw
-  asking = (async () => { try { merge(parseClips((await getJSON(CLIPS_PATH, { limit: 200 })).body)); } catch { /* the route is missing or down: nothing, silently */ } })();
-  return asking;
+  const gen = accountGeneration();                                    // a clip set that lands after the account changed is not kept
+  const mine = (async () => { try { const body = (await getJSON(CLIPS_PATH, { limit: 200 })).body; if (gen === accountGeneration()) merge(parseClips(body)); } catch { /* the route is missing or down: nothing, silently */ } })();
+  asking = mine;
+  return mine;
 }
 
 export function row(c: Clip): Rows['rows'][number] {
@@ -112,7 +121,8 @@ export async function showClips(address: string, tick: number): Promise<Rows> {
   const k = feedKey(feed);
   if (!askedFeeds.has(k)) {
     askedFeeds.add(k);
-    try { merge(parseClips((await getJSON(CLIPS_PATH, { feed, limit: 50 })).body)); } catch { /* the route is missing or down: nothing, silently */ }
+    const gen = accountGeneration();
+    try { const body = (await getJSON(CLIPS_PATH, { feed, limit: 50 })).body; if (gen === accountGeneration()) merge(parseClips(body)); } catch { /* the route is missing or down: nothing, silently */ }
   }
   const mine = [...byID.values()].filter((c) => c.feedURL !== '' && feedKey(c.feedURL) === k).sort((a, b) => (a.clipID < b.clipID ? -1 : a.clipID > b.clipID ? 1 : 0));
   return { rows: mine.slice(0, SHOW_MAX).map(row) };
@@ -121,10 +131,12 @@ export async function showClips(address: string, tick: number): Promise<Rows> {
 /** "Hear it": the clips cut for the story at a `pub:<route>[/vN]` address (a version has the story's clips), at most three; none for any other page. */
 export async function storyClips(address: string, tick: number): Promise<Rows> {
   tickOver(tick);
-  if (!address.startsWith('pub:')) return { rows: [] };
+  if (!address.startsWith('pub:')) { lastStory = ''; return { rows: [] }; }
+  if (lastStory === '') asked = false;                               // a story page came to the top from another page: the clips are asked for again (once), so a clip matched since, or a failed ask, shows now
+  lastStory = address;                                               // (a swipe from one story to the next asks nothing more)
   const route = address.slice(4).replace(/^\//, '');
   await ensureAll();
-  const all = [...byID.values()].sort((a, b) => (a.clipID < b.clipID ? -1 : a.clipID > b.clipID ? 1 : 0));
+  const all = [...byID.values()].sort((a, b) => a.rank - b.rank);   // the server's order: the best quote of a story first
   let found = all.filter((c) => c.route === route);
   if (found.length === 0) { const bare = route.replace(/\/v[1-9][0-9]*$/, ''); found = all.filter((c) => c.route === bare); }
   return { rows: found.slice(0, STORY_MAX).map(row) };

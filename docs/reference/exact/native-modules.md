@@ -297,8 +297,9 @@ state (`status: "error"`, `message`), so the page shows its existing error and
 retry, never a spinner word. Time is never read: `Date.now()` and `new Date()` are
 refused. The server's `Date` header is "now" for ranking and "2 h ago"; a
 fixed `Date.UTC(...)` of a parsed string is fine. State between answers is a
-module-level `Map` (kept lists), cleared when a `tick` argument changes (a pull to
-refresh).
+module-level `Map` (kept lists); what was asked is forgotten when a `tick` argument changes (a pull to
+refresh) and the next fetch replaces rows by id (clips.ts); a fetch that lands after the account
+changed is dropped (`accountGeneration()` taken before the request).
 
 **4. Grants.** `export const grants` is read by the build without running the
 module: a string or a template of constants **in `app.ts` itself**. An imported

@@ -259,5 +259,5 @@ final class OpeningCacheTests: XCTestCase {
         _ = await ready.start(reason: .launch)
         XCTAssertEqual(s2, 0, "nothing to wait for: no wait")
     }
-    // 11 (the stories held on the phone play next when the desk cannot be reached) is a bun test now: content-run.test.ts S7, `localStories`.
+    // 11 (the stories held on the phone play next when the desk cannot be reached): only the helper moved, `localStories` (bun test content-run.test.ts S7). Nothing on the run sheet calls it yet, so the offline fill is not wired: a named residual (docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md).
 }

@@ -120,6 +120,7 @@ export class Retrieval {
   private runnerGen = -1;
   private running = new Set<Promise<void>>();
   private lastLine = '';
+  private restN = 0;
   private answered = new Map<string, Promise<{ id: string; ok: boolean }>>();
   modelState: 'ok' | 'downloading' | 'absent' = 'absent';
   private prog = { done: 0, total: 0, rate: 0 };
@@ -145,25 +146,42 @@ export class Retrieval {
   /** Sign-out: nothing of the account stays in the index; a running pass is stale and writes nothing more. */
   reset(): void {
     this.gen++; this.wanted = false; this.runnerGen = -1; this.prog = { done: 0, total: 0, rate: 0 }; this.lastLine = '';
+    this.loaded = null; this.store = new VectorStore(this.engine, this.dimension); this.cold = null; this.modelState = 'absent';
     this.corpus.reset(); this.answered.clear();
   }
 
   private async openVectors(): Promise<void> {
-    this.loaded ??= loadVectors(this.storage, this.engine, this.dimension).then((s) => { this.store = s; });
+    // The account guard of this runtime is `gen` (reset() runs at every sign-out through onSignOut): a read that lands after a reset installs nothing.
+    const g = this.gen;
+    this.loaded ??= loadVectors(this.storage, this.engine, this.dimension).then((s) => { if (g === this.gen) this.store = s; });
     await this.loaded;
   }
 
   /** Read every source: the cached front (the phone's own file), then each registered store. A source that throws leaves its old documents. */
-  async refresh(): Promise<void> {
-    this.corpus.hold('paper-front', await loadPaperFront(this.storage, this.corpus.storyDates));
+  async refresh(): Promise<boolean> {
+    const g = this.gen, live = (): boolean => g === this.gen, before = this.corpus.index.count;
+    const front = await loadPaperFront(this.storage, this.corpus.storyDates);
+    if (!live()) return false;                                  // a sign-out came while the file was read: nothing of it is held
+    this.corpus.hold('paper-front', front);
     for (const [name, fn] of [...this.sources]) {
-      try { this.corpus.hold(name, await fn()); } catch { /* a store that cannot be read is skipped this time */ }
+      try { const docs = await fn(); if (!live()) return false; await this.corpus.holdSliced(name, docs, live); } catch { /* a store that cannot be read is skipped this time */ }
     }
+    return live() && this.corpus.index.count !== before;       // true: the index changed, so the embedding pass has work
   }
+  private cold: Promise<void> | null = null;
+  /** How long the first ask after a launch waits for the stores to be indexed (they are indexed in slices, in the background, either way). */
+  static COLD_WAIT_MS = 1500;
 
   async serve(a: Ask): Promise<Served> {
     await this.openVectors();
-    await this.refresh();
+    if (this.cold === null) {
+      // The first ask after a launch (or a sign-in) finds an empty index: the stores are indexed in slices in the background and the ask waits for them only a little,
+      // so an answer turn never runs a whole cold build (a real store: seconds). What is not indexed yet is simply not in this answer.
+      const g = this.gen;
+      const c: Promise<void> = this.refresh().then((changed) => { if (changed && g === this.gen) this.kick(); }, () => undefined);
+      this.cold = c;
+      await Promise.race([c, sleep(Retrieval.COLD_WAIT_MS)]);
+    } else if (await this.refresh()) this.kick();
     const rs = runSheetDocs(a.facts.runSheet);
     this.corpus.hold('runsheet', rs.docs);
     this.corpus.hold('open-pages', openPageDocs(a.facts.pages));
@@ -222,12 +240,17 @@ export class Retrieval {
       }
     } catch { this.modelState = 'absent'; return; }
     this.modelState = 'ok';
+    console.log(`AUTORADIO embed model=ok items=${items.length} done=${this.prog.done} (pass starts)`);
     const store = this.store, started = this.now(), before = store.count;
     await runJob(store, (p) => n.embed(p), items, {
       busy: async () => { try { const s = await n.deviceState(); return s.radioBusy || s.lowPower || s.thermal; } catch { return true; } },
       save: async () => { if (g === this.gen) await saveVectors(store, this.storage); },
       rest: async () => {
-        if (g === this.gen) { this.prog.done = Math.min(store.count, items.length); const dt = (this.now() - started) / 1000; this.prog.rate = dt > 0 ? Math.max(0, store.count - before) / dt : 0; }
+        if (g === this.gen) {
+          this.prog.done = Math.min(store.count, items.length); const dt = (this.now() - started) / 1000; this.prog.rate = dt > 0 ? Math.max(0, store.count - before) / dt : 0;
+          // The pass's one line (counts only): a stuck or failing pass is seen in the log. Every 25th slice's rest.
+          if (++this.restN % 25 === 1) console.log(`AUTORADIO embed model=${this.modelState} items=${items.length} done=${this.prog.done} rate=${this.prog.rate.toFixed(1)}/s`);
+        }
         await sleep(this.delays.rest);
       },
       cancelled: () => g !== this.gen,
@@ -244,7 +267,12 @@ export class Retrieval {
     const have = this.answered.get(a.id);
     if (have) return have;
     const p = (async () => {
-      try { await later({ op: 'retrievalAnswer', id: a.id, context: toWire(a.id, await this.serve(a)) }); return { id: a.id, ok: true }; }
+      const g = this.gen;
+      try {
+        const served = await this.serve(a);
+        if (g !== this.gen) { this.answered.delete(a.id); return { id: a.id, ok: false };  }       // another account began meanwhile: nothing of this answer is sent
+        await later({ op: 'retrievalAnswer', id: a.id, context: toWire(a.id, served) }); return { id: a.id, ok: true };
+      }
       catch { this.answered.delete(a.id); return { id: a.id, ok: false }; }
     })();
     this.answered.set(a.id, p);
@@ -271,7 +299,7 @@ export function withProviders(q: string, local: Row[]): Row[] {
   return out;
 }
 
-export type Found = { hits: Row[]; note: string; query: string; stale?: boolean };
+export type Found = { hits: Row[]; note: string; query: string };
 let latest = 0;
 /**
  * The paper-wide half of the launcher's search (the server's substring search over every published story, public: no key). One ask goes out
@@ -283,10 +311,11 @@ export async function launcherSearch(raw: string, local: Row[], get: (path: stri
   const mine = ++latest;
   if (q === '') return { hits: [], note: '', query: '' };
   await sleep(o.pause);
-  if (mine !== latest) return { hits: local, note: '', query: q, stale: true };
+  if (mine !== latest) return { hits: local, note: '', query: '' };
   const status = await searchPaper(q, get);
-  if (mine !== latest) return { hits: local, note: '', query: q, stale: true };
+  if (mine !== latest) return { hits: local, note: '', query: '' };
   const base = withProviders(q, local);
   const hits = status.state === 'done' ? corpusRows(status.hits, base) : base;
+  console.log(`search: paper ${status.state} found=${status.hits.length} extra=${hits.length - base.length}`);      // counts only: the proof reads it (rows the paper added beyond the local ones)
   return { hits, note: corpusNote(status, hits.length > 0), query: q };
 }

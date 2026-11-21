@@ -41,6 +41,14 @@ export type Item = {
 };
 
 export const BUDGET = { windowTokens: 2048, share: 0.5, charsPerToken: 3.5, candidates: 20, perParent: 2, maxItemChars: 800, minItemChars: 240 };
+/**
+ * THE INDEX'S BOUND. The shared runtime has one Hermes module heap of 64 MiB for all of app.ts (docs/reference/exact/internals.md, "heap"); measured under Bun
+ * (2026-11-21, review of the retrieval lane): 1,900 passages of the R7 fixture hold about 58 MB. So the index holds at most MAX_INDEX_ITEMS passages in all
+ * (newest-first sources fill it first; a passage past the bound is not indexed, never an error) and cuts one passage's text at MAX_ITEM_CHARS. 1,200 passages is
+ * about 35 MB measured the same way: it leaves room for the app's other state. Raising it needs a heap measurement under the real 64 MiB limit first.
+ */
+export const MAX_INDEX_ITEMS = 1200;
+export const MAX_ITEM_CHARS = 4000;
 export const BUDGET_CHARS = Math.floor(BUDGET.windowTokens * BUDGET.share * BUDGET.charsPerToken); // 3,584
 
 // ---------------------------------------------------------------------------------------------------------------- tokens
@@ -158,7 +166,9 @@ export class Index {
     this.keys.set(d.id, k);
     const titleTokens = tokens(d.title);
     const mine: number[] = [];
-    const add = (id: string, text: string, address: string, place: string): void => {
+    const add = (id: string, whole: string, address: string, place: string): void => {
+      if (this.liveCount >= MAX_INDEX_ITEMS) return;          // the bound (MAX_INDEX_ITEMS above): this passage is not indexed
+      const text = whole.length > MAX_ITEM_CHARS ? whole.slice(0, MAX_ITEM_CHARS) : whole;
       const tf = new Map<string, number>();
       let n = 0;
       for (const t of tokens(text)) { tf.set(t, (tf.get(t) ?? 0) + 1); n++; }
@@ -743,6 +753,18 @@ export class Corpus {
     for (const old of this.groups.get(group) ?? []) if (!ids.has(old)) this.index.remove(old);
     this.groups.set(group, ids);
     this.index.upsertAll(docs);
+  }
+  /** The same as `hold`, in slices that hand the processor back between them (an answer turn has a CPU budget of its own: a cold build of a real store must not run in one go).
+   * `live` says the account is still the one the documents were read for; once it is not, nothing more is indexed. */
+  async holdSliced(group: string, docs: Doc[], live: () => boolean, slice = 40): Promise<void> {
+    const ids = new Set(docs.map((d) => d.id));
+    for (const old of this.groups.get(group) ?? []) if (!ids.has(old)) this.index.remove(old);
+    this.groups.set(group, ids);
+    for (let i = 0; i < docs.length; i += slice) {
+      if (!live()) return;
+      this.index.upsertAll(docs.slice(i, i + slice));
+      if (i + slice < docs.length) await new Promise<void>((r) => setTimeout(r, 0));
+    }
   }
   drop(group: string): void { this.hold(group, []); this.groups.delete(group); }
   /** Sign-out: everything held goes. */

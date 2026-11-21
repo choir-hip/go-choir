@@ -59,6 +59,11 @@ describe('S3 to S5 the run', () => {
     const slow = fetchers({ stories: async () => { n++; await new Promise((r) => setTimeout(r, 20)); return []; } });
     n = 0; await Promise.all([syncContent('k3', storage, env(slow)), syncContent('k3', storage, env(slow))]); expect(n).toBe(1);
   });
+  test('S3b the launch sync never walks the files (stories, documents and the small kinds only)', async () => {
+    let walked = 0;
+    const r = await syncContent('kf', storage, env(fetchers({ fileList: async () => { walked++; return []; } })));
+    expect(r.state).toBe('done'); expect(walked).toBe(0); expect(r.line).not.toContain('file');
+  });
   test('S4 signed out and offline change nothing', async () => {
     const out = await syncContent('k', storage, env(fetchers({ documentPage: async () => { throw new SignedOutError(); } })));
     expect(out.state).toBe('signedout');
@@ -93,6 +98,9 @@ describe('S6 to S8 reads and grants', () => {
     expect(out[0]).toMatchObject({ id: 's-story-2', address: 'story:2' });
     expect(localStories([it('s/ä 6', 'X', 'y', 1)], { told: [], held: new Set(), limit: 5 })[0].id).toBe('s-s---6');
     expect(localStories([it('a', 'A', 'b', 1)], { told: [], held: new Set(['s-a']), limit: 5 })).toEqual([]);
+    // the run sheet's bounds: 8 KiB of text and a 300-byte one-line title (a longer entry would be dropped as invalid by the sheet)
+    const big = localStories([it('b', 'T'.repeat(500), 'x'.repeat(20000), 1)], { told: [], held: new Set(), limit: 5 })[0];
+    expect(new TextEncoder().encode(big.text).length).toBeLessThanOrEqual(8192); expect(new TextEncoder().encode(big.title).length).toBeLessThanOrEqual(300);
   });
   test('S8 the grants name the database', () => { expect(grants).toContain('sqlite.open app:/data/content.db'); });
 });

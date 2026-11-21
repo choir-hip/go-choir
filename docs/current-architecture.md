@@ -16,7 +16,7 @@ carries "checked" (the date someone read the code or proof). A row with no proof
 
 1. There is no single play queue on the phone. Four lists decide what plays next, and skip consults them in a fixed order (section 6).
 2. There is no Autoradio desk that runs cells. The `autoradio` package desk is a manifest (verbs Report, Done; custodian of `choir.app.autoradio.run_sheet`, whose server store is built but not yet written by any desk). Its two server routes are one streamed model call each, no tools, no cell, no Texture document (sections 2, 5).
-3. An on-device language model runs in the phone app today (Qwen3-0.6B through llama.cpp), but it answers only from the reader's saved stories. It is not given the deck, the queue or the play history (section 6).
+3. An on-device language model runs in the phone app today (Qwen3-0.6B through llama.cpp), but it answers only from what the phone holds for the turn: the cached front page (headlines and deks), the run sheet, the open pages, the edition topics and the page in front, found by shared code (`retrieval-run.ts`); the stories, documents and books the phone holds in full are not searched yet. It is not given the deck, the queue or the play history (section 6).
 4. The phone's voice turns call the computer's `/api/autoradio/turns` with the queue and 40 candidate stories. The DJ's stretch comes from `/api/autoradio/programme`. If no stretch segment arrives within 8 seconds, one front-page story plays. On the lane `lane/programme-opening` (not deployed) the route is rewritten to answer `open` with one `opening` and every other cause with one to six entries (kinds `opening`, `transition`); the installed phone does not know those kinds, so the route lands only after the phone build that does.
 5. Texture writes one piece at a time. Research is read-only on the world. Engineering mutates only inside capsules. Management admits engineering.
 6. Prompts are embedded yaml, seeded to disk per computer; a per-owner override file exists, but its write route is refused on deployed computers (section 3, 8).
@@ -41,7 +41,7 @@ carries "checked" (the date someone read the code or proof). A row with no proof
 ```
 
 The owner's picture: on-device models answer a voice prompt at once with the deck, queue and play history as context, then
-the desk takes over. Today: the on-device layer answers from saved stories only (partial); the deck/queue/history context is
+the desk takes over. Today: the on-device layer answers from the cached front, the run sheet, open pages, topics and the page in front only (partial); the deck/queue/history context is
 **idea**; the desk is a server fast turn plus a stretch writer. Mail and podcast notes in the program: **specified**
 (DJ design slice 3, slice 7; the route drops those kinds). Checked 2026-11-16.
 
@@ -145,12 +145,12 @@ Fallback: no stretch segment within 8 seconds (or no candidates, 404/503) gives 
 | Speech start and end | energy detector (`energy-vad`), turn policy from Mike's engine (`Voice/TurnPolicy`) | none by default; Silero VAD (about 1 MB) is registered and in setup's ladder | Silero 0.6 ms per 256 ms hop, 106 MB (A16, before the 2026-11-15 ruling) |
 | Transcription | Apple's recogniser (`apple-speech`) | Parakeet EOU 120M / TDT 0.6B registered, setup ladder | EOU first load 34 s, RTF 0.035, 149 MB (A16, same caveat) |
 | Quick decisions | the computer's Jev route, one call per turn with every question (`choir-system1`) | Qwen3-0.6B one-token scorer exists (`llama-qwen3-0.6b`) and is not the default | none; ledger C37 and C38 (scorer speed and Jev agreement) were never settled |
-| First spoken answer | holder `saved-answer`: 2 to 3 sentences from the reader's saved stories and books using Qwen3-0.6B Q8 (639 MB, llama.cpp b12259); with no passage above a relevance floor, one holding line and the model is not called; `NO_ANSWER` is allowed | **Qwen3-0.6B, yes** | none recorded. Whether the model is downloaded on the owner's phone: unknown; settle by the trace event `localWarm` or voice setup's record |
+| First spoken answer | holder `saved-answer`: 2 to 3 sentences from the passages shared code found (the cached front's headlines and deks, the run sheet, open pages, edition topics, the page in front; not the saved stories or books yet) using Qwen3-0.6B Q8 (639 MB, llama.cpp b12259); with no passage above a relevance floor, one holding line and the model is not called; `NO_ANSWER` is allowed | **Qwen3-0.6B, yes** | none recorded. Whether the model is downloaded on the owner's phone: unknown; settle by the trace event `localWarm` or voice setup's record |
 | Speaking voice | catalog default neural voice (Kokoro 82M, "Heart"), system voice while the model is missing | Kokoro; Pocket TTS and Phonon registered | the owner saw a neural voice load and speak via Settings (problem record 2026-11-15, QA round 1); the default was the system voice then |
 | Not in the default path | LFM3-Audio, Smart Turn, wake word, speaker check | registered or sketched only | none; `ON-DEVICE-MODELS.md` sections 1 to 7 are relayed, unverified |
 
 What the on-device language model is given: the system prompt, the page in front (title, kind, text) and the recent lines
-(`LocalAck`), or numbered passages from saved stories (`SavedAnswerHolder`). It is not given the deck, the queue or the play
+(`LocalAck`), or numbered passages from those sources (`SavedAnswerHolder`). It is not given the deck, the queue or the play
 history. Plain spoken commands (skip, back, pause, play, "play this next", "add this to the queue", "clear the queue") are matched
 by words, whole utterance only, with no model (`QueueVoice.swift`). Anything else goes to the server turn with the queue.
 Owner ruling 2026-11-15: models under 100 MB may be bundled, larger ones download at onboarding.

@@ -55,7 +55,10 @@ let folderKnown = false;                              // the folder was listed, 
 const known = new Map<string, FM.Entry>();           // id -> the entry the last list or open saw
 let open: Loaded[] = [];                              // the last few documents held in memory, newest last
 
-export function forget(): void { folderKnown = false; places = null; known.clear(); open = []; }
+let cacheGen = -1;
+export function forget(): void { folderKnown = false; places = null; known.clear(); open = []; cacheGen = accountGeneration(); }
+/** The caches belong to the account generation they were made in: the first touch after it moved empties them. A late answer is checked against its own captured generation before it inserts. */
+const sync = (): void => { if (cacheGen !== accountGeneration()) forget(); };
 
 /** Sign-out (account.ts): the places and what this session holds. The cache is under app:/cache/files, which the Files wipe removes. Never throws. */
 export async function wipeImported(storage: Storage | undefined): Promise<void> {
@@ -65,18 +68,22 @@ export async function wipeImported(storage: Storage | undefined): Promise<void> 
 }
 
 async function loadPlaces(storage: Storage | undefined): Promise<Record<string, M.Place>> {
+  sync();
   if (places) return places;
-  places = {};
-  if (!storage) return places;
+  const gen = accountGeneration();
+  const mine: Record<string, M.Place> = {};
+  places = mine;
+  if (!storage) return mine;
   try {
     const v = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(PLACES_FILE)));
     if (v && typeof v === 'object' && !Array.isArray(v)) {
       for (const [k, p] of Object.entries(v as Record<string, { block?: unknown; length?: unknown }>)) {
-        if (p && typeof p.block === 'number' && typeof p.length === 'number') places[k] = { block: p.block, length: p.length };
+        if (p && typeof p.block === 'number' && typeof p.length === 'number') mine[k] = { block: p.block, length: p.length };
       }
     }
   } catch { /* none kept yet */ }
-  return places;
+  if (gen !== accountGeneration()) { if (places === mine) places = null; return {}; }            // the account moved while the file was read: nothing of it is kept or shown
+  return mine;
 }
 async function setPlace(storage: Storage | undefined, id: string, block: number, length: number, gen: number): Promise<void> {
   const all = await loadPlaces(storage);
@@ -95,8 +102,11 @@ const cacheKey = (e: FM.Entry): string => FM.hash(`${e.path}|${e.size}|${e.modif
 
 /** The documents in the folder (PDFs and e-books), newest first; a folder that does not exist yet holds none. */
 async function entries(net: F.Net): Promise<FM.Entry[]> {
+  sync();
+  const gen = accountGeneration();
   let listed;
-  try { listed = await F.fileEntries(M.FOLDER, net); folderKnown = true; } catch (e) { if (isMissing(e)) { folderKnown = false; return []; } throw e; }
+  try { listed = await F.fileEntries(M.FOLDER, net); if (gen === accountGeneration()) folderKnown = true; } catch (e) { if (isMissing(e)) { if (gen === accountGeneration()) folderKnown = false; return []; } throw e; }
+  if (gen !== accountGeneration()) return [];                                                       // a late list of the previous account's folder is not kept
   const docs = listed.entries.filter((e) => !e.isDirectory && M.kindOfName(e.name) !== null)
     .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   for (const e of docs) known.set(M.idOf(e.name), e);
@@ -116,21 +126,22 @@ async function entryOf(id: string, net: F.Net, refresh = false): Promise<FM.Entr
 // ---------------------------------------------------------------- the text
 
 type Text = { status: 'ready' | 'empty' | 'error'; message: string; doc?: Loaded };
-const remember = (l: Loaded): Loaded => { open = [...open.filter((o) => o.key !== l.key), l].slice(-OPEN_DOCUMENTS); return l; };
+const remember = (l: Loaded, gen: number): Loaded => { if (gen !== accountGeneration()) return l; sync(); open = [...open.filter((o) => o.key !== l.key), l].slice(-OPEN_DOCUMENTS); return l; };
 
 /** The text of a document: held in memory, else read from the phone's copy of what the computer read, else asked of the computer (and kept). */
 async function textOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Promise<Text> {
+  sync();
+  const gen = accountGeneration();
   const key = cacheKey(e), kind = M.kindOfName(e.name)!;
   const held = open.find((o) => o.key === key);
-  if (held) return { status: 'ready', message: '', doc: remember(held) };
+  if (held) return { status: 'ready', message: '', doc: remember(held, gen) };
   const file = `${F.CACHE_DIR}/${key}/text.json`;
   if (storage) {
     try {
       const v = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(file)));
-      if (Array.isArray(v?.sections) && Array.isArray(v?.blocks) && v.blocks.length > 0) return { status: 'ready', message: '', doc: remember({ key, text: v as M.DocText, index: null }) };
+      if (Array.isArray(v?.sections) && Array.isArray(v?.blocks) && v.blocks.length > 0) return { status: 'ready', message: '', doc: remember({ key, text: v as M.DocText, index: null }, gen) };
     } catch { /* not kept yet */ }
   }
-  const gen = accountGeneration();
   try {
     const r = await F.fileTexture(e, storage, net);
     if (r.status !== 'ready' || !r.target.startsWith('texture:')) return { status: 'error', message: r.message === '' ? 'Your computer could not read this document.' : r.message };
@@ -141,7 +152,7 @@ async function textOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Pr
       try { await storage.fs.mkdir(`${F.CACHE_DIR}/${key}`).catch(() => {}); await writeCurrent(gen, storage, file, new TextEncoder().encode(JSON.stringify(text))); } catch { /* a full disk loses only the copy */ }
     }
     console.log(`imported: text kind=${kind} blocks=${text.blocks.length} sections=${text.sections.length}`);
-    return { status: 'ready', message: '', doc: remember({ key, text, index: null }) };
+    return { status: 'ready', message: '', doc: remember({ key, text, index: null }, gen) };
   } catch (err) {
     return { status: 'error', message: say(err) };
   }

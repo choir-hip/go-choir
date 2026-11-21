@@ -140,6 +140,13 @@ public final class ClipStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         for c in clips where byID[c.clipID] == nil { byID[c.clipID] = c; byRoute[c.route, default: []].append(c) }
     }
+    /// The page handed this clip's own record (the newest the phone has of it): it REPLACES the row held for the id, so a record the radio's fetch kept without a usable fingerprint
+    /// plays as the clip the row offered, and one held once stays held once.
+    public func put(_ clip: PodcastClip) {
+        lock.lock(); defer { lock.unlock() }
+        if let old = byID[clip.clipID] { byRoute[old.route]?.removeAll { $0.clipID == clip.clipID } }
+        byID[clip.clipID] = clip; byRoute[clip.route, default: []].append(clip)
+    }
     public var all: [PodcastClip] { lock.lock(); defer { lock.unlock() }; return byID.values.sorted { $0.clipID < $1.clipID } }
     /// The front was refreshed: the next stretch asks again.
     public func markStale() { lock.lock(); stale = true; lock.unlock() }

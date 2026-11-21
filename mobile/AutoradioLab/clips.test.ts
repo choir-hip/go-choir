@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import * as C from './clips.ts';
 import { parseEpisode } from './podcast-model.ts';
+import { nextGeneration } from './api.ts';
 
 const body = JSON.parse(readFileSync(new URL('../fixtures/podcasts/clips.json', import.meta.url), 'utf8')) as { clips: Record<string, unknown>[] };
 const FEED = 'https://feeds.example.com/show.xml';
@@ -153,6 +154,45 @@ describe('H2 one bulk request', () => {
     expect(C.remembered()).toBe(0);
     await C.storyClips('pub:a', 0);
     expect(calls.length).toBe(2);
+  });
+});
+
+describe('H4 refresh, replacement, order and the account', () => {
+  test('a story reached again from another page asks again, and a failed first ask is retried then (no tick needed)', async () => {
+    handler = () => new Response('', { status: 500 });
+    expect((await C.storyClips('pub:a', 0)).rows).toEqual([]);
+    expect((await C.storyClips('pub:a', 0)).rows).toEqual([]);          // the same page drawn again: no new request
+    expect(calls.length).toBe(1);
+    handler = () => new Response(JSON.stringify(body), { status: 200 });
+    await C.storyClips('radio:', 0);                                      // another page on top
+    expect((await C.storyClips('pub:a', 0)).rows.length).toBe(3);
+    expect(calls.length).toBe(2);
+    await C.storyClips('pub:b', 0);                                       // a swipe to the next story asks nothing more
+    expect(calls.length).toBe(2);
+  });
+  test('a fetched clip replaces the held one with the same id; ids absent from the answer stay', async () => {
+    await C.storyClips('pub:a', 0);
+    const changed = body.clips.filter((c) => c.clip_id === 'clip-000000000001').map((c) => ({ ...c, audio_url: 'https://cdn.example.com/new.mp3', quote: 'A repaired quote.' }));
+    handler = () => new Response(JSON.stringify({ clips: changed }), { status: 200 });
+    const r = await C.storyClips('pub:a', 1);
+    expect(r.rows.find((x) => x.clipID === 'clip-000000000001')!.quote).toBe('A repaired quote.');
+    expect(r.rows.length).toBe(3);
+    expect(JSON.parse((await C.clipAct('play', 'clip-000000000001')).play.record).audio_url).toBe('https://cdn.example.com/new.mp3');
+  });
+  test('a story keeps the server\'s order (best first), not the order of the ids', async () => {
+    const mk = (id: string) => ({ ...body.clips[0], clip_id: id, story: { route: '/a', title: 'S' } });
+    handler = () => new Response(JSON.stringify({ clips: [mk('clip-0000000000c3'), mk('clip-0000000000a1'), mk('clip-0000000000b2')] }), { status: 200 });
+    expect((await C.storyClips('pub:a', 0)).rows.map((x) => x.clipID)).toEqual(['clip-0000000000c3', 'clip-0000000000a1', 'clip-0000000000b2']);
+  });
+  test('a clip set that lands after the account changed is dropped', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => { release = r; });
+    globalThis.fetch = (async (input: RequestInfo | URL) => { calls.push(String(input)); await gate; return new Response(JSON.stringify(body), { status: 200 }); }) as typeof fetch;
+    const pending = C.storyClips('pub:a', 0);
+    nextGeneration(); C.forget();
+    release();
+    expect((await pending).rows).toEqual([]);
+    expect(C.remembered()).toBe(0);
   });
 });
 

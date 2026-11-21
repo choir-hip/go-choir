@@ -17,7 +17,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { accountGeneration, nextGeneration, resetSeam, bindNative } from './api.ts';
 import { nativeDevice } from './edition-picks.ts';
-import { WIPES, wipedPaths, wipeAll, leftovers } from './account.ts';
+import { WIPES, wipedPaths, wipeAll } from './account.ts';
 import {
   PICKS_FILE, picksPage, picksText, toggle, expand, addTyped, clearPicks, hear, drainHeard, wipePicks, forgetPicks, parseStored, type Device, type Env,
 } from './edition-picks.ts';
@@ -149,24 +149,33 @@ describe('P4 accounts', () => {
     await toggle(storage, 'Film', E());                        // B's own first tap
     expect(stored()).toEqual(['Film']);
   });
-  test('d: a wipe whose rm fails empties the file instead; when it can do neither it names itself failed', async () => {
+  test('d: a wipe whose rm fails empties the file and still names itself failed (a file that remains is never "cleared")', async () => {
     await toggle(storage, 'Space', E());
     failRm = true; nextGeneration();
-    await wipePicks(storage, E());
+    await expect(wipePicks(storage, E())).rejects.toThrow();
     expect(stored()).toEqual([]); expect((await picksText(storage, E())).picks).toBe('');
     await toggle(storage, 'Chess', E());                       // (a new account's tap, after the generation moved once more)
     nextGeneration(); failWrites = true;
     await expect(wipePicks(storage, E())).rejects.toThrow();
   });
-  test('d2: with rm failing for good, the emptied file counts as cleared in the wipe bookkeeping (no full wipe at every launch)', async () => {
+  test('d2: with rm failing for good, the wipe fails by name (the file is emptied, never reported cleared)', async () => {
     await toggle(storage, 'Space', E());
     failRm = true; nextGeneration();
     const failed = await wipeAll(storage, undefined, WIPES.filter((w) => w.name === 'edition-picks'));
-    expect(failed).toEqual([]);
-    expect(await leftovers(storage)).toEqual([]);
-    expect((await picksText(storage, E())).picks).toBe('');
-    put(PICKS_FILE, '{"topics":["Space"]}');                   // a file that still holds picks IS left over
-    expect(await leftovers(storage)).toEqual(['edition-topics.json']);
+    expect(failed).toEqual(['edition-picks']);
+    failRm = false;
+  });
+  test('P6c a read that fails for another reason than absence fails closed: not loaded, no write over the real picks', async () => {
+    put(PICKS_FILE, '{"topics":["Space","Chess"]}');
+    const real = storage.fs.readFile; let broken = true;
+    (storage.fs as { readFile: unknown }).readFile = async (p: string) => { if (broken) throw new Error('EACCES'); return real(p); };
+    await expect(picksPage(storage, {}, E())).rejects.toThrow();
+    await expect(hear(storage, 'done', E())).rejects.toThrow();
+    expect(JSON.parse(new TextDecoder().decode(files.get(PICKS_FILE)!)).topics).toEqual(['Space', 'Chess']);
+    broken = false;
+    const page = await picksPage(storage, {}, E());
+    expect(page.loaded).toBe(true); expect(page.picks).toBe('Space\nChess');
+    (storage.fs as { readFile: unknown }).readFile = real;
   });
   test('the wipe list covers the file (account.ts)', () => {
     expect(wipedPaths()).toContain(PICKS_FILE);

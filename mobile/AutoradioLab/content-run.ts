@@ -2,12 +2,13 @@
 // and the narrow reads other lanes use. Tests: content-run.test.ts (S1 to S8).
 //
 // Narrow reads for other lanes (the Swift consumers of the store read nothing now): `contentDocs(storage)` every held item as search documents (retrieval), `contentAt(storage, address)` the item that
-// opens at an address (the reader offline), `localStories(items, ...)` the stories the radio can play when the desk cannot be reached (the run sheet writer).
+// opens at an address, `localStories(items, ...)` the stories the radio can play when the desk cannot be reached (a helper with its tests; nothing on the run sheet calls it yet).
+// `contentDocs` is what the retrieval runtime reads (retrieval-live.ts `live.setDocSource('store', ...)`).
 //
 // The one native fact: `{op: 'contentBusy'}` on the app module (AutoradioModule+Notebook.swift `notebookOp`): whether remote audio is on air. The player is native; a sync does not take the network from it.
 import type { Storage } from './app.contract.d.ts';
 import { ContentStore, CONTENT_DB, syncAll, liveFetchers, toDoc, type Db, type Fetchers, type StoredItem } from './content.ts';
-import { getJSON, nativeLater, SignedOutError } from './api.ts';
+import { accountGeneration, getJSON, nativeLater, SignedOutError } from './api.ts';
 import { cut } from './takes.ts';
 import type { Doc } from './search.ts';
 
@@ -24,8 +25,10 @@ export function contentStore(storage: Storage | undefined): Promise<ContentStore
     try {
       if (held) { held.store.dispose(); try { await held.db.close?.(); } catch { /* closed */ } held = null; }
       if (!storage) return null;
+      const acct = accountGeneration();                                           // an open that straddles a sign-out is not installed: the file under it is the old account's
       const db = (await storage.sqlite.open(CONTENT_DB)) as Closable;
       const store = new ContentStore(db); await store.init();
+      if (acct !== accountGeneration()) { store.dispose(); try { await db.close?.(); } catch { /* closed */ } return null; }
       held = { store, db, gen: store.generation };
       return store;
     } catch { return null; } finally { opening = null; }
@@ -36,10 +39,15 @@ export function contentStore(storage: Storage | undefined): Promise<ContentStore
 export type SyncInfo = { state: 'done' | 'signedout' | 'offline' | 'unavailable'; line: string };
 export type Env = { fetchers?: Fetchers; now?: () => Promise<number | null>; busy?: () => Promise<boolean> };
 const serverNow = async (): Promise<number | null> => { try { return (await getJSON('/health')).serverTime; } catch { return null; } };
+export const BUSY_DEADLINE_MS = 2000;
+/** Whether remote audio is on air. A native answer that never comes counts as "not busy" after the deadline, so a wedged call cannot hold the sync (and its `running` slot) forever. */
 const nativeBusy = async (): Promise<boolean> => {
   const l = nativeLater() as unknown as ((r: Record<string, unknown>) => Promise<unknown>) | null;
   if (!l) return false;
-  try { const r = (await l({ op: 'contentBusy' })) as { busy?: unknown } | null; return r?.busy === true; } catch { return false; }
+  return Promise.race([
+    (async () => { try { const r = (await l({ op: 'contentBusy' })) as { busy?: unknown } | null; return r?.busy === true; } catch { return false; } })(),
+    new Promise<boolean>((res) => setTimeout(() => res(false), BUSY_DEADLINE_MS)),
+  ]);
 };
 
 let last: { key: string; info: SyncInfo } | null = null;
@@ -49,7 +57,8 @@ let running: { key: string; p: Promise<SyncInfo> } | null = null;
 export function syncContent(key: string, storage: Storage | undefined, env: Env = {}): Promise<SyncInfo> {
   if (last?.key === key) return Promise.resolve(last.info);
   if (running?.key === key) return running.p;
-  const p = run(storage, env).then((info) => { if (info.state !== 'unavailable' && info.state !== 'offline') last = { key, info }; return info; }).finally(() => { running = null; });
+  const gen = accountGeneration();                                                  // a result that lands after a sign-out is not the next account's last answer
+  const p = run(storage, env).then((info) => { if (gen === accountGeneration() && info.state !== 'unavailable' && info.state !== 'offline') last = { key, info }; return info; }).finally(() => { if (running?.p === p) running = null; });
   running = { key, p };
   return p;
 }
@@ -68,7 +77,7 @@ async function run(storage: Storage | undefined, env: Env): Promise<SyncInfo> {
   }])) as unknown as Fetchers;
   const f: Fetchers = { ...watched, audioBusy: env.busy ?? nativeBusy };
   try {
-    const reports = await syncAll(store, f, { now, log: (l) => console.log(l) });
+    const reports = await syncAll(store, f, { now, files: false, log: (l) => console.log(l) });      // stories, documents and the small kinds; the file walk is not a launch job
     if (signedOut) return { state: 'signedout', line: 'Signed out: nothing synced.' };
     const stopped = reports.find((r) => r.stoppedBy !== '');
     if (reports.length > 0 && reports.every((r) => r.stoppedBy === 'error') ) return { state: 'offline', line: 'The computer could not be reached.' };
@@ -89,12 +98,12 @@ export type LocalStory = { id: string; title: string; text: string; address: str
 export function localStories(items: StoredItem[], o: { told: string[]; held: Set<string>; limit?: number }): LocalStory[] {
   const told = new Set(o.told.map((t) => t.trim().toLowerCase())), out: LocalStory[] = [];
   for (const it of [...items].filter((x) => x.kind === 'story').sort((a, b) => (b.date ?? -Infinity) - (a.date ?? -Infinity))) {
-    const title = it.title.replace(/\s+/g, ' ').trim(), body = it.text.trim();
+    const title = cut(it.title.replace(/\s+/g, ' ').trim(), 300), body = it.text.trim();            // the run sheet's bounds (RunSheetBounds: 8 KiB of text, 300 bytes of one-line title)
     if (title === '' || body === '' || told.has(title.toLowerCase())) continue;
     let id = 's-';
     for (const ch of it.id) { if (new TextEncoder().encode(id).length >= 64) break; id += /[0-9A-Za-z_.-]/.test(ch) ? ch : '-'; }
     if (o.held.has(id)) continue;
-    out.push({ id, title, text: cut(body, 16 * 1024), address: it.address });
+    out.push({ id, title, text: cut(body, 8 * 1024), address: it.address });
     if (out.length >= (o.limit ?? 5)) break;
   }
   return out;

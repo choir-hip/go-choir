@@ -67,7 +67,7 @@ public final class AccountWipe: @unchecked Sendable {
         register("turn-history") { turnHistory.clear() }
         register("notebook") {
             notebookCache.wipe()
-            if let f = legacyTopicsFile { try? FileManager.default.removeItem(at: f) }       // the old build's picks file (nothing writes it now); the proof in edition-picks.ts decides about it if this delete fails
+            if let f = legacyTopicsFile { try? FileManager.default.removeItem(at: f) }       // the old build's picks file (nothing writes it now); never read, so a failed delete leaves a file nothing opens
             if let f = topicsMarker { try? FileManager.default.removeItem(at: f) }
             await MainActor.run { notebook.wipe() }
         }
@@ -94,6 +94,7 @@ public final class AccountWipe: @unchecked Sendable {
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
         register("held-rest") { heldRest.wipe() }
+        register("retrieval-bridge") { RetrievalBridge.shared.clear() }     // the last turn's record and a pending ask belong to the account that left
     }
 
     /// For the app target's stores that are files (one-line registrations in AutoradioModule): delete these paths.

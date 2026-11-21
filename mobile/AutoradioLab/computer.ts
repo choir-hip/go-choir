@@ -16,7 +16,7 @@
 // Nothing here reads a clock or sets a timer: the poll is the page's `task`, and "Restart to update" sends an idempotency key made from a counter and the
 // computer's epoch, not from a random number (a data source may not call `Math.random`).
 
-import { authedJSON, HTTPError, segment, SignedOutError } from './api.ts';
+import { accountGeneration, authedJSON, HTTPError, segment, SignedOutError } from './api.ts';
 
 export type ComputerView = { id: string; state: string; target: string; phase: string; updateAvailable: boolean; message: string; epoch: number; checked: boolean };
 export const POLLS = 40;
@@ -124,10 +124,15 @@ export class Computer {
 }
 
 let one: Computer | undefined;
-/** The one Computer of this process (sources and acts share it). */
-export const computer = (): Computer => (one ??= new Computer());
+let oneGen = -1;
+/** The one Computer of this process (sources and acts share it) for the CURRENT account generation: a moved generation is a new Computer, so a late answer lands in the old one and is never shown. */
+export const computer = (): Computer => {
+  const g = accountGeneration();
+  if (!one || oneGen !== g) { one = new Computer(); oneGen = g; }
+  return one;
+};
 /** For tests: a new process. */
-export function forgetComputer(c?: Computer): void { one = c; }
+export function forgetComputer(c?: Computer): void { one = c; oneGen = accountGeneration(); }
 
 /** Source: the page's view; the first read of a signed-in phone asks the computer (C7: a signed-out phone sends nothing). */
 export async function settingsComputer(args: { signedIn: boolean; tick: number }): Promise<ComputerView> {

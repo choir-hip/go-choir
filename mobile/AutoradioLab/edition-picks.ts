@@ -86,10 +86,16 @@ async function ensure(storage: Storage | undefined, m: Mem): Promise<void> {
     m.loaded = (async () => {
       if (!storage) return;
       let t: string | undefined;
-      try { t = new TextDecoder().decode(await storage.fs.readFile(PICKS_FILE)); } catch { /* none: no picks yet */ }
+      try { t = new TextDecoder().decode(await storage.fs.readFile(PICKS_FILE)); } catch {
+        // Absent is "no picks yet"; anything else is a read that did not happen: fail closed (loaded stays false, nothing is written over the real list).
+        let there = true; try { await storage.fs.stat(PICKS_FILE); } catch { there = false; }
+        if (there) throw new Error('the edition picks could not be read');
+      }
       m.sel = new Selection(parseStored(t));
       m.own = m.sel.topics.filter((x) => !suggestions().some((s) => key(s) === key(x)));
     })();
+    m.loaded.catch(() => { if (m.loaded === failed) m.loaded = null; });
+    const failed = m.loaded;
   }
   await m.loaded;
 }
@@ -154,7 +160,8 @@ export async function picksText(storage: Storage | undefined, env: Env = liveEnv
 export async function picksPage(storage: Storage | undefined, a: { talking?: boolean } = {}, env: Env = liveEnv(storage)): Promise<PicksPage> {
   if (a.talking) await drainHeard(storage, env);
   const m = await opened(storage, env);
-  m.live = await env.live().catch(() => []);
+  const live = await env.live().catch(() => []);
+  if (m.gen === accountGeneration()) m.live = live;
   return build(m);
 }
 const pageNow = (storage: Storage | undefined, env: Env): Promise<PicksPage> => picksPage(storage, {}, env);
@@ -211,7 +218,12 @@ export async function wipePicks(storage: Storage | undefined, env: Env = liveEnv
   if (fs) {
     try { await fs.rm(PICKS_FILE); } catch { /* checked below */ }
     let there = true; try { await fs.stat(PICKS_FILE); } catch { there = false; }
-    if (there) { try { await fs.atomicWriteFile(PICKS_FILE, new TextEncoder().encode('{"topics":[]}')); } catch { failed = true; } }
+    if (there) {
+      try { await fs.atomicWriteFile(PICKS_FILE, new TextEncoder().encode('{"topics":[]}')); } catch { failed = true; }
+      try { await fs.rm(PICKS_FILE); } catch { /* checked below */ }
+      let still = true; try { await fs.stat(PICKS_FILE); } catch { still = false; }
+      if (still) failed = true;          // a file that remains is a wipe that failed: account.ts names the store and retries at the next launch
+    }
   }
   await pushMirror(env, 0, null, true);          // the native wipe is the other path
   if (failed) throw new Error('the edition picks could not be cleared');

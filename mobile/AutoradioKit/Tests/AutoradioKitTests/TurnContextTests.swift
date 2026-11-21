@@ -29,6 +29,8 @@ final class TurnContextTests: XCTestCase {
         XCTAssertTrue(prefix.contains("Senate passes the water bill") && prefix.contains("Senate committee delays"), "the Senate stories are in the context")
         XCTAssertTrue(prefix.contains("World News: The Senate week"), "and the podcast episode")
         XCTAssertFalse(prefix.contains("Harbor strike"), "and nothing unrelated")
+        // The order the holder is shown is the retriever's (the fake sorts newest first, as search.test.ts S1 and S5 prove for the real one): the day-old story comes before the three-day-old one.
+        if let w = prefix.range(of: "Senate passes the water bill"), let b = prefix.range(of: "Senate committee delays") { XCTAssertTrue(w.lowerBound < b.lowerBound, "newest first") } else { XCTFail("both stories are in the prefix") }
         XCTAssertTrue(suffix.contains("tell me about the Senate"))
     }
     func testOnAirIsTheContentPageOrWhatTheRunSheetHasOnAir() {

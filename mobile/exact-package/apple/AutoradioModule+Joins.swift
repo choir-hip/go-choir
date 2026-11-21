@@ -12,7 +12,7 @@ extension AutoradioModule {
             let op = args["op"] as? String ?? "", id = args["id"] as? String ?? "", record = args["record"] as? String ?? ""
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if let clip = PodcastClip.parse(record: record), clip.clipID == id { ClipStore.shared.merge([clip]) }
+                if let clip = PodcastClip.parse(record: record), clip.clipID == id { ClipStore.shared.put(clip) }
                 guard ClipStore.shared.clip(id) != nil else { reply(self.json(PodDone(status: "error", message: "That clip is not available any more."))); return }
                 if op == "play", !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
                 if op == "queue" { HearIt.enqueue(id) } else { await HearIt.play(id) }
