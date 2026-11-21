@@ -163,7 +163,7 @@ A refused source throws, and the page shows its existing failure state. The word
 in one place: the account card (`accountState`, `account-state.ts`), which is exempt,
 asks the boundary for the state without waiting (`boundary.state()`: the same fact read,
 no writes; when the state is CLEARING and no wipe is running it starts one and answers
-at once), and is shown on every page by the banner and on Settings > Account.
+at once) (amended in landing 1: the card also runs the Adopt job when the state is ADOPT, and answers with its result. The write is the same one a gated answer would make, idempotent, only when there is no record and a key, and it is what heals a failed Adopt without a tap), and is shown on every page by the banner and on Settings > Account.
 
 | State | Pages | The card says | Actions on the banner and in Settings | How it heals without a relaunch |
 | --- | --- | --- | --- | --- |

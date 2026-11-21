@@ -395,6 +395,27 @@ describe('C: one writer', () => {
   });
 });
 
+describe('E: the epoch, and a hung shared wipe', () => {
+  test('the epoch moves on sign-in (EMPTY then OPEN), so Files, Mail and Textures, which take only acctTick, ask again', async () => {
+    boot('none', 'absent', null);
+    const e0 = (await account.peek(m.storage, undefined)).epoch;
+    W.key = 'present'; W.value = KEY_A;
+    const e1 = (await account.peek(m.storage, undefined)).epoch;
+    expect(e1).not.toBe(e0);
+    const e2 = (await account.peek(m.storage, undefined)).epoch;
+    expect(e2).toBe(e1);                                                                              // and stable while nothing changes
+  });
+  test('a shared wipe that never answers is a failed Clear (nothing marked clean); Clear this phone still returns; the next attempt retries', async () => {
+    boot('A', 'A'); (account as { timing: { sharedMs?: number } }).timing.sharedMs = 40; m.faults.hangRm.add('app:/data/takes.json');
+    const r = await Promise.race([signOut(), wait(2000).then(() => 'hung')]);
+    expect(r).not.toBe('hung');
+    expect((r as { done: boolean }).done).toBe(true); expect((r as { failed: string }).failed).not.toBe('');
+    expect(m.files.has(STAMP)).toBe(true); expect(await stateNow()).toBe('clearing');                  // the record stays: nothing was marked clean
+    m.faults.hangRm.clear(); await probe(); await idle();
+    expect(dataLeft()).toEqual([]); expect(await stateNow()).toBe('empty');
+  });
+});
+
 describe('H: a re-run wipe never destroys the new account', () => {
   test('a wipe that half-finishes, B signs in, the wipe is re-run: B\'s data written after Adopt survives every later answer', async () => {
     boot('A', 'absent'); m.faults.rmSilently.add('app:/data/takes.json');

@@ -22,6 +22,7 @@ export type Faults = {
   write: Set<string>;                    // atomicWriteFile rejects with 'full'
   read: Map<string, string>;             // readFile rejects with this code
   stat: Map<string, string>;             // stat rejects with this code
+  hangRm: Set<string>;                   // rm never answers (a store the system will not release)
   hangRead: Set<string>;                 // readFile never answers
   hold: Map<string, Promise<void>>;      // readFile takes the bytes, THEN waits (a read that began before a wipe and ends after it)
   noStorage: boolean;
@@ -32,7 +33,7 @@ export function memFs(seed: Record<string, string> | string[] = []) {
   const files = new Map<string, Uint8Array>();
   const enc = new TextEncoder();
   if (Array.isArray(seed)) for (const p of seed) files.set(p, enc.encode('x')); else for (const [p, v] of Object.entries(seed)) files.set(p, enc.encode(v));
-  const faults: Faults = { rm: new Set(), rmSilently: new Set(), write: new Set(), read: new Map(), stat: new Map(), hangRead: new Set(), hold: new Map(), noStorage: false };
+  const faults: Faults = { rm: new Set(), rmSilently: new Set(), write: new Set(), read: new Map(), stat: new Map(), hangRm: new Set(), hangRead: new Set(), hold: new Map(), noStorage: false };
   const writes: string[] = [];
   const spy = { stampOverwrites: 0 };
   const kids = (p: string) => [...files.keys()].filter((k) => k.startsWith(p + '/'));
@@ -52,6 +53,7 @@ export function memFs(seed: Record<string, string> | string[] = []) {
     },
     rm: async (p: string) => {
       events.push('rm:' + p);
+      if (faults.hangRm.has(p)) await new Promise(() => undefined);
       if (faults.rm.has(p)) throw new FsError('EACCES');
       if (faults.rmSilently.has(p)) return;
       files.delete(p); for (const k of kids(p)) files.delete(k);

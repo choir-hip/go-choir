@@ -2,7 +2,7 @@
 // One list of words (words.ts). The card is EXEMPT from the gate (app.ts): it never waits on a wipe; asking CLEARING starts one if none runs, and asking ADOPT retries its one write.
 // Per state (docs/design/account-boundary-2026-11-21.md section 3): OPEN says nothing (after a 401: "no longer accepted", Clear this phone); EMPTY "signed out", Sign in (the ONLY state that offers it:
 // no second account signs in while the first one's data is on the phone); ADOPT "could not record the account", Try again; CLEARING "clearing", and after five tries Try again and Clear this phone;
-// LOCKED "Unlock your phone", and after five tries the same two buttons. A bridge error, or no answer from a native package yet, is "unknown": nothing is shown. A host with no native package
+// LOCKED "Unlock your phone", and after five tries the same two buttons. A bridge error is a key that cannot be read: LOCKED, with the same words and buttons (the pages refuse, so the card must say so). No answer from a native package yet is "unknown": nothing is shown. A host with no native package
 // (Android, web) cannot sign in yet: "noSignIn", no button. `epoch` moves when the boundary closes or a wipe completes: every gated resource takes it (the contracts' acctTick) so a page that
 // refused is asked again when the boundary heals.
 import { hasNativeHandle, rejectedDigest } from './api.ts';
@@ -22,7 +22,6 @@ export const TRIES = 5;
 export async function accountState(_tick: string, top = '', host = '', tries = 0, storage?: Storage, store?: Store): Promise<AccountView> {
   const p = await peek(storage, store);
   if (!hasNativeHandle() && p.state === 'empty') return host === 'none' ? view('noSignIn', WORDS.noSignIn, '', p.epoch) : view('unknown', '', '', p.epoch);
-  if (p.key.error) return view('unknown', '', '', p.epoch);
   const stuck = tries >= TRIES;
   const more = stuck ? ` ${WORDS.stuck}` : '';
   switch (p.state) {

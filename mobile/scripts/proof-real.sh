@@ -65,7 +65,15 @@ legacy_clean() {
 
 # ---- the account boundary's checks on the app's files (docs/design/account-boundary-2026-11-21.md, section 8). The record is `app:/data/account-stamp`: where it is, is the app's data folder on this build.
 KEYDIG=$(tr -d '[:space:]' < "$KEYFILE" | shasum -a 256 | cut -d' ' -f1)       # what the app records for the proof key (ProofKey.swift trims it); never printed
-data_dir() { CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null); f=$(find "$CONT" -name account-stamp 2>/dev/null | head -1); [ -n "$f" ] && dirname "$f"; }
+data_dir() { # the app's data folder: where the record is, else the folder an agent drive or a device build keeps app:/data in (the record may be gone, the folder is not)
+  CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null); f=$(find "$CONT" -name account-stamp 2>/dev/null | head -1)
+  if [ -n "$f" ]; then dirname "$f"; return; fi
+  ls -dt "$CONT"/Library/Caches/exact/*/agent/*/data "$CONT"/Library/Application\ Support/exact/*/data 2>/dev/null | head -1
+}
+record_now() { d=$(data_dir); [ -n "$d" ] && cat "$d/account-stamp" 2>/dev/null; }   # the record's text now, or nothing; each drive's value is taken RIGHT AFTER that drive (a later drive changes it)
+stamp_eq() { # name expected actual: a record captured after its own drive
+  if [ -n "$3" ] && [ "$3" = "$2" ]; then echo "ok: $1"; else echo "MISSING: $1"; FAILS="$FAILS [$1]"; fi
+}
 stamp_is() { # name expected-digest: the record exists and holds exactly that digest (it fails when the account was never adopted, or the wrong digest was written)
   d=$(data_dir); if [ -n "$d" ] && [ "$(cat "$d/account-stamp" 2>/dev/null)" = "$2" ]; then echo "ok: $1"; else echo "MISSING: $1"; FAILS="$FAILS [$1]"; fi
 }
@@ -397,6 +405,7 @@ run_drive relaunch light "" --touch platform
 unset NOKEY
 D2="$SHOTS/drive-relaunch.txt"
 D2_DATA=$(data_dir)
+D2_STAMP=$(record_now)
 D2_PAPER=$([ -n "$D2_DATA" ] && [ -e "$D2_DATA/paper-front.json" ] && echo kept || echo gone)
 
 # D3, an account change without a sign-out: data of the proof key's account is on the phone (a marked file is written into the app's data folder), then the Keychain item is REPLACED by another
@@ -419,6 +428,7 @@ run_drive keychange light "" --touch platform
 unset FAKEKEY
 D3="$SHOTS/drive-keychange.txt"
 D3_LEFT=$(grep -rl "D3-OLD-ACCOUNT-DATA" "$CONT" 2>/dev/null | wc -l | tr -d ' ')
+D3_STAMP=$(record_now)                                 # before D4 presses Clear this phone, which removes it
 
 # D4, a refused key: the same phone (the fake key is still in the Keychain, NOKEY places none). The banner offers Clear this phone and not Sign in; tapping it signs out, and the page asks again and
 # says the signed-out words. A wrong catch: the old banner (Sign in over a refused key); a Clear this phone that does nothing; a page that stays blank after the clear (it was never asked again).
@@ -432,7 +442,7 @@ run_drive refused light "" --touch platform
 unset NOKEY
 D4="$SHOTS/drive-refused.txt"
 tseg "$D4" real-d4-refused > "$SHOTS/seg-d4-refused.txt"; tseg "$D4" real-d4-cleared > "$SHOTS/seg-d4-cleared.txt"
-D4_STAMP=$(data_dir)
+D4_STAMP=$(record_now)
 
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
@@ -593,16 +603,16 @@ bad "drill: Mail shows no rows after sign-out" '\[mail-row-' "$AFTER"
 [ "$MARKER" = 0 ] && echo "ok: D1: no signout-pending marker is written" || { echo "MISSING: D1: a signout-pending marker exists ($MARKER)"; FAILS="$FAILS [drill marker]"; }
 # D2: the relaunch after the kill. Signed in (the key survived the crash): the record must be the key's digest. Signed out (the key went): no old data on screen or in the files, and no record.
 if grep -qE '\[settings-account-signed\][^"]*"Yes"' "$D2"; then
-  stamp_is "D2: the kill came before the key delete: still signed in, the record is the key's digest" "$KEYDIG"
+  stamp_eq "D2: the kill came before the key delete: still signed in, the record is the key's digest" "$KEYDIG" "$D2_STAMP"
 else
   chk "D2: the key went: the account page says signed out" '\[settings-account-signed\][^"]*"No"' "$D2"
   bad "D2: the key went: no Files rows on screen" '\[files-row-/' "$D2"
   bad "D2: the key went: no Mail rows on screen" '\[mail-row-' "$D2"
-  [ -z "$D2_DATA" ] || { [ ! -e "$D2_DATA/account-stamp" ] && [ "$D2_PAPER" = gone ] && echo "ok: D2: the key went: the record and the paper's copy are gone from the files" || { echo "MISSING: D2: the key went but the record or the old data is on disk"; FAILS="$FAILS [D2 files]"; }; }
+  [ -z "$D2_DATA" ] || { [ -z "$D2_STAMP" ] && [ "$D2_PAPER" = gone ] && echo "ok: D2: the key went: the record and the paper's copy are gone from the files" || { echo "MISSING: D2: the key went but the record or the old data is on disk"; FAILS="$FAILS [D2 files]"; }; }
 fi
 # D3: the marked old file is gone, the record is the new digest, the banner offers Clear this phone and not Sign in
 [ "$D3_LEFT" = 0 ] && echo "ok: D3: the old account's marked file is gone after the key changed" || { echo "MISSING: D3: the old account's data survived the key change ($D3_LEFT)"; FAILS="$FAILS [D3 data]"; }
-stamp_is "D3: the record is the new key's digest" "$FAKEDIG"
+stamp_eq "D3: the record is the new key's digest" "$FAKEDIG" "$D3_STAMP"
 chk "D3: the card offers Clear this phone for the refused key" '\[signedout-clear\]' "$D3"
 bad "D3: the card does not offer Sign in over the refused key" '\[signedout-signin\]' "$D3"
 # D4: before the tap, Clear this phone and no Sign in; after it, the signed-out words and Sign in, and no rows
@@ -611,7 +621,7 @@ bad "D4: a refused key: the banner does not offer Sign in" '\[signedout-signin\]
 chk "D4: after Clear this phone the page is asked again and says the signed-out words" 'Sign in to read your mail' "$SHOTS/seg-d4-cleared.txt"
 chk "D4: after Clear this phone the banner offers Sign in" '\[signedout-signin\]' "$SHOTS/seg-d4-cleared.txt"
 bad "D4: after Clear this phone no Mail rows" '\[mail-row-' "$SHOTS/seg-d4-cleared.txt"
-[ -z "$(data_dir)" ] && echo "ok: D4: the record is gone after Clear this phone" || { echo "MISSING: D4: the record is still there after Clear this phone"; FAILS="$FAILS [D4 record]"; }
+[ -z "$D4_STAMP" ] && echo "ok: D4: the record is gone after Clear this phone" || { echo "MISSING: D4: the record is still there after Clear this phone"; FAILS="$FAILS [D4 record]"; }
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"
