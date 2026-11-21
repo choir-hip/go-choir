@@ -353,4 +353,10 @@ describe('what each kind of entry starts with', () => {
     expect(plan(e)).toEqual({ kind: 'file', address: 'file:docs/a.mp3', title: 'F' });
   });
   test('the session retry delays are 1, 2, 4, 8, 15 and then 15 again', () => expect([1, 2, 3, 4, 5, 6, 9].map(retryDelay)).toEqual([1, 2, 4, 8, 15, 15, 15]));
+  test('a clip card carries the episode it was cut from, so it can open the episode', () => {
+    const c = audio({ url: 'https://x.test/a.mp3', title: 'T', show: 'S', start: 5, end: 9, episode_id: 'pod:feed/ep1' }, 'clip-abc');
+    expect(c.source?.ref).toBe('clip:clip-abc#pod:feed/ep1'); expect(c.source?.clip_id).toBe('clip-abc');
+    expect(audioSpec(c)?.episode_id).toBe('pod:feed/ep1');
+    expect(audioSpec(audio({ url: 'https://x.test/a.mp3', title: 'T', show: 'S', start: 5, end: 9 }, 'clip-abc'))?.episode_id).toBeUndefined();
+  });
 });

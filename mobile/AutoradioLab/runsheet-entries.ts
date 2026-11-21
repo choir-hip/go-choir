@@ -72,7 +72,8 @@ export function audio(a: Audio, clipID?: string, by: By = 'listener'): Entry {
   const url = long ? undefined : a.url;
   const strip = <T extends Record<string, unknown>>(o: T): T => { for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k]; return o; };
   if (a.end !== undefined || clipID !== undefined) {
-    return base(id, 'clip', by, t, strip({ ref: 'clip:' + (clipID ?? a.episode_id ?? 'x'), label: cleanTitle(a.show), url, start: a.start, end: a.end, clip_id: clipID }));
+    // The clip's ref is its id; the episode it was cut from rides after a '#', so the card can open its episode (the server keeps the ref as a free string).
+    return base(id, 'clip', by, t, strip({ ref: 'clip:' + (clipID ?? a.episode_id ?? 'x') + (clipID !== undefined && a.episode_id !== undefined ? '#' + a.episode_id : ''), label: cleanTitle(a.show), url, start: a.start, end: a.end, clip_id: clipID }));
   }
   return base(id, 'episode', by, t, strip({ ref: 'episode:' + (a.episode_id ?? (long ? 'long' : a.url)), label: cleanTitle(a.show), url, start: a.start }));
 }
@@ -93,7 +94,9 @@ export function audioSpec(e: Entry): AudioSpec | undefined {
   if ((e.kind !== 'clip' && e.kind !== 'episode') || !e.source) return undefined;
   const url = e.source.url ?? longURL(e.id);
   if (!url) return undefined;
-  const ep = e.kind === 'episode' && e.source.ref.startsWith('episode:') ? e.source.ref.slice(8) : undefined;
+  const hash = e.source.ref.indexOf('#');
+  const ep = e.kind === 'episode' && e.source.ref.startsWith('episode:') ? e.source.ref.slice(8)
+    : e.kind === 'clip' && e.source.ref.startsWith('clip:') && hash > 0 ? e.source.ref.slice(hash + 1) : undefined;
   const o: AudioSpec = { url, title: e.title, show: e.source.label, is_clip: e.source.end !== undefined };
   if (e.source.start !== undefined) o.start = e.source.start;
   if (e.source.end !== undefined) o.end = e.source.end;
