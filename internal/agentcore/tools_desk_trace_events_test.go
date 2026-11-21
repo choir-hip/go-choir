@@ -3,7 +3,6 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 	"testing"
 
