@@ -106,6 +106,9 @@ export type WriterDeps = {
   offlineFill?(): Entry[] | Promise<Entry[]>;
 };
 
+/** Between two entries of a long answer: lets the next turn start (Exact gives a turn about 100 ms of CPU; Bun has no scheduler). */
+const yieldTurn = async (): Promise<void> => { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); };
+
 export class Writer {
   latency = 0; inFlight = false; dry = false; notice = ''; asks: string[] = [];
   private opened = false; private quietOn?: string; private stops = 0; private task?: Promise<void>;
@@ -163,6 +166,7 @@ export class Writer {
             received += 1;
             const r = this.d.rt.director.applyFromDesk(placeOp(e, cause), cause);
             if (r?.applied) added += 1; else dropped += 1;
+            await yieldTurn();                        // each placement saves the whole sheet: one turn is 100 ms of CPU, and a stretch is dozens of entries
           } else if (ev.type === 'error' && added === 0) failure = { kind: 'other' };
         }
       } catch (err) {

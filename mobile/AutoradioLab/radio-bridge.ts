@@ -238,6 +238,8 @@ async function holdInner(storage: Store | undefined, native: NativeReader | unde
     if (r.front.lines.length > 0 || clock.ms - r.readySince > 2000) await openRadioOf(r);
     else { try { await r.fetchFront(); } catch { /* none yet */ } }
   }
+  await r.rt.peek();
+  console.log(`radio: hold: ${r.rt.store.ahead().length} ahead on the sheet, the deck holds ${r.rt.deckLine().held}, playing ${r.rt.deckLine().item || 'nothing'}`);
   return { tick: r.tick, write: false, hold: false };
 }
 

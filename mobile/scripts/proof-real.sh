@@ -478,7 +478,9 @@ BGCONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
 BGJ="$BGCONT/Library/Application Support/Autoradio/deck-journal.json"
 BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1           # the Home screen over the app: it is not frontmost
-sleep "$BG_SECONDS"
+# Is the app's process alive after the drive ended and the Home screen came? (the native console shows no line from the first process after the drive: dead, or stopped, is what this says)
+sleep 15; echo "background: the app's process 15 s after leaving: $(SIM spawn "$EXACT_SIM" launchctl list 2>/dev/null | grep -F "$APP" | head -2 | tr '\n' ' ')"
+sleep $((BG_SECONDS - 15))
 BGRES=$(python3 - "$BGJ" "$BGT0" <<'PYEOF'
 import json, sys
 path, t0 = sys.argv[1], sys.argv[2]
@@ -536,6 +538,9 @@ LEFT=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/de
 export NOKEY=1
 fresh_paper pick-signedout
 STORY_SO=$F_STORY1
+# The first run is offered ONCE (onboarding.ts offer: "offered" is kept in app:/data/onboarding.json), and the pick drive above was a signed-out launch that used the offer: reset_state clears the old Swift
+# file only. The signed-out tour is a FIRST launch, so the kept progress is removed here (the check below asserts what a first signed-out launch shows, as it always did).
+rm -f "$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"/Library/Caches/exact/*/agent/*/data/onboarding.json "$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"/Library/Application\ Support/exact/*/data/onboarding.json
 step "clock data"; wait_ 6000
 # the account card is answered in REAL time (the key read, the host fact): give the first screen several settle steps before it is read
 wait_ 6000; wait_ 6000; wait_ 6000
