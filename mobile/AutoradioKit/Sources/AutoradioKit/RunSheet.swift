@@ -315,3 +315,25 @@ extension RunSheet {
         return alnum(b[0]) && b.dropFirst().allSatisfy { alnum($0) || $0 == 95 || $0 == 46 || $0 == 45 }
     }
 }
+
+extension RunSheet {
+    /// The entry's size as a record carries it (the server's bound, fixture 33): the entry as compact JSON, marshalled as a JSON string (as a
+    /// record body is), minus the two quotes. A plain byte costs 1; `<` `>` `&` 6; a quote or a backslash 2 more than the plain byte it
+    /// escapes (a quote or backslash in the text is `\"` inside the entry and so 4 in all); a control character 7; U+2028 and U+2029 7.
+    static func entryJSONSize(_ e: RunSheetEntry) -> Int {
+        let enc = JSONEncoder(); enc.outputFormatting = [.withoutEscapingSlashes]
+        guard let d = try? enc.encode(e), let inner = String(data: d, encoding: .utf8) else { return RunSheetBounds.maxEntryJSON + 1 }
+        var n = 0
+        for u in inner.unicodeScalars {
+            switch u.value {
+            case 0x22, 0x5C: n += 2                                      // `"` and `\` are escaped again when the JSON text is marshalled as a string
+            case 0x3C, 0x3E, 0x26: n += 6                                // `<` `>` `&`
+            case 0x0A, 0x0D, 0x09: n += 2
+            case 0x00..<0x20: n += 6                                     // a control character not written short (inside the entry it is already \u00XX: this is the rest)
+            case 0x2028, 0x2029: n += 7                                  // the entry writes \u2028 (6), marshalled again it is 7
+            default: n += String(u).utf8.count
+            }
+        }
+        return n
+    }
+}
