@@ -108,4 +108,9 @@ export function localStories(items: StoredItem[], o: { told: string[]; held: Set
   }
   return out;
 }
+/** The held stories the radio can play when the desk cannot be reached (the writer's `offlineFill`): read from the store, not on the sheet, not already told. */
+export async function offlineStories(storage: Storage | undefined, o: { told: string[]; held: Set<string>; limit?: number }): Promise<LocalStory[]> {
+  const s = await contentStore(storage);
+  return s ? localStories(await s.items('story'), o) : [];
+}
 export { toDoc };

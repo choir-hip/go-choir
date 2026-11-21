@@ -103,7 +103,7 @@ export type WriterDeps = {
   post(body: Record<string, unknown>): Promise<string>;
   now(): Date; tz(): string; requestId(): string; generation(): number;
   /** Stories held on the phone, to play when the desk cannot be reached and fewer than two playable entries are ahead. */
-  offlineFill?(): Entry[];
+  offlineFill?(): Entry[] | Promise<Entry[]>;
 };
 
 export class Writer {
@@ -170,7 +170,9 @@ export class Writer {
       if (added === 0 && store.onAir()?.id !== airId) this.checkAhead();
       if (added > 0) this.checkAhead();
       else if (failure && this.d.offlineFill && store.ahead().filter((e) => e.kind !== 'transition').length < 2) {
-        for (const e of this.d.offlineFill()) store.place(e, 'end', { by: 'phone', reason: 'the desk could not be reached: a story held on this phone' });
+        const fill = await this.d.offlineFill();
+        if (gen !== this.d.generation() || stops !== this.stops) return;                       // another account or a stop while the store was read
+        for (const e of fill) store.place(e, 'end', { by: 'phone', reason: 'the desk could not be reached: a story held on this phone' });
       }
     })();
   }

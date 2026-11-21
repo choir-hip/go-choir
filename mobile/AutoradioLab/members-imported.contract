@@ -2,7 +2,7 @@
 // shapes in imported-types.contract): a document is a file on the person's computer, listed, opened and imported through the Files client. Two names are the Swift package's, because
 // they are audio (interface/imported.json): `importedFollow` (the block the radio is reading now) and `importedHand` (hands the words to the player; the audio is native).
 // Every name a child component injects is in the reader-documents band of the `provide` list in app.contract. Prefixes: lb = the place, ld = one document.
-use importedFollow, importedHand, ImportedFollow, ImportedHanded from "@choir/autoradio"
+use importedFollow, ImportedFollow, ImportedHanded from "@choir/autoradio"
 use ImportedList, ImportedDocInfo, ImportedSection, ImportedFind, ImportedLocate, ImportedAck from "./imported-types.contract"
 
 members Autoradio
@@ -36,7 +36,7 @@ members Autoradio
   derive ldPlayText = match ldAck { case some(a) => a.play.text, case none => "" }
   action ldAcked
     if ldPlayOp != "" and ldPlayText != ""
-      send ldHanded = importedHand(op=ldPlayOp, id=ldPlayId, title=ldPlayTitle, at=ldPlayAt, text=ldPlayText)
+      send ldHanded = radioHandWords(ldPlayOp, ldPlayId, ldPlayTitle, ldPlayAt, ldPlayText)
 
   state ldSec = 0
   // The block the listener chose (tap a paragraph); -1 for none. Reading aloud starts here.

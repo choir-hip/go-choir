@@ -123,6 +123,8 @@ const sources: Sources = {
   radioPlayPause: (_a, _s, storage, native) => radioBridge.radioPlayPause(storage as never, native as never),
   radioStart: (_a, _s, storage, native) => radioBridge.radioStart(storage as never, native as never),
   radioPlayStory: ([route, title], _s, storage, native) => radioBridge.radioPlayStory(storage as never, native as never, route, title),
+  radioPlayAudio: ([op, id, url, title, show, start], _s, storage, native) => radioBridge.radioPlayAudio(storage as never, native as never, op, id, url, title, show, start),
+  radioHandWords: ([op, id, title, at, text], _s, storage, native) => radioBridge.radioHandWords(storage as never, native as never, op, id, title, at, text),
   radioListen: ([address, title, text], _s, storage, native) => radioBridge.radioListen(storage as never, native as never, address, title, text),
   radioMove: ([move], _s, storage, native) => radioBridge.radioMove(storage as never, native as never, move),
   // The Autoradio page (radio-page.ts): the native facts, the bar's facts and the entries in; the page out.

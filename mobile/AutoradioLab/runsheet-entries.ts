@@ -35,6 +35,10 @@ const base = (id: string, kind: Entry['kind'], by: By, title: string, source: En
 export const paperStory = (route: string, title: string, by: By = 'listener'): Entry =>
   base(mintId(by === 'listener' ? 'l-' : 'p-'), 'page', by, cleanTitle(title), { ref: 'pub:' + route, label: cleanTitle(title) });
 
+/** A story the phone holds the whole text of (the content store): it plays with its own words when the desk cannot be reached. */
+export const heldStory = (id: string, title: string, text: string, address: string): Entry =>
+  ({ ...base(id, 'story', 'phone', cleanTitle(title), { ref: address, label: cleanTitle(title) }), text, est_seconds: estimateSeconds(text) });
+
 export function webPage(url: string, title: string, by: By = 'listener'): Entry {
   let host = '';
   try { host = new URL(url).host; } catch { /* no host */ }
@@ -56,6 +60,8 @@ export type Audio = { url: string; title: string; show: string; start?: number; 
 
 /** Addresses too long for the server's bound (2048 bytes), kept on the phone by entry id: the entry names the audio by its ref and leaves its url out. */
 const longURLs = new Map<string, string>();
+/** Sign-out: the long web addresses of the account's entries (keyed by entry id) are forgotten. */
+export function forgetLongURLs(): void { longURLs.clear(); }
 export const longURL = (id: string): string | undefined => longURLs.get(id);
 
 export function audio(a: Audio, clipID?: string, by: By = 'listener'): Entry {

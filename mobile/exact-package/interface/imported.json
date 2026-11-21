@@ -20,17 +20,6 @@
      "block": -1
     }
    }
-  },
-  {
-   "send": "importedHand",
-   "options": {
-    "op": "string",
-    "id": "string",
-    "title": "string",
-    "at": "number",
-    "text": "string"
-   },
-   "answers": "ImportedHanded"
   }
  ]
 }

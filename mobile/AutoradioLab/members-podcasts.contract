@@ -56,6 +56,9 @@ members Autoradio
     refresh podShow
     refresh podEp
     if podPlayOp != "" and (podPlayUrl != "" or podPlayOp == "keep")
-      send podHanded = podcastPlayAudio(op=podPlayOp, id=podPlayId, url=podPlayUrl, title=podPlayTitle, show=podPlayShow, start=podPlayStart)
+      if podPlayOp == "keep"
+        send podHanded = podcastPlayAudio(op=podPlayOp, id=podPlayId, url=podPlayUrl, title=podPlayTitle, show=podPlayShow, start=podPlayStart)
+      else
+        send podHanded = radioPlayAudio(podPlayOp, podPlayId, podPlayUrl, podPlayTitle, podPlayShow, podPlayStart)
   action retryPodcasts
     podTick = podTick + 1

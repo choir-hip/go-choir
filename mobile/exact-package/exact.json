@@ -855,17 +855,6 @@
       }
     },
     {
-      "send": "importedHand",
-      "options": {
-        "op": "string",
-        "id": "string",
-        "title": "string",
-        "at": "number",
-        "text": "string"
-      },
-      "answers": "ImportedHanded"
-    },
-    {
       "send": "mailOpenReview",
       "options": {
         "url": "string"

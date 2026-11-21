@@ -10,7 +10,8 @@ import { Writer, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
 import { applyTurnOps, turnQueueJSON } from './voice-queue.ts';
 import { routePoster, signedInRequester } from './runsheet-store.ts';
 import { authedJSON } from './api.ts';
-import { audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds } from './runsheet-entries.ts';
+import { audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds, heldStory, forgetLongURLs } from './runsheet-entries.ts';
+import { offlineStories } from './content-run.ts';
 import { loadReader } from './reader.ts';
 import { sentenceTexts } from './reader-parse.ts';
 import { fileResolve } from './files.ts';
@@ -39,6 +40,7 @@ let restored: Promise<void> | undefined;
 export function resetRadio(): void { radio = undefined; restored = undefined; }
 export async function wipeRadio(storage: Store | undefined): Promise<void> {
   const r = radio; radio = undefined; restored = undefined;
+  forgetLongURLs();                                                                          // the long web addresses of this account's entries (runsheet-entries.ts)
   if (r) { r.writer.stop(); await r.rt.signOut(); }
   if (storage) { try { await storage.fs.rm(SHEET_FILE); } catch { /* absent */ } }
 }
@@ -131,6 +133,12 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
       return { takes, kept };
     },
     edition: async () => '',
+    // The offline story fill: the stories the phone holds whole (content-run.ts), as the Swift LocalStories gave them; the entry builder is runsheet-entries.ts.
+    offlineFill: async () => {
+      const entries = rt.store.sheet.entries;
+      const told = entries.filter((e) => e.state !== 'ahead').map((e) => e.title), held = new Set(entries.map((e) => e.id));
+      return (await offlineStories(storage as never, { told, held })).map((l) => heldStory(l.id, l.title, l.text, l.address));
+    },
     post: async (body) => {
       try { return await authedText(PROGRAMME_PATH, { method: 'POST', body }); }
       catch (e) { const s = (e as { status?: number }).status; throw Object.assign(e as Error, { kind: (e as Error).name === 'SignedOutError' ? 'signedOut' : s === undefined ? 'transport' : 'other' }); }
@@ -268,6 +276,28 @@ async function openRadioOf(r: Radio): Promise<void> {
   r.writer.openAhead();
   r.started = true;
   await r.rt.pump();
+}
+
+/** Play or queue one audio address (an episode, a clip's episode): the podcast page's Play and Add to queue. The audio is the deck's; the entry and the order are the sheet's. */
+export async function radioPlayAudio(storage: Store | undefined, native: NativeReader | undefined, op: string, id: string, url: string, title: string, show: string, start: number): Promise<{ status: string; message: string }> {
+  if (url === '') return { status: 'error', message: 'This episode has no audio to play.' };
+  const r = await getRadio(storage, native);
+  const e = audioEntry({ url, title: title === '' ? 'Episode' : title, show, ...(start > 0 ? { start } : {}), ...(id !== '' ? { episode_id: id } : {}) });
+  if (op === 'queue') r.rt.queue(e); else r.rt.play(e);
+  await r.rt.pump();
+  return { status: 'ok', message: '' };
+}
+
+/** Read an imported document aloud (or queue it): the words are the document's own, one line per block from block `at`; the entry is the sheet's book entry. */
+export async function radioHandWords(storage: Store | undefined, native: NativeReader | undefined, op: string, id: string, title: string, at: number, text: string): Promise<{ ok: boolean; message: string }> {
+  const paragraphs = text.split('\n').filter((p) => p !== '');
+  if (id === '' || paragraphs.length === 0) return { ok: false, message: 'This document has nothing to read.' };
+  const r = await getRadio(storage, native);
+  const e = bookEntry(id, title, at), words = { title, paragraphs };
+  if (op === 'queue') { r.rt.queue(e, words); await r.rt.pump(); return { ok: true, message: 'Added to the queue.' }; }
+  r.rt.play(e, words);
+  await r.rt.pump();
+  return { ok: true, message: '' };
 }
 
 export async function radioPlayPause(storage: Store | undefined, native: NativeReader | undefined): Promise<Ack> { await radioPlayPauseOf(await getRadio(storage, native)); return ACK; }
