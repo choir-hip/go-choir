@@ -7,6 +7,7 @@
 //   a book or a PDF                 kind document  source.ref doc:<id>, source.start the block it is read from
 //   a podcast clip                  kind clip      source.ref clip:<id>, source.url the audio, source.start and end its range
 //   a podcast episode               kind episode   source.ref episode:<podcast key>, source.url the audio, source.start where it begins
+import { clock } from './clock.ts';
 import { Bounds, entryJSONSize, validId, type By, type Ended, type Entry, type Op } from './runsheet-model.ts';
 
 const enc = new TextEncoder();
@@ -24,9 +25,12 @@ export const cleanTitle = (s: string): string => cutBytes(oneLine(s), Bounds.max
 
 /** `p-` (phone), `l-` (listener) or `d-` plus twenty-four hex characters (96 bits): placer-minted, never reused. */
 export function mintId(prefix: string): string {
-  const b = new Uint8Array(12);
+  const b = new Uint8Array(6);
   crypto.getRandomValues(b);
-  return prefix + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  // Exact's random stream starts the same on every launch of an agent run, and the sheet outlives a launch (it refuses an op id it has applied): the first twelve digits are the device's
+  // clock (milliseconds, from the native facts), so two launches never mint the same id; the last twelve are the random stream, for two ids in one millisecond.
+  const at = Math.max(0, Math.floor(clock.ms)).toString(16).padStart(12, '0').slice(-12);
+  return prefix + at + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 const prefixFor = (by: By): string => (by === 'listener' ? 'l-' : by === 'desk' ? 'd-' : 'p-');
 const base = (id: string, kind: Entry['kind'], by: By, title: string, source: Entry['source']): Entry =>
