@@ -15,7 +15,8 @@ final class RetrievalFactsTests: XCTestCase {
     func testTheAnswerOfSharedCodeIsTheContextTheTurnReads() async throws {
         let b = bridge()
         b.raise = { [unowned b] in guard let a = b.current else { return }; b.answer(id: a.id, context: Self.wire(id: a.id)) }
-        let c = try XCTUnwrap(await b.ask(words: "tell me about the Senate", pageTitle: "Autoradio", pageAddress: "radio:"))
+        let asked = await b.ask(words: "tell me about the Senate", pageTitle: "Autoradio", pageAddress: "radio:")
+        let c = try XCTUnwrap(asked)
         XCTAssertEqual(c.items.map(\.id), ["pub:a"]); XCTAssertEqual(c.brief, "On air now: Harbor."); XCTAssertEqual(c.record.sources, ["Autopaper"])
         XCTAssertEqual(c.items[0].date, Date(timeIntervalSince1970: 1_794_600_000)); XCTAssertEqual(c.record.at, Date(timeIntervalSince1970: 1_794_700_000))
         XCTAssertEqual(b.lastRecord, c.record, "a kept turn names what the model was shown")
