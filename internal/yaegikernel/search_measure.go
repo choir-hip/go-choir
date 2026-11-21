@@ -68,7 +68,7 @@ func (st *SearchStore) outletsHeld() int {
 	defer st.mu.Unlock()
 	seen := map[string]bool{}
 	for key := range st.first {
-		if o := outletOf(key); o != "" {
+		if o := pageOutlet(key); o != "" {
 			seen[o] = true
 		}
 	}
@@ -103,9 +103,13 @@ func outletOf(raw string) string {
 // page belongs to, by the same rule the stop rule and the site: rule use. A page
 // of an aggregator (news.google.com, msn.com: hosts that republish other
 // outlets' stories) belongs to no outlet: it is "".
-func (s *ChoirScope) Outlet(url string) string {
-	if aggregatorHosts[hostOf(url)] {
+func (s *ChoirScope) Outlet(url string) string { return pageOutlet(url) }
+
+// pageOutlet is the outlet a page belongs to: outletOf, or "" for an aggregator's
+// page. The stop rule's counts, the decision's counts and choir.Outlet use it.
+func pageOutlet(raw string) string {
+	if aggregatorHosts[hostOf(raw)] {
 		return ""
 	}
-	return outletOf(url)
+	return outletOf(raw)
 }

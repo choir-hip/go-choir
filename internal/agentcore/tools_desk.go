@@ -809,7 +809,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// their labels: the values they defined are still defined.
 			rt.seedRunLabels(execCtx.RunID, workers.sessionLabels(lease))
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
-			rt.openTree(execCtx.RunID)
+			if deskmanifest.InResearchFamily(deskRole) {
+				rt.openTree(execCtx.RunID)
+			}
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, RunID: execCtx.RunID, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
 				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration, Held: rt.briefHeldForSession(execCtx), Tree: rt.treeStateFor(execCtx.RunID),
 				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining, updatesTooLarge)})

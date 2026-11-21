@@ -4123,6 +4123,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// A story's research run also gets what the story already holds and what
 	// its earlier runs read (story_research_context.go).
 	storyCtx := rt.storyResearchContextOpening(ctx, rec)
+	// The pages it lists are held pages of the run's root session, in front of the
+	// brief's: the run tries them before its first web search (search_decision.go).
+	rt.noteStoryHeld(rec.RunID, storyCtx)
 	openingText := rec.Prompt + opening.openingText() + brief.openingText() + storyCtx.openingText()
 	userMsg, _ := json.Marshal(map[string]any{
 		"role": "user",

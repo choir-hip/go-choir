@@ -353,3 +353,93 @@ func TestStoryContextPredecessorTakesASmallerShare(t *testing.T) {
 		t.Errorf("the story's own capture is missing:\n%s", c.text)
 	}
 }
+
+// Read-first, story side (the lead's handover, 2026-11-21): the pages a story's
+// research context lists are held pages of the run's root session, in front of the
+// corpus brief's. The rule demands the first five of that one search zero (the same
+// five it demands of any search); the section lists up to 40.
+func TestAStorysPagesAreTheFrontOfTheRunsSearchZeroAndTheBriefsFollow(t *testing.T) {
+	rt := &Runtime{}
+	story := &storyResearchContext{held: []yaegikernel.HeldPage{
+		{URL: "https://port.example/1", CaptureID: "c1"}, {URL: "https://news.example/a", CaptureID: "cap-r1"}, {URL: "https://shared.example/x", CaptureID: "cap-s"},
+	}}
+	// The brief arrives first: the story's pages still come in front, each page once.
+	rt.noteBriefHeld("run-1", []yaegikernel.HeldPage{{URL: "https://shared.example/x", CaptureID: "cap-b9"}, {URL: "https://brief.example/y", CaptureID: "cap-b1"}})
+	rt.noteStoryHeld("run-1", story)
+	var got []string
+	for _, p := range rt.briefHeldFor("run-1") {
+		got = append(got, p.CaptureID)
+	}
+	if want := "c1 cap-r1 cap-s cap-b1"; strings.Join(got, " ") != want {
+		t.Fatalf("search zero = %q, want %q", strings.Join(got, " "), want)
+	}
+	rt.noteStoryHeld("run-2", nil)
+	if rt.briefHeldFor("run-2") != nil {
+		t.Fatal("a run with no story context got a search zero")
+	}
+}
+
+func TestAStoryResearchContextHoldsOnlyPagesWithAURL(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer := "owner-story-held", rt.cfg.ComputerID
+	t0 := time.Now().UTC().Add(-time.Hour)
+	doc := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Dock strike", "Whether the dock strike ends and on what terms", "", []string{"c1", "c-nourl"}, t0)
+	rt.researchDeps = &researchtools.Dependencies{Captures: &ctxSink{urls: map[string]string{"c1": "https://port.example/1"},
+		pages: map[string][]researchtools.LeadPage{doc: {{CaptureID: "cap-r1", URL: "https://news.example/a"}}}}}
+	c := rt.storyResearchContextOpening(context.Background(), briefRunRecord(owner, computer, doc, "run-h"))
+	if c == nil {
+		t.Fatal("no context")
+	}
+	var urls []string
+	for _, p := range c.held {
+		urls = append(urls, p.URL)
+	}
+	if strings.Join(urls, " ") != "https://port.example/1 https://news.example/a" {
+		t.Fatalf("held = %v: the capture with no URL is listed in the section but cannot be a held page", urls)
+	}
+}
+
+// A research run on a story with held pages is refused its first web search until it
+// has tried them (a ReadCapture of each, by id; an attempt counts), then it sends.
+func TestAResearchRunOnAStoryIsRefusedItsFirstSearchUntilItTriedWhatTheStoryHolds(t *testing.T) {
+	var ids []string
+	tool, ctx, _, _ := decisionRig(t, manyPagesClient{pages: 3}, func(r *Runtime) {
+		owner, computer := "owner-story-gate", r.cfg.ComputerID
+		t0 := time.Now().UTC().Add(-time.Hour)
+		doc := openStoryOf(t, r.store, owner, computer, "cell-1:cast:c1", "Dock strike", "Whether the dock strike ends and on what terms", "", []string{"c1"}, t0)
+		pages := map[string][]researchtools.LeadPage{}
+		urls := map[string]string{"c1": "https://port.example/1"}
+		for i := 1; i <= 6; i++ {
+			pages[doc] = append(pages[doc], researchtools.LeadPage{CaptureID: fmt.Sprintf("cap-r%d", i), URL: fmt.Sprintf("https://news.example/%d", i)})
+		}
+		r.researchDeps.Captures = &ctxSink{urls: urls, pages: pages}
+		c := r.storyResearchContextOpening(context.Background(), briefRunRecord(owner, computer, doc, "run-desk-eval"))
+		if c == nil {
+			t.Fatal("the story held pages and got no context")
+		}
+		for _, p := range c.held {
+			ids = append(ids, p.CaptureID)
+		}
+		r.noteStoryHeld("run-desk-eval", c)
+	})
+	if len(ids) < 5 {
+		t.Fatalf("the story's context held %v", ids)
+	}
+	out := evalDeskCell(t, tool, ctx, `s, _ := choir.Search("first question")
+fmt.Println(s.ID == "", len(s.Results), s.Refused != "")`)
+	if out.Error != "" || !strings.Contains(out.Stdout, "true 5 true") {
+		t.Fatalf("the first web search was not refused for the story's held pages: %q %q", out.Error, out.Stdout)
+	}
+	// The first five, newest fed capture first: c1 (fed) leads. Trying them (an attempt
+	// counts, whether or not the capture is still there) releases the search.
+	var tryList []string
+	for _, id := range ids[:5] {
+		tryList = append(tryList, fmt.Sprintf("%q", id))
+	}
+	out = evalDeskCell(t, tool, ctx, `for _, id := range []string{`+strings.Join(tryList, ",")+`} { choir.ReadCapture(id, 0, 0) }
+s, _ := choir.Search("first question")
+fmt.Println(s.ID != "", s.Refused == "")`)
+	if out.Error != "" || !strings.Contains(out.Stdout, "true true") {
+		t.Fatalf("the search was not sent after the story's pages were tried: %q %q", out.Error, out.Stdout)
+	}
+}

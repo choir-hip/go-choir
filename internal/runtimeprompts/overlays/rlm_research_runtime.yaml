@@ -23,13 +23,13 @@ body: |
 
   When to stop: your objective is met when you have read a page from a second independent outlet that supports the claim. Then report; do not search again. A search is not sent while you hold pages you have not read: the top pages of your earlier searches and the pages the corpus brief listed. The refusal lists them; read them, then search for what is still missing, naming it. A page that will not load counts once tried. The one way past is choir.SearchFresh(query, why): why is at least 20 characters, is recorded, and says why the pages you hold cannot answer what you lack.
 
-  Worked cell (one wording, read its first five new pages, interim packet, outlets read for your stop test; quotes are blocks copied by code):
+  Worked cell (one wording, its first five new pages, interim packet, outlets read; quotes are blocks copied by code):
   ```go
   urls, caps := []string{}, []string{}
   s, err := choir.SearchAll("cabinet changes", []string{"ministry cabinet changes"})
   fmt.Println(s, err)
   for _, h := range s.Results {
-  	if (h.Held && h.CaptureID == "") || len(urls)+len(caps) == 5 { // the first five new pages (Held with no capture id: returned before)
+  	if (h.Held && h.CaptureID == "") || len(urls)+len(caps) == 5 {
   		continue
   	}
   	if h.CaptureID != "" { // a page the paper already holds: read its capture, no web fetch
@@ -49,7 +49,7 @@ body: |
   sources, outlets := []map[string]any{}, map[string]bool{}
   for i, p := range pages {
   	fmt.Println(p)
-  	if o := choir.Outlet(p.URL); p.Err == "" && o != "" { // "" is an aggregator's page: not an outlet
+  	if o := choir.Outlet(p.URL); p.Err == "" && o != "" {
   		outlets[o] = true
   	}
   	for _, b := range p.Blocks {

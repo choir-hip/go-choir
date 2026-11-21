@@ -429,7 +429,7 @@ func TestParentPlusFourChildrenWithNothingReadEachMaySendItsFirstSearchAndNoSeco
 	}
 }
 
-func TestTwoChildrenWithDifferentObjectivesAreNotHeldByEachOthersPages(t *testing.T) {
+func TestEachOfTwoSessionsWithDifferentObjectivesSendsItsFirstSearch(t *testing.T) {
 	a, b := newResearchFixture(t), newResearchFixture(t)
 	a.urlsFor = map[string][]string{"harbor strike": pagesN("a", 1, 10)}
 	b.urlsFor = map[string][]string{"cabinet changes": pagesN("b", 1, 10)}
@@ -719,5 +719,22 @@ func TestARefusalPrintsTheCaptureIDFieldNotASnippetThatLooksLikeOne(t *testing.T
 	got := pageLines(pages)
 	if strings.Contains(got, "evil-id") || !strings.Contains(got, "cap-real  https://h.example/2") || !strings.Contains(got, "\n  https://p.example/1") {
 		t.Fatalf("pageLines = %q", got)
+	}
+}
+
+// An aggregator's page is no outlet in any count: the stop rule's, the decision's
+// and choir.Outlet's are one function.
+func TestAggregatorPagesAreNoOutletInTheRunsCounts(t *testing.T) {
+	f := newResearchFixture(t)
+	f.urlsFor = map[string][]string{"qq": {"https://news.google.com/a", "https://www.msn.com/b", "https://www.bbc.co.uk/c", "https://news.bbc.co.uk/d"}, "two": pagesN("z", 1, 2)}
+	cell, _ := searchCell(t, f)
+	cell(`choir.Search("qq")`)
+	cell(`for _, h := range choir.Searches.List()[0].Results { choir.Read(h.URL) }`)
+	out := cell(`choir.SearchStart("two")`)
+	if st := out.SearchStats; st == nil || st.OutletsLast != 1 {
+		t.Fatalf("outlets held at the send: %+v, want 1 (bbc.co.uk; the two aggregators are none)", st)
+	}
+	if ns := f.scope.searches.needState(); ns.outlets != 1 {
+		t.Fatalf("the decision counts %d outlets read, want 1", ns.outlets)
 	}
 }

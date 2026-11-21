@@ -305,7 +305,7 @@ func fitFrame(frame SessionFrame) ([]byte, SessionFrame, error) {
 }
 
 // The most the frame carries of the read-first rule's state: the run's brief
-// pages, and the research tree's tried pages (the most recent kept) and window.
+// pages, and the research tree's tried pages (the most recent kept).
 // A run reads tens of pages, so these are far above use; they keep a runaway
 // tree from failing every cell with the frame bound.
 const (

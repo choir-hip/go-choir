@@ -338,7 +338,7 @@ func (st *SearchStore) needState() needState {
 	read := st.readSet()
 	outlets := map[string]bool{}
 	for key := range read {
-		if o := outletOf(key); o != "" {
+		if o := pageOutlet(key); o != "" {
 			outlets[o] = true
 		}
 	}

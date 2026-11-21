@@ -29,12 +29,44 @@ import (
 // the decision is a record, not a gate (the gate is the guest's refusal).
 
 // noteBriefHeld keeps the pages the run's corpus brief delivered, to hand to its
-// cells as search zero.
+// cells as search zero, after any pages the story's context put in front of them.
 func (rt *Runtime) noteBriefHeld(runID string, held []yaegikernel.HeldPage) {
+	rt.addHeld(runID, held, false)
+}
+
+// noteStoryHeld keeps the pages a story's research context lists (earlier runs'
+// reads, the captures the story holds, its predecessor's) as the front of the
+// run's search zero: the root session tries what the story already holds before
+// its first web search. The rule demands the first five of search zero, story
+// pages first, whichever of the two noted first.
+func (rt *Runtime) noteStoryHeld(runID string, c *storyResearchContext) {
+	if c == nil {
+		return
+	}
+	rt.addHeld(runID, c.held, true)
+}
+
+// addHeld merges pages into the run's search zero, each page once (by its key),
+// at the front or the back.
+func (rt *Runtime) addHeld(runID string, held []yaegikernel.HeldPage, front bool) {
 	if rt == nil || strings.TrimSpace(runID) == "" || len(held) == 0 {
 		return
 	}
-	rt.briefHeld.Store(runID, append([]yaegikernel.HeldPage(nil), held...))
+	add := append([]yaegikernel.HeldPage(nil), held...)
+	existing := rt.briefHeldFor(runID)
+	first, second := existing, add
+	if front {
+		first, second = add, existing
+	}
+	seen := map[string]bool{}
+	var merged []yaegikernel.HeldPage
+	for _, p := range append(append([]yaegikernel.HeldPage(nil), first...), second...) {
+		if key := yaegikernel.PageKey(p.URL); key != "" && !seen[key] {
+			seen[key] = true
+			merged = append(merged, p)
+		}
+	}
+	rt.briefHeld.Store(runID, merged)
 }
 
 // briefHeldForSession is the search zero a cell's frame carries: the brief's
@@ -119,6 +151,12 @@ func (rt *Runtime) openTree(runID string) {
 		return
 	}
 	if _, loaded := rt.treeRead.LoadOrStore(runID, &treeRead{tried: map[string]bool{}}); !loaded {
+		// The run may have ended between the check above and the store: its tree
+		// is then closed again, not kept for ever.
+		if rt.treeIsClosed(runID) {
+			rt.treeRead.Delete(runID)
+			return
+		}
 		rt.noteGateStateLostIfResumed(runID, rt.runStartedBeforeBoot(runID))
 	}
 }

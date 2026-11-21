@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // A story's research trajectory (docs/design/semantic-layer-2026-11-20.md
@@ -39,10 +40,17 @@ import (
 //     story holds (opened with or fed), the outlets those hold, and, through
 //     the story's succeeds ref, the same for the story it continues. It is
 //     appended to the run's first message beside the corpus brief. The
-//     read-first lane's held pages (yaegikernel.HeldPage: URL, Title,
-//     CaptureID) are built from storyPages, whose storyHeldPage has the same
-//     fields; adopting it is one call, rt.noteBriefHeld(runID, pages), once
-//     that lane is on main.
+//     read-first rule (search_decision.go) takes the same pages as HELD pages
+//     of the run's root session, in FRONT of the corpus brief's (noteStoryHeld):
+//     the run tries what the story already holds, newest fed capture first,
+//     before its first web search. The rule demands the first five of that one
+//     search zero (story pages, then the brief's), the same five it demands of
+//     any search; the section lists up to 40 so the model sees the rest, and
+//     is not required to read them. Pages whose URL is not known (a capture
+//     the store did not return) are listed but not held: the rule keys a page
+//     by its URL. Owner, 2026-11-21: "the more that we send a capture to
+//     existing trajectories with accumulated context, the better" and "we
+//     should be reading much more and searching less".
 //   - requireFedCapturesRead: a Texture's Cast to research for a story that
 //     already had research is refused while captures fed since its last
 //     research Cast are not yet read by it. The same shape as the need test's
@@ -347,6 +355,19 @@ func outletOf(raw string) string {
 // storyResearchContext is the section a research run on a story gets.
 type storyResearchContext struct {
 	text string
+	// held are the pages the section lists, with a known URL, the story's own
+	// first and then its predecessor's: the run's search zero (noteStoryHeld).
+	held []yaegikernel.HeldPage
+}
+
+func heldOf(pages []storyHeldPage) []yaegikernel.HeldPage {
+	var out []yaegikernel.HeldPage
+	for _, p := range pages {
+		if strings.TrimSpace(p.URL) != "" && p.CaptureID != "" {
+			out = append(out, yaegikernel.HeldPage{URL: p.URL, Title: p.Title, CaptureID: p.CaptureID})
+		}
+	}
+	return out
 }
 
 func (c *storyResearchContext) openingText() string {
@@ -429,6 +450,7 @@ func (rt *Runtime) storyResearchContextOpening(ctx context.Context, rec *types.R
 	pages, _, fed := rt.storyPages(ctx, rec.OwnerID, rec.ComputerID, doc, storyContextMaxPages)
 	var b strings.Builder
 	found := false
+	held := heldOf(pages)
 	mainPoint, succeeds := rt.store.StoryPointOf(ctx, rec.OwnerID, rec.ComputerID, doc)
 	if len(pages) > 0 {
 		b.WriteString("Story research so far. This story's earlier research runs read, and the story holds, these pages; read one with choir.ReadCapture(capture_id) before you search the web for what it already answers.\n")
@@ -458,13 +480,14 @@ func (rt *Runtime) storyResearchContextOpening(ctx context.Context, rec *types.R
 				fmt.Fprintf(&b, "The earlier story's main point: %s\n", intakeClip(pm, mainPointMaxRunes))
 			}
 			describeStoryPages(&b, prior)
+			held = append(held, heldOf(prior)...)
 			found = true
 		}
 	}
 	if !found {
 		return nil
 	}
-	return &storyResearchContext{text: strings.TrimSpace(b.String())}
+	return &storyResearchContext{text: strings.TrimSpace(b.String()), held: held}
 }
 
 // syncSet is a set of ids safe for concurrent use.

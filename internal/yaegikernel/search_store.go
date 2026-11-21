@@ -229,7 +229,7 @@ type SearchStartResult struct {
 	Query     string   `json:"query"`
 	Providers []string `json:"providers"`
 	Cooling   []string `json:"cooling,omitempty"`
-	// Tree answers a Probe: the research tree's tried pages and window now.
+	// Tree answers a Probe: the pages any session of the research tree has tried, now.
 	Tree *TreeState `json:"tree,omitempty"`
 }
 
@@ -637,7 +637,11 @@ func (s *ChoirScope) startSearch(query string, o searchOpts) (SearchStub, error)
 			}
 		}
 		// The web has shown what it has for this question (search_hold.go).
-		if pages, held := s.searches.mostlySeen(query, o.qk, s.searches.nowTime()); held {
+		pages, held := s.searches.mostlySeen(query, o.qk, s.searches.nowTime())
+		if held && refresh() {
+			pages, held = s.searches.mostlySeen(query, o.qk, s.searches.nowTime())
+		}
+		if held {
 			return refuse("mostly_seen", mostlySeenRefusal(len(pages)), pages)
 		}
 		// Read what the run holds first: the paper's held pages, then the top

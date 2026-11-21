@@ -76,14 +76,26 @@ func (rt *Runtime) noteRunChild(runID string) {
 		return
 	}
 	runSearchMu.Lock()
-	defer runSearchMu.Unlock()
 	v, _ := rt.runSearch.Load(runID)
 	t, _ := v.(*runSearchTotals)
+	created := false
 	if t == nil {
 		t = &runSearchTotals{desk: deskmanifest.ResearcherName()}
 		rt.runSearch.Store(runID, t)
+		created = true
 	}
 	t.children++
+	runSearchMu.Unlock()
+	if !created {
+		return
+	}
+	// The entry this made carries the resumed flag, as noteRunSearchStats' does.
+	resumed := rt.runStartedBeforeBoot(runID)
+	runSearchMu.Lock()
+	if cur, _ := rt.runSearch.Load(runID); cur == any(t) {
+		t.resumed = resumed
+	}
+	runSearchMu.Unlock()
 }
 
 // takeRunSearchSummary returns the run's summary line and forgets the run's

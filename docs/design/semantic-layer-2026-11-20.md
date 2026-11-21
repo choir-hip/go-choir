@@ -574,8 +574,9 @@ Built in lane `search-read-first`; the code wins where it differs.
   an aggregator host (a short list in `search_need.go`; none existed before)
   never counts as the outlet. The refusal lists the pages, then the exception
   ("Only if none of these pages can bear on what you lack: SearchFresh"). A
-  `SearchFresh` send writes `runtime: search fresh run= why=` on the console so
-  the proof script counts reasons by distinct text. `choirFunctionDocs` Args keep
+  `SearchFresh` send writes `runtime: search fresh run= why_len= why_hash=` on the
+  console (the reason itself stays on the tape row: it is the run's own sentence
+  and can carry a query), so the proof script counts reasons by distinct hash. `choirFunctionDocs` Args keep
   `fresh` because the signature keeps the variadic argument (it is refused with a
   pointer, and the surface test requires docs to equal the source).
 - **The research tree shares what has been tried, not what has been returned
@@ -602,14 +603,28 @@ Built in lane `search-read-first`; the code wins where it differs.
   brief's pages are the root's: its text is delivered to the root run, a child is
   handed an objective and nothing of the brief, so a child's frame carries no
   `Held` (the host gives `Held` to a session with a `RunRecord`, the root's, and
-  not to a child's). Consequence, stated plainly: parent plus four children with
-  nothing read may each send their FIRST search (five first searches); the
+  not to a child's). Consequence, stated plainly: parent plus its children with
+  nothing read may each send their FIRST search (one `choir.Research` call may
+  spawn up to `MaxResearchChildren` = 16, so up to seventeen first searches); the
   saving is that no branch sends a second search without reading what its own
   first returned. The run summary line is per root run and now carries
   `children=` and `started_<desk>=` (research, research_web) so the deployed
   reading shows where a run's searches come from; the proof script prints
   searches by desk. A page is one page whatever its scheme or `www.`. The probe's
   answer is bounded as the frame is (the most recent 2,000 tried pages).
+- **A story's pages are the front of search zero (lead's handover,
+  2026-11-21).** The pages a story's research context lists (earlier runs'
+  reads, the captures the story holds, its predecessor's;
+  `story_research_context.go`) are held pages of the root session exactly like
+  the brief's: `noteStoryHeld` puts them in front of the brief's in the run's one
+  search zero, each page once. The rule demands the FIRST FIVE of that one list,
+  the same five it demands of any search (the section lists up to 40 so the model
+  sees what the story holds; it is not required to read all of them), so a
+  research run on a story tries the story's newest fed captures before its first
+  web search, by `choir.ReadCapture(capture_id, 0, 0)` with no web fetch; an
+  attempt counts. A page whose URL the store did not return is listed in the
+  section but is not a held page (the rule keys a page by its URL). A child is
+  handed none of it.
 - **A planned restart loosens the gate (residual, stated).** The tree's tried set
   and the brief's pages are in memory (`treeRead`, `briefHeld`), not rebuilt from
   the journal: a run a planned restart resumes once begins with an empty gate, so

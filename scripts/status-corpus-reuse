@@ -121,7 +121,8 @@ HEADER = ["hour", "runs", "started", "from_held", "not_sent", "pages_returned", 
 
 KNOWN_SR = {"started", "from_held", "not_sent", "pages_returned", "pages_new", "pages_read", "search_all_calls",
             "wordings_offered", "wordings_sent", "unread_notes", "fresh_over_unread", "fresh_sent", "untagged",
-            "wordings_running", "searches_judged", "searches_mostly_seen", "outlets_held_max", "outlets_held_last", "resumed_segment"}
+            "wordings_running", "searches_judged", "searches_mostly_seen", "outlets_held_max", "outlets_held_last", "resumed_segment",
+            "children", "started_research", "started_research_web"}
 
 
 def stamp_epoch(s):
