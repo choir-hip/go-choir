@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -38,6 +39,9 @@ const (
 	// is held from the first version; two thirds of the paper's duplicates
 	// are 1.1 to 59 hours apart (evidence section 2).
 	heldHorizon = 72 * time.Hour
+	// openingHeadlineRunes clips a headline of the page, so one oversized
+	// headline cannot take the page's bound.
+	openingHeadlineRunes = 300
 	// heldPerCapture is the top few held stories offered for one arrival.
 	heldPerCapture = 3
 	// heldLedeRunes is the line of lead a candidate carries.
@@ -109,7 +113,7 @@ func storyAge(updated, now time.Time) string {
 }
 
 func leftOutNote(left int, window time.Duration, oldest string) string {
-	return fmt.Sprintf("%d stories updated in the last %s are not listed: the page is bounded, and the oldest listed is %s old. Read them, with ledes, with choir.Stories(50, next) (the next above); a story you cannot find there is older than the window.", left, shortDuration(window), oldest)
+	return fmt.Sprintf("%d stories updated in the last %s are not listed: the page is bounded, and the oldest listed is %s old. Read them, with ledes, with choir.Stories(50, next); the cursor goes on past the oldest listed, so keep following the next of each page for the rest.", left, shortDuration(window), oldest)
 }
 
 // buildOpeningPage builds the page from the story index (newest first, any
@@ -131,7 +135,7 @@ func buildOpeningPage(sums []store.StorySummary, now time.Time, window time.Dura
 		return page, info
 	}
 	entry := func(s store.StorySummary) openingStory {
-		return openingStory{Inbox: deskmanifest.DocumentInbox(s.DocID), Headline: strings.Join(strings.Fields(s.Headline), " "), Age: storyAge(s.UpdatedAt, now), Version: s.Version}
+		return openingStory{Inbox: deskmanifest.DocumentInbox(s.DocID), Headline: intakeClip(s.Headline, openingHeadlineRunes), Age: storyAge(s.UpdatedAt, now), Version: s.Version}
 	}
 	// The page's own bytes beside its stories, at the worst case: the note,
 	// the cursor and the count of a page that left everything out.
@@ -192,6 +196,18 @@ type heldStory struct {
 	weight float64
 }
 
+// unspacedScript reports a rune of a script written without spaces between
+// words, whose title is one token to a word splitter.
+func unspacedScript(r rune) bool {
+	return unicode.Is(unicode.Han, r) || unicode.Is(unicode.Hiragana, r) || unicode.Is(unicode.Katakana, r) ||
+		unicode.Is(unicode.Thai, r) || unicode.Is(unicode.Lao, r) || unicode.Is(unicode.Khmer, r) || unicode.Is(unicode.Myanmar, r)
+}
+
+// titleStems are a title's words as the held index reads them: a word of a
+// spaced script as titleTokens reads it (three or more runes, no stop word)
+// cut to five letters, and a run of an unspaced script as its overlapping
+// character bigrams (a single character stands for itself), so that identical
+// or near-identical titles match. Matching across languages is not done.
 func titleStems(title string) map[string]bool {
 	out := map[string]bool{}
 	for w := range titleTokens(title) {
@@ -199,6 +215,28 @@ func titleStems(title string) map[string]bool {
 			w = string(r[:5])
 		}
 		out[w] = true
+	}
+	for _, word := range strings.FieldsFunc(strings.ToLower(title), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) && !unicode.IsMark(r) }) {
+		var run []rune
+		flush := func() {
+			switch {
+			case len(run) == 1:
+				out[string(run)] = true
+			case len(run) > 1:
+				for i := 0; i+1 < len(run); i++ {
+					out[string(run[i:i+2])] = true
+				}
+			}
+			run = run[:0]
+		}
+		for _, r := range word {
+			if unspacedScript(r) {
+				run = append(run, r)
+			} else {
+				flush()
+			}
+		}
+		flush()
 	}
 	return out
 }
@@ -298,6 +336,9 @@ type openingOffer struct {
 	LeftOut    int
 	ByCapture  map[string][]string
 	HeldUnlist int
+	// Leased are the captures the task leases (the arrivals of its records,
+	// whether or not the records section fitted).
+	Leased []string
 }
 
 // buildHeldSection offers, for each arrival with a candidate, its top few held
@@ -318,7 +359,7 @@ func buildHeldSection(arrivals []types.CaptureArrival, idx *heldIndex, budgetTok
 		if len(cands) == 0 {
 			continue
 		}
-		c := openingHeldCapture{CaptureID: id, Title: strings.Join(strings.Fields(a.Title), " "), HeldStories: cands}
+		c := openingHeldCapture{CaptureID: id, Title: intakeClip(a.Title, heldLedeRunes), HeldStories: cands}
 		raw, _ := json.Marshal(c)
 		if estimateTextTokens(strings.Repeat("x", bytes+len(raw)+400)) > budgetTokens {
 			unlisted++
@@ -351,7 +392,10 @@ type heldCheckEntry struct {
 // heldPacket is the part of a texture:new Cast's spec the held check reads.
 type heldPacket struct {
 	Captures  []string         `json:"captures"`
-	HeldCheck []heldCheckEntry `json:"held_check"`
+	HeldCheck []heldCheckEntry `json:"-"`
+	// heldRaw is the held_check as written, so a malformed one is seen.
+	HeldRaw json.RawMessage `json:"held_check"`
+	HeldBad bool            `json:"-"`
 }
 
 func parseHeldPacket(packet string) (heldPacket, bool) {
@@ -359,6 +403,11 @@ func parseHeldPacket(packet string) (heldPacket, bool) {
 	packet = strings.TrimSpace(packet)
 	if packet == "" || json.Unmarshal([]byte(packet), &p) != nil {
 		return p, false
+	}
+	if raw := strings.TrimSpace(string(p.HeldRaw)); raw != "" && raw != "null" {
+		if json.Unmarshal(p.HeldRaw, &p.HeldCheck) != nil {
+			p.HeldBad = true
+		}
 	}
 	return p, true
 }
@@ -397,8 +446,32 @@ func (o *openingOffer) offeredFor(captures []string) []string {
 // follow_up and different. It never refuses an open for what the verdict is.
 func requireHeldVerdicts(offer *openingOffer, packet string) error {
 	p, ok := parseHeldPacket(packet)
-	if !ok || offer == nil {
+	if !ok || offer == nil || len(offer.ByCapture) == 0 {
 		return nil
+	}
+	shape := fmt.Sprintf("\"held_check\": [{\"story\": \"%s\", \"verdict\": \"same|follow_up|different\"}]", deskmanifest.DocumentInbox("<doc>"))
+	leased := strings.Join(offer.Leased, ", ")
+	if len(offer.Leased) == 0 {
+		var ids []string
+		for id := range offer.ByCapture {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		leased = strings.Join(ids, ", ")
+	}
+	if p.HeldBad {
+		return fmt.Errorf("held_check must be a list of {story, verdict} objects, as in %s; the captures you lease are %s (nothing was sent)", shape, leased)
+	}
+	if len(offer.Leased) > 0 {
+		leasedSet := map[string]bool{}
+		for _, id := range offer.Leased {
+			leasedSet[id] = true
+		}
+		for _, id := range p.Captures {
+			if id = strings.TrimSpace(id); id != "" && !leasedSet[id] {
+				return fmt.Errorf("the Cast names capture %s, which this task does not lease; the captures you lease are %s, and held stories were offered for some of them: answer in the spec as in %s (nothing was sent)", id, leased, shape)
+			}
+		}
 	}
 	owed := offer.offeredFor(p.Captures)
 	if len(owed) == 0 {
@@ -418,7 +491,7 @@ func requireHeldVerdicts(offer *openingOffer, packet string) error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("a Cast to %s must answer, for each held story offered for its captures, whether it is the same happening, a follow_up or different: add to the spec \"held_check\": [{\"story\": \"%s\", \"verdict\": \"same|follow_up|different\"}] for %s (nothing was sent; read the held stories you were handed, then cast again)", types.StoryOpenInbox(), deskmanifest.DocumentInbox("<doc>"), strings.Join(missing, ", "))
+		return fmt.Errorf("a Cast to %s must answer, for each held story offered for its captures, whether it is the same happening, a follow_up or different: add to the spec %s for %s (nothing was sent; read the held stories you were handed, then cast again)", types.StoryOpenInbox(), shape, strings.Join(missing, ", "))
 	}
 	return nil
 }

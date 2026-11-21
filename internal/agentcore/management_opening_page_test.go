@@ -484,7 +484,94 @@ choir.Done("opened")`
 			line = l
 		}
 	}
-	if line == "" || !strings.Contains(line, "window=8h") || !strings.Contains(line, "offered="+covering) || !strings.Contains(line, "verdicts="+covering+":different") || !strings.Contains(line, "page_left_out=0") {
+	if line == "" || strings.Contains(line, "story=- ") || !strings.Contains(line, "window=8h") || !strings.Contains(line, "offered="+covering) || !strings.Contains(line, "verdicts="+covering+":different") || !strings.Contains(line, "page_left_out=0") {
 		t.Fatalf("H4: the committed open's line = %q", line)
+	}
+}
+
+// Review round 1 (seat 2, b0296a55d). Failure list, written before the code:
+//  R1  the held section and the offer depend on the records section fitting:
+//      a task whose records are too large for the bound gets no offer, so its
+//      open is unchecked.
+//  R2  with an offer, a held_check that is present but not a list of
+//      {story, verdict}, or a Cast naming a capture the task does not lease,
+//      commits unchecked.
+//  R3  a headline in a script written without spaces is one token, so even an
+//      identical title cannot match.
+//  R7  one huge headline drops the whole page and the held section.
+func TestHeldOfferDoesNotDependOnTheRecordsFitting(t *testing.T) {
+	restore := managementTaskOpeningSectionTokens
+	t.Cleanup(func() { managementTaskOpeningSectionTokens = restore })
+	filler := strings.Repeat("zqx wvu tsr ", 600)
+	f, _, rec := openingFixture(t, "owner-open-norecords", "Harbor strike begins at Rotterdam port "+filler)
+	covering := openTestStory(t, f.s, f.owner, f.computer, "Rotterdam port workers begin a harbor strike")
+	managementTaskOpeningSectionTokens = 1500
+	o := f.rt.managementTaskOpening(context.Background(), rec)
+	if o == nil || strings.Contains(o.text, "Your records:") {
+		t.Fatalf("R1: the records were meant not to fit: %v", o)
+	}
+	if o.offer == nil || len(o.offer.ByCapture["cap-o1"]) == 0 || o.offer.ByCapture["cap-o1"][0] != covering || !strings.Contains(o.text, covering) {
+		t.Fatalf("R1: no offer when the records do not fit: %+v", o.offer)
+	}
+}
+
+func TestHeldCheckMalformedOrForeignCaptureIsRefused(t *testing.T) {
+	offer := &openingOffer{ByCapture: map[string][]string{"cap-1": {"docA"}}, Leased: []string{"cap-1", "cap-2"}}
+	for name, packet := range map[string]string{
+		"string":      `{"captures":["cap-1"],"held_check":"same"}`,
+		"object":      `{"captures":["cap-1"],"held_check":{"story":"docA","verdict":"same"}}`,
+		"bad entries": `{"captures":["cap-1"],"held_check":[1,2]}`,
+	} {
+		err := requireHeldVerdicts(offer, packet)
+		if err == nil || !strings.Contains(err.Error(), "cap-1") || !strings.Contains(err.Error(), "same|follow_up|different") {
+			t.Errorf("R2: %s held_check was accepted or the error does not name the captures and the shape: %v", name, err)
+		}
+	}
+	err := requireHeldVerdicts(offer, `{"captures":["cap-9"],"held_check":[{"story":"docA","verdict":"same"}]}`)
+	if err == nil || !strings.Contains(err.Error(), "cap-9") || !strings.Contains(err.Error(), "cap-2") {
+		t.Errorf("R2: a capture the task does not lease was accepted: %v", err)
+	}
+	// A leased capture with no candidate may be named; null or an empty list is no answer, not malformed.
+	if err := requireHeldVerdicts(offer, `{"captures":["cap-2"]}`); err != nil {
+		t.Errorf("R2: a capture with nothing offered was refused: %v", err)
+	}
+	// Nothing offered at all: a malformed field is not this check's business.
+	if err := requireHeldVerdicts(&openingOffer{ByCapture: map[string][]string{}, Leased: []string{"cap-1"}}, `{"captures":["cap-1"],"held_check":"x"}`); err != nil {
+		t.Errorf("R2: refused with nothing offered: %v", err)
+	}
+}
+
+func TestHeldStoriesMatchHeadlinesWrittenWithoutSpaces(t *testing.T) {
+	now := time.Date(2026, 11, 20, 22, 0, 0, 0, time.UTC)
+	pool := []store.StorySummary{
+		sumAt(0, "東京で大規模な地震が発生、津波警報を発令", "lede", 2*time.Hour, now),
+		sumAt(1, "นายกรัฐมนตรีประกาศยุบสภาผู้แทนราษฎร", "lede", 3*time.Hour, now),
+		sumAt(2, "新型コロナワクチンの追加接種を開始", "lede", 4*time.Hour, now),
+	}
+	idx := newHeldIndex(pool, now)
+	if c := idx.find("東京で大規模な地震が発生、津波警報を発令", 3); len(c) == 0 || c[0].DocID != pool[0].DocID {
+		t.Errorf("R3: an identical Japanese title was not offered first: %+v", c)
+	}
+	if c := idx.find("東京で大規模な地震が発生 津波警報", 3); len(c) == 0 || c[0].DocID != pool[0].DocID {
+		t.Errorf("R3: a near-identical Japanese title was not offered: %+v", c)
+	}
+	if c := idx.find("นายกรัฐมนตรีประกาศยุบสภาผู้แทนราษฎร", 3); len(c) == 0 || c[0].DocID != pool[1].DocID {
+		t.Errorf("R3: an identical Thai title was not offered: %+v", c)
+	}
+	if c := idx.find("今日の天気は晴れのち曇りでしょう", 3); len(c) != 0 {
+		t.Errorf("R3: an unrelated Japanese title was offered %+v", c)
+	}
+}
+
+func TestOneHugeHeadlineIsClippedNotDroppingThePage(t *testing.T) {
+	now := time.Date(2026, 11, 20, 22, 0, 0, 0, time.UTC)
+	in := windowStories(40, openingWindow, now)
+	in[0].Headline = strings.Repeat("A very long headline ", 3000)
+	page, info := buildOpeningPage(in, now, openingWindow, 6000)
+	if info.Shown < 30 || len(page.Stories) != info.Shown || !strings.HasSuffix(page.Stories[0].Headline, "…") || len([]rune(page.Stories[0].Headline)) > 301 {
+		t.Fatalf("R7: shown %d, first headline %d runes", info.Shown, len([]rune(page.Stories[0].Headline)))
+	}
+	if raw, _ := json.Marshal(page); estimateTextTokens(string(raw)) > 6000 {
+		t.Fatalf("R7: page over its bound")
 	}
 }
