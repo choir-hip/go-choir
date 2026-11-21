@@ -1,21 +1,7 @@
 import Foundation
 
-// The run sheet (slice A of the Autoradio desk): one ordered list of everything the listener hears, and the one reducer that applies ops
-// to it. The Go twin is internal/runsheet; both read the fixtures in mobile/fixtures/runsheet and must agree on every one. The wire
-// format is JSON with snake_case keys. Unknown fields are ignored; an unknown kind, state, op or other vocabulary word is a decode
-// error. The reducer holds mechanical invariants only; nothing in it interprets meaning.
-//
-// Interpretations of the frozen interface (the same list is in internal/runsheet/apply.go):
-//  - duplicate detection needs memory, so RunSheet carries `applied_ops` (the last 512 applied op_ids); a dropped op is not remembered;
-//  - dropped reasons: duplicate, not_ahead, not_on_air, not_phone, bad_transition, other_on_air (no longer produced: a takeover), unknown_id, stale_version,
-//    no_previous, duplicate_id, reason_required, invalid;
-//  - the reducer reads no clock: ended.at is whatever the op carried ("" when nothing); skip and `now` take at and last_block from op.ended;
-//  - skip, previous and aired never promote an entry to on_air: only an `aired` op from the phone does;
-//  - previous returns the entry on air and the latest heard or skipped entry to ahead, in place;
-//  - an entry that goes on air moves to the head of the ahead entries (order: tail, on_air, ahead);
-//  - heard or skipped entries beyond the most recent 50 are trimmed; the ahead list is not capped here;
-//  - place needs state "ahead", a fresh id and the text its kind requires;
-//  - check order: op shape, duplicate, aired's authority, reason, then the op's own rules.
+// The run sheet's wire types (data only). The sheet, its reducer and its decisions are shared code (AutoradioLab/runsheet-model.ts, radio-runtime.ts); the Go twin is internal/runsheet. JSON with snake_case keys;
+// native code only decodes what shared code hands over (RadioBridge) and encodes entries it builds for it.
 
 public enum RunSheetKind: String, Codable, Equatable, Sendable {
     case opening, transition, story, clip, take, episode, page, document, mail, result, answer
@@ -280,25 +266,6 @@ public struct RunSheetOp: Codable, Equatable, Sendable {
 }
 
 /// What the reducer says about one op. `dropped` is nil when the op applied; `version` is the sheet's version after the op.
-public struct RunSheetResult: Codable, Equatable, Sendable {
-    public var opId: String
-    public var applied: Bool
-    public var dropped: String?
-    public var version: Int64
-    public init(opId: String, applied: Bool, dropped: String? = nil, version: Int64) {
-        self.opId = opId; self.applied = applied; self.dropped = dropped; self.version = version
-    }
-    enum CodingKeys: String, CodingKey { case opId = "op_id", applied, dropped, version }
-}
-
-/// The dropped reasons.
-public enum RunSheetDropped {
-    public static let duplicate = "duplicate", notAhead = "not_ahead", notOnAir = "not_on_air", notPhone = "not_phone"
-    public static let badTransition = "bad_transition", otherOnAir = "other_on_air", unknownId = "unknown_id", staleVersion = "stale_version"
-    public static let noPrevious = "no_previous", duplicateId = "duplicate_id", reasonRequired = "reason_required", invalid = "invalid"
-    public static let aheadFull = "ahead_full"
-}
-
 public enum RunSheetBounds {
     public static let maxTitleBytes = 300, maxTextBytes = 8 * 1024, maxReasonBytes = 160, maxTail = 50, maxAppliedOps = 512
     /// The server's field bounds (internal/runsheet/runsheet.go): an op that breaks one is dropped there as invalid, so the phone builds none.
