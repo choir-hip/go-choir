@@ -48,3 +48,7 @@ Tests for the four exits first, then: forget the remembered answer on every
 unclean result, forget it when a settle reports a failure, and make the late
 continuation check whose key it sees. Red: two seats, proof on the simulator
 drill.
+
+## 2026-11-21: HeldPages needs the wipe's generation as its boundary (reader review 4)
+
+The reader's native `HeldPages` (the pages the shared reader hands the voice) is emptied by AccountWipe's registration but has no generation boundary: a hand-over in flight across an account change can still land after the wipe. A floor kept from the shared generation was tried and removed (it never healed after a failed sign-out); the boundary arrives with the wipe's own generation in the account change.

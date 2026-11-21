@@ -43,20 +43,15 @@ public final class HeldPages: @unchecked Sendable {
     /// Addresses held, least recently used first.
     private var recency: [String] = []
     private let limit: Int
-    /// The shared account generation the last hand-over came under, and the lowest one the next may come under: a sign-out wipe raises it past the last one seen, so a hand-over that began
-    /// before the account changed and lands after the wipe is refused (the rule at AccountWipe: a writer checks its generation before each put).
-    private var lastSeen = 0, floor = 0
     public init(limit: Int = HeldPages.defaultLimit) { self.limit = max(1, limit) }
 
-    /// True when the page is held; false when its generation is older than the account now signed in. `generation` nil: no check (a native caller).
-    @discardableResult
-    public func hold(_ p: HeldPage, generation: Int? = nil) -> Bool {
+    // The page of an account that has since gone is dropped by AccountWipe's registration (sign-out). A hand-over still in flight across the change is not refused here: that boundary arrives with the wipe's
+    // own generation in the account change (docs/problems/unclean-sign-out-leaves-the-old-accounts-data-for-the-next-2026-11-21.md, "HeldPages needs the wipe's generation as its boundary").
+    public func hold(_ p: HeldPage) {
         lock.lock(); defer { lock.unlock() }
-        if let g = generation { guard g >= floor else { return false }; lastSeen = max(lastSeen, g) }
         pages[p.address] = p
         recency.removeAll { $0 == p.address }; recency.append(p.address)
         while pages.count > limit, let oldest = recency.first, oldest != p.address { recency.removeFirst(); pages[oldest] = nil }
-        return true
     }
     public func page(_ address: String) -> HeldPage? {
         lock.lock(); defer { lock.unlock() }
@@ -67,7 +62,7 @@ public final class HeldPages: @unchecked Sendable {
     public func all() -> [HeldPage] { lock.lock(); defer { lock.unlock() }; return Array(pages.values) }
     public var count: Int { lock.lock(); defer { lock.unlock() }; return pages.count }
     /// Sign-out: every page held (the previous account's).
-    public func wipe() { lock.lock(); pages = [:]; recency = []; floor = max(floor, lastSeen + 1); lock.unlock() }
+    public func wipe() { lock.lock(); pages = [:]; recency = []; lock.unlock() }
 }
 
 /// `pub:` and `texture:` as pages for the voice: the lines are the plain text of the page the shared reader handed over; before it has, the page is "loading".

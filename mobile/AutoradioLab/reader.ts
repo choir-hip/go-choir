@@ -128,7 +128,7 @@ function hand(d: ReaderDoc, gen: number): void {
   const send = handOver === undefined ? (nativeLater() as HandOver | null) : handOver;     // api.ts types the request for the key reads; the module's `later` takes any op
   if (!send || d.status !== 'ready' || gen !== accountGeneration()) return;
   const blocks = d.blocks.filter((b) => b.text !== '').map((b) => ({ id: b.id, kind: b.kind, text: b.text, sentences: sentenceTexts(b) }));
-  void Promise.resolve().then(() => send({ op: 'pageText', generation: gen, address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { console.log(obj(r) && r.ok === true ? `reader: handed to the voice blocks=${blocks.length}` : 'reader: the voice did not take the page'); }, () => undefined);
+  void Promise.resolve().then(() => send({ op: 'pageText', address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { console.log(obj(r) && r.ok === true ? `reader: handed to the voice blocks=${blocks.length}` : 'reader: the voice did not take the page'); }, () => undefined);
 }
 
 /** The source behind the reader page. `accState` and `saved` are only there to ask again: a sign-in from the banner, and the editor's save. */
