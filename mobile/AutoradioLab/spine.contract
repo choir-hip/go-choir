@@ -34,13 +34,13 @@ members Autoradio
   // Every theme send (choose, mode, add from a Texture, remove) repaints the theme, the list, the cards and the scale.
   mutation thm as shape SettingsAck refreshes th, thl, tc, tx
   // The bar (bar.ts, shared code): what the native side reports as facts (the engine's phase and words, the player, the run sheet player; `barFacts`) and the conversation's entries, decided on the clock here.
-  // While a timed state (an error, a revision) shows (`bi.until`), the facts are read again every half second (a data source may not read the clock, so the facts carry it), and the bar ends the state by itself.
+  // While a timed state (an error, a revision) shows (`bi.until`), the facts are read again every quarter second (a data source may not read the clock, so the facts carry it), and the bar ends the state by itself.
   resource bf = barFacts(tick=barTick) as shape BarFacts else empty()
   state barTick = 0
   action barBump
     barTick = barTick + 1
   task barTimed when bi.until > 0 key=barTick
-    after(500, barBump)
+    after(250, barBump)
   resource bi = barInfo(bf, cvraw, `${barTick}|${signedOutTick}`) as shape BarInfo else empty()
   mutation pm as shape PageList
   // A second handle, for an action that opens one page and closes another in the same step.

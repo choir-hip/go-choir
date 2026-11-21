@@ -16,7 +16,7 @@ export const PICK_A_STORY = 'Pick a story below.';
 
 export type BarInfo = {
   state: string; text: string; playing: boolean; talking: boolean; signedIn: boolean; handsFree: boolean; progress: number;
-  question: string; answerText: string; answerLabel: string; answerState: string; answerNote: string; canRetry: boolean;
+  question: string; answerId: string; answerText: string; answerLabel: string; answerState: string; answerNote: string; canRetry: boolean;
   /** Seconds until a timed state ends (0: none), so the contract asks again then and not before. */
   until: number;
 };
@@ -45,11 +45,11 @@ function plain(stage: string, message: string): string {
 }
 
 /** The bar for the native facts and the conversation's entries. The clock is the facts' own `at` (seconds, the device's clock, the same one that stamps `errorAt` and `revisedAt`):
- * a data source may not read the time, and the facts are read again each half second while a timed state shows (spine.contract). `now` overrides it (tests). */
+ * a data source may not read the time, and the facts are read again each quarter second while a timed state shows (spine.contract). `now` overrides it (tests). */
 export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): BarInfo {
   const f = obj(rawFacts);
   now = now ?? num(f.at);
-  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.playing), talking: false, signedIn: bool(f.signedIn), handsFree: bool(f.handsFree), progress: 0, question: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, until: 0 };
+  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.playing), talking: false, signedIn: bool(f.signedIn), handsFree: bool(f.handsFree), progress: 0, question: '', answerId: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, until: 0 };
   const blockCount = Math.max(0, Math.floor(num(f.blockCount)));
   if (blockCount > 0) b.progress = Math.min(1, Math.max(0, (Math.max(0, num(f.blockIndex)) + Math.max(0, num(f.blockFraction))) / blockCount));
 
@@ -95,7 +95,7 @@ export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): B
   if (e && str(e.id) !== dismissed) {
     const first = str(e.first), source = str(e.firstSource), answer = str(e.answer), note = str(e.note), status = str(e.status);
     const saved = source === '' ? first : `${source}: ${first}`;
-    b.question = str(e.question);
+    b.question = str(e.question); b.answerId = str(e.id);
     if (status === 'failed') { b.answerState = 'failed'; b.answerNote = note; b.canRetry = true; }
     else if (status === 'answered' || status === 'answering') {
       if (answer !== '') { b.answerState = 'full'; b.answerText = answer; } else { b.answerState = 'first'; b.answerText = saved; b.answerLabel = 'From your saved stories'; }

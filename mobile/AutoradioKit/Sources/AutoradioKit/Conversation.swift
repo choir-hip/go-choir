@@ -114,7 +114,7 @@ public final class Conversation: @unchecked Sendable {
         }
     }
 
-    public func dismiss() { lock.lock(); dismissed = list.last?.id; lock.unlock(); onChange?() }
+    public func dismiss(id: String = "") { lock.lock(); dismissed = id.isEmpty ? list.last?.id : id; lock.unlock(); onChange?() }
     public func entries() -> [ConversationEntry] { lock.lock(); defer { lock.unlock() }; return list }
     public func entry(_ id: String) -> ConversationEntry? { entries().last { $0.id == id } }
     public func clear() { lock.lock(); list = []; current = nil; dismissed = nil; lock.unlock(); onChange?() }

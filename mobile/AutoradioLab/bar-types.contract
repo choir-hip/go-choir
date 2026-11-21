@@ -10,6 +10,7 @@ shape BarInfo
   handsFree: bool
   progress: number
   question: string
+  answerId: string
   answerText: string
   answerLabel: string
   answerState: string

@@ -114,6 +114,7 @@ final class ConversationTests: XCTestCase {
         c.begin(id: "t1", question: "q"); c.addAnswer(id: "t1", sentence: "a"); c.finishAnswer(id: "t1", status: "completed")
         c.dismiss(); XCTAssertEqual(c.dismissedID(), "t1")
         c.begin(id: "t2", question: "q2"); XCTAssertEqual(c.dismissedID(), "", "a new question shows its card again")
+        c.dismiss(id: "t1"); XCTAssertEqual(c.dismissedID(), "t1", "the card names the entry it shows (bar.ts answerId)")
     }
 }
 

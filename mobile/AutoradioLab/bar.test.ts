@@ -158,6 +158,13 @@ describe('the answer card', () => {
     expect(card({ id: 'e1', status: 'answered', answer: 'a' }, 'e1').answerState).toBe('');
     expect(card({ id: 'e1', status: 'answered', answer: 'a' }, 'other').answerState).toBe('full');
   });
+  test('B8 the card names the entry it shows, so Close can close that one even when a later entry was cancelled', () => {
+    const entries = [entry({ id: 'e1', status: 'answered', answer: 'a' }), entry({ id: 'e2', status: 'cancelled' })];
+    const shown = barInfo(play(), { entries, dismissed: '' }, at());
+    expect(shown.answerId).toBe('e1');
+    expect(barInfo(play(), { entries, dismissed: shown.answerId }, at()).answerState).toBe('');
+    expect(barInfo(play(), none, at()).answerId).toBe('');
+  });
   test('B8 the latest entry that is not cancelled decides', () => {
     const entries = [entry({ id: 'e1', status: 'answered', answer: 'old answer' }), entry({ id: 'e2', question: 'later?', status: 'failed', note: 'no' }), entry({ id: 'e3', status: 'cancelled' })];
     expect(barInfo(play(), { entries, dismissed: '' }, at())).toMatchObject({ question: 'later?', answerState: 'failed' });

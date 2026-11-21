@@ -387,6 +387,7 @@ bad "mail: Sent and Quarantine show no error screen" '\[mail-error\]' "$SHOTS/dr
 # the bar drive (bar.ts over the native facts)
 BR="$SHOTS/drive-bar.txt"
 chk "bar: on a page the line names the page and counts the deck" '\[page-indicator\] "On: [^"]+ · [0-9]+ in the deck"' "$BR"
+[ -n "$PLAY1" ] || fail "bar" "the survey found no paper-play- id: the bar's playing, pausing and run sheet checks would be skipped"
 if [ -n "$PLAY1" ]; then
   chk "bar: a story is playing (NOW PLAYING with a title)" 'NOW PLAYING|Now playing, [^.]{3,}' "$BR"
   chk "bar: the progress rule is drawn" '\[bar-progress\]' "$BR"
