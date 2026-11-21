@@ -16,8 +16,9 @@
 // Rules (proved by the table in account.test.ts): an unreadable key never wipes and never adopts. A key present with a pending marker means the native half never
 // deleted the key: the marker goes, nothing is wiped. A key absent with a stamp or a marker means a sign-out is unfinished: finish it (the native sign-out, which is
 // idempotent and reruns the Swift wipe, THEN the shared wipe, THEN the stamp and the marker go). A key present whose digest is not the stamp's is another account: wipe
-// both halves, THEN write the new stamp. A stamp or marker is advanced or removed ONLY when every wipe succeeded; otherwise it stays, the next launch tries again, and
-// the page is told which stores failed. A native call that outlives its deadline keeps its continuation, and the marker stays until it answers or the next launch reconciles.
+// both halves, THEN write the new stamp. A marker is removed ONLY when every wipe succeeded. An ACCOUNT CHANGE writes the new stamp first, with the list of the stores still to wipe (a second line of the stamp file), and
+// strikes names off as they clear: a retry wipes only the list, never the new account's data. The answer `settleAccount` remembers is valid only for the state it was computed from (the table in
+// docs/problems/unclean-sign-out-leaves-the-old-accounts-data-for-the-next-2026-11-21.md); the page is told which stores failed. A native call that outlives its deadline keeps its continuation, and the marker stays until it answers or the next launch reconciles.
 import type { Storage, Store } from './app.contract.d.ts';
 import * as podcast from './podcast.ts';
 import { wipeMail } from './mail.ts';
@@ -30,13 +31,15 @@ import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
 import { wipePages, PAGES_FILE } from './pages.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
+import { accountGeneration, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
 
 /** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
  * launch (`settleAccount`) finishes the wipe before any source answers. (Review 2026-11-19, finding 2.) */
 export const PENDING_FILE = 'app:/data/signout-pending';
-/** The SHA-256 of the key of the account whose data the shared stores hold. A different account seen at launch wipes them first. */
+/** The SHA-256 of the key of the account whose data the shared stores hold. A different account seen wipes them first. A second line, when there is one, lists (comma-separated) the stores of the PREVIOUS
+ * account's that still have to be wiped: `native`, a store's name, or `rm:<path>`. The stamp is written (with the list) BEFORE an account change wipes anything and names are struck off as they clear, so a
+ * retry wipes only what is listed and never the new account's data in the stores that already cleared. */
 export const STAMP_FILE = 'app:/data/account-stamp';
 
 export type Wipe = { name: string; run(storage: Storage | undefined, store: Store | undefined): Promise<unknown> };
@@ -112,7 +115,7 @@ export const DATA_WIPES: Wipe[] = WIPES.filter((w) => w.name !== 'account-stamp'
 export type StampFact = 'none' | 'same' | 'other';
 export type MarkerFact = 'none' | 'pending';
 export type Facts = { key: KeyState; stamp: StampFact; marker: MarkerFact };
-export type Action = 'nothing' | 'adopt' | 'clear-marker' | 'finish' | 'account-change';
+export type Action = 'nothing' | 'adopt' | 'clear-marker' | 'finish' | 'account-change' | 'resume';
 
 export function decide(f: Facts): Action {
   if (f.key === 'unreadable') return 'nothing';                       // never wipes, never adopts
@@ -140,17 +143,26 @@ export function nativeOf(later: ((r: { op: string }) => Promise<unknown>) | null
 
 export type Reconciled = { action: Action; failed: string[] };
 
+/** The stamp file: the account's digest, and the names still to wipe. */
+async function readStamp(storage: Storage): Promise<{ digest: string; todo: string[] }> {
+  const raw = (await readText(storage, STAMP_FILE)) ?? '';
+  const [digest, list = ''] = raw.split('\n');
+  return { digest, todo: list === '' ? [] : list.split(',') };
+}
 async function stampFact(storage: Storage, digest: string): Promise<StampFact> {
-  let stamp = '';
-  try { stamp = new TextDecoder().decode(await storage.fs.readFile(STAMP_FILE)); } catch { /* none */ }
+  const { digest: stamp } = await readStamp(storage);
   return stamp === '' ? 'none' : stamp === digest ? 'same' : 'other';
 }
 
 /** Most wipes swallow "absent", so a wipe that did nothing looks like one that worked. After the wipes, every path they cover is looked at: a survivor is a failure. */
 async function leftovers(storage: Storage | undefined): Promise<string[]> {
+  return (await leftoversOf(storage, wipedPaths())).map((p) => p.slice(p.lastIndexOf('/') + 1) || p);
+}
+/** The paths (of those given, the stamp and the marker aside) that still exist. */
+async function leftoversOf(storage: Storage | undefined, paths: string[]): Promise<string[]> {
   if (!storage) return [];
   const out: string[] = [];
-  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
+  for (const p of paths) if (p !== STAMP_FILE && p !== PENDING_FILE && (await exists(storage, p))) out.push(p);
   return out;
 }
 
@@ -159,6 +171,33 @@ async function sharedWipeThen(storage: Storage | undefined, store: Store | undef
   const failed = [...(await wipeAll(storage, store, DATA_WIPES)), ...(await leftovers(storage))];
   if (failed.length === 0) await after();
   return failed;
+}
+
+/** An account change, and its retry. The stamp (this key) is written FIRST together with the list of what is to be wiped; each name is struck off as it clears; a name that fails stays. Nothing is wiped
+ * if the list cannot be written (fail closed). A retry (`resume`) is given only the names still listed, so the new account's data in the stores that already cleared is never wiped again. */
+async function changeAccount(storage: Storage, store: Store | undefined, native: Native, digest: string, names: string[], action: Action): Promise<Reconciled> {
+  const todo = new Set(names);
+  const save = (): Promise<boolean> => mark(storage, STAMP_FILE, todo.size > 0 ? `${digest}\n${[...todo].join(',')}` : digest);
+  if (!(await save())) return { action, failed: ['account-stamp'] };
+  const strike = async (name: string): Promise<void> => { todo.delete(name); await save(); };
+  const shared = [...todo].filter((n) => n !== 'native' && !n.startsWith('rm:'));
+  if (shared.length > 0) {
+    const mine = DATA_WIPES.filter((w) => shared.includes(w.name));
+    nextGeneration(); resetSession(); wipes += 1;
+    for (const w of mine) { try { await w.run(storage, store); await strike(w.name); } catch { console.log(`account: wipe ${w.name} failed`); } }
+    // Only a FULL change looks for survivors: a partial retry runs when the new account may already have written into the other stores.
+    if (shared.length === DATA_WIPES.length) for (const p of await leftoversOf(storage, wipedPaths())) todo.add(`rm:${p}`);
+    await save();
+  }
+  for (const n of [...todo].filter((x) => x.startsWith('rm:'))) { const p = n.slice(3); try { await storage.fs.rm(p); } catch { /* absent */ } if (!(await exists(storage, p))) await strike(n); }
+  if (todo.has('native')) {
+    // The late answer strikes only the native name, and only if the same key is still stored and the stamp is still this account's.
+    const ok = await native.wipe(() => { void (async () => { const n = await keyState(); if (n.state === 'present' && n.digest === digest && (await readStamp(storage)).digest === digest) { const cur = (await readStamp(storage)).todo.filter((x) => x !== 'native'); await mark(storage, STAMP_FILE, cur.length > 0 ? `${digest}\n${cur.join(',')}` : digest); } })(); });
+    if (ok) await strike('native');
+  }
+  const failed = [...todo].map((n) => (n.startsWith('rm:') ? n.slice(n.lastIndexOf('/') + 1) : n));
+  console.log(`account: ${action}, ${failed.length} left`);
+  return { action, failed };
 }
 
 /** The one function: read the three facts, decide, act. Run at launch (`settleAccount`) and at the end of every sign-out attempt. */
@@ -190,16 +229,10 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
       console.log(`account: finished an interrupted sign-out, ${failed.length} failed`);
       return { action, failed };
     }
-    if (action === 'account-change') {
-      const stamp2 = async (): Promise<void> => { await mark(storage, STAMP_FILE, k.digest); };
-      // The late answer finishes only the stamp (the new account IS signed in: re-wiping would delete its fresh stores), and only if the same key is still stored and the wipe below was clean.
-      let shared: Promise<string[]> | null = null;
-      const nativeOk = await native.wipe(() => { void (async () => { const n = await keyState(); if (n.state === 'present' && n.digest === k.digest && shared && (await shared).length === 0) await stamp2(); })(); });
-      shared = sharedWipeThen(storage, store, nativeOk ? stamp2 : async () => undefined);       // shared stores go regardless; the old stamp stays unless both succeeded
-      const failed = [...(await shared)];       // a copy: the late continuation reads the wipe's own result
-      if (!nativeOk) failed.push('native');
-      console.log(`account: another account signed in, ${failed.length} failed`);
-      return { action, failed };
+    if (action === 'account-change') return changeAccount(storage, store, native, k.digest, [...DATA_WIPES.map((w) => w.name), 'native'], action);
+    if (action === 'nothing' && k.state === 'present') {
+      const todo = (await readStamp(storage)).todo;                    // the same account, with stores of the previous one still listed: wipe only those
+      if (todo.length > 0) return changeAccount(storage, store, native, k.digest, todo, 'resume');
     }
     return { action, failed: [] };
   }
@@ -208,13 +241,21 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
 
 // ---- sign-out
 
+/** The sign-out in flight, if any: `settleAccount` waits for it, and a second sign-out waits for the first. */
+let inflight: Promise<unknown> | null = null;
 /** The sign-out: the result carries the wipe counter (a monotonic value the contract passes on to the sources that keep state in memory). */
 export async function accountSignOut(
   storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
   opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
 ): Promise<SignOutResult> {
-  const r = await signOutInner(storage, store, native, opts);
-  return { ...r, epoch: wipes };
+  const before = inflight;
+  const run = (async (): Promise<SignOutResult> => {
+    if (before) await before.catch(() => undefined);
+    const r = await signOutInner(storage, store, native, opts);
+    return { ...r, epoch: wipes };
+  })();
+  inflight = run;
+  try { return await run; } finally { if (inflight === run) inflight = null; }
 }
 
 async function signOutInner(
@@ -254,16 +295,40 @@ async function signOutInner(
   const run = wipes.map((w) => ({ ...w, run: async (s: Storage | undefined, st: Store | undefined) => { step('wipe:' + w.name); return w.run(s, st); } }));
   const failed = [...(await wipeAll(storage, store, run)), ...(opts.wipes ? [] : await leftovers(storage))];
   step('wiped');
-  if (failed.length === 0) { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); return { done: true, failed: '', message: '' }; }
+  if (failed.length === 0) {
+    const bookkeeping = [...((await removeFile(storage, STAMP_FILE)) ? [] : ['account-stamp']), ...((await removeFile(storage, PENDING_FILE)) ? [] : ['signout-marker'])];
+    if (bookkeeping.length === 0) return { done: true, failed: '', message: '' };
+    return { done: true, failed: bookkeeping.join(','), message: `Signed out, but these could not be cleared yet: ${bookkeeping.join(', ')}. They will be cleared the next time the app starts.` };
+  }
   // Signed out, but not everything could be cleared: the marker and the stamp stay, the next launch tries again, and the page says which stores.
   return { done: true, failed: failed.join(','), message: `Signed out, but these could not be cleared yet: ${failed.join(', ')}. They will be cleared the next time the app starts.` };
 }
 
-let settled: Promise<Reconciled> | null = null;
-/** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops. */
-export function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
-  if (!settled) settled = (async () => { await forgetOldCopy(storage); return reconcile(storage, store, native); })();
-  return settled;
+// ---- the remembered answer: valid only for the state it was computed from
+// `settleAccount` runs before every source answer. It observes what `reconcile` reads (the key, the stamp file, whether the marker exists) plus the account generation and the wipe counter, and returns the remembered
+// answer only if that is the state a CLEAN settle left; anything else recomputes. Nothing has to remember anything at an exit. A sign-out in flight is waited for. A settle that failed or threw remembers nothing.
+let memo: { seen: string; result: Reconciled } | null = null;
+let running: { seen: string; p: Promise<Reconciled> } | null = null;
+async function observe(storage: Storage | undefined): Promise<string> {
+  const k = await keyState();
+  const stamp = storage ? ((await readText(storage, STAMP_FILE)) ?? '') : '';
+  const marker = storage ? await exists(storage, PENDING_FILE) : false;
+  return [k.state, k.state === 'present' ? k.digest : '', stamp, marker ? 'pending' : 'none', accountGeneration(), wipes].join('|');
+}
+/** The first answer after a launch, and every one after it, waits for this: it is `reconcile` with the app module's native ops, run only when the observed state is not the one a clean settle left. */
+export async function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
+  while (inflight) await inflight.catch(() => undefined);              // a sign-out in flight: settle on what it leaves
+  const seen = await observe(storage);
+  if (memo && memo.seen === seen) return memo.result;
+  if (running && running.seen === seen) return running.p;
+  const p = (async (): Promise<Reconciled> => {
+    await forgetOldCopy(storage);
+    const r = await reconcile(storage, store, native);
+    memo = r.failed.length === 0 ? { seen: await observe(storage), result: r } : null;
+    return r;
+  })();
+  running = { seen, p };
+  try { return await p; } finally { if (running && running.p === p) running = null; }
 }
 /** For tests. */
-export function resetSettled(): void { settled = null; }
+export function resetSettled(): void { memo = null; running = null; }
