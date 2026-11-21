@@ -2,10 +2,13 @@ package agentcore
 
 import (
 	"encoding/json"
+	"log"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -37,10 +40,10 @@ func TestStoriesShownCountsPerRunAndIsForgotten(t *testing.T) {
 }
 
 func TestManagementStoryChoiceLine(t *testing.T) {
-	if got := managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{}); got != "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=- page_in_window=0 page_left_out=0 offered=- verdicts=-" {
+	if got := managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{}); got != "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=- page_in_window=0 page_left_out=0 offered=- answers=- captures=0 sources=near:0,lead:0 main_point=0 succeeds=-" {
 		t.Fatalf("feed line = %q", got)
 	}
-	if got := managementStoryChoiceLine("run-9", "open", "", 0, 0, choiceDetail{}); got != "management story choice run=run-9 choice=open story=- opening_shown=0 verb_shown=0 candidates_shown=0 window=- page_in_window=0 page_left_out=0 offered=- verdicts=-" {
+	if got := managementStoryChoiceLine("run-9", "open", "", 0, 0, choiceDetail{}); got != "management story choice run=run-9 choice=open story=- opening_shown=0 verb_shown=0 candidates_shown=0 window=- page_in_window=0 page_left_out=0 offered=- answers=- captures=0 sources=near:0,lead:0 main_point=0 succeeds=-" {
 		t.Fatalf("open line = %q", got)
 	}
 }
@@ -81,5 +84,26 @@ func TestStoriesCursorFitsTheBrokerBound(t *testing.T) {
 	junk, _ := json.Marshal(yaegikernel.StoriesPayload{Before: strings.Repeat("x", yaegikernel.MaxStoriesBeforeBytes+1)})
 	if yaegikernel.ValidatePayload(yaegikernel.ActionStories, junk) == nil {
 		t.Error("an oversize before was accepted")
+	}
+}
+
+// A Texture's Cast that opens a research round leaves one line naming the story
+// and the round; nothing else does (a feed to a story, a Cast that continues an
+// open round, another desk's Cast).
+func TestStoryResearchCastLineIsLoggedOncePerOpenedRound(t *testing.T) {
+	rt := &Runtime{}
+	var out strings.Builder
+	prev := log.Writer()
+	log.SetOutput(&out)
+	defer log.SetOutput(prev)
+	rec := func(inbox string, opened bool, round int) types.InboxRecordReceipt {
+		return types.InboxRecordReceipt{Inbox: inbox, OpenedRound: opened, Round: round}
+	}
+	rt.logStoryResearchCast("run-t", deskmanifest.DocumentCustodianName(), rec(deskmanifest.ResearchInbox("doc-1"), true, 2))
+	rt.logStoryResearchCast("run-t", deskmanifest.DocumentCustodianName(), rec(deskmanifest.ResearchInbox("doc-1"), false, 2))
+	rt.logStoryResearchCast("run-t", deskmanifest.DocumentCustodianName(), rec("management:o", true, 1))
+	rt.logStoryResearchCast("run-m", "management", rec(deskmanifest.ResearchInbox("doc-1"), true, 1))
+	if got := strings.TrimSpace(out.String()); !strings.HasSuffix(got, "story research cast run=run-t story=doc-1 round=2") || strings.Count(got, "story research cast") != 1 {
+		t.Fatalf("log = %q", got)
 	}
 }

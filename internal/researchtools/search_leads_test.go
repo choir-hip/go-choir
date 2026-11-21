@@ -178,3 +178,25 @@ func TestSinkWritesAnArrivalAsOnePost(t *testing.T) {
 		t.Fatal("no corpusd URL, no error")
 	}
 }
+
+func TestSinkReadsLeadConversationsAsOnePost(t *testing.T) {
+	var posts int
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		if r.URL.Path != "/internal/platform/search-leads/by-capture" || r.Method != http.MethodPost {
+			t.Errorf("%s %s", r.Method, r.URL.Path)
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"conversations":{"cap-1":["doc-a","doc-b"]}}`)
+	}))
+	defer srv.Close()
+	var _ SearchLeadStoryReader = NewCorpusdCaptureSink(srv.URL)
+	got, err := NewCorpusdCaptureSink(srv.URL).SearchLeadConversations(context.Background(), "o", "c", []string{"cap-1", "cap-2"})
+	if err != nil || posts != 1 || len(got["cap-1"]) != 2 || len(got) != 1 || body["owner_id"] != "o" {
+		t.Fatalf("got=%v err=%v posts=%d body=%v", got, err, posts, body)
+	}
+	if _, err := NewCorpusdCaptureSink("").SearchLeadConversations(context.Background(), "o", "c", nil); err == nil {
+		t.Fatal("no corpusd URL, no error")
+	}
+}

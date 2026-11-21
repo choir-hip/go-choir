@@ -121,7 +121,7 @@ func (s *Store) PublishStoryIndex(ctx context.Context, ownerID, computerID strin
 
 func sameStoryIndexEntry(a, b types.StoryIndexEntry) bool {
 	return a.DocID == b.DocID && a.TrajectoryID == b.TrajectoryID && a.RevisionID == b.RevisionID && a.Headline == b.Headline &&
-		a.Lede == b.Lede && a.Version == b.Version && a.UpdatedAt.Equal(b.UpdatedAt) && a.Archived == b.Archived
+		a.Lede == b.Lede && a.MainPoint == b.MainPoint && a.Succeeds == b.Succeeds && a.Version == b.Version && a.UpdatedAt.Equal(b.UpdatedAt) && a.Archived == b.Archived
 }
 
 // reconcileStoryIndex does PublishStoryIndex's work with trajectoryMu held and
@@ -158,7 +158,7 @@ func (s *Store) reconcileStoryIndex(ctx context.Context, ownerID, computerID str
 			key := storyIndexRowKey(sum.DocID)
 			live[key] = true
 			want := types.StoryIndexEntry{DocID: sum.DocID, TrajectoryID: sum.TrajectoryID, RevisionID: sum.RevisionID,
-				Headline: sum.Headline, Lede: sum.Lede, Version: sum.Version, UpdatedAt: sum.UpdatedAt.UTC()}
+				Headline: sum.Headline, Lede: sum.Lede, MainPoint: sum.MainPoint, Succeeds: sum.Succeeds, Version: sum.Version, UpdatedAt: sum.UpdatedAt.UTC()}
 			if prior, had := rows[key]; had {
 				var cur types.StoryIndexEntry
 				if json.Unmarshal(prior.Body, &cur) == nil && sameStoryIndexEntry(cur, want) {
@@ -236,7 +236,7 @@ func (s *Store) ListStoryIndex(ctx context.Context, ownerID, computerID string, 
 		if e.Archived {
 			continue
 		}
-		all = append(all, StorySummary{DocID: e.DocID, TrajectoryID: e.TrajectoryID, Headline: e.Headline, Lede: e.Lede,
+		all = append(all, StorySummary{DocID: e.DocID, TrajectoryID: e.TrajectoryID, Headline: e.Headline, Lede: e.Lede, MainPoint: e.MainPoint, Succeeds: e.Succeeds,
 			UpdatedAt: e.UpdatedAt, Version: e.Version, RevisionID: e.RevisionID})
 	}
 	sort.SliceStable(all, func(i, j int) bool {

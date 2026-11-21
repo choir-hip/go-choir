@@ -458,6 +458,8 @@ func castBodyFromPacket(raw string) (*types.CommitmentCast, error) {
 		Withdrawals   []types.CastWithdrawal  `json:"withdrawals"`
 		Captures      []string                `json:"captures"`
 		Publish       string                  `json:"publish"`
+		MainPoint     string                  `json:"main_point"`
+		Succeeds      string                  `json:"succeeds"`
 	}
 	if err := json.Unmarshal([]byte(raw), &probe); err != nil {
 		return nil, fmt.Errorf("a Cast's packet is not JSON: %w", err)
@@ -469,6 +471,7 @@ func castBodyFromPacket(raw string) (*types.CommitmentCast, error) {
 			cast.Captures = append(cast.Captures, id)
 		}
 	}
+	cast.MainPoint, cast.Succeeds = strings.TrimSpace(probe.MainPoint), strings.TrimSpace(probe.Succeeds)
 	switch publish := strings.TrimSpace(probe.Publish); publish {
 	case "", types.CastPublishAuto:
 		cast.Publish = publish
@@ -657,11 +660,11 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		}
 		if strings.TrimSpace(in.ToDesk) == types.StoryOpenInbox() && in.Kind == yaegikernel.IntentCast {
 			opensStory = true
-			// A task's open answers for each held story its opening offered
-			// for the captures (held_check); the answer is recorded with the
-			// Cast's packet. Never refused for what the answer is.
+			// A task's open records its main point and answers for each
+			// candidate story its opening offered for the captures (judgment);
+			// both are recorded with the Cast's packet. Refused only for shape.
 			if task {
-				if err := requireHeldVerdicts(rt.openingOfferOf(r.scope.RunID), in.Statement); err != nil {
+				if err := requireJudgment(rt.openingOfferOf(r.scope.RunID), in.Statement); err != nil {
 					return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
 				}
 			}
@@ -845,6 +848,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		seq, opened := int64(0), ""
 		if i < len(committed.Records) {
 			rt.logManagementStoryChoice(r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i], in)
+			rt.logStoryResearchCast(r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i])
 			seq = committed.Records[i].InboxSeq
 			if committed.Records[i].OpenedStory || in.Kind == yaegikernel.IntentDelegate {
 				// The receipt names the story a Cast to texture:new opened,

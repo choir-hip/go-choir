@@ -68,20 +68,30 @@ func (rt *Runtime) forgetStoriesShown(runID string) {
 
 // managementStoryChoiceLine: candidates_shown stays the sum of the two, for
 // readers of the line from before the split. The page's window, its stories in
-// that window and how many it left out, the held stories offered for the
-// decision's captures and the verdicts given (none: an offered story with no verdict, which a run before this check or a Cast the host did not check may leave; -:
-// not asked) follow. Ids and counts only.
+// that window and how many it left out, the candidate stories offered for the
+// decision's captures and the answers given (none: an offered story with no
+// answer, which the host's check refuses for a task opening; -: not asked, as
+// for a feed or a decline) follow, then what the main-point judgment adds:
+// captures (how many the act disposes of), sources (candidates offered, by
+// how they were found), main_point (characters; an open's only) and succeeds
+// (the document a successor continues, - for none). Ids and counts only.
 func managementStoryChoiceLine(runID, choice, storyID string, opening, verb int, d choiceDetail) string {
 	if storyID == "" {
 		storyID = "-"
 	}
-	return fmt.Sprintf("management story choice run=%s choice=%s story=%s opening_shown=%d verb_shown=%d candidates_shown=%d window=%s page_in_window=%d page_left_out=%d offered=%s verdicts=%s",
-		runID, choice, storyID, opening, verb, opening+verb, shortDuration(d.Window), d.InWindow, d.LeftOut, d.offeredText(), d.verdictsText())
+	succeeds := d.Succeeds
+	if succeeds == "" {
+		succeeds = "-"
+	}
+	return fmt.Sprintf("management story choice run=%s choice=%s story=%s opening_shown=%d verb_shown=%d candidates_shown=%d window=%s page_in_window=%d page_left_out=%d offered=%s answers=%s captures=%d sources=near:%d,lead:%d main_point=%d succeeds=%s",
+		runID, choice, storyID, opening, verb, opening+verb, shortDuration(d.Window), d.InWindow, d.LeftOut, d.offeredText(), d.answersText(),
+		d.Captures, d.Sources.Near, d.Sources.Lead, d.MainPoint, succeeds)
 }
 
 // logManagementStoryChoice logs one committed record of a management run that
-// went to a story: fed (an existing story's inbox) or opened (texture:new).
-// in is the staged act that made the record.
+// went to a story: fed (an existing story's inbox), opened (texture:new) or a
+// decline (the captures a task leaves out of every story). in is the staged
+// act that made the record.
 func (rt *Runtime) logManagementStoryChoice(runID, profile string, rec types.InboxRecordReceipt, in yaegikernel.StagedIntent) {
 	if !deskmanifest.AdmitsAssignments(profile) {
 		return
@@ -90,8 +100,28 @@ func (rt *Runtime) logManagementStoryChoice(runID, profile string, rec types.Inb
 	case rec.OpenedStory:
 		d := rt.detailOfDecision(runID, stagedDecision{packet: in.Statement})
 		log.Print(managementStoryChoiceLine(runID, "open", strings.TrimPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"), rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
+	case in.Kind == yaegikernel.IntentDecline:
+		d := rt.detailOfDecision(runID, stagedDecision{captures: in.Captures})
+		log.Print(managementStoryChoiceLine(runID, "decline", "", rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
 	case strings.HasPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"):
 		d := rt.detailOfDecision(runID, stagedDecision{captures: in.Captures})
 		log.Print(managementStoryChoiceLine(runID, "feed", strings.TrimPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"), rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
 	}
+}
+
+// storyResearchLine is the one line a story's request for research leaves:
+// the story, and which round of its research this is. A story's first round
+// follows its open (or, with a succeeds ref, its successor's open); a later
+// round follows a feed or an owner's turn. scripts/status-story-choice counts
+// research runs started by cause from these lines and the choice lines.
+func storyResearchLine(runID, story string, round int) string {
+	return fmt.Sprintf("story research cast run=%s story=%s round=%d", runID, story, round)
+}
+
+// logStoryResearchCast logs a Texture's Cast that opened a research round.
+func (rt *Runtime) logStoryResearchCast(runID, profile string, rec types.InboxRecordReceipt) {
+	if strings.TrimSpace(profile) != deskmanifest.DocumentCustodianName() || !rec.OpenedRound || !deskmanifest.IsResearchInbox(rec.Inbox) {
+		return
+	}
+	log.Print(storyResearchLine(runID, strings.TrimPrefix(rec.Inbox, deskmanifest.ResearcherName()+":"), rec.Round))
 }

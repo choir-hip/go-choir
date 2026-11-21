@@ -62,6 +62,36 @@ func (c *CorpusdCaptureSink) WriteSearchLeads(ctx context.Context, w SearchLeads
 	return out.Rows, nil
 }
 
+// SearchLeadStoryReader is a capture sink that names, for captures, the
+// conversations whose searches returned the lead each capture's page came
+// from. A sink that does not (a test fake) gives the caller none.
+type SearchLeadStoryReader interface {
+	SearchLeadConversations(ctx context.Context, ownerID, computerID string, captureIDs []string) (map[string][]string, error)
+}
+
+// SearchLeadConversations asks corpusd, in one request, which conversations
+// (story documents, for a story's research) searched their way to each capture.
+func (c *CorpusdCaptureSink) SearchLeadConversations(ctx context.Context, ownerID, computerID string, captureIDs []string) (map[string][]string, error) {
+	if c == nil || c.BaseURL == "" {
+		return nil, fmt.Errorf("search leads: corpusd URL is not configured")
+	}
+	raw, err := json.Marshal(map[string]any{"owner_id": ownerID, "computer_id": computerID, "capture_ids": captureIDs})
+	if err != nil {
+		return nil, err
+	}
+	body, err := c.do(ctx, http.MethodPost, c.BaseURL+"/internal/platform/search-leads/by-capture", raw, 4<<20)
+	if err != nil {
+		return nil, fmt.Errorf("search leads: %w", err)
+	}
+	var out struct {
+		Conversations map[string][]string `json:"conversations"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("search leads: decode: %w", err)
+	}
+	return out.Conversations, nil
+}
+
 // MarkSearchLeadsTried tells corpusd a run read these URLs.
 func (c *CorpusdCaptureSink) MarkSearchLeadsTried(ctx context.Context, ownerID, computerID string, urls []string, captureID string) error {
 	if c == nil || c.BaseURL == "" {

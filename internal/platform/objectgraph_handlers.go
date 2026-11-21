@@ -28,6 +28,7 @@ func RegisterObjectGraphRoutes(s *server.Server, h *ObjectGraphHandler) {
 	s.HandleFunc("/internal/platform/captures/", h.HandleCaptureRead)
 	s.HandleFunc("/internal/platform/search-leads", h.HandleSearchLeads)
 	s.HandleFunc("/internal/platform/search-leads/tried", h.HandleSearchLeadsTried)
+	s.HandleFunc("/internal/platform/search-leads/by-capture", h.HandleSearchLeadsByCapture)
 }
 
 type ObjectGraphHandler struct {

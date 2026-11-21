@@ -912,36 +912,46 @@ check "S5 --history prints the widened file with the new columns" 'head -n1 "$ro
 
 # status-story-choice. Failure list, written before the code:
 #  C1  a decision outside [since, until) is counted, or an hour is not split on the UTC hour
-#  C2  opens and feeds are not counted apart, or a line that is neither is counted
-#  C3  an open with offered=<docs> is not counted as an open with an offer, or a feed is
-#  C4  the verdicts of the offered opens are not counted by kind (none for an unanswered one)
-#  C5  a page with page_left_out above 0 is not counted as cut; the median page is not read
-#      from page_in_window (a line from before the change falls back to opening_shown)
+#  C2  opens, feeds and declines are not counted apart, or a line that is none of them is counted
+#  C3  answers by kind are wrong: a feed is same (per capture), an open's first capture is next
+#      with a succeeds and new without, its other captures are same_as_batch, a decline is decline
+#  C4  candidates by source (vector, lead), stories opened and fed (distinct), successor links
+#      and the share of captures sent to an existing trajectory are not read from the lines
+#  C5  research runs are not counted by cause (a successor's first round, an open's first
+#      round, a later round), or captures per trajectory are not bucketed
+#  C6  a line from before the judgment (no captures=) does not count one capture
 storychoice="$here/status-story-choice"
 python3 - "$root" <<'PY'
 import sys
 root = sys.argv[1]
 P = "[ 1.0] runtime[1]: "
-def ln(ts, choice, extra):
-    return f"{P}{ts} management story choice run=r-1 choice={choice} story=- opening_shown=50 verb_shown=0 candidates_shown=50{extra}\n"
-new = lambda w, left, off, ver: f" window=8h page_in_window={w} page_left_out={left} offered={off} verdicts={ver}"
+def ln(ts, choice, story, caps, sources, offered, succeeds):
+    return (f"{P}{ts} management story choice run=r-1 choice={choice} story={story} opening_shown=50 verb_shown=0 "
+            f"candidates_shown=50 window=8h page_in_window=300 page_left_out=0 offered={offered} answers=- captures={caps} "
+            f"sources={sources} main_point=40 succeeds={succeeds}\n")
+rs = lambda ts, story, rnd: f"{P}{ts} story research cast run=t-1 story={story} round={rnd}\n"
 lines = [
-  ln("2026/11/20 21:10:00", "open", new(300, 0, "dA,dB", "dA:same,dB:different")),
-  ln("2026/11/20 21:20:00", "open", new(310, 0, "-", "-")),
-  ln("2026/11/20 21:30:00", "feed", new(320, 0, "dC", "-")),
-  ln("2026/11/20 21:40:00", "open", new(330, 12, "dD", "dD:none")),
-  ln("2026/11/20 22:00:00", "open", ""),
-  ln("2026/11/20 20:59:59", "open", new(1, 0, "-", "-")),
+  ln("2026/11/20 21:10:00", "open", "s1", 3, "near:2,lead:1", "dA,dB", "-"),
+  ln("2026/11/20 21:20:00", "open", "s2", 1, "near:0,lead:0", "-", "dA"),
+  ln("2026/11/20 21:30:00", "feed", "s1", 2, "near:1,lead:0", "s1", "-"),
+  ln("2026/11/20 21:40:00", "feed", "s9", 1, "near:1,lead:1", "s9", "-"),
+  ln("2026/11/20 22:00:00", "decline", "-", 4, "near:0,lead:0", "-", "-"),
+  ln("2026/11/20 20:59:59", "open", "sx", 5, "near:0,lead:0", "-", "-"),
   P + "2026/11/20 21:15:00 management story choice run=r-1 choice=weird\n",
+  P + "2026/11/20 22:10:00 management story choice run=r-1 choice=feed story=s8 opening_shown=50 verb_shown=0 candidates_shown=50\n",
+  rs("2026/11/20 21:11:00", "s1", 1), rs("2026/11/20 21:21:00", "s2", 1), rs("2026/11/20 21:31:00", "s1", 2),
+  rs("2026/11/20 21:41:00", "s9", 3), rs("2026/11/20 20:00:00", "sx", 1),
 ]
 open(root + "/sc.log", "w").write("".join(lines))
 PY
 env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc.log" --since 2026-11-20T21:00Z --until 2026-11-20T23:00Z --json >"$root/out" 2>&1
-check "C1 two hours in the window, the 20:59 line out" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert [r[\"hour\"] for r in d]==[\"2026-11-20T21Z\",\"2026-11-20T22Z\"], d" "$root/out"'
-check "C2 21h: 4 decisions, 3 opens, 1 feed; the weird line is not counted" 'python3 -c "import json,sys; r=json.load(open(sys.argv[1]))[0]; assert (r[\"decisions\"],r[\"opens\"],r[\"feeds\"])==(4,3,1), r" "$root/out"'
-check "C3 two opens had an offer; the feed with an offer does not count" 'python3 -c "import json,sys; r=json.load(open(sys.argv[1]))[0]; assert r[\"opens_offered\"]==2, r" "$root/out"'
-check "C4 verdicts same 1, different 1, none 1" 'python3 -c "import json,sys; r=json.load(open(sys.argv[1]))[0]; assert (r[\"same\"],r[\"different\"],r[\"none\"],r[\"follow_up\"])==(1,1,1,0), r" "$root/out"'
-check "C5 one page cut; median of 300,310,320,330 is 315; the old line reads opening_shown 50" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[0][\"left_out\"]==1 and d[0][\"median_page\"]==315 and d[1][\"median_page\"]==50, d" "$root/out"'
+check "C1 two hours in the window, the 20:59 line out" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1]))[\"hours\"]; assert [r[\"hour\"] for r in d]==[\"2026-11-20T21Z\",\"2026-11-20T22Z\"], d" "$root/out"'
+check "C2 window: 7 decisions are 2 opens, 3 feeds, 1 decline (the weird line out); 21h has 4" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); t=d[\"summary\"]; h=d[\"hours\"][0]; assert (t[\"decisions\"],t[\"opens\"],t[\"feeds\"],t[\"declines\"],h[\"decisions\"])==(6,2,3,1,4), (t,h)" "$root/out"'
+check "C3 answers: same 4 (2+1+1 captures, the old-format feed counts 1), next 1, new 1, same_as_batch 2, decline 4" 'python3 -c "import json,sys; t=json.load(open(sys.argv[1]))[\"summary\"]; assert (t[\"same\"],t[\"next\"],t[\"new\"],t[\"same_as_batch\"],t[\"decline\"],t[\"captures\"])==(4,1,1,2,4,12), t" "$root/out"'
+check "C4 sources near 4 lead 2; opened 2, fed 3, successor links 1; share 4/12" 'python3 -c "import json,sys; t=json.load(open(sys.argv[1]))[\"summary\"]; assert (t[\"cand_near\"],t[\"cand_lead\"],t[\"stories_opened\"],t[\"stories_fed\"],t[\"successor_links\"],t[\"share_to_existing_trajectory\"])==(4,2,2,3,1,0.333), t" "$root/out"'
+check "C5 research: 4 runs in the window: open 1 (s1), successor 1 (s2), feed 2; trajectories: s1 5 captures, s2 1, s9 1, s8 1" 'python3 -c "import json,sys; t=json.load(open(sys.argv[1]))[\"summary\"]; assert t[\"research_runs\"]==4 and t[\"research_by_cause\"]=={\"open\":1,\"successor\":1,\"feed\":2} and t[\"captures_per_trajectory\"]=={\"1\":3,\"2\":0,\"3\":0,\"4-5\":1,\"6+\":0}, t" "$root/out"'
+env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc.log" --since 2026-11-20T21:00Z --until 2026-11-20T23:00Z >"$root/out" 2>&1
+check "C6 the text table prints the answers and the research causes" 'grep -q "same 4, next 1, same_as_batch 2, new 1, decline 4" "$root/out" && grep -q "research runs started 4: by an open 1, by a successor 1, by a feed or later round 2" "$root/out"'
 
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -233,6 +233,36 @@ arrival by source. Then the duplicates method re-run on one day's opens by a
 reader who did not build A (C-A1). Numbers the author cannot write: the
 console's lines and the second reader's labels.
 
+**Where the code won, 2026-11-21 (built in lane `story-main-point`).**
+
+- Candidates are up to 12 per capture, not 6 (the task brief), ranked by nearest
+  captures held, then version (the context a trajectory has accumulated: owner,
+  2026-11-21, "the more that we send a capture to existing trajectories with
+  accumulated context, the better"), then newest. Entities are not a source:
+  captures carry none (design, Entities above).
+- `StorySummary.MainPoint` and `Succeeds` come from the trajectory through the
+  kind cache that already reads each trajectory once; the story index row
+  carries them too, so a reconcile does not erase them.
+- The decline is logged as a choice line (`choice=decline`), so the status
+  script counts every disposition; an open's extra captures are the
+  "same as another capture in this batch" answer (one Cast, one story, one
+  trajectory), derived from the line, not a field a model writes.
+- The host does not decide whether Texture starts a research run on a feed:
+  that is Texture's turn (`textureprompts/texture.yaml`, "Dispatch in the same
+  cell"). A Texture prompt line now tells it to read a fed capture and revise
+  before it casts research. The host cannot hand a successor its
+  predecessor's pages: the research brief's threads come from Texture's research
+  Cast, not the opening Cast, so the `succeeds` ref and the prompt line are what
+  a successor has. Both are bets, not mechanisms (C-A2 below).
+- The built task prompt held its bound only after cutting 190 characters of
+  older overlay text (the bound is on the overlay body; this section added
+  about 1,000).
+
+**Claim C-A2.** Research rounds per capture fall: `story research cast` lines
+per decision on the paper, first full UTC day after A against the 0.68 research
+briefs per decision seen on 2026-11-21 05Z to 07Z (77 runs, 114 decisions).
+p 0.4.
+
 **Claim.** C-A1: on the first full UTC day after A, opened stories that a
 reader who did not build A judges to serve the main point of a story already
 held are at most 8% of opens (from 17.4% exact duplicates, and 24.2% second or

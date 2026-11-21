@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -174,4 +175,71 @@ func TestOnlyAManagementCastOpensAStory(t *testing.T) {
 	if wakes := storyWakes(t, s); len(wakes) != 0 {
 		t.Fatalf("refused openings minted wakes: %+v", wakes)
 	}
+}
+
+// Landing A (docs/design/semantic-layer-2026-11-20.md section 3). Failure list,
+// written before the code:
+//   - an opening Cast's main_point and succeeds are not copied into the
+//     story trajectory's subject refs, or are copied into a trajectory more
+//     than once (a Cast that names several captures must open ONE story with
+//     ONE trajectory: captures judged the same beat in a batch share it);
+//   - the story library does not return them, or a story-index reconcile
+//     (which rewrites each row from the summaries) erases them;
+//   - a story opened without them (before this change) is listed with
+//     invented ones, instead of empty (its lede then stands in).
+func TestOpeningCastRecordsMainPointAndSucceedsOnceInOneTrajectory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	first := openingCast("cell-1:cast:c1")
+	first.Cast.MainPoint = "Whether the harbor reopens and on what terms"
+	receipt := mustCommitInbox(t, s, "cell-records:cell-1", nil, first)
+	firstDoc := strings.TrimPrefix(receipt.Records[0].Inbox, "texture:")
+	// A successor naming three captures: one story, one trajectory.
+	next := openingCast("cell-2:cast:c1")
+	next.Directive.Objective = "Harbor reopens: first ships arrive"
+	next.Cast.Captures = []string{"capture-c", "capture-d", "capture-e"}
+	next.Cast.MainPoint = "Whether the first ships reach the reopened harbor"
+	next.Cast.Succeeds = "texture:" + firstDoc
+	receipt = mustCommitInbox(t, s, "cell-records:cell-2", nil, next)
+	nextDoc := strings.TrimPrefix(receipt.Records[0].Inbox, "texture:")
+	// A story opened without either.
+	plain := openingCast("cell-3:cast:c1")
+	plain.Directive.Objective = "Old style story"
+	receipt = mustCommitInbox(t, s, "cell-records:cell-3", nil, plain)
+	plainDoc := strings.TrimPrefix(receipt.Records[0].Inbox, "texture:")
+
+	docs, err := s.ListStoryDocuments(ctx, storyOwner, storyComputer, time.Time{}, "", 0)
+	if err != nil || len(docs) != 3 {
+		t.Fatalf("three openings made %d story documents (%v); a multi-capture open is one story", len(docs), err)
+	}
+	check := func(sums []StorySummary, via string) {
+		t.Helper()
+		got := map[string]StorySummary{}
+		for _, sum := range sums {
+			got[sum.DocID] = sum
+		}
+		if got[firstDoc].MainPoint != first.Cast.MainPoint || got[firstDoc].Succeeds != "" ||
+			got[nextDoc].MainPoint != next.Cast.MainPoint || got[nextDoc].Succeeds != firstDoc ||
+			got[plainDoc].MainPoint != "" || got[plainDoc].Succeeds != "" {
+			t.Fatalf("%s: summaries = %+v", via, got)
+		}
+	}
+	check(s.StorySummariesOf(ctx, docs), "trajectory")
+	doc, _ := s.GetLifecycleDocument(ctx, storyOwner, storyComputer, nextDoc)
+	snapshot, err := s.GetLifecycleSnapshot(ctx, storyOwner, storyComputer, doc.TrajectoryID)
+	if err != nil || snapshot.Trajectory.SubjectRefs[types.StoryRefMainPoint] != next.Cast.MainPoint || snapshot.Trajectory.SubjectRefs[types.StoryRefSucceeds] != firstDoc {
+		t.Fatalf("trajectory refs = %+v, %v", snapshot.Trajectory.SubjectRefs, err)
+	}
+	// The index rows carry them, and a reconcile of unchanged stories keeps them.
+	if err := s.PublishStoryIndex(ctx, storyOwner, storyComputer); err != nil {
+		t.Fatalf("publish index: %v", err)
+	}
+	if err := s.PublishStoryIndex(ctx, storyOwner, storyComputer); err != nil {
+		t.Fatalf("publish index again: %v", err)
+	}
+	indexed, err := s.ListStoryIndex(ctx, storyOwner, storyComputer, time.Time{}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(indexed, "index")
 }

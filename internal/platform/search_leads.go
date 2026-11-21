@@ -104,6 +104,9 @@ var searchLeadIndexes = []struct{ name, ddl string }{
 	{"idx_sl_tsv", `CREATE INDEX idx_sl_tsv ON search_leads USING GIN (tsv)`},
 	{"idx_sl_returned", `CREATE INDEX idx_sl_returned ON search_leads(last_returned_at)`},
 	{"idx_sl_scope_recent", `CREATE INDEX idx_sl_scope_recent ON search_leads(owner_id, computer_id, last_returned_at DESC)`},
+	// idx_sl_capture serves SearchLeadConversationsByCapture: the leads whose
+	// page became one of the named captures.
+	{"idx_sl_capture", `CREATE INDEX idx_sl_capture ON search_leads(owner_id, computer_id, capture_id) WHERE capture_id IS NOT NULL`},
 }
 
 // SearchLeadHit is one result of a provider's arrival.
@@ -230,6 +233,50 @@ func (s *Store) SearchLeadsByText(ctx context.Context, ownerID, computerID, quer
 		return nil, errSearchLeadsNotReady
 	}
 	return s.readLeads(ctx, `AND tsv @@ plainto_tsquery('simple', ?) AND plainto_tsquery('simple', ?)::text <> ''`, []any{query, query}, ownerID, computerID, limit)
+}
+
+// SearchLeadConversationsByCapture returns, for each named capture that a
+// lead's page became, the conversations whose searches returned that lead
+// (a story's research run searches in its story's conversation, so these name
+// the stories whose research already met the capture's page), newest lead
+// first within a capture. A capture no lead made is absent. Management's
+// open-or-feed decision reads it (agentcore/management_candidates.go).
+func (s *Store) SearchLeadConversationsByCapture(ctx context.Context, ownerID, computerID string, captureIDs []string) (map[string][]string, error) {
+	if !s.searchLeadsReady() {
+		return nil, errSearchLeadsNotReady
+	}
+	var ids []string
+	for _, id := range captureIDs {
+		if id = strings.TrimSpace(id); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	out := map[string][]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	raw, _ := json.Marshal(ids)
+	rows, err := s.corpus().QueryContext(ctx, `SELECT capture_id, to_jsonb(conversation_ids)::text FROM search_leads
+		WHERE owner_id = ? AND computer_id = ? AND capture_id IN (SELECT jsonb_array_elements_text(?::jsonb))
+		ORDER BY last_returned_at DESC, url_key`, ownerID, computerID, string(raw))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, convs string
+		if err := rows.Scan(&id, &convs); err != nil {
+			return nil, err
+		}
+		var list []string
+		_ = json.Unmarshal([]byte(convs), &list)
+		for _, c := range list {
+			if c = strings.TrimSpace(c); c != "" {
+				out[id] = append(out[id], c)
+			}
+		}
+	}
+	return out, rows.Err()
 }
 
 // SearchLeadsByURL returns a computer's lead for each URL (by capture key).
