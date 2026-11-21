@@ -139,6 +139,8 @@ export class World {
   pending = new Set<Promise<unknown>>();
   /** The module state of this world (`scoped`): a world begins with none, and a closed world's is unreachable. */
   bag = new Map<symbol, unknown>();
+  /** Downloads in flight (the host writes the file, not storage): a Clear waits for them only up to its deadline and then goes on (it removes the cache by path). */
+  downloads = new Set<Promise<unknown>>();
   whenClosed: Promise<void>; private resolveClosed: () => void = () => undefined;
   constructor(id: number) { this.id = id; this.whenClosed = new Promise<void>((r) => { this.resolveClosed = r; }); }
   close(): void { this.closed = true; this.resolveClosed(); }
@@ -207,6 +209,9 @@ export async function rmTree(storage: Storage, path: string): Promise<void> {
 export async function drainClosed(ms: number): Promise<boolean> {
   const all = closedWorlds.flatMap((w) => [...w.pending]);
   const ok = all.length === 0 || (await withDeadline(Promise.allSettled(all).then(() => true), false, ms));
+  // A download is waited for the same time, and then NOT a failure: a host that never ends one must not keep every Clear from finishing. Its bytes, if they land late, are removed by the next Clear's removal of the cache folder.
+  const dl = closedWorlds.flatMap((w) => [...w.downloads]);
+  if (dl.length > 0) await withDeadline(Promise.allSettled(dl).then(() => true), false, ms);
   if (ok) closedWorlds.length = 0;
   return ok;
 }
@@ -379,7 +384,7 @@ export function authedToFile(path: string, dest: string, storage: Storage | unde
   if (w.closed) return ended();
   // A download is written by the HOST, not through `storage`: the Clear must wait for it (and for its cleanup) like a write, or its bytes land after the wipe.
   const p = authedToFileImpl(w, path, dest, storage, o);
-  w.pending.add(p); void p.then(() => w.pending.delete(p), () => w.pending.delete(p));
+  w.downloads.add(p); void p.then(() => w.downloads.delete(p), () => w.downloads.delete(p));
   return inert(w, p);
 }
 async function authedToFileImpl(w: World, path: string, dest: string, storage: Storage | undefined, opts: Authed): Promise<{ bytes: number; contentType: string }> {

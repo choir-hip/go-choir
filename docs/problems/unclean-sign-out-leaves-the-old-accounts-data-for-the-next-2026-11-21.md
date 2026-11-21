@@ -135,3 +135,12 @@ the unbound storage; a signed-in request that names no world is refused (the tes
 nothing itself. What remains, stated: the non-I/O-await gap (a chain resumed from a microtask or a promise another chain
 resolves, which then starts new I/O, begins it in the new world); M3 is regex-based and does not see state inside
 functions or classes, or `const x = makeThing()`; the native landings 2 and 3; the real device's behaviour (no device run).
+
+Sixth round (seat 2 on 0ced3a4ee): themes are two stores. The DEVICE store (bundled themes, the person's own theme files,
+the choice) is device settings on raw storage; a Texture theme can never enter it. The TEXTURE store is account data:
+`app:/data/theme-textures`, on the wipe list, state in the world (`scoped`), every op (list, install, remove) through the
+world it began in; a Texture theme is never carried over from the old build; the Clear drops a choice that named one.
+A Clear no longer waits for a download longer than its deadline (late bytes are removed by the next Clear's removal of the
+cache folder). An Adopt stamps the new world with the digest of the key it wrote. `tsc` (Exact's, with a throwaway
+config over the non-test sources) reports 0 errors touching `world` and 9 unrelated ones (node types in tooling files and
+one comparison in `deck-ops.ts`); it is not in the gates.

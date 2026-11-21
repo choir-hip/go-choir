@@ -64,7 +64,9 @@ fs.write app:/data/takes.json
 fs.read app:/data/theme-choice.json
 fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
-fs.write app:/data/themes`;
+fs.write app:/data/themes
+fs.read app:/data/theme-textures
+fs.write app:/data/theme-textures`;
 
 const takesState = scoped(() => ({ overlay: undefined as ReturnType<typeof newTakes> | undefined }));      // the takes overlay belongs to the world (api.ts `scoped`)
 const takes = (): ReturnType<typeof newTakes> => (takesState().overlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated

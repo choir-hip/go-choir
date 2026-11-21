@@ -529,16 +529,16 @@ describe('W: the wipes', () => {
     expect(account.wipedPaths()).not.toContain(STAMP);
   });
   test('S19 the phone\'s own themes survive a wipe; a theme installed from a Texture document does not (it carries account A\'s document: its name and colours)', async () => {
-    const mm = memFs(['app:/data/theme-choice.json', 'app:/data/themes/texture-ember.json', 'app:/data/themes/mine.json', 'app:/data/recent-files.json']);
+    const mm = memFs(['app:/data/theme-choice.json', 'app:/data/theme-textures/texture-ember.json', 'app:/data/themes/mine.json', 'app:/data/recent-files.json']);
     expect(await account.wipeAll(mm.storage, undefined, account.WIPES)).toEqual([]);
     expect([...mm.files.keys()].sort()).toEqual(['app:/data/theme-choice.json', 'app:/data/themes/mine.json']);
   });
   test('S19b a Texture theme loaded in memory is not listed to the next account after a Clear, and a surviving texture file keeps the phone in CLEARING', async () => {
     const T = await import('./themes.ts'); const ember = JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme);
-    boot('A', 'absent', { ...SEED_FILES, 'app:/data/themes/texture-ember.json': ember });
+    boot('A', 'absent', { ...SEED_FILES, 'app:/data/theme-textures/texture-ember.json': ember });
     T.resetThemes();
     expect(JSON.stringify(await T.themeListShared('light', false, m.storage))).toContain('ember');
-    m.faults.rmSilently.add('app:/data/themes/texture-ember.json');
+    m.faults.rmSilently.add('app:/data/theme-textures/texture-ember.json'); m.faults.rmSilently.add('app:/data/theme-textures');
     await probe(); await idle(); expect(await stateNow()).toBe('clearing');
     m.faults.rmSilently.clear(); await probe(); await idle(); expect(await stateNow()).toBe('empty');
     expect(JSON.stringify(await T.themeListShared('light', false, m.storage))).not.toContain('ember');
