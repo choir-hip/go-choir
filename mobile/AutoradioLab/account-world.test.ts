@@ -107,45 +107,60 @@ describe('M2 a request is signed only with the key of its world', () => {
   });
 });
 
-describe('M3 the inventory of module-level mutable state', () => {
+describe('M3 module state belongs to the world: no module-level mutable state outside a short allow-list', () => {
   const dir = new URL('.', import.meta.url).pathname;
   const files = readdirSync(dir).filter((f) => f.endsWith('.ts') && !/\.test\.ts$|\.d\.ts$|^account-phone\.ts$|^build-info\.gen\.ts$/.test(f));
-  const found: Record<string, string[]> = {};
-  for (const f of files) {
-    const names: string[] = [];
-    for (const line of readFileSync(dir + f, 'utf8').split('\n')) {
-      const mm = /^(?:export )?(?:let|var) ([A-Za-z_]\w*)/.exec(line) ?? /^(?:export )?const ([A-Za-z_]\w*)(?:: [^=]+)? = new (?:Map|Set|WeakMap|WeakSet)\b/.exec(line);
-      if (mm && !/^[A-Z][A-Z0-9_]*$/.test(mm[1])) names.push(mm[1]);
+  // What the test SEES: every top-level `let`/`var`, and every top-level `const` whose initializer builds something that can change (new X(...), [], {}, an object or array literal), ALL-CAPS names included.
+  const seen = (): Record<string, string[]> => {
+    const found: Record<string, string[]> = {};
+    for (const f of files) for (const line of readFileSync(dir + f, 'utf8').split('\n')) {
+      const mm = /^(?:export )?(?:let|var) ([A-Za-z_]\w*)/.exec(line) ?? /^(?:export )?const ([A-Za-z_]\w*)(?:: [^=]+)? = (?:new [A-Z]\w*(?:<[^(]*>)?\(|\[\]|\{\}|\{|\[)/.exec(line);
+      if (mm) (found[f] ??= []).push(mm[1]);
     }
-    if (names.length) found[f] = names;
-  }
-  // WHY each may stay (the mechanism makes a closed world's chains inert, and a wipe clears what an account's chains put here): `wipe` = cleared by forget()/the wipe list; `device` = the phone's own
-  // facts, not an account's; `public` = public data keyed by public addresses; `world` = the seam's own; `tests` = reset by tests only.
-  const INVENTORY: Record<string, string[]> = {
-    'account.ts': ['adopting', 'chain', 'clearing', 'wipes', 'boundaryId', 'lastFailed', 'active'],                  // the boundary's own machinery
-    'api.ts': ['reader', 'nativeAnswered', 'lastNative', 'lastFlags', 'world', 'generation', 'blockedDigest', 'discovered', 'discovering', 'rejected', 'keyReads', 'closedWorlds'],   // the seam: world, key, session
-    'app.ts': ['takesOverlay'],                                                                           // the takes overlay: its own generation guard drops it whole (take-session.ts sync)
-    'bar.ts': ['seen'], 'clips.ts': ['byID', 'askedFeeds', 'askedAll', 'lastTick'],                       // seen: keyed by generation; clips: public, wipe
-    'deck-ops.ts': ['posting'], 'demo-leftovers.ts': ['attempt'], 'files.ts': ['recents', 'lastNow', 'resolved'],   // posting: a flag; attempt: once per process; files: wipe
-    'host.ts': ['decided', 'inflight'], 'mail-sanitize.ts': ['lastTarget'], 'mail-seal.ts': ['sealable'],       // device facts
-    'mail.ts': ['kept', 'autoRead', 'drafts', 'savedDrafts', 'alias', 'clock', 'started'],                // wipe
-    'pages.ts': ['pages', 'recency', 'lastClosed', 'loaded', 'loading', 'epoch', 'saving'],               // wipe (its own epoch)
-    'paper-model.ts': ['KEYS', 'PADDED'], 'paper.ts': ['kept', 'lastTick'],                               // public
-    'podcast.ts': ['generation', 'lib', 'feeds', 'known', 'failed', 'attempted', 'inflight', 'transcripts', 'transcriptAsked', 'searches', 'latestQuery', 'suggestions', 'suggestionsAt', 'syncAt', 'syncNote', 'lastTick', 'rev', 'reportedFeeds', 'reportedNow', 'played', 'nowSeconds', 'libGen'],   // wipe
-    'runsheet-entries.ts': ['longURLs'], 'search.ts': ['liveVectors'], 'content.ts': ['liveStores', 'running'], 'contract-rules.ts': ['roleFaces'],       // keyed by entry id (run sheet lane); live stores wipe themselves
-    'runsheet-store.ts': [], 'textures.ts': ['last'], 'themes.ts': ['loading', 'current', 'status', 'saving', 'dirty', 'migrated', 'hadChoiceFile', 'choiceTouched', 'migrating', 'migrateTries', 'rev'],   // device settings; Texture themes dropped by the wipe
+    return found;
   };
-  test('every module-level mutable name is in the inventory, with its file (a new one fails until someone lists it and says why)', () => {
-    const unlisted: string[] = [];
-    for (const [f, names] of Object.entries(found)) for (const nm of names) if (!(INVENTORY[f] ?? []).includes(nm)) unlisted.push(`${f}: ${nm}`);
-    expect(unlisted).toEqual([]);
+  // STATEFUL: allowed, each with the reason it is not the world's. A module that keeps account-scoped state uses `scoped()` (api.ts) instead and shows up nowhere here.
+  const STATEFUL: Record<string, Record<string, string>> = {
+    'account.ts': { chain: 'the boundary\'s own machinery: the one writer', clearing: 'the one writer', wipes: 'the one writer', boundaryId: 'the one writer', lastFailed: 'the one writer', adopting: 'the one writer', active: 'the one writer', timing: 'deadlines (tests shorten them)' },
+    'api.ts': { reader: 'the seam: the native handle', nativeAnswered: 'the seam', lastNative: 'the seam (a log line)', lastFlags: 'the seam (a log line)', world: 'THE WORLD', closedWorlds: 'the worlds whose started writes a Clear waits for', blockedDigest: 'the seam: sealing block', discovered: 'digest-keyed computer id', discovering: 'digest-keyed computer id', rejected: 'the refused key digest (cleared at sign-out)', keyTiming: 'deadline (tests shorten it)', keyReads: 'a counter for the log' },
+    'deck-ops.ts': { posting: 'a re-entrancy flag, holds no data' }, 'demo-leftovers.ts': { attempt: 'keyed by world: an attempt of a closed world is replaced' },
+    'host.ts': { decided: 'the host fact (is there a native package): the device\'s', inflight: 'the host probe' }, 'mail-sanitize.ts': { lastTarget: 'the last link target the sanitizer allowed: not read across answers' },
+    'mail-seal.ts': { sealable: 'whether the platform can seal: the device\'s' },
+    'paper-model.ts': { KEYS: 'a memo of a pure function of its argument', PADDED: 'a memo of a pure function of its argument' },
+    'podcast.ts': { search: 'a test knob (the pause before a search)' },
+    'runsheet-entries.ts': { longURLs: 'entry id to url: the train\'s lane moves it into the world' }, 'search.ts': { liveVectors: 'live stores wipe themselves (wipeLiveVectors)', embedPrompt: 'a function', f32: 'a function' },
+    'content.ts': { liveStores: 'live stores wipe themselves (wipeLiveContent)', running: 'a flag of the live sync (its own generation)' },
+    'themes.ts': { loading: 'device settings: the phone\'s theme store, Texture themes hidden while the boundary is owed', current: 'device settings', status: 'device settings', saving: 'device settings', dirty: 'device settings', migrated: 'device settings', hadChoiceFile: 'device settings', choiceTouched: 'device settings', migrating: 'device settings', migrateTries: 'device settings', rev: 'device settings' },
+  };
+  // CONSTANTS: read-only tables and objects. The test checks that nothing in their own file changes them.
+  const CONSTANTS: Record<string, string[]> = {"account.ts": ["WIPES"], "activity.ts": ["LABELS", "MONTHS"], "api.ts": ["KEYCHAIN_ACCOUNTS", "NEVER", "READS"], "app.ts": ["sources", "EXEMPT"], "clips.ts": ["NONE"], "content.ts": ["KINDS", "KIND_LABEL", "STANDARD_BUDGET", "TEXT_EXTENSIONS"], "contract-rules.ts": ["roleFaces"], "deck.ts": ["DECK_NAMES", "EMPTY_ITEM"], "demo-leftovers.ts": ["STORIES", "TEXTURES", "MAILBOXES", "MESSAGES", "FILES"], "edition-model.ts": ["HOUSE", "TREE", "ALIASES", "TRIM", "FILLERS", "ADD_VERBS", "REMOVE_VERBS", "FINISH", "QUESTION_LEAD", "NOTHING", "NEGATIVE_LEAD"], "files-model.ts": ["IMAGE", "VIDEO", "AUDIO", "MARKDOWN", "TEXT", "CSV", "CODE", "LABELS", "SYMBOLS", "MIME", "MONTHS"], "files.ts": ["realNet"], "mail-model.ts": ["FOLDERS", "ENTITIES", "DROPPED", "BLOCK_END", "DAYS", "MONTHS", "OFFLINE"], "mail-sanitize.ts": ["ALLOWED_TAGS", "VOID_TAGS", "RAW_TEXT", "DROP_WITH_CONTENT", "GLOBAL_ATTRS", "NAMED"], "mail-seal.ts": ["MAGIC"], "notebook.ts": ["HELD"], "paper-layout.ts": ["FALLBACK_STEP"], "paper-model.ts": ["DAYS", "MONTHS", "HOUSE", "FINER", "ALIASES", "TERMS", "STOP"], "podcast-feed.ts": ["INLINE"], "podcast-model.ts": ["LINEBREAK", "MONTHS", "MONTH_NAMES", "ZONES"], "podcast.ts": ["enc", "NO_PLAY", "zone"], "programme-model.ts": ["SEGMENT_LABELS", "STRIPPED"], "radio-director.ts": ["SESSION_RETRY_DELAYS"], "radio-model.ts": ["SMALL", "TENS", "DAYS", "MONTHS"], "radio-page.ts": ["EMPTY_FACTS"], "runsheet-entries.ts": ["enc"], "runsheet-model.ts": ["KINDS", "BYS", "STATES", "OUTCOMES", "ROLES", "OPS", "ATS", "Dropped", "Bounds", "enc"], "runsheet-store.ts": ["NO_REPORT"], "search.ts": ["BUDGET", "STOP", "PRONOUNS", "JOB_BUDGET"], "take-session.ts": ["IDLE", "PHASES", "ENDED", "RECORDER_OPS"], "takes.ts": ["BOUNDS", "STRIPPED", "enc", "NEW"], "textures.ts": ["MONTHS", "real"], "themes-bundled.ts": ["BUNDLED"], "themes.ts": ["FACES", "GENERIC", "TYPE_SCALES", "UNSAFE", "RGB_COMMA", "RGB_SPACE", "MODES", "realNet"], "words.ts": ["WORDS"], "xml.ts": ["NAMED"]};
+  test('every module-level mutable-looking name is allowed, and the allow-list has no stale entry', () => {
+    const found = seen(); const unlisted: string[] = []; const stale: string[] = [];
+    for (const [f, names] of Object.entries(found)) for (const nm of names) if (!(nm in (STATEFUL[f] ?? {})) && !(CONSTANTS[f] ?? []).includes(nm)) unlisted.push(`${f}: ${nm}`);
+    for (const [f, m] of Object.entries(STATEFUL)) for (const nm of Object.keys(m)) if (!(found[f] ?? []).includes(nm)) stale.push(`${f}: ${nm}`);
+    for (const [f, a] of Object.entries(CONSTANTS)) for (const nm of a) if (!(found[f] ?? []).includes(nm)) stale.push(`${f}: ${nm}`);
+    expect(unlisted).toEqual([]); expect(stale).toEqual([]);
   });
-  test('raw fetch, raw timers on an account chain, and the Keychain session read stay in their choke points', () => {
+  test('a name allowed as a constant is never changed in its own file', () => {
+    const changed: string[] = [];
+    for (const [f, names] of Object.entries(CONSTANTS)) {
+      const src = readFileSync(dir + f, 'utf8');
+      for (const nm of names) if (new RegExp(`\\b${nm}\\.(set|add|push|pop|shift|splice|delete|clear|sort|reverse)\\(|\\b${nm}\\s*(=|\\+=)[^=>]|\\b${nm}\\[[^\\]]+\\]\\s*=[^=]|\\b${nm}\\.\\w+\\s*=[^=>]`).test(src.replace(/^(?:export )?const [^\n]*\n/gm, (l) => (l.includes(' ' + nm + ' ') || l.includes(' ' + nm + ':') ? '' : l)))) changed.push(`${f}: ${nm}`);
+    }
+    expect(changed).toEqual([]);
+  });
+  test('the scoped state of a module is what a new world starts without: a world\'s bag is fresh and a closed one is unreachable', () => {
+    api.resetSeam(); const S = api.scoped(() => ({ n: 0 }));
+    S().n = 5; const w1 = api.currentWorld(); api.nextGeneration();
+    expect(S().n).toBe(0); expect(api.currentWorld()).not.toBe(w1); S().n = 2; S.reset(); expect(S().n).toBe(0);
+  });
+  test('raw fetch, raw native calls and the Keychain session read stay in their choke points', () => {
     const bad: string[] = [];
     for (const f of files) {
-      const src = readFileSync(dir + f, 'utf8');
-      if (f !== 'api.ts' && /[^.\w]fetch\(/.test(src.replace(/\/\/.*$/gm, '')) && !/^(files|podcast)\.ts$/.test(f)) bad.push(`${f}: fetch( outside api.ts`);
+      const src = readFileSync(dir + f, 'utf8').replace(/\/\/.*$/gm, '');
+      if (f !== 'api.ts' && /[^.\w]fetch\(/.test(src) && !/^(files|podcast)\.ts$/.test(f)) bad.push(`${f}: fetch( outside api.ts`);
       if (f !== 'api.ts' && f !== 'account.ts' && /keptSession\(|op: 'session'/.test(src)) bad.push(`${f}: reads the session key itself`);
+      if (!/^(api|account|host|themes)\.ts$/.test(f) && /\bnativeLater\(\)/.test(src)) bad.push(`${f}: nativeLater() on an account chain (use nativeInert)`);
     }
     expect(bad).toEqual([]);
   });
@@ -288,6 +303,63 @@ describe('C9b seat 2\'s second round, under the world mechanism', () => {
     const r = await api.authedJSON('/api/queue', { method: 'POST', body: { batch: 2 }, world: wA }).then(() => 'sent', (e) => (e as Error).name);
     expect(r).toBe('SignedOutError'); expect(sent.length).toBe(1);                                      // refused, and never signed with B's key
     expect(sent.join('')).not.toContain(KEY_B);
+  });
+});
+
+describe('C10 seat 1\'s round on c222cbf80: module state belongs to the world, the gate captures its world first, native is a choke point', () => {
+  test('C10.pages-save a sign-out during a page write: B\'s first page change completes (the old save chain does not outlive its world)', async () => {
+    boot({ 'app:/data/open-pages-shared.json': JSON.stringify({ pages: [], recency: [] }) }); account.timing.sharedMs = 40;
+    let release: () => void = () => undefined; m.faults.writeHold.set(PAGES_FILE, new Promise<void>((r) => { release = r; }));
+    void call('pagesOpen', ['mail:a', 'A']).catch(() => undefined); await wait(15);                      // A's save is in flight
+    await signOut(); m.faults.writeHold.clear(); release(); await wait(20);                              // the sign-out ends (its Clear waited for the write, then failed or finished)
+    W.key = 'present'; W.value = KEY_B;
+    let r = 'refused';
+    for (let i = 0; i < 6 && r !== 'wrote'; i++) { r = await Promise.race([call('pagesOpen', ['mail:b', 'B']).then(() => 'wrote', (e) => (e as Error).name), wait(400).then(() => 'hung')]); await idle(); }
+    expect(r).toBe('wrote');
+    expect(m.text(PAGES_FILE)).toContain('mail:b');
+  });
+  test('C10.adopt-mid-read an Adopt while A\'s first read of the open pages is in flight: B\'s first answer completes (a single-flight load of the closed world is not joined)', async () => {
+    boot({ 'app:/data/open-pages-shared.json': JSON.stringify({ pages: [], recency: [] }) }, false); W = newWorld('absent'); n = phone(() => W); api.bindNative(n as never);
+    let release: () => void = () => undefined; m.faults.hold.set(PAGES_FILE, new Promise<void>((r) => { release = r; }));
+    void call('pagesView', [0]).catch(() => undefined); await wait(15);                                 // EMPTY world: the read is held
+    W.key = 'present'; W.value = KEY_B; m.faults.hold.clear();
+    const r = await Promise.race([call('pagesView', [0]).then(() => 'answered', (e) => (e as Error).name), wait(500).then(() => 'hung')]);
+    release();
+    expect(r).toBe('answered');
+  });
+  test('C10.gate-world the boundary moving during the facts read: the answer is refused and the NEW world keeps no digest and stays owed', async () => {
+    boot({}); let go: () => void = () => undefined; W.keystateGate = new Promise<void>((r) => { go = r; });
+    const a = call('pagesView', [0]).then(() => 'answered', (e) => (e as Error).name); await wait(15);
+    api.nextGeneration();                                                                                // the boundary moves while the facts are read
+    const w1 = api.currentWorld(); go();
+    expect(await a).toBe('AccountClosedError');
+    expect(w1.digest).toBeUndefined(); expect(w1.owed).toBe(true);
+  });
+  test('C10.native a native answer that arrives after the boundary moved never reaches the chain that asked (nativeInert)', async () => {
+    boot({}); let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    api.bindNative({ available: true, later: async () => { await gate; return { ok: true }; } } as never);
+    const later = (api as unknown as { nativeInert: () => ((r: object) => Promise<unknown>) | null }).nativeInert();
+    expect(typeof later).toBe('function');
+    const p = later!({ op: 'x' }).then(() => 'resumed', () => 'rejected');
+    await wait(5); api.nextGeneration(); release();
+    expect(await Promise.race([p, wait(60).then(() => 'never')])).toBe('never');
+  });
+  test('C10.slow-wipe a timed-out attempt\'s detached wipe is progressing slowly: after attempt 2 closed its world and B adopted, it removes nothing of B\'s', async () => {
+    boot({ 'app:/data/podcasts-library.json': 'x', 'app:/data/takes.json': 'x' }); W = newWorld('absent'); n = phone(() => W); api.bindNative(n as never);
+    account.timing.sharedMs = 40; let go: () => void = () => undefined; m.faults.rmGate.set('app:/data/podcasts-library.json', new Promise<void>((r) => { go = r; }));
+    await call('pagesView', [0]).catch(() => undefined); await wait(90); await idle();                  // attempt 1: its first removal is slow; it times out and is detached
+    expect(m.files.has(STAMP)).toBe(true);
+    account.timing.sharedMs = 2000; W.key = 'present'; W.value = KEY_B;
+    void call('pagesView', [0]).catch(() => undefined);                                                  // attempt 2 starts (and closes attempt 1's world)
+    await wait(100);
+    const early = await call('pagesOpen', ['mail:b1', 'B1']).then(() => 'wrote', (e) => (e as Error).name);   // B may already be adopted here (only if nothing waits for the slow removal)
+    go();                                                                                                // the slow removal lands now
+    await wait(120); await idle();
+    if (early === 'wrote') expect(m.text(PAGES_FILE) ?? '').toContain('mail:b1');                      // B's data written before it landed survives the detached wipe
+    let r = 'refused';
+    for (let i = 0; i < 20 && r !== 'wrote'; i++) { r = await call('pagesOpen', ['mail:b2', 'B2']).then(() => 'wrote', (e) => (e as Error).name); await wait(25); await idle(); }
+    expect(r).toBe('wrote'); await wait(150); await idle();
+    expect(m.text(PAGES_FILE)).toContain('mail:b2');
   });
 });
 

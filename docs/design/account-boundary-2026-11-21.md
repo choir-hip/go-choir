@@ -169,7 +169,10 @@ races each answer against its world and ends it refused. A request is signed onl
 before it wipes, and a Clear that times out is a failed Clear (the phone stays CLEARING, the card says to close
 and reopen the app); nothing is abandoned and there is never a second writer. A queued Adopt or Clear whose
 boundary moved before its turn is skipped; a queued sign-out refuses if the key it finds is not the one it saw at
-the tap. Texture themes (the one account-bearing store the exempt theme sources reach) are not shown while the
+the tap. Module state belongs to the world too: a module declares its account-scoped state once with `scoped()` (`api.ts`) and a
+new world starts with a fresh one, so a promise a closed world left pending (a save chain, a single-flight load) can never
+be joined by the next; the M3 test allows no other module-level mutable state except a short, reasoned allow-list. Native
+calls of an account chain go through `nativeInert()`. Texture themes (the one account-bearing store the exempt theme sources reach) are not shown while the
 new world is owed. *What it does not cover:* a chain resumed from a non-I/O await after the close (a microtask,
 a promise another chain resolves) that then starts new I/O begins it in the new world; the inventory test lists
 every module-level mutable name so a new lane cannot add one unseen, and keeps raw `fetch` and the Keychain read

@@ -13,7 +13,7 @@
 //                                  Nothing is carried from the pre-release build: the old Swift files (takes-own.json, takes-muted.json) are never read here (docs/reference/AUTORADIO-TAKES.md)
 // A take in review belongs to the recorder, not to this module: a restart of the shared code finds it (`takeState`) and can publish it; a failed publish never drops it.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, nativeLater, SignedOutError } from './api.ts';
+import { accountGeneration, nativeInert, SignedOutError } from './api.ts';
 import {
   BOUNDS, addOwn, client, cut, emptyKept, loadKept, mp4Seconds, mute as muteIn, page, removeOwn, saveKept, seamNet, sha256Hex, unmute as unmuteIn, validHandle,
   TakesRefused, TakesUnavailable, type Kept, type MyTake, type Net, type Record_, type Recorder, type TakesPageInfo,
@@ -69,7 +69,7 @@ export type Device = {
 
 /** The device over the app module's `later`, or null when there is no module (Android today, the web). */
 export function nativeDevice(): Device | null {
-  const raw = nativeLater();
+  const raw = nativeInert();
   if (!raw) return null;
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   const snap = async (r: Record<string, unknown>): Promise<Native> => parseNative(await later(r));

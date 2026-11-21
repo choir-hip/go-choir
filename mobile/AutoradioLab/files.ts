@@ -9,7 +9,7 @@
 // Logs carry counts and kinds, never a file name. No source throws for a failure the page has words for: it answers its own status and message.
 import type { Storage } from './app.contract.d.ts';
 import { WORDS } from './words.ts';
-import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
+import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration, scoped } from './api.ts';
 import * as M from './files-model.ts';
 import type { Entry, FileInfo, FileListing, FileResolved } from './files-model.ts';
 
@@ -79,11 +79,9 @@ function choirBackend(net: Net): Backend {
 // ---------------------------------------------------------------- state between answers (cleared by forget())
 
 type Recent = { path: string; size: number; modified: number | null; openedAt: number };
-let recents: Recent[] | null = null;
-let lastNow = 0;
-const resolved = new Map<string, Promise<FileResolved>>();
+const S = scoped(() => ({ recents: null as Recent[] | null, lastNow: 0, resolved: new Map<string, Promise<FileResolved>>() }));      // module state belongs to the world (api.ts `scoped`)
 
-export function forget(): void { recents = null; lastNow = 0; resolved.clear(); }
+export function forget(): void { S.reset(); }
 
 /** Sign-out (account.ts): the recent list, every cached file and the pickers' copies, and what this session holds. Never throws. */
 export async function wipeFiles(storage: Storage | undefined): Promise<void> {
@@ -93,33 +91,34 @@ export async function wipeFiles(storage: Storage | undefined): Promise<void> {
 }
 
 async function loadRecents(storage: Storage | undefined): Promise<Recent[]> {
-  if (recents) return recents;
-  recents = [];
-  if (!storage) return recents;
+  const s = S();
+  if (s.recents) return s.recents;
+  const none: Recent[] = []; s.recents = none;
+  if (!storage) return none;
   try {
     const v = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(RECENT_FILE)));
-    if (Array.isArray(v)) recents = v.filter((r) => r && typeof r.path === 'string' && typeof r.openedAt === 'number').slice(0, RECENT_LIMIT);
+    if (Array.isArray(v)) s.recents = v.filter((r) => r && typeof r.path === 'string' && typeof r.openedAt === 'number').slice(0, RECENT_LIMIT);
   } catch { /* none kept yet */ }
-  return recents;
+  return s.recents ?? none;
 }
 async function saveRecents(storage: Storage | undefined, gen: number = accountGeneration()): Promise<void> {
-  if (!recents) return;
-  await writeCurrent(gen, storage, RECENT_FILE, new TextEncoder().encode(JSON.stringify(recents)));      // a full disk loses only the recent list; a sign-out in flight writes nothing
+  if (!S().recents) return;
+  await writeCurrent(gen, storage, RECENT_FILE, new TextEncoder().encode(JSON.stringify(S().recents)));      // a full disk loses only the recent list; a sign-out in flight writes nothing
 }
 async function touch(storage: Storage | undefined, e: Entry, at: number, gen: number = accountGeneration()): Promise<void> {
   const list = await loadRecents(storage);
   if (gen !== accountGeneration()) return;                  // signed out since the source started: neither memory nor the file takes it
-  recents = [{ path: e.path, size: e.size, modified: e.modified, openedAt: at }, ...list.filter((r) => r.path !== e.path)].slice(0, RECENT_LIMIT);
+  S().recents = [{ path: e.path, size: e.size, modified: e.modified, openedAt: at }, ...list.filter((r) => r.path !== e.path)].slice(0, RECENT_LIMIT);
   await saveRecents(storage, gen);
 }
 async function forgetRecent(storage: Storage | undefined, path: string, prefix = false): Promise<void> {
   const list = await loadRecents(storage);
-  recents = list.filter((r) => r.path !== path && !(prefix && r.path.startsWith(path + '/')));
+  S().recents = list.filter((r) => r.path !== path && !(prefix && r.path.startsWith(path + '/')));
   await saveRecents(storage);
 }
 async function renameRecent(storage: Storage | undefined, from: string, to: string): Promise<void> {
   const list = await loadRecents(storage);
-  recents = list.map((r) => (r.path === from ? { ...r, path: to } : r));
+  S().recents = list.map((r) => (r.path === from ? { ...r, path: to } : r));
   await saveRecents(storage);
 }
 
@@ -139,7 +138,7 @@ function build(path: string, mode: string, sort: M.SortKey, desc: boolean, query
 }
 
 const makeBackend = (net: Net): Backend => choirBackend(net);
-const noteNow = (n: number | null): number => { if (n !== null) lastNow = n; return lastNow; };
+const noteNow = (n: number | null): number => { if (n !== null) S().lastNow = n; return S().lastNow; };
 
 export async function fileList(a: ListArgs, storage?: Storage, net: Net = realNet): Promise<FileListing> {
   const sort = M.sortKey(a.sort);
@@ -150,7 +149,7 @@ export async function fileList(a: ListArgs, storage?: Storage, net: Net = realNe
     if (q !== '') return await search(backend, path, q, sort, a.desc);
     if (a.mode === 'recent') {
       const list = await loadRecents(storage);
-      const now = lastNow || list.reduce((m, r) => Math.max(m, r.openedAt, r.modified ?? 0), 0);
+      const now = S().lastNow || list.reduce((m, r) => Math.max(m, r.openedAt, r.modified ?? 0), 0);
       const entries = list.map((r): Entry => ({ name: M.nameOf(r.path), path: r.path, isDirectory: false, size: r.size, modified: r.modified }));
       const places: Record<string, string> = {};
       for (const e of entries) places[e.path] = M.parent(e.path) === '/' ? 'Files' : M.nameOf(M.parent(e.path));
@@ -160,7 +159,7 @@ export async function fileList(a: ListArgs, storage?: Storage, net: Net = realNe
     const now = noteNow(r.now);
     return build(path, 'browse', sort, a.desc, '', M.sortEntries(r.entries, sort, a.desc), now);
   } catch (e) {
-    return build(path, a.mode, sort, a.desc, q, [], lastNow, {}, 'error', say(e));
+    return build(path, a.mode, sort, a.desc, q, [], S().lastNow, {}, 'error', say(e));
   }
 }
 
@@ -181,7 +180,7 @@ async function search(backend: Backend, path: string, query: string, sort: M.Sor
       if (e.isDirectory && depth < SEARCH_DEPTH) queue.push([e.path, depth + 1]);
     }
   }
-  return build(path, 'search', sort, desc, query, M.sortEntries(found, sort, desc), lastNow, places);
+  return build(path, 'search', sort, desc, query, M.sortEntries(found, sort, desc), S().lastNow, places);
 }
 
 // ---------------------------------------------------------------- opening
@@ -198,7 +197,7 @@ function infoOf(e: Entry, status: string, message = ''): FileInfo {
   const k = M.kindOf(e.name, e.isDirectory);
   return {
     ...M.emptyInfo(), address: M.addressOf(e.path, e.isDirectory), path: e.path, folder: M.parent(e.path), name: e.name, kind: k, kindLabel: M.kindLabel(k), size: e.size,
-    sizeLabel: M.sizeLabel(e.size), modifiedLabel: M.dateLabel(e.modified, lastNow), mime: M.mimeOf(e.name), status, message,
+    sizeLabel: M.sizeLabel(e.size), modifiedLabel: M.dateLabel(e.modified, S().lastNow), mime: M.mimeOf(e.name), status, message,
   };
 }
 
@@ -226,7 +225,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
   if (entry.isDirectory) return infoOf(entry, 'folder');
   const kind = M.kindOf(entry.name, false);
   const out = infoOf(entry, 'ready');
-  if (kind === 'other') { await touch(storage, entry, lastNow, gen); return out; }
+  if (kind === 'other') { await touch(storage, entry, S().lastNow, gen); return out; }
   if (M.opensElsewhere(kind)) {
     const r = await resolveEntry(entry, storage, net);
     out.target = r.target; out.status = r.status === 'ready' ? 'ready' : 'error'; out.message = r.message;
@@ -266,7 +265,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
       bytes = bytes ?? new Uint8Array(await storage!.fs.readFile(dest));
       const [w, h] = imageSize(bytes); out.width = w; out.height = h;
     }
-    await touch(storage, entry, lastNow, gen);
+    await touch(storage, entry, S().lastNow, gen);
   } catch (e) {
     out.status = e instanceof FilesError && e.kind === 'tooLarge' ? 'toolarge' : 'error';
     out.message = say(e);
@@ -297,10 +296,10 @@ export function imageSize(b: Uint8Array): [number, number] {
  * `texture:` page to open. One ask per file version, shared by every caller; a failure is not kept, so a second open asks again. */
 function resolveEntry(entry: Entry, storage: Storage | undefined, net: Net): Promise<FileResolved> {
   const key = `${entry.path}|${entry.size}|${entry.modified ?? ''}`;
-  const held = resolved.get(key);
+  const held = S().resolved.get(key);
   if (held) return held;
-  const p = doResolve(entry, storage, net).then((r) => { if (r.status !== 'ready') resolved.delete(key); return r; });
-  resolved.set(key, p);
+  const p = doResolve(entry, storage, net).then((r) => { if (r.status !== 'ready') S().resolved.delete(key); return r; });
+  S().resolved.set(key, p);
   return p;
 }
 
@@ -319,7 +318,7 @@ async function doResolve(entry: Entry, storage: Storage | undefined, net: Net): 
     const r = await net.json('/api/texture/files/open', { method: 'POST', body: { source_path: entry.path.replace(/^\//, ''), title: entry.name, initial_content: text } });
     const id = (r.body as { doc_id?: unknown } | null)?.doc_id;
     if (typeof id !== 'string' || id === '') return fail('Texture did not open the document.');
-    await touch(storage, entry, lastNow, gen);
+    await touch(storage, entry, S().lastNow, gen);
     return { address, target: 'texture:' + id, title: entry.name, status: 'ready', message: '' };
   } catch (e) {
     return fail(say(e));

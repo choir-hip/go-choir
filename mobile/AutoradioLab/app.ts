@@ -7,7 +7,7 @@ import { adoptNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
 import { aboutBuild } from './about.ts';
 import { accountSignOut, enter, AccountClosedError } from './account.ts';
-import { currentWorld, bindStorage, type World } from './api.ts';
+import { currentWorld, bindStorage, scoped, type World } from './api.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
@@ -66,8 +66,8 @@ fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
 fs.write app:/data/themes`;
 
-let takesOverlay: ReturnType<typeof newTakes> | undefined;
-const takes = (): ReturnType<typeof newTakes> => (takesOverlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
+const takesState = scoped(() => ({ overlay: undefined as ReturnType<typeof newTakes> | undefined }));      // the takes overlay belongs to the world (api.ts `scoped`)
+const takes = (): ReturnType<typeof newTakes> => (takesState().overlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
 export const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // The About page's build rows (about.ts): the app's baked-in commit and the server's, from /health.
@@ -162,7 +162,7 @@ export const answer: Answer = async (source, args, store, storage, native) => {
   if (Object.hasOwn(EXEMPT, source)) return guarded(currentWorld(), sources[source](args, store, storage, native));      // the phone's own facts, on the raw storage; a public fetch of a closed world never arrives, so the answer ends refused and the resource is asked again (acctTick)
   const b = await enter(storage, store);
   if (!b.readable) throw new AccountClosedError(b.state);
-  const w = currentWorld(); w.digest ??= b.digest; w.owed = false;                                               // requests of this world are signed with this key only
+  const w = b.world; w.digest ??= b.digest; w.owed = false;                                               // requests of this world are signed with this key only
   const bound = bindStorage(storage, w);
   // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): once per world, only behind an open boundary, finished before the first source runs, so the
   // modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.

@@ -98,6 +98,8 @@ const storage = {
 } as never;
 const mtimes = new Map<string, number>();
 let writeGate: Promise<void> | null = null; let readdirGate: Promise<void> | null = null;
+// The world mechanism (api.ts): work of a closed world never settles, so a test waits a moment for it instead of awaiting it.
+const settle = (p: Promise<unknown>): Promise<unknown> => Promise.race([p.then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, 40))]);
 const env = (): C.Env => ({ storage });
 
 let logs: string[] = [];
@@ -638,7 +640,7 @@ describe('R3 a sign-out while mail is being written', () => {
     const out = await accountSignOut(storage, undefined);
     expect(out.done).toBe(true);
     release();
-    await pending.catch(() => undefined);
+    await settle(pending);                                                 // the native answer after the sign-out never reaches the chain (the world is closed)
     await new Promise((r) => setTimeout(r, 20));
     expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
     expect(nativeKey).toBeNull();
@@ -751,7 +753,7 @@ describe('R9 the last races and words', () => {
     const pending = mail.mailMessage('mail:em_01hz0a', false, env());
     await started;
     await beginSignOut();                                                  // the generation moves; the native module does not know (it will seal)
-    release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
+    release(); await settle(pending); await new Promise((r) => setTimeout(r, 20));
     expect(sealCalls).toBeGreaterThan(0); expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
   });
   test('a file write in flight when the sign-out begins is removed (the check after the write)', async () => {
@@ -761,7 +763,7 @@ describe('R9 the last races and words', () => {
     for (let i = 0; i < 40 && sealCalls === 0; i++) await new Promise((r) => setTimeout(r, 5));
     await new Promise((r) => setTimeout(r, 20));
     await beginSignOut();
-    release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
+    release(); await settle(pending); await new Promise((r) => setTimeout(r, 20));
     expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
   });
   test('"Show original" in flight at a sign-out leaves no plain file and no path', async () => {

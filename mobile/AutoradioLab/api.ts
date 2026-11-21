@@ -135,6 +135,8 @@ export class World {
   /** The boundary moved and no gate has confirmed it open for this world yet: what belongs to an account (a Texture theme) is not shown. */
   owed = false;
   pending = new Set<Promise<unknown>>();
+  /** The module state of this world (`scoped`): a world begins with none, and a closed world's is unreachable. */
+  bag = new Map<symbol, unknown>();
   whenClosed: Promise<void>; private resolveClosed: () => void = () => undefined;
   constructor(id: number) { this.id = id; this.whenClosed = new Promise<void>((r) => { this.resolveClosed = r; }); }
   close(): void { this.closed = true; this.resolveClosed(); }
@@ -147,6 +149,15 @@ export const accountGeneration = (): number => world.id;
 export function closeWorld(owed = false): World { const old = world; old.close(); world = new World(old.id + 1); world.owed = owed; closedWorlds.push(old); return old; }
 /** A sign-out or a Clear begins: the world ends and the next is OWED until a gate confirms the boundary open. */
 export function nextGeneration(): number { closeWorld(true); return world.id; }
+/** MODULE STATE BELONGS TO THE WORLD. A module that keeps anything account-scoped (a cache, a loaded flag, a single-flight promise, a mutex chain) declares it once as
+ *     const S = scoped(() => ({ items: new Map<string, Item>(), loading: null as Promise<void> | null }));
+ * and reads `S().items`. Every world starts with a fresh one and a closed world's is unreachable, so nothing a chain of the old world left (above all a promise that never settles) can be joined by the
+ * new world, and no wipe has to remember to clear it. `S.reset()` drops the current world's (tests, and a module's own `forget`). The M3 test allows no other module-level mutable state. */
+export function scoped<T>(init: () => T): { (): T; reset(): void } {
+  const key = Symbol('scoped');
+  const get = (): T => { let v = world.bag.get(key); if (v === undefined) { v = init(); world.bag.set(key, v); } return v as T; };
+  return Object.assign(get, { reset: (): void => { world.bag.delete(key); } });
+}
 const NEVER = new Promise<never>(() => undefined);
 /** `p` for a world that is still open when it answers; for a closed one, a promise that never settles (the chain waiting on it stops). */
 export function inert<T>(w: World, p: Promise<T>): Promise<T> {
@@ -172,6 +183,12 @@ export function bindStorage<S extends { fs: object }>(raw: S, w: World = world):
     };
   }
   return Object.create(raw, { fs: { value: fs, enumerable: true } }) as S;      // defineProperty, not assignment: the host's storage object has a read-only `fs`
+}
+/** The app module's `later` for a chain that works on an account's data (the mail seal, the voice's takes): inert for a closed world like every other choke point, so a native answer that arrives after the
+ * boundary moved never resumes the chain. Null when there is no module. (`nativeLater` stays raw for the boundary's own machinery, the host fact and the device-level themes.) */
+export function nativeInert(): ((request: { op: string; account?: Account; b64?: string; aad?: string }) => Promise<unknown>) | null {
+  const w = world;
+  return reader && reader.available !== false ? (r) => inert(w, reader!.later(r)) : null;
 }
 /** Wait (up to `ms`) for every write that a closed world started to finish. True when none is left. */
 export async function drainClosed(ms: number): Promise<boolean> {
