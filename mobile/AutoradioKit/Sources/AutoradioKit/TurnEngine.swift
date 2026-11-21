@@ -115,6 +115,8 @@ public struct EngineEnvironment: Sendable {
     public var onOutcome: @Sendable (String, Outcome) -> Void
     /// The reader's learned voice: with one, a hands-free turn in another voice (a TV) is not shown and not sent.
     public var speakerGate: SpeakerGate = .shared
+    /// Where what the radio said aloud goes for the desk's next request. A test gives its own: the shared one carries lines from turns another test left running.
+    public var turnHistory: TurnHistory = .shared
     /// The page in front of the listener right now (title and kind), for the acknowledgement to name. nil: none known.
     public var frontPage: @Sendable () -> FrontPage?
     /// The text of the page at an address, as far as the phone has it (the local stream may say something from it).
@@ -741,7 +743,7 @@ public actor TurnEngine {
         }
         await env.playback.resume()
         // What the radio said aloud this turn goes to the desk's next request as history.
-        TurnHistory.shared.add(listener: transcript, radio: heard.snapshot + deskHeard.snapshot)
+        env.turnHistory.add(listener: transcript, radio: heard.snapshot + deskHeard.snapshot)
         let tid = t.id
         let events = Array(log.events(since: t.firstEventIndex))
         let rec = TurnRecord.fold(id: tid, configuration: cfg, device: env.device, events: events)

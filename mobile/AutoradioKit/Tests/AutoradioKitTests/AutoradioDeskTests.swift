@@ -244,7 +244,7 @@ final class StreamedDeskEngineTests: XCTestCase {
     override func setUp() { AckHistory.shared.clear(); TurnHistory.shared.clear(); ScriptedStreamingDesk.sentences = ["The desk says the strike ended.", "Talks resume Monday."]; ScriptedStreamingDesk.hang = false; ScriptedStreamingDesk.requests = [] }
     override func tearDown() { LocalLanguage.model = nil }
 
-    func make(model: LocalLanguageModel?, deskDelay: Double = 0.3, s1Delay: Double = 0.05, front: FrontPage? = FrontPage(address: "pub:front", title: "Front page", kind: "paper")) throws -> (TurnEngine, EventLog, Locked<TurnRecord?>, TurnEngine.Turn) {
+    func make(model: LocalLanguageModel?, history: TurnHistory = .shared, deskDelay: Double = 0.3, s1Delay: Double = 0.05, front: FrontPage? = FrontPage(address: "pub:front", title: "Front page", kind: "paper")) throws -> (TurnEngine, EventLog, Locked<TurnRecord?>, TurnEngine.Turn) {
         LocalLanguage.model = model
         let r = StageRegistry.builtIn()
         r.register(.system1, StubS1.self) { StubS1($0) }
@@ -257,8 +257,9 @@ final class StreamedDeskEngineTests: XCTestCase {
         cfg.set(.desk, .init(id: "scripted-stream-desk", params: ["delay": .number(deskDelay)]))
         let log = EventLog(clock: LabClock())
         let got = Locked<TurnRecord?>(nil)
-        let env = EngineEnvironment(registry: r, log: log, playback: SimulatedPlayback(position: ProgramPosition(programmeID: "p", blockIndex: 0, context: "ctx")),
+        var env = EngineEnvironment(registry: r, log: log, playback: SimulatedPlayback(position: ProgramPosition(programmeID: "p", blockIndex: 0, context: "ctx")),
                                     onRecord: { got.value = $0 }, frontPage: { front }, pageText: { _ in "A strike ended in Nancy." })
+        env.turnHistory = history
         let engine = TurnEngine(env: env, configuration: cfg)
         let t = TurnEngine.Turn(id: "t1", config: cfg, transcriber: try r.make(.transcriber, as: Transcriber.self, cfg),
                                 yield: try r.make(.yieldPolicy, as: YieldPolicy.self, cfg), session: EmptyTranscription(), firstEventIndex: 0)
@@ -297,11 +298,11 @@ final class StreamedDeskEngineTests: XCTestCase {
     }
 
     func testWhatWasSaidAloudBecomesTheNextRequestsHistory() async throws {
-        TurnHistory.shared.clear()          // the shared history carries lines from the hands-free tests that ran before
+        let own = TurnHistory()             // not the shared one: it carries lines from the hands-free tests that ran before
         let m = FakeLocalModel(pieces: ["The front page has a strike story."])
-        let (engine, log, _, t) = try make(model: m, deskDelay: 1.0)
+        let (engine, log, _, t) = try make(model: m, history: own, deskDelay: 1.0)
         await engine.runPipeline(t, transcript: "what is the top story", endedAt: log.clock.now)
-        let h = TurnHistory.shared.snapshot()
+        let h = own.snapshot()
         XCTAssertEqual(h.first, TurnHistory.Line(role: "listener", text: "what is the top story"))
         XCTAssertTrue(h.contains(TurnHistory.Line(role: "radio", text: "The front page has a strike story.")))
         XCTAssertTrue(h.contains(TurnHistory.Line(role: "radio", text: "The desk says the strike ended.")))
