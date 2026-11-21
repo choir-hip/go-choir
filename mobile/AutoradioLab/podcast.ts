@@ -26,7 +26,7 @@
 // 10. Time is never read (`Date.now()` is refused): "now" is the Date header of the last answer any server gave, kept in the library file.
 
 import type { Result, Storage } from './app.contract.d.ts';
-import { authedJSON, SignedOutError, getJSON, TIMEOUT_MS, writeCurrent, accountGeneration, inert, inertTimeout, currentWorld, scoped } from './api.ts';
+import { authedJSON, SignedOutError, getJSON, TIMEOUT_MS, writeCurrent, accountGeneration, inert, inertTimeout, currentWorld, scoped, rmTree } from './api.ts';
 import { NotAFeed, parseFeed } from './podcast-feed.ts';
 import {
   HOME, TOP_URL, clock, decodeChartNews, decodePopular, decodeSearch, decodeSubscriptions, decodeTranscript, durationLabel, durationsAgree, episodeAddress,
@@ -60,7 +60,7 @@ export async function wipe(storage: Storage | undefined): Promise<void> {
   forget();
   if (!storage) return;
   try { await storage.fs.rm(LIBRARY_FILE); } catch { /* none */ }
-  try { await storage.fs.rm(FEED_DIR); } catch { /* none */ }
+  try { await rmTree(storage, FEED_DIR); } catch { /* none */ }
 }
 
 function resetFor(tick: number): void {

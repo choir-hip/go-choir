@@ -108,7 +108,7 @@ describe('G3 the card: what it says and which button, per state', () => {
   test('a refused key (a 401) says so and offers Clear this phone, not Sign in', async () => {
     boot('A', 'A');
     globalThis.fetch = (async (u: string) => (String(u).endsWith('/api/compute/status') ? new Response(JSON.stringify({ computers: [{ computer_id: 'c', current: true }] }), { status: 200 }) : new Response('{}', { status: 401 }))) as never;
-    await api.authedJSON('/api/x').catch(() => undefined);
+    await api.authedJSON('/api/x', { world: api.currentWorld() }).catch(() => undefined);
     expect(await card()).toMatchObject({ state: 'rejected', action: 'clear' });
   });
   test('CLEARING: says so, no button at first; after five tries Try again and Clear this phone, and what failed', async () => {

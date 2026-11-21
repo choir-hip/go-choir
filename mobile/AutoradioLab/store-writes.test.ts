@@ -97,14 +97,14 @@ describe('W2 to W5 the stores', () => {
     const list = await F.fileList({ path: '/', mode: 'recent', sort: 'name', desc: false, query: '' }, storage, net);
     expect(list.rows.length).toBe(0);
   });
-  test('W5 files: a download that finishes after the sign-out is removed by the seam', async () => {
+  test('W5 files: a download that finishes after the sign-out is left to the Clear (the seam removes nothing of a closed world)', async () => {
     const api = await import('./api.ts');
     const g = api.accountGeneration(); expect(g).toBeGreaterThanOrEqual(0);
     const rmd: string[] = [];
     const reader = { available: true, later: async (r: { op: string }) => (r.op === 'session' ? { found: true, value: 'k-not-real-0001', computerId: 'c' } : { ok: true }) };
     bindNative(reader as never);
     globalThis.fetch = (async () => { nextGeneration(); const r = new Response('', { status: 200 }); Object.defineProperty(r, 'exactBodyTo', { value: { path: 'app:/cache/files/h/a.mp3', bytes: 5 } }); return r; }) as never;
-    await settle(api.authedToFile('/api/files/a.mp3', 'app:/cache/files/h/a.mp3', { fs: { rm: async (p: string) => { rmd.push(p); } } } as never));      // the reply never reaches the caller; the file is removed
-    expect(rmd).toEqual(['app:/cache/files/h/a.mp3']);
+    await settle(api.authedToFile('/api/files/a.mp3', 'app:/cache/files/h/a.mp3', { fs: { rm: async (p: string) => { rmd.push(p); } } } as never, { world: api.currentWorld() }));      // the reply never reaches the caller; the file is the Clear's to remove
+    expect(rmd).toEqual([]);
   });
 });

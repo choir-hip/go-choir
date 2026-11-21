@@ -26,7 +26,7 @@
 //
 // Time arrives as an argument (epoch milliseconds); nothing here reads a clock.
 
-import { authedJSON, authedBytes, getJSON, SignedOutError, currentWorld } from './api.ts';
+import { authedJSON, authedBytes, getJSON, SignedOutError, currentWorld, scoped } from './api.ts';
 import { parseDate } from './paper-model.ts';
 import type { Doc } from './search.ts';
 
@@ -221,12 +221,12 @@ export const fileVersion = (e: FileEntry): string => `${e.size}|${e.modified ===
 export type SyncOptions = { now: number; log?: (line: string) => void };
 
 /** One syncer at a time: a second `syncAll` while one runs returns at once with no reports. */
-const running = new WeakSet<ContentStore>();
+const R = scoped(() => ({ running: new WeakSet<ContentStore>() }));      // module state belongs to the world (api.ts `scoped`)
 
 /** Every kind, in the order the listener feels them: stories, mail, documents, then the slow ones. One report per kind. */
 export async function syncAll(store: ContentStore, f: Fetchers, o: SyncOptions): Promise<SyncReport[]> {
-  if (running.has(store)) return [];
-  running.add(store);
+  if (R().running.has(store)) return [];
+  R().running.add(store);
   const started = store.generation;
   const live = (): boolean => store.generation === started;
   const log = o.log ?? ((): void => undefined);
@@ -245,7 +245,7 @@ export async function syncAll(store: ContentStore, f: Fetchers, o: SyncOptions):
     }
     if (live()) await store.enforceBudget(o.now);
     return out;
-  } finally { running.delete(store); }
+  } finally { R().running.delete(store); }
 }
 
 type Ctx = { store: ContentStore; f: Fetchers; now: number; live: () => boolean };

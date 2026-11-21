@@ -22,7 +22,7 @@
 //  F10 A chosen theme that has only one scheme meets a mode control that asks for the other: the control shows the one scheme and refuses the other; the "default" id clears the choice.
 //  F11 The lens is a style (A native glass, B no material with a wash, C ultra-thin) and a wash of the page colour: a theme without a "lens" key shows the native glass; an unknown style or a wash outside 0...1 is refused.
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, HTTPError, SignedOutError, nativeLater, currentWorld, type Reply, type World } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, nativeLater, currentWorld, unbound, type Reply, type World } from './api.ts';
 import { WORDS } from './words.ts';
 import { BUNDLED } from './themes-bundled.ts';
 
@@ -599,7 +599,8 @@ export async function themeMigrate(host: string, storage: Storage | undefined): 
 }
 
 /** The store, loaded once: bundled themes, the user's files, the kept choice (and the migration on a phone that has the old one). */
-export function themeStore(storage: Storage | undefined): Promise<ThemeStore> {
+export function themeStore(bound: Storage | undefined): Promise<ThemeStore> {
+  const storage = unbound(bound);                           // the device's own settings: a world closing under a gated caller must not cut the store's load (only a Texture-derived write stays in its world)
   if (current) return Promise.resolve(current);
   if (!loading) {
     loading = (async () => {
@@ -622,7 +623,8 @@ export function themeStore(storage: Storage | undefined): Promise<ThemeStore> {
 }
 
 /** Writes run one after another; each writes the choice as it is WHEN IT RUNS, so the last choice wins the file. */
-function saveChoice(storage: Storage | undefined, s: ThemeStore): Promise<void> {
+function saveChoice(bound: Storage | undefined, s: ThemeStore): Promise<void> {
+  const storage = unbound(bound);
   const run = saving.then(async () => { if (storage) await storage.fs.atomicWriteFile(CHOICE_FILE, enc({ ...s.choice, ...(migrated ? { migrated: true } : {}) })); dirty = false; }, () => undefined);
   saving = run.catch(() => undefined);
   return run.catch(() => undefined);     // the choice holds in memory for this launch; a failed write is not the person's error

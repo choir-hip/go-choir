@@ -16,6 +16,7 @@
 //  5. A post answers 404 or fails: the ops stay pending, in order, and are sent again; none is lost or sent twice after an answer.
 //  6. A batch is over 64 ops or 256 KB: it is sent in several posts.
 //  7. A transition whose neighbours changed is hidden or removed by the phone: it is shown stale (`isStale`), never changed by the phone.
+import { currentWorld } from './api.ts';
 import { boundedOp, mintId, refTooLong } from './runsheet-entries.ts';
 import {
   apply, decodeOp, decodeSheet, emptySheet, onAirEntry, ahead as aheadOf, heard as heardOf, entryById,
@@ -339,5 +340,5 @@ export class RunSheetStore {
 
 /** The store's requester over the signed-in seam (`authedJSON`): pass `routePoster(signedInRequester(authedJSON))` as the poster. HTTP errors
  *  carry `status`, which `routePoster` reads; a signed-out call (no session) is "offline": the ops stay pending and nothing is lost. */
-export const signedInRequester = (authedJSON: (path: string, o?: { method?: 'GET' | 'POST'; body?: unknown }) => Promise<{ body: unknown }>): Requester =>
-  (path, opts) => authedJSON(path, opts);
+export const signedInRequester = (authedJSON: (path: string, o?: { method?: 'GET' | 'POST'; body?: unknown; world?: unknown }) => Promise<{ body: unknown }>, world?: unknown): Requester =>
+  (path, opts) => authedJSON(path, { ...opts, world: world ?? currentWorld() });

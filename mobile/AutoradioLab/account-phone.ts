@@ -24,6 +24,7 @@ export type Faults = {
   stat: Map<string, string>;             // stat rejects with this code
   hangRm: Set<string>;                   // rm does not answer until `releaseRm()` (a store the system will not release yet)
   releaseRm: () => void;
+  strictDirs: boolean;                  // rm of a folder that still has children refuses (ENOTEMPTY), as a host that is not recursive would
   rmGate: Map<string, Promise<void>>;   // the first rm of this path waits for the promise (one-shot)
   writeHold: Map<string, Promise<void>>; // atomicWriteFile of this path waits for the promise, then lands (a write in flight)
   hangRead: Set<string>;                 // readFile never answers
@@ -36,14 +37,14 @@ export function memFs(seed: Record<string, string> | string[] = []) {
   const files = new Map<string, Uint8Array>();
   const enc = new TextEncoder();
   if (Array.isArray(seed)) for (const p of seed) files.set(p, enc.encode('x')); else for (const [p, v] of Object.entries(seed)) files.set(p, enc.encode(v));
-  const faults: Faults = { rm: new Set(), rmSilently: new Set(), write: new Set(), read: new Map(), stat: new Map(), hangRm: new Set(), rmGate: new Map(), writeHold: new Map(), releaseRm: () => { for (const r of held.splice(0)) r(); }, hangRead: new Set(), hold: new Map(), noStorage: false };
+  const faults: Faults = { rm: new Set(), rmSilently: new Set(), write: new Set(), read: new Map(), stat: new Map(), hangRm: new Set(), strictDirs: false, rmGate: new Map(), writeHold: new Map(), releaseRm: () => { for (const r of held.splice(0)) r(); }, hangRead: new Set(), hold: new Map(), noStorage: false };
   const writes: string[] = [];
   const held: (() => void)[] = [];
   const spy = { stampOverwrites: 0 };
   const kids = (p: string) => [...files.keys()].filter((k) => k.startsWith(p + '/'));
   const fs = {
     directories: { data: 'app:/data', cache: 'app:/cache', temporary: 'app:/tmp' },
-    atomicWriteFile: async (p: string, b: Uint8Array) => { { const h = faults.writeHold.get(p); if (h) await h; } if (faults.write.has(p)) throw new FsError('full'); if (p === STAMP && files.has(p)) spy.stampOverwrites += 1; events.push('write:' + p); writes.push(p + '=' + new TextDecoder().decode(b)); files.set(p, b); },
+    atomicWriteFile: async (p: string, b: Uint8Array) => { events.push('writecall:' + p); { const h = faults.writeHold.get(p); if (h) await h; } if (faults.write.has(p)) throw new FsError('full'); if (p === STAMP && files.has(p)) spy.stampOverwrites += 1; events.push('write:' + p); writes.push(p + '=' + new TextDecoder().decode(b)); files.set(p, b); },
     readFile: async (p: string) => {
       if (faults.hangRead.has(p)) await new Promise(() => undefined);
       const c = faults.read.get(p); if (c) throw new FsError(c);
@@ -61,6 +62,7 @@ export function memFs(seed: Record<string, string> | string[] = []) {
       if (faults.hangRm.has(p)) await new Promise<void>((r) => { held.push(r); });
       if (faults.rm.has(p)) throw new FsError('EACCES');
       if (faults.rmSilently.has(p)) return;
+      if (faults.strictDirs && kids(p).length) throw new FsError('ENOTEMPTY');
       files.delete(p); for (const k of kids(p)) files.delete(k);
     },
     mkdir: async () => undefined,
