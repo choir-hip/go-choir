@@ -214,7 +214,9 @@ if [ -n "$READER_STORY" ]; then
   step "tap reader-menu"; view real-r4-reader-menu 1200
   step "tap reader-menu-versions"; view real-r5-reader-versions 1500
   step logs
-  run_drive reader2 light "" --touch platform
+  # Not `--touch platform`: a real touch refuses a point outside the viewport ("scroll it into view first": the first citation is below the first screen, and so are the menu and the page after the card opens), while the agent's own tap scrolls its target into view
+  # (docs/reference/exact: "`tap` and `type` scroll their target into view"; recipes/ios-driving.md: a row scrolled out of view takes a drive without the flag). Reader one, which taps nothing below the fold, keeps the real touch.
+  run_drive reader2 light ""
 fi
 
 # ---- 3c. THEME drive: a theme from a Texture, loaded through Settings (the document "Autoradio theme test" on d@e holds one choir-theme block)
