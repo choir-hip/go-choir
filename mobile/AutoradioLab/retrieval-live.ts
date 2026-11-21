@@ -5,12 +5,24 @@
 //   paperSearch     the launcher's paper-wide search (the server's public route), merged after the local rows.
 import type { Storage } from './app.contract.d.ts';
 import { getJSON, nativeLater } from './api.ts';
-import { Retrieval, nativeEmbedder, parseAsk, launcherSearch, type Found } from './retrieval-run.ts';
-import type { Row } from './search.ts';
+import { Retrieval, nativeEmbedder, parseAsk, launcherSearch, registerSearchProvider, type Found } from './retrieval-run.ts';
+import type { Doc, Row } from './search.ts';
+import { contentDocs } from './content-run.ts';
+import { importedDocs } from './imported-search.ts';
 
 /** The one runtime of the process. Document sources register here (`live.setDocSource`: the content store, the reader's books). */
 export const live = new Retrieval();
 let warmed = false;
+
+// The document sources: the phone's content store (content-run.ts) and the imported documents the phone holds the text of (imported-search.ts). Both read through the runtime's storage.
+live.setDocSource('store', () => contentDocs(live.storage));
+let importedHeld: Doc[] = [];
+live.setDocSource('imported', async () => (importedHeld = await importedDocs(live.storage)));
+// The launcher's local rows for imported documents: their titles, from the copy the index last read (the index is built before any search is useful).
+registerSearchProvider('imported', (q) => {
+  const w = q.toLowerCase().split(/\s+/).filter((x) => x !== '');
+  return w.length === 0 ? [] : importedHeld.filter((d) => w.every((x) => d.title.toLowerCase().includes(x))).map((d) => ({ address: d.address, title: d.title, kind: 'document', detail: 'Imported document' }));
+});
 
 export async function retrievalServe(a: { id: string; words: string; pageTitle: string; pageAddress: string; now: number; facts: string }, storage: Storage | undefined): Promise<{ id: string; ok: boolean }> {
   live.storage = storage ?? live.storage;
