@@ -657,6 +657,14 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		}
 		if strings.TrimSpace(in.ToDesk) == types.StoryOpenInbox() && in.Kind == yaegikernel.IntentCast {
 			opensStory = true
+			// A task's open answers for each held story its opening offered
+			// for the captures (held_check); the answer is recorded with the
+			// Cast's packet. Never refused for what the answer is.
+			if task {
+				if err := requireHeldVerdicts(rt.openingOfferOf(r.scope.RunID), in.Statement); err != nil {
+					return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
+				}
+			}
 		}
 		if parent && engineeringCastIntent(in) {
 			if castPlan != nil {
@@ -836,7 +844,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	for i, in := range localIDs {
 		seq, opened := int64(0), ""
 		if i < len(committed.Records) {
-			rt.logManagementStoryChoice(r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i])
+			rt.logManagementStoryChoice(r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i], in)
 			seq = committed.Records[i].InboxSeq
 			if committed.Records[i].OpenedStory || in.Kind == yaegikernel.IntentDelegate {
 				// The receipt names the story a Cast to texture:new opened,

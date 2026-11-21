@@ -60,12 +60,14 @@ func (rt *Runtime) managementTaskSlots(ctx context.Context, ownerID, computerID 
 var managementTaskCallTimeout = 3 * time.Minute
 
 // managementTaskPrompt is the first user turn of a task's run. The host
-// appends the task's records and the newest page of the story library
-// (managementTaskOpening): a task that fetched them itself spent its first
-// cells on the same Records and Stories reads every time
+// appends the task's records and the story page (managementTaskOpening): a
+// task that fetched them itself spent its first cells on the same Records and
+// Stories reads every time
 // (docs/evidence/token-efficiency-2026-11-09/followup/system-prompt-review.md,
-// L5).
-const managementTaskPrompt = "Management delegated captures to you. Your records and the newest page of the story library come with this message, as choir.Records() and choir.Stories(50, \"\") return them, with the last 8 hours in full; a note says so when one did not fit. The Cast from management names your objective and the captures you lease (r.Cast.Captures); each captures record shows them (r.Captures.Items) with Jev's label (r.Labels). Open, feed or decline every one of them, then end with choir.Done(note)."
+// L5). What it says of the page is what buildOpeningPage builds: every story
+// of the window as headlines, a left_out count and a next cursor when the
+// bound cut it, and held_stories for the captures one may already cover.
+var managementTaskPrompt = fmt.Sprintf("Management delegated captures to you. Your records come with this message, as choir.Records() returns them, and so does the story library: every story updated in the last %d hours, as headlines only (inbox, headline, age since its last version, v the version number), newest first; left_out and next say when the bound cut the list and how to read the rest with choir.Stories(50, next), which returns ledes. Under it, held_stories lists, for a capture, the held stories of the last 72 hours that may already cover it, with a line of lead; a note says so when a section did not fit. The Cast from management names your objective and the captures you lease (r.Cast.Captures); each captures record shows them (r.Captures.Items) with Jev's label (r.Labels). Open, feed or decline every one of them, then end with choir.Done(note). A Cast to texture:new must answer for each held story offered for its captures: held_check, same, follow_up or different.", openingWindowHours)
 
 // managementTaskOpeningSectionTokens bounds each handed section (the records,
 // the story page): prompts stay within 100,000 tokens, and a section over the
@@ -89,11 +91,12 @@ type taskOpening struct {
 	hasRecs  bool
 	storyHd  int64
 	storyOut json.RawMessage
+	offer    *openingOffer
 }
 
 const (
 	openingRecordsNote = "\n\nYour records did not come with this message (too large to show here, or unavailable): read them with choir.Records()."
-	openingStoriesNote = "\n\nThe newest stories did not come with this message (too large to show here, or unavailable): read them with choir.Stories(50, \"\")."
+	openingStoriesNote = "\n\nThe story list did not come with this message (too large to show here, or unavailable): read them with choir.Stories(50, \"\")."
 )
 
 // openingStoryLabels frame the story page: its headlines and ledes are written
@@ -133,10 +136,23 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 	exec := toolregistry.ExecutionContext{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID}
 	storiesIn := false
 	if head, headErr := rt.store.StoryLibraryHeadOf(ctx, rec.OwnerID, rec.ComputerID); headErr == nil {
-		if page, err := rt.storiesOpeningPage(ctx, exec); err == nil {
-			o.storyHd, o.storyOut, storiesIn = head, page, true
-			b.WriteString("\n\nThe newest stories:\n")
+		var arrivals []types.CaptureArrival
+		if o.hasRecs {
+			for _, r := range o.records.view {
+				if r.Captures != nil {
+					arrivals = append(arrivals, r.Captures.Items...)
+				}
+			}
+		}
+		if page, held, offer, err := rt.storiesOpeningPage(ctx, exec, arrivals); err == nil {
+			o.storyHd, o.storyOut, o.offer, storiesIn = head, page, offer, true
+			b.WriteString("\n\n" + openingStoriesHeading + "\n")
 			b.WriteString(frameOpeningSection(openingStoryLabels, string(page)))
+			if held != nil {
+				heldJSON, _ := json.Marshal(held)
+				b.WriteString("\n\n" + openingHeldHeading + "\n")
+				b.WriteString(frameOpeningSection(openingStoryLabels, string(heldJSON)))
+			}
 		}
 	}
 	if !storiesIn {
@@ -146,27 +162,35 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 	return o
 }
 
-// storiesWindow is how far back the story page handed to a management task
-// reaches: the stories updated in the last 8 hours (at least the newest 50),
-// not the newest 50 alone, which a busy hour pushes a story out of
-// (docs/problems/unsupported-cites-duplicates-and-churn-2026-11-10.md, D2).
-const storiesWindow = 8 * time.Hour
-
-// storiesOpeningPage is the story page of a task's opening: the window's
-// stories, or the newest 50 when those do not fit the section bound.
-func (rt *Runtime) storiesOpeningPage(ctx context.Context, exec toolregistry.ExecutionContext) (json.RawMessage, error) {
-	page, err := rt.storiesEgressWithin(ctx, deskmanifest.TaskRoleName(), exec, nil, storiesWindow)
-	if err == nil && estimateTextTokens(string(page)) <= managementTaskOpeningSectionTokens {
-		return page, nil
-	}
+// storiesOpeningPage builds the story page of a task's opening and the held
+// stories offered for its captures. The page is the whole window as headlines,
+// built to fit the section bound, never a fallback to a count of stories; the
+// page does not come at all only when not even one headline fits, or the story
+// read failed (a note then names the verb that reads it).
+func (rt *Runtime) storiesOpeningPage(ctx context.Context, exec toolregistry.ExecutionContext, arrivals []types.CaptureArrival) (page json.RawMessage, held *openingHeldSection, offer *openingOffer, err error) {
+	sums, err := rt.storyIndexRead(ctx, deskmanifest.TaskRoleName(), exec, time.Time{}, "", 0)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	page, err = rt.storiesEgress(ctx, deskmanifest.TaskRoleName(), exec, nil)
-	if err == nil && estimateTextTokens(string(page)) > managementTaskOpeningSectionTokens {
-		return nil, fmt.Errorf("the story page is too large to hand over")
+	now := time.Now().UTC()
+	built, info := buildOpeningPage(sums, now, openingWindow, managementTaskOpeningSectionTokens)
+	if info.InWindow > 0 && info.Shown == 0 {
+		return nil, nil, nil, fmt.Errorf("the story page is too large to hand over")
 	}
-	return page, err
+	if page, err = json.Marshal(built); err != nil {
+		return nil, nil, nil, err
+	}
+	offer = &openingOffer{Window: info.Window, InWindow: info.InWindow, Shown: info.Shown, LeftOut: info.LeftOut, ByCapture: map[string][]string{}}
+	if len(arrivals) > 0 {
+		var byCapture map[string][]string
+		var unlisted int
+		held, byCapture, unlisted = buildHeldSection(arrivals, newHeldIndex(sums, now), managementTaskOpeningSectionTokens)
+		offer.HeldUnlist = unlisted
+		if held != nil {
+			offer.ByCapture = byCapture
+		}
+	}
+	return page, held, offer, nil
 }
 
 // frameOpeningSection frames a handed section by its labels, with the data
@@ -194,7 +218,7 @@ func (o *taskOpening) commit() {
 		exec := toolregistry.ExecutionContext{RunID: rec.RunID, OwnerID: rec.OwnerID, ComputerID: rec.ComputerID}
 		rt.noteEgressRead(context.Background(), exec, yaegikernel.ActionStories, nil, o.storyOut)
 		rt.noteStoryLibraryShownAt(rec.RunID, o.storyHd)
-		rt.noteOpeningStoriesShown(rec.RunID, o.storyOut)
+		rt.noteOpeningOffer(rec.RunID, o.offer)
 	}
 }
 

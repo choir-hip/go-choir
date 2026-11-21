@@ -1,7 +1,6 @@
 package agentcore
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -43,22 +42,20 @@ func (rt *Runtime) storiesShownCount(runID string) int {
 	return 0
 }
 
-// noteOpeningStoriesShown counts the stories of the page a task's opening
-// delivered, which the host puts in the first message and which no verb call
-// counts. An unreadable page counts nothing.
-func (rt *Runtime) noteOpeningStoriesShown(runID string, page json.RawMessage) {
+// noteOpeningOffer records what the opening a task was handed carried: the
+// page's size and the held stories offered. Building the opening marks
+// nothing; the commit calls this.
+func (rt *Runtime) noteOpeningOffer(runID string, offer *openingOffer) {
 	runID = strings.TrimSpace(runID)
-	var p yaegikernel.StoriesPage
-	if rt == nil || runID == "" || json.Unmarshal(page, &p) != nil || len(p.Stories) == 0 {
+	if rt == nil || runID == "" || offer == nil {
 		return
 	}
-	rt.openingShown.Store(runID, len(p.Stories))
+	rt.openingOffers.Store(runID, offer)
 }
 
 func (rt *Runtime) openingShownCount(runID string) int {
-	if v, ok := rt.openingShown.Load(strings.TrimSpace(runID)); ok {
-		n, _ := v.(int)
-		return n
+	if o := rt.openingOfferOf(runID); o != nil {
+		return o.Shown
 	}
 	return 0
 }
@@ -66,28 +63,35 @@ func (rt *Runtime) openingShownCount(runID string) int {
 func (rt *Runtime) forgetStoriesShown(runID string) {
 	runID = strings.TrimSpace(runID)
 	rt.storiesShown.Delete(runID)
-	rt.openingShown.Delete(runID)
+	rt.openingOffers.Delete(runID)
 }
 
 // managementStoryChoiceLine: candidates_shown stays the sum of the two, for
-// readers of the line from before the split.
-func managementStoryChoiceLine(runID, choice, storyID string, opening, verb int) string {
+// readers of the line from before the split. The page's window, its stories in
+// that window and how many it left out, the held stories offered for the
+// decision's captures and the verdicts given (none: asked and not answered; -:
+// not asked) follow. Ids and counts only.
+func managementStoryChoiceLine(runID, choice, storyID string, opening, verb int, d choiceDetail) string {
 	if storyID == "" {
 		storyID = "-"
 	}
-	return fmt.Sprintf("management story choice run=%s choice=%s story=%s opening_shown=%d verb_shown=%d candidates_shown=%d", runID, choice, storyID, opening, verb, opening+verb)
+	return fmt.Sprintf("management story choice run=%s choice=%s story=%s opening_shown=%d verb_shown=%d candidates_shown=%d window=%s page_in_window=%d page_left_out=%d offered=%s verdicts=%s",
+		runID, choice, storyID, opening, verb, opening+verb, shortDuration(d.Window), d.InWindow, d.LeftOut, d.offeredText(), d.verdictsText())
 }
 
 // logManagementStoryChoice logs one committed record of a management run that
 // went to a story: fed (an existing story's inbox) or opened (texture:new).
-func (rt *Runtime) logManagementStoryChoice(runID, profile string, rec types.InboxRecordReceipt) {
+// in is the staged act that made the record.
+func (rt *Runtime) logManagementStoryChoice(runID, profile string, rec types.InboxRecordReceipt, in yaegikernel.StagedIntent) {
 	if !deskmanifest.AdmitsAssignments(profile) {
 		return
 	}
 	switch {
 	case rec.OpenedStory:
-		log.Print(managementStoryChoiceLine(runID, "open", "", rt.openingShownCount(runID), rt.storiesShownCount(runID)))
+		d := rt.detailOfDecision(runID, stagedDecision{packet: in.Statement})
+		log.Print(managementStoryChoiceLine(runID, "open", "", rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
 	case strings.HasPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"):
-		log.Print(managementStoryChoiceLine(runID, "feed", strings.TrimPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"), rt.openingShownCount(runID), rt.storiesShownCount(runID)))
+		d := rt.detailOfDecision(runID, stagedDecision{captures: in.Captures})
+		log.Print(managementStoryChoiceLine(runID, "feed", strings.TrimPrefix(rec.Inbox, deskmanifest.DocumentCustodianName()+":"), rt.openingShownCount(runID), rt.storiesShownCount(runID), d))
 	}
 }

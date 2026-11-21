@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""status-story-choice: per UTC hour, how the paper's management tasks chose
+between feeding a story and opening one, and whether a held story had been
+offered for the open (docs/evidence/duplicate-stories-on-the-paper-2026-11-20.md,
+options 1 and 2).
+
+Read only against Node B: one ssh reads the paper VM's guest console files; nothing is
+written there. fetch() returns text, compute() is pure. --fixture FILE feeds console
+lines with no network (scripts/test-status-scripts.sh).
+
+  status-story-choice [--since T] [--until T] [--node HOST] [--json] [--fixture FILE]
+
+T is YYYY-MM-DDTHH:MMZ; the window is [since, until). Exit 0, or 2 when the fetch failed.
+
+It reads one console line per decision, written by internal/agentcore
+management_story_choice.go:
+  management story choice run= choice=(open|feed) story= opening_shown= verb_shown=
+      candidates_shown= window= page_in_window= page_left_out= offered=(-|doc,doc)
+      verdicts=(-|doc:(same|follow_up|different|none),...)
+and prints, per hour: decisions, opens, feeds, opens where a held story was offered,
+the verdicts of those opens (same / follow_up / different / none), decisions whose page
+left stories out, and the median page size. A line without window= is from before the
+change: it counts as a decision, and its page is the old newest-50 page.
+
+The console rotates at about 1 MB and keeps about 2.5 hours; a window before the oldest
+line is partial. Ids and counts only; the script prints no title.
+"""
+import argparse
+import calendar
+import json
+import re
+import statistics
+import subprocess
+import sys
+import time
+
+PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+NODE = "node-b"
+STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
+LINE_RE = re.compile(STAMP + r" management story choice (.*)$")
+KV_RE = re.compile(r"(\w+)=(\S*)")
+
+
+def stamp_epoch(s):
+    return calendar.timegm(time.strptime(s, "%Y/%m/%d %H:%M:%S"))
+
+
+def parse_arg_time(s):
+    return calendar.timegm(time.strptime(s, "%Y-%m-%dT%H:%MZ"))
+
+
+def hour_label(t):
+    return time.strftime("%Y-%m-%dT%HZ", time.gmtime(t - t % 3600))
+
+
+def compute(text, since=None, until=None):
+    hours = {}
+    for ln in text.splitlines():
+        m = LINE_RE.search(ln)
+        if not m:
+            continue
+        t = stamp_epoch(m.group(1))
+        if (since is not None and t < since) or (until is not None and t >= until):
+            continue
+        kv = dict(KV_RE.findall(m.group(2)))
+        choice = kv.get("choice")
+        if choice not in ("open", "feed"):
+            continue
+        h = hours.setdefault(hour_label(t), {"decisions": 0, "opens": 0, "feeds": 0, "opens_offered": 0,
+                                             "same": 0, "follow_up": 0, "different": 0, "none": 0,
+                                             "left_out": 0, "pages": []})
+        h["decisions"] += 1
+        h["opens" if choice == "open" else "feeds"] += 1
+        h["pages"].append(int(kv.get("page_in_window", kv.get("opening_shown", "0")) or 0))
+        if int(kv.get("page_left_out", "0") or 0) > 0:
+            h["left_out"] += 1
+        offered = kv.get("offered", "-")
+        if choice == "open" and offered not in ("-", ""):
+            h["opens_offered"] += 1
+            for part in kv.get("verdicts", "-").split(","):
+                v = part.rsplit(":", 1)[-1]
+                if v in ("same", "follow_up", "different", "none"):
+                    h[v] += 1
+    rows = []
+    for k in sorted(hours):
+        h = hours[k]
+        pages = h.pop("pages")
+        h["hour"] = k
+        h["median_page"] = int(statistics.median(pages)) if pages else 0
+        rows.append(h)
+    return rows
+
+
+def render(rows):
+    out = ["hour           decisions  opens  feeds  opens_with_offer  same  follow_up  different  none  page_cut  median_page"]
+    for r in rows:
+        out.append("%-14s %9d %6d %6d %17d %5d %10d %10d %5d %9d %12d" % (
+            r["hour"], r["decisions"], r["opens"], r["feeds"], r["opens_offered"], r["same"],
+            r["follow_up"], r["different"], r["none"], r["left_out"], r["median_page"]))
+    if not rows:
+        out.append("(no management story choice lines in the window)")
+    return "\n".join(out)
+
+
+REMOTE = r"""
+dir=/var/lib/go-choir/vm-state/@VM@
+sudo -n true 2>/dev/null || echo "##NOSUDO"
+echo "##CONSOLE"
+sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
+  grep -a -E 'management story choice run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} management story choice)/\1/'
+echo "##END"
+""".replace("@VM@", PAPER_VM)
+
+
+def fetch(node):
+    p = subprocess.run(["ssh", "-C", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node, REMOTE],
+                       capture_output=True, text=True, timeout=240)
+    if "##END" not in p.stdout:
+        raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
+    if "##NOSUDO" in p.stdout:
+        raise RuntimeError("sudo -n is not allowed on %s: the guest console cannot be read" % node)
+    return "\n".join(ln for ln in p.stdout.splitlines() if not ln.startswith("##"))
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="status-story-choice")
+    ap.add_argument("--since")
+    ap.add_argument("--until")
+    ap.add_argument("--node", default=NODE)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--fixture")
+    a = ap.parse_args(argv)
+    try:
+        since = parse_arg_time(a.since) if a.since else None
+        until = parse_arg_time(a.until) if a.until else None
+        if a.fixture:
+            with open(a.fixture) as f:
+                text = f.read()
+        else:
+            text = fetch(a.node)
+        rows = compute(text, since, until)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as e:
+        print("status-story-choice: unavailable: %s" % e, file=sys.stderr)
+        return 2
+    print(json.dumps(rows, sort_keys=True) if a.json else render(rows))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -910,5 +910,38 @@ check "S5 the next write widens the header and keeps the old row, its new cells 
 env -u BASH_ENV python3 "$hourly" --history --search-history "$H3" >"$root/out" 2>&1
 check "S5 --history prints the widened file with the new columns" 'head -n1 "$root/out" | grep -q "runs_searched"'
 
+# status-story-choice. Failure list, written before the code:
+#  C1  a decision outside [since, until) is counted, or an hour is not split on the UTC hour
+#  C2  opens and feeds are not counted apart, or a line that is neither is counted
+#  C3  an open with offered=<docs> is not counted as an open with an offer, or a feed is
+#  C4  the verdicts of the offered opens are not counted by kind (none for an unanswered one)
+#  C5  a page with page_left_out above 0 is not counted as cut; the median page is not read
+#      from page_in_window (a line from before the change falls back to opening_shown)
+storychoice="$here/status-story-choice"
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+P = "[ 1.0] runtime[1]: "
+def ln(ts, choice, extra):
+    return f"{P}{ts} management story choice run=r-1 choice={choice} story=- opening_shown=50 verb_shown=0 candidates_shown=50{extra}\n"
+new = lambda w, left, off, ver: f" window=8h page_in_window={w} page_left_out={left} offered={off} verdicts={ver}"
+lines = [
+  ln("2026/11/20 21:10:00", "open", new(300, 0, "dA,dB", "dA:same,dB:different")),
+  ln("2026/11/20 21:20:00", "open", new(310, 0, "-", "-")),
+  ln("2026/11/20 21:30:00", "feed", new(320, 0, "dC", "-")),
+  ln("2026/11/20 21:40:00", "open", new(330, 12, "dD", "dD:none")),
+  ln("2026/11/20 22:00:00", "open", ""),
+  ln("2026/11/20 20:59:59", "open", new(1, 0, "-", "-")),
+  P + "2026/11/20 21:15:00 management story choice run=r-1 choice=weird\n",
+]
+open(root + "/sc.log", "w").write("".join(lines))
+PY
+env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc.log" --since 2026-11-20T21:00Z --until 2026-11-20T23:00Z --json >"$root/out" 2>&1
+check "C1 two hours in the window, the 20:59 line out" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert [r[\"hour\"] for r in d]==[\"2026-11-20T21Z\",\"2026-11-20T22Z\"], d" "$root/out"'
+check "C2 21h: 4 decisions, 3 opens, 1 feed; the weird line is not counted" 'python3 -c "import json,sys; r=json.load(open(sys.argv[1]))[0]; assert (r[\"decisions\"],r[\"opens\"],r[\"feeds\"])==(4,3,1), r" "$root/out"'
+check "C3 two opens had an offer; the feed with an offer does not count" 'python3 -c "import json,sys; r=json.load(open(sys.argv[1]))[0]; assert r[\"opens_offered\"]==2, r" "$root/out"'
+check "C4 verdicts same 1, different 1, none 1" 'python3 -c "import json,sys; r=json.load(open(sys.argv[1]))[0]; assert (r[\"same\"],r[\"different\"],r[\"none\"],r[\"follow_up\"])==(1,1,1,0), r" "$root/out"'
+check "C5 one page cut; median of 300,310,320,330 is 315; the old line reads opening_shown 50" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[0][\"left_out\"]==1 and d[0][\"median_page\"]==315 and d[1][\"median_page\"]==50, d" "$root/out"'
+
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

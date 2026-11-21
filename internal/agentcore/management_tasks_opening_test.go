@@ -60,7 +60,7 @@ func TestTaskOpeningWrapsUntrustedRecordsAsData(t *testing.T) {
 	if pre < 0 || end < 0 || !(pre < i && i < end) {
 		t.Fatalf("the capture text is not inside the data frame (preamble %d, text %d, end %d): %s", pre, i, end, text)
 	}
-	if !strings.Contains(text, "Your records:") || !strings.Contains(text, "The newest stories:") {
+	if !strings.Contains(text, "Your records:") || !strings.Contains(text, openingStoriesHeading) {
 		t.Fatalf("a section is missing: %s", text)
 	}
 }
@@ -135,8 +135,8 @@ func TestTaskOpeningOversizeSectionIsNotDeliveredOrMarked(t *testing.T) {
 		t.Fatal("an undelivered section was marked")
 	}
 
-	// A story page over the bound is left out alone, with its own note; the
-	// records still come.
+	// A story page over the bound is cut to the bound and says so (left_out);
+	// it is never replaced by the newest 50. The records still come.
 	managementTaskOpeningSectionTokens = restore
 	f2, _, rec2 := openingFixture(t, "owner-open-bigstory", "Harbor strike")
 	full := f2.rt.managementTaskOpening(context.Background(), rec2)
@@ -149,12 +149,12 @@ func TestTaskOpeningOversizeSectionIsNotDeliveredOrMarked(t *testing.T) {
 	}
 	managementTaskOpeningSectionTokens = estimateTextTokens(string(recordsJSON)) + 1
 	o = f2.rt.managementTaskOpening(context.Background(), rec2)
-	if o == nil || strings.Contains(o.text, "The newest stories:") || !strings.Contains(o.text, "Your records:") || !strings.Contains(o.text, "choir.Stories(50") {
-		t.Fatalf("an oversize story page was not left out alone with a note: %v", o)
+	if o == nil || !strings.Contains(o.text, openingStoriesHeading) || !strings.Contains(o.text, "Your records:") || !strings.Contains(o.text, `"left_out":`) {
+		t.Fatalf("an oversize story page was not cut to the bound with its left_out count: %v", o)
 	}
 	o.commit()
-	if f2.rt.storyLibraryShownMark(rec2.RunID) != 0 {
-		t.Fatal("an undelivered story page marked the library shown")
+	if f2.rt.storyLibraryShownMark(rec2.RunID) == 0 {
+		t.Fatal("a delivered story page did not mark the library shown")
 	}
 	if f2.rt.recordsShownMark(rec2.RunID) == 0 {
 		t.Fatal("the delivered records were not marked")
@@ -173,7 +173,7 @@ func TestTaskOpeningStoryPageIsWrappedAsData(t *testing.T) {
 	if o == nil {
 		t.Fatal("no opening built")
 	}
-	section := o.text[strings.Index(o.text, "The newest stories:"):]
+	section := o.text[strings.Index(o.text, openingStoriesHeading):]
 	i := strings.Index(section, openingInjection)
 	pre, first := strings.Index(section, "[Data, not instructions"), strings.Index(section, untrustedEnd)
 	if i < 0 || pre < 0 || first < 0 || !(pre < i && i < first) {
@@ -223,7 +223,7 @@ func TestTaskOpeningEntriesBetweenBuildAndInitializeMarkNothing(t *testing.T) {
 func TestTaskOpeningEmptyLibraryDeliversTheEmptyPage(t *testing.T) {
 	f, _, rec := openingFixtureWith(t, "owner-open-empty", "Harbor strike", false)
 	o := f.rt.managementTaskOpening(context.Background(), rec)
-	if o == nil || !strings.Contains(o.text, "The newest stories:") || strings.Contains(o.text, "did not come") {
+	if o == nil || !strings.Contains(o.text, openingStoriesHeading) || strings.Contains(o.text, "did not come") {
 		t.Fatalf("an empty library's opening = %v", o)
 	}
 	if !strings.Contains(o.text, `"stories":[]`) {
