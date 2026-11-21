@@ -47,7 +47,7 @@ public final class AccountWipe: @unchecked Sendable {
         takeOwn: TakeOwn = .shared,
         takeMutes: TakeMutes = .shared,
         takeStore: TakeStore = .shared,
-        legacyTakeFiles: [URL?] = [TakeFiles.url("takes-own.json"), TakeFiles.url("takes-muted.json")],
+        legacyTakeFiles: [URL?] = TakeFiles.legacy,
         tempDirectory: URL = FileManager.default.temporaryDirectory,
         runSheet: RunSheetStore = .shared,
         openingCache: OpeningCache? = nil,

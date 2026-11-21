@@ -42,8 +42,6 @@ class FakeDevice implements Device {
   seconds = 10; file: Uint8Array | null = mp4(10);
   refuse: Native['ended'] | '' = ''; detail = '';
   responds = { title: '', route: '' };
-  oldMuted: string[] = [];          // what the old muted file would say: the device must never be asked for it, and shared code must ignore it if it is sent anyway
-  legacyFiles: { present: boolean; ids: string[] } | null = null; legacyReads = 0; legacyReadFails = false; dropFails = false; drops = 0;
   mirrored: { ids: string[]; handle: string; muted: string[] }[] = [];
   steered: string[] = [];
   limits: unknown = null;
@@ -67,9 +65,9 @@ class FakeDevice implements Device {
   async publishing(on: boolean) { this.log.push(`publishing:${on}`); this.snap = { ...this.snap, publishing: on }; return this.snap; }
   async done() { this.log.push('done'); this.snap = { ...IDLE }; return this.snap; }
   async steerMute(h: string) { this.steered.push(h); }
-  async mirror(k: { ids: string[]; handle: string; muted: string[] }) { this.mirrored.push({ ids: [...k.ids], handle: k.handle, muted: [...k.muted] }); }
-  async legacy() { this.legacyReads++; if (this.legacyReadFails) return null; return { ...(this.legacyFiles ?? { present: false, ids: [] }), muted: this.oldMuted } as never; }
-  async dropLegacy() { this.log.push('drop'); this.drops++; if (this.dropFails) return false; this.legacyFiles = null; return true; }
+  mirrorGen = -1; refusedMirrors = 0;
+  /** As the native op: a push for an older account generation than one already accepted is refused. */
+  async mirror(k: { ids: string[]; handle: string; muted: string[] }, gen: number) { if (gen < this.mirrorGen) { this.refusedMirrors++; return; } this.mirrorGen = gen; this.mirrored.push({ ids: [...k.ids], handle: k.handle, muted: [...k.muted] }); }
 }
 
 const files = new Map<string, Uint8Array>();
@@ -561,29 +559,15 @@ describe('row 5 a server error listing my takes is said', () => {
 
 const OLD_LIVE = 'take-00000000000000a5';          // the id mine.json lists as live
 const mineOnly = (s: Seen) => (s.m === 'DELETE' ? { status: 204 } : s.p.endsWith('/record') ? { status: 200, json: recordFx } : { status: 200, json: s.q?.mine ? mineFx : { takes: [] } });
-const oldFiles = (o: Partial<{ ids: string[] }> = {}) => ({ present: true, ids: [OLD_LIVE, 'take-dead-1'], ...o });
 
-describe('nothing is carried from the pre-release build: the old files are never read, adopted from or deleted here', () => {
-  test('refresh asks the device for nothing about them, whatever they hold, and the kept data is only what the server says', async () => {
-    const h = setup(mineOnly); h.dev.legacyFiles = oldFiles(); h.dev.oldMuted = ['voice-Aonly', 'voice-Bm'];
+describe('nothing is carried from the pre-release build: the kept data is only what the server says', () => {
+  test('a refresh learns the live own take from mine and nothing else; an account with no live take starts empty and its mutes are its own', async () => {
+    const h = setup(mineOnly);
     const p = await act(h.env, h.o, 'refresh', '');
-    const k = await loadKept(storage);
-    expect(h.dev.legacyReads).toBe(0); expect(h.dev.drops).toBe(0); expect(h.dev.legacyFiles).not.toBeNull();       // not read, not deleted
-    expect(k.ids).toEqual([OLD_LIVE]); expect(k.muted).toEqual([]); expect(k.handle).toBe('voice-me0001');          // only `mine`'s take: learned from the server
-    expect(p.muted).toEqual([]); expect(p.mine.map((m) => m.id)).toEqual([OLD_LIVE]);
-    expect(h.dev.mirrored.every((m) => m.muted.length === 0 && !m.ids.includes('take-dead-1'))).toBe(true);
-  });
-  test('not on a server failure, on a refresh with no live take, nor on a restart', async () => {
-    for (const handler of [() => ({ status: 500 }), () => ({ status: 200, json: { takes: [] } }), mineOnly]) {
-      const h = setup(handler as never); h.dev.legacyFiles = oldFiles();
-      await act(h.env, h.o, 'refresh', ''); await act(h.env, newOverlay(), 'refresh', '');
-      expect(h.dev.legacyReads).toBe(0); expect(h.dev.drops).toBe(0);
-    }
-  });
-  test('an account with no live take starts with nothing, and the mutes it makes are its own', async () => {
-    const h = setup(() => ({ status: 200, json: { takes: [] } })); h.dev.legacyFiles = oldFiles(); h.dev.oldMuted = ['voice-Aonly'];
-    expect((await act(h.env, h.o, 'refresh', '')).muted).toEqual([]);
-    expect((await act(h.env, h.o, 'mute', 'voice-mine')).muted.map((m) => m.handle)).toEqual(['voice-mine']);
+    expect((await loadKept(storage)).ids).toEqual([OLD_LIVE]); expect(p.muted).toEqual([]); expect(p.handle).toBe('voice-me0001');
+    const g = setup(() => ({ status: 200, json: { takes: [] } }));
+    expect((await act(g.env, g.o, 'refresh', '')).muted).toEqual([]);
+    expect((await act(g.env, g.o, 'mute', 'voice-mine')).muted.map((m) => m.handle)).toEqual(['voice-mine']);
   });
 });
 
@@ -684,5 +668,32 @@ describe('the programme\'s copy is pushed before the server is asked, and never 
     release(); await refresh;
     expect(h.dev.mirrored.at(-1)).toEqual({ ids: [], handle: '', muted: [] });
     expect(h.o.mine).toEqual([]);
+  });
+});
+
+describe('review 5: a mirror in flight when the account changes is refused natively; a delete answered for a left account says nothing', () => {
+  test('1 the late push of the old account carries an older generation and is refused: the programme\'s copy stays empty', async () => {
+    const h = setup();
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; }); let hold = false;
+    const real = h.dev.mirror.bind(h.dev);
+    h.dev.mirror = async (k, gen) => { if (hold) await gate; await real(k, gen); };
+    hold = true;
+    const mute = act(h.env, h.o, 'mute', 'voice-OLD');
+    await new Promise((r) => setTimeout(r, 15));
+    nextGeneration(); hold = false;
+    await pageFor(h.env, h.o, IDLE);                      // the next account's first page: sync pushes the empty copy with the new generation
+    release(); await mute;
+    expect(h.dev.refusedMirrors).toBe(1); expect(h.dev.mirrored.at(-1)).toEqual({ ids: [], handle: '', muted: [] });
+  });
+  test('5 a delete answered after the account changed writes no notice and drops no row of the next account', async () => {
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    const h = setup(async (x) => { if (x.m === 'DELETE') { await gate; return { status: 500 }; } return mineOnly(x); });
+    await act(h.env, h.o, 'refresh', '');
+    const del = act(h.env, h.o, 'delete', OLD_LIVE);
+    await new Promise((r) => setTimeout(r, 10));
+    nextGeneration(); await pageFor(h.env, h.o, IDLE);
+    h.o.mine = [{ takeID: 'take-B', duration: 5, transcript: 'b', published: true, publisher: 'voice-b', at: 1, outcomes: null }];       // the next account's list
+    release(); await del;
+    expect(h.o.notice).toBe(''); expect(h.o.mine.map((t) => t.takeID)).toEqual(['take-B']);
   });
 });

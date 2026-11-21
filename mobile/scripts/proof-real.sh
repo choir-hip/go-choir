@@ -413,7 +413,7 @@ fi
 chk "takes: the Takes section drew" '\[radio-takes\]' "$SHOTS/seg-takes.txt"
 chk "takes: the record control is there" '\[takes-record\]' "$SHOTS/seg-takes.txt"
 bad "takes: no old muted voice is listed" 'Never play takes by voice-drillm' "$SHOTS/seg-takes.txt"
-bad "takes: nothing of the old files is in the kept file (if there is one)" 'take-drill|voice-drill' "$SHOTS/takes-data.json"
+if [ -f "$SHOTS/takes-data.json" ]; then bad "takes: nothing of the old files is in the kept file" 'take-drill|voice-drill' "$SHOTS/takes-data.json"; else echo "info: takes: no kept file (d@e has no live take), nothing to check in it"; fi
 chk "takes: the programme's copy was pushed by shared code (the file exists)" '"ids"' "$SHOTS/takes-copy-own.json"
 bad "takes: nothing of the old files is in the programme's copy" 'take-drill|voice-drill' "$SHOTS/takes-copy-own.json"
 chk "takes: the programme's muted copy is empty" '^\[\]$' "$SHOTS/takes-copy-muted.json"

@@ -139,6 +139,8 @@ public struct TakesClient: Sendable {
 
 /// Where the phone keeps these (its own support folder).
 enum TakeFiles {
+    /// The pre-release build's two files (own ids, muted voices): never read by this build, removed with the account (AccountWipe).
+    static let legacy: [URL?] = [url("takes-own.json"), url("takes-muted.json")]
     static func url(_ name: String) -> URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Autoradio").appendingPathComponent(name)
     }

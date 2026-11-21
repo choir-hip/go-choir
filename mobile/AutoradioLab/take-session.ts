@@ -63,7 +63,8 @@ export type Device = {
   /** The take is published: drop the file and give the radio back. */
   done(): Promise<Native>;
   steerMute(handle: string): Promise<void>;
-  mirror(k: { ids: string[]; handle: string; muted: string[] }): Promise<void>;
+  /** `gen`: the account generation the state belongs to; native refuses a push older than one it already took, so a push in flight when the account changed cannot land after the new account's. */
+  mirror(k: { ids: string[]; handle: string; muted: string[] }, gen: number): Promise<void>;
 };
 
 /** The device over the app module's `later`, or null when there is no module (Android today, the web). */
@@ -89,7 +90,7 @@ export function nativeDevice(): Device | null {
       return out;
     },
     async steerMute(handle) { await later({ op: 'takeSteerMute', handle }); },
-    async mirror(k) { await later({ op: 'takeMirror', ids: k.ids, handle: k.handle, muted: k.muted }); },
+    async mirror(k, gen) { await later({ op: 'takeMirror', ids: k.ids, handle: k.handle, muted: k.muted, gen }); },
   };
 }
 
@@ -118,7 +119,7 @@ async function sync(env: Env, o: Overlay): Promise<boolean> {
   Object.assign(o, newOverlay(), { gen: g });
   if (had) {
     try { await env.device?.discard(); } catch { /* the sign-out path discards it natively before the sign-out; this is the second path */ }
-    try { await env.device?.mirror(emptyKept()); } catch { /* the native wipe is the other path */ }
+    try { await env.device?.mirror(emptyKept(), g); } catch { /* the native wipe is the other path */ }
   }
   return had;
 }
@@ -127,7 +128,7 @@ async function keptOf(env: Env, o: Overlay): Promise<Kept> { return (o.kept ??= 
 async function keep(env: Env, o: Overlay, k: Kept, gen: number, mirror = true): Promise<boolean> {
   if (!(await saveKept(env.storage, k, gen))) return false;
   o.kept = k;
-  if (mirror) { try { await env.device?.mirror(k); } catch { /* the programme keeps its last copy */ } }
+  if (mirror) { try { await env.device?.mirror(k, gen); } catch { /* the programme keeps its last copy */ } }
   return true;
 }
 /** The ONE way the kept data changes: `f` is applied to the data as the change before it left it (changes are queued, so none is lost), and nothing is written for an account that is no longer
@@ -194,8 +195,8 @@ async function refresh(env: Env, o: Overlay): Promise<void> {
   const k0 = await keptOf(env, o);
   if (!live()) return;
   // never from an account that has been left: if the account changed while the push was out, the copy is emptied again
-  try { await env.device?.mirror(k0); } catch { /* the programme keeps its last copy */ }
-  if (!live()) { try { await env.device?.mirror(emptyKept()); } catch { /* sync's push is the other */ } return; }
+  try { await env.device?.mirror(k0, gen ?? 0); } catch { /* the programme keeps its last copy */ }
+  if (!live()) { try { await env.device?.mirror(emptyKept(), accountGeneration()); } catch { /* sync's push is the other */ } return; }
   const c = client(env.net);
   let m: MyTake[];
   try { m = await c.mine(); }
@@ -264,11 +265,15 @@ async function publish(env: Env, o: Overlay): Promise<void> {
 }
 
 async function del(env: Env, o: Overlay, id: string): Promise<void> {
+  const gen = accountGeneration();
+  const same = (): boolean => accountGeneration() === gen && o.gen === gen;       // the answer is still for the account that asked
   try {
     await client(env.net).remove(id);
+    if (!same()) return;
     await mutate(env, o, (k) => ({ kept: removeOwn(k, id), out: undefined }), undefined);
+    if (!same()) return;
     o.mine = o.mine.filter((t) => t.takeID !== id); o.notice = '';
-  } catch (e) { o.notice = e instanceof SignedOutError ? 'Sign in to delete a take.' : `Could not delete: ${why(e)}.`; }
+  } catch (e) { if (same()) o.notice = e instanceof SignedOutError ? 'Sign in to delete a take.' : `Could not delete: ${why(e)}.`; }
 }
 
 const RECORDER_OPS = new Set(['record', 'rerecord', 'stop', 'preview', 'discard']);

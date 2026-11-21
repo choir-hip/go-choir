@@ -98,11 +98,6 @@ public enum Demo {
            let demo = try? JSONSerialization.jsonObject(with: Data(demoThemeJSON.utf8)) as? NSDictionary, o.isEqual(demo) {
             if (try? FileManager.default.removeItem(at: themeFile)) != nil { if defaults.string(forKey: "AutoradioThemeID") == "ember" { defaults.removeObject(forKey: "AutoradioThemeID") } } else { ok = false }
         }
-        if case (let f, var o)? = json("takes-own.json") {          // the demo take ids and the demo handle
-            let ids = o["ids"] as? [String] ?? [], handle = o["handle"] as? String ?? ""
-            let keep = ids.filter { $0.range(of: #"^take-0{13}d[0-9a-f]{2}$"#, options: .regularExpression) == nil }
-            if keep.count != ids.count || handle == "voice-de0001" { o["ids"] = keep; if handle == "voice-de0001" { o["handle"] = "" }; write(o, f) }
-        }
         for k in ["AutoradioDemo", "AutoradioDemoSheet", "AutoradioOpenOnboarding"] { defaults.removeObject(forKey: k) }          // launch flags only demo mode read
         if ok { defaults.set(true, forKey: clearedMoreKey) }
     }

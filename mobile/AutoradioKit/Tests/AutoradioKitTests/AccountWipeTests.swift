@@ -56,6 +56,12 @@ final class AccountWipeTests: XCTestCase {
 
     /// Row 1 of the takes state table (docs/reference/AUTORADIO-TAKES.md): a take in review is the account's; after sign-out (or an account change) the recorder is idle, its file is gone and the radio is
     /// given back, so the next account is never shown it and can never publish it.
+    /// The default names the two files of the pre-release build, in the app's own folder (the tests below pass their own, or none, so they never touch a developer's real files).
+    func testTheDefaultLegacyFilesAreTheTwoPreReleaseNames() {
+        XCTAssertEqual(TakeFiles.legacy.compactMap { $0?.lastPathComponent }, ["takes-own.json", "takes-muted.json"])
+        XCTAssertTrue(TakeFiles.legacy.allSatisfy { $0?.deletingLastPathComponent().lastPathComponent == "Autoradio" })
+    }
+
     func testATakeInReviewIsGoneAfterTheWipe() async {
         let rec = FakeRecorder(), gate = FakeGate(), clock = Date(timeIntervalSince1970: 1000)
         let dir = root.appendingPathComponent("takes-live")
@@ -127,7 +133,7 @@ final class AccountWipeTests: XCTestCase {
             AccountWipe.removeContents(of: rootRef.appendingPathComponent("books")); AccountWipe.removeContents(of: rootRef.appendingPathComponent("cache/files"))
         }
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, topicsFile: topics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
-                              takeOwn: own, takeMutes: mutes, takeStore: takes, tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
+                              takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
                               texture: texture, environment: env, content: content, corpus: SavedCorpus(),
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice)
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
