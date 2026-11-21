@@ -1,0 +1,83 @@
+// The shapes of the imported documents (PDFs and e-books the person imports to read and hear). Declared here and answered by `app.ts` (imported.ts); they were
+// the Swift package's (interface/books.json: ShelfListing and the rest) before the page moved to shared code. The native side hands over only the block the radio is
+// reading now (`ImportedFollow`) and takes the words to read aloud (interface/imported.json): the audio is the voice.
+
+shape ImportedRow
+  id: string
+  address: string
+  title: string
+  kindLabel: string
+  detail: string
+  progress: number
+
+shape ImportedList
+  status: string
+  message: string
+  count: number
+  rows: ImportedRow[]
+
+shape ImportedSectionRef
+  index: number
+  title: string
+
+shape ImportedDocInfo
+  address: string
+  id: string
+  title: string
+  kind: string
+  kindLabel: string
+  status: string
+  message: string
+  src: string
+  shareSrc: string
+  sections: ImportedSectionRef[]
+  blockCount: number
+  position: number
+  resumeSection: number
+  resumeBlock: number
+
+shape ImportedBlock
+  n: number
+  kind: string
+  level: number
+  text: string
+  marker: string
+
+shape ImportedSection
+  index: number
+  count: number
+  title: string
+  start: number
+  page: number
+  status: string
+  blocks: ImportedBlock[]
+
+shape ImportedHit
+  block: number
+  section: number
+  label: string
+  snippet: string
+
+shape ImportedFind
+  query: string
+  hits: ImportedHit[]
+  message: string
+
+// The section a block is in (the page follows the voice by it).
+shape ImportedLocate
+  address: string
+  block: number
+  section: number
+
+// What the player is handed to read aloud: `op` is "play" or "queue", `text` is one line per block from block `at` to the end ("" when there is nothing to hand).
+shape ImportedPlay
+  op: string
+  id: string
+  title: string
+  at: number
+  text: string
+
+shape ImportedAck
+  ok: bool
+  message: string
+  play: ImportedPlay

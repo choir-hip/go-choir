@@ -63,7 +63,7 @@ component KeyGlyph
           if slug == "mail"
             rect x=3 y=6 width=18 height=12 rx=2
             path d="M3.5 8l8.5 6 8.5-6"
-          if slug == "books"
+          if slug == "imported"
             path d="M12 6.5v13M12 6.5c-2-1.6-5-2.2-8-2.2v13c3 0 6 .6 8 2.2 2-1.6 5-2.2 8-2.2v-13c-3 0-6 .6-8 2.2z"
           if slug == "podcasts"
             rect x=9 y=3 width=6 height=11 rx=3
@@ -146,7 +146,7 @@ component Launcher
               KeyGlyph(slug="textures", name="Textures", address="textures:", cols=3)
               KeyGlyph(slug="files", name="Files", address="file:/", cols=3)
               KeyGlyph(slug="mail", name="Mail", address="mailbox:inbox", cols=3)
-              KeyGlyph(slug="books", name="Reader", address="books:", cols=3)
+              KeyGlyph(slug="imported", name="Imported documents", address="imported:", cols=3)
               KeyGlyph(slug="podcasts", name="Podcasts", address="podcasts:", cols=3)
               KeyGlyph(slug="settings", name="Settings", address="settings:root", cols=3)
             SectionHeader(label="In the deck, top first")

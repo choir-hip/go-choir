@@ -184,7 +184,7 @@ public final class AutoradioModule: ExactPackage {
         registerRadioPage()      // the Autoradio page
         registerTakes()          // takes: record, review, publish (station L7)
         registerNotebook()       // my notebook (station L6)
-        registerBooks()   // lane autoradio-reader
+        registerImported()
         registerTalk()
         registerTextureEdit()   // your own Texture documents in rich text
         registerPodcasts()      // lane autoradio-podcasts

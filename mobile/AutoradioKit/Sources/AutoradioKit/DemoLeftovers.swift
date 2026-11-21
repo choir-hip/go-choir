@@ -19,14 +19,12 @@ public enum Demo {
         #endif
     }
 
-    /// Native because the platform forces it: this removes on-disk state the native code wrote (the shelf, the stores' files).
-    /// Needs a positive demo trace: the sample book only if the shelf lists it, pages and signals only for the fixture addresses
+    /// Native because the platform forces it: this removes on-disk state the native code wrote (the stores' files).
+    /// Needs a positive demo trace: pages and signals only for the fixture addresses
     /// demo produced; onboarding, topics and voice setup are never touched. Once per device, whatever the flag was; marked after the removals.
     public static func clearLeftovers(support: URL, allowed: Bool = allowedHere, defaults: UserDefaults = .standard) {
         guard !allowed, !defaults.bool(forKey: clearedKey) else { return }
         var ok = true
-        let shelf = ReaderShelf(root: support.appendingPathComponent("books"))
-        if shelf.doc(sampleBookID) != nil { shelf.remove(id: sampleBookID); ok = shelf.doc(sampleBookID) == nil }
         let file = support.appendingPathComponent("open-pages.json")
         if let d = try? Data(contentsOf: file), var o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
            let pages = o["pages"] as? [[String: Any]], let recency = o["recency"] as? [String] {

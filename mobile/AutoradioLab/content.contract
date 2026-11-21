@@ -15,7 +15,8 @@
 //   doc-close, doc-read, doc-queue, doc-toc, doc-find-open, doc-find, doc-find-clear, doc-find-none, doc-hits, doc-hit-<n>, doc-mode-pages,
 //   doc-mode-text, doc-prev, doc-position, doc-next, doc-contents, doc-chapter-<n>; for a web page reader-web-host, reader-web-close,
 //   reader-web-read, reader-web-add, reader-web-safari (the page typed into the bar: bar-web-host, bar-web-close, bar-web-read, bar-web-add, bar-web-safari).
-use Theme, ShelfDocInfo, ShelfChapter, ShelfFind from "@choir/autoradio"
+use Theme from "@choir/autoradio"
+use ImportedDocInfo, ImportedSection, ImportedFind from "./imported-types.contract"
 use StackVp, Btn, ChipFace, ChoiceWord, PlainList, LineRow, RowRule from "./ui.contract"
 
 // A list under the actions: it scrolls inside the panel only when it is long (the page behind it never moves).
@@ -37,12 +38,12 @@ component Capped
 component DocExpanded
   inject
     th: Theme
-    ldInfo: ShelfDocInfo
-    ldChap: ShelfChapter
+    ldInfo: ImportedDocInfo
+    ldChap: ImportedSection
     ldSec: number
     ldShowPages: bool
     ldFind: string
-    ldFound: ShelfFind
+    ldFound: ImportedFind
     ldFindDraft: string
     ctlPanel: string
     ctlRead: action

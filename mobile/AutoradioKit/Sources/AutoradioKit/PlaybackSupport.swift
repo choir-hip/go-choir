@@ -1,15 +1,11 @@
 import Foundation
 
-// Pieces the radio shares that used to live beside the old queue: a URL typed into the bar, a book imported from the bar, a web page read
+// Pieces the radio shares that used to live beside the old queue: a URL typed into the bar, a web page read
 // as paragraphs, and running on the main actor from any thread. Moved unchanged out of PlayQueue.swift.
 
 // MARK: A URL in the prompt bar
 
 public enum BarURL {
-    /// A book or a PDF typed into the bar goes to the Reader's import, not to a web page. The reader lane sets this to `ReaderShelf.importFrom(url:)`;
-    /// until it is set the address opens as a page.
-    nonisolated(unsafe) public static var importDocument: (@Sendable (URL) -> Void)?
-    public static func isDocument(_ url: URL) -> Bool { ["pdf", "epub"].contains(url.pathExtension.lowercased()) }
     /// The page a submitted bar text means, or nil when it is an ordinary sentence. http and https; or one bare word with a dot, a
     /// known-looking host ("choir.news", "example.com/path"). A question ("what is choir.news?") has spaces, so it is not a URL.
     public static func detect(_ text: String) -> URL? {
@@ -28,20 +24,6 @@ public enum BarURL {
         guard let tld = labels.last, tld.count >= 2, tld.allSatisfy({ $0.isLetter && $0.isLowercase }) else { return nil }
         guard labels.allSatisfy({ $0.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" } }) else { return nil }
         return URL(string: "https://" + t)
-    }
-}
-
-/// A .pdf or .epub typed into the bar: import it into the Reader, then open its page; if it fails say why in the bar's own line.
-public enum BarDocumentImport {
-    public static func name(of url: URL) -> String { url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent }
-    public static func failureLine(_ error: Error, url: URL) -> String {
-        let why = (error as? ShelfError)?.description ?? ShelfError.unreadable("").description
-        return "\(name(of: url)) was not added. \(why)"
-    }
-    /// `importer` returns the new document's id. Nothing opens on a failure.
-    public static func run(url: URL, importer: (URL) async throws -> String, open: @MainActor (String) -> Void, say: (String) -> Void) async {
-        do { let id = try await importer(url); await open(ShelfAddress.address(id)) }
-        catch { say(failureLine(error, url: url)) }
     }
 }
 

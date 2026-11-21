@@ -29,8 +29,8 @@ public enum PageAddress {
     /// My notebook: what Autoradio has been told and has learned about the listener (station L6).
     public static let notebook = "notebook:"
     public static func canonical(_ address: String) -> String {
-        // lane autoradio-reader: "doc:<id>@<block>" (a search hit) opens the document page and remembers the block once.
-        if let (id, block) = ShelfAddress.parse(address), let b = block { ShelfJump.shared.set(id, block: b); return ShelfAddress.address(id) }
+        // An imported document's page is "doc:<id>"; a "@<block>" mark (a place in it) is not part of the page's address.
+        if address.hasPrefix("doc:"), let at = address.firstIndex(of: "@") { return String(address[..<at]) }
         return address.trimmingCharacters(in: .whitespaces).lowercased() == "texture:my-edition" ? edition : address
     }
 
@@ -49,7 +49,7 @@ public enum PageAddress {
         case "activity": return "activity"
         case "settings": return "settings"
         case "lab": return "lab"
-        case "books": return "books"      // lane autoradio-reader
+        case "imported": return "imported"
         case "doc": return "doc"
         case "conversation": return "conversation"
         case "podcasts", "podcast": return "podcast"
@@ -81,7 +81,7 @@ public enum PageAddress {
         case "mailbox:inbox": return "Mail"
         case "podcasts:": return "Podcasts"
         case "file:/", "file:": return "Files"
-        case "books:": return "Reader"
+        case "imported:": return "Imported documents"
         default: break
         }
         switch kind(of: address) {

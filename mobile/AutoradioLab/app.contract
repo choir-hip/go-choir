@@ -27,7 +27,7 @@ component Autoradio
   members "./members-radio.contract"          // the Autoradio page
   members "./members-takes.contract"          // takes (station L7)
   members "./members-notebook.contract"       // my notebook (station L6)
-  members "./members-books.contract"
+  members "./members-imported.contract"
   members "./members-content.contract"        // the content row above the bar (owner, 2026-11-16)
   members "./members-talk.contract"
   // ---- lane autoradio-podcasts ----
@@ -169,11 +169,13 @@ component Autoradio
     lbNote
     lbImport
     lbPicked
-    lbRemove
     ldInfo
     ldChap
     ldFound
     ldFollow
+    ldFollowAt
+    ldHanded
+    ldAcked
     ldAck
     ldSec
     ldBlock
@@ -192,7 +194,6 @@ component Autoradio
     ldClearFind
     ldRead
     ldQueue
-    ldRemove
     // ---- the content row (members-content.contract, content.contract) ----
     ctlOpen
     ctlFor
