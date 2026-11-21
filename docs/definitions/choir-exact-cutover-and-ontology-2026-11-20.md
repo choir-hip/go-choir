@@ -275,7 +275,7 @@ decisions_for_the_owner:
     default: accept for now; Android is outside this mission
 now:
   status: working
-  as_of: 2026-11-21T09:10Z
+  as_of: 2026-11-21T09:00Z
   slice: 'X-train (lane/exact-train1: ten package lanes merged, app builds, first simulator proof passed five drives and failed at imported; the integrator drives the proof loop); the run sheet flip''s review fixes (lane/exact-radio-fix); the account boundary (lane/account-boundary-l1, world mechanism, seat 1 accepted the delta, seat 2 reading); search landing A, the main-point judgment with story trajectories (lane/story-main-point, sent back once); search landing B, read first (lane/search-read-first, seat 1 accepted)'
   source_ref: origin/main 8578a1aa8 plus docs
   deploy_identity: staging and the paper on 8578a1aa8 (the publish load fix); the owners iPhone on the takes build
