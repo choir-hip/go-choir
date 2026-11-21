@@ -78,7 +78,7 @@ func decisionRig(t *testing.T, client search.Client, configure func(rt *Runtime)
 	return tool, ctx, execCtx.RunID, rows
 }
 
-func num(m map[string]any, k string) int {
+func decNum(m map[string]any, k string) int {
 	switch v := m[k].(type) {
 	case int:
 		return v
@@ -111,10 +111,10 @@ time.Sleep(300 * time.Millisecond)`)
 	// The first search asked with nothing held although it returned 6 pages: a
 	// search never counts its own results. The second asked with the first's 6
 	// pages returned and the 5 read.
-	if d := decisions[0]; num(d, "earlier_searches") != 0 || num(d, "pages_returned") != 0 || num(d, "pages_tried") != 0 || d["search_verb"] != "search" {
+	if d := decisions[0]; decNum(d, "earlier_searches") != 0 || decNum(d, "pages_returned") != 0 || decNum(d, "pages_tried") != 0 || d["search_verb"] != "search" {
 		t.Fatalf("first decision counted something held: %v", d)
 	}
-	if d := decisions[1]; num(d, "earlier_searches") != 1 || num(d, "pages_returned") != 6 || num(d, "pages_tried") != 5 {
+	if d := decisions[1]; decNum(d, "earlier_searches") != 1 || decNum(d, "pages_returned") != 6 || decNum(d, "pages_tried") != 5 {
 		t.Fatalf("second decision: %v", d)
 	}
 	if d := decisions[2]; d["fresh_why"] != "the first answer is about another harbor" || d["search_verb"] != "search_fresh" {
@@ -127,7 +127,7 @@ time.Sleep(300 * time.Millisecond)`)
 			}
 		}
 	}
-	if len(dones) < 1 || num(dones[0], "pages_returned") != 6 {
+	if len(dones) < 1 || decNum(dones[0], "pages_returned") != 6 {
 		t.Fatalf("search_done lacks pages_returned: %v", dones)
 	}
 }
@@ -165,7 +165,7 @@ fmt.Println(s.ID, s.Refused == "")`)
 	}
 	time.Sleep(50 * time.Millisecond)
 	decisions, _ := rows()
-	if len(decisions) != 1 || num(decisions[0], "held_brief") != 6 || num(decisions[0], "held_tried") != 5 {
+	if len(decisions) != 1 || decNum(decisions[0], "held_brief") != 6 || decNum(decisions[0], "held_tried") != 5 {
 		t.Fatalf("the decision does not report the 6 held pages, 5 tried: %v", decisions)
 	}
 }
