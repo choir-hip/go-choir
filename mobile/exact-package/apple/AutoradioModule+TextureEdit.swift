@@ -9,7 +9,7 @@ import Foundation
 extension AutoradioModule {
     func registerTextureEdit() {
         Task { @MainActor [weak self] in
-            TextureEditor.shared.onChange = { DispatchQueue.main.async { self?.touch(["textureEditInfo", "readerDoc"], now: true) } }
+            TextureEditor.shared.onChange = { DispatchQueue.main.async { self?.touch(["textureEditInfo"], now: true) } }
             await TextureEditor.shared.retryPending()                   // what an earlier launch or a bad network kept
         }
         handle("textureEditInfo") { [unowned self] args, reply in

@@ -1,8 +1,10 @@
-// Lane file: reader. Owned by the reader lane (mobile/README.md, "File ownership"). The reader's sources and sends:
-//   readerDoc(address)    the document at a pub: or texture: address, as blocks of runs, citations, sources, versions
-//   readerFollow          the block and sentence the radio is reading (set by lane 1 through ReaderFollow.shared.set)
-//   readerAim             what the bar's prompt is aimed at: a document or one block of it
-// View: web-page (WebPageView), the source page in place. Sends: readerOpenExternal, readerAimSet, readerStop (stop the desk's revision), readerRestore (a version as latest), readerReload, readerPrefetch, readerFollowSet.
+// Lane file: reader. The document itself (a story or a Texture document: blocks, citations, versions, related, "Hear it", stop, restore, reload, prefetch) is read by shared code now
+// (AutoradioLab/reader.ts, reader-parse.ts) and is not here. What stays native, and why:
+//   readerFollow                     the block and sentence the radio is reading: set by the bar's voice turn, matched against the page the shared reader handed over (HeldPages)
+//   holdPage (the `pageText` op)     the page in front, handed over by shared code (reader.ts `hand`): the voice turn reads its text and the follow-along matches against it
+//   readerAim / readerAimSet         what the bar's prompt is aimed at; the voice turn reads it
+//   readerOpenExternal               Platform.open (leaving the app: Safari, mail, phone)
+// View: web-page (WebPageView), the source page in place: a WKWebView, a platform view only native code can draw.
 import Foundation
 import ExactPackage
 import WebKit
@@ -77,34 +79,23 @@ extension AutoradioModule {
         return v
     }
 
+    /// The shared reader hands over the page in front (AutoradioModule's app-module op `pageText`, ModelsEntry.swift): held for the voice turn's page text, the corpus and the follow-along.
+    /// The reason it is native: the voice engine is native and cannot ask the shared module for a page's text.
+    /// True only when the page was held (the hand-over names an address).
+    @discardableResult
+    public func holdPage(_ request: [String: Any]) -> Bool {
+        guard let p = HeldPage.parse(request) else { return false }
+        HeldPages.shared.hold(p)
+        let text = p.lines.joined(separator: " ")
+        if !text.isEmpty { runtime.pageTextReady(address: p.address, text: text) }   // the text may arrive after the page is in front
+        DispatchQueue.main.async { [weak self] in self?.touch(["pageModel"]) }
+        return true
+    }
+
     func registerReader() {
-        pageSources.register(ReaderPageSource())
+        pageSources.register(HeldPageSource())
         ReaderFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerFollow"]) } }
 
-        handle("readerDoc") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? ""
-            guard TextureAddress.parse(address).kind != .none else {
-                var blank = json(ReaderDoc.loading(""))
-                blank["hearIt"] = []                       // every answer carries every field of the shape, or the request keeps its last value
-                return reply(blank)
-            }
-            Task { [weak self] in
-                // A document the desk is revising is read again each time it is asked for (and asked for again every few seconds).
-                let again = ReaderStore.shared.cached(address)?.revising ?? false
-                let d = await ReaderStore.shared.doc(address, force: again)
-                DispatchQueue.main.async {
-                    // lane autoradio-joins: "Hear it", the clips cut from this story (none: an empty list, nothing drawn). The clip set is
-                    // asked for once in a while; the page is read again when it arrives.
-                    var o = self?.json(d) ?? [:]
-                    o["hearIt"] = self?.json(ClipRowsView(rows: HearIt.rows(address: address)))["rows"] ?? []
-                    reply(o)
-                    if address.hasPrefix("pub:") {
-                        Task { [weak self] in if await PodcastClips.ensure(client: ChoirEnvironment.shared.client()) { self?.touch(["readerDoc"]) } }
-                    }
-                    if d.revising { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self?.touch(["readerDoc"]) } }
-                }
-            }
-        }
         handle("readerFollow") { [unowned self] _, reply in reply(json(ReaderFollow.shared.info)) }
         handle("readerAim") { [unowned self] _, reply in reply(json(ReaderAim.shared.info)) }
 
@@ -117,47 +108,12 @@ extension AutoradioModule {
             touch(["readerAim"])
             reply(json(ReaderAim.shared.info))
         }
-        handle("readerStop") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? ""
-            Task { [weak self] in
-                await ReaderStore.shared.cancelRevision(document: address)
-                DispatchQueue.main.async { self?.touch(["readerDoc"]); reply(["ok": true]) }
-            }
-        }
-        handle("readerRestore") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? "", version = args["version"] as? String ?? ""
-            Task { [weak self] in
-                let ok = await ReaderStore.shared.restore(document: address, revisionAddress: version)
-                DispatchQueue.main.async { self?.touch(["readerDoc"]); reply(["ok": ok]) }
-            }
-        }
-        // The stack's neighbours: the card above and below the one on top are fetched and decoded now, so a swipe finds them held.
-        handle("readerPrefetch") { args, reply in
-            ReaderStore.shared.prefetch([args["prev"] as? String ?? "", args["next"] as? String ?? ""])
-            reply(["ok": true])
-        }
-        handle("readerReload") { [unowned self] args, reply in
-            ReaderStore.shared.invalidate(args["address"] as? String ?? "")
-            touch(["readerDoc"])
-            reply(["ok": true])
-        }
         // Leaving the app on purpose: "Open in Safari" for a web page, or a mail, phone or message link. Web pages are otherwise shown
         // in place by the contract (WebLayer); anything that is neither is refused.
         handle("readerOpenExternal") { args, reply in
             switch SourceLink.route(args["url"] as? String ?? "") {
             case .inApp(let u), .external(let u): Platform.open(u); reply(["ok": true])
             case .refused: reply(["ok": false])
-            }
-        }
-        handle("readerFollowSet") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? ""
-            Task { [weak self] in
-                let known = await ReaderStore.shared.doc(address)       // makes sure the document is cached
-                _ = known
-                DispatchQueue.main.async {
-                    guard let self else { return reply([:]) }
-                    reply(self.json(ReaderFollow.shared.set(address: address, spoken: args["spoken"] as? String ?? "")))
-                }
             }
         }
     }

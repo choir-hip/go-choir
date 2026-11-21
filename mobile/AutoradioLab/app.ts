@@ -11,7 +11,7 @@ import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
-import { readerDocShared } from './reader.ts';
+import { readerDocShared, readerHear, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
 import * as themes from './themes.ts';
@@ -94,7 +94,13 @@ const sources: Sources = {
   // The Takes section (take-session.ts): the recorder's snapshot (the native source takesRecorder: the voice) in, the page out; a press is takesAct. One overlay (the shared half of the session) per process.
   takesPage: ([rec, _tick], _s, storage) => takesPageFor(takesEnv(storage), takes(), rec),
   takesAct: ([op, arg], _s, storage) => takesAct(takesEnv(storage), takes(), op, arg),
-  readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
+  // The reader (reader.ts): the story or document in front, and what its page does to it.
+  readerDocShared: ([address, acc, saved, _tick, heard]) => readerDocShared(address, acc, saved, undefined, heard ? 1 : 0),
+  readerHearShared: ([address]) => readerHear(address),
+  readerStopShared: ([address]) => readerStop(address),
+  readerRestoreShared: ([address, version]) => readerRestore(address, version),
+  readerReloadShared: ([address]) => readerReload(address),
+  readerPrefetchShared: ([prev, next]) => readerPrefetch(prev, next),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
   accountState: ([tick, top, host]) => accountState(tick, top, host),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),

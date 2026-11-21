@@ -1,59 +1,191 @@
-// The reader for stories, in shared code: a `pub:` page read on a host with no native reader (Android; the Swift reader, ReaderShelf/ReaderStore, is the iOS one and decodes more: citations, versions,
-// related stories, tables, embeds). This twin reads the public route the paper already uses (GET /api/platform/publications/resolve?route=, no key), takes the readable text, and cuts it into
-// blocks the reader page draws (h, p, li, quote), one text run each. Citations, versions, related stories, hear-it rows and editing are NOT here (owed: they come with the full port).
-// Logs carry counts only.
-import { getJSON } from './api.ts';
-import type { Result } from './app.contract.d.ts';
-import { storyText } from './content.ts';
+// The reader, in shared code for both platforms (it was Swift: TextureReaderSource.swift's ReaderStore and the readerDoc, readerStop, readerRestore, readerReload and readerPrefetch handlers).
+// The story or document at an address, as blocks of runs with citations, sources, versions, related stories and the clips cut from it (the parse is reader-parse.ts), and what the page does to it.
+//   pub:<route>            GET /api/platform/publications/resolve?route=  (public: no key)  and  .../related?route=&limit=5
+//   texture:<doc>[@<rev>]  GET /api/texture/documents/{id}, /api/texture/revisions/{rev}, /api/texture/documents/{id}/revisions   (the listener's key)
+// Held in memory for the session (never on disk: nothing here is stored, so nothing here needs a wipe beyond forgetting); keyed on the account generation, so another account never sees a held
+// document and an answer that began under an older generation is never held. A story and a revision never change, so they are held; a document's head changes (an edit, the desk's revision),
+// so it is asked for again each time and the held copy only stands in when the ask fails. Logs carry counts only, never a title.
+import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
+import { storyClips } from './clips.ts';
+import { blankDoc, parseAddress, parseBundle, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
+import { WORDS } from './words.ts';
 
-export type ReaderDoc = Result<'readerDocShared'>;
+export type { ReaderDoc };
+export type Ack = { ok: boolean };
+export type Net = {
+  pub(path: string, query?: Query): Promise<Reply>;
+  authed(path: string, opts?: Authed): Promise<Reply>;
+  clips(address: string): Promise<ReaderDoc['hearIt']>;
+};
+const real: Net = { pub: (p, q) => getJSON(p, q), authed: (p, o) => authedJSON(p, o), clips: (a) => storyClips(a) };
+
+/** How many documents the session holds; the least recently used goes first. A story is a few tens of kilobytes decoded. */
+export const HELD_LIMIT = 40;
 const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-const empty = (address: string, status: string, message = ''): ReaderDoc => ({
-  address, status, message, title: '', kicker: '', dek: '', byline: '', meta: '', kind: 'story', disclosure: '', blocks: [], cites: [], sources: [], versions: [], related: [],
-  revision: 0, latest: 0, newer: false, historical: false, revising: false, revisingNote: '', trajectory: '', permalink: '', plain: '', textBlocks: 0, markdown: '', hearIt: [], editable: false, source: '', docId: '',
-});
-
-const run = (id: string, text: string) => ({ id, text, kind: 'text', weight: 400, slant: '', anchor: '', label: '', sent: 0, href: '' });
-const block = (id: string, kind: string, text: string, level = 0): ReaderDoc['blocks'][number] => ({ id, kind, level, depth: 0, marker: kind === 'li' ? '•' : '', runs: [run(`${id}.0`, text)], rows: [], text, ordinal: 0, cites: [], sentences: 0 });
-
-/** Markdown-ish text to blocks: headings (#), bullets (- or *), quotes (>), paragraphs. Fences and rules are dropped; the rest is plain text. */
-export function blocksOf(markdown: string): ReaderDoc['blocks'] {
-  const out: ReaderDoc['blocks'] = [];
-  let para: string[] = []; let inCode = false;
-  const flush = (): void => { if (para.length > 0) { out.push(block(`b${out.length}`, 'p', para.join(' '))); para = []; } };
-  for (const raw of markdown.split('\n')) {
-    const t = raw.trim();
-    if (t.startsWith('```')) { flush(); inCode = !inCode; continue; }
-    if (inCode) continue;
-    if (t === '' || /^([-*_]\s*){3,}$/.test(t)) { flush(); continue; }
-    const h = /^(#{1,6})\s+(.*)$/.exec(t);
-    if (h) { flush(); out.push(block(`b${out.length}`, 'h', h[2], h[1].length)); continue; }
-    const li = /^[-*•]\s+(.*)$/.exec(t);
-    if (li) { flush(); out.push(block(`b${out.length}`, 'li', li[1])); continue; }
-    if (t.startsWith('>')) { flush(); out.push(block(`b${out.length}`, 'quote', t.replace(/^>\s?/, ''))); continue; }
-    para.push(t);
-  }
-  flush();
-  return out;
+let held = new Map<string, ReaderDoc>();
+/** The clips found for a story, by address, for this account generation. */
+let clipRows = new Map<string, ReaderDoc['hearIt']>();
+let inflight = new Map<string, Promise<ReaderDoc>>();
+let heldGen = -1;
+export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); clipRows = new Map(); heldGen = -1; }
+export const heldCount = (): number => held.size;
+function current(): number {
+  const g = accountGeneration();
+  if (g !== heldGen) { held = new Map(); inflight = new Map(); clipRows = new Map(); heldGen = g; }
+  return g;
+}
+function put(d: ReaderDoc): void {
+  held.delete(d.address); held.set(d.address, d);
+  while (held.size > HELD_LIMIT) { const oldest = held.keys().next().value as string; if (oldest === d.address) break; held.delete(oldest); }
 }
 
-/** The story at a `pub:` address. Another address is "loading": another reader owns it. */
-export async function readerDocShared(address: string): Promise<ReaderDoc> {
-  if (!address.startsWith('pub:')) return empty(address, 'loading');
-  const route = address.slice(4);
-  try {
-    const body = (await getJSON('/api/platform/publications/resolve', { route })).body;
-    const text = storyText(body);
-    if (text === null || text.trim() === '') return empty(address, 'error', 'This story has no text to show.');
-    const title = obj(body) && obj(body.publication) ? str(body.publication.title) : '';
-    // storyText drops headings' hashes; the blocks are cut from the same lines so a story keeps its paragraphs
-    const raw = obj(body) ? (obj(body.payload) && str(body.payload.text) !== '' ? str(body.payload.text) : obj(body.artifact) ? str(body.artifact.content) : '') : '';
-    const blocks = blocksOf(raw !== '' ? raw : text);
-    const d = empty(address, 'ready');
-    d.title = title; d.blocks = blocks; d.plain = blocks.map((b) => b.text).join('\n\n'); d.textBlocks = blocks.filter((b) => b.kind === 'p').length; d.permalink = route.replace(/^\//, '');
-    console.log(`reader: story blocks=${blocks.length}`);
+function why(e: unknown): string {
+  if (e instanceof HTTPError) return e.message;
+  return 'Check the connection and try again.';
+}
+function failDoc(address: string, e: unknown): ReaderDoc {
+  if (e instanceof SignedOutError) {
+    const m = e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : e.reason === 'refused' ? 'Sign in again to open your documents.' : 'Sign in to open your documents.';
+    return blankDoc(address, 'error', m);
+  }
+  return blankDoc(address, 'error', `Could not open this page. ${why(e)}`);
+}
+
+/** One ask of the server for an address: throws on a failure (the callers say it in words). */
+async function fetchDoc(address: string, net: Net): Promise<ReaderDoc> {
+  const a = parseAddress(address);
+  if (a.kind === 'pub') {
+    const bare = splitRoute(a.route).bare;
+    const related = net.pub('/api/platform/publications/related', { route: bare, limit: 5 }).then((r) => parseRelated(r.body), () => []);       // a route that is not there: the story still opens
+    const body = (await net.pub('/api/platform/publications/resolve', { route: a.route })).body;
+    if (!obj(body)) throw new Error('the computer sent a story that is not a story');
+    const d = parseBundle(body, address);
+    d.related = await related;                                  // "Hear it" is not waited for: readerHear fills it in when the clips arrive (a slow clip route must not hold the story)
+    console.log(`reader: story blocks=${d.blocks.length} cites=${d.cites.length} related=${d.related.length}`);
     return d;
-  } catch { return empty(address, 'error', 'Could not load this story. Check the connection and try again.'); }
+  }
+  if (a.kind === 'texture') {
+    const docBody = (await net.authed(`/api/texture/documents/${segment(a.doc)}`)).body;
+    if (!obj(docBody)) throw new Error('the computer sent a document that is not a document');
+    const docObj = obj(docBody.document) ? docBody.document : docBody;
+    const rid = a.rev !== '' ? a.rev : str(docObj.current_revision_id);
+    const list = net.authed(`/api/texture/documents/${segment(a.doc)}/revisions`).then((r) => (obj(r.body) && Array.isArray(r.body.revisions) ? r.body.revisions.filter(obj) : []), () => []);
+    let revObj: Record<string, unknown> = {};
+    if (rid !== '') {
+      const rb = (await net.authed(`/api/texture/revisions/${segment(rid)}`)).body;
+      if (obj(rb)) revObj = obj(rb.revision) ? rb.revision : rb;
+    }
+    const d = parseRevision(revObj, docObj, address, await list);
+    d.docId = a.doc; d.source = str(revObj.content); d.editable = a.rev === '' && d.status === 'ready';
+    console.log(`reader: document blocks=${d.blocks.length} versions=${d.versions.length}`);
+    return d;
+  }
+  return blankDoc(address, 'loading');
+}
+
+/** The document at an address, fetched now and held nowhere (the callers hold it). A failure is an error document with words. */
+export async function loadReader(address: string, net: Net = real): Promise<ReaderDoc> {
+  try { return await fetchDoc(address, net); } catch (e) { return failDoc(address, e); }
+}
+
+/** A story and a revision never change: the held copy is the answer. A document's head is asked for again. */
+const cacheable = (address: string): boolean => { const a = parseAddress(address); return a.kind === 'pub' || (a.kind === 'texture' && a.rev !== ''); };
+
+async function ask(address: string, net: Net): Promise<ReaderDoc> {
+  const a = parseAddress(address);
+  if (a.kind === 'none') return blankDoc(address, 'loading');
+  const gen = current();
+  const have = held.get(address);
+  if (have && cacheable(address)) { held.delete(address); held.set(address, have); return have; }
+  const key = address;
+  const shared = inflight.get(key);
+  if (shared) return shared;
+  const p = (async (): Promise<ReaderDoc> => {
+    let d: ReaderDoc;
+    try { d = await fetchDoc(address, net); }
+    catch (e) {
+      if (gen !== accountGeneration()) return blankDoc(address, 'loading');
+      return !(e instanceof SignedOutError) && held.get(address) ? held.get(address)! : failDoc(address, e);
+    }
+    if (gen !== accountGeneration()) return blankDoc(address, 'loading');           // another account began while this was on its way: neither held nor shown
+    if (d.status === 'ready') put(d);
+    return d;
+  })().finally(() => { if (inflight.get(key) === p) inflight.delete(key); });
+  inflight.set(key, p);
+  return p;
+}
+
+// THE VOICE HOLDS THE PAGE IN FRONT. The one native call this file makes, with the reason only native code can meet: the voice turn (Swift today, Kotlin on Android) answers "what is this page
+// about" and matches what the radio is saying against the page, and it runs in the native engine, which cannot ask this module. So the page in front, once read, is handed over as its blocks with their
+// sentences (`{op: 'pageText'}` on the app module; it holds at most 40 and forgets them at sign-out). Nothing is read back. A host with no native module, a failed call or a stale account is silent.
+type HandOver = (request: Record<string, unknown>) => Promise<unknown>;
+let handOver: HandOver | null | undefined;
+/** Test only: the native hand-over (null: no native module; undefined: the real one). */
+export function setHandOverForTest(f: HandOver | null | undefined): void { handOver = f; }
+function hand(d: ReaderDoc, gen: number): void {
+  const send = handOver === undefined ? (nativeLater() as HandOver | null) : handOver;     // api.ts types the request for the key reads; the module's `later` takes any op
+  if (!send || d.status !== 'ready' || gen !== accountGeneration()) return;
+  const blocks = d.blocks.filter((b) => b.text !== '').map((b) => ({ id: b.id, kind: b.kind, text: b.text, sentences: sentenceTexts(b) }));
+  void Promise.resolve().then(() => send({ op: 'pageText', address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { console.log(obj(r) && r.ok === true ? `reader: handed to the voice blocks=${blocks.length}` : 'reader: the voice did not take the page'); }, () => undefined);
+}
+
+/** The source behind the reader page. `accState` and `saved` are only there to ask again: a sign-in from the banner, and the editor's save. */
+export async function readerDocShared(address: string, _accState: string, _saved: boolean, net: Net = real, _heard = 0): Promise<ReaderDoc> {
+  const gen = accountGeneration();
+  let d = await ask(address, net);
+  const rows = clipRows.get(address);
+  if (rows && d.status === 'ready' && d.hearIt !== rows) d = { ...d, hearIt: rows };
+  hand(d, gen);
+  return d;
+}
+
+const ack = (ok: boolean): Ack => ({ ok });
+
+/** "Hear it" for the story in front: the clips cut for it, asked for apart from the story (the first ask is the session's bulk clip set, up to the 15 s deadline). The page asks the story again when this
+ * answers true, and then shows them. A story with none, another page, or a failing clip route answers false. */
+export async function readerHear(address: string, net: Net = real): Promise<Ack> {
+  const gen = current();
+  if (parseAddress(address).kind !== 'pub') return ack(false);
+  let rows: ReaderDoc['hearIt'] = [];
+  try { rows = await net.clips(address); } catch { rows = []; }
+  if (gen !== accountGeneration() || rows.length === 0) return ack(false);
+  clipRows.set(address, rows);
+  return ack(true);
+}
+
+/** Forget a document: the next ask reads it again (the page menu's Reload). */
+export async function readerReload(address: string): Promise<Ack> { current(); held.delete(address); return ack(true); }
+
+/** A version as the latest (the web's "Restore"): POST /api/texture/documents/{id}/restore. The head is already the latest. */
+export async function readerRestore(address: string, version: string, net: Net = real): Promise<Ack> {
+  const a = parseAddress(address), r = parseAddress(version);
+  current();
+  if (a.kind !== 'texture') return ack(false);
+  if (r.rev === '') return ack(true);
+  try { await net.authed(`/api/texture/documents/${segment(a.doc)}/restore`, { method: 'POST', body: { revision_id: r.rev, mode: 'restore_as_latest' } }); }
+  catch { held.delete(address); return ack(false); }
+  held.delete(address);
+  return ack(true);
+}
+
+/** Stop the desk's revision in flight (the web's "Stop"): POST /api/texture/lifecycle/{trajectory}/cancel. One already finished (404, 409) is fine; the document is read again. */
+export async function readerStop(address: string, net: Net = real): Promise<Ack> {
+  current();
+  const traj = held.get(address)?.trajectory ?? '';
+  held.delete(address);
+  if (traj === '') return ack(true);
+  try { await net.authed(`/api/texture/lifecycle/${segment(traj)}/cancel`, { method: 'POST' }); }
+  catch (e) { return ack(e instanceof HTTPError && (e.status === 404 || e.status === 409)); }
+  return ack(true);
+}
+
+/** Fetch the stories either side of the card on top now, so a swipe finds them held. Held ones, documents, other pages and the empty address are skipped; a failure is kept nowhere. */
+export async function readerPrefetch(prev: string, next: string, net: Net = real): Promise<Ack> {
+  current();
+  const seen = new Set<string>();
+  const todo = [prev, next].filter((a) => a !== '' && parseAddress(a).kind === 'pub' && !seen.has(a) && (seen.add(a), true) && held.get(a)?.status !== 'ready');
+  await Promise.all(todo.map((a) => ask(a, net)));
+  return ack(true);
 }

@@ -10,7 +10,7 @@
 // read; the deck keeps the ORDER, which the Kit does not model. A move updates `order` at once and tells the Kit (pageOpen); the
 // page on top is drawn for real only when the Kit's focus has caught up (pg.top == the top), a placard before. If the Kit's focus is
 // ever somewhere else for half a second (something outside the deck opened a page) the deck follows it (task syncTop).
-use pageOpen, pageClose, readerPrefetch from "@choir/autoradio"
+use pageOpen, pageClose from "@choir/autoradio"
 use ReaderAck from "@choir/autoradio"
 use StackVp, stackName, isFixed, kindOf, kindWord from "./ui.contract"
 
@@ -21,7 +21,7 @@ members Autoradio
   state pdrag = false
   state flying = false
   state flyDir = 1
-  // The neighbours of the card on top are fetched and decoded ahead (readerPrefetch), so a swipe finds them held.
+  // The neighbours of the card on top are fetched and decoded ahead (readerPrefetchShared, reader.ts), so a swipe finds them held.
   mutation rpf as shape ReaderAck
 
   // Onboarding (the setup page and the edition topics) takes over the deck as before: one page, nothing to swipe.
@@ -171,4 +171,4 @@ members Autoradio
     after(1, warmNeighbours)
   action warmNeighbours
     if inStack
-      send rpf = readerPrefetch(prev=prevAddr, next=nextAddr)
+      send rpf = readerPrefetchShared(prevAddr, nextAddr)

@@ -1,7 +1,7 @@
 // The Textures place's list, in shared code (it was Swift: TextureReaderSource.swift `TextureList`, answered by the native source `texturesList`). The listener's documents
 // from GET /api/texture/documents, with the edition pinned first, and the server's own answer to "which document is my edition" (GET /api/texture/edition) applied to it.
 // Nothing here is native: the signed-in client (api.ts) is the whole platform need, and the words for "no key", "locked" and "refused" are the app's one list (words.ts).
-// Opening a document (`texture:<id>`) is still the Swift reader's (readerDoc): a later move.
+// Opening a document (`texture:<id>`) is the shared reader (reader.ts).
 import { authedJSON, accountGeneration, SignedOutError, HTTPError, type Reply } from './api.ts';
 import { WORDS } from './words.ts';
 

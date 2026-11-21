@@ -220,6 +220,12 @@ integrator drove `AutoradioLab` on the simulator; these are what went wrong.
    the layout (`ui-model.md`, "Buttons, scroll, text and tap targets").
 3. **Drive a scroll by drag through a `testId`.** `scroll id=` is not a tap
    target.
+   **A tap does not scroll its target into view** (seen at `f53347503`, 2026-11-21, `proof-real.sh` reader drive, twice: with `--touch platform` "the point is
+   outside the viewport", and without it "its middle is outside the viewport; scroll it into view first", both on an inline citation mark inside a flowed paragraph below
+   the first screen). Exact's own `recipes/ios-driving.md` line "`tap` and `type` scroll their target into view" did not hold for that node, so do not rely on it. Scroll
+   explicitly: `tap <scroller> wheel 0 <points>` moves the content exactly that far with no glide, under either flag. The distance comes from the node's own frame:
+   `layout <testId>` prints `space viewport X,Y W×H` at the scroll the page opens at, and `layout_scroll` in `mobile/scripts/proof-common.sh` turns that into the wheel
+   distance. The steps of one drive are fixed before it runs, so the frame is read in an earlier drive of the same page.
 4. **Leave about 1.2 s between consecutive taps** on a page that is changing,
    or the second can be dropped.
 5. **Drags need `agent ios --touch platform`.** Under that flag a `tap X
