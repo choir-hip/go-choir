@@ -50,9 +50,15 @@ public enum Moment {
         return String(format: "%d:%02d %@", h % 12 == 0 ? 12 : h % 12, m, h < 12 ? "AM" : "PM")
     }
 
+    /// The app's one day-part word: morning from 05:00, afternoon from 12:00, evening from 18:00, and plain "Hello" from midnight to 05:00.
+    public static func hello(_ now: Date, calendar: Calendar = .current) -> String {
+        let h = calendar.component(.hour, from: now)
+        return h < 5 ? "Hello" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
+    }
+
     /// The one fresh sentence, computed at the moment the app opens: the greeting by the app's one day-part function, and the time.
     public static func clause(now: Date, calendar: Calendar = .current) -> String {
-        "\(PhoneOpening.hello(now, calendar: calendar)), it\u{2019}s \(timeWords(now, calendar: calendar))."
+        "\(Self.hello(now, calendar: calendar)), it\u{2019}s \(timeWords(now, calendar: calendar))."
     }
 
     /// The body with the fresh clause as its second block (after the constant first one): the cached first block starts at once.

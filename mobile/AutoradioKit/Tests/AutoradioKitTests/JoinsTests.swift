@@ -61,13 +61,7 @@ final class JoinOpenEpisodeTests: XCTestCase {
         PodcastBridge.open = nil
         XCTAssertFalse(PodcastBridge.openEpisode(of: audio(1, ep: "g1"), store: s), "with no hook there is no episode page to open")
     }
-    func testJ1_TheQueueSaysWhenItsCurrentClipCanOpenItsEpisode() async {
-        let s = store([clipRow(hex(1), guid: "g1")])
-        let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
-        q.playNow(.audio(audio(1, ep: "g1"))); await q.settle()
-        XCTAssertTrue(q.info(clips: s).canOpenEpisode)
-        XCTAssertFalse(q.info(clips: ClipStore()).canOpenEpisode)
-    }
+
 }
 
 // MARK: J5 first answers from the Reader's books
@@ -121,18 +115,9 @@ final class JoinLibraryTests: XCTestCase {
 final class JoinHearItTests: XCTestCase {
     func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
 
-    func testJ3_QueueAddsTheClip() async {
-        let s = store([clipRow(hex(1))]); let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
-        HearIt.enqueue(hex(1), store: s, player: q)
-        XCTAssertEqual(q.store.ahead(limit: 10).count, 1)
-    }
+
     // J3's "a clip the phone does not have says so" and "Open episode names the page at the clip's start" are shared code now: clips.test.ts C5.
-    func testJ3_PlayOfAMismatchedFilePlaysTheEpisodeFromItsStartNotTheClip() async {
-        let s = store([clipRow(hex(1))]); s.markMismatch(hex(1)); let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
-        await HearIt.play(hex(1), store: s, player: q); await q.settle()
-        guard let a = q.store.onAir()?.audioSpec else { return XCTFail("nothing playing") }
-        XCTAssertNil(a.start); XCTAssertNil(a.end); XCTAssertEqual(q.store.onAir()?.kind, .episode)
-    }
+
 }
 
 final class JoinShowClipsTests: XCTestCase {

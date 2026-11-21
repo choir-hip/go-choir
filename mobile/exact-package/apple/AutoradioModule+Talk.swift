@@ -14,8 +14,8 @@ extension AutoradioModule {
         // `applyTurnOps`, which translates the old words onto run sheet ops.
         var hooks = QueueVoice.hooks
         hooks.candidates = { [choir] in (choir?.storyRows() ?? []).prefix(40).map { (route: $0.route, title: $0.title) } }
-        hooks.snapshot = { await MainActor.run { RunSheetPlayer.shared.turnQueueJSON() } }       // the wire's `queue`
-        hooks.applyServerOps = { json in _ = await MainActor.run { RunSheetPlayer.shared.applyTurnOps(json) } }  // dedupe by turn, decoding, rebase: the sheet's
+        hooks.snapshot = { RadioBridge.shared.snapshot }                                                                   // the wire's `queue`, as shared code last made it (voice-queue.ts)
+        hooks.applyServerOps = { json in RadioBridge.shared.send("turnOps", ["json": String(data: json, encoding: .utf8) ?? ""]) }   // the `queue_ops` event, whole, to shared code: it applies it (dedupe by turn, the sheet's rules)
         QueueVoice.hooks = hooks
         SavedCorpus.shared.installRunSheet()
 

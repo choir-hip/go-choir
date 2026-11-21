@@ -72,16 +72,7 @@ final class OnAirSoundTests: XCTestCase {
     }
 
     /// The session is not ready: the entry fails at once with the plain reason, and the bar says so.
-    @MainActor func testAnEntryThatCannotSpeakFailsWithTheReason() async {
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
-        RunSheetPlayer.sessionRetryDelays = [3600]
-        p.sessionReady = { _ in "the audio engine did not start" }
-        p.playNow(.paperStory(route: "a", title: "A")); await p.settle()
-        XCTAssertTrue(p.message.hasPrefix("Can\u{2019}t speak: the audio engine did not start"), p.message)
-        XCTAssertNotNil(s.onAir(), "a session that cannot be taken is not the entry's failure: it stays on air, held")
-        XCTAssertTrue(p.isWaitingForSession)
-        XCTAssertFalse(s.sheet.entries.contains { $0.ended?.outcome == .failed })
-    }
+
 }
 final class MuteVoiceTwo: Voice, @unchecked Sendable {
     static let stageID = "avspeech"

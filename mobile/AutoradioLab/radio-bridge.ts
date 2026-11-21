@@ -18,7 +18,7 @@ import { parseList, FRONT_LIMIT } from './paper-model.ts';
 import { loadKept, takesOf, type Kept, type Take } from './takes.ts';
 import { seamNet } from './takes.ts';
 import { clock, now as clockNow } from './clock.ts';
-import type { Entry } from './runsheet-model.ts';
+import { decodeEntry, type Entry } from './runsheet-model.ts';
 import type { Storage as RunStorage } from './runsheet-store.ts';
 import type { RadioFacts } from './radio-page.ts';
 
@@ -29,7 +29,7 @@ const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-type Radio = { rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; started: boolean; native?: NativeReader };
+type Radio = { rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
 let restored: Promise<void> | undefined;
 
@@ -51,12 +51,13 @@ function runStorage(s: Store | undefined): RunStorage | undefined {
 }
 
 /** The native facts, over the app module's `radioFacts` op: the audio's own facts and the inbox of what native callers and the voice turn handed over. */
-async function readFacts(r: { inbox: string[] }): Promise<NativeFacts> {
+async function readFacts(r: { inbox: string[] } & Partial<Radio>): Promise<NativeFacts> {
   const later = nativeLater();
   if (!later) return NO_FACTS;
   try {
     const o = obj(await later({ op: 'radioFacts' }));
     if (num(o.at) > 0) clock.ms = num(o.at);
+    r.ready = o.ready === true;
     if (Array.isArray(o.inbox)) for (const m of o.inbox) if (typeof m === 'string') r.inbox.push(m);
     const pos = obj(o.position), a = obj(o.audio), rem = obj(o.remote);
     return {
@@ -100,7 +101,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  const state: Radio = { rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, started: false, native };
+  const state: Radio = { rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
     deck: nativeDeck(), storage: runStorage(storage), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
@@ -114,6 +115,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
     for (const s of stories) { if (s.updated !== null) state.front.published[s.route] = s.updated / 1000; state.front.versions[s.route] = s.versions; }
     return body;
   };
+  state.fetchFront = front;
   state.writer = new Writer({
     rt, front,
     texts: async (routes) => {
@@ -189,9 +191,15 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   await r.rt.pump();
   while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
   r.writer.checkAhead();
+  // The radio starts by itself when Autoradio opens (onboarding complete, no other audio on the phone), once a launch: it waits a moment for the front page it speaks from.
+  if (!r.started && r.ready && !r.rt.store.onAir()) {
+    if (r.readySince === 0) r.readySince = clock.ms;
+    if (r.front.lines.length > 0 || clock.ms - r.readySince > 2000) await openRadioOf(r);
+    else { try { await r.fetchFront(); } catch { /* none yet */ } }
+  }
   // the turn route's queue: pushed to native, which sends it with every turn
   const later = nativeLater();
-  if (later) { try { await later({ op: 'radioSet', snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, ahead: r.rt.store.ahead(50) }); } catch { /* the next pulse sets it */ } }
+  if (later) { try { await later({ op: 'radioSet', snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); } catch { /* the next pulse sets it */ } }
   return { tick: r.tick };
 }
 
@@ -204,6 +212,15 @@ async function handle(r: Radio, text: string): Promise<void> {
     case 'turnEnded': await r.rt.turnEnded(); break;
     case 'level': if (m.value === 'pause') await r.rt.act('pause'); else if (m.value === 'play') await r.rt.act('resume'); break;
     case 'stopAll': await r.rt.signOut(); break;
+    case 'openWeb': r.web.url = str(m.url); break;
+    case 'closeWeb': r.web.url = ''; break;
+    case 'place': {
+      const e = (() => { try { return decodeEntry(m.entry); } catch { return undefined; } })();
+      if (!e) break;
+      const w = obj(m.words), words = Array.isArray(w.paragraphs) ? { title: str(w.title), paragraphs: w.paragraphs.filter((p): p is string => typeof p === 'string') } : undefined;
+      if (m.mode === 'now') r.rt.play(e, words); else if (m.mode === 'next') r.rt.playNext(e, words); else r.rt.queue(e, words);
+      break;
+    }
     default: break;
   }
 }
@@ -243,6 +260,7 @@ async function radioPlayPauseOf(r: Radio): Promise<void> {
 
 /** The radio opens: the phone's opening plays at once, from the front titles it holds, and the desk is asked for more. */
 async function openRadioOf(r: Radio): Promise<void> {
+  if (r.front.lines.length === 0) { try { await r.fetchFront(); } catch { /* the opening says it has no front page yet */ } }
   const lines = r.front.lines;
   r.rt.director.open(phoneOpening(lines, clockNow(), -clockNow().getTimezoneOffset(), mintId('p-')));
   r.writer.openAhead();

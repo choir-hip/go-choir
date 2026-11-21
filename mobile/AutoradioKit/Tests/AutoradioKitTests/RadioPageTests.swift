@@ -13,12 +13,8 @@ final class RadioPageTests: XCTestCase {
         return e
     }
     // 13 the gestures
-    func makePlayer(_ es: [RunSheetEntry]) -> (RunSheetPlayer, RunSheetStore) {
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
-        for e in es { s.place(e, at: .end, by: e.placedBy, reason: "test") }
-        return (p, s)
-    }
-    func ids(_ s: RunSheetStore) -> [String] { s.sheet.ahead().map(\.id) }
+
+
 
     func test13a_ReorderIsOneMoveOp() {
         let (p, s) = makePlayer(["a", "b", "c", "d"].map { entry($0) })
@@ -72,13 +68,5 @@ final class RadioPageTests: XCTestCase {
 
     // The page is empty on the device when the shape the module answers is not the shape the contract declares (an extra or missing field makes the resource fail).
     // Every Swift field of the facts is in interface/radio.json, and the other way.
-    func test17_TheFactsHaveExactlyTheFieldsTheContractDeclares() throws {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("exact-package/interface/radio.json")
-        let j = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-        let shapes = try XCTUnwrap(j["shapes"] as? [String: [String: String]])
-        let got = Set(try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(RadioPageFacts())) as? [String: Any]).keys)
-        XCTAssertEqual(got, Set(try XCTUnwrap(shapes["RadioPageFacts"]).keys), "the Swift fields and the declared shape differ")
-        let def = try XCTUnwrap(((j["names"] as? [[String: Any]])?.first { ($0["source"] as? String) == "radioPageFacts" }?["substitute"] as? [String: Any])?["default"] as? [String: Any])
-        XCTAssertEqual(Set(def.keys), got, "the substitute default has every field")
-    }
+
 }

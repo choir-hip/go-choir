@@ -170,30 +170,23 @@ extension AutoradioModule {
     }
 }
 
-/// The ONE place Reader meets the run sheet (Kit/RunSheetPlayer.swift): Read aloud is `place now` of a book entry, Add to queue is `place queued`. The player asks
-/// the text source below for the blocks from a position and reports the block being read through `onDocumentPosition`, which lights it on the page
-/// and moves the saved place. Nothing here speaks by itself.
+/// The ONE place Reader meets the run sheet (shared code: radio-bridge.ts): Read aloud is `place now` of a book entry, Add to queue is `place queued`. Shared code asks for the text from a position through the app module's
+/// `bookText` op (AutoradioModule+Queue.swift). The block being read is not followed on the page while it is read aloud: a residual of the move. Nothing here speaks by itself.
 enum ShelfPlayback {
-    @MainActor static func register() {
-        RunSheetPlayer.shared.registerTextSource(kind: "document") { id, at in
-            let blocks = ReaderShelf.shared.blocks(id: id, from: at)
-            return blocks.isEmpty ? nil : blocks
-        }
-        RunSheetPlayer.shared.onDocumentPosition = { id, block in ShelfFollow.shared.set(id: id, block: block) }
-    }
+    @MainActor static func register() {}
     static func play(module: AutoradioModule, doc: ShelfDoc, at: Int, done: @escaping (Bool) -> Void) {
         Task { @MainActor [weak module] in
             guard let module else { return done(false) }
             ShelfFollow.shared.set(id: doc.id, block: at)
             // As the queue's own add does: the engine is started first when it is not running.
             if !module.runtime.snapshot().running { await module.runtime.start(virtual: module.virtualEngine) }
-            RunSheetPlayer.shared.playNow(.book(id: doc.id, title: doc.title, at: at))
+            RadioBridge.shared.place(.book(id: doc.id, title: doc.title, at: at), mode: "now")
             done(true)
         }
     }
     static func enqueue(module: AutoradioModule, doc: ShelfDoc, at: Int, done: @escaping (Bool, String) -> Void) {
         Task { @MainActor in
-            RunSheetPlayer.shared.queue(.book(id: doc.id, title: doc.title, at: at))
+            RadioBridge.shared.place(.book(id: doc.id, title: doc.title, at: at), mode: "add")
             done(true, "Added to the queue.")
         }
     }

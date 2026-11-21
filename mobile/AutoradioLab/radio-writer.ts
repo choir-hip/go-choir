@@ -5,7 +5,7 @@
 import { cutBytes, oneLine } from './runsheet-entries.ts';
 import { AHEAD_FLOOR_SECONDS, StretchDecoder, askOutcome, entryFrom, placeOp, plainWords, shouldAskMore, toldRoutes, type Incoming } from './programme-model.ts';
 import { parseStory, weight } from './paper-model.ts';
-import { candidateJSON, candidates as takeCandidates, merged, type Kept, type Take } from './takes.ts';
+import { candidateJSON, candidates as takeCandidates, merged, title as takeTitle, type Kept, type Take } from './takes.ts';
 import type { RadioRuntime } from './radio-runtime.ts';
 import type { Entry } from './runsheet-model.ts';
 
@@ -145,7 +145,7 @@ export class Writer {
         if (gen !== this.d.generation() || stops !== this.stops) return;                      // signed out meanwhile: nothing of the answer is applied
         const dec = new StretchDecoder();
         const takeById = new Map(picked.map((t) => [t.takeID, t]));
-        const look = { clip: () => undefined, take: (id: string) => { const t = takeById.get(id); return t ? { take_id: t.takeID, publisher: t.publisher, duration: t.duration, title: t.title, responds_to: t.respondsTo ? { route: t.respondsTo.route, title: t.respondsTo.title } : undefined } : undefined; } };
+        const look = { clip: () => undefined, take: (id: string) => { const t = takeById.get(id); return t ? { take_id: t.takeID, publisher: t.publisher, duration: t.duration, title: takeTitle(t.transcript), responds_to: t.respondsTo ? { route: t.respondsTo.route, title: t.respondsTo.title } : undefined } : undefined; } };
         for (const ev of [...dec.feed(raw), ...dec.finish()]) {
           if (ev.type === 'segment') {
             const e = entryFrom(ev.segment as Incoming, look as never);

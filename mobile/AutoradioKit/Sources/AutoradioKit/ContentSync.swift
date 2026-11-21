@@ -173,7 +173,7 @@ public extension ContentSync.Fetchers {
         f.storyBody = StoryBodies.resolveFetcher
         // The podcasts' shows, episodes and transcripts were read here from the Swift PodcastService. The podcast app is shared code now
         // (AutoradioLab/podcast.ts, `podcastDocuments`); until the content store moves and reads it, the phone's own search holds no podcasts.
-        f.runSheet = { await MainActor.run { RunSheetStore.shared.sheet } }
+        f.runSheet = { RadioBridge.shared.sheet() ?? RunSheet() }
         return f
     }
 }

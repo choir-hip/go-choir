@@ -26,7 +26,7 @@ export type DeckWhy = 'playing' | 'paused_listener' | 'paused_system' | 'held_se
 export type DeckEnd = 'finished' | 'skipped' | 'replaced' | 'stopped' | 'failed';
 
 export type DeckRemote = 'play' | 'pause' | 'toggle' | 'next' | 'previous' | 'seek';
-export type DeckSystem = 'interruption-began' | 'interruption-ended' | 'route-lost' | 'session-held' | 'session-back' | 'engine-lost';
+export type DeckSystem = 'interruption-began' | 'interruption-ended' | 'route-lost' | 'session-held' | 'session-back' | 'engine-lost' | 'dropped';
 
 export type DeckEvent = {
   seq: number;

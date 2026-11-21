@@ -62,7 +62,7 @@ extension AutoradioModule {
         gesture(kind == "more" ? SignalKind.more : SignalKind.less, f, surface: surface, meaning: kind)
         // The tap also goes to the computer as the listener's own steering line, with the entry on air and the stories it cites (design 6).
         Task { @MainActor in
-            if let t = SteerTap.on(entry: RunSheetPlayer.shared.store.onAir(), direction: kind == "more" ? "more" : "less", tappedStory: f.address) {
+            if let t = SteerTap.on(entry: RadioBridge.shared.onAirEntry(), direction: kind == "more" ? "more" : "less", tappedStory: f.address) {
                 SteerQueue.shared.enqueue(t); await SteerQueue.shared.flush()
             }
         }

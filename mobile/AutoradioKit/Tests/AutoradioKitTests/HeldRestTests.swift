@@ -36,30 +36,6 @@ final class HeldRestTests: XCTestCase {
         let f = tmp(); HeldRest(file: f).put(id: "x", rest: "The rest.")
         XCTAssertEqual(HeldRest(file: f).row("x")?.rest, "The rest.")
     }
-    func testAHeldContinuationPlaysTheRestAfterARelaunch() async {
-        // the process forgot `provided`; the store still has the words
-        let k = HeldRest.shared
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
-        var c = RunSheetEntry(id: "c-keep1", kind: .mail, placedBy: .phone, title: "Real subject", estSeconds: 3)
-        c.source = RunSheetSource(ref: "mail:m1", label: "Real subject")
-        k.put(id: c.id, rest: "The rest of it.")
-        p.playNow(c); await p.settle()
-        XCTAssertEqual(e.speaks, ["speak:c-keep1"], "the rest is spoken, not 'Could not play'")
-        XCTAssertEqual(p.message, "")
-    }
-    func testPostedOpsCarryTheRealTitlesOfABookAMessageAndAFile() async {
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
-        p.registerTextSource(kind: "document") { _, _ in ["Block."] }
-        let poster = Capture(); s.poster = poster
-        let book = RunSheetEntry.book(id: "b1", title: "Confidential Merger Memoir", at: 0)
-        let mail = RunSheetEntry.readAloud(address: "mail:m9", title: "Zebrafish quarterly invoice mentions Dolores")
-        let file = RunSheetEntry.filesAudio(address: "file:/Podcasts/x.mp3", title: "Tuesday Marmalade Lecture")
-        s.place(book, at: .end); s.place(mail, at: .end); s.place(file, at: .end)
-        await s.flushTask?.value; s.flush(); await s.flushTask?.value
-        let all = poster.ops.map { String(decoding: (try? JSONEncoder().encode($0)) ?? Data(), as: UTF8.self) }.joined()
-        XCTAssertFalse(poster.ops.isEmpty)
-        for w in ["Confidential Merger Memoir", "Zebrafish quarterly invoice mentions Dolores", "Tuesday Marmalade Lecture"] { XCTAssertTrue(all.contains(w), w) }
-        for w in ["Read aloud", "A message", "A file"] { XCTAssertFalse(all.contains(w), w) }
-        XCTAssertEqual(book.displayTitle, "Confidential Merger Memoir"); XCTAssertEqual(mail.displayTitle, "Zebrafish quarterly invoice mentions Dolores")
-    }
+
+
 }

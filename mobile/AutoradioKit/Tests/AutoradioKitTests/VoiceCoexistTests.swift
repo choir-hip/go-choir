@@ -16,23 +16,8 @@ final class VoiceCoexistTests: XCTestCase {
     }
 
     /// A: the route change that voice on itself causes (the Bluetooth headset leaves A2DP) is not the headset going away: the radio is not paused.
-    func testTheRouteChangeOfVoiceOnDoesNotPauseTheRadio() async {
-        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("vc-\(UUID().uuidString)"), session: NullSessionOwner())
-        let c = PlaybackContinuity(runtime: rt, queue: RunSheetPlayer(store: RunSheetStore()))
-        rt.player.play()
-        XCTAssertFalse(rt.player.userPaused)
-        try? await rt.coordinator.claim(.talking, preferBuiltInMic: false, reason: "voice on")       // the radio's own session change
-        c.routeLost()
-        XCTAssertFalse(rt.player.userPaused, "the radio's own route change paused it and nothing resumes it")
-    }
-    func testARealRouteLossStillPauses() async {
-        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("vc-\(UUID().uuidString)"), session: NullSessionOwner())
-        let c = PlaybackContinuity(runtime: rt, queue: RunSheetPlayer(store: RunSheetStore()))
-        rt.player.onNeedsSession = nil          // play's own session claim (an async Task) would touch the coordinator and race the route loss
-        rt.player.play()
-        c.routeLost()
-        XCTAssertTrue(rt.player.userPaused, "headphones unplugged, no session change of ours: paused")
-    }
+
+
 
     /// B(b): in the background voice on gives the microphone up and plays on; in the foreground it takes it back.
     func testTheBackgroundGivesUpTheMicrophoneAndTheForegroundTakesItBack() async {

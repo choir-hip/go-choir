@@ -78,5 +78,5 @@ members Autoradio
   action obFinish
     send pm = pageOpen(address="paper:front", title="Paper")
     send pms = pagesOpen("paper:front", "Paper")
-    send acct = radioStart()
+    send racct = radioStart()
     layer = ""

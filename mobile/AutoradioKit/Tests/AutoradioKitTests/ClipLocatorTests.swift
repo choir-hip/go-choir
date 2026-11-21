@@ -285,29 +285,12 @@ fileprivate final class FakeLocator: ClipLocating, @unchecked Sendable {
 @MainActor
 final class ClipPlayerTests: XCTestCase {
     func relocatable(_ id: String) -> PodcastClip { clip(fpRecord(of: synth(seconds: 60, seed: 3), start: 5, end: 35), id: id) }
-    func make(_ clips: [PodcastClip], _ loc: ClipLocating) -> (RunSheetPlayer, RunSheetStore, FakeEngine, ClipStore) {
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
-        let cs = ClipStore(); cs.replace(clips); p.clips = cs; p.locator = loc
-        return (p, s, e, cs)
-    }
+
     func keptFile() -> URL { let u = FileManager.default.temporaryDirectory.appendingPathComponent("kept-\(UUID().uuidString).mp3"); try? Data([1, 2, 3]).write(to: u); return u }
     func story(_ id: String) -> RunSheetEntry { RunSheetEntry(id: id, kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 10) }
 
     // 6
-    func test6_AnOldRecordIsNeverAClip() async {
-        let old = clip(nil, id: "clip-0000000000d1")
-        let cs = ClipStore(); cs.replace([old])
-        let seg = IncomingSegment(stretchID: "s", segmentID: "s/1", kind: "podcast_clip", title: "T", text: "Lead.", cites: [], blockCount: 1, clip: ProgrammeClipRef(clipID: old.clipID, storyRef: "pub:a@v1", seconds: 30))
-        XCTAssertNil(ProgrammeRouteFeed.entry(from: seg, clips: cs), "dropped before the page, not a failed row")
-        XCTAssertTrue(HearIt.rows(route: "a", store: cs)[0].episodeOnly)
-        let loc = FakeLocator(.refused("never called"))
-        let (p, s, e, _) = make([old], loc)
-        p.playNow(old.clipEntry); await p.settle()                                   // a stale entry that names it anyway
-        XCTAssertTrue(loc.calls.isEmpty); XCTAssertFalse(e.log.contains { $0.hasPrefix("remote:") })
-        XCTAssertEqual(s.entry(s.sheet.entries[0].id)?.state, .skipped)
-        await HearIt.play(old.clipID, store: cs, player: p); await p.settle()
-        XCTAssertEqual(s.onAir()?.kind, .episode, "Hear it plays the episode")
-    }
+
 
     // 7
     func test7_TheNextClipIsLocatedWhileTheEntryBeforeItPlaysAndPlaysFromTheLocatedFile() async {

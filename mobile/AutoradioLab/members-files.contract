@@ -170,7 +170,7 @@ members Autoradio
   action fvPlayed
     fvPaused = false
     if pl.playing
-      send acct = radioPlayPause()
+      send racct = radioPlayPause()
   action fvPausedEv
     fvPaused = true
   action fvEnded

@@ -48,7 +48,7 @@ public extension SavedCorpus {
     /// Read the run sheet before every question (it lives on the main actor), and name what is on air.
     func installRunSheet() {
         preparers.append { [unowned self] in
-            let sheet = await MainActor.run { RunSheetStore.shared.sheet }
+            let sheet = RadioBridge.shared.sheet() ?? RunSheet()
             let r = RetrievalSources.runSheet(sheet)
             hold(group: "runsheet", r.docs); onAirHint = r.onAirTitle
             let ahead = r.docs.filter { $0.source == "Up next" }.prefix(4).map(\.title)

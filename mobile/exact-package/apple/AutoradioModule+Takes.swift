@@ -13,7 +13,7 @@ import Foundation
     func yieldForTake() async -> String? {
         handsFree = HandsFreeSwitch.shared.isOn
         if handsFree { HandsFreeSwitch.shared.set(false) }
-        RunSheetPlayer.shared.setLevel(.pause)
+        RadioBridge.shared.send("level", ["value": "pause"])
         await module.runtime.player.setLevel(.pause)
         do { try await module.runtime.coordinator.setRecordingTake(true) }
         catch { giveBack(); return "the microphone could not be taken (\(error))" }
@@ -23,7 +23,7 @@ import Foundation
         let hf = handsFree; handsFree = false
         Task { @MainActor in
             try? await module.runtime.coordinator.setRecordingTake(false)
-            RunSheetPlayer.shared.setLevel(.play)
+            RadioBridge.shared.send("level", ["value": "play"])
             await module.runtime.player.setLevel(.play)
             if hf { HandsFreeSwitch.shared.set(true) }
         }
@@ -40,7 +40,7 @@ import Foundation
         let make: @Sendable () -> Transcriber = { SFSpeechTranscriber(StageParams([:])) }
         session = TakeSession(recorder: AVTakeRecorder(), transcriber: FileTranscriber(make: make), gate: TakeGate(module), preview: preview,
                               micAllowed: { LiveAudio.micPermissionGranted() ? true : await LiveAudio.requestMicPermission() },
-                              responds: { TakeResponds.from(entry: RunSheetPlayer.shared.store.onAir()) }, dir: dir)
+                              responds: { TakeResponds.from(entry: RadioBridge.shared.onAirEntry()) }, dir: dir)
         TakeSession.live = session
         preview.onEnd = { [weak self] in self?.session.previewEnded() }
         session.onChange = { [weak self, weak module] in
@@ -67,14 +67,6 @@ extension AutoradioModule {
     func registerTakes() {
         onMainThread {
             TakesHost.shared = TakesHost(module: self)
-            // Another listener's take is fetched like a clip: the publisher's bytes, signed in, into a file the player deletes when the entry ends. Native because the run sheet player is.
-            RunSheetPlayer.shared.takeAudio = { id in
-                let path = TakeStore.shared.take(id)?.audioPath ?? Take.audioPath(id)
-                guard let data = try? await TakesClient(client: ChoirEnvironment.shared.client()).audio(path: path) else { return nil }
-                let f = FileManager.default.temporaryDirectory.appendingPathComponent("take-play-\(id).m4a")
-                guard (try? data.write(to: f, options: .atomic)) != nil else { return nil }
-                return f
-            }
         }
         handle("takesRecorder") { [unowned self] _, reply in reply(takesSnapshot()) }
     }

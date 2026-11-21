@@ -21,7 +21,7 @@ members Autoradio
   // Signed out the radio reads the PUBLIC paper: the first story now (the native player), the second queued after it. The rows of the radio page play or queue their own.
   action playPublic(first: string, firstTitle: string, second: string, secondTitle: string)
     if first != ""
-      send acct = radioPlayStory(first, firstTitle)
+      send racct = radioPlayStory(first, firstTitle)
     if second != ""
       send qm = queueAdd("add", "story", second, secondTitle, "")
   // toggle | back15 | fwd15 | keep | remove | playAt | skip | clear | openWeb | closeWeb

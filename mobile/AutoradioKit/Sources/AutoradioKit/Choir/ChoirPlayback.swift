@@ -1,28 +1,17 @@
 import Foundation
 
-/// The run sheet player's engine in the app: spoken entries go through the existing programme player (ChoirApp), remote audio through
+/// The deck's engine in the app: spoken entries go through the existing programme player (ChoirApp), remote audio through
 /// AVPlayer (RemoteAudioPlayer). Only one of them makes sound at a time: starting one silences the other.
 @MainActor public final class ChoirPlaybackEngine: PlaybackEngine {
     let app: ChoirApp
     var continuity: PlaybackContinuity?
     public let remote = RemoteAudioPlayer()
-    var player: RunSheetPlayer { RunSheetPlayer.shared }
 
     public init(app: ChoirApp) { self.app = app }
-
-    public func speak(documentID: String, entry: RunSheetEntry, paragraphs: [String]) async -> Bool {
-        remote.stop()
-        return await app.speakEntry(documentID: documentID, entry: entry, paragraphs: paragraphs)
-    }
 
     public func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool {
         remote.stop()
         return await app.speakSegment(documentID: documentID, entryID: entryID, title: title, kind: kind, paragraphs: paragraphs)
-    }
-
-    public func playStory(route: String, title: String) async -> String? {
-        remote.stop()
-        return await app.playPaperStory(route: route)
     }
 
     /// The server block being spoken, the last one, and the seconds into the entry (the words before this block at the speaking rate, plus the
@@ -65,7 +54,7 @@ import Foundation
 
     public func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool {
         stopSpoken()                                    // the programme's voice stops (the listener's pause is not touched)
-        return await remote.play(url: url, title: title, show: show, start: start, end: end, rate: BarTracker.shared.speed, generation: player.generation)
+        return await remote.play(url: url, title: title, show: show, start: start, end: end, rate: BarTracker.shared.speed, generation: 0)
     }
 
     public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { await remote.duration(of: url, deadline: deadline) }
