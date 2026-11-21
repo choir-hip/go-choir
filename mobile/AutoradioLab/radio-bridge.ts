@@ -152,7 +152,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
     },
     now: clockNow, tz: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', requestId: () => 'radio-' + mintId('').slice(0, 12), generation: accountGeneration,
   });
-  rt.director.hooks.aheadChanged = (prev => () => { prev?.(); state.writer.checkAhead(); })(rt.director.hooks.aheadChanged);
+  // The writer is asked from the pulse (radioPulse awaits it): a fetch started from a hook inside some other answer, and carried on after that answer ended, is never run (Exact: "fetch() called outside an answer").
   return state;
 }
 
@@ -210,7 +210,8 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const r = await getRadio(storage, native);
   await r.rt.pump();
   while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
-  r.writer.checkAhead();
+  // The pulse that STARTS the desk's ask (or the sheet's post) waits for it, at the end: those are fetches, and a fetch that goes on after its answer ended is never run. The next pulses return at once, so the screens go on updating meanwhile.
+  const flushBefore = r.rt.store.flushTask, asked = r.writer.checkAhead();
   // The radio starts by itself when Autoradio opens (onboarding complete, no other audio on the phone), once a launch: it waits a moment for the front page it speaks from.
   if (!r.started && r.ready && !r.rt.store.onAir()) {
     if (r.readySince === 0) r.readySince = clock.ms;
@@ -220,6 +221,10 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   // the turn route's queue: pushed to native, which sends it with every turn
   const later = nativeLater();
   if (later) { try { await later({ op: 'radioSet', snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); } catch { /* the next pulse sets it */ } }
+  const waits: Promise<void>[] = [];
+  if (asked) waits.push(r.writer.settle());
+  if (r.rt.store.flushTask !== flushBefore && r.rt.store.flushTask) waits.push(r.rt.store.flushTask);
+  await Promise.all(waits.map((t) => t.catch(() => undefined)));
   return { tick: r.tick };
 }
 
@@ -299,7 +304,7 @@ async function openRadioOf(r: Radio): Promise<void> {
   if (r.front.lines.length === 0) { try { await r.fetchFront(); } catch { /* the opening says it has no front page yet */ } }
   const lines = r.front.lines;
   r.rt.director.open(phoneOpening(lines, clockNow(), -clockNow().getTimezoneOffset(), mintId('p-')));
-  r.writer.openAhead();
+  r.writer.openAhead(false);
   r.started = true;
   await r.rt.pump();
 }

@@ -90,7 +90,7 @@ export class RadioRuntime {
       spokenPaused: () => this.deckState?.why === 'paused_listener',
       spokenRemainder: () => (this.facts.remainder === '' ? undefined : this.facts.remainder),
       audioPlace: () => this.facts.audio,
-      aheadChanged: () => { void this.keepHeld(); },
+      aheadChanged: () => { this.chain = this.chain.then(() => this.keepHeld()).then(() => undefined, () => undefined); },       // in the pump's chain: the answer that pumps waits for it (a native call started outside an answer is never run)
       onChange: () => this.onChange?.(),
     });
     this.director.onCommand = (c) => this.command(c);
@@ -172,7 +172,8 @@ export class RadioRuntime {
   pump(): Promise<void> {
     const run = this.chain.then(async () => { await this.pumpOnce(); if (this.pendingStarts.length > 0 && !this.inPump) await this.pumpOnce(); });
     this.chain = run.catch(() => undefined);
-    return run;
+    // what was appended to the chain meanwhile (a stop, the held list) is waited for too
+    return run.then(async () => { let c: Promise<unknown>; do { c = this.chain; await c; } while (c !== this.chain); });
   }
 
   private async refreshFacts(): Promise<void> { if (this.native) { try { this.facts = await this.native.facts(); } catch { /* keep the last */ } } }
@@ -254,7 +255,7 @@ export class RadioRuntime {
   // ---- commands from the director ----
 
   private command(c: Command): void {
-    if (c.kind === 'stop') { void this.deck.act('stop'); return; }
+    if (c.kind === 'stop') { this.chain = this.chain.then(() => this.deck.act('stop')).then(() => undefined, () => undefined); return; }       // in the pump's chain: the answer that pumps waits for it (a native call outside an answer is never run)
     this.pendingStarts.push(c.entry);
     // Outside a pump (a verb from the screen) nothing reads the journal: pump now, which starts it.
     if (!this.inPump) void this.pump();

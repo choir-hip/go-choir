@@ -443,7 +443,8 @@ if [ -n "$STORY_CARDS" ]; then
   step "tap story-more"; wait_ 1500; step tree
   step "tap bar-mark"; wait_ 900; step "type launcher-search Paper"; view real-66-launcher-search 1200
   step "tap \"search-hit-paper:front\""; wait_ 600       # a search shows hits (search-hit-<address>); launcher-open-<address> is the deck's row, not on screen while a query is typed
-  place settings 900; step "tap settings-nav-learned"; view real-67-learned 1500
+  # the launcher keeps the typed query "Paper" (it lists hits, not the places): the field is emptied before Settings is picked
+  step "clock settle"; step "tap bar-mark"; wait_ 600; step "type launcher-search \"\""; wait_ 800; step "clock settle"; step "tap place-settings"; wait_ 900; step "tap settings-nav-learned"; view real-67-learned 1500
   step "tap settings-learned-reset"; view real-68-learned-reset 1200
   step logs
   run_drive cards light "" --touch platform

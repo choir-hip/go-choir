@@ -112,14 +112,16 @@ export class Writer {
   constructor(private d: WriterDeps) {}
   settle(): Promise<void> { return this.task ?? Promise.resolve(); }
   open(): void { this.opened = true; this.ask('open'); }
-  openAhead(): void { this.opened = true; this.checkAhead(); }
+  /** The radio opened: the desk is asked from now on. `start` false only marks it (the pulse starts the ask inside an answer that waits for it). */
+  openAhead(start = true): void { this.opened = true; if (start) this.checkAhead(); }
   /** The sheet changed or an entry started: is the time ahead short? */
-  checkAhead(): void {
-    if (!this.opened || this.inFlight) return;
+  checkAhead(): boolean {
+    if (!this.opened || this.inFlight) return false;
     const store = this.d.rt.store;
-    if (this.quietOn !== undefined && this.quietOn === store.onAir()?.id) return;
-    if (!shouldAskMore(store.ahead(), this.latency)) return;
+    if (this.quietOn !== undefined && this.quietOn === store.onAir()?.id) return false;
+    if (!shouldAskMore(store.ahead(), this.latency)) return false;
     this.ask('extend');
+    return true;
   }
   stop(): void { this.stops += 1; this.inFlight = false; this.quietOn = undefined; this.publish(false); }
   private publish(writing: boolean): void { this.d.rt.setDesk({ notice: this.notice, writing, dry: this.dry }); }
