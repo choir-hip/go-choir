@@ -365,6 +365,8 @@ any machine.
 
 ### Moving the pin
 
+First run on a new pin (2026-11-21, de212e671 to f53347503): the checkout moved, patch 0001 applied, 803 shared tests passed, the contract built with no errors, and the native build and `proof-real.sh` passed on the first try. The one failure was `test web`: `cargo metadata --offline` could not find a crate the new lock names. `setup-exact.sh` now fetches the locked crates when that check fails.
+
 Reading first (no Exact checkout of your own; the lead's `mobile/.exact-src` in the build tree is the one object store, and the
 Mac build queue uses it, so **do not check out, reset or build in it while reading**):
 

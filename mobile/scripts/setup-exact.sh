@@ -76,6 +76,12 @@ if command -v rustup >/dev/null 2>&1; then
     echo "hermes: installing the pinned bundles (online, once per pin)"
     (cd "$SRC" && env -u HERMES_LEAN_SYS_OFFLINE -u CARGO_NET_OFFLINE cargo run -q --manifest-path "$INST" -- $TARGETS)
   fi
+  # The web build (`test web`, `agent web`) reads the workspace with `cargo metadata --locked --offline`, so every crate the
+  # pin's Cargo.lock names must already be in the Cargo cache. A new pin can lock new crates (2026-11-21: i_float); fetch them here, once.
+  if ! (cd "$SRC" && cargo metadata --locked --offline --format-version 1) >/dev/null 2>&1; then
+    echo "cargo: fetching the crates this pin locks (online, once per pin)"
+    (cd "$SRC" && env -u CARGO_NET_OFFLINE cargo fetch --locked)
+  fi
 else
   echo "setup-exact: rustup not found; install Rust (rustup) before building" >&2
 fi
