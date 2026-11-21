@@ -402,7 +402,8 @@ if [ -n "$READER_STORY" ]; then
   bad "reader: native did not refuse the hand-over" 'reader: the voice did not take the page' "$R1"
   chk "reader: the story has a title" '\[page-title\] "[^"]{3,}"' "$R1"
   bad "reader: no error message" '\[reader-message\] "(Could|Sign in)' "$R1"
-  chk "reader: the text is there (paragraph blocks)" '\[reader-block-b[0-9]+\] "[^"]{20,}"' "$R1"
+  # a block's text is its sentence runs, children of the block's own line (`Text#N "..."`); blocks_have_text (proof-common.sh) needs 20 characters under each of the first two, so an empty block cannot pass
+  if out=$(blocks_have_text "$R1" 2); then echo "ok: reader: the text is there (the first two blocks carry sentences)"; else echo "MISSING: reader: the text is there: $out"; FAILS="$FAILS [reader text]"; fi
   chk "reader: the kicker and the disclosure (a story from the paper)" '\[reader-disclosure\] "Written by AI' "$R1"
   chk "reader: a citation mark is in the text" '\[reader-cite-' "$R1"
   chk "reader: the Sources list is there and has a row" '\[reader-source-1\]' "$R1"

@@ -37,6 +37,20 @@ layout_scroll() {
   ' "$1"
 }
 
+# blocks_have_text <tree-file> [n]: the reader's text is really on the page. For each of the first n (default 2) `reader-block-b<N>` lines of a tree dump, the block must carry a text of 20 or more characters: on its own line
+# (`[reader-block-b2] "..."`, the old shape) or in a child line, deeper than the block and before the next line at its depth or less (`Text#859 "..."`, one per sentence run). A block with no such text fails, so an
+# empty block cannot pass; fewer than n blocks fails too. Prints the failing block's id and returns 1.
+blocks_have_text() {
+  awk -v n="${2:-2}" '
+    function indent(l) { match(l, /^ */); return RLENGTH }
+    function close_block() { if (cur != "" && seen <= n && !ok) { print "no text in " cur; bad = 1 } cur = "" }
+    match($0, /\[reader-block-b[0-9]+\]/) { close_block(); seen++; cur = substr($0, RSTART + 1, RLENGTH - 2); ind = indent($0); ok = ($0 ~ /\] "[^"]{20,}/); next }
+    cur != "" && indent($0) <= ind { close_block() }
+    cur != "" && $0 ~ /Text#[0-9]+ "[^"]{20,}/ { ok = 1 }
+    END { close_block(); if (seen < n) { print "only " seen " blocks"; bad = 1 } exit bad }
+  ' "$1"
+}
+
 # run_drive <name> <mode> <onboarding?> <agent flags...>: reset, run the collected steps, retry a refused launch up to 3 times.
 run_drive() {
   name="$1"; mode="$2"; ob="$3"; shift 3
