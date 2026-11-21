@@ -1093,13 +1093,15 @@ manifests are signed by corpusd's own platform key in
 
 ### 8.3 Where it is weak
 
-**Gaps are permanent by design.** A transient corpusd error during publish
-loses that version forever; only a later revision publishes. For an active
-story this is invisible; for a story that receives no further evidence, the
-last revision may never reach readers (*inference* from
-`AutoPublishRevision`: there is no retry and no boot sweep). The trade is
-deliberate (no resumer that could loop), and a bounded, logged retry of the
-latest unpublished revision would keep it while reducing loss.
+**Gaps are permanent after the retry.** A publish that fails for a reason
+that passes (a timeout, a 502, 503 or 504) is retried twice in the same job
+(`publishVersionWithRetry`: 5 s, then 15 s, each attempt with its own
+deadline). A publish that still fails, or is refused (a 4xx), loses that
+version; only a later revision publishes. For an active story this is
+invisible; for a story that receives no further evidence, the last revision
+may never reach readers (*inference* from `AutoPublishRevision`: there is no
+boot sweep, and a crash ends the retry). The trade is deliberate (no resumer
+that could loop).
 
 **The signing key lives where root processes can read it.** The platform
 signing key is a file on Node B. The isolation review found that host
@@ -1121,7 +1123,7 @@ that is fine; at many papers it is a throughput ceiling (*inference*).
 
 | question | option | gain | cost |
 |---|---|---|---|
-| failed publish | gap, no retry (current) | no loop, simple | lost versions |
+| failed publish | bounded in-job retry of a timeout or 5xx, then a gap (current) | no loop, no durable state | a lost version after the third failure or a crash |
 | | bounded retry of the latest unpublished revision | fewer losses | a small durable obligation with restart semantics |
 | who supplies content | guest sends content | one hop fewer | confused deputy |
 | | proxy reads back from the guest (current) | content comes from the authority | publish depends on the guest being up |
