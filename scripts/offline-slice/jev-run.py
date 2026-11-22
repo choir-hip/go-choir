@@ -3,24 +3,19 @@
 as the gateway does (internal/gateway/jev.go): model ~typesafe/jev-latest, the response body kept
 whole. Resumes: jobs already in OUT are skipped. A real 429 or 5xx is retried after the provider's
 Retry-After (else 5 s, 15 s, 45 s); no limiter of ours.
-The key is read from $OPENROUTER_API_KEY, else .env in the repo root, as scripts/event-blind-sample.py does;
-it is never printed or written.
+The key is read from $OPENROUTER_API_KEY only (the dev shell provides it); it is never printed or written.
   jev-run.py JOBS OUT [--workers N] [--limit N]"""
-import json, os, re, sys, time, threading, urllib.request, urllib.error
+import json, os, sys, time, threading, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 URL = "https://openrouter.ai/api/alpha/decisions"
 MODEL = "~typesafe/jev-latest"
 
 def key():
-    if os.environ.get("OPENROUTER_API_KEY"):
-        return os.environ["OPENROUTER_API_KEY"]
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    for line in open(os.path.join(root, ".env")):
-        m = re.match(r'\s*(?:export\s+)?OPENROUTER_API_KEY\s*=\s*"?([^"\s]+)', line)
-        if m:
-            return m.group(1)
-    sys.exit("no OPENROUTER_API_KEY")
+    k = os.environ.get("OPENROUTER_API_KEY")
+    if not k:
+        sys.exit("OPENROUTER_API_KEY is not in the environment (run this from the dev shell); this script does not read .env")
+    return k
 
 def post(k, job):
     body = json.dumps({"model": MODEL, "state": json.loads(job["state"]) if isinstance(job["state"], str) else job["state"], "questions": job["questions"]}).encode()
