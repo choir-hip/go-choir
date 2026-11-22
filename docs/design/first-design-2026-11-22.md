@@ -72,6 +72,46 @@ its main point; that event begins the successor. Rule 2 leaves open what to do
 when one story's events are a subset of another's (a part of a larger story,
 or a duplicate in the making): open question 4.
 
+## Conventions: what is an event, an entity, a story
+
+The owner, 2026-11-22: "events can span over time and space. locality is a
+fallacy... the observation shapes the system inherently. like, is the iran war
+an event, an entity, or a story? its a story, comprised of entities (which
+include abstract entities like governments or militaries. but strategies...
+like 'the blockade of the strait of hormuz'... is that an event or an entity?
+its background of many stories. its a story. yes."
+
+"stories, textures, should become much more recursive, more frequently citing
+and transcluding other stories. they cite out to the web a lot, but now that
+we have a corpus of coverage, now is the time to use it. indeed, the whole
+point of choir is that we can be self-referential. textures reference textures
+is the essence of it. and because a texture story encapsulates entities and
+events, we can traverse the story graph in addition to doing vector semantic
+similarity operations".
+
+What this changes:
+
+- The ruling of 2026-10-20 ("one event is one incident, one place, one time",
+  the text Jev is given in `event_layer.go`) no longer holds as written: an
+  event may extend in time and space. Why that ruling was made still matters:
+  the wording before it ("or its direct development") turned a developing
+  story into one event. Stories that contain stories now carry that load.
+- A story is the composing object. A story cites and transcludes other
+  stories; the war is a story, the blockade is a story inside it and in
+  others. Story to story is an edge of the graph beside succeeds.
+- Entities include abstract ones (a government, a military).
+- The graph is traversed through stories: a story holds its events and
+  entities, so walking story to story reaches them.
+
+Lead's reading, not ruled: an event is what captures report in common, the
+unit of observation; a story is our written account, which may be made of
+other stories. When we come to describe the parts of an event separately, it
+has become a story. Open question 8.
+
+What exists: the object graph registers `choir.publication_transclusion` and
+`transcludes` edges (`internal/objectgraph/registry.go`); how often a
+published story cites or transcludes another is not measured.
+
 ## Two questions, each asked once
 
 | Question | Kind | Unit | Who |
@@ -213,3 +253,8 @@ entities attach through events.
 6. How a personal root reads the shared graph without a private computer's
    data crossing owners.
 7. The order of the build, and what the paper runs meanwhile.
+8. What separates an event from a story, now that an event may span time and
+   place: is an event the unit captures report in common and a story our
+   account of it, an event becoming a story once its parts are told apart?
+9. How often stories cite or transclude stories today, and what the writer's
+   prompt and verbs make easy.
