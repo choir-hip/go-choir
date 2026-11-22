@@ -27,11 +27,15 @@ reset_state() {
   CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
   [ -n "$CONT" ] || fail "reset" "no app container (is the app installed?)"
   S="$CONT/Library/Application Support/Autoradio"
+  # ONE app:/data tree per run: of the two layouts an earlier drive may have left (the scratch store under Caches/exact/<id>/agent/<name>/data and Application Support/exact/<id>/data) only the one touched most recently is the app's; the other is stale (roots, marks and
+  # an ending mark nothing reads) and would be counted by every check below, so it is removed. The in-use tree is kept: the kill and relaunch drills depend on what it holds.
+  keep=$(data_dir_of "$CONT")
+  for t in "$CONT"/Library/Caches/exact/*/agent/*/data "$CONT"/Library/Application\ Support/exact/*/data; do [ -d "$t" ] && [ "$t" != "$keep" ] && rm -rf "$t"; done
   rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
   rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
   # The takes' data: the shared file (app:/data/takes.json, take-session.ts) and the Swift programme's copies (takes-own.json, takes-muted.json). Every drive starts without them; the takes drive seeds the old two below.
   rm -rf "$S/account"; rm -f "$S/takes-own.json" "$S/takes-muted.json" "$S/takes-copy-own.json" "$S/takes-copy-muted.json" "$CONT"/Library/Application\ Support/exact/*/data/takes.json "$CONT"/Library/Caches/exact/*/agent/*/data/takes.json
-  rm -f "$CONT"/Library/Application\ Support/exact/*/data/edition-topics.json "$CONT"/Library/Caches/exact/*/agent/*/data/edition-topics.json   # the edition picks' own place now (edition-picks.ts: app:/data)
+  rm -f "$CONT"/Library/Application\ Support/exact/*
   rm -rf "$CONT"/Library/Application\ Support/exact/*/data/theme-choice.json "$CONT"/Library/Application\ Support/exact/*/data/themes   # app:/data on a device build
   rm -rf "$CONT"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CONT"/Library/Caches/exact/*/agent/*/data/themes   # the themes' own place now (themes.ts: app:/data, which an agent drive keeps under Library/Caches/exact/<app id>/agent/default/data), not UserDefaults and Autoradio/themes
   rm -f "$CONT/Library/Preferences/$APP.plist"
@@ -88,16 +92,16 @@ legacy_clean() {
 # ---- the account boundary's checks on the app's files (docs/design/account-boundary-2026-11-21.md, "Accounts are partitions"). An account's files live under `accounts/<sha256 of its key>/` in each of the app's three
 # folders (data, cache, tmp), and under no other name. Every check below guards against an empty container path: with no container, nothing is looked at, and a check that looks at nothing FAILS (it never passes for nothing).
 KEYDIG=$(tr -d '[:space:]' < "$KEYFILE" | shasum -a 256 | cut -d' ' -f1)       # what the app names the proof key's root (the seed trims it); never printed
-root_names_in() { # container: the name of every account root folder in it, one per line, sorted (empty when there is none, or no container)
+root_names_in() { # container: the name of every account root folder in the tree the last launch used (data_dir's), one per line, sorted (empty when there is none, or no container)
   [ -n "$1" ] && [ -d "$1" ] || return 0
-  find "$1" -type d -path '*/accounts/*' 2>/dev/null | awk -F/accounts/ 'NF == 2 && $2 !~ /\// { print $2 }' | sort -u
+  d=$(CONT="$1" data_dir_of "$1"); [ -n "$d" ] || return 0
+  find "$(dirname "$d")" -type d -path '*/accounts/*' 2>/dev/null | awk -F/accounts/ 'NF == 2 && $2 !~ /\// { print $2 }' | sort -u
 }
+data_dir_of() { ls -dt "$1"/Library/Caches/exact/*/agent/*/data "$1"/Library/Application\ Support/exact/*/data 2>/dev/null | head -1; }
 app_container() { SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null; }
 root_names() { root_names_in "$(app_container)"; }
-data_dir() { # the folder holding the app's `accounts` folder, else the folder an agent drive or a device build keeps app:/data in (the account roots may be gone, the folder is not)
+data_dir() { # the folder the LAST launch kept app:/data in: of the two layouts (the drive's scratch store under Caches/exact/<id>/agent/<name>/data, and Application Support/exact/<id>/data) the one touched most recently, so a stale tree of an earlier run is never planted in or read
   CONT=$(app_container); [ -n "$CONT" ] || return 0
-  f=$(find "$CONT" -type d -name accounts -path '*/data/*' 2>/dev/null | head -1)
-  if [ -n "$f" ]; then dirname "$f"; return; fi
   ls -dt "$CONT"/Library/Caches/exact/*/agent/*/data "$CONT"/Library/Application\ Support/exact/*/data 2>/dev/null | head -1
 }
 count_in_container() { # needle: how many files of the app's container hold the text (the container must be known: prints 99999 when it is not, so a "none left" check fails)

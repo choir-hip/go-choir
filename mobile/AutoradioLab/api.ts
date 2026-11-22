@@ -123,7 +123,11 @@ export const heldSession = (): Held | null => held;
 /** A sign-in stored this key: the store write is the caller's; this holds it for the chains. */
 export function holdSession(key: string, keyId: string, computerId = ''): void { if (!sessionOver) held = { key, keyId, computerId }; }
 /** The sign-out: forget the three secrets (the store's own write) and hold nothing. Throws when the store refuses. */
-export function forgetSession(store: SecretStore): void { held = null; store.forget(SECRET_KEY); store.forget(SECRET_KEY_ID); store.forget(SECRET_COMPUTER); }
+export function forgetSession(store: SecretStore): void {
+  held = null; const bad: string[] = [];
+  for (const n of [SECRET_KEY, SECRET_KEY_ID, SECRET_COMPUTER]) { try { store.forget(n); } catch (e) { bad.push(`${n}: ${String((e as { message?: unknown } | null)?.message ?? e).slice(0, 100)}`); } }      // every name is tried; the host's own refusal words are logged (they name the secret, never its value)
+  if (bad.length) { console.log(`account: the store refused to forget (${bad.join('; ')})`); throw new Error('the store refused to forget'); }
+}
 export const dropHeld = (): void => { held = null; };
 export async function keyDigest(key: string): Promise<string> { return digestOf(key); }
 /** REVOKE a key on the server with itself (a second place a request is signed: the key is the one being revoked and goes to ORIGIN only). Bounded; already revoked (401) or unknown (404) is revoked. Answers whether nothing live is left. */

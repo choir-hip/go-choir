@@ -368,3 +368,10 @@ describe('I7 every resource takes the account handle, or is transient, or holds 
   });
   test('the device sources are exactly the listed ones, each with a reason', () => { for (const [k, why] of Object.entries(DEVICE)) { expect(Object.hasOwn(sources, k)).toBe(true); expect((why ?? '').length).toBeGreaterThan(10); } });
 });
+
+describe('the launch has one owner: the card', () => {
+  test('the card is asked again while it has no answer (a launch attempt that died with its answer is restarted by it), and only then', () => {
+    const c = text('account.contract');
+    expect(c).toMatch(/task cardUnanswered when acs\.state == ""/); expect(c).toMatch(/task cardUnanswered[^\n]*\n\s+after\(3000, bumpLock\)/);
+  });
+});

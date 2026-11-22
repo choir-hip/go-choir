@@ -47,6 +47,10 @@ members Autoradio
     lockTick = lockTick + 1
   task rereadBoundary when acs.state == "locked" and bndTries < 5 key=bndTries
     after(3000, bumpBnd)
+  // THE ONE OWNER OF THE LAUNCH IS THE CARD (account.ts `launch`): its storage calls belong to the card's answer, and the host drops an answer that a changed argument replaced. While the card has no answer at all it is asked again every three seconds, so a launch
+  // attempt that died with its answer is restarted by the card, never left for the gated answers (which only wait for the shared result). The task ends when the card answers.
+  task cardUnanswered when acs.state == "" key=lockTick
+    after(3000, bumpLock)
   // A refused key is re-read a few times too (15 s), then left to the events that recover it (a new key, a page's 200 above, the app coming to the front): two native calls and a hash every 3 s forever is too much.
   state rejTicks = 0
   action bumpRej
