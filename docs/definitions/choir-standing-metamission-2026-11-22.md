@@ -20,6 +20,12 @@ metamission:
       status: working
       depends_on: []
       note: 'the first design: subjects and mentions, the hot path for captures, predictions that subscribe, the root Texture, the readers. Stations F0 to F6. No red station starts before the design panel has read the draft.'
+    - id: M3
+      path: docs/definitions/choir-storage-efficiency-2026-11-22.md
+      readiness: executable
+      status: working
+      depends_on: []
+      note: 'storage: no routine operation writes a second copy of a store, restore fits its budget, the store is measured by kind and cut. Stations S0 to S7. Added on the owner''s word after Node B''s disk refused deploys and wakes on 2026-11-22.'
 start:
   captured_at: 2026-11-22T05:02Z
   source:
@@ -46,7 +52,7 @@ value:
   better_means: 'the landing slot is never idle while a reviewed candidate waits, and no mission stalls because another holds the session''s attention'
   goodharting_would_be: 'landings batched across missions to save a deploy; a mission marked working here that nobody has touched in a day; this file growing station detail'
 homotopy:
-  realism_axis: 'two missions now; a third is one more station entry and its own file'
+  realism_axis: 'three missions now; another is one more station entry and its own file'
 boundaries:
   mutation_class: green for this file; each mission states its own
   authority_sources:
@@ -59,35 +65,36 @@ boundaries:
   excluded:
     - 'station detail: a station''s now card is its own authority'
 operating_notes:
-  - 'Landing order: the first reviewed and proved candidate takes the slot. When two are ready: the Exact train, then graph-first, then the account boundary, then first-design stations in their order. A small candidate goes ahead of a large one that is not ready.'
+  - 'Landing order: the first reviewed and proved candidate takes the slot. When two are ready: the Exact train, then graph-first, then the account boundary, then first-design stations in their order. Storage stations S1 and S2 are small and go ahead of a large candidate that is not ready. A small candidate goes ahead of a large one that is not ready.'
   - 'Resources: the Mac build lock serves M1 (train proof, account drills, phone install); the build machines serve all Go work; read-only reads of the paper are free. At most about five builders at once, because the lead reads every report.'
   - 'Overlap: graph-first lands before any M2 station that changes how research or Texture opens a run.'
   - 'Adding a mission: write its goal file, add one station entry here, name it in docs/ACTIVE.md and docs/mission-graph.yaml. Run with /goal docs/definitions/choir-standing-metamission-2026-11-22.md.'
   - 'Each hourly tick reads both station files'' now cards and rewrites this one''s.'
 now:
   status: working
-  as_of: 2026-11-22T05:02Z
-  slice: 'M1: the train''s proof, graph-first in rework after two send-backs, the account boundary in rework. M2: F0 and the read-only half of F1 building; the design panel not yet run.'
-  source_ref: origin/main 9f10b7477
-  deploy_identity: staging and the paper on 92f068980
-  candidate: none frozen
+  as_of: 2026-11-22T16:31Z
+  slice: 'M1: the Exact train waits on a staging that can wake the drill computer; graph-first is reviewed and rebased, waiting for the landing slot; the account boundary is being rebuilt on Exact''s secret store. M2: F0 landed and deploying; offline slice rungs 1 and 2 running with spend granted. M3: S0, S1 and S2 building.'
+  source_ref: origin/main c8d48a589
+  deploy_identity: staging and the paper on c27a50d98; a deploy of main (run 45044023185) in flight
+  candidate: 'graph-first (.lane/trees/gf-land, to be rebased again before landing)'
   conjecture:
-    claim: 'see M2 (ledger C190) and M1 (ledger C183, C188); this file makes no claim of its own'
+    claim: 'see M1 (ledger C183, C191), M2 (C190, C192, C194) and M3 (C195); this file makes no claim of its own'
     test: the station files' tests
     edge: independence
-    edge_note: 'both missions change research and Texture prompts, so a result in one may be caused by the other''s landing'
+    edge_note: 'M1 and M2 both change research and Texture prompts, and M3 changes the paper''s restarts and captures, so a result in one may be caused by another''s landing'
     observer_upgrade: one landing at a time with its own deployed proof window before the next
     scope_if_supported: none of its own
     ledger_id: C190
     status: untested
-  believed_state: 'nothing has landed since read-first; three candidates are in rework or proof; two redesign builders started at 05:00Z'
-  main_uncertainty: 'which candidate reaches the landing slot first'
-  next_observation: 'the train''s proof line; graph-first''s reworked commit; F1''s pair file'
+  believed_state: 'deployed today: the main-point judgment, read-first, the proxy fix. Landed and deploying: F0, a spend test fix. Nothing landed for ten hours because Node B''s disk refused deploys; it has room again (70 GiB at 16:28Z).'
+  main_uncertainty: 'whether the deploy in flight restarts the paper cleanly and swaps in the staged compact copy'
+  next_observation: 'the deploy''s result and Node B''s free space after it; then F0''s by-desk count (C194)'
   blocker: none
-  next_action: 'review and land whichever candidate is ready first; run the design panel on M2''s draft'
+  next_action: 'after the deploy: land graph-first, then S1; prove the train against a staging that wakes d@e and land it; install on the owner''s phone'
 receipts:
   - 'M1: docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md'
   - 'M2: docs/definitions/choir-first-design-2026-11-22.md'
+  - 'M3: docs/definitions/choir-storage-efficiency-2026-11-22.md'
 ---
 
 # The standing metamission
