@@ -112,6 +112,24 @@ What exists: the object graph registers `choir.publication_transclusion` and
 `transcludes` edges (`internal/objectgraph/registry.go`); how often a
 published story cites or transcludes another is not measured.
 
+### The line between an event and a story (proposed by the lead, not ruled)
+
+The owner asked for the bright line and the borderline (2026-11-22).
+
+- **An event is observed and settles. A story is authored and predicts.** An
+  event exists whether or not we write about it, is known through captures,
+  and is what a prediction is about and is settled by. A story exists because
+  we wrote it: a Texture with a main point and revisions, which makes
+  predictions and is revised by what settles them.
+- **Events do not nest; stories do.** When the parts of a happening need
+  telling apart, the parts are events and the whole is a story about them. A
+  happening may have both an event and a story about it.
+- **A future event is a prediction.** It becomes an event when captures
+  report it.
+- Borderlines: an ongoing state (a blockade, a drought) is a story, its
+  beginning and end are events; a capture that reports nothing happening
+  (analysis, opinion) attaches to a story as commentary and to no event.
+
 ## Two questions, each asked once
 
 | Question | Kind | Unit | Who |
@@ -330,9 +348,14 @@ entities attach through events.
 
 ## Open questions
 
-1. Is the root one long-lived session, or a fresh session per digest that
-   reads its own document to remember? (Lead leans to the second: cheaper,
-   survives restarts, fits "a crash restart never resumes work".)
+1. Ruled 2026-11-22: "root is one long session. but its repl makes it easily
+   resettable. the point of it being root texture is that it writes its own
+   texture, which is a text vector, a list of revisions. so it always has
+   enough context with its latest version and tools to read prior versions in
+   addition to what events and inbound it receives". The session is long and
+   disposable; the root's own Texture is its memory. Follow-on, not ruled: is
+   the paper's root Texture the front page, and a person's root Texture their
+   edition?
 2. Is research a sub-call of a story's Texture (root, story, research), or a
    desk the story Casts to as now? The contract says desks talk only through
    precommitment records: does a sub-call carry one?
