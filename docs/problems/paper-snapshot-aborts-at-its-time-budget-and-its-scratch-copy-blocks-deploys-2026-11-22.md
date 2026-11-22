@@ -37,3 +37,31 @@ grows with the store, and it needs free space equal to the store on the guest
 and on the host. Related: `paper-chunk-writes-drain-node-b-disk-2026-11-12.md`.
 
 Nothing was changed. No remedy that trims or deletes was run.
+
+## 09:10Z: the retry holds the copy again; the deploy of d7d276b55 was refused
+
+- CI run 45000646351 (the proxy resolve fix): every test job passed; "Deploy
+  to Staging (Node B)" failed at the disk preflight, "root filesystem still
+  below required headroom", after its own bounded reclaim.
+- The retry began at 08:11Z; its scratch copy finished at 08:28:27Z ("wal
+  bound: checkpoint after snapshot capture") and it is streaming. In the first
+  attempt the copy took about 6 minutes and the stream stage the other 83 of
+  the 90. `store_stalled` holders in `ReadObjectSnapshotFiltered` through the
+  morning (25, 86, 43, 31, 11 per console file): the stream contends with the
+  running paper for the guest's own store. The producer logs no rate.
+- `snapshot_producer.go` (about line 590): the host keeps the chunks an
+  attempt uploaded and a retry skips them, but the scratch copy is rewritten
+  and every chunk is read and hashed again each attempt. So retries make
+  progress and each holds about 50 GiB while it runs; the backoff is 20 min.
+- The host GC (`go-choir-disk-gc.service`) last ran 00:58Z and freed nothing;
+  no dead nix store paths; the journal is 249 MB. Not verified as reclaimable:
+  `vm-state/candidate-fleet-bf04bbc7…` (19.7 GiB, last written 2026-11-10).
+- No existing host-side way to make the guest trim or to hold the retry was
+  found. Nothing was run. Decision: wait for the second attempt's outcome
+  (budget ends about 09:58Z) and the trim after it; no deletion without the
+  owner.
+
+What the fix should be (not built): a snapshot that does not copy the store
+(read from a consistent view), a trim straight after a capture ends or
+aborts, a stream rate in the log, and a deploy preflight that says what holds
+the space.
