@@ -52,6 +52,7 @@ boundaries:
   authority_sources:
     - 'the owner''s words above; CLAUDE.md; each station file''s authority'
   owner_rulings:
+    - '"autoradio is already a compelling product imo. now we are sprinting towards production grade, scalable"; "and above all, software quality. craft matters" (2026-11-22). Reading (the lead''s): when speed and quality pull apart, quality wins; a station is done when its replacement is proved and the old mechanism is deleted, not when the new one runs beside it.'
     - '"we are still working on exact train arent we. we should of course continue that" (2026-11-22). Reading: the phone cutover is not displaced by the redesign.'
   must_preserve:
     - 'one landing and one deploy at a time; one Mac native build at a time through the lock; every must_preserve of each station file'
