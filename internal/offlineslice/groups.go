@@ -61,12 +61,20 @@ func dot(a, b []float32) float64 {
 // it opens a group. A group closes when closeAfter passes with no new member;
 // a closed group is not joined. Nothing after an arrival is read.
 func GroupArrivals(items []GItem, G float64, mode LinkMode, closeAfter time.Duration) []Group {
+	return GroupArrivalsCapped(items, G, mode, closeAfter, 0, 0)
+}
+
+// GroupArrivalsCapped is GroupArrivals with two bounds on chaining: a group
+// takes no member once it is maxAge old (0: no bound) or holds maxSize members
+// (0: no bound).
+func GroupArrivalsCapped(items []GItem, G float64, mode LinkMode, closeAfter, maxAge time.Duration, maxSize int) []Group {
 	var groups []Group
 	var open []int // indexes into groups
 	for i, it := range items {
 		keep := open[:0]
 		for _, gi := range open {
-			if it.At.Sub(groups[gi].Last) <= closeAfter {
+			g := &groups[gi]
+			if it.At.Sub(g.Last) <= closeAfter && (maxAge == 0 || it.At.Sub(g.Opened) <= maxAge) && (maxSize == 0 || len(g.Members) < maxSize) {
 				keep = append(keep, gi)
 			}
 		}
@@ -228,4 +236,25 @@ func OriginOf(c Capture, rawURL string, wire string) string {
 		return o
 	}
 	return accountOf(host, u.Path)
+}
+
+var leadingTags = regexp.MustCompile(`^\s*((?:#\s?[\pL\pN_]+\s*){1,4})`)
+
+// OriginOfRelays is OriginOf with one more rule for relays: a post that opens
+// with a hashtag naming an outlet (labels maps an outlet's name, lower case
+// without spaces, to its outlet key) is that outlet, however the account is
+// named and whether or not the link resolves. Relay accounts say whom they
+// relay in their first hashtag ("# BBC # News ...").
+func OriginOfRelays(c Capture, rawURL string, wire string, labels map[string]string) string {
+	if wire == "" && strings.HasPrefix(c.SourceID, "social:") {
+		if m := leadingTags.FindStringSubmatch(c.Lead); m != nil {
+			for _, tag := range strings.Split(m[1], "#") {
+				l := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(tag), " ", ""))
+				if o, ok := labels[l]; ok && l != "" {
+					return o
+				}
+			}
+		}
+	}
+	return OriginOf(c, rawURL, wire)
 }

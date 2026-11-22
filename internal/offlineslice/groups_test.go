@@ -133,3 +133,46 @@ func TestReachWithin(t *testing.T) {
 	}
 	_ = g
 }
+
+func TestGroupCapsAgeAndSize(t *testing.T) {
+	var items []GItem
+	for i := 0; i < 8; i++ { // identical vectors, one an hour
+		items = append(items, GItem{At: ts("2026-11-18T00:00:00Z").Add(time.Duration(i) * time.Hour), Vec: unit(1, 0)})
+	}
+	gs := GroupArrivalsCapped(items, 0.9, LinkCentroid, 48*time.Hour, 0, 3)
+	if len(gs) != 3 || len(gs[0].Members) != 3 || len(gs[1].Members) != 3 || len(gs[2].Members) != 2 {
+		t.Fatalf("size cap: %d groups %+v", len(gs), gs)
+	}
+	gs = GroupArrivalsCapped(items, 0.9, LinkCentroid, 48*time.Hour, 3*time.Hour, 0)
+	// a group takes members until it is 3 h old: arrivals at 0,1,2,3 h; the 4 h arrival opens a new one
+	if len(gs) != 2 || len(gs[0].Members) != 4 || len(gs[1].Members) != 4 {
+		t.Fatalf("age cap: %d groups", len(gs))
+	}
+	// no caps equals the uncapped rule
+	if got := GroupArrivalsCapped(items, 0.9, LinkCentroid, 48*time.Hour, 0, 0); len(got) != 1 {
+		t.Fatal("no caps")
+	}
+}
+
+func TestOriginCollapsesARelayHashtagToItsOutlet(t *testing.T) {
+	labels := map[string]string{"bbc": "bbc.com", "cnn": "cnn.com"}
+	soc := Capture{Host: "bsky.app", SourceID: "social:bsky", Lead: "# BBC # News Russell fastest in Las Vegas practice after rain https:// w.st/VnQau"}
+	if got := OriginOfRelays(soc, "https://bsky.app/profile/bbc-bot.example/post/3a", "", labels); got != "bbc.com" {
+		t.Fatalf("relay %q", got)
+	}
+	// a hashtag that is not an outlet label leaves the account
+	soc.Lead = "# Ukraine # War Neptun struck the bridge"
+	if got := OriginOfRelays(soc, "https://bsky.app/profile/bot.example/post/3a", "", labels); got != "bsky.app/bot.example" {
+		t.Fatalf("no relay %q", got)
+	}
+	// an article link still wins over a relay hashtag? no: the hashtag names the outlet the account relays
+	soc.Lead = "# CNN # News Susan Smith seeks parole https://www.cnn.com/2026/11/18/us/x"
+	if got := OriginOfRelays(soc, "https://bsky.app/profile/bot.example/post/3a", "", labels); got != "cnn.com" {
+		t.Fatalf("link %q", got)
+	}
+	// only a leading hashtag counts, not one in the middle of the text
+	soc.Lead = "Talks resume in Geneva # BBC"
+	if got := OriginOfRelays(soc, "https://bsky.app/profile/bot.example/post/3a", "", labels); got != "bsky.app/bot.example" {
+		t.Fatalf("trailing hashtag %q", got)
+	}
+}
