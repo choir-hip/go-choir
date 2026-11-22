@@ -1428,6 +1428,33 @@ nodes:
       about the learning engine"; "let's just build everything". Takes the
       work of choir-autoradio-learning-engine-2026-11-14 forward as built
       stations; conjecture K1 is ledger C120.
+  - id: choir-standing-metamission-2026-11-22
+    title: The standing metamission — the list of live missions, their landing order and shared machines; the file /goal runs
+    path: docs/definitions/choir-standing-metamission-2026-11-22.md
+    status: working  # 2026-11-22 on the owner's word
+    kind: metamission
+    entrypoint: true
+    depends_on: []
+    enables: [choir-first-design-2026-11-22, choir-exact-cutover-and-ontology-2026-11-20]
+    settled_by: owner
+    note: >-
+      Owner 2026-11-22: "make a metamission which covers them both, and any
+      3rd or nth mission we add. so we can keep /goal running continuously".
+  - id: choir-first-design-2026-11-22
+    title: The first design — one bucket of subjects, a capture attached with no agent session, stories and a root Texture that predict and are scored, the personal root, Autoradio as a cell desk
+    path: docs/definitions/choir-first-design-2026-11-22.md
+    status: working  # 2026-11-22 on the owner's word
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-22: "we are approaching a fundamental redesign... this is
+      the first design"; on draft 2 of docs/design/first-design-2026-11-22.md:
+      "great, this is the plan for the next throughline". Replaces the
+      ontology track of choir-exact-cutover-and-ontology-2026-11-20, which
+      continues for the phone cutover; conjecture is ledger C190.
   - id: choir-exact-cutover-and-ontology-2026-11-20
     title: The Exact cutover and the ontology — every page outside voice in shared code with nothing carried over; events, entities, claims and outlets in one identity space with a typed library in the cell; one story per happening; web searches under 1,000 a day
     path: docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md
