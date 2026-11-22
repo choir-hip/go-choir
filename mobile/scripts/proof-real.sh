@@ -476,18 +476,24 @@ step logs
 run_drive background light "" --touch platform
 reset_state light ""
 BGCONSOLE="$SHOTS/bg-app-console.txt"
+# Shared code's `console.log` lines go to the platform log of a native app (Exact js/src/console.js: a line with a method is written by the host); a plain launch has no driver, so they are read from
+# the simulator's log stream (harness only: read-only, no app change).
+BGJSLOG="$SHOTS/bg-js-console.txt"
+SIM spawn "$EXACT_SIM" log stream --level debug --style compact --predicate 'process == "Autoradio"' > "$BGJSLOG" 2>&1 &
+BGSTREAM=$!
 SIM launch --console "$EXACT_SIM" $APP > "$BGCONSOLE" 2>&1 &
 BGLAUNCH=$!
 sleep 45
 BGCONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
 BGLOG="$BGCONT/Library/Application Support/Autoradio/console.log"
 echo "background: plain launch, 45 s in: $(grep -c 'AUTORADIO on air ' "$BGLOG") on-air lines in the native console; the app's own output so far:"; tail -8 "$BGCONSOLE" | cut -c1-220
-echo "background: shared code's console in the plain launch (mirrored by js-console.ts, simulator only), the radio/onboarding/writer/deck lines:"; grep -E "AUTORADIO js: (radio|onboarding|writer|deck|runsheet|api)" "$BGLOG" | tail -25 | cut -c1-240
+echo "background: shared code's console in the plain launch (the simulator's log stream, $BGJSLOG: $(wc -l < "$BGJSLOG" | tr -d ' ') lines), the radio/onboarding/writer/deck/api lines:"; grep -E "(radio|onboarding|writer|deck|runsheet|api):" "$BGJSLOG" | tail -25 | cut -c1-260
 BGDIR=$(ls -d "$BGCONT"/Library/Application\ Support/exact/*/data "$BGCONT"/Library/Caches/exact/*/agent/*/data 2>/dev/null | head -2 | tr '\n' ' '); echo "background: data dirs: $BGDIR; files: $(ls $BGDIR 2>/dev/null | tr '\n' ' ')"
 BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1           # the Home screen over the app: it is not frontmost
 sleep "$BG_SECONDS"
-kill $BGLAUNCH 2>/dev/null
+kill $BGLAUNCH $BGSTREAM 2>/dev/null
+echo "background: the radio/hold/writer lines of shared code after the $BG_SECONDS s:"; grep -E "(radio|writer|deck|runsheet):" "$BGJSLOG" | tail -25 | cut -c1-260
 if [ ! -f "$BGLOG" ]; then echo "MISSING: background: no native console ($BGLOG)"; FAILS="$FAILS [background journal]"
 else
   BGN=$(awk -v t0="$BGT0" '$1 >= t0 && /AUTORADIO on air / && / voice=/' "$BGLOG" | wc -l | tr -d ' ')
