@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Push the lane's HEAD to the build VM's mirror and check it out at ~/offline-slice-r0 there.
+set -euo pipefail
+git push -q -f --no-verify choir-runner:go-choir-mirror.git HEAD:refs/heads/lane/offline-slice-r0
+ssh choir-runner 'cd ~/go-choir && git fetch -q origin +refs/heads/lane/offline-slice-r0:refs/remotes/origin/lane/offline-slice-r0 && git worktree remove --force ~/offline-slice-r0 2>/dev/null; git worktree add -q --detach ~/offline-slice-r0 origin/lane/offline-slice-r0 && git -C ~/offline-slice-r0 log --oneline | head -1'

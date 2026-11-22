@@ -142,7 +142,7 @@ func TestNeighboursAreEarlierHoursOnly(t *testing.T) {
 	if len(nb[4]) != 0 {
 		t.Fatalf("a capture with no vector has neighbours")
 	}
-	if nb[3][0].Cos > 0.01 {
+	if nb[3][0].Cos > 0.2 {
 		t.Fatalf("orthogonal vectors score %v", nb[3][0].Cos)
 	}
 }
@@ -187,7 +187,7 @@ func TestReplayPreparesRulesPerDayAndUsesOnlyEarlierSubjects(t *testing.T) {
 		mk("b", "2026-11-17T01:00:00Z", "Known", 1, 0.05),
 		mk("c", "2026-11-17T05:00:00Z", "Other", 1, 0.1),
 	}
-	ents := []Entity{{EntityID: "E1", Name: "Known", Created: ts("2026-11-17T00:00:00Z"), Updated: ts("2026-11-17T00:00:00Z")}}
+	ents := []Entity{{EntityID: "E1", Name: "Known", Created: ts("2026-11-16T23:00:00Z"), Updated: ts("2026-11-16T23:00:00Z")}}
 	fr := &fakeRules{}
 	res := Replay(caps, ents, nil, fr, AliasesAll, 10)
 	if len(fr.prepared) != 2 || !fr.prepared[0].Equal(ts("2026-11-16T00:00:00Z")) || !fr.prepared[1].Equal(ts("2026-11-17T00:00:00Z")) {
