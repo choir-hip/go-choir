@@ -1,6 +1,6 @@
 # The first design: Autopaper and its readers
 
-Draft 2, 2026-11-22, taken from the top after a day's conversation with the
+Draft 3, 2026-11-22 (draft 2 as read by a panel of five; section 12 says what changed), taken from the top after a day's conversation with the
 owner. Status: **idea**; nothing here is built unless a line says so, and
 nothing is ratified. Lines marked (owner) are rulings, quoted in
 [first-design-path-2026-11-22.md](first-design-path-2026-11-22.md) with the
@@ -42,8 +42,13 @@ claims; a subject's importance is the number of stories about it (owner).
 3. **Selection by System 1, one call a poll.** (owner) "any prediction can be
    scored with system1, which can also select subjects from a list, and also
    suggest more/other/idk". For every capture in the batch: which candidates
-   is it about, or other / cannot tell. One call with every capture's
-   question in it.
+   is it about, or other / cannot tell. One job with every capture's
+   questions in it, split only where the vendor's limits refuse it (the
+   existing `jevJob`). System 1 picks one option a question, so "which of
+   these" is one yes/no question for each capture and candidate, and one more:
+   is there an important subject not listed. Only that last one escalates. An
+   answer under the counting probability is stored as tentative and wakes
+   nobody.
 4. **Escalation.** "Other" goes to a language-model desk, many captures a
    session, which names a new subject or resolves the hard one. A random
    share of what System 1 did not escalate is checked the same way, or its
@@ -52,7 +57,17 @@ claims; a subject's importance is the number of stories about it (owner).
    predictions waiting on it. Matches are collected for a debounced wake.
 
 Budget to hold: one embedding and a share of one System 1 call a capture;
-seconds, not minutes; no session of any desk.
+seconds, not minutes; no session for a capture (the escalation desk and the
+audit share are sessions, many captures each, and their share of captures is
+measured from the first day).
+
+The candidate service for captures exists and is deployed (station E2 of the
+entity layer, `internal/platform/capture_ready.go`: exact, near, token
+subset, initials, neighbours, with ambiguity and a stoplist); writing
+mentions does not. This path adopts it and its probability bands; it does not
+start again. The name `choir.subject` is taken (an owner-scoped user subject);
+the stored kind stays `choir.entity`, widened, unless the custodian's design
+says otherwise.
 
 This replaces three mechanisms that each ask today which thing a capture
 belongs to: the intake label's "same event", the event layer's call a minute
@@ -101,16 +116,31 @@ Proposed: the paper's root Texture is the front page.
 
 ## 6. The loop that learns
 
-Predict, subscribe, be woken, be settled, see the score. Settlement is by the
-claims that arrive (System 1 judges whether they answer the prediction) or by
-the clock: a prediction whose time passes is settled false (owner). The score
+Predict, subscribe, be woken, be settled, see the score. A prediction is a
+durable record made with its settlement fixed: the subject, a yes/no question
+System 1 can ask of one arriving passage, a probability, a deadline.
+Settlement is host code that runs when a mention is written and when a
+deadline passes, not a wake. **Only captures settle, and copies of one wire
+report count once; the paper's own stories never settle or count as
+evidence.** A subject match routes a passage to the question; it does not
+settle it. A prediction whose time passes is settled false (owner); one whose
+predictor was closed by a crash is closed as interrupted and left out of the
+score. The score is skill against a base rate from history, not accuracy, so
+predicting the near-certain earns nothing. A wake is a read: what settled or
+surprised since this predictor's cursor. Nothing is held in memory for a
+restart to lose or resume.
+
+The surprise rate has a denominator the paper cannot shrink: claims from
+distinct origins on subjects that many outlets are reporting, of which no
+prediction settled true. It is printed beside the count of open predictions. The score
 is shown to the predictor. Today predictions are stored and some are scored;
 nothing matches an arrival to a prediction, nothing settles on expiry, and
 Texture is never shown its score.
 
 ## 7. Queries and their cost
 
-One edge table, mention, carries the graph; each pattern is one or two index
+Two edge families carry the graph: mention (account to subject) and citation
+(story to story, the `transcludes` edge that exists). For mentions, each pattern is one or two index
 reads. What is new on a subject since a time, and who is waiting on a
 subject, run constantly and are single lookups. Stories like this one: shared
 subjects weighted by rarity. What connects two subjects: accounts mentioning
@@ -137,19 +167,34 @@ hourly cap; the 1.5 s spacing of research children; the search refusal gate
 
 ## 10. Order of work
 
-0. Log the desk on every model call: cost per capture and per story, by desk.
-1. Subjects and mentions for stories, from what exists; test the query
-   patterns on the paper's data (hub sizes; do rarity-weighted overlaps find
-   real duplicates when read).
-2. The hot path for captures; retire the three mechanisms it replaces.
-3. Predictions that name a subject; match at mention write; settle on arrival
-   and on expiry; show the score. The first surprise rate.
-4. Stories woken by mentions; per-capture management tasks removed.
-5. The root, with stories as its sub-calls.
-6. The readers: the personal root and edition; Autoradio as a cell desk.
+The panel's main change: nothing is retired until what replaces it is
+proved, and the design is tried offline before it is wired in.
 
-Each is a station with its own review and deployed proof; the paper keeps
-publishing throughout.
+0. Log the desk on every model call (in build, lane f0-desk-on-calls).
+1. Name the custodian of subjects and mentions, and the identity rules (how a
+   thing that happens is told from another of the same name: by its time and
+   the subjects mentioned beside it).
+2. **The offline slice that proves or kills the design.** Replay a week of
+   captures through the hot path into derived tables only: candidates, one
+   System 1 job an hour of captures, the escalation desk with a check of each
+   new name against its nearest existing subjects. Hand-read 200. Have 50
+   existing stories predict on the first three days and settle them on the
+   rest under section 6. Reported: was the right subject among the candidates;
+   the share escalated; new subjects per 1,000 captures over time; the share
+   later merged; skill against the base rate. Kill lines set before the run.
+3. The hot path live, written beside the three old mechanisms and compared
+   with them. Nothing a reader or a desk sees changes.
+4. Predictions, settlement and the score, as host code and records.
+5. Stories woken by settlements and surprises; something opens a story for a
+   subject that has none. Only then are per-capture management tasks, the
+   intake label's question and the event layer retired, together.
+6. The root, with stories as its sub-calls (a new substrate: today's research
+   children have no tape and die with their parent).
+7. The readers.
+
+A standing check from step 3 on: mentions resolved again under today's
+aliases and compared with what is stored, so a vocabulary that fragments or
+merges wrongly is seen.
 
 ## 11. Open
 
@@ -161,3 +206,46 @@ publishing throughout.
 5. How the hot path's candidate rules are tuned without a per-capture model.
 6. Whether a story's Texture naming its own subjects is enough to find the
    subjects that are not proper names.
+7. (panel) Importance: the owner's rule is the number of stories about a
+   subject, which is zero for a subject with no story, yet the root must be
+   woken by subjects that matter and have none. Proposed: importance for
+   ranking stays the owner's count; whether a subject with no story deserves
+   one is read from captures (distinct origins in a window).
+8. (panel) A time span on a subject, optional, so two elections or two rounds
+   of talks with one name stay apart. It passes the test "does code behave
+   differently", but it is the first step back toward kinds.
+9. (panel) Wakes on hub subjects: one capture mentioning five hubs can match
+   many predictions. The read-since-cursor wake coalesces them; whether that
+   is enough is measured in the offline slice.
+10. (panel) Removing the 1.5 s spacing of research children needs the caller
+    fixed, or the gateway's refusals return.
+
+## 12. The panel of 2026-11-22
+
+Five members (Claude Opus, GPT 6.1 Sol, DeepSeek v4.1 flash, Muse Spark, GLM
+5.3 flash) read draft 2 and the repository, read-only. All five: proceed with
+changes. What each put first: only independent captures settle and count
+(Opus); the measured slice from arrival to story wake before any retirement
+(Sol); every wake gated on a counted mention from a distinct outlet, tentative
+ones stored silently (DeepSeek); the custodian named and predictions durable,
+interrupted on a crash and not false (Muse Spark); the hot path beside the old
+ones and retired only after predictions are live (GLM).
+
+Adopted above: independence of evidence and wire copies counted once; skill
+against a base rate and a fixed denominator for surprise; settlement as host
+code and wakes as reads; yes/no questions per candidate in one job split only
+at vendor limits; tentative mentions; the deployed capture candidates adopted;
+two edge families; the offline slice with kill lines; nothing retired before
+its replacement; the standing re-resolution check; the escalation desk checks
+a new name against existing subjects before writing.
+
+Corrections to draft 2's facts: the capture side of the entity layer is
+deployed for candidates (it said not built); `choir.subject` is a taken name;
+the debounce in the old root code also enforces a minimum gap, which is
+spacing and goes with it; draft 2 retired editorial routing two steps before
+anything else opened stories.
+
+Not adopted, for the owner: a time span on subjects (open question 8);
+importance read from captures (open question 7). Dropped until code needs
+them: roles on mentions.
+
