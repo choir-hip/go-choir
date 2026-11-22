@@ -3,10 +3,16 @@ package agentcore
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/storecomposition"
 	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -259,5 +265,140 @@ func TestObservabilityServesTheRunMemoryRetirementCensus(t *testing.T) {
 	c := read()
 	if c.Passes != 1 || c.FinishedAt == nil || len(c.Dispositions) == 0 {
 		t.Fatalf("after a pass: %+v", c)
+	}
+}
+
+// The store_composition section: absent on a plain read; ?store_composition=start
+// begins a background reading and answers at once; ?store_composition=1 reads
+// its progress and then its finished report.
+func TestObservabilityStartsAndReadsTheStoreComposition(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-store-composition")
+	read := func(query string) (state string, tables []string, ok bool) {
+		req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability"+query, nil)
+		req.Header.Set("X-Authenticated-User", "owner-telemetry")
+		rec := httptest.NewRecorder()
+		(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
+		var obs struct {
+			C *struct {
+				State  string `json:"state"`
+				Tables []struct {
+					Table string `json:"table"`
+				} `json:"tables"`
+			} `json:"store_composition"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil || rec.Code != http.StatusOK {
+			t.Fatalf("observability = %d %s", rec.Code, rec.Body.String())
+		}
+		if obs.C == nil {
+			return "", nil, false
+		}
+		for _, tt := range obs.C.Tables {
+			tables = append(tables, tt.Table)
+		}
+		return obs.C.State, tables, true
+	}
+	if _, _, ok := read(""); ok {
+		t.Fatal("a plain read showed store_composition")
+	}
+	if _, _, ok := read("?store_composition=1"); ok {
+		t.Fatal("a read with no reading showed one")
+	}
+	if state, _, ok := read("?store_composition=start"); !ok || (state != "running" && state != "done") {
+		t.Fatalf("start answered state %q ok=%v", state, ok)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		state, tables, ok := read("?store_composition=1")
+		if ok && state == "done" {
+			have := map[string]bool{}
+			for _, n := range tables {
+				have[n] = true
+			}
+			if !have["og_objects"] || !have["run_memory_entries"] {
+				t.Fatalf("the guest's own tables are not in the reading: %v", tables)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the reading did not finish: %q", state)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// The route refuses a request with no authenticated user, and starts nothing.
+func TestObservabilityStoreCompositionNeedsAnAuthenticatedUser(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-store-composition-auth")
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability?store_composition=start", nil)
+	rec := httptest.NewRecorder()
+	(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no user: %d %s", rec.Code, rec.Body.String())
+	}
+	if rt.storeComposition != nil {
+		t.Fatal("a refused request opened the scanner")
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/runtime/observability?store_composition=start", nil)
+	req.Header.Set("X-Authenticated-User", "owner-telemetry")
+	rec = httptest.NewRecorder()
+	(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed || rt.storeComposition != nil {
+		t.Fatalf("POST: %d", rec.Code)
+	}
+}
+
+// Stop ends a running composition reading before the store closes, and a
+// start after Stop begins nothing.
+func TestRuntimeStopEndsTheStoreCompositionReading(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-store-composition-stop")
+	rt.storeCompositionOnce.Do(func() {
+		rt.storeComposition = storecomposition.Open("", storecomposition.Config{BatchRows: 1, MinYield: 200 * time.Millisecond})
+	})
+	if _, started := rt.storeComposition.Start(rt.store.ReadDB); !started {
+		t.Fatal("reading did not start")
+	}
+	if st := rt.storeComposition.Status(); st == nil || st.State != "running" {
+		t.Fatalf("status = %+v", st)
+	}
+	t0 := time.Now()
+	rt.stopStoreComposition()
+	if time.Since(t0) > 5*time.Second {
+		t.Fatalf("stop took %v", time.Since(t0))
+	}
+	if st := rt.storeComposition.Status(); st == nil || st.State != "interrupted" || st.Reason != "cancelled" {
+		t.Fatalf("after stop = %+v", st)
+	}
+	if _, started := rt.storeComposition.Start(rt.store.ReadDB); started {
+		t.Fatal("a reading started after stop")
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability?store_composition=start", nil)
+	req.Header.Set("X-Authenticated-User", "owner-telemetry")
+	rec := httptest.NewRecorder()
+	(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
+	if strings.Contains(rec.Body.String(), `"store_composition"`) {
+		t.Fatalf("the route answered for a stopped runtime: %s", rec.Body.String())
+	}
+}
+
+// A report a dead process left "running" is rewritten "interrupted" when the
+// runtime is built, before anything asks for it.
+func TestRuntimeBootRewritesARunningCompositionReport(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "runtime.db")
+	s, err := openTestStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	file := filepath.Join(dir, "store-composition.json")
+	running := `{"state":"running","started_at":"2026-11-22T00:00:00Z","progress":{"rows_walked":5,"batches":1,"tables_done":0,"tables_total":3},"store":{},"scope":"` + storecomposition.Scope + `","reading_note":"` + storecomposition.ReadingNote + `"}`
+	if err := os.WriteFile(file, []byte(running), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rt := New(provideriface.Config{ComputerID: "computer-boot-rewrite", StorePath: dbPath}, s, events.NewEventBus(), nil)
+	t.Cleanup(rt.Stop)
+	data, err := os.ReadFile(file)
+	if err != nil || !strings.Contains(string(data), `"interrupted"`) || strings.Contains(string(data), `"running"`) {
+		t.Fatalf("file after boot: %s %v", data, err)
 	}
 }

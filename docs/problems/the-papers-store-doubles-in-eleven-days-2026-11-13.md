@@ -47,3 +47,7 @@ is not measured; there is no per-table reading.
 A per-table reading in the observability endpoint if it can be bounded, then
 bounds ranked by bytes saved per unit of risk
 (`docs/design/bounding-the-guest-store-2026-11-14.md`, to be written).
+
+## Instrument (2026-11-22)
+
+The per-table reading stops at about 95 s on the 51.5 GiB paper store with a third of it attributed, and says nothing by object kind. A background composition reading now exists (`internal/storecomposition`, started with `?store_composition=start` on the observability route and read with `?store_composition=1`): short read statements walked by rowid, no long read transaction, a deadline of 8 hours, sizes and counts only (per table; per object kind with version state and duplicate content hashes; run memory by kind and age). It has run on synthetic stores only; it has not been run on the paper.

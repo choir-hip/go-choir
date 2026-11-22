@@ -58,6 +58,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storecomposition"
 	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -544,6 +545,13 @@ type Runtime struct {
 	// storeTables runs the state file's per-table readings one at a time and
 	// keeps the last (internal/storetables).
 	storeTables storetables.Scanner
+	// storeComposition is the background store composition reading, started
+	// and read through the observability route (internal/storecomposition).
+	// Opened by New at boot (a Runtime built without New opens it on first
+	// use): storeCompositionScanner.
+	storeComposition     *storecomposition.Scanner
+	storeCompositionOnce sync.Once
+	storeCompositionStop atomic.Bool
 	selfdevComputerID     string
 	selfdevRealizationID  string
 	selfdevStartupMarker  string
@@ -763,6 +771,9 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	if path := quotaLedgerPath(cfg.StorePath); path != "" {
 		_ = rt.quotaLedger.Persist(path, time.Now())
 	}
+	// Opening the scanner at boot rewrites a report a dead process left
+	// "running" as "interrupted", before anything asks for it.
+	_ = rt.storeCompositionScanner()
 	if rt.mailbox == nil && strings.TrimSpace(cfg.MaildURL) != "" {
 		rt.mailbox = maildesk.NewHTTPMailbox(cfg.MaildURL)
 	}
@@ -1425,6 +1436,11 @@ func (rt *Runtime) MaintenanceHeld() bool {
 // Stop gracefully shuts down the runtime, cancelling all in-flight runs.
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
+	// A composition reading ends first, so it is not reading while the rest
+	// of Stop winds the runtime down, and no new one may start. (Stop does
+	// not close the store; the process's shutdown hook calls
+	// StopStoreComposition itself, because nothing calls Stop there.)
+	rt.stopStoreComposition()
 	rt.stopCheckpointCadence()
 	rt.stopSnapshotProducer()
 	rt.stopProjector()
@@ -5575,4 +5591,33 @@ func (rt *Runtime) inheritTrajectoryPolicyOverlay(ctx context.Context, ownerID s
 	}
 	metadata[modelpolicy.MetadataPolicyOverlayID] = overlayID
 	return metadata, true
+}
+
+// storeCompositionScanner is the store composition scanner, opened by New at
+// boot (or on first use for a Runtime built without New): its report file sits beside the state file, and a reading a dead
+// process left running is reported interrupted at that open, never resumed.
+// Nil without a store.
+func (rt *Runtime) storeCompositionScanner() *storecomposition.Scanner {
+	if rt == nil || rt.store == nil || strings.TrimSpace(rt.cfg.StorePath) == "" || rt.storeCompositionStop.Load() {
+		return nil
+	}
+	rt.storeCompositionOnce.Do(func() {
+		state := store.StateDBPath(rt.cfg.StorePath)
+		rt.storeComposition = storecomposition.Open(filepath.Join(filepath.Dir(state), "store-composition.json"), storecomposition.Config{StateFile: state})
+	})
+	return rt.storeComposition
+}
+
+// StopStoreComposition ends a running composition reading and refuses new
+// ones; the autoputer's graceful shutdown calls it.
+func (rt *Runtime) StopStoreComposition() { rt.stopStoreComposition() }
+
+// stopStoreComposition ends a running composition reading (bounded wait) and
+// refuses every later one: the route answers nothing for it after Stop.
+func (rt *Runtime) stopStoreComposition() {
+	rt.storeCompositionStop.Store(true)
+	rt.storeCompositionOnce.Do(func() {}) // waits for an open in progress; none starts after
+	if rt.storeComposition != nil {
+		rt.storeComposition.Close(10 * time.Second)
+	}
 }

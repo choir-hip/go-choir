@@ -642,6 +642,8 @@ func Run() {
 	// A graceful stop (SIGTERM) seals the open run-telemetry window after the
 	// HTTP server stops accepting; a crash does not, which is the loss the
 	// batching ruling allows. A no-op when batching was never enabled.
+	// A running store composition reading ends first (it reads the store).
+	s.AddShutdownHook(func(ctx context.Context) { rt.Runtime.StopStoreComposition() })
 	s.AddShutdownHook(func(ctx context.Context) {
 		if err := db.DrainTelemetry(ctx); err != nil {
 			log.Printf("autoputer: shutdown telemetry drain: %v", err)
