@@ -1435,11 +1435,23 @@ nodes:
     kind: metamission
     entrypoint: true
     depends_on: []
-    enables: [choir-first-design-2026-11-22, choir-exact-cutover-and-ontology-2026-11-20, choir-storage-efficiency-2026-11-22]
+    enables: [choir-first-design-2026-11-22, choir-exact-cutover-and-ontology-2026-11-20, choir-storage-efficiency-2026-11-22, choir-autoradio-on-android-2026-11-22]
     settled_by: owner
     note: >-
       Owner 2026-11-22: "make a metamission which covers them both, and any
       3rd or nth mission we add. so we can keep /goal running continuously".
+  - id: choir-autoradio-on-android-2026-11-22
+    title: Autoradio on Android — the shared codebase running on an old Motorola, and the model benchmark on it
+    path: docs/definitions/choir-autoradio-on-android-2026-11-22.md
+    status: working  # 2026-11-22 on the owner's word
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-22: "lets try to get autoradio running on it... thats a
+      new mission to add to the metamission".
   - id: choir-storage-efficiency-2026-11-22
     title: Storage efficiency — no routine second copy of a store, restore inside its budget, the store measured by kind and cut
     path: docs/definitions/choir-storage-efficiency-2026-11-22.md

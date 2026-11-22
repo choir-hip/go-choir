@@ -26,6 +26,12 @@ metamission:
       status: working
       depends_on: []
       note: 'storage: no routine operation writes a second copy of a store, restore fits its budget, the store is measured by kind and cut. Stations S0 to S7. Added on the owner''s word after Node B''s disk refused deploys and wakes on 2026-11-22.'
+    - id: M4
+      path: docs/definitions/choir-autoradio-on-android-2026-11-22.md
+      readiness: executable
+      status: working
+      depends_on: []
+      note: 'Android: Autoradio running on an old Motorola from the shared codebase, and a measured table of which on-device models such a phone can run. Stations A0 to A5. Added on the owner''s word, 2026-11-22.'
 start:
   captured_at: 2026-11-22T05:02Z
   source:
@@ -95,6 +101,7 @@ receipts:
   - 'M1: docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md'
   - 'M2: docs/definitions/choir-first-design-2026-11-22.md'
   - 'M3: docs/definitions/choir-storage-efficiency-2026-11-22.md'
+  - 'M4: docs/definitions/choir-autoradio-on-android-2026-11-22.md'
 ---
 
 # The standing metamission

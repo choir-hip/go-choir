@@ -19,6 +19,16 @@ mission we add. so we can keep /goal running continuously"). It lists the
 live missions below and holds only what they share: the landing order and
 the machines.
 
+## Live goal from 2026-11-22: Autoradio on Android
+
+The owner, 2026-11-22, with two old Android phones plugged in: "lets try to
+get autoradio running on it... thats a new mission to add to the
+metamission". Goal:
+[`definitions/choir-autoradio-on-android-2026-11-22.md`](definitions/choir-autoradio-on-android-2026-11-22.md).
+The Motorola (64-bit, 3.4 GiB) is the target and the low-end model
+benchmark; the Samsung runs a 32-bit system Exact does not build for and is
+left out by default. Only the voice is native there too.
+
 ## Live goal from 2026-11-22: storage efficiency
 
 The owner, 2026-11-22, after Node B's disk refused deploys and wakes: "the
