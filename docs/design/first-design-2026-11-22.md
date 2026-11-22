@@ -176,7 +176,13 @@ predictions register subscriptions... thats how it ought to be".
 - So the root is woken by what it has a stake in, and there is no commit log
   to tail, which is where the earlier root desk failed review.
 
-Lead's additions, not ruled:
+Ruled the same day (owner: "yes, bingo. useful additions. stories predict next
+events and get woken with them. surprises are key"): the three additions
+below, and that a story's Texture predicts its own next events and is woken by
+them, the same mechanism as the root one level down.
+
+- **Stories predict too.** The root watches the whole; each story watches its
+  own thread.
 
 - **Surprise needs a place.** An event that matches no prediction is the most
   informative kind. A standing subscription to the unmatched (above an
