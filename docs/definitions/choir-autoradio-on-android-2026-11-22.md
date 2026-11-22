@@ -53,6 +53,10 @@ boundaries:
     - 'the owner''s words above; CLAUDE.md, "The phone app is Exact; only voice is native"'
   owner_rulings:
     - '"only the voice stuff should be swift. the rest should be exact" (2026-11-18). Reading: on Android only the voice is Kotlin; a page that needs Kotlin to work is a page not yet moved to Exact, and the fix is in M1.'
+    - '"i need to publish all these benchmarks. this is great open source data. then when new models come out we update the benchmarks. the better we test them, the better decisions we make on deployment" (2026-11-22). Reading: the benchmark is a maintained public dataset, not a one-off table. This repository is public, so the dataset is published by landing it here; a second venue is the owner''s to name (Q3).'
+    - '"my budget and privacy and taste doesnt want me to send voice to other services. and i dont yet want the infra demand to process voice server side... client side voice is such an unlock, as it dramatically improves the value of old devices" (2026-11-22). Reading: the voice stays on the device at every rung of the ladder; a cloud or server voice is not a fallback this mission may choose.'
+    - '"we should think about the up-spec. for devices like my current iphone and much better... what could be done with full interaction models. full duplex voice etc. i dont believe that you want those as the sole model in your system... you want the interaction model, and the persistent rlm desks" (2026-11-22). Reading: a design station (A7), not a build; the interaction model is the device''s ears and mouth and the desks remain the mind.'
+    - '"remember, we will keep going up-spec. and yes, we can include bigger models in mac (and eventual windows and linux) builds. the point now is to get the baseline, the framework, and to get it working for beta users, ios and android. i mean, the first thing is like, what are the minimum system requirements and recommended settings. the point is to be inclusive, to say that that old phone you have that you use as a music player and camera is still useful, growing in value actually" (2026-11-22). Reading: the order is baseline first (A8, from A4''s measurements), then the ladder upward; desktop builds may carry larger models; LFM3-Omni-2B joins A7 as the candidate for a phone that sees. Being ready for beta users is this mission''s aim; sending a build to testers is still the owner''s act.'
   must_preserve:
     - 'no page logic in Kotlin; a native call needs a reason only native code can meet, written beside it'
     - 'one native build at a time through the Mac build lock; builders never run native builds, emulators or a phone'
@@ -60,7 +64,7 @@ boundaries:
     - 'sign-in drills use d@e; no secrets in the repo or output'
     - 'no switches: Android gets the same features or an honest "not on this phone yet", never a hidden one'
   excluded:
-    - 'a release to a store or to testers'
+    - 'sending a build to a store or to testers (the mission makes the app ready for beta users; the release is the owner''s act)'
     - 'a 32-bit build (the Samsung), unless the owner rules otherwise (Q1)'
     - 'tablets, wear and car surfaces'
 stations:
@@ -99,6 +103,27 @@ stations:
     review: none
     depends_on: []
     status: pending
+  - id: A6
+    name: The benchmark, published and kept
+    scope: 'the harness (scripts/model-bench) and its results as an open dataset: every row with its model build, hashes, device, runtime, protocol and harness commit, so anyone can rerun it; a page that says what is measured and what is not; a routine for adding a model when one comes out. The owner''s own recordings are never published: only numbers from them. Each model''s licence is read for terms on publishing results before its row is published.'
+    class: yellow for the harness and the dataset in this repository; an outward act for any other venue (Q3)
+    review: one seat on the dataset''s claims before it is posted
+    depends_on: [A4]
+    status: pending
+  - id: A7
+    name: The up-spec, full interaction models
+    scope: 'a design note: what a full-duplex interaction model does on a phone of this iPhone''s class and above (listening while speaking, turn-taking, barge-in, echo, the owner''s voice among others) as one model in place of the pipeline of small ones; the one contract both the pipeline and an interaction model answer, so the ladder of devices is one ladder; what stays with the desks (what is said is authored by a desk, never invented by the voice); which open models exist and on what hardware they are real (2026-11-22 survey: Mac demos only, none on a phone; LFM3-Audio-2B and LFM3-Omni-2B are streaming and turn-based, not full-duplex); LFM3-Omni-2B as the candidate for a phone that sees (camera and screen), on phones of 8 GB and more and on desktop builds, which may carry larger models; a first experiment on the Mac'
+    class: green
+    review: a panel on the design
+    depends_on: [A4]
+    status: pending
+  - id: A8
+    name: Minimum system requirements and recommended settings
+    scope: 'from measured rows only: for each class of device (by memory, chip class and system version, iPhone and Android), the smallest set of models with which hands-free voice works with no audio leaving the device (the minimum), and the set we recommend; published as a table a person can read ("your phone: works, with these settings") and held in one shared data file the app reads to choose its models on that device, so the page and the app cannot disagree. The oldest class that works is the headline number, and it is re-measured when a model is added.'
+    class: green for the table; orange for the app reading it
+    review: one seat for the app change
+    depends_on: [A4]
+    status: pending
   - id: A5
     name: The voice in Kotlin
     scope: 'design first, from A4''s table: the audio session, the microphone, speech and the models behind the same contract names the Swift voice answers; then its stations'
@@ -112,6 +137,11 @@ decisions_for_the_owner:
     why: 'it needs a 32-bit ARM target added to Exact itself, and its 2.6 GiB of memory and 4.7 GiB of free storage leave little room for models'
     options: [not pursued, add a 32-bit target to Exact]
     default: not pursued
+  - id: Q3
+    question: Where else is the benchmark published, beyond this public repository?
+    why: 'a model hub dataset or a page of its own is where others would find it; posting there is outward and is the owner''s act'
+    options: ['a public repository of its own', 'a dataset on a model hub', 'a page of the Autopaper', 'more than one']
+    default: this repository only (docs/evidence and scripts/model-bench); nothing posted elsewhere until the owner names the venue
   - id: Q2
     question: May the Motorola be signed in with the owner's own account, or only d@e?
     why: the phone's touch is broken, so it is driven by adb and is a test device in practice
