@@ -144,6 +144,43 @@ the documents and caught up by tailing their commit log (all three open
 defects are in that log's handling). Children that are the root's own
 sub-calls report to it directly.
 
+## Backfill
+
+The owner, 2026-11-22: "we will need to backfill all this data. we should
+think about how to do this. using system1, and we can give jev an 'i dont
+know/more/other' button which calls an llm? other data backfill ideas?"
+
+The paper holds about 222,000 captures and 35,000 stories (2026-11-19 counts),
+few events and 6,690 story entities of poor quality. Ideas, none decided:
+
+1. **Derive before asking.** A story's events are the events of the captures
+   it cites; an event's entities come from extraction over its captures. No
+   model.
+2. **Cluster by vector first, confirm with Jev.** Captures near each other in
+   a time window are candidate events; Jev answers "same happening?" for whole
+   clusters in few large calls (the vendor's limits bind, `reference/SYSTEM1.md`),
+   never one call a capture.
+3. **An "other / cannot tell" option on every Jev question, which escalates to
+   a language model.** Jev picks and writes no text, so naming a new event
+   also needs a model or a rule (the central capture's headline). The
+   reference page's cautions apply (`reference/system1/calibration-and-cascades.md`):
+   the escalation test is the whole cascade, and a random share of the answers
+   Jev did NOT escalate must also be labelled, or its accuracy is never known.
+4. **Newest first, and on demand.** Resolve what traversal touches; a capture
+   no reader reaches may never need resolving.
+5. **Entities by a public identifier.** Canonical ids (Wikidata) merge
+   "U.S." and "United States" by rule; Jev only for the ambiguous.
+6. **Offline, then import.** As the vector backfill was: computed off the
+   paper's computer, checked on a sample, imported in one step.
+7. **Derived tables only.** The backfill writes projections that can be
+   dropped and rebuilt, never canonical records, so a bad pass is redone.
+8. **A hand-read sample and a ledger claim before it is trusted.**
+9. **Outside seeds, to be weighed:** the outlets' own article metadata;
+   public event lists.
+
+First output worth having: the count of existing stories that share an event
+set (the owner's rule 2), which measures the duplicate problem directly.
+
 ## Cost budget (to be set from measurement)
 
 The marginal cost of a capture must approach zero for sources to scale: an
