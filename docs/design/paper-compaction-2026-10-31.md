@@ -1,5 +1,29 @@
 # Compaction that reaches the paper (2026-10-31)
 
+> **2026-11-22: the layout trigger was removed** (`compactLayoutMaxAge`,
+> `compactLayoutMinBytes`, the layout branch of `compactReason`, and the
+> `state.db.layout.json` marker). A copy is now due only by free pages (10% or
+> 2 GiB) or when `store.compact_force` is on. Wherever sections 1 to 5 below
+> describe a layout trigger, a layout age, a layout marker or a layout clock
+> (the P1 and P8 rows, section 3, the weekly age in section 4), that part no
+> longer exists; sections 5 and the proof sections are history.
+>
+> Why: the copy of 2026-11-22 was due by layout with 0 of 13,383,190 pages
+> free, so it reclaimed nothing; it was store-sized (about 51 GiB), stayed
+> staged until a planned restart, held Node B under the deploy floor and
+> refused wakes ([problem record](../problems/compact-copy-staged-on-a-51-gib-store-holds-node-b-under-the-deploy-floor-2026-11-22.md)).
+> The layout claim's only evidence is the synthetic bench in section 5, never
+> measured on the paper. For scale, one day after a snapshot on a layout about
+> seven days old, 2,708 of 13,124 chunks were already held (line 75 of the
+> [snapshot problem record](../problems/paper-snapshot-aborts-at-its-time-budget-and-its-scratch-copy-blocks-deploys-2026-11-22.md)).
+> **Unmeasured, and the residual:** what the removal does to the daily
+> snapshot's upload. The reading that settles it is chunks new per capture over
+> the week after this deploys.
+>
+> A staged copy already on disk is still swapped in or dropped by
+> `RebaseOntoCompactCopy` exactly as before. A leftover `.layout.json` is read
+> by nothing.
+
 Mutation class: red (guest store file, snapshot layout, the boot path of a
 planned restart; the paper is the protected computer). Built and tested, not
 deployed. Rollback: turn `store.telemetry_retire` off on the computer (the

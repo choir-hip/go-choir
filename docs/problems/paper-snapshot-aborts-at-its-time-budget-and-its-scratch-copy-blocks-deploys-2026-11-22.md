@@ -109,6 +109,6 @@ swing; it does not remove the hour. The structural cost is the whole-store
 witness and re-seal each day; an earlier incremental design did not converge
 (`incremental-snapshots-design-three-review-rounds-structural-assessment-2026-11-15.md`).
 A trim straight after a capture shortens the swing's tail and nothing else.
-None of this is built. The second store-sized copy, the weekly compaction, is
+None of this is built. The second store-sized copy, the compaction (due by layout age when this was written, since removed), is
 its own record:
 `compact-copy-staged-on-a-51-gib-store-holds-node-b-under-the-deploy-floor-2026-11-22.md`.

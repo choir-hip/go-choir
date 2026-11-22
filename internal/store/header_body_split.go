@@ -601,8 +601,6 @@ func postSplitSwap(dbPath, statePath string, side HeaderBodySplitSummary) error 
 	if err := splitStepHook("swap/floored"); err != nil {
 		return err
 	}
-	// The new file is compact: compaction is not due for a while.
-	writeLayoutMarker(statePath, time.Now(), side.SourceHeadSequence)
 	now := time.Now().UTC()
 	side.SwappedAt = &now
 	raw, err := json.Marshal(side)

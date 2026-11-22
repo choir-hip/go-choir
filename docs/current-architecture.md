@@ -172,6 +172,7 @@ fresh deploy is not immediately what a computer shows: unknown how long; settle 
 ## 9. Operations (checked 2026-11-16; one line each)
 
 - Node B: the staging host (`choir.news`), runs vmctl, gateway, corpusd; disk headroom is the recurring risk (`scripts/status-storage`).
+- Store compaction (`internal/store/compact.go`): a compact copy of a computer's state file is staged only when the file's free pages pass 10% or 2 GiB, or when `store.compact_force` is on; the age of the file's layout is no longer a trigger (removed 2026-11-22). The copy is store-sized and stays staged until a planned restart swaps it in or drops it. Status: built; a copy staged "due by layout" before the removal is still swapped in or dropped as before.
 - Staging is the acceptance environment; verify the deployed commit with `GET https://choir.news/health`.
 - Build VMs: `ssh choir-agents` for builds; one Mac build at a time through the lock (CLAUDE.md).
 - Deploy and expedite: `.github/scripts/node-b-ci-deploy` lists paths that expedite; `Ring-Expedite` trailer on every non-docs landing.

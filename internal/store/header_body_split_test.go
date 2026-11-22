@@ -393,8 +393,8 @@ func TestSplitMigratesFixtureStore(t *testing.T) {
 	if old, _ := statePresplitLayout(f.statePath + presplitSuffix); !old {
 		t.Fatal("the rollback copy is not the old file")
 	}
-	if _, ok := readLayoutMarker(f.statePath); !ok {
-		t.Fatal("no layout marker")
+	if exists(f.statePath + ".layout.json") {
+		t.Fatal("the split wrote a layout marker")
 	}
 	stats := headerBodySplitStatsAt(f.statePath)
 	if stats == nil || stats.Summary == nil || stats.Summary.Rows["og_objects"] != oldObjects || stats.Summary.SourceHeadSequence != 4242 || !stats.PresplitPresent {
