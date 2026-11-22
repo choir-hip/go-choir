@@ -756,7 +756,7 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 		}
 		var firstTok time.Time
 		autoradioCallsTotal.Add(1)
-		resp, err := streamer.StreamText(ctx, provideriface.TextStreamRequest{
+		resp, err := streamer.StreamText(provideriface.WithCaller(ctx, provideriface.Caller{Desk: "autoradio", RunID: t.req.TurnID}), provideriface.TextStreamRequest{
 			Provider: sel.Provider, Model: sel.Model, ReasoningEffort: effort,
 			ConversationID: t.req.TurnID, CacheKey: "autoradio:" + t.rt.cfg.ComputerID + ":" + promptSum[:8],
 			System: prompt, StableUser: stable, User: volatile, MaxTokens: maxTokens, ReasoningOff: reasoningOff,

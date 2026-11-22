@@ -153,16 +153,16 @@ func (h *Handler) HandleHostFetch(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		ms := time.Since(start).Milliseconds()
 		if p := recover(); p != nil {
-			log.Printf("gateway: fetch aborted computer=%s method=%s host=%s status=%d bytes=%d ms=%d reason=body cap or upstream break", computerID, res.Method, res.Host, res.Status, res.Bytes, ms)
+			log.Printf("gateway: fetch aborted computer=%s method=%s host=%s status=%d bytes=%d ms=%d reason=body cap or upstream break", computerID, logField(res.Method, 16), logField(res.Host, 255), res.Status, res.Bytes, ms)
 			panic(p)
 		}
 		switch {
 		case res.Refused != "":
-			log.Printf("gateway: fetch refused computer=%s method=%s host=%s reason=%q ms=%d", computerID, res.Method, res.Host, res.Refused, ms)
+			log.Printf("gateway: fetch refused computer=%s method=%s host=%s reason=%q ms=%d", computerID, logField(res.Method, 16), logField(res.Host, 255), res.Refused, ms)
 		case res.Err != nil:
-			log.Printf("gateway: fetch failed computer=%s method=%s host=%s err=%q ms=%d", computerID, res.Method, res.Host, sanitizeError(res.Err), ms)
+			log.Printf("gateway: fetch failed computer=%s method=%s host=%s err=%q ms=%d", computerID, logField(res.Method, 16), logField(res.Host, 255), sanitizeError(res.Err), ms)
 		default:
-			log.Printf("gateway: fetch computer=%s method=%s host=%s status=%d bytes=%d ms=%d", computerID, res.Method, res.Host, res.Status, res.Bytes, ms)
+			log.Printf("gateway: fetch computer=%s method=%s host=%s status=%d bytes=%d ms=%d", computerID, logField(res.Method, 16), logField(res.Host, 255), res.Status, res.Bytes, ms)
 		}
 	}()
 	svc.exec.ServeTo(w, r, &res)

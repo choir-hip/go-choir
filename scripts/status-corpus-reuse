@@ -104,7 +104,7 @@ CS_RE = re.compile(STAMP + r" corpus search computer=\S+ (.*)$")
 RB_RE = re.compile(STAMP + r" research brief run=(\S+) desk=(\S+) (.*)$")
 EF_RE = re.compile(STAMP + r" event layer: resolved \d+ captures in \d+ calls: op=event_flush (.*)$")
 RD_RE = re.compile(STAMP + r" corpus read run=(\S+) desk=(\S+) conv=\S+ capture=\S+ held=(\S+) via=(\S+)")
-GW_RE = re.compile(STAMP + r" .*search request from autoputer (\S+) \(.*?run=(\S+) desk=(\S+) conv=")
+GW_RE = re.compile(STAMP + r" .*search request from autoputer (\S+) \(.*run=(\S+) desk=(\S+) conv=")  # greedy: the LAST run= desk= conv= is the fixed tail
 GWA_RE = re.compile(STAMP + r" .*search for autoputer (\S+) answered .*? served=(\w+)")
 QH_RE = re.compile(r"[ (]qh=(\w+)")
 WK_RE = re.compile(STAMP + r" runtime: actor wake latency kind=(\w+) target=research:")

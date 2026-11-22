@@ -115,6 +115,7 @@ func (p *Provider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 
 // Execute implements provideriface.Provider.
 func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
+	ctx = provideriface.WithCaller(ctx, provideriface.Caller{RunID: task.RunID, Desk: task.AgentProfile})
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"gateway","routed":true}`))
 
 	llmConfig := provideriface.ResolvedLLMConfigFromMetadata(task.Metadata)
@@ -356,6 +357,7 @@ func (p *Provider) do(ctx context.Context, req llmRequest, accept string) (*http
 	if accept != "" {
 		httpReq.Header.Set("Accept", accept)
 	}
+	setCallerHeaders(ctx, httpReq.Header)
 	// The transport (hostlink) resends a refused dial across a gateway
 	// restart (host-deploy-restart-fails-in-flight-guest-turns-2026-10-10).
 	resp, err := p.httpClient.Do(httpReq)

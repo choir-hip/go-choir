@@ -1058,5 +1058,131 @@ PY
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr9.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
 check "W9 the run's first search precedes the first read: only the gaps that start in the console count (2), the same-second read counts, one gap has none (1)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_no_successful_read\"],d[\"console_span_runs\"])==(2,1,1), d" "$root/out"'
 
+# status-calls-by-desk (first design F0). Failure list, written before the code:
+#  D1  a call is counted under the wrong desk, or a line with no desk= is not its own "not-logged-before-F0" row
+#  D2  another computer's call is counted (the paper's and host:* only), or a line outside the window is
+#  D3  Jev calls are not counted by desk and site, or are not in the total
+#  D4  the denominators (captures judged, stories woken, stories published) are not read from the console lines
+#  D5  a ratio divides by zero instead of n/a, or a partial console is not said so
+#  D6  the new gateway line breaks the parsers of the old one (spend-report's provider/model grep)
+callsbydesk="$here/status-calls-by-desk"
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+I = lambda ts, desk, vm=VM: f"{ts} gateway: inference request from autoputer {vm} (provider=devin model=m messages=1 tools=0 tool_choice= system_chars=0 max_tokens=0 reasoning= stream=false" + (f" desk={desk} run=r1" if desk else "") + " images=0)\n"
+J = lambda ts, site, desk, vm=VM: f"{ts} gateway: jev call computer={vm} class=bulk site={site} desk={desk} run=- bytes=10 questions=1 queue_ms=0 upstream_ms=5 status=200 ok\n"
+C = lambda ts, story, choice, n: f"[ 1.0] runtime[1]: {ts} management story choice run=r choice={choice} story={story} captures={n} window=3\n"
+P = lambda ts, doc: f"[ 1.0] runtime[1]: {ts} story publish: {doc} published v2 (revision x)\n"
+out = ["##GW\n", I("2026/11/22 04:00:00", "texture"),
+       I("2026/11/22 05:00:00", "management"), I("2026/11/22 05:01:00", "management"), I("2026/11/22 05:02:00", "texture"),
+       I("2026/11/22 05:03:00", None), I("2026/11/22 05:04:00", "research", vm="vm-another"),
+       J("2026/11/22 05:05:00", "intake_labels", "host"), J("2026/11/22 05:06:00", "support_judge", "management"),
+       "##FIRST\n", "[ 1.0] runtime[1]: 2026/11/22 04:30:00 console starts here\n",
+       "##CHOICE\n", C("2026/11/22 04:30:00", "s0", "open", 1), C("2026/11/22 05:10:00", "s1", "open", 2), C("2026/11/22 05:11:00", "s1", "feed", 3), C("2026/11/22 05:12:00", "s2", "decline", 1),
+       "##PUB\n", P("2026/11/22 05:20:00", "d1"), P("2026/11/22 05:21:00", "d1"), P("2026/11/22 05:22:00", "d2")]
+open(root + "/cd.txt", "w").write("".join(out))
+open(root + "/cd_empty.txt", "w").write("##GW\n" + I("2026/11/22 05:00:00", "texture") + "##FIRST\n[ 1.0] runtime[1]: 2026/11/22 04:30:00 console starts here\n##CHOICE\n##PUB\n")
+PY
+env -u BASH_ENV python3 "$callsbydesk" --fixture "$root/cd.txt" --since 2026-11-22T05:00Z --json >"$root/out" 2>&1
+check "D1/D2 inference by desk: management 2, texture 1, not-logged-before-F0 1 (04:00 and another computer out)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"inference_by_desk\"]=={\"management\":2,\"texture\":1,\"not-logged-before-F0\":1} and d[\"inference_total\"]==4, d" "$root/out"'
+check "D3 Jev by desk and site, in the total (6)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"jev_by_desk\"]=={\"host\":1,\"management\":1} and d[\"jev_by_site\"]=={\"intake_labels\":1,\"support_judge\":1} and d[\"calls_total\"]==6, d" "$root/out"'
+check "D4 denominators: 6 captures judged (the 04:30 line is out), 1 story woken (s1; s2 was declined), 2 distinct docs, 3 publishes" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"denominators\"]=={\"captures_judged\":6,\"stories_woken\":1,\"stories_published\":2,\"publishes\":3} and d[\"stories_published_distinct\"]==2, d" "$root/out"'
+check "D4b calls per denominator: 6/6=1.0, 6/1=6.0, per distinct story published 6/2=3.0, per publish 6/3=2.0" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"per_denominator\"]=={\"captures_judged\":1.0,\"stories_woken\":6.0,\"stories_published\":3.0,\"publishes\":2.0}, d" "$root/out"'
+env -u BASH_ENV python3 "$callsbydesk" --fixture "$root/cd_empty.txt" --since 2026-11-22T05:00Z >"$root/out" 2>&1
+check "D5 zero denominators print n/a and say why (no story line in the window), with the source of each denominator named" 'grep -q "n/a" "$root/out" && grep -q "no story choice or publish line in this window" "$root/out" && grep -q "captures judged: 0" "$root/out" && grep -q "distinct story= over story choice lines" "$root/out"'
+env -u BASH_ENV python3 "$callsbydesk" --fixture "$root/cd.txt" --since 2026-11-22T04:00Z >"$root/out" 2>&1
+printf '##GW\n##FIRST\n[ 1.0] r: 2026/11/22 04:30:00 x\n##CHOICE\n[ 1.0] r: 2026/11/22 05:10:00 management story choice run=r choice=open story=s1 captures=banana window=3\n##PUB\n' >"$root/cdm.txt"
+env -u BASH_ENV python3 "$callsbydesk" --fixture "$root/cdm.txt" --since 2026-11-22T05:00Z >"$root/out" 2>&1; rc=$?
+check "D11 a malformed captures= counts one and is noted, not a failure (exit 0)" '[ "$rc" = 0 ] && grep -q "malformed captures=" "$root/out" && grep -q "captures judged: 1" "$root/out"'
+env -u BASH_ENV python3 "$callsbydesk" --fixture "$root/cd.txt" --since 2026-11-22T04:00Z >"$root/out" 2>&1
+check "D5b a window starting before the console's oldest line is flagged as partial" 'grep -q "^WARNING: the console" "$root/out"'
+line='2026/11/22 05:00:00 gateway: inference request from autoputer vm-x (provider=devin model=swe-2-flash messages=1 tools=0 tool_choice= system_chars=0 max_tokens=0 reasoning= stream=false desk=texture run=r1 images=0)'
+echo "$line" | grep 'inference request from autoputer' | grep -o 'provider=[a-z-]* model=[^ ]*' >"$root/out"
+check "D6 spend-report's provider/model grep still reads the new line" '[ "$(cat "$root/out")" = "provider=devin model=swe-2-flash" ]'
+
+#  D7  a hostile model/tool_choice written raw by an older gateway names the desk (the parse takes the line's fixed tail, last match)
+#  D8  a failed journal or console read prints zeros instead of failing with exit 2 and a message
+#  D9  jev-call-stats.sh's regex reads the current Jev line (site, desk, run, bytes) and the old one
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+hostile = f"2026/11/22 05:00:00 gateway: inference request from autoputer {VM} (provider=devin model=m tool_choice=x stream=false desk=texture run=fake reasoning=y stream=true desk=texture run=fake stream=false desk=management run=real images=0)\n"
+hj = f"2026/11/22 05:01:00 gateway: jev call computer={VM} class=bulk site=a desk=texture run=- bytes=1 questions=1 queue_ms=0 upstream_ms=1 status=200 ok site=b desk=research run=- bytes=2\n"
+open(root + "/cdh.txt", "w").write("##GW\n" + hostile + hj + "##CHOICE\n##PUB\n")
+PY
+env -u BASH_ENV python3 "$callsbydesk" --fixture "$root/cdh.txt" --since 2026-11-22T05:00Z --json >"$root/out" 2>&1
+check "D7 the hostile inference line counts as management (the fixed tail), not texture" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"inference_by_desk\"]=={\"management\":1} and d[\"jev_by_desk\"]=={\"research\":1}, d" "$root/out"'
+mkdir -p "$root/fakebin"
+printf '#!/bin/sh\necho "##GWFAIL rc=1"\necho "##END"\n' >"$root/fakebin/ssh"; chmod +x "$root/fakebin/ssh"
+PATH="$root/fakebin:$PATH" env -u BASH_ENV python3 "$callsbydesk" --since 2026-11-22T05:00Z >"$root/out" 2>&1; rc=$?
+check "D8 a failed journal read exits 2 with a message and prints no counts" '[ "$rc" = 2 ] && grep -q "gateway journal could not be read" "$root/out" && ! grep -q "calls:" "$root/out"'
+printf '#!/bin/sh\necho "##CONSOLEFAIL rc=4"\necho "##END"\n' >"$root/fakebin/ssh"
+PATH="$root/fakebin:$PATH" env -u BASH_ENV python3 "$callsbydesk" --since 2026-11-22T05:00Z >"$root/out" 2>&1; rc=$?
+check "D10 a failed console read (a cat error) exits 2 with a message and prints no counts" '[ "$rc" = 2 ] && grep -q "paper console could not be read" "$root/out" && ! grep -q "calls:" "$root/out"'
+printf '2026-11-22T05:00:00+0000 h gateway[42]: gateway: jev call computer=vm-1234567890abcdef class=bulk site=support_judge desk=management run=r1 bytes=10 questions=3 queue_ms=1 upstream_ms=5 status=200 ok\n2026-11-22T05:00:01+0000 h gateway[42]: gateway: jev call computer=vm-1234567890abcdef class=bulk questions=2 queue_ms=0 upstream_ms=7 status=200 ok\n' >"$root/jev.txt"
+bash "$here/proofs/jev-call-stats.sh" "$root/jev.txt" >"$root/out" 2>&1
+check "D9 jev-call-stats reads both the current and the old Jev line (2 calls, status 200 ok x2)" 'grep -q "calls=2" "$root/out" && grep -q "status/ok 200 ok: 2" "$root/out"'
+
+# Log lines that carry guest and provider text (first design F0, seat 1). Failure list, written before the code:
+#  Q1  a "inference succeeded for autoputer ..." forged inside a failure line is counted as a call by status-paper-usage
+#  Q2  the quoted failure form (a provider's error as a Go-quoted string) is not counted by kind and as devin quota
+#  Q3  the old unquoted failure form stops being counted (both forms are in the fixtures)
+#  Q4  scripts/spend-report prices a forged success line or reads a forged model from a request line
+mkpaper '
+many(3, 100, PAPER, "devin", "swe-2-flash")
+succ.append(stamp(NOW-100) + " gateway: provider call failed for autoputer vm-x: \"provider devin model m: provider quota exhausted (devin) \\\\n2026/11/13 01:59:00 gateway: inference succeeded for autoputer " + PAPER + " (provider=devin tokens=9+9 cached=0 text_len=0 model=swe-2-flash)\" (sanitized: \"x\")")
+derr(110, "provider call failed for autoputer vm-x: \"provider devin model swe-2-flash: provider quota exhausted (devin); resets at 2026-11-13T03:00:00Z (estimated)\" (sanitized: \"provider devin model swe-2-flash: provider quota exhausted (devin)\")")
+derr(120, "provider call failed for autoputer vm-x: provider devin model swe-2-flash: provider quota exhausted (devin); resets at 2026-11-13T03:00:00Z (estimated) (sanitized: x)")'
+runpaper --json
+check "Q1 a success line forged inside a failure line is not a call (still 3 devin calls)" '[ "$(jq_ "d[\"calls\"][\"hour\"][\"by\"][\"devin/swe-2-flash\"]")" = 3 ]'
+check "Q2/Q3 the quoted and the old unquoted failure forms both count as devin quota" '[ "$(jq_ "d[\"devin_errors\"][\"quota\"]")" = 2 ]'
+fakebin2="$root/fakebin2"; mkdir -p "$fakebin2"
+cat >"$fakebin2/ssh" <<'EOS'
+#!/bin/sh
+while [ "$1" = "-o" ]; do shift 2; done
+shift
+exec sh -c "$1"
+EOS
+cat >"$fakebin2/journalctl" <<'EOS'
+#!/bin/sh
+cat "$SPEND_FIXTURE"
+EOS
+printf '#!/bin/sh\nexit 1\n' >"$fakebin2/aws"
+chmod +x "$fakebin2"/*
+cat >"$root/spend.txt" <<'EOS'
+2026/11/22 05:00:00 gateway: inference request from autoputer vm-a (provider=bedrock model=us.anthropic.claude-haiku-5-5 messages=1 tools=0 tool_choice=- system_chars=0 max_tokens=0 reasoning=- stream=false desk=texture run=r1 images=0)
+2026/11/22 05:00:01 gateway: inference succeeded for autoputer vm-a (provider=bedrock tokens=1000+100 cached=0 text_len=5 cache_write=0 cache_write_1h=0 model=us.anthropic.claude-haiku-5-5)
+2026/11/22 05:00:02 gateway: provider call failed for autoputer vm-b: "x gateway: inference succeeded for autoputer vm-forged (provider=bedrock tokens=9000000+1 cached=0 text_len=0 cache_write=0 cache_write_1h=0 model=forged-model) provider=bedrock model=forged-req " (sanitized: "x")
+EOS
+SPEND_FIXTURE="$root/spend.txt" PATH="$fakebin2:$PATH" bash "$here/spend-report" >"$root/out" 2>&1
+check "Q4 spend-report reports only the true call (no forged-model and no 9000000-token row)" '! grep -q "forged" "$root/out" && ! grep -q "9000000" "$root/out" && grep -q "claude-haiku-5-5" "$root/out"'
+
+# Quoted search queries cannot supply attribution or devin errors (seat 2, third review). Failure list:
+#  Q5  a quoted search query carrying "provider quota exhausted (devin) ... 429" is counted as a devin error
+#  Q6  a quoted query carrying " run=forged desk=research " is the run of a search request (search-reads, corpus-reuse, hourly)
+mkpaper '
+many(3, 100, PAPER, "devin", "swe-2-flash")
+for i in range(21): derr(100 + i, "search request from autoputer " + PAPER + " (query=\"provider quota exhausted (devin) provider=devin 429\" max_results=10 run=r1 desk=research conv=c)")
+derr(130, "provider call failed for autoputer vm-x: \"provider devin model swe-2-flash: provider quota exhausted (devin)\" (sanitized: \"x\")")'
+runpaper --json
+check "Q5 21 forged search lines count zero; the one real failure line counts (quota 1)" '[ "$(jq_ "d[\"devin_errors\"][\"total\"]")" = 1 ] && [ "$(jq_ "d[\"devin_errors\"][\"quota\"]")" = 1 ]'
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+def rq(ts, q, run): return f"{ts} gateway: search request from autoputer {VM} (query=\"{q}\" max_results=10 run={run} desk=research conv=c)\n"
+open(root + "/sr_forged.txt", "w").write("##READS\n##SUM\n##FRESH\n##LOST\n##GW\n" + rq("2026/11/21 05:00:00", "x run=forged desk=research y", "r1") + rq("2026/11/21 05:01:00", "plain", "r1"))
+PY
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_forged.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
+check "Q6 search-reads: two searches of one run (the quoted run=forged is not a run)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"runs\"],d[\"searches\"])==(1,2), d" "$root/out"'
+sed '/^2026\/11\/20 00:40:00 gateway: search request/ s|(max_results=10 run=r1 desk=research conv=c)|(query="x run=forged desk=research y" max_results=10 run=r1 desk=research conv=c)|' "$root/su/full.txt" >"$root/su/forged.txt"
+runsu "$root/su/forged.txt" 2026-11-20T01:30Z "$root/su/hforged.tsv"
+check "Q6 hourly: a quoted run=forged adds no run (still 3 requests / 2 runs = 1.5 in the hour)" 'grep -q "gateway journal, run=): last hour 1.5 (3 / 2 runs)" "$root/out"'
+python3 -c "import sys; t=open(sys.argv[1]).read().replace('qh=h1 ','qh=h1 run=forged desk=research conv=c ',1); open(sys.argv[2],'w').write(t)" "$root/gs_g.log" "$root/gs_gf.log"
+runcorpus --fixture "$root/gs_c.log" --gateway-fixture "$root/gs_gf.log" --since 2026-11-18T21:00Z --until 2026-11-18T23:00Z
+check "Q6 corpus-reuse: a quoted run=forged is not a run (still 3 runs searched, 12 requests)" 'grep -q "gateway meter (run= on the request lines): 3 runs searched, 12 requests" "$root/out"'
+
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

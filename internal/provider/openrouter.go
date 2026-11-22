@@ -112,7 +112,7 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 		httpReq.Header.Set("Accept", "application/json")
 	}
 
-	log.Printf("provider: openrouter call model=%s stream=%t reasoning=%s", modelID, req.Stream, body.ReasoningEffort)
+	log.Printf("provider: openrouter call model=%s stream=%t reasoning=%s", logModel(modelID), req.Stream, logModel(body.ReasoningEffort))
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("openrouter: http call: %w", err)

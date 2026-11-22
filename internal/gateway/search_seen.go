@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"hash/fnv"
 	"net/http"
 	"net/url"
@@ -138,21 +139,37 @@ func searchURLHashes(urls []string, n int) string {
 	return strings.Join(parts, ",")
 }
 
+// modelCaller is the desk and run a model call's guest named, cleaned for the
+// log line: desk=unknown and run=- when it sent none (an old guest, or a
+// caller no desk or run owns), never an empty field. Logged only.
+func modelCaller(r *http.Request) (desk, run string) {
+	desk = searchAttributionValue(r, "X-Choir-Desk")
+	if desk == "-" {
+		desk = "unknown"
+	}
+	return desk, searchAttributionValue(r, "X-Choir-Run")
+}
+
 // searchAttributionValue is one attribution header cleaned for the log: no
 // space or control character, at most 64 bytes, "-" when absent. A header
 // cannot forge a second log line.
 func searchAttributionValue(r *http.Request, name string) string {
-	v := strings.Map(func(c rune) rune {
-		if c <= ' ' || c > 0x7e {
-			return -1
-		}
-		return c
-	}, r.Header.Get(name))
-	if len(v) > 64 {
-		v = v[:64]
-	}
-	if v == "" {
-		return "-"
-	}
-	return v
+	return logField(r.Header.Get(name), 64)
 }
+
+// logField cleans a guest-supplied string for a log line's key=value field: no
+// space, control character or non-ASCII byte, at most max bytes, "-" when
+// nothing is left. A guest's model name, tool_choice or reasoning effort can
+// carry spaces, "=" and newlines; raw, they forge fields ("desk=fake") and
+// whole lines that the money and status scripts parse
+// (docs/problems/gateway-log-lines-carry-raw-guest-strings-2026-11-22.md).
+func logField(s string, max int) string { return provider.LogField(s, max) }
+
+// logModelField is a guest-named model, tool_choice or effort as the model-call
+// lines carry it.
+func logModelField(s string) string { return logField(s, 96) }
+
+// logText is free text from a guest or an upstream (a provider's error, a
+// reason) as one bounded, Go-quoted log token: a newline or a fake line stays
+// inside the quotes.
+func logText(s string) string { return provider.LogText(s, 300) }

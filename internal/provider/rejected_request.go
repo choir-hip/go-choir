@@ -31,7 +31,7 @@ func logRejectedRequest(providerName string, resp *http.Response) string {
 	if t := strings.TrimSpace(resp.Header.Get("X-Amzn-Errortype")); t != "" && len(t) <= 80 {
 		reason = rejectedReasonSecrets.ReplaceAllString(t, "[redacted]") + " " + reason
 	}
-	log.Printf("provider: %s rejected request status=%d reason=%q", providerName, resp.StatusCode, reason)
+	log.Printf("provider: %s rejected request status=%d reason=%s", logModel(providerName), resp.StatusCode, LogText(reason, 300))
 	return reason
 }
 

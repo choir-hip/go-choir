@@ -502,8 +502,8 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 		// that succeeds closes the breaker and ends the doubling.
 		if b.Trip(c.hardCooldown) {
 			snap := b.Snapshot()
-			log.Printf("gateway: model %s/%s refused as a hard failure (%v; trip %d, half-opens at %s)",
-				c.inner.Name(), modelLabel(model), err, snap.Trips, formatUntil(snap.OpenUntil))
+			log.Printf("gateway: model %s/%s refused as a hard failure (%s; trip %d, half-opens at %s)",
+				c.inner.Name(), modelLabel(model), logText(err.Error()), snap.Trips, formatUntil(snap.OpenUntil))
 		}
 	case providerFailureCounts(ctx, err):
 		// The model now fails for another reason. The breaker is no longer
@@ -554,7 +554,7 @@ func formatUntil(t *time.Time) string {
 // the provider's default.
 func modelLabel(model string) string {
 	if model = strings.TrimSpace(model); model != "" {
-		return model
+		return logModelField(model) // a guest's string reaches the logs and the error text
 	}
 	return "(default)"
 }

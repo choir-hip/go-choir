@@ -465,7 +465,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	// Step 4: Resolve the provider (multi-provider or single-provider).
 	p, err := h.resolveProvider(req)
 	if err != nil {
-		log.Printf("gateway: provider resolution failed for autoputer %s: %v", computerID, err)
+		log.Printf("gateway: provider resolution failed for autoputer %s: %s", computerID, logText(err.Error()))
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
@@ -486,7 +486,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		req.ReasoningOff = false
 		n := reasoningOffIgnored.Add(1)
 		log.Printf("gateway: reasoning_off ignored for autoputer %s (provider=%s model=%s tools=%d): not a no-tools call to an autoradio pool member (ignored %d times)",
-			computerID, p.Name(), req.Model, len(req.Tools), n)
+			computerID, p.Name(), logModelField(req.Model), len(req.Tools), n)
 	}
 
 	// Step 5: Build the LLM request and call the provider.
@@ -506,10 +506,14 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		ReasoningOff:    req.ReasoningOff,
 	}
 
+	// The desk and the run the guest named (X-Choir-Desk, X-Choir-Run): logged
+	// only, nothing here reads them (first design, F0).
+	callerDesk, callerRun := modelCaller(r)
+
 	// Images are logged by count, size and short sha256, never by data
 	// (problems/models-configured-text-only-2026-10-15.md, FM11).
-	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v %s)",
-		computerID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream, provider.SummarizeMedia(req.Messages))
+	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v desk=%s run=%s %s)",
+		computerID, p.Name(), logModelField(req.Model), len(req.Messages), len(req.Tools), logModelField(req.ToolChoice), len(req.System), req.MaxTokens, logModelField(req.ReasoningEffort), req.Stream, callerDesk, callerRun, provider.SummarizeMedia(req.Messages))
 	h.calls.Call(computerID, p.Name()) // a failed call stays with the provider it was admitted to (call_tally.go)
 
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
@@ -527,8 +531,8 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		// credentials, or auth headers in the response
 		// (VAL-GATEWAY-007).
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: provider call failed for autoputer %s: %v (sanitized: %s)",
-			computerID, err, sanitized)
+		log.Printf("gateway: provider call failed for autoputer %s: %s (sanitized: %s)",
+			computerID, logText(err.Error()), logText(sanitized))
 		if q, ok := provider.AsQuotaExhausted(err); ok {
 			writeProviderQuota(w, q, req.Model, time.Now())
 			return
@@ -598,8 +602,8 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 		// If we haven't written any SSE data yet, we can return an HTTP error.
 		// Otherwise, send an error event.
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: streaming provider call failed for autoputer %s: %v (sanitized: %s)",
-			computerID, err, sanitized)
+		log.Printf("gateway: streaming provider call failed for autoputer %s: %s (sanitized: %s)",
+			computerID, logText(err.Error()), logText(sanitized))
 		if q, ok := provider.AsQuotaExhausted(err); ok && !wrote {
 			// Nothing streamed yet: the typed quota answer, as unstreamed.
 			w.Header().Del("Cache-Control")
@@ -1026,7 +1030,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	stream, err := h.searchClient.StreamFor(ctx, computerID, req)
 	if err != nil {
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: search failed for autoputer %s: %v", computerID, sanitized)
+		log.Printf("gateway: search failed for autoputer %s: %s", computerID, logText(fmt.Sprint(sanitized)))
 		writeGatewayJSON(w, http.StatusBadGateway, ErrorResponse{Error: sanitized})
 		return
 	}
@@ -1308,8 +1312,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 func inferenceSuccessLine(what, computerID string, resp *provider.LLMResponse) string {
 	u := resp.Usage
 	return fmt.Sprintf("%s for autoputer %s (provider=%s tokens=%d+%d cached=%d text_len=%d cache_write=%d cache_write_1h=%d model=%s)",
-		what, computerID, resp.ProviderName, u.InputTokens, u.OutputTokens, u.CachedInputTokens, len(resp.Text),
-		u.CacheWrite5mTokens+u.CacheWrite1hTokens, u.CacheWrite1hTokens, resp.Model)
+		what, computerID, logModelField(resp.ProviderName), u.InputTokens, u.OutputTokens, u.CachedInputTokens, len(resp.Text),
+		u.CacheWrite5mTokens+u.CacheWrite1hTokens, u.CacheWrite1hTokens, logModelField(resp.Model))
 }
 
 // AppliedHeader names what the gateway applied of a call's reasoning_off and
