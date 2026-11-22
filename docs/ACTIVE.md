@@ -11,6 +11,20 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
+## Live goal from 2026-11-22: the first design
+
+The owner, 2026-11-22, on the design read back from the top: "great, this is
+the plan for the next throughline". Goal:
+[`definitions/choir-first-design-2026-11-22.md`](definitions/choir-first-design-2026-11-22.md);
+design: [`design/first-design-2026-11-22.md`](design/first-design-2026-11-22.md).
+One bucket of subjects that any account mentions; a capture attached to
+subjects with no agent session; stories and a root Texture that predict, are
+woken by what answers or surprises them, and are scored; a person's root
+whose Texture is their edition; Autoradio as a cell desk. Stations F0 to F6.
+The goal below continues beside it for the phone cutover and the search
+changes in flight; its ontology track (events and entities as separate
+kinds) is replaced by this one.
+
 ## Live goal from 2026-11-20 (evening): the Exact cutover and the ontology
 
 The owner, 2026-11-20: "we need to be aggressive with the cutover from Swift
