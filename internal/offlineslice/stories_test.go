@@ -157,3 +157,18 @@ func TestRankAndCap(t *testing.T) {
 		t.Fatalf("cap: %d %d", len(list), pre)
 	}
 }
+
+func TestCleanText(t *testing.T) {
+	in := "Claques en maternelle https://www. europesays.com/fr/1312747/ # actu # Actualités #Crime RT @someone: Neptun struck the bridge. https://www.theguardian.com/a?b=c next"
+	got := CleanText(in)
+	for _, bad := range []string{"http", "europesays", "actu", "Crime", "@someone", "theguardian"} {
+		if strings.Contains(got, bad) {
+			t.Fatalf("%q left in %q", bad, got)
+		}
+	}
+	for _, good := range []string{"Claques en maternelle", "Neptun struck the bridge.", "next"} {
+		if !strings.Contains(got, good) {
+			t.Fatalf("%q lost from %q", good, got)
+		}
+	}
+}

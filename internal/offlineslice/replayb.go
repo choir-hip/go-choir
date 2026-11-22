@@ -112,17 +112,18 @@ func ReplayB(caps []Capture, ents []Entity, stops []Stop, rules Rules, policy Al
 			rules.Prepare(day, EntitiesAsOf(ents, day, policy), StopsAsOf(stops, day))
 			cl.StartDay()
 		}
-		ms := rules.Mentions(c.Title, c.Lead, nil)
+		lead := CleanText(c.Lead)
+		ms := rules.Mentions(c.Title, lead, nil)
 		if !IsArrival(c) {
 			if !cfg.DFArrivalsOnly {
-				cl.Observe(ms, c.Title, c.Lead)
+				cl.Observe(ms, c.Title, lead)
 			}
 			continue
 		}
 		o := OracleStatus(sd.Cites[c.ID], sd.First, c.Fetched)
 		r := ResultB{ID: c.ID, Day: day.Format("2006-01-02"), Fetched: c.Fetched, Class: Class(c), Source: c.SourceID, Host: c.Host,
 			Title: c.Title, Lead: c.Lead, Mentions: len(ms), Dropped: map[string]int{}}
-		r.RawCount = distinctCount(ms)
+		r.RawCount = distinctCount(rules.Mentions(c.Title, c.Lead, nil)) // the deployed rules on the page text as stored
 		var kept []Mention
 		for _, m := range ms {
 			if why := cl.Drop(m, c.Host); why != "" {
@@ -133,7 +134,7 @@ func ReplayB(caps []Capture, ents []Entity, stops []Stop, rules Rules, policy Al
 			kept = append(kept, m)
 			r.KeptKeys = append(r.KeptKeys, m.Key)
 		}
-		cl.Observe(ms, c.Title, c.Lead)
+		cl.Observe(ms, c.Title, lead)
 		r.RecentRank = recentRank(sd, c.Fetched, o, cfg.OracleDepth)
 		r.CleanCount = distinctCount(kept)
 		in := ListInput{Mentions: kept}

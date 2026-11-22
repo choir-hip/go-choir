@@ -135,3 +135,20 @@ func (c *Cleaner) Drop(m Mention, host string) string {
 	}
 	return ""
 }
+
+var (
+	urlRe     = regexp.MustCompile(`(?i)(https?://\S+(\s?/\S+)*|www\.\s?\S+(\s?/\S+)*)`)
+	hashtagRe = regexp.MustCompile(`#\s?[\pL\pN_]+`)
+	mentionRe = regexp.MustCompile(`(?:RT\s+)?@[\pL\pN_.]+(@[\pL\pN_.]+)?:?`)
+)
+
+// CleanText takes the furniture of a post out of a lead before the rules read
+// it: links (including the broken "www. host/path" form the extractor leaves),
+// hashtags and account handles. A hashtag is a label the poster chose, not a
+// name the text states, and "EuropeSays" or "UkraineWar" are not subjects.
+func CleanText(s string) string {
+	s = urlRe.ReplaceAllString(s, " ")
+	s = hashtagRe.ReplaceAllString(s, " ")
+	s = mentionRe.ReplaceAllString(s, " ")
+	return strings.Join(strings.Fields(s), " ")
+}

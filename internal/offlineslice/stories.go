@@ -289,4 +289,3 @@ func ReadStories(dir string) (*StoryData, error) {
 	}
 	return d, nil
 }
-
