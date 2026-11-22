@@ -24,6 +24,11 @@ const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** Ends the turn (Exact gives one about 100 ms of CPU; Bun has no scheduler). */
+/** One story is decoded at a time. THE CAUSE of `radioWrite` overrunning (the proof's firstrun, bar and search drives, 163-171 ms, with ten stories' lap lines interleaved in the console): the writer loads ten stories in parallel,
+ *  and every yield of ten decodings resumes in the SAME turn of the one mutation, so ten stretches of 16 ms made one turn of 160 ms. Exact's budget is per turn, and a turn is every resumption that lands together
+ *  (docs/reference/exact/internals.md:40-42). The fetches stay parallel; only the decoding is in line. */
+let decoding: Promise<unknown> = Promise.resolve();
+const decodeOne = <T>(f: () => Promise<T>): Promise<T> => { const run = decoding.then(f, f); decoding = run.then(() => undefined, () => undefined); return run; };
 const yieldTurn = (label = 'reader'): Promise<void> => lapYield(label);
 let held = new Map<string, ReaderDoc>();
 let inflight = new Map<string, Promise<ReaderDoc>>();
@@ -61,7 +66,7 @@ async function fetchDoc(address: string, net: Net): Promise<ReaderDoc> {
     const body = (await net.pub('/api/platform/publications/resolve', { route: a.route })).body;
     if (!obj(body)) throw new Error('the computer sent a story that is not a story');
     await yieldTurn(`${address}: reply decoded, before the bundle's decoding`);   // the reply's own text and JSON are done: the decoding of a large story starts in a turn of its own
-    const d = await parseBundleAsync(body, address, (label) => yieldTurn(`${address.slice(-24)}: ${label}`));
+    const d = await decodeOne(() => parseBundleAsync(body, address, (label) => yieldTurn(`${address.slice(-24)}: ${label}`)));
     d.related = await related;                                  // "Hear it" is the page's own source (clips.ts storyClips): a slow clip route does not hold the story
     console.log(`reader: story blocks=${d.blocks.length} cites=${d.cites.length} related=${d.related.length}`);
     return d;

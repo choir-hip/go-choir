@@ -494,8 +494,9 @@ BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1           # the Home screen over the app: it is not frontmost
 sleep "$BG_SECONDS"
 kill $BGLAUNCH $BGSTREAM 2>/dev/null
-echo "background: laps over 50 ms (lap.ts: the gap between two consecutive lap lines of the shared console, from the log stream's own timestamps):"
-awk '/console\] lap: / { split($2, t, ":"); ms = (t[1]*3600 + t[2]*60 + t[3]) * 1000; if (prev != "" && ms - pms > 50) printf "  %d ms  from [%s] to [%s]\n", ms - pms, prev, substr($0, index($0, "lap: ") + 5); prev = substr($0, index($0, "lap: ") + 5); pms = ms }' "$BGJSLOG" | head -30
+sleep 2          # the log stream is flushed to its file as it stops
+echo "background: laps 50 ms to 3 s apart (lap.ts: the gap between two consecutive lap lines of the shared console, from the log stream's own timestamps):"
+awk '/console\] lap: / { split($2, t, ":"); ms = (t[1]*3600 + t[2]*60 + t[3]) * 1000; if (prev != "" && ms - pms > 50 && ms - pms < 3000) printf "  %d ms  from [%s] to [%s]\n", ms - pms, prev, substr($0, index($0, "lap: ") + 5); prev = substr($0, index($0, "lap: ") + 5); pms = ms }' "$BGJSLOG" | head -30
 echo "background: the radio/hold/writer lines of shared code after the $BG_SECONDS s:"; grep -E "(radio|writer|deck|runsheet):" "$BGJSLOG" | tail -25 | cut -c1-260
 if [ ! -f "$BGLOG" ]; then echo "MISSING: background: no native console ($BGLOG)"; FAILS="$FAILS [background journal]"
 else
