@@ -193,6 +193,28 @@ them, the same mechanism as the root one level down.
 - **The same on a person's computer:** the root predicts what the owner will
   read, skip or ask, and the owner's acts are the events that settle it.
 
+### What the code supports today (read 2026-11-22, code only)
+
+| Piece | State | Where |
+|---|---|---|
+| A prediction with a probability, weight and resolve-by time | exists | `types/commitment.go:417-428` (`CastHypothesis`), `types/calibration.go:46-62` |
+| Scoring (Brier) and a per-desk digest | exists | `calibration/calibration.go:231`, `commitment_rules.go:869` |
+| Settlement written by a party that is not the claimant | exists | `agentcore/subcall_judge.go:532` |
+| A debounced digest scheduler | exists | `textureowner/texture_root.go:264-288` |
+| A prediction naming an event, entity or story | missing | the rule kinds are closed and engineering-shaped (`commitment_rules.go:110-153`) |
+| A store of open subscriptions; matching at event write | missing | nothing matches an incoming object to open claims; the hook would sit at `event_layer.go:772` |
+| Expiry settles false | missing | `ResolvesBy` is validated and read by nothing; "overdue" is a view status |
+| The score fed back to the predictor | narrower | engineering only, one arm of an experiment (`calibration_feedback.go:66-71`) |
+| An event's entities, stories, time of occurrence | missing | `store/world_event.go:29-67`; the event-to-story link is derived in memory from dispositions |
+| Sub-calls for Texture | narrower | research only; a child has no tape of its own (`research_children.go:306-312`) |
+| Surprise | missing | no matched flag on an event, no importance read |
+
+Found on the way, each against a standing rule: `researchChildCallInterval`
+spaces child model calls at 1.5 s (`research_children.go:77-83`; no limits on
+our own model calls; whether it is applied was not checked); the root digest
+is capped at 20 an hour and sits behind `texture.root_desk`, off by default
+(no switches).
+
 ## How context is found
 
 The owner, 2026-11-22: "we can run captures through vector search, then for
