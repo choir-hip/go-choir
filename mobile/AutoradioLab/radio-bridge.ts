@@ -15,6 +15,7 @@ import { offlineStories } from './content-run.ts';
 import { loadReader } from './reader.ts';
 import { sentenceTexts } from './reader-parse.ts';
 import { fileOpen } from './files.ts';
+import { firstRunOver } from './onboarding.ts';
 import { perform } from './radio-model.ts';
 import { htmlToText } from './mail-model.ts';
 import { parseList, FRONT_LIMIT, type Story } from './paper-model.ts';
@@ -212,18 +213,23 @@ export async function queueView(storage: Store | undefined, native: NativeReader
 export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
   const r = await getRadio(storage, native);
   await r.rt.peek();
+  if (!r.ready) r.ready = await firstRunOver(storage as never);          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after peek: reading the facts sets it from native)
   if (!r.started && r.ready && !r.rt.store.onAir() && r.readySince === 0) r.readySince = clock.ms;
   // the turn route's queue: pushed to native, which sends it with every turn (one call; the next pulse sets it again if this one is let go)
   const later = nativeLater();
   if (later) { try { await later({ op: 'radioSet', snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); } catch { /* the next pulse sets it */ } }
   const posting = r.rt.store.pending.length > 0 && !r.rt.store.isFlushing;
-  return { tick: r.tick, write: r.writer.wouldAsk() || posting, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)) };
+  const out = { tick: r.tick, write: r.writer.wouldAsk() || posting, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)) };
+  const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold}`;
+  if (state !== lastPulse) { lastPulse = state; console.log(`radio: pulse ${state}`); }
+  return out;
 }
 
 /** The radio starts by itself when Autoradio opens (onboarding complete, no other audio on the phone), once a launch: it waits a moment for the front page it speaks from. */
 const startDue = (r: Radio): boolean => !r.started && r.ready && !r.rt.store.onAir();
 
 /** The work the pulse says is due: the voice's messages, the radio's start, the pump (starts, the journal, the held list). A mutation: it is not let go when the next pulse is asked. */
+let lastPulse = '';
 let holding = false;                                  // one radioHold at a time: a second send would take the first's place, and the first would be let go
 export async function radioHold(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
   holding = true;
@@ -232,6 +238,7 @@ export async function radioHold(storage: Store | undefined, native: NativeReader
 async function holdInner(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
   const r = await getRadio(storage, native);
   await r.rt.pump();
+  if (!r.ready) r.ready = await firstRunOver(storage as never);
   while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
   if (startDue(r)) {
     if (r.readySince === 0) r.readySince = clock.ms;

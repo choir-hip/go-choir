@@ -19,7 +19,7 @@ describe('the radio pulse reads and says; it does not work', () => {
   });
   test('the only native calls after its awaits are the deck read and the one radioSet push', () => {
     const calls = [...pulse.matchAll(/await ([A-Za-z_.]+)\(/g)].map((m) => m[1]);
-    expect(calls.sort()).toEqual(['getRadio', 'later', 'r.rt.peek'].sort());
+    expect(calls.sort()).toEqual(['getRadio', 'firstRunOver', 'later', 'r.rt.peek'].sort());
   });
   test('the work is in mutations the contract sends and the pulse only names', () => {
     const contract = src('members-radio.contract');

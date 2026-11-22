@@ -123,6 +123,14 @@ async function save(env: Env, m: Mem): Promise<void> {
   if (!env.storage) return;
   await writeCurrent(m.gen, env.storage, PROGRESS_FILE, new TextEncoder().encode(JSON.stringify(m.p)));     // a refused or failed write leaves the step in memory; the next change writes again
 }
+/** Is the first run over (done or skipped)? The radio's start asks this itself: it must not wait for a page to ask `ob` (a plain launch has no driver whose dumps pull every resource in, and nothing else asked it). Also tells native. */
+export async function firstRunOver(storage: Storage | undefined): Promise<boolean> {
+  const env = liveEnv(storage);
+  const m = await load(env);
+  await mirror(env, m);
+  return over(m);
+}
+
 /** Sign-out (account.ts WIPES): the memory, the file, and the voice side. Throws when the file could not be removed and is not empty. */
 export async function wipeOnboarding(storage: Storage | undefined): Promise<void> {
   mem = null;

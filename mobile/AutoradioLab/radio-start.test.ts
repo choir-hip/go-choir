@@ -31,3 +31,17 @@ describe('the radio starts in a launch nothing but the page drives', () => {
     expect(calls.some((c) => c.op === 'deck' && c.name === 'deckPlay')).toBe(true);
   });
 });
+
+describe('the first run is over in shared code before native has been told', () => {
+  test('native says not ready but onboarding.json says done: the start is due (nothing asked `ob`)', async () => {
+    const { forgetOnboarding } = await import('./onboarding.ts');
+    forgetOnboarding();
+    await wipeRadio(undefined);
+    ready = false; calls.length = 0;
+    const store = { fs: { readFile: async (p: string) => { if (p.endsWith('onboarding.json')) return new TextEncoder().encode(JSON.stringify({ offered: true, skipped: false, setupDone: false, micRefused: false, topicsStarted: false, editionDone: true, voicePicked: 0 })); throw new Error('absent'); }, atomicWriteFile: async () => undefined, rm: async () => undefined } };
+    adoptNative(native as never, 'test');
+    const due = await radioPulse(store as never, native as never);
+    expect(due.hold).toBe(true);
+    expect(calls.some((c) => c.op === 'obMirror')).toBe(true);             // native is told too
+  });
+});
