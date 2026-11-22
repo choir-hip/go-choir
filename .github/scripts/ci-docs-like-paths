@@ -24,6 +24,8 @@ ci_go_script_path() {
     scripts/reeng_tracer*.mjs|scripts/rollback/*|scripts/snapshot-vault.sh|scripts/test-node-b-*) return 0 ;;
     scripts/verify-host-hardening.py|scripts/vision_probe.py|scripts/vmm_confinement_verify.py) return 0 ;;
     scripts/vmmanager-netfilter-test.sh|scripts/host_floor_probe.py) return 0 ;;
+    # internal/gateway's log-forgery test runs it against forged gateway lines.
+    scripts/spend-report) return 0 ;;
     # internal/platform/capture_rank_test.go runs the first against a test corpus;
     # vector_worker.go names the second as the reader of its journal line, and
     # internal/agentcore/event_layer.go names the third as the reader of its
