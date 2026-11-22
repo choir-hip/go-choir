@@ -35,7 +35,7 @@ const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-type Radio = { rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; takeList: Take[]; started: boolean; ready: boolean; over?: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
+type Radio = { rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
 let restored: Promise<void> | undefined;
 
@@ -213,8 +213,7 @@ export async function queueView(storage: Store | undefined, native: NativeReader
 export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
   const r = await getRadio(storage, native);
   await r.rt.peek();
-  if (!r.over) r.over = await firstRunOver(storage as never);
-  if (r.over) r.ready = true;                     // once the first run is seen over in this launch it stays over (the proof's plain launch saw it over, then not: the pulse log in bg-js-console.txt)          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after peek: reading the facts sets it from native)
+  if (!r.ready) r.ready = await firstRunOver(storage as never);          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after peek: reading the facts sets it from native)
   if (!r.started && r.ready && !r.rt.store.onAir() && r.readySince === 0) r.readySince = clock.ms;
   // the turn route's queue: pushed to native, which sends it with every turn (one call; the next pulse sets it again if this one is let go)
   const later = nativeLater();
@@ -239,8 +238,7 @@ export async function radioHold(storage: Store | undefined, native: NativeReader
 async function holdInner(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
   const r = await getRadio(storage, native);
   await r.rt.pump();
-  if (!r.over) r.over = await firstRunOver(storage as never);
-  if (r.over) r.ready = true;                     // once the first run is seen over in this launch it stays over (the proof's plain launch saw it over, then not: the pulse log in bg-js-console.txt)
+  if (!r.ready) r.ready = await firstRunOver(storage as never);
   while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
   if (startDue(r)) {
     if (r.readySince === 0) r.readySince = clock.ms;

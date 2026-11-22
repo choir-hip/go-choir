@@ -96,7 +96,7 @@ export function nativeDevice(): Device | null {
   };
 }
 
-type Mem = { gen: number; loaded: boolean; p: Progress; step: string; askMobile: boolean; message: string; hearingOK: boolean; edition: Edition | null; status: string; writingLine: string; error: string; mirrored: boolean | null; picked: number };
+type Mem = { gen: number; loaded: boolean; loading?: Promise<void>; p: Progress; step: string; askMobile: boolean; message: string; hearingOK: boolean; edition: Edition | null; status: string; writingLine: string; error: string; mirrored: boolean | null; picked: number };
 let mem: Mem | null = null;
 /** The account generation of the first memory this process made: the launch's. */
 let launchGen: number | undefined;
@@ -108,19 +108,29 @@ export type Env = { storage: Storage | undefined; device: Device | null; get: Ge
 export const liveEnv = (storage: Storage | undefined): Env => ({ storage, device: nativeDevice(), get: seamGet,
   closePage: async (a) => { await pages.pagesClose(storage, a); }, openPage: async (a, t) => { await pages.pagesOpen(storage, a, t); } });
 
+/** The progress, read once per account generation. THE CAUSE of the flip (found by reading, 2026-11-22): `loaded` used to be set BEFORE the file was read and a failed read counted as "no file", so a second
+ *  caller met a memory that said loaded with the default progress (step `welcome`: not over) while the first was still reading, and a read that failed (an answer let go while it waited, `the proof's plain
+ *  launch: pulse ready=true, then ready=false for good`) left that default for the life of the process. Now concurrent callers share one read, only a file that is truly absent is "no progress", and any other
+ *  failure leaves the memory unloaded so the next call reads again. */
 async function load(env: Env): Promise<Mem> {
   if (!mem || mem.gen !== accountGeneration()) mem = blank();          // the memory belongs to the account generation it was made in
   const m = mem;
   if (m.loaded) return m;
-  m.loaded = true;
-  let text: string | undefined;
-  try { if (env.storage) text = new TextDecoder().decode(await env.storage.fs.readFile(PROGRESS_FILE)); } catch { text = undefined; }
+  if (!m.loading) {
+    m.loading = (async () => {
+      let text: string | undefined, failed = false;
+      try { if (env.storage) text = new TextDecoder().decode(await env.storage.fs.readFile(PROGRESS_FILE)); }
+      catch (e) { if (!/ENOENT|No such file|not found|absent/i.test(String((e as Error)?.message ?? e))) failed = true; console.log(`onboarding: the progress file could not be read (${String((e as Error)?.message ?? e).slice(0, 120)}): not loaded, read again next time`); }
+      if (m.gen === accountGeneration() && !failed) { m.p = parseProgress(text); m.step = startStep(m.p); m.picked = m.p.voicePicked; m.loaded = true; }
+      m.loading = undefined;
+    })();
+  }
+  await m.loading;
   if (m.gen !== accountGeneration()) return load(env);                 // the account moved while the file was read: that text is not the new account's
-  m.p = parseProgress(text); m.step = startStep(m.p); m.picked = m.p.voicePicked;
   return m;
 }
 async function save(env: Env, m: Mem): Promise<void> {
-  if (!env.storage) return;
+  if (!env.storage || !m.loaded) return;                                // never write the default over progress that was not read
   await writeCurrent(m.gen, env.storage, PROGRESS_FILE, new TextEncoder().encode(JSON.stringify(m.p)));     // a refused or failed write leaves the step in memory; the next change writes again
 }
 /** Is the first run over (done or skipped)? The radio's start asks this itself: it must not wait for a page to ask `ob` (a plain launch has no driver whose dumps pull every resource in, and nothing else asked it). Also tells native. */
