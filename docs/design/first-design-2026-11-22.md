@@ -145,6 +145,17 @@ endpoint to other desks..."
   research by its forecasts. Research is a desk with its own single endpoint
   and its own children. This would answer open question 2.
 
+**Doubted the same day.** The owner, later on 2026-11-22: "one endpoint per
+desk may be wrong." Not a ruling yet; the section above stands as a proposal.
+What the doubt may rest on (lead's list): every request relayed through a root
+session costs a model call and time per hop; a research Report must return to
+the story that asked; a reader or the prompt bar addresses one document; a
+story that transcludes a story reaches it directly; most of what Autoradio
+needs is a read of published objects, which needs no desk endpoint at all. A
+middle form: one interface a desk (a typed address space routed by host code,
+not by a session), many addressees inside it, and the root observing the
+traffic rather than relaying it. Open question 10.
+
 ## How context is found
 
 The owner, 2026-11-22: "we can run captures through vector search, then for
@@ -277,5 +288,8 @@ entities attach through events.
 8. What separates an event from a story, now that an event may span time and
    place: is an event the unit captures report in common and a story our
    account of it, an event becoming a story once its parts are told apart?
+10. One endpoint a desk, or one interface with many addressees and a root
+    that observes: which requests must pass through the root, and which only
+    be seen by it?
 9. How often stories cite or transclude stories today, and what the writer's
    prompt and verbs make easy.
