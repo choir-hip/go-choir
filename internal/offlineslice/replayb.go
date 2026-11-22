@@ -1,6 +1,7 @@
 package offlineslice
 
 import (
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -70,6 +71,8 @@ type ResultB struct {
 	CitedStory []string `json:"cited_story,omitempty"`
 	// OracleRank: the best rank (1-based) among the stories at arrival that cite the capture; 0 when none is among the OracleDepth.
 	OracleRank int `json:"oracle_rank"`
+	// RecentRank: the control, the best rank among the OracleDepth most recently revised stories.
+	RecentRank int `json:"recent_rank"`
 }
 
 // ReplayB runs the cleaned rules and the story source over the source
@@ -109,9 +112,12 @@ func ReplayB(caps []Capture, ents []Entity, stops []Stop, rules Rules, policy Al
 		}
 		ms := rules.Mentions(c.Title, c.Lead, nil)
 		if !IsArrival(c) {
-			cl.Observe(ms, c.Title, c.Lead)
+			if !cfg.DFArrivalsOnly {
+				cl.Observe(ms, c.Title, c.Lead)
+			}
 			continue
 		}
+		o := OracleStatus(sd.Cites[c.ID], sd.First, c.Fetched)
 		r := ResultB{ID: c.ID, Day: day.Format("2006-01-02"), Fetched: c.Fetched, Class: Class(c), Source: c.SourceID, Host: c.Host,
 			Title: c.Title, Lead: c.Lead, Mentions: len(ms), Dropped: map[string]int{}}
 		r.RawCount = distinctCount(ms)
@@ -126,6 +132,7 @@ func ReplayB(caps []Capture, ents []Entity, stops []Stop, rules Rules, policy Al
 			r.KeptKeys = append(r.KeptKeys, m.Key)
 		}
 		cl.Observe(ms, c.Title, c.Lead)
+		r.RecentRank = recentRank(sd, c.Fetched, o, cfg.OracleDepth)
 		r.CleanCount = distinctCount(kept)
 		in := ListInput{Mentions: kept}
 		r.Stories = []StoryCand{}
@@ -153,7 +160,6 @@ func ReplayB(caps []Capture, ents []Entity, stops []Stop, rules Rules, policy Al
 			}
 		}
 		r.Final, r.PreCap = RankAndCap(in, cfg.Cap)
-		o := OracleStatus(sd.Cites[c.ID], sd.First, c.Fetched)
 		r.Oracle, r.CitedStory = o.Status, o.Existing
 		for rank, s := range r.Stories {
 			for _, e := range o.Existing {
@@ -184,4 +190,44 @@ func distinctCount(ms []Mention) int {
 		}
 	}
 	return len(seen)
+}
+
+// recentRank is the control for the oracle: stories ordered by how recently
+// they had been revised at arrival, the best rank (1-based) of a story that
+// existed and cites the capture, 0 when none is in the first depth.
+func recentRank(sd *StoryData, at time.Time, o Oracle, depth int) int {
+	if len(o.Existing) == 0 {
+		return 0
+	}
+	type sv struct {
+		id string
+		t  time.Time
+	}
+	var top []sv
+	for _, st := range sd.Stories {
+		vs := st.Versions
+		n := sort.Search(len(vs), func(i int) bool { return !vs[i].Created.Before(at) })
+		if n == 0 {
+			continue
+		}
+		x := sv{st.ID, vs[n-1].Created}
+		pos := sort.Search(len(top), func(i int) bool { return top[i].t.Before(x.t) })
+		if pos >= depth {
+			continue
+		}
+		top = append(top, sv{})
+		copy(top[pos+1:], top[pos:])
+		top[pos] = x
+		if len(top) > depth {
+			top = top[:depth]
+		}
+	}
+	for rank, x := range top {
+		for _, e := range o.Existing {
+			if x.id == e {
+				return rank + 1
+			}
+		}
+	}
+	return 0
 }

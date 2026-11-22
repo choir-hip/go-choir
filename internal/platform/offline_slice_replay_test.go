@@ -159,6 +159,7 @@ func TestOfflineSliceReplayB(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	cfg.DFArrivalsOnly = os.Getenv("OFFLINE_DF_ARRIVALS") == "1"
 	tag := os.Getenv("OFFLINE_TAG")
 	if tag == "" {
 		tag = "b"
