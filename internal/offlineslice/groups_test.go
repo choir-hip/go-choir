@@ -42,7 +42,7 @@ func TestGroupClosesAfter48HoursWithoutAMember(t *testing.T) {
 
 func TestGroupCentroidVersusAnyMember(t *testing.T) {
 	// a chain: a-b near, b-c near, a-c far. Single link keeps the chain in one group, the centroid does not.
-	a, b, c := unit(1, 0), unit(1, 0.6), unit(1, 1.5)
+	a, b, c := unit(1, 0), unit(1, 0.3), unit(1, 0.6)
 	items := []GItem{{At: ts("2026-11-18T00:00:00Z"), Vec: a}, {At: ts("2026-11-18T01:00:00Z"), Vec: b}, {At: ts("2026-11-18T02:00:00Z"), Vec: c}}
 	sl := GroupArrivals(items, 0.93, LinkAnyMember, 48*time.Hour)
 	ce := GroupArrivals(items, 0.93, LinkCentroid, 48*time.Hour)
