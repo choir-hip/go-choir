@@ -16,6 +16,8 @@ type ConfigB struct {
 	CommonRatio   float64
 	CommonMin     int
 	EntityStories int // top stories whose central entities are offered (3)
+	// DFArrivalsOnly counts document frequency over source arrivals only, not all captures.
+	DFArrivalsOnly bool
 }
 
 // DefaultConfigB is the stated configuration.
