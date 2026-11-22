@@ -697,9 +697,8 @@ Decisions made at the seams:
 data (paper, two stories in the reader with "More on this", a played story, Textures list and documents, the edition state, Files, Mail, Settings
 account / computer / appearance, a theme loaded from a Texture, the largest document). It asserts real conditions (a title is not empty, no error
 banner), not fixture text. `REAL_PROMPT=1` adds one typed question in the bar (a model call on the test computer); it is off by default.
-- **Sign-in.** The real sign-in is a browser device flow a script cannot approve. The proof copies a key file (`REAL_KEY_FILE`, default the QA key of the
-  test account) with `cp` into the app's `Documents/proof-key`; the simulator build reads it into the Keychain at launch and deletes it
-  (`AutoradioKit/ProofKey.swift`, called under `#if targetEnvironment(simulator)` only). The key is never printed; the script fails if a `choir_sk_`
+- **Sign-in.** The real sign-in is a browser device flow a script cannot approve. The proof writes a key file (`REAL_KEY_FILE`, default the QA key of the
+  test account) as the secret file `api-key` of the drive's scratch store (a scripted drive keeps Exact's secrets as files, `proof-real.sh` reset_state); there is no simulator-only code in the app. The key is never printed; the script fails if a `choir_sk_`
   string appears in the drive output.
 - **First run is real.** With no edition on the computer the app opens the "Make it yours" offer once; the proof screenshots it (`real-00`) and skips it.
   The app now asks the computer first (`GET /api/texture/edition`): `{found:false}` is the normal first-run answer; a computer that has an edition gets

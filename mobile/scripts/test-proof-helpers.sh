@@ -65,6 +65,24 @@ cat > "$T/blocks-empty.txt" <<'B'
 B
 if bhas "$T/blocks-empty.txt" 2; then no "blocks_have_text: an empty block passed"; else grep -q "no text in reader-block-b3" "$T/b.out" && ok "blocks_have_text: a block with no child text fails and is named" || no "blocks_have_text empty: $(cat "$T/b.out")"; fi
 if bhas "$T/blocks-ok.txt" 3; then no "blocks_have_text: fewer blocks than asked passed"; else ok "blocks_have_text: fewer blocks than asked fails"; fi
+# the account boundary's helpers (proof-real.sh): the root listing and the three checks. Each must be able to fail, and none may pass when the container is unknown.
+sed -n '/^root_names_in() {/,/^}/p;/^roots_have() {/,/^}/p;/^roots_lack() {/,/^}/p;/^roots_within() {/,/^}/p' "$HERE/proof-real.sh" > "$T/r.sh"; . "$T/r.sh"
+C="$T/container"; D1=$(printf '%064d' 1); D2=$(printf '%064d' 2)
+mkdir -p "$C/Library/Caches/exact/x/agent/default/data/accounts/$D1/files" "$C/Library/Caches/exact/x/agent/default/data/accounts/anonymous" "$C/Library/Caches/exact/x/agent/default/cache/accounts/$D1" "$C/Library/Caches/exact/x/agent/default/data/accounts-not"
+got=$(root_names_in "$C" | tr '\n' ' ')
+[ "$got" = "$D1 anonymous " ] && ok "root_names_in: the folders directly under accounts/, once each, not a nested one and not a look-alike" || no "root_names_in gave '$got'"
+[ -z "$(root_names_in "")" ] && [ -z "$(root_names_in "$T/nope")" ] && ok "root_names_in: no container, no roots" || no "root_names_in with no container"
+app_container() { echo "$T/container"; }
+FAILS=""; roots_have "h1" "$D1 anonymous" "$D1" >/dev/null; [ -z "$FAILS" ] && ok "roots_have passes when the digest is there" || no "roots_have"
+FAILS=""; roots_have "h2" "anonymous" "$D1" >/dev/null; [ "$FAILS" = " [h2]" ] && ok "roots_have fails when the digest is absent" || no "roots_have absent"
+FAILS=""; roots_lack "l1" "anonymous" "$D1" >/dev/null; [ -z "$FAILS" ] && ok "roots_lack passes when the digest is absent" || no "roots_lack"
+FAILS=""; roots_lack "l2" "$D1" "$D1" >/dev/null; [ "$FAILS" = " [l2]" ] && ok "roots_lack fails when the digest is there" || no "roots_lack present"
+FAILS=""; roots_within "w1" "$D1 anonymous" "$D1" anonymous >/dev/null; [ -z "$FAILS" ] && ok "roots_within passes when every root is allowed" || no "roots_within"
+FAILS=""; roots_within "w2" "$D1 $D2" "$D1" anonymous >/dev/null; [ "$FAILS" = " [w2]" ] && ok "roots_within fails on a root that is not allowed" || no "roots_within extra"
+FAILS=""; roots_within "w3" "" >/dev/null; [ -z "$FAILS" ] && ok "roots_within with nothing allowed passes only for no roots" || no "roots_within none"
+FAILS=""; roots_within "w4" "$D1" >/dev/null; [ "$FAILS" = " [w4]" ] && ok "roots_within with nothing allowed fails for a root" || no "roots_within none allowed"
+app_container() { echo ""; }
+FAILS=""; roots_lack "u1" "" "$D1" >/dev/null; roots_have "u2" "$D1" "$D1" >/dev/null; roots_within "u3" "" >/dev/null; [ "$FAILS" = " [u1] [u2] [u3]" ] && ok "with no app container every root check fails (it proves nothing)" || no "no container: '$FAILS'"
 # run_drive: a first run that ends in the dispatch-log timeout is run again once and logged; a second timeout fails
 mkdir -p "$T/shots"; SHOTS="$T/shots"; export SHOTS
 printf '#!/bin/sh\nn=$(cat "%s/n" 2>/dev/null || echo 0); echo $((n + 1)) > "%s/n"\nif [ $n -lt "$FAILN" ]; then echo "op 2/9 `tap place-mail`: tap #1: the dispatch log did not answer within 1 s of the touch; the app'"'"'s carrier and the touch runner were stopped"; exit 1; fi\necho tree\n' "$T" "$T" > "$T/exact.sh"; chmod +x "$T/exact.sh"

@@ -183,17 +183,12 @@ public final class ClipLocator: ClipLocating, @unchecked Sendable {
 
     public init(fetcher: ClipRangeFetching = URLSessionClipFetcher(), decoder: ClipDecoding = AVClipDecoder(), container: ClipContainer = Mp3Container(), directory: URL? = nil) {
         self.fetcher = fetcher; self.decoder = decoder; self.container = container
-        self.directory = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("autoradio-clips", isDirectory: true)
+        self.directory = directory ?? AccountWipe.url("clips")
         try? FileManager.default.removeItem(at: self.directory)            // what a crash left behind
         try? FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
     }
 
     private func path(_ id: String, _ ext: String) -> URL { directory.appendingPathComponent(id.filter { $0.isLetter || $0.isNumber || $0 == "-" } + "." + ext) }
-    /// Sign-out: every window file the locator holds.
-    public func wipe() {
-        try? FileManager.default.removeItem(at: directory)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    }
     public func discard(_ clip: PodcastClip) { try? FileManager.default.removeItem(at: path(clip.clipID, container.fileExtension)) }
 
     public func locate(_ clip: PodcastClip) async -> ClipLocation {

@@ -4,7 +4,7 @@ use voiceCards, voicePick, voiceStop, voiceContinue from "@choir/autoradio"
 use VoiceCards from "@choir/autoradio"
 
 members Autoradio
-  resource vc = voiceCards() as shape VoiceCards else empty()
+  resource vc = voiceCards() as shape VoiceCards else empty() transient
   mutation vcm as shape VoiceCards
 
   action vcPick(id: string)

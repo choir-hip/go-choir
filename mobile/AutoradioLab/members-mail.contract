@@ -19,12 +19,12 @@ members Autoradio
   derive mboxAddr = (mboxFor == pg.top and mboxSel != "") ? mboxSel : pg.top
   derive mboxName = mboxAddr.startsWith("mailbox:") ? mboxAddr.slice(8) : "inbox"
   // Arguments: the address; (message only) whether "Show original" is open on this page, which is when its document is written.
-  resource mbx = mailBox(mboxAddr, acs.state) as shape MailBoxView else empty()
-  resource mfr = mailFrame(mboxAddr) as shape MailBoxView else empty()
+  resource mbx = mailBox(mboxAddr, acctHandle) as shape MailBoxView else empty() transient
+  resource mfr = mailFrame(mboxAddr, acctHandle) as shape MailBoxView else empty() transient
   // The catch-up that keeps the phone's copy: asked again when the list arrives, answers counts only.
-  resource msy = mailSync(mboxAddr, mbx.rows.length) as shape MailSyncView else empty()
-  resource mmsg = mailMessage(pg.top, mailOriginal, acs.state) as shape MailMessageView else empty()
-  resource mcmp = mailCompose(pg.top) as shape MailComposeView else empty()
+  resource msy = mailSync(mboxAddr, mbx.rows.length, acctHandle) as shape MailSyncView else empty() transient
+  resource mmsg = mailMessage(pg.top, mailOriginal, acctHandle) as shape MailMessageView else empty() transient
+  resource mcmp = mailCompose(pg.top, acctHandle) as shape MailComposeView else empty() transient
   mutation mdr as shape MailComposeView refreshes mbx
   mutation mak as shape MailAck
   // Marking unread asks the computer, then the mailbox and the message are read again (the message is not marked read a second time: mail.ts).

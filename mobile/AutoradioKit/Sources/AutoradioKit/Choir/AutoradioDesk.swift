@@ -39,12 +39,12 @@ public final class TurnHistory: @unchecked Sendable {
         for r in radio { let t = r.trimmingCharacters(in: .whitespacesAndNewlines); if !t.isEmpty { lines.append(Line(role: "radio", text: t)) } }
         if lines.count > 24 { lines.removeFirst(lines.count - 24) }
     }
+    public func clear() { lock.lock(); lines = []; lock.unlock() }
     /// The last lines that fit the contract (at most 8, each 1 to 1000 bytes); a line over the bound is left out, never cut.
     public func snapshot(max count: Int = 8) -> [Line] {
         lock.lock(); defer { lock.unlock() }
         return Array(lines.filter { !$0.text.isEmpty && $0.text.utf8.count <= 1000 }.suffix(count))
     }
-    public func clear() { lock.lock(); lines = []; lock.unlock() }
 }
 
 struct SSEEvent: Equatable { var name: String; var data: String }

@@ -26,7 +26,7 @@
 //
 // Time arrives as an argument (epoch milliseconds); nothing here reads a clock.
 
-import { authedJSON, authedBytes, getJSON, SignedOutError } from './api.ts';
+import { authedJSON, authedBytes, getJSON, SignedOutError, currentWorld, scoped } from './api.ts';
 import { parseDate } from './paper-model.ts';
 import type { Doc } from './search.ts';
 
@@ -74,17 +74,13 @@ function rowToItem(r: unknown[]): StoredItem {
     version: str(r[7]), pinned: num(r[8]) === 1, syncedAt: num(r[9]), meta };
 }
 
-/** The stores this session holds, so sign-out can reach them (a sync that is running notices by `generation`; the open db is emptied). */
-const liveStores = new Set<ContentStore>();
-export async function wipeLiveContent(): Promise<void> { for (const s of [...liveStores]) await s.wipe(); }
-
 export class ContentStore {
-  /** Bumped by `wipe`: a sync that started under another generation drops its writes. */
+  /** A sync that started under another generation drops its writes (a test moves it). */
   generation = 0;
-  constructor(readonly db: Db, public budget: Budget = STANDARD_BUDGET) { liveStores.add(this); }
+  constructor(readonly db: Db, public budget: Budget = STANDARD_BUDGET) {}
 
-  /** The database is closed: sign-out no longer reaches this store. */
-  dispose(): void { liveStores.delete(this); }
+  /** The database is closed. */
+  dispose(): void { /* nothing else holds the store */ }
 
   async init(): Promise<void> {
     await this.db.execute('CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, text TEXT NOT NULL, date INTEGER, address TEXT NOT NULL, source TEXT NOT NULL, version TEXT NOT NULL, pinned INTEGER NOT NULL, synced_at INTEGER NOT NULL, meta TEXT NOT NULL, bytes INTEGER NOT NULL)');
@@ -167,12 +163,6 @@ export class ContentStore {
     return [...gone];
   }
 
-  /** Sign-out: delete everything. A run in progress notices by `generation`. */
-  async wipe(): Promise<void> {
-    this.generation++;
-    await this.db.execute('DELETE FROM items'); await this.db.execute('DELETE FROM checkpoints'); await this.db.execute('DELETE FROM synced');
-  }
-
   /** Every held item as a search document (`store:<id>`); search.ts keeps those whose key is unchanged. */
   async docs(): Promise<Doc[]> {
     const r = await this.db.query(`SELECT ${COLS} FROM items`);
@@ -222,12 +212,12 @@ export const fileVersion = (e: FileEntry): string => `${e.size}|${e.modified ===
 export type SyncOptions = { now: number; log?: (line: string) => void; files?: boolean };
 
 /** One syncer at a time: a second `syncAll` while one runs returns at once with no reports. */
-const running = new WeakSet<ContentStore>();
+const R = scoped(() => ({ running: new WeakSet<ContentStore>() }));      // module state belongs to the world (api.ts `scoped`)
 
 /** Every kind, in the order the listener feels them: stories, mail, documents, then the slow ones. One report per kind. */
 export async function syncAll(store: ContentStore, f: Fetchers, o: SyncOptions): Promise<SyncReport[]> {
-  if (running.has(store)) return [];
-  running.add(store);
+  if (R().running.has(store)) return [];
+  R().running.add(store);
   const started = store.generation;
   const live = (): boolean => store.generation === started;
   const log = o.log ?? ((): void => undefined);
@@ -247,7 +237,7 @@ export async function syncAll(store: ContentStore, f: Fetchers, o: SyncOptions):
     }
     if (live()) await store.enforceBudget(o.now);
     return out;
-  } finally { running.delete(store); }
+  } finally { R().running.delete(store); }
 }
 
 type Ctx = { store: ContentStore; f: Fetchers; now: number; live: () => boolean; bytes: { n: number } };
@@ -400,7 +390,7 @@ export async function textureSource(id: string, get: (path: string) => Promise<u
 
 /** The real routes. Mail, documents and files need the listener's session; a signed-out phone throws `SignedOutError` from the first page, and nothing is changed. */
 export function liveFetchers(o: { podcasts?: () => Doc[]; transcriptTargets?: Fetchers['transcriptTargets']; transcript?: Fetchers['transcript']; runSheet?: Fetchers['runSheet']; audioBusy?: Fetchers['audioBusy'] } = {}): Fetchers {
-  const j = async (path: string, query: Record<string, string | number> = {}): Promise<unknown> => (await authedJSON(path, { query })).body;
+  const j = async (path: string, query: Record<string, string | number> = {}): Promise<unknown> => (await authedJSON(path, { query, world: currentWorld() })).body;
   const base = noFetchers();
   return {
     ...base,
@@ -424,7 +414,7 @@ export function liveFetchers(o: { podcasts?: () => Doc[]; transcriptTargets?: Fe
         name: s(x, 'name'), path: (path === '/' ? '' : path) + '/' + s(x, 'name'), isDirectory: s(x, 'type') === 'directory', size: typeof x.size === 'number' ? x.size : 0, modified: parseDate(x.modified) }));
     },
     fileText: async (path) => {
-      const r = await authedBytes('/api/files' + path.split('/').map((p) => encodeURIComponent(p)).join('/'), { query: { disposition: 'inline' } });
+      const r = await authedBytes('/api/files' + path.split('/').map((p) => encodeURIComponent(p)).join('/'), { query: { disposition: 'inline' }, world: currentWorld() });
       if (r.bytes.length > MAX_FILE_BYTES) return null;
       return new TextDecoder().decode(r.bytes);
     },

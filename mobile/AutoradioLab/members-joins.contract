@@ -6,9 +6,9 @@ use ClipRows from "./podcast-types.contract"
 use PodAck from "./podcast-types.contract"
 
 members Autoradio
-  resource shClips = showClips(pg.top, podTick) as shape ClipRows else empty()
+  resource shClips = showClips(pg.top, podTick, acctHandle) as shape ClipRows else empty()
   // "Hear it" on a story page: the clips cut for the story at the top page (one bulk request, shared with Play).
-  resource hearClips = storyClips(pg.top, podTick) as shape ClipRows else empty()
+  resource hearClips = storyClips(pg.top, podTick, acctHandle) as shape ClipRows else empty()
   mutation clipAck as shape PodAck then afterClip
   mutation clipHanded as shape PodDone
 

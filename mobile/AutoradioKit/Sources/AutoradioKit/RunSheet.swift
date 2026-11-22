@@ -5,10 +5,6 @@ import Foundation
 
 public enum RunSheetKind: String, Codable, Equatable, Sendable {
     case opening, transition, story, clip, take, episode, page, document, mail, result, answer
-    /// Entries of these kinds carry words to speak.
-    public var textRequired: Bool {
-        switch self { case .opening, .transition, .story, .answer, .result: return true; default: return false }
-    }
 }
 public enum RunSheetBy: String, Codable, Equatable, Sendable { case listener, desk, phone }
 public enum RunSheetState: String, Codable, Equatable, Sendable {

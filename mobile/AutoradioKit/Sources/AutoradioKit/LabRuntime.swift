@@ -74,7 +74,7 @@ public final class LabRuntime: @unchecked Sendable {
         self.registry = registry
         let log = EventLog(clock: clock)
         self.log = log
-        let voiceStore = VoiceChoiceStore(file: supportDir.appendingPathComponent("voice-choice.json"))
+        let voiceStore = VoiceChoiceStore(file: AccountWipe.url("voice-choice.json"))
         self.voiceStore = voiceStore
         // The saved voice, or on a fresh install the neural default. The model stages register after this runs, so the stage is not checked
         // here: `makeSpeaker` falls back to the system voice for a stage that is not registered.
@@ -89,7 +89,7 @@ public final class LabRuntime: @unchecked Sendable {
                                        voiceOn: { override.value ?? HandsFreeSwitch.shared.isOn })
         self.coordinator = coord
         self.session = coord
-        store = KeptTurnStore(root: supportDir.appendingPathComponent("turns"))
+        store = KeptTurnStore(root: AccountWipe.url("turns"))
         configs = ConfigStore(dir: supportDir.appendingPathComponent("configs"))
         FixtureTurn.install(into: store)
         let doc = emptyProgramme ? ProgrammeDocument(id: "none", title: "", blocks: []) : FixtureProgramme.document

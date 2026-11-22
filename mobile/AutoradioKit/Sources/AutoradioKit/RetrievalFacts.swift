@@ -84,7 +84,6 @@ public final class RetrievalBridge: @unchecked Sendable {
 
     /// What the last turn was shown, for the kept turn's context.json.
     public var lastRecord: RetrievalRecord? { lock.lock(); defer { lock.unlock() }; return last }
-    public func clear() { lock.lock(); last = nil; pending = nil; lock.unlock() }
     /// The source `retrievalAsk` reads this.
     public var current: RetrievalAsk? { lock.lock(); defer { lock.unlock() }; return pending }
 

@@ -102,7 +102,7 @@ final class VoiceChoiceTests: XCTestCase {
         XCTAssertTrue(notes(l).contains { $0.contains("not ready") && $0.contains(VoiceCatalog.phononModel) }, "\(notes(l))")
     }
     func testTheChoiceSurvivesARelaunchThroughTheRuntime() {
-        let dir = tmp()
+        let dir = tmp(); AccountWipe.baseOverride = dir; defer { AccountWipe.baseOverride = nil }      // the voice choice lives in the account folder under the support dir
         let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
         XCTAssertEqual(rt.configuration.setting(.voice)?.id, "kokoro")
         rt.setVoice(VoiceCatalog.option(id: "kokoro:am_adam")!)

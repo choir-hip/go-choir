@@ -5,6 +5,7 @@
 // no page is open.
 
 test "no page open: the three podcast sources answer their idle shapes"
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state podHome.status == "idle"
   expect state podShow.status == ""
@@ -12,11 +13,13 @@ test "no page open: the three podcast sources answer their idle shapes"
   expect state podHome.shows.length == 0
 
 test "no show page: no clip rows, and no note"
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state shClips.rows.length == 0
   expect state clipNote == ""
 
 test "nothing is playing: the playhead reads revision 0"
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state podNow.episodeId == ""
   expect state podHead.rev == 0

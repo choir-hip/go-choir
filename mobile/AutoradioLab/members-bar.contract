@@ -6,7 +6,7 @@ use StackVp from "./ui.contract"
 
 members Autoradio
   // The radio view: what plays, the block's sentences, the programme's items, the yield level, the talk mode.
-  resource ri = radioView() as shape RadioInfo else empty()
+  resource ri = radioView() as shape RadioInfo else empty() transient
   mutation rm as shape RadioInfo
   mutation rm2 as shape SettingsAck
 

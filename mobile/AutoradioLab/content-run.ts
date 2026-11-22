@@ -8,32 +8,35 @@
 // The one native fact: `{op: 'contentBusy'}` on the app module (AutoradioModule+Notebook.swift `notebookOp`): whether remote audio is on air. The player is native; a sync does not take the network from it.
 import type { Storage } from './app.contract.d.ts';
 import { ContentStore, CONTENT_DB, syncAll, liveFetchers, toDoc, type Db, type Fetchers, type StoredItem } from './content.ts';
-import { accountGeneration, getJSON, nativeLater, SignedOutError } from './api.ts';
+import { accountGeneration, getJSON, nativeLater, SignedOutError, scoped } from './api.ts';
 import { cut } from './takes.ts';
 import type { Doc } from './search.ts';
 
+// Module state belongs to the world (api.ts `scoped`): a closed world's is unreachable and no later world joins it.
+const S = scoped(() => ({ held: null as { store: ContentStore; db: Closable; gen: number } | null, opening: null as Promise<ContentStore | null> | null, last: null as { key: string; info: SyncInfo } | null, running: null as { key: string; p: Promise<SyncInfo> } | null }));
+
 type Closable = Db & { close?: () => Promise<void> };
-let held: { store: ContentStore; db: Closable; gen: number } | null = null;
-let opening: Promise<ContentStore | null> | null = null;
-export function forgetContent(): void { held = null; opening = null; last = null; running = null; }
+export function forgetContent(): void { S().held = null; S().opening = null; S().last = null; S().running = null; }
 
 /** The one store of this process, made on first use. After a sign-out wipe (the generation moved; the file is gone) the old handle is closed and a fresh store opens. Null when it cannot open. */
 export function contentStore(storage: Storage | undefined): Promise<ContentStore | null> {
-  if (held && held.store.generation === held.gen) return Promise.resolve(held.store);
-  if (opening) return opening;
-  opening = (async () => {
+  const st = S();
+  if (st.held && st.held.store.generation === st.held.gen) return Promise.resolve(st.held.store);
+  if (st.opening) return st.opening;
+  const mine: Promise<ContentStore | null> = (async () => {
     try {
-      if (held) { held.store.dispose(); try { await held.db.close?.(); } catch { /* closed */ } held = null; }
+      if (st.held) { st.held.store.dispose(); try { await st.held.db.close?.(); } catch { /* closed */ } st.held = null; }
       if (!storage) return null;
       const acct = accountGeneration();                                           // an open that straddles a sign-out is not installed: the file under it is the old account's
       const db = (await storage.sqlite.open(CONTENT_DB)) as Closable;
       const store = new ContentStore(db); await store.init();
       if (acct !== accountGeneration()) { store.dispose(); try { await db.close?.(); } catch { /* closed */ } return null; }
-      held = { store, db, gen: store.generation };
+      st.held = { store, db, gen: store.generation };
       return store;
-    } catch { return null; } finally { opening = null; }
+    } catch { return null; } finally { st.opening = null; }
   })();
-  return opening;
+  st.opening = mine;
+  return mine;
 }
 
 export type SyncInfo = { state: 'done' | 'signedout' | 'offline' | 'unavailable'; line: string };
@@ -50,16 +53,15 @@ const nativeBusy = async (): Promise<boolean> => {
   ]);
 };
 
-let last: { key: string; info: SyncInfo } | null = null;
-let running: { key: string; p: Promise<SyncInfo> } | null = null;
 
 /** Runs the sync once per key (the app's launch and each return to the front); the same key answers the last result. Never throws; logs hold counts, never a word. */
 export function syncContent(key: string, storage: Storage | undefined, env: Env = {}): Promise<SyncInfo> {
-  if (last?.key === key) return Promise.resolve(last.info);
-  if (running?.key === key) return running.p;
+  const st = S();
+  if (st.last && st.last.key === key) return Promise.resolve(st.last.info);
+  if (st.running && st.running.key === key) return st.running.p;
   const gen = accountGeneration();                                                  // a result that lands after a sign-out is not the next account's last answer
-  const p = run(storage, env).then((info) => { if (gen === accountGeneration() && info.state !== 'unavailable' && info.state !== 'offline') last = { key, info }; return info; }).finally(() => { if (running?.p === p) running = null; });
-  running = { key, p };
+  const p = run(storage, env).then((info) => { if (gen === accountGeneration() && info.state !== 'unavailable' && info.state !== 'offline') st.last = { key, info }; return info; }).finally(() => { if (st.running?.p === p) st.running = null; });
+  st.running = { key, p };
   return p;
 }
 

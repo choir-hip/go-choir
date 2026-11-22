@@ -54,6 +54,8 @@ final class EditionSetupTests: XCTestCase {
     }
 
     func testTheOldFileIsNeitherReadNorDeletedByTheEditionCalls() throws {
+        let b = FileManager.default.temporaryDirectory.appendingPathComponent("edition-old-\(UUID().uuidString)"); AccountWipe.baseOverride = b      // never the real support folder, and never a seal an earlier wipe left
+        defer { AccountWipe.baseOverride = nil; try? FileManager.default.removeItem(at: b) }
         guard let f = TakeFiles.url("edition-topics.json") else { return XCTFail("no Application Support") }
         let had = try? Data(contentsOf: f); defer { if let had { try? had.write(to: f) } else { try? FileManager.default.removeItem(at: f) } }
         try FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -63,16 +65,6 @@ final class EditionSetupTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: f, encoding: .utf8), "{\"topics\":[\"Space\"]}", "left where it is, unread")
     }
 
-    @MainActor func testTheNotebookWriteRefusesTopicsReadUnderAnEarlierAccount() async {
-        let store = NotebookStore(); var asked = 0
-        store.lookupEdition = { asked += 1; return nil }
-        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("topics-marker-\(UUID().uuidString)")
-        let stale = AccountWipe.generation
-        _ = AccountWipe.bumpGeneration()                      // the account changed after the topics were read
-        let wrote = await store.writeTopics(["Space"], marker: marker, generation: stale)
-        XCTAssertFalse(wrote); XCTAssertEqual(asked, 0, "the server is not even asked")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
-    }
 
     func testTheEditionIsWrittenWithoutANetworkFromTheChoices() async throws {
         let e = try await LocalEditionWriter().write(topics: ["Space", "Chess"]) { _ in }

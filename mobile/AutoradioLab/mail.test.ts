@@ -14,9 +14,11 @@ process.env.TZ = 'UTC';   // dates are the listener's wall clock; the tests fix 
 //  C1  reply addressing (Reply-To, outbound, "Re: " once), a refused draft makes no request, the request body, no alias, the approval link, 403 words, send is never called (10, 11).
 //  P1  the phone's copy: sealed files only, no plain word on disk, no key means no file, a bad file is ignored and removed, the oldest go past the limit.
 //  P2  the catch-up: fetches missing bodies, skips held ones, resumes from its cursor, stops at the budget, counts only.   P3  search over the copy.
-//  W1  the old copy: leftover `app:/cache/mail-*.html` are removed at first use; `wipeMail` removes every file and the key; the old Swift store's folder is removed by the native sign-out wipe (AutoradioModule.swift "app-files").
+//  W1  the old copy: leftover `app:/cache/mail-*.html` are removed at first use; a sign-out deletes the account's folder; the old Swift store's folder is removed by the native sign-out wipe (AutoradioModule.swift "app-files").
 //  L1  logs carry counts and ids only (14).   A1  the grants match the paths the modules use.
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { dig, reopen, moveAccount } from './account-phone.ts';
+import { currentWorld as theWorld } from './api.ts';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import * as M from './mail-model.ts';
 import { sanitized, clean, decodeAttr } from './mail-sanitize.ts';
@@ -32,7 +34,7 @@ import msgOut from '../fixtures/mail/message-outbound.json';
 const NOW = Date.parse('2026-11-18T18:00:00Z');
 
 // ---- the canned computer: the real signed-in seam (api.ts) over a stubbed `fetch` and a stubbed native key reader
-import { SignedOutError, HTTPError, bindNative, resetSession, resetSeam, beginSignOut } from './api.ts';
+import { SignedOutError, HTTPError, bindNative, resetSession, resetSeam, endWorld } from './api.ts';
 type Req = { path: string; opts: { method?: string; query?: Record<string, string | number>; body?: unknown } };
 let calls: Req[] = [];
 let route: (r: Req) => { status: number; body: unknown } | 'network' = () => ({ status: 404, body: { error: 'not found' } });
@@ -44,9 +46,11 @@ let nativeKey: Buffer | null = null; let refuses = false; let forgets = 0; let s
 let locked = false; let noPair = false; let signedOutNative = false; let sealGate: Promise<void> | null = null; let sealStarted: (() => void) | null = null;
 const b64of = (b: Uint8Array): string => Buffer.from(b).toString('base64');
 const reader = { available: true, later: async (r: { op?: string; account?: string; b64?: string; aad?: string }) => {
-  if (r.op === 'session') return { found: true, value: 'test-key-0001-not-real', computerId: 'comp-1' };
+  if (r.op === 'keystate') return { state: signedOutNative ? 'absent' : 'present' };               // the Keychain item is gone once the native sign-out ran
+  if (r.op === 'session') return signedOutNative ? { found: false } : { found: true, value: 'test-key-0001-not-real', computerId: 'comp-1' };
   if (r.op === 'mailCan') return noPair ? { found: false } : { ok: true };
   if (r.op === 'mailForget') { nativeKey = null; forgets += 1; return { ok: true }; }
+  if (r.op === 'holdKey') { signedOutNative = !(r as unknown as { key?: string }).key; return { ok: true }; }               // the in-memory key native holds for MailSeal's gate: cleared at the sign-out
   if (r.op === 'signOut') { signedOutNative = true; nativeKey = null; forgets += 1; return { done: true }; }
   if (r.op === 'mailSeal') {
     sealCalls += 1; sealStarted?.();
@@ -97,12 +101,14 @@ const storage = {
 } as never;
 const mtimes = new Map<string, number>();
 let writeGate: Promise<void> | null = null; let readdirGate: Promise<void> | null = null;
+// The world mechanism (api.ts): work of a closed world never settles, so a test waits a moment for it instead of awaiting it.
+const settle = (p: Promise<unknown>): Promise<unknown> => Promise.race([p.then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, 40))]);
 const env = (): C.Env => ({ storage });
 
 let logs: string[] = [];
 const realLog = console.log;
 beforeEach(() => {
-  resetSeam(); bindNative(reader as never); stubFetch();
+  resetSeam(); reopen(dig('test-key-0001-not-real'), 'test-key-0001-not-real', 'comp-1'); bindNative(reader as never); stubFetch();
   mail.forget(); calls = []; files.clear(); mtimes.clear(); nativeKey = null; refuses = false; forgets = 0; sealCalls = 0; locked = false; noPair = false; signedOutNative = false; sealGate = null; sealStarted = null; writeGate = null; readdirGate = null; logs = []; forgetProbe();
   route = () => ({ status: 404, body: { error: 'not found' } });
   console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
@@ -324,7 +330,7 @@ describe('B1 B2 the mailbox', () => {
     const f = await mail.mailFrame('mailbox:inbox', env());
     expect(f.status).toBe('cached'); expect(f.rows.length).toBe(3);
     // with no copy at all (a fresh phone, or the copy wiped) it says so and shows no rows
-    await mail.wipeMail(storage); mail.forget();
+    files.clear(); mail.forget();
     v = await mail.mailBox('mailbox:inbox', env());
     expect(v.status).toBe('offline'); expect(v.rows).toEqual([]); expect(v.cached).toBe(false);
   });
@@ -392,8 +398,8 @@ describe('G1 G2 a message', () => {
     expect([...files.keys()].filter((k) => k.startsWith('app:/cache/mail-'))).toEqual([]);      // nothing written, and the old one removed
     expect(files.has('app:/cache/other.html')).toBe(true);
     v = await mail.mailMessage('mail:em_01hz08', true, env());
-    expect(v.originalPath).toMatch(/^app:\/cache\/mail-[0-9a-f]{32}\.html$/);
-    const doc = new TextDecoder().decode(files.get(v.originalPath)!);
+    expect(v.originalPath).toMatch(/^app:\/cache\/accounts\/[0-9a-f]{64}\/mail-[0-9a-f]{32}\.html$/);      // what the iframe and the host see: the account's root is in the path
+    const doc = new TextDecoder().decode(files.get(v.originalPath.replace(/accounts\/[0-9a-f]{64}\//, ''))!);      // the module wrote it through storage, which re-roots (the test's storage is the world's: unbound)
     expect(doc).toContain('Content-Security-Policy'); expect(doc).toContain('Your order');
     for (const bad of ['<script', 'steal(', 'tracker.example.com', 'javascript:', 'onload', 'src=']) expect(doc).not.toContain(bad);
     expect(doc).not.toContain('href='); expect(doc).toContain('(https://shop.example.com/orders/1)');
@@ -540,26 +546,12 @@ describe('W1 L1 D1 A1', () => {
     expect(await C.forgetOldCopy(storage)).toBe(0);
   });
 
-  test('W1 wipeMail removes every sealed file, every original, the key and the memory; it never throws, even with nothing', async () => {
-    computer();
-    await mail.mailBox('mailbox:inbox', env()); await mail.mailMessage('mail:em_01hz08', true, env()); await mail.mailSync('mailbox:inbox', env());
-    expect([...files.keys()].some((k) => k.startsWith('app:/data/mail/'))).toBe(true); expect(nativeKey).not.toBeNull();
-    files.set('app:/data/paper-front.json', new TextEncoder().encode('{}'));
-    const r = await mail.wipeMail(storage);
-    expect(r.files).toBeGreaterThan(0); expect(r.originals).toBe(1);
-    expect([...files.keys()]).toEqual(['app:/data/paper-front.json']);
-    expect(nativeKey).toBeNull(); expect(forgets).toBe(1);
-    route = () => 'network';
-    expect((await mail.mailFrame('mailbox:inbox', env())).status).toBe('frame');                // memory is gone too
-    expect(await mail.wipeMail(storage)).toEqual({ files: 0, originals: 0 });
-    expect(await mail.wipeMail(undefined)).toEqual({ files: 0, originals: 0 });
-  });
 
   test('L1 logs carry ids and counts, never a sender, a subject, an address or a word of a message', async () => {
     computer();
     await mail.mailBox('mailbox:inbox', env()); await mail.mailMessage('mail:em_01hz0a', false, env()); await mail.mailSync('mailbox:inbox', env());
     await mail.mailSaveDraft('mail:new', 'maya.ortiz@example.com', 'Thursday dinner', 'Seven at the usual place');
-    route = () => 'network'; await mail.mailBox('mailbox:inbox', env()); await mail.wipeMail(storage);
+    route = () => 'network'; await mail.mailBox('mailbox:inbox', env());
     const all = logs.join('\n');
     restore();
     expect(all.length).toBeGreaterThan(0);
@@ -568,9 +560,9 @@ describe('W1 L1 D1 A1', () => {
 
   test('A1 the grants name the paths and the secret the modules use', () => {
     const g = app.grants.split('\n');
-    expect(g).toContain(`fs.read ${C.DIR}`); expect(g).toContain(`fs.write ${C.DIR}`);
-    expect(g).toContain(`fs.read ${C.CACHE}`); expect(g).toContain(`fs.write ${C.CACHE}`);
-    expect(g.some((l) => l.startsWith('secret.'))).toBe(false);          // no secret in Exact's store: the key is the platform's
+    expect(g).toContain('fs.read app:/data'); expect(g).toContain('fs.write app:/data');      // the account's folder is under it
+    expect(g).toContain('fs.read app:/cache'); expect(g).toContain('fs.write app:/cache');
+    expect(g.filter((l) => l.startsWith('secret.'))).toEqual(['secret.keep api-key', 'secret.keep key-id', 'secret.keep computer-id']);          // the sign-in key is Exact's (signin.ts), these three names only
     expect(g.some((l) => l.startsWith('net.fetch'))).toBe(true);
   });
 });
@@ -622,7 +614,7 @@ describe('R1 R2 hostile bodies', () => {
     computer((r) => (r.path === '/api/email/messages/em_big' ? { status: 200, body: { message: inboxList.messages[0], text_body: '', html_body: big, recipients: {} } } : undefined));
     const v = await mail.mailMessage('mail:em_big', true, env());
     expect(v.cut).toBe(true); expect(v.hasOriginal).toBe(true);
-    expect(new TextDecoder().decode(files.get(v.originalPath)!)).toContain('too large to show in full');
+    expect(new TextDecoder().decode(files.get(v.originalPath.replace(/accounts\/[0-9a-f]{64}\//, ''))!)).toContain('too large to show in full');
   });
 });
 
@@ -634,26 +626,18 @@ describe('R3 a sign-out while mail is being written', () => {
     const pending = mail.mailMessage('mail:em_01hz0a', false, env());
     await started;                                                         // the message was fetched and its first seal is in the native module
     const { accountSignOut } = await import('./account.ts');
-    const out = await accountSignOut(storage, undefined, reader as never);
+    const out = await accountSignOut(storage, { get: () => null, set: () => undefined, forget: () => undefined, has: () => false } as never);
     expect(out.done).toBe(true);
     release();
-    await pending.catch(() => undefined);
+    await settle(pending);                                                 // the native answer after the sign-out never reaches the chain (the world is closed)
     await new Promise((r) => setTimeout(r, 20));
     expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
     expect(nativeKey).toBeNull();
   });
-  test('sealing is off from the start of a sign-out until another account signs in, and on again when the sign-out is given up', async () => {
-    const api = await import('./api.ts');
-    expect(await seal(new Uint8Array([1]), 'x')).not.toBeNull();
-    await beginSignOut();
-    expect(api.sealingBlocked()).toBe(true); expect(await seal(new Uint8Array([1]), 'x')).toBeNull(); expect(await C.sealed(env())).toBe(false);
-    api.abortSignOut();
-    expect(api.sealingBlocked()).toBe(false); expect(await seal(new Uint8Array([1]), 'x')).not.toBeNull();
-  });
   test('a store write that began under an older generation refuses, makes no key and leaves no file', async () => {
     const api = await import('./api.ts');
     const old: C.Env = { storage, gen: api.accountGeneration() };
-    api.nextGeneration();
+    moveAccount();
     expect(await C.saveState(old, { done: {}, syncedAt: {}, cursor: {} })).toBe(false);
     expect(files.size).toBe(0); expect(nativeKey).toBeNull(); expect(sealCalls).toBe(0);
   });
@@ -749,38 +733,18 @@ describe('R9 the last races and words', () => {
     const started = new Promise<void>((r) => { sealStarted = r; });
     const pending = mail.mailMessage('mail:em_01hz0a', false, env());
     await started;
-    await beginSignOut();                                                  // the generation moves; the native module does not know (it will seal)
-    release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
+    endWorld();                                                  // the generation moves; the native module does not know (it will seal)
+    release(); await settle(pending); await new Promise((r) => setTimeout(r, 20));
     expect(sealCalls).toBeGreaterThan(0); expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
   });
-  test('a file write in flight when the sign-out begins is removed (the check after the write)', async () => {
-    computer();
-    let release: () => void = () => undefined; writeGate = new Promise<void>((r) => { release = r; });
-    const pending = mail.mailMessage('mail:em_01hz0a', false, env());
-    for (let i = 0; i < 40 && sealCalls === 0; i++) await new Promise((r) => setTimeout(r, 5));
-    await new Promise((r) => setTimeout(r, 20));
-    await beginSignOut();
-    release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
-    expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
-  });
-  test('"Show original" in flight at a sign-out leaves no plain file and no path', async () => {
+  test('"Show original" in flight at a sign-out leaves no plain file', async () => {
     computer();
     let release: () => void = () => undefined; readdirGate = new Promise<void>((r) => { release = r; });
     const pending = mail.mailMessage('mail:em_01hz08', true, env());
     await new Promise((r) => setTimeout(r, 30));
-    await beginSignOut();
-    release(); const v = await pending;
-    expect(v.originalPath).toBe(''); expect([...files.keys()].filter((k) => k.startsWith('app:/cache/mail-'))).toEqual([]);
-  });
-  test('the next session\'s first sync is not answered idle: a different key clears the block at once', async () => {
-    computer();
-    await mail.mailBox('mailbox:inbox', env());
-    await beginSignOut();
-    expect(await C.sealed(env())).toBe(false);
-    const api = await import('./api.ts');
-    api.nextGeneration();
-    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: true, value: 'another-key-0002-not-real', computerId: 'comp-2' } : r.op === 'mailCan' ? { ok: true } : { ok: true }) } as never);
-    expect(await C.sealed({ storage })).toBe(true);
+    endWorld();
+    release(); await Promise.race([pending.then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, 50))]);      // the chain of the closed world never resumes
+    expect([...files.keys()].filter((k) => k.startsWith('app:/cache/mail-'))).toEqual([]);
   });
   test('a timeout has its own words, not "offline"', () => {
     const w = M.words(new Error('timeout: The request timed out'));

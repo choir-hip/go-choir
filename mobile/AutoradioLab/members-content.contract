@@ -18,7 +18,7 @@ members Autoradio
   state ctlPanel = ""
 
   // ---- your own Texture document: edited in rich text with Exact's Markdown editor (Kit/TextureEditor.swift)
-  resource edInfo = textureEditInfo(address=pg.top) as shape TextureEditInfo else empty()
+  resource edInfo = textureEditInfo(address=pg.top) as shape TextureEditInfo else empty() transient
   mutation edm as shape TextureEditInfo
   state edOn = false
   state edFor = ""

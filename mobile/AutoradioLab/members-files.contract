@@ -31,7 +31,7 @@ members Autoradio
   state fsNoteOn = false
 
   // `fileList` and the changes are not package names: app.ts answers them (files.ts). Arguments are positional: path, mode, sort, desc, query.
-  resource fsList = fileList(fsPath, fsMode, fsSort, fsDesc, fsQuery, acs.state) as shape FileListing else empty()
+  resource fsList = fileList(fsPath, fsMode, fsSort, fsDesc, fsQuery, acctHandle) as shape FileListing else empty()
   mutation fsM as shape FileListing refreshes fsList, fvInfo
   derive fsNote = match fsM { case some(l) => l.message, case none => "" }
 
@@ -101,7 +101,7 @@ members Autoradio
 
   // ------------------------------------------------------------------ the open file (file:/path/name.ext)
   // Asked for every page; the module answers an empty "loading" record for any address that is not a file.
-  resource fvInfo = fileOpen(pg.top, acs.state) as shape FileInfo else empty()
+  resource fvInfo = fileOpen(pg.top, acctHandle) as shape FileInfo else empty()
   // A PDF, e-book, text, Markdown or code file is another page's document: the listener's computer opens it (decision D4) and the deck follows (members-stack openPage).
   mutation fvRes as shape FileResolved then fileResolved
 

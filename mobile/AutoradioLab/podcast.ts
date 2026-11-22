@@ -26,7 +26,7 @@
 // 10. Time is never read (`Date.now()` is refused): "now" is the Date header of the last answer any server gave, kept in the library file.
 
 import type { Result, Storage } from './app.contract.d.ts';
-import { authedJSON, SignedOutError, getJSON, TIMEOUT_MS, writeCurrent, accountGeneration } from './api.ts';
+import { fetchPublic, authedJSON, SignedOutError, getJSON, TIMEOUT_MS, putFile, accountGeneration, inert, inertTimeout, currentWorld, scoped } from './api.ts';
 import { NotAFeed, parseFeed } from './podcast-feed.ts';
 import {
   HOME, TOP_URL, clock, decodeChartNews, decodePopular, decodeSearch, decodeSubscriptions, decodeTranscript, durationLabel, durationsAgree, episodeAddress,
@@ -50,63 +50,31 @@ const emptyLibrary = (): Library => ({ subscriptions: [], removed: [], synced: [
 
 // ---- state kept between answers (cleared by `forget`, which a test calls, and by `wipe`, which sign-out calls)
 
-let lib: Library | null = null;
+const S = scoped(() => ({ lib: null as Library | null, generation: 0, feeds: new Map<string, Feed>(), known: new Map<string, Show>(), failed: new Map<string, string>(), attempted: new Set<string>(), inflight: new Map<string, Promise<void>>(), transcripts: new Map<string, Transcript>(), transcriptAsked: new Set<string>(), searches: new Map<string, Show[] | 'failed'>(), latestQuery: '', suggestions: [] as Show[], suggestionsAt: -1, syncAt: -1, syncNote: '', lastTick: 0, rev: 0, reportedFeeds: false, reportedNow: '', played: new Set<string>(), nowSeconds: 0, libGen: 0 }));      // module state belongs to the world (api.ts `scoped`)
 /** Raised by every wipe: a feed that was being fetched when the listener signed out is not kept. */
-let generation = 0;
-const feeds = new Map<string, Feed>();
-const known = new Map<string, Show>();
-const failed = new Map<string, string>();
-const attempted = new Set<string>();
-const inflight = new Map<string, Promise<void>>();
-const transcripts = new Map<string, Transcript>();
-const transcriptAsked = new Set<string>();
-const searches = new Map<string, Show[] | 'failed'>();
-let latestQuery = '';
-let suggestions: Show[] = [];
-let suggestionsAt = -1;
-let syncAt = -1;
-let syncNote = '';
-let lastTick = 0;
-let rev = 0;
-let reportedFeeds = false;
-let reportedNow = '';
-const played = new Set<string>();
 
-export function forget(): void {
-  generation++;
-  lib = null; feeds.clear(); known.clear(); failed.clear(); attempted.clear(); inflight.clear(); transcripts.clear(); transcriptAsked.clear(); searches.clear();
-  latestQuery = ''; suggestions = []; suggestionsAt = -1; syncAt = -1; syncNote = ''; lastTick = 0; rev = 0; reportedFeeds = false; reportedNow = ''; played.clear();
-}
+export function forget(): void { const g = S().generation + 1; S.reset(); S().generation = g; }      // a fresh state; the counter that ends a feed fetch begun before it goes on
 
-/** Sign-out: the library, every cached feed and transcript, and the files. Called by the sign-out wipe (lane exact-signin). */
-export async function wipe(storage: Storage | undefined): Promise<void> {
-  forget();
-  if (!storage) return;
-  try { await storage.fs.rm(LIBRARY_FILE); } catch { /* none */ }
-  try { await storage.fs.rm(FEED_DIR); } catch { /* none */ }
-}
 
 function resetFor(tick: number): void {
-  if (tick === lastTick) return;
-  lastTick = tick;
-  attempted.clear(); failed.clear(); transcriptAsked.clear(); searches.clear(); suggestionsAt = -1; syncAt = -1;
+  if (tick === S().lastTick) return;
+  S().lastTick = tick;
+  S().attempted.clear(); S().failed.clear(); S().transcriptAsked.clear(); S().searches.clear(); S().suggestionsAt = -1; S().syncAt = -1;
 }
 
 // ---- time: the Date header of the last answer any server gave
 
-let nowSeconds = 0;
-const now = (): number => nowSeconds || (lib?.clock ?? 0);
+const now = (): number => S().nowSeconds || (S().lib?.clock ?? 0);
 function sawTime(headerMs: number | null): void {
-  if (headerMs !== null && headerMs / 1000 > nowSeconds) { nowSeconds = headerMs / 1000; if (lib) lib.clock = nowSeconds; }
+  if (headerMs !== null && headerMs / 1000 > S().nowSeconds) { S().nowSeconds = headerMs / 1000; { const l = S().lib; if (l) l.clock = S().nowSeconds; } }
 }
 
 // ---- files
 
 const enc = new TextEncoder(), dec = new TextDecoder();
 
-let libGen = 0;       // the seam's account generation the library in memory was loaded under: its file writes refuse after a sign-out began (writeCurrent)
 async function loadLibrary(storage: Storage | undefined): Promise<Library> {
-  if (lib) return lib;
+  { const have = S().lib; if (have) return have; }
   const g = accountGeneration();
   let l = emptyLibrary();
   if (storage) {
@@ -119,14 +87,14 @@ async function loadLibrary(storage: Storage | undefined): Promise<Library> {
       }
     } catch { /* missing or damaged: an empty library */ }
   }
-  lib = l; libGen = g;
-  for (const s of l.subscriptions) known.set(feedKey(s.show.feedURL), s.show);
+  S().lib = l; S().libGen = g;
+  for (const s of l.subscriptions) S().known.set(feedKey(s.show.feedURL), s.show);
   return l;
 }
 
 async function saveLibrary(storage: Storage | undefined): Promise<void> {
-  if (!storage || !lib) return;
-  await writeCurrent(libGen, storage, LIBRARY_FILE, enc.encode(JSON.stringify(lib)));      // a full disk loses only the copy; a sign-out in flight writes nothing, and a file that lands after it is removed
+  if (!storage || !S().lib) return;
+  await putFile(storage, LIBRARY_FILE, enc.encode(JSON.stringify(S().lib)));      // a full disk loses only the copy; a sign-out in flight writes nothing, and a file that lands after it is removed
 }
 
 /** FNV-1a over the bytes, twice with different seeds: a file name, not a secret. */
@@ -139,23 +107,25 @@ function feedFile(norm: string): string {
   return `${FEED_DIR}/${a.toString(16).padStart(8, '0')}${b.toString(16).padStart(8, '0')}.json`;
 }
 
-async function cachedFeed(feedURL: string, storage: Storage | undefined): Promise<Feed | null> {
+export async function cachedFeed(feedURL: string, storage: Storage | undefined): Promise<Feed | null> {
   const n = feedKey(feedURL);
-  const have = feeds.get(n);
+  const have = S().feeds.get(n);
   if (have) return have;
   if (!storage) return null;
-  const gen = generation;                                                    // a file read that lands after a sign-out is not kept
+  const gen = S().generation;                                                    // a file read that lands after a sign-out is not kept
   try {
     const f = JSON.parse(dec.decode(await storage.fs.readFile(feedFile(n)))) as Feed;
-    if (f && f.show && Array.isArray(f.episodes)) { if (gen === generation) feeds.set(n, f); return gen === generation ? f : null; }
+    if (f && f.show && Array.isArray(f.episodes)) { S().feeds.set(n, f); return f; }
   } catch { /* none */ }
   return null;
 }
 
 // ---- the network
 
-async function fetchBody(url: string, accept: string): Promise<{ text: string; date: number | null }> {
-  const response = await fetch(url, { method: 'GET', headers: { accept, 'user-agent': 'Autoradio' }, exactTimeout: TIMEOUT_MS } as RequestInit);
+/** The feed fetch is an I/O choke point of the world (api.ts): for a closed world it never answers, so a chain waiting on it stops. */
+const fetchBody = (url: string, accept: string): Promise<{ text: string; date: number | null }> => inert(currentWorld(), fetchBodyImpl(url, accept));
+async function fetchBodyImpl(url: string, accept: string): Promise<{ text: string; date: number | null }> {
+  const response = await fetchPublic(url, { method: 'GET', headers: { accept, 'user-agent': 'Autoradio' }, exactTimeout: TIMEOUT_MS } as RequestInit);
   if (!response.ok) throw new Error(`${response.status}`);
   const len = Number(response.headers.get('content-length') ?? '0');
   if (len > MAX_FEED_BYTES) throw new TooBig();
@@ -177,7 +147,7 @@ async function fetchJSON(url: string): Promise<unknown> {
 
 async function load(feedURL: string, storage: Storage | undefined): Promise<void> {
   const n = feedKey(feedURL);
-  const gen = generation;
+  const gen = S().generation;
   const apiGen = accountGeneration();                                        // the seam's account generation: the file write below refuses after a sign-out began
   const candidates = [https(feedURL)];
   let lastError = 'The feed could not be reached.';
@@ -195,19 +165,19 @@ async function load(feedURL: string, storage: Storage | undefined): Promise<void
       else lastError = 'The feed could not be reached. Check your connection.';
     }
   }
-  if (gen !== generation) return;                                           // signed out while the feed was fetched: it is not kept
+  if (gen !== S().generation) return;                                           // signed out while the feed was fetched: it is not kept
   const l = await loadLibrary(storage);
   if (result) {
-    const k = known.get(n);
+    const k = S().known.get(n);
     if (k) { if (result.show.author === '') result.show.author = k.author; if (result.show.artworkURL === '') result.show.artworkURL = k.artworkURL; }
-    feeds.set(n, result); failed.delete(n); known.set(n, result.show);
+    S().feeds.set(n, result); S().failed.delete(n); S().known.set(n, result.show);
     const i = l.subscriptions.findIndex((s) => feedKey(s.show.feedURL) === n);
     if (i >= 0) { l.subscriptions[i].show = result.show; await saveLibrary(storage); }
     if (storage) {
       try { await storage.fs.mkdir(FEED_DIR); } catch { /* exists */ }
-      await writeCurrent(apiGen, storage, feedFile(n), enc.encode(JSON.stringify(result)));      // the copy may be lost, not the feed; a sign-out in flight writes nothing
+      await putFile(storage, feedFile(n), enc.encode(JSON.stringify(result)));      // the copy may be lost, not the feed; a sign-out in flight writes nothing
     }
-  } else failed.set(n, lastError);
+  } else S().failed.set(n, lastError);
 }
 
 /** Make the feed ready: fetched once a session (again when stale by the server's clock, or when `force`); one fetch per feed at a time. */
@@ -216,16 +186,16 @@ async function ensureFeed(feedURL: string, storage: Storage | undefined, force =
   const have = await cachedFeed(feedURL, storage);
   const t = now();
   const stale = !have || t === 0 || t - have.fetchedAt >= STALE_AFTER;
-  if (force || (!attempted.has(n) && stale)) {
-    attempted.add(n);
-    let p = inflight.get(n);
-    if (!p) { p = load(feedURL, storage).finally(() => inflight.delete(n)); inflight.set(n, p); }
+  if (force || (!S().attempted.has(n) && stale)) {
+    S().attempted.add(n);
+    let p = S().inflight.get(n);
+    if (!p) { p = load(feedURL, storage).finally(() => S().inflight.delete(n)); S().inflight.set(n, p); }
     await p;
   } else {
-    const p = inflight.get(n);
+    const p = S().inflight.get(n);
     if (p) await p;
   }
-  return feeds.get(n) ?? have;
+  return S().feeds.get(n) ?? have;
 }
 
 // ---- subscriptions and positions
@@ -248,31 +218,30 @@ function report(l: Library, key: string, seconds: number, duration: number | nul
 
 async function pushShow(s: Show): Promise<boolean> {
   try {
-    await authedJSON('/api/podcast/subscriptions', { method: 'POST', body: { feed_url: s.feedURL, title: s.title, author: s.author, artwork_url: s.artworkURL } });
+    await authedJSON('/api/podcast/subscriptions', { world: currentWorld(), method: 'POST', body: { feed_url: s.feedURL, title: s.title, author: s.author, artwork_url: s.artworkURL } });
     return true;
   } catch { return false; }
 }
 
 async function reportFeeds(l: Library, nowPlaying: { feedURL: string; episodeGuid: string; audioURL: string } | null = null): Promise<void> {
-  try { await authedJSON('/api/platform/podcast-feeds', { method: 'POST', body: reportBody(l.subscriptions.map((s) => s.show), nowPlaying) }); } catch { /* 404, signed out or offline: silent */ }
+  try { await authedJSON('/api/platform/podcast-feeds', { world: currentWorld(), method: 'POST', body: reportBody(l.subscriptions.map((s) => s.show), nowPlaying) }); } catch { /* 404, signed out or offline: silent */ }
 }
 
 async function syncIfDue(storage: Storage | undefined, l: Library): Promise<void> {
   const t = now();
-  if (syncAt >= 0 && t > 0 && t - syncAt < 600) return;
-  if (syncAt >= 0 && t === 0) return;
-  syncAt = t;
-  const gen = generation;                                                    // the answer of an account that was signed out meanwhile is dropped
+  if (S().syncAt >= 0 && t > 0 && t - S().syncAt < 600) return;
+  if (S().syncAt >= 0 && t === 0) return;
+  S().syncAt = t;
+  const gen = S().generation;
   let list: Show[];
-  try { list = decodeSubscriptions((await authedJSON('/api/podcast/subscriptions', { query: { limit: 200 } })).body); }
-  catch (e) { if (gen !== generation) return; syncNote = e instanceof SignedOutError ? '' : "Not in step with your computer's podcasts yet: it did not answer. Subscriptions here are kept on this phone."; return; }
-  if (gen !== generation) return;
+  try { list = decodeSubscriptions((await authedJSON('/api/podcast/subscriptions', { world: currentWorld(), query: { limit: 200 } })).body); }
+  catch (e) { S().syncNote = e instanceof SignedOutError ? '' : "Not in step with your computer's podcasts yet: it did not answer. Subscriptions here are kept on this phone."; return; }
   const removed = new Set(l.removed.map(feedKey));
   const added: Show[] = [];
   for (const s of list) {
     const n = feedKey(s.feedURL);
     if (removed.has(n) || isSubscribed(l, n)) continue;
-    l.subscriptions.push({ show: s, at: now() }); known.set(n, s);
+    l.subscriptions.push({ show: s, at: now() }); S().known.set(n, s);
     if (!l.synced.includes(n)) l.synced.push(n);
     added.push(s);
   }
@@ -280,17 +249,15 @@ async function syncIfDue(storage: Storage | undefined, l: Library): Promise<void
   const toPush = l.subscriptions.map((s) => s.show).filter((s) => !onServer.has(feedKey(s.feedURL)));
   let failedPush = 0;
   for (const s of toPush) { if (await pushShow(s)) { const n = feedKey(s.feedURL); if (!l.synced.includes(n)) l.synced.push(n); } else failedPush++; }
-  if (gen !== generation) return;
+  if (gen !== S().generation) return;
   await saveLibrary(storage);
-  if (gen !== generation) return;
-  syncNote = failedPush === 0 ? "In step with your computer's podcasts." : 'Some shows could not be sent to your computer yet.';
+  S().syncNote = failedPush === 0 ? "In step with your computer's podcasts." : 'Some shows could not be sent to your computer yet.';
 }
 
 async function loadSuggestions(): Promise<void> {
   const t = now();
-  if (suggestionsAt >= 0 && (t === 0 || t - suggestionsAt < 600)) return;
-  suggestionsAt = t;
-  const gen = generation;
+  if (S().suggestionsAt >= 0 && (t === 0 || t - S().suggestionsAt < 600)) return;
+  S().suggestionsAt = t;
   let out: Show[] = [];
   try { const r = await getJSON('/api/platform/podcast-popular', { limit: 30 }); sawTime(r.serverTime); out = decodePopular(r.body); } catch { /* 404 or offline: the chart */ }
   if (out.length === 0) {
@@ -299,22 +266,20 @@ async function loadSuggestions(): Promise<void> {
       if (chart.length > 0) out = decodeSearch(await fetchJSON(lookupURL(chart.map((c) => c.id))));
     } catch { out = []; }
   }
-  if (gen !== generation) return;                                           // the chart is public, but the held list belongs to this account's session
-  suggestions = out;
-  for (const x of out) if (!known.has(feedKey(x.feedURL))) known.set(feedKey(x.feedURL), x);
+  S().suggestions = out;
+  for (const x of out) if (!S().known.has(feedKey(x.feedURL))) S().known.set(feedKey(x.feedURL), x);
 }
 
 async function runSearch(q: string): Promise<void> {
-  if (searches.has(q)) return;
-  if (search.pause > 0) await new Promise<void>((r) => setTimeout(r, search.pause));
-  if (q !== latestQuery) return;                                            // a newer query was typed while this one waited: dropped
-  const gen = generation;
+  if (S().searches.has(q)) return;
+  if (search.pause > 0) await inertTimeout(search.pause);                    // a timer a chain waits on ends with its world
+  if (q !== S().latestQuery) return;                                            // a newer query was typed while this one waited: dropped
   try {
     const shows = decodeSearch(await fetchJSON(searchURL(q)));
-    if (q !== latestQuery || gen !== generation) return;
-    searches.set(q, shows);
-    for (const x of shows) if (!known.has(feedKey(x.feedURL))) known.set(feedKey(x.feedURL), x);
-  } catch { if (q === latestQuery) searches.set(q, 'failed'); }
+    if (q !== S().latestQuery) return;
+    S().searches.set(q, shows);
+    for (const x of shows) if (!S().known.has(feedKey(x.feedURL))) S().known.set(feedKey(x.feedURL), x);
+  } catch { if (q === S().latestQuery) S().searches.set(q, 'failed'); }
 }
 
 /** Search queries are compared by their words: lower case, spaces collapsed. */
@@ -339,7 +304,7 @@ function row(l: Library, s: Show, subscribed: boolean): ShowRow {
     feedURL: s.feedURL, address: showAddress(s.feedURL), title: s.title, author: s.author, artwork: https(s.artworkURL), detail: '', latest: '', latestStamp: '',
     subscribed, unplayed: false, unplayedCount: 0,
   };
-  const f = feeds.get(feedKey(s.feedURL));
+  const f = S().feeds.get(feedKey(s.feedURL));
   const e = f?.episodes[0];
   if (f && e) {
     const n = unplayedCount(l, f);
@@ -366,20 +331,20 @@ export async function podcastHome(a: HomeArgs, storage: Storage | undefined): Pr
   const l = await loadLibrary(storage);
   const q = normalize(a.q);
   v.query = q; v.hasQuery = q !== '';
-  latestQuery = q;
+  S().latestQuery = q;
   // The computer's list first (it may add shows), then everything the page needs together: one fetch per feed, and the suggestions or the search.
   await Promise.all([syncIfDue(storage, l), q === '' ? loadSuggestions() : runSearch(q)]);
   await Promise.all(l.subscriptions.map((s) => ensureFeed(s.show.feedURL, storage)));
   const subs = l.subscriptions.map((s) => s.show);                         // read after the feeds: a feed's own title replaces the address
-  if (!reportedFeeds) { reportedFeeds = true; await reportFeeds(l); }
-  const shows = subs.map((s, i) => ({ r: row(l, s, true), i, t: feeds.get(feedKey(s.feedURL))?.episodes[0]?.published ?? 0 }));
+  if (!S().reportedFeeds) { S().reportedFeeds = true; await reportFeeds(l); }
+  const shows = subs.map((s, i) => ({ r: row(l, s, true), i, t: S().feeds.get(feedKey(s.feedURL))?.episodes[0]?.published ?? 0 }));
   shows.sort((x, y) => (x.t !== y.t ? y.t - x.t : x.i - y.i));
   v.shows = shows.map((x) => x.r);
-  v.syncNote = syncNote;
+  v.syncNote = S().syncNote;
   if (q === '') {
-    v.suggestions = suggestions.filter((s) => !isSubscribed(l, s.feedURL)).map((s) => row(l, s, false));
+    v.suggestions = S().suggestions.filter((s) => !isSubscribed(l, s.feedURL)).map((s) => row(l, s, false));
   } else {
-    const found = searches.get(q);
+    const found = S().searches.get(q);
     if (found === 'failed') v.searchNote = 'Could not search podcasts right now. Check your connection and try again.';
     else if (found) {
       v.results = found.map((s) => row(l, s, isSubscribed(l, s.feedURL)));
@@ -417,7 +382,7 @@ export async function podcastShow(a: ShowArgs, storage: Storage | undefined): Pr
   resetFor(a.tick);
   const l = await loadLibrary(storage);
   const f = await ensureFeed(feed, storage);
-  const k = known.get(feedKey(feed));
+  const k = S().known.get(feedKey(feed));
   v.feedURL = feed; v.subscribed = isSubscribed(l, feed);
   v.title = k?.title ?? ''; v.author = k?.author ?? ''; v.artwork = https(k?.artworkURL ?? ''); v.summary = k?.summary ?? '';
   if (f) {
@@ -430,7 +395,7 @@ export async function podcastShow(a: ShowArgs, storage: Storage | undefined): Pr
     v.unplayedLine = n > 0 ? `${n} unplayed` : '';
     if (v.episodes.length === 0) { v.status = 'empty'; v.message = 'This feed has no episodes yet.'; }
   } else {
-    const m = failed.get(feedKey(feed));
+    const m = S().failed.get(feedKey(feed));
     if (m) { v.status = 'error'; v.message = m; }
   }
   return v;
@@ -450,7 +415,7 @@ export async function podcastEpisode(a: EpisodeArgs, storage: Storage | undefine
   const l = await loadLibrary(storage);
   const f = await ensureFeed(feed, storage);
   const key = episodeKey(feedKey(feed), id);
-  const k = known.get(feedKey(feed));
+  const k = S().known.get(feedKey(feed));
   v.status = 'loading';
   v.feedURL = feed; v.subscribed = isSubscribed(l, feed); v.showAddress = showAddress(feed);
   v.showTitle = k?.title ?? hint?.show ?? ''; v.artwork = https(k?.artworkURL ?? '');
@@ -462,7 +427,7 @@ export async function podcastEpisode(a: EpisodeArgs, storage: Storage | undefine
     if (f) v.note = "This episode is no longer in the show's feed. It can still be played from the link the clip carried.";
   }
   if (!resolved) {
-    const m = failed.get(feedKey(feed));
+    const m = S().failed.get(feedKey(feed));
     if (m) { v.status = 'error'; v.message = m; }
     return v;
   }
@@ -478,15 +443,14 @@ export async function podcastEpisode(a: EpisodeArgs, storage: Storage | undefine
   const r = resumeSeconds(l, key);
   if (r !== null) { v.hasResume = true; v.resumeLabel = 'Resume from ' + clock(r); }
   // The shared transcript: shown when the platform has one; "on its way" only for an episode that was played here.
-  if (!transcripts.has(key) && !transcriptAsked.has(key)) {
-    transcriptAsked.add(key);
-    const gen = generation;
+  if (!S().transcripts.has(key) && !S().transcriptAsked.has(key)) {
+    S().transcriptAsked.add(key);
     try {
-      const t = decodeTranscript((await authedJSON('/api/platform/podcast-transcript', { query: { feed, guid: id } })).body);
-      if (t && gen === generation) transcripts.set(key, t);
+      const t = decodeTranscript((await authedJSON('/api/platform/podcast-transcript', { world: currentWorld(), query: { feed, guid: id } })).body);
+      if (t) S().transcripts.set(key, t);
     } catch { /* 404, signed out or offline: none */ }
   }
-  const tr = transcripts.get(key);
+  const tr = S().transcripts.get(key);
   if (tr) {
     v.transcriptState = 'ready'; v.transcriptSource = tr.source;
     const fileLength = (v.current && a.nowDuration > 0 ? a.nowDuration : null) ?? resolved.duration;
@@ -499,7 +463,7 @@ export async function podcastEpisode(a: EpisodeArgs, storage: Storage | undefine
       if (q === '' || b.text.toLowerCase().includes(q)) v.transcript.push({ key: String(i), time: clock(b.start), text: b.text, seconds: b.start, current: i === cur, seekable: seek && v.playable });
     });
     if (v.transcript.length === 0 && q !== '') v.transcriptNote = 'Nothing in the transcript matches that.';
-  } else if (played.has(key) || position(l, key) !== null) { v.transcriptState = 'pending'; v.transcriptNote = 'Transcript on its way.'; }
+  } else if (S().played.has(key) || position(l, key) !== null) { v.transcriptState = 'pending'; v.transcriptNote = 'Transcript on its way.'; }
   return v;
 }
 
@@ -509,15 +473,15 @@ export async function podcastSubscribe(feedURL: string, storage: Storage | undef
   const l = await loadLibrary(storage);
   const n = feedKey(feedURL);
   if (isSubscribed(l, n)) return ack('ok', 'You already subscribe to this show.');
-  const base = known.get(n) ?? (feeds.get(n)?.show) ?? makeShow(feedURL, feedURL);
+  const base = S().known.get(n) ?? (S().feeds.get(n)?.show) ?? makeShow(feedURL, feedURL);
   const s: Show = { ...base, feedURL };
   l.subscriptions.push({ show: s, at: now() });
   l.removed = l.removed.filter((r) => feedKey(r) !== n);
-  known.set(n, s);
+  S().known.set(n, s);
   await saveLibrary(storage);
   if (await pushShow(s)) { if (!l.synced.includes(n)) l.synced.push(n); await saveLibrary(storage); }
   await reportFeeds(l);
-  attempted.delete(n);                                                       // the new subscription is fetched when its page is asked again
+  S().attempted.delete(n);                                                       // the new subscription is fetched when its page is asked again
   return ack('ok', 'Subscribed. New episodes will show here.');
 }
 
@@ -543,7 +507,7 @@ async function resolve(address: string, storage: Storage | undefined): Promise<{
   const ep = f?.episodes.find((e) => e.id === p.id);
   const url = (ep && ep.enclosureURL !== '' ? ep.enclosureURL : null) ?? p.hint?.enclosure ?? '';
   if (url === '') return null;
-  const showTitle = f?.show.title ?? known.get(feedKey(p.feed))?.title ?? p.hint?.show ?? '';
+  const showTitle = f?.show.title ?? S().known.get(feedKey(p.feed))?.title ?? p.hint?.show ?? '';
   return { url, title: ep?.title ?? p.hint?.title ?? 'Episode', show: showTitle, key, feed: p.feed, hint: p.hint };
 }
 
@@ -561,7 +525,7 @@ export async function podcastPlay(address: string, mode: string, now_: Now, stor
   } else if (mode === 'start') start = null;
   else if (mode.startsWith('at:')) { const at = parseFloat(mode.slice(3)); start = Number.isFinite(at) && at > 0 ? at : null; }
   else start = resumeSeconds(l, r.key);
-  played.add(r.key);
+  S().played.add(r.key);
   return ack('ok', 'Playing.', { play: { op, id: r.key, url: r.url, title: r.title, show: r.show, start: start ?? 0, clip: '', feed: r.feed, record: '' } });
 }
 
@@ -577,21 +541,21 @@ export async function podcastQueue(address: string, storage: Storage | undefined
 export type HeadArgs = { id: string; clip: boolean; elapsed: number; duration: number };
 export async function podcastPlayhead(a: HeadArgs, storage: Storage | undefined): Promise<Result<'podcastPlayhead'>> {
   const parsed = parseEpisodeKey(a.id);
-  if (!parsed || !(a.elapsed > 0)) return { rev };
+  if (!parsed || !(a.elapsed > 0)) return { rev: S().rev };
   const l = await loadLibrary(storage);
   const before = l.positions[a.id];
   const duration = a.duration > 0 ? a.duration : null;
   const done = duration !== null && a.elapsed >= duration - FINISHED_WITHIN;
   if (!before || Math.abs(a.elapsed - before.seconds) >= 5 || (done && !before.finished)) {
-    if (report(l, a.id, a.elapsed, duration)) { rev++; await saveLibrary(storage); }
+    if (report(l, a.id, a.elapsed, duration)) { S().rev++; await saveLibrary(storage); }
   }
-  if (reportedNow !== a.id) {
-    reportedNow = a.id;
+  if (S().reportedNow !== a.id) {
+    S().reportedNow = a.id;
     const f = await cachedFeed(parsed.feed, storage);
     const ep = f?.episodes.find((e) => e.id === parsed.id);
     if (ep && ep.enclosureURL !== '') await reportFeeds(l, { feedURL: parsed.feed, episodeGuid: parsed.id, audioURL: ep.enclosureURL });
   }
-  return { rev };
+  return { rev: S().rev };
 }
 
 /** What the phone's own search reads: the subscribed shows and their cached episodes (for the search lane, lane X10, to feed the index). */

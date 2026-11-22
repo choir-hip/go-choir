@@ -5,6 +5,7 @@
 // of the answer). The signed-in routes need the stored key, which the web host has no way to read, so a request is never made here: the requests, the offline copy,
 // the seal, the sanitiser and every rule of the old Swift tests are in mail.test.ts. The pages are looked at on the simulator and on Android.
 test "with no mail page on top every mail source is answered by app.ts and says idle"
+  clock +2500 real      // the card answers first (account.ts launch), then the sources it unlocks
   clock data
   expect state mbx.status == "idle"
   expect state mfr.status == "frame"
@@ -14,6 +15,7 @@ test "with no mail page on top every mail source is answered by app.ts and says 
   expect state mbx.rows.length == 0
 
 test "the mailbox frame is the same four tabs before any fetch"
+  clock +2500 real      // the card answers first (account.ts launch), then the sources it unlocks
   clock data
   expect state mfr.folder == "inbox"
   expect state mfr.title == "Inbox"

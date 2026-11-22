@@ -198,24 +198,6 @@ public enum RemoteHost {
     }
 }
 
-// MARK: Keychain (bearer tokens; never in the repo)
-
-public enum Keychain {
-    public static func get(service: String, account: String) -> String? {
-        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                                kSecAttrAccount as String: account, kSecReturnData as String: true]
-        var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
-        return String(data: d, encoding: .utf8)
-    }
-    public static func set(_ value: String, service: String, account: String) {
-        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
-        SecItemDelete(base as CFDictionary)
-        var add = base; add[kSecValueData as String] = Data(value.utf8)
-        SecItemAdd(add as CFDictionary, nil)
-    }
-}
-
 // MARK: System 1
 
 public final class FixedSystem1: System1, @unchecked Sendable {
@@ -246,7 +228,7 @@ public final class RemoteSystem1: System1, @unchecked Sendable {
         var r = URLRequest(url: u, timeoutInterval: ChoirClient.idleTimeout)     // idle transport timeout only
         r.httpMethod = "POST"
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let tok = Keychain.get(service: "news.choir.autoradio", account: "system1") { r.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
+        if let tok = KeychainKeyStore(service: "news.choir.autoradio").get("system1") { r.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
         r.httpBody = try JSONEncoder().encode(Req(context: i.context, listener_words: i.listenerWords, questions: i.questions))
         let t0 = ProcessInfo.processInfo.systemUptime
         let (data, resp) = try await URLSession.shared.data(for: r)
@@ -333,7 +315,7 @@ public final class RemoteProgramme: Programme, @unchecked Sendable {
         guard let u = URL(string: url) else { throw LabError.badInput("remote programme has no url") }
         try Self.requireConfiguredHost(u)
         var r = URLRequest(url: u)
-        if let tok = Keychain.get(service: "news.choir.autoradio", account: "programme") { r.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
+        if let tok = KeychainKeyStore(service: "news.choir.autoradio").get("programme") { r.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
         let (d, resp) = try await URLSession.shared.data(for: r)
         if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) { throw LabError.http(h.statusCode) }
         return try JSONDecoder().decode(ProgrammeDocument.self, from: d)

@@ -17,7 +17,7 @@
 import type { Storage } from './app.contract.d.ts';
 import {
   Corpus, VectorStore, retrieve, fusedRetriever, embedQuery, workItems, runJob, coverage, saveVectors, loadVectors, loadPaperFront, editionTopicDocs, openPageDocs,
-  onSignOut, searchPaper, corpusRows, corpusNote, normalizeQuery, ENGINE, DIMENSION, MIN_COVERAGE, COSINE_FLOOR, type Doc, type Context, type Embed, type Row,
+  searchPaper, corpusRows, corpusNote, normalizeQuery, ENGINE, DIMENSION, MIN_COVERAGE, COSINE_FLOOR, type Doc, type Context, type Embed, type Row,
 } from './search.ts';
 
 // ---------------------------------------------------------------------------------------------------------------- the facts native hands over
@@ -124,16 +124,14 @@ export class Retrieval {
   private answered = new Map<string, Promise<{ id: string; ok: boolean }>>();
   modelState: 'ok' | 'downloading' | 'absent' = 'absent';
   private prog = { done: 0, total: 0, rate: 0 };
-  private off: () => void;
 
   constructor(o: Options = {}) {
     this.storage = o.storage; this.native = o.native ?? null; this.now = o.now ?? (() => 0);   // data sources read no clock (Exact refuses Date.now): the rate is 0 until a caller passes one
     ; this.delays = o.delays ?? DELAYS;
     this.engine = o.engine ?? ENGINE; this.dimension = o.dimension ?? DIMENSION; this.cosineFloor = o.cosineFloor ?? COSINE_FLOOR;
     this.store = new VectorStore(this.engine, this.dimension);
-    this.off = onSignOut(() => this.reset());
   }
-  dispose(): void { this.off(); }
+  dispose(): void { /* nothing is registered outside this runtime */ }
 
   get progress(): { done: number; total: number; rate: number } { return { ...this.prog }; }
   line(): string { return this.lastLine; }
@@ -151,7 +149,7 @@ export class Retrieval {
   }
 
   private async openVectors(): Promise<void> {
-    // The account guard of this runtime is `gen` (reset() runs at every sign-out through onSignOut): a read that lands after a reset installs nothing.
+    // The account guard of this runtime is `gen` (reset() drops the index): a read that lands after a reset installs nothing.
     const g = this.gen;
     this.loaded ??= loadVectors(this.storage, this.engine, this.dimension).then((s) => { if (g === this.gen) this.store = s; });
     await this.loaded;

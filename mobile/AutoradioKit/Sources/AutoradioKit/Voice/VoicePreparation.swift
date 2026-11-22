@@ -136,27 +136,7 @@ final class VoicePreparation: @unchecked Sendable {
         publish()
     }
 
-    /// A model was dropped (a memory warning, an idle unload, removal).
-    func markUnloaded(_ names: [String]) {
-        lock.lock()
-        for name in names { ready.remove(name) }
-        lock.unlock()
-        publish()
-    }
 
-    /// A model took `ms` to load: a load that long was a compile, so the
-    /// system's caches are cold whatever the build says, and the person is
-    /// told it is the first time.
-    func noteLoad(_ name: String, ms: Double) {
-        guard ms >= Self.coldLoadMs else { return }
-        lock.lock()
-        let changed = !firstTime
-        firstTime = true
-        if changed { defaults.removeObject(forKey: Self.preparedKey) }
-        lock.unlock()
-        if changed { VoiceMode.log.notice("voice prepare: \(name, privacy: .public) took \(Int(ms), privacy: .public) ms, caches look cold") }
-        publish()
-    }
 
     /// Calls `listener` with each new snapshot, until the returned token is
     /// passed to `remove`.

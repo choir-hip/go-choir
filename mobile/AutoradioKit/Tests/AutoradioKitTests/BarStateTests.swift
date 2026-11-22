@@ -29,8 +29,6 @@ final class BarStateTests: XCTestCase {
         XCTAssertEqual(tr.raw().errorAt, 1013, "only the engine's own stages are errors for the bar")
         XCTAssertEqual(tr.expiry(now: t0.addingTimeInterval(5))!, 1.0, accuracy: 0.01)
         XCTAssertNil(tr.expiry(now: t0.addingTimeInterval(30)))
-        tr.wipe()
-        XCTAssertEqual(tr.raw().errorAt, 0); XCTAssertEqual(tr.raw().holding, ""); XCTAssertEqual(tr.raw().revisedAt, 0)
     }
 
     func testClockCountsOnlyRunningTime() {

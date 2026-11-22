@@ -1,8 +1,7 @@
 #!/bin/sh
 # Real-data proof: the app on a simulator of its own, signed in to the test computer (d@e) on staging.
 # Sign-in: the real one is a browser device flow a script cannot approve, so the key file (REAL_KEY_FILE, default the QA key for d@e)
-# is copied with `cp` into the app's Documents as `proof-key`; the simulator build reads it into the Keychain at launch and deletes it
-# (AutoradioKit/ProofKey.swift, compiled only for the simulator). The key is never printed, logged or put on a command line.
+# is written as the secret file `api-key` of the drive's scratch store (Exact's own store for a scripted drive: see reset_state). The key is never printed, logged or put on a command line.
 # Reads only on the computer: the tour taps nothing that writes or spends (no prompts, no mail). The one local write is the theme choice on the phone (the Appearance tap; reset_state clears it). Set REAL_PROMPT=1 for the one optional
 # prompt-bar question at the end (a model call on d@e).
 # Assertions are on real conditions (a title is not empty, there is no error banner), never on fixture text.
@@ -31,16 +30,21 @@ reset_state() {
   rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
   rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
   # The takes' data: the shared file (app:/data/takes.json, take-session.ts) and the Swift programme's copies (takes-own.json, takes-muted.json). Every drive starts without them; the takes drive seeds the old two below.
-  rm -f "$S/takes-own.json" "$S/takes-muted.json" "$S/takes-copy-own.json" "$S/takes-copy-muted.json" "$CONT"/Library/Application\ Support/exact/*/data/takes.json "$CONT"/Library/Caches/exact/*/agent/*/data/takes.json
+  rm -rf "$S/account"; rm -f "$S/takes-own.json" "$S/takes-muted.json" "$S/takes-copy-own.json" "$S/takes-copy-muted.json" "$CONT"/Library/Application\ Support/exact/*/data/takes.json "$CONT"/Library/Caches/exact/*/agent/*/data/takes.json
   rm -f "$CONT"/Library/Application\ Support/exact/*/data/edition-topics.json "$CONT"/Library/Caches/exact/*/agent/*/data/edition-topics.json   # the edition picks' own place now (edition-picks.ts: app:/data)
   rm -rf "$CONT"/Library/Application\ Support/exact/*/data/theme-choice.json "$CONT"/Library/Application\ Support/exact/*/data/themes   # app:/data on a device build
   rm -rf "$CONT"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CONT"/Library/Caches/exact/*/agent/*/data/themes   # the themes' own place now (themes.ts: app:/data, which an agent drive keeps under Library/Caches/exact/<app id>/agent/default/data), not UserDefaults and Autoradio/themes
   rm -f "$CONT/Library/Preferences/$APP.plist"
-  mkdir -p "$CONT/Documents"
-  if [ -n "${NOKEY:-}" ]; then rm -f "$CONT/Documents/proof-key"      # a launch with no key at all (the sign-out drill before it emptied the Keychain)
+  # THE KEY IS EXACT'S (`secret.keep`): a scripted drive keeps secrets as plain files in its scratch tree, not in the Keychain (Exact reference.md "a scripted drive never keeps them"; host/apple/src/picker.rs agent_secret_root), so the proof key
+  # is SEEDED as the secret file `api-key` of the drive's scratch store (`default`, the name a native drive without --storage gets): `<container>/Library/Caches/exact/<app id>/agent/default/secrets/api-key`, mode 0600 in a 0700 folder.
+  # No simulator-only code in the app: the drills then run the same path as a real sign-in's stored key. NOKEY leaves whatever the store holds (the crash drill); FAKEKEY seeds another account's key; the key is never printed, logged or put on a command line.
+  SECRETS="$CONT/Library/Caches/exact/$APP/agent/default/secrets"
+  if [ -n "${NOKEY:-}" ]; then :
   else
-    cp "$KEYFILE" "$CONT/Documents/proof-key" || fail "reset" "could not place the key file"
-    chmod 600 "$CONT/Documents/proof-key"
+    mkdir -p "$SECRETS"; chmod 700 "$SECRETS"
+    if [ -n "${FAKEKEY:-}" ]; then printf '%s' "$FAKEKEY" > "$SECRETS/api-key"
+    else tr -d '[:space:]' < "$KEYFILE" > "$SECRETS/api-key" || fail "reset" "could not place the key file"; fi
+    chmod 600 "$SECRETS/api-key"; rm -f "$SECRETS/key-id" "$SECRETS/computer-id"
   fi
   # The carry-over drill (SEED_LEGACY=1) seeds what an old build left, in THIS simulator's app container only: two preference keys (AutoradioThemeID=depth, AutoradioThemeMode=dark)
   # and one file, Application Support/Autoradio/themes/drill-user.json (a valid theme with the id drill-user). Nothing else; legacy_clean removes all three.
@@ -60,10 +64,56 @@ reset_state() {
   if [ -n "${SEED_PICKS:-}" ]; then
     mkdir -p "$S"; printf '%s' '{"topics":["Zzdrillseed"]}' > "$S/edition-topics.json"
   fi
+  # The orphan-root drills (PLANT_ORPHAN=<64 hex digest>, PLANT_MARK=<text>) plant what a kill or an old build leaves, in THIS simulator's data folder only, AFTER everything above (which removes the old top-level files): a root named by the
+  # digest with a marked takes.json in it, and an old top-level takes.json with its own mark. The launch must delete both before any page draws, and never show their text. The plant is read back here, so a drill that could not
+  # plant fails at once instead of passing for nothing.
+  if [ -n "${PLANT_ORPHAN:-}" ]; then
+    d=$(data_dir); [ -n "$d" ] || fail "reset" "no data folder to plant the orphan root in (is there a drive before this one?)"
+    mkdir -p "$d/accounts/$PLANT_ORPHAN"
+    printf '{"handle":"%s","ids":[],"muted":[]}' "$PLANT_MARK-ROOT" > "$d/accounts/$PLANT_ORPHAN/takes.json"
+    printf '{"handle":"%s","ids":[],"muted":[]}' "$PLANT_MARK-LEFTOVER" > "$d/takes.json"
+    grep -q "$PLANT_MARK-ROOT" "$d/accounts/$PLANT_ORPHAN/takes.json" && grep -q "$PLANT_MARK-LEFTOVER" "$d/takes.json" || fail "reset" "the orphan root could not be planted"
+    if [ -n "${PLANT_NATIVE:-}" ]; then          # what a kill between the native key delete and the Swift wipe leaves: a NATIVE store file (the Swift books folder, wiped by AccountWipe) and the ending mark that says the wipe is owed
+      mkdir -p "$S/books/d2native"; printf '%s' "$PLANT_MARK-NATIVE" > "$S/books/d2native/text.txt"; printf 'ending' > "$d/ending"
+      mkdir -p "$S/account"; printf '%s' "$PLANT_MARK-NATIVE" > "$S/account/takes-copy-own.json"      # the ONE native account folder (AccountWipe.root): the wipe removes it and lists that it is gone
+      grep -q "$PLANT_MARK-NATIVE" "$S/books/d2native/text.txt" && grep -q "$PLANT_MARK-NATIVE" "$S/account/takes-copy-own.json" && [ -e "$d/ending" ] || fail "reset" "the native store and the ending mark could not be planted"
+    fi
+  fi
 }
 legacy_clean() {
   for k in AutoradioThemeMode AutoradioThemeID; do SIM spawn "$EXACT_SIM" defaults delete $APP $k >/dev/null 2>&1; done
   CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null); [ -n "$CONT" ] && rm -rf "$CONT/Library/Application Support/Autoradio/themes"
+}
+
+# ---- the account boundary's checks on the app's files (docs/design/account-boundary-2026-11-21.md, "Accounts are partitions"). An account's files live under `accounts/<sha256 of its key>/` in each of the app's three
+# folders (data, cache, tmp), and under no other name. Every check below guards against an empty container path: with no container, nothing is looked at, and a check that looks at nothing FAILS (it never passes for nothing).
+KEYDIG=$(tr -d '[:space:]' < "$KEYFILE" | shasum -a 256 | cut -d' ' -f1)       # what the app names the proof key's root (the seed trims it); never printed
+root_names_in() { # container: the name of every account root folder in it, one per line, sorted (empty when there is none, or no container)
+  [ -n "$1" ] && [ -d "$1" ] || return 0
+  find "$1" -type d -path '*/accounts/*' 2>/dev/null | awk -F/accounts/ 'NF == 2 && $2 !~ /\// { print $2 }' | sort -u
+}
+app_container() { SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null; }
+root_names() { root_names_in "$(app_container)"; }
+data_dir() { # the folder holding the app's `accounts` folder, else the folder an agent drive or a device build keeps app:/data in (the account roots may be gone, the folder is not)
+  CONT=$(app_container); [ -n "$CONT" ] || return 0
+  f=$(find "$CONT" -type d -name accounts -path '*/data/*' 2>/dev/null | head -1)
+  if [ -n "$f" ]; then dirname "$f"; return; fi
+  ls -dt "$CONT"/Library/Caches/exact/*/agent/*/data "$CONT"/Library/Application\ Support/exact/*/data 2>/dev/null | head -1
+}
+count_in_container() { # needle: how many files of the app's container hold the text (the container must be known: prints 99999 when it is not, so a "none left" check fails)
+  CONT=$(app_container); if [ -z "$CONT" ] || [ ! -d "$CONT" ]; then echo 99999; return; fi
+  grep -rl -- "$1" "$CONT" 2>/dev/null | wc -l | tr -d ' '
+}
+roots_have() { # name roots digest: the roots (as captured after a drive) include this digest; it fails when the container is unknown
+  if [ -n "$(app_container)" ] && echo " $2 " | grep -q " $3 "; then echo "ok: $1"; else echo "MISSING: $1 (roots: '$2')"; FAILS="$FAILS [$1]"; fi
+}
+roots_lack() { # name roots digest: the roots do not include this digest; it fails when the container is unknown (a missing container proves nothing)
+  if [ -n "$(app_container)" ] && ! echo " $2 " | grep -q " $3 "; then echo "ok: $1"; else echo "MISSING: $1 (roots: '$2')"; FAILS="$FAILS [$1]"; fi
+}
+roots_within() { # name roots allowed...: every root is one of the allowed names (the anonymous root is never swept, so a drill allows it)
+  rn="$1"; rr="$2"; shift 2; rbad=""
+  for x in $rr; do case " $* " in *" $x "*) ;; *) rbad="$rbad $x";; esac; done
+  if [ -n "$(app_container)" ] && [ -z "$rbad" ]; then echo "ok: $rn"; else echo "MISSING: $rn (not allowed:$rbad)"; FAILS="$FAILS [$rn]"; fi
 }
 
 # ids found in a drive's tree dump: ids <file> <prefix>  -> every test id that starts with the prefix (one per line, in order)
@@ -102,8 +152,8 @@ export EXACT_SIM="${EXACT_SIM:-$("$HERE/sim-device.sh")}"
 [ -n "$EXACT_SIM" ] || fail "simulator" "no simulator"
 echo "simulator $EXACT_SIM"
 if [ -z "${NOTESTS:-}" ]; then
-  echo "swift test (RealShapeTests, ProofKeyTests, TypedTurnTests)"
-  "$HERE/xe.sh" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter "RealShapeTests|ProofKeyTests|TypedTurnTests" > "$SCRATCH/test.txt" 2>&1 \
+  echo "swift test (RealShapeTests, TypedTurnTests)"
+  "$HERE/xe.sh" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter "RealShapeTests|TypedTurnTests" > "$SCRATCH/test.txt" 2>&1 \
     || { grep -E "error:|failed|XCTAssert" "$SCRATCH/test.txt" | cut -c1-400 | head -40; tail -6 "$SCRATCH/test.txt"; cp "$SCRATCH/test.txt" "$SHOTS/swift-tests.txt"; fail "swift test"; }
   grep -E "Executed [0-9]+ tests" "$SCRATCH/test.txt" | tail -1
   cp "$SCRATCH/test.txt" "$SHOTS/swift-tests.txt"
@@ -117,7 +167,7 @@ fi
 SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 
 # ---- 3.0 WARM-UP drive: the first launch after an install showed Settings account, Files and Mail signed out for the whole drive in four of sixteen runs (the later drives of the same run were fine, with the
-# same key). The cause is not proven (a first-launch race around the Keychain); the survey must not be that launch, so it is a throwaway one that only opens the app and waits.
+# same key). The cause is not proven (a first-launch race around the secret store); the survey must not be that launch, so it is a throwaway one that only opens the app and waits.
 step "clock data"; wait_ 6000
 place settings 900; step "tap settings-nav-account"; view real-00w-warmup 4000
 step logs
@@ -194,8 +244,8 @@ TKS="$CHK/Library/Application Support/Autoradio"
 TK_FILE=$(ls -t "$CHK"/Library/Caches/exact/*/agent/*/data/takes.json "$CHK"/Library/Application\ Support/exact/*/data/takes.json 2>/dev/null | head -1)
 rm -f "$SHOTS/takes-data.json" "$SHOTS/takes-copy-own.json" "$SHOTS/takes-copy-muted.json" "$SHOTS/takes-old-own.json" "$SHOTS/takes-old-muted.json"
 [ -n "$TK_FILE" ] && cp "$TK_FILE" "$SHOTS/takes-data.json"
-cp "$TKS/takes-copy-own.json" "$SHOTS/takes-copy-own.json" 2>/dev/null
-cp "$TKS/takes-copy-muted.json" "$SHOTS/takes-copy-muted.json" 2>/dev/null
+cp "$TKS/account/takes-copy-own.json" "$SHOTS/takes-copy-own.json" 2>/dev/null      # the native account folder (AccountWipe.root)
+cp "$TKS/account/takes-copy-muted.json" "$SHOTS/takes-copy-muted.json" 2>/dev/null
 cp "$TKS/takes-own.json" "$SHOTS/takes-old-own.json" 2>/dev/null
 cp "$TKS/takes-muted.json" "$SHOTS/takes-old-muted.json" 2>/dev/null
 tseg() { awk -v m="$2" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$1"; }
@@ -462,6 +512,11 @@ view real-66-bar-on-page 600
 [ -n "$PLAY_BAR" ] && { to_top; step "tap \"$PLAY_BAR\""; wait_ 5000; view real-67-bar-playing 800; step "tap bar-play"; wait_ 1500; view real-68-bar-paused 800; step "tap bar-play"; wait_ 3000; view real-69-bar-resumed 800; step "tap bar-now"; view real-70-bar-run-sheet 1500; }
 step logs
 run_drive bar light "" --touch platform
+# R1 (before the sign-out drill): the phone holds ONE account root, named by the proof key's digest, with the paper's offline copy in it. A wrong catch: a build that writes under the old top-level paths (no root),
+# under a root named by anything but the key's digest, or under a second root.
+CUR_ROOTS=$(root_names | tr '\n' ' ')
+roots_have "R1: before the sign-out the phone holds the proof key's root" "$CUR_ROOTS" "$KEYDIG"
+roots_within "R1: before the sign-out no other root exists" "$CUR_ROOTS" "$KEYDIG" anonymous
 
 # ---- 3f4. BACKGROUND drive (the radio plays on with the app not in front): the radio starts by itself (a signed-in computer, onboarding done) and the Home screen is put over the app for BG_SECONDS.
 # Checks that can fail: at least five entries START on the native console (`on air <entry> voice=`) after the app left the front. What this proves: the radio (shared code's pump and hold, and the deck) keeps
@@ -507,25 +562,27 @@ fi
 echo "not driven: background: no remote next (a script cannot press the lock screen), and no frozen shared code (the simulator does not suspend it): only the owner's locked phone shows those"
 SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1
 
-# ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the proof key has no key id, so nothing is revoked on the server and nothing else is written there).
-# Data is on the pages first; then Sign out; then the account page says signed out, Files and Mail show no data, and the wipe marker and the stamp are gone from the app's files.
+# ---- 3g. SIGN-OUT DRILL, LAST (drill 1, "sign out of one": local, it signs the simulator's app out; the proof key has no key id, so nothing is revoked on the server and nothing else is written there).
+# Data is on the pages first (Files rows, the paper's copy in the account's root); then Sign out; then the whole app is ONE full-screen card that says to close and reopen it. The three folders of accounts/ are gone, no
+# `signout-pending` or `account-stamp` is written (the old record), and the relaunch (the signed-out tour right after) is signed out. A wrong catch: a build that wipes and carries on (no card), a card with controls, a root left
+# behind, the old record file.
 step "clock data"; wait_ 5000
 place paper 2000
 place files 900; view real-40-files-before 3000
 place settings 900; step "tap settings-nav-account"; view real-41-account-before 3500
-step "tap settings-signout"; wait_ 5000; step tree; shot real-42-account-after
-place files 900; view real-43-files-after 3000
-place mail 900; view real-44-mail-after 3000
-place settings 900; step "tap settings-nav-account"; view real-45-account-after-again 3500
+step "tap settings-signout"; wait_ 6000; step tree; shot real-42-ended-card
+step "tap bar-mark"; wait_ 1200; step "tap place-files"; wait_ 800; step tree; shot real-43-ended-card-tapped      # taps on controls under the card (the bar's mark, a place) do nothing
 step logs
 run_drive drill light "" --touch platform
 DR="$SHOTS/drive-drill.txt"
-AFTER="$SHOTS/drill-after.txt"; awk '/\[settings-account-signed\][^"]*"No"/ { f = 1 } f' "$DR" > "$AFTER"
-CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
-LEFT_FILES=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/dev/null)
-LEFT=$(printf '%s' "$LEFT_FILES" | grep -c . | tr -d ' ')
+tseg "$DR" real-43-ended-card-tapped > "$SHOTS/seg-ended-tapped.txt"
+AFTER="$SHOTS/drill-after.txt"; awk '/\[ended-card\]/ { match($0, /^ */); ind = RLENGTH; f = 1; print; next } f { match($0, /^ */); if (RLENGTH <= ind) f = 0; else print }' "$DR" > "$AFTER"      # the card's own subtree: what the card holds, not the pages under it
+[ -s "$AFTER" ] || fail "drill 1" "the sign-out left no ended card to look at"
+CONT=$(app_container)
+DRILL_ROOTS=$(root_names | tr '\n' ' ')
+MARKER=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/dev/null | wc -l | tr -d ' ')
 
-# ---- 3h. SIGNED-OUT TOUR (the drill above left the Keychain empty): launch with no key. The first screen (the radio) says what is true and offers the one way in; the paper lists the public stories and a
+# ---- 3h. SIGNED-OUT TOUR (the drill above left the secret store empty): launch with no key. The first screen (the radio) says what is true and offers the one way in; the paper lists the public stories and a
 # story reads; the radio offers to read the public paper; Settings > Account has a Sign in button. Nothing here needs the owner's computer.
 export NOKEY=1
 fresh_paper pick-signedout
@@ -553,6 +610,123 @@ unset NOKEY
 SO="$SHOTS/drive-signedout.txt"
 # the FIRST screen's dump only: the text of the drive up to the first screenshot step (real-50), not the whole drive
 SO1="$SHOTS/signedout-first.txt"; awk '{ print } /real-50-so-first-screen/ { exit }' "$SO" > "$SO1"
+
+# ---- 3i. ACCOUNT BOUNDARY DRILLS 2 to 6 (docs/design/account-boundary-2026-11-21.md, "Accounts are partitions", station 1). Each drive's steps are fixed before it runs; what each check would catch is written beside it.
+# Drill 2, kill mid sign-out. (a) A real kill: sign out, kill the app at once, relaunch with no key placed (the secret store keeps what the crash left). The kill may land before the native key delete (still signed in, the root is
+# the key's) or after it (key gone: the root is an orphan): both are right. The wrong outcome is key gone and the old account's root on disk or its data on screen. The window itself cannot be forced by a script. (b) The state
+# a kill after the key delete and before the root delete leaves is PLANTED (a root named by the proof key's digest, a marked takes.json in it, and no key): the launch must delete it before any page draws and never show it.
+unset NOKEY
+step "clock data"; wait_ 5000
+place paper 2500                                       # the paper's offline copy (paper-front.json) is account data, in the account's root
+place settings 900; step "tap settings-nav-account"; wait_ 2500
+step "tap settings-signout"
+run_drive crash light "" --touch platform
+SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 3     # the kill: the sign-out's native half may be midway
+NOKEY=1; export NOKEY
+step "clock data"; wait_ 3000; view real-d2-first 1500
+place files 900; view real-d2-files 3000
+place mail 900; view real-d2-mail 3000
+place settings 900; step "tap settings-nav-account"; view real-d2-account 3500
+step logs
+run_drive relaunch light "" --touch platform
+unset NOKEY
+D2="$SHOTS/drive-relaunch.txt"
+D2_ROOTS=$(root_names | tr '\n' ' ')
+D2_CONT=$(app_container)
+# (b) the planted state, with NO key: NOKEY only removes the key FILE, the secret file survives, so the key is cleared deterministically first by a completed sign-out (its own drive, checked), and only then is the state planted.
+unset NOKEY
+step "clock data"; wait_ 5000
+place settings 900; step "tap settings-nav-account"; wait_ 2500
+step "tap settings-signout"; wait_ 8000; step tree; shot real-d2b-cleared
+step logs
+run_drive clearkey light "" --touch platform
+CK="$SHOTS/drive-clearkey.txt"
+NOKEY=1; export NOKEY; PLANT_ORPHAN="$KEYDIG"; PLANT_MARK="D2PLANTED"; PLANT_NATIVE=1; export PLANT_ORPHAN PLANT_MARK PLANT_NATIVE
+step "clock data"; wait_ 3000; step tree; shot real-d2b-first
+place paper 2500; place settings 900; step "tap settings-nav-account"; view real-d2b-account 3500
+step logs
+run_drive killplant light "" --touch platform
+unset NOKEY PLANT_ORPHAN PLANT_MARK PLANT_NATIVE
+D2B="$SHOTS/drive-killplant.txt"
+D2B_ROOTS=$(root_names | tr '\n' ' ')
+D2B_LEFT=$(count_in_container D2PLANTED)
+D2B_ENDING=$(find "$(app_container)" -name ending -path "*/data/*" 2>/dev/null | wc -l | tr -d ' ')
+
+# (c) the mark with the key STILL THERE (a kill after the person tapped Sign out and before the key was deleted): the mark is the person's intent, so the launch FINISHES the sign-out (key deleted, native stores wiped, root deleted,
+# mark removed) and the phone comes up signed out. A wrong catch: a build that wipes native, clears the mark and opens the account signed in with half its data gone.
+unset NOKEY; PLANT_ORPHAN="$KEYDIG"; PLANT_MARK="D2CMARK"; PLANT_NATIVE=1; export PLANT_ORPHAN PLANT_MARK PLANT_NATIVE
+step "clock data"; wait_ 6000; step tree; shot real-d2c-first
+place settings 900; step "tap settings-nav-account"; view real-d2c-account 3500
+step tree; step logs
+run_drive finishmark light "" --touch platform
+unset PLANT_ORPHAN PLANT_MARK PLANT_NATIVE
+D2C="$SHOTS/drive-finishmark.txt"
+D2C_ROOTS=$(root_names | tr '\n' ' ')
+D2C_LEFT=$(count_in_container D2CMARK)
+D2C_ENDING=$(find "$(app_container)" -name ending -path "*/data/*" 2>/dev/null | wc -l | tr -d ' ')
+
+# Drill 3, launch with an orphan root: signed in with the proof key, a root named by ANOTHER digest holds a marked takes.json, and an old top-level takes.json holds its own mark. After the launch both are gone
+# (the sweep deleted them), the key's own root is the only one, and neither mark was ever on a page. A wrong catch: a build that sweeps late (the marks would show in the takes section), reads a root it was not
+# given, or keeps the old top-level files.
+ORPHAN_DIG=$(printf '%s' 'another-account-key-not-real' | shasum -a 256 | cut -d' ' -f1)
+PLANT_ORPHAN="$ORPHAN_DIG"; PLANT_MARK="D3ORPHAN"; export PLANT_ORPHAN PLANT_MARK
+step "clock data"; wait_ 6000; step tree; shot real-d3-first
+place paper 2500; place radio 2000; view real-d3-radio 2500
+place settings 900; step "tap settings-nav-account"; view real-d3-account 3500
+step logs
+run_drive orphan light "" --touch platform
+unset PLANT_ORPHAN PLANT_MARK
+D3O="$SHOTS/drive-orphan.txt"
+D3O_ROOTS=$(root_names | tr '\n' ' ')
+D3O_LEFT=$(count_in_container D3ORPHAN)
+
+# Drill 4, a changed key (an account change without a sign-out). The phone holds the proof key's root (a marked recent-files.json is written INTO it), then the secret file is REPLACED by another string and the app is
+# relaunched. The old root is swept (the marked file is gone), the new key has a root of its own (the paper's copy is written there), and the card says the key is refused and offers Sign out, not Sign in. Drill 6 (first
+# frame) rides on this drive: its first step is a tree dump BEFORE any settle, and the seed drive before it showed Files rows, so Exact holds a kept answer for the proof key's handle. A wrong catch: a build that
+# kept the old root for the new key, read it, or showed the old account's kept answers for the new account.
+step "clock data"; wait_ 5000
+place paper 2500; place files 900; view real-d6-seed-files 3500
+place settings 900; step "tap settings-nav-account"; view real-d4-seed 3000
+step logs
+run_drive seed light "" --touch platform
+SEED="$SHOTS/drive-seed.txt"
+D4_DATA=$(data_dir)
+D4_PLANTED=no
+if [ -n "$D4_DATA" ] && [ -d "$D4_DATA/accounts/$KEYDIG" ]; then printf '%s' '[{"path":"/D4-OLD-ACCOUNT-DATA.txt","size":1,"modified":null,"openedAt":1}]' > "$D4_DATA/accounts/$KEYDIG/recent-files.json"; grep -q D4-OLD-ACCOUNT-DATA "$D4_DATA/accounts/$KEYDIG/recent-files.json" 2>/dev/null && D4_PLANTED=yes; fi
+# drill 6, the control: the SAME account relaunches and opens Files with NOTHING settled after the tap (no `clock data`): a kept launch answer of the Files list, if Exact keeps one on this build, shows its rows here. If it does not,
+# the leak check below could never fail on this build, and the proof says so (not driven) instead of passing for nothing.
+step "clock settle"; step "tap bar-mark"; step "clock +600 real"; step "clock settle"; step "tap place-files"; step tree; shot real-d6-control-files; step logs
+run_drive keptsame light "" --touch platform
+KS="$SHOTS/drive-keptsame.txt"
+FAKEKEY="choir_sk_-d4-drill-fake-key-not-real"; export FAKEKEY
+FAKEDIG=$(printf '%s' "$FAKEKEY" | shasum -a 256 | cut -d' ' -f1)
+step tree; shot real-d6-first-frame                                      # drill 6: the very first frame, nothing mounted yet
+step "clock settle"; step "tap bar-mark"; step "clock +600 real"; step "clock settle"; step "tap place-files"; step tree; shot real-d6-first-files      # then Files, with NOTHING settled after the tap: only a kept answer could fill it
+step "clock data"; wait_ 6000; view real-d4-first 2500
+place paper 2500
+place mail 900; wait_ 6000; view real-d4-mail 3000                    # a signed-in request with the fake key: the server answers 401, the card says so
+place files 900; view real-d4-files 3000
+place settings 900; step "tap settings-nav-account"; view real-d4-account 3500
+step logs
+run_drive keychange light "" --touch platform
+unset FAKEKEY
+D4="$SHOTS/drive-keychange.txt"
+D4_ROOTS=$(root_names | tr '\n' ' ')
+D4_LEFT=$(count_in_container D4-OLD-ACCOUNT-DATA)
+FF="$SHOTS/first-frame.txt"; tseg "$D4" real-d6-first-files > "$FF"; FF0="$SHOTS/first-frame0.txt"; awk '{ print } /real-d6-first-frame/ { exit }' "$D4" > "$FF0"
+
+# Drill 5, a refused key: the same phone (the fake key is still in the secret store, NOKEY places none). The card offers Sign out and not Sign in; tapping it ends the session behind the ended card. A wrong catch: the old
+# card (Sign in over a refused key), a Sign out that does nothing, a page that stays blank instead of the card.
+NOKEY=1; export NOKEY
+step "clock data"; wait_ 6000
+place mail 900; wait_ 6000; view real-d5-refused 3000
+step "tap signedout-signout"; wait_ 6000; step tree; shot real-d5-ended
+step logs
+run_drive refused light "" --touch platform
+unset NOKEY
+D5="$SHOTS/drive-refused.txt"
+tseg "$D5" real-d5-refused > "$SHOTS/seg-d5-refused.txt"
+D5_ROOTS=$(root_names | tr '\n' ' ')
 
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
@@ -780,13 +954,73 @@ chk "signed out: Settings > Account has Sign in" '\[settings-signin\]' "$SO"
 chk "signed out: Textures says sign in (shared code)" '\[textures-message\] "Sign in to see your documents' "$SO"
 chk "signed out: Files says sign in" 'Sign in to see your files' "$SO"
 bad "signed out: no locked-phone sentence" 'Unlock your phone' "$SO"
-# the sign-out drill
-chk "drill: signed in before" '\[settings-account-signed\][^"]*"Yes"' "$DR"
-chk "drill: the account page says signed out after" '\[settings-account-signed\][^"]*"No"' "$DR"
-bad "drill: no failure note on the account page" '\[settings-signout-message\]' "$AFTER"
-bad "drill: Files shows no rows after sign-out" '\[files-row-/' "$AFTER"
-bad "drill: Mail shows no rows after sign-out" '\[mail-row-' "$AFTER"
-[ "$LEFT" = 0 ] && echo "ok: drill: the wipe marker and the stamp are gone from the app's files" || { echo "MISSING: drill: marker or stamp left ($LEFT): $(printf '%s' "$LEFT_FILES" | sed "s|$CONT||" | tr '\n' ' ')"; FAILS="$FAILS [drill files]"; }
+# drill 1: sign out of one
+echo "info: $(grep -o 'AUTORADIO old key: [a-z ]*' "$DR" | head -1 || true) / $(grep -o 'account: swept [^"]*' "$DR" | head -1 || true) (the old key's cleaner and the launch sweep: states only)"
+chk "drill 1: signed in before" '\[settings-account-signed\][^"]*"Yes"' "$DR"
+chk "drill 1: the whole app is the ended card" '\[ended-card\]' "$DR"
+chk "drill 1: the card says to close and reopen" 'Signed out\. Close Autoradio and open it again\.' "$DR"
+bad "drill 1: the card has no controls" '\[(settings-signout|signedout-signin|signedout-signout|settings-signin)\]' "$AFTER"
+bad "drill 1: no failure note" 'Sign-out did not finish' "$DR"
+chk "drill 1: after taps on the controls under it the card is still the whole app" '\[ended-card\]' "$SHOTS/seg-ended-tapped.txt"
+bad "drill 1: a tap under the card opened nothing (no launcher, no Files page)" '\[(launcher-open-|files-list|files-row-|place-files)' "$SHOTS/seg-ended-tapped.txt"
+roots_have "drill 1: NOTHING is wiped in the process that signs out: the account's root is still there until the next launch (drill 2 relaunches and checks it is gone)" "$DRILL_ROOTS" "$KEYDIG"
+[ -n "$CONT" ] && [ "$MARKER" = 0 ] && echo "ok: drill 1: no signout-pending marker and no account-stamp is written" || { echo "MISSING: drill 1: an old record or marker exists ($MARKER)"; FAILS="$FAILS [drill 1 marker]"; }
+# drill 2: kill mid sign-out. (a) the relaunch: signed in (the key survived the kill) or signed out; either way no root of the old digest without a key, and no old data on screen.
+if grep -qE '\[settings-account-signed\][^"]*"Yes"' "$D2"; then
+  roots_have "drill 2 (proves only that a kill is survived, not the crash window): the kill came before the key delete: still signed in, the root is the key's" "$D2_ROOTS" "$KEYDIG"
+else
+  chk "drill 2: the key went: the account page says signed out" '\[settings-account-signed\][^"]*"No"' "$D2"
+  bad "drill 2: the key went: no Files rows on screen" '\[files-row-/' "$D2"
+  bad "drill 2: the key went: no Mail rows on screen" '\[mail-row-' "$D2"
+  roots_lack "drill 2: the key went: the old account's root is gone from the files" "$D2_ROOTS" "$KEYDIG"
+fi
+# drill 2 (b): the planted state of a kill after the key delete. The key was cleared first, by a completed sign-out, so this is the state it names.
+chk "drill 2b: the key was cleared first (the sign-out card)" 'Signed out\. Close Autoradio and open it again\.' "$CK"
+[ "$D2B_ENDING" = 0 ] && [ -n "$(app_container)" ] && echo "ok: drill 2b: the native wipe ran again and the ending mark is gone" || { echo "MISSING: drill 2b: the ending mark is still there (the wipe was not finished) or the container is unknown"; FAILS="$FAILS [drill 2b ending]"; }
+roots_lack "drill 2b: the orphan root named by the key's digest was deleted at launch" "$D2B_ROOTS" "$KEYDIG"
+[ "$D2B_LEFT" = 0 ] && echo "ok: drill 2b: the planted mark is nowhere in the app's files" || { echo "MISSING: drill 2b: the planted mark survived the launch ($D2B_LEFT files)"; FAILS="$FAILS [drill 2b mark]"; }
+bad "drill 2b: the planted mark was never on a page" 'D2PLANTED' "$D2B"
+# drill 2c: the mark with the key still there: the sign-out is finished, the phone is signed out
+chk "drill 2c: the launch finished the sign-out: the account page says signed out" '\[settings-account-signed\][^"]*"No"' "$D2C"
+roots_lack "drill 2c: the account's root is gone" "$D2C_ROOTS" "$KEYDIG"
+bad "drill 2c: the launch wipe came first, so the process is a normal signed-out start, not the ended card" '\[ended-card\]' "$D2C"
+[ "$D2C_LEFT" = 0 ] && [ "$D2C_ENDING" = 0 ] && [ -n "$(app_container)" ] && echo "ok: drill 2c: the native store and the mark are gone" || { echo "MISSING: drill 2c: the native store or the ending mark survived ($D2C_LEFT, $D2C_ENDING)"; FAILS="$FAILS [drill 2c]"; }
+bad "drill 2c: the account's data was never on a page" 'D2CMARK' "$D2C"
+# drill 2d, a mark BEFORE THE FIRST UNLOCK, cannot be shown on a simulator (it has no first-unlock state and no protected-data class): native answers `notready` (never cached) while protected data is unavailable, the Keychain answers InteractionNotAllowed or the mark file cannot be read, and the account never opens with the mark still present.
+# It is driven by the fake-filesystem and stub tests (AccountWipeTests testNotReady*, account.test.ts E8) and is an OWNER CHECK on a real phone: sign out, restart the phone, open Autoradio before unlocking (a lock-screen widget or alarm), then unlock and look for the signed-out start.
+echo "owner check, NOT RUN by this script: drill 2d (a mark before the first unlock; see the comment above)"
+# drill 3: launch with an orphan root
+[ "$D3O_LEFT" = 0 ] && echo "ok: drill 3: the orphan root and the old top-level file are gone after the launch" || { echo "MISSING: drill 3: a planted mark survived the launch ($D3O_LEFT files)"; FAILS="$FAILS [drill 3 left]"; }
+roots_have "drill 3: the proof key's root is on disk" "$D3O_ROOTS" "$KEYDIG"
+roots_lack "drill 3: the orphan root is gone" "$D3O_ROOTS" "$ORPHAN_DIG"
+roots_within "drill 3: only the key's root and the anonymous one are left" "$D3O_ROOTS" "$KEYDIG" anonymous
+bad "drill 3: neither planted mark was ever on a page" 'D3ORPHAN' "$D3O"
+chk "drill 3: the launch was signed in as the proof key" '\[settings-account-signed\][^"]*"Yes"' "$D3O"
+# drill 4: a changed key
+[ "$D4_PLANTED" = yes ] && echo "ok: drill 4: the old account's marker was planted in its root before the key change" || { echo "MISSING: drill 4: the marker could not be planted (the check below would pass for nothing)"; FAILS="$FAILS [drill 4 plant]"; }
+[ "$D4_LEFT" = 0 ] && echo "ok: drill 4: the old account's marked file is gone after the key changed" || { echo "MISSING: drill 4: the old account's data survived the key change ($D4_LEFT)"; FAILS="$FAILS [drill 4 left]"; }
+roots_lack "drill 4: the old key's root is gone" "$D4_ROOTS" "$KEYDIG"
+roots_have "drill 4: the new key has a root of its own" "$D4_ROOTS" "$FAKEDIG"
+chk "drill 4: the card offers Sign out for the refused key" '\[signedout-signout\]' "$D4"
+bad "drill 4: the card does not offer Sign in over the refused key" '\[signedout-signin\]' "$D4"
+# drill 6: the first frame shows nothing of the old account. The control reads Exact's OWN journal line for a kept answer (runner/src/runner/lines.rs `kept_shown`: "<resource> shows its kept answer from the last session"): the same
+# account's relaunch must show at least one gated resource's kept answer, so the check can fail. If it shows none the drill did NOT drive, and that FAILS the proof (it never passes for nothing): with `acs` transient the first handle
+# is empty and a kept answer waits (kept_wait.rs:1-9), so if Exact shows none here the claim of this drill is to be deleted (docs/problems record) and the bun-level I7 scan is the evidence.
+KEPT_RE='(fsList|pfront|pgs|epicks|rdoc|tlist|lnc|fvInfo|learnt|cmpt|acctInfo|th|thl|tc|tx|bi|rpulse|brun) shows its kept answer from the last session'
+[ -s "$FF" ] && [ -s "$FF0" ] && echo "ok: drill 6: the first frame and the Files frame were dumped" || { echo "MISSING: drill 6: no first-frame dump"; FAILS="$FAILS [drill 6 dump]"; }
+bad "drill 6: no Files row of the old account in the very first frame" '\[files-row-/' "$FF0"
+if grep -qE "$KEPT_RE" "$KS"; then
+  echo "ok: drill 6: the control (same account) shows kept answers: Exact says so in its journal, so the check below can fail"
+  bad "drill 6: the new account shows no kept answer of a gated resource at its first frame" "$KEPT_RE" "$D4"
+  bad "drill 6: no Files row of the old account in the new account's unsettled Files frame" '\[files-row-/' "$FF"
+else
+  echo "MISSING: drill 6 was not driven: the same account's relaunch shows no kept answer in Exact's journal, so a leak could not show either; delete this drill's claim if Exact keeps nothing here"; FAILS="$FAILS [drill 6 not driven]"
+fi
+# drill 5: a refused key
+chk "drill 5: a refused key: the card offers Sign out" '\[signedout-signout\]' "$SHOTS/seg-d5-refused.txt"
+bad "drill 5: a refused key: the card does not offer Sign in" '\[signedout-signin\]' "$SHOTS/seg-d5-refused.txt"
+chk "drill 5: Sign out ends the session behind the card" 'Signed out\. Close Autoradio and open it again\.' "$D5"
+roots_within "drill 5: no account root is left after the sign-out" "$D5_ROOTS"
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"

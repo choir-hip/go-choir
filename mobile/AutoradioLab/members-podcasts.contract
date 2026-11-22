@@ -15,13 +15,13 @@ members Autoradio
   state podNoteFor = ""
 
   // What the player is playing: asked again by the package while a podcast plays.
-  resource podNow = podcastNow() as shape PodNow else empty()
+  resource podNow = podcastNow() as shape PodNow else empty() transient
   // Its playhead, kept every 5 s of progress; `rev` changes when positions did, so the pages below read them again.
-  resource podHead = podcastPlayhead(podNow.episodeId, podNow.clip, podNow.elapsed, podNow.duration) as shape PodHead else empty()
+  resource podHead = podcastPlayhead(podNow.episodeId, podNow.clip, podNow.elapsed, podNow.duration, acctHandle) as shape PodHead else empty()
   // Arguments are positional (named ones belong to a package's sources).
-  resource podHome = podcastHome(podQ, pg.top, podTick) as shape PodHomeView else empty()
-  resource podShow = podcastShow(pg.top, podTick, podNow.episodeId, podHead.rev) as shape PodShowView else empty()
-  resource podEp = podcastEpisode(pg.top, podFind, podTick, podNow.episodeId, podNow.clip, podNow.start, podNow.elapsed, podNow.duration, podHead.rev) as shape PodEpisodeView else empty()
+  resource podHome = podcastHome(podQ, pg.top, podTick, acctHandle) as shape PodHomeView else empty()
+  resource podShow = podcastShow(pg.top, podTick, podNow.episodeId, podHead.rev, acctHandle) as shape PodShowView else empty()
+  resource podEp = podcastEpisode(pg.top, podFind, podTick, podNow.episodeId, podNow.clip, podNow.start, podNow.elapsed, podNow.duration, podHead.rev, acctHandle) as shape PodEpisodeView else empty()
   mutation pak as shape PodAck then afterPod
   mutation podHanded as shape PodDone
 

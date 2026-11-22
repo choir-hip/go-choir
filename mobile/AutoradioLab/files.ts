@@ -9,7 +9,7 @@
 // Logs carry counts and kinds, never a file name. No source throws for a failure the page has words for: it answers its own status and message.
 import type { Storage } from './app.contract.d.ts';
 import { WORDS } from './words.ts';
-import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
+import { authedJSON, authedBytes, authedToFile, SignedOutError, putFile, accountGeneration, scoped, currentWorld, appPath } from './api.ts';
 import * as M from './files-model.ts';
 import type { Entry, FileInfo, FileListing, FileResolved } from './files-model.ts';
 
@@ -18,8 +18,10 @@ export const CACHE_DIR = 'app:/cache/files';
 export const RECENT_LIMIT = 30;
 const SEARCH_FOLDERS = 80, SEARCH_DEPTH = 4, SEARCH_FOUND = 200, TEXTURE_CAP = 1_000_000;
 
-export type Net = { json: typeof authedJSON; bytes: typeof authedBytes; toFile: (path: string, dest: string, opts?: Parameters<typeof authedJSON>[1], storage?: Storage) => Promise<{ bytes: number; contentType: string }> };
-export const realNet: Net = { json: authedJSON, bytes: authedBytes, toFile: (path, dest, opts, storage) => authedToFile(path, dest, storage, opts) };
+type Opts = Omit<Parameters<typeof authedJSON>[1], 'world'>;
+export type Net = { json: (path: string, opts?: Opts) => ReturnType<typeof authedJSON>; bytes: (path: string, opts?: Opts) => ReturnType<typeof authedBytes>; toFile: (path: string, dest: string, opts?: Opts, storage?: Storage) => Promise<{ bytes: number; contentType: string }> };
+// Every request states its world: the one current when it is made (a chain that captured account data first passes the world it began in).
+export const realNet: Net = { json: (path, opts) => authedJSON(path, { ...opts, world: currentWorld() }), bytes: (path, opts) => authedBytes(path, { ...opts, world: currentWorld() }), toFile: (path, dest, opts, storage) => authedToFile(path, dest, storage, { ...opts, world: currentWorld() }) };
 
 /** What the page may say when a file cannot be had. */
 export class FilesError extends Error {
@@ -43,7 +45,7 @@ const BAD_NAME = 'That name cannot be used. Avoid slashes and empty names.';
 
 type Backend = {
   list(path: string): Promise<{ entries: Entry[]; now: number | null }>;
-  fetch(path: string): Promise<Uint8Array>;
+  fetchBytes(path: string): Promise<Uint8Array>;
   /** The file at `path` into the app file `dest`, the bytes never in JavaScript; the size written. */
   download(path: string, dest: string, storage: Storage): Promise<number>;
   put(path: string, bytes: Uint8Array): Promise<void>;
@@ -67,7 +69,7 @@ function choirBackend(net: Net): Backend {
       }
       return { entries, now: r.serverTime };
     },
-    async fetch(path) { return (await net.bytes(route(path), { query: { disposition: 'inline' } })).bytes; },
+    async fetchBytes(path) { return (await net.bytes(route(path), { query: { disposition: 'inline' } })).bytes; },
     async download(path, dest, storage) { return (await net.toFile(route(path), dest, { query: { disposition: 'inline' } }, storage)).bytes; },
     async put(path, bytes) { await net.json(route(path), { method: 'PUT', body: bytes, headers: { 'content-type': M.mimeOf(M.nameOf(path)) } }); },
     async mkdir(path) { await net.json(route(path), { method: 'POST' }); },
@@ -79,47 +81,40 @@ function choirBackend(net: Net): Backend {
 // ---------------------------------------------------------------- state between answers (cleared by forget())
 
 type Recent = { path: string; size: number; modified: number | null; openedAt: number };
-let recents: Recent[] | null = null;
-let lastNow = 0;
-const resolved = new Map<string, Promise<FileResolved>>();
+const S = scoped(() => ({ recents: null as Recent[] | null, lastNow: 0, resolved: new Map<string, Promise<FileResolved>>() }));      // module state belongs to the world (api.ts `scoped`)
 
-export function forget(): void { recents = null; lastNow = 0; resolved.clear(); }
+export function forget(): void { S.reset(); }
 
-/** Sign-out (account.ts): the recent list, every cached file and the pickers' copies, and what this session holds. Never throws. */
-export async function wipeFiles(storage: Storage | undefined): Promise<void> {
-  forget();
-  if (!storage) return;
-  for (const p of [RECENT_FILE, CACHE_DIR, 'app:/tmp/picked']) { try { await storage.fs.rm(p); } catch { /* absent */ } }
-}
 
 async function loadRecents(storage: Storage | undefined): Promise<Recent[]> {
-  if (recents) return recents;
-  recents = [];
-  if (!storage) return recents;
+  const s = S();
+  if (s.recents) return s.recents;
+  const none: Recent[] = []; s.recents = none;
+  if (!storage) return none;
   try {
     const v = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(RECENT_FILE)));
-    if (Array.isArray(v)) recents = v.filter((r) => r && typeof r.path === 'string' && typeof r.openedAt === 'number').slice(0, RECENT_LIMIT);
+    if (Array.isArray(v)) s.recents = v.filter((r) => r && typeof r.path === 'string' && typeof r.openedAt === 'number').slice(0, RECENT_LIMIT);
   } catch { /* none kept yet */ }
-  return recents;
+  return s.recents ?? none;
 }
 async function saveRecents(storage: Storage | undefined, gen: number = accountGeneration()): Promise<void> {
-  if (!recents) return;
-  await writeCurrent(gen, storage, RECENT_FILE, new TextEncoder().encode(JSON.stringify(recents)));      // a full disk loses only the recent list; a sign-out in flight writes nothing
+  if (!S().recents) return;
+  await putFile(storage, RECENT_FILE, new TextEncoder().encode(JSON.stringify(S().recents)));      // a full disk loses only the recent list; a sign-out in flight writes nothing
 }
 async function touch(storage: Storage | undefined, e: Entry, at: number, gen: number = accountGeneration()): Promise<void> {
   const list = await loadRecents(storage);
   if (gen !== accountGeneration()) return;                  // signed out since the source started: neither memory nor the file takes it
-  recents = [{ path: e.path, size: e.size, modified: e.modified, openedAt: at }, ...list.filter((r) => r.path !== e.path)].slice(0, RECENT_LIMIT);
+  S().recents = [{ path: e.path, size: e.size, modified: e.modified, openedAt: at }, ...list.filter((r) => r.path !== e.path)].slice(0, RECENT_LIMIT);
   await saveRecents(storage, gen);
 }
 async function forgetRecent(storage: Storage | undefined, path: string, prefix = false): Promise<void> {
   const list = await loadRecents(storage);
-  recents = list.filter((r) => r.path !== path && !(prefix && r.path.startsWith(path + '/')));
+  S().recents = list.filter((r) => r.path !== path && !(prefix && r.path.startsWith(path + '/')));
   await saveRecents(storage);
 }
 async function renameRecent(storage: Storage | undefined, from: string, to: string): Promise<void> {
   const list = await loadRecents(storage);
-  recents = list.map((r) => (r.path === from ? { ...r, path: to } : r));
+  S().recents = list.map((r) => (r.path === from ? { ...r, path: to } : r));
   await saveRecents(storage);
 }
 
@@ -139,7 +134,7 @@ function build(path: string, mode: string, sort: M.SortKey, desc: boolean, query
 }
 
 const makeBackend = (net: Net): Backend => choirBackend(net);
-const noteNow = (n: number | null): number => { if (n !== null) lastNow = n; return lastNow; };
+const noteNow = (n: number | null): number => { if (n !== null) S().lastNow = n; return S().lastNow; };
 
 export async function fileList(a: ListArgs, storage?: Storage, net: Net = realNet): Promise<FileListing> {
   const sort = M.sortKey(a.sort);
@@ -150,7 +145,7 @@ export async function fileList(a: ListArgs, storage?: Storage, net: Net = realNe
     if (q !== '') return await search(backend, path, q, sort, a.desc);
     if (a.mode === 'recent') {
       const list = await loadRecents(storage);
-      const now = lastNow || list.reduce((m, r) => Math.max(m, r.openedAt, r.modified ?? 0), 0);
+      const now = S().lastNow || list.reduce((m, r) => Math.max(m, r.openedAt, r.modified ?? 0), 0);
       const entries = list.map((r): Entry => ({ name: M.nameOf(r.path), path: r.path, isDirectory: false, size: r.size, modified: r.modified }));
       const places: Record<string, string> = {};
       for (const e of entries) places[e.path] = M.parent(e.path) === '/' ? 'Files' : M.nameOf(M.parent(e.path));
@@ -160,7 +155,7 @@ export async function fileList(a: ListArgs, storage?: Storage, net: Net = realNe
     const now = noteNow(r.now);
     return build(path, 'browse', sort, a.desc, '', M.sortEntries(r.entries, sort, a.desc), now);
   } catch (e) {
-    return build(path, a.mode, sort, a.desc, q, [], lastNow, {}, 'error', say(e));
+    return build(path, a.mode, sort, a.desc, q, [], S().lastNow, {}, 'error', say(e));
   }
 }
 
@@ -181,12 +176,14 @@ async function search(backend: Backend, path: string, query: string, sort: M.Sor
       if (e.isDirectory && depth < SEARCH_DEPTH) queue.push([e.path, depth + 1]);
     }
   }
-  return build(path, 'search', sort, desc, query, M.sortEntries(found, sort, desc), lastNow, places);
+  return build(path, 'search', sort, desc, query, M.sortEntries(found, sort, desc), S().lastNow, places);
 }
 
 // ---------------------------------------------------------------- opening
 
 const cacheKey = (e: Entry): string => M.hash(`${e.path}|${e.size}|${e.modified ?? ''}`);
+/** Where an entry's downloaded copy goes: `app:/cache/files/<key>/<name>`, which the account's root (api.ts) puts under `accounts/<d>/`. The host writes a download, not `storage`, so `authedToFile` re-roots its `dest` the same way. */
+export const cacheDest = (e: Entry): string => `${CACHE_DIR}/${cacheKey(e)}/${M.cacheName(e.name)}`;
 
 async function entryAt(backend: Backend, path: string): Promise<Entry | null> {
   const r = await backend.list(M.parent(path));
@@ -198,7 +195,7 @@ function infoOf(e: Entry, status: string, message = ''): FileInfo {
   const k = M.kindOf(e.name, e.isDirectory);
   return {
     ...M.emptyInfo(), address: M.addressOf(e.path, e.isDirectory), path: e.path, folder: M.parent(e.path), name: e.name, kind: k, kindLabel: M.kindLabel(k), size: e.size,
-    sizeLabel: M.sizeLabel(e.size), modifiedLabel: M.dateLabel(e.modified, lastNow), mime: M.mimeOf(e.name), status, message,
+    sizeLabel: M.sizeLabel(e.size), modifiedLabel: M.dateLabel(e.modified, S().lastNow), mime: M.mimeOf(e.name), status, message,
   };
 }
 
@@ -226,7 +223,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
   if (entry.isDirectory) return infoOf(entry, 'folder');
   const kind = M.kindOf(entry.name, false);
   const out = infoOf(entry, 'ready');
-  if (kind === 'other') { await touch(storage, entry, lastNow, gen); return out; }
+  if (kind === 'other') { await touch(storage, entry, S().lastNow, gen); return out; }
   if (M.opensElsewhere(kind)) {
     const r = await resolveEntry(entry, storage, net);
     out.target = r.target; out.status = r.status === 'ready' ? 'ready' : 'error'; out.message = r.message;
@@ -235,7 +232,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
   const cap = M.maxBytes(kind);
   if (entry.size > cap) { out.status = 'toolarge'; out.message = `It is ${M.sizeLabel(entry.size)}, too large to open on this phone.`; return out; }
   try {
-    const name = M.cacheName(entry.name), key = cacheKey(entry), dest = `${CACHE_DIR}/${key}/${name}`;
+    const dest = cacheDest(entry), dir = dest.slice(0, dest.lastIndexOf('/'));
     let bytes: Uint8Array | null = null;
     let have = false;
     // Whole means the size the listing named: the host stages a download beside the file and puts it in place only when complete, so a file of another
@@ -244,7 +241,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
     if (!have) {
       if (storage) {
         // The host writes the body to the file; nothing enters JavaScript (a video of 800 MB costs the same as a note).
-        await storage.fs.mkdir(`${CACHE_DIR}/${key}`).catch(() => {});
+        await storage.fs.mkdir(dir).catch(() => {});
         try {
           const written = await backend.download(path, dest, storage);
           if (written > cap) throw new FilesError('tooLarge', `It is ${M.sizeLabel(written)}, too large to open on this phone.`);
@@ -252,10 +249,10 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
       } else {
         // No file system (the web build): the reply is held in memory, so only what fits there.
         if (entry.size > M.MEMORY_MAX) throw new FilesError('tooLarge', `It is ${M.sizeLabel(entry.size)}, too large to open here.`);
-        bytes = await backend.fetch(path);
+        bytes = await backend.fetchBytes(path);
       }
     }
-    if (storage) { out.local = dest; out.src = dest; }
+    if (storage) { out.local = appPath(dest); out.src = out.local; }      // what the page and the host see: the account's root is in the path
     if (kind === 'csv') {
       bytes = bytes ?? new Uint8Array(await storage!.fs.readFile(dest));
       const cut = bytes.length > 256_000;
@@ -266,7 +263,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
       bytes = bytes ?? new Uint8Array(await storage!.fs.readFile(dest));
       const [w, h] = imageSize(bytes); out.width = w; out.height = h;
     }
-    await touch(storage, entry, lastNow, gen);
+    await touch(storage, entry, S().lastNow, gen);
   } catch (e) {
     out.status = e instanceof FilesError && e.kind === 'tooLarge' ? 'toolarge' : 'error';
     out.message = say(e);
@@ -297,10 +294,10 @@ export function imageSize(b: Uint8Array): [number, number] {
  * `texture:` page to open. One ask per file version, shared by every caller; a failure is not kept, so a second open asks again. */
 function resolveEntry(entry: Entry, storage: Storage | undefined, net: Net): Promise<FileResolved> {
   const key = `${entry.path}|${entry.size}|${entry.modified ?? ''}`;
-  const held = resolved.get(key);
+  const held = S().resolved.get(key);
   if (held) return held;
-  const p = doResolve(entry, storage, net).then((r) => { if (r.status !== 'ready') resolved.delete(key); return r; });
-  resolved.set(key, p);
+  const p = doResolve(entry, storage, net).then((r) => { if (r.status !== 'ready') S().resolved.delete(key); return r; });
+  S().resolved.set(key, p);
   return p;
 }
 
@@ -313,13 +310,13 @@ async function doResolve(entry: Entry, storage: Storage | undefined, net: Net): 
     let text = '';
     if (kind === 'markdown' || kind === 'text' || kind === 'code') {
       if (entry.size > TEXTURE_CAP) return fail(`It is ${M.sizeLabel(entry.size)}, too large to open on this phone.`);
-      const bytes = await choirBackend(net).fetch(entry.path);
+      const bytes = await choirBackend(net).fetchBytes(entry.path);
       try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return fail('This file is not text.'); }
     }
     const r = await net.json('/api/texture/files/open', { method: 'POST', body: { source_path: entry.path.replace(/^\//, ''), title: entry.name, initial_content: text } });
     const id = (r.body as { doc_id?: unknown } | null)?.doc_id;
     if (typeof id !== 'string' || id === '') return fail('Texture did not open the document.');
-    await touch(storage, entry, lastNow, gen);
+    await touch(storage, entry, S().lastNow, gen);
     return { address, target: 'texture:' + id, title: entry.name, status: 'ready', message: '' };
   } catch (e) {
     return fail(say(e));

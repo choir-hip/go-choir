@@ -2,6 +2,7 @@
 // from the banner asks it again. With no Textures page on top (pg.top is empty in the first moments of the web host, see mail.test.contract) it answers the idle shape (status "loading" in the data), no rows, and
 // no request. The web host holds no key, so a sign-in cannot be made here; that the answer is a function of the account state is in textures.test.ts (L8, the generation).
 test "with no Textures page on top the list is answered by app.ts and says idle with no rows"
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state tlist.status == "loading"
   expect state tlist.rows.length == 0

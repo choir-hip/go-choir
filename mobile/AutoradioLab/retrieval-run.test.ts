@@ -19,7 +19,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   Retrieval, onAirTitle, isContent, runSheetDocs, toWire, nativeEmbedder, launcherSearch, registerSearchProvider, unregisterSearchProvider, parseAsk, serveAsk, type Facts, type Ask, type NativeEmbed, type DeviceState,
 } from './retrieval-run.ts';
-import { VectorStore, wipeLiveVectors, embedPrompt, truncatedUnit, PAPER_FRONT_FILE, VECTORS_DIR, type Doc } from './search.ts';
+import { VectorStore, embedPrompt, truncatedUnit, PAPER_FRONT_FILE, VECTORS_DIR, type Doc } from './search.ts';
 
 const NOW = 1_794_700_000_000;
 const ago = (d: number): number => NOW - d * 86400000;
@@ -239,29 +239,6 @@ describe('R5 the embedding pass', () => {
     const r = new Retrieval({ native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D });
     r.setDocSource('t', six); r.kick(); await r.waitIdle();
     expect(order[0]).toBe('5'); expect(order[order.length - 1]).toBe('0');
-  });
-  test('sign-out wipes the vectors, on disk too, and the corpus, and goes back to BM25', async () => {
-    const dev = new FakeDevice(); dev.state.present = true; dev.state.loaded = true; const files = new Map<string, Uint8Array>();
-    const storage = fakeStorage(files);
-    const r = new Retrieval({ storage, native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D });
-    r.setDocSource('t', six); r.kick(); await r.waitIdle();
-    expect(files.size).toBe(2);
-    await wipeLiveVectors(storage);
-    expect(files.size).toBe(0); expect(r.progress.done).toBe(0); expect(r.usesVectors()).toBe(false);
-    expect(r.corpus.index.count).toBe(0);
-  });
-  test('the stale pass of an account that left writes nothing back', async () => {
-    const dev = new FakeDevice(); dev.state.present = true; dev.state.loaded = true; const files = new Map<string, Uint8Array>();
-    const storage = fakeStorage(files);
-    const gate: { open: () => void } = { open: () => undefined };
-    const held = new Promise<void>((res) => { gate.open = res; });
-    const embed = dev.embed; dev.embed = async (p) => { await held; return embed(p); };
-    const r = new Retrieval({ storage, native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D });
-    r.setDocSource('t', six); r.kick();
-    await wait(40);
-    await wipeLiveVectors(storage);
-    gate.open(); await r.waitIdle();
-    expect(files.size).toBe(0); expect(r.progress.done).toBe(0);
   });
 });
 

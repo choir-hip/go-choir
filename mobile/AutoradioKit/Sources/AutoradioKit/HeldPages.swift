@@ -45,8 +45,7 @@ public final class HeldPages: @unchecked Sendable {
     private let limit: Int
     public init(limit: Int = HeldPages.defaultLimit) { self.limit = max(1, limit) }
 
-    // The page of an account that has since gone is dropped by AccountWipe's registration (sign-out). A hand-over still in flight across the change is not refused here: that boundary arrives with the wipe's
-    // own generation in the account change (docs/problems/unclean-sign-out-leaves-the-old-accounts-data-for-the-next-2026-11-21.md, "HeldPages needs the wipe's generation as its boundary").
+    // Memory only: a process that has signed out never opens another account (shared code ends the session), and the next launch starts empty.
     public func hold(_ p: HeldPage) {
         lock.lock(); defer { lock.unlock() }
         pages[p.address] = p
@@ -72,8 +71,6 @@ public final class HeldPages: @unchecked Sendable {
         while out.hasSuffix(" ") { out.removeLast() }
         return out
     }
-    /// Sign-out: every page held (the previous account's).
-    public func wipe() { lock.lock(); pages = [:]; recency = []; lock.unlock() }
 }
 
 /// `pub:` and `texture:` as pages for the voice: the lines are the plain text of the page the shared reader handed over; before it has, the page is "loading".

@@ -17,7 +17,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as F from './files.ts';
 import * as M from './files-model.ts';
-import { SignedOutError, type Reply } from './api.ts';
+import { SignedOutError, resetSeam, type Reply } from './api.ts';
 import rootListing from '../fixtures/files/root-listing.json';
 import textureOpen from '../fixtures/files/texture-open.json';
 import { readFileSync } from 'node:fs';
@@ -70,7 +70,7 @@ let toFileFail: unknown = null;
 let bigSizes: Record<string, number> = {};
 const enc = (s: string) => new TextEncoder().encode(s);
 beforeEach(() => {
-  F.forget(); calls = []; files.clear(); sizes.clear(); reads = []; bigSizes = {}; toFileFail = null; fail = null;
+  resetSeam(); F.forget(); calls = []; files.clear(); sizes.clear(); reads = []; bigSizes = {}; toFileFail = null; fail = null;
   tree = { '/': rootListing, '/Documents': [{ name: 'Council notes.txt', type: 'file', size: 30, modified: '2026-11-18T10:00:00Z' }, { name: 'Sub', type: 'directory', size: 0, modified: '2026-11-01T00:00:00Z' }], '/Documents/Sub': [{ name: 'deep lamp.png', type: 'file', size: 9, modified: '2026-11-01T00:00:00Z' }] };
   blobs = { '/readings.csv': enc('day,mm\nMon,"1,5"\r\nTue,"say ""hi"""\nWed'), '/Notes 2.txt': enc('Two lamps.\n'), '/Harbor.md': enc('# Harbor\n\nA note.\n') };
 });
@@ -337,7 +337,7 @@ describe('F16 and F17 words and grants', () => {
   });
   test('F17 the grants cover what the module touches', () => {
     const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8');
-    for (const g of [`fs.read ${F.RECENT_FILE}`, `fs.write ${F.RECENT_FILE}`, `fs.read ${F.CACHE_DIR}`, `fs.write ${F.CACHE_DIR}`, 'fs.read app:/tmp/picked', 'net.fetch ${ORIGIN}']) expect(app).toContain(g);
+    for (const g of ['fs.read app:/data', 'fs.write app:/data', 'fs.read app:/cache', 'fs.write app:/cache', 'fs.read app:/tmp', 'net.fetch ${ORIGIN}']) expect(app).toContain(g);
   });
 });
 

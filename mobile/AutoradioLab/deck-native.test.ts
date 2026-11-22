@@ -3,6 +3,7 @@
 //  N2 the answer is read as a DeckState: missing and mistyped fields are the empty state; the journal keeps only well-formed lines, in order.
 //  N3 a module that does not answer, throws or is absent is the empty state, never a throw: shared code goes on and the next pump asks again.
 import { describe, expect, test } from 'bun:test';
+import * as api from './api.ts';
 import { nativeDeck } from './deck-native.ts';
 import { item } from './deck.ts';
 
@@ -35,5 +36,12 @@ describe('the native deck port', () => {
     expect(await nativeDeck(() => null).state()).toEqual(empty);
     expect(await nativeDeck(() => async () => { throw new Error('x'); }).play(item({ id: 'a', kind: 'speech' }))).toEqual(empty);
     expect(await nativeDeck(() => async () => undefined).act('stop')).toEqual(empty);
+  });
+  test('N4 the DEFAULT port is the inert call: after its world closed, a play from a radio source still in flight is never delivered', async () => {
+    calls.length = 0; api.resetSeam(); api.bindNative({ available: true, later } as never); const w = api.openWorld('anonymous');
+    const d = nativeDeck(); await d.state(); expect(calls.length).toBe(1);                       // a live world's call goes through
+    api.endWorld(); calls.length = 0;
+    void d.play(item({ id: 'x', kind: 'speech', paragraphs: 'Words.', segment: 'story' })); void d.act('seekBy', 15); void d.enqueue(item({ id: 'y', kind: 'audio', url: 'https://a/b.mp3' }), 1);      // a closed world's call stays pending forever (api.ts inert)
+    await new Promise((r) => setTimeout(r, 30)); expect(calls).toEqual([]); void w; api.resetSeam();
   });
 });

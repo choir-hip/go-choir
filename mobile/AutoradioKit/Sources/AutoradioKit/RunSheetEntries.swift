@@ -21,7 +21,6 @@ public struct RunSheetAudio: Equatable, Sendable {
     public var start: Double?
     public var end: Double?
     public var episodeId: String?
-    public var isClip: Bool { end != nil }
     public init(url: URL, title: String, show: String, start: Double? = nil, end: Double? = nil, episodeId: String? = nil) {
         self.url = url; self.title = title; self.show = show; self.start = start; self.end = end; self.episodeId = episodeId
     }
@@ -34,13 +33,6 @@ extension RunSheetEntry {
     /// One clean title: one line, at most 300 bytes at a character boundary.
     public static func cleanTitle(_ s: String) -> String { StretchCandidates.cut(StretchCandidates.oneLine(s), bytes: RunSheetBounds.maxTitleBytes) }
 
-    public static func paperStory(route: String, title: String, by: RunSheetBy = .listener) -> RunSheetEntry {
-        RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .page, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: "pub:" + route, label: cleanTitle(title)))
-    }
-    public static func webPage(url: URL, title: String, by: RunSheetBy = .listener) -> RunSheetEntry {
-        let t = cleanTitle(title.isEmpty ? (url.host ?? url.absoluteString) : title)
-        return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .page, placedBy: by, title: t, source: RunSheetSource(ref: "url:" + url.absoluteString, label: url.host ?? t, url: url.absoluteString))
-    }
     public static func book(id: String, title: String, at: Int, by: RunSheetBy = .listener) -> RunSheetEntry {
         RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .document, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: "doc:" + id, label: cleanTitle(title), start: Double(at)))
     }
@@ -49,9 +41,6 @@ extension RunSheetEntry {
         let kind: RunSheetKind = address.hasPrefix("mail:") ? .mail : .page
         return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: kind, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: address, label: cleanTitle(title)))
     }
-    /// True when the entry's words are read from the phone's own store by its address (a message, a book, a file), so the entry carries none: the
-    /// rest of a cut passage is then held by the phone (`HeldRest`) rather than made into a story entry with text.
-    var wordsComeFromThePhone: Bool { kind == .mail || kind == .document || (source.map { $0.ref.hasPrefix("mail:") || $0.ref.hasPrefix("doc:") || $0.ref.hasPrefix("file:") } ?? false) }
     /// Addresses too long for the server's bound (2048 bytes), kept on the phone by entry id: the entry names the audio by its ref and leaves its url out.
     nonisolated(unsafe) private static var longURLs: [String: URL] = [:]
     private static let longLock = NSLock()
@@ -71,19 +60,12 @@ extension RunSheetEntry {
                              source: RunSheetSource(ref: "episode:" + (a.episodeId ?? (long ? "long" : a.url.absoluteString)), label: cleanTitle(a.show), url: url, start: a.start))
     }
 
-    /// An audio file in Files. The entry names the file by its Files path (`file:<path>`), never by where the phone keeps a copy: that is a device
-    /// path and goes nowhere. The phone finds its own copy again from the path (`RunSheetPlayer.fileResolver`).
-    public static func filesAudio(address: String, title: String, by: RunSheetBy = .listener) -> RunSheetEntry {
-        RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .episode, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: address, label: "Files"))
-    }
     /// The Files address of an audio file this entry plays.
     public var filesAddress: String? {
         guard kind == .episode || kind == .clip, let r = source?.ref, r.hasPrefix("file:") else { return nil }
         return r
     }
 
-    /// True when a ref the entry names is over its bound: a ref cannot be cut, so such an entry is not placed (the store says so).
-    public var refTooLong: Bool { (source?.ref.utf8.count ?? 0) > RunSheetBounds.maxURLBytes }
 
     /// The route of a paper story this entry reads in full.
     public var paperRoute: String? {
@@ -127,14 +109,6 @@ extension RunSheetEntry {
         if let h = webURL?.host { return h }
         if let l = source?.label, !l.isEmpty { return l }
         return kindWord.capitalized
-    }
-    /// Who put it there, as a sentence.
-    public var byWords: String {
-        switch placedBy {
-        case .listener: return "Added by you"
-        case .desk: return "From the desk"
-        case .phone: return "From the phone"
-        }
     }
     /// A rough time to speak it, from the words (2.6 a second).
     public static func estimateSeconds(words text: String) -> Double { max(1, (Double(text.split(whereSeparator: { $0.isWhitespace }).count) / BarTracker.wordsPerSecond).rounded()) }

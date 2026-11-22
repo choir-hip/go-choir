@@ -35,11 +35,6 @@ public struct KeptTurn: Sendable {
 public final class KeptTurnStore: @unchecked Sendable {
     public let root: URL
     public init(root: URL) { self.root = root; try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true) }
-    /// Sign-out: every kept turn (the audio and the words of what the listener asked).
-    public func wipe() {
-        try? FileManager.default.removeItem(at: root)
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    }
     public func list() -> [KeptTurn] {
         let items = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
         return items.filter { FileManager.default.fileExists(atPath: $0.appendingPathComponent("mic.caf").path) }

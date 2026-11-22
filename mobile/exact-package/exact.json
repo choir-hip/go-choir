@@ -616,21 +616,6 @@
   },
   "names": [
     {
-      "source": "choirAuth",
-      "live": true,
-      "answers": "ChoirAuth",
-      "substitute": {
-        "default": {
-          "signedIn": false,
-          "baseURL": "",
-          "status": "idle",
-          "userCode": "",
-          "verificationURL": "",
-          "message": ""
-        }
-      }
-    },
-    {
       "source": "choirPlayer",
       "live": true,
       "answers": "ChoirPlayer",
@@ -646,18 +631,6 @@
           "message": ""
         }
       }
-    },
-    {
-      "send": "choirSignIn",
-      "answers": "LabState"
-    },
-    {
-      "send": "choirOpenApproval",
-      "answers": "LabState"
-    },
-    {
-      "send": "choirCancelSignIn",
-      "answers": "LabState"
     },
     {
       "send": "choirRefresh",

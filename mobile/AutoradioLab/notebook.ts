@@ -18,7 +18,7 @@
 
 import type { Storage } from './app.contract.d.ts';
 import { WORDS } from './words.ts';
-import { authedJSON, HTTPError, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, putFile, accountGeneration, currentWorld } from './api.ts';
 import { textureSource } from './content.ts';
 import { cut } from './takes.ts';
 
@@ -139,10 +139,8 @@ export async function loadCache(storage: Storage | undefined): Promise<string | 
   try { return new TextDecoder().decode(await storage.fs.readFile(CACHE_FILE)); } catch { return null; }
 }
 export async function saveCache(storage: Storage | undefined, text: string, gen: number = accountGeneration()): Promise<void> {
-  await writeCurrent(gen, storage, CACHE_FILE, new TextEncoder().encode(text));      // a failed write: the page reads the computer next time; a sign-out in flight writes nothing
+  await putFile(storage, CACHE_FILE, new TextEncoder().encode(text));      // a failed write: the page reads the computer next time; a sign-out in flight writes nothing
 }
-/** Sign-out: the text and the file. The Swift sign-out wipe must call this for the shared copy (reported). */
-export async function wipeNotebook(storage: Storage | undefined): Promise<void> { if (!storage) return; try { await storage.fs.rm(CACHE_FILE); } catch { /* absent */ } }
 
 // ---------------------------------------------------------------------------------------------------------------- the learning route
 
@@ -191,7 +189,7 @@ export function parseLearning(body: unknown): Read | null {
 }
 
 export type Get = (path: string, query?: Record<string, string | number>) => Promise<unknown>;
-export const seamGet: Get = async (path, query) => (await authedJSON(path, { query })).body;
+export const seamGet: Get = async (path, query) => (await authedJSON(path, { query, world: currentWorld() })).body;
 
 /** The scorecard: ready, "not yet" (404, 501, or a shape this phone does not know), offline, or signed out. Never throws. */
 export async function readLearning(get: Get, limit = 200): Promise<Load> {

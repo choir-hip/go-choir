@@ -61,15 +61,13 @@ final class OnboardingController: @unchecked Sendable {
         if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
         s.onChange = { [weak self] in self?.changed() }
         set { setup = s }
-        let gen = AccountWipe.generation
         Task { [weak self, s] in
             await s.run()
-            self?.setupFinished(s, gen: gen)
+            self?.setupFinished(s)
         }
     }
 
-    private func setupFinished(_ s: VoiceSetup, gen: Int) {
-        guard gen == AccountWipe.generation else { return }        // the account changed while the voice was being set up: its outcome is not the next account's
+    private func setupFinished(_ s: VoiceSetup) {
         if let d = try? JSONEncoder().encode(s.record) {
             try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
             try? d.write(to: recordFile, options: .atomic)
@@ -219,12 +217,11 @@ struct OnboardingPageSource: PageSource {
 
 extension AutoradioModule {
     func registerOnboarding() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
+        let support = AccountWipe.url("voice-setup.json").deletingLastPathComponent()      // the account folder: the setup record is account content, sealed with it
         let c = OnboardingController(module: self, support: support)
         OnboardingController.shared = c
         StageRegistry.registerEditionSetupStages(runtime.registry)
         pageSources.register(OnboardingPageSource())
-        choir.accountWipe.register("onboarding") { [weak c] in c?.reset() }
         handle("voiceSetupFacts") { _, reply in reply(c.facts()) }
     }
 
@@ -244,8 +241,7 @@ extension AutoradioModule {
         case "obReset": c.reset()
         case "obMirror": c.mirror(finished: (r["finished"] as? Bool) ?? false)
         case "obNotebookTopics":
-            let gen = AccountWipe.generation
-            _ = await NotebookStore.shared.writeTopics((r["topics"] as? [String]) ?? [], generation: gen)       // a failure here is quiet: the page retries
+            _ = await NotebookStore.shared.writeTopics((r["topics"] as? [String]) ?? [])       // a failure here is quiet: the page retries
         default: break
         }
         return [:]

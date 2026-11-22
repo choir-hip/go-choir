@@ -52,7 +52,6 @@ public enum EditionOutcome: Equatable, Sendable {
 public enum EditionCompletion {
     public static let deadlineSeconds = 20.0
     public static let failedLine = "I couldn't write your edition just now. Your topics are saved."
-    public static let timedOutLine = "Writing your edition is taking too long. Your topics are saved."
 
     public static func run(topics: [String], writer: EditionWriter, deadline: Double = deadlineSeconds,
                            progress: @escaping @Sendable (String) -> Void) async -> EditionOutcome {

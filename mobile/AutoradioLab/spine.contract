@@ -16,11 +16,11 @@ members Autoradio
   // The open pages are shared code's on every host (pages.ts, kept in storage.fs): the deck, the launcher and the voice's front page all read this one set. The voice is handed the pages as facts
   // (pages.ts `mirror`, the native op `pagesMirror`). A native request to open a page (an episode opened from the playing bar: `pageRequest`) is answered by `pageRequested`, which opens it here
   // once per request id and gives the new view; the set is read again after it.
-  resource preq = pageRequest() as shape PageRequest else empty()
-  resource preqd = pageRequested(preq.id, preq.address, preq.title) as shape PageList else empty()
-  resource pgs = pagesView(signedOutTick, preqd.top) as shape PageList else empty()
+  resource preq = pageRequest() as shape PageRequest else empty() transient
+  resource preqd = pageRequested(preq.id, preq.address, preq.title, acctHandle) as shape PageList else empty()
+  resource pgs = pagesView(acctHandle, preqd.top) as shape PageList else empty()
   derive pg = pgs
-  resource pmod = pageModel(address=pg.top) as shape PageModel else empty()
+  resource pmod = pageModel(address=pg.top) as shape PageModel else empty() transient
   // The themes are shared code (themes.ts, both platforms). The system's scheme and Reduce Motion are Exact's own facts (`vp`, members-stack.contract); the first frame shows the whole bundled light default (every field; themes.test.ts P1 keeps it in step) until the answer lands.
   // The one-time carry-over of the old choice and themes (themes.ts migrate) runs apart from the first paint: a task sends it at launch and again when the host fact is decided (the native handle may bind
   // late; at most three tries), and its reply REFRESHES the four theme resources (a revision passed as a resource's argument was not asked again: simulator drive, 2026-11-20).
@@ -31,13 +31,13 @@ members Autoradio
     send mig = themeMigrate(hc.mode)
   task themeMigrateTask when migTries < 3 key=hc.mode
     after(10, migGo)
-  resource th = theme(vp.prefersColorScheme, vp.prefersReducedMotion) as shape Theme else empty(id="chrome-pastel", name="Chrome Pastel", scheme="light", schemes="light", paper="#F7FBFE", paper2="#EAF4FA", fg="#16232E", muted="#41596B", accent="#1F6E8C", accent2="#2F6F8F", success="#146B4A", danger="#9C2440", onAccent="#FFFFFF", rule="rgba(31,110,140,.18)", scrim="rgba(22,35,46,.84)", onScrim="#FFFFFF", fontRead="system-ui", fontUi="system-ui", fontMono="ui-monospace", fontHead="ui-serif", fontText="ui-serif", fontLabel="system-ui", fontAction="system-ui", scale="editorial", radiusCard=12, radiusControl=6, radiusPill=6, radiusRules=0, shadow1="0 8px 20px rgba(18,52,74,.14), inset 0 1px 0 rgba(255,255,255,.9)", shadow2="0 14px 34px rgba(18,52,74,.16)", shadow3="0 24px 64px rgba(18,52,74,.22), inset 0 0 0 1px rgba(255,255,255,.55)", edge1="inset 0 1px 0 rgba(255,255,255,.9)", edge2="inset 0 0 0 1px rgba(255,255,255,.55)", edge3="inset 0 0 0 1px rgba(255,255,255,.55)", material1="solid", material2="glass", material3="glass", press1=0.98, behindScale3=0.96, behindDim3=0.08, barBacking=0.94, layerBacking=0.86, lensStyle="A", lensWash=0, motionFastMs=120, motionEnterMs=340, motionSheetMs=260, staggerMs=40, springStiffness=240, springDamping=26, springMass=1, reducedMotion=false, markDriftS=60, markListenScale=1.15, markTumble="3.3s,5.9s")
-  resource thl = themeList(vp.prefersColorScheme, vp.prefersReducedMotion) as shape ThemeList else empty(mode="system", themeID="chrome-pastel", scheme="light", locked="")
+  resource th = theme(vp.prefersColorScheme, vp.prefersReducedMotion, acctHandle) as shape Theme else empty(id="chrome-pastel", name="Chrome Pastel", scheme="light", schemes="light", paper="#F7FBFE", paper2="#EAF4FA", fg="#16232E", muted="#41596B", accent="#1F6E8C", accent2="#2F6F8F", success="#146B4A", danger="#9C2440", onAccent="#FFFFFF", rule="rgba(31,110,140,.18)", scrim="rgba(22,35,46,.84)", onScrim="#FFFFFF", fontRead="system-ui", fontUi="system-ui", fontMono="ui-monospace", fontHead="ui-serif", fontText="ui-serif", fontLabel="system-ui", fontAction="system-ui", scale="editorial", radiusCard=12, radiusControl=6, radiusPill=6, radiusRules=0, shadow1="0 8px 20px rgba(18,52,74,.14), inset 0 1px 0 rgba(255,255,255,.9)", shadow2="0 14px 34px rgba(18,52,74,.16)", shadow3="0 24px 64px rgba(18,52,74,.22), inset 0 0 0 1px rgba(255,255,255,.55)", edge1="inset 0 1px 0 rgba(255,255,255,.9)", edge2="inset 0 0 0 1px rgba(255,255,255,.55)", edge3="inset 0 0 0 1px rgba(255,255,255,.55)", material1="solid", material2="glass", material3="glass", press1=0.98, behindScale3=0.96, behindDim3=0.08, barBacking=0.94, layerBacking=0.86, lensStyle="A", lensWash=0, motionFastMs=120, motionEnterMs=340, motionSheetMs=260, staggerMs=40, springStiffness=240, springDamping=26, springMass=1, reducedMotion=false, markDriftS=60, markListenScale=1.15, markTumble="3.3s,5.9s")
+  resource thl = themeList(vp.prefersColorScheme, vp.prefersReducedMotion, acctHandle) as shape ThemeList else empty(mode="system", themeID="chrome-pastel", scheme="light", locked="")
   // Every theme send (choose, mode, add from a Texture, remove) repaints the theme, the list, the cards and the scale.
   mutation thm as shape SettingsAck refreshes th, thl, tc, tx
   // The bar (bar.ts, shared code): what the native side reports as facts (the engine's phase and words, the player, the run sheet player; `barFacts`) and the conversation's entries, decided on the clock here.
   // While a timed state (an error, a revision) shows (`bi.until`), the facts are read again every quarter second (a data source may not read the clock, so the facts carry it), and the bar ends the state by itself.
-  resource bf = barFacts(tick=barTick) as shape BarFacts else empty()
+  resource bf = barFacts(tick=barTick) as shape BarFacts else empty() transient
   state barTick = 0
   action barBump
     barTick = barTick + 1
@@ -48,13 +48,13 @@ members Autoradio
   state radioTick = 0
   action radioBump
     radioTick = radioTick + 1
-  resource ds = deckState() as shape DeckState else empty()
-  resource rnote = radioNote() as shape RadioNote else empty()
-  resource rpulse = radioPulse(ds.seq, rnote.tick, radioTick) as shape RadioTick else empty()
+  resource ds = deckState() as shape DeckState else empty() transient
+  resource rnote = radioNote() as shape RadioNote else empty() transient
+  resource rpulse = radioPulse(ds.seq, rnote.tick, radioTick, acctHandle) as shape RadioTick else empty()
   task radioClock when rpulse.tick >= 0 key=radioTick
     after(1000, radioBump)
-  resource brun = barRun(rpulse.tick) as shape BarRun else empty()
-  resource bi = barInfo(bf, brun, cvraw, `${barTick}|${signedOutTick}`) as shape BarInfo else empty()
+  resource brun = barRun(rpulse.tick, acctHandle) as shape BarRun else empty()
+  resource bi = barInfo(bf, brun, cvraw, `${barTick}|${acctHandle}`) as shape BarInfo else empty()
   // The shared set's handles (pages.ts); each refreshes the shared view.
   mutation pms as shape PageList refreshes pgs
   mutation pcs as shape PageList refreshes pgs

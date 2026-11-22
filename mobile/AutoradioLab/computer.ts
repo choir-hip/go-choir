@@ -16,7 +16,10 @@
 // Nothing here reads a clock or sets a timer: the poll is the page's `task`, and "Restart to update" sends an idempotency key made from a counter and the
 // computer's epoch, not from a random number (a data source may not call `Math.random`).
 
-import { accountGeneration, authedJSON, HTTPError, segment, SignedOutError } from './api.ts';
+import { accountGeneration, currentWorld, authedJSON, HTTPError, segment, SignedOutError, scoped } from './api.ts';
+
+// Module state belongs to the world (api.ts `scoped`): a closed world's is unreachable and no later world joins it.
+const S = scoped(() => ({ one: undefined as Computer | undefined, oneGen: -1 }));
 
 export type ComputerView = { id: string; state: string; target: string; phase: string; updateAvailable: boolean; message: string; epoch: number; checked: boolean };
 export const POLLS = 40;
@@ -25,7 +28,7 @@ const empty = (): ComputerView => ({ id: '', state: '', target: '', phase: 'idle
 
 export type Snapshot = { id: string; state: string; epoch: number; target: string };
 export type Call = (method: 'GET' | 'POST', path: string, body?: unknown) => Promise<unknown>;
-const live: Call = async (method, path, body) => (await authedJSON(path, { method, body })).body;
+const live: Call = async (method, path, body) => (await authedJSON(path, { method, body, world: currentWorld() })).body;
 
 const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -123,16 +126,15 @@ export class Computer {
   }
 }
 
-let one: Computer | undefined;
-let oneGen = -1;
 /** The one Computer of this process (sources and acts share it) for the CURRENT account generation: a moved generation is a new Computer, so a late answer lands in the old one and is never shown. */
 export const computer = (): Computer => {
   const g = accountGeneration();
-  if (!one || oneGen !== g) { one = new Computer(); oneGen = g; }
-  return one;
+  const st = S();
+  if (!st.one || st.oneGen !== g) { st.one = new Computer(); st.oneGen = g; }
+  return st.one;
 };
 /** For tests: a new process. */
-export function forgetComputer(c?: Computer): void { one = c; oneGen = accountGeneration(); }
+export function forgetComputer(c?: Computer): void { S().one = c; S().oneGen = accountGeneration(); }
 
 /** Source: the page's view; the first read of a signed-in phone asks the computer (C7: a signed-out phone sends nothing). */
 export async function settingsComputer(args: { signedIn: boolean; tick: number }): Promise<ComputerView> {

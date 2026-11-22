@@ -8,7 +8,7 @@ members Autoradio
   state nbSel = ""
   state nbTick = 0
   // Arguments are positional (app.ts answers it). On top of the deck it reads; otherwise it answers the idle page and holds nothing.
-  resource nb = notebookPageShared(nbSel, nbTick, pg.top == "notebook:", signedOutTick, au.signedIn) as shape NotebookPageInfo else empty()
+  resource nb = notebookPageShared(nbSel, nbTick, pg.top == "notebook:", acctHandle, au.signedIn) as shape NotebookPageInfo else empty()
 
   // refresh | select (arg is a line id; the same again clears it)
   action notebookDo(op: string, arg: string)
@@ -20,7 +20,7 @@ members Autoradio
   // The phone's copy of what the computer holds (stories, documents, files): once per launch and per return to the front, only while signed in.
   mutation csync as shape ContentSyncInfo
   // The gate holds only while the app is in front, so the task fires once on each return to the front (the key changes when the gate turns true again), never on the way to the background.
-  derive csKey = `${hpg.visibilityState}|${signedOutTick}`
+  derive csKey = `${hpg.visibilityState}|${acctHandle}`
   // Each kick gets its own run number, so a return to the front is a new key for the sync (the same visibility value would otherwise answer the last result).
   state csRun = 0
   action contentKick

@@ -36,23 +36,22 @@ public struct FrontPage: Codable, Sendable, Equatable {
 
 /// The open pages as shared code last handed them over (AutoradioLab/pages.ts mirrors its set through the app module's `pagesMirror` op after every change), most recent first.
 /// A FACT, not a set: shared code owns which pages are open; the voice needs only which one is in front (the acknowledgement names it, the local model warms on it) and the list
-/// the retrieval ask carries. A push from an older account generation than one already seen is refused, and sign-out empties it (AccountWipe), as with the takes' mirror.
+/// the retrieval ask carries. A push from an older account generation than one already seen is refused, as with the takes' mirror.
 public final class OpenPageFacts: @unchecked Sendable {
     public static let shared = OpenPageFacts()
     private let lock = NSLock()
     private var rows: [FrontPage] = []
-    private var floor = 0, seen = -1
-    /// False (nothing changes) when `gen` is older than one already seen or than the last wipe.
+    private var seen = -1
+    /// False (nothing changes) when `gen` is older than one already seen.
     @discardableResult
     public func replace(gen: Int, _ new: [FrontPage]) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        guard gen >= max(floor, seen) else { return false }
+        guard gen >= seen else { return false }
         seen = max(seen, gen); rows = new; return true
     }
     public func list() -> [FrontPage] { lock.lock(); defer { lock.unlock() }; return rows }
     /// The page at `address`, else the one in front (nil: nothing is open yet).
     public func front(_ address: String?) -> FrontPage? { let l = list(); return address.flatMap { a in l.first { $0.address == a } } ?? l.first }
-    public func wipe() { lock.lock(); rows = []; floor = seen + 1; lock.unlock() }
 }
 
 /// What a generation cost, for the trace: the prompt had `promptTokens` tokens, of which the first `prefixTokens` are the stable prefix

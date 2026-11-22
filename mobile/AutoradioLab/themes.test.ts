@@ -11,11 +11,12 @@
 //  G1  the migration: a phone with the old choice and old themes keeps both; once; nothing is asked again; a failed write leaves the old copy and tries again; a choice made here wins; no native, nothing happens.
 //  X1  the Texture fetch: the words for 404, 422, refused, locked; the demo document; nothing written for a theme that is refused; a bundled id is refused.
 //  Z1  the sources answer the shapes the contracts bind (every field of Theme, ThemeExtras and ThemeCard).
+import { dig, reopen } from './account-phone.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import * as T from './themes.ts';
 import { BUNDLED } from './themes-bundled.ts';
-import { resetSeam, bindNative, HTTPError, SignedOutError, type Reply } from './api.ts';
+import { resetSeam, bindNative, currentWorld, HTTPError, SignedOutError, type Reply } from './api.ts';
 import { WORDS } from './words.ts';
 import demoJSON from './fixtures/texture/theme-ember.json';
 
@@ -43,8 +44,9 @@ function memFs(failWrites = false) {
 const demo = (): Record<string, unknown> => JSON.parse(JSON.stringify(demoJSON));
 const reply = (body: unknown): Reply => ({ body, serverTime: 0, raw: '' });
 const kept = (m: ReturnType<typeof memFs>) => JSON.parse(m.text(T.CHOICE_FILE) ?? 'null');
-beforeEach(() => { resetSeam(); T.resetThemes(); });
+beforeEach(() => { resetSeam(); reopen(dig('test-key-themes')); T.resetThemes(); });      // a world the boundary has confirmed (a Texture theme is shown only through one); the gate and the card stamp it from the facts
 const store = (bundled?: Record<string, unknown>) => new T.ThemeStore(bundled);
+const tview = (bundled?: Record<string, unknown>) => new T.ThemeStore(bundled).withTextures([]);      // the copy a page is shown: the only store that may hold a Texture theme
 
 describe('the default pair (ThemeDefaultsTests)', () => {
   test('D1 a light scheme shows Chrome Pastel', () => {
@@ -102,12 +104,12 @@ describe('the default pair (ThemeDefaultsTests)', () => {
   });
   test('D8 removing the chosen theme returns to the default and clears the kept choice', async () => {
     const m = memFs();
-    const s = await T.themeStore(m.storage);
+    await T.themeStore(m.storage);
     await T.themeFromTexture('t1', m.storage, { net: async () => reply({ doc_id: 't1', theme: doc('ember') }) });
-    await T.themeSet('ember', m.storage); expect(s.themeID(dark)).toBe('ember');
+    await T.themeSet('ember', m.storage); expect((await T.shownStore(m.storage)).themeID(dark)).toBe('ember');
     await T.themeRemove('ember', m.storage);
-    expect(kept(m).theme).toBeNull(); expect(s.themeID(dark)).toBe('liquid-metal');
-    expect(m.files.has(`${T.THEMES_DIR}/texture-ember.json`)).toBe(false);
+    expect(kept(m).theme).toBeNull(); expect((await T.shownStore(m.storage)).themeID(dark)).toBe('liquid-metal');
+    expect(m.files.has(`${T.TEXTURE_DIR}/texture-ember.json`)).toBe(false);
   });
   test('D9 nothing replaces a bundled theme (an install, a file, the reserved id), and removing it does nothing', async () => {
     const m = memFs();
@@ -218,7 +220,7 @@ describe('the loader (ThemeLoaderTests)', () => {
     expect(s.current(light).reducedMotion).toBe(false); expect(s.current(light).markDriftS).toBe(60);
   });
   test('F4 a dark-only theme is never shown light', () => {
-    const s = store();
+    const s = tview();
     expect(s.installFromTexture(T.parseTextureTheme(demo()).theme)).toBe('ember');
     s.setTheme('ember'); s.setMode('light');
     expect(s.effectiveScheme(light)).toBe('dark'); expect(s.current(light).scheme).toBe('dark');
@@ -229,13 +231,15 @@ describe('the loader (ThemeLoaderTests)', () => {
     const ack = await T.themeFromTexture('demo-theme', m.storage, { net: async () => reply(demo()) });
     expect(ack).toEqual({ ok: true, message: 'Added Ember from the Texture.' });
     T.resetThemes();
-    const again = await T.themeStore(m.storage);
+    const again = await T.shownStore(m.storage);
     const card = again.cards(light).find((c) => c.id === 'ember');
     expect(card?.origin).toBe('texture'); expect(card?.schemes).toBe('dark');
+    expect((await T.themeStore(m.storage)).cards(light).find((c) => c.id === 'ember')).toBeUndefined();       // the device store never holds it
     await T.themeRemove('ember', m.storage); await T.themeRemove('depth', m.storage);
-    expect(again.cards(light).find((c) => c.id === 'ember')).toBeUndefined(); expect(again.cards(light).find((c) => c.id === 'depth')).toBeDefined();
+    const after = await T.shownStore(m.storage);
+    expect(after.cards(light).find((c) => c.id === 'ember')).toBeUndefined(); expect(after.cards(light).find((c) => c.id === 'depth')).toBeDefined();
     T.resetThemes();
-    expect((await T.themeStore(m.storage)).cards(light).find((c) => c.id === 'ember')).toBeUndefined();
+    expect((await T.shownStore(m.storage)).cards(light).find((c) => c.id === 'ember')).toBeUndefined();
   });
   test('F7 an unreadable theme is refused and nothing is written', async () => {
     const m = memFs();
@@ -260,16 +264,16 @@ describe('the lens (ThemeLensTests)', () => {
   const withLens = (lens: unknown): Record<string, unknown> => { const o = JSON.parse(JSON.stringify(BUNDLED.depth)); o.id = 'lens-test'; o.name = 'Lens test'; if (lens === undefined) delete o.lens; else o.lens = lens; return o; };
   test('L1 every bundled theme says native glass and no wash; one without a lens key defaults to it', () => {
     for (const [name, o] of Object.entries(BUNDLED)) { const l = (o as { lens?: { style?: string; wash?: number } }).lens; expect(l?.style).toBe('A'); expect(l?.wash).toBe(0); void name; }
-    const s = store(); expect(s.current(light).lensStyle).toBe('A'); expect(s.current(light).lensWash).toBe(0);
+    const s = tview(); expect(s.current(light).lensStyle).toBe('A'); expect(s.current(light).lensWash).toBe(0);
     s.installFromTexture(withLens(undefined)); s.setTheme('lens-test');
     expect(s.current(light).lensStyle).toBe('A'); expect(s.current(light).lensWash).toBe(0);
   });
   test('L2 a lens style and wash reach the theme', () => {
-    const s = store(); s.installFromTexture(withLens({ style: 'B', wash: 0.55 })); s.setTheme('lens-test');
+    const s = tview(); s.installFromTexture(withLens({ style: 'B', wash: 0.55 })); s.setTheme('lens-test');
     expect(s.current(light).lensStyle).toBe('B'); expect(s.current(light).lensWash).toBe(0.55);
   });
   test('L3 a bad lens is refused with a reason', () => {
-    const s = store();
+    const s = tview();
     expect(() => s.installFromTexture(withLens({ style: 'Z', wash: 0 }))).toThrow(/lens\.style/);
     expect(() => s.installFromTexture(withLens({ style: 'A', wash: 2 }))).toThrow(/lens\.wash/);
     expect(s.list(light).some((t) => t.id === 'lens-test')).toBe(false);
@@ -429,9 +433,10 @@ describe('the migration from the Swift storage (G1)', () => {
     const m = memFs(); const log: string[] = [];
     bindNative(legacy({}, log) as never);
     const s = await load(m);
-    expect(s.choice).toEqual({ theme: 'mine', mode: 'dark' }); expect(s.originOf('mine')).toBe('file'); expect(s.originOf('ember')).toBe('texture');
+    expect(s.choice).toEqual({ theme: 'mine', mode: 'dark' }); expect(s.originOf('mine')).toBe('file'); expect(s.originOf('ember')).toBeUndefined();       // a Texture theme is account data: never carried over
     expect(s.problems.some((p) => p.startsWith('broken.json'))).toBe(true);                       // honest: the broken one is still reported
-    expect(m.files.has(`${T.THEMES_DIR}/texture-ember.json`)).toBe(true); expect(m.files.has(`${T.THEMES_DIR}/mine.json`)).toBe(true);
+    expect(m.files.has(`${T.THEMES_DIR}/texture-ember.json`)).toBe(false); expect(m.files.has(`${T.TEXTURE_DIR}/texture-ember.json`)).toBe(false); expect(m.files.has(`${T.THEMES_DIR}/mine.json`)).toBe(true);
+    expect(s.problems.some((p) => p.startsWith('a theme from a Texture'))).toBe(true);
     expect(kept(m)).toEqual({ theme: 'mine', mode: 'dark', migrated: true });
     expect(log).toEqual(['themeLegacy']);                                                          // the old copy is not removed (a reverted build still reads it)
     T.resetThemes(); log.length = 0;
@@ -507,7 +512,7 @@ describe('the migration from the Swift storage (G1)', () => {
     bindNative(legacy() as never);
     const s = await load(m);
     expect(m.text(`${T.THEMES_DIR}/mine.json`)).toBe(mine); expect(s.cards(light).find((c) => c.id === 'mine')?.name).toBe('Newer');
-    expect(m.files.has(`${T.THEMES_DIR}/texture-ember.json`)).toBe(true);                       // the others still come
+    expect(m.files.has(`${T.THEMES_DIR}/theme-two.json`) || m.files.has(`${T.THEMES_DIR}/mine.json`)).toBe(true);      // the others still come (a Texture theme is not carried)
   });
   test('G1 the first answer does not wait for the carry-over; the revision moves when it is done, so the sources are asked again', async () => {
     const m = memFs(); let release: () => void = () => undefined;

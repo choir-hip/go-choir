@@ -6,7 +6,7 @@ use StackVp from "./ui.contract"
 
 members Autoradio
   // asked again when the pump says something changed (`rpulse`, spine.contract)
-  resource qv = queueView(rpulse.tick) as shape QueueInfo else empty()
+  resource qv = queueView(rpulse.tick, acctHandle) as shape QueueInfo else empty()
   mutation qm as shape QueueInfo refreshes qv
   resource qVp = exactViewport() as shape StackVp
 

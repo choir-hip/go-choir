@@ -465,23 +465,13 @@ export function fromHalf(h: number): number {
   return s * Math.pow(2, e - 15) * (1 + m / 1024);
 }
 
-/** The vector stores this session holds, so sign-out can empty them (the in-memory copy serves the old account otherwise). */
-const liveVectors = new Set<VectorStore>();
-/** What else sign-out must reach in memory (the retrieval runtime's corpus and its running embedding pass, retrieval-run.ts). Run before the vectors go. */
-const liveResets = new Set<() => void>();
-export function onSignOut(f: () => void): () => void { liveResets.add(f); return () => { liveResets.delete(f); }; }
-export async function wipeLiveVectors(storage: Storage | undefined): Promise<void> {
-  for (const f of [...liveResets]) f();
-  for (const v of [...liveVectors]) await wipeVectors(v, storage);
-}
-
 export class VectorStore {
   private ids: string[] = [];
   private keys: string[] = [];
   private vec: Float32Array[] = [];
   private slot = new Map<string, number>();
   dirty = false;
-  constructor(readonly engine: string = ENGINE, readonly dimension: number = DIMENSION) { liveVectors.add(this); }
+  constructor(readonly engine: string = ENGINE, readonly dimension: number = DIMENSION) {}
 
   get count(): number { return this.ids.length; }
   /** The content key each stored id was made from (what the job compares to decide what to embed again). */
@@ -573,13 +563,6 @@ export async function saveVectors(store: VectorStore, storage: Storage | undefin
     await storage.fs.atomicWriteFile(`${VECTORS_DIR}/rows.json`, new TextEncoder().encode(rows));
     store.dirty = false;
   } catch { /* a full disk loses only the derived vectors; they are made again */ }
-}
-/** Sign-out: forget every vector, in memory and on disk. */
-export async function wipeVectors(store: VectorStore, storage: Storage | undefined): Promise<void> {
-  store.wipe(); store.dirty = false;
-  if (!storage) return;
-  try { await storage.fs.rm(`${VECTORS_DIR}/vectors.f16`); } catch { /* absent */ }
-  try { await storage.fs.rm(`${VECTORS_DIR}/rows.json`); } catch { /* absent */ }
 }
 
 // ---------------------------------------------------------------------------------------------------------------- fusion

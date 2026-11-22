@@ -139,7 +139,8 @@ final class Repair2StageTests: XCTestCase {
         let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
         rt.registry.register(.voice, LongVoice.self) { LongVoice($0) }
         rt.setStage(.voice, id: "long-voice")
-        let app = ChoirApp(runtime: rt, keys: InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"]), openURL: nil)
+        HeldKeys.hold(key: secretKey, keyId: "", computerId: "comp-1"); defer { HeldKeys.hold(key: "", keyId: "", computerId: "") }
+        let app = ChoirApp(runtime: rt)
         rt.player.setDocument(ProgrammeDocument(id: "choir:a", title: "A", blocks: [.speech(text: "One."), .speech(text: "Two.")]))
         rt.player.play()
         let started = await poll { rt.player.loopIsActive }; XCTAssertTrue(started)

@@ -14,7 +14,7 @@
 //  V6 a route that is an absolute URL or has a scheme is never opened: only a path starting with "/" without ":" becomes `pub:<route>`
 // Time arrives as an argument (epoch milliseconds); a day-old row's clock is shown in UTC (the shared code has no zone).
 
-import { authedJSON, HTTPError, SignedOutError } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, currentWorld } from './api.ts';
 import { parseDate } from './paper-model.ts';
 
 export type Item = { id: string; kind: string; label: string; detail: string; group: string; ago: string; target: string; title: string; at: number; unseen: boolean };
@@ -74,7 +74,7 @@ export function view(events: Item[], status: string, message: string, radio: Ite
 }
 
 /** The page's source: the changelog with the radio's own rows as given. Never throws; a failure is `failed` and its one line. */
-export async function activityInfo(a: { now: number; signedIn: boolean; radio: Item[]; live: Item[] }, get: (path: string, q: Record<string, string | number>) => Promise<unknown> = async (p, q) => (await authedJSON(p, { query: q })).body): Promise<View> {
+export async function activityInfo(a: { now: number; signedIn: boolean; radio: Item[]; live: Item[] }, get: (path: string, q: Record<string, string | number>) => Promise<unknown> = async (p, q) => (await authedJSON(p, { query: q, world: currentWorld() })).body): Promise<View> {
   if (!a.signedIn) return view([], 'idle', '', a.radio, a.live);
   try { return view(items(await get('/api/changelog', { limit: 50, minor: 1 }), a.now), 'ok', '', a.radio, a.live); }
   catch (e) { return view([], 'failed', plain(e), a.radio, a.live); }

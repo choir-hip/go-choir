@@ -55,7 +55,7 @@ final class FakeEngine: PlaybackEngine {
 // 11  the journal is wiped at sign-out
 // 17  the whole deck is wiped at sign-out; 18 no level op, no rate field
 @MainActor
-final class DeckTests: XCTestCase {
+final class DeckTests: KeychainFakeCase {
     func tmp() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("deck-\(UUID().uuidString).json") }
     func makeDeck(_ journal: DeckJournal? = nil) -> (Deck, FakeEngine) {
         let d = Deck(journal: journal ?? DeckJournal()); let e = FakeEngine(); d.engine = e; d.retryDelays = [0.01]
@@ -246,35 +246,7 @@ final class DeckTests: XCTestCase {
 
 
 
-    // 11
-    func test11_TheJournalIsWipedAtSignOut() async {
-        let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }
-        let d = Deck(journal: DeckJournal(storage: f)); d.began(id: "a")
-        let w = AccountWipe()
-        w.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), legacyTakeFiles: [], tempDirectory: f.deletingLastPathComponent().appendingPathComponent("wipe-tmp-\(UUID().uuidString)"), deck: d)
-        await w.run()
-        XCTAssertEqual(d.journal.seq, 0); XCTAssertTrue(d.journal.lines.isEmpty); XCTAssertFalse(FileManager.default.fileExists(atPath: f.path))
-    }
 
-    // Review 2026-11-19 (deck, seat 2), 7 and 8:
-    //  J6 sign-out wipes the DECK, not only its journal: the item on air, the held items and the reason go, the engine stops, and a late end of the old
-    //     account's item writes nothing into the new account's journal
-    //  J7 the interface carries no `level` op and no `rate` (a no-op and a constant): acts that remain move something
-    func test17_SignOutWipesTheDeckAndALateEndWritesNothing() async {
-        let f = tmp(); defer { try? FileManager.default.removeItem(at: f); try? FileManager.default.removeItem(at: DeckJournal.seqFile(for: f)) }
-        let (d, e) = makeDeck(DeckJournal(storage: f))
-        _ = await d.play(speech("a")); d.soundBegan(); d.enqueue(speech("b"))
-        XCTAssertNotNil(d.current); XCTAssertEqual(d.held.count, 1)
-        let w = AccountWipe(); w.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), legacyTakeFiles: [], tempDirectory: f.deletingLastPathComponent().appendingPathComponent("wipe-tmp-\(UUID().uuidString)"), deck: d); await w.run()
-        XCTAssertNil(d.current); XCTAssertTrue(d.held.isEmpty); XCTAssertEqual(d.why, .empty)
-        XCTAssertTrue(e.log.contains("stopSpoken") || e.log.contains("stopRemote"))
-        XCTAssertTrue(d.journal.lines.isEmpty); XCTAssertEqual(d.journal.seq, 0)
-        XCTAssertNil(d.ended(.finished, played: true, id: "a"))      // the late end of the old account's item
-        d.documentEnded(id: "deck:a", anyPlayed: true)
-        XCTAssertTrue(d.journal.lines.isEmpty)
-        // and it plays for the next account as a fresh deck
-        _ = await d.play(speech("c")); XCTAssertEqual(d.journal.lines.first?.item, "c"); XCTAssertEqual(d.journal.lines.first?.seq, 1)
-    }
     func test18_TheInterfaceTellsNoLie() async {
         let (d, e) = makeDeck()
         _ = await d.play(speech("a"))
@@ -366,16 +338,6 @@ final class DeckTests: XCTestCase {
         var raw = try JSONSerialization.jsonObject(with: Data(contentsOf: f)) as! [String: Any]; raw["acked"] = 2
         try JSONSerialization.data(withJSONObject: raw).write(to: f)
         XCTAssertEqual(DeckJournal(storage: f).lines.map(\.seq), [3])
-    }
-    func test22_AStartSuspendedAcrossTheWipeMakesNoSound() async {
-        let (d, e) = makeDeck(); var release: CheckedContinuation<Void, Never>?
-        e.holdSpeak = { await withCheckedContinuation { release = $0 } }
-        let t = Task { @MainActor in await d.play(self.speech("a")) }
-        await settle(); XCTAssertNotNil(release)
-        d.wipe(); e.log = []
-        release?.resume(); _ = await t.value
-        XCTAssertNil(d.current); XCTAssertTrue(e.log.contains("stopSpoken"), "the engine is stopped again when the start resolves after the wipe")
-        XCTAssertTrue(d.journal.lines.isEmpty)
     }
 
 }

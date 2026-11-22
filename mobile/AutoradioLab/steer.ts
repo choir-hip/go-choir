@@ -8,8 +8,11 @@
 // S4 400 resends bare; a second 400 drops it. S5 a 5xx or a transport error keeps it. S6 signed out keeps it. S7 a sign-out during a flush leaves no file.
 // S8 two flushes at once send each tap once. S9 the story routes of a tap lose their version and are unique, at most 12.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, authedJSON, HTTPError, SignedOutError, writeCurrent } from './api.ts';
+import { currentWorld, accountGeneration, authedJSON, HTTPError, SignedOutError, putFile, scoped } from './api.ts';
 import { onAirEntry, type Entry, type Sheet } from './runsheet-model.ts';
+
+// Module state belongs to the world (api.ts `scoped`): a closed world's is unreachable and no later world joins it.
+const S = scoped(() => ({ counter: 0, taps: [] as SteerTap[], loaded: false, loading: null as Promise<void> | null, flushing: null as Promise<void> | null, epoch: 0, state: "idle", saving: Promise.resolve() as Promise<unknown> }));
 
 export const STEER_FILE = 'app:/data/steer-queue.json';
 export const STEER_PATH = '/api/autoradio/steer';
@@ -33,9 +36,8 @@ const cut = (s: string, bytes: number): string => {
   return out;
 };
 
-let counter = 0;     // (no clock in a data source: the tap's time is the caller's `now`, epoch seconds, 0 when it has none)
 const stamp = (now: number): string => (now > 0 ? new Date(now * 1000).toISOString().replace(/\.\d+Z$/, 'Z') : '');
-const newID = (): string => 's-' + Array.from(crypto.getRandomValues(new Uint8Array(6)), (x) => x.toString(16).padStart(2, '0')).join('') + (counter++).toString(36);
+const newID = (): string => 's-' + Array.from(crypto.getRandomValues(new Uint8Array(6)), (x) => x.toString(16).padStart(2, '0')).join('') + (S().counter++).toString(36);
 
 /** A tap on the entry on air: the entry's id, the stories it cites and the one the listener tapped (when it is another). Null with nothing on air (S1). */
 export function tapOn(entry: Entry | undefined, direction: 'more' | 'less', tappedStory: string | undefined, now = 0): SteerTap | null {
@@ -63,7 +65,7 @@ export function body(t: SteerTap, bare: boolean): Record<string, unknown> {
   return b;
 }
 
-const realPost: Post = async (b) => { await authedJSON(STEER_PATH, { method: 'POST', body: b }); };
+const realPost: Post = async (b) => { await authedJSON(STEER_PATH, { method: 'POST', body: b, world: currentWorld() }); };
 
 export async function sendOne(t: SteerTap, post: Post = realPost): Promise<SteerSend> {
   const status = (e: unknown): number => (e instanceof HTTPError ? e.status : 0);
@@ -84,12 +86,6 @@ export async function sendOne(t: SteerTap, post: Post = realPost): Promise<Steer
   }
 }
 
-let taps: SteerTap[] = [];
-let loaded = false;
-let loading: Promise<void> | null = null;
-let flushing: Promise<void> | null = null;
-let epoch = 0;
-let state = 'idle';
 
 const valid = (t: unknown): t is SteerTap => {
   const o = t as Partial<SteerTap> | null;
@@ -97,64 +93,62 @@ const valid = (t: unknown): t is SteerTap => {
 };
 
 async function load(storage: Storage | undefined): Promise<void> {
-  if (loaded) return;
-  if (!loading) {
-    const mine = epoch;
+  if (S().loaded) return;
+  if (!S().loading) {
+    const mine = S().epoch;
     const p: Promise<void> = (async () => {
       let stored: unknown = null;
       if (storage) { try { stored = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(STEER_FILE))); } catch { /* none kept */ } }
-      if (mine !== epoch) return;
-      taps = (Array.isArray(stored) ? stored.filter(valid) : []).slice(-MAX_TAPS);
-      loaded = true;
-    })().finally(() => { if (loading === p) loading = null; });
-    loading = p;
+      if (mine !== S().epoch) return;
+      S().taps = (Array.isArray(stored) ? stored.filter(valid) : []).slice(-MAX_TAPS);
+      S().loaded = true;
+    })().finally(() => { if (S().loading === p) S().loading = null; });
+    S().loading = p;
   }
-  await loading;
+  await S().loading;
 }
 
-let saving: Promise<unknown> = Promise.resolve();
 function save(storage: Storage | undefined, gen: number): Promise<void> {
-  const run = saving.then(() => writeCurrent(gen, storage, STEER_FILE, new TextEncoder().encode(JSON.stringify(taps))), () => undefined);
-  saving = run.catch(() => undefined);
+  const run = S().saving.then(() => putFile(storage, STEER_FILE, new TextEncoder().encode(JSON.stringify(S().taps))), () => undefined);
+  S().saving = run.catch(() => undefined);
   return run.then(() => undefined);
 }
 
-export async function queued(storage: Storage | undefined): Promise<number> { await load(storage); return taps.length; }
-export const steerState = (): string => state;
+export async function queued(storage: Storage | undefined): Promise<number> { await load(storage); return S().taps.length; }
+export const steerState = (): string => S().state;
 
 export async function enqueue(storage: Storage | undefined, t: SteerTap): Promise<void> {
   const gen = accountGeneration();
   await load(storage);
   if (gen !== accountGeneration()) return;
-  taps.push(t);
-  if (taps.length > MAX_TAPS) taps = taps.slice(taps.length - MAX_TAPS);
+  S().taps.push(t);
+  if (S().taps.length > MAX_TAPS) S().taps = S().taps.slice(S().taps.length - MAX_TAPS);
   await save(storage, gen);
 }
 
 /** Send what waits, in order, one flush at a time (S8). */
 export function flush(storage: Storage | undefined, post: Post = realPost): Promise<void> {
-  if (flushing) return flushing;
+  const cur = S().flushing; if (cur) return cur;
   const p: Promise<void> = (async () => {
     const gen = accountGeneration();
     await load(storage);
     let sent = 0;
     for (;;) {
-      const tap = taps[0];
+      const tap = S().taps[0];
       if (!tap || gen !== accountGeneration()) break;
       const r = await sendOne(tap, post);
       if (gen !== accountGeneration()) break;                        // signed out meanwhile: the wipe owns the queue now
-      if (r === 'sent') { taps = taps.filter((x) => x.id !== tap.id); state = 'sent'; sent += 1; }
-      else if (r === 'refused') taps = taps.filter((x) => x.id !== tap.id);
-      else state = r === 'notYet' ? 'notyet' : 'offline';
+      if (r === 'sent') { S().taps = S().taps.filter((x) => x.id !== tap.id); S().state = 'sent'; sent += 1; }
+      else if (r === 'refused') S().taps = S().taps.filter((x) => x.id !== tap.id);
+      else S().state = r === 'notYet' ? 'notyet' : 'offline';
       await save(storage, gen);
       if (r === 'notYet' || r === 'offline') break;
     }
-    console.log(`steer: sent=${sent} queued=${taps.length}`);
-  })().finally(() => { if (flushing === p) flushing = null; });
-  flushing = p;
+    console.log(`steer: sent=${sent} queued=${S().taps.length}`);
+  })().finally(() => { if (S().flushing === p) S().flushing = null; });
+  S().flushing = p;
   return p;
 }
 
 /** Sign-out and tests. */
-export function forget(): void { taps = []; loaded = false; loading = null; flushing = null; state = 'idle'; epoch += 1; }
-export async function wipeSteer(storage: Storage | undefined): Promise<void> { forget(); if (!storage) return; try { await storage.fs.rm(STEER_FILE); } catch { /* absent */ } }
+export function forget(): void { S().taps = []; S().loaded = false; S().loading = null; S().flushing = null; S().state = 'idle'; S().epoch += 1; }

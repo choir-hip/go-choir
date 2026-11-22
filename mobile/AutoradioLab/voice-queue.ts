@@ -6,6 +6,7 @@
 // every op carries an op_id made from it); an op the sheet refuses is dropped silently; a garbled op stops no other.
 import { audioSpec, bookOf, cutBytes, displayTitle, paperRoute, paperStory, book as bookEntry, audio as audioEntry, webPage, webURL } from './runsheet-entries.ts';
 import { apply as reduce, type Entry, type Op } from './runsheet-model.ts';
+import { scoped } from './api.ts';
 import type { RadioRuntime } from './radio-runtime.ts';
 
 const bytes = (s: string): number => new TextEncoder().encode(s).length;
@@ -77,8 +78,8 @@ function entryFromWire(item: Record<string, unknown>): Entry | undefined {
   }
 }
 
-const turnLog: string[] = [];
-export const resetTurnLog = (): void => { turnLog.length = 0; };
+const T = scoped(() => ({ log: [] as string[] }));      // the ids of the voice turns this world applied: the world's (api.ts `scoped`)
+export const resetTurnLog = (): void => { T().log.length = 0; };
 
 /** What the turn route answered (the `queue_ops` event, JSON text). The old rebase rule holds by the reducer's own rules: an op that names an entry applies only while that entry is ahead; additions
  *  always apply; `clear` and `previous` only when the sheet is still at `base_version`. */
@@ -91,8 +92,8 @@ export function applyTurnOps(rt: RadioRuntime, text: string): { applied: number;
   const base = typeof o.base_version === 'number' ? o.base_version : undefined;
   const raw = Array.isArray(o.ops) ? o.ops : Array.isArray(o.queue_ops) ? o.queue_ops : [];
   if (turn !== '' && raw.length) {
-    if (turnLog.includes(turn)) return { applied: 0, dropped: raw.length };
-    turnLog.push(turn); if (turnLog.length > 100) turnLog.splice(0, turnLog.length - 100);
+    if (T().log.includes(turn)) return { applied: 0, dropped: raw.length };
+    T().log.push(turn); if (T().log.length > 100) T().log.splice(0, T().log.length - 100);
   }
   const store = rt.store;
   let applied = 0, dropped = 0;

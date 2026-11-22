@@ -75,22 +75,10 @@ public struct TextureEditInfo: Codable, Sendable, Equatable {
     }
 
     public static func applicationSupportFile() -> URL? {
-        guard let d = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
-        let dir = d.appendingPathComponent("Autoradio", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("texture-pending.json")
+        AccountWipe.url("texture-pending.json")
     }
 
     private var generation = 0
-    /// Sign-out: the sessions, the retry timer and the pending text (memory and file). A save in flight finds the generation changed and keeps nothing.
-    public func wipe() {
-        generation += 1
-        retryTask?.cancel(); retryTask = nil
-        for s in sessions.values { s.task?.cancel() }
-        sessions = [:]; pending = [:]
-        if let storage { try? FileManager.default.removeItem(at: storage) }
-        changed()
-    }
 
     private func savePending() {
         guard let storage else { return }

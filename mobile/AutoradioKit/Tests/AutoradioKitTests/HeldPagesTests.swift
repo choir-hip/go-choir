@@ -38,10 +38,6 @@ final class HeldPagesTests: XCTestCase {
         for i in 5...30 { h.hold(HeldPage(address: "pub:\(i)")) }
         XCTAssertEqual(h.count, 3)
     }
-    func testH5_SignOutForgetsEverything() {
-        let h = HeldPages(); h.hold(HeldPage(address: "pub:1")); h.wipe()
-        XCTAssertEqual(h.count, 0); XCTAssertNil(h.page("pub:1")); XCTAssertTrue(h.all().isEmpty)
-    }
     func testH6_FollowLocatesByText() {
         let d = HeldPage.parse(request)
         let hit = ReaderFollow.locate(spoken: "The second sentence follows it.", in: d)

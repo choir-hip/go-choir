@@ -15,7 +15,7 @@
 //     or range is picked up); ids absent from a response are kept.   11. The whole set is asked again each time a story page is reached from another page and on a retry tick; a failed ask is retried then.
 
 import type { Result } from './app.contract.d.ts';
-import { accountGeneration, getJSON } from './api.ts';
+import { getJSON, scoped } from './api.ts';
 import { episodeAddress, feedKey, parseShow } from './podcast-model.ts';
 
 export const CLIPS_PATH = '/api/platform/podcast-clips';
@@ -81,31 +81,24 @@ type Ack = Result<'clipAct'>;
 
 export const STORY_MAX = 3, SHOW_MAX = 10;
 
-const byID = new Map<string, Clip>();
-const askedFeeds = new Set<string>();
-let asked = false, asking: Promise<void> | null = null;
-let lastTick = 0;
-let seq = 0;
-/** The story page last asked for ('' when the last page asked was not a story): a story reached from another page asks the whole set again. */
-let lastStory = '';
+// Module state belongs to the world (api.ts `scoped`). `lastStory`: the story page last asked for ('' when the last page asked was not a story): a story reached from another page asks the whole set again.
+const S = scoped(() => ({ byID: new Map<string, Clip>(), askedFeeds: new Set<string>(), asked: false, asking: null as Promise<void> | null, lastTick: 0, seq: 0, lastStory: '' }));
 
 /** For the sign-out test: how many clips are held in memory. */
-export const remembered = (): number => byID.size;
+export const remembered = (): number => S().byID.size;
 
-export function forget(): void { byID.clear(); askedFeeds.clear(); asked = false; asking = null; lastTick = 0; lastStory = ''; }
 
-function merge(clips: Clip[]): void { for (const c of clips) byID.set(c.clipID, { ...c, rank: ++seq }); }
+function merge(clips: Clip[]): void { for (const c of clips) S().byID.set(c.clipID, { ...c, rank: ++S().seq }); }
 
 /** A retry resets what was asked, so the next draw asks again. */
-function tickOver(tick: number): void { if (tick !== lastTick) { lastTick = tick; askedFeeds.clear(); asked = false; } }
+function tickOver(tick: number): void { if (tick !== S().lastTick) { S().lastTick = tick; S().askedFeeds.clear(); S().asked = false; } }
 
 /** The whole set (`GET /api/platform/podcast-clips?limit=200`): one request for every page, never one per story. (A data source has no clock: a pull to refresh is what asks again.) */
 function ensureAll(): Promise<void> {
-  if (asked) return asking ?? Promise.resolve();
-  asked = true;                                                       // once a retry: a failure is asked again by the next one, never on every draw
-  const gen = accountGeneration();                                    // a clip set that lands after the account changed is not kept
-  const mine = (async () => { try { const body = (await getJSON(CLIPS_PATH, { limit: 200 })).body; if (gen === accountGeneration()) merge(parseClips(body)); } catch { /* the route is missing or down: nothing, silently */ } })();
-  asking = mine;
+  if (S().asked) return S().asking ?? Promise.resolve();
+  S().asked = true;                                                       // once a retry: a failure is asked again by the next one, never on every draw
+  const mine = (async () => { try { merge(parseClips((await getJSON(CLIPS_PATH, { limit: 200 })).body)); } catch { /* the route is missing or down: nothing, silently */ } })();
+  S().asking = mine;
   return mine;
 }
 
@@ -119,32 +112,31 @@ export async function showClips(address: string, tick: number): Promise<Rows> {
   tickOver(tick);
   if (feed === '') return { rows: [] };
   const k = feedKey(feed);
-  if (!askedFeeds.has(k)) {
-    askedFeeds.add(k);
-    const gen = accountGeneration();
-    try { const body = (await getJSON(CLIPS_PATH, { feed, limit: 50 })).body; if (gen === accountGeneration()) merge(parseClips(body)); } catch { /* the route is missing or down: nothing, silently */ }
+  if (!S().askedFeeds.has(k)) {
+    S().askedFeeds.add(k);
+    try { merge(parseClips((await getJSON(CLIPS_PATH, { feed, limit: 50 })).body)); } catch { /* the route is missing or down: nothing, silently */ }
   }
-  const mine = [...byID.values()].filter((c) => c.feedURL !== '' && feedKey(c.feedURL) === k).sort((a, b) => (a.clipID < b.clipID ? -1 : a.clipID > b.clipID ? 1 : 0));
+  const mine = [...S().byID.values()].filter((c) => c.feedURL !== '' && feedKey(c.feedURL) === k).sort((a, b) => (a.clipID < b.clipID ? -1 : a.clipID > b.clipID ? 1 : 0));
   return { rows: mine.slice(0, SHOW_MAX).map(row) };
 }
 
 /** "Hear it": the clips cut for the story at a `pub:<route>[/vN]` address (a version has the story's clips), at most three; none for any other page. */
 export async function storyClips(address: string, tick: number): Promise<Rows> {
   tickOver(tick);
-  if (!address.startsWith('pub:')) { lastStory = ''; return { rows: [] }; }
-  if (lastStory === '') asked = false;                               // a story page came to the top from another page: the clips are asked for again (once), so a clip matched since, or a failed ask, shows now
-  lastStory = address;                                               // (a swipe from one story to the next asks nothing more)
+  if (!address.startsWith('pub:')) { S().lastStory = ''; return { rows: [] }; }
+  if (S().lastStory === '') S().asked = false;                               // a story page came to the top from another page: the clips are asked for again (once), so a clip matched since, or a failed ask, shows now
+  S().lastStory = address;                                               // (a swipe from one story to the next asks nothing more)
   const route = address.slice(4).replace(/^\//, '');
   await ensureAll();
-  const all = [...byID.values()].sort((a, b) => a.rank - b.rank);   // the server's order: the best quote of a story first
+  const all = [...S().byID.values()].sort((a, b) => a.rank - b.rank);   // the server's order: the best quote of a story first
   let found = all.filter((c) => c.route === route);
   if (found.length === 0) { const bare = route.replace(/\/v[1-9][0-9]*$/, ''); found = all.filter((c) => c.route === bare); }
   return { rows: found.slice(0, STORY_MAX).map(row) };
 }
 
 async function find(id: string): Promise<Clip | null> {
-  if (!byID.has(id)) await ensureAll();
-  return byID.get(id) ?? null;
+  if (!S().byID.has(id)) await ensureAll();
+  return S().byID.get(id) ?? null;
 }
 
 const NONE = { op: '', id: '', url: '', title: '', show: '', start: 0, clip: '', feed: '', record: '' };

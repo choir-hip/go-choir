@@ -20,12 +20,15 @@
 //  9. The text is fetched once per file version; a changed file (size or time) is fetched again.
 // Logs carry counts and kinds, never a file name.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, authedJSON, writeCurrent } from './api.ts';
+import { accountGeneration, authedJSON, putFile, scoped, appPath } from './api.ts';
 import * as F from './files.ts';
 import * as FM from './files-model.ts';
 import { textureSource } from './content.ts';
 import * as M from './imported-model.ts';
 import type { Result } from './app.contract.d.ts';
+
+// Module state belongs to the world (api.ts `scoped`): a closed world's is unreachable and no later world joins it.
+const S = scoped(() => ({ places: null as Record<string, M.Place> | null, folderKnown: false, known: new Map<string, FM.Entry>(), open: [] as Loaded[], cacheGen: -1 }));
 
 export type ImportedList = Result<'importedList'>;
 export type ImportedDocInfo = Result<'importedDoc'>;
@@ -50,29 +53,18 @@ const GONE = 'This document is not on your computer any more.';
 // ---------------------------------------------------------------- state between answers (cleared by forget())
 
 type Loaded = { key: string; text: M.DocText; index: M.Index | null };
-let places: Record<string, M.Place> | null = null;
-let folderKnown = false;                              // the folder was listed, so it exists
-const known = new Map<string, FM.Entry>();           // id -> the entry the last list or open saw
-let open: Loaded[] = [];                              // the last few documents held in memory, newest last
 
-let cacheGen = -1;
-export function forget(): void { folderKnown = false; places = null; known.clear(); open = []; cacheGen = accountGeneration(); }
+export function forget(): void { S().folderKnown = false; S().places = null; S().known.clear(); S().open = []; S().cacheGen = accountGeneration(); }
 /** The caches belong to the account generation they were made in: the first touch after it moved empties them. A late answer is checked against its own captured generation before it inserts. */
-const sync = (): void => { if (cacheGen !== accountGeneration()) forget(); };
+const sync = (): void => { if (S().cacheGen !== accountGeneration()) forget(); };
 
-/** Sign-out (account.ts): the places and what this session holds. The cache is under app:/cache/files, which the Files wipe removes. Never throws. */
-export async function wipeImported(storage: Storage | undefined): Promise<void> {
-  forget();
-  if (!storage) return;
-  try { await storage.fs.rm(PLACES_FILE); } catch { /* absent */ }
-}
 
 async function loadPlaces(storage: Storage | undefined): Promise<Record<string, M.Place>> {
   sync();
-  if (places) return places;
+  const have = S().places; if (have) return have;
   const gen = accountGeneration();
   const mine: Record<string, M.Place> = {};
-  places = mine;
+  S().places = mine;
   if (!storage) return mine;
   try {
     const v = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(PLACES_FILE)));
@@ -82,7 +74,7 @@ async function loadPlaces(storage: Storage | undefined): Promise<Record<string, 
       }
     }
   } catch { /* none kept yet */ }
-  if (gen !== accountGeneration()) { if (places === mine) places = null; return {}; }            // the account moved while the file was read: nothing of it is kept or shown
+  if (gen !== accountGeneration()) { if (S().places === mine) S().places = null; return {}; }            // the account moved while the file was read: nothing of it is kept or shown
   return mine;
 }
 async function setPlace(storage: Storage | undefined, id: string, block: number, length: number, gen: number): Promise<void> {
@@ -91,12 +83,12 @@ async function setPlace(storage: Storage | undefined, id: string, block: number,
   const b = M.clampBlock(block, length);
   if (all[id] && all[id].block === b && all[id].length === length) return;
   all[id] = { block: b, length };
-  await writeCurrent(gen, storage, PLACES_FILE, new TextEncoder().encode(JSON.stringify(all)));
+  await putFile(storage, PLACES_FILE, new TextEncoder().encode(JSON.stringify(all)));
 }
 
 // ---------------------------------------------------------------- the computer's folder
 
-const say = F.say;
+const say = (e: unknown): string => F.say(e);      // lazily: files.ts and this file meet in an import cycle through api.ts and app.ts
 const isMissing = (e: unknown): boolean => (e as { status?: number })?.status === 404;
 const cacheKey = (e: FM.Entry): string => FM.hash(`${e.path}|${e.size}|${e.modified ?? ''}`);
 
@@ -105,11 +97,11 @@ async function entries(net: F.Net): Promise<FM.Entry[]> {
   sync();
   const gen = accountGeneration();
   let listed;
-  try { listed = await F.fileEntries(M.FOLDER, net); if (gen === accountGeneration()) folderKnown = true; } catch (e) { if (isMissing(e)) { if (gen === accountGeneration()) folderKnown = false; return []; } throw e; }
+  try { listed = await F.fileEntries(M.FOLDER, net); if (gen === accountGeneration()) S().folderKnown = true; } catch (e) { if (isMissing(e)) { if (gen === accountGeneration()) S().folderKnown = false; return []; } throw e; }
   if (gen !== accountGeneration()) return [];                                                       // a late list of the previous account's folder is not kept
   const docs = listed.entries.filter((e) => !e.isDirectory && M.kindOfName(e.name) !== null)
     .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  for (const e of docs) known.set(M.idOf(e.name), e);
+  for (const e of docs) S().known.set(M.idOf(e.name), e);
   return docs;
 }
 /** The documents of the folder (for the search's document source, imported-search.ts). */
@@ -117,23 +109,23 @@ export const entriesOf = entries;
 async function entryOf(id: string, net: F.Net, refresh = false): Promise<FM.Entry | null> {
   const name = M.nameOfId(id);
   if (name === null || M.kindOfName(name) === null) return null;
-  if (!refresh) { const k = known.get(id); if (k) return k; }
-  known.delete(id);
+  if (!refresh) { const k = S().known.get(id); if (k) return k; }
+  S().known.delete(id);
   await entries(net);
-  return known.get(id) ?? null;
+  return S().known.get(id) ?? null;
 }
 
 // ---------------------------------------------------------------- the text
 
 type Text = { status: 'ready' | 'empty' | 'error'; message: string; doc?: Loaded };
-const remember = (l: Loaded, gen: number): Loaded => { if (gen !== accountGeneration()) return l; sync(); open = [...open.filter((o) => o.key !== l.key), l].slice(-OPEN_DOCUMENTS); return l; };
+const remember = (l: Loaded, gen: number): Loaded => { if (gen !== accountGeneration()) return l; sync(); S().open = [...S().open.filter((o) => o.key !== l.key), l].slice(-OPEN_DOCUMENTS); return l; };
 
 /** The text of a document: held in memory, else read from the phone's copy of what the computer read, else asked of the computer (and kept). */
 async function textOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Promise<Text> {
   sync();
   const gen = accountGeneration();
   const key = cacheKey(e), kind = M.kindOfName(e.name)!;
-  const held = open.find((o) => o.key === key);
+  const held = S().open.find((o) => o.key === key);
   if (held) return { status: 'ready', message: '', doc: remember(held, gen) };
   const file = `${F.CACHE_DIR}/${key}/text.json`;
   if (storage) {
@@ -149,7 +141,7 @@ async function textOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Pr
     const text = kind === 'pdf' ? M.fromPdfText(md ?? '') : M.fromMarkdown(md ?? '');
     if (text.blocks.length === 0) return { status: 'empty', message: NO_TEXT[kind] };
     if (storage && gen === accountGeneration()) {
-      try { await storage.fs.mkdir(`${F.CACHE_DIR}/${key}`).catch(() => {}); await writeCurrent(gen, storage, file, new TextEncoder().encode(JSON.stringify(text))); } catch { /* a full disk loses only the copy */ }
+      try { await storage.fs.mkdir(`${F.CACHE_DIR}/${key}`).catch(() => {}); await putFile(storage, file, new TextEncoder().encode(JSON.stringify(text))); } catch { /* a full disk loses only the copy */ }
     }
     console.log(`imported: text kind=${kind} blocks=${text.blocks.length} sections=${text.sections.length}`);
     return { status: 'ready', message: '', doc: remember({ key, text, index: null }, gen) };
@@ -163,11 +155,11 @@ const indexOf = (d: Loaded): M.Index => (d.index ??= M.buildIndex(d.text.blocks)
 async function copyOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Promise<string> {
   if (!storage || e.size > COPY_MAX) return '';
   const dest = `${F.CACHE_DIR}/${cacheKey(e)}/${FM.cacheName(e.name)}`;
-  try { if ((await storage.fs.stat(dest)).size === e.size) return dest; } catch { /* not there */ }
+  try { if ((await storage.fs.stat(dest)).size === e.size) return appPath(dest); } catch { /* not there */ }
   try {
     await storage.fs.mkdir(`${F.CACHE_DIR}/${cacheKey(e)}`).catch(() => {});
     const n = await F.fileDownload(e.path, dest, storage, net);
-    if (n === e.size) return dest;
+    if (n === e.size) return appPath(dest);                  // what the iframe and the share sheet (the host) see: the account's root is in the path
     try { await storage.fs.rm(dest); } catch { /* nothing there */ }
   } catch { try { await storage.fs.rm(dest); } catch { /* nothing there */ } }
   return '';
@@ -297,7 +289,7 @@ export async function importedAdd(a: { from: string; name: string }, storage?: S
   if (same) return again(`“${M.titleOf(same.name)}” is already imported.`);
   const name = M.uniqueName(a.name, new Set(existing.map((e) => e.name)));
   if (!FM.validName(name)) return again('That name cannot be used. Avoid slashes and empty names.');
-  if (!folderKnown) { try { await F.fileMkdir({ dir: '/', name: M.FOLDER.slice(1) }, storage, net); } catch { /* the upload says why not */ } }
+  if (!S().folderKnown) { try { await F.fileMkdir({ dir: '/', name: M.FOLDER.slice(1) }, storage, net); } catch { /* the upload says why not */ } }
   const up = await F.fileUpload({ from: a.from, name, dir: M.FOLDER }, storage, net);
   let landed: FM.Entry | undefined;
   try { landed = (await entries(net)).find((e) => e.name === name && e.size === size); } catch { /* the list below says */ }

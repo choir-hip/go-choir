@@ -14,12 +14,12 @@
 //  P6b The page says `loaded` once the file was read for this account generation (the done sends are gated on it); a pick list that was never loaded is not "the listener chose nothing".
 //  P7 Speech: "add space and chess" is stored and answered; "done" finishes; heard words are taken from the native mailbox in order and each is answered once, even when refused.
 //  P8 The page: rows follow the selection, expanding changes no pick, own topics stay as chips after a deselect (E9), the typed duplicate says so, live sections merge.
+import { moveAccount } from './account-phone.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { accountGeneration, nextGeneration, resetSeam, bindNative } from './api.ts';
+import { accountGeneration, resetSeam, bindNative } from './api.ts';
 import { nativeDevice } from './edition-picks.ts';
-import { WIPES, wipedPaths, wipeAll } from './account.ts';
 import {
-  PICKS_FILE, picksPage, picksText, toggle, expand, addTyped, hear, drainHeard, wipePicks, forgetPicks, parseStored, type Device, type Env,
+  PICKS_FILE, picksPage, picksText, toggle, expand, addTyped, hear, drainHeard, forgetPicks, parseStored, type Device, type Env,
 } from './edition-picks.ts';
 import { readFileSync } from 'node:fs';
 
@@ -137,96 +137,18 @@ describe('P3 concurrent writers', () => {
 });
 
 describe('P4 accounts', () => {
-  test('a: after a sign-out the next account reads nothing, from memory or from the file', async () => {
-    await toggle(storage, 'Space', E()); expect((await picksText(storage, E())).picks).toBe('Space');
-    nextGeneration(); await wipePicks(storage, E());           // account.ts: the generation moves, then the wipes run
-    expect(files.has(PICKS_FILE)).toBe(false);
-    expect((await picksText(storage, E())).picks).toBe('');
-    expect((await picksPage(storage, {}, E())).pickedCount).toBe(0);
-  });
   test('a, no wipe yet: a moved generation alone empties what B reads from memory (the file is read fresh, and it is the wipe\'s to remove)', async () => {
     await toggle(storage, 'Space', E());
-    nextGeneration(); files.delete(PICKS_FILE);
+    moveAccount(); files.delete(PICKS_FILE);
     expect((await picksText(storage, E())).picks).toBe('');
-  });
-  test('b: a write held in flight when the account changes lands nowhere; the next account reads nothing', async () => {
-    const release = hold();
-    const p = toggle(storage, 'Space', E());
-    await release.entered;
-    nextGeneration(); await wipePicks(storage, E()).catch(() => undefined);
-    release(); await p;
-    expect(files.has(PICKS_FILE)).toBe(false);
-    expect((await picksText(storage, E())).picks).toBe('');
-  });
-  test('c: a change queued for A that would run after the account moved is skipped, not applied to B', async () => {
-    const release = hold();
-    const first = toggle(storage, 'Space', E());               // A: held in the write
-    const second = toggle(storage, 'Chess', E());              // A: queued behind it
-    await release.entered;
-    nextGeneration(); await wipePicks(storage, E()).catch(() => undefined);
-    release(); await Promise.all([first, second]);
-    expect(files.has(PICKS_FILE)).toBe(false);
-    await toggle(storage, 'Film', E());                        // B's own first tap
-    expect(stored()).toEqual(['Film']);
-  });
-  test('d: a wipe whose rm fails empties the file (so the next account reads nothing) and still names itself failed; when it can do neither it names itself failed too', async () => {
-    await toggle(storage, 'Space', E());
-    failRm = true; nextGeneration();
-    await expect(wipePicks(storage, E())).rejects.toThrow();
-    expect(stored()).toEqual([]); expect((await picksText(storage, E())).picks).toBe('');
-    await toggle(storage, 'Chess', E());                       // (a new account's tap, after the generation moved once more)
-    nextGeneration(); failWrites = true;
-    await expect(wipePicks(storage, E())).rejects.toThrow();
-  });
-  test('d2: a rm that fails once is retried after the emptying and the store succeeds; one that keeps failing names the store failed (account.ts keeps its marker and retries at the next launch)', async () => {
-    await toggle(storage, 'Space', E());
-    failRmOnce = true; nextGeneration();
-    expect(await wipeAll(storage, undefined, WIPES.filter((w) => w.name === 'edition-picks'))).toEqual([]);
-    expect(files.has(PICKS_FILE)).toBe(false);
-    await toggle(storage, 'Chess', E());
-    failRm = true; nextGeneration();
-    expect(await wipeAll(storage, undefined, WIPES.filter((w) => w.name === 'edition-picks'))).toEqual(['edition-picks']);
-    expect((await picksText(storage, E())).picks).toBe('');       // emptied, even though it could not be removed
-  });
-  test('the wipe list covers the file (account.ts)', () => {
-    expect(wipedPaths()).toContain(PICKS_FILE);
-    expect(WIPES.some((w) => w.name === 'edition-picks')).toBe(true);
-  });
-  test('the real wipe list removes the file', async () => {
-    await toggle(storage, 'Space', E());
-    const w = WIPES.find((x) => x.name === 'edition-picks')!;
-    nextGeneration(); await w.run(storage, undefined);
-    expect(files.has(PICKS_FILE)).toBe(false);
   });
 });
 
 describe('P5 the native copy', () => {
-  test('pushed only after the file was written, in the order written; emptied at the wipe', async () => {
-    await toggle(storage, 'Space', E()); await toggle(storage, 'Chess', E());
-    expect(phone.mirrored.at(-1)).toEqual(['Space', 'Chess']);
-    failWrites = true; const n = phone.mirrored.length;
-    await toggle(storage, 'Film', E());
-    expect(phone.mirrored.length).toBe(n);                     // not written, not pushed
-    failWrites = false;
-    nextGeneration(); await wipePicks(storage, E());
-    expect(phone.mirrored.at(-1)).toEqual([]);
-  });
   test('a first read after a restart gives the native side its copy', async () => {
     put(PICKS_FILE, '{"topics":["Space"]}');
     await picksText(storage, E());
     expect(phone.mirrored.at(-1)).toEqual(['Space']);
-  });
-  test('a native call that never answers does not stop the next push; a write refused because the account moved is not pushed', async () => {
-    phone.mirrorHangs = true;
-    await toggle(storage, 'Space', { ...E(), mirrorDeadlineMs: 1 });          // the push hangs; its deadline lets the chain go on
-    phone.mirrorHangs = false;
-    await toggle(storage, 'Chess', { ...E(), mirrorDeadlineMs: 1 });
-    expect(phone.mirrored.at(-1)).toEqual(['Space', 'Chess']);
-    const g = accountGeneration();
-    const release = hold(); const p = toggle(storage, 'Film', E()); await release.entered;
-    nextGeneration(); release(); await p;
-    expect(accountGeneration()).toBeGreaterThan(g);
-    expect(phone.mirrored.some((t) => t.includes('Film'))).toBe(false);
   });
 });
 
@@ -238,7 +160,7 @@ describe('P6 the old Swift file is never read', () => {
     const dev = nativeDevice()!;
     const e: Env = { device: dev, live: async () => [] };
     await picksText(storage, e); await toggle(storage, 'Space', e); await hear(storage, 'add chess', e); await drainHeard(storage, e);
-    nextGeneration(); await wipePicks(storage, e);
+    moveAccount();;
     expect(ops.length).toBeGreaterThan(0);
     expect(ops.filter((o) => !ALLOWED.includes(o))).toEqual([]);
   });
@@ -279,16 +201,6 @@ describe('P7 speech', () => {
     expect(phone.said).toEqual([{ id: 'a', line: 'Added Space.', finish: false }, { id: 'b', line: 'Added Chess.', finish: false }, { id: 'c', line: 'Took off Space.', finish: false }, { id: 'd', line: 'Okay.', finish: true }]);
     expect(stored()).toEqual(['Chess']);
     await drainHeard(storage, E()); expect(phone.said.length).toBe(4);
-  });
-  test('words heard for an account that has moved on are answered empty and change nothing', async () => {
-    const release = hold();
-    phone.heard = [{ id: 'a', words: 'add space' }];
-    const p = drainHeard(storage, E());
-    await release.entered;
-    nextGeneration(); await wipePicks(storage, E()).catch(() => undefined);
-    release(); await p;
-    expect(phone.said).toEqual([{ id: 'a', line: '', finish: false }]);
-    expect(files.has(PICKS_FILE)).toBe(false);
   });
   test('a mailbox the native side cannot answer is no edit', async () => {
     const dead: Device = { ...device(), heard: async () => { throw new Error('no'); } };

@@ -1,32 +1,52 @@
 // The integrator's members of the root: the Choir sign-in and the player (the voice lab page, its stages, parameters, trace and
 // audio switch are gone: owner, 2026-11-19, "get rid of lab pages").
-use choirAuth, choirPlayer from "@choir/autoradio"
-use choirSignIn, choirOpenApproval, choirCancelSignIn, choirRefresh from "@choir/autoradio"
+use choirPlayer, choirRefresh from "@choir/autoradio"
 use ChoirAuth, ChoirPlayer from "@choir/autoradio"
 use LabState, SettingsAck from "@choir/autoradio"
 use SignOutResult from "./account-types.contract"
 use AccountView, HostPage from "./account-state-types.contract"
 
 members Autoradio
-  resource au = choirAuth() as shape ChoirAuth else empty()
-  resource pl = choirPlayer() as shape ChoirPlayer else empty()
-  // What the app says about the account (account-state.ts): asked again when anything that can change it happened: a sign-in or a sign-out, a page change, the app coming back to the front (the phone
-  // unlocked: a key that could not be read yet is read again). An unreadable key is "locked", never "signed out".
+  // THE SIGN-IN is shared code (signin.ts): the device flow against the server, the key kept in Exact's store (`secret.keep`), the approval page opened by `openURL`. `au` is asked again when a press or a poll changes it (siTick) and when the app comes back.
+  state siTick = 0
+  resource au = signInView(siTick) as shape ChoirAuth else empty() transient
+  mutation si as shape ChoirAuth refreshes au
+  action pollSignIn
+    send si = signInPoll()
+    siTick = siTick + 1
+  task signInTask when au.status == "pending" key=siTick
+    after(3000, pollSignIn)
+  action openApproval
+    openURL(au.verificationURL)
+  task openApprovalOnce when au.status == "pending" and au.verificationURL != "" key=au.userCode
+    after(1, openApproval)
+  resource pl = choirPlayer() as shape ChoirPlayer else empty() transient
+  // What the app says about the account (account-state.ts): asked again when anything that can change it happened: a sign-in or a sign-out, the app coming back to the front (a launch that is still starting is asked again), a re-read.
+  // It is NOT asked again on a page change (no `pg.` in the tick: account-world.test.ts forbids it): the state is the launch verdict (account.ts), held for the process, and only a sign-in (T1) or a sign-out (T2) changes it. "Not ready" is "locked", never "signed out".
   resource hpg = exactPage() as shape HostPage else empty()
   // The tick: anything that can change the answer. The app coming back to the front (visibility, focus), a sign-in flow's progress (au.status, au.message), a sign-out (the epoch), a page change and the host fact (every input of the answer is in the tick). NOT the statuses of other pages' sources: a resource is asked only when something reads it, so waiting on them left the card unanswered at launch (found by the signed-out tour). A refusal (401) shows at the next page change or return to the front, and a counter that moves every 3 s while the key is locked, so "locked" cannot stick if no event arrives.
   state lockTick = 0
   action bumpLock
     lockTick = lockTick + 1
-  // Also re-asked (with the host fact, spine.contract hc) while the answer is open: an unreadable key, a handle not bound yet, a host with no sign-in: a native module that arrives late corrects the state without a page change.
-  task rereadLocked when acs.state == "locked" or acs.state == "unknown" key=lockTick
-    after(3000, bumpLock)
-  // A host with no native package: a module may still load late, so the re-probe runs a few times (15 s) and then stops; the decision is then final for this launch.
-  state lateTicks = 0
-  action bumpLate
-    lateTicks = lateTicks + 1
+  // A key that cannot be read yet (locked before the first unlock): the launch opens nothing and sweeps nothing (account.ts). Re-read every 3 s, at most five times; the app coming back to the front (hpg) asks too.
+  state bndTries = 0
+  // Sign out offered from a LOCKED phone is two steps (the first tap asks, it removes nothing); the question is withdrawn the moment a key read succeeds.
+  state confirmRemove = false
+  action askRemove
+    confirmRemove = true
+  action cancelRemove
+    confirmRemove = false
+  task dropConfirm when confirmRemove and acs.state != "locked" key=lockTick
+    after(1, cancelRemove)
+  action retryAccount
+    confirmRemove = false
+    bndTries = 1
     lockTick = lockTick + 1
-  task rereadLate when acs.state == "noSignIn" and lateTicks < 5 key=lateTicks
-    after(3000, bumpLate)
+  action bumpBnd
+    bndTries = bndTries + 1
+    lockTick = lockTick + 1
+  task rereadBoundary when acs.state == "locked" and bndTries < 5 key=bndTries
+    after(3000, bumpBnd)
   // A refused key is re-read a few times too (15 s), then left to the events that recover it (a new key, a page's 200 above, the app coming to the front): two native calls and a hash every 3 s forever is too much.
   state rejTicks = 0
   action bumpRej
@@ -35,7 +55,7 @@ members Autoradio
   task rereadRejected when acs.state == "rejected" and rejTicks < 5 key=rejTicks
     after(3000, bumpRej)
   // A page that hit a refusal (the server said 401 to this phone's key: api.ts records it) shows its error; the account sentence is asked again at that moment, not at the next tick, so the card
-  // appears when it happens. Any error asks again (the answer is the same when the error was only the network): one keystate read.
+  // appears when it happens. Any error asks again (the answer is the same when the error was only the network): one card ask (it reads the store again).
   task noteRefusal when mbx.status == "error" or fsList.status == "error" or acctInfo.status == "failed" or (pg.top == "notebook:" and nb.docState == "offline") key=pg.top
     after(100, bumpLock)
   // And the other way: a page that works again clears a stale "rejected" at once (api.ts clears the digest on any 200), not at the next 3 s read.
@@ -44,31 +64,38 @@ members Autoradio
   // The card is the first thing in the bar's own column (bar.contract), so it sits whole above the bar at every bar height (the "On:" line, the now-playing strip, the answer card). Not over the code screen, a
   // sheet, the launcher, the bar's field or any keyboard (exactViewport: the one general keyboard fact), the content controls, the reader's aim row or a web layer.
   derive bannerOn = acs.message != "" and au.status != "pending" and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
-  resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}`, pg.top, hc.mode) as shape AccountView else empty()
+  resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${soTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}`, hc.mode, bndTries) as shape AccountView else empty() transient
+  // THE identifying argument of every gated resource (invariant I7): the account handle (the first 16 hex of the key's digest, or `anonymous`, or "" while no world is open). Exact keeps a resource's last answer across launches
+  // under its identifying arguments, so one account's kept answers are never shown for another's, and a page that refused (locked, ended) is asked again when the account opens. Mail resources are `transient` besides.
+  derive acctHandle = acs.handle
   mutation acct as shape LabState
   mutation racct as shape SettingsAck
-  // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
+  // Sign-out is led by shared code (account.ts): it ends the session (a full-screen card says to close and reopen the app), the native sign-out deletes the key, and the account's folders are removed.
   mutation so as shape SignOutResult
+  // Step one of a sign-out is quick and refreshes the card at once (the session ends and the ending mark is written); step two is the native half, which may take a while behind the card.
+  mutation ending as shape SignOutResult refreshes acs
+  // A tap on the ended card is taken here and does nothing but ask the card again: it never reaches the bar beneath.
+  action cardTap
+    lockTick = lockTick + 1
   derive signOutNote = match so { case some(a) => a.message, case none => "" }
-  // The wipe counter as the last sign-out answered it (account.ts wipeEpoch: bumped by every ATTEMPTED wipe, failed ones too, and by a late continuation's wipe); "" before any sign-out answered. It changes with
-  // each sign-out result, so the shared sources that keep state in memory (the open pages, the notebook) are asked again. A late wipe bumps the counter but has no event that carries it here (a residual).
-  derive signedOutTick = match so { case some(a) => `${a.epoch}`, case none => "" }
+  // The sign-out's result asks the card again at once.
+  derive soTick = match so { case some(a) => `${a.done}|${a.failed}`, case none => "" }
   mutation ctl as shape LabState
   mutation down as shape LabState
   mutation up as shape LabState
 
   action signIn
-    send acct = choirSignIn()
+    send si = signInStart()
   action cancelSignIn
-    send acct = choirCancelSignIn()
-  action openApproval
-    send acct = choirOpenApproval()
+    send si = signInCancel()
   action signOut
+    confirmRemove = false
     // The unsent text of a message being written belongs to the account that is leaving (it may quote that account's mail).
     mailFor = ""
     mailTo = ""
     mailSubject = ""
     mailBody = ""
+    send ending = accountEnding()
     send so = accountSignOut()
   action refreshRadio
     send acct = choirRefresh()

@@ -8,11 +8,12 @@
 //  C4 a show's feed is asked once a session (and again after a retry), not on every draw; a 404 or a failure is no rows, silently.
 //  C5 Play and Queue answer the clip's id for the native locator; a clip the phone does not have says so; Open episode answers the episode's page with
 //     the clip's audio and start in the address, and does nothing for a clip with no feed.
+import { moveAccount } from './account-phone.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import * as C from './clips.ts';
 import { parseEpisode } from './podcast-model.ts';
-import { nextGeneration } from './api.ts';
+import { resetWorld } from './api.ts';
 
 const body = JSON.parse(readFileSync(new URL('../fixtures/podcasts/clips.json', import.meta.url), 'utf8')) as { clips: Record<string, unknown>[] };
 const FEED = 'https://feeds.example.com/show.xml';
@@ -20,7 +21,7 @@ let calls: string[] = [];
 let handler: (u: URL) => Response;
 
 beforeEach(() => {
-  C.forget(); calls = [];
+  resetWorld(); calls = [];
   handler = () => new Response(JSON.stringify(body), { status: 200 });
   globalThis.fetch = (async (input: RequestInfo | URL) => { calls.push(String(input)); return handler(new URL(String(input))); }) as typeof fetch;
 });
@@ -94,10 +95,10 @@ describe('C5 what a row does', () => {
     expect(p.feed).toBe(FEED); expect(p.id).toBe('guid-1'); expect(p.hint).toEqual({ enclosure: 'https://cdn.example.com/one.mp3', start: 10, title: 'Episode One', show: 'Synthetic Hour' });
     expect(a.openTitle).toBe('Episode One');
     const none = { ...body.clips[0], clip_id: 'clip-0000000000f1', feed_url: '', episode_guid: '' };
-    handler = () => new Response(JSON.stringify({ clips: [none] }), { status: 200 }); C.forget();
+    handler = () => new Response(JSON.stringify({ clips: [none] }), { status: 200 }); resetWorld();
     expect((await C.clipAct('open', 'clip-0000000000f1')).open).toBe('');
     const noGuid = { ...body.clips[0], clip_id: 'clip-0000000000f2', episode_guid: '' };
-    handler = () => new Response(JSON.stringify({ clips: [noGuid] }), { status: 200 }); C.forget();
+    handler = () => new Response(JSON.stringify({ clips: [noGuid] }), { status: 200 }); resetWorld();
     expect(parseEpisode((await C.clipAct('open', 'clip-0000000000f2')).open)!.id).toBe('https://cdn.example.com/one.mp3');
   });
 });
@@ -150,7 +151,7 @@ describe('H2 one bulk request', () => {
   test('forgetting the account\'s session drops the set', async () => {
     await C.storyClips('pub:a', 0);
     expect(C.remembered()).toBeGreaterThan(0);
-    C.forget();
+    resetWorld();
     expect(C.remembered()).toBe(0);
     await C.storyClips('pub:a', 0);
     expect(calls.length).toBe(2);
@@ -189,9 +190,10 @@ describe('H4 refresh, replacement, order and the account', () => {
     const gate = new Promise<void>((r) => { release = r; });
     globalThis.fetch = (async (input: RequestInfo | URL) => { calls.push(String(input)); await gate; return new Response(JSON.stringify(body), { status: 200 }); }) as typeof fetch;
     const pending = C.storyClips('pub:a', 0);
-    nextGeneration(); C.forget();
+    moveAccount();                                       // the world the ask began in closes: its chain never resumes
     release();
-    expect((await pending).rows).toEqual([]);
+    const settled = await Promise.race([pending.then(() => 'answered'), new Promise<string>((r) => setTimeout(() => r('never'), 50))]);
+    expect(settled).toBe('never');
     expect(C.remembered()).toBe(0);
   });
 });

@@ -13,9 +13,9 @@
 //  B9  the run sheet's overlay: held for the audio session shows paused; nothing on air shows idle; remote audio shows as the radio with its own play state and progress.
 //  B10 `until` is the seconds to the next change of a timed state, 0 when none, so the contract asks again then and not before.
 //  B11 the native answer's real shape: missing fields, wrong types, extra fields and nothing at all give an idle bar, never a throw.
+import { moveAccount } from './account-phone.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { barInfo, forgetBar, ERROR_WINDOW, REVISED_WINDOW, PICK_A_STORY } from './bar.ts';
-import { nextGeneration } from './api.ts';
 
 const T0 = 1_000_000;
 const facts = (o: Record<string, unknown> = {}) => ({
@@ -108,14 +108,14 @@ describe('the bar state', () => {
     const f = play({ message: 'Could not load the story.' });
     expect(barInfo(f, none, at(0)).state).toBe('error');
     expect(barInfo(f, none, at(ERROR_WINDOW + 1)).state).toBe('playing');
-    nextGeneration();
+    moveAccount();
     expect(barInfo(f, none, at(ERROR_WINDOW + 2)).state).toBe('error');   // new account, new message
-    nextGeneration();
+    moveAccount();
     expect(barInfo(play(), none, at(ERROR_WINDOW + 3)).state).toBe('playing');
   });
   test('B6 the account held before a sign-out does not leak its error into the next', () => {
     expect(barInfo(play({ message: 'Old account words.' }), none, at(0)).state).toBe('error');
-    nextGeneration();
+    moveAccount();
     expect(barInfo(play(), none, at(1)).state).toBe('playing');
   });
   test('B7 progress along the programme', () => {

@@ -12,10 +12,10 @@
 //                                  Nothing is carried from the pre-release build: the old Swift files (takes-own.json, takes-muted.json) are never read here (docs/reference/AUTORADIO-TAKES.md)
 // A take in review belongs to the recorder, not to this module: a restart of the shared code finds it (`takeState`) and can publish it; a failed publish never drops it.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, nativeLater, SignedOutError } from './api.ts';
+import { accountGeneration, nativeInert, SignedOutError, currentWorld } from './api.ts';
 import { enqueue as steerEnqueue, flush as steerFlush, mute as steerTap } from './steer.ts';
 import {
-  BOUNDS, addOwn, client, cut, emptyKept, loadKept, mp4Seconds, mute as muteIn, page, removeOwn, saveKept, seamNet, sha256Hex, unmute as unmuteIn, validHandle,
+  BOUNDS, addOwn, client, cut, emptyKept, loadKept, mp4Seconds, mute as muteIn, page, removeOwn, saveKept, seamNetIn, sha256Hex, unmute as unmuteIn, validHandle,
   TakesRefused, TakesUnavailable, type Kept, type MyTake, type Net, type Record_, type Recorder, type TakesPageInfo,
 } from './takes.ts';
 
@@ -69,7 +69,7 @@ export type Device = {
 
 /** The device over the app module's `later`, or null when there is no module (Android today, the web). */
 export function nativeDevice(storage?: Storage): Device | null {
-  const raw = nativeLater();
+  const raw = nativeInert();
   if (!raw) return null;
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   const snap = async (r: Record<string, unknown>): Promise<Native> => parseNative(await later(r));
@@ -108,7 +108,8 @@ export type Overlay = {
 };
 export const newOverlay = (): Overlay => ({ notice: '', published: '', mine: [], myRecord: null, publishing: false, kept: null, queue: Promise.resolve(), gen: null });
 export type Env = { device: Device | null; storage: Storage | undefined; net: Net };
-export const liveEnv = (storage: Storage | undefined): Env => ({ device: nativeDevice(storage), storage, net: seamNet });
+/** The session's env for ONE answer: its requests belong to the world the answer began in (a publish that hashes the audio first still signs for that world only). */
+export const liveEnv = (storage: Storage | undefined): Env => ({ device: nativeDevice(storage), storage, net: seamNetIn(currentWorld()) });
 
 /** Everything this module holds in memory belongs to ONE account. When the generation moved (a sign-out, an account change: account.ts bumps it before the wipes) the overlay is dropped whole,
  * the recorder's take is discarded, and the native programme's copy is emptied at once, even if the native wipe had failed. */

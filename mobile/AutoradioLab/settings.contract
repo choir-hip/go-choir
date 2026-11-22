@@ -345,7 +345,7 @@ component AccountScreen
         text signOutNote testId="settings-signout-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.danger
       if acs.message != ""
         text acs.message testId="settings-account-state" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.fg
-      text "This phone holds its own key. Signing out removes the key from this phone and ends it on the server. Your computer and your documents stay where they are." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
+      text "This phone holds its own key. Signing out removes the key from this phone, deletes the account data on the phone and ends the key on the server; you then close Autoradio and open it again. Your computer and your documents stay where they are." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
       row gap=12 width="100%"
         button press=refreshAccount testId="settings-account-refresh" appearance="none"
           ActionButton(label="Refresh", testId="settings-account-refresh-box", primary=false, danger=false)
@@ -353,10 +353,10 @@ component AccountScreen
         if acs.action == "signIn"
           button press=signIn testId="settings-signin" appearance="none"
             ActionButton(label="Sign in", testId="settings-signin-box", primary=false, danger=false)
-        // one Sign in and one Sign out, worded so they do not contradict: a refused phone signs in again, or clears its stored key (sign-out is local first: it removes the key and this phone's data)
-        if au.signedIn
+        // Sign out ends the session (a full-screen card then says to close and reopen the app). A refused key offers it from the card too (acs.action == "signOut").
+        if au.signedIn or acs.action == "signOut" or acs.alsoSignOut
           button press=signOut testId="settings-signout" appearance="none"
-            ActionButton(label=(acs.state == "rejected" ? "Clear this phone" : "Sign out"), testId="settings-signout-box", primary=false, danger=true)
+            ActionButton(label="Sign out", testId="settings-signout-box", primary=false, danger=true)
 
 // ---------------------------------------------------------------- voice and models
 

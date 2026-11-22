@@ -1,5 +1,7 @@
 // The account source under bun test, `fetch` and the native key reader stubbed. Every value is made up (fixtures/settings).
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { dig, reopen } from './account-phone.ts';
+import { currentWorld as theWorld } from './api.ts';
 import { bindNative, resetSession, ORIGIN } from './api.ts';
 import { settingsAccount, parseWhoami, plainAccountError } from './settings.ts';
 import live from '../fixtures/settings/whoami-live.json';
@@ -8,7 +10,7 @@ const KEY = 'test-key-0001-not-real';
 let calls: string[] = [];
 let handler: () => Response;
 beforeEach(() => {
-  calls = []; resetSession();
+  calls = []; resetSession(); reopen(dig(KEY), KEY, 'comp-1');
   bindNative({ available: true, later: async (r: { op?: string; account?: string }) => (r.op === 'session' ? { found: true, value: KEY, computerId: 'comp-1' } : r.account === 'api-key' ? { found: true, value: KEY } : r.account === 'computer-id' ? { found: true, value: 'comp-1' } : { found: false }) } as never);
   handler = () => new Response(JSON.stringify(live), { status: 200 });
   globalThis.fetch = (async (u: string) => { calls.push(String(u)); return handler(); }) as never;

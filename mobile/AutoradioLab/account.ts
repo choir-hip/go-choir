@@ -1,288 +1,229 @@
-// Sign-out, orchestrated from shared code. The Account screen's "Sign out" sends `accountSignOut` (app.ts), which:
-//   1. asks the native side to sign out: ONE native call, `{op: 'signOut'}` on the app module (modules/apple/ModelsEntry.swift). Only native
-//      code can meet it: the sign-in key is a Keychain item the Swift sign-in wrote, and the Swift stores (AccountWipe) still hold the voice's
-//      and the not-yet-moved pages' data. The native side stops playback, tells shared code's run sheet to post what it holds with the OLD key (and waits for its answer, five seconds at most),
-//      deletes the key, runs its own wipe, and answers `{done: true}` when it has finished.
-//   2. only then wipes every store the shared modules keep (WIPES below), each on its own: one that throws is named and does not stop the rest.
-// Why this order and this direction: Exact has no call from native code into `app.ts` (the only ways back are `context.changed`, which asks a
-// source again, and a declared event on a Contract node: docs/reference/exact/native-modules.md, "Out (Swift to the UI)"). Sign-out is
-// started by a Contract action, so shared code can lead and call native once; no hook is needed, and no shared store can be missed by a
-// native list. The drift guard in account.test.ts (S4) fails when a shared module keeps a path no wipe here covers.
-// Sign-in stays Swift; the key is never read or moved here.
-//
-// ONE FUNCTION decides what a launch and the end of every sign-out do about the account's data (`reconcile`, below): three facts in, one action out.
-//   key state (native, THREE answers: present with a digest / absent = the Keychain said item-not-found / unreadable = locked or anything else),
-//   stamp (the SHA-256 of the key of the account whose data the shared stores hold: none / same / other), marker (`signout-pending`: none / pending).
-// Rules (proved by the table in account.test.ts): an unreadable key never wipes and never adopts. A key present with a pending marker means the native half never
-// deleted the key: the marker goes, nothing is wiped. A key absent with a stamp or a marker means a sign-out is unfinished: finish it (the native sign-out, which is
-// idempotent and reruns the Swift wipe, THEN the shared wipe, THEN the stamp and the marker go). A key present whose digest is not the stamp's is another account: wipe
-// both halves, THEN write the new stamp. A stamp or marker is advanced or removed ONLY when every wipe succeeded; otherwise it stays, the next launch tries again, and
-// the page is told which stores failed. A native call that outlives its deadline keeps its continuation, and the marker stays until it answers or the next launch reconciles.
+// THE ACCOUNT BOUNDARY (docs/design/account-boundary-2026-11-21.md, "Accounts are partitions" and "Round 12"; docs/problems/account-boundary-nine-review-rounds-structural-assessment-2026-11-22.md). A process belongs to ONE account for its whole life.
+// THE KEY IS EXACT'S (`secret.keep`), so the launch verdict is made HERE, once, from the store's key (api.ts `adoptStore`), two markers under `app:/data` and the sweep. Native holds no verdict.
+//   LAUNCH   a pending sign-out (the ending mark) is finished first (revoke, forget the secrets, sweep every root, native forgets its own files); then the old pre-partition leftovers and orphan roots are swept; only a finished sweep lets a world open: the key's, or nobody's (anonymous).
+//            No key but the marker says an account was signed in on this install: STARTING (the secret has not read yet, before the first unlock; Exact asks this answer again when its retry completes); after `LOST_AFTER` asks, anonymous and Sign in is offered.
+//   T1       a key held while the world is anonymous (a sign-in stored it, or a late read found it): the anonymous world moves to the account's, once.
+//   T2       SIGN-OUT ends the session: native drops its in-memory key, the ending mark is written, the key is revoked then forgotten; no world opens again. The card says "close and reopen"; the next launch wipes first.
 import type { Storage, Store } from './app.contract.d.ts';
-import * as podcast from './podcast.ts';
-import { wipeMail } from './mail.ts';
-import { wipeFiles } from './files.ts';
-import { wipeImported, PLACES_FILE as IMPORTED_PLACES } from './imported.ts';
-import { wipePaper, CACHE_FILE as PAPER_FRONT } from './paper.ts';
-import { wipeKept, KEPT_FILE } from './takes.ts';
-import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
-import { VECTORS_DIR, wipeLiveVectors } from './search.ts';
-import { CONTENT_DB, wipeLiveContent } from './content.ts';
-import { forget as forgetClips } from './clips.ts';
-import { forgetNotebook } from './notebook-run.ts';
-import { resetReaderForTest as forgetReader } from './reader.ts';
-import { wipePages, PAGES_FILE } from './pages.ts';
-import { wipeTold, TOLD_FILE } from './cards.ts';
-import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
-import { wipeSteer, STEER_FILE } from './steer.ts';
-import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
-import { DEMO_MARKER } from './demo-leftovers.ts';
-import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
-import { forgetOldCopy } from './mail-store.ts';
-import { wipePicks, PICKS_FILE } from './edition-picks.ts';
-import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
+import { ACCOUNTS, adoptStore, currentWorld, dropHeld, endWorld, forgetSession, heldSession, keyDigest, openWorld, sessionEnded, nativeLater, revokeKey, withDeadline, rmTree, rejectedDigest, deviceStorage, markNotBaked, type World } from './api.ts';
 
-/** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
- * launch (`settleAccount`) finishes the wipe before any source answers. (Review 2026-11-19, finding 2.) */
-export const PENDING_FILE = 'app:/data/signout-pending';
-/** The SHA-256 of the key of the account whose data the shared stores hold. A different account seen at launch wipes them first. */
-export const STAMP_FILE = 'app:/data/account-stamp';
+/** A page answer refused because the account is not open (locked, or the session ended). The page shows its existing failure state; the card says why. */
+export class AccountClosedError extends Error {
+  state: string;
+  constructor(state: string) { super(`the account boundary is closed (${state})`); this.name = 'AccountClosedError'; this.state = state; }
+}
 
-export type Wipe = { name: string; run(storage: Storage | undefined, store: Store | undefined): Promise<unknown> };
-
-const rmAll = async (storage: Storage | undefined, paths: string[]): Promise<void> => {
-  if (!storage) return;
-  for (const p of paths) { try { await storage.fs.rm(p); } catch { /* absent */ } }
-};
-
-/** Every store the shared modules keep. A module that moves in adds one line here (and its path to WIPED_PATHS). */
-export const WIPES: Wipe[] = [
-  { name: 'podcasts', run: (s) => podcast.wipe(s) },
-  { name: 'mail', run: (s) => wipeMail(s) },
-  { name: 'files', run: (s) => wipeFiles(s) },
-  { name: 'imported-documents', run: (s) => wipeImported(s) },
-  { name: 'paper-front', run: (s) => wipePaper(s) },
-  { name: 'takes', run: (s) => wipeKept(s) },
-  { name: 'notebook', run: (s) => wipeNotebook(s) },
-  { name: 'notebook-page', run: async () => forgetNotebook() },                                                       // the page's memo and the pushed text, in memory only
-  { name: 'edition-picks', run: (s) => wipePicks(s) },                                                            // the listener's topics (edition-picks.ts): memory, the file, and the native copy
-  { name: 'onboarding', run: (s) => wipeOnboarding(s) },                                                           // the first run's progress (onboarding.ts): memory, the file, and the voice side
-  { name: 'vectors', run: async (s) => { await wipeLiveVectors(s); await rmAll(s, [VECTORS_DIR]); } },       // the live in-memory store first, then the files
-  { name: 'content', run: async (s) => { await wipeLiveContent(); await rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]); } },  // stops a running sync (generation), empties the open db
-  { name: 'radio', run: (s) => wipeRadio(s as never) },                                                        // the run sheet and the deck (radio-bridge.ts): the sheet's file, its pending ops, what was on air
-  { name: 'pages', run: (s) => wipePages(s) },                                                                  // the deck's open set (pages.ts): only the radio stays
-  { name: 'told-paper', run: (s) => wipeTold(s) },                                                                 // what the listener told the paper (cards.ts)
-  { name: 'recent-pages', run: (s) => wipeRecent(s) },                                                           // the launcher's recent pages (recent-pages.ts)
-  { name: 'steer', run: (s) => wipeSteer(s) },                                                                   // the waiting more / less taps (steer.ts)
-  { name: 'clips', run: async () => forgetClips() },                                                              // in memory only (public clips, but another account's page asked for them)
-  { name: 'reader', run: async () => forgetReader() },                                                              // the held stories and documents, in memory only (also dropped by the account generation)
-  { name: 'demo-leftovers', run: (s) => rmAll(s, [DEMO_MARKER]) },                                                  // a marker, not data: it only lets the one-time pass run again
-  { name: 'account-stamp', run: (s) => rmAll(s, [STAMP_FILE]) },
+/** The old top-level paths of every account store (before the roots), removed at launch and never read: the owner's ruling that nothing is carried over from earlier builds. A test (account.test.ts L2) compares them with every
+ * `app:/` literal the shared modules use, so a new store that is not re-rooted or listed as a device path fails there. `LEFTOVER_PREFIXES` is a folder and the file-name prefix its leftovers begin with. */
+export const LEFTOVERS: string[] = [
+  'app:/data/mail', 'app:/data/recent-files.json', 'app:/data/paper-front.json', 'app:/data/podcasts-library.json', 'app:/data/podcast-feeds', 'app:/data/takes.json', 'app:/data/notebook-cache.md',
+  'app:/data/vectors', 'app:/data/content.db', 'app:/data/content.db-wal', 'app:/data/content.db-shm', 'app:/data/open-pages-shared.json', 'app:/data/demo-leftovers-cleared', 'app:/data/theme-textures',
+  'app:/data/account-stamp', 'app:/data/signout-pending', 'app:/data/what-i-told-the-paper.json', 'app:/data/recent-pages.json', 'app:/data/steer-queue.json', 'app:/data/runsheet.json',
+  'app:/data/imported-places.json', 'app:/data/edition-topics.json', 'app:/data/onboarding.json', 'app:/data/exports', 'app:/cache/files',
 ];
+export const LEFTOVER_PREFIXES: [string, string][] = [['app:/cache', 'mail-']];
+const SPACES = ['app:/data', 'app:/cache', 'app:/tmp'];
 
-/** (A function, not a constant: api.ts imports app.ts, which imports this, so a constant read at load can meet a module not yet initialised.)
- * The paths the wipes above cover (account.test.ts S4 compares them with every `app:/` literal in the shared modules). `app:/tmp/picked` is files'. */
-export const wipedPaths = (): string[] => [
-  podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', IMPORTED_PLACES, PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE, SHEET_FILE, ONBOARDING_FILE,
-  VECTORS_DIR, CONTENT_DB, PAGES_FILE, TOLD_FILE, RECENT_FILE, STEER_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
-];
+/** Deadlines, not limits. `nativeMs`: the native sign-out (it waits up to five seconds for the run sheet and stops the audio). Tests shorten it. */
+export const timing = { nativeMs: 30000, hostMs: 1500, wipeMs: 8000 };
 
-/** Run each wipe; the names of the ones that threw. Logs ids, never content. The signed-in seam is reset first: a new account generation (a reply
- * still in flight is dropped as signed out) and no remembered computer. */
-/** Counts every completed wipe, the late continuation's too: the shared sources that keep state in memory are asked again when it changes (signedOutTick). */
-let wipes = 0;
-export const wipeEpoch = (): number => wipes;
-export async function wipeAll(storage: Storage | undefined, store: Store | undefined, wipes_: Wipe[] = WIPES): Promise<string[]> {
-  nextGeneration(); resetSession(); wipes += 1;
-  const failed: string[] = [];
-  for (const w of wipes_) {
-    try { await w.run(storage, store); } catch { failed.push(w.name); console.log(`account: wipe ${w.name} failed`); }
+const codeOf = (e: unknown): string => String((e as { code?: unknown } | null)?.code ?? '');
+const readdir = async (storage: Storage, p: string): Promise<string[]> => { try { return await storage.fs.readdir(p); } catch (e) { if (codeOf(e) === 'ENOENT') return []; throw e; } };
+
+/** Delete every root no live key names (`anonymous` stays) and the leftovers. Never reads a file. A failure on one path leaves it for the next launch. `live`: the digest of the live key, or '' for none. */
+export async function sweep(storage: Storage, live: string): Promise<{ removed: number; failed: number }> {
+  let removed = 0; let failed = 0;
+  const rm = async (p: string): Promise<void> => { try { await rmTree(storage, p); removed += 1; } catch { failed += 1; } };
+  for (const space of SPACES) {
+    let names: string[] = [];
+    try { names = await readdir(storage, `${space}/${ACCOUNTS}`); } catch { failed += 1; continue; }
+    for (const n of names) if (n !== 'anonymous' && n !== live) await rm(`${space}/${ACCOUNTS}/${n}`);
   }
-  return failed;
-}
-
-export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe' }): Promise<unknown> };
-export type SignOutResult = { done: boolean; failed: string; message: string; epoch: number };
-/** A deadline, not a limit: a native sign-out that never answers leaves the page retryable. */
-export const NATIVE_DEADLINE_MS = 30000;
-
-const timeout = (ms: number): Promise<'timeout'> => new Promise((r) => setTimeout(() => r('timeout'), ms));
-/** A token for one sign-out, written into its marker: a late answer from another sign-out is told apart by it. */
-const signoutToken = (): string => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');      // 16 random bytes, hex (getRandomValues is the call already used on the device, runsheet-entries.ts)
-/** Fails closed: no storage, or a write that fails, is not a marker. */
-const mark = async (storage: Storage | undefined, path: string, text: string): Promise<boolean> => {
-  if (!storage) return false;
-  try { await storage.fs.atomicWriteFile(path, new TextEncoder().encode(text)); return true; } catch { return false; }
-};
-const readText = async (storage: Storage, path: string): Promise<string | null> => { try { return new TextDecoder().decode(await storage.fs.readFile(path)); } catch { return null; } };
-const exists = async (storage: Storage, path: string): Promise<boolean> => { try { await storage.fs.stat(path); return true; } catch { return false; } };
-const removeFile = async (storage: Storage | undefined, path: string): Promise<boolean> => {
-  if (!storage) return true;
-  try { await storage.fs.rm(path); } catch { /* absent */ }
-  return !(await exists(storage, path));
-};
-
-/** The stores of the wipe list WITHOUT the stamp: the stamp is advanced or removed only after every one of these succeeded. */
-export const DATA_WIPES: Wipe[] = WIPES.filter((w) => w.name !== 'account-stamp');
-
-// ---- the decision (pure)
-
-export type StampFact = 'none' | 'same' | 'other';
-export type MarkerFact = 'none' | 'pending';
-export type Facts = { key: KeyState; stamp: StampFact; marker: MarkerFact };
-export type Action = 'nothing' | 'adopt' | 'clear-marker' | 'finish' | 'account-change';
-
-export function decide(f: Facts): Action {
-  if (f.key === 'unreadable') return 'nothing';                       // never wipes, never adopts
-  if (f.key === 'present') {
-    if (f.marker === 'pending') return 'clear-marker';                // the native half did not delete the key: nothing was signed out
-    return f.stamp === 'none' ? 'adopt' : f.stamp === 'same' ? 'nothing' : 'account-change';
+  for (const p of LEFTOVERS) {
+    let there = true; try { await storage.fs.stat(p); } catch (e) { there = codeOf(e) !== 'ENOENT'; }       // only what is there: a removal of nothing is not counted
+    if (there) await rm(p);
   }
-  return f.marker === 'pending' || f.stamp !== 'none' ? 'finish' : 'nothing';   // absent
+  if (!live) { let there = true; try { await storage.fs.stat('app:/tmp/picked'); } catch (e) { there = codeOf(e) !== 'ENOENT'; } if (there) await rm('app:/tmp/picked'); }      // signed out: a person's picked documents do not outlive the sign-out (a signed-in launch keeps them)
+  for (const [dir, prefix] of LEFTOVER_PREFIXES) { let names: string[] = []; try { names = await readdir(storage, dir); } catch { failed += 1; continue; } for (const n of names) if (n.startsWith(prefix)) await rm(`${dir}/${n}`); }
+  if (removed > 0 || failed > 0) console.log(`account: swept ${removed} orphan or leftover paths, ${failed} failed`);       // counts only, never a name
+  return { removed, failed };
 }
 
-// ---- the native half, under a deadline
+// ---- the process's boundary state. It holds no account data: fixed words, and a promise that settles when the launch has run.
+export type Ended = '' | 'ending' | 'signedout' | 'unfinished' | 'blocked';
+/** Why the process is LOCKED: the key has not read yet (the marker says an account was signed in) or a marker cannot be read. Fixed words, no account data. */
+export type LockedWhy = '' | 'starting';
+/** THE ENDING MARK (Exact's `app:/data/ending`): written by a sign-out before the key is deleted, removed last by the launch that has finished everything. */
+export const ENDING = 'app:/data/ending';
+/** THE SIGNED-IN MARKER (`app:/data/signed-in`): "an account was signed in on this install", written by a sign-in and removed by the launch that finishes a sign-out. It exists only to tell a secret that is absent from one that has not read yet. */
+export const SIGNED = 'app:/data/signed-in';
+/** The card's re-reads (three seconds apart, `tries` of account-state.ts) ran out with the marker set and the secret still not reading: from then on the launch is anonymous (the key was lost: a restored backup, a wiped Keychain) and Sign in is offered. A bound in time, not in answers. */
+let lost = false;
+let lastWhy = '';      // log on change only: fixed words, never account data
+const why = (w: string): void => { if (w !== lastWhy) { lastWhy = w; console.log(`account: ${w}`); } };
+export const declareLost = (): void => { lost = true; };
+let endedWhy: Ended = '';
+type Launch = { promise: Promise<'ready' | 'locked'>; resolve: (r: 'ready' | 'locked') => void; done: boolean };
+let launching: Launch | null = null;      // the one launch of this process: ONE shared result, but any number of attempts (see `launch`)
+let lockedWhy: LockedWhy = '';
+let finishP: Promise<boolean> | null = null;
+let markerWritten = false;
+let swept = false;
+let chain: Promise<unknown> = Promise.resolve();
 
-export type Native = { signOut(onLate?: () => void): Promise<boolean>; wipe(onLate?: () => void): Promise<boolean> };
-/** The app module's two ops as booleans. A call that outlives `ms` answers false NOW, but keeps its continuation: `onLate` runs if it answers done:true afterwards. */
-export function nativeOf(later: ((r: { op: string }) => Promise<unknown>) | null, ms = NATIVE_DEADLINE_MS): Native {
-  const call = (op: 'signOut' | 'wipe', onLate?: () => void): Promise<boolean> => {
-    if (!later) return Promise.resolve(false);
-    let timedOut = false;
-    const p: Promise<boolean> = later({ op }).then((r) => !!r && (r as { done?: unknown }).done === true, () => false);
-    void p.then((ok) => { if (timedOut && ok) onLate?.(); });
-    return Promise.race([p, timeout(ms).then(() => { timedOut = true; return false; })]);
-  };
-  return { signOut: (l) => call('signOut', l), wipe: (l) => call('wipe', l) };
+/** The one chain: a sign-out is the person's act and always runs, one at a time. */
+export function job<T>(fn: () => Promise<T>): Promise<T | undefined> {
+  const run = async (): Promise<T | undefined> => fn();
+  const p = chain.then(run, run);
+  chain = p.then(() => undefined, () => undefined);
+  return p;
+}
+export async function idle(): Promise<void> { for (;;) { const c = chain; await c; if (c === chain) return; } }
+/** For tests: a process that has just started. */
+export function resetBoundary(): void { endedWhy = ''; launching = null; chain = Promise.resolve(); timing.nativeMs = 30000; timing.wipeMs = 8000; swept = false; lockedWhy = ''; markerWritten = false; finishP = null; lost = false; lastWhy = ''; }
+
+type Mark = 'present' | 'absent' | 'unreadable';
+/** One folder listing answers both markers (metadata only: a marker's content is never read). A listing that fails for another reason than a missing folder is unreadable. */
+async function readMarks(storage: Storage): Promise<{ ending: Mark; signed: Mark }> {
+  try { const names = await storage.fs.readdir('app:/data'); return { ending: names.includes('ending') ? 'present' : 'absent', signed: names.includes('signed-in') ? 'present' : 'absent' }; }
+  catch (e) { const m: Mark = codeOf(e) === 'ENOENT' ? 'absent' : 'unreadable'; return { ending: m, signed: m }; }
+}
+async function readMark(storage: Storage, path: string): Promise<Mark> { const m = await readMarks(storage); return path === ENDING ? m.ending : m.signed; }
+async function rmMark(storage: Storage, path: string): Promise<boolean> { try { await deviceStorage(storage).fs.rm(path); } catch (e) { if (codeOf(e) !== 'ENOENT') return false; } return (await readMark(storage, path)) === 'absent'; }
+export async function writeSigned(storage: Storage): Promise<boolean> { try { await deviceStorage(storage).fs.atomicWriteFile(SIGNED, new TextEncoder().encode('1')); return true; } catch { return false; } }
+async function writeEnding(storage: Storage): Promise<boolean> { try { await deviceStorage(storage).fs.atomicWriteFile(ENDING, new TextEncoder().encode('ending')); return true; } catch { return false; } }
+
+/** The few native calls left (docs/design, "Round 12"): `holdKey` (the key in memory for the Swift clients that still call the server: pages still in Swift, deleted with the last of them) and `forgetAccountFiles` (deletion only). Bounded. */
+async function native(request: { op: string; [k: string]: unknown }, ms: number): Promise<unknown> {
+  const later = nativeLater(); if (!later) return null;
+  try { return await withDeadline(later(request), null, ms); } catch { return null; }
+}
+export const handKey = (): Promise<unknown> => { const h = heldSession(); return native({ op: 'holdKey', key: h?.key ?? '', keyId: h?.keyId ?? '', computerId: h?.computerId ?? '' }, timing.hostMs); };
+
+/** FINISH a sign-out the last process began (the ending mark is there): revoke the key if it is still held, forget the three secrets, sweep EVERY account root, have native forget its own files, remove the markers (the ending mark last). False when any step failed: the mark stays and the process is blocked. */
+async function finishEnding(storage: Storage, store: Store): Promise<boolean> {
+  const h = heldSession();
+  if (h && !(await revokeKey(h.keyId, h.key))) console.log('account: the key was removed from this phone but NOT revoked on the server');
+  try { forgetSession(store); } catch { console.log('account: the secrets could not be forgotten'); return false; }
+  const f = (await native({ op: 'forgetAccountFiles' }, timing.wipeMs)) as { done?: unknown } | null;      // native's own files first: if it cannot, nothing is swept and the next launch tries again
+  if (nativeLater() && !(f && f.done === true)) return false;
+  try { const r = await sweep(storage, ''); if (r.failed > 0) return false; swept = true; } catch { return false; }
+  if (!(await rmMark(storage, SIGNED))) return false;
+  return rmMark(storage, ENDING);
 }
 
-export type Reconciled = { action: Action; failed: string[] };
-
-async function stampFact(storage: Storage, digest: string): Promise<StampFact> {
-  let stamp = '';
-  try { stamp = new TextDecoder().decode(await storage.fs.readFile(STAMP_FILE)); } catch { /* none */ }
-  return stamp === '' ? 'none' : stamp === digest ? 'same' : 'other';
+/** THE LAUNCH, once per process (see the header); `locked` is asked again at the next answer. The result is shared, but the storage calls of an attempt belong to the ANSWER that made them: the host drops them with the answer (the card is asked again the moment the sign-in view changes, and its first answer is gone), and an attempt whose answer is gone never finishes. So the card (`restart`) starts a fresh attempt, with its own storage, while the shared result is still open; the first attempt to finish settles it and the others stand down. */
+function launch(storage: Storage | undefined, store: Store | undefined, restart = false): Promise<'ready' | 'locked'> {
+  let d = launching;
+  if (d && (d.done || !restart)) return d.promise;
+  if (!d) { let res!: (r: 'ready' | 'locked') => void; const promise = new Promise<'ready' | 'locked'>((r) => { res = r; }); const made: Launch = { promise, done: false, resolve: (r) => { if (!made.done) { made.done = true; res(r); } } }; d = made; launching = d; }
+  const mine = d;
+  runLaunch(mine, storage, store).then((r) => { mine.resolve(r); if (r === 'locked' && launching === mine && !sessionEnded()) launching = null; }, () => { mine.resolve('locked'); if (launching === mine) launching = null; });
+  return mine.promise;
 }
-
-/** Most wipes swallow "absent", so a wipe that did nothing looks like one that worked. After the wipes, every path they cover is looked at: a survivor is a failure. */
-async function leftovers(storage: Storage | undefined): Promise<string[]> {
-  if (!storage) return [];
-  const out: string[] = [];
-  // The paper's cache is the PUBLIC front page: a signed-out phone shows the paper and caches it again within seconds, so a copy that is back after the wipe is not the old account's (the drill showed "could not be cleared yet: paper-front.json").
-  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && p !== PAPER_FRONT && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
-  return out;
-}
-
-/** Wipe every shared store; then, ONLY if every one succeeded and nothing is left, run `after`. Returns the names that failed. */
-async function sharedWipeThen(storage: Storage | undefined, store: Store | undefined, after: () => Promise<void>): Promise<string[]> {
-  const failed = [...(await wipeAll(storage, store, DATA_WIPES)), ...(await leftovers(storage))];
-  if (failed.length === 0) await after();
-  return failed;
-}
-
-/** The one function: read the three facts, decide, act. Run at launch (`settleAccount`) and at the end of every sign-out attempt. */
-export async function reconcile(storage: Storage | undefined, store: Store | undefined, native: Native): Promise<Reconciled> {
-  if (!storage) return { action: 'nothing', failed: [] };
-  for (let round = 0; round < 2; round++) {
-    const k = await keyState();
-    const marker: MarkerFact = (await exists(storage, PENDING_FILE)) ? 'pending' : 'none';
-    const stamp: StampFact = k.state === 'present' ? await stampFact(storage, k.digest) : (await exists(storage, STAMP_FILE)) ? 'other' : 'none';
-    const action = decide({ key: k.state, stamp, marker });
-    if (action === 'clear-marker') { await removeFile(storage, PENDING_FILE); continue; }     // then the stamp rules apply to the same key
-    if (action === 'adopt') { await mark(storage, STAMP_FILE, k.digest); return { action, failed: [] }; }
-    if (action === 'finish') {
-      // BOUND to this sign-out: its marker's content (a token written by accountSignOut) and its stamp are captured now; the bookkeeping clears them only if they are still those.
-      // A later sign-out (sign in, sign out again) writes its own marker and stamp, and a stale answer must not delete them.
-      const was = { marker: await readText(storage, PENDING_FILE), stamp: await readText(storage, STAMP_FILE) };
-      const done = async (): Promise<void> => {
-        if ((await readText(storage, PENDING_FILE)) !== was.marker || (await readText(storage, STAMP_FILE)) !== was.stamp) return;
-        await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE);
-      };
-      // A late native answer never wipes the shared stores again (they are wiped below, once): it only finishes the bookkeeping that waited on it, and only if the key is still absent.
-      let shared: Promise<string[]> | null = null;
-      const nativeOk = await native.signOut(() => { void (async () => { if ((await keyState()).state === 'absent' && shared && (await shared).length === 0) await done(); })(); });
-      // The shared wipe does not DEPEND on the native answer: the key is gone, so the previous account's shared stores must not stay readable because the native half failed or hung.
-      // (It starts after the native call has answered or passed its deadline, at most NATIVE_DEADLINE_MS later; only the stamp and marker wait for both results.)
-      shared = sharedWipeThen(storage, store, nativeOk ? done : async () => undefined);
-      const failed = [...(await shared)];       // a copy: the late continuation reads the wipe's own result
-      if (!nativeOk) failed.push('native');
-      console.log(`account: finished an interrupted sign-out, ${failed.length} failed`);
-      return { action, failed };
+async function runLaunch(d: Launch, storage: Storage | undefined, store: Store | undefined): Promise<'ready' | 'locked'> {
+  {
+    if (!storage || !store) { why(`starting: ${storage ? '' : 'no storage'} ${store ? '' : 'no store'}`.trim()); lockedWhy = 'starting'; return 'locked'; }
+    markNotBaked();
+    const marks = await readMarks(storage); const ending = marks.ending;
+    if (ending === 'unreadable') { why('starting: the ending mark cannot be read'); lockedWhy = 'starting'; return 'locked'; }
+    adoptStore(store);
+    if (ending === 'present') {
+      if (!(await finishEnding(storage, store))) { endedWhy = 'blocked'; endWorld(); return 'locked'; }
+      dropHeld(); marks.signed = 'absent';      // the launch that finished it removed both markers
     }
-    if (action === 'account-change') {
-      const stamp2 = async (): Promise<void> => { await mark(storage, STAMP_FILE, k.digest); };
-      // The late answer finishes only the stamp (the new account IS signed in: re-wiping would delete its fresh stores), and only if the same key is still stored and the wipe below was clean.
-      let shared: Promise<string[]> | null = null;
-      const nativeOk = await native.wipe(() => { void (async () => { const n = await keyState(); if (n.state === 'present' && n.digest === k.digest && shared && (await shared).length === 0) await stamp2(); })(); });
-      shared = sharedWipeThen(storage, store, nativeOk ? stamp2 : async () => undefined);       // shared stores go regardless; the old stamp stays unless both succeeded
-      const failed = [...(await shared)];       // a copy: the late continuation reads the wipe's own result
-      if (!nativeOk) failed.push('native');
-      console.log(`account: another account signed in, ${failed.length} failed`);
-      return { action, failed };
+    let live = ''; const h = heldSession(); if (h) live = await keyDigest(h.key);
+    if (!live) {
+      const signed = marks.signed;
+      if (signed === 'unreadable' || (signed === 'present' && !lost)) { why(`starting: the signed-in marker is ${signed} and no key reads`); lockedWhy = 'starting'; return 'locked'; }
     }
-    return { action, failed: [] };
+    lockedWhy = '';
+    if (d.done) return 'ready';      // another attempt finished first
+    if (!(await sweepOnce(storage, live))) { endedWhy = 'blocked'; endWorld(); return 'locked'; }
+    if (sessionEnded() || d.done) return 'ready';
+    if (currentWorld().kind !== 'none') return 'ready';      // another attempt opened it
+    const opened = openWorld(live || 'anonymous');
+    for (const space of SPACES) { for (const p of [`${space}/${ACCOUNTS}`, `${space}/${ACCOUNTS}/${opened.root}`]) { try { await storage.fs.mkdir(p); } catch { /* it exists */ } } }      // the first write of a module (onboarding) finds its root: a host's files need the parent folder
+    await native({ op: 'ready' }, timing.hostMs);      // the launch is clean: native builds its module (a blocked launch never says it)
+    if (live) await handKey();
+    return 'ready';
   }
-  return { action: 'nothing', failed: [] };
+}
+async function sweepOnce(storage: Storage, live: string): Promise<boolean> {
+  if (swept) return true;
+  try { const r = await sweep(storage, live); if (r.failed === 0) swept = true; return r.failed === 0; } catch { console.log('account: the sweep failed'); return false; }
+}
+
+export type State = 'open' | 'anonymous' | 'locked' | 'ended';
+
+/** The state, for the gate and the card: launch if it has not run; a key held while the world is anonymous (a sign-in stored it, or a late read found it) moves the anonymous world to the account's, once (T1). */
+async function settle(storage: Storage | undefined, store: Store | undefined, restart = false): Promise<{ state: State; world: World; digest: string }> {
+  if (sessionEnded()) return { state: 'ended', world: currentWorld(), digest: '' };
+  const launched = await launch(storage, store, restart);
+  if (sessionEnded()) return { state: 'ended', world: currentWorld(), digest: '' };
+  if (launched === 'locked') return { state: 'locked', world: currentWorld(), digest: '' };
+  const w = currentWorld();
+  if (w.kind === 'anonymous') {
+    adoptStore(store);
+    const h = heldSession();
+    if (h && !sessionEnded()) { const d = await keyDigest(h.key); if (!sessionEnded() && currentWorld() === w) { openWorld(d); await handKey(); } }
+  }
+  const now = currentWorld();
+  return { state: now.kind === 'account' ? 'open' : 'anonymous', world: now, digest: now.digest ?? '' };
+}
+
+/** The gate's one question, asked before every page answer that touches account data. OPEN and ANONYMOUS pass; LOCKED and ENDED refuse. */
+export async function enter(storage: Storage | undefined, store?: Store): Promise<{ readable: boolean; state: State; world: World }> {
+  const s = await settle(storage, store);
+  if (s.state === 'locked' || s.state === 'ended') why(`the gate refuses: ${s.state}`);
+  return { readable: s.state === 'open' || s.state === 'anonymous', state: s.state, world: s.world };
+}
+
+export type Peek = { state: State; handle: string; ended: Ended; why: LockedWhy; rejected: boolean };
+/** The card's question: never waits on a job. */
+export async function peek(storage: Storage | undefined, store?: Store, tries = 0): Promise<Peek> {
+  if (tries >= 5 && !sessionEnded()) { const was = lost; lost = true; if (!was && lockedWhy === 'starting') launching = null; }      // the bound (account-state.ts TRIES): a launch that is still starting becomes anonymous
+  const s = await settle(storage, store, true);
+  const w = currentWorld();
+  return { state: s.state, handle: s.state === 'ended' || s.state === 'locked' ? '' : w.handle, ended: endedWhy, why: s.state === 'locked' ? lockedWhy || 'starting' : '', rejected: s.state === 'open' && rejectedDigest() !== '' && rejectedDigest() === w.digest };
 }
 
 // ---- sign-out
 
-/** The sign-out: the result carries the wipe counter (a monotonic value the contract passes on to the sources that keep state in memory). */
-export async function accountSignOut(
-  storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
-  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
-): Promise<SignOutResult> {
-  const r = await signOutInner(storage, store, native, opts);
-  return { ...r, epoch: wipes };
-}
+export type SignOutResult = { done: boolean; failed: string; message: string; epoch: number };
+const WORDS_UNFINISHED = 'Sign-out did not finish. Close Autoradio, open it again and try again.';
 
-async function signOutInner(
-  storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
-  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
-): Promise<Omit<SignOutResult, 'epoch'>> {
-  if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };
-  const step = opts.crash ?? ((): void => undefined);
-  // The marker first: if the app dies after the key is gone and before the wipes are finished, the next launch finishes them (and if the key is still there, it clears it).
-  const token = signoutToken();
-  if (!(await mark(storage, PENDING_FILE, token))) return { done: false, failed: '', message: 'Sign-out did not start. Try again.' };
-  step('marker');
-  // The generation moves and sealing stops BEFORE the native call: a write in flight that would land after the key is gone refuses itself.
-  await beginSignOut();
-  step('begun');
-  let late = false;
-  let nativeDone: Promise<unknown>;
-  try { nativeDone = native.later({ op: 'signOut' }); } catch { nativeDone = Promise.resolve({ done: false }); }
-  const wipes = opts.wipes ?? DATA_WIPES;
-  // A native call that outlives the deadline keeps its continuation: if it answers done:true later, the shared stores are wiped then and the marker goes.
-  nativeDone.then(async (r) => {
-    if (!late || !r || (r as { done?: unknown }).done !== true) return;
-    if ((await keyState()).state === 'present') return;                          // a sign-in finished inside the window: its stores are its own
-    await sharedWipeThen(storage, store, async () => { if (storage && (await readText(storage, PENDING_FILE)) !== token) return; await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); });
-  }, () => undefined);
-  const r = await Promise.race([nativeDone.then((x) => x, () => ({ done: false, threw: true })), timeout(opts.deadlineMs ?? NATIVE_DEADLINE_MS)]);
-  if (r === 'timeout') { late = true; return { done: false, failed: '', message: 'Sign-out is taking long. It will finish by itself; nothing more to do.' }; }   // the marker stays; sealing stays off
-  const ans = r as { done?: unknown; threw?: boolean };
-  if (ans.done !== true) {
-    // Not signed out (the key may still be there). An explicit "not done" means the key remains: the marker goes. A throw is unknown: the marker stays and the next
-    // reconcile decides by the key (present: the marker is cleared and nothing is wiped).
-    abortSignOut();
-    if (!ans.threw) await removeFile(storage, PENDING_FILE);
-    return { done: false, failed: '', message: 'Sign-out did not finish. Try again.' };
-  }
-  step('native');
-  const run = wipes.map((w) => ({ ...w, run: async (s: Storage | undefined, st: Store | undefined) => { step('wipe:' + w.name); return w.run(s, st); } }));
-  const failed = [...(await wipeAll(storage, store, run)), ...(opts.wipes ? [] : await leftovers(storage))];
-  step('wiped');
-  if (failed.length === 0) { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); return { done: true, failed: '', message: '' }; }
-  // Signed out, but not everything could be cleared: the marker and the stamp stay, the next launch tries again, and the page says which stores.
-  return { done: true, failed: failed.join(','), message: `Signed out, but these could not be cleared yet: ${failed.join(', ')}. They will be cleared the next time the app starts.` };
+/** STEP ONE of a sign-out, quick and with its own source so the card draws at once: the session ends (the world closes, no world opens again), native is told to DROP its in-memory key, and only then the ending mark is written. Idempotent. A mark that cannot be written stops the sign-out before the key is deleted. */
+export async function accountEnding(storage: Storage | undefined, store?: Store): Promise<SignOutResult> {
+  if (!sessionEnded()) { adoptStore(store); endWorld(); endedWhy = 'ending'; }
+  const h = heldSession(); const id = h?.keyId ?? '', key = h?.key ?? '';
+  pendingRevoke = pendingRevoke ?? (h ? { id, key } : null);
+  dropHeld();
+  await native({ op: 'holdKey', key: '', keyId: '', computerId: '' }, timing.hostMs);
+  await native({ op: 'radioSet', signedOut: true }, timing.hostMs);      // the session has ended: the run sheet has nothing more to post, so native need not wait for it
+  if (!markerWritten) markerWritten = storage ? await writeEnding(storage) : false;
+  if (!markerWritten && endedWhy === 'ending') endedWhy = 'unfinished';
+  return { done: markerWritten, failed: '', message: '', epoch: 0 };
 }
+let pendingRevoke: { id: string; key: string } | null = null;
 
-let settled: Promise<Reconciled> | null = null;
-/** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops. */
-export function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
-  if (!settled) settled = (async () => { await forgetOldCopy(storage); return reconcile(storage, store, native); })();
-  return settled;
+/** STEP TWO, the person's tap, never behind the gate: revoke the key on the server, then forget the three secrets. NOTHING is wiped in this process (late writers may write what they like): the next launch finishes it. The result follows from the secrets, not from a guess: a forget that threw leaves the mark and the card says it did not finish. */
+export async function accountSignOut(storage: Storage | undefined, store?: Store): Promise<SignOutResult> {
+  const r = (await job(() => signOutBody(storage, store))) ?? { done: false, failed: '', message: 'Nothing was signed out.' };
+  return { ...r, epoch: 0 };
 }
-/** For tests. */
-export function resetSettled(): void { settled = null; }
+function finishOnce(store: Store | undefined): Promise<boolean> {
+  return (finishP ??= (async () => {
+    const p = pendingRevoke; pendingRevoke = null;
+    if (p && p.key && !(await revokeKey(p.id, p.key))) console.log('account: the key was removed from this phone but NOT revoked on the server');
+    if (!store) return false;
+    try { forgetSession(store); return true; } catch { return false; }
+  })().finally(() => { finishP = null; }));
+}
+async function signOutBody(storage: Storage | undefined, store: Store | undefined): Promise<Omit<SignOutResult, 'epoch'>> {
+  if (sessionEnded() && endedWhy === 'signedout') return { done: true, failed: '', message: '' };
+  await accountEnding(storage);
+  if (!markerWritten) return { done: false, failed: '', message: WORDS_UNFINISHED };
+  if (!(await finishOnce(store))) { endedWhy = 'unfinished'; return { done: false, failed: '', message: WORDS_UNFINISHED }; }
+  endedWhy = 'signedout'; return { done: true, failed: '', message: '' };
+}

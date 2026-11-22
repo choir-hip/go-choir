@@ -37,7 +37,6 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     public var speed = "1"
     /// The same speed as a number, for the slider (0.5 to 3).
     public var speedValue = 1.0
-    public var speedChoices: [String] = ["0.8", "1", "1.25", "1.5"]
     /// button | open | hybrid
     public var mode = ""
     public var micOpen = false
@@ -86,10 +85,6 @@ public final class BarTracker: @unchecked Sendable {
     private var errorStage = ""
     private var errorMessage = ""
     private var clock = BlockClock()
-    /// Sign-out: the held words (a message, a revision summary, the holding line) are the account's.
-    public func wipe() {
-        lock.lock(); holdingLine = ""; revisedAt = nil; revisedSummary = ""; errorAt = nil; errorStage = ""; errorMessage = ""; lock.unlock()
-    }
     public private(set) var speed = 1.0
     private var level = 0.0
     /// The audio's own position in the block (set by the runtime). Without one the estimate from play time is used.

@@ -5,18 +5,21 @@
 // Held in memory for the session (never on disk: nothing here is stored, so nothing here needs a wipe beyond forgetting); keyed on the account generation, so another account never sees a held
 // document and an answer that began under an older generation is never held. A story and a revision never change, so they are held; a document's head changes (an edit, the desk's revision),
 // so it is asked for again each time and the held copy only stands in when the ask fails. Logs carry counts only, never a title.
-import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
+import { currentWorld, accountGeneration, authedJSON, getJSON, HTTPError, nativeInert, segment, SignedOutError, type Authed, type Query, type Reply, scoped } from './api.ts';
 import { lapYield } from './lap.ts';
 import { blankDoc, parseAddress, parseBundleAsync, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
 import { WORDS } from './words.ts';
+
+// Module state belongs to the world (api.ts `scoped`): a closed world's is unreachable and no later world joins it.
+const S = scoped(() => ({ held: new Map<string, ReaderDoc>(), inflight: new Map<string, Promise<ReaderDoc>>(), heldGen: -1 }));
 
 export type { ReaderDoc };
 export type Ack = { ok: boolean };
 export type Net = {
   pub(path: string, query?: Query): Promise<Reply>;
-  authed(path: string, opts?: Authed): Promise<Reply>;
+  authed(path: string, opts?: Omit<Authed, 'world'>): Promise<Reply>;
 };
-const real: Net = { pub: (p, q) => getJSON(p, q), authed: (p, o) => authedJSON(p, o) };
+const real: Net = { pub: (p, q) => getJSON(p, q), authed: (p, o) => authedJSON(p, { ...(o ?? {}), world: currentWorld() }) };
 
 /** How many documents the session holds; the least recently used goes first. A story is a few tens of kilobytes decoded. */
 export const HELD_LIMIT = 40;
@@ -30,19 +33,16 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 let decoding: Promise<unknown> = Promise.resolve();
 const decodeOne = <T>(f: () => Promise<T>): Promise<T> => { const run = decoding.then(f, f); decoding = run.then(() => undefined, () => undefined); return run; };
 const yieldTurn = (label = 'reader'): Promise<void> => lapYield(label);
-let held = new Map<string, ReaderDoc>();
-let inflight = new Map<string, Promise<ReaderDoc>>();
-let heldGen = -1;
-export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); heldGen = -1; }
-export const heldCount = (): number => held.size;
+export function resetReaderForTest(): void { S().held = new Map(); S().inflight = new Map(); S().heldGen = -1; }
+export const heldCount = (): number => S().held.size;
 function current(): number {
   const g = accountGeneration();
-  if (g !== heldGen) { held = new Map(); inflight = new Map(); heldGen = g; }
+  if (g !== S().heldGen) { S().held = new Map(); S().inflight = new Map(); S().heldGen = g; }
   return g;
 }
 function put(d: ReaderDoc): void {
-  held.delete(d.address); held.set(d.address, d);
-  while (held.size > HELD_LIMIT) { const oldest = held.keys().next().value as string; if (oldest === d.address) break; held.delete(oldest); }
+  S().held.delete(d.address); S().held.set(d.address, d);
+  while (S().held.size > HELD_LIMIT) { const oldest = S().held.keys().next().value as string; if (oldest === d.address) break; S().held.delete(oldest); }
 }
 
 function why(e: unknown): string {
@@ -102,23 +102,23 @@ async function ask(address: string, net: Net): Promise<ReaderDoc> {
   const a = parseAddress(address);
   if (a.kind === 'none') return blankDoc(address, 'loading');
   const gen = current();
-  const have = held.get(address);
-  if (have && cacheable(address)) { held.delete(address); held.set(address, have); return have; }
+  const have = S().held.get(address);
+  if (have && cacheable(address)) { S().held.delete(address); S().held.set(address, have); return have; }
   const key = address;
-  const shared = inflight.get(key);
+  const shared = S().inflight.get(key);
   if (shared) return shared;
   const p = (async (): Promise<ReaderDoc> => {
     let d: ReaderDoc;
     try { d = await fetchDoc(address, net); }
     catch (e) {
       if (gen !== accountGeneration()) return blankDoc(address, 'loading');
-      return !(e instanceof SignedOutError) && held.get(address) ? held.get(address)! : failDoc(address, e);
+      return !(e instanceof SignedOutError) && S().held.get(address) ? S().held.get(address)! : failDoc(address, e);
     }
-    if (gen !== accountGeneration()) return blankDoc(address, 'loading');           // another account began while this was on its way: neither held nor shown
+    if (gen !== accountGeneration()) return blankDoc(address, 'loading');           // another account began while this was on its way: neither S().held nor shown
     if (d.status === 'ready') put(d);
     return d;
-  })().finally(() => { if (inflight.get(key) === p) inflight.delete(key); });
-  inflight.set(key, p);
+  })().finally(() => { if (S().inflight.get(key) === p) S().inflight.delete(key); });
+  S().inflight.set(key, p);
   return p;
 }
 
@@ -130,7 +130,7 @@ let handOver: HandOver | null | undefined;
 /** Test only: the native hand-over (null: no native module; undefined: the real one). */
 export function setHandOverForTest(f: HandOver | null | undefined): void { handOver = f; }
 function hand(d: ReaderDoc, gen: number): void {
-  const send = handOver === undefined ? (nativeLater() as HandOver | null) : handOver;     // api.ts types the request for the key reads; the module's `later` takes any op
+  const send = handOver === undefined ? (nativeInert() as HandOver | null) : handOver;     // api.ts types the request for the key reads; the module's `later` takes any op
   if (!send || d.status !== 'ready' || gen !== accountGeneration()) return;
   const blocks = d.blocks.filter((b) => b.text !== '').map((b) => ({ id: b.id, kind: b.kind, text: b.text, sentences: sentenceTexts(b) }));
   void Promise.resolve().then(() => send({ op: 'pageText', address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { console.log(obj(r) && r.ok === true ? `reader: handed to the voice blocks=${blocks.length}` : 'reader: the voice did not take the page'); }, () => undefined);
@@ -147,7 +147,7 @@ export async function readerDocShared(address: string, _accState: string, _saved
 const ack = (ok: boolean): Ack => ({ ok });
 
 /** Forget a document: the next ask reads it again (the page menu's Reload). */
-export async function readerReload(address: string): Promise<Ack> { current(); held.delete(address); return ack(true); }
+export async function readerReload(address: string): Promise<Ack> { current(); S().held.delete(address); return ack(true); }
 
 /** A version as the latest (the web's "Restore"): POST /api/texture/documents/{id}/restore. The head is already the latest. */
 export async function readerRestore(address: string, version: string, net: Net = real): Promise<Ack> {
@@ -156,16 +156,16 @@ export async function readerRestore(address: string, version: string, net: Net =
   if (a.kind !== 'texture') return ack(false);
   if (r.rev === '') return ack(true);
   try { await net.authed(`/api/texture/documents/${segment(a.doc)}/restore`, { method: 'POST', body: { revision_id: r.rev, mode: 'restore_as_latest' } }); }
-  catch { held.delete(address); return ack(false); }
-  held.delete(address);
+  catch { S().held.delete(address); return ack(false); }
+  S().held.delete(address);
   return ack(true);
 }
 
 /** Stop the desk's revision in flight (the web's "Stop"): POST /api/texture/lifecycle/{trajectory}/cancel. One already finished (404, 409) is fine; the document is read again. */
 export async function readerStop(address: string, net: Net = real): Promise<Ack> {
   current();
-  const traj = held.get(address)?.trajectory ?? '';
-  held.delete(address);
+  const traj = S().held.get(address)?.trajectory ?? '';
+  S().held.delete(address);
   if (traj === '') return ack(true);
   try { await net.authed(`/api/texture/lifecycle/${segment(traj)}/cancel`, { method: 'POST' }); }
   catch (e) { return ack(e instanceof HTTPError && (e.status === 404 || e.status === 409)); }
@@ -176,7 +176,7 @@ export async function readerStop(address: string, net: Net = real): Promise<Ack>
 export async function readerPrefetch(prev: string, next: string, net: Net = real): Promise<Ack> {
   current();
   const seen = new Set<string>();
-  const todo = [prev, next].filter((a) => a !== '' && parseAddress(a).kind === 'pub' && !seen.has(a) && (seen.add(a), true) && held.get(a)?.status !== 'ready');
+  const todo = [prev, next].filter((a) => a !== '' && parseAddress(a).kind === 'pub' && !seen.has(a) && (seen.add(a), true) && S().held.get(a)?.status !== 'ready');
   // One story at a time, a new turn between: two large stories decoded in one turn went over Exact's 100 ms of CPU per turn (the reply was refused: the proof's read drive, 961 KB for two stories).
   for (const a of todo) {
     await ask(a, net);

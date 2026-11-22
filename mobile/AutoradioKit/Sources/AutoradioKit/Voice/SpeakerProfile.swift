@@ -242,12 +242,12 @@ struct SpeakerProfile: Codable, Equatable {
     }
 }
 
-/// Where the profile is kept: `Application Support/MikeVoice/speaker.json`,
+/// Where the profile is kept: `Application Support/Autoradio/account/MikeVoice/speaker.json` (moved once from `Application Support/MikeVoice`, signed in only),
 /// excluded from backup, readable only once the phone has been unlocked.
 /// Removed with the voice models and by "Forget my voice".
 enum SpeakerStore {
     static var url: URL {
-        URL.applicationSupportDirectory.appending(path: "MikeVoice/speaker.json", directoryHint: .notDirectory)
+        AccountWipe.url("MikeVoice/speaker.json")
     }
 
     /// Deletes a profile made with an older speaker model, so the voice is

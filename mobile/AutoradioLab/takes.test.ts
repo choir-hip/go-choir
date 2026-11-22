@@ -6,7 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   BOUNDS, parseTake, parseMine, takesOf, mineOf, title, candidates, candidateJSON, merged, multipart, sha256Hex, client, mp4Seconds, recordWords, parseRecord, pathOf,
   loadKept, saveKept, emptyKept, owns, addOwn, mute, unmute, muteLine, isMuted, page, clock, lengthWords, counted, parseOutcomes, stripUnsafe, cut, audioPath,
-  TakesUnavailable, TakesRefused, type Net, type Recorder, type Take, KEPT_FILE, wipeKept,
+  TakesUnavailable, TakesRefused, type Net, type Recorder, type Take, KEPT_FILE,
 } from './takes.ts';
 import list from '../fixtures/takes/list.json';
 import mineFx from '../fixtures/takes/mine.json';
@@ -153,7 +153,6 @@ describe('T6 what the phone keeps', () => {
     expect(owns(back, { takeID: 'other', publisher: 'voice-me0001' })).toBe(true); expect(isMuted(back, 'voice-3fa2c1')).toBe(true);
     expect(unmute(back, 'voice-3fa2c1').had).toBe(true); expect((await loadKept(storage)).muted.length).toBe(1);
     expect(muteLine('voice-3fa2c1')).toBe('Never play takes by voice-3fa2c1.');
-    await wipeKept(storage); expect(files.has(KEPT_FILE)).toBe(false); expect(await loadKept(storage)).toEqual(emptyKept());
   });
 });
 

@@ -5,11 +5,12 @@
 //  R3 a page that is not on top reads nothing and answers the idle page; coming back to the top reads again (the Swift page asked once a minute and on open)
 //  R4 the native fact: the steer taps waiting are shown; with no native module there is no line; a native that fails or never answers is 0, never a stuck page
 //  R5 the notebook text read is handed to native once per change (the DJ's request is built natively and cannot read app:/data), never when there is none
-//  R6 a sign-out (a new signedOutTick) reads again, and a read in flight for the old key never answers the new one
+//  R6 a sign-out (a new handle) reads again, and a read in flight for the old key never answers the new one
 //  R7 the native call is asked to write the topics on a read (Swift writeTopics: the Texture write stays native), before the notebook is read
+import { resetWorld } from './api.ts';
 import { enqueue as steerEnqueue, forget as steerForget } from './steer.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { notebookShared, forgetNotebook, selectedAfter, type Device } from './notebook-run.ts';
+import { notebookShared, selectedAfter, type Device } from './notebook-run.ts';
 import type { Get } from './notebook.ts';
 import { HTTPError } from './api.ts';
 import notebookMd from '../fixtures/learning/notebook.md' with { type: 'text' };
@@ -30,9 +31,9 @@ const get: Get = async (p) => {
 let steer = 0, texts: string[] = [], order: string[] = [];
 const device: Device = { state: async () => { order.push('native'); }, text: async (t) => { texts.push(t); } };
 const env = (d: Device | null = device) => ({ get, device: d });
-const args = (o: Partial<{ selected: string; tick: number; active: boolean; signedOutTick: string }> = {}) => ({ selected: '', tick: 0, active: true, signedOutTick: '', ...o });
+const args = (o: Partial<{ selected: string; tick: number; active: boolean; handle: string }> = {}) => ({ selected: '', tick: 0, active: true, handle: '', ...o });
 
-beforeEach(() => { steerForget(); files.clear(); calls = []; steer = 0; texts = []; order = []; forgetNotebook(); });
+beforeEach(() => { steerForget(); files.clear(); calls = []; steer = 0; texts = []; order = []; resetWorld(); });
 
 describe('R1 to R3 the page state', () => {
   test('R1 a select answers from what was read, and the same id again clears it', async () => {
@@ -68,13 +69,13 @@ describe('R4 to R7 the native fact and call', () => {
   test('R4 the steer taps waiting (steer.ts, shared) are shown, with or without a module; a failing or silent native does not hide the page', async () => {
     for (let i = 0; i < 3; i++) await steerEnqueue(storage, { id: `t${i}`, entryID: 'e', direction: 'more', stories: [], title: '', at: '' });
     expect((await notebookShared(args(), storage, env())).steerLine).toBe('3 more or less taps waiting to reach your computer.');
-    forgetNotebook();
+    resetWorld();
     expect((await notebookShared(args(), storage, env(null))).steerLine).toBe('3 more or less taps waiting to reach your computer.');
-    forgetNotebook();
+    resetWorld();
     const broken: Device = { state: async () => { throw new Error('native'); }, text: async () => { throw new Error('native'); } };
     const p = await notebookShared(args(), storage, env(broken));
     expect(p.steerLine).toBe('3 more or less taps waiting to reach your computer.'); expect(p.docState).toBe('ready');
-    forgetNotebook();
+    resetWorld();
     const silent: Device = { state: () => new Promise(() => undefined), text: async () => undefined };
     const q = await notebookShared(args(), storage, { ...env(silent), deviceDeadlineMs: 20 });
     expect(q.docState).toBe('ready'); expect(q.steerLine).toBe('3 more or less taps waiting to reach your computer.');
@@ -84,11 +85,11 @@ describe('R4 to R7 the native fact and call', () => {
     expect(texts).toEqual([notebookMd]);
     await notebookShared(args({ tick: 1 }), storage, env());
     expect(texts.length).toBe(1);
-    forgetNotebook(); texts = [];
+    resetWorld(); texts = [];
     const none: Get = async (p) => (p === '/api/texture/edition' ? { found: false } : learning);
     await notebookShared(args(), storage, { get: none, device });
     expect(texts).toEqual([]);
-    forgetNotebook(); files.clear();
+    resetWorld(); files.clear();
     const down: Get = async () => { throw new Error('network'); };
     await notebookShared(args(), storage, { get: down, device });
     expect(texts).toEqual([]);
@@ -106,11 +107,11 @@ describe('R4 to R7 the native fact and call', () => {
   test('R6 a sign-out reads again; an old read never answers the new key', async () => {
     await notebookShared(args(), storage, env());
     const n = calls.length;
-    await notebookShared(args({ signedOutTick: '1' }), storage, env());
+    await notebookShared(args({ handle: '1' }), storage, env());
     expect(calls.length).toBeGreaterThan(n);
     let release: () => void = () => undefined;
     const slow: Get = async (p) => { if (p === '/api/autoradio/learning') await new Promise<void>((r) => { release = r; }); return get(p); };
-    forgetNotebook();
+    resetWorld();
     const first = notebookShared(args({ tick: 5 }), storage, { get: slow, device });
     await new Promise((r) => setTimeout(r, 5));
     const second = await notebookShared(args({ tick: 6 }), storage, env());

@@ -42,7 +42,7 @@ public struct StoryRow: Codable, Sendable { public var title, dek, route, sectio
 /// The listener-facing controller: sign-in, the story list, the run sheet's opening, plain-words status.
 public final class ChoirApp: @unchecked Sendable {
     public let runtime: LabRuntime
-    public let signIn: ChoirSignIn
+    public let baseURL: String
     private let lock = NSLock()
     private var stories: [ChoirStory] = []
     private var message = ""
@@ -51,21 +51,12 @@ public final class ChoirApp: @unchecked Sendable {
     public var onChange: (@Sendable () -> Void)?
     nonisolated(unsafe) var continuity: PlaybackContinuity?
 
-    public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL, openURL: (@Sendable (URL) -> Void)?) {
+    public init(runtime: LabRuntime, baseURL: String = ChoirEnvironment.defaultBaseURL) {
         self.runtime = runtime
         LaunchTimings.shared.begin()
-        ChoirEnvironment.shared.keys = keys
+        ChoirEnvironment.shared.keys = HeldKeys.store      // the key is Exact's: shared code hands it in memory (HeldKeys)
         ChoirEnvironment.shared.log = runtime.log
-        signIn = ChoirSignIn(baseURL: baseURL)
-        signIn.openURL = openURL
-        registerAccountWipe()
-        signIn.onChange = { [weak self] in
-            guard let self else { return }
-            if self.signIn.current.status == "idle", self.signIn.current.signedIn, self.signIn.current.message == "signed in" {
-                Task { await self.refresh() }
-            }
-            self.onChange?()
-        }
+        self.baseURL = baseURL
         // The deck is told what its engine says (it journals it; shared code reads the journal): a document that ran out of blocks, an engine lost mid-entry.
         runtime.player.onRanDry = { id, played in Task { @MainActor in Deck.shared.documentEnded(id: id, anyPlayed: played) } }
         runtime.player.onEngineLost = { _, _ in Task { @MainActor in Deck.shared.engineLost() } }
@@ -147,13 +138,13 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// First run after launch or sign-in: load the story list (the opening is built from it). Nothing plays here.
     public func refresh() async {
-        guard signIn.current.signedIn else { onChange?(); return }
-        await ChoirEnvironment.shared.warm(baseURL: signIn.baseURL)
+        guard HeldKeys.present else { onChange?(); return }
+        await ChoirEnvironment.shared.warm(baseURL: baseURL)
         await loadStories()
     }
 
     private func frontBaseURL() -> String {
-        runtime.configuration.setting(.programme)?.params["baseURL"].map { "\($0)" } ?? signIn.baseURL
+        runtime.configuration.setting(.programme)?.params["baseURL"].map { "\($0)" } ?? baseURL
     }
 
     public func loadStories() async {
@@ -230,38 +221,27 @@ public final class ChoirApp: @unchecked Sendable {
         }
     }
 
-    /// Sign-out, in this order: playback stops (shared code reports the entry on air as `left`); the run sheet gets up to five seconds to post its
-    /// pending ops with the old key still held, and it says when it is done (`RadioBridge.waitSignedOut`: shared code's `radioSet` with `signedOut`), so the wait is for the
-    /// answer and not a guess; what is not answered by then is dropped, never sent under a later account; then the local key goes and the account wipe runs (ChoirSignIn.signOut);
-    /// the revoke follows in the background.
-    public func signOut() async {
+    /// Sign-out (the key is already gone from memory, shared code cleared it first): playback stops and the run sheet gets up to five seconds to say it is done (`RadioBridge.waitSignedOut`; nothing is posted under a later account).
+    @discardableResult public func signOut() async -> Bool {
         await MainActor.run { TakeSession.live?.discard() }      // a take in hand is the old account's: dropped first (its give-back is a queued task that may land after the pause; the queue is cleared, so it plays nothing)
         lock.lock(); loading = false; lock.unlock()
         runtime.player.pause(reason: "sign out")
         runtime.player.clearQueue()
+        runtime.stop()                                          // the voice and turn pipeline stops like playback: a late learn or kept turn would write account data
         runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
         await MainActor.run { Deck.shared.engine?.stopSpoken(); Deck.shared.engine?.stopRemote() }
-        RadioBridge.shared.send("stopAll")                      // shared code's run sheet leaves the air (`left`) and posts, then the account wipe runs
+        RadioBridge.shared.send("stopAll")                      // shared code's run sheet leaves the air (`left`) and posts
         await RadioBridge.shared.waitSignedOut(seconds: 5)      // until shared code says it is done (its own wait for the route is 3 s), with the old key still held
-        await signIn.signOut()
         lock.lock(); stories = []; message = ""; lock.unlock()
         onChange?()
-    }
-
-    /// Every store of the account, wiped by one call at sign-out. The module adds the stores that live in the app target (mail).
-    public let accountWipe = AccountWipe()
-    private func registerAccountWipe() {
-        let kept = runtime.store
-        // Registered at once (not in a later task): a sign-out before the main actor ran a task would wipe nothing.
-        onMainThread { [accountWipe] in accountWipe.registerStandard(keptTurns: kept) }
-        signIn.onSignOut = { [accountWipe] in await accountWipe.run() }
+        return true
     }
 
     public func playerView() -> ChoirPlayerView {
         let snap = runtime.snapshot()
         let p = runtime.player
         var v = ChoirPlayerView()
-        v.signedIn = signIn.current.signedIn
+        v.signedIn = HeldKeys.present
         lock.lock(); v.loading = loading; v.message = message; lock.unlock()
         let onAir = onMainThread { Deck.shared.current != nil || RadioBridge.shared.onAirEntry() != nil }
         v.title = p.document.title
@@ -279,5 +259,4 @@ public final class ChoirApp: @unchecked Sendable {
         let r = RadioBridge.shared.onAirEntry()?.paperRoute ?? ""
         return s.map { StoryRow(title: $0.title, dek: $0.dek, route: $0.route, section: $0.section, current: $0.route == r) }
     }
-    public func authView() -> ChoirAuthState { signIn.current }
 }

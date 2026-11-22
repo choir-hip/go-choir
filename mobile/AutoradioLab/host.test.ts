@@ -48,9 +48,9 @@ describe('round 6: recovery and the time bound', () => {
   test('R1b an app-module op that answered anywhere (api.ts) counts as native too', async () => {
     const api = await import('./api.ts');
     resetSeam(); resetHost();
-    api.adoptNative(handle(async (r) => (r.op === 'session' ? { found: false } : { state: 'absent' })), 'x');
-    await api.keyState();                                                         // any answer from the app module
-    expect((await api.keyState()).state).toBe('absent');
+    api.adoptNative(handle(async (r) => (r.op === 'session' ? { found: false } : { state: 'anonymous' })), 'x');
+    api.noteNativeAnswered();                                                     // any answer from the app module
+    expect(api.nativeHasAnswered()).toBe(true);
     expect(api.nativeHasAnswered()).toBe(true);
     expect(await hostMode(5, 5)).toBe('native');
   });
@@ -76,8 +76,8 @@ describe('the notebook page is idle when it is not on top', () => {
   test('H5 with the page not on top (active false) the notebook source does not fetch', async () => {
     let fetches = 0; globalThis.fetch = (async () => { fetches++; return new Response('{}', { status: 200 }); }) as never;
     const { answer } = await import('./app.ts');
-    const storage = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => undefined } } as never;
-    const n = await answer('notebookPageShared' as never, ['', 0, false, ''] as never, undefined as never, storage, undefined as never) as { docState: string };
+    const storage = (await import('./account-phone.ts')).memFs({}).storage as never;      // a host with no native module sweeps too (the sweep finishes before any world opens): the storage must be one a sweep can run on
+    const n = await answer('notebookPageShared' as never, ['', 0, false, ''] as never, (await import('./account-phone.ts')).fakeStore() as never, storage, undefined as never) as { docState: string };
     expect(n.docState).toBe('loading'); expect(fetches).toBe(0);
   });
 });

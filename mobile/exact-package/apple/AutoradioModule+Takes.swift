@@ -36,7 +36,7 @@ import Foundation
     private var ticker: Task<Void, Never>?
     let preview = AVTakePreview()
     init(module: AutoradioModule) {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("takes", isDirectory: true)
+        let dir = AccountWipe.url("take-scratch/x").deletingLastPathComponent()
         let make: @Sendable () -> Transcriber = { SFSpeechTranscriber(StageParams([:])) }
         session = TakeSession(recorder: AVTakeRecorder(), transcriber: FileTranscriber(make: make), gate: TakeGate(module), preview: preview,
                               micAllowed: { LiveAudio.micPermissionGranted() ? true : await LiveAudio.requestMicPermission() },

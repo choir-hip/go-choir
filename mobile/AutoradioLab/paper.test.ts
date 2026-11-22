@@ -316,8 +316,7 @@ describe('the grants', () => {
     const app = await Bun.file(new URL('./app.ts', import.meta.url)).text();
     expect(app).toContain("export const ORIGIN = 'https://choir.news';");
     expect(app).toContain('net.fetch ${ORIGIN}');
-    expect(app).toContain(`fs.read ${CACHE_FILE}`);
-    expect(app).toContain(`fs.write ${CACHE_FILE}`);
+    expect(app).toContain('fs.read app:/data'); expect(app).toContain('fs.write app:/data');      // the account's folder is under it; the handle re-roots every path (api.ts)
     expect(ORIGIN).toBe('https://choir.news');
   });
 });

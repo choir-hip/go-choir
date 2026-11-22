@@ -30,7 +30,6 @@ public struct PaperStory: Sendable, Equatable {
         self.sections = sections
     }
 
-    public var isOpinion: Bool { kind.lowercased() == "opinion" || section.lowercased() == "opinion" }
 
     /// Importance, lifted by depth (sources) and decayed by age, in the manner of the web's ranking
     /// (`L/autopaper.ts`: importance mode, depth factor 0.75 for thin sourcing, recency). `now` is the edition's time.
@@ -82,13 +81,3 @@ public struct PaperStory: Sendable, Equatable {
     }
 }
 
-public enum PaperText {
-    public static func relative(_ d: Date?, now: Date) -> String {
-        guard let d else { return "" }
-        let s = Int(now.timeIntervalSince(d))
-        if s < 90 { return "just now" }
-        if s < 3600 { return "\(s / 60) min ago" }
-        if s < 86400 { return "\(s / 3600) h ago" }
-        return "\(s / 86400) d ago"
-    }
-}

@@ -36,12 +36,13 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
 
 let secretKey = "choir_sk_TESTKEY_do_not_leak"
 
-final class ChoirClientTests: XCTestCase {
+final class ChoirClientTests: KeychainFakeCase {
     var env: ChoirEnvironment!
     var log: EventLog!
     var keys: InMemoryKeyStore!
 
     override func setUp() {
+        super.setUp()
         let cfg = URLSessionConfiguration.ephemeral
         cfg.protocolClasses = [StubProtocol.self]
         keys = InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"])
@@ -51,7 +52,7 @@ final class ChoirClientTests: XCTestCase {
         StubProtocol.seen = []
         StubProtocol.handler = { _ in .init() }
     }
-    override func tearDown() { env.session = .shared }
+    override func tearDown() { env.session = .shared; super.tearDown() }
 
     func noLeak(file: StaticString = #filePath, line: UInt = #line) {
         let dump = log.events.map { LabRuntime.describe($0.event) }.joined(separator: "\n")
@@ -122,61 +123,6 @@ final class ChoirClientTests: XCTestCase {
         XCTAssertEqual(keys.get(KeyAccount.computerID), "comp-9")
         XCTAssertEqual(StubProtocol.seen.last?.headers["x-choir-computer"], "comp-9")
         XCTAssertNil(StubProtocol.seen.first?.headers["x-choir-computer"], "status is read without naming a computer")
-    }
-
-    // MARK: Device flow
-
-    func testDeviceFlowStoresKeyAndNeverShowsIt() async throws {
-        keys.delete(KeyAccount.apiKey); keys.delete(KeyAccount.computerID)
-        nonisolated(unsafe) var polls = 0
-        StubProtocol.handler = { req in
-            switch req.path {
-            case "/auth/device/begin": return .init(json: ["device_code": "choir_dc_x", "user_code": "ABCD-EFGH", "verification_uri": "https://choir.news/device",
-                                                           "verification_uri_complete": "https://choir.news/device?user_code=ABCD-EFGH", "expires_in": 600, "interval": 5])
-            case "/auth/device/token":
-                polls += 1
-                if polls == 1 { return .init(status: 400, json: ["error": "authorization_pending"]) }
-                if polls == 2 { return .init(status: 400, json: ["error": "slow_down"]) }
-                return .init(json: ["api_key": secretKey, "key_id": "k1", "scopes": ["read:runtime"]])
-            case "/api/compute/status": return .init(json: ["computers": [["computer_id": "comp-2", "kind": "interactive"]]])
-            default: return .init()
-            }
-        }
-        nonisolated(unsafe) var opened: URL?
-        let si = ChoirSignIn(env: env)
-        si.sleep = { _ in }
-        si.openURL = { opened = $0 }
-        let st = await si.begin()
-        XCTAssertEqual(st.userCode, "ABCD-EFGH"); XCTAssertEqual(opened?.absoluteString, "https://choir.news/device?user_code=ABCD-EFGH")
-        await si.wait()
-        XCTAssertEqual(keys.get(KeyAccount.apiKey), secretKey)
-        XCTAssertEqual(keys.get(KeyAccount.computerID), "comp-2")
-        XCTAssertTrue(si.current.signedIn)
-        let shown = String(data: try JSONEncoder().encode(si.current), encoding: .utf8)!
-        XCTAssertFalse(shown.contains(secretKey))
-        noLeak()
-        XCTAssertEqual(polls, 3)
-    }
-
-    func testDeviceFlowDenied() async {
-        keys.delete(KeyAccount.apiKey)
-        StubProtocol.handler = { req in
-            req.path == "/auth/device/begin" ? .init(json: ["device_code": "d", "user_code": "U", "verification_uri_complete": "https://choir.news/device?u=U", "expires_in": 600, "interval": 1])
-                                             : .init(status: 400, json: ["error": "access_denied"])
-        }
-        let si = ChoirSignIn(env: env); si.sleep = { _ in }
-        _ = await si.begin(); await si.wait()
-        XCTAssertEqual(si.current.status, "failed"); XCTAssertFalse(si.current.signedIn)
-    }
-
-    func testSignOutRevokesAndForgets() async {
-        try? keys.set("k1", account: KeyAccount.keyID)
-        let si = ChoirSignIn(env: env)
-        await si.signOut()
-        await si.waitForRevoke()
-        XCTAssertNil(keys.get(KeyAccount.apiKey)); XCTAssertNil(keys.get(KeyAccount.computerID))
-        XCTAssertEqual(StubProtocol.seen.first?.method, "DELETE")
-        XCTAssertEqual(StubProtocol.seen.first?.path, "/auth/api-keys/k1")
     }
 
     // MARK: Programme

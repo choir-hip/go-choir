@@ -75,7 +75,6 @@ path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirSystem1.swift the voice
 path mobile/AutoradioKit/Sources/AutoradioKit/DeskContext.swift what the voice turn tells the model about now (the page in front, what is on air), built from engine state at turn time
 path mobile/AutoradioKit/Sources/AutoradioKit/Conversation.swift the turn engine's record of the question, the answers and their words, kept as the turn runs
 path mobile/AutoradioKit/Sources/AutoradioKit/Concurrency.swift Once, TaskBag and withDeadline: the turn engine's cancellation and deadline pieces
-path mobile/AutoradioKit/Sources/AutoradioKit/ProofKey.swift the simulator-only proof key: writes the Keychain item the signed-in seam reads (compiled out of device builds)
 path mobile/exact-package/apple/AutoradioModule+Platform.swift the platform seam: the audio session owner, the console log file the proof reads and the system's background time for the opening written ahead
 path mobile/exact-package/apple/AutoradioModule+Mail.swift mail's two native sends: the in-app web view for the approval page, and mailRead, which hands text to the radio's voice
 # --- interface names
@@ -86,4 +85,3 @@ name choirHandsFreeToggle opens and closes the microphone
 name importedFollow the block the player is reading now: only the player knows
 name deck* the deck: play, hold, pause, seek, acknowledge, and the state and journal it keeps (the audio session and the lock screen are native)
 # --- the Keychain read behind the signed-in seam (AutoradioLab/api.ts); goes when sign-in moves to Exact's own secret store
-path mobile/AutoradioKit/Sources/AutoradioKit/Choir/CredentialReader.swift reads the Keychain item today's sign-in wrote, in place (Exact's secret store keeps items under another service), so the phone stays signed in

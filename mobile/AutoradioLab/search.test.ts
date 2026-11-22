@@ -20,7 +20,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   Index, Corpus, VectorStore, BUDGET_CHARS, retrieve, bm25Retriever, tokens, stem, passages, queryTerms, embedPrompt, truncatedUnit, toHalf, fromHalf, day,
-  fuse, rrf, fusedRetriever, itemID, workItems, todo, runJob, contentKey, loadVectors, saveVectors, wipeVectors, coverage, embedQuery, paperFrontDocs,
+  fuse, rrf, fusedRetriever, itemID, workItems, todo, runJob, contentKey, loadVectors, saveVectors, coverage, embedQuery, paperFrontDocs,
   loadPaperFront, PAPER_FRONT_FILE, decodeCorpus, corpusRows, corpusNote, searchPaper, normalizeQuery, CORPUS_PATH, fileNameDocs, editionTopicDocs,
   openPageDocs, ENGINE, DIMENSION, VECTORS_DIR, type Doc, type Query, type Embed, type Fusion,
 } from './search.ts';
@@ -251,15 +251,6 @@ describe('S9 and S10 the store and the job', () => {
     s.upsert('pub:old', w.find((x) => x.id === 'pub:old')!.key, hashVec('x'));
     expect(todo(w, s).todo.some((x) => x.id === 'pub:old')).toBe(false);
     expect(contentKey('a', 'b')).toBe(contentKey('a', 'b')); expect(contentKey('a', 'b')).not.toBe(contentKey('a', 'c'));
-  });
-  test('sign-out wipes the vectors in memory and on disk', async () => {
-    const files = new Map<string, Uint8Array>();
-    const storage = fakeStorage(files);
-    const s = new VectorStore('fake-1', D);
-    await runJob(s, fakeEmbed, items, { save: () => saveVectors(s, storage) });
-    expect(files.size).toBe(2);
-    await wipeVectors(s, storage);
-    expect(s.count).toBe(0); expect(files.size).toBe(0);
   });
 });
 

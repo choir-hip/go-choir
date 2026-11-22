@@ -3,15 +3,15 @@ import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
-import { adoptNative } from './api.ts';
+import { adoptNative, bindStorage, deviceStorage, markNotBaked, scoped, type World } from './api.ts';
 import { settingsAccount, aboutPage } from './settings.ts';
 import { settingsComputer, computerAct } from './computer.ts';
 import { activityPage } from './activity.ts';
 import { onboardingPage, onboardingAct, liveEnv as onboardingEnv } from './onboarding.ts';
 import * as cards from './cards.ts';
 import { aboutBuild } from './about.ts';
-import { accountSignOut, settleAccount } from './account.ts';
-import { clearDemoLeftovers } from './demo-leftovers.ts';
+import { accountSignOut, accountEnding, enter, AccountClosedError } from './account.ts';
+import { signInView, signInStart, signInPoll, signInCancel } from './signin.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
@@ -40,62 +40,22 @@ export const ORIGIN = 'https://choir.news';
 export const grants = `device.microphone purpose.microphone
 device.microphone-background purpose.recordingInBackground
 device.speech-recognition purpose.speech
-fs.read app:/data/exports
-fs.write app:/data/exports
-fs.read app:/data/paper-front.json
-fs.write app:/data/paper-front.json
 net.fetch ${ORIGIN}
-fs.read app:/data/podcasts-library.json
-fs.write app:/data/podcasts-library.json
-fs.read app:/data/podcast-feeds
-fs.write app:/data/podcast-feeds
 net.fetch https:
-fs.read app:/data/recent-files.json
-fs.write app:/data/recent-files.json
-fs.read app:/cache/files
-fs.write app:/cache/files
-fs.read app:/tmp/picked
-fs.read app:/data/mail
-fs.write app:/data/mail
+fs.read app:/data
+fs.write app:/data
 fs.read app:/cache
 fs.write app:/cache
-fs.read app:/data/signout-pending
-fs.write app:/data/signout-pending
-fs.read app:/data/account-stamp
-fs.write app:/data/account-stamp
-fs.read app:/data/what-i-told-the-paper.json
-fs.write app:/data/what-i-told-the-paper.json
-fs.read app:/data/recent-pages.json
-fs.write app:/data/recent-pages.json
-fs.read app:/data/steer-queue.json
-fs.write app:/data/steer-queue.json
-fs.read app:/data/open-pages-shared.json
-fs.write app:/data/open-pages-shared.json
-fs.read app:/data/demo-leftovers-cleared
-fs.write app:/data/demo-leftovers-cleared
-fs.read app:/data/notebook-cache.md
-fs.write app:/data/notebook-cache.md
-fs.read app:/data/takes.json
-fs.write app:/data/takes.json
-fs.read app:/data/runsheet.json
-fs.write app:/data/runsheet.json
-fs.read app:/data/vectors
-fs.write app:/data/vectors
-fs.read app:/data/imported-places.json
-fs.write app:/data/imported-places.json
-fs.read app:/data/theme-choice.json
-fs.write app:/data/theme-choice.json
-fs.read app:/data/themes
-fs.write app:/data/themes
-fs.read app:/data/edition-topics.json
-fs.write app:/data/edition-topics.json
-fs.read app:/data/onboarding.json
-fs.write app:/data/onboarding.json
-sqlite.open app:/data/content.db`;
+fs.read app:/tmp
+fs.write app:/tmp
+sqlite.open app:/data/accounts
+secret.keep api-key
+secret.keep key-id
+secret.keep computer-id`;
 
-let takesOverlay: ReturnType<typeof newTakes> | undefined;
-const takes = (): ReturnType<typeof newTakes> => (takesOverlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
-const sources: Sources = {
+const takesState = scoped(() => ({ overlay: undefined as ReturnType<typeof newTakes> | undefined }));      // the takes overlay belongs to the world (api.ts `scoped`)
+const takes = (): ReturnType<typeof newTakes> => (takesState().overlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
+export const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // The About page's build rows (about.ts): the app's baked-in commit and the server's, from /health.
   aboutBuild: ([tick]) => aboutBuild({ tick }),
@@ -152,9 +112,14 @@ const sources: Sources = {
   readerReloadShared: ([address]) => readerReload(address),
   readerPrefetchShared: ([prev, next]) => readerPrefetch(prev, next),
   // My notebook (notebook-run.ts): the selected line, the Refresh count, whether the page is on top and the sign-out tick in; the page out. The content store's sync (content-run.ts) is started by a task.
-  notebookPageShared: ([selected, tick, active, signedOutTick, _signedIn], _store, storage) => notebookShared({ selected, tick, active, signedOutTick }, storage),
+  notebookPageShared: ([selected, tick, active, handle, _signedIn], _store, storage) => notebookShared({ selected, tick, active, handle }, storage),
   contentSync: ([key], _store, storage) => syncContent(key, storage),
-  accountState: ([tick, top, host]) => accountState(tick, top, host),
+  accountState: ([tick, host, tries], store, storage) => accountState(tick, host, tries, storage, store),
+  signInView: ([_tick], store) => signInView(store),
+  signInStart: (_a, store, storage) => signInStart(storage, store),
+  signInPoll: (_a, store, storage) => signInPoll(storage, store),
+  signInCancel: () => signInCancel(),
+  accountEnding: (_a, store, storage) => accountEnding(storage, store),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),
   // The story cards and the launcher (cards.ts): the places, recent pages and local hits; "more of this" and the steering tap; what the paper has learned.
   launcherData: ([q, _pages, now], _s, storage) => cards.launcherData({ q, now }, storage),
@@ -167,7 +132,7 @@ const sources: Sources = {
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
   pagesPin: ([address], _store, storage) => pages.pagesPin(storage, address),
   pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
-  accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
+  accountSignOut: (_a, store, storage) => accountSignOut(storage, store),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
   podcastEpisode: ([address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev], _store, storage) =>
@@ -219,13 +184,42 @@ const sources: Sources = {
   paperSearch: ([q, local]) => paperSearch(q, local),
   mailAsk: ([address, question]) => mail.mailAsk(address, question),
 };
+/** THE DEVICE SOURCES: the only sources that answer without an account (invariant I4). Each draws before sign-in or after the session ended, so each gets the DEVICE handle (api.ts `deviceStorage`): the theme choice and the
+ * person's own theme files, and no other path. The three of the boundary itself (`accountState`, `accountEnding`, `accountSignOut`) take the host's storage. Every other source is gated: it is handed the storage of the open world, re-rooted under
+ * the account's folder, and refused while the account is locked or the session has ended. A new source is gated until someone writes its line here and says why it needs no account. */
+export const DEVICE: Partial<Record<keyof Sources, string>> = {
+  accountState: 'the card: it asks the boundary for the state, never waits on anything, and says why pages refuse',
+  accountEnding: 'Sign out, step one: the session ends and the ending mark is written, at once, so the card draws before the native half runs',
+  accountSignOut: 'Sign out: the way out of every refusing state, so it can never wait behind the gate',
+  signInView: 'the sign-in card\'s facts: whether a key is held and the flow\'s words; never the key or the device code',
+  signInStart: 'Sign in: asks the server for a code; it needs no account and must work signed out',
+  signInPoll: 'Sign in: one poll of the server; stores the key only while no key is held and the session has not ended',
+  signInCancel: 'Sign in: stop waiting for the approval',
+  hostCaps: 'a fact about this host (is there a native package), no account data',
+  aboutBuild: 'the app\'s baked-in commit and the server\'s public /health, no account data',
+  theme: 'device settings under app:/data/theme-choice.json; Texture themes only from the open account world, read only',
+  themeList: 'the same device settings: the list of installed themes',
+  themeExtras: 'the same device settings: the theme\'s sizes',
+  themeCards: 'the same device settings: the theme cards',
+  themeMigrate: 'the same device settings: the one-time carry-over of the theme choice',
+  themeSet: 'the same device settings: choosing a theme',
+  schemeSet: 'the same device settings: light or dark',
+  themeRemove: 'the same device settings: removing an installed theme',
+};
+
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
+/** Run `p`, but end it (refused) the moment the world it began in closes: its own chain stays pending forever (api.ts, the world), and the page is told and asks again. */
+const guarded = <T,>(w: World, p: Promise<T> | T): Promise<T> => new Promise<T>((res, rej) => { const off = w.watch(() => rej(new AccountClosedError('ended'))); Promise.resolve(p).then((v) => { off(); res(v); }, (e) => { off(); rej(e); }); });
+/** THE GATE. Every source not in DEVICE asks the boundary first (account.ts `enter`) and throws AccountClosedError unless an account (or the anonymous world) is open: the page shows its existing failure state and the card says
+ * why. It is handed the storage of ITS WORLD (api.ts `bindStorage`): every path re-rooted under the account's folder, every call inert once the world closes. The card and the sign-out take the host's storage. */
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
-  // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
-  if (source !== 'accountSignOut') await settleAccount(storage, store);
-  // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, finished before the first source runs, so the
-  // modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.
-  if (source !== 'accountSignOut') await clearDemoLeftovers(storage);
-  return sources[source](args, store, storage, native);
+  if (source === 'accountState' || source === 'accountSignOut' || source === 'accountEnding') return sources[source](args, store, storage, native);
+  if (Object.hasOwn(DEVICE, source)) return sources[source](args, store, deviceStorage(storage), native);
+  markNotBaked();      // reads Exact's host fact, which THROWS at the bake: the resource is left unbaked (an account's data must never be evaluated into the plan at build time, where there is no native module and no account)
+  const b = await enter(storage, store);
+  if (!b.readable) throw new AccountClosedError(b.state);
+  const w = b.world;
+  if (w.closed) throw new AccountClosedError('ended');      // a world that closed while the gate waited is refused BEFORE the source is called
+  return guarded(w, sources[source](args, store, bindStorage(storage, w), native));
 };

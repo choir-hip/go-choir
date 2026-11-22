@@ -36,13 +36,6 @@ describe('S1 and S2 opening', () => {
     expect(await contentStore(undefined)).toBeNull();
     expect(await contentStore({ sqlite: { open: async () => { throw new Error('disk'); } } } as never)).toBeNull();
   });
-  test('S2 after a wipe the old handle is closed and a fresh store opens', async () => {
-    const a = (await contentStore(storage))!;
-    await a.put(newItem({ id: 'x', kind: 'story', title: 't', text: 'b', address: 'pub:/x' }));
-    await a.wipe();
-    const b = (await contentStore(storage))!;
-    expect(b).not.toBe(a); expect(opened).toBe(2); expect(closed).toBe(1); expect(await b.get('x')).toBeNull();
-  });
 });
 
 describe('S3 to S5 the run', () => {
@@ -102,5 +95,5 @@ describe('S6 to S8 reads and grants', () => {
     const big = localStories([it('b', 'T'.repeat(500), 'x'.repeat(20000), 1)], { told: [], held: new Set(), limit: 5 })[0];
     expect(new TextEncoder().encode(big.text).length).toBeLessThanOrEqual(8192); expect(new TextEncoder().encode(big.title).length).toBeLessThanOrEqual(300);
   });
-  test('S8 the grants name the database', () => { expect(grants).toContain('sqlite.open app:/data/content.db'); });
+  test('S8 the grants name the database', () => { expect(grants).toContain('sqlite.open app:/data/accounts'); });
 });

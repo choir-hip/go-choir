@@ -28,8 +28,11 @@
 import type { Storage } from './app.contract.d.ts';
 import { complete, generalEdition, localWriter, FAILED_LINE, TIMED_OUT_LINE, type Edition, type Writer, editionLines } from './edition-writer.ts';
 import { lookupEdition, seamGet, type Get } from './notebook.ts';
-import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
+import { accountGeneration, nativeInert, putFile, scoped } from './api.ts';
 import * as pages from './pages.ts';
+
+// Module state belongs to the world (api.ts `scoped`): a closed world's is unreachable and no later world joins it.
+const S = scoped(() => ({ mem: null as Mem | null }));
 
 export const PROGRESS_FILE = 'app:/data/onboarding.json';
 export const EDIT = 'onboarding:edit';
@@ -87,7 +90,7 @@ export type Device = {
   op(op: string, args?: Record<string, unknown>): Promise<void>;
 };
 export function nativeDevice(): Device | null {
-  const raw = nativeLater();
+  const raw = nativeInert();
   if (!raw) return null;
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   return {
@@ -97,12 +100,11 @@ export function nativeDevice(): Device | null {
 }
 
 type Mem = { gen: number; loaded: boolean; loading?: Promise<void>; p: Progress; step: string; askMobile: boolean; message: string; hearingOK: boolean; edition: Edition | null; status: string; writingLine: string; error: string; mirrored: boolean | null; picked: number };
-let mem: Mem | null = null;
 /** The account generation of the first memory this process made: the launch's. */
 let launchGen: number | undefined;
 const blank = (): Mem => ({ gen: launchGen === undefined ? (launchGen = accountGeneration()) : accountGeneration(), loaded: false, p: fresh(), step: 'welcome', askMobile: false, message: '', hearingOK: false, edition: null, status: '', writingLine: '', error: '', mirrored: null, picked: 0 });
 /** For tests: a new process. */
-export function forgetOnboarding(): void { mem = null; }
+export function forgetOnboarding(): void { S().mem = null; }
 
 export type Env = { storage: Storage | undefined; device: Device | null; get: Get; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void> };
 export const liveEnv = (storage: Storage | undefined): Env => ({ storage, device: nativeDevice(), get: seamGet,
@@ -113,8 +115,9 @@ export const liveEnv = (storage: Storage | undefined): Env => ({ storage, device
  *  launch: pulse ready=true, then ready=false for good`) left that default for the life of the process. Now concurrent callers share one read, only a file that is truly absent is "no progress", and any other
  *  failure leaves the memory unloaded so the next call reads again. */
 async function load(env: Env): Promise<Mem> {
-  if (!mem || mem.gen !== accountGeneration()) mem = blank();          // the memory belongs to the account generation it was made in
-  const m = mem;
+  const st = S();
+  if (!st.mem || st.mem.gen !== accountGeneration()) st.mem = blank();          // the memory belongs to the account generation it was made in
+  const m = st.mem;
   if (m.loaded) return m;
   if (!m.loading) {
     m.loading = (async () => {
@@ -134,7 +137,7 @@ async function load(env: Env): Promise<Mem> {
 }
 async function save(env: Env, m: Mem): Promise<void> {
   if (!env.storage || !m.loaded) return;                                // never write the default over progress that was not read
-  await writeCurrent(m.gen, env.storage, PROGRESS_FILE, new TextEncoder().encode(JSON.stringify(m.p)));     // a refused or failed write leaves the step in memory; the next change writes again
+  await putFile(env.storage, PROGRESS_FILE, new TextEncoder().encode(JSON.stringify(m.p)));     // a refused or failed write leaves the step in memory; the next change writes again
 }
 /** Is the first run over (done or skipped)? The radio's start asks this itself: it must not wait for a page to ask `ob` (a plain launch has no driver whose dumps pull every resource in, and nothing else asked it). Also tells native. */
 export async function firstRunOver(storage: Storage | undefined): Promise<boolean> {
@@ -142,14 +145,7 @@ export async function firstRunOver(storage: Storage | undefined): Promise<boolea
   const m = await load(env);
   await mirror(env, m);
   return over(m);
-}
 
-/** Sign-out (account.ts WIPES): the memory, the file, and the voice side. Throws when the file could not be removed and is not empty. */
-export async function wipeOnboarding(storage: Storage | undefined): Promise<void> {
-  mem = null;
-  try { await nativeDevice()?.op('obReset'); } catch { /* the native memory resets at its own wipe */ }
-  if (!storage) return;
-  try { await storage.fs.rm(PROGRESS_FILE); } catch (e) { try { await storage.fs.stat(PROGRESS_FILE); } catch { return; } throw e; }
 }
 
 const over = (m: Mem): boolean => m.step === 'done' || m.step === 'skipped';

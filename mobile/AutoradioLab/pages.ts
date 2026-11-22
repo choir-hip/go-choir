@@ -1,9 +1,9 @@
 // The deck's open pages, in shared code (a port of the Swift OpenPages, Pages.swift): which pages are open, which is current, open / close / focus / pin / reopen, and the file that keeps
 // them between launches. It is the one open-page set on every host (the Swift OpenPages is gone): the deck, the launcher (cards.ts) and the voice, which is handed the pages as facts (`mirror`). The set is addresses and
 // titles only (never resumed work); the Autoradio page (`radio:`) is always open and cannot be closed; the pile keeps the 30 most recent unpinned pages; an address is open once.
-// Sign-out: only the radio stays and the file goes (account.ts wipes it). Logs carry counts only.
+// Sign-out ends the session and the account's folder, with this file, is deleted (account.ts). Logs carry counts only.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
+import { accountGeneration, nativeInert, scoped } from './api.ts';
 import { note as noteRecent } from './recent-pages.ts';
 
 export const PAGES_FILE = 'app:/data/open-pages-shared.json';
@@ -49,28 +49,23 @@ export function defaultTitle(address: string): string {
   }
 }
 
-let pages: Page[] = [];
-let recency: string[] = [];
-let lastClosed: Page | null = null;
-let loaded = false;
-let loading: Promise<void> | null = null;
-let epoch = 0;                       // bumped by a wipe: a read that began before it belongs to the old account and is dropped
+const S = scoped(() => ({ pages: [] as Page[], recency: [] as string[], lastClosed: null as Page | null, loaded: false, loading: null as Promise<void> | null, saving: Promise.resolve() as Promise<unknown>, mirrored: false, lastRequest: 0 }));      // module state belongs to the world (api.ts `scoped`)
 
 const radioPage = (): Page => ({ address: RADIO, kind: 'radio', title: 'Autoradio', opener: '', pinned: false });
-function focusLocked(address: string): void { recency = [address, ...recency.filter((a) => a !== address)]; }
+function focusLocked(address: string): void { S().recency = [address, ...S().recency.filter((a) => a !== address)]; }
 
 function openLocked(p: Page): Page {
-  const i = pages.findIndex((x) => x.address === p.address);
+  const i = S().pages.findIndex((x) => x.address === p.address);
   if (i >= 0) {
-    if (p.title !== '' && pages[i].title === defaultTitle(p.address)) pages[i].title = p.title;
-    focusLocked(p.address); return pages[i];
+    if (p.title !== '' && S().pages[i].title === defaultTitle(p.address)) S().pages[i].title = p.title;
+    focusLocked(p.address); return S().pages[i];
   }
-  pages.push(p); focusLocked(p.address);
+  S().pages.push(p); focusLocked(p.address);
   for (;;) {                                                               // the pile keeps the 30 most recent unpinned pages; the radio is never trimmed
-    if (pages.filter((x) => !x.pinned && x.address !== RADIO).length <= LIMIT) break;
-    const oldest = [...recency].reverse().find((a) => a !== RADIO && pages.find((x) => x.address === a)?.pinned === false);
+    if (S().pages.filter((x) => !x.pinned && x.address !== RADIO).length <= LIMIT) break;
+    const oldest = [...S().recency].reverse().find((a) => a !== RADIO && S().pages.find((x) => x.address === a)?.pinned === false);
     if (oldest === undefined) break;
-    pages = pages.filter((x) => x.address !== oldest); recency = recency.filter((a) => a !== oldest);
+    S().pages = S().pages.filter((x) => x.address !== oldest); S().recency = S().recency.filter((a) => a !== oldest);
   }
   return p;
 }
@@ -98,62 +93,59 @@ function validated(raw: unknown): { pages: Page[]; recency: string[] } {
 
 /** One read at a time (single flight): a second caller during the read waits for it. A wipe during the read drops its result and the caller reads again. */
 async function load(storage: Storage | undefined): Promise<void> {
-  for (let tries = 0; !loaded && tries < 3; tries++) {
-    if (!loading) {
-      const mine = epoch;
+  for (let tries = 0; !S().loaded && tries < 3; tries++) {
+    if (!S().loading) {
+      const s = S();                                                       // this load fills the state it began for: a wipe that resets the state mid-read leaves the old one to be dropped
       const p: Promise<void> = (async () => {
         let stored: unknown = null;
         if (storage) { try { stored = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(PAGES_FILE))); } catch { /* none kept yet, or damaged: the radio alone */ } }
-        if (mine !== epoch) return;                                        // wiped while reading: this is the old account's file
         const v = validated(stored);
-        pages = v.pages; recency = v.recency;
+        if (S() !== s) return;                                             // wiped while reading: this is the old account's file
+        s.pages = v.pages; s.recency = v.recency;
         openLocked(radioPage());                                           // every launch lands on the radio
-        loaded = true;
-      })().finally(() => { if (loading === p) loading = null; });
-      loading = p;
+        s.loaded = true;
+      })().finally(() => { if (s.loading === p) s.loading = null; });
+      s.loading = p;
     }
-    await loading;
+    await S().loading;
   }
 }
 
-let saving: Promise<unknown> = Promise.resolve();
 /** Saves run one after another and each writes the set as it is WHEN IT RUNS, so the last state wins the file whatever order the host finishes the writes in. */
 function save(storage: Storage | undefined, gen: number): Promise<void> {
-  const run = saving.then(() => writeCurrent(gen, storage, PAGES_FILE, new TextEncoder().encode(JSON.stringify({ pages, recency }))), () => undefined);   // a sign-out in flight writes nothing
-  saving = run.catch(() => undefined);
+  const run = S().saving.then(() => storage?.fs.atomicWriteFile(PAGES_FILE, new TextEncoder().encode(JSON.stringify({ pages: S().pages, recency: S().recency }))), () => undefined);   // a closed world's storage never starts the write
+  S().saving = run.catch(() => undefined);
   return run.then(() => undefined);
 }
 
 function view(): PageList {
-  const rows = recency.flatMap((a) => pages.filter((x) => x.address === a));
+  const rows = S().recency.flatMap((a) => S().pages.filter((x) => x.address === a));
   const top = rows[0];
-  return { rows, top: top?.address ?? '', topKind: top?.kind ?? '', topTitle: top?.title ?? '', count: pages.length };
+  return { rows, top: top?.address ?? '', topKind: top?.kind ?? '', topTitle: top?.title ?? '', count: S().pages.length };
 }
 
 /** The voice's copy: native keeps no set, only the pages as FACTS (OpenPageFacts, LocalAck.swift): which page is in front (the acknowledgement names it, the local model warms on it, a page left
  * posts what was typed on it) and the list the retrieval ask carries. Pushed through the one narrow app-module op `pagesMirror` after every change, with the account generation the change began under:
  * native refuses a push older than one it has seen. Best effort: no module (Android, the web) or a failed call loses nothing, the set is this file's. */
 async function mirror(gen: number): Promise<void> {
-  const raw = nativeLater();
+  const raw = nativeInert();
   if (!raw) return;
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   const v = view();
   try { await later({ op: 'pagesMirror', gen, pages: v.rows.map((r) => ({ address: r.address, title: r.title, kind: r.kind })) }); } catch { /* the voice keeps the last facts */ }
 }
-let mirrored = false;
 
 /** Read the set. The first read of a launch also hands the voice its facts. */
 export async function pagesView(storage: Storage | undefined): Promise<PageList> {
   const gen = accountGeneration();
   await load(storage);
-  if (!mirrored && gen === accountGeneration()) { mirrored = true; await mirror(gen); }
+  if (!S().mirrored && gen === accountGeneration()) { S().mirrored = true; await mirror(gen); }
   return view();
 }
 
 /** A page a native module asked to open (`pageRequest`: an episode opened from the playing bar): opened once per request id, then the new view. An id of 0 asks nothing. */
-let lastRequest = 0;
 export async function pageRequested(storage: Storage | undefined, id: number, address: string, title: string): Promise<PageList> {
-  if (id > 0 && id !== lastRequest && address !== '') { lastRequest = id; return pagesOpen(storage, address, title); }
+  if (id > 0 && id !== S().lastRequest && address !== '') { S().lastRequest = id; return pagesOpen(storage, address, title); }
   return pagesView(storage);
 }
 
@@ -162,7 +154,7 @@ export async function pagesOpen(storage: Storage | undefined, rawAddress: string
   await load(storage);
   if (gen !== accountGeneration()) return view();                          // a sign-out began while the set loaded: nothing of this open is kept
   const address = canonical(rawAddress);
-  openLocked({ address, kind: kindOf(address), title: title !== '' ? title : defaultTitle(address), opener: recency[0] ?? '', pinned: false });
+  openLocked({ address, kind: kindOf(address), title: title !== '' ? title : defaultTitle(address), opener: S().recency[0] ?? '', pinned: false });
   await save(storage, gen);
   await noteRecent(storage, 'open', address);                              // the launcher's Recent rows (recent-pages.ts)
   await mirror(gen);
@@ -171,26 +163,26 @@ export async function pagesOpen(storage: Storage | undefined, rawAddress: string
 export async function pagesFocus(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
   const address = canonical(rawAddress);
-  if (pages.some((x) => x.address === address)) focusLocked(address);
+  if (S().pages.some((x) => x.address === address)) focusLocked(address);
   await save(storage, gen); await mirror(gen); return view();
 }
 /** Close a page. When it was in front, its opener (if still open) comes forward, else the next most recent. */
 export async function pagesClose(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
   const address = canonical(rawAddress);
-  const p = pages.find((x) => x.address === address);
+  const p = S().pages.find((x) => x.address === address);
   if (address !== RADIO && p) {
-    const wasFront = recency[0] === address;
-    pages = pages.filter((x) => x.address !== address); recency = recency.filter((a) => a !== address);
-    lastClosed = p;
+    const wasFront = S().recency[0] === address;
+    S().pages = S().pages.filter((x) => x.address !== address); S().recency = S().recency.filter((a) => a !== address);
+    S().lastClosed = p;
     await noteRecent(storage, 'close', address);
-    if (wasFront && p.opener !== '' && pages.some((x) => x.address === p.opener)) focusLocked(p.opener);
+    if (wasFront && p.opener !== '' && S().pages.some((x) => x.address === p.opener)) focusLocked(p.opener);
   }
   await save(storage, gen); await mirror(gen); return view();
 }
 export async function pagesReopen(storage: Storage | undefined): Promise<PageList> {
   await load(storage);
-  const p = lastClosed; lastClosed = null;
+  const p = S().lastClosed; S().lastClosed = null;
   if (!p) return view();
   const gen = accountGeneration();
   openLocked({ ...p });                                                    // the opener it had is kept (the Swift reopen does the same)
@@ -201,10 +193,9 @@ export async function pagesReopen(storage: Storage | undefined): Promise<PageLis
 export async function pagesPin(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
   const address = canonical(rawAddress);
-  const p = pages.find((x) => x.address === address); if (p) p.pinned = !p.pinned;
+  const p = S().pages.find((x) => x.address === address); if (p) p.pinned = !p.pinned;
   await save(storage, gen); await mirror(gen); return view();
 }
 
-/** Sign-out and tests: only the radio stays; the file is removed by the account wipe. */
-export function forget(): void { pages = []; recency = []; lastClosed = null; loaded = false; loading = null; epoch += 1; mirrored = false; lastRequest = 0; }
-export async function wipePages(storage: Storage | undefined): Promise<void> { forget(); if (!storage) return; try { await storage.fs.rm(PAGES_FILE); } catch { /* absent */ } }
+/** Tests, and a module's own reset: only the radio stays. */
+export function forget(): void { S.reset(); }

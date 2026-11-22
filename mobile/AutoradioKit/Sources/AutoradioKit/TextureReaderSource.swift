@@ -40,11 +40,6 @@ public struct TextureAddress: Equatable, Sendable {
         let parts = rest.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
         return (parts.first ?? "").isEmpty ? TextureAddress(kind: .none) : TextureAddress(kind: .document, doc: parts[0], rev: parts.count > 1 ? parts[1] : "")
     }
-    /// "slug/v3" -> ("slug", 3); a bare route -> (route, 0)
-    public static func splitRoute(_ route: String) -> (bare: String, version: Int) {
-        guard let r = route.range(of: "/v", options: .backwards), let n = Int(route[r.upperBound...]), n > 0 else { return (route, 0) }
-        return (String(route[..<r.lowerBound]), n)
-    }
 }
 
 // The Textures place's list (TextureRow, TextureList: parse, the pinned edition, the words) is shared code now: AutoradioLab/textures.ts. What stays here is the edition lookup below, which the

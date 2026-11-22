@@ -43,8 +43,6 @@ public struct PodcastClip: Sendable, Equatable {
     public var episodeEntry: RunSheetEntry {
         .audio(RunSheetAudio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: nil, end: nil, episodeId: episodeKey))
     }
-    /// How far the file's length may differ from the transcribed file's before the range is distrusted.
-    public static let durationTolerance = 3.0
 
     static func bare(_ route: String) -> String { route.hasPrefix("/") ? String(route.dropFirst()) : route }
 
@@ -70,11 +68,6 @@ public struct PodcastClip: Sendable, Equatable {
         .audio(RunSheetAudio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: start, end: end, episodeId: episodeKey), clipID: clipID)
     }
 
-    /// "56 s", "1 min 5 s": the length the reader is told.
-    public var lengthLabel: String {
-        let s = Int(seconds.rounded())
-        return s < 60 ? "\(s) s" : (s % 60 == 0 ? "\(s / 60) min" : "\(s / 60) min \(s % 60) s")
-    }
 }
 
 /// The record's `fingerprint` object (all additive and optional on the wire; the whole object is dropped when it does not decode).
@@ -125,8 +118,6 @@ public final class ClipStore: @unchecked Sendable {
     private var lastFailed = false
     private var mismatched = Set<String>()
     public init() {}
-    /// This clip's audio is not the file that was transcribed (its length differs): it is never played as a clip.
-    public func markMismatch(_ id: String) { lock.lock(); mismatched.insert(id); lock.unlock() }
     public func isMismatch(_ id: String) -> Bool { lock.lock(); defer { lock.unlock() }; return mismatched.contains(id) }
 
     public func replace(_ clips: [PodcastClip], at: Date = Date(), failed: Bool = false) {

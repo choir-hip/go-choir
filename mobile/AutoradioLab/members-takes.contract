@@ -1,4 +1,4 @@
-// Lane members file (Takes, station L7): the Takes section of the Autoradio page. The page is shared code (take-session.ts, takes.ts), asked again whenever the recorder's snapshot changes or the account does (signedOutTick: the shared half of the session belongs to one account, take-session.ts sync); the
+// Lane members file (Takes, station L7): the Takes section of the Autoradio page. The page is shared code (take-session.ts, takes.ts), asked again whenever the recorder's snapshot changes or the account does (acctTick: the shared half of the session belongs to one account, take-session.ts sync); the
 // recorder (microphone, the radio's gate, the file, the recogniser, the preview) is the one native source, declared in exact-package/interface/takes.json. The page (radio.contract) only reads `tp`
 // and sends `takesDo`.
 use takesRecorder from "@choir/autoradio"
@@ -6,8 +6,8 @@ use TakesRecorder from "@choir/autoradio"
 use TakesPageInfo from "./takes-types.contract"
 
 members Autoradio
-  resource trec = takesRecorder() as shape TakesRecorder else empty()
-  resource tp = takesPage(trec, signedOutTick) as shape TakesPageInfo else empty()
+  resource trec = takesRecorder() as shape TakesRecorder else empty() transient
+  resource tp = takesPage(trec, acctHandle) as shape TakesPageInfo else empty()
   // The act's answer is the page after it; it also asks `tp` again (what a press changed may not be in the recorder: a notice, the listener's takes, the muted voices).
   mutation tpm as shape TakesPageInfo refreshes tp
 

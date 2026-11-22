@@ -144,11 +144,6 @@ public final class NotebookCache: @unchecked Sendable {
         if let file, let d = try? Data(contentsOf: file) { _text = String(decoding: d, as: UTF8.self) }
     }
     public var text: String? { lock.lock(); defer { lock.unlock() }; return _text }
-    /// Sign-out: the text and the file.
-    public func wipe() {
-        lock.lock(); _text = nil; lock.unlock()
-        if let file { try? FileManager.default.removeItem(at: file) }
-    }
     public func set(_ t: String) {
         lock.lock(); _text = t; lock.unlock()
         guard let file else { return }
@@ -181,8 +176,6 @@ public final class NotebookCache: @unchecked Sendable {
     }
 
     private var writing: Task<Bool, Never>?
-    /// Sign-out: a write in flight is cancelled.
-    public func wipe() { writing?.cancel(); writing = nil }
 
     /// The topics written on this phone and not yet in the notebook (the marker says when they are): written now, once. Asked for by the shared page on every read.
     public func writePendingTopics() async {
@@ -195,17 +188,16 @@ public final class NotebookCache: @unchecked Sendable {
     /// Writes the listener's topics as lines of "What you asked for", once: through the ordinary owner revision route (an edit by the listener), creating
     /// the document first when there is none. The local topics file stays as a cache. True when the notebook holds them afterwards.
     @discardableResult
-    public func writeTopics(_ topics: [String], marker: URL? = nil, generation: Int? = nil) async -> Bool {
-        if let g = generation, g != AccountWipe.generation { return false }        // the account moved on between reading the topics and now: they are not this account's to write
+    public func writeTopics(_ topics: [String], marker: URL? = nil) async -> Bool {
         if let w = writing { return await w.value }      // one in flight: a second would also find nothing and make a second document
-        let t = Task { @MainActor in await self.writeTopicsNow(topics, marker: marker, generation: generation) }
+        let t = Task { @MainActor in await self.writeTopicsNow(topics, marker: marker) }
         writing = t
         let r = await t.value
         writing = nil
         return r
     }
 
-    private func writeTopicsNow(_ topics: [String], marker: URL?, generation: Int?) async -> Bool {
+    private func writeTopicsNow(_ topics: [String], marker: URL?) async -> Bool {
         let marker = marker ?? TakeFiles.url("notebook-topics-written")
         let key = topics.map { NotebookText.topicKey($0) }.sorted().joined(separator: ",")
         guard !key.isEmpty else { return true }
@@ -213,26 +205,22 @@ public final class NotebookCache: @unchecked Sendable {
         let client = ChoirEnvironment.shared.client()
         guard client.hasKey else { return false }
         var address = "", current: String?
-        let gen = generation ?? AccountWipe.generation          // every write below is dropped if the account was wiped meanwhile (the generation the topics were read under, when given)
-        guard gen == AccountWipe.generation else { return false }
-        guard let ed = await lookupEdition(), gen == AccountWipe.generation else { return false }        // the server cannot say: try later, never create on a guess
+        guard let ed = await lookupEdition() else { return false }        // the server cannot say: try later, never create on a guess
         if ed.found {
             address = "texture:" + ed.docID
             let d = await TextureText.fetch(address)
-            guard d.status == "ready", gen == AccountWipe.generation else { return false }
+            guard d.status == "ready" else { return false }
             current = d.source
         } else {
-            guard let id = await createNotebook(), gen == AccountWipe.generation else { return false }
+            guard let id = await createNotebook() else { return false }
             address = "texture:" + id
         }
         let merged = NotebookText.merging(topics: topics, into: current)
-        guard gen == AccountWipe.generation else { return false }
         if merged != current {
             await TextureEditor.shared.edit(address: address, markdown: merged)
             await TextureEditor.shared.flush(address: address)
             guard TextureEditor.shared.info(address: address).status == "saved" else { return false }
         }
-        guard gen == AccountWipe.generation else { return false }
         notebookCache.set(merged)
         if let marker { try? FileManager.default.createDirectory(at: marker.deletingLastPathComponent(), withIntermediateDirectories: true); try? Data(key.utf8).write(to: marker, options: .atomic) }
         return true

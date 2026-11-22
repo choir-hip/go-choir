@@ -2,7 +2,7 @@
 // Failure list: see notebook.ts (N1 to N8).
 import { describe, expect, test } from 'bun:test';
 import {
-  parse, merging, mineRef, sha256, editionText, parseLearning, readLearning, page, HELD, notebookPage, loadDoc, lookupEdition, CACHE_FILE, saveCache, loadCache, wipeNotebook,
+  parse, merging, mineRef, sha256, editionText, parseLearning, readLearning, page, HELD, notebookPage, loadDoc, lookupEdition, CACHE_FILE, saveCache, loadCache,
   EDITION_MAX_BYTES, type Get, type DocLoad,
 } from './notebook.ts';
 import { HTTPError, SignedOutError } from './api.ts';
@@ -134,7 +134,6 @@ describe('N7 the notebook\'s document', () => {
     const r = await loadDoc(route({ edition: { found: true, doc_id: 'nb1' } }), storage);
     expect(r.load).toMatchObject({ state: 'found', address: 'texture:nb1' }); expect(r.text).toBe(notebookMd);
     expect(await loadCache(storage)).toBe(notebookMd);
-    await wipeNotebook(storage); expect(files.has(CACHE_FILE)).toBe(false);
   });
   test('found:false is none; an unanswered ask is not none: the last text read, else unavailable', async () => {
     files.clear();

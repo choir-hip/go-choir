@@ -32,9 +32,9 @@ describe('the radio pulse reads and says; it does not work', () => {
 
 /** A `void` in front of a call starts work nothing waits for: what it fetches after an await is never run once its answer is gone. Each one that is allowed says why. */
 const ALLOWED: Record<string, string> = {
-  'account.ts::void p.then((ok) => { if (timedOut && ok) onLate?.(); });': 'a late native answer after the deadline: bookkeeping that the next launch repeats (reconcile)',
-  'account.ts::void (async () => { if ((await keyState()).state': 'the late continuation of a sign-out (the marker stays, the next launch finishes it)',
-  'account.ts::void (async () => { const n = await keyState();': 'the late continuation of a wipe (the marker stays, the next launch finishes it)',
+  'account.ts::void p.then((r) => { if (r === \'locked\' && launching === p': 'the launch decision is asked again at the next answer when it was locked: bookkeeping of a promise already awaited by its callers',
+  'account.ts::void (async () => { for (let i = 0; i < 300 && !answered;': 'says "run sheet done" to the native sign-out every 100 ms until it answers: the session has ended, nothing else runs',
+  'app.ts::const guarded =': 'a world-closed watcher: the answer ends (refused) the moment its world closes; the chain it ends stays pending forever, by design',
   'notebook-run.ts::void (async () => {': 'one native push whose first call is made inside the answer; a miss is pushed again by the next read',
   'radio-runtime.ts::if (how === \'restart\') { const it = this.known.get(air.id); if (it) void this.deck.play(it); }': 'one native call started inside the pump (a mutation); the journal says if it did not play',
   'radio-runtime.ts::if (!this.inPump) void this.pump();': 'joined by the caller\'s own `await rt.pump()` (the chain), so the answer waits for it',

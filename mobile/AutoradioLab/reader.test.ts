@@ -12,9 +12,10 @@
 //  R13 the page in front is handed to the native voice (it holds the page text the turn reads): its blocks with sentences, once per ask, only a ready document, nothing when there is no native module, never from another account.
 //  R14 the log says "handed" only when native answered that it held the page; a refusal is logged.
 //  R11 "Hear it": the story's clips come with it; a failing clip route gives none and does not fail the story.   R12 a document the desk is revising says so.
+import { moveAccount } from './account-phone.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as R from './reader.ts';
-import { HTTPError, SignedOutError, nextGeneration, resetSeam, type Reply } from './api.ts';
+import { HTTPError, SignedOutError, resetSeam, type Reply } from './api.ts';
 
 const reply = (body: unknown): Reply => ({ body, serverTime: 0, raw: '' });
 const bundle = (title: string, text = 'The council voted.') => ({ publication: { title, kind: 'story' }, route: { bare: 'pub/x', permalink: 'pub/x/v1' }, artifact: { content: `# ${title}\n\n${text}` }, nav: { revision: 1, latest: 1 } });
@@ -111,10 +112,10 @@ describe('held documents', () => {
   test('R7 a new account never sees the old one\'s documents; a stale answer is not held', async () => {
     const f = fake();
     await R.readerDocShared('pub:pub/x', 'in', false, f.net);
-    nextGeneration();
+    moveAccount();
     await R.readerDocShared('pub:pub/x', 'in', false, f.net);
     expect(f.count('/publications/resolve')).toBe(2);
-    const flip: R.Net = { ...fake().net, pub: async (p) => (p.endsWith('/resolve') ? (nextGeneration(), reply(bundle('Old account story'))) : reply({})) };
+    const flip: R.Net = { ...fake().net, pub: async (p) => (p.endsWith('/resolve') ? (moveAccount(), reply(bundle('Old account story'))) : reply({})) };
     const pending = R.readerDocShared('pub:pub/slow', 'in', false, flip);
     const d = await pending;
     expect(d.status).toBe('loading'); expect(JSON.stringify(d)).not.toContain('Old account story');
@@ -126,7 +127,7 @@ describe('held documents', () => {
     expect((await R.readerDocShared('texture:d1@r1', 'in', false, f.net)).status).toBe('ready');
     await R.readerDocShared('texture:d1@r1', 'in', false, f.net);
     expect(f.count('/api/texture/revisions/r1')).toBe(1);                      // held for the account that read it
-    nextGeneration();
+    moveAccount();
     const other = fake({ authed: (p) => (p.startsWith('/api/texture/revisions/') ? { revision_id: 'r1', content: 'The new account\u2019s own text.' } : p.endsWith('/revisions') ? { revisions: [] } : { doc_id: 'd1', title: 'Theirs', current_revision_id: 'r1' }) });
     const d = await R.readerDocShared('texture:d1@r1', 'in', false, other.net);
     expect(other.count('/api/texture/revisions/r1')).toBe(1);                  // asked again with the new account's key
@@ -207,7 +208,7 @@ describe('the voice holds the page in front', () => {
     R.setHandOverForTest(async () => { throw new Error('native down'); });
     expect((await R.readerDocShared('pub:pub/y', 'in', false, fake().net)).status).toBe('ready');
     const sent: unknown[] = []; R.setHandOverForTest(async (r) => { sent.push(r); return {}; });
-    const flip: R.Net = { ...fake().net, pub: async (p) => (p.endsWith('/resolve') ? (nextGeneration(), reply(bundle('Old'))) : reply({})) };
+    const flip: R.Net = { ...fake().net, pub: async (p) => (p.endsWith('/resolve') ? (moveAccount(), reply(bundle('Old'))) : reply({})) };
     await R.readerDocShared('pub:pub/z', 'in', false, flip);
     expect(sent.length).toBe(0);
   });

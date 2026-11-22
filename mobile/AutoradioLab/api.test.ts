@@ -16,7 +16,16 @@
 //  A13 authedToFile: the body goes to the named app file by the host (`exactBodyTo`), the reply is never read, a path outside app:/cache is refused before the key is read,
 //      a refusal is an error with no file, a sign-out in flight removes the file and drops the reply, a host that wrote nothing is an error.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { authedJSON, authedBytes, authedToFile, SignedOutError, HTTPError, bindNative, resetSession, resetSeam, nextGeneration, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
+import { dig, reopen, moveAccount } from './account-phone.ts';
+import { currentWorld as theWorld } from './api.ts';
+import { SignedOutError, HTTPError, bindNative, resetSession, resetSeam, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
+// A signed-in request states its world (api.ts: a missing one throws): the tests state the one current when they ask.
+import * as apiReal from './api.ts';
+const sync = (): void => { const k = kept['api-key']; if (k === undefined) apiReal.dropHeld(); else apiReal.holdSession(k, '', kept['computer-id'] ?? ''); };      // what an answer's store gives (adoptStore): the key kept under Exact's `secret.keep`
+const authedJSON = (p: string, o: object = {}) => (sync(), apiReal.authedJSON(p, { ...o, world: apiReal.currentWorld() } as never));
+const authedBytes = (p: string, o: object = {}) => (sync(), apiReal.authedBytes(p, { ...o, world: apiReal.currentWorld() } as never));
+const authedToFile = (p: string, d: string, s: never, o: object = {}) => (sync(), apiReal.authedToFile(p, d, s, { ...o, world: apiReal.currentWorld() } as never));
+
 
 const KEY = 'test-key-0001-not-real';
 const KEY2 = 'test-key-0002-not-real';
@@ -32,17 +41,14 @@ const header = (c: Call, n: string) => (c.init.headers as Record<string, string>
 beforeEach(() => {
   kept = { 'api-key': KEY, 'computer-id': 'comp-1' };
   reads = []; calls = []; resetSeam();
-  bindNative(native as never);
+  bindNative(native as never); reopen(dig(KEY));      // the boundary stamps a world with the key it read; a test does it by hand
   handler = () => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } });
   globalThis.fetch = (async (u: string, init: RequestInit) => { const c = { url: String(u), init }; calls.push(c); return handler(c); }) as never;
 });
 
 describe('signed-in seam', () => {
-  test('A1 no reader, or no key: SignedOutError and nothing sent', async () => {
+  test('A1 no key: SignedOutError and nothing sent (the key is Exact\'s store, not a native reader)', async () => {
     kept = {};
-    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
-    bindNative(undefined);
-    kept = { 'api-key': KEY };
     await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
     expect(calls.length).toBe(0);
   });
@@ -140,7 +146,7 @@ describe('signed-in seam', () => {
     handler = (c) => c.url.endsWith('/api/compute/status') ? new Response(JSON.stringify({ computers: [{ computer_id: header(c, 'Authorization').includes(KEY2) ? 'c-two' : 'c-one' }] }), { status: 200 }) : new Response('{}', { status: 200 });
     await authedJSON('/api/x');
     expect(header(calls[1], 'X-Choir-Computer')).toBe('c-one');
-    kept = { 'api-key': KEY2 };
+    kept = { 'api-key': KEY2 }; reopen(dig(KEY2));      // another account is another world, stamped with its own key
     await authedJSON('/api/x');
     expect(header(calls[calls.length - 1], 'X-Choir-Computer')).toBe('c-two');
   });
@@ -158,7 +164,7 @@ describe('signed-in seam', () => {
 describe('review 2026-11-19: generation, redirect, one read', () => {
   test('N1 a source answered WITHOUT a usable native handle does not unbind the one that works (the signed-out screens of the first real run)', async () => {
     const { adoptNative } = await import('./api.ts');
-    resetSeam(); adoptNative(native as never, 'paperFront');
+    resetSeam(); reopen(dig(KEY)); adoptNative(native as never, 'paperFront');
     adoptNative(undefined, 'mailBox'); adoptNative({ available: false, later: native.later } as never, 'filesList');
     const r = await authedJSON('/api/x');
     expect(r.body).toEqual({ ok: true }); expect(header(calls[0], 'Authorization')).toBe(`Bearer ${KEY}`);
@@ -174,19 +180,15 @@ describe('review 2026-11-19: generation, redirect, one read', () => {
     globalThis.fetch = (async (u: string, init: RequestInit) => { calls.push({ url: String(u), init }); await gate; return new Response('{"old":"account"}', { status: 200 }); }) as never;
     const j = authedJSON('/api/x'); const b = authedBytes('/api/y');
     await new Promise((r) => setTimeout(r, 5));
-    nextGeneration(); release();
-    const [rj, rb] = await Promise.allSettled([j, b]);
-    expect(rj.status).toBe('rejected'); expect(rb.status).toBe('rejected');
-    expect((rj as PromiseRejectedResult).reason).toBeInstanceOf(SignedOutError); expect((rb as PromiseRejectedResult).reason).toBeInstanceOf(SignedOutError);
+    moveAccount(); release();
+    // The world mechanism (api.ts): a reply that arrives after the boundary moved never reaches the chain that asked: its promise does not settle (it is not "rejected": a rejection would run the caller's catch branch).
+    const settled = await Promise.race([Promise.allSettled([j, b]).then(() => 'settled'), new Promise((r) => setTimeout(() => r('never'), 60))]);
+    expect(settled).toBe('never');
   });
   test('R1 the key reaches the server only: redirects are not followed, a 3xx is an error', async () => {
     handler = () => new Response('', { status: 302, headers: { location: 'https://evil.example.com/' } });
     await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(HTTPError);
     expect((calls[0].init as { redirect?: string }).redirect).toBe('manual');
-  });
-  test('O1 the key and the computer id come from ONE native read', async () => {
-    await authedJSON('/api/x');
-    expect(reads).toEqual(['session']);
   });
   test('K1 what is kept after discovery is a digest: the key text is in no field of the module state', async () => {
     kept = { 'api-key': KEY };
@@ -206,7 +208,7 @@ describe('A13 the signed-in download to a file', () => {
     handler = () => { const r = wrote(60_000_000); r.arrayBuffer = async () => { read = true; return new ArrayBuffer(0); }; r.text = async () => { read = true; return ''; }; return r; };
     const got = await authedToFile('/api/files/talk.mp4', DEST, storage([]), { query: { disposition: 'inline' } });
     expect(got.bytes).toBe(60_000_000); expect(read).toBe(false);
-    expect((calls[0].init as { exactBodyTo?: string }).exactBodyTo).toBe(DEST);
+    expect((calls[0].init as { exactBodyTo?: string }).exactBodyTo).toBe(apiReal.rootPath(apiReal.currentWorld(), DEST));      // the host writes under the account's root
     expect(header(calls[0], 'Authorization')).toBe(`Bearer ${KEY}`); expect(header(calls[0], 'Accept')).toBe('*/*');
     expect(calls[0].url).toBe(`${ORIGIN}/api/files/talk.mp4?disposition=inline`); expect((calls[0].init as { redirect?: string }).redirect).toBe('manual');
   });
@@ -224,12 +226,12 @@ describe('A13 the signed-in download to a file', () => {
     const removed: string[] = [];
     handler = () => new Response('hello', { status: 200 });
     await expect(authedToFile('/api/files/a', DEST, storage(removed))).rejects.toThrow(/did not write/);
-    expect(removed).toContain(DEST);
+    expect(removed).toContain(apiReal.rootPath(apiReal.currentWorld(), DEST));
   });
-  test('a sign-out while the file arrives: the file is removed and the reply is dropped', async () => {
+  test('a sign-out while the file arrives: the reply is dropped, and the file is left to the Clear (it removes the cache by path; a remove here could take the next account\'s file at the same path)', async () => {
     const removed: string[] = [];
-    handler = () => { nextGeneration(); return wrote(10); };
-    await expect(authedToFile('/api/files/a', DEST, storage(removed))).rejects.toBeInstanceOf(SignedOutError);
-    expect(removed).toContain(DEST);
+    handler = () => { moveAccount(); return wrote(10); };
+    await Promise.race([authedToFile('/api/files/a', DEST, storage(removed)).then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, 40))]);      // the reply never reaches the caller (the world is closed)
+    expect(removed).not.toContain(DEST);
   });
 });

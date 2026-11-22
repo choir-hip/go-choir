@@ -16,7 +16,7 @@ import {
   FRONT, FRONT_LIMIT, LIST_LIMIT, MINE, buildMine, belongs, dateLine, display, isCategory, parseList, parseLiveSections, relative, resolveView, sections,
   type LiveSection, type Section, type Story,
 } from './paper-model.ts';
-import { getJSON, writeCurrent, accountGeneration } from './api.ts';
+import { getJSON, putFile, accountGeneration, scoped } from './api.ts';
 
 export const FRONT_PATH = '/api/platform/publications/front';
 /** The last good front list, kept for an offline start. */
@@ -37,8 +37,7 @@ const UNREACHABLE = 'Could not reach choir.news. Pull to try again.';
 
 // The newest answer of each list is kept until the next pull to refresh (`tick` changes), so switching views and coming back from a
 // story ask nothing: one ask per list, never one per view change.
-const kept = new Map<string, Promise<Listing>>();
-let lastTick = 0;
+const S = scoped(() => ({ kept: new Map<string, Promise<Listing>>(), lastTick: 0 }));      // module state belongs to the world (api.ts `scoped`)
 
 async function readCache(storage: Storage | undefined): Promise<unknown | null> {
   if (!storage) return null;
@@ -46,19 +45,19 @@ async function readCache(storage: Storage | undefined): Promise<unknown | null> 
 }
 
 async function writeCache(storage: Storage | undefined, raw: string, gen: number): Promise<void> {
-  await writeCurrent(gen, storage, CACHE_FILE, new TextEncoder().encode(raw));       // a full disk or no storage loses only the offline copy; a sign-out in flight writes nothing
+  await putFile(storage, CACHE_FILE, new TextEncoder().encode(raw));       // a full disk or no storage loses only the offline copy; a sign-out in flight writes nothing
 }
 
 /** The front list (`section` empty) or one category's list. Only the front list is written to the phone. */
 export function listing(section: string, storage: Storage | undefined): Promise<Listing> {
-  const hit = kept.get(section);
+  const hit = S().kept.get(section);
   if (hit) return hit;
   // The promise is kept, so two answers asked together (the picks arrive a moment after the page) make one request.
   const p = load(section, storage).then((r) => {
-    if (!(r.status === 'ready' && (r.stories.length > 0 || section !== ''))) kept.delete(section);
+    if (!(r.status === 'ready' && (r.stories.length > 0 || section !== ''))) S().kept.delete(section);
     return r;
   });
-  kept.set(section, p);
+  S().kept.set(section, p);
   return p;
 }
 
@@ -127,7 +126,7 @@ export function composeFront(stories: Story[], o: {
 export async function paperFront(a: PaperArgs, storage?: Storage): Promise<PaperFront> {
   const view = a.view === '' ? FRONT : a.view;
   const width = a.width >= 200 ? a.width : 393;
-  if (a.tick !== lastTick) { kept.clear(); lastTick = a.tick; }
+  if (a.tick !== S().lastTick) { S().kept.clear(); S().lastTick = a.tick; }
   const picks = view === MINE ? pickList(a.picks) : [];
   const r = await listing('', storage);
   let category: Story[] | null = null;
@@ -141,11 +140,5 @@ export async function paperFront(a: PaperArgs, storage?: Storage): Promise<Paper
 }
 
 /** Forget the kept lists (tests). */
-export function forget(): void { kept.clear(); lastTick = 0; }
+export function forget(): void { S.reset(); }
 
-/** Sign-out (account.ts): the cached front list on disk and what this session holds. Never throws. */
-export async function wipePaper(storage: Storage | undefined): Promise<void> {
-  kept.clear(); lastTick = 0;
-  if (!storage) return;
-  try { await storage.fs.rm(CACHE_FILE); } catch { /* absent */ }
-}

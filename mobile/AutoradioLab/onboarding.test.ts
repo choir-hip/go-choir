@@ -1,8 +1,9 @@
 // First run under bun test: the steps, their order and what is kept (O1 to O14), against a fake voice side and a fake storage.
+import { moveAccount } from './account-phone.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { onboardingAct, onboardingPage, forgetOnboarding, wipeOnboarding, parseProgress, startStep, noVoice, PROGRESS_FILE, EDIT, SETUP,
+import { onboardingAct, onboardingPage, forgetOnboarding, parseProgress, startStep, noVoice, PROGRESS_FILE, EDIT, SETUP,
   MIC_REFUSED_LINE, MIC_SILENT_LINE, TALK_REFUSED_LINE, HEARING_AGAIN_LINE, type Env, type VoiceFacts, type Device } from './onboarding.ts';
-import { resetSeam, nextGeneration } from './api.ts';
+import { resetSeam } from './api.ts';
 import { FAILED_LINE, type Writer } from './edition-writer.ts';
 
 const files = new Map<string, Uint8Array>();
@@ -114,14 +115,6 @@ describe('leaving and coming back', () => {
     expect(startStep(parseProgress('{"topicsStarted":true}'))).toBe('topics');
     expect(startStep(parseProgress('{"skipped":true,"setupDone":true}'))).toBe('skipped');
   });
-  test('O13 sign-out removes the file and forgets the run; a file that cannot go says so', async () => {
-    await act('topics'); expect(files.has(PROGRESS_FILE)).toBe(true);
-    await wipeOnboarding(storage); expect(files.has(PROGRESS_FILE)).toBe(false);
-    expect((await onboardingPage(v, 0, SETUP, env())).step).toBe('welcome');
-    files.set(PROGRESS_FILE, new TextEncoder().encode('{}'));
-    const stuck = { fs: { rm: async () => { throw new Error('busy'); }, stat: async () => ({}) } } as never;
-    await expect(wipeOnboarding(stuck)).rejects.toThrow('busy');
-  });
 });
 
 describe('the edition', () => {
@@ -142,7 +135,7 @@ describe('the edition', () => {
     const slow: Writer = async (topics) => { await new Promise<void>((r) => { release = r; }); return { title: 'T', intro: '', writingLines: [], sections: [{ heading: 'H', lines: topics }] }; };
     const pending = act('topicsDone', '', 'Space', SETUP, env({ writer: slow }));
     await new Promise((r) => setTimeout(r, 10));
-    nextGeneration(); files.clear(); calls = [];
+    moveAccount(); files.clear(); calls = [];
     release(); await pending;
     expect(ops()).not.toContain('obNotebookTopics'); expect(files.has(PROGRESS_FILE)).toBe(false);
     expect((await onboardingPage(v, 0, SETUP, env())).step).toBe('welcome');

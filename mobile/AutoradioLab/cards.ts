@@ -14,15 +14,18 @@
 //  MAX_LIFT, and a "more" and a "less" cancel.   6 an act dated in the future weighs at most one; old acts fade.   7 the shaded order is a stable permutation of the input.
 //  9 forget of a route with no acts and reset of nothing remove none.   Launcher: an empty query has no hits; one hit per address (open, places, recent, stories); the query is plain
 //  text, never a pattern; a place line is one line of at most 60 characters; recent pages exclude the open ones and repeats and unknown schemes.
-//  Sign-out: a write that began under an older account generation is refused (api.ts writeCurrent); the store is emptied by account.ts (`told-paper`).
+//  Sign-out: the world closes (api.ts), so a write begun by it never resumes, and the account's folder holding this file is deleted (account.ts).
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, writeCurrent } from './api.ts';
+import { accountGeneration, putFile, scoped } from './api.ts';
 import { defaultTitle, kindOf, pagesView, type Page } from './pages.ts';
 import { addresses as recentAddresses, events as recentEvents } from './recent-pages.ts';
 import { decodeSheet } from './runsheet-model.ts';
 import { enqueue, flush, onAir, tapOn } from './steer.ts';
 import type { Story } from './paper-model.ts';
 import { listing } from './paper.ts';
+
+// Module state belongs to the world (api.ts `scoped`): a closed world's is unreachable and no later world joins it.
+const S = scoped(() => ({ pinned: false, told: new Told(), loaded: false, loading: null as Promise<void> | null, epoch: 0, saving: Promise.resolve() as Promise<unknown> }));
 
 export const TOLD_FILE = 'app:/data/what-i-told-the-paper.json';
 export const MAX_LIFT = 0.25;
@@ -147,44 +150,38 @@ export function factsOf(s: Pick<Story, 'route' | 'title' | 'dek' | 'section' | '
 // ---- the stored acts
 
 /** The caller's clock (epoch seconds) for this use; none (0, or a test's own) leaves the newest act's time. */
-let pinned = false;
-function tick(now: number | undefined): void { if (!pinned) told.now = now !== undefined && now > 0 ? () => now : () => told.acts.reduce((m, a) => Math.max(m, a.at), 0) + DOUBLE_FIRE_SECONDS; }
+function tick(now: number | undefined): void { if (!S().pinned) S().told.now = now !== undefined && now > 0 ? () => now : () => S().told.acts.reduce((m, a) => Math.max(m, a.at), 0) + DOUBLE_FIRE_SECONDS; }
 
-let told = new Told();
-let loaded = false;
-let loading: Promise<void> | null = null;
-let epoch = 0;
 
 async function load(storage: Storage | undefined): Promise<void> {
-  if (loaded) return;
-  if (!loading) {
-    const mine = epoch;
+  if (S().loaded) return;
+  if (!S().loading) {
+    const mine = S().epoch;
     const p: Promise<void> = (async () => {
       let stored: unknown = null;
       if (storage) { try { stored = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(TOLD_FILE))); } catch { /* none kept, or damaged: empty */ } }
-      if (mine !== epoch) return;                                              // wiped while reading: the old account's file
+      if (mine !== S().epoch) return;                                              // wiped while reading: the old account's file
       const raw = Array.isArray((stored as { acts?: unknown } | null)?.acts) ? (stored as { acts: unknown[] }).acts : [];
-      told.acts = raw.filter((a): a is ToldAct => {
+      S().told.acts = raw.filter((a): a is ToldAct => {
         const o = a as Partial<ToldAct> | null;
         return !!o && (o.kind === 'more' || o.kind === 'less') && typeof o.route === 'string' && o.route !== '' && typeof o.at === 'number' && Number.isFinite(o.at)
           && typeof o.title === 'string' && Array.isArray(o.entities) && o.entities.every((e) => typeof e === 'string') && typeof o.topic === 'string';
       });
-      loaded = true;
-    })().finally(() => { if (loading === p) loading = null; });
-    loading = p;
+      S().loaded = true;
+    })().finally(() => { if (S().loading === p) S().loading = null; });
+    S().loading = p;
   }
-  await loading;
+  await S().loading;
 }
 
-let saving: Promise<unknown> = Promise.resolve();
 function save(storage: Storage | undefined, gen: number): Promise<void> {
-  const run = saving.then(() => writeCurrent(gen, storage, TOLD_FILE, new TextEncoder().encode(JSON.stringify({ acts: told.acts }))), () => undefined);
-  saving = run.catch(() => undefined);
+  const run = S().saving.then(() => putFile(storage, TOLD_FILE, new TextEncoder().encode(JSON.stringify({ acts: S().told.acts }))), () => undefined);
+  S().saving = run.catch(() => undefined);
   return run.then(() => undefined);
 }
 
 /** The acts as the store holds them (tests, and the learned screen). */
-export async function acts(storage: Storage | undefined): Promise<ToldAct[]> { await load(storage); return [...told.acts]; }
+export async function acts(storage: Storage | undefined): Promise<ToldAct[]> { await load(storage); return [...S().told.acts]; }
 
 // ---- what the paper has learned (Settings)
 
@@ -200,13 +197,13 @@ export function learnedRows(list: ToldAct[], utc = false): LearnedItem[] {
 }
 export async function learnedInfo(storage: Storage | undefined): Promise<LearnedInfo> {
   await load(storage);
-  const rows = learnedRows(told.acts);
+  const rows = learnedRows(S().told.acts);
   return { rows, count: rows.length, message: rows.length === 0 ? 'Nothing yet. Swipe right on a story you want more of, and it shows here.' : '' };
 }
 export async function learnedReset(storage: Storage | undefined): Promise<{ ok: boolean; message: string }> {
   const gen = accountGeneration();
   await load(storage);
-  const n = told.reset();
+  const n = S().told.reset();
   if (n > 0) await save(storage, gen);
   return { ok: true, message: '' };
 }
@@ -267,7 +264,7 @@ async function shadedStories(storage: Storage | undefined, front: () => Promise<
   await load(storage);
   let list: Story[] = [];
   try { list = await front(); } catch { /* no front list: no stories */ }
-  return told.order(list.map(factsOf)).map((x) => x.story);
+  return S().told.order(list.map(factsOf)).map((x) => x.story);
 }
 
 const frontStories = async (storage: Storage | undefined): Promise<Story[]> => (await listing('', storage)).stories;
@@ -305,7 +302,7 @@ export async function storyMore(a: { address: string; surface: string; sheet: st
   const s = list.find((x) => x.route === route);
   if (!s) return { message: '' };
   const f = factsOf(s);
-  if (!told.record('more', f)) return { message: '' };
+  if (!S().told.record('more', f)) return { message: '' };
   if (gen !== accountGeneration()) return { message: '' };
   await save(storage, gen);
   let entry;
@@ -316,7 +313,6 @@ export async function storyMore(a: { address: string; surface: string; sheet: st
 }
 
 /** Tests: the clock the acts are dated and weighed by. */
-export function setClock(now: (() => number) | null): void { pinned = now !== null; if (now) told.now = now; }
+export function setClock(now: (() => number) | null): void { S().pinned = now !== null; if (now) S().told.now = now; }
 /** Sign-out and tests. */
-export function forget(): void { const now = told.now; told = new Told(); if (pinned) told.now = now; loaded = false; loading = null; epoch += 1; }
-export async function wipeTold(storage: Storage | undefined): Promise<void> { forget(); if (!storage) return; try { await storage.fs.rm(TOLD_FILE); } catch { /* absent */ } }
+export function forget(): void { const now = S().told.now; S().told = new Told(); if (S().pinned) S().told.now = now; S().loaded = false; S().loading = null; S().epoch += 1; }

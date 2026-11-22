@@ -1,445 +1,239 @@
-// Sign-out orchestrated from shared code (account.ts). Failure list, each line a test below:
-//  S1 the native sign-out (key delete, Swift stores, revoke) runs FIRST and the shared wipes only after it answered: the old key is
-//     still held while the native side settles what it posts; pending shared work is never sent under a later account.
-//  S2 when the native sign-out fails or is missing in a native build, nothing shared is wiped and the answer says so (retry is safe).
-//  S3 one wipe that throws does not stop the others; the answer names what failed, never why in the listener's words.
-//  S4 every path the shared modules keep under app:/data or app:/cache is removed by some wipe (a new store without a wipe fails here).
-//  S5 the answer never carries a key.
-//  S6 a kill between the native sign-out and the wipes: the marker is still there at the next launch, which finishes the wipes before any
-//     source answers; a clean sign-out leaves no marker; a native sign-out that did not finish leaves none either and wipes nothing.
-//  S7 a native build whose native module is absent refuses (nothing wiped, done false); a native call that never answers is a deadline, done false.
-//  S8 the real wipes empty a real in-memory file system seeded at EVERY `app:/` path any shared module names; a path no wipe covers fails here.
-//  S9 sign out A, sign in B: B sees nothing of A (files, memory, live content store, live vectors, remembered computer, a reply still in flight).
-//  S12 the drift guard runs the real wipes against a recording storage: every `app:/` literal the modules name is among the recorded removals (or under one),
-//      and the native mail key is forgotten.   S13 the clips remembered in memory are forgotten at sign-out.
-//  S14 THE TABLE (auth round 2, review 2026-11-19): key state (3) x stamp (3) x marker (2): what a launch does, and that it never wipes while the key is unreadable or present+same.
-//  S15 a kill at each step boundary of a sign-out, then a relaunch: (a) a signed-in account's data is never wiped while its key is present, (b) once the key is gone no
-//      store of the old account is left, shared or Swift, and a new account is adopted clean. Findings 1 to 4 of the round are rows here.
-//  S10 a different account's key at launch (the stamp) wipes the old data first; the same account, or a phone with no key, keeps it.
-import { describe, expect, test } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
-import { accountSignOut, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
-import { createHash } from 'node:crypto';
-import { authedJSON, bindNative, resetSeam, SignedOutError } from './api.ts';
-import { ContentStore } from './content.ts';
-import { VectorStore } from './search.ts';
-import { clipAct, remembered as clipsRemembered } from './clips.ts';
+// THE ACCOUNT BOUNDARY AS PARTITIONS (docs/design/account-boundary-2026-11-21.md, "Accounts are partitions"). Station 1. Failure list, written from the design's operations and invariants BEFORE the code:
+//  L1  launch with a live key: the sweep deletes every root no live key names (data, cache and tmp), the leftover top-level paths and `app:/cache/mail-*`, keeps the live root and `anonymous`, and READS no file.
+//  L2  launch with no key: the world is anonymous; every account root is swept (a root with no key is an orphan), `anonymous` stays.
+//  L3  launch with an unreadable key (I6): LOCKED. Nothing is swept, no world opens, every gated answer refuses; when the key reads, the next answer sweeps and opens.
+//  L4  changed key: the old account's root is swept, the new key's root is its own, and the world is the new key's.
+//  L5  a signed-out process whose key appears (a sign-in) moves to that account's world, once; a second account world is refused (I5).
+//  S1  sign out of one: the session ends (the world closes, no world opens again), the native sign-out runs once, the key is gone, the account folders are deleted, the card says to close and reopen.
+//  S2  kill mid sign-out: the key is gone and the root is left (a refused removal): the next launch deletes the orphan before any page, and never reads it.
+//  S3  the key still there after the native sign-out (the delete failed): the card says it did not finish, the root is KEPT, the process stays ended and the relaunch is still signed in.
+//  S4  no native module: nothing changes, and the world stays open.
+//  S5  a chain of the account that left writes, sends and asks native nothing after the sign-out (the bound storage and the request are inert), and a write already in flight lands in the account's own root, which no key names.
+//  C1  the card: signedIn with the handle (16 hex), signedOut, locked, rejected with Sign out, ended with the three sentences; the handle moves when the account opens.
+import { afterEach, describe, expect, test } from 'bun:test';
+import * as account from './account.ts';
+import * as api from './api.ts';
+import { accountState } from './account-state.ts';
+import { WORDS } from './words.ts';
+import { resetHost } from './host.ts';
+import { dig, events, fakeStore, KEY_A, KEY_B, memFs, type Mem } from './account-phone.ts';
 
+// THE KEY IS EXACT'S (Round 12): the "phone" is a fake secret store (`fakeStore`, `hide()` = a Keychain the host could not read yet), the markers under `app:/data`, and a native module that holds the key in memory (`holdKey`) and forgets its files.
+type Phone = { key: 'present' | 'absent' | 'unreadable'; forgetDone: boolean; log: string[] };
+let W: Phone; let m: Mem; let reads: string[]; let store: ReturnType<typeof fakeStore>; let forgets: number;
+const ROOT = (k: string, space = 'data'): string => `app:/${space}/accounts/${dig(k)}`;
+const settle = (p: Promise<unknown>): Promise<unknown> => Promise.race([p.then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, 40))]);
+const native = () => ({ available: true, later: async (r: { op: string }) => { W.log.push(r.op); if (r.op === 'forgetAccountFiles') { forgets += 1; return { done: W.forgetDone }; } if (r.op === 'hello') return { state: 'native' }; return { ok: true }; } });
 
-/** A real in-memory file system: files and folders, rm removes a folder's children, readdir lists them. */
-function memFs(seed: string[] = []) {
-  const files = new Map<string, Uint8Array>();
-  for (const p of seed) files.set(p, new TextEncoder().encode('x'));
-  const kids = (p: string) => [...files.keys()].filter((k) => k.startsWith(p + '/'));
-  const fs = {
-    directories: { data: 'app:/data', cache: 'app:/cache', temporary: 'app:/tmp' },
-    atomicWriteFile: async (p: string, b: Uint8Array) => { files.set(p, b); },
-    readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; },
-    stat: async (p: string) => { if (files.has(p) || kids(p).length) return { size: 1, modifiedMs: 0 }; throw new Error('ENOENT'); },
-    rm: async (p: string) => { files.delete(p); for (const k of kids(p)) files.delete(k); },
-    mkdir: async () => undefined,
-    readdir: async (p: string) => [...new Set(kids(p).map((k) => k.slice(p.length + 1).split('/')[0]))],
-  };
-  return { files, storage: { fs, sqlite: {} } as never };
+/** A process that has just started on a phone whose store holds `key` and whose files are `files`. Every read of a file is logged (the sweep must read none). */
+function boot(files: Record<string, string>, key: Phone['key'] = 'present', value = KEY_A): void {
+  events.length = 0; reads = []; forgets = 0;
+  W = { key, forgetDone: true, log: [] };
+  store = fakeStore(key === 'absent' ? {} : { 'api-key': value, 'key-id': 'kid-1' });
+  const f = { ...files }; if (key !== 'absent') f[account.SIGNED] = '1'; if (key === 'unreadable') store.hide();
+  m = memFs(f);
+  const read = m.storage.fs.readFile.bind(m.storage.fs); (m.storage as { fs: { readFile: unknown } }).fs.readFile = async (p: string) => { reads.push(p); return read(p); };
+  account.resetBoundary(); api.resetSeam(); api.bindNative(native() as never);
+  globalThis.fetch = (async () => new Response('{}', { status: 200 })) as never;
 }
-const native = (done = true, log: string[] = []) => ({ available: true, later: async (r: { op: string }) => { log.push(r.op); return { done }; } });
+afterEach(() => { account.resetBoundary(); api.resetSeam(); delete (globalThis as { exactHost?: unknown }).exactHost; });
+const has = (p: string): boolean => [...m.files.keys()].some((k) => k === p || k.startsWith(p + '/'));
+const relaunch = (): void => { account.resetBoundary(); api.resetSeam(); api.bindNative(native() as never); };
+const gated = (): Promise<{ readable: boolean; state: string; world: api.World }> => account.enter(m.storage as never, store as never);
+const out = (): Promise<account.SignOutResult> => account.accountSignOut(m.storage as never, store as never);
+const ending = (): Promise<account.SignOutResult> => account.accountEnding(m.storage as never, store as never);
+const card = (tries = 0) => accountState('', 'native', tries, m.storage as never, store as never);
 
-describe('accountSignOut', () => {
-  test('S1 native first, then the shared wipes', async () => {
-    const order: string[] = [];
-    const { storage } = memFs();
-    const n = { available: true, later: async (r: { op: string }) => { order.push(`native:${r.op}`); return { done: true }; } };
-    const r = await accountSignOut(storage, undefined, n as never, { wipes: [{ name: 'a', run: async () => { order.push('wipe:a'); } }] });
-    expect(order).toEqual(['native:signOut', 'wipe:a']);
-    expect(r).toMatchObject({ done: true, failed: '', message: '' });
+describe('L launch: the sweep and the one-world rule', () => {
+  test('L1 a live key: orphan roots, leftovers and old mail originals go, the live root and anonymous stay, and nothing is read', async () => {
+    boot({
+      [`${ROOT(KEY_A)}/takes.json`]: 'mine', [`${ROOT(KEY_B)}/takes.json`]: 'planted', [`${ROOT(KEY_B, 'cache')}/files/x`]: 'x', [`${ROOT(KEY_B, 'tmp')}/y`]: 'y', 'app:/data/accounts/anonymous/paper-front.json': '{}',
+      'app:/data/accounts/not-a-digest/z': 'z', 'app:/data/takes.json': 'leftover', 'app:/data/mail/inbox': 'leftover', 'app:/cache/mail-abc.html': 'leftover', 'app:/cache/other.html': 'keep', 'app:/data/theme-choice.json': '{}',
+    });
+    const b = await gated();
+    expect(b.readable).toBe(true); expect(b.state).toBe('open'); expect(b.world.kind).toBe('account'); expect(b.world.digest).toBe(dig(KEY_A));
+    expect(has(`${ROOT(KEY_A)}/takes.json`)).toBe(true); expect(has('app:/data/accounts/anonymous')).toBe(true);
+    expect(has(ROOT(KEY_B))).toBe(false); expect(has(ROOT(KEY_B, 'cache'))).toBe(false); expect(has(ROOT(KEY_B, 'tmp'))).toBe(false); expect(has('app:/data/accounts/not-a-digest')).toBe(false);
+    expect(has('app:/data/takes.json')).toBe(false); expect(has('app:/data/mail')).toBe(false); expect(has('app:/cache/mail-abc.html')).toBe(false);
+    expect(has('app:/cache/other.html')).toBe(true); expect(has('app:/data/theme-choice.json')).toBe(true);
+    expect(reads).toEqual([]);
   });
-  test('S2 a native answer that says not done wipes nothing shared', async () => {
-    const r = await accountSignOut(memFs().storage, undefined, native(false) as never, { wipes: [{ name: 'a', run: async () => { throw new Error('must not run'); } }] });
-    expect(r.done).toBe(false);
+  test('L2 no key: anonymous world; every account root is an orphan and goes', async () => {
+    boot({ [`${ROOT(KEY_A)}/takes.json`]: 'a', 'app:/data/accounts/anonymous/paper-front.json': '{}' }, 'absent');
+    const b = await gated();
+    expect(b.readable).toBe(true); expect(b.state).toBe('anonymous'); expect(b.world.kind).toBe('anonymous'); expect(b.world.root).toBe('anonymous');
+    expect(has(ROOT(KEY_A))).toBe(false); expect(has('app:/data/accounts/anonymous')).toBe(true); expect(reads).toEqual([]);
   });
-  test('S7 no native module: refuses and wipes nothing', async () => {
-    const order: string[] = [];
-    for (const n of [null, undefined, { available: false, later: async () => ({}) }]) {
-      const r = await accountSignOut(memFs().storage, undefined, n as never, { wipes: [{ name: 'a', run: async () => { order.push('wipe:a'); } }] });
-      expect(r.done).toBe(false);
-    }
-    expect(order).toEqual([]);
+  test('L3 a key that does not read yet (the marker is there) is LOCKED: nothing is swept, no world opens; when it reads, the next answer sweeps and opens', async () => {
+    boot({ [`${ROOT(KEY_B)}/takes.json`]: 'orphan?', 'app:/data/takes.json': 'leftover' }, 'unreadable');
+    const b = await gated();
+    expect(b.readable).toBe(false); expect(b.state).toBe('locked'); expect(api.currentWorld().kind).toBe('none');
+    expect(has(`${ROOT(KEY_B)}/takes.json`)).toBe(true); expect(has('app:/data/takes.json')).toBe(true);
+    store.hide(false);
+    const c = await gated();
+    expect(c.readable).toBe(true); expect(has(ROOT(KEY_B))).toBe(false); expect(has('app:/data/takes.json')).toBe(false);
   });
-  test('S3 a throwing wipe does not stop the rest and is named; the marker stays for the next launch', async () => {
-    const order: string[] = []; const m = memFs();
-    const r = await accountSignOut(m.storage, undefined, native() as never, { wipes: [
-      { name: 'first', run: async () => { throw new Error('secret words of the listener'); } },
-      { name: 'second', run: async () => { order.push('second'); } },
-    ] });
-    expect(order).toEqual(['second']); expect(r.done).toBe(true); expect(r.failed).toBe('first'); expect(JSON.stringify(r)).not.toContain('secret words');
-    expect(m.files.has(PENDING_FILE)).toBe(true);
+  test('L4 a changed key: the old root is swept, the new key has its own, and the world is the new key\'s', async () => {
+    boot({ [`${ROOT(KEY_A)}/takes.json`]: 'A\'s' }, 'present', KEY_B);
+    const b = await gated();
+    expect(b.world.digest).toBe(dig(KEY_B)); expect(has(ROOT(KEY_A))).toBe(false);
+    const bound = api.bindStorage(m.storage as never, b.world);
+    await bound.fs.atomicWriteFile('app:/data/takes.json', new TextEncoder().encode('B'));
+    expect(m.text(`${ROOT(KEY_B)}/takes.json`)).toBe('B');
   });
-  test('S6 the marker is written BEFORE the native call and gone after a clean sign-out', async () => {
-    const m = memFs(); let during = false;
-    const n = { available: true, later: async () => { during = m.files.has(PENDING_FILE); return { done: true }; } };
-    await accountSignOut(m.storage, undefined, n as never, { wipes: [] });
-    expect(during).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(false);
+  test('L5 T1: a key held while the world is anonymous moves it to that account ONCE; a second account world is refused', async () => {
+    boot({ [`${ROOT(KEY_A)}/takes.json`]: 'a' }, 'absent');
+    const a = await gated(); expect(a.state).toBe('anonymous'); expect(has(ROOT(KEY_A))).toBe(false);
+    store.set('api-key', KEY_A);                                                               // a sign-in stored it
+    const b = await gated(); expect(b.state).toBe('open'); expect(b.world.digest).toBe(dig(KEY_A)); expect(a.world.closed).toBe(true);
+    expect(() => api.openWorld(dig(KEY_B))).toThrow(/one account world/);
+    expect(api.currentWorld()).toBe(b.world);
+  });
+  test('L6 every root name is 64 hex characters (I8): no key and no path of one appears in a root', async () => {
+    boot({}, 'present', KEY_A);
+    const b = await gated(); const bound = api.bindStorage(m.storage as never, b.world);
+    await bound.fs.atomicWriteFile('app:/data/x', new Uint8Array([1])); await bound.fs.atomicWriteFile('app:/cache/y', new Uint8Array([1]));
+    for (const k of m.files.keys()) { expect(k).not.toContain(KEY_A); const r = /\/accounts\/([^/]+)\//.exec(k); if (r) expect(r[1]).toMatch(/^[0-9a-f]{64}$/); }
+  });
+  test('L8 no storage: locked, no world, nothing latched; with storage the launch then runs', async () => {
+    boot({ [`${ROOT(KEY_B)}/takes.json`]: 'orphan' });
+    const a = await account.enter(undefined as never, store as never); expect(a.state).toBe('locked'); expect(api.currentWorld().kind).toBe('none');
+    const b = await gated(); expect(b.state).toBe('open'); expect(has(ROOT(KEY_B))).toBe(false);
   });
 });
 
-describe('the wipes', () => {
-  test('wipeAll runs every registered wipe and returns the failed names', async () => {
-    const ran: string[] = [];
-    const failed = await wipeAll(undefined, undefined, [{ name: 'x', run: async () => { ran.push('x'); } }, { name: 'y', run: async () => { throw new Error('no'); } }]);
-    expect(ran).toEqual(['x']); expect(failed).toEqual(['y']);
+describe('S sign-out ends the session', () => {
+  const seed = (): Record<string, string> => ({ [`${ROOT(KEY_A)}/takes.json`]: 'a', [`${ROOT(KEY_A, 'cache')}/files/f`]: 'f', [`${ROOT(KEY_A, 'tmp')}/t`]: 't', 'app:/data/accounts/anonymous/paper-front.json': '{}', 'app:/data/theme-choice.json': '{}', 'app:/tmp/picked/doc.pdf': 'pdf' });
+  test('S1 sign out: the world closes, no world opens again, the secrets go, NOTHING is wiped in this process, the card says close and reopen', async () => {
+    boot(seed());
+    const w = (await gated()).world; expect(w.closed).toBe(false);
+    const rms: string[] = []; const rm = m.storage.fs.rm.bind(m.storage.fs); (m.storage as { fs: { rm: unknown } }).fs.rm = async (p: string) => { rms.push(p); return rm(p); };
+    const r = await out();
+    expect(r.done).toBe(true); expect(store.kept.size).toBe(0); expect(w.closed).toBe(true); expect(api.sessionEnded()).toBe(true);
+    expect(rms).toEqual([]); expect(has(ROOT(KEY_A))).toBe(true); expect(has('app:/tmp/picked')).toBe(true); expect(m.files.has(account.ENDING)).toBe(true);
+    const after = await gated(); expect(after.readable).toBe(false); expect(after.state).toBe('ended');
+    expect(() => api.openWorld(dig(KEY_B))).toThrow(/session has ended/); expect(() => api.openWorld('anonymous')).toThrow(/session has ended/);
+    expect(await card()).toMatchObject({ state: 'ended', message: WORDS.endedSignedOut, action: '', handle: '' });
   });
-  // The phone's own settings, not the account's: the theme choice and the themes the person installed (themes.ts). The Swift app kept them in UserDefaults and Application Support/themes, which no
-  // sign-out ever touched; a sign-out leaves the phone looking the way its owner set it. (Colours and a name; nothing of the account.)
-  const PHONE_KEPT = new Set(['app:/data/theme-choice.json', 'app:/data/themes']);
-  const allPaths = (): string[] => {
-    const dir = new URL('.', import.meta.url).pathname;
-    const files = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.d.ts') && f !== 'app.ts');
-    const found = new Set<string>();
-    for (const f of files) {
-      const src = readFileSync(dir + f, 'utf8');
-      // any `app:/data`, `app:/cache` or `app:/tmp` literal, in any quotes, template strings included (the part up to a `${` or the quote)
-      for (const m of src.matchAll(/['"`](app:\/(?:data|cache|tmp)(?:\/[^'"`$]*)?)/g)) found.add(m[1].replace(/\/$/, ''));
-    }
-    return [...found];
-  };
-  test('S4 every app:/ path any shared module names is covered by the wipe list', () => {
-    const found = allPaths();
-    expect(found.length).toBeGreaterThan(10);
-    const covered = (p: string) => wipedPaths().some((w) => p === w || p.startsWith(w + '/') || p.startsWith(w + '-'));
-    // `app:/data`, `app:/cache` and `app:/tmp` themselves are the roots (a `directories` default), and `app:/data/exports`, `app:/cache/mail-*.html` are named below
-    const roots = ['app:/data', 'app:/cache', 'app:/tmp'];
-    const unknown = found.filter((p) => !roots.includes(p) && !covered(p) && !PHONE_KEPT.has(p) && p !== 'app:/cache/mail-' && !p.startsWith('app:/cache/mail-'));
-    expect(unknown).toEqual([]);
+  test('S2 kill after the secrets are forgotten: the next launch finds the mark, sweeps every root before any world opens (reading none), has native forget its files and clears both marks', async () => {
+    boot(seed()); await gated(); await out();
+    expect(store.kept.size).toBe(0); expect(has(ROOT(KEY_A))).toBe(true); expect(m.files.has(account.ENDING)).toBe(true);
+    reads.length = 0; relaunch(); const b = await gated();
+    expect(m.files.has(account.ENDING)).toBe(false); expect(m.files.has(account.SIGNED)).toBe(false); expect(forgets).toBe(1);
+    expect(b.state).toBe('anonymous'); expect(has(ROOT(KEY_A))).toBe(false); expect(has(ROOT(KEY_A, 'cache'))).toBe(false); expect(has('app:/tmp/picked')).toBe(false); expect(reads.filter((p) => p.includes('/accounts/'))).toEqual([]);
   });
-  test('S19 the phone\'s theme (the choice and the themes under app:/data/themes, a Texture\'s included) survives a sign-out wipe: parity with the Swift AccountWipe, which never touched the UserDefaults choice or Application Support/Autoradio/themes', async () => {
-    const m = memFs(['app:/data/theme-choice.json', 'app:/data/themes/texture-ember.json', 'app:/data/themes/mine.json', 'app:/data/recent-files.json']);
-    const failed = await wipeAll(m.storage, undefined, WIPES);
-    expect(failed).toEqual([]);
-    expect([...m.files.keys()].sort()).toEqual(['app:/data/theme-choice.json', 'app:/data/themes/mine.json', 'app:/data/themes/texture-ember.json']);
+  test('S3 the store refuses to forget: did not finish, the process stays ended, the key is kept, and the relaunch (the mark is the intent) finishes it', async () => {
+    boot(seed()); await gated(); const real = store.forget; store.forget = (): void => { throw new Error('keychain refused'); };
+    const r = await out();
+    expect(r.done).toBe(false); expect(r.message).toBe('Sign-out did not finish. Close Autoradio, open it again and try again.'); expect(store.kept.has('api-key')).toBe(true); expect(has(`${ROOT(KEY_A)}/takes.json`)).toBe(true);
+    expect((await gated()).state).toBe('ended');
+    expect(await card()).toMatchObject({ state: 'ended', message: WORDS.endedUnfinished });
+    store.forget = real; relaunch();
+    const c = await gated(); expect(c.state).toBe('anonymous'); expect(store.kept.size).toBe(0); expect(has(ROOT(KEY_A))).toBe(false);
   });
-  test('S8 the real wipes leave an in-memory file system empty (seeded at every path the modules name, mail files and the stamp included)', async () => {
-    const seed = [...allPaths().filter((p) => p.split('/').length > 2 && p !== PENDING_FILE && !PHONE_KEPT.has(p)).flatMap((p) => (p.endsWith('/') ? [] : [p, `${p}/child.bin`])), 'app:/data/mail/msg-1.bin', 'app:/cache/mail-1.html', STAMP_FILE];
-    const m = memFs(seed);
-    const failed = await wipeAll(m.storage, undefined, WIPES);
-    expect(failed).toEqual([]);
-    expect([...m.files.keys()]).toEqual([]);
-  });
-});
-
-describe('S9 sign out A, sign in B', () => {
-  const KEYA = 'test-key-A-not-real'; const KEYB = 'test-key-B-not-real';
-  test('B sees nothing of A: files, a live content store, a live vector store, the remembered computer; and a reply still in flight', async () => {
-    resetSeam(); resetSettled();
-    let key = KEYA; const seenComputers: string[] = [];
-    const reader = { available: true, later: async (r: { op: string }) => (r.op === 'session' ? { found: true, value: key, computerId: '' } : { done: true }) };
-    bindNative(reader as never);
+  test('S5 a chain of the account that left does nothing after the sign-out; a write already in flight lands in its own root, which the next launch removes', async () => {
+    boot(seed()); const w = (await gated()).world;
+    const bound = api.bindStorage(m.storage as never, w);
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-    globalThis.fetch = (async (u: string, init: RequestInit) => {
-      const h = init.headers as Record<string, string>;
-      if (String(u).endsWith('/api/compute/status')) return new Response(JSON.stringify({ computers: [{ computer_id: `comp-of-${h.Authorization.includes('-A-') ? 'A' : 'B'}`, current: true }] }), { status: 200 });
-      seenComputers.push(h['X-Choir-Computer']);
-      if (String(u).endsWith('/late')) { await gate; return new Response('{"a":"data"}', { status: 200 }); }
-      return new Response('{}', { status: 200 });
-    }) as never;
-    const m = memFs(['app:/data/takes.json', 'app:/data/podcasts-library.json', 'app:/data/mail/msg-1.bin']);
-    const db = { execute: async () => undefined, query: async () => ({ rows: [] }) };
-    const content = new ContentStore(db as never); const vectors = new VectorStore(); vectors.wipe(); vectors.dirty = false;
-    await authedJSON('/api/one');                                          // A discovers its computer
-    const late = authedJSON('/late').then(() => 'wrote', (e) => (e instanceof SignedOutError ? 'dropped' : 'error'));
-    await new Promise((r) => setTimeout(r, 5));
-    const gen0 = content.generation;
-    const r = await accountSignOut(m.storage, undefined, reader as never);
-    expect(r.done).toBe(true);
-    expect([...m.files.keys()]).toEqual([]);
-    expect(content.generation).toBeGreaterThan(gen0);                       // a running sync would drop its writes
+    m.faults.writeHold.set(`${ROOT(KEY_A)}/inflight.json`, gate);
+    const inflight = bound.fs.atomicWriteFile('app:/data/inflight.json', new Uint8Array([1]));
+    const calls: string[] = []; globalThis.fetch = (async (u: unknown) => { calls.push(String(u)); return new Response('{}'); }) as never;
+    await out();
+    calls.length = 0;
+    const late = [bound.fs.atomicWriteFile('app:/data/late.json', new Uint8Array([2])), bound.fs.readFile('app:/data/takes.json'), api.authedJSON('/api/x', { world: w }), api.nativeInert()?.({ op: 'takeState' })];
     release();
-    expect(await late).toBe('dropped');                                    // the late reply of A never reaches a caller
-    key = KEYB;                                                             // B signs in
-    await authedJSON('/api/two');
-    expect(seenComputers[0]).not.toBe(seenComputers[seenComputers.length - 1]);
+    await Promise.all(late.map((p) => settle(p as Promise<unknown>)));
+    expect(has(`${ROOT(KEY_A)}/late.json`)).toBe(false); expect(calls).toEqual([]);
+    await settle(inflight);
+    for (const k of m.files.keys()) if (k.includes('inflight')) expect(k.startsWith(ROOT(KEY_A))).toBe(true);
+    relaunch(); await gated();
+    expect(has(ROOT(KEY_A))).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------------------------------------------------------------------- the table and the kills
-
-const dig = (k: string): string => createHash('sha256').update(k).digest('hex');
-type World = { key: 'present' | 'absent' | 'unreadable'; value: string; swift: boolean; native: string[]; killInNative: boolean; hang: boolean; lateRelease: (() => void) | null };
-let W: World;
-const newWorld = (key: World['key'] = 'present', value = 'test-key-A-not-real'): World => ({ key, value, swift: true, native: [], killInNative: false, hang: false, lateRelease: null });
-/** The app module as the model of the phone: the Keychain item (3 answers), the Swift stores, and sign-out's two native steps (key delete, then Swift wipe). */
-const phone = () => ({ available: true, later: async (r: { op: string }) => {
-  if (r.op === 'keystate') return { state: W.key };
-  if (r.op === 'session') return W.key === 'present' ? { found: true, value: W.value, computerId: '' } : { found: false };
-  if (r.op === 'signOut') {
-    W.native.push('signOut');
-    if (W.hang) await new Promise<void>((res) => { W.lateRelease = res; });
-    W.key = 'absent';                                            // ChoirSignIn.swift:128, the key goes first
-    if (W.killInNative) throw new Error('killed between the key delete and the Swift wipe');
-    W.swift = false;                                             // :129, AccountWipe
-    return { done: true };
-  }
-  if (r.op === 'wipe') { W.native.push('wipe'); W.swift = false; return { done: true }; }
-  return { ok: true };
-} });
-const SEED = ['app:/data/takes.json', 'app:/data/podcasts-library.json', 'app:/data/mail/msg-1.bin'];
-const launch = async (m: ReturnType<typeof memFs>) => { resetSeam(); resetSettled(); bindNative(phone() as never); return settleAccount(m.storage, undefined); };
-const dataLeft = (m: ReturnType<typeof memFs>): string[] => [...m.files.keys()].filter((k) => SEED.includes(k));
-
-describe('S14 the table: key x stamp x marker', () => {
-  const keys: World['key'][] = ['present', 'absent', 'unreadable'];
-  const stamps = ['none', 'same', 'other'] as const;
-  const markers = ['none', 'pending'] as const;
-  // What must happen, written out (not derived from decide): the data, the Swift stores, the stamp and the marker after one launch.
-  const expected = (key: World['key'], stamp: string, marker: string) => {
-    if (key === 'unreadable') return { data: true, swift: true, stamp: stamp === 'none' ? 'none' : stamp, marker, native: [] as string[] };
-    if (key === 'present') {
-      if (stamp === 'other') return { data: false, swift: false, stamp: 'new', marker: 'none', native: ['wipe'] };
-      return { data: true, swift: true, stamp: 'new', marker: 'none', native: [] as string[] };         // none: adopt; same: kept; a pending marker is cleared, nothing wiped
-    }
-    if (stamp !== 'none' || marker === 'pending') return { data: false, swift: false, stamp: 'none', marker: 'none', native: ['signOut'] };
-    return { data: true, swift: true, stamp: 'none', marker: 'none', native: [] as string[] };
-  };
-  for (const key of keys) for (const stamp of stamps) for (const marker of markers) {
-    test(`key ${key} / stamp ${stamp} / marker ${marker}`, async () => {
-      W = newWorld(key);
-      const m = memFs(SEED);
-      if (stamp === 'same') m.files.set(STAMP_FILE, new TextEncoder().encode(dig(W.value)));
-      if (stamp === 'other') m.files.set(STAMP_FILE, new TextEncoder().encode('f'.repeat(64)));
-      if (marker === 'pending') m.files.set(PENDING_FILE, new TextEncoder().encode('1'));
-      const stampBefore = m.files.get(STAMP_FILE);
-      await launch(m);
-      const e = expected(key, stamp, marker);
-      expect(dataLeft(m).length > 0).toBe(e.data); expect(W.swift).toBe(e.swift); expect(W.native).toEqual(e.native);
-      expect(m.files.has(PENDING_FILE)).toBe(e.marker === 'pending');
-      const st = m.files.get(STAMP_FILE);
-      if (e.stamp === 'new') expect(new TextDecoder().decode(st)).toBe(dig(W.value));
-      else if (e.stamp === 'none') expect(st).toBeUndefined();
-      else expect(st).toEqual(stampBefore);
-    });
-  }
-  test('decide() covers all 18 combinations', () => {
-    let n = 0;
-    for (const key of keys) for (const stamp of stamps) for (const marker of markers) { expect(typeof decide({ key, stamp, marker } as Facts)).toBe('string'); n++; }
-    expect(n).toBe(18);
+describe('S6 raw reads of a closed world', () => {
+  test('after the session ends nothing is held: the computer id and the key read nothing', async () => {
+    boot({}); await gated(); expect(api.heldSession()?.key).toBe(KEY_A);
+    await ending(); expect(api.heldSession()).toBeNull(); expect(await api.keptComputerId()).toBeNull();
   });
 });
 
-describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
-  const steps = ['marker', 'begun', 'native', 'wipe:vectors', 'wiped'];
-  for (const step of steps) {
-    test(`killed after "${step}"`, async () => {
-      W = newWorld('present'); const m = memFs(SEED);
-      resetSeam(); resetSettled(); bindNative(phone() as never); await settleAccount(m.storage, undefined);       // the signed-in phone, adopted
-      resetSettled();
-      await accountSignOut(m.storage, undefined, phone() as never, { crash: (s) => { if (s === step) throw new Error('killed'); } }).catch(() => undefined);
-      const keyGoneAtKill = W.key === 'absent';
-      await launch(m);                                                      // the relaunch
-      if (!keyGoneAtKill) {                                                 // (a) the key was still there: nothing was signed out, nothing may be wiped
-        expect(dataLeft(m).length).toBe(SEED.length); expect(W.swift).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(false);
-      } else {                                                              // (b) the key is gone: nothing of the old account remains, shared or Swift
-        expect(dataLeft(m)).toEqual([]); expect(W.swift).toBe(false); expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(false);
-      }
-    });
-  }
-  test('killed between the key delete and the Swift wipe (finding 2): the relaunch reruns the Swift wipe', async () => {
-    W = newWorld('present'); W.killInNative = true; const m = memFs(SEED);
-    await launch(m); resetSettled();
-    await accountSignOut(m.storage, undefined, phone() as never).catch(() => undefined);
-    expect(W.key).toBe('absent'); expect(W.swift).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(true);
-    W.killInNative = false; W.native = [];
-    await launch(m);
-    expect(W.swift).toBe(false); expect(W.native).toEqual(['signOut']); expect(dataLeft(m)).toEqual([]); expect(m.files.has(PENDING_FILE)).toBe(false);
+describe('E the ending mark: a kill never shows the old account\'s words', () => {
+  const seed = (): Record<string, string> => ({ [`${ROOT(KEY_A)}/takes.json`]: 'a' });
+  test('E1 the mark is written BEFORE the secrets are forgotten, and stays after a clean sign-out (only the next launch clears it)', async () => {
+    boot(seed()); await gated(); let atForget = ''; const real = store.forget; store.forget = (n: string): void => { atForget = m.files.has(account.ENDING) ? 'marked' : 'unmarked'; real(n); };
+    const r = await out();
+    expect(atForget).toBe('marked'); expect(r.done).toBe(true); expect(m.files.has(account.ENDING)).toBe(true);
   });
-  test('after the marker and before the key delete (finding 1): the relaunch wipes nothing, clears the marker, keeps the stamp', async () => {
-    W = newWorld('present'); const m = memFs(SEED);
-    await launch(m); resetSettled();
-    await accountSignOut(m.storage, undefined, phone() as never, { crash: (s) => { if (s === 'marker') throw new Error('killed'); } }).catch(() => undefined);
-    expect(m.files.has(PENDING_FILE)).toBe(true);
-    W.native = []; await launch(m);
-    expect(dataLeft(m).length).toBe(SEED.length); expect(W.native).toEqual([]); expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(true);
+  test('E2 a kill after the mark and before the forget: the mark is the person\'s intent, so the next launch FINISHES the sign-out (revoke, forget, sweep, native forgets, marks removed)', async () => {
+    boot({ ...seed(), 'app:/tmp/picked/doc.pdf': 'pdf' }); await gated(); await ending();
+    expect(m.files.has(account.ENDING)).toBe(true); expect(store.kept.has('api-key')).toBe(true);
+    relaunch(); const b = await gated();
+    expect(store.kept.size).toBe(0); expect(m.files.has(account.ENDING)).toBe(false); expect(b.state).toBe('anonymous'); expect(has(ROOT(KEY_A))).toBe(false); expect(has('app:/tmp/picked')).toBe(false); expect(forgets).toBe(1);
   });
-  test('a stamp is not advanced by a wipe that failed (finding 3): the old stamp stays and the next launch tries again', async () => {
-    W = newWorld('present', 'test-key-B-not-real'); const m = memFs(SEED);
-    m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real')));
-    const rm = m.storage.fs.rm; let broken = true;
-    (m.storage as never as { fs: { rm: (p: string) => Promise<void> } }).fs.rm = async (p: string) => { if (broken && p === 'app:/data/takes.json') throw new Error('disk'); return rm(p); };
-    const r = await launch(m);
-    expect(r.failed.length).toBeGreaterThan(0); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-A-not-real'));      // not relabelled as B's
-    broken = false; await launch(m);
-    expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));
+  test('E2b two sign-out taps share one revoke and one forget', async () => {
+    boot(seed()); await gated(); const calls: string[] = []; globalThis.fetch = (async (u: unknown, i: { method?: string }) => { calls.push(`${i?.method} ${String(u)}`); return new Response('{}'); }) as never;
+    const [a, b] = await Promise.all([out(), out()]); expect(a.done && b.done).toBe(true); expect(calls.filter((c) => c.startsWith('DELETE')).length).toBe(1);
   });
-  // (The rows "wipe:vectors" and "wiped" above model a wipe that FAILED at that point, not a process kill: a kill is the rows named for the marker, the native steps and the relaunch.)
-  test('round 3, 1: a native sign-out that fails or hangs does not leave the previous account\'s shared stores readable (the shared wipe starts regardless; the marker stays)', async () => {
-    W = newWorld('absent'); W.swift = true; const m = memFs(SEED);
-    m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real'))); m.files.set(PENDING_FILE, new TextEncoder().encode('1'));
-    resetSeam(); resetSettled(); bindNative({ ...phone(), later: async (r: { op: string }) => (r.op === 'signOut' ? { done: false } : phone().later(r)) } as never);
-    const r = await settleAccount(m.storage, undefined);
-    expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]);                 // the shared stores are gone
-    expect(m.files.has(PENDING_FILE)).toBe(true); expect(m.files.has(STAMP_FILE)).toBe(true);   // and the retry is kept
+  test('E3 native cannot forget its files: BLOCKED, no world (not even anonymous), one card that promises nothing; the mark stays and the next launch converges', async () => {
+    boot(seed()); await gated(); await out(); W.forgetDone = false;
+    relaunch(); reads.length = 0; const a = await gated(); expect(a.readable).toBe(false); expect(a.state).toBe('ended'); expect(api.sessionEnded()).toBe(true); expect(api.currentWorld().kind).toBe('none');
+    expect(m.files.has(account.ENDING)).toBe(true);
+    expect(await card()).toMatchObject({ state: 'ended', message: WORDS.endedBlocked, action: '' });
+    W.forgetDone = true; relaunch(); const c = await gated(); expect(c.state).toBe('anonymous'); expect(has(ROOT(KEY_A))).toBe(false); expect(m.files.has(account.ENDING)).toBe(false);
   });
-  test('round 3, 1b: the same for an account change whose native wipe fails: shared stores wiped, the old stamp stays', async () => {
-    W = newWorld('present', 'test-key-B-not-real'); const m = memFs(SEED);
-    m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real')));
-    resetSeam(); resetSettled(); bindNative({ ...phone(), later: async (r: { op: string }) => (r.op === 'wipe' ? { done: false } : phone().later(r)) } as never);
-    const r = await settleAccount(m.storage, undefined);
-    expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-A-not-real'));
+  test('E5 a mark that cannot be written stops the sign-out before the key is touched', async () => {
+    boot(seed()); await gated(); m.faults.write.add(account.ENDING);
+    const r = await out();
+    expect(r.done).toBe(false); expect(store.kept.has('api-key')).toBe(true); expect(has(`${ROOT(KEY_A)}/takes.json`)).toBe(true);
+    expect(await card()).toMatchObject({ state: 'ended', message: WORDS.endedUnfinished });
   });
-  test('round 3, 2: a late native answer does not wipe a sign-in that completed inside the window (sign-out, and the launch\'s finish)', async () => {
-    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-    const later = async (r: { op: string }) => (r.op === 'signOut' ? (await gate, { done: true }) : phone().later(r));
-    W = newWorld('present'); const m = memFs(SEED);
-    await launch(m); resetSettled();
-    const out = await accountSignOut(m.storage, undefined, { available: true, later } as never, { deadlineMs: 20 });
-    expect(out.done).toBe(false);                                                      // the page was told; the native call is still out
-    // a new sign-in completed inside the window: the key is present (and the new account has written its own data)
-    release(); for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 5));
-    expect(dataLeft(m).length).toBe(SEED.length);                                      // the late done:true wiped nothing of the new account's
-    // the same for the launch's finish: key absent + marker, the native call hangs past the deadline, a sign-in lands, the late answer arrives
-    let release2: () => void = () => undefined; const gate2 = new Promise<void>((r) => { release2 = r; });
-    W = newWorld('absent'); const m2 = memFs(SEED); m2.files.set(PENDING_FILE, new TextEncoder().encode('1'));
-    resetSeam(); resetSettled(); bindNative(phone() as never);
-    const r = await settleAccount(m2.storage, undefined, nativeOf(async (q) => (q.op === 'signOut' ? (await gate2, { done: true }) : phone().later(q)), 20));
-    expect(r.failed).toContain('native');
-    for (const k of SEED) m2.files.set(k, new TextEncoder().encode('new'));             // the shared wipe already ran (round 3, 1); the new account writes afresh
-    W.key = 'present'; W.value = 'test-key-B-not-real';
-    release2(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
-    expect(dataLeft(m2).length).toBe(SEED.length);
+  test('B1 the sweep of the old pre-partition leftovers finishes BEFORE any world opens, anonymous included; a sweep that fails is BLOCKED, not open', async () => {
+    boot({ 'app:/data/takes.json': 'leftover', [`${ROOT(KEY_A)}/takes.json`]: 'a' }, 'absent'); m.faults.rm.add('app:/data/takes.json');
+    const a = await gated(); expect(a.readable).toBe(false); expect(a.state).toBe('ended'); expect(api.currentWorld().kind).toBe('none');
+    expect(await card()).toMatchObject({ state: 'ended', message: WORDS.endedBlocked });
   });
-  test('round 4: an account change whose native wipe answers AFTER the deadline does not wipe the new account\'s data again; it only finishes the stamp', async () => {
-    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-    W = newWorld('present', 'test-key-B-not-real'); const m = memFs(SEED);
-    m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real')));
-    resetSeam(); resetSettled(); bindNative(phone() as never);
-    const r = await settleAccount(m.storage, undefined, nativeOf(async (q) => (q.op === 'wipe' ? (await gate, { done: true }) : phone().later(q)), 20));
-    expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]);              // the shared stores were wiped at the launch
-    for (const k of SEED) m.files.set(k, new TextEncoder().encode('B wrote this'));        // the new account is signed in and has written data in between
-    release(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
-    expect(dataLeft(m).length).toBe(SEED.length);                                          // it survives the late answer
-    expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));   // and the bookkeeping is finished
+  test('R1 a sign-out that lands while the launch is running leaves the process ENDED, never anonymous, and no source runs', async () => {
+    boot(seed());
+    const waiting = gated(); await ending();
+    const r = await waiting; expect(r.state).toBe('ended'); expect(r.readable).toBe(false); expect(api.currentWorld().kind).toBe('none');
   });
-  test('round 5: the launch finish\'s late answer belongs to ITS sign-out: a later sign-out\'s marker and stamp are not cleared by it', async () => {
-    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-    W = newWorld('absent'); const m = memFs(SEED);
-    m.files.set(PENDING_FILE, new TextEncoder().encode('token-1')); m.files.set(STAMP_FILE, new TextEncoder().encode('stamp-1'));
-    resetSeam(); resetSettled(); bindNative(phone() as never);
-    const r = await settleAccount(m.storage, undefined, nativeOf(async (q) => (q.op === 'signOut' ? (await gate, { done: true }) : phone().later(q)), 20));
-    expect(r.failed).toContain('native');
-    // the user signed in and signed out again: a NEW sign-out's marker and stamp exist, its wipes have not run
-    m.files.set(PENDING_FILE, new TextEncoder().encode('token-2')); m.files.set(STAMP_FILE, new TextEncoder().encode('stamp-2'));
-    release(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
-    expect(new TextDecoder().decode(m.files.get(PENDING_FILE))).toBe('token-2'); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe('stamp-2');
+  test('B1b the sweep of the old leftovers happens while NO world is open: every removal sees `none`', async () => {
+    boot({ 'app:/data/takes.json': 'leftover', 'app:/data/mail/inbox': 'leftover', [`${ROOT(KEY_B)}/takes.json`]: 'orphan' }, 'absent');
+    const kinds: string[] = []; const rm = m.storage.fs.rm.bind(m.storage.fs); (m.storage as { fs: { rm: unknown } }).fs.rm = async (p: string) => { kinds.push(api.currentWorld().kind); return rm(p); };
+    const b = await gated(); expect(b.state).toBe('anonymous'); expect(kinds.length).toBeGreaterThan(0); expect(kinds.every((k) => k === 'none')).toBe(true);
   });
-  test('round 5: and when nothing changed in between, the late answer does clear its own marker and stamp', async () => {
-    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-    W = newWorld('absent'); const m = memFs(SEED);
-    m.files.set(PENDING_FILE, new TextEncoder().encode('token-1')); m.files.set(STAMP_FILE, new TextEncoder().encode('stamp-1'));
-    resetSeam(); resetSettled(); bindNative(phone() as never);
-    await settleAccount(m.storage, undefined, nativeOf(async (q) => (q.op === 'signOut' ? (await gate, { done: true }) : phone().later(q)), 20));
-    release(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
-    expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(false);
-  });
-  test('the marker holds a token of 16 random bytes in hex (from getRandomValues), different for each sign-out', async () => {
-    const seen: string[] = [];
-    for (let i = 0; i < 2; i++) {
-      W = newWorld('present'); W.hang = true; const m = memFs(SEED); await launch(m); resetSettled();
-      await accountSignOut(m.storage, undefined, phone() as never, { deadlineMs: 10 });
-      seen.push(new TextDecoder().decode(m.files.get(PENDING_FILE))); W.lateRelease?.();
-    }
-    expect(seen[0]).toMatch(/^[0-9a-f]{32}$/); expect(seen[1]).toMatch(/^[0-9a-f]{32}$/); expect(seen[0]).not.toBe(seen[1]);
-  });
-  test('a native sign-out that outlives its deadline keeps its continuation and the marker (finding 4)', async () => {
-    W = newWorld('present'); W.hang = true; const m = memFs(SEED);
-    await launch(m); resetSettled();
-    const out = await accountSignOut(m.storage, undefined, phone() as never, { deadlineMs: 20 });
-    expect(out.done).toBe(false); expect(m.files.has(PENDING_FILE)).toBe(true); expect(dataLeft(m).length).toBe(SEED.length);
-    W.lateRelease!();                                                       // the native call answers done:true after the page was told
-    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5));
-    expect(dataLeft(m)).toEqual([]); expect(m.files.has(PENDING_FILE)).toBe(false); expect(W.swift).toBe(false);
-  });
-  test('a failed native sign-out ("not done") removes the marker and wipes nothing; a throw keeps the marker for the next launch to judge by the key', async () => {
-    W = newWorld('present'); const m = memFs(SEED);
-    const n = (r: unknown) => ({ available: true, later: async () => r });
-    const a = await accountSignOut(m.storage, undefined, n({ done: false }) as never);
-    expect(a.done).toBe(false); expect(m.files.has(PENDING_FILE)).toBe(false); expect(dataLeft(m).length).toBe(SEED.length);
-    const b = await accountSignOut(m.storage, undefined, { available: true, later: async () => { throw new Error('x'); } } as never);
-    expect(b.done).toBe(false); expect(m.files.has(PENDING_FILE)).toBe(true); expect(dataLeft(m).length).toBe(SEED.length);
-    resetSeam(); bindNative(phone() as never); await settleAccount(m.storage, undefined);
-    expect(m.files.has(PENDING_FILE)).toBe(false); expect(dataLeft(m).length).toBe(SEED.length);                   // the key is there: cleared, nothing wiped
-  });
-  test('no storage: a sign-out does not start (it fails closed)', async () => {
-    W = newWorld('present'); const out = await accountSignOut(undefined, undefined, phone() as never);
-    expect(out.done).toBe(false); expect(W.native).toEqual([]);
-  });
-  test('a partial wipe after a signed-out phone says which stores and keeps the marker', async () => {
-    W = newWorld('present'); const m = memFs(SEED);
-    const out = await accountSignOut(m.storage, undefined, phone() as never, { wipes: [{ name: 'a', run: async () => { throw new Error('x'); } }, { name: 'b', run: async () => undefined }] });
-    expect(out.done).toBe(true); expect(out.failed).toBe('a'); expect(out.message).toContain('a'); expect(m.files.has(PENDING_FILE)).toBe(true);
-  });
-  test('a different account B after A signs out is adopted clean: nothing of A remains (shared or Swift)', async () => {
-    W = newWorld('present'); const m = memFs(SEED);
-    await launch(m); resetSettled();
-    expect((await accountSignOut(m.storage, undefined, phone() as never)).done).toBe(true);
-    W.key = 'present'; W.value = 'test-key-B-not-real'; W.swift = false;
-    await launch(m);
-    expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));
-  });
-  test('the first launch over an install with a key, old Swift stores and NO stamp adopts and wipes nothing', async () => {
-    W = newWorld('present'); const m = memFs(SEED);
-    const r = await launch(m);
-    expect(r.action).toBe('adopt'); expect(dataLeft(m).length).toBe(SEED.length); expect(W.swift).toBe(true); expect(W.native).toEqual([]);
+  test('P9 the card draws at once: step one ends the session before step two has run', async () => {
+    boot(seed()); await gated(); await ending();
+    expect(await card()).toMatchObject({ state: 'ended' }); expect((await gated()).readable).toBe(false);
   });
 });
 
-describe('S16 the paper page passes the story title with the route (the loss the deck builder named)', () => {
-  test('the action, the paper buttons and the interface carry the title', async () => {
-    const c = await Bun.file(new URL('./account.contract', import.meta.url)).text();
-    expect(c).toContain('action playStory(route: string, title: string)'); expect(c).toContain('radioPlayStory(route, title)');
-    const p = await Bun.file(new URL('./paper.contract', import.meta.url)).text();
-    expect((p.match(/playStory\(s\.route, s\.title\)/g) ?? []).length).toBeGreaterThanOrEqual(1); expect(p).not.toContain('playStory(s.route)');
-    const app = await Bun.file(new URL('./app.ts', import.meta.url)).text();
-    expect(app).toContain('radioPlayStory: ([route, title]');       // the title goes with the route to shared code (radio-bridge.ts), which names the entry by it
+describe('C the card', () => {
+  test('C1 signed in: the handle is the first 16 hex of the key digest; signed out; the handle moves when the account opens (T1)', async () => {
+    boot({}, 'absent'); const o = await card(); expect(o).toMatchObject({ state: 'signedOut', action: 'signIn', handle: 'anonymous', message: WORDS.signedOut, radioMessage: WORDS.radioSignedOut });
+    store.set('api-key', KEY_A); const inn = await card();
+    expect(inn).toMatchObject({ state: 'signedIn', action: '', handle: dig(KEY_A).slice(0, 16), message: '' }); expect(inn.handle).not.toBe(o.handle);
   });
-});
-
-describe('S17 the grants and the wipes name the same paths, exactly, in both directions', () => {
-  const grantsOf = (): { read: Set<string>; write: Set<string> } => {
-    const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8');
-    const read = new Set<string>(), write = new Set<string>();
-    for (const m of app.matchAll(/^fs\.(read|write) (app:\/[^\s`;]+)/gm)) (m[1] === 'read' ? read : write).add(m[2]);
-    return { read, write };
-  };
-  // Not granted on purpose: app:/tmp/picked is read only (a picked file is the system's copy); the vector store and the content database are not wired to a page yet (their wipes exist for when they are).
-  const WIPED_NOT_GRANTED = new Set(['app:/tmp/picked', 'app:/data/vectors', 'app:/data/content.db']);
-  // Granted but not a wipe path of its own: `app:/data/exports` holds files the listener asked to export (not account data); `app:/cache` is the root the mail originals sit under (mail-*.html is removed by wipeMail).
-  const GRANTED_NOT_WIPED = new Set(['app:/data/exports', 'app:/cache', 'app:/data/theme-choice.json', 'app:/data/themes']);   // the last two: the phone's theme (themes.ts), kept through a sign-out
-  test('every wiped path is granted for read and write (a denied path fails silently), but the named exceptions', () => {
-    const { read, write } = grantsOf();
-    expect(wipedPaths().filter((p) => !WIPED_NOT_GRANTED.has(p)).filter((p) => !(read.has(p) && write.has(p)))).toEqual([]);
-    for (const p of WIPED_NOT_GRANTED) expect(wipedPaths()).toContain(p);                // an exception that is no longer wiped is a stale exception
+  test('C2 starting says so and offers nothing', async () => {
+    boot({}, 'unreadable'); expect(await card()).toMatchObject({ state: 'locked', message: WORDS.starting, action: '', handle: '' });
   });
-  test('every granted path is wiped (exact match), but the named exceptions: no store keeps data the sign-out does not know', () => {
-    const { read, write } = grantsOf();
-    const granted = new Set([...read, ...write]);
-    expect([...granted].filter((p) => !GRANTED_NOT_WIPED.has(p)).filter((p) => !wipedPaths().includes(p))).toEqual([]);
-    for (const p of GRANTED_NOT_WIPED) expect(granted.has(p)).toBe(true);
+  test('C3 a refused key offers Sign out, not Sign in; a 200 clears it', async () => {
+    boot({}, 'present'); const w = (await gated()).world;
+    globalThis.fetch = (async () => new Response('', { status: 401 })) as never;
+    await api.authedJSON('/api/x', { world: w }).catch(() => undefined);
+    expect(await card()).toMatchObject({ state: 'rejected', action: 'signOut', message: WORDS.rejected });
+    globalThis.fetch = (async () => new Response('{}', { status: 200 })) as never;
+    await api.authedJSON('/api/x', { world: w }).catch(() => undefined);
+    expect((await card()).state).toBe('signedIn');
   });
-});
-
-describe('S18 the sign-out counter (round 6)', () => {
-  test('every completed sign-out carries a larger epoch, the second in a process too; a wipe that finishes late bumps it', async () => {
-    W = newWorld('present'); const m = memFs(SEED);
-    await launch(m); resetSettled();
-    const a = await accountSignOut(m.storage, undefined, phone() as never);
-    W = newWorld('present'); await launch(m); resetSettled();
-    const b = await accountSignOut(m.storage, undefined, phone() as never);
-    expect(a.done && b.done).toBe(true); expect(b.epoch).toBeGreaterThan(a.epoch);
-    const { wipeEpoch } = await import('./account.ts');
-    const before = wipeEpoch(); await wipeAll(m.storage, undefined, []);
-    expect(wipeEpoch()).toBeGreaterThan(before);                                           // the late continuation runs wipeAll too: it is counted
+  test('P4 a key that stays unreadable has a bound: after five re-reads the launch is anonymous and Sign in is offered (the key was lost); until then the card only says it is starting', async () => {
+    boot({}, 'unreadable');
+    expect(await card()).toMatchObject({ state: 'locked', action: '', alsoSignOut: false });
+    expect(await card(5)).toMatchObject({ state: 'signedOut', action: 'signIn' });
   });
-  test('the contracts pass the epoch and the sign-in state to the shared notebook', async () => {
-    const c = await Bun.file(new URL('./members-notebook.contract', import.meta.url)).text();
-    expect(c).toContain('notebookPageShared(nbSel, nbTick, pg.top == "notebook:", signedOutTick, au.signedIn)');
-    expect(await Bun.file(new URL('./account-types.contract', import.meta.url)).text()).toContain('epoch: number');
+  test('P4b the key that reads again after the bound moves the anonymous world to the account (T1), once', async () => {
+    boot({}, 'unreadable'); await card(5); store.hide(false);
+    const after = await card(5); expect(after.state).toBe('signedIn'); expect(after.handle).toBe(dig(KEY_A).slice(0, 16));
   });
 });

@@ -10,11 +10,13 @@
 //  8 a damaged file: empty.      9 the feed parser: enclosures, durations, notes, dates, ids, not-a-feed, 300 items, hostile text and depth.
 // 10 the grants and the files in app.ts agree.        11 play hands the deck data; keep listening does not restart; the key is the position's key.
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { dig, reopen } from './account-phone.ts';
+import { currentWorld as theWorld, currentWorld, bindStorage, endWorld } from './api.ts';
 import { readFileSync } from 'node:fs';
 import { parseFeed, NotAFeed } from './podcast-feed.ts';
 import * as M from './podcast-model.ts';
 import * as P from './podcast.ts';
-import { bindNative, resetSession } from './api.ts';
+import { bindNative, resetSession, dropHeld } from './api.ts';
 import { readXML } from './xml.ts';
 
 const fx = (n: string): string => readFileSync(new URL(`../fixtures/podcasts/${n}`, import.meta.url), 'utf8');
@@ -48,7 +50,7 @@ const ok = (): Record<string, (u: URL, i?: RequestInit) => Response> => ({
   'choir.news/api/platform/podcast-transcript': () => reply('', 404),
 });
 const signIn = (on: boolean): void => {
-  resetSession();
+  resetSession(); reopen(dig('test-key'), on ? 'test-key' : undefined, 'computer-1'); if (!on) dropHeld();
   bindNative(on ? { later: async ({ op, account }: { op?: string; account?: string }) => (op === 'session' ? { found: true, value: 'test-key', computerId: 'computer-1' } : account === 'api-key' ? { found: true, value: 'test-key' } : account === 'computer-id' ? { found: true, value: 'computer-1' } : { found: false }) } : null);
 };
 const count = (needle: string): number => calls.filter((c) => c.url.includes(needle)).length;
@@ -426,33 +428,29 @@ describe('transcript', () => {
 describe('10 the grants and the files agree', () => {
   const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8');
   test('app.ts grants the library, the feed folder, and any https host for a feed the listener names', () => {
-    expect(app).toContain(`fs.read ${P.LIBRARY_FILE}`); expect(app).toContain(`fs.write ${P.LIBRARY_FILE}`);
-    expect(app).toContain(`fs.read ${P.FEED_DIR}`); expect(app).toContain(`fs.write ${P.FEED_DIR}`);
+    expect(app).toContain('fs.read app:/data'); expect(app).toContain('fs.write app:/data');
     expect(app).toMatch(/^net\.fetch https:$/m);
     expect(app).not.toMatch(/net\.fetch http:/);
   });
-  test('sign-out wipes the library and every cached feed', async () => {
-    await P.podcastSubscribe(FEED_URL, storage); await showPage();
-    await P.wipe(storage);
-    expect([...files.keys()]).toEqual([]);
-    expect(await P.subscriptions(storage)).toEqual([]);
-  });
 });
 
-describe('a feed that finishes loading after the wipe is not kept (the Swift AccountWipeTests rule)', () => {
+describe('a feed that finishes loading after the session ended is not kept', () => {
   test('nothing is written and nothing is shown', async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => { release = r; });
     routes['feeds.example.com/show.xml'] = () => { throw new Error('unused'); };
     globalThis.fetch = (async (input: RequestInfo | URL) => { calls.push({ url: String(input), method: 'GET', auth: false }); await gate; return reply(FEED); }) as typeof fetch;
-    await P.podcastSubscribe(FEED_URL, storage).catch(() => {});
-    const pending = showPage();
+    const bound = bindStorage(storage as never, currentWorld()) as never;
+    await P.podcastSubscribe(FEED_URL, bound).catch(() => {});
+    const before = new Set(files.keys());
+    expect(before.size).toBeGreaterThan(0);          // the subscription was written, under the account's root, so the check below can fail
+    expect([...before].every((k) => k.includes('/accounts/'))).toBe(true);
+    const pending = Promise.race([showPage(), new Promise((r) => setTimeout(r, 30))]);
     await new Promise((r) => setTimeout(r, 5));
-    await P.wipe(storage);
+    endWorld();                                       // a sign-out: the world closes, nothing of it resumes
     release();
     await pending;
-    expect([...files.keys()]).toEqual([]);
-    expect(await P.subscriptions(storage)).toEqual([]);
+    expect([...files.keys()].filter((k) => !before.has(k))).toEqual([]);
   });
 });
 

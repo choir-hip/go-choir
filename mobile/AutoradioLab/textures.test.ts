@@ -7,9 +7,10 @@
 //  L6 load: two requests (the list, the edition); a missing edition answer does not fail the list.
 //  L7 the words: no key, locked, refused, unknown, any other failure; never "Loading", and "Sign in" only when signing in is the answer.
 //  L8 the source: any page but the Textures place answers the last list; another account (a new account generation) never sees it.
+import { moveAccount } from './account-phone.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as T from './textures.ts';
-import { SignedOutError, HTTPError, resetSeam, nextGeneration, type Reply } from './api.ts';
+import { SignedOutError, HTTPError, resetSeam, type Reply } from './api.ts';
 import { WORDS } from './words.ts';
 
 const reply = (body: unknown): Reply => ({ body, serverTime: 0, raw: '' });
@@ -103,7 +104,7 @@ describe('the source', () => {
     const first = await T.texturesListShared('textures:', net);
     expect(first.rows.length).toBe(1); expect(n).toBe(2);
     expect((await T.texturesListShared('radio:', net)).rows.length).toBe(1); expect(n).toBe(2);       // the last list, no request
-    nextGeneration();                                                                              // another account: the last list is not served, and is dropped
+    moveAccount();                                                                              // another account: the last list is not served, and is dropped
     expect((await T.texturesListShared('radio:', net)).rows).toEqual([]);
     expect(n).toBe(2);
   });

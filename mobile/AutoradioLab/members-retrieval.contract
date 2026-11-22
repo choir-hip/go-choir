@@ -6,9 +6,9 @@ use retrievalAsk, RetrievalAsk from "@choir/autoradio"
 use RetrievalServed, PaperSearch from "./retrieval-types.contract"
 
 members Autoradio
-  resource rask = retrievalAsk() as shape RetrievalAsk else empty()
-  resource rserved = retrievalServe(rask.id, rask.words, rask.pageTitle, rask.pageAddress, rask.now, rask.facts) as shape RetrievalServed else empty()
-  resource psr = paperSearch(lq, lnc.hits) as shape PaperSearch else empty()
+  resource rask = retrievalAsk() as shape RetrievalAsk else empty() transient
+  resource rserved = retrievalServe(rask.id, rask.words, rask.pageTitle, rask.pageAddress, rask.now, rask.facts, acctHandle) as shape RetrievalServed else empty()
+  resource psr = paperSearch(lq, lnc.hits, acctHandle) as shape PaperSearch else empty()
   // What the launcher lists: the local rows at once, the paper's rows when the answer for THIS query lands.
   derive shownHits = psr.query == lq ? psr.hits : lnc.hits
   derive shownNote = psr.query == lq ? psr.note : (lnc.hits.length == 0 ? "Searching the paper\u2026" : "")

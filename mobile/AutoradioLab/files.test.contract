@@ -3,6 +3,7 @@
 // "Loading" anywhere. The listing, the open file, the changes and the PDF's route are proven by files.test.ts (bun test) against a fake computer; the page's
 // own tree is looked at on the simulator and on Android (the deck mounts a page only when the package says which page is on top).
 test "without a session the Files place says so in words, not a spinner"
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state fsList.status == "error"
   expect state fsList.message == "Sign in to see your files."
@@ -10,6 +11,7 @@ test "without a session the Files place says so in words, not a spinner"
   expect state fsList.title == "Files"
 
 test "a page that is not a file answers an empty record, never a waiting one"
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state fvInfo.status == "empty"
   expect state fvInfo.kind == "other"

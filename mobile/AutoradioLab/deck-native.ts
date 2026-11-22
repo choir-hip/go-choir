@@ -3,7 +3,7 @@
 // the journal that survives a kill; shared code cannot call a package's names from a function (only a contract can), so it reaches them through the module's `later` like the
 // key and the mail cipher. The interface is item-shaped and says nothing of AVPlayer: Exact's own `audio` element could play a remote item behind the same five names (docs/reference/exact/deck.md).
 // A call that fails or an absent module answers the EMPTY state, never a throw: shared code goes on, and the next pump asks again.
-import { nativeLater } from './api.ts';
+import { nativeInert } from './api.ts';
 import type { DeckEvent, DeckItem, DeckOp, DeckPort, DeckState, DeckWhy } from './deck.ts';
 
 type Later = (request: { op: string; [key: string]: unknown }) => Promise<unknown>;
@@ -32,8 +32,8 @@ export function readState(raw: unknown): DeckState {
   };
 }
 
-/** The deck port over the app module. `later` is read at each call (the module can bind late): `nativeLater` by default. */
-export function nativeDeck(later: () => Later | null = nativeLater as () => Later | null): DeckPort {
+/** The deck port over the app module. `later` is read at each call (the module can bind late): `nativeInert` by default, the choke point: a call from a world that has closed is never delivered (a radio source in flight at a sign-out cannot restart the deck). */
+export function nativeDeck(later: () => Later | null = nativeInert as () => Later | null): DeckPort {
   const call = async (name: string, args: Record<string, unknown> = {}): Promise<DeckState> => {
     const l = later();
     if (!l) { if (name === 'deckPlay') console.log('deck: play asked and the app module is not bound here: nothing plays'); return EMPTY_STATE; }

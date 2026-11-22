@@ -1,7 +1,7 @@
 // Signed out (or locked, or refused) is a clear state with one way in, on every page (owner, 2026-11-20: "im logged out but no obvious way to sign in"). A slim card above the bar says what is true
-// (the sentence is account-state.ts, the app's one list) and, when signing in is the answer, the one plain action: the existing browser device flow (`signIn`). A locked phone gets the sentence
-// and no action. The paper has no sign-in line of its own any more; this card is the one way in.
-use Theme from "@choir/autoradio"
+// (the sentence is account-state.ts, the app's one list) and, when signing in is the answer, the one plain action: the existing browser device flow (`signIn`). A locked phone gets the sentence and, after five re-reads, Try again and a two-step Sign out.
+// A refused key offers Sign out. The ENDED card (a sign-out ended the session) is the whole screen: one sentence, no controls (EndedCard, used by app.contract).
+use Theme, PageList from "@choir/autoradio"
 use AccountView from "./account-state-types.contract"
 use Btn from "./ui.contract"
 
@@ -9,12 +9,45 @@ component SignedOutBanner
   inject
     th: Theme
     acs: AccountView
+    pg: PageList
     signIn: action
+    signOut: action
+    retryAccount: action
+    askRemove: action
+    cancelRemove: action
+    confirmRemove: bool
   view
-    if acs.message != ""
-      // compact: the sentence (at most two lines) and the button side by side; no button where signing in is not possible or not the answer (a locked phone, a host with no native package)
+    if acs.message != "" and acs.state != "ended"
       row testId="signedout-banner" margin="0px 12px 8px 12px" gap=10 padding="8px 12px" align-items="center" box-sizing="border-box" background-color=th.paper2 border-radius=th.radiusCard box-shadow=th.shadow2
-        text acs.message testId="signedout-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg line-height=1.3 line-clamp=2 flex=1 min-width=0
+        text (pg.top == "radio:" and acs.radioMessage != "" ? acs.radioMessage : acs.message) testId="signedout-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg line-height=1.3 line-clamp=(acs.alsoSignOut ? 8 : 2) flex=1 min-width=0
         if acs.action == "signIn"
           button press=signIn testId="signedout-signin" appearance="none" flex-shrink=0 aria-label="Sign in"
             Btn(label="Sign in", primary=false, wide=false)
+        if acs.action == "retry"
+          button press=retryAccount testId="signedout-retry" appearance="none" flex-shrink=0 aria-label="Try again"
+            Btn(label="Try again", primary=false, wide=false)
+        if acs.action == "signOut"
+          button press=signOut testId="signedout-signout" appearance="none" flex-shrink=0 aria-label="Sign out"
+            Btn(label="Sign out", primary=false, wide=false)
+        // From a LOCKED phone it is two steps: the first tap only asks (acs.alsoSignOut, askRemove); Remove signs out, Cancel withdraws the question.
+        if acs.alsoSignOut and confirmRemove == false
+          button press=askRemove testId="signedout-signout" appearance="none" flex-shrink=0 aria-label="Sign out"
+            Btn(label="Sign out", primary=false, wide=false)
+        if acs.alsoSignOut and confirmRemove
+          column gap=6 flex=1 min-width=0
+            text "This removes this account's data from this phone. What is saved in your Choir computer stays." testId="signedout-confirm" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg line-height=1.3
+            row gap=10
+              button press=signOut testId="signedout-remove" appearance="none" flex-shrink=0 aria-label="Remove"
+                Btn(label="Remove", primary=false, wide=false)
+              button press=cancelRemove testId="signedout-cancel" appearance="none" flex-shrink=0 aria-label="Cancel"
+                Btn(label="Cancel", primary=false, wide=false)
+
+// The session ended: nothing else is drawn or answers. The person closes Autoradio and opens it again.
+component EndedCard
+  inject
+    th: Theme
+    acs: AccountView
+    cardTap: action
+  view
+    column testId="ended-card" press=cardTap position="absolute" inset=0 z-index=100 background-color=th.paper align-items="center" justify-content="center" padding=32 box-sizing="border-box"
+      text acs.message testId="ended-message" font-family=th.fontHead font-size="-exact-title3" color=th.fg line-height=1.3 text-align="center"

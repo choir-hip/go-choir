@@ -2,7 +2,7 @@
 // from GET /api/texture/documents, with the edition pinned first, and the server's own answer to "which document is my edition" (GET /api/texture/edition) applied to it.
 // Nothing here is native: the signed-in client (api.ts) is the whole platform need, and the words for "no key", "locked" and "refused" are the app's one list (words.ts).
 // Opening a document (`texture:<id>`) is the shared reader (reader.ts).
-import { authedJSON, accountGeneration, SignedOutError, HTTPError, type Reply } from './api.ts';
+import { authedJSON, accountGeneration, SignedOutError, HTTPError, type Reply, scoped, currentWorld } from './api.ts';
 import { WORDS } from './words.ts';
 
 export type TextureRow = { address: string; title: string; updated: string; meta: string; edition: boolean };
@@ -87,19 +87,19 @@ export async function loadTextures(net: Net): Promise<TextureList> {
   } catch (e) { return failure(e); }
 }
 
-const real: Net = { json: (path, opts) => authedJSON(path, opts) };
+const real: Net = { json: (path, opts) => authedJSON(path, { ...opts, world: currentWorld() }) };
 // The last list, kept in memory for the pages that are not the Textures place (the list stays while the place is behind another page); another account never sees it, and it is dropped
 // (not just hidden) the first time anything asks under a new account generation.
-let last: { gen: number; list: TextureList } | null = null;
+const S = scoped(() => ({ last: null as { gen: number; list: TextureList } | null }));      // module state belongs to the world (api.ts `scoped`)
 /** Test only: forget the last list. */
-export function resetTexturesForTest(): void { last = null; }
+export function resetTexturesForTest(): void { S().last = null; }
 
 /** The source: `at` is the page in front, the contract asks it again after a stop, a restore or a reload (a document's versions change). Only the Textures place asks the computer. */
 export async function texturesListShared(at: string, net: Net = real): Promise<TextureList> {
-  if (last && last.gen !== accountGeneration()) last = null;
-  if (at !== 'textures:') return last ? last.list : list('loading');
+  { const l0 = S().last; if (l0 && l0.gen !== accountGeneration()) S().last = null; }
+  if (at !== 'textures:') { const l1 = S().last; return l1 ? l1.list : list('loading'); }
   const gen = accountGeneration();
   const l = await loadTextures(net);
-  if (gen === accountGeneration()) last = { gen, list: l };
+  if (gen === accountGeneration()) S().last = { gen, list: l };
   return l;
 }

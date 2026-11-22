@@ -148,17 +148,4 @@ export async function forgetOldCopy(storage: Storage | undefined, keep = ''): Pr
   return gone;
 }
 
-/** Remove every file of the copy, every "Show original" document, and the key. Counts only. */
-export async function wipeFiles(env: Env): Promise<{ files: number; originals: number }> {
-  let files = 0;
-  const fs = env.storage?.fs;
-  if (fs) {
-    let names: string[] = [];
-    try { names = await fs.readdir(DIR); } catch { /* no folder */ }
-    for (const n of names) { try { await fs.rm(`${DIR}/${n}`); files += 1; } catch { /* kept */ } }
-    try { await fs.rm(DIR); } catch { /* the folder was never made, or is not empty */ }
-  }
-  const originals = await forgetOldCopy(env.storage);
-  await forgetKey();                                      // the native key goes too: whatever stays on a disk is then unreadable
-  return { files, originals };
-}
+

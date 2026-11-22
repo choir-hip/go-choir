@@ -6,6 +6,7 @@
 answer fetch "https://choir.news" with 200 {"stories":[{"publication_id":"pub-4340d797c17cb5bcbe4e2de10f5dd966","title":"Saudi strikes on Sanaa province kill at least 44, Houthis say; toll unconfirmed by Riyadh","dek":"The United States has officially lost its measles elimination status, reversing ","updated_at":"2026-11-18T12:16:30.512437918Z","version_count":3,"latest_revision":6,"route":{"bare":"/pub/texture/saudi-strikes-on-sanaa-province-kill-at-least-44-houthis-say-toll-unconfirmed-by-riyadh-pub69d57312b","permalink":"/pub/texture/us-loses-measles-free-status-after-26-years-as-paho-confirms-endemic-transmission-pub4340d797c/v6"},"importance":8,"section":"health","sections":["us","health"],"source_count":5,"words":325,"entities":[{"id":"ent:a93e46e0350589e94d67bc26","label":"United States"},{"id":"ent:7149bc222f9501a39e13d1c9","label":"U.S."}]},{"publication_id":"pub-5fa1da4bb431280a469d4df40808d9ca","title":"French slides in France's 2026 national school assessments while mathematics hold steady","dek":"France's education ministry published the results of national assessments sat by","updated_at":"2026-11-18T12:15:56.870679449Z","version_count":4,"latest_revision":6,"route":{"bare":"/pub/texture/french-slides-in-frances-2026-national-school-assessments-while-mathematics-hold-steady-pub5fa1da4bb","permalink":"/pub/texture/french-slides-in-frances-2026-national-school-assessments-while-mathematics-hold-steady-pub5fa1da4bb/v6"},"importance":5,"section":"world","sections":["world"],"source_count":7,"words":380,"entities":[{"id":"ent:9d8edfe86fd9c2c22b8c96b3","label":"France"}]},{"publication_id":"pub-074d567dbb30408ebbbe969659fbcede","title":"Turkish police raid pro-opposition TV channel S\u00f6zc\u00fcTV, which is placed under state administration","dek":"Turkish police raided the Istanbul headquarters of pro-opposition television cha","updated_at":"2026-11-18T12:15:42.270956705Z","version_count":3,"latest_revision":5,"route":{"bare":"/pub/texture/turkish-police-raid-pro-opposition-tv-channel-s\u00f6zc\u00fctv-which-is-placed-under-state-administrati-pub074d567db","permalink":"/pub/texture/turkish-police-raid-pro-opposition-tv-channel-s\u00f6zc\u00fctv-which-is-placed-under-state-administrati-pub074d567db/v5"},"importance":7,"section":"world","sections":["world","politics"],"source_count":6,"words":454,"entities":[{"id":"ent:7857a8bee52cea1db6119004","label":"Channel"},{"id":"ent:b2973f72d418a3862ba82748","label":"S\u00f6zc\u00fcTV"}]},{"publication_id":"pub-69d57312b2b572ab9f7321a09f1e74ae","title":"Saudi strikes on Sanaa province kill at least 44, Houthis say; toll unconfirmed by Riyadh","dek":"Saudi air strikes on Houthi-held areas of Yemen's Sanaa province killed at least","updated_at":"2026-11-18T12:14:51.149433598Z","version_count":3,"latest_revision":6,"route":{"bare":"/pub/texture/saudi-strikes-on-sanaa-province-kill-at-least-44-houthis-say-toll-unconfirmed-by-riyadh-pub69d57312b","permalink":"/pub/texture/saudi-strikes-on-sanaa-province-kill-at-least-44-houthis-say-toll-unconfirmed-by-riyadh-pub69d57312b/v6"},"importance":8,"section":"world","sections":["world","politics"],"source_count":6,"words":307,"entities":[{"id":"ent:d3d291d8b846e655b09d0bb8","label":"Saudi Arabia"},{"id":"ent:ce7e00f46397c419f87092f8","label":"Houthis"}]},{"publication_id":"pub-70b0bd8483994a708f458df0e253bd63","title":"Wired's Nubia Redmagic 12 Pro review: a 6/10 gaming beast with real compromises","dek":"Wired's review of the Nubia Redmagic 12 Pro, published November 18, 2026, rates ","updated_at":"2026-11-18T12:13:55.284414272Z","version_count":4,"latest_revision":6,"route":{"bare":"/pub/texture/wireds-nubia-redmagic-12-pro-review-a-610-gaming-beast-with-real-compromises-pub70b0bd848","permalink":"/pub/texture/wireds-nubia-redmagic-12-pro-review-a-610-gaming-beast-with-real-compromises-pub70b0bd848/v6"},"importance":3,"section":"tech_ai","sections":["tech_ai"],"source_count":7,"words":641,"entities":[{"id":"ent:6366d5d7b9126a65eb6a37aa","label":"Nubia Redmagic"},{"id":"ent:e78219e6c0aaab38a470952a","label":"WIRED"}]}],"sections":[{"id":"world","label":"World"},{"id":"us","label":"U.S."},{"id":"politics","label":"Politics"},{"id":"business","label":"Business"},{"id":"tech_ai","label":"Technology"},{"id":"science","label":"Science"},{"id":"health","label":"Health"},{"id":"climate","label":"Climate"},{"id":"culture","label":"Culture"},{"id":"sports","label":"Sports"}]}
 
 test "the stories of an answered fetch are the page"
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state pfront.status == "ready"
   expect state pfront.count == 5
@@ -16,12 +17,14 @@ test "the stories of an answered fetch are the page"
   expect state paperLoading == false
 
 test "a story opens by the route the page gives it"
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state pfront.routes.0 == "/pub/texture/saudi-strikes-on-sanaa-province-kill-at-least-44-houthis-say-toll-unconfirmed-by-riyadh-pub69d57312b"
   expect state pfront.titles.0 == "Saudi strikes on Sanaa province kill at least 44, Houthis say; toll unconfirmed by Riyadh"
 
 test "an empty front is the empty state, not a spinner"
   answer fetch "https://choir.news" with 200 {"stories":[],"sections":[{"id":"world","label":"World"},{"id":"us","label":"U.S."}]}
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state pfront.status == "empty"
   expect state pfront.message == "Nothing on the front page yet."
@@ -30,6 +33,7 @@ test "an empty front is the empty state, not a spinner"
 
 test "a failed fetch is the error state with its own words"
   fail fetch "https://choir.news"
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state pfront.status == "error"
   expect state pfront.message == "Could not reach choir.news. Pull to try again."
@@ -37,11 +41,13 @@ test "a failed fetch is the error state with its own words"
 
 test "a server error is the same"
   answer fetch "https://choir.news" with 500 {"error":"failed to list stories"}
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state pfront.status == "error"
   expect state pfront.count == 0
 
 test "a body that is not the front list is an error, not a crash"
   answer fetch "https://choir.news" with 200 {"unexpected":true}
+  clock +2500 real      // the first gated answer waits for the host's own decision that there is no native package (account.ts launch), in real time
   clock data
   expect state pfront.status == "error"

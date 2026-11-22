@@ -8,6 +8,7 @@
 //   a podcast clip                  kind clip      source.ref clip:<id>, source.url the audio, source.start and end its range
 //   a podcast episode               kind episode   source.ref episode:<podcast key>, source.url the audio, source.start where it begins
 import { clock } from './clock.ts';
+import { scoped } from './api.ts';
 import { Bounds, entryJSONSize, validId, type By, type Ended, type Entry, type Op } from './runsheet-model.ts';
 
 const enc = new TextEncoder();
@@ -63,16 +64,14 @@ export const filesAudio = (address: string, title: string, by: By = 'listener'):
 export type Audio = { url: string; title: string; show: string; start?: number; end?: number; episode_id?: string };
 
 /** Addresses too long for the server's bound (2048 bytes), kept on the phone by entry id: the entry names the audio by its ref and leaves its url out. */
-const longURLs = new Map<string, string>();
-/** Sign-out: the long web addresses of the account's entries (keyed by entry id) are forgotten. */
-export function forgetLongURLs(): void { longURLs.clear(); }
-export const longURL = (id: string): string | undefined => longURLs.get(id);
+const L = scoped(() => ({ longURLs: new Map<string, string>() }));      // module state belongs to the world (api.ts `scoped`)
+export const longURL = (id: string): string | undefined => L().longURLs.get(id);
 
 export function audio(a: Audio, clipID?: string, by: By = 'listener'): Entry {
   const t = cleanTitle(a.title);
   const id = mintId(by === 'listener' ? 'l-' : 'p-');
   const long = bytes(a.url) > Bounds.maxURLBytes;
-  if (long) longURLs.set(id, a.url);
+  if (long) L().longURLs.set(id, a.url);
   const url = long ? undefined : a.url;
   const strip = <T extends Record<string, unknown>>(o: T): T => { for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k]; return o; };
   if (a.end !== undefined || clipID !== undefined) {

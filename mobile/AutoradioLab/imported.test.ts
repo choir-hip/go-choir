@@ -19,8 +19,8 @@ import * as I from './imported.ts';
 import * as F from './files.ts';
 import * as M from './imported-model.ts';
 import { SignedOutError, type Reply } from './api.ts';
+import { dig, reopen } from './account-phone.ts';
 import { readFileSync } from 'node:fs';
-import { WIPES, wipedPaths } from './account.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 let calls: Call[] = [];
@@ -233,8 +233,6 @@ describe('I11 to I13 reading, finding, placing and handing words to the player',
     await I.importedPlace({ address: d.address, section: 1, block: -1 }, storage, net); expect((await open('r.pdf')).position).toBe(2);
     expect((await I.importedPlace({ address: 'doc:' + id('gone.pdf'), section: 0, block: 1 }, storage, net)).ok).toBe(false);
     expect(files.has(I.PLACES_FILE)).toBe(true);
-    await I.wipeImported(storage); expect(files.has(I.PLACES_FILE)).toBe(false);
-    expect(WIPES.map((w) => w.name)).toContain('imported-documents'); expect(wipedPaths()).toContain(I.PLACES_FILE);
   });
   test('I13 read aloud and queue hand the words from the chosen block as data for the native player', async () => {
     put('b.epub', 500, BOOK);
@@ -250,9 +248,11 @@ describe('I11 to I13 reading, finding, placing and handing words to the player',
 
 describe('I14 and I15 the original and the words', () => {
   test('I14 the original is copied under the cache by the host; a large one is not; the share sheet gets the copy of an e-book too', async () => {
+    reopen(dig('k-imported'));
     put('r.pdf', 1000, PDF); put('b.epub', 500, BOOK); put('huge.pdf', I.COPY_MAX + 1, PDF);
     const pdf = await open('r.pdf');
-    expect(pdf.src).toMatch(/^app:\/cache\/files\/[0-9a-f]+\/r\.pdf$/); expect(pdf.shareSrc).toBe(pdf.src); expect(pdf.message).toBe('');
+    expect(pdf.src).toMatch(/^app:\/cache\/accounts\/[0-9a-f]{64}\/files\/[0-9a-f]+\/r\.pdf$/);      // the host and the iframe see the account's root (P6)
+    expect(pdf.shareSrc).toBe(pdf.src); expect(pdf.message).toBe('');
     const epub = await open('b.epub');
     expect(epub.src).toBe(''); expect(epub.shareSrc).toMatch(/b\.epub$/);
     await open('r.pdf'); expect(downloads.filter((n) => n === 'r.pdf').length).toBe(1);          // not again

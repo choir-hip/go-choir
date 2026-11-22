@@ -3,14 +3,14 @@
 // What stays native and why: the deck (the audio), a few facts only the audio code knows (`radioFacts`: a turn is open, what is left of the spoken entry, the place in it), the book text (the
 // shelf is native until it moves) and the voice turn's queue snapshot and server ops (`radioSet`, and the inbox in `radioFacts`): the turn engine is native and Exact has no call from native into shared code,
 // so shared code PUSHES the snapshot and native hands back the server's `queue_ops` text, which the pump applies (the retrieval lane's pattern).
-import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, type NativeReader } from './api.ts';
+import { authedText, authedToFile, getJSON, nativeInert, accountGeneration, currentWorld, fetchPublic, appPath, inertTimeout, scoped, type NativeReader, type World } from './api.ts';
 import { nativeDeck } from './deck-native.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
 import { Writer, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
 import { applyTurnOps, turnQueueJSON } from './voice-queue.ts';
 import { routePoster, signedInRequester } from './runsheet-store.ts';
 import { authedJSON } from './api.ts';
-import { audioSpec, audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds, heldStory, forgetLongURLs } from './runsheet-entries.ts';
+import { audioSpec, audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds, heldStory } from './runsheet-entries.ts';
 import { offlineStories } from './content-run.ts';
 import { loadReader } from './reader.ts';
 import { sentenceTexts } from './reader-parse.ts';
@@ -37,17 +37,10 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 type Radio = { rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
-let radio: Radio | undefined;
-let restored: Promise<void> | undefined;
+const S = scoped(() => ({ radio: undefined as Radio | undefined, restored: undefined as Promise<void> | undefined }));      // the radio of the world: its run sheet, its desk, what was on air
 
-/** Fresh state (tests; a sign-out wipes through `wipeRadio`). */
-export function resetRadio(): void { radio = undefined; restored = undefined; }
-export async function wipeRadio(storage: Store | undefined): Promise<void> {
-  const r = radio; radio = undefined; restored = undefined;
-  forgetLongURLs();                                                                          // the long web addresses of this account's entries (runsheet-entries.ts)
-  if (r) { r.writer.stop(); await r.rt.signOut(); }
-  if (storage) { try { await storage.fs.rm(SHEET_FILE); } catch { /* absent */ } }
-}
+/** Fresh state (tests). */
+export function resetRadio(): void { S.reset(); }
 
 function runStorage(s: Store | undefined): RunStorage | undefined {
   if (!s) return undefined;
@@ -60,7 +53,7 @@ function runStorage(s: Store | undefined): RunStorage | undefined {
 
 /** The native facts, over the app module's `radioFacts` op: the audio's own facts and the inbox of what native callers and the voice turn handed over. */
 async function readFacts(r: { inbox: string[] } & Partial<Radio>): Promise<NativeFacts> {
-  const later = nativeLater();
+  const later = nativeInert();
   if (!later) return NO_FACTS;
   try {
     const o = obj(await later({ op: 'radioFacts' }));
@@ -76,7 +69,7 @@ async function readFacts(r: { inbox: string[] } & Partial<Radio>): Promise<Nativ
   } catch { return NO_FACTS; }
 }
 
-function resolvers(storage: Store | undefined): Partial<Resolvers> {
+function resolvers(storage: Store | undefined, w: World): Partial<Resolvers> {
   const words = async (address: string): Promise<{ title: string; paragraphs: string[] } | undefined> => {
     const d = await loadReader(address);
     const ps = d.blocks.map((b) => sentenceTexts(b).join(' ').trim()).filter((p) => p !== '');
@@ -85,7 +78,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
   return {
     story: (route) => words('pub:' + route),
     webPage: async (url, title) => {
-      const res = await fetch(url, { method: 'GET', headers: { accept: 'text/html' } } as RequestInit);
+      const res = await fetchPublic(url, { method: 'GET', headers: { accept: 'text/html' } });
       if (!res.ok) return undefined;
       const text = htmlToText(await res.text()).split(/\n{2,}/).map((p) => p.replace(/\s+/g, ' ').trim()).filter((p) => p !== '');
       return text.length ? { title, paragraphs: text } : undefined;
@@ -94,20 +87,21 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
     book: async () => undefined,
     take: async (id) => {
       const dest = `app:/cache/files/take-${id}/audio.m4a`;
-      try { await authedToFile(`/api/platform/takes/${encodeURIComponent(id)}/audio`, dest, storage as never); return { url: dest }; } catch { return undefined; }
+      try { await authedToFile(`/api/platform/takes/${encodeURIComponent(id)}/audio`, dest, storage as never, { world: w }); return { url: appPath(dest) }; } catch { return undefined; }
     },
     file: async (address) => {
       // Files audio is brought to the phone by the Files page's own open (the cache folder `app:/cache/files/<key>/<name>`); the deck turns that address into the file.
       const info = await fileOpen({ address }, storage as never);
-      return info.status === 'ready' && info.local.startsWith('app:/cache/files/') ? { url: info.local } : undefined;
+      return info.status === 'ready' && info.local.startsWith('app:/cache/accounts/') ? { url: info.local } : undefined;
     },
   };
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
+  const w = currentWorld();                                   // the world this radio belongs to: its requests are signed for this world only
   const state: Radio = { rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
-    deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
+    deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester((p, o) => authedJSON(p, { ...(o ?? {}), world: w }))), generation: accountGeneration, resolvers: resolvers(storage, w),
     native: { facts: () => readFacts(state) },
     onChange: () => { state.tick += 1; },
   });
@@ -133,7 +127,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
     texts: async (routes) => {
       // the writer sends the first 8 KB of each: the rest of a 1.6 MB story is not read
       const out: Record<string, string[]> = {};
-      await Promise.race([Promise.all(routes.map(async (r) => { try { const d = await loadReader('pub:' + r); lap(`texts: ${r.slice(-20)} read (${d.blocks.length} blocks)`); { const ps: string[] = []; let n = 0; for (const b of d.blocks) { const t = sentenceTexts(b).join(' '); ps.push(t); n += t.length; if (n > 24 * 1024) break; } out[r] = ps; } } catch { /* goes without text */ } })), new Promise((res) => setTimeout(res, 3000))]);
+      await Promise.race([Promise.all(routes.map(async (r) => { try { const d = await loadReader('pub:' + r); lap(`texts: ${r.slice(-20)} read (${d.blocks.length} blocks)`); { const ps: string[] = []; let n = 0; for (const b of d.blocks) { const t = sentenceTexts(b).join(' '); ps.push(t); n += t.length; if (n > 24 * 1024) break; } out[r] = ps; } } catch { /* goes without text */ } })), inertTimeout(3000, w)]);
       return out;
     },
     takes: async () => {
@@ -150,7 +144,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
       return (await offlineStories(storage as never, { told, held })).map((l) => heldStory(l.id, l.title, l.text, l.address));
     },
     post: async (body) => {
-      try { return await authedText(PROGRAMME_PATH, { method: 'POST', body }); }
+      try { return await authedText(PROGRAMME_PATH, { method: 'POST', body, world: w }); }
       catch (e) { const s = (e as { status?: number }).status; throw Object.assign(e as Error, { kind: (e as Error).name === 'SignedOutError' ? 'signedOut' : s === undefined ? 'transport' : 'other' }); }
     },
     now: clockNow, tz: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', requestId: () => 'radio-' + mintId('').slice(0, 12), generation: accountGeneration,
@@ -164,14 +158,13 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
 const yieldTurn = (label: string): Promise<void> => lapYield(`bridge: ${label}`);
 
 export async function getRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  if (!radio) radio = await makeRadio(storage, native);
-  const r = radio;                                          // held locally: a sign-out (`wipeRadio`) clears the module's variable at any await below
+  const st = S();
+  if (!st.radio) st.radio = await makeRadio(storage, native);
+  const r = st.radio;
   await readFacts(r);                                       // the device's time first: nothing below may run on a stale clock
-  if (radio !== r) return getRadio(storage, native);       // signed out meanwhile: this radio is the old account's
-  if (!restored) restored = r.rt.restore();
-  const done = restored;
-  await done;
-  return radio === r ? r : getRadio(storage, native);
+  if (!st.restored) st.restored = r.rt.restore();
+  await st.restored;
+  return r;
 }
 
 // ---- the entries the screens ask for ----
@@ -221,7 +214,7 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   if (!r.ready) r.ready = await firstRunOver(storage as never);          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after peek: reading the facts sets it from native)
   if (!r.started && r.ready && !r.rt.store.onAir() && r.readySince === 0) r.readySince = clock.ms;
   // the turn route's queue: pushed to native, which sends it with every turn (one call; the next pulse sets it again if this one is let go)
-  const later = nativeLater();
+  const later = nativeInert();
   if (later) { try { await later({ op: 'radioSet', snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); } catch { /* the next pulse sets it */ } }
   const posting = r.rt.store.pending.length > 0 && !r.rt.store.isFlushing;
   const out = { tick: r.tick, write: r.writer.wouldAsk() || posting, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)) };
@@ -282,7 +275,7 @@ async function handle(r: Radio, text: string): Promise<void> {
     case 'level': break;      // the voice's yield acted on the deck natively at once (ChoirApp.swift `onLevel`); its lines are in the journal
     case 'stopAll': {
       await r.rt.signOut();
-      const later = nativeLater();                                            // native waits for this before the key goes (ChoirApp.signOut): the wait is for the answer, not a guess
+      const later = nativeInert();                                            // native waits for this before the key goes (ChoirApp.signOut): the wait is for the answer, not a guess
       if (later) { try { await later({ op: 'radioSet', signedOut: true }); } catch { /* native stops waiting at its deadline */ } }
       break;
     }
@@ -332,7 +325,7 @@ export async function queueAct(storage: Store | undefined, native: NativeReader 
 /** "Open episode": the page of the episode on air, at the clip's time. Opening a page is the shell's (native `openPage`); shared code names the address. */
 async function openEpisodeOf(r: Radio): Promise<void> {
   const air = r.rt.store.onAir(), spec = air ? audioSpec(air) : undefined, k = spec?.episode_id ? parseEpisodeKey(spec.episode_id) : null;
-  const later = nativeLater();
+  const later = nativeInert();
   if (!spec || !k || !later) return;
   const address = episodeAddress(k.feed, k.id, { enclosure: spec.url, start: spec.start ?? null, title: spec.title, show: spec.show });
   try { await later({ op: 'openPage', address, title: 'Episode' }); } catch { /* the page did not open */ }
@@ -420,7 +413,7 @@ export async function barRun(storage: Store | undefined, native: NativeReader | 
 
 export async function radioPageFacts(storage: Store | undefined, native: NativeReader | undefined): Promise<RadioFacts> {
   const r = await getRadio(storage, native);
-  const v = r.rt.view(), later = nativeLater();
+  const v = r.rt.view(), later = nativeInert();
   let sentences: string[] = [], sentenceIndex = 0, progress = 0;
   if (later) { try { const o = obj(await later({ op: 'radioFacts', peek: true })); sentences = Array.isArray(o.sentences) ? o.sentences.filter((x): x is string => typeof x === 'string') : []; sentenceIndex = num(o.sentenceIndex); progress = num(o.progress); } catch { /* none */ } }
   const sheet = { ...r.rt.store.sheet, applied_ops: [] };

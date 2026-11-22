@@ -7,9 +7,10 @@
 //  P10 a stored file with a malformed entry (a non-string in recency, a page with no address) drops THAT entry and keeps the rest: nothing is half-applied.
 //  P11 two callers at the first read share ONE load (no duplicates, one read).   P12 a wipe during a load: the old account's file does not refill the set.
 //  P13 a close then reopen keeps the opener (as the Swift reopen does).
+import { moveAccount } from './account-phone.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as P from './pages.ts';
-import { bindNative, nextGeneration, resetSeam } from './api.ts';
+import { bindNative, resetSeam } from './api.ts';
 
 const files = new Map<string, Uint8Array>();
 const storage = {
@@ -73,17 +74,6 @@ describe('pages', () => {
     expect(P.canonical(' Texture:My-Edition ')).toBe('onboarding:edit'); expect(P.canonical('doc:abc@12')).toBe('doc:abc');
     expect((await P.pagesOpen(storage, 'texture:my-edition', '')).top).toBe('onboarding:edit');
   });
-  test('P8 sign-out leaves the radio and no file', async () => {
-    await P.pagesOpen(storage, 'paper:front', ''); expect(files.has(P.PAGES_FILE)).toBe(true);
-    await P.wipePages(storage);
-    expect(files.has(P.PAGES_FILE)).toBe(false); expect(addrs(await P.pagesView(undefined))).toEqual(['radio:']);
-  });
-  test('P9 a write that lands after a sign-out began is removed', async () => {
-    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-    const slow = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { await gate; files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
-    const p = P.pagesOpen(slow, 'paper:front', ''); await new Promise((r) => setTimeout(r, 5)); nextGeneration(); release(); await p;
-    expect(files.has(P.PAGES_FILE)).toBe(false);
-  });
 });
 
 describe('load', () => {
@@ -106,17 +96,6 @@ describe('load', () => {
     await new Promise((r) => setTimeout(r, 10)); release(); await Promise.all([a, b]);
     const v = await P.pagesView(slow);
     expect(reads).toBe(1); expect(addrs(v)).toEqual(['textures:', 'radio:', 'paper:front']); expect(new Set(addrs(v)).size).toBe(v.rows.length);
-  });
-  test('P12 a wipe during a load: the old account\'s file does not refill the set (fails without the epoch guard)', async () => {
-    await P.pagesOpen(storage, 'paper:front', 'Old account page'); P.forget();
-    const snapshot = files.get(P.PAGES_FILE)!;                                 // the bytes the read in flight will return, taken BEFORE the wipe deletes the file
-    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-    let reads = 0;
-    const slow = { fs: { readFile: async () => { reads++; if (reads === 1) { await gate; return snapshot; } throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
-    const load = P.pagesView(slow); await new Promise((r) => setTimeout(r, 10));
-    await P.wipePages(slow);                                                   // sign-out while the read is out
-    release(); const v = await load;
-    expect(addrs(v)).toEqual(['radio:']); expect(addrs(await P.pagesView(slow))).toEqual(['radio:']);
   });
   test('P13 close then reopen keeps the opener', async () => {
     await P.pagesOpen(storage, 'paper:front', ''); await P.pagesOpen(storage, 'pub:/x', 'X'); await P.pagesClose(storage, 'pub:/x');
@@ -149,7 +128,7 @@ describe('round 6', () => {
     const api = await import('./api.ts');
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
     const slow = { fs: { readFile: async () => { await gate; throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
-    const p = P.pagesOpen(slow, 'paper:front', ''); await new Promise((r) => setTimeout(r, 10)); api.nextGeneration(); release(); const v = await p;
+    const p = P.pagesOpen(slow, 'paper:front', ''); await new Promise((r) => setTimeout(r, 10)); moveAccount(); release(); const v = await p;
     expect(addrs(v)).not.toContain('paper:front'); expect(files.has(P.PAGES_FILE)).toBe(false);
   });
 });
@@ -164,7 +143,7 @@ describe('the voice\'s facts and a native request (P14, P15)', () => {
     await P.pagesOpen(storage, 'pub:a', 'A');
     const last = calls[calls.length - 1] as { op: string; gen: number; pages: { address: string; title: string; kind: string }[] };
     expect(last.op).toBe('pagesMirror'); expect(last.pages.map((x) => x.address)).toEqual(['pub:a', 'radio:']); expect(last.pages[0]).toEqual({ address: 'pub:a', title: 'A', kind: 'reader' });
-    nextGeneration();
+    moveAccount();
     await P.pagesClose(storage, 'pub:a');
     expect((calls[calls.length - 1] as { gen: number }).gen).toBe(1);
   });

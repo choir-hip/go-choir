@@ -2,7 +2,7 @@
 // first native call answers). The deck's page set, the shared reader and the shared notebook use it: they are the Android path and must do no work on iOS.
 // "native" is decided at once by a usable handle that answers a probe, and is sticky. "none" is decided only after a wait for a handle to appear (a module may load late) and a probe that
 // fails, throws or never answers. Before the decision the source has not answered, and the contracts read that as native (only "none" switches to the shared twins).
-import { nativeLater, nativeHasAnswered } from './api.ts';
+import { nativeLater, nativeHasAnswered, noteNativeAnswered } from './api.ts';
 
 let decided: 'native' | 'none' | null = null;
 let inflight: Promise<'native' | 'none'> | null = null;
@@ -13,8 +13,8 @@ const probe = async (probeMs: number): Promise<boolean> => {
   const later = nativeLater();
   if (!later) return false;
   try {
-    const r = await Promise.race([later({ op: 'keystate' }), new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), probeMs))]);
-    return r !== 'timeout' && !!r && typeof (r as { state?: unknown }).state === 'string';
+    const r = await Promise.race([later({ op: 'hello' }), new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), probeMs))]);
+    const ok = r !== 'timeout' && !!r && typeof (r as { state?: unknown }).state === 'string'; if (ok) noteNativeAnswered(); return ok;
   } catch { return false; }
 };
 

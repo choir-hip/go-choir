@@ -169,10 +169,7 @@ extension DeckLine {
     }
 
     public static func applicationSupportFile() -> URL? {
-        guard let d = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
-        let dir = d.appendingPathComponent("Autoradio", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("deck-journal.json")
+        AccountWipe.url("deck-journal.json")
     }
     /// The small file beside the journal that holds `seq` and `acked`.
     static func seqFile(for storage: URL) -> URL { storage.deletingPathExtension().appendingPathExtension("seq.json") }
@@ -273,10 +270,6 @@ extension DeckLine {
         return append("ended", item: item, block: last?.block ?? 0, seconds: last?.seconds ?? 0, final: last?.final ?? 0, rendered: sounded, end: "failed", reason: "interrupted by a restart")
     }
 
-    public func wipe() {
-        lines = []; seq = 0; acked = 0; dropped = 0; isLoaded = true
-        if let storage { try? FileManager.default.removeItem(at: storage); try? FileManager.default.removeItem(at: Self.seqFile(for: storage)) }
-    }
 
     /// Nothing is written while the file could not be read (it would destroy what it holds). A failed write is counted and logged with counts only;
     /// the next event writes everything held again.
@@ -340,15 +333,6 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
 
     public init(journal: DeckJournal) { self.journal = journal }
 
-    /// Sign-out: the item on air, the held items and the reason go with the journal, the engine stops: a late end writes nothing for the next account.
-    public func wipe() {
-        retryTask?.cancel(); retryTask = nil; generation += 1
-        let wasPlaying = current != nil
-        current = nil; held = []; why = .empty; sounded = false; commanded = false; silentRun = 0; lastHeard = false; attempts = 0
-        if wasPlaying { stopEngine() }
-        journal.wipe()
-        changed()
-    }
 
     /// At launch, before the run sheet is restored: an item the kill left open is closed in the journal.
     @discardableResult public func boot() -> DeckLine? { journal.closeOpenAtBoot() }

@@ -2,7 +2,7 @@ import XCTest
 @testable import AutoradioKit
 
 /// The mail cipher: AES-GCM with a native key that never leaves. A made-up Keychain service stands in for the real one.
-final class MailSealTests: XCTestCase {
+final class MailSealTests: KeychainFakeCase {
     private let service = "news.choir.autoradio.mailseal.test-\(UUID().uuidString.prefix(8))"
 
     func testSealThenOpenAndNothingElseOpens() {

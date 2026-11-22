@@ -5,7 +5,7 @@
 use PageDeck from "./pages.contract"
 use BarShell from "./bar.contract"
 use SignInScreen from "./onboarding.contract"
-use SignedOutBanner from "./signedout.contract"
+use SignedOutBanner, EndedCard from "./signedout.contract"
 use BarWebLayer from "./queue.contract"
 
 component Autoradio
@@ -79,7 +79,12 @@ component Autoradio
     signOutNote
     acs
     hpg
-    signedOutTick
+    acctHandle
+    retryAccount
+    askRemove
+    cancelRemove
+    confirmRemove
+    cardTap
     hc
     noNative
     refreshRadio
@@ -469,3 +474,6 @@ component Autoradio
       if au.status == "pending"
         column position="absolute" inset=0 background-color=th.paper z-index=50
           SignInScreen()
+      // A sign-out ended the session (account.ts): the whole app is this one card until the person closes and reopens it. Every gated page refuses underneath.
+      if acs.state == "ended"
+        EndedCard()

@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { adoptNative } from './api.ts';
 import { forgetOnboarding } from './onboarding.ts';
-import { radioHold, radioPulse, wipeRadio } from './radio-bridge.ts';
+import { radioHold, radioPulse, resetRadio } from './radio-bridge.ts';
 
 const calls: { op: string; name?: string }[] = [];
 let ready = false;
@@ -21,7 +21,7 @@ const native = {
 describe('the radio starts in a launch nothing but the page drives', () => {
   test('not ready: nothing is due; ready: the pulse says hold, and radioHold plays the opening', async () => {
     forgetOnboarding();                        // nor the first run's memory of another test file
-    await wipeRadio(undefined);                // another test file may have made the module's one radio
+    resetRadio();                // another test file may have made the module's one radio
     adoptNative(native as never, 'test');
     const before = await radioPulse(undefined, native as never);
     expect(before.hold).toBe(false);
@@ -37,7 +37,7 @@ describe('the radio starts in a launch nothing but the page drives', () => {
 describe('the first run is over in shared code before native has been told', () => {
   test('native says not ready but onboarding.json says done: the start is due (nothing asked `ob`)', async () => {
     forgetOnboarding();
-    await wipeRadio(undefined);
+    resetRadio();
     ready = false; calls.length = 0;
     const store = { fs: { readFile: async (p: string) => { if (p.endsWith('onboarding.json')) return new TextEncoder().encode(JSON.stringify({ offered: true, skipped: false, setupDone: false, micRefused: false, topicsStarted: false, editionDone: true, voicePicked: 0 })); throw Object.assign(new Error('absent'), { code: 'ENOENT' }); }, atomicWriteFile: async () => undefined, rm: async () => undefined } };
     adoptNative(native as never, 'test');

@@ -1,196 +1,145 @@
 import XCTest
 @testable import AutoradioKit
 
-// Sign-out wipes everything of the account that sits on the phone, and the first request of each kind after the next sign-in carries none of it.
-// Failure list (written before the code):
-//  1  after sign-out no file under the stores' folders holds the marker
-//  2  after sign-out every in-memory store answers empty
-//  3  after the next sign-in the first turn, programme, steer flush, sheet post, podcast sync and texture retry carry no marker
-//  4  pending run sheet ops are dropped at sign-out, never posted under the next key
-//  5  the revoke is sent in the background with the old key, after the local key is gone
-@MainActor
-final class AccountWipeTests: XCTestCase {
-    static let marker = "MARKER-7731"
-    var root: URL!
-
-    override func setUp() {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("acctwipe-\(UUID().uuidString)")
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+// NATIVE'S PART OF THE ACCOUNT BOUNDARY (docs/design/account-boundary-2026-11-21.md, "Round 12"): the key is Exact's and the verdict is shared code's, so what is tested here is what native still does. Failure list, written first:
+//  1. `forgetAll` removes the account folder, the old stores, the app target's files and the shared roots, forgets the mail seal, and answers true only when none is left and the seal's status is clean
+//  2. `retireOldKey`: the old Keychain items are read once, the key is revoked, the three items are deleted; a revoke that fails still deletes; nothing there is `none`
+//  3. `HeldKeys` is the in-memory key: held and cleared by `hold`; the mail seal makes a key only while one is held; native persists nothing
+//  4. the voice carry-over moves the old file only while a key is held, and never deletes an old file when none is held
+//  5. no store builds its own account path; no test names a real folder; a new native file may not start calling the server with `ChoirClient` (the residual only shrinks)
+final class AccountWipeTests: KeychainFakeCase {
+    private let fm = FileManager.default
+    private func plant(_ rel: String) throws { let u = AccountWipe.base.appendingPathComponent(rel); try fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true); try Data("old account".utf8).write(to: u) }
+    private func plantAll() throws {
+        try plant("account/takes-copy-own.json"); try plant("account/MikeVoice/speaker.json"); try plant("account/turns/t1/record.json")
+        for o in ["takes-own.json", "deck-journal.json", "notebook-cache.md", "turns/t1/record.json", "voice-choice.json", "../MikeVoice/speaker.json"] { try plant(o) }
+        AccountWipe.extraPaths = ["books", "content", "console.log", "recent-files.json"].map { AccountWipe.base.appendingPathComponent($0) }
+        for e in ["books/b1/text.txt", "content/c.json", "console.log", "recent-files.json"] { try plant(e) }
     }
-    override func tearDown() { try? FileManager.default.removeItem(at: root) }
+    private func leftovers() -> [String] {
+        (["account", "takes-own.json", "deck-journal.json", "notebook-cache.md", "turns", "voice-choice.json", "../MikeVoice", "books", "content", "console.log", "recent-files.json"]).filter { fm.fileExists(atPath: AccountWipe.base.appendingPathComponent($0).path) }
+    }
 
-    
-    final class FakeAPI: TextureAPI {
-        var posts: [String] = []
-        var failure: Error? = URLError(.notConnectedToInternet)
-        func head(docId: String) async throws -> TextureHead { TextureHead(content: "base", body: nil, revisionId: "r1", version: 1) }
-        func post(docId: String, content: String, body: [String: Any], parent: String) async throws -> (revisionId: String, version: Int) {
-            if let failure { throw failure }
-            posts.append(content); return ("r2", 2)
+    func testForgetAllRemovesEveryNativePathAndIsTrueOnlyWhenNoneIsLeft() throws {
+        try plantAll(); XCTAssertEqual(leftovers().count, 11)
+        XCTAssertTrue(AccountWipe.forgetAll()); XCTAssertEqual(leftovers(), []); XCTAssertTrue(AccountWipe.forgetAll(), "idempotent: nothing to remove is clean")
+    }
+    func testForgetAllIsFalseWhenAPathStaysOrTheSealSaysNo() throws {
+        try plantAll(); let stuck = AccountWipe.root.appendingPathComponent("turns/t1"); try fm.createDirectory(at: stuck, withIntermediateDirectories: true); try Data("x".utf8).write(to: stuck.appendingPathComponent("f"))
+        try fm.setAttributes([.posixPermissions: 0o500], ofItemAtPath: stuck.path); defer { try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: stuck.path) }
+        XCTAssertFalse(AccountWipe.forgetAll(), "a path that stays is not done")
+        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: stuck.path); XCTAssertTrue(AccountWipe.forgetAll())
+        for (status, expect) in [(errSecSuccess, true), (errSecItemNotFound, true), (errSecInteractionNotAllowed, false)] as [(OSStatus, Bool)] { AccountWipe.forgetMail = { status }; XCTAssertEqual(AccountWipe.forgetAll(), expect, "status \(status)") }
+    }
+    /// THE PRODUCTION WIRING, built by the very function the module calls: the shared account roots under Exact's data, cache and temporary folders are removed too.
+    func testTheWiringTheModuleUsesRemovesTheSharedRootsToo() throws {
+        let app = AccountWipe.base.appendingPathComponent("../exact/app1")
+        let data = app.appendingPathComponent("data"), cache = app.appendingPathComponent("cache"), tmp = app.appendingPathComponent("tmp"), support = AccountWipe.base, files = cache.appendingPathComponent("files"), scratch = tmp.appendingPathComponent("takes")
+        AccountWipe.configure(support: support, data: data, cache: cache, temporary: tmp, filesCache: files, takesScratch: scratch)
+        let planted = [data, cache, tmp].map { $0.appendingPathComponent("accounts/abc") } + [tmp.appendingPathComponent("picked/doc.pdf"), files.appendingPathComponent("h/f"), scratch.appendingPathComponent("rec.m4a"), support.appendingPathComponent("content/c.json")].map { $0.appendingPathComponent("") }
+        for u in planted { try fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true); try Data("old".utf8).write(to: u.deletingLastPathComponent().appendingPathComponent("z.bin")) }
+        XCTAssertTrue(AccountWipe.forgetAll()); XCTAssertFalse(planted.contains { fm.fileExists(atPath: $0.deletingLastPathComponent().path) }, "every production path is gone")
+    }
+
+    func testTheOldKeyIsReadOnceRevokedAndTheThreeItemsAreDeleted() throws {
+        let k = KeychainKeyStore(); try k.set("old-key-not-real", account: KeyAccount.apiKey); try k.set("old-id", account: KeyAccount.keyID); try k.set("comp", account: KeyAccount.computerID)
+        nonisolated(unsafe) var seen: [String] = []; AccountWipe.revoke = { id, key in seen.append("\(id):\(key == "old-key-not-real")"); return true }
+        XCTAssertEqual(AccountWipe.retireOldKey(), "revoked"); XCTAssertEqual(seen, ["old-id:true"])
+        for a in [KeyAccount.apiKey, KeyAccount.keyID, KeyAccount.computerID] { XCTAssertNil(k.get(a)) }
+        XCTAssertEqual(AccountWipe.retireOldKey(), "none"); XCTAssertEqual(seen.count, 1, "nothing left: no second revoke")
+    }
+    func testARevokeThatFailsStillDeletesAndSaysSo() throws {
+        let k = KeychainKeyStore(); try k.set("old-key-not-real", account: KeyAccount.apiKey); try k.set("old-id", account: KeyAccount.keyID)
+        AccountWipe.revoke = { _, _ in false }; XCTAssertEqual(AccountWipe.retireOldKey(), "not revoked"); XCTAssertNil(k.get(KeyAccount.apiKey)); XCTAssertNil(k.get(KeyAccount.keyID))
+        try k.set("old-key-not-real", account: KeyAccount.apiKey); XCTAssertEqual(AccountWipe.retireOldKey(), "not revoked", "a key with no id cannot be revoked, and is still deleted"); XCTAssertNil(k.get(KeyAccount.apiKey))
+    }
+    func testNothingTheOldKeyCleanerDoesLeavesTheKeyInAnyReturnValue() throws {
+        let k = KeychainKeyStore(); try k.set("old-key-not-real", account: KeyAccount.apiKey)
+        XCTAssertFalse(AccountWipe.retireOldKey().contains("old-key"))
+    }
+
+    func testHeldKeysAreHeldAndClearedAndTheMailSealMakesAKeyOnlyWhileOneIsHeld() throws {
+        XCTAssertFalse(HeldKeys.present); XCTAssertNil(MailSeal().seal(Data("m".utf8)), "no key held: the seal makes none")
+        HeldKeys.hold(key: "k-not-real", keyId: "id", computerId: "c"); XCTAssertTrue(HeldKeys.present); XCTAssertEqual(HeldKeys.store.get(KeyAccount.computerID), "c")
+        XCTAssertNotNil(MailSeal().seal(Data("m".utf8)), "a key is held: the seal is made")
+        HeldKeys.hold(key: "", keyId: "", computerId: ""); XCTAssertFalse(HeldKeys.present); XCTAssertNil(HeldKeys.store.get(KeyAccount.apiKey)); XCTAssertNil(HeldKeys.store.get(KeyAccount.keyID))
+        XCTAssertNil(KeychainKeyStore().get(KeyAccount.apiKey), "native never persists the key")
+    }
+
+    /// The one carry-over (voice): the speaker profile and the voice choice are moved once from the old path into the account folder, only while a key is held; with none held the old file stays in use and is NEVER deleted here.
+    func testTheVoiceIsMovedOnceWhileAKeyIsHeldAndNeverDeletedWithoutOne() throws {
+        let base = AccountWipe.base
+        try fm.createDirectory(at: base.appendingPathComponent("../MikeVoice"), withIntermediateDirectories: true)
+        let oldProfile = base.appendingPathComponent("../MikeVoice/speaker.json"), oldChoice = base.appendingPathComponent("voice-choice.json")
+        try Data("profile".utf8).write(to: oldProfile); try Data("choice".utf8).write(to: oldChoice)
+        let kept = AccountWipe.url("MikeVoice/speaker.json"); XCTAssertEqual(kept.standardizedFileURL.path, oldProfile.standardizedFileURL.path, "no key held: the old file stays in use"); XCTAssertTrue(fm.fileExists(atPath: oldProfile.path))
+        HeldKeys.hold(key: "k-not-real", keyId: "", computerId: "")
+        let p = AccountWipe.url("MikeVoice/speaker.json"), c = AccountWipe.url("voice-choice.json")
+        XCTAssertEqual(try String(contentsOf: p, encoding: .utf8), "profile"); XCTAssertEqual(try String(contentsOf: c, encoding: .utf8), "choice")
+        XCTAssertFalse(fm.fileExists(atPath: oldProfile.path)); XCTAssertFalse(fm.fileExists(atPath: oldChoice.path), "moved, not copied")
+        try Data("newer".utf8).write(to: oldChoice); _ = AccountWipe.url("voice-choice.json")
+        XCTAssertEqual(try String(contentsOf: c, encoding: .utf8), "choice", "a second call never overwrites the file in the folder")
+        XCTAssertNil(try? String(contentsOf: AccountWipe.url("takes-copy-own.json"), encoding: .utf8), "nothing else is carried over")
+    }
+
+    /// THE SCAN: a native store may not build its own path in the app's folders. Scanned: the Kit, the app target (exact-package/apple, not the gitignored Kit copy) and the native modules. Tokens: every way to name a folder. Exceptions are per LINE, with a reason.
+    /// A store that takes a root or dir parameter is checked at its callers: they must pass `AccountWipe.url`.
+    func testNoStoreBuildsItsOwnAccountPath() throws {
+        let mobile = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let roots = ["AutoradioKit/Sources/AutoradioKit", "exact-package/apple", "AutoradioLab/modules/apple"]
+        let tokens = ["applicationSupportDirectory", "cachesDirectory", "documentDirectory", "documentsDirectory", "libraryDirectory", "temporaryDirectory", "NSTemporaryDirectory", "NSHomeDirectory", "containerURL", "URL.applicationSupport"]
+        // (file, text the line contains, reason)
+        let allowed: [(String, String, String)] = [
+            ("AccountWipe.swift", "", "the one function and the wipe itself"),
+            ("KnownModels.swift", "", "model downloads: the device's, not an account's"),
+            ("Voice/WeSpeakerEmbedder.swift", "applicationSupportDirectory", "the speaker model download: the device's"),
+            ("FixtureClip.swift", "temporaryDirectory", "a proof fixture clip: no account content"), ("FixtureTurn.swift", "temporaryDirectory", "a proof fixture turn: no account content"),
+            ("AutoradioModule.swift", "temporaryDirectory.appendingPathComponent(\"takes\")", "the take recording scratch in `extraPaths`: removed and verified by the wipe"),
+            ("AutoradioModule.swift", "applicationSupportDirectory", "the support root the not-yet-moved stores and `extraPaths` hang off (onboarding, books, content)"),
+            ("AutoradioModule.swift", "cachesDirectory", "removal of the old Autoradio/files cache: no write"),
+            ("ModelsEntry.swift", "applicationSupportDirectory", "the legacy theme folder, read only: themes are the device's"),
+            ("VoiceSetup.swift", "NSHomeDirectory", "free disk space for the device profile"), ("Configurator.swift", "NSHomeDirectory", "free disk space for the device profile"),
+        ]
+        var bad: [String] = []; var callers: [String] = []
+        for r in roots {
+            let dir = mobile.appendingPathComponent(r); guard FileManager.default.fileExists(atPath: dir.path) else { XCTFail("missing \(r)"); continue }
+            let en = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil)
+            while let u = en?.nextObject() as? URL {
+                guard u.pathExtension == "swift", !u.path.contains("/Kit/"), let text = try? String(contentsOf: u, encoding: .utf8) else { continue }
+                let rel = String(u.path.dropFirst(dir.path.count + 1))
+                for (n, line) in text.components(separatedBy: "\n").enumerated() {
+                    let code = line.components(separatedBy: "//").first ?? line
+                    if tokens.contains(where: { code.contains($0) }), !allowed.contains(where: { rel.hasSuffix($0.0) && ($0.1.isEmpty || code.contains($0.1)) }) { bad.append("\(rel):\(n + 1)") }
+                    if code.contains("KeptTurnStore(root:") || code.contains("ConfigStore(dir:"), !code.contains("AccountWipe.url") { callers.append(rel + (code.contains("ConfigStore") ? " ConfigStore" : " KeptTurnStore")) }
+                }
+            }
         }
+        XCTAssertEqual(bad, [], "a native store names its account file through AccountWipe.url, or the line is excepted with a reason")
+        XCTAssertEqual(callers.filter { !$0.contains("Tests") }, ["LabRuntime.swift ConfigStore"], "KeptTurnStore gets AccountWipe.url; the lab's ConfigStore (LabConfiguration presets, no account content) is the one listed exception")
     }
-    final class Recorder: @unchecked Sendable {
-        let lock = NSLock(); private var _v: [String] = []
-        func add(_ s: String) { lock.lock(); _v.append(s); lock.unlock() }
-        var all: [String] { lock.lock(); defer { lock.unlock() }; return _v }
-    }
-
-    func markerInFiles() -> [String] {
-        var hits: [String] = []
-        let en = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey])
-        while let u = en?.nextObject() as? URL {
-            guard (try? u.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true, let d = try? Data(contentsOf: u) else { continue }
-            if d.range(of: Data(Self.marker.utf8)) != nil { hits.append(u.path.replacingOccurrences(of: root.path, with: "")) }
+    final class Box: @unchecked Sendable { private let l = NSLock(); private var v = false; func set() { l.lock(); v = true; l.unlock() }; var value: Bool { l.lock(); defer { l.unlock() }; return v } }
+    /// Test isolation: no test names the real Application Support, Caches or UserDefaults itself (the account base under XCTest is a temp folder). The guard test and this scan are the only places the words appear.
+    func testNoTestNamesARealFolder() throws {
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent(); var bad: [String] = []
+        for u in try fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) where u.pathExtension == "swift" && !["KeychainFakeCase.swift", "AccountWipeTests.swift"].contains(u.lastPathComponent) {
+            for (n, line) in (try String(contentsOf: u, encoding: .utf8)).components(separatedBy: "\n").enumerated() where ["applicationSupportDirectory", "cachesDirectory", "UserDefaults.standard", "homeDirectoryForCurrentUser", "NSHomeDirectory"].contains(where: { (line.components(separatedBy: "//").first ?? line).contains($0) }) { bad.append("\(u.lastPathComponent):\(n + 1)") }
         }
-        return hits
+        XCTAssertEqual(bad, [])
     }
-    func write(_ rel: String, _ text: String) {
-        let u = root.appendingPathComponent(rel)
-        try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? Data(text.utf8).write(to: u)
+    /// THE RESIDUAL CAN ONLY SHRINK: the Swift files that still call the server with the key (`ChoirClient`) are pages still in Swift (station 2 moves them to shared code). A new file that uses it fails here; a file that stops using it must leave the list.
+    func testOnlyTheListedNativeFilesCallTheServerWithTheKey() throws {
+        let kit = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources/AutoradioKit")
+        let listed: Set<String> = ["AccountWipe.swift", "BasicStages.swift", "Choir/AutoradioDesk.swift", "Choir/ChoirApp.swift", "Choir/ChoirDesk.swift", "Choir/ChoirProgramme.swift", "Choir/ChoirSystem1.swift", "Choir/PodcastClips.swift", "Choir/RadioProgramme.swift", "Choir/StretchCandidates.swift", "Choir/Takes.swift", "Notebook.swift", "TextureEditor.swift", "TextureReaderSource.swift"]
+        var using: Set<String> = []; let en = FileManager.default.enumerator(at: kit, includingPropertiesForKeys: nil)
+        while let u = en?.nextObject() as? URL { guard u.pathExtension == "swift", u.lastPathComponent != "ChoirClient.swift", let t = try? String(contentsOf: u, encoding: .utf8) else { continue }
+            if t.components(separatedBy: "\n").contains(where: { let c = $0.components(separatedBy: "//").first ?? $0; return c.contains("ChoirClient") || c.contains(".client(") }) { using.insert(String(u.path.dropFirst(kit.path.count + 1))) } }
+        XCTAssertEqual(using, listed, "a file that newly calls the server with ChoirClient is refused (move the call to shared code); a file that no longer does must be removed from this list")
     }
-
-    /// The default names the two files of the pre-release build, in the app's own folder (the takes and deck tests pass their own stores and no legacy files, so they delete none of a developer's).
-    func testTheDefaultLegacyFilesAreTheTwoPreReleaseNames() {
-        XCTAssertEqual(TakeFiles.legacy.compactMap { $0?.lastPathComponent }, ["takes-own.json", "takes-muted.json"])
-        XCTAssertTrue(TakeFiles.legacy.allSatisfy { $0?.deletingLastPathComponent().lastPathComponent == "Autoradio" })
-    }
-
-    /// Row 1 of the takes state table (docs/reference/AUTORADIO-TAKES.md): a take in review is the account's; after sign-out (or an account change) the recorder is idle, its file is gone and the radio is
-    /// given back, so the next account is never shown it and can never publish it. Row 4: a mirror push of the old account that lands after the wipe is refused.
-    func testATakeInReviewIsGoneAfterTheWipe() async {
-        let rec = FakeRecorder(), gate = FakeGate(), clock = Date(timeIntervalSince1970: 1000)
-        let dir = root.appendingPathComponent("takes-live")
-        let s = TakeSession(recorder: rec, transcriber: FakeTranscriber(words: Self.marker), gate: gate, preview: FakePreview(), micAllowed: { true }, responds: { TakeResponds(route: "r", title: Self.marker) },
-                            dir: dir, now: { clock })
-        TakeSession.live = s; TakeMirror.reset(); XCTAssertTrue(TakeMirror.accept(7))
-        let limits = TakeLimits(minSeconds: 0, maxSeconds: 59.5, maxBytes: 512 * 1024)
-        await s.start(limits); await s.stop(); XCTAssertEqual(s.state, .review); XCTAssertEqual(s.transcript, Self.marker)
-        let oldOwn = root.appendingPathComponent("takes-own.json"), oldMuted = root.appendingPathComponent("takes-muted.json")
-        write("takes-own.json", Self.marker); write("takes-muted.json", "[\"\(Self.marker)\"]")
-        let wipe = AccountWipe(); wipe.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), legacyTakeFiles: [oldOwn, oldMuted], tempDirectory: root.appendingPathComponent("tmp2"))
-        await wipe.run()
-        XCTAssertFalse(TakeMirror.accept(7), "the old account's push in flight at the wipe"); XCTAssertTrue(TakeMirror.accept(8)); TakeMirror.reset()
-        XCTAssertEqual(s.state, .idle); XCTAssertEqual(s.transcript, ""); XCTAssertNil(s.audio); XCTAssertEqual(gate.given, 1)
-        XCTAssertEqual(s.snapshot["respondsTitle"] as? String, "", "the story the old account answered is not carried either")
-        XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [], [])
-        XCTAssertFalse(FileManager.default.fileExists(atPath: oldOwn.path)); XCTAssertFalse(FileManager.default.fileExists(atPath: oldMuted.path), "the old Swift files go with the account that is leaving")
-        TakeSession.live = nil
-    }
-
-    func testEverythingOfTheAccountGoesAndTheNextSignInSendsNone() async throws {
-        let m = Self.marker
-        // The stores, each in its own place under the temporary root.
-        let turns = TurnHistory(); turns.add(listener: m, radio: [m])
-        let cache = NotebookCache(file: root.appendingPathComponent("notebook-cache.md")); cache.set(m)
-        let legacyTopics = root.appendingPathComponent("edition-topics.json"), topicsMarker = root.appendingPathComponent("notebook-topics-written")
-        write("edition-topics.json", "{\"topics\":[\"\(m)\"]}"); write("notebook-topics-written", m)
-        let notebook = NotebookStore()
-        let own = TakeOwn(file: root.appendingPathComponent("takes-own.json")); own.replace(ids: [m], handle: m)
-        let mutes = TakeMutes(file: root.appendingPathComponent("takes-muted.json")); mutes.replace([m])
-        let takes = TakeStore(); takes.replace([Take.parse(["take_id": m, "publisher": "pub", "state": "live", "transcript": m])!])
-        let tmp = root.appendingPathComponent("tmp"); write("tmp/takes/rec.m4a", m); write("tmp/take-play-\(m).m4a", m)
-        let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
-        let api = FakeAPI()
-        let texture = TextureEditor(api: api, storage: root.appendingPathComponent("texture-pending.json")); texture.retryAfter = 3600
-        await texture.edit(address: "texture:d1", markdown: m); await texture.flush(address: "texture:d1")
-        XCTAssertEqual(texture.pending["d1"], m)
-        let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
-
-        // What the second review found: the spoken words and the files of the app target.
-        let mailReading = MailReading(); mailReading.request(address: m, text: m)
-        let conversation = Conversation(); conversation.begin(id: "q1", question: m)
-        let acks = AckHistory(); acks.add(m, page: m)
-        let reader = HeldPages(limit: 4); reader.hold(HeldPage(address: "pub:x", title: m, blocks: [HeldBlock(id: "b1", kind: "p", text: m)]))
-        let kept = KeptTurnStore(root: root.appendingPathComponent("turns")); write("turns/t1/record.json", m)
-        write("MikeVoice/speaker.json", m); let voice = SpeakerGate(url: root.appendingPathComponent("MikeVoice/speaker.json"))
-        let openPages = OpenPageFacts(); openPages.replace(gen: 1, [FrontPage(address: "mailbox:inbox", title: m, kind: "mailbox")])
-        EditionPicksMirror.shared.set([m])        // the native copy of the picks (the file is shared code's)
-        write("onboarding.json", m); write("books/b1/text.txt", m); write("cache/files/f1.txt", m)
-
-        let wipe = AccountWipe()
-        wipe.register("open-pages") { openPages.wipe() }
-        let rootRef = root!
-        wipe.register("app-files") {          // as AutoradioModule registers them
-            AccountWipe.removeFiles([rootRef.appendingPathComponent("onboarding.json")])
-            AccountWipe.removeContents(of: rootRef.appendingPathComponent("books")); AccountWipe.removeContents(of: rootRef.appendingPathComponent("cache/files"))
-        }
-        wipe.registerStandard(turnHistory: turns, notebookCache: cache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook,
-                              takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, clips: clips,
-                              texture: texture, environment: env,
-                              mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
-                              deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
-        XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
-
-        await wipe.run()
-
-        // (a) no file holds the marker
-        XCTAssertEqual(markerInFiles(), [], "files still holding the account's words")
-        // (b) every in-memory store answers empty
-        XCTAssertTrue(turns.snapshot().isEmpty); XCTAssertNil(cache.text)
-        XCTAssertEqual(own.handle, ""); XCTAssertTrue(mutes.all.isEmpty); XCTAssertNil(takes.take(m))
-        XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1"))
-        XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
-        XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned)
-        XCTAssertTrue(openPages.list().isEmpty); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertFalse(EditionPicksMirror.shared.known, "and it is forgotten"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
-
-        // (c) the next sign-in: the first request of each kind carries nothing of the old account.
-        let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""
-        XCTAssertFalse(body.contains(m), "turn")
-        XCTAssertNil(EditionText.make(notebook: cache.text, topics: EditionPicksMirror.shared.topics), "programme: edition_text")
-        await texture.retryPending(); XCTAssertTrue(api.posts.isEmpty, "texture retry")
-    }
-}
-
-
-// Work in flight when the account is wiped: each fake suspends, the wipe runs, the fake is released, and nothing of the old account is written or held.
-actor Latch {
-    private var open = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-    func wait() async { if open { return }; await withCheckedContinuation { waiters.append($0) } }
-    func release() { open = true; for w in waiters { w.resume() }; waiters = [] }
-    var isOpen: Bool { open }
-}
-
-@MainActor
-final class AccountWipeInFlightTests: XCTestCase {
-    static let marker = "MARKER-7731"
-    var root: URL!
-    override func setUp() { root = FileManager.default.temporaryDirectory.appendingPathComponent("acctflight-\(UUID().uuidString)"); try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true) }
-    override func tearDown() { try? FileManager.default.removeItem(at: root) }
-
-    func waitFor(_ l: Latch) async { for _ in 0..<200 { if await l.isOpen { return }; try? await Task.sleep(nanoseconds: 10_000_000) } }
-    func filesHoldingMarker() -> [String] {
-        var hits: [String] = []
-        let en = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey])
-        while let u = en?.nextObject() as? URL {
-            if let d = try? Data(contentsOf: u), d.range(of: Data(Self.marker.utf8)) != nil { hits.append(u.lastPathComponent) }
-        }
-        return hits
-    }
-
-
-
-
-
-    // testFeedLoadAfterTheWipeIsNotKept moved to AutoradioLab/podcast.test.ts ("a feed that finishes loading after the wipe is not kept").
-
-
-
-    func testNotebookWriteAfterTheWipeKeepsNothing() async {
-        let m = Self.marker
-        let saved = ChoirEnvironment.shared.keys; ChoirEnvironment.shared.keys = InMemoryKeyStore([KeyAccount.apiKey: "k"]); defer { ChoirEnvironment.shared.keys = saved }
-        let entered = Latch(), release = Latch()
-        let s = NotebookStore(); let cache = NotebookCache(file: root.appendingPathComponent("notebook-cache.md")); s.notebookCache = cache
-        s.lookupEdition = { await entered.release(); await release.wait(); return EditionInfo(found: false) }
-        s.createNotebook = { "d1" }
-        let marker = root.appendingPathComponent("notebook-topics-written")
-        let run = Task { @MainActor in await s.writeTopics([m], marker: marker) }
-        await waitFor(entered)
-        let wipe = AccountWipe(); wipe.register("notebook") { await MainActor.run { cache.wipe(); s.wipe() } }
-        await wipe.run()
-        await release.release()
-        let ok = await run.value
-        XCTAssertFalse(ok); XCTAssertNil(cache.text); XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path)); XCTAssertEqual(filesHoldingMarker(), [])
+    /// The Kit answers `choirPlayer` with default values while no module is built; they must carry exactly the fields the interface declares as that name's substitute.
+    func testTheNotReadyAnswerCarriesTheDeclaredFields() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("exact-package/exact.json")
+        let names = (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any])["names"] as! [[String: Any]]
+        let declared = Set((((names.first { $0["source"] as? String == "choirPlayer" }!["substitute"] as! [String: Any])["default"]) as! [String: Any]).keys)
+        XCTAssertEqual(Set((try JSONSerialization.jsonObject(with: JSONEncoder().encode(ChoirPlayerView())) as! [String: Any]).keys), declared)
     }
 }

@@ -1,11 +1,12 @@
 // The story cards, the launcher and what the paper has learned (cards.ts): every assertion of the Swift CardsTests and LearnedFromPreferencesTests, plus the store and the steering tap.
 // Failure list: see the head of cards.ts (1 to 9, the launcher lines, sign-out).
+import { moveAccount } from './account-phone.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as C from './cards.ts';
 import * as R from './recent-pages.ts';
 import * as S from './steer.ts';
 import * as P from './pages.ts';
-import { HTTPError, nextGeneration, resetSeam } from './api.ts';
+import { HTTPError, resetSeam } from './api.ts';
 import type { Story } from './paper-model.ts';
 
 const files = new Map<string, Uint8Array>();
@@ -144,16 +145,8 @@ describe('the store', () => {
     expect((await C.storyMore({ address: 'pub:zzz', surface: 'page', sheet: '' }, storage, front)).message).toBe('');
     expect((await C.acts(storage)).length).toBe(0);
   });
-  test('sign-out during the read: the old account\'s file does not come back', async () => {
-    const front = async () => [S1('a', 'A', 'World', ['X'])];
-    await C.storyMore({ address: 'pub:a', surface: 'page', sheet: '' }, storage, front);
-    expect(files.has(C.TOLD_FILE)).toBe(true);
-    await C.wipeTold(storage);
-    expect(files.has(C.TOLD_FILE)).toBe(false);
-    expect((await C.acts(storage)).length).toBe(0);
-  });
   test('a write that began under an older account generation is refused', async () => {
-    const front = async () => { nextGeneration(); return [S1('a', 'A', 'World', ['X'])]; };
+    const front = async () => { moveAccount(); return [S1('a', 'A', 'World', ['X'])]; };
     await C.storyMore({ address: 'pub:a', surface: 'page', sheet: '' }, storage, front);
     expect(files.has(C.TOLD_FILE)).toBe(false);
   });
@@ -234,16 +227,6 @@ describe('steering', () => {
     await S.flush(storage, async (b) => { bodies.push(b); throw new HTTPError(400, 'x'); });
     expect(bodies.length).toBe(4); expect(Object.keys(bodies[1])).toEqual(['direction', 'entry_id']);      // each tap: full, then bare
     expect(await S.queued(storage)).toBe(0);
-  });
-  test('S8 two flushes at once send each tap once; S7 a sign-out during a flush leaves no file', async () => {
-    await S.enqueue(storage, tap(1));
-    let n = 0; let release: () => void = () => undefined;
-    const gate = new Promise<void>((r) => { release = r; });
-    const post = async () => { n += 1; await gate; };
-    const a = S.flush(storage, post), b = S.flush(storage, post);
-    for (let i = 0; i < 50 && n === 0; i++) await new Promise((r) => setTimeout(r, 1));
-    nextGeneration(); await S.wipeSteer(storage); release(); await Promise.all([a, b]);
-    expect(n).toBe(1); expect(files.has(S.STEER_FILE)).toBe(false);
   });
   test('a mute names the handle and no entry', () => { expect(S.body(S.mute('voice-1'), false)).toEqual({ direction: 'mute', handle: 'voice-1' }); });
 });

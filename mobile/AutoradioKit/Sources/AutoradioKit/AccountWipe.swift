@@ -1,109 +1,66 @@
 import Foundation
-
-// One wipe for everything of the account that sits on the phone. Sign-out calls `run()` once; each store has a `wipe()` (memory and files) and is
-// registered here by name. The order of sign-out (ChoirApp.signOut):
-//  1. playback stops (shared code's run sheet reports the entry on air as `left`);
-//  2. the run sheet (shared code's store and poster, radio-runtime.ts) posts its pending ops with the OLD key still held, up to three seconds, and tells native when it is done
-//     (`RadioBridge.waitSignedOut`, five seconds at most); whatever is not answered by then is DROPPED by the wipe, never sent later, and an answer that arrives after the wipe
-//     is the old account's and is thrown away: pending ops are never posted, and no sheet is written, under a later account;
-//  3. the local key goes, then this wipe runs (ChoirSignIn.signOut);
-//  4. the revoke is sent in the background with the old key held only for that one call.
-
-public final class AccountWipe: @unchecked Sendable {
-    private let lock = NSLock()
-    private var items: [(name: String, run: @Sendable () async -> Void)] = []
-    public init() {}
-
-    // The ONE account generation. `run()` bumps it first. Every writer of an account store captures it when its work starts and checks it before
-    // each put, flush, save or markSynced; a write whose captured generation is no longer the current one is dropped.
-    private static let genLock = NSLock()
-    nonisolated(unsafe) private static var _generation = 0
-    public static var generation: Int { genLock.lock(); defer { genLock.unlock() }; return _generation }
-    @discardableResult
-    public static func bumpGeneration() -> Int { genLock.lock(); defer { genLock.unlock() }; _generation += 1; return _generation }
-
-    public var names: [String] { lock.lock(); defer { lock.unlock() }; return items.map(\.name) }
-
-    /// A store's wipe, by name. A second registration under a name replaces the first.
-    public func register(_ name: String, _ run: @escaping @Sendable () async -> Void) {
-        lock.lock(); items.removeAll { $0.name == name }; items.append((name, run)); lock.unlock()
+// NATIVE'S PART OF THE ACCOUNT BOUNDARY (docs/design/account-boundary-2026-11-21.md, "Round 12"). The sign-in key is Exact's (`secret.keep`), and the launch verdict is shared code's (AutoradioLab/account.ts): native holds no verdict and decides nothing.
+// What is left, each with the reason only native can meet it: `forgetAll` (DELETION ONLY: these files are the Swift stores' own folders under Application Support, which Exact's `app:/` roots do not reach; shared code decides and writes the mark), `retireOldKey` (the one-shot
+// read of the old Keychain item that earlier builds wrote under their own service, which Exact's store cannot see), and `HeldKeys` (below: an in-memory copy of the key for the Swift clients that still call the server).
+public enum AccountWipe {
+    nonisolated(unsafe) static var forgetMail: () -> OSStatus = { MailSeal().forget() }
+    /// `Application Support/Autoradio` (a test gives its own; under XCTest with none given it is a temp folder, never the real one); `extraPaths`: the app target's stores not in the folder (removed and listed too).
+    nonisolated(unsafe) public static var baseOverride: URL?; nonisolated(unsafe) public static var extraPaths: [URL] = []
+    public static var base: URL {
+        if let b = baseOverride { return b }; if NSClassFromString("XCTestCase") != nil { return FileManager.default.temporaryDirectory.appendingPathComponent("autoradio-xctest-base", isDirectory: true) }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio", isDirectory: true)
     }
-
-    public func run() async {
-        Self.bumpGeneration()
-        lock.lock(); let all = items; lock.unlock()
-        for i in all { await i.run() }
+    public static var root: URL { base.appendingPathComponent("account", isDirectory: true) }
+    /// The ONLY place a store's account file is named (a scan fails a store that builds its own). THE ONE CARRY-OVER, voice: the speaker profile and voice choice are MOVED once from the old path (`Application Support/MikeVoice`) before the store first reads
+    /// (an enrolment costs minutes of speaking and is not saved in the cloud); only while a key is held. With none held the old file stays IN USE and is never deleted here (the key arrives from shared code after the store may have asked; `forgetAll` removes it at a sign-out).
+    public static func url(_ rel: String) -> URL {
+        let u = root.appendingPathComponent(rel), fm = FileManager.default
+        try? fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let old = ["MikeVoice/speaker.json": "../MikeVoice/speaker.json", "voice-choice.json": "voice-choice.json"][rel].map({ base.appendingPathComponent($0) }), !fm.fileExists(atPath: u.path), fm.fileExists(atPath: old.path) {
+            if HeldKeys.present { if (try? fm.moveItem(at: old, to: u)) == nil { return old } } else { return old } }
+        return u
     }
-
-    /// The stores the Kit owns. Every parameter defaults to the app's own; a test passes its own.
-    @MainActor
-    func registerStandard(
-        turnHistory: TurnHistory = .shared,
-        notebookCache: NotebookCache = .shared,
-        legacyTopicsFile: URL? = TakeFiles.url("edition-topics.json"),
-        topicsMarker: URL? = TakeFiles.url("notebook-topics-written"),
-        notebook: NotebookStore = .shared,
-        takeOwn: TakeOwn = .shared,
-        takeMutes: TakeMutes = .shared,
-        takeStore: TakeStore = .shared,
-        legacyTakeFiles: [URL?] = TakeFiles.legacy,
-        tempDirectory: URL = FileManager.default.temporaryDirectory,
-        clips: ClipLocator = .shared,
-        texture: TextureEditor = .shared,
-        environment: ChoirEnvironment = .shared,
-        mailReading: MailReading = .shared,
-        conversation: Conversation = .shared,
-        acks: AckHistory = .shared,
-        bar: BarTracker = .shared,
-        reader: HeldPages = .shared,
-        keptTurns: KeptTurnStore? = nil,
-        voice: SpeakerGate = .shared,
-        heldRest: HeldRest = .shared,
-        deck: Deck = .shared
-    ) {
-        register("turn-history") { turnHistory.clear() }
-        register("notebook") {
-            notebookCache.wipe()
-            if let f = legacyTopicsFile { try? FileManager.default.removeItem(at: f) }       // the old build's picks file: nothing writes or reads it now; this wipe is the only thing that removes it
-            if let f = topicsMarker { try? FileManager.default.removeItem(at: f) }
-            await MainActor.run { notebook.wipe() }
+    private static var oldPaths: [URL] { ["takes-own.json", "takes-muted.json", "takes-copy-own.json", "takes-copy-muted.json", "notebook-cache.md", "notebook-topics-written", "edition-topics.json", "deck-journal.json", "deck-journal.json.seq", "deck-journal.json.bad", "local-entries.json", "texture-pending.json", "turns", "voice-choice.json", "../MikeVoice", "../../Caches/autoradio-clips"].map { base.appendingPathComponent($0) } }
+    /// THE WIRING, the one function the module and a test call: every path removed and listed besides the account folder: the support files, files cache, take scratch, `picked` and the shared account roots from Exact's own context.
+    public static func configure(support: URL, data: URL, cache: URL, temporary: URL, filesCache: URL, takesScratch: URL) {
+        extraPaths = ["onboarding.json", "voice-setup.json", "recent-files.json", "books", "content", "console.log", "console.log.1"].map { support.appendingPathComponent($0) } + [filesCache, takesScratch, temporary.appendingPathComponent("picked")] + [data, cache, temporary].map { $0.appendingPathComponent("accounts") }
+    }
+    /// DELETION ONLY: remove the account folder, the old per-account stores and the app target's files, forget the mail seal, then list them. True only when none is left and the seal's status is clean (success or item-not-found).
+    public static func forgetAll() -> Bool {
+        let fm = FileManager.default, all = [root] + oldPaths + extraPaths
+        for p in all { try? fm.removeItem(at: p) }
+        let mail = forgetMail()
+        return [errSecSuccess, errSecItemNotFound].contains(mail) && !all.contains { fm.fileExists(atPath: $0.path) }
+    }
+    /// Revokes the old key on the server, bounded (6 s: the phone may be offline); blocks, because it runs once at launch off the main thread.
+    nonisolated(unsafe) static var revoke: (String, String) -> Bool = { id, key in
+        nonisolated(unsafe) var ok = false; let sem = DispatchSemaphore(value: 0)
+        Task.detached {
+            let held = ChoirClient(baseURL: ChoirEnvironment.shared.configuredBaseURL, keys: InMemoryKeyStore([KeyAccount.apiKey: key]), session: ChoirEnvironment.shared.session, log: nil, trustedOrigin: URL(string: ChoirEnvironment.shared.configuredBaseURL))
+            do { try await held.send("DELETE", "/auth/api-keys/\(PathSegment.encode(id))", route: "/auth/api-keys/{id}", timeout: 6); ok = true } catch ChoirError.unauthorized { ok = true } catch ChoirError.server(let s, _) where s == 404 { ok = true } catch { ok = false }
+            sem.signal()
         }
-        register("takes") {
-            await MainActor.run { TakeSession.live?.discard() }      // the account CHANGED path has no signOut() above it
-            TakeMirror.invalidate(); takeOwn.wipe(); takeMutes.wipe(); takeStore.wipe()      // first: a push of the old account landing from here on is refused
-            for u in legacyTakeFiles { if let u { try? FileManager.default.removeItem(at: u) } }      // the pre-release build's files (never read by this build) go with the account that is leaving
-            Self.removeTakeScratch(in: tempDirectory)
-        }
-        register("radio-bridge") { RadioBridge.shared.wipe() }       // the run sheet itself is shared code's (radio-bridge.ts wipeRadio, registered in account.ts)
-        register("deck") { await MainActor.run { deck.wipe() } }       // the item on air, the held items and the reason too, not only the journal
-        register("clips") { clips.wipe() }
-        // "podcasts": the library and cached feeds are files of shared code now; podcast.ts `wipe(storage)` is what sign-out must call (left to the lead).
-        register("texture") { await MainActor.run { texture.wipe() } }
-        register("playing") { environment.wipePlaying() }
-        register("mail-reading") { mailReading.wipe() }
-        register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe() }
-        // The native copy of the edition picks and the words waiting for shared code (the file itself is shared code's, wiped by account.ts).
-        register("edition-picks") { EditionPicksMirror.shared.reset(); EditionTalk.shared.clear() }
-        register("reader") { reader.wipe() }
-        // The enrolled voice is app-private (Application Support/MikeVoice, not a system setting) and the listener's own: it goes at sign-out.
-        register("voice-profile") { voice.forget() }
-        if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
-        register("held-rest") { heldRest.wipe() }
-        register("retrieval-bridge") { RetrievalBridge.shared.clear() }     // the last turn's record and a pending ask belong to the account that left
+        return sem.wait(timeout: .now() + 8) == .success && ok
     }
-
-    /// For the app target's stores that are files (one-line registrations in AutoradioModule): delete these paths.
-    public static func removeFiles(_ urls: [URL]) { for u in urls { try? FileManager.default.removeItem(at: u) } }
-    /// Delete what is inside a folder and keep the folder.
-    public static func removeContents(of dir: URL) {
-        for n in (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [] { try? FileManager.default.removeItem(at: dir.appendingPathComponent(n)) }
+    nonisolated(unsafe) static var oldKeys: KeyStore = KeychainKeyStore()
+    /// ONE-SHOT, every launch until it finds nothing: the old key (the Keychain items earlier builds wrote under service `news.choir.autoradio.choir`: key, key id, computer id) is read ONCE, revoked on the server, and the three items are deleted; a revoke that fails
+    /// still deletes. Answers a state word for the log, never the key: `none`, `revoked`, `not revoked`. DELETE THIS FUNCTION (and `oldKeys`) when no phone that ran a build before the key moved to Exact's store is left: it then always answers `none`.
+    @discardableResult public static func retireOldKey() -> String {
+        guard let key = oldKeys.get(KeyAccount.apiKey), !key.isEmpty else { for a in [KeyAccount.keyID, KeyAccount.computerID] { oldKeys.delete(a) }; return "none" }
+        let revoked = oldKeys.get(KeyAccount.keyID).map { revoke($0, key) } ?? false
+        for a in [KeyAccount.apiKey, KeyAccount.keyID, KeyAccount.computerID] { oldKeys.delete(a) }
+        return revoked ? "revoked" : "not revoked"
     }
+}
 
-    /// Recordings the listener abandoned (`takes/`) and the take being played (`take-play-*.m4a`).
-    static func removeTakeScratch(in tmp: URL) {
-        try? FileManager.default.removeItem(at: tmp.appendingPathComponent("takes", isDirectory: true))
-        for n in (try? FileManager.default.contentsOfDirectory(atPath: tmp.path)) ?? [] where n.hasPrefix("take-play-") {
-            try? FileManager.default.removeItem(at: tmp.appendingPathComponent(n))
-        }
+/// THE KEY IN MEMORY, for the Swift clients that still call the server with it (`ChoirClient`: the Choir page's player and stories, the programme, the desks, takes, the notebook, the Texture editor, podcasts). Shared code hands it (`holdKey`) after the launch opens the account and clears it
+/// at a sign-out BEFORE the ending mark is written; native never persists, reads or returns it. REASON: those clients are pages still in Swift (docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md); moving them to shared code is station 2 of the account boundary. DELETE THIS TYPE with
+/// the last of them (a test fails if a new file starts using `ChoirClient`, so this can only shrink).
+public enum HeldKeys {
+    public static let store = InMemoryKeyStore()
+    public static var present: Bool { !(store.get(KeyAccount.apiKey) ?? "").isEmpty }
+    public static func hold(key: String, keyId: String, computerId: String) {
+        if key.isEmpty { for a in [KeyAccount.apiKey, KeyAccount.keyID, KeyAccount.computerID] { store.delete(a) }; return }
+        try? store.set(key, account: KeyAccount.apiKey); if !keyId.isEmpty { try? store.set(keyId, account: KeyAccount.keyID) }; if !computerId.isEmpty { try? store.set(computerId, account: KeyAccount.computerID) }
     }
 }

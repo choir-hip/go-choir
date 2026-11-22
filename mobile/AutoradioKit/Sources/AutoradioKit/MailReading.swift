@@ -15,8 +15,6 @@ public final class MailReading: @unchecked Sendable {
         get { lock.lock(); defer { lock.unlock() }; return _handler }
         set { lock.lock(); _handler = newValue; lock.unlock() }
     }
-    /// Sign-out: the last mail read aloud is the account's.
-    public func wipe() { lock.lock(); _last = nil; lock.unlock() }
     public func request(address: String, text: String) {
         lock.lock(); _last = (address, text); let h = _handler; lock.unlock()
         h?(address, text)

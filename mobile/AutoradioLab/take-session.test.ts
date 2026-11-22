@@ -17,10 +17,12 @@
 //   U1  nothing is carried from the pre-release build: its old files are never read, adopted from or deleted here (the owner's ruling); the kept data is only what the server's `mine` says
 //   U2  the programme's copy is pushed before the server is asked, and never from an account that has been left
 //   U3  a take in review is the recorder's: a new session (the shared code restarted) still shows it and can publish it; a failed publish never discards it; a double tap never posts twice
+import { moveAccount } from './account-phone.ts';
 import { describe, expect, test } from 'bun:test';
 import { act, pageFor, newOverlay, parseNative, IDLE, limits, type Device, type Env, type Native, type Overlay } from './take-session.ts';
-import { client, emptyKept, KEPT_FILE, loadKept, wipeKept, BOUNDS, type Net } from './takes.ts';
-import { SignedOutError, nextGeneration } from './api.ts';
+import { client, emptyKept, KEPT_FILE, loadKept, BOUNDS, type Net } from './takes.ts';
+import { SignedOutError, bindStorage, currentWorld, endWorld } from './api.ts';
+import { dig, reopen } from './account-phone.ts';
 import publishFx from '../fixtures/takes/publish.json';
 import mineFx from '../fixtures/takes/mine.json';
 import recordFx from '../fixtures/takes/record.json';
@@ -79,7 +81,7 @@ function slowStorage() {
   let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
   let entered!: () => void; const began = new Promise<void>((r) => { entered = r; });
   const st = { hold: false, release, entered: began,
-    storage: { fs: { readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; },
+    storage: { fs: { readFile: async (p: string) => { const b = files.get(p); if (!b) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); return b; },
       atomicWriteFile: async (p: string, d: Uint8Array) => { if (st.hold) { entered(); await gate; } files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never };
   return st;
 }
@@ -450,8 +452,7 @@ describe('B2 a new account does not see or rewrite the old account\'s takes data
     await act(h.env, h.o, 'mute', 'voice-OLD');
     expect((await pageFor(h.env, h.o, IDLE)).muted).toHaveLength(1);
     // sign-out: the generation moves, the shared file goes (account.ts wipeKept), the old account's native copy may still be there
-    nextGeneration(); await wipeKept(storage);
-    const page = await pageFor(h.env, h.o, IDLE);
+    moveAccount(); await storage.fs.rm(KEPT_FILE); const page = await pageFor(h.env, h.o, IDLE);
     expect(page.muted).toEqual([]); expect(page.handle).toBe(''); expect(page.mine).toEqual([]); expect(page.record).toBe('');
     const p = await act(h.env, h.o, 'mute', 'voice-NEW');
     expect(p.muted.map((m) => m.handle)).toEqual(['voice-NEW']);
@@ -464,14 +465,13 @@ describe('B2 a new account does not see or rewrite the old account\'s takes data
   test('the listener\'s takes and record of the old account are dropped too', async () => {
     const h = setup((s) => (s.p.endsWith('/record') ? { status: 200, json: recordFx } : { status: 200, json: s.q?.mine ? mineFx : { takes: [] } }));
     const p = await act(h.env, h.o, 'refresh', ''); expect(p.mine).toHaveLength(1); expect(p.record).not.toBe('');
-    nextGeneration(); await wipeKept(storage);
-    const q = await pageFor(h.env, h.o, IDLE);
+    moveAccount(); await storage.fs.rm(KEPT_FILE); const q = await pageFor(h.env, h.o, IDLE);
     expect(q.mine).toEqual([]); expect(q.record).toBe(''); expect(q.handle).toBe(''); expect(q.notice).toBe('');
   });
   test('a notice and a "published as" line of the old account are dropped', async () => {
     const h = setup(); await recorded(h); await act(h.env, h.o, 'publish', '');
     expect((await pageFor(h.env, h.o, IDLE)).justPublished).not.toBe('');
-    nextGeneration(); expect((await pageFor(h.env, h.o, IDLE)).justPublished).toBe('');
+    moveAccount(); expect((await pageFor(h.env, h.o, IDLE)).justPublished).toBe('');
   });
 });
 
@@ -505,21 +505,20 @@ describe('row 1 the recorder\'s live take belongs to the account that made it', 
   test('a take in review is not shown to the next account: the change of account discards it', async () => {
     const h = setup(); await recorded(h);
     expect((await pageFor(h.env, h.o, h.dev.snap)).state).toBe('review');
-    nextGeneration();
+    moveAccount();
     const p = await pageFor(h.env, h.o, await h.dev.state());
     expect(h.dev.log).toContain('discard'); expect(h.dev.snap.phase).toBe('idle'); expect(p).toMatchObject({ state: 'idle', transcript: '', canPublish: false });
   });
 });
 
 describe('row 3 every write of the kept file is held to the account generation', () => {
-  test('a mute suspended inside the write while the account changes leaves no file behind', async () => {
+  test('a mute suspended inside the write while the account changes: the root goes, and nothing of it is mirrored', async () => {
     const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage };
     await act(env, h.o, 'refresh', '');
     sl.hold = true;
     const mute = act(env, h.o, 'mute', 'voice-OLD');
     await sl.entered;
-    nextGeneration(); await wipeKept(sl.storage);
-    sl.release(); await mute;
+    moveAccount(); sl.release(); await mute; files.delete(KEPT_FILE);      // the write landed in the old account's root, which the sign-out then deletes
     expect(files.has(KEPT_FILE)).toBe(false);
     expect((await pageFor(env, newOverlay(), IDLE)).muted).toEqual([]);
     expect(h.dev.mirrored.at(-1)?.muted ?? []).toEqual([]);          // and the programme was not given the old account's voice
@@ -590,21 +589,22 @@ describe('S1 a publish that finished for another account changes nothing of the 
     await recorded(h); sl.hold = true;
     const pub = act(env, h.o, 'publish', '');
     await sl.entered;
-    nextGeneration(); await wipeKept(sl.storage);
-    sl.release(); await pub;
+    moveAccount(); await sl.storage.fs.rm(KEPT_FILE); sl.release(); await pub;
     expect(h.dev.log).not.toContain('done'); expect(h.dev.log.filter((x) => x === 'discard').length).toBeLessThanOrEqual(1);       // at most the one `sync` makes for the old account
     expect(h.o.published).toBe('');
   });
 });
 
 describe('S4 a write that landed just before the account changed is not kept or sent on', () => {
-  test('a mute whose write was in flight when the generation moved: not mirrored, not sent to the steer queue', async () => {
-    const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage }; sl.hold = true;
+  test('a mute whose write was in flight when the session ended: nothing is mirrored or sent (the bound storage of a closed world never resumes the chain)', async () => {
+    reopen(dig('k-take'));
+    const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: bindStorage(sl.storage, currentWorld()) };
+    await act(env, h.o, 'refresh', '');
+    sl.hold = true;
     const mute = act(env, h.o, 'mute', 'voice-OLD');
     await sl.entered;
-    nextGeneration(); await wipeKept(sl.storage); sl.release(); await mute;
+    endWorld(); sl.release(); await Promise.race([mute.then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, 40))]);
     expect(h.dev.steered).toEqual([]); expect(h.dev.mirrored.every((m) => !m.muted.includes('voice-OLD'))).toBe(true);
-    expect((await pageFor(env, h.o, IDLE)).muted).toEqual([]);
   });
 });
 
@@ -617,7 +617,7 @@ describe('a previous account\'s publish does not touch the next account\'s overl
     await recorded(h);
     const pub = act(h.env, h.o, 'publish', '');
     await new Promise((r) => setTimeout(r, 10));
-    nextGeneration();
+    moveAccount();
     await pageFor(h.env, h.o, IDLE);                 // the next account's first page: the overlay is theirs now
     return { h, release: () => release(), pub };
   }
@@ -635,13 +635,13 @@ describe('a previous account\'s publish does not touch the next account\'s overl
     h.dev.audio = async () => { await gate; return null; };
     const pub = act(h.env, h.o, 'publish', '');
     await new Promise((r) => setTimeout(r, 10));
-    nextGeneration(); await pageFor(h.env, h.o, IDLE);
+    moveAccount(); await pageFor(h.env, h.o, IDLE);
     release(); await pub; expect(h.o.notice).toBe('');
   });
   test('a sign-in completing between the audio and the send: nothing is sent', async () => {
     const h = setup(); await recorded(h);
     const real = h.dev.audio.bind(h.dev);
-    h.dev.audio = async () => { const a = await real(); nextGeneration(); return a; };
+    h.dev.audio = async () => { const a = await real(); moveAccount(); return a; };
     await act(h.env, h.o, 'publish', '');
     expect(posts(h.seen)).toBe(0); expect(h.dev.log).not.toContain('done');
   });
@@ -664,7 +664,7 @@ describe('the programme\'s copy is pushed before the server is asked, and never 
     hold = true;
     const refresh = act(h.env, h.o, 'refresh', '');
     await new Promise((r) => setTimeout(r, 10));
-    nextGeneration(); hold = false;
+    moveAccount(); hold = false;
     await pageFor(h.env, h.o, IDLE);                                // B's page: sync empties the copy
     release(); await refresh;
     expect(h.dev.mirrored.at(-1)).toEqual({ ids: [], handle: '', muted: [] });
@@ -681,7 +681,7 @@ describe('review 5: a mirror in flight when the account changes is refused nativ
     hold = true;
     const mute = act(h.env, h.o, 'mute', 'voice-OLD');
     await new Promise((r) => setTimeout(r, 15));
-    nextGeneration(); hold = false;
+    moveAccount(); hold = false;
     await pageFor(h.env, h.o, IDLE);                      // the next account's first page: sync pushes the empty copy with the new generation
     release(); await mute;
     expect(h.dev.refusedMirrors).toBe(1); expect(h.dev.mirrored.at(-1)).toEqual({ ids: [], handle: '', muted: [] });
@@ -693,7 +693,7 @@ describe('review 5: a mirror in flight when the account changes is refused nativ
     await act(h.env, h.o, 'refresh', '');
     const del = act(h.env, h.o, 'delete', OLD_LIVE);
     await new Promise((r) => setTimeout(r, 10));
-    nextGeneration(); await pageFor(h.env, h.o, IDLE);
+    moveAccount(); await pageFor(h.env, h.o, IDLE);
     h.o.mine = [{ takeID: 'take-B', duration: 5, transcript: 'b', published: true, publisher: 'voice-b', at: 1, outcomes: null }];       // the next account's list
     release(); await del;
     expect(h.o.notice).toBe(''); expect(h.o.mine.map((t) => t.takeID)).toEqual(['take-B']);

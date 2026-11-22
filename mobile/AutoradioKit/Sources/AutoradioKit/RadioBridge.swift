@@ -53,6 +53,4 @@ public final class RadioBridge: @unchecked Sendable {
     public func sheet() -> RunSheet? { lock.lock(); let d = sheetJSON; lock.unlock(); return d.flatMap { try? JSONDecoder().decode(RunSheet.self, from: $0) } }
     /// The entry on air as shared code last said (nil when none): what a "more like this" tap and a take's "responds to" read.
     public func onAirEntry() -> RunSheetEntry? { lock.lock(); let d = onAirJSON; lock.unlock(); return d.flatMap { try? JSONDecoder().decode(RunSheetEntry.self, from: $0) } }
-    /// Sign-out: nothing of the old account is kept.
-    public func wipe() { lock.lock(); inbox = []; queueJSON = nil; onAirJSON = nil; sheetJSON = nil; lock.unlock() }
 }

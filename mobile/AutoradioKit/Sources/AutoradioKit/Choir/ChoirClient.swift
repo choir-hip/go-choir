@@ -76,27 +76,28 @@ public final class OverlayKeyStore: KeyStore, @unchecked Sendable {
 /// The iOS (and macOS) Keychain. Device-only, available after first unlock so audio can run with the screen locked.
 public final class KeychainKeyStore: KeyStore, @unchecked Sendable {
     let service: String
-    public init(service: String = "news.choir.autoradio.choir") { self.service = service }
+    public static let defaultService = "news.choir.autoradio.choir"      // the ONE literal (the destructive `absent` branch reads this item)
+    public init(service: String = KeychainKeyStore.defaultService) { self.service = service }
     private func base(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
     }
     public func get(_ account: String) -> String? {
         var q = base(account); q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
+        guard SecDoor.copy(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
         return String(data: d, encoding: .utf8)
     }
     public func set(_ value: String, account: String) throws {
-        SecItemDelete(base(account) as CFDictionary)
+        _ = SecDoor.delete(base(account) as CFDictionary)
         var add = base(account)
         add[kSecValueData as String] = Data(value.utf8)
         #if os(iOS)
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly   // data-protection class: iOS only (the Mac's login keychain has none)
         #endif
-        let st = SecItemAdd(add as CFDictionary, nil)
+        let st = SecDoor.add(add as CFDictionary, nil)
         if st != errSecSuccess { throw LabError.unavailable("keychain refused the write (\(st))") }
     }
-    public func delete(_ account: String) { SecItemDelete(base(account) as CFDictionary) }
+    public func delete(_ account: String) { _ = SecDoor.delete(base(account) as CFDictionary) }
 }
 #endif
 
@@ -199,8 +200,6 @@ public final class ChoirEnvironment: @unchecked Sendable {
                     trustedOrigin: URL(string: configuredBaseURL))
     }
 
-    /// Sign-out: the programmes the account was hearing.
-    public func wipePlaying() { lock.lock(); _playing = [:]; lock.unlock() }
 
     // What is playing, so the desk knows which document a turn is about.
     public func setPlaying(_ p: PlayingProgramme) { lock.lock(); _playing[p.programmeID] = p; lock.unlock() }

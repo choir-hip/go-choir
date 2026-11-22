@@ -139,11 +139,7 @@ public struct TakesClient: Sendable {
 
 /// Where the phone keeps these (its own support folder).
 enum TakeFiles {
-    /// The pre-release build's two files (own ids, muted voices): never read by this build, removed with the account (AccountWipe).
-    static let legacy: [URL?] = [url("takes-own.json"), url("takes-muted.json")]
-    static func url(_ name: String) -> URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Autoradio").appendingPathComponent(name)
-    }
+    static func url(_ name: String) -> URL? { AccountWipe.url(name) }
 }
 
 /// The listener's own takes (ids and handle), so the public list never offers their own voice back. A READ-ONLY copy of shared code's data, pushed with `replace` (never the old files: `TakeLegacy`).
@@ -165,11 +161,6 @@ public final class TakeOwn: @unchecked Sendable {
     public func replace(ids new: [String], handle h: String) {
         lock.lock(); ids = Set(new); _handle = Take.validHandle(h) ? h : ""; lock.unlock(); save()
     }
-    /// Sign-out: the ids and the handle are the account's.
-    public func wipe() {
-        lock.lock(); ids = []; _handle = ""; lock.unlock()
-        if let file { try? FileManager.default.removeItem(at: file) }
-    }
     private func save() {
         guard let file else { return }
         lock.lock(); let o: [String: Any] = ["ids": Array(ids).sorted(), "handle": _handle]; lock.unlock()
@@ -177,15 +168,13 @@ public final class TakeOwn: @unchecked Sendable {
     }
 }
 
-/// The programme's copy accepts a push only from the account generation that is current (take-session.ts sends its account generation with every push). A push older than one already seen is refused, and
-/// after the account wipe so is every push of a generation already seen (an old account's push still in flight); the new account's first push, of a newer generation, is accepted. Exact's TS hot reload does not
-/// restart this module and restarts the generation at 0, so after one every push is refused for the rest of that development session: relaunch.
+/// The programme's copy accepts a push only from the account generation that is current (take-session.ts sends its account generation with every push): a push older than one already seen is refused. Exact's TS hot reload
+/// restarts this module and restarts the generation at 0, so after one every push is refused for the rest of that development session: relaunch.
 public enum TakeMirror {
-    nonisolated(unsafe) static var floor = 0, seen = -1
+    nonisolated(unsafe) static var seen = -1
     private static let lock = NSLock()
-    public static func accept(_ gen: Int) -> Bool { lock.lock(); defer { lock.unlock() }; let ok = gen >= max(floor, seen); seen = max(seen, gen); return ok }
-    public static func invalidate() { lock.lock(); floor = seen + 1; lock.unlock() }
-    static func reset() { lock.lock(); floor = 0; seen = -1; lock.unlock() }
+    public static func accept(_ gen: Int) -> Bool { lock.lock(); defer { lock.unlock() }; let ok = gen >= seen; seen = max(seen, gen); return ok }
+    static func reset() { lock.lock(); seen = -1; lock.unlock() }
 }
 
 /// Voices the listener will not hear: a READ-ONLY copy of shared code's list (app:/data/takes.json), pushed with `replace`, kept in `takes-copy-muted.json`
@@ -200,11 +189,6 @@ public final class TakeMutes: @unchecked Sendable {
         if let file, let d = try? Data(contentsOf: file), let a = (try? JSONSerialization.jsonObject(with: d)) as? [String] { handles = a.filter(Take.validHandle) }
     }
     public var all: [String] { lock.lock(); defer { lock.unlock() }; return handles }
-    /// Sign-out: the muted voices are the account's.
-    public func wipe() {
-        lock.lock(); handles = []; lock.unlock()
-        if let file { try? FileManager.default.removeItem(at: file) }
-    }
     public func isMuted(_ h: String) -> Bool { lock.lock(); defer { lock.unlock() }; return handles.contains(h) }
     public func replace(_ new: [String]) {
         lock.lock(); handles = new.filter(Take.validHandle); lock.unlock()
@@ -225,7 +209,6 @@ public final class TakeStore: @unchecked Sendable {
     public init() {}
     public func replace(_ takes: [Take]) { lock.lock(); byID = Dictionary(takes.map { ($0.takeID, $0) }, uniquingKeysWith: { a, _ in a }); lock.unlock() }
     public func take(_ id: String) -> Take? { lock.lock(); defer { lock.unlock() }; return byID[id] }
-    public func wipe() { lock.lock(); byID = [:]; lock.unlock() }
 }
 
 // MARK: Candidates (11.5 step 1)

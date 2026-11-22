@@ -4,9 +4,9 @@
 //
 // One account owns the picks. The state, row by row, is the table in docs/reference/AUTORADIO-EDITION-PICKS.md. In short:
 //  - memory (`mem`) belongs to the account generation (api.ts `accountGeneration`): a moved generation starts a new, empty memory that reads the file again;
-//  - the file is written ONLY through `writeCurrent` with the generation the change began under, one change at a time (`mutate`'s queue), each change applied to the
+//  - the file is written ONLY through `putFile` on the storage of the world the change began in (a closed world's write never starts), one change at a time (`mutate`'s queue), each change applied to the
 //    state as it is at write time (no lost update), and a change queued for an account that has moved on is skipped;
-//  - the native side keeps one in-memory copy (the DJ's edition text, the saved corpus and the edition writer read it): pushed after the file is written, emptied at a wipe;
+//  - the native side keeps one in-memory copy (the DJ's edition text, the saved corpus and the edition writer read it): pushed after the file is written, emptied by the native sign-out wipe;
 //  - the old Swift file (Application Support/Autoradio/edition-topics.json) is NEVER READ here and nothing deletes it here: it says nothing about whose it is, so an upgraded
 //    phone starts with no picks (the cost, in the reference page). The native sign-out wipe still removes it.
 //
@@ -14,9 +14,12 @@
 // (the DJ request, the on-device retrieval) its copy; `editionHeard`/`editionSaid` carry the words the voice heard at the setup screen to shared code and its one-line answer back,
 // because Exact has no call from native code into shared code (native-modules.md, "Out"): shared code asks, on the screen's own timer.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
+import { accountGeneration, nativeInert, inertTimeout, putFile, scoped } from './api.ts';
 import { Selection, suggestions, resolve, treeRows, key, tidy, EXPLAINER, VOICE_HINT, selectionLine, type TopicRow } from './edition-model.ts';
 import { listing } from './paper.ts';
+
+// Module state belongs to the world (api.ts `scoped`): a closed world's is unreachable and no later world joins it.
+const S = scoped(() => ({ mem: null as Mem | null, tail: Promise.resolve() as Promise<unknown>, mirrorTail: Promise.resolve() as Promise<unknown> }));
 
 export const PICKS_FILE = 'app:/data/edition-topics.json';
 export const MIRROR_DEADLINE_MS = 5000;
@@ -34,7 +37,7 @@ export interface Device {
 export type Env = { device: Device | null; live: () => Promise<string[]>; mirrorDeadlineMs?: number };
 
 export function nativeDevice(): Device | null {
-  const raw = nativeLater();
+  const raw = nativeInert();
   if (!raw) return null;
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   const o = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
@@ -49,7 +52,7 @@ export function nativeDevice(): Device | null {
   };
 }
 
-const delay = <T,>(ms: number, v: T): Promise<T> => new Promise((r) => setTimeout(() => r(v), ms));
+const delay = <T,>(ms: number, v: T): Promise<T> => inertTimeout(ms).then(() => v);
 /** The live section ids of today's paper, when the paper has them already (a slow paper does not hold the topic screen: it is asked again). */
 const liveSections = (storage: Storage | undefined) => async (): Promise<string[]> =>
   Promise.race([listing('', storage).then((r) => r.sections.map((s) => s.id)), delay(300, [] as string[])]).catch(() => [] as string[]);
@@ -68,17 +71,15 @@ export function parseStored(text: string | undefined): string[] {
 }
 
 type Mem = { gen: number; sel: Selection; own: string[]; expanded: Set<string>; live: string[]; loaded: Promise<void> | null; rev: number; message: string; mirrored: boolean };
-let mem: Mem | null = null;
-let tail: Promise<unknown> = Promise.resolve();
-let mirrorTail: Promise<unknown> = Promise.resolve();
 
 /** For tests: a new process. */
-export function forgetPicks(): void { mem = null; tail = Promise.resolve(); mirrorTail = Promise.resolve(); }
+export function forgetPicks(): void { S().mem = null; S().tail = Promise.resolve(); S().mirrorTail = Promise.resolve(); }
 /** The memory of the CURRENT account generation; a moved generation is a new, empty one (it reads the file again). */
 function memFor(): Mem {
   const gen = accountGeneration();
-  if (!mem || mem.gen !== gen) mem = { gen, sel: new Selection(), own: [], expanded: new Set(), live: [], loaded: null, rev: 0, message: '', mirrored: false };
-  return mem;
+  const st = S();
+  if (!st.mem || st.mem.gen !== gen) st.mem = { gen, sel: new Selection(), own: [], expanded: new Set(), live: [], loaded: null, rev: 0, message: '', mirrored: false };
+  return st.mem;
 }
 
 async function ensure(storage: Storage | undefined, m: Mem): Promise<void> {
@@ -99,7 +100,7 @@ async function ensure(storage: Storage | undefined, m: Mem): Promise<void> {
   try { await m.loaded; } catch (e) { m.loaded = null; throw e; }
 }
 
-const run = <T,>(fn: () => Promise<T>): Promise<T> => { const r = tail.then(fn, fn); tail = r.catch(() => undefined); return r; };
+const run = <T,>(fn: () => Promise<T>): Promise<T> => { const r = S().tail.then(fn, fn); S().tail = r.catch(() => undefined); return r; };
 
 /** Every change goes through here: one at a time, applied to the state as it is NOW, written through the generation-checked write; skipped when the account moved on
  * between asking and running; undefined when it moved on before the end. After the write the native copy follows (and only then). */
@@ -108,9 +109,9 @@ async function mutate<R>(storage: Storage | undefined, env: Env, change: (m: Mem
   const out = await run(async () => {
     if (gen !== accountGeneration()) return undefined;
     const m = memFor(); await ensure(storage, m);
-    if (m.gen !== gen || mem !== m) return undefined;
+    if (m.gen !== gen || S().mem !== m) return undefined;
     const value = change(m); m.rev += 1;
-    const wrote = await writeCurrent(m.gen, storage, PICKS_FILE, new TextEncoder().encode(JSON.stringify({ topics: m.sel.topics })));
+    const wrote = await putFile(storage, PICKS_FILE, new TextEncoder().encode(JSON.stringify({ topics: m.sel.topics })));
     if (gen !== accountGeneration()) return undefined;
     return { value, wrote, topics: [...m.sel.topics] };
   });
@@ -122,11 +123,11 @@ async function mutate<R>(storage: Storage | undefined, env: Env, change: (m: Mem
 /** Give the native side its copy, in order, each push bounded by a deadline so a native call that never answers stops nothing. A push for an account that moved on is not sent. */
 function pushMirror(env: Env, gen: number, topics: string[] | null, force = false): Promise<void> {
   const dev = env.device; if (!dev) return Promise.resolve();
-  const p = mirrorTail.then(async () => {
+  const p = S().mirrorTail.then(async () => {
     if (!force && gen !== accountGeneration()) return;
     await Promise.race([(topics === null ? dev.forget() : dev.mirror(topics)).catch(() => undefined), delay(env.mirrorDeadlineMs ?? MIRROR_DEADLINE_MS, undefined)]);
   });
-  mirrorTail = p.catch(() => undefined);
+  S().mirrorTail = p.catch(() => undefined);
   return p.catch(() => undefined);
 }
 
@@ -205,21 +206,3 @@ export async function drainHeard(storage: Storage | undefined, env: Env = liveEn
 
 // ---- the sign-out
 
-/** Forget the memory and remove the file; when it cannot be removed, empty it and remove it again; when it still stays, say so (account.ts names the store and tries again at the next launch). */
-export async function wipePicks(storage: Storage | undefined, env: Env = liveEnv(storage)): Promise<void> {
-  mem = null;
-  const fs = storage?.fs;
-  let failed = false;
-  if (fs) {
-    const there = async (): Promise<boolean> => { try { await fs.stat(PICKS_FILE); return true; } catch { return false; } };
-    try { await fs.rm(PICKS_FILE); } catch { /* checked below */ }
-    if (await there()) {
-      // rm failed: empty it so the next account cannot read the picks, then remove it again; if it still stays, the store is named failed (account.ts keeps its marker and retries)
-      try { await fs.atomicWriteFile(PICKS_FILE, new TextEncoder().encode('{"topics":[]}')); } catch { /* still failed below */ }
-      try { await fs.rm(PICKS_FILE); } catch { /* checked below */ }
-      failed = await there();
-    }
-  }
-  await pushMirror(env, 0, null, true);          // the native wipe is the other path
-  if (failed) throw new Error('the edition picks could not be cleared');
-}
