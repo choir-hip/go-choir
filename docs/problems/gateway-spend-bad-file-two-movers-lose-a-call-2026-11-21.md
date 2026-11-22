@@ -1,7 +1,7 @@
-# Two gateway processes that both find a corrupt spend file can lose one process's calls
+# Two gateway processes that both find a corrupt spend file can lose one process's calls (cause: the test, not the ledger)
 
 Recorded 2026-11-21, from CI on main commit 49d0d6644 (a change that does not
-touch `internal/gateway`).
+touch `internal/gateway`); failed again on 34bc283ee.
 
 ## Problem
 
@@ -20,19 +20,45 @@ call recorded by the other process (`vm-a`) was not in the fresh file.
   an hour earlier, so the failure is an interleaving, not a constant.
 - The test was added with the two-writer work (f1aa4df9d, f883ea88d).
 
-## Belief
+## Cause (found 2026-11-22)
 
-Not confirmed from the code. The likely shape: process A flushes its delta
-into the fresh file and marks it saved; process B, which saw the bad file at
-the same moment, then writes a fresh file from its own view and replaces A's.
-If so the paid spend ledger can undercount by one process's unsaved calls
-whenever a corrupt file is met by two writers at once (a handoff between two
-gateway processes). The effect on the owner's spending cap is an undercount,
-which is the unsafe direction, though only in the rare corrupt-file case.
+The fault is in the test, not the ledger. `saveOnce`
+(`internal/gateway/paid_budget.go:410`) holds the file lock from the read
+(`:423`) through the quarantine (`:427`) and the write (`:460`), and the other
+process, waiting on that lock, reads the fresh file and merges its delta; the
+same shape holds in `AnthropicRelay.saveSpendOnce`
+(`anthropic_relay.go:370`). Two writers meeting a bad file, or a good one,
+cannot lose each other's call there.
 
-## Remaining error
+What lost the call: `Record` kicks the ledger's flusher on its first call
+(`spend_file_lock.go` `kickSave`), and the test's `stopSaver` only registered
+the stop for cleanup, so the flusher kept running. Interleaving:
 
-Whether the fault is in the code or in the test's own ordering (two extra
-`mustFlush` calls should have merged both deltas) is not known. Next step: a
-read-only reading of `Flush` on the bad-file path for a lost update, then a
-test that forces the interleaving. Until then the CI job was rerun.
+1. `a.Record(vm-a)` starts a's flusher; it saves vm-a to `spend.json` and
+   marks the delta saved (`paid_budget.go:458`).
+2. The test overwrites `spend.json` with the bad bytes
+   (`spend_two_writers_test.go:462`). The saved vm-a call now exists only in
+   a's memory.
+3. `a.Flush()` finds an empty delta (`paid_budget.go:414`) and writes nothing.
+4. `b.Flush()` finds the bad file, moves it aside and writes b's memory:
+   vm-b only. One call, one bad file moved: the CI signature.
+
+Reproduced deterministically on the build VM with the flusher's save forced
+to land before step 2 (`spendSaveWindowHook`), same failure text
+(`Calls:1 ... Computers:map[vm-b:...]`). Whether the flusher wins the race
+before step 2 depends on scheduling, hence rare, and likelier under `-race`.
+
+## Fix
+
+`stopSaver` now stops the flusher at once, before any `Record`, so these
+tests save by `Flush` only. `TestStopSaverLeavesNoFlusherToRaceATestsOwnFileWrites`
+fails on the old helper (a flusher exists after `Record`) and passes on the
+new one. The ledger is unchanged.
+
+## What remains
+
+A spend file corrupted from outside after a call was saved to it loses that
+saved call from the file when the other process quarantines it and writes its
+own memory; the owning process's memory still holds the call, but it is not
+rewritten. This is the documented loss in `noteBadMoved`, a property of
+external corruption rather than of two writers, and it is not fixed here.

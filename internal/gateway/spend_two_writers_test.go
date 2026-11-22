@@ -124,7 +124,11 @@ func holdLock(t *testing.T, path string) (release func()) {
 
 // stopSaver ends a ledger's flusher before its temp directory is removed, so
 // a retrying flusher cannot recreate a lock file in a directory being deleted.
-func stopSaver(t *testing.T, p *spendSaver) { t.Cleanup(p.stop) }
+// It stops the flusher now, before any Record can start one: a background
+// flusher saving while a test writes the file itself would race the test (a
+// call the flusher saved can be overwritten and is then never saved again).
+// The test saves by Flush only.
+func stopSaver(t *testing.T, p *spendSaver) { p.stop(); t.Cleanup(p.stop) }
 
 func shortLockWait(t *testing.T, d time.Duration) {
 	old := spendLockWait.Swap(int64(d))
@@ -841,5 +845,29 @@ func TestRelayUnopenableLockIsSurfaced(t *testing.T) { // 15
 	r.charge("vm-1", relayUsage{InputTokens: 1})
 	if err := r.Flush(); err == nil || !strings.Contains(r.Persistence().LastError, "lock") {
 		t.Fatalf("not surfaced: %v %+v", err, r.Persistence())
+	}
+}
+
+// A test that stops a ledger's flusher must stop it before its first Record:
+// Record's kick starts the flusher, which saves in the background, and a test
+// that then overwrites the file itself (a bad file) can clobber a call the
+// flusher had already saved and marked saved. That was the lost call of
+// TestPaidSpendTwoProcessesSeeingABadFileMoveItOnce in CI (2026-11-21, -22):
+// the ledger was right (read, quarantine and write happen under one lock),
+// the test's own overwrite raced the flusher.
+func TestStopSaverLeavesNoFlusherToRaceATestsOwnFileWrites(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "spend.json")
+	clk := &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)}
+	s := newTestSpend(t, path, clk)
+	stopSaver(t, &s.saver)
+	s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 100})
+	if s.saver.kick != nil {
+		t.Fatal("Record started a flusher after stopSaver: it saves in the background and races a test's own writes to the file")
+	}
+	if p := s.Persistence(); p.UnsavedCalls != 1 {
+		t.Fatalf("the call must still be unsaved: %+v", p)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("the file exists before any Flush")
 	}
 }
