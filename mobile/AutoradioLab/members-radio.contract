@@ -19,7 +19,9 @@ members Autoradio
   mutation rhm as shape RadioTick
   action holdNow
     send rhm = radioHold(rpulse.tick)
-  task holdKick when rpulse.hold key=rpulse.tick
+  // The key moves with the clock tick as well: the start waits for the front page or for 2 s, and nothing else may move `rpulse.tick` meanwhile (a plain launch), so a hold still due is sent again each second.
+  derive holdKey = `${rpulse.tick}|${radioTick}`
+  task holdKick when rpulse.hold key=holdKey
     after(1, holdNow)
 
   // "All of it" opens Up next to the whole run sheet ahead, in place.

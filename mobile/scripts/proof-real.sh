@@ -482,6 +482,7 @@ sleep 45
 BGCONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
 BGLOG="$BGCONT/Library/Application Support/Autoradio/console.log"
 echo "background: plain launch, 45 s in: $(grep -c 'AUTORADIO on air ' "$BGLOG") on-air lines in the native console; the app's own output so far:"; tail -8 "$BGCONSOLE" | cut -c1-220
+echo "background: shared code's console in the plain launch (mirrored by js-console.ts, simulator only), the radio/onboarding/writer/deck lines:"; grep -E "AUTORADIO js: (radio|onboarding|writer|deck|runsheet|api)" "$BGLOG" | tail -25 | cut -c1-240
 BGDIR=$(ls -d "$BGCONT"/Library/Application\ Support/exact/*/data "$BGCONT"/Library/Caches/exact/*/agent/*/data 2>/dev/null | head -2 | tr '\n' ' '); echo "background: data dirs: $BGDIR; files: $(ls $BGDIR 2>/dev/null | tr '\n' ' ')"
 BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1           # the Home screen over the app: it is not frontmost
@@ -716,8 +717,11 @@ chk "notebook: the page, from shared code" '\[notebook-page\]' "$NB"
 chk "notebook: the held list is complete (its last row, 13)" '\[notebook-held-13\]' "$NB"
 chk "notebook: the notebook was read (a section, or a plain notice that there is none or it is offline)" '\[notebook-(section-[a-z-]+|doc-notice)\]' "$NB"
 # (Two "not stuck loading" checks were deleted: the only `loading` the page draws is its idle answer, so they could not catch a stuck read; the positive checks above are the proof of the read.)
-chk "content sync: the shared sync ran at launch (stories: count and bytes logged)" 'console: content sync story: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$NB"
-chk "content sync: documents ran too" 'console: content sync document: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$NB"
+# The sync starts at EVERY launch and logs when it ends; the console is a ring of 4096 lines, so whether a given drive's dump still holds those lines depends on its traffic (the notebook drive lost them twice). The
+# lines are looked for in the launch dumps of all the drives (each launched a fresh app): the sync ran at launch if any of them shows it.
+cat "$SHOTS"/drive-*.txt > "$SCRATCH/all-drives.txt" 2>/dev/null
+chk "content sync: the shared sync ran at launch (stories: count and bytes logged)" 'console: content sync story: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$SCRATCH/all-drives.txt"
+chk "content sync: documents ran too" 'console: content sync document: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$SCRATCH/all-drives.txt"
 bad "content sync: stories did not stop on an error" 'content sync story: .*stopped: error' "$NB"
 bad "content sync: the file walk is not a launch job" 'content sync file:' "$NB"
 chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' "$SHOTS/drive-tour.txt"

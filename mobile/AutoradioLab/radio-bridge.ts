@@ -235,8 +235,10 @@ async function holdInner(storage: Store | undefined, native: NativeReader | unde
   while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
   if (startDue(r)) {
     if (r.readySince === 0) r.readySince = clock.ms;
+    // The front page it speaks from is fetched first and the radio opens in this same answer once it is held, or once 2 s have passed since the first run was over (the opening then says it has no front page yet).
+    // (It used to fetch in one answer and open in the next: with nothing else moving the tick, no next answer was asked, and a plain launch never started.)
+    if (r.front.lines.length === 0) { try { await r.fetchFront(); } catch { /* none yet */ } }
     if (r.front.lines.length > 0 || clock.ms - r.readySince > 2000) await openRadioOf(r);
-    else { try { await r.fetchFront(); } catch { /* none yet */ } }
   }
   await r.rt.peek();
   console.log(`radio: hold: ${r.rt.store.ahead().length} ahead on the sheet, the deck holds ${r.rt.deckLine().held}, playing ${r.rt.deckLine().item || 'nothing'}`);

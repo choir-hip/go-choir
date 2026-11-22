@@ -28,6 +28,9 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
 
     func observe(_ h: @escaping @Sendable (String, String) -> Void) { lock.lock(); handler = h; lock.unlock() }
 
+    // THE RULE (docs/reference/exact/audio.md "What keeps shared code running in the background"): while the radio is on this claim is held CONTINUOUSLY, from the first start until the listener stops it
+    // (`release()` below, reached from LabRuntime.stop and a sign-out) and never between entries: on iOS the page is frozen the moment no claim is held (Exact AudioSession.swift:148-157), and shared code
+    // is what writes ahead and hands the deck its next entries. The deck (Deck.swift) never releases it between items; a change of state is release-then-claim in ONE main-actor step, with no await between.
     func claim(_ state: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
         let ok: Bool = await MainActor.run {
             if claim != nil, held == state { return true }

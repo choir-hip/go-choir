@@ -137,7 +137,7 @@ with `background:true`, or a speech claim of type `playback`; or a call is activ
 `Info.plist` has `UIBackgroundModes = [audio]`, `ExactAudioSession = playback` and `ExactCapturesInBackground = true`, and the package's session owner claims `speech-playback` while the radio plays
 (`mobile/exact-package/apple/AutoradioModule.swift:23`, `:37`), which is the `playback` speech claim above. So the runtime is eligible to keep running, and the pulse and `radioHold` can keep the deck fed,
 while that claim is held. On Android the page freezes when the activity stops unless a foreground service holds a live claim or plays media (same table). Still **[unrun]** on a phone: the simulator
-never suspends an app, so only a locked iPhone shows it. The `audio` element has one `src` and no playlist: Exact has no native queue, and none is needed while the runtime stays eligible. If the claim is
+never suspends an app, so only a locked iPhone shows it. The `audio` element has one `src` and no playlist: Exact has no native queue, and none is needed while the runtime stays eligible. **The rule for this app: the `speech-playback` claim is held continuously while the radio is on, from the first start until the listener stops it, never between entries** (the deck releases it nowhere between items: `mobile/exact-package/apple/AutoradioModule.swift` `claim`/`release`, `Kit/Deck.swift`). If the claim is
 released in a gap (between entries, while a block is made) the page can freeze there, so the claim must be held through gaps.
 
 ## Now Playing and remote commands

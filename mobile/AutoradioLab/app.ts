@@ -4,6 +4,7 @@ import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue
 import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { adoptNative } from './api.ts';
+import { installConsoleMirror } from './js-console.ts';
 import { settingsAccount, aboutPage } from './settings.ts';
 import { settingsComputer, computerAct } from './computer.ts';
 import { activityPage } from './activity.ts';
@@ -222,6 +223,7 @@ const sources: Sources = {
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
+  installConsoleMirror();                 // harness: shared code's console in the native console on the simulator (js-console.ts)
   // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
   if (source !== 'accountSignOut') await settleAccount(storage, store);
   // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, finished before the first source runs, so the

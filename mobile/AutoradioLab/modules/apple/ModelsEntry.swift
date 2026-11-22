@@ -70,6 +70,16 @@ final class ModelsModule: ExactModule {
             }
             return
         }
+        // HARNESS ONLY (simulator builds): shared code's console line, printed so the app's console file carries it (js-console.ts). A device build answers nothing and shared code stops asking.
+        if op == "jsLog" {
+            #if targetEnvironment(simulator)
+            print("AUTORADIO js: \(request["line"] as? String ?? "")")
+            reply.send(["on": true])
+            #else
+            reply.send([:])
+            #endif
+            return
+        }
         // The deck (shared code's radio runtime commands it): one op, `{op: "deck", name: deckState|deckPlay|deckEnqueue|deckAct|deckAck, args}`, answering the deck's state. Native because the deck is
         // the audio: the session, the engine and the journal that survives a kill (AutoradioModule+Deck.swift `deckCall`). It decides nothing.
         if op == "deck" {
