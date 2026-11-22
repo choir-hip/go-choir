@@ -64,8 +64,12 @@ func main() {
 		seed := fs.Int64("seed", 20261124, "seed")
 		_ = fs.Parse(os.Args[2:])
 		groupsMain(*data, *in, *out, *key, *seed, *n)
+	case "s1jobs":
+		s1jobsMain(os.Args[2], os.Args[3], 20261125, 1200)
+	case "s1eval":
+		s1eval(os.Args[2], os.Args[3], os.Args[4])
 	default:
-		fmt.Fprintln(os.Stderr, "usage: offlineslice report|sample|sampleb|groups ...")
+		fmt.Fprintln(os.Stderr, "usage: offlineslice report|sample|sampleb|groups|s1jobs|s1eval ...")
 		os.Exit(2)
 	}
 }
