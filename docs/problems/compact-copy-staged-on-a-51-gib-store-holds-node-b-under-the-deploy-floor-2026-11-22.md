@@ -50,6 +50,21 @@ disk is the binding constraint on landing anything, and it tightens as the
 store grows. The compact copy is the worst of the three because it does not
 end by itself.
 
+## 12:43Z: hibernated computers are refused on wake
+
+The same shortage now refuses wakes, so this is an outage for any hibernated
+computer whose data image may still grow more than the host has above its
+floor, not only a blocked deploy.
+
+- Node B journal, 12:43:50Z to 12:44:03Z (four attempts): "vmctl: host
+  admission refused computer=computer-59c902c5… class=primary: its data image
+  may still grow 19784 MiB; the host state disk has 50461 MiB, 17693 MiB above
+  its floor", and the proxy's "bearer wake failed". The phone app's proof run
+  (trainp7) saw it as "HTTP 503: computer_waking_failed" on Textures, Files
+  and imported pages. This is the drill account's computer.
+- The refusal is correct: admitting it could take the host under its floor.
+- The owner was notified at 12:49Z. Nothing was changed on Node B.
+
 ## What it blocks
 
 The deploy of F0 (`34bc283ee`) and every deploy after it, until the paper
