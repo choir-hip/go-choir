@@ -191,7 +191,7 @@ for path in "${changed[@]}"; do
     # change must run CI) and that no host or guest closure reads: the experiment
     # driver with its self-test and fixtures, two status and proof readers, and
     # the native-boundary gate's two data files.
-    scripts/e1|scripts/selftest-e1|scripts/testdata/e1/*|scripts/status-vectors|scripts/status-corpus-reuse|scripts/proofs/corpus-search-recall|scripts/autoradio-native-ceiling.txt|scripts/autoradio-native-voice-list.txt)
+    scripts/e1|scripts/spend-report|scripts/selftest-e1|scripts/testdata/e1/*|scripts/status-vectors|scripts/status-corpus-reuse|scripts/proofs/corpus-search-recall|scripts/autoradio-native-ceiling.txt|scripts/autoradio-native-voice-list.txt)
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;

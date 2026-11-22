@@ -96,8 +96,12 @@ assert_output skills-text-only $'skills/throughline/SKILL.md\nskills/throughline
 assert_output skills-go-file $'skills/throughline/check/main.go\n' \
   'docs_only=false' 'go=true' 'flakehub=true'
 
-assert_output dev-scripts-only $'scripts/land\nscripts/spend-report\nscripts/system_briefing.py\nscripts/probes/x.sh\nscripts/prove-autoradio-turns\n' \
+assert_output dev-scripts-only $'scripts/land\nscripts/system_briefing.py\nscripts/probes/x.sh\nscripts/prove-autoradio-turns\n' \
   'docs_only=true' 'non_docs=false' 'go=false' 'flakehub=false'
+
+# A Go test (internal/gateway's log-forgery test) runs scripts/spend-report.
+assert_output go-run-script $'scripts/spend-report\n' \
+  'docs_only=false' 'go=true'
 
 assert_output mixed-skill-and-code $'skills/throughline/SKILL.md\ninternal/auth/service.go\n' \
   'docs_only=false' 'go=true' 'sbom=true' 'flakehub=true'

@@ -335,13 +335,13 @@ func (s *jevStats) observe(now time.Time, latency, queued time.Duration, status 
 	return line
 }
 
-func logJevCall(computerID string, class jevClass, site string, bytes, questions int, queued, upstream time.Duration, status int, err error) {
+func logJevCall(computerID string, class jevClass, site, desk, run string, bytes, questions int, queued, upstream time.Duration, status int, err error) {
 	state := "ok"
 	if err != nil {
 		state = "failed"
 	}
-	log.Printf("gateway: jev call computer=%s class=%s site=%s bytes=%d questions=%d queue_ms=%d upstream_ms=%d status=%d %s",
-		computerID, class, site, bytes, questions, queued.Milliseconds(), upstream.Milliseconds(), status, state)
+	log.Printf("gateway: jev call computer=%s class=%s site=%s desk=%s run=%s bytes=%d questions=%d queue_ms=%d upstream_ms=%d status=%d %s",
+		computerID, class, site, desk, run, bytes, questions, queued.Milliseconds(), upstream.Milliseconds(), status, state)
 }
 
 // JevSiteHeader names the optional request header by which a caller says which
@@ -365,9 +365,29 @@ func sanitizeJevSite(raw string) string {
 	return raw
 }
 
-// withJevSite carries the request's site to the log line only.
+// withJevSite carries the request's site, desk and run to the log line only.
 func withJevSite(ctx context.Context, r *http.Request) context.Context {
+	desk, run := modelCaller(r)
+	ctx = context.WithValue(ctx, jevCallerKey{}, [2]string{desk, run})
 	return context.WithValue(ctx, jevSiteKey{}, sanitizeJevSite(r.Header.Get(JevSiteHeader)))
+}
+
+type jevCallerKey struct{}
+
+// withHostDesk says the call is host code's, whatever the request's headers
+// claim: the host judgment route is not a desk (first design, F0).
+func withHostDesk(ctx context.Context) context.Context {
+	_, run := jevCallerFrom(ctx)
+	return context.WithValue(ctx, jevCallerKey{}, [2]string{"host", run})
+}
+
+// jevCallerFrom is the desk and run withJevSite carried ("unknown", "-" when
+// none).
+func jevCallerFrom(ctx context.Context) (desk, run string) {
+	if c, ok := ctx.Value(jevCallerKey{}).([2]string); ok {
+		return c[0], c[1]
+	}
+	return "unknown", "-"
 }
 
 func jevSiteFrom(ctx context.Context) string {

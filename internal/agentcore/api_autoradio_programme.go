@@ -784,7 +784,7 @@ func (c *programmeCall) run(ctx context.Context, streamer provideriface.TextStre
 		// the first delta is under the wall-clock deadline of the walk).
 		var idle *time.Timer
 		programmeCallsTotal.Add(1)
-		resp, err := streamer.StreamText(callCtx, provideriface.TextStreamRequest{
+		resp, err := streamer.StreamText(provideriface.WithCaller(callCtx, provideriface.Caller{Desk: "autoradio", RunID: c.stretchID}), provideriface.TextStreamRequest{
 			Provider: sel.Provider, Model: sel.Model, ReasoningEffort: effort,
 			ConversationID: c.stretchID, CacheKey: programmeCachePrefix + c.rt.cfg.ComputerID + ":" + promptSum[:8],
 			System: prompt, StableUser: stable, User: volatile, MaxTokens: sel.MaxTokens,

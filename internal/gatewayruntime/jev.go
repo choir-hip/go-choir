@@ -92,6 +92,7 @@ func (c *JudgmentClient) Decide(ctx context.Context, request JudgmentRequest) (*
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+c.token)
 	httpRequest.Header.Set("Content-Type", "application/json")
+	setCallerHeaders(ctx, httpRequest.Header)
 	if site := strings.TrimSpace(JevSiteFrom(ctx)); site != "" {
 		httpRequest.Header.Set(JevSiteHeader, site)
 	}

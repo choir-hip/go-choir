@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -65,20 +66,72 @@ func (h *Handler) HandlePlatformPublicationResolve(w http.ResponseWriter, r *htt
 		q.Set("view", "nav")
 	}
 	u.RawQuery = q.Encode()
-	var out platform.PublicationBundle
-	status, err := h.getPlatformJSON(r, u.String(), &out)
+	status, err := h.relayPlatformResolve(w, r, u.String(), routePath)
 	if err != nil {
 		if platformErr, ok := err.(*platformStatusError); ok && platformErr.status == http.StatusNotFound {
 			http.NotFound(w, r)
 			h.lifecycle.record("platform_publication.resolve", lifecycleHTTPStatus(http.StatusNotFound), time.Since(started))
 			return
 		}
-		log.Printf("proxy: platform publication resolve: %v", err)
+		log.Printf("proxy: platform publication resolve: %q", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve publication"})
 		return
 	}
-	writeJSON(w, status, out)
 	h.lifecycle.record("platform_publication.resolve", lifecycleHTTPStatus(status), time.Since(started))
+}
+
+// resolveBundleLogBytes is the size from which a resolve bundle is logged: 1 MiB,
+// the size that used to fail, and 1/64 of maxPlatformDecodeBytes. A story's bundle
+// is the current version's text carried several times (artifact, payload,
+// retrieval, transclusions, checks); revisions do not grow it (nav is four
+// integers). A long or heavily transcluded story is large, so the line shows the
+// growth before anything refuses. The route is request text: logged with %q.
+const resolveBundleLogBytes = 1 << 20
+
+// relayPlatformResolve streams corpusd's resolve answer to the client. The proxy
+// adds nothing to the bundle (same type both sides, no re-shaping), so it is
+// copied through without buffering: no size bound can truncate it. Three things
+// keep that honest:
+//   - It uses corpusdRelay, whose total timeout is the server's write budget: the
+//     client's drain is inside the call, and the shared 30 s corpusd client would
+//     cut a slow phone's download that the buffered path delivered.
+//   - A non-2xx answer, or a 2xx with no body (the old decode turned that into a
+//     502), is returned as an error before anything is written to w.
+//   - A copy that fails after the header is sent cannot be repaired: a chunked 200
+//     with a short body looks complete to the client. So it is logged and the
+//     connection is aborted (http.ErrAbortHandler), and the client sees a
+//     transport error, not a clean 200.
+func (h *Handler) relayPlatformResolve(w http.ResponseWriter, r *http.Request, target, route string) (int, error) {
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	if err != nil {
+		return 0, fmt.Errorf("build platform request: %w", err)
+	}
+	hostauth.MarkInternal(req)
+	resp, err := h.corpusdRelay.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("call corpusd: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		return resp.StatusCode, &platformStatusError{status: resp.StatusCode, body: string(body)}
+	}
+	body := bufio.NewReader(resp.Body)
+	if _, err := body.Peek(1); err != nil {
+		return resp.StatusCode, fmt.Errorf("corpusd answered %d with an empty or unreadable body: %v", resp.StatusCode, err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	n, err := io.Copy(w, body)
+	if n >= resolveBundleLogBytes {
+		log.Printf("proxy: platform publication resolve bundle size: route=%q bytes=%d", route, n)
+	}
+	if err != nil {
+		log.Printf("proxy: platform publication resolve: relay broke after %d bytes of route=%q, aborting the connection: %q", n, route, err)
+		h.lifecycle.record("platform_publication.resolve", lifecycleHTTPStatus(http.StatusBadGateway), 0)
+		panic(http.ErrAbortHandler)
+	}
+	return resp.StatusCode, nil
 }
 
 // HandlePlatformFrontStories serves the Autopaper front list to anyone,
@@ -325,8 +378,9 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := readPlatformBody(resp.Body, resp.ContentLength)
 	if err != nil {
+		log.Printf("proxy: platform proposal post: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read platform response"})
 		return
 	}
@@ -368,6 +422,41 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 	h.lifecycle.record("platform_proposal.total", lifecycleHTTPStatus(resp.StatusCode), time.Since(started))
 }
 
+// maxPlatformDecodeBytes bounds what the proxy buffers to decode from corpusd:
+// 64 MiB, about 180 times the largest bundle seen (361 KB) and 64 times the old
+// limit that truncated a live story. It exists so a runaway answer cannot fill the
+// proxy's memory, not to fit a real story; past it the call fails with an explicit
+// "too large" error, never a truncated read. A var so a test can lower it.
+var maxPlatformDecodeBytes int64 = 64 << 20
+
+type platformBodyTooLargeError struct {
+	limit    int64
+	upstream int64 // Content-Length, or -1 when the upstream did not say
+}
+
+func (e *platformBodyTooLargeError) Error() string {
+	if e.upstream >= 0 {
+		return fmt.Sprintf("corpusd response too large: %d bytes upstream, bound %d", e.upstream, e.limit)
+	}
+	return fmt.Sprintf("corpusd response too large: more than the bound of %d bytes (upstream length unknown)", e.limit)
+}
+
+// readPlatformBody reads a body that must be decoded, refusing (not truncating)
+// one over maxPlatformDecodeBytes. contentLength is the upstream's, or -1.
+func readPlatformBody(body io.Reader, contentLength int64) ([]byte, error) {
+	if contentLength > maxPlatformDecodeBytes {
+		return nil, &platformBodyTooLargeError{limit: maxPlatformDecodeBytes, upstream: contentLength}
+	}
+	data, err := io.ReadAll(io.LimitReader(body, maxPlatformDecodeBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxPlatformDecodeBytes {
+		return nil, &platformBodyTooLargeError{limit: maxPlatformDecodeBytes, upstream: contentLength}
+	}
+	return data, nil
+}
+
 type platformStatusError struct {
 	status int
 	body   string
@@ -388,7 +477,7 @@ func (h *Handler) getPlatformJSON(r *http.Request, target string, out any) (int,
 		return 0, fmt.Errorf("call corpusd: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := readPlatformBody(resp.Body, resp.ContentLength)
 	if err != nil {
 		return resp.StatusCode, fmt.Errorf("read corpusd response: %w", err)
 	}

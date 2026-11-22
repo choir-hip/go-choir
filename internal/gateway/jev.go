@@ -118,6 +118,7 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 	}
 
 	class, _ := judgmentRateScope(request.Scope)
+	desk, run := jevCallerFrom(ctx)
 	release, queued, err := t.limit().acquire(ctx, computerID, class)
 	if err != nil {
 		// A refusal at the limiter is a call the logs and the hour summary
@@ -126,7 +127,7 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 		if _, limited := err.(*jevLimitedError); limited {
 			status = http.StatusTooManyRequests
 		}
-		logJevCall(computerID, class, jevSiteFrom(ctx), jevRequestBytes(request), len(request.Questions), queued, 0, status, err)
+		logJevCall(computerID, class, jevSiteFrom(ctx), desk, run, jevRequestBytes(request), len(request.Questions), queued, 0, status, err)
 		if line := t.stats.observe(time.Now(), 0, queued, status, false); line != "" {
 			log.Print(line)
 		}
@@ -142,7 +143,7 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 	started := time.Now()
 	response, status, err := t.call(ctx, computerID, request)
 	upstream := time.Since(started)
-	logJevCall(computerID, class, jevSiteFrom(ctx), jevRequestBytes(request), len(request.Questions), queued, upstream, status, err)
+	logJevCall(computerID, class, jevSiteFrom(ctx), desk, run, jevRequestBytes(request), len(request.Questions), queued, upstream, status, err)
 	if line := t.stats.observe(time.Now(), upstream, queued, status, err == nil); line != "" {
 		log.Print(line)
 	}
@@ -415,7 +416,7 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// The cause (an OpenRouter status, a transport error) carries no
 		// credential; without it a spent key read only as "unavailable".
-		log.Printf("gateway: Jev judgment for %s failed: %v", computerID, err)
+		log.Printf("gateway: Jev judgment for %s failed: %s", computerID, logText(err.Error()))
 		if _, disabled := err.(jevTransportDisabledError); disabled {
 			writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgments are disabled"})
 			return

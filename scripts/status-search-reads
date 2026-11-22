@@ -48,7 +48,7 @@ PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
 NODE = "node-b"
 STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
 # desk=research and desk=research_web (a choir.Research child's searches carry the latter)
-GW_RE = re.compile("^" + STAMP + r" gateway: search request from autoputer (\S+) \(.*?run=(\S+) desk=(research(?:_web)?) ")
+GW_RE = re.compile("^" + STAMP + r" gateway: search request from autoputer (\S+) \(.*run=(\S+) desk=(research(?:_web)?) ")  # greedy: the LAST run= desk= is the fixed tail
 FRESH_RE = re.compile(STAMP + r" runtime: search fresh run=(\S+) why_len=(\d+) why_hash=([0-9a-f]+)")
 LOST_RE = re.compile(STAMP + r" runtime: search gate state lost at resume run=(\S+)")
 READ_RE = re.compile(STAMP + r" corpus read run=(\S+) ")

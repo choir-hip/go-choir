@@ -18,8 +18,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -1413,6 +1415,17 @@ func (rt *Runtime) judgeCall(ctx context.Context, meta jevrecord.Meta, timeout t
 	// The site rides the request as X-Choir-Jev-Site, so the gateway's log
 	// line names it (it said site=unknown for every guest call).
 	ctx = gatewayruntime.WithJevSite(ctx, meta.Site)
+	// The desk rides the request as X-Choir-Desk (first design, F0). A call
+	// outside any desk's run is host code's and says host, with the record's
+	// run id when it has one; so is every site that is a host pipeline, even
+	// when a stray execution context is in ctx. A call in a desk's run takes
+	// that run's own desk and run id.
+	exec := toolregistry.ExecutionContextFrom(ctx)
+	switch {
+	case meta.Site == "intake_labels" || meta.Site == "event_layer" || meta.Site == "front_importance" || meta.Site == "oped_gate",
+		exec.Role == "" && exec.Profile == "":
+		ctx = provideriface.WithCaller(ctx, provideriface.Caller{Desk: provideriface.DeskHost, RunID: meta.RunID})
+	}
 	return jevrecord.Observe(rt.jevRecorder(), meta, state, questions, func() (json.RawMessage, error) {
 		return callJudgeWithin(ctx, rt.candidateJudge, meta.Scope, timeout, state, questions)
 	})

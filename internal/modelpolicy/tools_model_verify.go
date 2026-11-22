@@ -200,7 +200,12 @@ func (m *Manager) runVerify(ctx context.Context, input verifyModelCapabilityArgs
 		}
 		called++
 		maxTokens := provideriface.MaxInteractiveOutputTokensForSelection(candidate, role)
-		response, err := loop.CallWithTools(ctx, provideriface.ToolLoopRequest{
+		callCtx := ctx
+		if toolregistry.ExecutionContextFrom(ctx).RunID == "" {
+			// Our own host code outside any run: name it, not unknown (first design, F0).
+			callCtx = provideriface.WithCaller(ctx, provideriface.Caller{Desk: "verify"})
+		}
+		response, err := loop.CallWithTools(callCtx, provideriface.ToolLoopRequest{
 			Provider:        candidate.Provider,
 			Model:           candidate.Model,
 			ReasoningEffort: candidate.ReasoningEffort,

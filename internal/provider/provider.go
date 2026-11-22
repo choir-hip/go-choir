@@ -538,7 +538,7 @@ func (p *BedrockProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 	httpReq.Header.Set("Accept", "application/json")
 	httpReq.Header.Set("anthropic-version", p.anthropicV)
 
-	log.Printf("provider: bedrock call model=%s region=%s", redactModel(modelID), p.region)
+	log.Printf("provider: bedrock call model=%s region=%s", logModel(redactModel(modelID)), p.region)
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
@@ -818,7 +818,7 @@ func (p *ZAIProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, e
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
 
-	log.Printf("provider: zai call model=%s", modelID)
+	log.Printf("provider: zai call model=%s", logModel(modelID))
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
@@ -857,7 +857,7 @@ func (p *ZAIProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(S
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
 
-	log.Printf("provider: zai stream model=%s", modelID)
+	log.Printf("provider: zai stream model=%s", logModel(modelID))
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
@@ -979,7 +979,7 @@ func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespo
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
 
-	log.Printf("provider: fireworks call model=%s", modelID)
+	log.Printf("provider: fireworks call model=%s", logModel(modelID))
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
@@ -1012,7 +1012,7 @@ func (p *FireworksProvider) Stream(ctx context.Context, req LLMRequest, onChunk 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
 
-	log.Printf("provider: fireworks stream model=%s", modelID)
+	log.Printf("provider: fireworks stream model=%s", logModel(modelID))
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
@@ -1169,14 +1169,14 @@ func (p *SyntheticProvider) call(ctx context.Context, req LLMRequest, onChunk fu
 		httpReq.Header.Set("Accept", "application/json")
 	}
 
-	log.Printf("provider: synthetic call model=%s stream=%t reasoning=%s", modelID, req.Stream, body.ReasoningEffort)
+	log.Printf("provider: synthetic call model=%s stream=%t reasoning=%s", logModel(modelID), req.Stream, logModel(body.ReasoningEffort))
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("synthetic: http call: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if summary := syntheticQuotaSummary(resp.Header); summary != "" {
-		log.Printf("provider: synthetic quota %s", summary)
+		log.Printf("provider: synthetic quota %s", LogText(summary, 200))
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
 		// Synthetic's 429 is either its account concurrency limit, which is
@@ -1342,7 +1342,7 @@ func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 	}
 	body := p.buildRequestBody(req, modelID)
 
-	log.Printf("provider: chatgpt call model=%s reasoning=%s", modelID, effectiveReasoning(req.ReasoningEffort, p.reasoning))
+	log.Printf("provider: chatgpt call model=%s reasoning=%s", logModel(modelID), logModel(effectiveReasoning(req.ReasoningEffort, p.reasoning)))
 
 	resp, err := p.doStreamRequestWithAuthRetry(ctx, body)
 	if err != nil {
@@ -1363,7 +1363,7 @@ func (p *ChatGPTProvider) Stream(ctx context.Context, req LLMRequest, onChunk fu
 	body := p.buildRequestBody(req, modelID)
 	body.Stream = true
 
-	log.Printf("provider: chatgpt stream model=%s reasoning=%s", modelID, effectiveReasoning(req.ReasoningEffort, p.reasoning))
+	log.Printf("provider: chatgpt stream model=%s reasoning=%s", logModel(modelID), logModel(effectiveReasoning(req.ReasoningEffort, p.reasoning)))
 
 	resp, err := p.doStreamRequestWithAuthRetry(ctx, body)
 	if err != nil {
@@ -1652,7 +1652,7 @@ func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk fun
 			httpReq.Header.Set("Authorization", "Bearer "+key.value)
 		}
 
-		log.Printf("provider: %s call model=%s key=%s", p.providerName, modelID, key.name)
+		log.Printf("provider: %s call model=%s key=%s", p.providerName, logModel(modelID), key.name)
 		r, err := p.httpClient.Do(httpReq)
 		if err != nil {
 			return nil, fmt.Errorf("%s: http call: %w", p.providerName, err)
@@ -2727,7 +2727,7 @@ func parseBedrockResponse(resp *http.Response, modelID string) (*LLMResponse, er
 	}
 
 	log.Printf("provider: bedrock response model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
-		redactModel(result.Model), result.StopReason,
+		logModel(redactModel(result.Model)), result.StopReason,
 		result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
 
 	return result, nil
@@ -2775,7 +2775,7 @@ func parseAnthropicResponse(resp *http.Response, modelID string, providerName st
 	result.ReasoningContent = encodeAnthropicThinkingBlocks(payload.Content)
 
 	log.Printf("provider: %s response model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
-		providerName, result.Model, result.StopReason,
+		providerName, logModel(result.Model), result.StopReason,
 		result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
 
 	return result, nil
@@ -2833,7 +2833,7 @@ func parseOpenAIChatCompletionsResponse(resp *http.Response, modelID string, pro
 
 	RecordCacheUsage(providerName, result.Usage)
 	log.Printf("provider: %s chat completion model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d",
-		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls))
+		providerName, logModel(result.Model), result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls))
 
 	return result, nil
 }
@@ -3015,11 +3015,11 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 		// unknown, so say so where it is seen (log line plus counter).
 		recordNoStreamUsage(providerName)
 		log.Printf("provider: %s stream_usage_missing model=%s stop=%s text_len=%d tool_calls=%d (stream ended with no usage; spend for this call is unknown)",
-			providerName, result.Model, result.StopReason, len(result.Text), len(result.ToolCalls))
+			providerName, logModel(result.Model), result.StopReason, len(result.Text), len(result.ToolCalls))
 	}
 	onChunk(StreamChunk{Type: "message_stop", StopReason: result.StopReason})
 	log.Printf("provider: %s chat completion stream model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
-		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
+		providerName, logModel(result.Model), result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
 	return result, nil
 }
 
@@ -3273,7 +3273,7 @@ func parseSSEStream(body io.Reader, modelID string, providerName string, onChunk
 				} `json:"error"`
 			}
 			if err := json.Unmarshal([]byte(data), &errData); err == nil {
-				log.Printf("provider: %s stream error: %s (sanitized)", providerName, errData.Error.Type)
+				log.Printf("provider: %s stream error: %s (sanitized)", providerName, logModel(errData.Error.Type))
 			}
 		}
 	}
@@ -3284,7 +3284,7 @@ func parseSSEStream(body io.Reader, modelID string, providerName string, onChunk
 
 	RecordCacheUsage(providerName, result.Usage)
 	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d",
-		providerName, result.Model, result.StopReason,
+		providerName, logModel(result.Model), result.StopReason,
 		result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls))
 
 	return result, nil
@@ -3462,7 +3462,7 @@ func parseOpenAIStreamLogged(body io.Reader, modelID string, providerName string
 	onChunk(StreamChunk{Type: "message_stop", StopReason: result.StopReason})
 	RecordCacheUsage(providerName, result.Usage)
 	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d ttfb_ms=%d%s",
-		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls), firstByteOf(body).Milliseconds(), meta.logFields())
+		providerName, logModel(result.Model), result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls), firstByteOf(body).Milliseconds(), meta.logFields())
 	return result, nil
 }
 

@@ -91,7 +91,7 @@ GW_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) gateway: search for autop
                    r"\((\d+) cooling, (\d+) pending\) skipped=\[([^\]]*)\] served=(\w+) results=(\d+) unique=(\d+)(?: seen=\d+)?"
                    r"(?: routing=\S+ escalated=\S+ paid_calls=\d+ today=\[([^\]]*)\])?")
 # the request line is written when a search arrives and carries run= (the answer line above has no run=)
-GWREQ_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) gateway: search request from autoputer (\S+) \(.*?run=(\S+) desk=")
+GWREQ_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) gateway: search request from autoputer (\S+) \(.*run=(\S+) desk=")  # greedy: the LAST run= desk= is the fixed tail; a quoted query cannot supply it
 GWFAIL_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) gateway: search failed for autoputer (\S+)")
 CORPUS_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) corpusd retrieval op=(\w+) shape=(\S+) ms=([0-9.]+) rows=\d+"
                        r"(?: vector_state=(\w+))? err=(\S*)$")

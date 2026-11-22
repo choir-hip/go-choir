@@ -626,13 +626,13 @@ func (c *SourceAPIClient) Do(req SourceAPIRequest) (*SourceAPIResponse, error) {
 	start := c.now()
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
-		log.Printf("gateway: source-api %s.%s upstream request failed after %s: %s", p.name, req.Endpoint, c.now().Sub(start).Round(time.Millisecond), scrubKey(err.Error(), key))
+		log.Printf("gateway: source-api %s.%s upstream request failed after %s: %s", p.name, logField(req.Endpoint, 64), c.now().Sub(start).Round(time.Millisecond), logText(scrubKey(err.Error(), key)))
 		return nil, &sourceAPIError{status: http.StatusBadGateway, msg: "upstream request failed"}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	data, readErr := io.ReadAll(io.LimitReader(resp.Body, sourceAPIMaxBody+1))
 	out := &SourceAPIResponse{Provider: p.name, Endpoint: req.Endpoint, UpstreamStatus: resp.StatusCode}
-	log.Printf("gateway: source-api %s.%s upstream=%d bytes=%d in %s", p.name, req.Endpoint, resp.StatusCode, len(data), c.now().Sub(start).Round(time.Millisecond))
+	log.Printf("gateway: source-api %s.%s upstream=%d bytes=%d in %s", p.name, logField(req.Endpoint, 64), resp.StatusCode, len(data), c.now().Sub(start).Round(time.Millisecond))
 	if resp.StatusCode >= 300 {
 		// An error body may echo the request, key included; only the
 		// status goes back.

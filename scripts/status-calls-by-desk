@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+"""status-calls-by-desk: which desk makes the paper's model calls, and what each
+costs per capture judged, per story woken and per story published (first design,
+docs/design/first-design-2026-11-22.md section 10 step 0, station F0).
+
+Read only against Node B (one ssh, `sudo -n` reads; nothing is written there).
+Counts and ids only; no prompt, query or title text is read or printed.
+
+  status-calls-by-desk [--since T] [--until T] [--node HOST] [--all-computers] [--json] [--fixture FILE]
+
+T is YYYY-MM-DDTHH:MMZ (UTC); default: the start of the current UTC hour. The window is
+[since, until). Exit 0, or 2 when the fetch failed.
+
+Calls (numerators), from the gateway journal (the whole window, no rotation):
+  `gateway: inference request from autoputer <vm> (... stream=B desk=D run=R ...)`
+        one line per model call admitted to a provider. desk is the desk the
+        guest named: management, texture, research, ..., "host" for host code
+        (no desk's run owns the call), "unknown" for a caller that named none
+        (an older guest, or a call site not yet naming one). A line from before
+        the desk was logged has no desk= and is its own row, "not-logged-before-F0"
+        (the gateway line change of station F0), never counted as unknown.
+  `gateway: jev call computer=<vm> ... site=S desk=D run=R ...`
+        one line per Jev judgment call (one call, many questions).
+Only these two routes are counted: the OpenAI-compatible and the Anthropic relay
+lines carry desk and run too but are not model calls of the paper's desks, and
+this script does not read them. Only the paper's computer (and the host's own
+judgment labels, host:*) is counted unless --all-computers. A line written before
+the desk was logged has no fixed tail; it is its own row, "not-logged-before-F0",
+and a hostile older line could make it read as a desk (old raw lines stay forgeable).
+
+Denominators, from the paper VM's console (it keeps about 2.5 hours; a window that
+starts before its oldest line is partial and the script says so):
+  captures judged   the sum of captures= over `management story choice` lines
+                    (a line from before the judgment counts one).
+  stories woken     distinct story= over `management story choice` lines with
+                    choice=open or feed (an open or a feed wakes the story's
+                    Texture).
+  stories published `story publish: <doc> published v<n>` lines (and distinct
+                    docs).
+"Per story published" uses distinct documents; "per publish" uses publish events.
+A denominator of zero prints "n/a". The desk is the guest's own claim (any guest
+can name any desk); a failed journal or console read fails the script (exit 2),
+it never prints zeros.
+"""
+import argparse
+import calendar
+import json
+import re
+import subprocess
+import sys
+import time
+
+PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+NODE = "node-b"
+STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
+INF_RE = re.compile("^" + STAMP + r" gateway: inference request from autoputer (\S+) \(")
+# The fixed tail of the line, last match: the gateway cleans a guest's model,
+# tool_choice and reasoning now, but an older gateway wrote them raw, and a
+# hostile string earlier in the line must not name the desk.
+INF_TAIL_RE = re.compile(r" stream=(?:true|false) desk=(\S+) run=\S+(?=\s)")
+JEV_TAIL_RE = re.compile(r" site=(\S+) desk=(\S+) run=\S+ bytes=")
+JEV_RE = re.compile("^" + STAMP + r" gateway: jev call computer=(\S+) ")
+CHOICE_RE = re.compile(STAMP + r" management story choice (.*)$")
+PUB_RE = re.compile(STAMP + r" story publish: (\S+) published v(\d+) ")
+NOT_LOGGED = "not-logged-before-F0"   # a line with no desk= was written before the desk was logged
+KV_RE = re.compile(r"(\w+)=(\S*)")
+
+
+def epoch(s):
+    return calendar.timegm(time.strptime(s, "%Y/%m/%d %H:%M:%S"))
+
+
+def arg_time(s):
+    return calendar.timegm(time.strptime(s, "%Y-%m-%dT%H:%MZ"))
+
+
+def ratio(n, d):
+    return None if not d else round(n / d, 2)
+
+
+def compute(text, since, until, all_computers=False):
+    sec = ""
+    inf, jev, jev_sites = {}, {}, {}
+    judged = pubs = malformed = 0
+    woken, pub_docs = set(), set()
+    console_first = None
+    for ln in text.splitlines():
+        if ln.startswith("##"):
+            sec = ln
+            continue
+        in_win = lambda t: t >= since and t < until
+        if sec == "##GW":
+            m = INF_RE.match(ln)
+            if m:
+                if not in_win(epoch(m.group(1))) or not (all_computers or m.group(2) == PAPER_VM):
+                    continue
+                d = INF_TAIL_RE.findall(ln)
+                desk = d[-1] if d else NOT_LOGGED
+                inf[desk] = inf.get(desk, 0) + 1
+                continue
+            m = JEV_RE.match(ln)
+            if m:
+                if not in_win(epoch(m.group(1))) or not (all_computers or m.group(2) == PAPER_VM or m.group(2).startswith("host:")):
+                    continue
+                d = JEV_TAIL_RE.findall(ln)
+                desk = d[-1][1] if d else NOT_LOGGED
+                jev[desk] = jev.get(desk, 0) + 1
+                site = d[-1][0] if d else (re.findall(r" site=(\S+)", ln) or ["unknown"])[-1]
+                jev_sites[site] = jev_sites.get(site, 0) + 1
+        elif sec == "##FIRST":
+            m = re.search(STAMP, ln)
+            if m:
+                console_first = epoch(m.group(1))
+        elif sec == "##CHOICE":
+            m = CHOICE_RE.search(ln)
+            if not m:
+                continue
+            t = epoch(m.group(1))
+            if not in_win(t):
+                continue
+            kv = dict(KV_RE.findall(m.group(2)))
+            # as status-story-choice counts: a line before the judgment has no
+            # captures= and counts one; an open counts at least one; a malformed
+            # captures= (the console is guest-written) counts one and is noted.
+            try:
+                n = int(kv.get("captures", "1") or 1)
+            except ValueError:
+                n = 1
+                malformed += 1
+            if kv.get("choice") == "open":
+                n = max(n, 1)
+            judged += n
+            if kv.get("choice") in ("open", "feed") and kv.get("story"):
+                woken.add(kv["story"])
+        elif sec == "##PUB":
+            m = PUB_RE.search(ln)
+            if not m:
+                continue
+            t = epoch(m.group(1))
+            if in_win(t):
+                pubs += 1
+                pub_docs.add(m.group(2))
+    total_inf, total_jev = sum(inf.values()), sum(jev.values())
+    total = total_inf + total_jev
+    desks = sorted(set(inf) | set(jev), key=lambda k: -(inf.get(k, 0) + jev.get(k, 0)))
+    denoms = {"captures_judged": judged, "stories_woken": len(woken), "stories_published": len(pub_docs), "publishes": pubs}
+    return {
+        "since": since, "until": None if until >= 1 << 60 else until,
+        "inference_by_desk": inf, "jev_by_desk": jev, "jev_by_site": jev_sites,
+        "calls_total": total, "by_desk_total": {d: inf.get(d, 0) + jev.get(d, 0) for d in desks}, "inference_total": total_inf, "jev_total": total_jev,
+        "denominators": denoms, "malformed_captures_lines": malformed, "stories_published_distinct": len(pub_docs), "all_computers": all_computers,
+        "per_denominator": {k: ratio(total, v) for k, v in denoms.items()},
+        "per_denominator_by_desk": {d: {k: ratio(inf.get(d, 0) + jev.get(d, 0), v) for k, v in denoms.items()} for d in desks},
+        "console_first": console_first,
+        "console_partial": console_first is not None and console_first > since,
+    }
+
+
+def fmt(v):
+    return "n/a" if v is None else "%.2f" % v
+
+
+def render(r):
+    t = lambda s: time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(s))
+    o = ["model calls by desk, window %s to %s" % (t(r["since"]), t(r["until"]) if r["until"] else "now"),
+         "calls: %d (%d inference, %d Jev)   source: the gateway journal's `inference request from autoputer` and `jev call` lines" % (r["calls_total"], r["inference_total"], r["jev_total"])]
+    d = r["denominators"]
+    o.append("%-14s %8s %8s %8s | per capture judged  per story woken  per distinct story published  per publish" % ("desk", "calls", "inference", "jev"))
+    for desk, pd in r["per_denominator_by_desk"].items():
+        o.append("%-14s %8d %8d %8d | %18s %16s %29s %11s" % (desk, r["inference_by_desk"].get(desk, 0) + r["jev_by_desk"].get(desk, 0),
+                 r["inference_by_desk"].get(desk, 0), r["jev_by_desk"].get(desk, 0),
+                 fmt(pd["captures_judged"]), fmt(pd["stories_woken"]), fmt(pd["stories_published"]), fmt(pd["publishes"])))
+    p = r["per_denominator"]
+    o.append("%-14s %8d %8d %8d | %18s %16s %29s %11s" % ("all desks", r["calls_total"], r["inference_total"], r["jev_total"],
+             fmt(p["captures_judged"]), fmt(p["stories_woken"]), fmt(p["stories_published"]), fmt(p["publishes"])))
+    o.append("denominators (paper console, `management story choice` and `story publish:` lines):")
+    o.append("  captures judged: %d   (sum of captures= over story choice lines)" % d["captures_judged"])
+    o.append("  stories woken: %d   (distinct story= over story choice lines with choice=open or feed)" % d["stories_woken"])
+    o.append("  stories published: %d distinct docs, %d publishes   (`story publish: <doc> published v<n>` lines; a revised story publishes again, so per publish is the lower figure)" % (d["stories_published"], d["publishes"]))
+    if r["all_computers"]:
+        o.append("WARNING: --all-computers counts every computer's calls but the denominators are the paper's console only: the ratios are not comparable.")
+    fam = {}
+    for desk, n in r["by_desk_total"].items():
+        k = "research (research_*)" if desk == "research" or desk.startswith("research_") else desk
+        fam[k] = fam.get(k, 0) + n
+    o.append("by desk family (a research child logs its role, research_web or research_texture, with its parent's run): " + " ".join("%s=%d" % kv for kv in sorted(fam.items(), key=lambda kv: -kv[1])))
+    if r["malformed_captures_lines"]:
+        o.append("NOTE: %d story choice line(s) had a malformed captures= and were counted as one capture each." % r["malformed_captures_lines"])
+    if r["console_first"] is None:
+        o.append("NOTE: the console's first line was not read (a fixture without ##FIRST): partial or not is unknown.")
+    elif not any(d.values()):
+        o.append("NOTE: no story choice or publish line in this window (the console runs from %s): every per-capture, per-story ratio is n/a, not zero." % t(r["console_first"]))
+    if r["console_partial"]:
+        o.append("WARNING: the console's oldest line (%s) is after the window's start: the denominators are partial and the ratios high." % t(r["console_first"]))
+    o.append("NOTE: the desk is the guest's own claim (a guest can name any desk); the gateway only logs it and trusts it for nothing.")
+    o.append("Jev calls by site: " + (" ".join("%s=%d" % kv for kv in sorted(r["jev_by_site"].items(), key=lambda kv: -kv[1])) or "-"))
+    return "\n".join(o)
+
+
+REMOTE = r"""
+dir=/var/lib/go-choir/vm-state/@VM@
+sudo -n true 2>/dev/null || echo "##NOSUDO"
+gw=$(sudo -n journalctl --no-pager -o cat --utc --since "@SINCE@ UTC" -u go-choir-gateway 2>&1); rc=$?
+[ $rc -eq 0 ] || echo "##GWFAIL rc=$rc"
+printf '%s\n' "$gw" | grep -a -E 'gateway: (inference request from autoputer|jev call computer=)' | sed -E 's/^/G|/'
+con=$(sudo -n sh -c "cd $dir && [ -f console.log ] || exit 3; for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do if [ -f \$f ]; then cat \$f || exit 4; fi; done" 2>&1); rc=$?
+[ $rc -eq 0 ] || echo "##CONSOLEFAIL rc=$rc"
+printf '%s\n' "$con" | awk 'NR==1 {print "F|" $0}
+       /management story choice run=/ {print "C|" $0; next}
+       /story publish: [^ ]+ published v/ {print "P|" $0; next}'
+echo "##END"
+""".replace("@VM@", PAPER_VM)
+
+
+def fetch(node, since):
+    p = subprocess.run(["ssh", "-C", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node,
+                        REMOTE.replace("@SINCE@", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(since)))],
+                       capture_output=True, text=True, timeout=300)
+    if "##END" not in p.stdout:
+        raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
+    if "##NOSUDO" in p.stdout:
+        raise RuntimeError("sudo -n is not allowed on %s" % node)
+    for marker, what in (("##GWFAIL", "the gateway journal could not be read"), ("##CONSOLEFAIL", "the paper console could not be read")):
+        if marker in p.stdout:  # (the console marker may carry rc=)
+            raise RuntimeError("%s on %s: %s; no counts printed" % (what, node, [l for l in p.stdout.splitlines() if l.startswith(marker)][0]))
+    secs = {"G": [], "C": [], "P": [], "F": []}
+    for ln in p.stdout.splitlines():
+        if len(ln) > 2 and ln[1] == "|" and ln[0] in secs:
+            secs[ln[0]].append(ln[2:])
+    return "\n".join(["##GW"] + secs["G"] + ["##FIRST"] + secs["F"] + ["##CHOICE"] + secs["C"] + ["##PUB"] + secs["P"])
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="status-calls-by-desk")
+    ap.add_argument("--since")
+    ap.add_argument("--until")
+    ap.add_argument("--node", default=NODE)
+    ap.add_argument("--all-computers", action="store_true")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--fixture")
+    a = ap.parse_args(argv)
+    try:
+        now = time.time()
+        since = arg_time(a.since) if a.since else now - now % 3600
+        until = arg_time(a.until) if a.until else 1 << 62
+        if a.fixture:
+            with open(a.fixture) as f:
+                text = f.read()
+        else:
+            text = fetch(a.node, since)
+        r = compute(text, since, until, a.all_computers)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as e:
+        print("status-calls-by-desk: unavailable: %s" % e, file=sys.stderr)
+        return 2
+    print(json.dumps(r, sort_keys=True) if a.json else render(r))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

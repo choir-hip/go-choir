@@ -645,6 +645,7 @@ func relayError(w http.ResponseWriter, status int, errType, message string) {
 // only then the upstream call.
 func (h *Handler) HandleAnthropicRelay(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
+	callerDesk, callerRun := modelCaller(r)
 	if r.URL.Path == anthropicRelayPrefix+"/grant" {
 		h.handleAnthropicRelayGrant(w, r)
 		return
@@ -810,17 +811,17 @@ func (h *Handler) HandleAnthropicRelay(w http.ResponseWriter, r *http.Request) {
 			// an estimate (four bytes a token), so a caller that drops its
 			// calls before the answer still spends its cap.
 			relay.charge(computerID, relayUsage{InputTokens: int64(len(body) / 4)})
-			log.Printf("gateway: anthropic relay %s: client went away (charged %d estimated input tokens)", computerID, len(body)/4)
+			log.Printf("gateway: anthropic relay %s: client went away (charged %d estimated input tokens) desk=%s run=%s", computerID, len(body)/4, callerDesk, callerRun)
 			return
 		}
-		log.Printf("gateway: anthropic relay %s: upstream call failed: %s", computerID, relay.redact(sanitizeError(err)))
+		log.Printf("gateway: anthropic relay %s: upstream call failed: %s desk=%s run=%s", computerID, logText(relay.redact(sanitizeError(err))), callerDesk, callerRun)
 		relayError(w, http.StatusBadGateway, "api_error", "relay upstream unavailable")
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		log.Printf("gateway: anthropic relay %s: upstream answered %d with a redirect; not followed", computerID, resp.StatusCode)
+		log.Printf("gateway: anthropic relay %s: upstream answered %d with a redirect; not followed desk=%s run=%s", computerID, resp.StatusCode, callerDesk, callerRun)
 		relayError(w, http.StatusBadGateway, "api_error", "relay upstream redirected")
 		return
 	}
@@ -837,8 +838,8 @@ func (h *Handler) HandleAnthropicRelay(w http.ResponseWriter, r *http.Request) {
 		out := []byte(relay.redact(string(errBody)))
 		w.WriteHeader(resp.StatusCode)
 		_, _ = w.Write(out)
-		log.Printf("gateway: anthropic relay %s model=%s path=%s status=%d bytes_in=%d bytes_out=%d dur=%s",
-			computerID, model, route.path, resp.StatusCode, len(body), len(out), time.Since(started).Round(time.Millisecond))
+		log.Printf("gateway: anthropic relay %s model=%s path=%s status=%d bytes_in=%d bytes_out=%d dur=%s desk=%s run=%s",
+			computerID, logModelField(model), route.path, resp.StatusCode, len(body), len(out), time.Since(started).Round(time.Millisecond), callerDesk, callerRun)
 		return
 	}
 
@@ -866,8 +867,8 @@ func (h *Handler) HandleAnthropicRelay(w http.ResponseWriter, r *http.Request) {
 	u := tap.finish()
 	relay.recordUsage(u)
 	relay.charge(computerID, u)
-	log.Printf("gateway: anthropic relay %s credential=%s model=%s path=%s status=%d bytes_in=%d bytes_out=%d tokens=%d+%d cached=%d day_spent=%d dur=%s",
-		computerID, relay.credentialKind(), model, route.path, resp.StatusCode, len(body), out, u.InputTokens, u.OutputTokens, u.CachedInputTokens, relay.spentToday(computerID), time.Since(started).Round(time.Millisecond))
+	log.Printf("gateway: anthropic relay %s credential=%s model=%s path=%s status=%d bytes_in=%d bytes_out=%d tokens=%d+%d cached=%d day_spent=%d dur=%s desk=%s run=%s",
+		computerID, relay.credentialKind(), logModelField(model), route.path, resp.StatusCode, len(body), out, u.InputTokens, u.OutputTokens, u.CachedInputTokens, relay.spentToday(computerID), time.Since(started).Round(time.Millisecond), callerDesk, callerRun)
 }
 
 // requestModel reads the top-level "model" of a Messages request, and refuses

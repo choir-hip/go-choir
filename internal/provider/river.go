@@ -109,7 +109,7 @@ func (p *RiverProvider) call(ctx context.Context, req LLMRequest, onChunk func(S
 		httpReq.Header.Set("Accept", "application/json")
 	}
 
-	log.Printf("provider: river call model=%s stream=%t reasoning=%s", modelID, req.Stream, body.ReasoningEffort)
+	log.Printf("provider: river call model=%s stream=%t reasoning=%s", logModel(modelID), req.Stream, logModel(body.ReasoningEffort))
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("river: http call: %w", err)

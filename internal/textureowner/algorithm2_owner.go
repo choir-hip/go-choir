@@ -259,7 +259,8 @@ func (h *Handler) algorithm2Complete(ctx context.Context, ownerID, system, user 
 	}
 	sel, _, _ := policy.Assign(policy.Resolve(role), "algorithm2:"+ownerID)
 	msg, _ := json.Marshal(map[string]any{"role": "user", "content": user})
-	resp, err := toolregistry.AsToolLoopProvider(h.Provider).CallWithTools(ctx, provideriface.ToolLoopRequest{
+	// The gateway's line names the desk (first design, F0); no run owns this call.
+	resp, err := toolregistry.AsToolLoopProvider(h.Provider).CallWithTools(provideriface.WithCaller(ctx, provideriface.Caller{Desk: role}), provideriface.ToolLoopRequest{
 		Provider: sel.Provider, Model: sel.Model, ReasoningEffort: sel.ReasoningEffort,
 		ConversationID: "algorithm2:" + ownerID, System: system, Messages: []json.RawMessage{msg},
 		MaxTokens: provideriface.MaxInteractiveOutputTokensForSelection(sel, role),

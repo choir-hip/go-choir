@@ -142,7 +142,7 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 	}
 	p, err := h.resolveProvider(gwReq)
 	if err != nil {
-		log.Printf("gateway: openai-compatible provider resolution failed for autoputer %s: %v", computerID, err)
+		log.Printf("gateway: openai-compatible provider resolution failed for autoputer %s: %s", computerID, logText(err.Error()))
 		writeGatewayJSON(w, http.StatusBadRequest, openAIErrorResponse(err.Error()))
 		return
 	}
@@ -165,8 +165,9 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 		CacheKey:        strings.TrimSpace(req.PromptCacheKey),
 	}
 
-	log.Printf("gateway: openai-compatible chat request from autoputer %s (provider=%s model=%s messages=%d tools=%d reasoning=%s stream=%v)",
-		computerID, p.Name(), gwReq.Model, len(gwReq.Messages), len(gwReq.Tools), gwReq.ReasoningEffort, gwReq.Stream)
+	callerDesk, callerRun := modelCaller(r)
+	log.Printf("gateway: openai-compatible chat request from autoputer %s (provider=%s model=%s messages=%d tools=%d reasoning=%s stream=%v desk=%s run=%s)",
+		computerID, p.Name(), logModelField(gwReq.Model), len(gwReq.Messages), len(gwReq.Tools), logModelField(gwReq.ReasoningEffort), gwReq.Stream, callerDesk, callerRun)
 
 	if req.Stream {
 		if len(llmReq.Tools) > 0 {
@@ -182,7 +183,7 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 	resp, err := p.Call(ctx, llmReq)
 	if err != nil {
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: openai-compatible provider call failed for autoputer %s: %v (sanitized: %s)", computerID, err, sanitized)
+		log.Printf("gateway: openai-compatible provider call failed for autoputer %s: %s (sanitized: %s)", computerID, logText(err.Error()), logText(sanitized))
 		writeGatewayJSON(w, http.StatusBadGateway, openAIErrorResponse(sanitized))
 		return
 	}
@@ -534,7 +535,7 @@ func (h *Handler) handleOpenAIStreamingChatCompletions(w http.ResponseWriter, r 
 	})
 	if err != nil {
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: openai-compatible streaming provider call failed for autoputer %s: %v (sanitized: %s)", computerID, err, sanitized)
+		log.Printf("gateway: openai-compatible streaming provider call failed for autoputer %s: %s (sanitized: %s)", computerID, logText(err.Error()), logText(sanitized))
 		writeOpenAISSE(w, canFlush, flusher, openAIErrorResponse(sanitized))
 		fmt.Fprintf(w, "data: [DONE]\n\n")
 		if canFlush {
@@ -572,7 +573,7 @@ func (h *Handler) handleOpenAIStreamingToolChatCompletions(w http.ResponseWriter
 	resp, err := p.Call(ctx, llmReq)
 	if err != nil {
 		sanitized := sanitizeError(err)
-		log.Printf("gateway: openai-compatible streaming tool provider call failed for autoputer %s: %v (sanitized: %s)", computerID, err, sanitized)
+		log.Printf("gateway: openai-compatible streaming tool provider call failed for autoputer %s: %s (sanitized: %s)", computerID, logText(err.Error()), logText(sanitized))
 		writeOpenAISSE(w, canFlush, flusher, openAIErrorResponse(sanitized))
 		fmt.Fprintf(w, "data: [DONE]\n\n")
 		if canFlush {

@@ -62,11 +62,11 @@ func (h *Handler) HandleHostJudgment(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
-	ctx, cancel := context.WithTimeout(withJevSite(r.Context(), r), jevTransportTimeout)
+	ctx, cancel := context.WithTimeout(withHostDesk(withJevSite(r.Context(), r)), jevTransportTimeout)
 	defer cancel()
 	response, err := h.jevTransport.Decide(ctx, label, request)
 	if err != nil {
-		log.Printf("gateway: host judgment from %s failed (questions=%d): %v", label, len(request.Questions), err)
+		log.Printf("gateway: host judgment from %s failed (questions=%d): %s", label, len(request.Questions), logText(err.Error()))
 		if _, disabled := err.(jevTransportDisabledError); disabled {
 			writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgments are disabled"})
 			return

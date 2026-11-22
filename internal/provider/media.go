@@ -542,7 +542,7 @@ func SummarizeMedia(messages []Message) MediaStats {
 				if len(ref) > 12 {
 					ref = ref[:12]
 				}
-				stats.Refs = append(stats.Refs, ref)
+				stats.Refs = append(stats.Refs, LogField(ref, 12))
 			default:
 				stats.Refs = append(stats.Refs, "url")
 			}

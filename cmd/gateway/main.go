@@ -14,6 +14,8 @@ import (
 )
 
 func main() {
+	// One log call is one line, whatever a guest or an upstream put in it.
+	log.SetOutput(gateway.SafeLogWriter(os.Stderr))
 	cfg := gateway.LoadConfig()
 
 	s := server.NewServer("gateway", cfg.Port)

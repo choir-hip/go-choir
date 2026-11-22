@@ -56,8 +56,14 @@ claims; a subject's importance is the number of stories about it (owner).
    is there an important subject not listed. Only that last one escalates. An
    answer under the counting probability is stored as tentative and wakes
    nobody.
-4. **Escalation.** "Other" goes to a language-model desk, many captures a
-   session, which names a new subject or resolves the hard one. A random
+4. **Unmatched is the common case, and it does not escalate per capture**
+   (rung 0b, 2026-11-22: 46 of 75 news arrivals report something no story
+   covers; when a story exists the ten nearest by vector hold it three times
+   in four). An unmatched capture is held with its actors and vector.
+   Unmatched captures are grouped by vector, and a group reported by several
+   distinct origins is named once by a language model and offered to the
+   root as a subject that matters and has no story. The language-model desk
+   also resolves the hard cases System 1 flags, many a session. A random
    share of what System 1 did not escalate is checked the same way, or its
    accuracy is never known.
 5. **Write mentions; match subscriptions.** A lookup by subject id finds the

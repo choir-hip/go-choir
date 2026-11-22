@@ -35,8 +35,11 @@ fi
 
 work="$(mktemp -d -t jevstats.XXXXXX)"
 
+# The line is `jev call computer= class= site= desk= run= bytes= questions= queue_ms=
+# upstream_ms= status= ok|failed`; site, desk, run and bytes are optional (older
+# gateways lack them; the regex was stale for the site and bytes fields).
 # One row per call: ts class questions queue_ms upstream_ms status ok computer-prefix pid
-grep 'jev call' "$file" | sed -E \
+grep 'jev call' "$file" | sed -E 's/ (site|desk|run|bytes)=[^ ]+//g' | sed -E \
   's/^([^ ]+) .*\[([0-9]+)\]: .*jev call computer=([^ ]+) class=([^ ]+) questions=([0-9]+) queue_ms=([0-9]+) upstream_ms=([0-9]+) status=([0-9]+) ([a-z]+).*/\1 \4 \5 \6 \7 \8 \9 \3 \2/' \
   | awk 'NF==9 { print $1, $2, $3, $4, $5, $6, $7, substr($8,1,11), $9 }' >"$work/rows"
 
