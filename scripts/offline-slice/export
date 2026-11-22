@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Rung 0 export: read-only reads on Node B streamed to flat files on the build VM
+# (never into the repo). Usage: scripts/offline-slice/export [DEST_DIR_ON_RUNNER]
+# Needs: ssh node-b (sudo -n -u postgres psql, sudo python3 reading capture-bodies),
+# ssh choir-runner. Each Node B statement runs with default_transaction_read_only on.
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+dest="${1:-offline-slice-r0-data}"
+ssh choir-runner "mkdir -p $dest"
+q() { # q FILE OUTNAME
+  { echo "set default_transaction_read_only=on;"; cat "$here/$1"; } |
+    ssh node-b 'nice -n 19 sudo -n -u postgres psql -d graph -q -v ON_ERROR_STOP=1 -f -' |
+    ssh choir-runner "cat > $dest/$2"
+}
+q export-captures.sql captures.csv
+q export-vectors.sql vectors.csv
+q export-entities.sql entities.csv
+q export-stopwords.sql stopwords.csv
+# bodies: the hash list comes from captures.csv (last column), streamed through here.
+ssh choir-runner "python3 -c 'import csv
+seen=set()
+for r in csv.reader(open(\"$dest/captures.csv\",newline=\"\")):
+    h=r[-1]
+    if h and h not in seen:
+        seen.add(h); print(h)'" |
+  ssh node-b "sudo -n nice -n 19 ionice -c3 python3 -c \"\$(echo $(base64 < "$here/read-bodies.py" | tr -d '\n') | base64 -d)\" 32768" |
+  ssh choir-runner "cat > $dest/bodies.bin"
+ssh choir-runner "cd $dest && ls -l && wc -l captures.csv vectors.csv entities.csv stopwords.csv"
