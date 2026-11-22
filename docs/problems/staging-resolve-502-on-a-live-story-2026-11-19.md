@@ -37,3 +37,5 @@ it an explicit `corpusd response too large: N bytes upstream, bound B` error, lo
 Remaining error. Duplication of the current version inside one bundle, and a story that grows long, make resolve large for the phone; it should later be trimmed or paged (the payload once,
 history on request), more so as `docs/design/first-design-2026-11-22.md` makes stories longer-lived and more recursive. Until then a very large bundle is slow, not refused. The same 1 MiB class
 remains at `platform_expand.go:392` (`paperCall`, the paper service), not touched here. Not yet proven on staging.
+
+Deployed and proved 2026-11-22T10:19Z (staging `c27a50d98`, fix `d7d276b55`): the failing route answers 200 with a 1,609,225-byte bundle (the cause is confirmed: over 1 MiB); 60 of the first 60 front stories resolve; the proxy's size line appeared for the route. Ledger C193, true. Still open: the bundle carries the current version's text several times; resolve should be trimmed or paged.
