@@ -10,7 +10,8 @@ members Autoradio
   // The native facts (their change asks `ob` again) and the page. The edit page (`onboarding:edit`) being on top is what makes the page "editing".
   resource ovoice = voiceSetupFacts() as shape VoiceSetupFacts else empty()
   resource ob = onboardingPage(ovoice, 0, pg.top) as shape Onboarding else empty()
-  mutation obm as shape Onboarding refreshes ob
+  // `pgs` (the deck's open pages) too: the first run's offer opens a page from shared code, and the deck must be asked again to show it.
+  mutation obm as shape Onboarding refreshes ob, pgs
   // The edition picks and the topic tree are shared code (edition-picks.ts), the one reader and writer of the saved topics. Every pick send repaints the tree and the paper's picks.
   // While the voice listens at this screen (and the page is on top) the page asks again twice a second: that ask takes the words the voice heard, applies them and answers the voice (edition-picks.ts drainHeard).
   state epTick = 0

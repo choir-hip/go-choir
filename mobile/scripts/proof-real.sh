@@ -393,8 +393,7 @@ chk "first run: the edit page lists the topic tree (onboarding.ts editing)" '\[o
 
 # ---- 3f1. NOTEBOOK drive (lane exact-notebook-content): the notebook page and the scorecard from shared code under app:/data, a Refresh press that reads again, and the content sync that
 # starts at launch (shared code: content-run.ts logs one line per kind, counts only). Reads nothing it writes: no tap on a line, whose ids depend on the account's own notebook.
-step "clock data"; wait_ 6000
-step logs          # the console is a ring of the last 4096 lines: the launch's (the content sync's) is read before the page's own traffic pushes it out
+step "clock data"; step logs          # the console is a ring of the last 4096 lines: the launch's (the content sync's) is read before the page's own traffic pushes it out
 place notebook 900; view real-47-notebook 5000
 step "tap notebook-refresh"; view real-48-notebook-refreshed 5000
 step logs
@@ -474,6 +473,12 @@ step "clock data"; wait_ 8000
 view real-71-radio-starts 8000
 step logs
 run_drive background light "" --touch platform
+# The agent drive above shows the radio starts; it cannot show the app living on: the app EXITS when its driver's socket closes (Agent.exitAfterLanding, ExactKit/Agent.swift:140-146; docs/reference/exact/
+# testing-and-debugging.md "the app hung up"), and no line of the native console follows a drive's end. So the app is launched PLAIN (no driver; its own clock and shared code running), given time to start the
+# radio, and only then sent to the background. The check below is unchanged.
+reset_state light ""
+SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1
+sleep 40
 BGCONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
 BGJ="$BGCONT/Library/Application Support/Autoradio/deck-journal.json"
 BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
