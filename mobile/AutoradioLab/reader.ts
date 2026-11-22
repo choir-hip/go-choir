@@ -6,7 +6,7 @@
 // document and an answer that began under an older generation is never held. A story and a revision never change, so they are held; a document's head changes (an edit, the desk's revision),
 // so it is asked for again each time and the held copy only stands in when the ask fails. Logs carry counts only, never a title.
 import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
-import { blankDoc, parseAddress, parseBundle, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
+import { blankDoc, parseAddress, parseBundleAsync, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
 import { WORDS } from './words.ts';
 
 export type { ReaderDoc };
@@ -22,6 +22,8 @@ export const HELD_LIMIT = 40;
 const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
+/** Ends the turn (Exact gives one about 100 ms of CPU; Bun has no scheduler). */
+const yieldTurn = async (): Promise<void> => { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); };
 let held = new Map<string, ReaderDoc>();
 let inflight = new Map<string, Promise<ReaderDoc>>();
 let heldGen = -1;
@@ -57,7 +59,8 @@ async function fetchDoc(address: string, net: Net): Promise<ReaderDoc> {
     const related = net.pub('/api/platform/publications/related', { route: bare, limit: 5 }).then((r) => parseRelated(r.body), () => []);       // a route that is not there: the story still opens
     const body = (await net.pub('/api/platform/publications/resolve', { route: a.route })).body;
     if (!obj(body)) throw new Error('the computer sent a story that is not a story');
-    const d = parseBundle(body, address);
+    await yieldTurn();                                         // the reply's own text and JSON are done: the decoding of a large story starts in a turn of its own
+    const d = await parseBundleAsync(body, address, yieldTurn);
     d.related = await related;                                  // "Hear it" is the page's own source (clips.ts storyClips): a slow clip route does not hold the story
     console.log(`reader: story blocks=${d.blocks.length} cites=${d.cites.length} related=${d.related.length}`);
     return d;

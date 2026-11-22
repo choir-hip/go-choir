@@ -30,6 +30,8 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
   const response = await fetch(url(path, query), { method: 'GET', headers: { accept: 'application/json' }, exactTimeout: TIMEOUT_MS } as RequestInit);
   if (!response.ok) throw new Error(`${path} answered ${response.status}`);
   const raw = await response.text();
+  // A large reply (a story bundle was 1.6 MB): its text and its JSON are not decoded in one turn (Exact gives a turn about 100 ms of CPU; Bun has no scheduler).
+  if (raw.length > 200_000) { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); }
   let body: unknown;
   try { body = JSON.parse(raw); } catch { throw new Error(`${path} answered a body that is not JSON`); }
   const date = response.headers.get('date');

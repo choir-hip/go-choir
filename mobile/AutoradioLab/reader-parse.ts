@@ -559,12 +559,15 @@ export function markdownSource(blocks: Block[]): string {
   return out.join('\n\n');
 }
 
-function build(address: string, title: string, bodyDoc: unknown, markdown: string, ctx: Ctx): ReaderDoc {
+/** The work of `build` as steps: each `yield` is a place where a caller that must stay inside Exact's 100 ms of CPU per turn may end the turn (`parseBundleAsync`); the plain callers run it straight through. */
+function* buildSteps(address: string, title: string, bodyDoc: unknown, markdown: string, ctx: Ctx): Generator<void, ReaderDoc, void> {
   let b = new Builder(ctx); let parsed = false;
   const root = decodeBodyDoc(bodyDoc);
+  yield;
   const content = root ? arr(root.content) : [];
-  if (content.length > 0) { for (const n of content) b.block(n, 0, 0); parsed = b.blocks.length > 0; }
-  if (!parsed) { b = new Builder(ctx); for (const m of mdBlocks(markdown)) b.addMarkdown(m); }
+  if (content.length > 0) { let i = 0; for (const n of content) { b.block(n, 0, 0); if (++i % 8 === 0) yield; } parsed = b.blocks.length > 0; }
+  if (!parsed) { b = new Builder(ctx); let i = 0; for (const m of mdBlocks(markdown)) { b.addMarkdown(m); if (++i % 8 === 0) yield; } }
+  yield;
   let blocks = b.blocks;
   if (blocks.length > 0 && blocks[0].kind === 'h' && title !== '' && trim(blocks[0].text).toLowerCase() === title.toLowerCase()) blocks = blocks.slice(1);
   let ord = 0;
@@ -572,14 +575,21 @@ function build(address: string, title: string, bodyDoc: unknown, markdown: strin
   if (blocks.length === 0) blocks = [block('empty', 'p', { runs: [run('empty-0', 'This document has no text yet.', { slant: 'italic' })], text: 'This document has no text yet.' })];
   const doc = blankDoc(address, 'ready'); doc.title = title; doc.blocks = blocks;
   doc.cites = b.finishCites(new Set(blocks.map((x) => x.id)));
+  yield;
   doc.sources = sourcesOf(doc.cites);
   doc.plain = blocks.filter((x) => x.kind !== 'code').map((x) => x.text).filter((t) => t !== '').join('\n\n');
+  yield;
   doc.textBlocks = ord; doc.markdown = markdownSource(blocks);
   return doc;
 }
+const runSteps = <T>(g: Generator<void, T, void>): T => { let r = g.next(); while (!r.done) r = g.next(); return r.value; };
+const runStepsAsync = async <T>(g: Generator<void, T, void>, tick: () => Promise<void>): Promise<T> => { let r = g.next(); while (!r.done) { await tick(); r = g.next(); } return r.value; };
 
 /** A published bundle (GET /api/platform/publications/resolve). */
-export function parseBundle(o: Obj, address: string): ReaderDoc {
+export function parseBundle(o: Obj, address: string): ReaderDoc { return runSteps(parseBundleSteps(o, address)); }
+/** The same, ending the turn between the steps (`tick`, Exact's `scheduler.yield`): a 1.6 MB bundle went 266 ms over a turn's 100 ms (the proof's prefetch, 2026-11-22). */
+export function parseBundleAsync(o: Obj, address: string, tick: () => Promise<void>): Promise<ReaderDoc> { return runStepsAsync(parseBundleSteps(o, address), tick); }
+function* parseBundleSteps(o: Obj, address: string): Generator<void, ReaderDoc, void> {
   const pub = obj(o.publication) ? o.publication : {}, artifact = obj(o.artifact) ? o.artifact : {}, payload = obj(o.payload) ? o.payload : {};
   const nav = obj(o.nav) ? o.nav : {}, route = obj(o.route) ? o.route : {};
   const title = trim(str(pub.title)), kindRaw = str(pub.kind);
@@ -587,14 +597,17 @@ export function parseBundle(o: Obj, address: string): ReaderDoc {
   for (const e of arr(o.source_entities)) if (typeof e.source_entity_id === 'string' && obj(e.entity)) ctx.entities.set(e.source_entity_id, e.entity);
   for (const e of arr(artifact.source_entities)) if (typeof e.source_entity_id === 'string' && !ctx.entities.has(e.source_entity_id)) ctx.entities.set(e.source_entity_id, e);
   for (const t of arr(o.transclusions)) if (str(t.anchor_id) !== '') ctx.transclusions.set(str(t.anchor_id), t);
+  yield;
   for (const r of arr(payload.resolved_blocks)) if (typeof r.cid === 'string') ctx.resolved.set(r.cid, r);
+  yield;
   for (const c of arr(obj(o.checks) ? o.checks.citations : [])) if (typeof c.anchor_id === 'string') ctx.checks.set(c.anchor_id, c);
   let manifest: unknown = payload.manifest;
   if (typeof manifest === 'string') { try { manifest = JSON.parse(manifest); } catch { manifest = null; } }
   for (const a of arr(obj(manifest) ? manifest.anchors : [])) if (str(a.anchor_id) !== '') ctx.manifestAnchors.set(str(a.anchor_id), a);
 
+  yield;
   const text = str(artifact.content) !== '' ? str(artifact.content) : str(payload.text);
-  const doc = build(address, title, artifact.body_doc, text, ctx);
+  const doc = yield* buildSteps(address, title, artifact.body_doc, text, ctx);
   doc.kind = kindRaw === 'opinion' ? 'opinion' : kindRaw === 'story' ? 'story' : 'document';
   const author = trim(str(pub.author_label));
   if (doc.kind === 'story') { doc.kicker = str(pub.section) !== '' ? str(pub.section) : 'Autopaper'; doc.disclosure = DISCLOSURE_STORY; }
@@ -627,7 +640,7 @@ export function parseRevision(rev: Obj, document: Obj, address: string, revision
   const ctx = newCtx();
   for (const e of arr(rev.source_entities)) if (typeof e.source_entity_id === 'string') ctx.entities.set(e.source_entity_id, e);
   for (const c of arr(rev.citations)) { const a = typeof c.anchor_id === 'string' ? c.anchor_id : typeof c.id === 'string' ? c.id : null; if (a !== null) ctx.checks.set(a, c); }
-  const doc = build(address, title, rev.body_doc, str(rev.content), ctx);
+  const doc = runSteps(buildSteps(address, title, rev.body_doc, str(rev.content), ctx));
   doc.kind = 'document'; doc.kicker = 'Texture';
   const ta = parseAddress(address);
   const rows: { rid: string; n: number; author: string; when: string }[] = [];

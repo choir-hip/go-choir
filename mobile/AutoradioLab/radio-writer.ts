@@ -146,13 +146,17 @@ export class Writer {
         const now = this.d.now();
         const skipping = cause === 'open' ? new Set<string>() : toldRoutes(store.sheet.entries);
         const front = await this.d.front();
+        await yieldTurn();                          // the front list's decoding and the candidates below are not one turn (the proof's radioWrite took 146 ms and was refused: no desk entries followed)
         let items = fromFront(front, now.getTime(), skipping);
         if (items.length === 0 && skipping.size > 0) items = fromFront(front, now.getTime());   // everything told: the desk is still asked, with the whole list
         if (items.length === 0) { failure = { kind: 'empty' }; throw new Error('no story to tell'); }
         const texts = await this.d.texts(items.slice(0, MAX_TEXT_ITEMS).map((c) => c.route));
         const { takes: all, kept } = await this.d.takes();
+        await yieldTurn();
+        await yieldTurn();
         const picked = takeCandidates(all, kept);
         const body = requestBody(cause, candidateBody(items, texts, picked), store.ahead(20).map((e) => e.title || ''), await this.d.edition(), now, this.d.tz(), this.d.requestId());
+        await yieldTurn();
         const raw = await this.post(body);
         if (gen !== this.d.generation() || stops !== this.stops) return;                      // signed out meanwhile: nothing of the answer is applied
         const dec = new StretchDecoder();

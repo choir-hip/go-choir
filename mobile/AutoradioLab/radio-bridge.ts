@@ -113,7 +113,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
   state.rt = rt;
   const front = async (): Promise<unknown> => {
     let body: unknown, stories: Story[];
-    try { body = (await getJSON('/api/platform/publications/front', { limit: FRONT_LIMIT })).body; stories = parseList(body); }
+    try { body = (await getJSON('/api/platform/publications/front', { limit: FRONT_LIMIT })).body; await yieldTurn(); stories = parseList(body); }
     catch (e) {
       // Offline: the radio opens from the paper's last good front list (paper.ts keeps it for an offline start) and the desk is not asked; the error stands for the caller.
       stories = (await listing('', storage as never)).stories;
@@ -158,6 +158,9 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
 }
 
 /** The radio of this process: made once, its sheet restored from its own file (nothing plays). */
+/** Ends the turn (Exact gives one about 100 ms of CPU; Bun has no scheduler). */
+const yieldTurn = async (): Promise<void> => { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); };
+
 export async function getRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
   if (!radio) radio = await makeRadio(storage, native);
   const r = radio;                                          // held locally: a sign-out (`wipeRadio`) clears the module's variable at any await below

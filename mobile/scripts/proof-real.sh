@@ -350,7 +350,8 @@ step "tap ob-topic-Science"; wait_ 700
 # (the layout the run printed: after Culture opens the page has already scrolled it to the top, and a drag of -300 put Film at screen y -11, under the status bar: the drag is +150 now, Film comes down into the middle.)
 step "tap ob-topic-open-Culture"; wait_ 700; step "tap edit-edition-scroll drag 0 150"; wait_ 500; step "clock settle"; step tree; step "layout ob-topic-Film"; step "tap ob-topic-Film"; wait_ 700
 step "tap edit-edition-scroll drag 0 -700"; wait_ 500; step "clock settle"
-step "type ob-topic-input Zzdrillchess"; step "clock settle"; step "tap ob-topic-add"          # settle first: the keyboard is still moving after the typing, and the touch was lost once (trainp4: "no touch reached the app's window"); view real-72-topics-picked 1200
+# settle before the add tap: the keyboard is still moving after the typing, and the touch was lost once (trainp4: "no touch reached the app's window")
+step "type ob-topic-input Zzdrillchess"; step "clock settle"; step "tap ob-topic-add"; view real-72-topics-picked 1200
 # (the run: after the drag to the top Science sat under the bar's field, so the list is dragged back up 400 to put it clear of the bar.)
 step "tap edit-edition-scroll drag 0 1500"; wait_ 500; step "tap edit-edition-scroll drag 0 -400"; wait_ 500; step "clock settle"; step "layout ob-topic-Science"; step "tap ob-topic-Science"; view real-73-topics-one-off 1200
 step "tap edit-edition-scroll drag 0 -1500"; wait_ 500; step "clock settle"; step tree; step "tap edit-edition-done"; wait_ 2500
