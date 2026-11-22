@@ -1,486 +1,163 @@
 # The first design: Autopaper and its readers
 
-Draft, 2026-11-22. Status: **idea, in conversation with the owner**. Nothing
-here is built or ratified. It records the owner's direction of 2026-11-22 in
-their words, the lead's reading beside it, what the code does today (from the
-trace of the same day), and the questions still open. It is not doctrine; when
-ratified its rules move to `choir-doctrine.md` and this file is deleted or cut
-to the build plan.
-
-## Why now
-
-The owner, 2026-11-22: "we are approaching a fundamental redesign. not a
-refactor but a redesign... the system works at a prototype level, and this
-will let us get to production. in some ways, this is the first design. like,
-every version of autopaper and autoradio up to now was a test to prove it
-could be done... now weve succeeded. so now its to make it nice".
-
-The objectives, in the owner's words: "to cover the world's stories, to
-personalize into individual autopaper editions, and serve as a foundation for
-autoradio, while using minimal resources enabling scaling of sources and
-agents".
-
-## What the trace found (2026-11-22, code and the paper's console)
-
-- Three mechanisms ask which existing thing a capture belongs to: Jev's intake
-  label (`intake_labels.go`), the event layer's Jev call a minute later
-  (`event_layer.go`), and a management task's model session with vector
-  candidates (`management_candidates.go`). The third ignores the second.
-- Event memberships are written and read only by the owner's event view and by
-  research's corpus search. No routing, front page or Autoradio code reads
-  them.
-- A management task is one model session for up to 12 captures; four run at
-  once through a dispatcher.
-- Roughly 1,000 model calls an hour for roughly 100 captures judged: about ten
-  calls a capture across all desks. The split by desk is not logged.
-- Research's sub-calls (`choir.Research`, up to 16 children) were used by none
-  of 27 runs; the research prompt never mentions them. No other desk has
-  sub-calls.
-- The root Texture exists behind a setting that defaults off, was sent back by
-  review six times, and is not on the capture path
-  (`problems/texture-root-desk-six-reviews-no-landing-2026-11-20.md`).
-- A personal edition does not exist as a paper; "My edition" is the notebook.
-  Autoradio's candidates are the public front page, sent up by the phone.
-
-## The objects
-
-The owner: "stories have many events"; "stories, events, and entities all have
-many of each other".
-
-| Object | What it is | Many-to-many with |
-|---|---|---|
-| capture | one page read from one outlet at one time | events (a capture may report several) |
-| event | something that happened, at a time and place | captures, stories, entities |
-| entity | a person, organisation or place | events, stories |
-| story | a narrative across events, with a main point | events, entities, other stories (succeeds) |
-
-Rules the owner stated:
-
-1. "this is one key way how we can compare captures. by the events they
-   cover." Two captures are alike to the degree they report the same events.
-2. "we shouldnt have multiple stories with exactly the same events." A story's
-   identity includes its event set; two stories with the same set are one
-   story.
-3. "the importance of events should match the quantity of stories the event is
-   involved in." Importance is read from the graph, not assigned.
-4. Earlier, still in force: "a story stops growing when the main point, the
-   main beat changes"; "revising not making new stories"; unclear cases lean
-   to revising.
-
-Lead's reading: events accumulate in a story until one arrives that changes
-its main point; that event begins the successor. Rule 2 leaves open what to do
-when one story's events are a subset of another's (a part of a larger story,
-or a duplicate in the making): open question 4.
-
-## Conventions: what is an event, an entity, a story
-
-The owner, 2026-11-22: "events can span over time and space. locality is a
-fallacy... the observation shapes the system inherently. like, is the iran war
-an event, an entity, or a story? its a story, comprised of entities (which
-include abstract entities like governments or militaries. but strategies...
-like 'the blockade of the strait of hormuz'... is that an event or an entity?
-its background of many stories. its a story. yes."
-
-"stories, textures, should become much more recursive, more frequently citing
-and transcluding other stories. they cite out to the web a lot, but now that
-we have a corpus of coverage, now is the time to use it. indeed, the whole
-point of choir is that we can be self-referential. textures reference textures
-is the essence of it. and because a texture story encapsulates entities and
-events, we can traverse the story graph in addition to doing vector semantic
-similarity operations".
-
-What this changes:
-
-- The ruling of 2026-10-20 ("one event is one incident, one place, one time",
-  the text Jev is given in `event_layer.go`) no longer holds as written: an
-  event may extend in time and space. Why that ruling was made still matters:
-  the wording before it ("or its direct development") turned a developing
-  story into one event. Stories that contain stories now carry that load.
-- A story is the composing object. A story cites and transcludes other
-  stories; the war is a story, the blockade is a story inside it and in
-  others. Story to story is an edge of the graph beside succeeds.
-- Entities include abstract ones (a government, a military).
-- The graph is traversed through stories: a story holds its events and
-  entities, so walking story to story reaches them.
-
-Lead's reading, not ruled: an event is what captures report in common, the
-unit of observation; a story is our written account, which may be made of
-other stories. When we come to describe the parts of an event separately, it
-has become a story. Open question 8.
-
-What exists: the object graph registers `choir.publication_transclusion` and
-`transcludes` edges (`internal/objectgraph/registry.go`); how often a
-published story cites or transcludes another is not measured.
-
-### The line between an event and a story
-
-**First proposal, withdrawn the same day.** The lead proposed "an event is
-observed and settles; a story is authored and predicts; events do not nest; a
-future event is a prediction, not an event". The owner broke it: "events often
-become events before they happen. thats natural. they get planned,
-anticipated, scheduled, discussed, before they happen. and discussed and
-referenced afterwards too. thats why events are nonlocal. so why isnt the war
-in iran an event? its entities, like the us and iran, are fine query
-objects... is it really smart to have an election be an event but a war isnt?
-basically, processes in general arent events even though events are
-processes."
-
-**Second proposal (lead, not ruled): the line is between the world and an
-account of it.**
-
-| | In the world (what accounts are about) | An account (a text) |
-|---|---|---|
-| Lasts and takes part | **entity**: the US, Iran, a government, the Strait of Hormuz | |
-| Happens and unfolds | **event**: an election, a war, a blockade, a strike, at any scale | |
-| Someone else's | | **capture**: an outlet's account |
-| Ours | | **story**: a Texture, our account |
-
-- An event is anything that happens, at any scale. A process is an event. The
-  war is an event, the blockade is an event inside it, the tanker seizure is
-  an event inside that. **Events have parts** (a part-of edge between events).
-- An event is a thing accounts refer to, so it exists as soon as it is
-  referred to: anticipated, under way, over. Its state changes; it is one
-  event throughout. A prediction is about how its state will change.
-- An entity is what lasts and takes part. An event is what happens. That is
-  the only line inside the world, and it is the ordinary one.
-- A story is never in the world. It is our text about events and entities, as
-  a capture is an outlet's. Stories cite and transclude stories; events
-  contain events: two recursions, side by side.
-- A capture attaches to the most specific event it reports; the larger events
-  have it through part-of. That is what the 2026-10-20 ruling was reaching for
-  when it cut events to one incident: the fault then was that "the same
-  occurrence or its development" was one flat event with no parts.
-- The owner's earlier rules hold unchanged: stories have many events; no two
-  stories with exactly the same events; an event's importance is the number of
-  stories it is in (a war that many stories are about ranks high by that
-  count).
-- Not an event and not an entity: a topic (inflation, energy). Vectors carry
-  topics.
-
-Open: when the owner said the blockade "is a story", was that the account of
-it (which this keeps) or its kind (which this changes to an event with a
-story about it)?
-
-### The typing itself doubted (owner, 2026-11-22)
-
-"im thinking about contradictions, like where one says the war is over and
-another says its still going. basically, what we are calling events are really
-categories. and entities are actors. the strait of hormuz in that context is
-not an entity. but honestly, is this the right way to think about it? if we
-have trouble articulating the distinction, is it well formed?"
-
-Lead's answer, a third proposal, not ruled: two proposals broke in an hour,
-which is the evidence that the type is not needed. Ask what the graph must DO,
-and type only where behaviour differs.
-
-- **One kind of node for what accounts refer to: a subject.** The US, Iran,
-  the war, the blockade, the Strait, the election. A label, aliases, a
-  description with a vector. No "event" or "entity" stored on the node.
-- **The role is on the mention, not the node.** In one account Iran is the
-  actor, the Strait the place, the blockade what happens. Another account may
-  use the same subject in another role. Nobody has to decide what a thing is,
-  only how this account uses it.
-- **What is said is a claim by a source, with its time.** "The war is over" is
-  one outlet's claim about the subject at a time; "it is still going" is
-  another's. The graph holds both and adjudicates neither. A contradiction is
-  two claims about one subject, which is something a story is for.
-- **Accounts stay as they were:** a capture is an outlet's, a story is ours.
-- The owner's rules restated: captures are compared by the subjects they
-  mention and what they claim; no two stories with the same subjects and the
-  same claims; a subject's importance is the number of stories about it; a
-  prediction is a claim about what sources will report of a subject by a time,
-  settled by the claims that arrive; a surprise is a claim no prediction
-  expected.
-- Cost caution: a claim need not be a model-extracted structure. A capture's
-  passage with the subjects it mentions is a claim already, and we hold
-  passages and vectors. The new work is resolving mentions to subjects, which
-  is the entity layer widened to include what happens.
-
-The test of well-formedness to apply to any further type: does any code path
-behave differently because of it? If not, it is not stored.
-
-**Ruled, 2026-11-22:** "yes, this is much better. much simpler. just one
-bucket from which any symbol can be associated with a story... no need to
-model events and entities as separate things. the real question is about
-usability, query patterns, efficient traversal". Where this document says
-event or entity above, read subject; the sections above this one are kept as
-the path to the ruling and are rewritten when the draft is cut to a plan.
-
-### Query patterns (lead's first list, to be tested on the paper's data)
-
-One edge table carries the graph: **mention** (account, subject, role, the
-passage, the time, the surface words as written). Every pattern is one or two
-index reads on it.
-
-| # | Question | Read |
-|---|---|---|
-| 1 | What does this account mention? | account to subjects |
-| 2 | What is new on this subject since T? | subject to accounts, newest first, by distinct outlet |
-| 3 | Which stories are like this one? | story to subjects to stories, shared subjects weighted by rarity |
-| 4 | What connects these two subjects? | accounts mentioning both |
-| 5 | Where do I enter from words? | vector to nearest subjects and passages, then 1 to 4 |
-| 6 | Who is waiting on this? | a new mention's subject to open predictions |
-| 7 | What matters? | stories per subject, a kept count |
-| 8 | What do sources disagree on? | pattern 2 in a window; the story reads the passages |
-
-Bounds that keep traversal cheap: a hub subject (a country) has a very large
-neighbourhood, so every read takes a window and a limit and samples by
-outlet and recency, and a second hop is weighted by rarity; importance uses
-the raw count, likeness the rarity-weighted one. Identity must be cheap to
-change: aliases map to one canonical id so a merge is a row, and a mention
-keeps its surface words so a wrong merge can be resolved again.
-
-In the REPL, a handful of verbs over these, each returning ids and metadata
-with the full object one read away: resolve a subject, what is about it since
-a time, an account's subjects, stories like this one, what connects two.
-
-What exists to start from: 6,690 story entity rows with `mentions_entity`
-edges and a learned alias lexicon; the capture side is not built. Names are
-extracted today; things that happen are not, and how to find them cheaply
-(the event layer's headlines are one seed) is open.
-
-## Two questions, each asked once
-
-| Question | Kind | Unit | Who |
-|---|---|---|---|
-| Is this capture a report of events we hold? | factual, high precision | capture | one batched Jev call per poll, vector neighbours as candidates |
-| Which stories does this event belong to, and does it move one? | editorial | event | the root Texture |
-
-The event layer is kept and read. Per-capture routing by a management session
-is removed. The intake label's "same event" and the event layer's join become
-one call. The editorial judgment runs on events, so twenty outlets on one
-strike are one decision.
-
-## Desks have one endpoint
-
-The owner, 2026-11-22: "graph traversal should make it easier for autoradio
-desk (which needs to become a go rlm anyway) to compose. but hmm, how does
-autoradio desk connect to root texture? indeed, i think it shuold connect to
-root texture, not to individual textures. thats the whole desk pattern,
-actually, that the desk, regardless of how many agents in it, only has one
-endpoint to other desks..."
-
-- A desk is addressed at one endpoint however many agents run inside it. For
-  the Texture desk that endpoint is the root Texture; story Textures are its
-  sub-calls and are not addressed from outside.
-- The Autoradio desk becomes a desk that runs Go cells (today it is two server
-  routes, one streamed model call each) and talks to the root Texture, never
-  to a story's Texture.
-- Lead's reading, not ruled: the same holds in the other direction. A story
-  Texture that needs research asks through its root, so the root sees every
-  request, can merge two stories' requests for the same gap, and can spend
-  research by its forecasts. Research is a desk with its own single endpoint
-  and its own children. This would answer open question 2.
-
-**Doubted the same day.** The owner, later on 2026-11-22: "one endpoint per
-desk may be wrong." Not a ruling yet; the section above stands as a proposal.
-What the doubt may rest on (lead's list): every request relayed through a root
-session costs a model call and time per hop; a research Report must return to
-the story that asked; a reader or the prompt bar addresses one document; a
-story that transcludes a story reaches it directly; most of what Autoradio
-needs is a read of published objects, which needs no desk endpoint at all. A
-middle form: one interface a desk (a typed address space routed by host code,
-not by a session), many addressees inside it, and the root observing the
-traffic rather than relaying it. Open question 10.
-
-**Ruled, 2026-11-22:** "yes, the middle form. and the question is how does
-the root desk get updates? it should get events. debounced. it can subscribe
-to events because it makes predictions about events and entities and those
-predictions register subscriptions... thats how it ought to be".
-
-## How the root is woken: a prediction is a subscription
-
-- The root Texture states predictions about events and entities (a story will
-  gain an event within a day; this entity will act; this scheduled event will
-  happen). Each prediction names what would settle it. That naming is its
-  subscription.
-- When an event is written (the capture-to-event step, host code), it is
-  matched against open subscriptions: by entity and story ids on the graph,
-  and by nearness for the loose ones. Matches are collected and delivered to
-  the root debounced, as one digest.
-- An arriving event settles the predictions it answers, true or false, and the
-  score is the learning engine's (precommit, then score).
-- So the root is woken by what it has a stake in, and there is no commit log
-  to tail, which is where the earlier root desk failed review.
-
-Ruled the same day (owner: "yes, bingo. useful additions. stories predict next
-events and get woken with them. surprises are key"): the three additions
-below, and that a story's Texture predicts its own next events and is woken by
-them, the same mechanism as the root one level down.
-
-- **Stories predict too.** The root watches the whole; each story watches its
-  own thread.
-
-- **Surprise needs a place.** An event that matches no prediction is the most
-  informative kind. A standing subscription to the unmatched (above an
-  importance line read from the graph) delivers them, and their share is the
-  measure of how well the root models the world.
-- **Expiry settles too.** A prediction whose time passes with no matching
-  event is settled false by the clock, not left open.
-- **The same on a person's computer:** the root predicts what the owner will
-  read, skip or ask, and the owner's acts are the events that settle it.
-
-### What the code supports today (read 2026-11-22, code only)
-
-| Piece | State | Where |
-|---|---|---|
-| A prediction with a probability, weight and resolve-by time | exists | `types/commitment.go:417-428` (`CastHypothesis`), `types/calibration.go:46-62` |
-| Scoring (Brier) and a per-desk digest | exists | `calibration/calibration.go:231`, `commitment_rules.go:869` |
-| Settlement written by a party that is not the claimant | exists | `agentcore/subcall_judge.go:532` |
-| A debounced digest scheduler | exists | `textureowner/texture_root.go:264-288` |
-| A prediction naming an event, entity or story | missing | the rule kinds are closed and engineering-shaped (`commitment_rules.go:110-153`) |
-| A store of open subscriptions; matching at event write | missing | nothing matches an incoming object to open claims; the hook would sit at `event_layer.go:772` |
-| Expiry settles false | missing | `ResolvesBy` is validated and read by nothing; "overdue" is a view status |
-| The score fed back to the predictor | narrower | engineering only, one arm of an experiment (`calibration_feedback.go:66-71`) |
-| An event's entities, stories, time of occurrence | missing | `store/world_event.go:29-67`; the event-to-story link is derived in memory from dispositions |
-| Sub-calls for Texture | narrower | research only; a child has no tape of its own (`research_children.go:306-312`) |
-| Surprise | missing | no matched flag on an event, no importance read |
-
-Found on the way, each against a standing rule: `researchChildCallInterval`
-spaces child model calls at 1.5 s (`research_children.go:77-83`; no limits on
-our own model calls; whether it is applied was not checked); the root digest
-is capped at 20 an hour and sits behind `texture.root_desk`, off by default
-(no switches).
-
-## How context is found
-
-The owner, 2026-11-22: "we can run captures through vector search, then for
-each match we can do graph traversal. this is then sampled and provided with
-metadata and full data accessible in repl".
-
-One retrieval shape for every reader (the capture-to-event call, the root
-Texture's digest, a story Texture, a research run, a personal edition):
-
-1. **Seed by vector.** The capture, event or question is embedded and its
-   nearest neighbours found.
-2. **Traverse the graph from each match.** Capture to its events; event to its
-   other captures (other outlets), its stories and its entities; story to its
-   main point, its events, its predecessor and successor.
-3. **Sample.** A large neighbourhood is cut by a stated rule (distinct
-   outlets, newest, most connected), and what was left out is counted.
-4. **Hand over metadata, keep the data reachable.** The context carries each
-   item's id, kind, date, outlet and how it was reached, with compressed
-   substance for the nearest; the full object is one REPL read away, with no
-   web fetch.
-
-The research digest in flight is the first use of this shape, on the edges
-that exist today.
-
-## The Texture tree
-
-The owner: "wouldnt that perhaps make sense with autopaper? giving a global
-perspective on the paper. and architecturally, the point is that each texture
-agent would be a sub-rlm of the root texture. enabling messaging. so, the root
-texture would be in charge of predicting the future of the autopaper. it would
-do much of what management is doing now. and for individual users, it would be
-similarly tracking a computer-owner model, and have comms with subtextures";
-"concurrency is to be achieved by desk subcalls".
-
-- **Root Texture (the paper).** Holds the whole view: the stories, their main
-  points, what is developing. Works on a digest of new events, never on raw
-  captures. Decides which stories an event joins, when a main point has moved,
-  what to pursue. Its forecasts are learning-engine claims (an event will
-  follow within a day; a story needs a second outlet), scored, and the scores
-  steer where research is spent.
-- **Story Textures.** Sub-calls of the root. Parent and child message through
-  the call. Several run at once.
-- **Research.** Runs for a named gap, opening with a digest from the object
-  graph (the change in flight, `problems/read-first-reads-more-but-searches-as-much-2026-11-22.md`).
-  The owner: "the goal of any run shouldnt just be to write the best story,
-  but to be building on and using our corpus, and then the story adds to our
-  corpus"; "we shouldnt need rules... prompts... a lot of compressed context
-  from the object graph".
-- **Root Texture (a person's computer).** The same shape with a model of the
-  owner in place of the world: what they read, heard, skipped, asked. A
-  personal edition is its selection over the shared graph. Autoradio reads
-  from it.
-- **Management.** Returns to computer-wide coherence and admitting
-  engineering.
-
-Why the earlier root desk failed review and this need not: it stood outside
-the documents and caught up by tailing their commit log (all three open
-defects are in that log's handling). Children that are the root's own
-sub-calls report to it directly.
-
-## Backfill
-
-The owner, 2026-11-22: "we will need to backfill all this data. we should
-think about how to do this. using system1, and we can give jev an 'i dont
-know/more/other' button which calls an llm? other data backfill ideas?"
-
-The paper holds about 222,000 captures and 35,000 stories (2026-11-19 counts),
-few events and 6,690 story entities of poor quality. Ideas, none decided:
-
-1. **Derive before asking.** A story's events are the events of the captures
-   it cites; an event's entities come from extraction over its captures. No
-   model.
-2. **Cluster by vector first, confirm with Jev.** Captures near each other in
-   a time window are candidate events; Jev answers "same happening?" for whole
-   clusters in few large calls (the vendor's limits bind, `reference/SYSTEM1.md`),
-   never one call a capture.
-3. **An "other / cannot tell" option on every Jev question, which escalates to
-   a language model.** Jev picks and writes no text, so naming a new event
-   also needs a model or a rule (the central capture's headline). The
-   reference page's cautions apply (`reference/system1/calibration-and-cascades.md`):
-   the escalation test is the whole cascade, and a random share of the answers
-   Jev did NOT escalate must also be labelled, or its accuracy is never known.
-4. **Newest first, and on demand.** Resolve what traversal touches; a capture
-   no reader reaches may never need resolving.
-5. **Entities by a public identifier.** Canonical ids (Wikidata) merge
-   "U.S." and "United States" by rule; Jev only for the ambiguous.
-6. **Offline, then import.** As the vector backfill was: computed off the
-   paper's computer, checked on a sample, imported in one step.
-7. **Derived tables only.** The backfill writes projections that can be
-   dropped and rebuilt, never canonical records, so a bad pass is redone.
-8. **A hand-read sample and a ledger claim before it is trusted.**
-9. **Outside seeds, to be weighed:** the outlets' own article metadata;
-   public event lists.
-
-First output worth having: the count of existing stories that share an event
-set (the owner's rule 2), which measures the duplicate problem directly.
-
-## Cost budget (to be set from measurement)
-
-The marginal cost of a capture must approach zero for sources to scale: an
-embedding and a share of one batched call. Agent sessions are spent per event
-that changes a story, not per capture. First step, before any deletion: log
-the desk on every model call so calls per capture, per event and per published
-story can be read by desk.
-
-## What would be deleted
-
-Per-capture management tasks and their dispatcher; the intake label's
-duplicate "same event" question; the search refusal gate and its escape (in
-flight); the root-desk commit-log digest; the `texture.root_desk` and
-`research.related_story` settings (no switches); `proj_capture_resolution` if
-entities attach through events.
-
-## Open questions
-
-1. Ruled 2026-11-22: "root is one long session. but its repl makes it easily
-   resettable. the point of it being root texture is that it writes its own
-   texture, which is a text vector, a list of revisions. so it always has
-   enough context with its latest version and tools to read prior versions in
-   addition to what events and inbound it receives". The session is long and
-   disposable; the root's own Texture is its memory. Follow-on, not ruled: is
-   the paper's root Texture the front page, and a person's root Texture their
-   edition?
-2. Is research a sub-call of a story's Texture (root, story, research), or a
-   desk the story Casts to as now? The contract says desks talk only through
-   precommitment records: does a sub-call carry one?
-3. Do entities attach to events first, with stories inheriting them?
-4. Subset event sets: part of a larger story, or a duplicate to merge?
-5. Who owns the event kind? Today the computer is the events' custodian; under
-   one-custodian-per-kind the root Texture's desk or a graph desk must be
-   named.
-6. How a personal root reads the shared graph without a private computer's
-   data crossing owners.
-7. The order of the build, and what the paper runs meanwhile.
-8. What separates an event from a story, now that an event may span time and
-   place: is an event the unit captures report in common and a story our
-   account of it, an event becoming a story once its parts are told apart?
-10. One endpoint a desk, or one interface with many addressees and a root
-    that observes: which requests must pass through the root, and which only
-    be seen by it?
-9. How often stories cite or transclude stories today, and what the writer's
-   prompt and verbs make easy.
+Draft 2, 2026-11-22, taken from the top after a day's conversation with the
+owner. Status: **idea**; nothing here is built unless a line says so, and
+nothing is ratified. Lines marked (owner) are rulings, quoted in
+[first-design-path-2026-11-22.md](first-design-path-2026-11-22.md) with the
+proposals that were broken on the way and the code readings. Everything else
+is the lead's proposal.
+
+## 0. What it is for
+
+(owner) "to cover the world's stories, to personalize into individual
+autopaper editions, and serve as a foundation for autoradio, while using
+minimal resources enabling scaling of sources and agents". (owner) "the goal
+of any run shouldnt just be to write the best story, but to be building on and
+using our corpus, and then the story adds to our corpus". (owner) "we need to
+make this efficient and fast."
+
+The measure of the whole: the **surprise rate** (how much of what arrives the
+paper did not expect), beside cost per capture and per published story.
+
+## 1. The things
+
+| Thing | What it is |
+|---|---|
+| **account** | a text about the world. A **capture** is an outlet's; a **story** is ours (a Texture, with revisions) |
+| **subject** | (owner) "one bucket from which any symbol can be associated with a story": anything accounts refer to. No kinds; events and entities are not modelled apart |
+| **mention** | this account refers to this subject: the passage, the time, the words as written, the role it plays there. What the passage says is that source's **claim**; the graph holds claims and settles none |
+| **prediction** | a claim by a story or a root about what sources will report of a subject by a time. It registers a subscription (owner) |
+
+Stories cite and transclude stories (owner: "textures reference textures is
+the essence of it"). No two stories have the same subjects and the same
+claims; a subject's importance is the number of stories about it (owner).
+
+## 2. The hot path: a capture arrives (no agent session)
+
+1. **Fetch, clean, passages, embed.** Built.
+2. **Candidate subjects, by rule.** (owner) "maybe we can predict subjects
+   from keyword extraction and/or vector embedding". Three cheap sources, no
+   model: known labels and aliases found in the text; proper names and rare
+   key phrases not yet known; the subjects of the captures nearest by vector.
+3. **Selection by System 1, one call a poll.** (owner) "any prediction can be
+   scored with system1, which can also select subjects from a list, and also
+   suggest more/other/idk". For every capture in the batch: which candidates
+   is it about, or other / cannot tell. One call with every capture's
+   question in it.
+4. **Escalation.** "Other" goes to a language-model desk, many captures a
+   session, which names a new subject or resolves the hard one. A random
+   share of what System 1 did not escalate is checked the same way, or its
+   accuracy is never known.
+5. **Write mentions; match subscriptions.** A lookup by subject id finds the
+   predictions waiting on it. Matches are collected for a debounced wake.
+
+Budget to hold: one embedding and a share of one System 1 call a capture;
+seconds, not minutes; no session of any desk.
+
+This replaces three mechanisms that each ask today which thing a capture
+belongs to: the intake label's "same event", the event layer's call a minute
+later, and a management session for every 12 captures.
+
+## 3. The warm path: a story is woken
+
+A story's Texture predicts what its subjects will do next (owner: "stories
+predict next events and get woken with them"). It is woken, debounced, by
+mentions that answer a prediction and by surprises on its subjects. It opens
+with context found one way (owner): vector to enter, the graph to move,
+sampled, metadata in the context and the full object one read away. It
+revises (owner: "revising not making new stories"; a story stops growing when
+its main point changes), cites and transcludes other stories, states new
+predictions, and asks research only for a named gap. Research starts from the
+graph and reports what it added and what was missing.
+
+Budget to hold: one session for a wake, not one for a capture.
+
+## 4. The root
+
+(owner) The root Texture holds the whole view, predicts the paper's future
+and does much of what management does now. It is one long session, resettable
+at any time; its memory is its own Texture and that Texture's revisions. It is
+woken by a debounced digest: its predictions answered, and surprises (claims
+no prediction expected; subjects that matter and have no story). It opens
+stories, which run as its sub-calls (owner: "concurrency is to be achieved by
+desk subcalls"), merges two that have become one, and spends research by how
+its predictions have scored.
+
+Other desks speak one interface to the Texture desk and may address a story
+inside it; the root is asked about the whole and sees the rest (owner: "the
+middle form"). Management returns to computer-wide coherence and admitting
+engineering.
+
+Proposed: the paper's root Texture is the front page.
+
+## 5. The readers
+
+- **A person's computer** has its own root, which predicts its owner (what
+  they will read, skip, ask) and is settled by what they do. Proposed: its
+  Texture is their edition.
+- **Autoradio** becomes a desk that runs Go cells (owner) and composes by
+  walking the graph: a subject, the stories about it, the story behind those.
+  It asks the listener's root about the whole and may address a story.
+
+## 6. The loop that learns
+
+Predict, subscribe, be woken, be settled, see the score. Settlement is by the
+claims that arrive (System 1 judges whether they answer the prediction) or by
+the clock: a prediction whose time passes is settled false (owner). The score
+is shown to the predictor. Today predictions are stored and some are scored;
+nothing matches an arrival to a prediction, nothing settles on expiry, and
+Texture is never shown its score.
+
+## 7. Queries and their cost
+
+One edge table, mention, carries the graph; each pattern is one or two index
+reads. What is new on a subject since a time, and who is waiting on a
+subject, run constantly and are single lookups. Stories like this one: shared
+subjects weighted by rarity. What connects two subjects: accounts mentioning
+both. Entry from words: vector to subjects and passages. Every read takes a
+window and a limit, because a hub subject's neighbourhood is vast. Aliases
+map to one canonical id, so a merge is a row; a mention keeps its words so a
+wrong merge can be redone. In the REPL: about five verbs over these.
+
+## 8. Filling it
+
+Stories first: the 6,690 entity rows and the alias lexicon that exist are the
+first subjects, and each story's Texture names its subjects as it writes, at
+no added call. Then captures, newest first, through the hot path of section 2
+run over history, computed off the paper and imported once checked on a
+hand-read sample. Only derived tables are written, so a bad pass is redone.
+
+## 9. What goes
+
+Per-capture management tasks and their dispatcher; the intake label's "same
+event" question; the event layer as a separate store (its call becomes step
+3); the separate entity layer design; the old root desk, its setting and its
+hourly cap; the 1.5 s spacing of research children; the search refusal gate
+(in flight); `research.related_story`.
+
+## 10. Order of work
+
+0. Log the desk on every model call: cost per capture and per story, by desk.
+1. Subjects and mentions for stories, from what exists; test the query
+   patterns on the paper's data (hub sizes; do rarity-weighted overlaps find
+   real duplicates when read).
+2. The hot path for captures; retire the three mechanisms it replaces.
+3. Predictions that name a subject; match at mention write; settle on arrival
+   and on expiry; show the score. The first surprise rate.
+4. Stories woken by mentions; per-capture management tasks removed.
+5. The root, with stories as its sub-calls.
+6. The readers: the personal root and edition; Autoradio as a cell desk.
+
+Each is a station with its own review and deployed proof; the paper keeps
+publishing throughout.
+
+## 11. Open
+
+1. Who is custodian of subjects and mentions (one desk writes; others ask).
+2. How a person's root reads the public graph without its queries or its
+   owner model flowing back.
+3. What roles a mention may carry, and whether any code needs them.
+4. Which model the escalation desk runs.
+5. How the hot path's candidate rules are tuned without a per-capture model.
+6. Whether a story's Texture naming its own subjects is enough to find the
+   subjects that are not proper names.
