@@ -45,7 +45,6 @@ public final class AccountWipe: @unchecked Sendable {
         notebook: NotebookStore = .shared,
         takeOwn: TakeOwn = .shared,
         takeMutes: TakeMutes = .shared,
-        takeStore: TakeStore = .shared,
         legacyTakeFiles: [URL?] = TakeFiles.legacy,
         tempDirectory: URL = FileManager.default.temporaryDirectory,
         clips: ClipLocator = .shared,
@@ -70,7 +69,7 @@ public final class AccountWipe: @unchecked Sendable {
         }
         register("takes") {
             await MainActor.run { TakeSession.live?.discard() }      // the account CHANGED path has no signOut() above it
-            TakeMirror.invalidate(); takeOwn.wipe(); takeMutes.wipe(); takeStore.wipe()      // first: a push of the old account landing from here on is refused
+            TakeMirror.invalidate(); takeOwn.wipe(); takeMutes.wipe();      // first: a push of the old account landing from here on is refused
             for u in legacyTakeFiles { if let u { try? FileManager.default.removeItem(at: u) } }      // the pre-release build's files (never read by this build) go with the account that is leaving
             Self.removeTakeScratch(in: tempDirectory)
         }

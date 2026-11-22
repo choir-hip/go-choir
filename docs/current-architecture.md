@@ -212,5 +212,5 @@ fresh deploy is not immediately what a computer shows: unknown how long; settle 
 - `docs/current-architecture.md` line 7 (old text): "R-sequence in ACTIVE.md" does not exist; the file never mentions Autoradio.
 - `docs/platform-os-app-state.md` lines 24 to 30: 18 registered apps; registry now loads packages. Line 3 says it is stale.
 - `README.md` lines 148 and 161: embedded Dolt; deleted 2026-10-30.
-- `mobile/README.md` line 183: default configuration lists choir-front, choir-desk and button to talk; the code uses the hands-free listener configuration with holder `saved-answer`. Line 368: "Desk contract (not implemented)" while `ChoirDesk.swift` exists.
+- `mobile/README.md` line 183: default configuration lists choir-front, choir-desk and button to talk; the code uses the hands-free listener configuration with holder `saved-answer`. The "Desk contract (not implemented)" section was replaced on 2026-11-22 when the interface-only `ChoirDesk` stub, `RemoteSystem1` and `RemoteProgramme` were deleted.
 - `docs/reference/ON-DEVICE-MODELS.md` line 13: "everything else is untested on any phone"; true for measurement, but it does not say Qwen3-0.6B, Silero and Parakeet are wired into the app.

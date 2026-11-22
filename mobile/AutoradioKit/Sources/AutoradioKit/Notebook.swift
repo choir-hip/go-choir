@@ -117,22 +117,6 @@ public enum NotebookText {
     }
 }
 
-// MARK: What the DJ is sent
-
-public enum EditionText {
-    public static let maxBytes = 32 * 1024
-    /// The notebook text when the phone holds it, else the topics as text, else nil.
-    public static func make(notebook: String?, topics: [String]) -> String? {
-        if let n = notebook?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty { return StretchCandidates.cut(n, bytes: maxBytes) }
-        let t = topics.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        guard !t.isEmpty else { return nil }
-        return StretchCandidates.cut("What the listener follows:\n" + t.map { "- \($0)" }.joined(separator: "\n"), bytes: maxBytes)
-    }
-    public static func current() -> String? {
-        make(notebook: NotebookCache.shared.text, topics: EditionPicksMirror.shared.topics)    // the picks are shared code's; this is its pushed copy (EditionSetup.swift)
-    }
-}
-
 /// The last notebook text read, kept on the phone for the programme request and for the page when the computer cannot be reached.
 public final class NotebookCache: @unchecked Sendable {
     public static let shared = NotebookCache(file: TakeFiles.url("notebook-cache.md"))
@@ -160,7 +144,7 @@ public final class NotebookCache: @unchecked Sendable {
 // MARK: The topics write: the one part of the notebook that stays native
 // The page, the scorecard and the learning route are shared code (AutoradioLab/notebook.ts, notebook-run.ts). What stays here is the WRITE of the listener's topics into the notebook:
 // a Texture canonical write through TextureEditor (Swift until the texture edit page moves), so it is a red surface and the shared code asks for it through the one native call
-// `notebookState` (AutoradioModule+Notebook.swift). The text read and the cache below feed the DJ's request (RadioProgramme.swift), which is built natively.
+// `notebookState` (AutoradioModule+Notebook.swift). The cache below is written by AutoradioModule+Notebook (`notebookText`) and wiped on sign-out; the DJ's request is built in shared code now (radio-writer.ts).
 
 @MainActor public final class NotebookStore {
     public static let shared = NotebookStore()

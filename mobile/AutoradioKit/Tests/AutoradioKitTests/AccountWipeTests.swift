@@ -68,7 +68,7 @@ final class AccountWipeTests: XCTestCase {
         await s.start(limits); await s.stop(); XCTAssertEqual(s.state, .review); XCTAssertEqual(s.transcript, Self.marker)
         let oldOwn = root.appendingPathComponent("takes-own.json"), oldMuted = root.appendingPathComponent("takes-muted.json")
         write("takes-own.json", Self.marker); write("takes-muted.json", "[\"\(Self.marker)\"]")
-        let wipe = AccountWipe(); wipe.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), legacyTakeFiles: [oldOwn, oldMuted], tempDirectory: root.appendingPathComponent("tmp2"))
+        let wipe = AccountWipe(); wipe.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), legacyTakeFiles: [oldOwn, oldMuted], tempDirectory: root.appendingPathComponent("tmp2"))
         await wipe.run()
         XCTAssertFalse(TakeMirror.accept(7), "the old account's push in flight at the wipe"); XCTAssertTrue(TakeMirror.accept(8)); TakeMirror.reset()
         XCTAssertEqual(s.state, .idle); XCTAssertEqual(s.transcript, ""); XCTAssertNil(s.audio); XCTAssertEqual(gate.given, 1)
@@ -88,7 +88,6 @@ final class AccountWipeTests: XCTestCase {
         let notebook = NotebookStore()
         let own = TakeOwn(file: root.appendingPathComponent("takes-own.json")); own.replace(ids: [m], handle: m)
         let mutes = TakeMutes(file: root.appendingPathComponent("takes-muted.json")); mutes.replace([m])
-        let takes = TakeStore(); takes.replace([Take.parse(["take_id": m, "publisher": "pub", "state": "live", "transcript": m])!])
         let tmp = root.appendingPathComponent("tmp"); write("tmp/takes/rec.m4a", m); write("tmp/take-play-\(m).m4a", m)
         let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
         let api = FakeAPI()
@@ -116,7 +115,7 @@ final class AccountWipeTests: XCTestCase {
             AccountWipe.removeContents(of: rootRef.appendingPathComponent("books")); AccountWipe.removeContents(of: rootRef.appendingPathComponent("cache/files"))
         }
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook,
-                              takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, clips: clips,
+                              takeOwn: own, takeMutes: mutes, legacyTakeFiles: [], tempDirectory: tmp, clips: clips,
                               texture: texture, environment: env,
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
                               deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
@@ -128,7 +127,7 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertEqual(markerInFiles(), [], "files still holding the account's words")
         // (b) every in-memory store answers empty
         XCTAssertTrue(turns.snapshot().isEmpty); XCTAssertNil(cache.text)
-        XCTAssertEqual(own.handle, ""); XCTAssertTrue(mutes.all.isEmpty); XCTAssertNil(takes.take(m))
+        XCTAssertEqual(own.handle, ""); XCTAssertTrue(mutes.all.isEmpty)
         XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1"))
         XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned)
@@ -137,7 +136,6 @@ final class AccountWipeTests: XCTestCase {
         // (c) the next sign-in: the first request of each kind carries nothing of the old account.
         let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""
         XCTAssertFalse(body.contains(m), "turn")
-        XCTAssertNil(EditionText.make(notebook: cache.text, topics: EditionPicksMirror.shared.topics), "programme: edition_text")
         await texture.retryPending(); XCTAssertTrue(api.posts.isEmpty, "texture retry")
     }
 }

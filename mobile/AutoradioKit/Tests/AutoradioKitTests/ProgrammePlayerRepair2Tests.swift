@@ -116,10 +116,6 @@ final class Repair2StageTests: XCTestCase {
         env.keys = InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"])
         env.log = EventLog(clock: LabClock())
     }
-    final class Manual: StretchSource, @unchecked Sendable {
-        var cont: AsyncThrowingStream<StretchEvent, Error>.Continuation!
-        func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> { AsyncThrowingStream { self.cont = $0 } }
-    }
     let article = { @Sendable () async throws -> ProgrammeDocument in ProgrammeDocument(id: "choir:a", title: "A", blocks: [.speech(text: "Article.")]) }
     func seg(_ n: Int) -> StretchEvent { .segment(IncomingSegment(stretchID: "m", segmentID: "m/\(n)", kind: "story", title: "S\(n)", text: "Words \(n).", cites: [], blockCount: nil)) }
     func player(_ doc: ProgrammeDocument) -> ProgrammePlayer {

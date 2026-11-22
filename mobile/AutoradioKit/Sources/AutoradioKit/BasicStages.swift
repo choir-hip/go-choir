@@ -1,7 +1,6 @@
 import Foundation
-import Security
 
-// Baseline implementations that need no model: addressing, bounds, yield, System 1, holder, desk, programme.
+// Baseline implementations that need no model: addressing, bounds, yield, and the lab stand-ins the Mac replay proof configs name (fixed, stub-echo, fixture).
 
 // MARK: MicSource
 
@@ -186,36 +185,6 @@ public final class PauseAtOnce: YieldPolicy, @unchecked Sendable {
     }
 }
 
-/// A stage that sends a bearer token (or the listener's words) to a URL from its configuration may send it only to the configured
-/// Choir host. A configuration can come from a link, so its URL is not trusted.
-public enum RemoteHost {
-    public static func allows(_ u: URL, env: ChoirEnvironment = .shared) -> Bool {
-        guard let base = URL(string: env.configuredBaseURL) else { return false }
-        return SameOrigin.matches(u, base)
-    }
-    static func require(_ u: URL, env: ChoirEnvironment = .shared) throws {
-        guard allows(u, env: env) else { throw ChoirError.wrongHost(u.host ?? "(none)") }
-    }
-}
-
-// MARK: Keychain (bearer tokens; never in the repo)
-
-public enum Keychain {
-    public static func get(service: String, account: String) -> String? {
-        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                                kSecAttrAccount as String: account, kSecReturnData as String: true]
-        var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
-        return String(data: d, encoding: .utf8)
-    }
-    public static func set(_ value: String, service: String, account: String) {
-        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
-        SecItemDelete(base as CFDictionary)
-        var add = base; add[kSecValueData as String] = Data(value.utf8)
-        SecItemAdd(add as CFDictionary, nil)
-    }
-}
-
 // MARK: System 1
 
 public final class FixedSystem1: System1, @unchecked Sendable {
@@ -224,35 +193,6 @@ public final class FixedSystem1: System1, @unchecked Sendable {
     public init() {}
     public func answer(_ i: System1Input) async throws -> [System1Answer] {
         i.questions.map { System1Answer(questionID: $0.id, option: $0.options.first ?? "", score: 1, ms: 0) }
-    }
-}
-
-/// POST {context, listener_words, questions:[{id,text,options}]} with `Authorization: Bearer <keychain token>`;
-/// response {answers:[{question_id, option, score}]}. The server lane supplies the endpoint.
-public final class RemoteSystem1: System1, @unchecked Sendable {
-    public static let stageID = "remote"
-    public static var descriptor: StageDescriptor {
-        StageDescriptor(displayName: "Remote (Jev)", summary: "HTTP POST to a configured URL; bearer token in the Keychain (service news.choir.autoradio, account system1).",
-                        params: [.text("url", "URL", "")], needsNetwork: true)
-    }
-    let url: String
-    public init(_ p: StageParams) { url = p.string("url") }
-    static func requireConfiguredHost(_ u: URL) throws { try RemoteHost.require(u) }
-    struct Req: Encodable { let context: String; let listener_words: String; let questions: [Question] }
-    struct Resp: Decodable { struct A: Decodable { let question_id: String; let option: String; let score: Double? }; let answers: [A] }
-    public func answer(_ i: System1Input) async throws -> [System1Answer] {
-        guard let u = URL(string: url), !url.isEmpty else { throw LabError.badInput("remote System 1 has no url") }
-        try Self.requireConfiguredHost(u)
-        var r = URLRequest(url: u, timeoutInterval: ChoirClient.idleTimeout)     // idle transport timeout only
-        r.httpMethod = "POST"
-        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let tok = Keychain.get(service: "news.choir.autoradio", account: "system1") { r.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
-        r.httpBody = try JSONEncoder().encode(Req(context: i.context, listener_words: i.listenerWords, questions: i.questions))
-        let t0 = ProcessInfo.processInfo.systemUptime
-        let (data, resp) = try await URLSession.shared.data(for: r)
-        let ms = (ProcessInfo.processInfo.systemUptime - t0) * 1000
-        if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) { throw LabError.http(h.statusCode) }
-        return try JSONDecoder().decode(Resp.self, from: data).answers.map { System1Answer(questionID: $0.question_id, option: $0.option, score: $0.score ?? 0, ms: ms) }
     }
 }
 
@@ -286,22 +226,6 @@ public final class StubEchoDesk: Desk, @unchecked Sendable {
     }
 }
 
-/// Interface only. Endpoint contract (to be supplied by the server lane): see README "Desk contract".
-public final class ChoirDesk: Desk, @unchecked Sendable {
-    public static let stageID = "choir"
-    public static var descriptor: StageDescriptor {
-        StageDescriptor(displayName: "Choir desk", summary: "System 2 on the owner's computer. Not wired yet.",
-                        params: [.text("baseURL", "Base URL", "")], needsNetwork: true)
-    }
-    public init(_ p: StageParams) {}
-    public func submit(_ t: DeskTurn) -> AsyncThrowingStream<Revision, Error> {
-        AsyncThrowingStream { c in
-            // TODO(server lane): POST the turn as a prompt at a place in the document; stream revisions back.
-            c.finish(throwing: LabError.unavailable("choir desk endpoint not defined yet"))
-        }
-    }
-}
-
 // MARK: Programme
 
 public final class FixtureProgramme: Programme, @unchecked Sendable {
@@ -321,25 +245,6 @@ public final class FixtureProgramme: Programme, @unchecked Sendable {
     ])
 }
 
-public final class RemoteProgramme: Programme, @unchecked Sendable {
-    public static let stageID = "remote"
-    public static var descriptor: StageDescriptor {
-        StageDescriptor(displayName: "Remote document", summary: "Fetch a ProgrammeDocument JSON from a URL.", params: [.text("url", "URL", "")], needsNetwork: true)
-    }
-    let url: String
-    public init(_ p: StageParams) { url = p.string("url") }
-    static func requireConfiguredHost(_ u: URL) throws { try RemoteHost.require(u) }
-    public func load() async throws -> ProgrammeDocument {
-        guard let u = URL(string: url) else { throw LabError.badInput("remote programme has no url") }
-        try Self.requireConfiguredHost(u)
-        var r = URLRequest(url: u)
-        if let tok = Keychain.get(service: "news.choir.autoradio", account: "programme") { r.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
-        let (d, resp) = try await URLSession.shared.data(for: r)
-        if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) { throw LabError.http(h.statusCode) }
-        return try JSONDecoder().decode(ProgrammeDocument.self, from: d)
-    }
-}
-
 // MARK: Built-in registration
 
 extension StageRegistry {
@@ -356,24 +261,12 @@ extension StageRegistry {
         r.register(.yieldPolicy, DipThenPause.self) { DipThenPause($0) }
         r.register(.yieldPolicy, PauseAtOnce.self) { _ in PauseAtOnce() }
         r.register(.system1, FixedSystem1.self) { _ in FixedSystem1() }
-        r.register(.system1, RemoteSystem1.self) { RemoteSystem1($0) }
         r.register(.holder, LocalAckHolder.self) { LocalAckHolder($0) }
         r.register(.desk, StubEchoDesk.self) { StubEchoDesk($0) }
-        r.register(.desk, ChoirDesk.self) { ChoirDesk($0) }
         r.register(.programme, FixtureProgramme.self) { _ in FixtureProgramme() }
-        r.register(.programme, RemoteProgramme.self) { RemoteProgramme($0) }
         registerAppleStages(r)
         registerChoirStages(r)
         registerExternalModels(r)
         return r
-    }
-
-    public static func defaultConfiguration() -> LabConfiguration {
-        LabConfiguration(name: "baseline", stages: [
-            .micSource: .init(id: "builtin"), .addressing: .init(id: "hybrid"), .speechBounds: .init(id: "energy-vad"),
-            .speakerCheck: .init(id: "none"), .transcriber: .init(id: "apple-speech"), .yieldPolicy: .init(id: "pause-at-once"),
-            .system1: .init(id: "fixed"), .holder: .init(id: "local-ack"), .voice: .init(id: "avspeech"),
-            .desk: .init(id: "stub-echo"), .programme: .init(id: "fixture"),
-        ])
     }
 }
