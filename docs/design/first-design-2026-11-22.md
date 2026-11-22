@@ -84,6 +84,30 @@ is removed. The intake label's "same event" and the event layer's join become
 one call. The editorial judgment runs on events, so twenty outlets on one
 strike are one decision.
 
+## How context is found
+
+The owner, 2026-11-22: "we can run captures through vector search, then for
+each match we can do graph traversal. this is then sampled and provided with
+metadata and full data accessible in repl".
+
+One retrieval shape for every reader (the capture-to-event call, the root
+Texture's digest, a story Texture, a research run, a personal edition):
+
+1. **Seed by vector.** The capture, event or question is embedded and its
+   nearest neighbours found.
+2. **Traverse the graph from each match.** Capture to its events; event to its
+   other captures (other outlets), its stories and its entities; story to its
+   main point, its events, its predecessor and successor.
+3. **Sample.** A large neighbourhood is cut by a stated rule (distinct
+   outlets, newest, most connected), and what was left out is counted.
+4. **Hand over metadata, keep the data reachable.** The context carries each
+   item's id, kind, date, outlet and how it was reached, with compressed
+   substance for the nearest; the full object is one REPL read away, with no
+   web fetch.
+
+The research digest in flight is the first use of this shape, on the edges
+that exist today.
+
 ## The Texture tree
 
 The owner: "wouldnt that perhaps make sense with autopaper? giving a global
