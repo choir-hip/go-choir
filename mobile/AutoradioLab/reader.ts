@@ -6,6 +6,7 @@
 // document and an answer that began under an older generation is never held. A story and a revision never change, so they are held; a document's head changes (an edit, the desk's revision),
 // so it is asked for again each time and the held copy only stands in when the ask fails. Logs carry counts only, never a title.
 import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
+import { lapYield } from './lap.ts';
 import { blankDoc, parseAddress, parseBundleAsync, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
 import { WORDS } from './words.ts';
 
@@ -23,7 +24,7 @@ const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** Ends the turn (Exact gives one about 100 ms of CPU; Bun has no scheduler). */
-const yieldTurn = async (): Promise<void> => { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); };
+const yieldTurn = (label = 'reader'): Promise<void> => lapYield(label);
 let held = new Map<string, ReaderDoc>();
 let inflight = new Map<string, Promise<ReaderDoc>>();
 let heldGen = -1;
@@ -59,8 +60,8 @@ async function fetchDoc(address: string, net: Net): Promise<ReaderDoc> {
     const related = net.pub('/api/platform/publications/related', { route: bare, limit: 5 }).then((r) => parseRelated(r.body), () => []);       // a route that is not there: the story still opens
     const body = (await net.pub('/api/platform/publications/resolve', { route: a.route })).body;
     if (!obj(body)) throw new Error('the computer sent a story that is not a story');
-    await yieldTurn();                                         // the reply's own text and JSON are done: the decoding of a large story starts in a turn of its own
-    const d = await parseBundleAsync(body, address, yieldTurn);
+    await yieldTurn(`${address}: reply decoded, before the bundle's decoding`);   // the reply's own text and JSON are done: the decoding of a large story starts in a turn of its own
+    const d = await parseBundleAsync(body, address, (label) => yieldTurn(`${address.slice(-24)}: ${label}`));
     d.related = await related;                                  // "Hear it" is the page's own source (clips.ts storyClips): a slow clip route does not hold the story
     console.log(`reader: story blocks=${d.blocks.length} cites=${d.cites.length} related=${d.related.length}`);
     return d;
@@ -174,8 +175,7 @@ export async function readerPrefetch(prev: string, next: string, net: Net = real
   // One story at a time, a new turn between: two large stories decoded in one turn went over Exact's 100 ms of CPU per turn (the reply was refused: the proof's read drive, 961 KB for two stories).
   for (const a of todo) {
     await ask(a, net);
-    const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
-    if (sc?.yield) await sc.yield();
+    await lapYield('prefetch: between two stories');
   }
   return ack(true);
 }

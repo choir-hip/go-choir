@@ -15,6 +15,7 @@ import { offlineStories } from './content-run.ts';
 import { loadReader } from './reader.ts';
 import { sentenceTexts } from './reader-parse.ts';
 import { fileOpen } from './files.ts';
+import { lapYield, lap } from './lap.ts';
 import { firstRunOver } from './onboarding.ts';
 import { perform } from './radio-model.ts';
 import { htmlToText } from './mail-model.ts';
@@ -113,7 +114,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
   state.rt = rt;
   const front = async (): Promise<unknown> => {
     let body: unknown, stories: Story[];
-    try { body = (await getJSON('/api/platform/publications/front', { limit: FRONT_LIMIT })).body; await yieldTurn(); stories = parseList(body); }
+    try { body = (await getJSON('/api/platform/publications/front', { limit: FRONT_LIMIT })).body; await yieldTurn('front list received'); stories = parseList(body); }
     catch (e) {
       // Offline: the radio opens from the paper's last good front list (paper.ts keeps it for an offline start) and the desk is not asked; the error stands for the caller.
       stories = (await listing('', storage as never)).stories;
@@ -132,7 +133,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
     texts: async (routes) => {
       // the writer sends the first 8 KB of each: the rest of a 1.6 MB story is not read
       const out: Record<string, string[]> = {};
-      await Promise.race([Promise.all(routes.map(async (r) => { try { const d = await loadReader('pub:' + r); { const ps: string[] = []; let n = 0; for (const b of d.blocks) { const t = sentenceTexts(b).join(' '); ps.push(t); n += t.length; if (n > 24 * 1024) break; } out[r] = ps; } } catch { /* goes without text */ } })), new Promise((res) => setTimeout(res, 3000))]);
+      await Promise.race([Promise.all(routes.map(async (r) => { try { const d = await loadReader('pub:' + r); lap(`texts: ${r.slice(-20)} read (${d.blocks.length} blocks)`); { const ps: string[] = []; let n = 0; for (const b of d.blocks) { const t = sentenceTexts(b).join(' '); ps.push(t); n += t.length; if (n > 24 * 1024) break; } out[r] = ps; } } catch { /* goes without text */ } })), new Promise((res) => setTimeout(res, 3000))]);
       return out;
     },
     takes: async () => {
@@ -160,7 +161,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
 
 /** The radio of this process: made once, its sheet restored from its own file (nothing plays). */
 /** Ends the turn (Exact gives one about 100 ms of CPU; Bun has no scheduler). */
-const yieldTurn = async (): Promise<void> => { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); };
+const yieldTurn = (label: string): Promise<void> => lapYield(`bridge: ${label}`);
 
 export async function getRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
   if (!radio) radio = await makeRadio(storage, native);
@@ -258,7 +259,9 @@ async function holdInner(storage: Store | undefined, native: NativeReader | unde
 
 /** The desk's ask and the sheet's post, in one answer that waits for both. */
 export async function radioWrite(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
+  lap('radioWrite: start');
   const r = await getRadio(storage, native);
+  lap('radioWrite: radio ready');
   r.rt.store.flush();
   const asked = r.writer.checkAhead();
   const waits: Promise<unknown>[] = [];

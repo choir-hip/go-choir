@@ -494,6 +494,8 @@ BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1           # the Home screen over the app: it is not frontmost
 sleep "$BG_SECONDS"
 kill $BGLAUNCH $BGSTREAM 2>/dev/null
+echo "background: laps over 50 ms (lap.ts: the gap between two consecutive lap lines of the shared console, from the log stream's own timestamps):"
+awk '/console\] lap: / { split($2, t, ":"); ms = (t[1]*3600 + t[2]*60 + t[3]) * 1000; if (prev != "" && ms - pms > 50) printf "  %d ms  from [%s] to [%s]\n", ms - pms, prev, substr($0, index($0, "lap: ") + 5); prev = substr($0, index($0, "lap: ") + 5); pms = ms }' "$BGJSLOG" | head -30
 echo "background: the radio/hold/writer lines of shared code after the $BG_SECONDS s:"; grep -E "(radio|writer|deck|runsheet):" "$BGJSLOG" | tail -25 | cut -c1-260
 if [ ! -f "$BGLOG" ]; then echo "MISSING: background: no native console ($BGLOG)"; FAILS="$FAILS [background journal]"
 else
@@ -519,7 +521,8 @@ run_drive drill light "" --touch platform
 DR="$SHOTS/drive-drill.txt"
 AFTER="$SHOTS/drill-after.txt"; awk '/\[settings-account-signed\][^"]*"No"/ { f = 1 } f' "$DR" > "$AFTER"
 CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
-LEFT=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/dev/null | wc -l | tr -d ' ')
+LEFT_FILES=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/dev/null)
+LEFT=$(printf '%s' "$LEFT_FILES" | grep -c . | tr -d ' ')
 
 # ---- 3h. SIGNED-OUT TOUR (the drill above left the Keychain empty): launch with no key. The first screen (the radio) says what is true and offers the one way in; the paper lists the public stories and a
 # story reads; the radio offers to read the public paper; Settings > Account has a Sign in button. Nothing here needs the owner's computer.
@@ -782,7 +785,7 @@ chk "drill: the account page says signed out after" '\[settings-account-signed\]
 bad "drill: no failure note on the account page" '\[settings-signout-message\]' "$AFTER"
 bad "drill: Files shows no rows after sign-out" '\[files-row-/' "$AFTER"
 bad "drill: Mail shows no rows after sign-out" '\[mail-row-' "$AFTER"
-[ "$LEFT" = 0 ] && echo "ok: drill: the wipe marker and the stamp are gone from the app's files" || { echo "MISSING: drill: marker or stamp left ($LEFT)"; FAILS="$FAILS [drill files]"; }
+[ "$LEFT" = 0 ] && echo "ok: drill: the wipe marker and the stamp are gone from the app's files" || { echo "MISSING: drill: marker or stamp left ($LEFT): $(printf '%s' "$LEFT_FILES" | sed "s|$CONT||" | tr '\n' ' ')"; FAILS="$FAILS [drill files]"; }
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"

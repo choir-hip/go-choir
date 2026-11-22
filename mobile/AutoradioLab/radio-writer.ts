@@ -2,6 +2,7 @@
 // of the sheet, `open` first and then `extend` whenever the spoken time ahead is short, with one ask in flight. Nothing is swapped in: a desk that fails leaves the sheet as it is and says so once.
 // The decisions (when to ask, what a segment becomes, what an ended ask says, which stories are already told) are programme-model.ts; this module is the request and the placing.
 // The route answers an event stream to a POST, which shared code cannot read as it arrives (docs/reference/exact/gaps.md 36): the whole answer is read when it ends, so the entries of one write arrive together.
+import { lapYield, lap } from './lap.ts';
 import { cutBytes, oneLine } from './runsheet-entries.ts';
 import { AHEAD_FLOOR_SECONDS, StretchDecoder, askOutcome, entryFrom, placeOp, plainWords, shouldAskMore, toldRoutes, type Incoming } from './programme-model.ts';
 import { parseStory, weight } from './paper-model.ts';
@@ -107,7 +108,7 @@ export type WriterDeps = {
 };
 
 /** Between two entries of a long answer: lets the next turn start (Exact gives a turn about 100 ms of CPU; Bun has no scheduler). */
-const yieldTurn = async (): Promise<void> => { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); };
+const yieldTurn = (label: string): Promise<void> => lapYield(`writer: ${label}`);
 
 export class Writer {
   latency = 0; inFlight = false; dry = false; notice = ''; asks: string[] = [];
@@ -146,18 +147,19 @@ export class Writer {
         const now = this.d.now();
         const skipping = cause === 'open' ? new Set<string>() : toldRoutes(store.sheet.entries);
         const front = await this.d.front();
-        await yieldTurn();                          // the front list's decoding and the candidates below are not one turn (the proof's radioWrite took 146 ms and was refused: no desk entries followed)
+        await yieldTurn('after the front list');                          // the front list's decoding and the candidates below are not one turn (the proof's radioWrite took 146 ms and was refused: no desk entries followed)
         let items = fromFront(front, now.getTime(), skipping);
         if (items.length === 0 && skipping.size > 0) items = fromFront(front, now.getTime());   // everything told: the desk is still asked, with the whole list
         if (items.length === 0) { failure = { kind: 'empty' }; throw new Error('no story to tell'); }
         const texts = await this.d.texts(items.slice(0, MAX_TEXT_ITEMS).map((c) => c.route));
         const { takes: all, kept } = await this.d.takes();
-        await yieldTurn();
-        await yieldTurn();
+        await yieldTurn('after takes');
+        await yieldTurn('before candidates');
         const picked = takeCandidates(all, kept);
         const body = requestBody(cause, candidateBody(items, texts, picked), store.ahead(20).map((e) => e.title || ''), await this.d.edition(), now, this.d.tz(), this.d.requestId());
-        await yieldTurn();
+        await yieldTurn('before post');
         const raw = await this.post(body);
+        lap(`writer: the desk's reply received (${raw.length} chars)`);
         if (gen !== this.d.generation() || stops !== this.stops) return;                      // signed out meanwhile: nothing of the answer is applied
         const dec = new StretchDecoder();
         const takeById = new Map(picked.map((t) => [t.takeID, t]));
@@ -170,7 +172,7 @@ export class Writer {
             received += 1;
             const r = this.d.rt.director.applyFromDesk(placeOp(e, cause), cause);
             if (r?.applied) added += 1; else dropped += 1;
-            await yieldTurn();                        // each placement saves the whole sheet: one turn is 100 ms of CPU, and a stretch is dozens of entries
+            await yieldTurn('after placing an entry');                        // each placement saves the whole sheet: one turn is 100 ms of CPU, and a stretch is dozens of entries
           } else if (ev.type === 'error' && added === 0) failure = { kind: 'other' };
         }
       } catch (err) {
