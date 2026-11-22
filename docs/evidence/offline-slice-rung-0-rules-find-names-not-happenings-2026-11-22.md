@@ -155,3 +155,38 @@ Harness `lane/offline-slice-r0` at `495b4fe38`; no model call, no spend.
    count groups by distinct origin, to see how many a day would reach the
    root at thresholds of 2, 3 and 5 origins, and hand-read 50 groups for
    whether each is one happening.
+
+## Rung 0c, the same day: unmatched arrivals grouped by vector
+
+Harness `lane/offline-slice-r0` at `b327f61ef`; no model call, no spend.
+
+- **Unmatched** = nearest earlier story below cosine 0.795 (chosen on days 1
+  to 3; it wrongly calls 20.2% of arrivals a story later used unmatched).
+  53 to 59% of arrivals a day are unmatched; 7,519 on days 4 to 7.
+- **Grouping** in arrival order, centroid cosine at least 0.84 (the value with
+  the most multi-member groups on days 1 to 3; the knee criterion gave one
+  group of 1,652 and was rejected), closing after 48 h quiet. Outlets by
+  `internal/outlet.Of`, wire copies by the event layer's `wireOrigin`.
+- **Wakes a day** (the day a group's Nth distinct outlet arrived): 2 outlets
+  51 to 92; 3 outlets 13 to 35; 5 outlets 1 to 10. 58.2% of unmatched arrivals
+  end in groups that never reach 2 outlets.
+- **Cross-check, 70 groups reaching 3 outlets on days 4 to 7:** 26 later got a
+  new story citing a member (median 9.3 h after the group opened); 2 only an
+  existing story; 42 none (citations lag, so an overcount).
+- **The hand read** (a Sonnet agent, 50 of those 70): ONE happening 37, MOSTLY
+  one 4, THEME 5, NOISE 4. News a general paper would cover: yes 32, marginal
+  14, no 4. Of the 41 ONE or MOSTLY, 38 are reports from different newsrooms;
+  3 are one text re-posted. Bad groups: an aggregator feed (1,635 members
+  behind the 12 shown), donation appeals, contract news sharing one word.
+
+### Reading (the lead's)
+
+Four in five groups that reach three outlets are one happening, and about two
+in three are plainly news. At about 20 such groups a day, naming them costs
+about 20 model calls a day, against one per unmatched arrival (about 1,900 a
+day). The paper opened a story on at least 26 of 70, a median of nine hours
+after the group formed. The defects are chaining (a group that keeps
+absorbing) and aggregator accounts counted as outlets; both are bounded by a
+cap on group age and size and by collapsing re-post accounts to the outlet
+they relay. This supports the design change above. It does not test System 1
+or the model that names a group: that needs spend (decision Q5).
