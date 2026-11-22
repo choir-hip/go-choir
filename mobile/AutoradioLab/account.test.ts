@@ -39,10 +39,13 @@ function boot(files: Record<string, string>, key: Phone['key'] = 'present', valu
 afterEach(() => { account.resetBoundary(); api.resetSeam(); delete (globalThis as { exactHost?: unknown }).exactHost; });
 const has = (p: string): boolean => [...m.files.keys()].some((k) => k === p || k.startsWith(p + '/'));
 const relaunch = (): void => { account.resetBoundary(); api.resetSeam(); api.bindNative(native() as never); };
-const gated = (): Promise<{ readable: boolean; state: string; world: api.World }> => account.enter(m.storage as never, store as never);
-const out = (): Promise<account.SignOutResult> => account.accountSignOut(m.storage as never, store as never);
-const ending = (): Promise<account.SignOutResult> => account.accountEnding(m.storage as never, store as never);
-const card = (tries = 0) => accountState('', 'native', tries, m.storage as never, store as never);
+// Every call is an ANSWER: the store is there in its synchronous first turn only (account-phone.ts fakeStore), as on the host.
+const gated = (): Promise<{ readable: boolean; state: string; world: api.World }> => store.turn(() => account.enter(m.storage as never, store as never));
+const out = (): Promise<account.SignOutResult> => store.turn(() => account.accountSignOut(m.storage as never, store as never));
+const ending = (): Promise<account.SignOutResult> => store.turn(() => account.accountEnding(m.storage as never, store as never));
+const card = (tries = 0) => store.turn(() => accountState('', 'native', tries, m.storage as never, store as never));
+/** A launch that has to finish a sign-out takes more than one answer (the secrets are forgotten in a turn that has the store): ask until it is no longer starting. */
+const launched = async (): Promise<{ readable: boolean; state: string; world: api.World }> => { let r = await gated(); for (let i = 0; i < 6 && r.state === 'locked'; i++) r = await gated(); return r; };
 
 describe('L launch: the sweep and the one-world rule', () => {
   test('L1 a live key: orphan roots, leftovers and old mail originals go, the live root and anonymous stay, and nothing is read', async () => {
@@ -84,7 +87,7 @@ describe('L launch: the sweep and the one-world rule', () => {
   test('L5 T1: a key held while the world is anonymous moves it to that account ONCE; a second account world is refused', async () => {
     boot({ [`${ROOT(KEY_A)}/takes.json`]: 'a' }, 'absent');
     const a = await gated(); expect(a.state).toBe('anonymous'); expect(has(ROOT(KEY_A))).toBe(false);
-    store.set('api-key', KEY_A);                                                               // a sign-in stored it
+    store.put('api-key', KEY_A);                                                               // a sign-in stored it
     const b = await gated(); expect(b.state).toBe('open'); expect(b.world.digest).toBe(dig(KEY_A)); expect(a.world.closed).toBe(true);
     expect(() => api.openWorld(dig(KEY_B))).toThrow(/one account world/);
     expect(api.currentWorld()).toBe(b.world);
@@ -108,7 +111,7 @@ describe('S sign-out ends the session', () => {
     boot(seed());
     const w = (await gated()).world; expect(w.closed).toBe(false);
     const rms: string[] = []; const rm = m.storage.fs.rm.bind(m.storage.fs); (m.storage as { fs: { rm: unknown } }).fs.rm = async (p: string) => { rms.push(p); return rm(p); };
-    const r = await out();
+    const r = await out(); await card();      // the secrets are forgotten by the next answer that has the store
     expect(r.done).toBe(true); expect(store.kept.size).toBe(0); expect(w.closed).toBe(true); expect(api.sessionEnded()).toBe(true);
     expect(rms).toEqual([]); expect(has(ROOT(KEY_A))).toBe(true); expect(has('app:/tmp/picked')).toBe(true); expect(m.files.has(account.ENDING)).toBe(true);
     const after = await gated(); expect(after.readable).toBe(false); expect(after.state).toBe('ended');
@@ -116,20 +119,19 @@ describe('S sign-out ends the session', () => {
     expect(await card()).toMatchObject({ state: 'ended', message: WORDS.endedSignedOut, action: '', handle: '' });
   });
   test('S2 kill after the secrets are forgotten: the next launch finds the mark, sweeps every root before any world opens (reading none), has native forget its files and clears both marks', async () => {
-    boot(seed()); await gated(); await out();
+    boot(seed()); await gated(); await out(); await card();
     expect(store.kept.size).toBe(0); expect(has(ROOT(KEY_A))).toBe(true); expect(m.files.has(account.ENDING)).toBe(true);
-    reads.length = 0; relaunch(); const b = await gated();
+    reads.length = 0; relaunch(); const b = await launched();
     expect(m.files.has(account.ENDING)).toBe(false); expect(m.files.has(account.SIGNED)).toBe(false); expect(forgets).toBe(1);
     expect(b.state).toBe('anonymous'); expect(has(ROOT(KEY_A))).toBe(false); expect(has(ROOT(KEY_A, 'cache'))).toBe(false); expect(has('app:/tmp/picked')).toBe(false); expect(reads.filter((p) => p.includes('/accounts/'))).toEqual([]);
   });
   test('S3 the store refuses to forget: did not finish, the process stays ended, the key is kept, and the relaunch (the mark is the intent) finishes it', async () => {
     boot(seed()); await gated(); const real = store.forget; store.forget = (): void => { throw new Error('keychain refused'); };
-    const r = await out();
-    expect(r.done).toBe(false); expect(r.message).toBe('Sign-out did not finish. Close Autoradio, open it again and try again.'); expect(store.kept.has('api-key')).toBe(true); expect(has(`${ROOT(KEY_A)}/takes.json`)).toBe(true);
+    await out();
+    expect(await card()).toMatchObject({ state: 'ended', message: WORDS.endedUnfinished }); expect(store.kept.has('api-key')).toBe(true); expect(has(`${ROOT(KEY_A)}/takes.json`)).toBe(true);
     expect((await gated()).state).toBe('ended');
-    expect(await card()).toMatchObject({ state: 'ended', message: WORDS.endedUnfinished });
     store.forget = real; relaunch();
-    const c = await gated(); expect(c.state).toBe('anonymous'); expect(store.kept.size).toBe(0); expect(has(ROOT(KEY_A))).toBe(false);
+    const c = await launched(); expect(c.state).toBe('anonymous'); expect(store.kept.size).toBe(0); expect(has(ROOT(KEY_A))).toBe(false);
   });
   test('S5 a chain of the account that left does nothing after the sign-out; a write already in flight lands in its own root, which the next launch removes', async () => {
     boot(seed()); const w = (await gated()).world;
@@ -146,7 +148,7 @@ describe('S sign-out ends the session', () => {
     expect(has(`${ROOT(KEY_A)}/late.json`)).toBe(false); expect(calls).toEqual([]);
     await settle(inflight);
     for (const k of m.files.keys()) if (k.includes('inflight')) expect(k.startsWith(ROOT(KEY_A))).toBe(true);
-    relaunch(); await gated();
+    relaunch(); await launched();
     expect(has(ROOT(KEY_A))).toBe(false);
   });
 });
@@ -162,25 +164,25 @@ describe('E the ending mark: a kill never shows the old account\'s words', () =>
   const seed = (): Record<string, string> => ({ [`${ROOT(KEY_A)}/takes.json`]: 'a' });
   test('E1 the mark is written BEFORE the secrets are forgotten, and stays after a clean sign-out (only the next launch clears it)', async () => {
     boot(seed()); await gated(); let atForget = ''; const real = store.forget; store.forget = (n: string): void => { atForget = m.files.has(account.ENDING) ? 'marked' : 'unmarked'; real(n); };
-    const r = await out();
+    const r = await out(); await card();
     expect(atForget).toBe('marked'); expect(r.done).toBe(true); expect(m.files.has(account.ENDING)).toBe(true);
   });
   test('E2 a kill after the mark and before the forget: the mark is the person\'s intent, so the next launch FINISHES the sign-out (revoke, forget, sweep, native forgets, marks removed)', async () => {
     boot({ ...seed(), 'app:/tmp/picked/doc.pdf': 'pdf' }); await gated(); await ending();
     expect(m.files.has(account.ENDING)).toBe(true); expect(store.kept.has('api-key')).toBe(true);
-    relaunch(); const b = await gated();
+    relaunch(); const b = await launched();
     expect(store.kept.size).toBe(0); expect(m.files.has(account.ENDING)).toBe(false); expect(b.state).toBe('anonymous'); expect(has(ROOT(KEY_A))).toBe(false); expect(has('app:/tmp/picked')).toBe(false); expect(forgets).toBe(1);
   });
   test('E2b two sign-out taps share one revoke and one forget', async () => {
     boot(seed()); await gated(); const calls: string[] = []; globalThis.fetch = (async (u: unknown, i: { method?: string }) => { calls.push(`${i?.method} ${String(u)}`); return new Response('{}'); }) as never;
-    const [a, b] = await Promise.all([out(), out()]); expect(a.done && b.done).toBe(true); expect(calls.filter((c) => c.startsWith('DELETE')).length).toBe(1);
+    const [a, b] = await Promise.all([out(), out()]); await card(); expect(a.done && b.done).toBe(true); expect(calls.filter((c) => c.startsWith('DELETE')).length).toBe(1);
   });
   test('E3 native cannot forget its files: BLOCKED, no world (not even anonymous), one card that promises nothing; the mark stays and the next launch converges', async () => {
-    boot(seed()); await gated(); await out(); W.forgetDone = false;
-    relaunch(); reads.length = 0; const a = await gated(); expect(a.readable).toBe(false); expect(a.state).toBe('ended'); expect(api.sessionEnded()).toBe(true); expect(api.currentWorld().kind).toBe('none');
+    boot(seed()); await gated(); await out(); await card(); W.forgetDone = false;
+    relaunch(); reads.length = 0; const a = await launched(); expect(a.readable).toBe(false); expect(a.state).toBe('ended'); expect(api.sessionEnded()).toBe(true); expect(api.currentWorld().kind).toBe('none');
     expect(m.files.has(account.ENDING)).toBe(true);
     expect(await card()).toMatchObject({ state: 'ended', message: WORDS.endedBlocked, action: '' });
-    W.forgetDone = true; relaunch(); const c = await gated(); expect(c.state).toBe('anonymous'); expect(has(ROOT(KEY_A))).toBe(false); expect(m.files.has(account.ENDING)).toBe(false);
+    W.forgetDone = true; relaunch(); const c = await launched(); expect(c.state).toBe('anonymous'); expect(has(ROOT(KEY_A))).toBe(false); expect(m.files.has(account.ENDING)).toBe(false);
   });
   test('E5 a mark that cannot be written stops the sign-out before the key is touched', async () => {
     boot(seed()); await gated(); m.faults.write.add(account.ENDING);
@@ -212,7 +214,7 @@ describe('E the ending mark: a kill never shows the old account\'s words', () =>
 describe('C the card', () => {
   test('C1 signed in: the handle is the first 16 hex of the key digest; signed out; the handle moves when the account opens (T1)', async () => {
     boot({}, 'absent'); const o = await card(); expect(o).toMatchObject({ state: 'signedOut', action: 'signIn', handle: 'anonymous', message: WORDS.signedOut, radioMessage: WORDS.radioSignedOut });
-    store.set('api-key', KEY_A); const inn = await card();
+    store.put('api-key', KEY_A); const inn = await card();
     expect(inn).toMatchObject({ state: 'signedIn', action: '', handle: dig(KEY_A).slice(0, 16), message: '' }); expect(inn.handle).not.toBe(o.handle);
   });
   test('C2 starting says so and offers nothing', async () => {

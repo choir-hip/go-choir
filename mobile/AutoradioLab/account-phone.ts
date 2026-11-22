@@ -9,6 +9,7 @@ export const dig = (k: string): string => createHash('sha256').update(k).digest(
 export const reopen = (d: string, key?: string, computerId = ''): ApiWorld => { resetWorld(); const w = openWorld(d); if (key) holdSession(key, '', computerId); return w; };
 /** A test's "the account moved" for the generation guards some modules still keep: the same key in a NEW world, the generation moved. (The real app never does this: a sign-out ends the session.) */
 export const moveAccount = (): ApiWorld => { const d = currentWorld().digest; resetWorld(); return d ? openWorld(d) : currentWorld(); };
+let hostTurnEnds: (() => void) | null = null;      // set by fakeStore.post: the next call to the host's storage ends the continuation's turn
 export const KEY_A = 'test-key-A-not-real';
 export const KEY_B = 'test-key-B-not-real';
 export const STAMP = 'app:/data/account-stamp';
@@ -77,13 +78,28 @@ export function memFs(seed: Record<string, string> | string[] = []) {
     mkdir: async () => undefined,
     readdir: async (p: string) => [...new Set(kids(p).map((k) => k.slice(p.length + 1).split('/')[0]))],
   };
+  for (const k of Object.keys(fs) as (keyof typeof fs)[]) { const f = fs[k]; if (typeof f === 'function') (fs as Record<string, unknown>)[k] = (...x: unknown[]) => { hostTurnEnds?.(); return (f as (...y: unknown[]) => unknown)(...x); }; }      // a call to the host's storage ends the continuation's turn: what follows has no store
   const storage = { fs, sqlite: {} } as never;
   return { files, faults, writes, spy, storage: storage as never, get text() { return (p: string): string | undefined => { const b = files.get(p); return b ? new TextDecoder().decode(b) : undefined; }; } };
 }
 export type Mem = ReturnType<typeof memFs>;
 
-/** A fake of Exact's secret store (`secret.keep`): what an answer is handed as `store`. `hide()` makes every read answer null while the value stays kept (a Keychain the host could not read yet). */
+/** A fake of Exact's secret store (`secret.keep`) that behaves as the REAL host does where it matters: the store exists only in the SYNCHRONOUS first turn of an answer (and in the continuation of an effectful request, a POST or a DELETE); after any other await `store.get`, `store.set` and
+ * `store.forget` THROW "no store here, in background work or the continuation of an answer that was let go" (js/src/door.rs:45-70 `between_answers`, the message at :366). A test runs an answer inside `turn(...)`, and a request with effects through `post(...)`. `hide()` makes every read answer
+ * null while the value stays kept (a Keychain the host could not read yet); `put` seeds a value outside any answer; forgetting an ABSENT name is not an error (runner/src/store.rs:558-577). */
 export function fakeStore(init: Record<string, string> = {}) {
-  const kept = new Map(Object.entries(init)); let hidden = false;
-  return { kept, hide: (on = true): void => { hidden = on; }, get: (n: string): string | null => (hidden ? null : kept.get(n) ?? null), set: (n: string, v: string): void => { kept.set(n, v); }, forget: (n: string): void => { kept.delete(n); }, has: (n: string): boolean => kept.has(n) };
+  const kept = new Map(Object.entries(init)); let hidden = false; let inTurn = false; let inPost = false; const isOpen = (): boolean => inTurn || inPost;
+  const guard = (op: string): void => { if (!isOpen()) throw new Error(`${op}: no store here, in background work or the continuation of an answer that was let go. Read the store before the answer's first await. A write that must stand goes after a request with effects (a POST), whose continuation keeps the store.`); };
+  const store = {
+    kept, hide: (on = true): void => { hidden = on; }, put: (n: string, v: string): void => { kept.set(n, v); },
+    get: (n: string): string | null => { guard('store.get'); return hidden ? null : kept.get(n) ?? null; },
+    set: (n: string, v: string): void => { guard('store.set'); kept.set(n, v); },
+    forget: (n: string): void => { guard('store.forget'); kept.delete(n); },
+    has: (n: string): boolean => kept.has(n),
+    /** Run an answer's synchronous first turn: the store is there until `call` returns (its promise, and every await in it, run without). */
+    turn<T>(call: () => T): T { inTurn = true; try { return call(); } finally { inTurn = false; } },
+    /** The reply of a request with effects: its continuation (the first turn after the await) has the store, the turn after that does not. */
+    post<T>(reply: T): Promise<T> { inPost = true; hostTurnEnds = () => { inPost = false; hostTurnEnds = null; }; return Promise.resolve(reply).then((x) => { setTimeout(() => { inPost = false; hostTurnEnds = null; }, 0); return x; }); },
+  };
+  return store;
 }

@@ -60,6 +60,10 @@ export const ENDING = 'app:/data/ending';
 export const SIGNED = 'app:/data/signed-in';
 /** The card's re-reads (three seconds apart, `tries` of account-state.ts) ran out with the marker set and the secret still not reading: from then on the launch is anonymous (the key was lost: a restored backup, a wiped Keychain) and Sign in is offered. A bound in time, not in answers. */
 let lost = false;
+let needForget = false;      // a turn that has the store must forget the three secrets (see `turn`)
+let forgotten = false;       // ... and one did
+let forgetFailed = false;
+let revoked = false;         // the pending sign-out's key was revoked (or could not be) once
 let lastWhy = '';      // log on change only: fixed words, never account data
 const step = (w: string): void => { console.log(`account: ${w}`); };      // a step reached, in fixed words (the next drill run names where a sign-out or a launch stopped)
 const why = (w: string): void => { if (w !== lastWhy) { lastWhy = w; console.log(`account: ${w}`); } };
@@ -82,7 +86,7 @@ export function job<T>(fn: () => Promise<T>): Promise<T | undefined> {
 }
 export async function idle(): Promise<void> { for (;;) { const c = chain; await c; if (c === chain) return; } }
 /** For tests: a process that has just started. */
-export function resetBoundary(): void { endedWhy = ''; launching = null; chain = Promise.resolve(); timing.nativeMs = 30000; timing.wipeMs = 8000; swept = false; lockedWhy = ''; markerWritten = false; finishP = null; lost = false; lastWhy = ''; }
+export function resetBoundary(): void { endedWhy = ''; launching = null; chain = Promise.resolve(); timing.nativeMs = 30000; timing.wipeMs = 8000; swept = false; lockedWhy = ''; markerWritten = false; finishP = null; lost = false; lastWhy = ''; needForget = false; forgotten = false; forgetFailed = false; revoked = false; pendingRevoke = null; }
 
 type Mark = 'present' | 'absent' | 'unreadable';
 /** One folder listing answers both markers (metadata only: a marker's content is never read). A listing that fails for another reason than a missing folder is unreadable. */
@@ -100,20 +104,34 @@ async function native(request: { op: string; [k: string]: unknown }, ms: number)
   const later = nativeLater(); if (!later) return null;
   try { return await withDeadline(later(request), null, ms); } catch { return null; }
 }
+/** THE STORE EXISTS ONLY IN THE SYNCHRONOUS FIRST TURN OF AN ANSWER (and the continuation of an effectful request): Exact's `store.get`, `store.set` and `store.forget` throw "no store here, in the continuation of an answer that was let go" after any other await
+ * (js/src/door.rs:45-70 `between_answers`, the message at :366). So every answer that is handed the store calls `turn(store)` as its FIRST statement, before any await: it reads the key (api.ts `adoptStore`) and performs the forget a
+ * previous turn asked for (`needForget`, set after the revoke that must come first). Nothing else in this file touches the store. */
+export function turn(store?: Store): void {
+  adoptStore(store);
+  if (needForget && store) {
+    needForget = false;
+    try { forgetSession(store); forgotten = true; step('secrets forgotten (in a turn that had the store)'); } catch { forgetFailed = true; endedWhy = endedWhy === 'ending' || endedWhy === 'signedout' || endedWhy === 'unfinished' ? 'unfinished' : 'blocked'; if (!sessionEnded()) endWorld(); }
+  }
+}
 export const handKey = (): Promise<unknown> => { const h = heldSession(); return native({ op: 'holdKey', key: h?.key ?? '', keyId: h?.keyId ?? '', computerId: h?.computerId ?? '' }, timing.hostMs); };
 
-/** FINISH a sign-out the last process began (the ending mark is there): revoke the key if it is still held, forget the three secrets, sweep EVERY account root, have native forget its own files, remove the markers (the ending mark last). False when any step failed: the mark stays and the process is blocked. */
-async function finishEnding(storage: Storage, store: Store): Promise<boolean> {
-  step('launch: finishing a sign-out (the ending mark is there)');
-  const h = heldSession();
-  if (h && !(await revokeKey(h.keyId, h.key))) console.log('account: the key was removed from this phone but NOT revoked on the server');
-  try { forgetSession(store); step('launch: secrets forgotten'); } catch { return false; }
-  const f = (await native({ op: 'forgetAccountFiles' }, timing.wipeMs)) as { done?: unknown } | null;      // native's own files first: if it cannot, nothing is swept and the next launch tries again
+/** FINISH a sign-out the last process began (the ending mark is there). `wait`: the key was revoked (if it was held) and a turn that has the store is asked to forget the secrets (`turn`); `done`: everything is gone and both markers are removed (the ending mark last); `blocked`: a step failed and the log
+ * says which. Native's own files go before the sweep: if native cannot, nothing is swept and the next launch tries again. */
+async function finishEnding(storage: Storage): Promise<'wait' | 'done' | 'blocked'> {
+  if (forgetFailed) { why('blocked: the store refused to forget the secrets'); return 'blocked'; }
+  if (!forgotten) {
+    const h = heldSession();
+    if (h && !revoked) { revoked = true; const ok = await revokeKey(h.keyId, h.key); step(`launch: revoke ${ok ? 'answered' : 'not made (no key id, offline or refused)'}`); }
+    needForget = true; return 'wait';
+  }
+  const f = (await native({ op: 'forgetAccountFiles' }, timing.wipeMs)) as { done?: unknown } | null;
   step(`launch: native forgot its files: ${nativeLater() ? String(f?.done === true) : 'no native module'}`);
-  if (nativeLater() && !(f && f.done === true)) return false;
-  try { const r = await sweep(storage, ''); if (r.failed > 0) return false; swept = true; } catch { return false; }
-  if (!(await rmMark(storage, SIGNED))) { step('launch: the signed-in marker could not be removed'); return false; }
-  const ended = await rmMark(storage, ENDING); step(`launch: the ending mark ${ended ? 'removed, the sign-out is finished' : 'could not be removed'}`); return ended;
+  if (nativeLater() && !(f && f.done === true)) { why('blocked: native could not forget its files'); return 'blocked'; }
+  try { const r = await sweep(storage, ''); if (r.failed > 0) { why('blocked: the sweep could not remove every root'); return 'blocked'; } swept = true; } catch { why('blocked: the sweep failed'); return 'blocked'; }
+  if (!(await rmMark(storage, SIGNED))) { why('blocked: the signed-in marker could not be removed'); return 'blocked'; }
+  const ended = await rmMark(storage, ENDING); step(`launch: the ending mark ${ended ? 'removed, the sign-out is finished' : 'could not be removed'}`); if (!ended) why('blocked: the ending mark could not be removed');
+  return ended ? 'done' : 'blocked';
 }
 
 /** THE LAUNCH, once per process (see the header); `locked` is asked again at the next answer. The result is shared, but the storage calls of an attempt belong to the ANSWER that made them: the host drops them with the answer (the card is asked again the moment the sign-in view changes, and its first answer is gone), and an attempt whose answer is gone never finishes. So the card (`restart`) starts a fresh attempt, with its own storage, while the shared result is still open; the first attempt to finish settles it and the others stand down. */
@@ -131,9 +149,10 @@ async function runLaunch(d: Launch, storage: Storage | undefined, store: Store |
     markNotBaked();
     const marks = await readMarks(storage); const ending = marks.ending;
     if (ending === 'unreadable') { why('starting: the ending mark cannot be read'); lockedWhy = 'starting'; return 'locked'; }
-    adoptStore(store);
     if (ending === 'present') {
-      if (!(await finishEnding(storage, store))) { endedWhy = 'blocked'; endWorld(); return 'locked'; }
+      const r = await finishEnding(storage);
+      if (r === 'wait') { why('starting: finishing a sign-out'); lockedWhy = 'starting'; return 'locked'; }
+      if (r === 'blocked') { endedWhy = 'blocked'; endWorld(); return 'locked'; }
       dropHeld(); marks.signed = 'absent';      // the launch that finished it removed both markers
     }
     let live = ''; const h = heldSession(); if (h) live = await keyDigest(h.key);
@@ -168,7 +187,6 @@ async function settle(storage: Storage | undefined, store: Store | undefined, re
   if (launched === 'locked') return { state: 'locked', world: currentWorld(), digest: '' };
   const w = currentWorld();
   if (w.kind === 'anonymous') {
-    adoptStore(store);
     const h = heldSession();
     if (h && !sessionEnded()) { const d = await keyDigest(h.key); if (!sessionEnded() && currentWorld() === w) { openWorld(d); await handKey(); } }
   }
@@ -178,6 +196,7 @@ async function settle(storage: Storage | undefined, store: Store | undefined, re
 
 /** The gate's one question, asked before every page answer that touches account data. OPEN and ANONYMOUS pass; LOCKED and ENDED refuse. */
 export async function enter(storage: Storage | undefined, store?: Store): Promise<{ readable: boolean; state: State; world: World }> {
+  turn(store);
   const s = await settle(storage, store);
   if (s.state === 'locked' || s.state === 'ended') why(`the gate refuses: ${s.state}`);
   return { readable: s.state === 'open' || s.state === 'anonymous', state: s.state, world: s.world };
@@ -186,6 +205,7 @@ export async function enter(storage: Storage | undefined, store?: Store): Promis
 export type Peek = { state: State; handle: string; ended: Ended; why: LockedWhy; rejected: boolean };
 /** The card's question: never waits on a job. */
 export async function peek(storage: Storage | undefined, store?: Store, tries = 0): Promise<Peek> {
+  turn(store);
   if (tries >= 5 && !sessionEnded()) { const was = lost; lost = true; if (!was && lockedWhy === 'starting') launching = null; }      // the bound (account-state.ts TRIES): a launch that is still starting becomes anonymous
   const s = await settle(storage, store, true);
   const w = currentWorld();
@@ -199,7 +219,8 @@ const WORDS_UNFINISHED = 'Sign-out did not finish. Close Autoradio, open it agai
 
 /** STEP ONE of a sign-out, quick and with its own source so the card draws at once: the session ends (the world closes, no world opens again), native is told to DROP its in-memory key, and only then the ending mark is written. Idempotent. A mark that cannot be written stops the sign-out before the key is deleted. */
 export async function accountEnding(storage: Storage | undefined, store?: Store): Promise<SignOutResult> {
-  if (!sessionEnded()) { adoptStore(store); endWorld(); endedWhy = 'ending'; step('sign-out: the session ended'); }
+  turn(store);
+  if (!sessionEnded()) { endWorld(); endedWhy = 'ending'; step('sign-out: the session ended'); }
   const h = heldSession(); const id = h?.keyId ?? '', key = h?.key ?? '';
   pendingRevoke = pendingRevoke ?? (h ? { id, key } : null);
   dropHeld();
@@ -213,21 +234,22 @@ let pendingRevoke: { id: string; key: string } | null = null;
 
 /** STEP TWO, the person's tap, never behind the gate: revoke the key on the server, then forget the three secrets. NOTHING is wiped in this process (late writers may write what they like): the next launch finishes it. The result follows from the secrets, not from a guess: a forget that threw leaves the mark and the card says it did not finish. */
 export async function accountSignOut(storage: Storage | undefined, store?: Store): Promise<SignOutResult> {
+  turn(store);
   const r = (await job(() => signOutBody(storage, store))) ?? { done: false, failed: '', message: 'Nothing was signed out.' };
   return { ...r, epoch: 0 };
 }
-function finishOnce(store: Store | undefined): Promise<boolean> {
+function finishOnce(): Promise<boolean> {
   return (finishP ??= (async () => {
     const p = pendingRevoke; pendingRevoke = null;
     if (p && p.key) { const ok = await revokeKey(p.id, p.key); step(`sign-out: revoke ${ok ? 'answered' : 'not made (no key id, offline or refused)'}`); }
-    if (!store) { step('sign-out: no store'); return false; }
-    try { forgetSession(store); step('sign-out: secrets forgotten'); return true; } catch { return false; }
+    needForget = true; step('sign-out: the secrets are forgotten by the next turn that has the store');      // not here: the store is gone after the awaits above
+    return true;
   })().finally(() => { finishP = null; }));
 }
 async function signOutBody(storage: Storage | undefined, store: Store | undefined): Promise<Omit<SignOutResult, 'epoch'>> {
   if (sessionEnded() && endedWhy === 'signedout') return { done: true, failed: '', message: '' };
-  await accountEnding(storage);
+  await accountEnding(storage, store);
   if (!markerWritten) return { done: false, failed: '', message: WORDS_UNFINISHED };
-  if (!(await finishOnce(store))) { endedWhy = 'unfinished'; return { done: false, failed: '', message: WORDS_UNFINISHED }; }
+  if (!(await finishOnce())) { endedWhy = 'unfinished'; return { done: false, failed: '', message: WORDS_UNFINISHED }; }
   endedWhy = 'signedout'; return { done: true, failed: '', message: '' };
 }

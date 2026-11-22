@@ -29,13 +29,15 @@ reset_state() {
   S="$CONT/Library/Application Support/Autoradio"
   # ONE app:/data tree per run: of the two layouts an earlier drive may have left (the scratch store under Caches/exact/<id>/agent/<name>/data and Application Support/exact/<id>/data) only the one touched most recently is the app's; the other is stale (roots, marks and
   # an ending mark nothing reads) and would be counted by every check below, so it is removed. The in-use tree is kept: the kill and relaunch drills depend on what it holds.
+  # A PROOF RUN STARTS FROM A KNOWN STATE: the first reset of a run removes both app:/data layouts, the scratch store (its seeded secrets, kept state and kv) and the lease files an earlier run left (an ending mark of the last run made every launch of the next one finish a sign-out). After that the
+  # drives keep what the previous drive left on purpose: only the kill and relaunch drills depend on it (drills 2 to 5 name it in their own comments), and every other drive's own checks read what its own launch made.
+  if [ -z "${PROOF_FRESH_DONE:-}" ]; then rm -rf "$CONT/Library/Application Support/exact" "$CONT/Library/Caches/exact"; PROOF_FRESH_DONE=1; fi
   keep=$(data_dir_of "$CONT")
   for t in "$CONT"/Library/Caches/exact/*/agent/*/data "$CONT"/Library/Application\ Support/exact/*/data; do [ -d "$t" ] && [ "$t" != "$keep" ] && rm -rf "$t"; done
   rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
   rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
   # The takes' data: the shared file (app:/data/takes.json, take-session.ts) and the Swift programme's copies (takes-own.json, takes-muted.json). Every drive starts without them; the takes drive seeds the old two below.
   rm -rf "$S/account"; rm -f "$S/takes-own.json" "$S/takes-muted.json" "$S/takes-copy-own.json" "$S/takes-copy-muted.json" "$CONT"/Library/Application\ Support/exact/*/data/takes.json "$CONT"/Library/Caches/exact/*/agent/*/data/takes.json
-  rm -f "$CONT"/Library/Application\ Support/exact/*
   rm -rf "$CONT"/Library/Application\ Support/exact/*/data/theme-choice.json "$CONT"/Library/Application\ Support/exact/*/data/themes   # app:/data on a device build
   rm -rf "$CONT"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CONT"/Library/Caches/exact/*/agent/*/data/themes   # the themes' own place now (themes.ts: app:/data, which an agent drive keeps under Library/Caches/exact/<app id>/agent/default/data), not UserDefaults and Autoradio/themes
   rm -f "$CONT/Library/Preferences/$APP.plist"

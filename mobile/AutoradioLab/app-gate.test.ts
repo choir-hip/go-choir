@@ -26,7 +26,7 @@ function boot(files: Record<string, string>, key: Key = 'present'): void {
 }
 beforeEach(() => boot({}));
 afterEach(() => { account.resetBoundary(); api.resetSeam(); });
-const call = (source: string, args: unknown[] = []) => answer(source as never, args as never, store as never, m.storage as never, nativeStub());
+const call = (source: string, args: unknown[] = []) => store.turn(() => answer(source as never, args as never, store as never, m.storage as never, nativeStub()));
 const settle = (p: Promise<unknown>): Promise<unknown> => Promise.race([p.then(() => 'answered', () => 'refused'), new Promise((r) => setTimeout(() => r('never'), 40))]);
 
 describe('G the gate', () => {
@@ -107,7 +107,7 @@ describe('P5 every source of app.ts is driven through the gate', () => {
 
 describe('G7 the world-closed watcher', () => {
   test('N answers leave zero waiters on the world (one reaction per answer used to be left for the life of the process); a close refuses the ones still in flight and drains', async () => {
-    boot({}); const w = (await account.enter(m.storage as never, store as never)).world; expect(w.watching).toBe(0);
+    boot({}); const w = (await store.turn(() => account.enter(m.storage as never, store as never))).world; expect(w.watching).toBe(0);
     for (let i = 0; i < 40; i++) await call('pagesView', ['x', '']);
     expect(w.watching).toBe(0);
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; }); m.faults.writeHold.set(`${ROOT(KEY_A)}/open-pages-shared.json`, gate);
@@ -115,7 +115,7 @@ describe('G7 the world-closed watcher', () => {
     await call('accountSignOut'); expect(w.watching).toBe(0); release(); expect(await settle(p)).toBe('refused');
   });
   test('a source never runs for an ended session (the gate\'s own pre-check of a world that closed between `enter` and the call has no seam: a microtask gap, named in the design note)', async () => {
-    boot({}); const w = (await account.enter(m.storage as never, store as never)).world; let ran = false; const orig = (sources as Record<string, unknown>).pagesView;
+    boot({}); const w = (await store.turn(() => account.enter(m.storage as never, store as never))).world; let ran = false; const orig = (sources as Record<string, unknown>).pagesView;
     (sources as Record<string, unknown>).pagesView = () => { ran = true; return {}; };
     try { api.endWorld(); await expect(call('pagesView', ['x', ''])).rejects.toMatchObject({ name: 'AccountClosedError' }); expect(ran).toBe(false); void w; } finally { (sources as Record<string, unknown>).pagesView = orig; }
   });
@@ -128,17 +128,18 @@ describe('G6 every account-gated answer refuses in every state that has no open 
   for (const [name, set, state] of states) {
     test(`${name}: every gated source refuses with AccountClosedError and none runs`, async () => {
       boot({ [`${ROOT(KEY_A)}/takes.json`]: 'secret' }); set(); const sent0 = sent.length;
-      for (const s of gatedNames()) await expect(answer(s as never, [] as never, store as never, m.storage as never, nativeStub())).rejects.toMatchObject({ name: 'AccountClosedError', state });
+      if (state === 'ended') for (let i = 0; i < 6; i++) await call('pagesView', ['x', '']).catch(() => undefined);      // finishing a sign-out takes more than one answer (the secrets are forgotten in a turn that has the store)
+      for (const s of gatedNames()) await expect(store.turn(() => answer(s as never, [] as never, store as never, m.storage as never, nativeStub()))).rejects.toMatchObject({ name: 'AccountClosedError', state });
       expect(sent.slice(sent0).filter((u) => !u.includes('/auth/api-keys/'))).toEqual([]); expect(m.files.get(`${ROOT(KEY_A)}/takes.json`)).toBeDefined();      // nothing was sent (a launch finishing a pending sign-out revokes the key: the one request it may make) and the account's file is untouched
     });
   }
   test('ended (after a sign-out): every gated source refuses', async () => {
     boot({}); await call('accountSignOut');
-    for (const s of gatedNames()) await expect(answer(s as never, [] as never, store as never, m.storage as never, nativeStub())).rejects.toMatchObject({ name: 'AccountClosedError', state: 'ended' });
+    for (const s of gatedNames()) await expect(store.turn(() => answer(s as never, [] as never, store as never, m.storage as never, nativeStub()))).rejects.toMatchObject({ name: 'AccountClosedError', state: 'ended' });
   });
   test('anonymous binds a gated source to the anonymous root only, account to its own root only', async () => {
-    boot({}, 'absent'); const a = await account.enter(m.storage as never, store as never); expect(a.world.root).toBe('anonymous');
-    boot({}, 'present'); const b = await account.enter(m.storage as never, store as never); expect(b.world.digest).toBe(dig(KEY_A));
+    boot({}, 'absent'); const a = await store.turn(() => account.enter(m.storage as never, store as never)); expect(a.world.root).toBe('anonymous');
+    boot({}, 'present'); const b = await store.turn(() => account.enter(m.storage as never, store as never)); expect(b.world.digest).toBe(dig(KEY_A));
   });
 });
 
@@ -160,7 +161,7 @@ describe('B the bake and the hosts that are not phones', () => {
     boot({}, 'unreadable');                                       // a bake has no key and no native answer: the boundary is closed
     await expect(call('pageRequested', [0, '', ''])).rejects.toBe(bakeError);       // not AccountClosedError, not an answer
     await expect(call('pagesView', ['x', ''])).rejects.toBe(bakeError);
-    for (const s of Object.keys(sources)) { if (Object.hasOwn(DEVICE, s)) continue; await expect(answer(s as never, [] as never, store as never, m.storage as never, undefined as never)).rejects.toBe(bakeError); }
+    for (const s of Object.keys(sources)) { if (Object.hasOwn(DEVICE, s)) continue; await expect(store.turn(() => answer(s as never, [] as never, store as never, m.storage as never, undefined as never))).rejects.toBe(bakeError); }
   });
 });
 

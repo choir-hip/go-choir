@@ -60,10 +60,11 @@ export async function signInPoll(storage: Storage | undefined, store?: Store, fo
     if (!r.ok || !o.api_key) { fail('The server did not give a key. Try again.'); return signInView(store); }
     if (f.token !== serial || sessionEnded() || heldSession() || currentWorld().kind === 'account') return signInView(store);
     if (!storage || !store) { fail('Could not store the key; close Autoradio and open it again.'); return signInView(store); }
-    if (!(await writeSigned(storage))) { fail('Could not store the key; close Autoradio and open it again.'); return signInView(store); }      // the marker first: a marker without a key is harmless, a key without one is not
-    if (f.token !== serial || sessionEnded()) return signInView(store);
+    // THE STORE IS HERE ONLY IN THIS TURN (the continuation of an effectful request): the key is stored before any other await (account.ts `turn`).
     try { store.set(SECRET_KEY, o.api_key); if (o.key_id) store.set(SECRET_KEY_ID, o.key_id); } catch { fail('Could not store the key; close Autoradio and open it again.'); return signInView(store); }
-    holdSession(o.api_key, o.key_id ?? ''); await handKey();
+    holdSession(o.api_key, o.key_id ?? '');
+    if (!(await writeSigned(storage))) console.log('account: sign-in: the signed-in marker could not be written');      // the key is stored; the marker only tells "absent" from "not readable yet" before the first unlock
+    await handKey();
     status = 'idle'; userCode = ''; verificationURL = ''; message = 'signed in'; flow = null;
   } catch { if (f.token === serial && status === 'pending') message = 'waiting; the network did not answer'; }
   return signInView(store);

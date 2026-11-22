@@ -59,6 +59,7 @@ run_drive() {
   attempt=1; relaunched=0
   while :; do
     reset_state "$mode" "$ob"
+    DSTART=$(date '+%Y-%m-%d %H:%M:%S')
     set -f; OLDIFS="$IFS"; IFS='
 '
     # shellcheck disable=SC2046
@@ -82,8 +83,12 @@ run_drive() {
   : > "$STEPS"
   cat "$SCRATCH/$name.txt" >> "$OUT"
   cp "$SCRATCH/$name.txt" "$SHOTS/drive-$name.txt" 2>/dev/null
+  # The app's account, launch and sweep lines (fixed words, counts and the host's refusal words for a secret NAME, never a value), from the simulator's own log: a drive's text carries them only when its steps ask for `logs`, and a drive that fails first
+  # would otherwise leave nothing to read. Saved beside the drive; printed when the drive fails.
+  DEVELOPER_DIR=$DD /usr/bin/xcrun simctl spawn "$EXACT_SIM" log show --start "$DSTART" --style compact --predicate 'subsystem == "news.choir.autoradio.lab" AND category == "console"' 2>/dev/null | grep 'account:' | sed 's/^.*console\] //' > "$SHOTS/drive-$name.account.txt"
   if [ $rc -ne 0 ]; then
     grep -v "^warning" "$SCRATCH/$name.txt" | tail -15
+    echo "the app's account lines during drive $name:"; tail -30 "$SHOTS/drive-$name.account.txt" 2>/dev/null
     # PROOF_KEEP_GOING=1: every drive starts a fresh app, so a failed drive is recorded and the next one runs; the end prints every name. Without it the first failure stops the proof.
     [ "${PROOF_KEEP_GOING:-}" = 1 ] || fail "drive $name (exit $rc)"
     DRIVES_FAILED="$DRIVES_FAILED $name"; echo "drive $name FAILED (exit $rc)"; return 0
