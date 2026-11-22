@@ -54,8 +54,18 @@ func main() {
 		seed := fs.Int64("seed", 20261123, "seed")
 		_ = fs.Parse(os.Args[2:])
 		sampleB(*in, *data, *out, *key, *n, *seed)
+	case "groups":
+		fs := flag.NewFlagSet("groups", flag.ExitOnError)
+		in := fs.String("results", "", "results-b jsonl (nearest story and oracle)")
+		data := fs.String("data", "", "export directory")
+		out := fs.String("out", "", "reader folder")
+		key := fs.String("key", "", "key folder (not for the reader)")
+		n := fs.Int("n", 50, "groups in the reader folder")
+		seed := fs.Int64("seed", 20261124, "seed")
+		_ = fs.Parse(os.Args[2:])
+		groupsMain(*data, *in, *out, *key, *seed, *n)
 	default:
-		fmt.Fprintln(os.Stderr, "usage: offlineslice report|sample|sampleb ...")
+		fmt.Fprintln(os.Stderr, "usage: offlineslice report|sample|sampleb|groups ...")
 		os.Exit(2)
 	}
 }
