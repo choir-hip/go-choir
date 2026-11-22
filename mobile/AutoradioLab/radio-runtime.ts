@@ -320,6 +320,9 @@ export class RadioRuntime {
     const held = this.deckState?.held ?? [];
     return wanted.length !== held.length || wanted.some((w, i) => w.id !== held[i]);
   }
+  // Why the held list is native (a reason only native code can meet): on iOS shared code runs in the background only while audio is SOUNDING with the audio background mode, and may freeze in a gap, while a
+  // block is synthesised or after a pause (docs/reference/exact/native-modules.md "Open questions", Exact docs/contract-for-agents.md:4929); on Android it freezes when the activity stops. The deck must
+  // therefore hold the next entries itself (up to Deck.heldMax, only those whose sound needs no fetch) and play on alone; this keeps that list full while shared code runs. Unrun on a locked phone.
   private async keepHeld(): Promise<void> {
     const epoch = this.epoch;
     const wanted = this.director.wants || this.store.onAir() ? this.holdable() : [];

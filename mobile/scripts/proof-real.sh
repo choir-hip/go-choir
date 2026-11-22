@@ -462,74 +462,34 @@ view real-66-bar-on-page 600
 step logs
 run_drive bar light "" --touch platform
 
-# ---- 3f4. BACKGROUND drive (the deck plays on with the app not in front): the radio starts by itself (a signed-in computer, onboarding done), the app is sent to the background (the Home screen is launched over it) and
-# left for BG_SECONDS; the deck's own journal (the app's file `deck-journal.json`, written by native code whatever shared code is doing) is then read. Checks that can fail: at least five entries STARTED after the app left
-# the front, each begun after the one before ended `finished` with sound (the order of the sheet), all with the app not frontmost. What this cannot show: the simulator does not suspend a backgrounded app (Exact's own
-# contract says suspension is qualified on a real host, outside a drive: docs/contract-for-agents.md "frozen"), so a pass here does NOT show that shared code can be frozen and the radio still plays on; it shows the deck's
-# journal is written and ordered while backgrounded. A lock screen's next cannot be pressed from a script: the check below counts `remote next` lines and says "not driven" when there are none. Only the owner's locked phone
-# shows the radio playing five entries through with the screen off, and a real next from the lock screen. The drive refuses to pass when the app did not survive the drive (no new lines), instead of passing empty.
-BG_SECONDS="${BG_SECONDS:-240}"
+# ---- 3f4. BACKGROUND drive (the radio plays on with the app not in front): the radio starts by itself (a signed-in computer, onboarding done) and the Home screen is put over the app for BG_SECONDS.
+# Checks that can fail: at least five entries START on the native console (`on air <entry> voice=`) after the app left the front. What this proves: the radio (shared code's pump and hold, and the deck) keeps
+# starting entries while the app is covered. What it cannot prove: the simulator does not suspend an app, so frozen shared code (an iPhone with the screen locked and no sounding audio) is NOT shown, and the
+# order of the sheet is not read (the deck journal that said it is pruned when shared code acknowledges it). The held-entries-while-frozen case is owed on the owner's locked phone (docs/design/autoradio-in-exact-2026-11-18.md).
+BG_SECONDS="${BG_SECONDS:-300}"
+# The app must leave the front WITHOUT exiting: it exits when its driver's socket closes (Agent.exitAfterLanding, ExactKit/Agent.swift:140-146), so the driver stays attached for BG_SECONDS (`clock +N real`: the
+# app's own clock runs, shared code with it) and the Home screen is launched over the app by a watcher that waits for the first screenshot of the drive (the radio has started). What is counted afterwards is the
+# NATIVE console's `on air <entry> voice=` lines (written by the audio code, kept whatever shared code does, never pruned by an acknowledgement as the deck journal is) after that moment.
 step "clock data"; wait_ 8000
-view real-71-radio-starts 8000
+view real-71-radio-starts 3000
 step logs
+n=0; while [ $n -lt $((BG_SECONDS / 10)) ]; do step "clock +10000 real"; n=$((n + 1)); done
+step logs
+rm -f "$SCRATCH/bgt0"
+( until grep -q "real-71-radio-starts" "$SCRATCH/background.txt" 2>/dev/null; do sleep 1; done; date -u '+%Y-%m-%dT%H:%M:%SZ' > "$SCRATCH/bgt0"; SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1 ) &
+BGWATCH=$!
 run_drive background light "" --touch platform
-# The agent drive above shows the radio starts; it cannot show the app living on: the app EXITS when its driver's socket closes (Agent.exitAfterLanding, ExactKit/Agent.swift:140-146; docs/reference/exact/
-# testing-and-debugging.md "the app hung up"), and no line of the native console follows a drive's end. So the app is launched PLAIN (no driver; its own clock and shared code running), given time to start the
-# radio, and only then sent to the background. The check below is unchanged.
-reset_state light ""
-SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1
-sleep 40
+kill $BGWATCH 2>/dev/null
+BGT0=$(cat "$SCRATCH/bgt0" 2>/dev/null)
 BGCONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
-# What shared code kept in the 40 s (a plain launch has no driver, so no console): the first run's progress, the run sheet, the deck's journal. They say whether the radio started by itself.
-BGD=$(ls -d "$BGCONT"/Library/Caches/exact/*/agent/*/data "$BGCONT"/Library/Application\ Support/exact/*/data 2>/dev/null | head -1)
-echo "background: plain launch, 40 s in: onboarding=$(cat "$BGD/onboarding.json" 2>/dev/null | head -c 160) deck-journal=$(head -c 200 "$BGCONT/Library/Application Support/Autoradio/deck-journal.json" 2>/dev/null)"
-python3 - "$BGD/runsheet.json" <<'PYEOF'
-import json, sys
-try:
-    s = json.load(open(sys.argv[1]))["sheet"]["entries"]
-    print("background: run sheet entries:", [(e["id"][:10], e["kind"], e["state"]) for e in s][:8])
-except Exception as e:
-    print("background: run sheet unreadable:", e)
-PYEOF
-BGJ="$BGCONT/Library/Application Support/Autoradio/deck-journal.json"
-BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1           # the Home screen over the app: it is not frontmost
-# Is the app's process alive after the drive ended and the Home screen came? (the native console shows no line from the first process after the drive: dead, or stopped, is what this says)
-sleep 15; echo "background: the app's process 15 s after leaving: $(SIM spawn "$EXACT_SIM" launchctl list 2>/dev/null | grep -F "$APP" | head -2 | tr '\n' ' ')"
-sleep $((BG_SECONDS - 15))
-BGRES=$(python3 - "$BGJ" "$BGT0" <<'PYEOF'
-import json, sys
-path, t0 = sys.argv[1], sys.argv[2]
-try:
-    raw = json.load(open(path))
-except Exception as e:
-    print("unreadable", e); sys.exit(0)
-lines = []
-def walk(v):
-    if isinstance(v, dict):
-        if "seq" in v and "type" in v: lines.append(v)
-        else:
-            for x in v.values(): walk(x)
-    elif isinstance(v, list):
-        for x in v: walk(x)
-walk(raw)
-lines.sort(key=lambda l: l["seq"])
-after = [l for l in lines if l.get("at", "") >= t0]
-started = [l for l in after if l["type"] == "started"]
-order_ok = True; prev_end = None
-for l in after:
-    if l["type"] == "ended": prev_end = l
-    if l["type"] == "started" and prev_end is not None and not (prev_end.get("end") == "finished" and prev_end.get("rendered")): order_ok = False
-remote = [l for l in after if l["type"] == "remote" and l.get("command") == "next"]
-dry = [l for l in after if l.get("command") == "held-dry"]
-print("ok" if True else "", len(started), "order" if order_ok else "disorder", len(remote), len(dry))
-PYEOF
-)
-set -- $BGRES
-if [ "$1" = "unreadable" ]; then echo "MISSING: background: the deck's journal could not be read ($BGRES)"; FAILS="$FAILS [background journal]"
-elif [ "${2:-0}" -ge 5 ] && [ "$3" = "order" ]; then echo "ok: background: $2 entries started in order after the app left the front ($BG_SECONDS s); $5 held-dry lines"
-else echo "MISSING: background: needs at least 5 entries started in order after the app left the front; got $2 ($3). If 0: the app did not survive the drive."; FAILS="$FAILS [background entries]"; fi
-if [ "${4:-0}" -gt 0 ]; then echo "ok: background: a remote next acted ($4 lines)"; else echo "not driven: background: no remote next (a script cannot press the lock screen); only the owner's phone shows it"; fi
+BGLOG="$BGCONT/Library/Application Support/Autoradio/console.log"
+if [ -z "$BGT0" ] || [ ! -f "$BGLOG" ]; then echo "MISSING: background: no moment of leaving the front ($BGT0) or no native console ($BGLOG)"; FAILS="$FAILS [background journal]"
+else
+  BGN=$(awk -v t0="$BGT0" '$1 >= t0 && /AUTORADIO on air / && / voice=/' "$BGLOG" | wc -l | tr -d ' ')
+  if [ "$BGN" -ge 5 ]; then echo "ok: background: $BGN entries started on air after the app left the front (the Home screen over it, driver attached, $BG_SECONDS s)"
+  else echo "MISSING: background: needs at least 5 entries started on air after the app left the front; the native console shows $BGN since $BGT0"; FAILS="$FAILS [background entries]"; fi
+fi
+echo "not driven: background: no remote next (a script cannot press the lock screen), and no frozen shared code (the simulator does not suspend it): only the owner's locked phone shows those"
 SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1
 
 # ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the proof key has no key id, so nothing is revoked on the server and nothing else is written there).
