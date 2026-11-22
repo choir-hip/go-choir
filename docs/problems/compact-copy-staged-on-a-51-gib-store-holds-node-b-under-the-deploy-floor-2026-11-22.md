@@ -65,6 +65,18 @@ floor, not only a blocked deploy.
 - The refusal is correct: admitting it could take the host under its floor.
 - The owner was notified at 12:49Z. Nothing was changed on Node B.
 
+## 13:28Z: the copy is staged; refused deploys still cost disk
+
+- Paper console, 12:12:33Z: "store: compact copy: staged 51220185088 bytes at
+  sequence 13617852 in 1h24m36s (copy 28m54s), for the next planned restart".
+  So the check is finished and the copy waits, as read from the code.
+- Node B free: 50 GiB at 12:50Z, 44 GiB at 13:28Z. `/nix` went from 39 to 43
+  GiB: each landing's CI prebuilds the deploy's closure on Node B before the
+  preflight refuses the deploy (runs 45019936090 and 45022429116). The rest is
+  the paper's own growth.
+- Decision (lead): no landing that triggers CI's deploy path until the disk is
+  resolved; work continues in lanes. Docs commits do not build.
+
 ## What it blocks
 
 The deploy of F0 (`34bc283ee`) and every deploy after it, until the paper
