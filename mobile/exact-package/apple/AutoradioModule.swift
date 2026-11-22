@@ -210,7 +210,7 @@ public final class AutoradioModule: ExactPackage {
         if shown { touch(["barFacts"], now: true) }
     }
 
-    /// Entries Exact can call, before the module is built: `later` answers the substitutes of `choirAuth` and `choirPlayer` and `NotSupportedError` otherwise; `view` needs no store; `foreground` only schedules a notice.
+    /// Entries Exact can call, before the module is built: `later` answers the substitute of `choirPlayer` and `NotSupportedError` otherwise; `view` needs no store; `foreground` only schedules a notice.
     public func later(_ name: String, _ args: [String: Any], preferred: Any?, reply: @escaping ([String: Any]) -> Void) {
         guard choir != nil, runtime != nil else { reply(name == "choirPlayer" ? json(ChoirPlayerView()) : ["error": "NotSupportedError"]); return }
         let state = { [unowned self] in self.json(self.runtime.snapshot()) }
