@@ -112,3 +112,48 @@ A trim straight after a capture shortens the swing's tail and nothing else.
 None of this is built. The second store-sized copy, the compaction (due by layout age when this was written, since removed), is
 its own record:
 `compact-copy-staged-on-a-51-gib-store-holds-node-b-under-the-deploy-floor-2026-11-22.md`.
+
+## Named residuals of the one-pass design (read from code on 2026-11-22, not run)
+
+The design is [snapshot-one-pass-2026-11-22.md](../design/snapshot-one-pass-2026-11-22.md);
+stage A1 is the reader. Read from origin/main 5182b4781:
+
+- (a) Restore of a version 1 record recomputes the whole-store logical witness
+  in `VerifySnapshotFile` (`internal/agentcore/restore_snapshot.go`, the
+  `LiveStoreWitness` call), from `openStagedStore`
+  (`restore_snapshot.go:166`) and the boot install
+  (`internal/autoputer/projection_base.go:198`). On the paper the witness took
+  55 minutes at capture, so a restore would run until its caller's context
+  cancels (the proxy's ten-minute request for rematerialize; `bootstrapCtx` of
+  30 minutes, `internal/autoputer/run.go:339`, for boot, whose link to
+  `Install` is inferred). `Install` then returns the context error with no
+  fallback to an older snapshot. A1 removes this for version 2 records only,
+  and no capture writes one until A2.
+- (b) `RematerializeFromTape` computes a second whole-store logical digest after
+  the replay (`reconstructedWitness` and `WitnessContentMatches` against the
+  checkpoint's witness, `internal/agentcore/rematerialize.go`). That is a
+  checkpoint-binding claim and A1 and A2 do not change it, so rematerialize of
+  the paper stays over its ten-minute budget. Open; owner decision needed on
+  what replaces it.
+- (c) `restoreRequestBudget` (`internal/agentcore/snapshot_producer.go:105`) is
+  used only by a test (`snapshot_producer_replay_test.go:73`); it bounds
+  nothing. The design's earlier phrase "a restore of the paper would exceed it"
+  is corrected: the bound is the caller's context. `CandidateBudget` only stops
+  starting another candidate after a failure.
+- (d) Dropping the capture witness loses the only read of every table at
+  capture, which is a corruption canary on the source (a store with a malformed
+  b-tree fails capture today). The page digest does not replace it. `quick_check`
+  as a replacement is unmeasured: `internal/store/compact.go:64` records
+  integrity_check at 58 minutes on a 20 GB copy.
+- (e) The staged restore's fallback to an older snapshot is best effort.
+  `openStagedStore` passes `CandidateBudget: restoreCandidateBudget` (2
+  minutes; `internal/agentcore/restore_snapshot.go:93,165`), and `Install`
+  starts no further candidate once it has failed one and the budget is spent
+  (`internal/snapshot/snapshot.go:1316`). A page-digest failure arrives only
+  after the whole file is fetched and hashed, so on the paper the budget is
+  spent by the first candidate and the older one is not tried. Boot passes no
+  budget (`internal/autoputer/projection_base.go:190`). The budget is not
+  changed by A1. Read from code, not run.
+- Correction to the investigation's statement that nothing else reads the
+  witness: confirmed for `WitnessRoot` and `SchemaHash` (one reader), but the
+  restore path has a second, independent whole-store digest, item (b).

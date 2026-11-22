@@ -192,9 +192,11 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 		MaxSequence: targetSeq,
 		// The store's partitions: emptied, then the snapshot's installed.
 		PartitionDir: choirstore.TelemetryPartitionDir(storePath),
-		// The chunks are authenticated by their seal; this checks that the
-		// pages agree with the witness the producer recorded. A snapshot that
-		// fails falls back to the next older one.
+		// The chunks are authenticated by their seal; this checks the restored
+		// file against the record: a version 1 record's logical witness, a
+		// version 2 record's head row (its page digest is checked by the install
+		// itself, and the install refuses a version 2 record with no Verify). A
+		// snapshot that fails falls back to the next older one.
 		Verify: agentcore.VerifySnapshotFile,
 	}, candidates)
 	if err != nil {
