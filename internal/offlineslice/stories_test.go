@@ -127,6 +127,9 @@ func TestCleanerOutletAndCommonNoun(t *testing.T) {
 	if r := c.Drop(Mention{Key: "nato", Phrase: "NATO", Acronym: true}, ""); r != "" {
 		t.Fatalf("acronym %q", r)
 	}
+	if r := c.Drop(Mention{Key: "storm", Phrase: "STORM", Cands: []Cand{{EntityID: "e"}}}, ""); r != "" {
+		t.Fatalf("capitals are an acronym: %q", r)
+	}
 	if r := c.Drop(Mention{Key: "storm surge", Phrase: "Storm Surge"}, ""); r != "" {
 		t.Fatalf("multiword is not a common noun: %q", r)
 	}

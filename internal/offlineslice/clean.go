@@ -135,7 +135,7 @@ func (c *Cleaner) Drop(m Mention, host string) string {
 	if c.nDocs > 0 && float64(c.df[m.Key])/float64(c.nDocs) > lim {
 		return "df"
 	}
-	if !m.Acronym && !strings.Contains(m.Key, " ") {
+	if !m.Acronym && !allCaps(m.Phrase) && !strings.Contains(m.Key, " ") {
 		l, p := c.lower[m.Key], c.capt[m.Key]
 		if l+p >= c.commonMin && float64(l)/float64(l+p) > c.commonRatio {
 			return "commonnoun"
@@ -159,4 +159,18 @@ func CleanText(s string) string {
 	s = hashtagRe.ReplaceAllString(s, " ")
 	s = mentionRe.ReplaceAllString(s, " ")
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// allCaps: the phrase is written in capitals (US, AI, EU, U.S.): an acronym, not a word.
+func allCaps(s string) bool {
+	letters := 0
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			if !unicode.IsUpper(r) {
+				return false
+			}
+			letters++
+		}
+	}
+	return letters >= 2
 }
