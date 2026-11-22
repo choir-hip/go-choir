@@ -480,6 +480,17 @@ reset_state light ""
 SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1
 sleep 40
 BGCONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
+# What shared code kept in the 40 s (a plain launch has no driver, so no console): the first run's progress, the run sheet, the deck's journal. They say whether the radio started by itself.
+BGD=$(ls -d "$BGCONT"/Library/Caches/exact/*/agent/*/data "$BGCONT"/Library/Application\ Support/exact/*/data 2>/dev/null | head -1)
+echo "background: plain launch, 40 s in: onboarding=$(cat "$BGD/onboarding.json" 2>/dev/null | head -c 160) deck-journal=$(head -c 200 "$BGCONT/Library/Application Support/Autoradio/deck-journal.json" 2>/dev/null)"
+python3 - "$BGD/runsheet.json" <<'PYEOF'
+import json, sys
+try:
+    s = json.load(open(sys.argv[1]))["sheet"]["entries"]
+    print("background: run sheet entries:", [(e["id"][:10], e["kind"], e["state"]) for e in s][:8])
+except Exception as e:
+    print("background: run sheet unreadable:", e)
+PYEOF
 BGJ="$BGCONT/Library/Application Support/Autoradio/deck-journal.json"
 BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1           # the Home screen over the app: it is not frontmost
@@ -776,7 +787,7 @@ chk "signed out: the paper lists public stories" '\[paper-story-/pub/' "$SO"
 [ -n "$STORY_SO" ] && chk "signed out: a story reads" '\[reader-block-' "$SO"
 chk "signed out: the radio offers the public paper" '\[radio-play-public\]' "$SO"
 # public playback was STARTED: the now-playing line names one of the public stories listed on the radio page
-T0=$(awk '/\[radio-public-play-0\]/{f=1} f && /Text#[0-9]+ "/{print; exit}' "$SO" | grep -o 'Text#[0-9]* "[^"]*"' | head -1 | sed -E 's/^Text#[0-9]+ "//; s/"$//' | cut -c1-24)
+T0=$(awk '/\[radio-public-play-0\]/{f=1; next} f && /Text#[0-9]+ "/{ t=$0; f=0 } /tapped .*"radio-play-public"/{ exit } END{}  { if (t != "") last=t } END{ print last }' "$SO" | grep -o 'Text#[0-9]* "[^"]*"' | head -1 | sed -E 's/^Text#[0-9]+ "//; s/"$//' | cut -c1-24)   # the first public row as the LAST dump before the tap showed it (the paper's front changes live: the first dump of the drive can be minutes old)
 if [ -n "$T0" ] && grep -E 'NOW PLAYING|Now playing,' "$SO" | grep -qF "$T0"; then echo "ok: signed out: public playback started (now playing: a public story)"; else echo "MISSING: signed out: public playback started (title '$T0')"; FAILS="$FAILS [public playback]"; fi
 # the tree a screenshot was taken of: the lines between the previous screenshot line and this one
 seg() { awk -v m="$1" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$SO"; }
