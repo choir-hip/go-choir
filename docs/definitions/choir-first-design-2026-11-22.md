@@ -166,7 +166,7 @@ now:
   main_uncertainty: 'whether cheap candidate rules propose the right subjects often enough that the escalation desk stays small'
   next_observation: 'F0''s first by-desk count; the same 50 pairs against vector nearness; a score that ranks (it saturates at 1.0 for 35,177 pairs). F1''s read (docs/evidence/subjects-find-duplicate-stories-read-2026-11-22.md): 32 of 50 same or part, 18 same actors and a different happening, none unrelated; one thing sits under several rows and 28% of stories carry no subject.'
   blocker: none
-  next_action: 'start F0 and F1''s read; run the design panel on draft 2 and record what it disputes'
+  next_action: 'land F0; write the custodian and identity rules; set the offline slice''s kill lines and run it. The panel (five members, all proceed with changes; design section 12) reordered the work: nothing is retired before its replacement is proved, and an offline replay of a week of captures comes before any red station. The stations below predate that and are renumbered when the slice has run.'
 operating_notes:
   - 'Roles and review seats are in CLAUDE.md; builders work in lanes (lane new <name> --base origin/main) and compile Go on the build VM.'
   - 'A test of anything a desk reads runs with the reader gate in enforce, as production ships (the graph-first digest passed its tests in observe and was empty in production).'
