@@ -70,6 +70,7 @@ boundaries:
     - '"unpublished drafts in research are fine" (2026-11-22). Read as: a research run may be given the text of stories not yet published, and its web queries may draw on it.'
     - '"we should design for user computers being always accessible. todays storage issues wont remain" (2026-11-22). Read as: the app gets no separate mode for an unreachable computer; the host''s storage is what is fixed.'
     - 'On Node B''s disk (2026-11-22): "we will offload the tape soon. for now, lets do the other efficiencies"; the only computers to keep are the paper, the owner''s own, and the two test accounts; "we should delete the extra computers. we can make more later"; "Retire it and remove old paper snapshots".'
+    - 'On the phone''s sign-in key (2026-11-22), after the lead found Exact keeps secrets in the Keychain itself: "yes, i want to move everything to exact that can be. signing in again is fine." Read as: the key moves to Exact''s secret store; the old native item is deleted, not migrated; this lifts the earlier rule that the owner''s iPhone credential is never moved, for this change only.'
   must_preserve:
     - 'the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging'
     - 'no switches; no limits on our own model calls; one System 1 call a flush with every question in it'
