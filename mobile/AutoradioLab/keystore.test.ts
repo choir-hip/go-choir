@@ -139,3 +139,17 @@ describe('K9 an attempt whose answer is gone never finishes: the card starts ano
     void first;
   });
 });
+
+describe('K11 native is told by whichever answer first sees the world open', () => {
+  test('the attempt that opened the world died with its answer (its mkdir never lands): the next answer still sends `ready` and `holdKey`, once each', async () => {
+    boot({}, SEED);
+    const dead = memFs({}).storage as never as { fs: { mkdir: unknown } }; (dead.fs as { mkdir: unknown }).mkdir = () => new Promise(() => undefined);
+    void fs.turn(() => account.peek(dead as never, store()));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(api.currentWorld().kind).toBe('account'); expect(calls.some((c) => c.op === 'ready')).toBe(false);      // the world is open, native was never told
+    expect((await fs.turn(() => account.peek(m.storage as never, store()))).state).toBe('open');
+    await fs.turn(() => account.peek(m.storage as never, store()));
+    expect(calls.filter((c) => c.op === 'ready').length).toBe(1); expect(calls.filter((c) => c.op === 'holdKey' && c.key === KEY_A).length).toBe(1);
+  });
+});
+

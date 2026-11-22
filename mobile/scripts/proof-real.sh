@@ -418,7 +418,8 @@ run_drive picks light "" --touch platform
 unset SEED_PICKS
 
 CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
-PICKS_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/edition-topics.json "$CHK"/Library/Application\ Support/exact/*/data/edition-topics.json 2>/dev/null | head -1)
+# the account's file lives in its own root since the partition (data/accounts/<digest>/edition-topics.json); the old top-level place is listed too (a build that did not partition)
+PICKS_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/accounts/*/edition-topics.json "$CHK"/Library/Application\ Support/exact/*/data/accounts/*/edition-topics.json "$CHK"/Library/Caches/exact/*/agent/*/data/edition-topics.json "$CHK"/Library/Application\ Support/exact/*/data/edition-topics.json 2>/dev/null | head -1)
 [ -n "$PICKS_FILE" ] && cp "$PICKS_FILE" "$SHOTS/picks-stored.json"
 OLD_FILE="$CHK/Library/Application Support/Autoradio/edition-topics.json"
 if [ -n "$CHK" ] && [ -f "$OLD_FILE" ]; then cp "$OLD_FILE" "$SHOTS/picks-old-file.json"; else rm -f "$SHOTS/picks-old-file.json"; fi
@@ -577,7 +578,9 @@ place paper 2000
 place files 900; view real-40-files-before 3000
 place settings 900; step "tap settings-nav-account"; view real-41-account-before 3500
 step "tap settings-signout"; wait_ 6000; step tree; shot real-42-ended-card
-step "tap bar-mark"; wait_ 1200; step "tap place-files"; wait_ 800; step tree; shot real-43-ended-card-tapped      # taps on controls under the card (the bar's mark, a place) do nothing
+# The agent REFUSES a tap on a control a card covers ("node #N covers its middle"): that refusal is Exact's own proof that the controls under the card cannot be reached, and a refused tap ends the drive, so the drive taps the CARD itself (taken by `cardTap`, which does nothing but ask
+# the card again) and the checks read that the card is still the whole app and that nothing under it opened. (The first drill run on the Exact-store design failed here with that refusal, which is not a defect of the app.)
+step "tap ended-card"; wait_ 1200; step "tap ended-card"; wait_ 800; step tree; shot real-43-ended-card-tapped
 step logs
 run_drive drill light "" --touch platform
 DR="$SHOTS/drive-drill.txt"
@@ -729,6 +732,9 @@ place mail 900; wait_ 6000; view real-d5-refused 3000
 step "tap signedout-signout"; wait_ 6000; step tree; shot real-d5-ended
 step logs
 run_drive refused light "" --touch platform
+# A sign-out wipes NOTHING in its own process (the account's roots go at the next launch, which finishes it in more than one answer): the roots are read after a relaunch, not after the drive that signed out.
+step "clock data"; wait_ 15000; step tree
+run_drive refused2 light "" --touch platform
 unset NOKEY
 D5="$SHOTS/drive-refused.txt"
 tseg "$D5" real-d5-refused > "$SHOTS/seg-d5-refused.txt"

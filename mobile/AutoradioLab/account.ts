@@ -5,7 +5,7 @@
 //   T1       a key held while the world is anonymous (a sign-in stored it, or a late read found it): the anonymous world moves to the account's, once.
 //   T2       SIGN-OUT ends the session: native drops its in-memory key, the ending mark is written, the key is revoked then forgotten; no world opens again. The card says "close and reopen"; the next launch wipes first.
 import type { Storage, Store } from './app.contract.d.ts';
-import { ACCOUNTS, adoptStore, currentWorld, dropHeld, endWorld, forgetSession, heldSession, keyDigest, openWorld, sessionEnded, nativeLater, revokeKey, withDeadline, rmTree, rejectedDigest, deviceStorage, markNotBaked, type World } from './api.ts';
+import { ACCOUNTS, accountGeneration, adoptStore, currentWorld, dropHeld, endWorld, forgetSession, heldSession, keyDigest, openWorld, sessionEnded, nativeLater, revokeKey, withDeadline, rmTree, rejectedDigest, deviceStorage, markNotBaked, type World } from './api.ts';
 
 /** A page answer refused because the account is not open (locked, or the session ended). The page shows its existing failure state; the card says why. */
 export class AccountClosedError extends Error {
@@ -60,6 +60,8 @@ export const ENDING = 'app:/data/ending';
 export const SIGNED = 'app:/data/signed-in';
 /** The card's re-reads (three seconds apart, `tries` of account-state.ts) ran out with the marker set and the secret still not reading: from then on the launch is anonymous (the key was lost: a restored backup, a wiped Keychain) and Sign in is offered. A bound in time, not in answers. */
 let lost = false;
+let readySent = false;       // native was told the launch is clean (`ready`)
+let handedGeneration = -1;   // the generation of the world whose key native was handed (`holdKey`): a counter
 let needForget = false;      // a turn that has the store must forget the three secrets (see `turn`)
 let forgotten = false;       // ... and one did
 let forgetFailed = false;
@@ -86,7 +88,7 @@ export function job<T>(fn: () => Promise<T>): Promise<T | undefined> {
 }
 export async function idle(): Promise<void> { for (;;) { const c = chain; await c; if (c === chain) return; } }
 /** For tests: a process that has just started. */
-export function resetBoundary(): void { endedWhy = ''; launching = null; chain = Promise.resolve(); timing.nativeMs = 30000; timing.wipeMs = 8000; swept = false; lockedWhy = ''; markerWritten = false; finishP = null; lost = false; lastWhy = ''; needForget = false; forgotten = false; forgetFailed = false; revoked = false; pendingRevoke = null; }
+export function resetBoundary(): void { endedWhy = ''; launching = null; chain = Promise.resolve(); timing.nativeMs = 30000; timing.wipeMs = 8000; swept = false; lockedWhy = ''; markerWritten = false; finishP = null; lost = false; lastWhy = ''; needForget = false; forgotten = false; forgetFailed = false; revoked = false; pendingRevoke = null; readySent = false; handedGeneration = -1; }
 
 type Mark = 'present' | 'absent' | 'unreadable';
 /** One folder listing answers both markers (metadata only: a marker's content is never read). A listing that fails for another reason than a missing folder is unreadable. */
@@ -134,6 +136,15 @@ async function finishEnding(storage: Storage): Promise<'wait' | 'done' | 'blocke
   return ended ? 'done' : 'blocked';
 }
 
+/** Tell native the launch is clean (`ready`: it builds its module) and hand it the open account's key (`holdKey`), ONCE each, from whichever answer first sees the world open: the attempt that opened the world may have died with its answer (the host drops the
+ * storage calls of a dropped answer), and a native that was never told stays unbuilt (no deck, no voice, no Swift client has a key). A native module that is not usable yet is retried by the next ask. */
+async function ensureNative(): Promise<void> {
+  if (sessionEnded() || currentWorld().kind === 'none' || !nativeLater()) return;
+  if (!readySent) { readySent = true; await native({ op: 'ready' }, timing.hostMs); step('native told the launch is clean'); }
+  const h = heldSession(), g = accountGeneration();
+  if (h && currentWorld().kind === 'account' && handedGeneration !== g) { handedGeneration = g; await handKey(); }
+}
+
 /** THE LAUNCH, once per process (see the header); `locked` is asked again at the next answer. The result is shared, but the storage calls of an attempt belong to the ANSWER that made them: the host drops them with the answer (the card is asked again the moment the sign-in view changes, and its first answer is gone), and an attempt whose answer is gone never finishes. So the card (`restart`) starts a fresh attempt, with its own storage, while the shared result is still open; the first attempt to finish settles it and the others stand down. */
 function launch(storage: Storage | undefined, store: Store | undefined, restart = false): Promise<'ready' | 'locked'> {
   let d = launching;
@@ -167,8 +178,6 @@ async function runLaunch(d: Launch, storage: Storage | undefined, store: Store |
     if (currentWorld().kind !== 'none') return 'ready';      // another attempt opened it
     const opened = openWorld(live || 'anonymous');
     for (const space of SPACES) { for (const p of [`${space}/${ACCOUNTS}`, `${space}/${ACCOUNTS}/${opened.root}`]) { try { await storage.fs.mkdir(p); } catch { /* it exists */ } } }      // the first write of a module (onboarding) finds its root: a host's files need the parent folder
-    await native({ op: 'ready' }, timing.hostMs);      // the launch is clean: native builds its module (a blocked launch never says it)
-    if (live) await handKey();
     return 'ready';
   }
 }
@@ -188,8 +197,9 @@ async function settle(storage: Storage | undefined, store: Store | undefined, re
   const w = currentWorld();
   if (w.kind === 'anonymous') {
     const h = heldSession();
-    if (h && !sessionEnded()) { const d = await keyDigest(h.key); if (!sessionEnded() && currentWorld() === w) { openWorld(d); await handKey(); } }
+    if (h && !sessionEnded()) { const d = await keyDigest(h.key); if (!sessionEnded() && currentWorld() === w) openWorld(d); }
   }
+  await ensureNative();
   const now = currentWorld();
   return { state: now.kind === 'account' ? 'open' : 'anonymous', world: now, digest: now.digest ?? '' };
 }
