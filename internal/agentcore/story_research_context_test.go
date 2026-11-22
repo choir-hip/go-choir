@@ -42,7 +42,6 @@ type ctxSink struct {
 	pages map[string][]researchtools.LeadPage
 	urls  map[string]string
 	gone  map[string]bool
-	reads int
 }
 
 func (s *ctxSink) WriteCaptures(context.Context, string, string, []sourcegraph.CaptureItem) (sourcegraph.CaptureWriteResult, error) {
@@ -52,7 +51,6 @@ func (s *ctxSink) ListCaptures(context.Context, string, string, int) ([]objectgr
 	return nil, fmt.Errorf("not used")
 }
 func (s *ctxSink) ReadCapture(_ context.Context, id string, _, _ int) (json.RawMessage, error) {
-	s.reads++
 	if s.gone[id] {
 		return nil, fmt.Errorf("capture %s not found", id)
 	}
@@ -129,7 +127,7 @@ func TestStoryMaterialHoldsTheWholeBatchAndFeedsSinceResearch(t *testing.T) {
 		t.Fatalf("R1: material = %+v, %v; want c1,c2,c3 and no research yet", m, err)
 	}
 	// No earlier research: nothing is refused, the opening captures are its first material.
-	if err := rt.requireFedCapturesRead(ctx, owner, computer, doc, "run-t"); err != nil {
+	if err := requireFedRead(rt, ctx, owner, computer, doc, "run-t"); err != nil {
 		t.Fatalf("R4: a story with no earlier research was refused: %v", err)
 	}
 	researchCastAt(t, s, owner, computer, doc, "texture-cell:cast:r1", t0.Add(10*time.Minute))
@@ -137,7 +135,7 @@ func TestStoryMaterialHoldsTheWholeBatchAndFeedsSinceResearch(t *testing.T) {
 	var logs bytes.Buffer
 	log.SetOutput(&logs)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
-	err = rt.requireFedCapturesRead(ctx, owner, computer, doc, "run-t")
+	err = requireFedRead(rt, ctx, owner, computer, doc, "run-t")
 	if err == nil || !strings.Contains(err.Error(), "c4") || !strings.Contains(err.Error(), "c5") || strings.Contains(err.Error(), "c1") || !strings.Contains(err.Error(), "nothing was sent") {
 		t.Fatalf("R4: a research Cast after an unread feed was accepted or does not name c4 and c5: %v", err)
 	}
@@ -145,76 +143,19 @@ func TestStoryMaterialHoldsTheWholeBatchAndFeedsSinceResearch(t *testing.T) {
 		t.Fatalf("R4: the refusal is not counted: %q", logs.String())
 	}
 	rt.noteStoryCaptureRead(owner, computer, doc, "c4")
-	if err := rt.requireFedCapturesRead(ctx, owner, computer, doc, "run-t"); err == nil || strings.Contains(err.Error(), "c4,") || !strings.Contains(err.Error(), "c5") {
+	if err := requireFedRead(rt, ctx, owner, computer, doc, "run-t"); err == nil || strings.Contains(err.Error(), "c4,") || !strings.Contains(err.Error(), "c5") {
 		t.Fatalf("R4: a read capture is owed again, or the other is not: %v", err)
 	}
 	rt.noteStoryCaptureRead(owner, computer, doc, "c5")
-	if err := rt.requireFedCapturesRead(ctx, owner, computer, doc, "run-t"); err != nil {
+	if err := requireFedRead(rt, ctx, owner, computer, doc, "run-t"); err != nil {
 		t.Fatalf("R4: every fed capture was read and research was refused: %v", err)
 	}
 	// Another story's reads are not this story's.
 	other := openStoryOf(t, s, owner, computer, "cell-3:cast:c1", "Other story", "Whether the other thing happens at all", "", []string{"o1"}, t0)
 	researchCastAt(t, s, owner, computer, other, "texture-cell:cast:r2", t0.Add(10*time.Minute))
 	feedCastAt(t, s, owner, computer, other, "cell-4:cast:f1", []string{"c4"}, t0.Add(20*time.Minute))
-	if err := rt.requireFedCapturesRead(ctx, owner, computer, other, "run-u"); err == nil || !strings.Contains(err.Error(), "c4") {
+	if err := requireFedRead(rt, ctx, owner, computer, other, "run-u"); err == nil || !strings.Contains(err.Error(), "c4") {
 		t.Fatalf("R4: a read of c4 on one story cleared another story's feed: %v", err)
-	}
-}
-
-func TestResearchRunOnAStorySeesEarlierReadsFedCapturesAndPredecessor(t *testing.T) {
-	rt, s := testRuntime(t)
-	owner, computer := "owner-story-context", rt.cfg.ComputerID
-	ctx := context.Background()
-	t0 := time.Now().UTC().Add(-time.Hour)
-	first := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Dock strike", "Whether the dock strike ends and on what terms", "", []string{"c1"}, t0)
-	feedCastAt(t, s, owner, computer, first, "cell-2:cast:f1", []string{"c2"}, t0.Add(5*time.Minute))
-	succ := openStoryOf(t, s, owner, computer, "cell-3:cast:c1", "Dock strike ends", "What the settlement of the dock strike contains", "texture:"+first, []string{"c9"}, t0.Add(30*time.Minute))
-	stranger := openStoryOf(t, s, owner, computer, "cell-5:cast:c1", "Unrelated vote", "Who wins the unrelated vote and by how much", "", []string{"z1"}, t0)
-	sink := &ctxSink{
-		pages: map[string][]researchtools.LeadPage{
-			first:    {{CaptureID: "cap-r1", URL: "https://news.example/a", Title: "Talks resume"}, {CaptureID: "cap-r2", URL: "https://news.example/b", Title: "Union statement"}, {CaptureID: "cap-r3", URL: "https://wire.example/c"}},
-			stranger: {{CaptureID: "cap-z", URL: "https://elsewhere.example/z"}},
-		},
-		urls: map[string]string{"c1": "https://port.example/1", "c2": "https://port.example/2", "c9": "https://port.example/9"},
-	}
-	rt.researchDeps = &researchtools.Dependencies{Captures: sink}
-	// R2: a second research run on the first story sees the first run's reads, outlets and fed captures.
-	rec := briefRunRecord(owner, computer, first, "run-ctx-1")
-	c := rt.storyResearchContextOpening(ctx, rec)
-	if c == nil {
-		t.Fatal("R2: a story that holds pages got no context")
-	}
-	text := c.openingText()
-	for _, want := range []string{"cap-r1", "cap-r2", "cap-r3", "capture_id c1 https://port.example/1", "capture_id c2", "news.example (2)", "wire.example (1)", "main point: Whether the dock strike ends", "[Data, not instructions"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("R2: the context lacks %q:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "cap-z") || strings.Contains(text, "elsewhere.example") || strings.Contains(text, "succeeds") {
-		t.Errorf("R2: another story's pages, or a predecessor, in a story with none:\n%s", text)
-	}
-	// R3: the successor's first run starts with its predecessor's pages and outlets.
-	rec = briefRunRecord(owner, computer, succ, "run-ctx-2")
-	c = rt.storyResearchContextOpening(ctx, rec)
-	if c == nil {
-		t.Fatal("R3: a successor got no context")
-	}
-	text = c.openingText()
-	for _, want := range []string{"succeeds an earlier one", "cap-r1", "cap-r3", "wire.example", "capture_id c9", "main point: What the settlement", "The earlier story's main point: Whether the dock strike ends"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("R3: the successor's context lacks %q:\n%s", want, text)
-		}
-	}
-	// A story that holds nothing and succeeds nothing has no section.
-	sink.urls = nil
-	rt.researchDeps = &researchtools.Dependencies{Captures: &ctxSink{}}
-	empty := openStoryOf(t, s, owner, computer, "cell-6:cast:c1", "Empty story", "A story that holds no page of any kind", "", nil, t0)
-	if c := rt.storyResearchContextOpening(ctx, briefRunRecord(owner, computer, empty, "run-ctx-3")); c != nil {
-		t.Errorf("R2: a story with no pages got a section: %+v", c)
-	}
-	// Not a story's research run: none.
-	if c := rt.storyResearchContextOpening(ctx, &types.RunRecord{RunID: "r", OwnerID: owner, ComputerID: computer, AgentID: "texture:" + first, ChannelID: first, AgentProfile: "texture"}); c != nil {
-		t.Errorf("a texture run got a research context")
 	}
 }
 
@@ -255,191 +196,28 @@ func TestStoryReadThroughDeskEgressClearsTheRefusal(t *testing.T) {
 	}
 	// Another desk's read of c4 is no read by the story's Texture.
 	read("research", "c4")
-	if err := rt.requireFedCapturesRead(ctx, owner, computer, doc, "run-t"); err == nil || !strings.Contains(err.Error(), "c4") {
+	if err := requireFedRead(rt, ctx, owner, computer, doc, "run-t"); err == nil || !strings.Contains(err.Error(), "c4") {
 		t.Fatalf("a research desk's read cleared the story's refusal: %v", err)
 	}
 	texture := deskmanifest.DocumentCustodianName()
 	read(texture, "c4") // read
 	read(texture, "c5") // the store says it is gone: the attempt counts
-	err := rt.requireFedCapturesRead(ctx, owner, computer, doc, "run-t")
+	err := requireFedRead(rt, ctx, owner, computer, doc, "run-t")
 	if err == nil || strings.Contains(err.Error(), "c4") || strings.Contains(err.Error(), "c5") || !strings.Contains(err.Error(), "c6") {
 		t.Fatalf("after reading c4 and trying c5 the refusal should name only c6: %v", err)
 	}
 	read(texture, "c6")
-	if err := rt.requireFedCapturesRead(ctx, owner, computer, doc, "run-t"); err != nil {
+	if err := requireFedRead(rt, ctx, owner, computer, doc, "run-t"); err != nil {
 		t.Fatalf("every fed capture was read or tried and research is still refused: %v", err)
 	}
 }
 
-// A story with hundreds of captures delays no research start: the context
-// lists at most the section's bound, newest first, and reads only those.
-func TestStoryContextReadsAtMostWhatItShows(t *testing.T) {
-	rt, s := testRuntime(t)
-	owner, computer := "owner-story-bound", rt.cfg.ComputerID
-	var ids []string
-	urls := map[string]string{}
-	for i := 0; i < 150; i++ {
-		id := fmt.Sprintf("cap-%03d", i)
-		ids = append(ids, id)
-		urls[id] = fmt.Sprintf("https://site%d.example/p", i)
+// requireFedRead is the refusal the reducer makes (rlm_reduce.go): the unread fed captures
+// of a story as an error, nil when there are none.
+func requireFedRead(rt *Runtime, ctx context.Context, owner, computer, doc, runID string) error {
+	unread := rt.unreadFedCaptures(ctx, owner, computer, doc, runID)
+	if len(unread) == 0 {
+		return nil
 	}
-	doc := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Big story", "A story that holds a great many captures", "", ids, time.Now().UTC().Add(-time.Hour))
-	sink := &ctxSink{urls: urls}
-	rt.researchDeps = &researchtools.Dependencies{Captures: sink}
-	c := rt.storyResearchContextOpening(context.Background(), briefRunRecord(owner, computer, doc, "run-bound"))
-	if c == nil || strings.Count(c.text, "- capture_id ") != storyContextMaxPages || sink.reads != storyContextMaxPages {
-		t.Fatalf("listed %d pages after %d reads, want %d and %d", strings.Count(c.text, "- capture_id "), sink.reads, storyContextMaxPages, storyContextMaxPages)
-	}
-	if !strings.Contains(c.text, "capture_id cap-149 ") || strings.Contains(c.text, "capture_id cap-000") {
-		t.Fatalf("the newest captures are not the ones listed:\n%s", c.text)
-	}
-}
-
-// The section's page budget is shared, not first come: forty lead pages must
-// not push out the captures the story was just fed (review round 3, finding 8),
-// a predecessor's pages take a smaller share than the story's own, one URL
-// cannot fill the section, and the whole build has one deadline.
-func TestStoryContextKeepsTheNewestCapturesWhenLeadsFillTheSection(t *testing.T) {
-	rt, s := testRuntime(t)
-	owner, computer := "owner-story-share", rt.cfg.ComputerID
-	t0 := time.Now().UTC().Add(-time.Hour)
-	doc := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Big story", "A story with many pages read and a few just fed", "", []string{"old-1", "old-2"}, t0)
-	researchCastAt(t, s, owner, computer, doc, "texture-cell:cast:r1", t0.Add(10*time.Minute))
-	feedCastAt(t, s, owner, computer, doc, "cell-2:cast:f1", []string{"fed-1", "fed-2", "fed-3"}, t0.Add(20*time.Minute))
-	var leads []researchtools.LeadPage
-	for i := 0; i < 60; i++ {
-		leads = append(leads, researchtools.LeadPage{CaptureID: fmt.Sprintf("lead-%02d", i), URL: fmt.Sprintf("https://lead%d.example/p", i)})
-	}
-	long := "https://long.example/" + strings.Repeat("x", 3000)
-	sink := &ctxSink{pages: map[string][]researchtools.LeadPage{doc: leads}, urls: map[string]string{"fed-1": long, "fed-2": "https://f.example/2", "fed-3": "https://f.example/3", "old-1": "https://o.example/1"}}
-	rt.researchDeps = &researchtools.Dependencies{Captures: sink}
-	c := rt.storyResearchContextOpening(context.Background(), briefRunRecord(owner, computer, doc, "run-share"))
-	if c == nil {
-		t.Fatal("no context")
-	}
-	for _, want := range []string{"capture_id fed-1", "capture_id fed-2", "capture_id fed-3", "capture_id old-1", "Fed since the last research round: fed-1, fed-2, fed-3"} {
-		if !strings.Contains(c.text, want) {
-			t.Errorf("60 lead pages pushed out %q:\n%s", want, c.text)
-		}
-	}
-	if n := strings.Count(c.text, "- capture_id "); n != storyContextMaxPages {
-		t.Errorf("listed %d pages, want exactly the bound %d", n, storyContextMaxPages)
-	}
-	if strings.Contains(c.text, strings.Repeat("x", 300)) {
-		t.Errorf("a 3,000-character URL was listed whole")
-	}
-}
-
-func TestStoryContextPredecessorTakesASmallerShare(t *testing.T) {
-	rt, s := testRuntime(t)
-	owner, computer := "owner-story-pred", rt.cfg.ComputerID
-	t0 := time.Now().UTC().Add(-time.Hour)
-	first := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "First", "The first main point of a story that moved on", "", []string{"p1"}, t0)
-	succ := openStoryOf(t, s, owner, computer, "cell-2:cast:c1", "Second", "The second main point after it moved on", "texture:"+first, []string{"s1"}, t0.Add(time.Minute))
-	var leads []researchtools.LeadPage
-	for i := 0; i < 60; i++ {
-		leads = append(leads, researchtools.LeadPage{CaptureID: fmt.Sprintf("pred-%02d", i), URL: fmt.Sprintf("https://pred%d.example/p", i)})
-	}
-	rt.researchDeps = &researchtools.Dependencies{Captures: &ctxSink{pages: map[string][]researchtools.LeadPage{first: leads}, urls: map[string]string{"s1": "https://s.example/1"}}}
-	c := rt.storyResearchContextOpening(context.Background(), briefRunRecord(owner, computer, succ, "run-pred"))
-	if c == nil {
-		t.Fatal("no context")
-	}
-	// The predecessor's share is 20 pages: its own capture p1 and 19 of its 60 leads.
-	if n := strings.Count(c.text, "- capture_id pred-"); n != storyContextMaxPredecessorPages-1 || !strings.Contains(c.text, "capture_id p1") {
-		t.Errorf("the predecessor's leads listed = %d, want %d beside its own capture:\n%s", n, storyContextMaxPredecessorPages-1, c.text)
-	}
-	if !strings.Contains(c.text, "capture_id s1") {
-		t.Errorf("the story's own capture is missing:\n%s", c.text)
-	}
-}
-
-// Read-first, story side (the lead's handover, 2026-11-21): the pages a story's
-// research context lists are held pages of the run's root session, in front of the
-// corpus brief's. The rule demands the first five of that one search zero (the same
-// five it demands of any search); the section lists up to 40.
-func TestAStorysPagesAreTheFrontOfTheRunsSearchZeroAndTheBriefsFollow(t *testing.T) {
-	rt := &Runtime{}
-	story := &storyResearchContext{held: []yaegikernel.HeldPage{
-		{URL: "https://port.example/1", CaptureID: "c1"}, {URL: "https://news.example/a", CaptureID: "cap-r1"}, {URL: "https://shared.example/x", CaptureID: "cap-s"},
-	}}
-	// The brief arrives first: the story's pages still come in front, each page once.
-	rt.noteBriefHeld("run-1", []yaegikernel.HeldPage{{URL: "https://shared.example/x", CaptureID: "cap-b9"}, {URL: "https://brief.example/y", CaptureID: "cap-b1"}})
-	rt.noteStoryHeld("run-1", story)
-	var got []string
-	for _, p := range rt.briefHeldFor("run-1") {
-		got = append(got, p.CaptureID)
-	}
-	if want := "c1 cap-r1 cap-s cap-b1"; strings.Join(got, " ") != want {
-		t.Fatalf("search zero = %q, want %q", strings.Join(got, " "), want)
-	}
-	rt.noteStoryHeld("run-2", nil)
-	if rt.briefHeldFor("run-2") != nil {
-		t.Fatal("a run with no story context got a search zero")
-	}
-}
-
-func TestAStoryResearchContextHoldsOnlyPagesWithAURL(t *testing.T) {
-	rt, s := testRuntime(t)
-	owner, computer := "owner-story-held", rt.cfg.ComputerID
-	t0 := time.Now().UTC().Add(-time.Hour)
-	doc := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Dock strike", "Whether the dock strike ends and on what terms", "", []string{"c1", "c-nourl"}, t0)
-	rt.researchDeps = &researchtools.Dependencies{Captures: &ctxSink{urls: map[string]string{"c1": "https://port.example/1"},
-		pages: map[string][]researchtools.LeadPage{doc: {{CaptureID: "cap-r1", URL: "https://news.example/a"}}}}}
-	c := rt.storyResearchContextOpening(context.Background(), briefRunRecord(owner, computer, doc, "run-h"))
-	if c == nil {
-		t.Fatal("no context")
-	}
-	var urls []string
-	for _, p := range c.held {
-		urls = append(urls, p.URL)
-	}
-	if strings.Join(urls, " ") != "https://port.example/1 https://news.example/a" {
-		t.Fatalf("held = %v: the capture with no URL is listed in the section but cannot be a held page", urls)
-	}
-}
-
-// A research run on a story with held pages is refused its first web search until it
-// has tried them (a ReadCapture of each, by id; an attempt counts), then it sends.
-func TestAResearchRunOnAStoryIsRefusedItsFirstSearchUntilItTriedWhatTheStoryHolds(t *testing.T) {
-	var ids []string
-	tool, ctx, _, _ := decisionRig(t, manyPagesClient{pages: 3}, func(r *Runtime) {
-		owner, computer := "owner-story-gate", r.cfg.ComputerID
-		t0 := time.Now().UTC().Add(-time.Hour)
-		doc := openStoryOf(t, r.store, owner, computer, "cell-1:cast:c1", "Dock strike", "Whether the dock strike ends and on what terms", "", []string{"c1"}, t0)
-		pages := map[string][]researchtools.LeadPage{}
-		urls := map[string]string{"c1": "https://port.example/1"}
-		for i := 1; i <= 6; i++ {
-			pages[doc] = append(pages[doc], researchtools.LeadPage{CaptureID: fmt.Sprintf("cap-r%d", i), URL: fmt.Sprintf("https://news.example/%d", i)})
-		}
-		r.researchDeps.Captures = &ctxSink{urls: urls, pages: pages}
-		c := r.storyResearchContextOpening(context.Background(), briefRunRecord(owner, computer, doc, "run-desk-eval"))
-		if c == nil {
-			t.Fatal("the story held pages and got no context")
-		}
-		for _, p := range c.held {
-			ids = append(ids, p.CaptureID)
-		}
-		r.noteStoryHeld("run-desk-eval", c)
-	})
-	if len(ids) < 5 {
-		t.Fatalf("the story's context held %v", ids)
-	}
-	out := evalDeskCell(t, tool, ctx, `s, _ := choir.Search("first question")
-fmt.Println(s.ID == "", len(s.Results), s.Refused != "")`)
-	if out.Error != "" || !strings.Contains(out.Stdout, "true 5 true") {
-		t.Fatalf("the first web search was not refused for the story's held pages: %q %q", out.Error, out.Stdout)
-	}
-	// The first five, newest fed capture first: c1 (fed) leads. Trying them (an attempt
-	// counts, whether or not the capture is still there) releases the search.
-	var tryList []string
-	for _, id := range ids[:5] {
-		tryList = append(tryList, fmt.Sprintf("%q", id))
-	}
-	out = evalDeskCell(t, tool, ctx, `for _, id := range []string{`+strings.Join(tryList, ",")+`} { choir.ReadCapture(id, 0, 0) }
-s, _ := choir.Search("first question")
-fmt.Println(s.ID != "", s.Refused == "")`)
-	if out.Error != "" || !strings.Contains(out.Stdout, "true true") {
-		t.Fatalf("the search was not sent after the story's pages were tried: %q %q", out.Error, out.Stdout)
-	}
+	return fmt.Errorf("%s (nothing was sent)", unreadFedMessage(unread))
 }

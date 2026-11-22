@@ -141,17 +141,6 @@ type Runtime struct {
 	// runSearch holds each running run's search counts until its summary
 	// line is logged (search_run_summary.go).
 	runSearch sync.Map
-	// briefHeld holds each running research run's search zero: the pages its
-	// corpus brief delivered (run id -> []yaegikernel.HeldPage), handed to the
-	// run's cells so it reads them before it searches the web
-	// (search_decision.go). Forgotten when the run ends.
-	briefHeld sync.Map
-	// treeRead holds each running research tree's reading (run id -> *treeRead,
-	// search_decision.go).
-	treeRead sync.Map
-	// treeClosed remembers the runs whose tree was closed (run id -> time), so a
-	// late cell does not reopen one (search_decision.go).
-	treeClosed sync.Map
 	// calibrationRunReads holds each running run's calibration read state
 	// (run id -> *calibrationRunReads, calibration_reads.go).
 	calibrationRunReads sync.Map
@@ -784,8 +773,6 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		s.SetRunTerminalObserver(func(runID string) {
 			rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded)
 			rt.logRunSearchSummary(runID)
-			rt.briefHeld.Delete(runID)
-			rt.closeTree(runID)
 			rt.forgetStoriesShown(runID)
 		})
 		// A closed round with a scorable desk-to-desk Cast is judged
@@ -4120,13 +4107,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// A return before the run memory takes the text writes the brief's line
 	// as dropped (a second call after commitAfter writes nothing).
 	defer brief.finish(false)
-	// A story's research run also gets what the story already holds and what
-	// its earlier runs read (story_research_context.go).
-	storyCtx := rt.storyResearchContextOpening(ctx, rec)
-	// The pages it lists are held pages of the run's root session, in front of the
-	// brief's: the run tries them before its first web search (search_decision.go).
-	rt.noteStoryHeld(rec.RunID, storyCtx)
-	openingText := rec.Prompt + opening.openingText() + brief.openingText() + storyCtx.openingText()
+	// A research run on a story also gets the story digest (research_digest.go), which
+	// the brief carries: the story's text, what earlier rounds found, a passage of each
+	// capture it holds, then the corpus brief.
+	openingText := rec.Prompt + opening.openingText() + brief.openingText()
 	userMsg, _ := json.Marshal(map[string]any{
 		"role": "user",
 		"content": []any{

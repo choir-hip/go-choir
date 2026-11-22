@@ -169,9 +169,8 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 			notSent("no word of two or more letters or digits", "refused")
 			continue
 		}
-		// The need test (search_need.go) is startSearch's, run-wide, as for every verb:
-		// a wording is not sent while the run holds pages it has not read, whatever
-		// question they were returned for.
+		// startSearch answers a wording whose terms an earlier search had (reuse) and
+		// refuses one while another search of the run runs; nothing else holds it.
 		stub, err := s.startSearch(w.Wording, searchOpts{verb: "search_all", qk: qk})
 		if stub.Refused != "" {
 			if stub.Running {
@@ -185,46 +184,9 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 				s.allStat.running++
 				s.statsMu.Unlock()
 				if res.Next == "" {
-					res.Next = fmt.Sprintf("No further wording was sent: a search of this run is still running (%s). Wait for it with choir.SearchWait(%q, 15000), read what it returned, then call SearchAll again for what is still missing. A wording can be sent now with choir.SearchFresh(wording, why).", stub.ID, stub.ID)
+					res.Next = fmt.Sprintf("No further wording was sent: a search of this run is still running (%s). Wait for it with choir.SearchWait(%q, 15000), read what it returned, then call SearchAll again for what is still missing.", stub.ID, stub.ID)
 				}
 				notSent(fmt.Sprintf("a search of this run is still running (%s)", stub.ID), "")
-				continue
-			}
-			switch stub.Reason {
-			case reasonReadFirst, reasonHeldFirst, reasonSiteHeld:
-				// The run holds pages it has not read: they are in Results, and
-				// every wording left meets the same refusal, so they are named,
-				// not tried (one count: startSearch's).
-				addPages(stub.Unread, false)
-				stopWhy = stub.Refused
-				if stub.Reason == reasonSiteHeld {
-					// The text names one outlet; the wordings left may name another,
-					// and they are held by the run's untried pages whatever they ask
-					// for: say that, not the first wording's outlet.
-					if need := s.searches.readNeed(); len(need.pages) > 0 {
-						stopWhy = readFirstRefusal(need)
-					}
-				}
-				if res.Next == "" {
-					res.Next = "Read the pages in the Results of this value (choir.ReadAll on their URLs), then call SearchAll again for what is still missing, naming it. A page that will not load counts once you have tried it. If they cannot bear on what you lack, say why: choir.SearchFresh(wording, why)."
-				}
-				notSent(stub.Refused, "")
-				continue
-			}
-			if len(stub.Unread) > 0 {
-				// The web has shown what it has for this question (search_hold.go):
-				// the pages the run holds for it are in Results, and the wordings
-				// left meet the same hold, so they are named, not tried.
-				addPages(stub.Unread, false)
-				// Each later wording is judged on its own by the same rule: one that
-				// restricts to an outlet the run holds no page from is not held.
-				s.statsMu.Lock()
-				s.allStat.offered--
-				s.statsMu.Unlock()
-				if res.Next == "" {
-					res.Next = "The web has shown you what it has for this question: its latest search returned mostly pages you already held, and you hold pages for it that you have not tried to read (the Results of this value; choir.Searches.Summary(id)). Read what you hold or conclude not found. The hold ends once you have tried every page you hold for it (a page that will not load counts once tried: if all of them fail, nothing readable is held and the next wording is sent). A wording left out can be sent now with choir.SearchFresh(wording, why)."
-				}
-				notSent("the web has shown you what it has for this question (see the line below the wordings)", "")
 				continue
 			}
 			notSent(stub.Refused, "")
@@ -257,8 +219,7 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 				w.Returned = len(got.Results)
 			}
 			w.SearchID = stub.ID
-			notSent(fmt.Sprintf("%s; its %d pages are in the list, marked held; send it alone with choir.SearchFresh",
-				strings.TrimSuffix(strings.Replace(stub.Reused, " (same question); send it anyway with choir.SearchFresh(query, why)", "", 1), ""), w.Returned), "")
+			notSent(fmt.Sprintf("%s; its %d pages are in the list, marked held", stub.Reused, w.Returned), "")
 			continue
 		}
 		if _, err := s.SearchWait(stub.ID, searchWaitMs); err != nil {

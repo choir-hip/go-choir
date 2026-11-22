@@ -268,6 +268,30 @@ var runCaptures struct {
 
 const runCapturesMax = 512
 
+// CaptureMadeByRun reports whether the run's own Reads made the capture (it did not
+// exist in the corpus before the run): the proof's "built by the run", against a
+// capture that already was the corpus's. The ledger is in this process, so a run
+// that straddles a restart reads as not made.
+func CaptureMadeByRun(runID, captureID string) bool {
+	runCaptures.Lock()
+	defer runCaptures.Unlock()
+	return runCaptures.byRun[runID][captureID]
+}
+
+// NoteCaptureMadeByRunForTest records a capture as made by a run's own Read, for another
+// package's test of a count that reads it.
+func NoteCaptureMadeByRunForTest(runID, captureID string) {
+	runCaptures.Lock()
+	defer runCaptures.Unlock()
+	if runCaptures.byRun == nil {
+		runCaptures.byRun = map[string]map[string]bool{}
+	}
+	if runCaptures.byRun[runID] == nil {
+		runCaptures.byRun[runID] = map[string]bool{}
+	}
+	runCaptures.byRun[runID][captureID] = true
+}
+
 func runCaptureState(ctx context.Context, captureID string, made bool) string {
 	run := toolregistry.ExecutionContextFrom(ctx).RunID
 	if run == "" {

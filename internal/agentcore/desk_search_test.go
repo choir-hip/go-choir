@@ -192,16 +192,18 @@ func TestDeskSearchesKeepTheirOwnIDs(t *testing.T) {
 	client := newPipeSearchClient("a", "b")
 	tool, ctx, _, _ := researchSearchTool(t, client)
 	go func() {
-		first, second := <-client.opened, <-client.opened
-		for _, p := range []string{"a", "b"} {
-			client.provider(t, second, p)
-			client.provider(t, first, p)
+		// One search runs at a time: the second opens after the first ended.
+		for i := 0; i < 2; i++ {
+			p := <-client.opened
+			for _, name := range []string{"a", "b"} {
+				client.provider(t, p, name)
+			}
+			client.done(t, p, 2)
 		}
-		client.done(t, first, 2)
-		client.done(t, second, 2)
 	}()
 	out := evalDeskCell(t, tool, ctx, `x, _ := choir.SearchStart("alpha")
-y, _ := choir.SearchFresh("beta", "a second wording asked while the first runs") // a second search while the first runs is otherwise refused
+_, _ = choir.SearchWait(x.ID, 5000)
+y, _ := choir.SearchStart("beta")
 for _, id := range []string{x.ID, y.ID} {
 	c, err := choir.SearchWait(id, 5000)
 	r, _ := choir.Searches.Get(id)
@@ -286,7 +288,10 @@ fmt.Println(r)`)
 	if out.Error != "" {
 		t.Fatalf("cell error: %s", out.Error)
 	}
-	if !strings.Contains(out.Stdout, `2 "w2 beta": not sent (the top pages of this run's earlier searches are not read yet`) {
-		t.Fatalf("the second wording was sent: the first search was not tagged with its question, so the start frame did not reach the store before the answer:\n%s", out.Stdout)
+	// Nothing holds the second wording but the stop rule inside the call and the running
+	// rule: the first search's start frame reached the store before its answer (it is
+	// tagged with its question), so the call sees it finished and sends the second.
+	if !strings.Contains(out.Stdout, `1 "w1 alpha": sent s1`) || !strings.Contains(out.Stdout, `2 "w2 beta": sent s2`) {
+		t.Fatalf("both wordings must be sent:\n%s", out.Stdout)
 	}
 }

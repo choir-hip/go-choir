@@ -61,3 +61,18 @@ graph first, and then the web... we should be able to provide a lot of
 compressed context from the object graph, from prior stories, more than a web
 search". The fix is therefore the run's opening context and its prompt, and
 the refusal gates come out. The tighter gate was not built.
+
+## Outcome (2026-11-22, lane `graph-first`)
+
+The owner ruled, on hearing the stock-counting fix: "hmm, we shouldnt need rules. we
+should be able with prompts to encourage models to search the object graph first, and
+then the web ... we should be able to provide a lot of compressed context from the object
+graph, from prior stories, more than a web search"; and: "basically, the goal of any run
+shouldnt just be to write the best story, but to be building on and using our corpus, and
+then the story adds to our corpus". The read-first refusals and `SearchFresh` are removed;
+a research run on a story opens with a digest of the paper's graph (the story's text, what
+earlier rounds found, a passage of every capture it holds, then the nearest stories) and
+is told to use it first; the Report names what it adds and what the corpus lacked. The
+claim is unsettled until the proof reads it: `scripts/status-search-reads` (searches per
+run, graph before web, the digest's size and use, cited sources from the corpus versus
+captured by the run). Design note section 4 is rewritten to this frame.

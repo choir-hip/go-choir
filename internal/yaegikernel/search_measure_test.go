@@ -45,11 +45,6 @@ func TestReuseDeclineReasonsAreFixedTokens(t *testing.T) {
 	if st := out.SearchStats; st == nil || st.ReuseDeclined["earlier_run"] != 1 {
 		t.Fatalf("stats = %+v, want earlier_run=1", st)
 	}
-	// fresh over a usable match is counted as fresh, and is no decline of reuse.
-	out = cell(`choir.SearchFresh("harbor strike", "the earlier answer is out of date")`)
-	if st := out.SearchStats; st == nil || st.ReuseDeclined["fresh"] != 1 {
-		t.Fatalf("stats = %+v, want fresh=1", st)
-	}
 	for tok := range out.SearchStats.ReuseDeclined {
 		if strings.ContainsAny(tok, " /:.") {
 			t.Fatalf("token %q is not a fixed token", tok)

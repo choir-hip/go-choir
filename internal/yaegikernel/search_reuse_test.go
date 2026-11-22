@@ -101,7 +101,7 @@ fmt.Println(b)`)
 	if !strings.Contains(out.Stdout, "s1 s1 s2\n") {
 		t.Fatalf("ids: the reworded query must come back as s1, the one with another word as s2:\n%s", out.Stdout)
 	}
-	if !strings.Contains(out.Stdout, "s1 not sent: answered from your search s1, under a minute ago (same question); send it anyway with choir.SearchFresh(query, why)") {
+	if !strings.Contains(out.Stdout, "s1 not sent: answered from your search s1, under a minute ago (same question)") {
 		t.Fatalf("the stub does not say it was answered from s1:\n%s", out.Stdout)
 	}
 	if got := f.searchCalls.Load(); got != 2 {
@@ -170,19 +170,6 @@ fmt.Println(s.ID, err)`)
 	}
 	if st := out.SearchStats; st == nil || st.NotSent["refused"] != 2 {
 		t.Fatalf("stats = %+v, want 2 refused", st)
-	}
-}
-
-func TestSearchFreshSendsAMatchAnyway(t *testing.T) {
-	f := newResearchFixture(t)
-	cell, _ := searchCell(t, f)
-	out := cell(`a, _ := choir.SearchStart("harbor strike")
-b, _ := choir.SearchStart("strike harbor")
-c, _ := choir.SearchFresh("harbor strike", "the first answer is too old for this question")
-d, _ := choir.Search("harbor strike")
-fmt.Println(a.ID, b.ID, c.ID, d.ID)`)
-	if !strings.Contains(out.Stdout, "s1 s1 s2 s2\n") || f.searchCalls.Load() != 2 {
-		t.Fatalf("fresh must send (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
 }
 

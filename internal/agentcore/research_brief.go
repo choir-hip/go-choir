@@ -55,8 +55,8 @@ const (
 	researchBriefTitleRunes   = 160
 	researchBriefURLRunes     = 200 // a url or id over its limit is omitted, never cut
 	researchBriefIDRunes      = 80
-	researchBriefPassageRunes = 600
-	researchBriefSnippetRunes = 300
+	researchBriefPassageRunes = 900
+	researchBriefSnippetRunes = 700
 	// researchBriefNamedThreads is how many threads a note names (the rest are
 	// counted); researchBriefNameRunes clips each name and
 	// researchBriefReasonRunes clips a reason.
@@ -310,9 +310,6 @@ type researchBriefResult struct {
 	// read; unread counts the unread records the run's inbox held.
 	from   string
 	unread int
-	// held are the delivered brief's captures, in the brief's order: the run's
-	// search zero, read before it searches the web (yaegikernel.HeldPage).
-	held []yaegikernel.HeldPage
 }
 
 type briefBlock struct {
@@ -588,11 +585,6 @@ collect:
 		return res
 	}
 	res.outcome = briefDelivered
-	for _, c := range caps {
-		if strings.TrimSpace(c.URL) != "" {
-			res.held = append(res.held, yaegikernel.HeldPage{URL: c.URL, Title: c.Title, CaptureID: c.CaptureID})
-		}
-	}
 	delivered, _ := json.Marshal(map[string]any{"captures": nonNilCaptures(caps), "published": stories})
 	got, _ := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, delivered)
 	res.labels = res.labels.Union(got)
@@ -789,6 +781,9 @@ type researchBrief struct {
 	desk    string
 	elapsed time.Duration
 	logged  bool
+	// digest is the story digest delivered with the brief (research_digest.go), nil
+	// for a run on no story.
+	digest *researchDigest
 }
 
 // researchBriefOpening builds the brief of a research desk run, or returns
@@ -801,6 +796,39 @@ type researchBrief struct {
 // One deadline covers the whole build, the run-memory and inbox reads
 // included: every store call below takes the context.
 func (rt *Runtime) researchBriefOpening(ctx context.Context, rec *types.RunRecord) *researchBrief {
+	if rt == nil || rt.store == nil || rec == nil || !deskmanifest.IsResearchInbox(agentIDForRun(rec)) || !deskmanifest.SpawnsResearch(agentProfileForRun(rec)) {
+		return nil
+	}
+	// A resume replays the first message it stored: no brief and no digest.
+	if entries, err := rt.store.ListRunMemoryEntries(ctx, rec.OwnerID, rec.RunID); err == nil && len(entries) > 0 {
+		return nil
+	}
+	// The digest is built from the store at the same time as the brief's corpus
+	// searches, under the same 8 s bound (researchBriefDeadline): the build and the brief
+	// run side by side and each degrades alone, but the run's start waits for both, so a
+	// slow corpusd can add up to 8 s to it.
+	var digest *researchDigest
+	built := make(chan struct{})
+	go func() {
+		defer close(built)
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("research digest: panic run=%s: %v", rec.RunID, r)
+			}
+		}()
+		digest = rt.researchDigestOpening(ctx, rec)
+	}()
+	b := rt.researchBriefOpeningCore(ctx, rec)
+	<-built
+	if b == nil {
+		return nil
+	}
+	b.digest = digest
+	return b
+}
+
+// researchBriefOpeningCore is the brief alone.
+func (rt *Runtime) researchBriefOpeningCore(ctx context.Context, rec *types.RunRecord) *researchBrief {
 	if rt == nil || rt.store == nil || rec == nil || !deskmanifest.IsResearchInbox(agentIDForRun(rec)) || !deskmanifest.SpawnsResearch(agentProfileForRun(rec)) {
 		return nil
 	}
@@ -873,9 +901,6 @@ func (rt *Runtime) researchBriefOpening(ctx context.Context, rec *types.RunRecor
 	ctx = researchtools.WithCorpusCaller(ctx, researchtools.CorpusCallerBrief)
 	b.res = buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
 	b.res.from, b.res.unread = plan.from, len(recs)
-	if b.res.outcome == briefDelivered {
-		rt.noteBriefHeld(rec.RunID, b.res.held)
-	}
 	if b.res.panicked > 0 {
 		// Once per brief, with the run and no query text.
 		log.Printf("runtime: research brief run=%s: a corpus search panicked (%d of %d threads); the run starts without those threads", rec.RunID, b.res.panicked, len(plan.threads))
@@ -1029,10 +1054,14 @@ func (rt *Runtime) researchBriefSearcher() briefSearchFunc {
 
 // openingText is the text to append to the first turn, "" for no brief.
 func (b *researchBrief) openingText() string {
-	if b == nil || strings.TrimSpace(b.res.text) == "" {
+	if b == nil {
 		return ""
 	}
-	return "\n\n" + frameOpeningSection(worldReadLabels, b.res.text)
+	text := b.digest.openingText()
+	if strings.TrimSpace(b.res.text) != "" {
+		text += "\n\n" + frameOpeningSection(worldReadLabels, b.res.text)
+	}
+	return text
 }
 
 // finish writes the brief's one journal line. delivered is true when the run
@@ -1047,7 +1076,7 @@ func (b *researchBrief) finish(delivered bool) {
 	if !delivered {
 		res.outcome, res.reason = briefDropped, "the run memory did not take the text; the desk never saw this brief ("+res.outcome+" at build)"
 	}
-	log.Printf("runtime: %s", researchBriefLogLine(b.rec.RunID, b.desk, b.elapsed, res))
+	log.Printf("runtime: %s%s", researchBriefLogLine(b.rec.RunID, b.desk, b.elapsed, res), b.digest.digestLogFields())
 }
 
 // commitAfter writes the line and marks the run with the labels of what the
@@ -1060,8 +1089,12 @@ func (b *researchBrief) commitAfter(m *runMemoryManager) {
 	}
 	fresh := m != nil && m.startedFresh
 	b.finish(fresh)
-	if !fresh || len(b.res.labels) == 0 {
+	labels := b.res.labels
+	if b.digest != nil && len(b.digest.labels) > 0 && strings.TrimSpace(b.digest.text) != "" {
+		labels = labels.Union(b.digest.labels)
+	}
+	if !fresh || len(labels) == 0 {
 		return
 	}
-	b.rt.taintRun(b.rec.RunID, b.res.labels)
+	b.rt.taintRun(b.rec.RunID, labels)
 }

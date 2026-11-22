@@ -100,6 +100,64 @@ fmt.Println("seen", len(choir.Records()))`); !strings.Contains(out, "seen 0") {
 	}
 }
 
+// A research Report is counted once its record is COMMITTED: a Report the commit refuses
+// (here a final Report before the run read the Cast it answers) commits nothing, and its Report
+// is not logged as one the corpus received (the line is what the proof script counts).
+func TestAResearchReportIsLoggedOnlyWhenItsRecordCommits(t *testing.T) {
+	deskTestWorkerBin(t)
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	owner, computer, doc := "owner-reportlog", rt.cfg.ComputerID, "doc-reportlog"
+	texture, research := "texture:"+doc, "research:"+doc
+	cast := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "seed-cast", Records: []types.CommitmentRecord{{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "texture-cell:cast:tray-1", Kind: types.CommitmentKindDirective,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "cover chips", Body: `{"kind":"question","summary":"chips"}`},
+		Cast:      &types.CommitmentCast{}, Inbox: research, SenderInbox: texture, Addressee: research,
+		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: texture},
+	}}}
+	cast.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(cast)
+	if _, err := s.CommitInboxRecords(ctx, cast); err != nil {
+		t.Fatalf("seed Cast: %v", err)
+	}
+	rec := types.RunRecord{RunID: "run-reportlog", AgentID: research, OwnerID: owner, ComputerID: computer, ChannelID: doc, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, State: types.RunRunning}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+	execCtx := toolregistry.ExecutionContext{RunID: rec.RunID, AgentID: rec.AgentID, OwnerID: owner, ChannelID: doc, ComputerID: computer, Profile: agentprofile.Research, Role: agentprofile.Research, RunRecord: &rec}
+	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
+	buf := briefCaptureLog(t)
+	cell := func(src string) (string, error) {
+		payload, _ := json.Marshal(map[string]any{"source": src, "timeout_ms": 15000})
+		return tool.Func(toolregistry.WithExecutionContext(ctx, execCtx), payload)
+	}
+	packet := `map[string]interface{}{"kind":"evidence_update","summary":"it shipped","claims":[]interface{}{map[string]interface{}{"text":"it shipped"}},"work_disposition":"completed"}`
+	// A final Report before the run read the Cast it answers is refused at the commit:
+	// nothing is committed and the Report is not logged.
+	out, err := cell(`import "choir"
+choir.ReportPacket("texture", ` + packet + `, "")`)
+	if err == nil || !strings.Contains(err.Error(), "unread Cast") {
+		t.Fatalf("the unread-Cast refusal did not fire (out %q err %v): the test needs a refused commit", out, err)
+	}
+	if got, _ := s.ListInboxRecords(ctx, owner, computer, texture, 0, 10); len(got) != 0 {
+		t.Fatalf("the refused Report committed %d records", len(got))
+	}
+	if strings.Contains(buf.String(), "research report run=run-reportlog") {
+		t.Fatalf("a Report the commit refused was logged as received:\n%s", buf.String())
+	}
+	// Read the Cast, then the Report commits and is logged once.
+	if _, err := cell(`import "choir"
+choir.Records()
+choir.ReportPacket("texture", ` + packet + `, "")`); err != nil {
+		t.Fatalf("the committing cell: %v", err)
+	}
+	if got, _ := s.ListInboxRecords(ctx, owner, computer, texture, 0, 10); len(got) != 1 {
+		t.Fatalf("the Report did not commit: %d records", len(got))
+	}
+	if n := strings.Count(buf.String(), "research report run=run-reportlog final=true"); n != 1 {
+		t.Fatalf("a committed final Report is logged %d times, want once:\n%s", n, buf.String())
+	}
+}
+
 // A crash boot closes every open round with one system closure addressed to
 // the caster; a second boot writes nothing; a planned boot closes nothing
 // (Cut 1, "Restart"). Ways this could fail, written first: the closure

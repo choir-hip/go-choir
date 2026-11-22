@@ -99,7 +99,7 @@ func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load research prompt: %v", err)
 	}
-	corpus, web := strings.Index(prompt.Content, "choir.SearchWireCorpus("), strings.Index(prompt.Content, "choir.SearchStart(")
+	corpus, web := strings.Index(prompt.Content, "choir.SearchWireCorpus("), strings.Index(prompt.Content, "choir.SearchAll(")
 	if corpus < 0 || web < 0 || corpus > web {
 		t.Fatalf("research prompt does not search the corpus before the web: %q", prompt.Content)
 	}
@@ -111,9 +111,10 @@ func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 // and to write each thread as held, stale or missing; still tells it to run
 // searches at once or to cover every open thread in each round with several
 // searches; or does not say that SearchAll sends the first wording and names
-// the rest, that no web search is sent while the top pages of earlier searches
-// and the brief's held pages are untried, or that SearchFresh(query, why) is the
-// one way past (v19, 2026-11-21: this replaced the 15-unread line and `fresh`).
+// the rest (v19, 2026-11-21: this replaced the 15-unread line and `fresh`); v20
+// (2026-11-22) removed the read-first refusals and SearchFresh: it says the
+// objective is to build on and use the corpus, graph first then the web, and that
+// the Report names what it adds and what the corpus lacked.
 func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
 	if err != nil {
@@ -134,17 +135,15 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"each thread of the objective as held (with its capture ids), stale or missing",
 		"Search the web only for the stale and missing threads, one question at a time",
 		"read what it returns before you search again",
-		"the wordings of one missing question",
 		"choir.SearchAll(question, wordings)",
-		"it sends the first wording and names the rest",
-		"No web search (choir.Search(query), choir.SearchStart(query) or SearchAll) is sent while you hold pages you have not tried to read",
-		"the top 5 pages of each of your earlier searches, and (if you were shown it) the first pages the corpus brief listed",
-		"The refusal lists them and is not an error: read them",
-		"a page that will not load counts once you have tried it",
-		"then search again for what is still missing, naming it",
-		"A site: search for an outlet whose page you hold is met by reading that page",
-		"choir.SearchFresh(query, why), with a reason of at least 20 characters that is recorded",
 		"mark each page new or held",
+		"build on and use what the paper already holds",
+		"your Report is an addition to the corpus",
+		"A research run on a story opens with a digest of the graph",
+		"Graph first, then the web",
+		"which claims rest on which capture ids from the graph",
+		"\"adds: ...\" (what this adds to the corpus) and \"missing: ...\" (what the corpus lacked)",
+		"A search of the same terms as an earlier one returns that earlier search; one search runs at a time",
 		"a page from a second independent outlet that supports it: report it and do not search again",
 	} {
 		if !strings.Contains(flat, want) {

@@ -671,7 +671,7 @@ open(root + "/cr_d.log", "w").write("".join(L))
 PY
 runcorpus --fixture "$root/cr_d.log"
 check "R14 all four shapes count: 4 runs, started 10, from the deployed shape pages_returned 240 and read 20" 'grep -q "summary lines): 4" "$root/out" && grep -q "started (web searches sent) sum 10" "$root/out" && grep -q "pages_returned 240, pages_new 188, pages_read 20" "$root/out"'
-check "R14 reasons from the parentheses are summed and not read as fields; wordings 3 sent of 6 offered (50.0%), unread_notes 1, calls 3" 'grep -q "not_sent 3 (holds_unread=2, stopped_yielding=1)" "$root/out" && grep -q "(3 lines carry the wording fields) search_all_calls 3, wordings_offered 6, wordings_sent 3 (50.0%), unread_notes 1" "$root/out"'
+check "R14 reasons from the parentheses are summed and not read as fields; wordings 3 sent of 6 offered (50.0%), calls 3" 'grep -q "not_sent 3 (holds_unread=2, stopped_yielding=1)" "$root/out" && grep -q "(3 lines carry the wording fields) search_all_calls 3, wordings_offered 6, wordings_sent 3 (50.0%)" "$root/out"'
 check "R14 an unknown numeric field in the middle is kept, shown, and does not drop the line" 'grep -q "other numeric fields on the summary lines (sums): widgets_seen=7" "$root/out"'
 runcorpus --fixture "$root/cr_d.log" --first 2 --after 2026-11-19T01:51Z
 check "R14 --first on the deployed shape finds 2 (d-2, d-3)" 'grep -q "found 2" "$root/out" && grep -q "summary lines): 2" "$root/out"'
@@ -695,7 +695,7 @@ import sys
 root = sys.argv[1]
 PRE = "[ 9.0] x-go-choir-run-autoputer-runtime[1]: "
 L = [PRE + "2026/11/20 03:00:00 runtime: other\n",
- PRE + "2026/11/20 03:10:00 runtime: search run=f-1 desk=research started=9 from_held=1 not_sent=2 (search_running=2) search_all_calls=1 wordings_offered=4 wordings_sent=3 fresh_over_unread=0 untagged=0 wordings_running=2 pages_returned=200 pages_new=80 pages_read=10 searches_judged=9 searches_mostly_seen=4 outlets_held_max=7 outlets_held_last=6 reuse_declined_out_of_window=2 reuse_declined_earlier_run=1 resumed_segment=1\n",
+ PRE + "2026/11/20 03:10:00 runtime: search run=f-1 desk=research started=9 from_held=1 not_sent=2 (search_running=2) search_all_calls=1 wordings_offered=4 wordings_sent=3 fresh_over_unread=0 fresh_sent=3 untagged=0 wordings_running=2 pages_returned=200 pages_new=80 pages_read=10 searches_judged=9 searches_mostly_seen=4 outlets_held_max=7 outlets_held_last=6 reuse_declined_out_of_window=2 reuse_declined_earlier_run=1 resumed_segment=1\n",
  PRE + "2026/11/20 03:11:00 runtime: search run=f-2 desk=research started=2 from_held=0 not_sent=0 pages_returned=20 pages_new=20 pages_read=1 searches_judged=2 searches_mostly_seen=0 outlets_held_max=2 outlets_held_last=2\n",
  PRE + "2026/11/20 03:12:00 runtime: search run=f-3 desk=research started=1 from_held=0 not_sent=0 pages_returned=10 pages_new=5 pages_read=1\n",
  PRE + "2026/11/20 03:40:00 runtime: other\n"]
@@ -706,8 +706,6 @@ check "R17 the measurement fields are summed over the lines that carry them (2 o
 check "R17 the reuse decline reasons are summed by token and the outlets are shown" 'grep -q "reuse declined a prior identical search, by reason: earlier_run=1, out_of_window=2" "$root/out" && grep -q "largest 7" "$root/out"'
 check "R17 the new fields are not listed as unknown numeric fields, and the older lines still count" '! grep -q "other numeric fields" "$root/out" && grep -q "summary lines): 3" "$root/out"'
 runcorpus --fixture "$root/cr_e.log"
-check "R16 6 searches refused by the need test, 4 sent: 60.0% of attempts" 'grep -q "refused by the need test (holds_unread, read_first, held_first, site_held; every verb) 6; web searches sent 4; refused share of attempts 60.0%" "$root/out"'
-check "R16 fresh_over_unread is read, summed and printed" 'grep -q "fresh_over_unread+fresh_sent 1, untagged 0" "$root/out"'
 # R10
 mkpaper 'many(90, 100, PAPER, "devin", "swe-2-flash")'; mkstore 77926 '78 + 0.5 * h' 3
 env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/missing.log" --corpus-append "$root/h.tsv" >"$root/out" 2>&1; rc=$?
@@ -990,34 +988,44 @@ env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc3.log" --since 2026-11
 check "C8 the text table prints them" 'grep -q "research gate: 2 skipped (a store read failed, research went unchecked), 1 released" "$root/out"'
 
 
-# status-search-reads (the deployed proof of the read-first rule). Failure list,
+# status-search-reads (the deployed proof of the graph-first change). Failure list,
 # written before the code:
 #  W1  runs, searches or the mean per run are wrong, or a desk other than research is counted
 #  W2  the 1/2/3/4+ distribution or the 7-or-more tail is wrong
 #  W3  a later search sent with a read since the previous one is counted as zero-read, or one with none is not
-#  W4  refusals by reason (read_first, held_first, site_held, holds_unread) are not summed from the run lines
-#  W5  fresh_sent is not summed, or pages returned and read are not
-#  W6  a search before --since is counted
+#  W4  the digest's median tokens, the runs handed one, or the digest captures read by capture id are wrong
+#  W5  the share of runs whose first search was a graph search, graph searches per web search, or the
+#      share of runs with no web search at all are wrong (the host's brief searches counted as the run's)
+#  W6  cited sources from the corpus versus captured by the run, or the share of Reports naming a gap, are
+#      wrong (the final report line must win over an interim one)
+#  W7  a search before --since is counted; an empty console window prints zeros
+#  W8  a refusal counter or a SearchFresh line is printed (neither exists)
 searchreads="$here/status-search-reads"
 python3 - "$root" <<'PY'
 import sys
 root = sys.argv[1]
 VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
 G = lambda ts, run, desk="research", vm=VM: f"{ts} gateway: search request from autoputer {vm} ( max_results=40 run={run} desk={desk} conv=c-{run})\n"
-R = lambda ts, run: f"[ 1.0] runtime[1]: {ts} corpus read run={run} desk=research conv=c capture=obj:x held=false via=read\n"
+R = lambda ts, run, cap="obj:x", held="false", via="read": f"[ 1.0] runtime[1]: {ts} corpus read run={run} desk=research conv=c capture={cap} held={held} via={via}\n"
 S = lambda ts, run, extra: f"[ 1.0] runtime[1]: {ts} runtime: search run={run} desk=research {extra}\n"
+B = lambda ts, run, tok, caps: f"[ 1.0] runtime[1]: {ts} runtime: research brief run={run} desk=research ms=5 stories=2 captures=3 outcome=delivered digest_tokens={tok} digest_story=1 digest_reports=1 digest_passages=3 digest_pointers=0 digest_predecessor=0 digest_ms=9 digest_degraded=- digest_captures={caps}\n"
+C = lambda ts, run, caller="cell": f"[ 1.0] runtime[1]: {ts} corpus search computer=c1 captures_ms=3 captures=4 run={run} desk=research conv=c published=1 events=0 capped=false vector=ok caller={caller}\n"
+P = lambda ts, run, final, src, corpus, byrun, gap: f"[ 1.0] runtime[1]: {ts} runtime: research report run={run} final={final} sources={src} from_corpus={corpus} by_run={byrun} no_capture={src-corpus-byrun} claims=2 adds=true gap={gap}\n"
 out = ["##READS\n", R("2026/11/21 04:59:00", "other"), R("2026/11/21 05:00:30", "r1"),
+       R("2026/11/21 05:20:00", "r5", cap="c1", held="true", via="read_capture"), R("2026/11/21 05:20:01", "r5", cap="c2", held="true", via="read_capture"),
        "##SUM\n",
-       S("2026/11/21 05:05:00", "r1", "started=3 from_held=0 not_sent=3 (read_first=2 held_first=1) children=2 started_research=1 started_research_web=2 search_all_calls=1 wordings_offered=1 wordings_sent=1 fresh_sent=1 untagged=0 wordings_running=0 pages_returned=100 pages_new=90 pages_read=12"),
-       S("2026/11/21 05:06:30", "r4", "started=1 from_held=0 not_sent=0 fresh_sent=0 pages_returned=10 pages_new=10 pages_read=2").replace("desk=research ", "desk=research_web "),
-       S("2026/11/21 05:06:00", "r2", "started=1 from_held=0 not_sent=1 (holds_unread=1 site_held=2) fresh_sent=0 pages_returned=40 pages_new=40 pages_read=8"),
-       "##FRESH\n",
-       f"[ 1.0] runtime[1]: 2026/11/21 05:07:00 runtime: search fresh run=r1 why_len=39 why_hash=aaaa1111\n",
-       f"[ 1.0] runtime[1]: 2026/11/21 05:08:00 runtime: search fresh run=r2 why_len=39 why_hash=aaaa1111\n",
-       f"[ 1.0] runtime[1]: 2026/11/21 05:09:00 runtime: search fresh run=r2 why_len=31 why_hash=bbbb2222\n",
-       "##LOST\n",
-       f"[ 1.0] runtime[1]: 2026/11/21 05:06:00 runtime: search gate state lost at resume run=r2\n",
-       f"[ 1.0] runtime[1]: 2026/11/21 05:06:10 runtime: search gate state lost at resume run=r2\n",
+       S("2026/11/21 05:05:00", "r1", "started=3 from_held=0 not_sent=0 children=2 started_research=1 started_research_web=2 search_all_calls=1 wordings_offered=1 wordings_sent=1 untagged=0 wordings_running=0 pages_returned=100 pages_new=90 pages_read=12"),
+       S("2026/11/21 05:06:30", "r4", "started=1 from_held=0 not_sent=0 pages_returned=10 pages_new=10 pages_read=2").replace("desk=research ", "desk=research_web "),
+       S("2026/11/21 05:06:00", "r2", "started=1 from_held=0 not_sent=0 pages_returned=40 pages_new=40 pages_read=8"),
+       "##BRIEF\n",
+       B("2026/11/21 05:00:00", "r1", 9000, "c1,c2,c3"), B("2026/11/21 05:01:00", "r2", 5000, "c1"), B("2026/11/21 05:02:00", "r5", 13000, "c1,c2,c3,c4"),
+       B("2026/11/21 05:03:00", "r6", 7000, "-"),
+       "##GRAPH\n",
+       C("2026/11/21 04:59:30", "r1"), C("2026/11/21 05:00:10", "r1", "brief"),
+       C("2026/11/21 05:03:30", "r2"), C("2026/11/21 05:02:30", "r5"), C("2026/11/21 05:30:00", "r5"), C("2026/11/21 05:31:00", "r6"),
+       "##REPORT\n",
+       P("2026/11/21 05:10:00", "r1", "false", 4, 1, 3, "false"), P("2026/11/21 05:40:00", "r1", "true", 5, 3, 2, "true"),
+       P("2026/11/21 05:41:00", "r5", "true", 3, 3, 0, "false"),
        "##GW\n",
        G("2026/11/21 04:00:00", "early"),
        G("2026/11/21 05:05:00", "r4", "research_web"),
@@ -1033,30 +1041,28 @@ env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-
 check "W1 4 runs, 12 searches (research_web counted; the management line, the 04:00 search, another computer and run=- are out), mean 3.0" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"runs\"],d[\"searches\"],d[\"mean_per_run\"])==(4,12,3.0), d" "$root/out"'
 check "W2 runs by searches 1:1 2:0 3:1 4+:1; one run of 7 with 7 searches" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"runs_by_searches\"]=={\"1\":2,\"2\":0,\"3\":1,\"4+\":1} and (d[\"runs_7plus\"],d[\"searches_from_7plus\"])==(1,7), d" "$root/out"'
 check "W3 8 later searches in the console span, 7 with no successful read since the previous one (r1 read once, between its first two)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_no_successful_read\"])==(8,7), d" "$root/out"'
-check "W4 refusals by reason are summed from the run lines" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"refusals\"]=={\"read_first\":2,\"held_first\":1,\"holds_unread\":1,\"site_held\":2} and d[\"refused\"]==6, d" "$root/out"'
-check "W5 fresh_sent 1; pages returned 150, read 22 (the research_web run line counts)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"search_fresh\"],d[\"pages_returned\"],d[\"pages_read\"])==(1,150,22), d" "$root/out"'
-env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
-check "W10 searches by desk come from the gateway lines (research 11, research_web 1), children and started by desk from the run lines" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"searches_by_desk\"]=={\"research\":11,\"research_web\":1} and d[\"children\"]==2 and d[\"started_by_desk\"]=={\"research\":1,\"research_web\":2}, d" "$root/out"'
-check "W7 SearchFresh reasons are counted by distinct hash (never text): 3 sends, 2 distinct, the repeated one first, with its length; a resumed run with lost gate state counts once" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"fresh_reasons\"][0]==[\"aaaa1111\",39,2] and len(d[\"fresh_reasons\"])==2 and d[\"gate_state_lost_runs\"]==1, d" "$root/out"'
-printf '##READS\n##SUM\n##FRESH\n##GW\n2026/11/21 05:00:00 gateway: search request from autoputer vm-x ( max_results=40 run=r1 desk=research conv=c)\n2026/11/21 05:01:00 gateway: search request from autoputer vm-x ( max_results=40 run=r1 desk=research conv=c)\n' >"$root/sr_empty.txt"
-env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_empty.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
-check "W8 an empty console window says so instead of printing zeros" 'grep -q "console window empty" "$root/out" && ! grep -q "no SUCCESSFUL read since the run" "$root/out"'
+check "W4 four runs have a brief line, all four were handed a digest or none: three have tokens (median 9000); 3 of the 8 named captures were read by capture id (r5 read c1, c2)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"brief_runs\"],d[\"digest_runs\"],d[\"digest_tokens_median\"])==(4,4,8000.0) and (d[\"digest_captures_named\"],d[\"digest_captures_read\"])==(8,2), d" "$root/out"'
+check "W5 6 runs searched (r1 r2 r3 r4 by the web, r5 r6 by the graph only): 2 first searches were graph searches (r5 r6; r2 searched the web 30 seconds first), 4 graph searches in the window (the brief's and the pre-window ones are out), 0.33 a web search, 2 of the 4 briefed runs had no web search" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"searched_runs\"],d[\"graph_first_runs\"],d[\"graph_searches\"],d[\"graph_per_web_search\"],d[\"zero_web_runs\"],d[\"zero_web_pct\"])==(6,2,4,0.33,2,50.0), d" "$root/out"'
+check "W6 the final line wins: r1 final 5 sources 3 corpus 2 by run, r5 3 and 0: 6 cited from the corpus, 2 by runs; gaps 1 of 2 Reports" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"cited_from_corpus\"],d[\"cited_by_run\"],d[\"report_runs\"],d[\"gap_runs\"],d[\"gap_pct\"])==(6,2,2,1,50.0), d" "$root/out"'
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T04:00Z >"$root/out" 2>&1
-check "W6 the text report prints the runs line and the SearchFresh count" 'grep -q "^runs 5  searches 13  mean per run 2.6" "$root/out" && grep -q "SearchFresh sends (ended runs): 1" "$root/out"'
-
-# W9 the console span starts at the console's first line, not at its first read, and a
-# read in the same second as a search counts (seat 2 of the read-first change, 2026-11-21).
+check "W7 the text report prints the runs line and the measures of using and building on the corpus" 'grep -q "^runs 5  searches 13  mean per run 2.6" "$root/out" && grep -q "^USING THE CORPUS" "$root/out" && grep -q "^BUILDING ON IT" "$root/out"'
+check "W8 no refusal counter and no SearchFresh line is printed" '! grep -qi "refus\|SearchFresh\|fresh" "$root/out"'
+printf '##READS\n##SUM\n##BRIEF\n##GRAPH\n##REPORT\n##GW\n2026/11/21 05:00:00 gateway: search request from autoputer vm-x ( max_results=40 run=r1 desk=research conv=c)\n2026/11/21 05:01:00 gateway: search request from autoputer vm-x ( max_results=40 run=r1 desk=research conv=c)\n' >"$root/sr_empty.txt"
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_empty.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
+check "W9 an empty console window says so instead of printing zeros" 'grep -q "console window empty" "$root/out" && ! grep -q "USING THE CORPUS" "$root/out"'
+# The console span starts at the console's first line, not at its first read, and a read in
+# the same second as a search counts.
 python3 - "$root" <<'PY'
 import sys
 root = sys.argv[1]
 VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
 G = lambda ts: f"{ts} gateway: search request from autoputer {VM} ( max_results=40 run=rx desk=research conv=c-rx)\n"
 out = ["##READS\n", f"[ 1.0] runtime[1]: 2026/11/21 05:10:00 corpus read run=rx desk=research conv=c capture=obj:x held=false via=read\n",
-       "##SUM\n##FRESH\n##GW\n", G("2026/11/21 05:09:00"), G("2026/11/21 05:10:00"), G("2026/11/21 05:12:00"), G("2026/11/21 05:14:00")]
+       "##SUM\n##BRIEF\n##GRAPH\n##REPORT\n##GW\n", G("2026/11/21 05:09:00"), G("2026/11/21 05:10:00"), G("2026/11/21 05:12:00"), G("2026/11/21 05:14:00")]
 open(root + "/sr9.txt", "w").write("".join(out))
 PY
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr9.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
-check "W9 the run's first search precedes the first read: only the gaps that start in the console count (2), the same-second read counts, one gap has none (1)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_no_successful_read\"],d[\"console_span_runs\"])==(2,1,1), d" "$root/out"'
+check "W10 the run's first search precedes the first read: only the gaps that start in the console count (2), the same-second read counts, one gap has none (1)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_no_successful_read\"],d[\"console_span_runs\"])==(2,1,1), d" "$root/out"'
 
 # status-calls-by-desk (first design F0). Failure list, written before the code:
 #  D1  a call is counted under the wrong desk, or a line with no desk= is not its own "not-logged-before-F0" row

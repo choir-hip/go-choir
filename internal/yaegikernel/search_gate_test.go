@@ -7,138 +7,33 @@ import (
 	"time"
 )
 
-// Every web search a run sends passes the need test
-// (docs/problems/web-searches-are-sent-without-asking-what-is-held-2026-11-19.md,
-// fix 1). How the verbs differed before this change (read from the code):
-//   - SearchAll(question, wordings) judged each wording against the pages
-//     held for ITS QUESTION (unreadNew(qk) >= 15), refused it as holds_unread
-//     with the count and "Next" text, and stopped when wordings stopped
-//     yielding. It sent through SearchStart.
-//   - SearchStart(query, fresh...) had no test: it answered a same-terms query
-//     from a held search (reuseSearch), else added a once-per-cell NOTE when
-//     the run held 15 or more unread pages (noteUnreadPages) and SENT. It
-//     returned a SearchStub at once, without waiting.
-//   - Search(query, fresh...) was SearchStart + SearchWait(15 s) + Get, so the
-//     same: no test.
-//   - fresh skipped only the same-terms reuse; it was never logged.
-//   - The run line counted holds_unread only for SearchAll, and unread_notes
-//     for the note.
-//
-// Failure list, written before the code:
-//  1. SearchStart with 15 or more unread pages held sends the search.
-//  2. Its refusal, if any, names no reason, no count, no held pages, or is an
-//     error, or is not counted as holds_unread in the run's counts.
-//  3. Search (the waiting verb) sends it too, or returns an error, or returns
-//     a Search that does not carry the held pages and the reason.
-//  4. With fewer than 15 unread pages the search is not sent.
-//  5. fresh does not send it, or is not counted when the gate would have
-//     refused (fresh_over_unread).
-//  6. A burst of five SearchStart calls in one cell sends all five: each is
-//     judged before the earlier one's pages have arrived.
-//  7. A search started while another of the run is still running waits for it
-//     (blocking the cell up to 15 s, and the cell's own timeout) or is sent
-//     unjudged: it must come back at once, not sent, naming the running search
-//     (rule of 2026-11-19, replacing the wait: a cell cannot time out on it).
-//  8. Searches started from several goroutines at once are all sent.
-//  9. SearchWait of a refused stub's empty id fails with "no search": it must
-//     say the search was not sent.
-// 10. The SearchStart and Search surface docs still say the unread pages are
-//     "a note only; the search is sent".
-//
-// The burst rule: one search is judged and sent at a time per cell scope. A
-// search started while another of the run is still running cannot be judged by
-// the pages that one will return, so it is refused at once (no waiting), naming
-// the running search; a burst of five sends the first. fresh sends anyway.
+// What holds a web search now (owner, 2026-11-22: "we shouldnt need rules"): a search of
+// the same terms as a finished one of the run is answered from it, one search of a run runs
+// at a time, and a query with no real word is refused. NOTHING is refused for pages the run
+// holds untried: the run is given the paper's graph and told to use it first
+// (research_digest.go in agentcore). The tests below keep the running rule and the removal.
 
-// 2026-11-21: the 15-unread line, counted per question, is replaced by the
-// run-wide read-first rule (search_need.go, search_read_first_test.go): the
-// tests below keep what they proved (the refusal is at once, lists the pages,
-// counts by reason, fresh goes through SearchFresh) against the new rule.
-
-func seedUnread(t *testing.T, f *researchFixture, n int) func(string) SessionResult {
-	t.Helper()
-	f.urlsFor = map[string][]string{"w1 alpha": pagesN("a", 1, n), "plain two": pagesN("p", 1, 5), "plain three": pagesN("q", 1, 5)}
+func TestNoSearchIsRefusedForUntriedPages(t *testing.T) {
+	f := newResearchFixture(t)
+	f.urlsFor = map[string][]string{"one": pagesN("a", 1, 40), "two": pagesN("b", 1, 40), "three": pagesN("c", 1, 40)}
 	cell, _ := searchCell(t, f)
-	cell(`choir.SearchAll("the harbor strike", []string{"w1 alpha"})`)
-	if f.searchCalls.Load() != 1 {
-		t.Fatalf("seed sent %d searches", f.searchCalls.Load())
+	// Send, read nothing, send a different query, again: all sent, none refused.
+	out := cell(`a, _ := choir.Search("one")
+b, _ := choir.Search("two")
+c, _ := choir.SearchStart("three")
+d, _ := choir.SearchAll("a fourth question", []string{"fourth wording alpha"})
+fmt.Println(a.Refused == "", b.Refused == "", c.Refused == "", len(d.Wordings), d.Wordings[0].Sent)`)
+	if f.searchCalls.Load() != 4 || !strings.Contains(out.Stdout, "true true true 1 true") {
+		t.Fatalf("a search was refused for untried pages (sent %d):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
-	return cell
-}
-
-func TestSearchStartRefusedWhenTheRunHoldsEnoughUnreadPages(t *testing.T) {
-	f := newResearchFixture(t)
-	cell := seedUnread(t, f, 40)
-	out := cell(`s, err := choir.SearchStart("plain two")
-fmt.Println("err:", err)
-fmt.Println("id:", s.ID)
-fmt.Println(s)`)
-	if f.searchCalls.Load() != 1 {
-		t.Fatalf("the provider was asked %d times, want 1 (the seed only):\n%s", f.searchCalls.Load(), out.Stdout)
+	if st := out.SearchStats; st == nil || len(st.NotSent) != 0 {
+		t.Fatalf("stats = %+v, want nothing not sent", st)
 	}
-	for _, want := range []string{"err: <nil>", "id: \n", "not sent", "not read yet", "5 of them", "https://a.example/p1", "https://a.example/p5", "SearchFresh"} {
-		if !strings.Contains(out.Stdout, want) {
-			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
-		}
-	}
-	if st := out.SearchStats; st == nil || st.NotSent["read_first"] != 1 || st.Started != 0 {
-		t.Fatalf("stats = %+v, want 1 read_first and nothing started", st)
-	}
-}
-
-func TestSearchRefusedReturnsTheHeldPages(t *testing.T) {
-	f := newResearchFixture(t)
-	cell := seedUnread(t, f, 40)
-	out := cell(`s, err := choir.Search("plain two")
-fmt.Println(err, s.ID == "", s.Done, len(s.Results), s.Refused != "")
-fmt.Println(s.Refused)`)
-	if f.searchCalls.Load() != 1 {
-		t.Fatalf("the provider was asked %d times, want 1:\n%s", f.searchCalls.Load(), out.Stdout)
-	}
-	if !strings.Contains(out.Stdout, "<nil> true true 5 true") || !strings.Contains(out.Stdout, "not read yet") {
-		t.Fatalf("stdout:\n%s", out.Stdout)
-	}
-}
-
-func TestSearchStartIsSentOnceTheTopPagesAreTried(t *testing.T) {
-	f := newResearchFixture(t)
-	cell := seedUnread(t, f, 40)
-	cell(readTop(5, "a"))
-	cell(`choir.SearchStart("plain two")`)
-	if f.searchCalls.Load() != 2 {
-		t.Fatalf("the top five pages are tried (the other 35 are not needed); provider asked %d times, want 2", f.searchCalls.Load())
-	}
-}
-
-func TestSearchFreshSendsOverTheNeedTestAndIsCounted(t *testing.T) {
-	f := newResearchFixture(t)
-	cell := seedUnread(t, f, 40)
-	out := cell(`s, err := choir.SearchFresh("plain two", "the held pages are about another harbor")
-fmt.Println(s.ID, err)`)
-	if f.searchCalls.Load() != 2 || !strings.Contains(out.Stdout, "s2 <nil>") {
-		t.Fatalf("SearchFresh must send: calls %d\n%s", f.searchCalls.Load(), out.Stdout)
-	}
-	if st := out.SearchStats; st == nil || st.FreshSent != 1 || st.NotSent["read_first"] != 0 {
-		t.Fatalf("stats = %+v, want fresh_sent 1", st)
-	}
-}
-
-func TestABurstOfFiveInOneCellSendsOne(t *testing.T) {
-	f := newResearchFixture(t)
-	f.urlsFor = map[string][]string{}
-	for _, q := range []string{"burst one", "burst two", "burst three", "burst four", "burst five"} {
-		f.urlsFor[q] = pagesN(strings.ReplaceAll(q, " ", ""), 1, 40)
-	}
-	cell, _ := searchCell(t, f)
-	out := cell(`for _, q := range []string{"burst one", "burst two", "burst three", "burst four", "burst five"} {
-	s, _ := choir.SearchStart(q)
-	fmt.Println(q, "->", s.ID)
-}`)
-	if f.searchCalls.Load() != 1 {
-		t.Fatalf("a burst of five sent %d, want 1:\n%s", f.searchCalls.Load(), out.Stdout)
-	}
-	if st := out.SearchStats; st == nil || st.NotSent["read_first"] != 4 {
-		t.Fatalf("stats = %+v, want 4 read_first", st)
+	// The same-terms answer and the running rule still hold.
+	out = cell(`s, _ := choir.Search("one")
+fmt.Println(s.ID, s.Reused != "")`)
+	if f.searchCalls.Load() != 4 || !strings.Contains(out.Stdout, "s1 true") {
+		t.Fatalf("a repeat of an earlier question must be answered from it (sent %d):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
 }
 
@@ -155,7 +50,7 @@ fmt.Println(s.Refused)`)
 	if f.searchCalls.Load() != 1 {
 		t.Fatalf("the second search was sent (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
-	for _, want := range []string{"<nil> true true", "a search of this run is still running (s1)", `choir.SearchWait("s1", 15000)`, "SearchFresh"} {
+	for _, want := range []string{"<nil> true true", "a search of this run is still running (s1)", `choir.SearchWait("s1", 15000)`} {
 		if !strings.Contains(out.Stdout, want) {
 			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
 		}
@@ -176,38 +71,13 @@ fmt.Println(s.Refused)`)
 	}
 }
 
-func TestAfterTheRunningSearchEndsWithManyPagesTheNextIsRefusedForThem(t *testing.T) {
-	f := newResearchFixture(t)
-	f.runningFor = map[string]bool{"burst one": true}
-	cell, _ := searchCell(t, f)
-	cell(`choir.SearchStart("burst one")`)
-	f.scope.searches.apply(providerFrame("s1", "keenable", true, pagesN("r", 1, 40)...))
-	f.scope.searches.apply(SearchFrame{ID: "s1", Kind: SearchFrameDone})
-	out := cell(`s, _ := choir.SearchStart("burst two")
-fmt.Println(s.Refused)`)
-	if f.searchCalls.Load() != 1 || !strings.Contains(out.Stdout, "not read yet") {
-		t.Fatalf("calls %d:\n%s", f.searchCalls.Load(), out.Stdout)
-	}
-}
-
-func TestFreshSendsWhileAnotherSearchRuns(t *testing.T) {
-	f := newResearchFixture(t)
-	f.runningFor = map[string]bool{"burst one": true}
-	cell, _ := searchCell(t, f)
-	cell(`choir.SearchStart("burst one")`)
-	if _, err := f.scope.startSearch("burst two", searchOpts{verb: "search_fresh", fresh: true, freshWhy: "the running search is about something else"}); err != nil {
-		t.Fatal(err)
-	}
-	if f.searchCalls.Load() != 2 {
-		t.Fatalf("SearchFresh is the run's own statement that it wants the search: calls %d", f.searchCalls.Load())
-	}
-}
-
 func TestSearchesFromManyGoroutinesAreJudgedOneAtATime(t *testing.T) {
 	f := newResearchFixture(t)
 	f.urlsFor = map[string][]string{}
+	f.runningFor = map[string]bool{}
 	for _, q := range []string{"par one", "par two", "par three", "par four", "par five"} {
 		f.urlsFor[q] = pagesN(strings.ReplaceAll(q, " ", ""), 1, 40)
+		f.runningFor[q] = true // the first stays running: the others are refused at once
 	}
 	f.scope.BindCell().Begin(SessionFrame{RunID: "run-1"})
 	var wg sync.WaitGroup
@@ -226,29 +96,6 @@ func TestSearchesFromManyGoroutinesAreJudgedOneAtATime(t *testing.T) {
 	}
 }
 
-func TestSearchWaitOfARefusedStubSaysItWasNotSent(t *testing.T) {
-	f := newResearchFixture(t)
-	cell := seedUnread(t, f, 40)
-	out := cell(`s, _ := choir.SearchStart("plain two")
-_, err := choir.SearchWait(s.ID, 10)
-fmt.Println(err)`)
-	if !strings.Contains(out.Stdout, "was not sent") {
-		t.Fatalf("stdout:\n%s", out.Stdout)
-	}
-}
-
-func TestTheSearchDocsSayWhatIsReadFirstAndTheWayPast(t *testing.T) {
-	for _, verb := range []string{"SearchStart", "Search"} {
-		doc := choirFunctionDocs[verb].Summary
-		if strings.Contains(doc, "a note only") {
-			t.Errorf("%s doc still says a note only: %s", verb, doc)
-		}
-		if !strings.Contains(doc, "not sent") || !strings.Contains(doc, "first 5 pages") || !strings.Contains(doc, "SearchFresh") || strings.Contains(doc, "15 or more") {
-			t.Errorf("%s doc does not say a search is not sent while the top 5 pages of earlier searches are untried, and name SearchFresh", verb)
-		}
-	}
-}
-
 // From the review of the gate (seat 2, and the coordinator). Failure list,
 // written before the code:
 //  11. SearchAll for a question whose words are all small (an empty term key)
@@ -259,72 +106,6 @@ func TestTheSearchDocsSayWhatIsReadFirstAndTheWayPast(t *testing.T) {
 //      the run, not only this query's.
 //  14. fresh_over_unread counts a search the host then refused or failed to
 //      start: it must count only a search that was sent.
-
-func TestSearchAllOfAQuestionWithNoTermsIsJudgedRunWideToo(t *testing.T) {
-	if k := questionKey("!!! ???"); k != "" {
-		t.Fatalf("the test needs a question with an empty key, got %q", k)
-	}
-	f := newResearchFixture(t)
-	cell := seedUnread(t, f, 40)
-	out := cell(`r, _ := choir.SearchAll("!!! ???", []string{"plain two", "plain three"})
-fmt.Println(len(r.Results))
-fmt.Println(r)`)
-	if f.searchCalls.Load() != 1 {
-		t.Fatalf("an empty question key must use the run-wide count; provider asked %d times:\n%s", f.searchCalls.Load(), out.Stdout)
-	}
-	// Run-wide, so the text says the run, as the plain verbs' refusal does; and
-	// the held pages are in Results, which Next tells the run to read.
-	for _, want := range []string{"not sent (the top pages of this run's earlier searches are not read yet", "5\n"} {
-		if !strings.Contains(out.Stdout, want) {
-			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
-		}
-	}
-	if strings.Contains(out.Stdout, "this question already holds") {
-		t.Fatalf("a run-wide count must not be called the question's:\n%s", out.Stdout)
-	}
-}
-
-func TestARefusedBareSearchStartLeavesANoteInTheCellResult(t *testing.T) {
-	f := newResearchFixture(t)
-	cell := seedUnread(t, f, 40)
-	out := cell(`choir.SearchStart("plain two")`)
-	notes := strings.Join(out.Searches, "\n")
-	for _, want := range []string{"not sent: plain two", "not read yet", "SearchFresh"} {
-		if !strings.Contains(notes, want) {
-			t.Fatalf("cell result lacks %q:\n%s", want, notes)
-		}
-	}
-}
-
-func TestTheRefusalSaysWhichSearchesPagesAreHeld(t *testing.T) {
-	f := newResearchFixture(t)
-	cell := seedUnread(t, f, 40)
-	out := cell(`s, _ := choir.SearchStart("plain two")
-fmt.Println(s.Refused)`)
-	if !strings.Contains(out.Stdout, "earlier searches") {
-		t.Fatalf("stdout:\n%s", out.Stdout)
-	}
-}
-
-func TestFreshSentCountsOnlyASearchThatWasSent(t *testing.T) {
-	f := newResearchFixture(t)
-	f.hostErr = map[string]string{"plain two": "provider refused"}
-	cell := seedUnread(t, f, 40)
-	out := cell(`_, err := choir.SearchFresh("plain two", "the held pages are about another harbor")
-fmt.Println(err != nil)`)
-	if !strings.Contains(out.Stdout, "true") {
-		t.Fatalf("the host refusal must reach the cell:\n%s", out.Stdout)
-	}
-	if st := out.SearchStats; st != nil {
-		t.Fatalf("stats = %+v, a search the host refused counts nothing (not started, not fresh_sent)", st)
-	}
-	// The same cell's next fresh search is sent, and it alone is counted.
-	out = cell(`_, err := choir.SearchFresh("plain three", "the held pages are about another harbor")
-fmt.Println(err)`)
-	if st := out.SearchStats; st == nil || st.FreshSent != 1 || st.Started != 1 {
-		t.Fatalf("stats = %+v, want exactly 1 fresh_sent and 1 started", st)
-	}
-}
 
 // Follow-ups to the review of the running rule. Failure list, written first:
 //  15. SearchAll sends a wording while another search of the run is running.
@@ -397,8 +178,8 @@ func TestSearchWaitOfNoIDSaysWhatToDo(t *testing.T) {
 	cell, _ := searchCell(t, f)
 	out := cell(`_, err := choir.SearchWait("", 10)
 fmt.Println(err)`)
-	if !strings.Contains(out.Stdout, "was not sent") || !strings.Contains(out.Stdout, "unread") || !strings.Contains(out.Stdout, "still running") {
-		t.Fatalf("the error must name both refusals:\n%s", out.Stdout)
+	if !strings.Contains(out.Stdout, "was not sent") || !strings.Contains(out.Stdout, "still running") {
+		t.Fatalf("the error must say a refused search has no id:\n%s", out.Stdout)
 	}
 }
 
@@ -410,7 +191,7 @@ func TestAFinishedMatchIsReusedWhileAnUnrelatedSearchRuns(t *testing.T) {
 	cell, _ := searchCell(t, f)
 	cell(`choir.SearchStart("harbor strike")`)
 	cell(readTop(5, "h"))
-	if _, err := f.scope.startSearch("other thing", searchOpts{verb: "search_fresh", fresh: true, freshWhy: "an unrelated thing the run asks for"}); err != nil {
+	if _, err := f.scope.startSearch("other thing", searchOpts{verb: "search"}); err != nil {
 		t.Fatal(err)
 	}
 	out := cell(`b, _ := choir.SearchStart("strike harbor")

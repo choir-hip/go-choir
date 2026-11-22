@@ -49,15 +49,13 @@ type researchFixture struct {
 	// payloads are the search_start payloads the host was sent, in order (the
 	// need state the guest reports: search_read_first_test.go).
 	payloads []SearchStartPayload
+	// corpus is the capture ids a corpus search (SearchWireCorpus) returns.
+	corpus []string
 	// captureErr makes ReadCapture of a capture id fail (a deleted capture, a
 	// refused read); captureReads counts ReadCapture calls.
 	captureErr   map[string]string
 	captureReads atomic.Int32
-	// liveTree is what the host answers a tree probe with (a search_start with
-	// Probe set): the research tree as it stands now, which a sibling may have
-	// moved since the cell began. probes counts them; a probe is not a search.
-	liveTree *TreeState
-	probes   atomic.Int32
+	corpusCalls  atomic.Int32
 }
 
 func newResearchFixture(t *testing.T) *researchFixture {
@@ -78,11 +76,6 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				var in SearchStartPayload
 				if err := json.Unmarshal(payload, &in); err != nil {
 					return nil, err
-				}
-				if in.Probe {
-					f.probes.Add(1)
-					tree, _ := json.Marshal(SearchStartResult{Tree: f.liveTree})
-					return tree, nil
 				}
 				f.searchCalls.Add(1)
 				f.searchMu.Lock()
@@ -116,6 +109,13 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				f.scope.searches.apply(providerFrame(id, "keenable", true, urls...))
 				f.scope.searches.apply(SearchFrame{ID: id, Kind: SearchFrameDone})
 				return json.RawMessage(fmt.Sprintf(`{"id":%q,"query":%q,"providers":["keenable"]}`, id, in.Query)), nil
+			case ActionSearchWireCorpus:
+				f.corpusCalls.Add(1)
+				var caps []map[string]string
+				for _, id := range f.corpus {
+					caps = append(caps, map[string]string{"capture_id": id, "url": strings.TrimPrefix(id, "cap:")})
+				}
+				return json.Marshal(map[string]any{"captures": caps})
 			case ActionReadCapture:
 				// A capture id "cap:<url>" names the capture of that page.
 				var in ReadCapturePayload
@@ -308,44 +308,91 @@ func workedCell(t *testing.T) string {
 	return code
 }
 
-func TestOverlayWorkedCellSearchesReadsAndSendsTheInterimInOneCell(t *testing.T) {
+func TestOverlayWorkedCellIsGraphFirstThenTheWebForWhatIsMissing(t *testing.T) {
+	// The graph holds two outlets: the cell reads them by capture id and sends no web search.
 	f := newResearchFixture(t)
+	f.corpus = []string{"cap:https://www.bbc.co.uk/a", "cap:https://www.itv.co.uk/b"}
 	cell, hooks := f.session(t)
 	hooks.Begin(SessionFrame{RunID: "run-1"})
 	out := cell(workedCell(t))
-	if !strings.Contains(out.Stdout, "interim packet: 5 sources") {
-		t.Fatalf("the worked cell did not send its interim packet:\n%s", out.Stdout)
+	if !strings.Contains(out.Stdout, "interim packet: 2 sources") || strings.Contains(out.Stdout, "<error") || strings.Contains(out.Stdout, "refused") {
+		t.Fatalf("the worked cell did not send its interim packet from the graph:\n%s", out.Stdout)
 	}
-	if strings.Count(out.Stdout, "ok https://") != 5 {
-		t.Errorf("the cell must print a line for every page it read:\n%s", out.Stdout)
+	if f.corpusCalls.Load() != 1 || f.captureReads.Load() != 2 || f.reads.Load() != 0 || f.searchCalls.Load() != 0 {
+		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 2, 0, 0", f.corpusCalls.Load(), f.captureReads.Load(), f.reads.Load(), f.searchCalls.Load())
 	}
-	if strings.Contains(out.Stdout, "<error") || strings.Contains(out.Stdout, "refused") {
-		t.Errorf("the packet was refused:\n%s", out.Stdout)
-	}
-	if got := f.reads.Load(); got != 5 {
-		t.Errorf("the cell read %d pages, want 5: the top five as listed", got)
-	}
-	// One wording, one search; the stop test says to report, not to search again.
-	if got := f.searchCalls.Load(); got != 1 {
-		t.Errorf("the worked cell sent %d searches, want 1", got)
-	}
-	if !strings.Contains(out.Stdout, "if two of these outlets support the claim, report now and do not search again") {
+	if !strings.Contains(out.Stdout, "outlets read without error: 2") || !strings.Contains(out.Stdout, "report now only if two independent outlets among them support the claim") {
 		t.Errorf("the worked cell did not print its stop test:\n%s", out.Stdout)
+	}
+
+	// The graph holds one outlet: the cell goes to the web for the second, reads its first
+	// five new pages, and says in the packet's notes what came from each.
+	g := newResearchFixture(t)
+	g.corpus = []string{"cap:https://www.bbc.co.uk/a"}
+	cell, hooks = g.session(t)
+	hooks.Begin(SessionFrame{RunID: "run-2"})
+	out = cell(workedCell(t))
+	if !strings.Contains(out.Stdout, "interim packet: 6 sources") || strings.Contains(out.Stdout, "<error") || strings.Contains(out.Stdout, "refused") {
+		t.Fatalf("the worked cell did not go to the web for what the graph lacks:\n%s", out.Stdout)
+	}
+	if g.corpusCalls.Load() != 1 || g.captureReads.Load() != 1 || g.reads.Load() != 5 || g.searchCalls.Load() != 1 {
+		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 1, 5, 1", g.corpusCalls.Load(), g.captureReads.Load(), g.reads.Load(), g.searchCalls.Load())
+	}
+
+	// The graph holds nothing: the web alone.
+	h := newResearchFixture(t)
+	cell, hooks = h.session(t)
+	hooks.Begin(SessionFrame{RunID: "run-3"})
+	out = cell(workedCell(t))
+	if !strings.Contains(out.Stdout, "interim packet: 5 sources") || h.reads.Load() != 5 || h.searchCalls.Load() != 1 {
+		t.Errorf("an empty graph: %d web reads, %d web searches:\n%s", h.reads.Load(), h.searchCalls.Load(), out.Stdout)
 	}
 	for _, l := range out.Searches {
 		if strings.Contains(l, "interim packet") {
 			t.Errorf("a cell that read and sent in one cell was nudged to send: %s", l)
 		}
 	}
-	// And the same reads without a send are nudged, naming the captures.
+	// And reads without a send are nudged, naming the captures.
 	f2 := newResearchFixture(t)
 	cell2, hooks2 := f2.session(t)
-	hooks2.Begin(SessionFrame{RunID: "run-2"})
+	hooks2.Begin(SessionFrame{RunID: "run-4"})
 	res := cell2(`pages := choir.ReadAll([]string{"https://a.example/1", "https://b.example/2"})
 fmt.Println(len(pages))`)
 	nudged := strings.Join(res.Searches, "\n")
 	if !strings.Contains(nudged, "cap-a.example-1") || !strings.Contains(nudged, "cap-b.example-2") {
 		t.Errorf("reads with no packet must be nudged with their capture ids:\n%s", nudged)
+	}
+}
+
+// The worked cell counts what was read WITHOUT error: a web page that failed is neither a
+// page of the notes' "from the web" count nor an outlet read.
+func TestOverlayWorkedCellCountsOnlyPagesReadWithoutError(t *testing.T) {
+	f := newResearchFixture(t)
+	f.corpus = []string{"cap:https://www.bbc.co.uk/a"}
+	f.urlsFor = map[string][]string{"ministry cabinet changes": {"https://w1.example/p", "https://w2.example/p", "https://w3.example/p", "https://w4.example/p", "https://w5.example/p"}}
+	f.failing["https://w2.example/p"] = "HTTP 403"
+	f.failing["https://w4.example/p"] = "HTTP 500"
+	cell, hooks := f.session(t)
+	hooks.Begin(SessionFrame{RunID: "run-err"})
+	out := cell(workedCell(t))
+	if strings.Contains(out.Stdout, "<error") {
+		t.Fatalf("the worked cell failed:\n%s", out.Stdout)
+	}
+	// 1 graph page and 3 web pages read; two web reads failed.
+	if !strings.Contains(out.Stdout, "interim packet: 4 sources") || !strings.Contains(out.Stdout, "outlets read without error: 4") {
+		t.Fatalf("the cell counted failed reads:\n%s", out.Stdout)
+	}
+	var notes []string
+	for _, in := range out.Intents {
+		var p struct {
+			Notes []string `json:"notes"`
+		}
+		if json.Unmarshal([]byte(in.Packet), &p) == nil && len(p.Notes) > 0 {
+			notes = p.Notes
+		}
+	}
+	if len(notes) == 0 || notes[0] != "adds: 4 sources, 1 from the graph, 3 from the web" {
+		t.Fatalf("notes = %q, want the adds line to count the 3 web pages read without error", notes)
 	}
 }
 
