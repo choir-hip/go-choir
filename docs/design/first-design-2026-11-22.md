@@ -199,6 +199,46 @@ and type only where behaviour differs.
 The test of well-formedness to apply to any further type: does any code path
 behave differently because of it? If not, it is not stored.
 
+**Ruled, 2026-11-22:** "yes, this is much better. much simpler. just one
+bucket from which any symbol can be associated with a story... no need to
+model events and entities as separate things. the real question is about
+usability, query patterns, efficient traversal". Where this document says
+event or entity above, read subject; the sections above this one are kept as
+the path to the ruling and are rewritten when the draft is cut to a plan.
+
+### Query patterns (lead's first list, to be tested on the paper's data)
+
+One edge table carries the graph: **mention** (account, subject, role, the
+passage, the time, the surface words as written). Every pattern is one or two
+index reads on it.
+
+| # | Question | Read |
+|---|---|---|
+| 1 | What does this account mention? | account to subjects |
+| 2 | What is new on this subject since T? | subject to accounts, newest first, by distinct outlet |
+| 3 | Which stories are like this one? | story to subjects to stories, shared subjects weighted by rarity |
+| 4 | What connects these two subjects? | accounts mentioning both |
+| 5 | Where do I enter from words? | vector to nearest subjects and passages, then 1 to 4 |
+| 6 | Who is waiting on this? | a new mention's subject to open predictions |
+| 7 | What matters? | stories per subject, a kept count |
+| 8 | What do sources disagree on? | pattern 2 in a window; the story reads the passages |
+
+Bounds that keep traversal cheap: a hub subject (a country) has a very large
+neighbourhood, so every read takes a window and a limit and samples by
+outlet and recency, and a second hop is weighted by rarity; importance uses
+the raw count, likeness the rarity-weighted one. Identity must be cheap to
+change: aliases map to one canonical id so a merge is a row, and a mention
+keeps its surface words so a wrong merge can be resolved again.
+
+In the REPL, a handful of verbs over these, each returning ids and metadata
+with the full object one read away: resolve a subject, what is about it since
+a time, an account's subjects, stories like this one, what connects two.
+
+What exists to start from: 6,690 story entity rows with `mentions_entity`
+edges and a learned alias lexicon; the capture side is not built. Names are
+extracted today; things that happen are not, and how to find them cheaply
+(the event layer's headlines are one seed) is open.
+
 ## Two questions, each asked once
 
 | Question | Kind | Unit | Who |
