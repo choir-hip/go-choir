@@ -21,7 +21,7 @@ metamission:
       depends_on: []
       note: 'the first design: subjects and mentions, the hot path for captures, predictions that subscribe, the root Texture, the readers. Stations F0 to F6. No red station starts before the design panel has read the draft.'
 start:
-  captured_at: 2026-11-22T05:20Z
+  captured_at: 2026-11-22T05:02Z
   source:
     canonical_ref: origin/main 9f10b7477 (docs); the last code commit is 92f068980
     deploy_identity: staging and the paper on 92f068980, read from the CI run's deploy job; the owner's iPhone on the build of 2026-11-20 at bfc1492c6
@@ -65,7 +65,7 @@ operating_notes:
   - 'Each hourly tick reads both station files'' now cards and rewrites this one''s.'
 now:
   status: working
-  as_of: 2026-11-22T05:20Z
+  as_of: 2026-11-22T05:02Z
   slice: 'M1: the train''s proof, graph-first in rework after two send-backs, the account boundary in rework. M2: F0 and the read-only half of F1 building; the design panel not yet run.'
   source_ref: origin/main 9f10b7477
   deploy_identity: staging and the paper on 92f068980
