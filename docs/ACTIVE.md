@@ -11,6 +11,14 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
+## Run this: the standing metamission
+
+`/goal docs/definitions/choir-standing-metamission-2026-11-22.md` (owner,
+2026-11-22: "make a metamission which covers them both, and any 3rd or nth
+mission we add. so we can keep /goal running continuously"). It lists the
+live missions below and holds only what they share: the landing order and
+the machines.
+
 ## Live goal from 2026-11-22: the first design
 
 The owner, 2026-11-22, on the design read back from the top: "great, this is
