@@ -124,6 +124,27 @@ is removed. The intake label's "same event" and the event layer's join become
 one call. The editorial judgment runs on events, so twenty outlets on one
 strike are one decision.
 
+## Desks have one endpoint
+
+The owner, 2026-11-22: "graph traversal should make it easier for autoradio
+desk (which needs to become a go rlm anyway) to compose. but hmm, how does
+autoradio desk connect to root texture? indeed, i think it shuold connect to
+root texture, not to individual textures. thats the whole desk pattern,
+actually, that the desk, regardless of how many agents in it, only has one
+endpoint to other desks..."
+
+- A desk is addressed at one endpoint however many agents run inside it. For
+  the Texture desk that endpoint is the root Texture; story Textures are its
+  sub-calls and are not addressed from outside.
+- The Autoradio desk becomes a desk that runs Go cells (today it is two server
+  routes, one streamed model call each) and talks to the root Texture, never
+  to a story's Texture.
+- Lead's reading, not ruled: the same holds in the other direction. A story
+  Texture that needs research asks through its root, so the root sees every
+  request, can merge two stories' requests for the same gap, and can spend
+  research by its forecasts. Research is a desk with its own single endpoint
+  and its own children. This would answer open question 2.
+
 ## How context is found
 
 The owner, 2026-11-22: "we can run captures through vector search, then for
