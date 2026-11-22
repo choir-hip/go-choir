@@ -1,6 +1,6 @@
 # A compact copy staged on the paper's 51 GiB store holds Node B under the deploy floor until a deploy restarts the paper (2026-11-22)
 
-Status: the layout trigger is fixed (see "Fix"); the staged copy and the preflight constant remain. Nothing on Node B was changed or restarted.
+Status: the layout trigger is fixed (see "Fix"); the staged copy was consumed by a deploy and the shortage is over (see "What was done"); the preflight constant remains.
 
 ## Problem
 
@@ -150,3 +150,48 @@ staged until a planned restart, so a store that does fragment will hold the
 volume twice again. The deploy preflight's 14 GiB "guest store compaction
 peak" is still a constant, not the store's size. Options 1, 2 and 4 are
 untouched; the snapshot's own scratch copy is a separate record.
+
+## What was done, 2026-11-22 afternoon (the owner's word for each act)
+
+- **The paper's three oldest snapshot roots were removed** (2026-11-17, 19 and
+  20; the roots of 11-21 and 11-22 were kept), and the 26,124 chunks only they
+  held were given an old modification time so the hourly artifact collector
+  deleted them through its own logged path. Cost: a restore of the paper to a
+  checkpoint before 2026-11-21 12:00Z has no snapshot base. The rows as they
+  were, the list of roots and the list of chunks are on Node B under
+  `/root/paper-snapshot-roots-removed-20261122/`.
+- **Five computers were removed** through vmctl's own remove call and their
+  disk folders deleted. Kept: the paper, the owner's own computer and the two
+  test accounts. The removed computers' tape segments and snapshot chunks are
+  still on the host (goal file decision Q2, default keep).
+- No host service was restarted by hand.
+- **The staged copy was consumed by a deploy.** At 16:28Z Node B had 70 GiB
+  free and the deploy of `22192b13b` passed the preflight; the paper's planned
+  restart at 16:47Z rebased onto the copy ("55367938048 -> 51220189184 bytes,
+  44520 events to replay"). Free space: 88 GiB at 16:58Z, 168.5 GiB at 18:13Z
+  after the guest's trim and the collector's sweep; the paper's data image is
+  54.2 GiB. That deploy job was marked incomplete for another reason
+  (`deploy-marked-incomplete-while-the-paper-was-refreshed-twice-2026-11-22.md`).
+
+## Where the rest of the disk is (read-only, 16:00Z)
+
+- Postgres, 41 GiB: `control` 29, of which the event receipt table is 20 of
+  heap and 8 of indexes with about 12 live (receipt compaction has run; the
+  dead space returns only by a rewrite under an exclusive lock: decision Q3,
+  default no); `graph` 12.
+- A hibernated computer's image keeps blocks its guest freed: one test
+  computer uses 8.4 GiB in the guest and holds 19.8 on the host.
+- What the paper's 51 GiB store is made of is not known: the by-table reading
+  is cut off at about 95 s with 15 GiB attributed. A background reading by
+  object kind is reviewed and queued to land (`lane/store-land`).
+
+## Corrections to what the lead said that day
+
+A computer was called a dead candidate and then said to be on an older guest;
+it was the primary computer of a test account, hibernated, on the current
+release. It was not deleted. The first reading of the disk fall as a second
+snapshot capture was also wrong (above).
+
+The mission that removes the store-sized copies:
+`docs/definitions/choir-storage-efficiency-2026-11-22.md`.
+
