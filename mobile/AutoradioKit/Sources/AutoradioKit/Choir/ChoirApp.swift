@@ -163,7 +163,6 @@ public final class ChoirApp: @unchecked Sendable {
         do {
             let list = try await ChoirFront.stories(client: ChoirEnvironment.shared.client(baseURL: base), limit: 30)
             lock.lock(); stories = list; lock.unlock()
-            ClipStore.shared.markStale()                          // the front is fresh: the next write asks for the clips again, once
             if list.isEmpty { say("The front page is empty right now.") }
         } catch { say(Self.plain(stage: "programme", message: "\(error)")) }
     }

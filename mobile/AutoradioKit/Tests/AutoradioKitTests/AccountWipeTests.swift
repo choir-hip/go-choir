@@ -50,27 +50,26 @@ final class AccountWipeTests: XCTestCase {
         try? Data(text.utf8).write(to: u)
     }
 
-    /// The default names the two files of the pre-release build, in the app's own folder (the takes and deck tests pass their own stores and no legacy files, so they delete none of a developer's).
-    func testTheDefaultLegacyFilesAreTheTwoPreReleaseNames() {
-        XCTAssertEqual(TakeFiles.legacy.compactMap { $0?.lastPathComponent }, ["takes-own.json", "takes-muted.json"])
+    /// The default names the files earlier builds left, in the app's own folder (the takes and deck tests pass their own stores and no legacy files, so they delete none of a developer's).
+    func testTheDefaultLegacyFilesAreTheNamesEarlierBuildsUsed() {
+        XCTAssertEqual(TakeFiles.legacy.compactMap { $0?.lastPathComponent }, ["takes-own.json", "takes-muted.json", "takes-copy-own.json", "takes-copy-muted.json"])
         XCTAssertTrue(TakeFiles.legacy.allSatisfy { $0?.deletingLastPathComponent().lastPathComponent == "Autoradio" })
     }
 
     /// Row 1 of the takes state table (docs/reference/AUTORADIO-TAKES.md): a take in review is the account's; after sign-out (or an account change) the recorder is idle, its file is gone and the radio is
-    /// given back, so the next account is never shown it and can never publish it. Row 4: a mirror push of the old account that lands after the wipe is refused.
+    /// given back, so the next account is never shown it and can never publish it.
     func testATakeInReviewIsGoneAfterTheWipe() async {
         let rec = FakeRecorder(), gate = FakeGate(), clock = Date(timeIntervalSince1970: 1000)
         let dir = root.appendingPathComponent("takes-live")
         let s = TakeSession(recorder: rec, transcriber: FakeTranscriber(words: Self.marker), gate: gate, preview: FakePreview(), micAllowed: { true }, responds: { TakeResponds(route: "r", title: Self.marker) },
                             dir: dir, now: { clock })
-        TakeSession.live = s; TakeMirror.reset(); XCTAssertTrue(TakeMirror.accept(7))
+        TakeSession.live = s
         let limits = TakeLimits(minSeconds: 0, maxSeconds: 59.5, maxBytes: 512 * 1024)
         await s.start(limits); await s.stop(); XCTAssertEqual(s.state, .review); XCTAssertEqual(s.transcript, Self.marker)
         let oldOwn = root.appendingPathComponent("takes-own.json"), oldMuted = root.appendingPathComponent("takes-muted.json")
         write("takes-own.json", Self.marker); write("takes-muted.json", "[\"\(Self.marker)\"]")
-        let wipe = AccountWipe(); wipe.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), legacyTakeFiles: [oldOwn, oldMuted], tempDirectory: root.appendingPathComponent("tmp2"))
+        let wipe = AccountWipe(); wipe.registerStandard(legacyTakeFiles: [oldOwn, oldMuted], tempDirectory: root.appendingPathComponent("tmp2"))
         await wipe.run()
-        XCTAssertFalse(TakeMirror.accept(7), "the old account's push in flight at the wipe"); XCTAssertTrue(TakeMirror.accept(8)); TakeMirror.reset()
         XCTAssertEqual(s.state, .idle); XCTAssertEqual(s.transcript, ""); XCTAssertNil(s.audio); XCTAssertEqual(gate.given, 1)
         XCTAssertEqual(s.snapshot["respondsTitle"] as? String, "", "the story the old account answered is not carried either")
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [], [])
@@ -82,12 +81,12 @@ final class AccountWipeTests: XCTestCase {
         let m = Self.marker
         // The stores, each in its own place under the temporary root.
         let turns = TurnHistory(); turns.add(listener: m, radio: [m])
-        let cache = NotebookCache(file: root.appendingPathComponent("notebook-cache.md")); cache.set(m)
+        let legacyCache = root.appendingPathComponent("notebook-cache.md"); write("notebook-cache.md", m)
         let legacyTopics = root.appendingPathComponent("edition-topics.json"), topicsMarker = root.appendingPathComponent("notebook-topics-written")
         write("edition-topics.json", "{\"topics\":[\"\(m)\"]}"); write("notebook-topics-written", m)
         let notebook = NotebookStore()
-        let own = TakeOwn(file: root.appendingPathComponent("takes-own.json")); own.replace(ids: [m], handle: m)
-        let mutes = TakeMutes(file: root.appendingPathComponent("takes-muted.json")); mutes.replace([m])
+        let oldTakeFiles = ["takes-own.json", "takes-muted.json", "takes-copy-own.json", "takes-copy-muted.json"].map { root.appendingPathComponent($0) }
+        for f in oldTakeFiles { write(f.lastPathComponent, m) }
         let tmp = root.appendingPathComponent("tmp"); write("tmp/takes/rec.m4a", m); write("tmp/take-play-\(m).m4a", m)
         let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
         let api = FakeAPI()
@@ -114,8 +113,8 @@ final class AccountWipeTests: XCTestCase {
             AccountWipe.removeFiles([rootRef.appendingPathComponent("onboarding.json")])
             AccountWipe.removeContents(of: rootRef.appendingPathComponent("books")); AccountWipe.removeContents(of: rootRef.appendingPathComponent("cache/files"))
         }
-        wipe.registerStandard(turnHistory: turns, notebookCache: cache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook,
-                              takeOwn: own, takeMutes: mutes, legacyTakeFiles: [], tempDirectory: tmp, clips: clips,
+        wipe.registerStandard(turnHistory: turns, legacyNotebookCache: legacyCache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook,
+                              legacyTakeFiles: oldTakeFiles, tempDirectory: tmp, clips: clips,
                               texture: texture, environment: env,
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
                               deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
@@ -126,8 +125,7 @@ final class AccountWipeTests: XCTestCase {
         // (a) no file holds the marker
         XCTAssertEqual(markerInFiles(), [], "files still holding the account's words")
         // (b) every in-memory store answers empty
-        XCTAssertTrue(turns.snapshot().isEmpty); XCTAssertNil(cache.text)
-        XCTAssertEqual(own.handle, ""); XCTAssertTrue(mutes.all.isEmpty)
+        XCTAssertTrue(turns.snapshot().isEmpty)
         XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1"))
         XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned)
@@ -179,16 +177,16 @@ final class AccountWipeInFlightTests: XCTestCase {
         let m = Self.marker
         let saved = ChoirEnvironment.shared.keys; ChoirEnvironment.shared.keys = InMemoryKeyStore([KeyAccount.apiKey: "k"]); defer { ChoirEnvironment.shared.keys = saved }
         let entered = Latch(), release = Latch()
-        let s = NotebookStore(); let cache = NotebookCache(file: root.appendingPathComponent("notebook-cache.md")); s.notebookCache = cache
+        let s = NotebookStore()
         s.lookupEdition = { await entered.release(); await release.wait(); return EditionInfo(found: false) }
         s.createNotebook = { "d1" }
         let marker = root.appendingPathComponent("notebook-topics-written")
         let run = Task { @MainActor in await s.writeTopics([m], marker: marker) }
         await waitFor(entered)
-        let wipe = AccountWipe(); wipe.register("notebook") { await MainActor.run { cache.wipe(); s.wipe() } }
+        let wipe = AccountWipe(); wipe.register("notebook") { await MainActor.run { s.wipe() } }
         await wipe.run()
         await release.release()
         let ok = await run.value
-        XCTAssertFalse(ok); XCTAssertNil(cache.text); XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path)); XCTAssertEqual(filesHoldingMarker(), [])
+        XCTAssertFalse(ok); XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path)); XCTAssertEqual(filesHoldingMarker(), [])
     }
 }

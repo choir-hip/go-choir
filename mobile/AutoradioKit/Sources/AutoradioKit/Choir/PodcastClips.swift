@@ -119,20 +119,16 @@ public final class ClipStore: @unchecked Sendable {
     private let lock = NSLock()
     private var byID: [String: PodcastClip] = [:]
     private var byRoute: [String: [PodcastClip]] = [:]
-    private var fetchedAt: Date?
-    private var stale = true
-    private var lastFailed = false
     private var mismatched = Set<String>()
     public init() {}
     /// This clip's audio is not the file that was transcribed (its length differs): it is never played as a clip.
     public func markMismatch(_ id: String) { lock.lock(); mismatched.insert(id); lock.unlock() }
     public func isMismatch(_ id: String) -> Bool { lock.lock(); defer { lock.unlock() }; return mismatched.contains(id) }
 
-    public func replace(_ clips: [PodcastClip], at: Date = Date(), failed: Bool = false) {
+    public func replace(_ clips: [PodcastClip]) {
         lock.lock(); defer { lock.unlock() }
         byID = [:]; byRoute = [:]
         for c in clips where byID[c.clipID] == nil { byID[c.clipID] = c; byRoute[c.route, default: []].append(c) }
-        fetchedAt = at; stale = false; lastFailed = failed
     }
     public func clip(_ id: String) -> PodcastClip? { lock.lock(); defer { lock.unlock() }; return byID[id] }
     public func clips(forRoute route: String) -> [PodcastClip] { lock.lock(); defer { lock.unlock() }; return byRoute[PodcastClip.bare(route)] ?? [] }
@@ -149,14 +145,6 @@ public final class ClipStore: @unchecked Sendable {
         byID[clip.clipID] = clip; byRoute[clip.route, default: []].append(clip)
     }
     public var all: [PodcastClip] { lock.lock(); defer { lock.unlock() }; return byID.values.sorted { $0.clipID < $1.clipID } }
-    /// The front was refreshed: the next stretch asks again.
-    public func markStale() { lock.lock(); stale = true; lock.unlock() }
-    /// Fresh enough not to ask again: fetched, not marked stale, and (after a failure) not older than `failedAge`.
-    func isFresh(now: Date = Date(), maxAge: TimeInterval = 900, failedAge: TimeInterval = 120) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        guard let t = fetchedAt, !stale else { return false }
-        return now.timeIntervalSince(t) < (lastFailed ? failedAge : maxAge)
-    }
 }
 
 // MARK: What the native side still needs of the podcast app's names

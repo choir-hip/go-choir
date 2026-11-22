@@ -27,12 +27,12 @@ const get: Get = async (p) => {
   if (p === '/api/texture/revisions/r1') return { revision: { content: notebookMd } };
   throw new HTTPError(404, 'HTTP 404');
 };
-let steer = 0, texts: string[] = [], order: string[] = [];
-const device: Device = { state: async () => { order.push('native'); }, text: async (t) => { texts.push(t); } };
+let steer = 0, order: string[] = [];
+const device: Device = { state: async () => { order.push('native'); } };
 const env = (d: Device | null = device) => ({ get, device: d });
 const args = (o: Partial<{ selected: string; tick: number; active: boolean; signedOutTick: string }> = {}) => ({ selected: '', tick: 0, active: true, signedOutTick: '', ...o });
 
-beforeEach(() => { steerForget(); files.clear(); calls = []; steer = 0; texts = []; order = []; forgetNotebook(); });
+beforeEach(() => { steerForget(); files.clear(); calls = []; steer = 0; order = []; forgetNotebook(); });
 
 describe('R1 to R3 the page state', () => {
   test('R1 a select answers from what was read, and the same id again clears it', async () => {
@@ -71,37 +71,13 @@ describe('R4 to R7 the native fact and call', () => {
     forgetNotebook();
     expect((await notebookShared(args(), storage, env(null))).steerLine).toBe('3 more or less taps waiting to reach your computer.');
     forgetNotebook();
-    const broken: Device = { state: async () => { throw new Error('native'); }, text: async () => { throw new Error('native'); } };
+    const broken: Device = { state: async () => { throw new Error('native'); } };
     const p = await notebookShared(args(), storage, env(broken));
     expect(p.steerLine).toBe('3 more or less taps waiting to reach your computer.'); expect(p.docState).toBe('ready');
     forgetNotebook();
-    const silent: Device = { state: () => new Promise(() => undefined), text: async () => undefined };
+    const silent: Device = { state: () => new Promise(() => undefined) };
     const q = await notebookShared(args(), storage, { ...env(silent), deviceDeadlineMs: 20 });
     expect(q.docState).toBe('ready'); expect(q.steerLine).toBe('3 more or less taps waiting to reach your computer.');
-  });
-  test('R5 the text is handed over once per change, and not when there is none', async () => {
-    await notebookShared(args(), storage, env());
-    expect(texts).toEqual([notebookMd]);
-    await notebookShared(args({ tick: 1 }), storage, env());
-    expect(texts.length).toBe(1);
-    forgetNotebook(); texts = [];
-    const none: Get = async (p) => (p === '/api/texture/edition' ? { found: false } : learning);
-    await notebookShared(args(), storage, { get: none, device });
-    expect(texts).toEqual([]);
-    forgetNotebook(); files.clear();
-    const down: Get = async () => { throw new Error('network'); };
-    await notebookShared(args(), storage, { get: down, device });
-    expect(texts).toEqual([]);
-  });
-  test('R5b a push that failed or hangs never holds the page and is tried again at the next read', async () => {
-    let n = 0; const sent: string[] = [];
-    const flaky: Device = { state: async () => 0, text: async (t) => { n++; if (n === 1) return new Promise(() => undefined); sent.push(t); } };
-    const first = await notebookShared(args(), storage, { ...env(flaky), deviceDeadlineMs: 30 });
-    expect(first.docState).toBe('ready');                    // answered while the push hangs
-    await new Promise((r) => setTimeout(r, 60));
-    await notebookShared(args({ tick: 1 }), storage, { ...env(flaky), deviceDeadlineMs: 30 });
-    await new Promise((r) => setTimeout(r, 10));
-    expect(sent).toEqual([notebookMd]);                      // the timed-out push was not counted as done
   });
   test('R6 a sign-out reads again; an old read never answers the new key', async () => {
     await notebookShared(args(), storage, env());

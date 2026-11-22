@@ -12,7 +12,7 @@
 //       (and only then); a second Publish while one is in flight posts nothing
 //   S5  the preview toggles through the recorder and Publish stops it first
 //   S6  delete drops the row and the own id; refresh reads the listener's takes and record; a server without takes says "not available yet"
-//   S7  a mute is kept, mirrored to the native programme and sent to the learning engine ONCE; the same handle twice is one mute; unmute undoes it
+//   S7  a mute is kept and sent to the learning engine ONCE; the same handle twice is one mute; unmute undoes it
 //   S8  Record sends the bounds to the recorder; Discard drops the take and clears the words; a phone with no recorder says so and nothing else changes
 //   U1  nothing is carried from the pre-release build: its old files are never read, adopted from or deleted here (the owner's ruling); the kept data is only what the server's `mine` says
 //   U2  the programme's copy is pushed before the server is asked, and never from an account that has been left
@@ -42,7 +42,6 @@ class FakeDevice implements Device {
   seconds = 10; file: Uint8Array | null = mp4(10);
   refuse: Native['ended'] | '' = ''; detail = '';
   responds = { title: '', route: '' };
-  mirrored: { ids: string[]; handle: string; muted: string[] }[] = [];
   steered: string[] = [];
   limits: unknown = null;
   async state() { return this.snap; }
@@ -65,9 +64,6 @@ class FakeDevice implements Device {
   async publishing(on: boolean) { this.log.push(`publishing:${on}`); this.snap = { ...this.snap, publishing: on }; return this.snap; }
   async done() { this.log.push('done'); this.snap = { ...IDLE }; return this.snap; }
   async steerMute(h: string) { this.steered.push(h); }
-  mirrorGen = -1; refusedMirrors = 0;
-  /** As the native op: a push for an older account generation than one already accepted is refused. */
-  async mirror(k: { ids: string[]; handle: string; muted: string[] }, gen: number) { if (gen < this.mirrorGen) { this.refusedMirrors++; return; } this.mirrorGen = gen; this.mirrored.push({ ids: [...k.ids], handle: k.handle, muted: [...k.muted] }); }
 }
 
 const files = new Map<string, Uint8Array>();
@@ -189,7 +185,6 @@ describe('S3 publish', () => {
     expect(h.dev.log.filter((x) => x === 'done')).toHaveLength(1);
     const kept = await loadKept(storage);
     expect(kept.ids).toContain('take-00000000000000b6'); expect(kept.handle).toBe('voice-me0001');
-    expect(h.dev.mirrored.at(-1)).toMatchObject({ handle: 'voice-me0001' });
   });
   test('the claim is what the file says, clamped: a header of 60.3 claims exactly 60', async () => {
     const h = setup(); h.dev.file = mp4(60.3); h.dev.seconds = 59.5;
@@ -302,15 +297,15 @@ describe('S6 my takes', () => {
 });
 
 describe('S7 mutes', () => {
-  test('kept, mirrored to the native programme, sent to the learning engine once; twice is one; unmute undoes it', async () => {
+  test('kept, sent to the learning engine once; twice is one; unmute undoes it', async () => {
     const h = setup();
     let p = await act(h.env, h.o, 'mute', 'voice-3fa2c1');
     expect(p.muted).toEqual([{ handle: 'voice-3fa2c1', line: 'Never play takes by voice-3fa2c1.' }]);
     await act(h.env, h.o, 'mute', 'voice-3fa2c1'); await act(h.env, h.o, 'mute', 'bad handle');
     expect(h.dev.steered).toEqual(['voice-3fa2c1']);
-    expect((await loadKept(storage)).muted).toEqual(['voice-3fa2c1']); expect(h.dev.mirrored.at(-1)?.muted).toEqual(['voice-3fa2c1']);
+    expect((await loadKept(storage)).muted).toEqual(['voice-3fa2c1']);
     p = await act(h.env, h.o, 'unmute', 'voice-3fa2c1');
-    expect(p.muted).toEqual([]); expect((await loadKept(storage)).muted).toEqual([]); expect(h.dev.mirrored.at(-1)?.muted).toEqual([]);
+    expect(p.muted).toEqual([]); expect((await loadKept(storage)).muted).toEqual([]);
     expect(h.dev.steered).toEqual(['voice-3fa2c1']);
   });
   test('a relaunch (a new overlay) still lists the mute', async () => {
@@ -445,7 +440,7 @@ describe('S4 two publishes started in the same window post once', () => {
 });
 
 describe('B2 a new account does not see or rewrite the old account\'s takes data', () => {
-  test('wipe, render, mute: only the new account\'s voice is kept and mirrored; the old files cannot come back', async () => {
+  test('wipe, render, mute: only the new account\'s voice is kept; the old files cannot come back', async () => {
     const h = setup(() => ({ status: 200, json: { takes: [] } }));
     await act(h.env, h.o, 'mute', 'voice-OLD');
     expect((await pageFor(h.env, h.o, IDLE)).muted).toHaveLength(1);
@@ -457,9 +452,7 @@ describe('B2 a new account does not see or rewrite the old account\'s takes data
     expect(p.muted.map((m) => m.handle)).toEqual(['voice-NEW']);
     const k = await loadKept(storage);
     expect(k.muted).toEqual(['voice-NEW']); expect(k.ids).toEqual([]); expect(k.handle).toBe('');
-    expect(h.dev.mirrored.at(-1)?.muted).toEqual(['voice-NEW']);
     // the native copy of the old account is emptied as soon as the change is seen, even if the native wipe had failed
-    expect(h.dev.mirrored.some((m) => m.muted.length === 0 && m.ids.length === 0 && m.handle === '')).toBe(true);
   });
   test('the listener\'s takes and record of the old account are dropped too', async () => {
     const h = setup((s) => (s.p.endsWith('/record') ? { status: 200, json: recordFx } : { status: 200, json: s.q?.mine ? mineFx : { takes: [] } }));
@@ -522,7 +515,6 @@ describe('row 3 every write of the kept file is held to the account generation',
     sl.release(); await mute;
     expect(files.has(KEPT_FILE)).toBe(false);
     expect((await pageFor(env, newOverlay(), IDLE)).muted).toEqual([]);
-    expect(h.dev.mirrored.at(-1)?.muted ?? []).toEqual([]);          // and the programme was not given the old account's voice
   });
 });
 
@@ -530,7 +522,7 @@ describe('row 4 two changes to the kept data at the same time are both kept', ()
   test('two mutes from a fresh overlay', async () => {
     const h = setup();
     await Promise.all([act(h.env, h.o, 'mute', 'voice-1'), act(h.env, h.o, 'mute', 'voice-2')]);
-    expect((await loadKept(storage)).muted.sort()).toEqual(['voice-1', 'voice-2']); expect(h.dev.mirrored.at(-1)?.muted.sort()).toEqual(['voice-1', 'voice-2']);
+    expect((await loadKept(storage)).muted.sort()).toEqual(['voice-1', 'voice-2']);
   });
   test('a publish and a mute and an unmute in the same window: the final file has the own id and the right mutes', async () => {
     let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
@@ -543,7 +535,6 @@ describe('row 4 two changes to the kept data at the same time are both kept', ()
     release(); await pub;
     const k = await loadKept(storage);
     expect(k.ids).toContain('take-00000000000000b6'); expect(k.muted.sort()).toEqual(['voice-keep', 'voice-new']);
-    expect(h.dev.mirrored.at(-1)).toMatchObject({ muted: expect.arrayContaining(['voice-keep', 'voice-new']) });
   });
 });
 
@@ -565,128 +556,13 @@ describe('nothing is carried from the pre-release build: the kept data is only w
     const h = setup(mineOnly);
     const p = await act(h.env, h.o, 'refresh', '');
     expect((await loadKept(storage)).ids).toEqual([OLD_LIVE]); expect(p.muted).toEqual([]); expect(p.handle).toBe('voice-me0001');
-    expect(h.dev.mirrored.every((m) => m.muted.length === 0 && m.ids.every((id) => id === OLD_LIVE))).toBe(true);     // the pushed copy holds only what the server says
     const g = setup(() => ({ status: 200, json: { takes: [] } }));
     expect((await act(g.env, g.o, 'refresh', '')).muted).toEqual([]);
     expect((await act(g.env, g.o, 'mute', 'voice-mine')).muted.map((m) => m.handle)).toEqual(['voice-mine']);
   });
 });
 
-describe('the programme\'s copy is pushed from shared code, first thing', () => {
-  test('a signed-in session pushes this account\'s state (empty when unknown) before it asks the server anything', async () => {
-    const h = setup(mineOnly);
-    await act(h.env, h.o, 'refresh', '');
-    expect(h.dev.mirrored[0]).toEqual({ ids: [], handle: '', muted: [] });
-    files.set(KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: ['take-B'], handle: 'voice-B', muted: ['voice-Bm'] })));
-    const g = setup(mineOnly); files.set(KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: ['take-B'], handle: 'voice-B', muted: ['voice-Bm'] })));
-    await act(g.env, g.o, 'refresh', '');
-    expect(g.dev.mirrored[0]).toEqual({ ids: ['take-B'], handle: 'voice-B', muted: ['voice-Bm'] });
-  });
-});
-
-describe('S1 a publish that finished for another account changes nothing of the next one', () => {
-  test('the generation moves while the write of the new id is in flight: no "published as", no done, no discard of the next account\'s take', async () => {
-    const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage };
-    await recorded(h); sl.hold = true;
-    const pub = act(env, h.o, 'publish', '');
-    await sl.entered;
-    nextGeneration(); await wipeKept(sl.storage);
-    sl.release(); await pub;
-    expect(h.dev.log).not.toContain('done'); expect(h.dev.log.filter((x) => x === 'discard').length).toBeLessThanOrEqual(1);       // at most the one `sync` makes for the old account
-    expect(h.o.published).toBe('');
-  });
-});
-
-describe('S4 a write that landed just before the account changed is not kept or sent on', () => {
-  test('a mute whose write was in flight when the generation moved: not mirrored, not sent to the steer queue', async () => {
-    const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage }; sl.hold = true;
-    const mute = act(env, h.o, 'mute', 'voice-OLD');
-    await sl.entered;
-    nextGeneration(); await wipeKept(sl.storage); sl.release(); await mute;
-    expect(h.dev.steered).toEqual([]); expect(h.dev.mirrored.every((m) => !m.muted.includes('voice-OLD'))).toBe(true);
-    expect((await pageFor(env, h.o, IDLE)).muted).toEqual([]);
-  });
-});
-
-// ---------------------------------------------------------------------------------------------------------------- review 4
-
-describe('a previous account\'s publish does not touch the next account\'s overlay', () => {
-  async function aPublishInFlight(status: number) {
-    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
-    const h = setup(async (x) => { if (x.m === 'POST') { await gate; return status === 201 ? { status, json: publishFx } : { status }; } return { status: 200, json: { takes: [] } }; });
-    await recorded(h);
-    const pub = act(h.env, h.o, 'publish', '');
-    await new Promise((r) => setTimeout(r, 10));
-    nextGeneration();
-    await pageFor(h.env, h.o, IDLE);                 // the next account's first page: the overlay is theirs now
-    return { h, release: () => release(), pub };
-  }
-  test('A\'s failed POST writes no notice onto B\'s page, and its finally does not un-block B\'s own publish', async () => {
-    const { h, release, pub } = await aPublishInFlight(500);
-    h.o.publishing = true;                                  // B is publishing now
-    const logBefore = h.dev.log.length;
-    release(); await pub;
-    expect(h.o.notice).toBe(''); expect(h.o.publishing).toBe(true);
-    expect(h.dev.log.slice(logBefore)).not.toContain('publishing:false');         // and A did not clear the recorder's bit under B
-  });
-  test('A\'s "the recording is gone" is not B\'s page\'s notice either', async () => {
-    const h = setup(); await recorded(h);
-    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
-    h.dev.audio = async () => { await gate; return null; };
-    const pub = act(h.env, h.o, 'publish', '');
-    await new Promise((r) => setTimeout(r, 10));
-    nextGeneration(); await pageFor(h.env, h.o, IDLE);
-    release(); await pub; expect(h.o.notice).toBe('');
-  });
-  test('a sign-in completing between the audio and the send: nothing is sent', async () => {
-    const h = setup(); await recorded(h);
-    const real = h.dev.audio.bind(h.dev);
-    h.dev.audio = async () => { const a = await real(); nextGeneration(); return a; };
-    await act(h.env, h.o, 'publish', '');
-    expect(posts(h.seen)).toBe(0); expect(h.dev.log).not.toContain('done');
-  });
-});
-
-describe('the programme\'s copy is pushed before the server is asked, and never from an account that has been left', () => {
-  test('the first push precedes the first request of mine', async () => {
-    let atMine = -1; let dev: FakeDevice | null = null;
-    const h = setup((x) => { if (x.q?.mine && atMine < 0) atMine = dev!.mirrored.length; return mineOnly(x); }); dev = h.dev;
-    await act(h.env, h.o, 'refresh', '');
-    expect(atMine).toBeGreaterThanOrEqual(1);
-  });
-  test('a refresh begun for A whose push lands after the account changed leaves the programme\'s copy empty and A\'s takes off B\'s page', async () => {
-    const h = setup(mineOnly);
-    h.o.gen = null;                                                 // fresh overlay
-    await act(h.env, h.o, 'mute', 'voice-A');                       // A has a mute
-    let release!: () => void; const gate = new Promise<void>((r) => { release = r; }); let hold = false;
-    const real = h.dev.mirror.bind(h.dev);
-    h.dev.mirror = async (k) => { if (hold) { await gate; } await real(k); };
-    hold = true;
-    const refresh = act(h.env, h.o, 'refresh', '');
-    await new Promise((r) => setTimeout(r, 10));
-    nextGeneration(); hold = false;
-    await pageFor(h.env, h.o, IDLE);                                // B's page: sync empties the copy
-    release(); await refresh;
-    expect(h.dev.mirrored.at(-1)).toEqual({ ids: [], handle: '', muted: [] });
-    expect(h.o.mine).toEqual([]);
-  });
-});
-
-describe('review 5: a mirror in flight when the account changes is refused natively; a delete answered for a left account says nothing', () => {
-  test('1 the late push of the old account carries an older generation and is refused: the programme\'s copy stays empty', async () => {
-    const h = setup();
-    let release!: () => void; const gate = new Promise<void>((r) => { release = r; }); let hold = false;
-    const real = h.dev.mirror.bind(h.dev);
-    h.dev.mirror = async (k, gen) => { if (hold) await gate; await real(k, gen); };
-    hold = true;
-    const mute = act(h.env, h.o, 'mute', 'voice-OLD');
-    await new Promise((r) => setTimeout(r, 15));
-    nextGeneration(); hold = false;
-    await pageFor(h.env, h.o, IDLE);                      // the next account's first page: sync pushes the empty copy with the new generation
-    release(); await mute;
-    expect(h.dev.refusedMirrors).toBe(1); expect(h.dev.mirrored.at(-1)).toEqual({ ids: [], handle: '', muted: [] });
-    expect(h.dev.mirrored.every((m, i) => i < 1 || (m.muted.length === 0 && m.ids.length === 0))).toBe(true);       // after the account changed, nothing of the old account is ever pushed
-  });
+describe('review 5: a delete answered for a left account says nothing', () => {
   test('5 a delete answered after the account changed writes no notice and drops no row of the next account', async () => {
     let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
     const h = setup(async (x) => { if (x.m === 'DELETE') { await gate; return { status: 500 }; } return mineOnly(x); });

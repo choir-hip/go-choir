@@ -39,12 +39,10 @@ public final class AccountWipe: @unchecked Sendable {
     @MainActor
     func registerStandard(
         turnHistory: TurnHistory = .shared,
-        notebookCache: NotebookCache = .shared,
+        legacyNotebookCache: URL? = TakeFiles.url("notebook-cache.md"),
         legacyTopicsFile: URL? = TakeFiles.url("edition-topics.json"),
         topicsMarker: URL? = TakeFiles.url("notebook-topics-written"),
         notebook: NotebookStore = .shared,
-        takeOwn: TakeOwn = .shared,
-        takeMutes: TakeMutes = .shared,
         legacyTakeFiles: [URL?] = TakeFiles.legacy,
         tempDirectory: URL = FileManager.default.temporaryDirectory,
         clips: ClipLocator = .shared,
@@ -62,15 +60,14 @@ public final class AccountWipe: @unchecked Sendable {
     ) {
         register("turn-history") { turnHistory.clear() }
         register("notebook") {
-            notebookCache.wipe()
+            if let f = legacyNotebookCache { try? FileManager.default.removeItem(at: f) }      // the cache of the notebook text an earlier build kept: nothing reads it now
             if let f = legacyTopicsFile { try? FileManager.default.removeItem(at: f) }       // the old build's picks file: nothing writes or reads it now; this wipe is the only thing that removes it
             if let f = topicsMarker { try? FileManager.default.removeItem(at: f) }
             await MainActor.run { notebook.wipe() }
         }
         register("takes") {
             await MainActor.run { TakeSession.live?.discard() }      // the account CHANGED path has no signOut() above it
-            TakeMirror.invalidate(); takeOwn.wipe(); takeMutes.wipe();      // first: a push of the old account landing from here on is refused
-            for u in legacyTakeFiles { if let u { try? FileManager.default.removeItem(at: u) } }      // the pre-release build's files (never read by this build) go with the account that is leaving
+            for u in legacyTakeFiles { if let u { try? FileManager.default.removeItem(at: u) } }      // the files earlier builds left (never read by this build) go with the account that is leaving
             Self.removeTakeScratch(in: tempDirectory)
         }
         register("radio-bridge") { RadioBridge.shared.wipe() }       // the run sheet itself is shared code's (radio-bridge.ts wipeRadio, registered in account.ts)
