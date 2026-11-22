@@ -146,6 +146,11 @@ decisions_for_the_owner:
     why: a personal root's queries and its model of the owner are private
     options: [nothing, counts only]
     default: nothing; the personal root reads a copy or a read it cannot be identified by, settled in F6's design
+  - id: Q5
+    question: May the offline slice spend on model calls, and up to how much?
+    why: 'rungs 1 and 2 replay captures through System 1 and a language-model step; the plan (docs/design/first-design-offline-slice-plan-2026-11-22.md) estimates under 2 dollars of System 1 and under 6 of escalation for a full week, through the d@e identity; no spending cap for System 1 exists in code and its credit balance is not known to the lead'
+    options: ['yes: 5 dollars for System 1 and 10 for the language-model step', 'yes with other ceilings', 'no: rung 0 only']
+    default: 'no spend. Rung 0 (rules only, no model, a hand read for kill line (c)) runs now; rungs 1 and 2 wait for the owner''s word'
 now:
   status: working
   as_of: 2026-11-22T05:00Z
