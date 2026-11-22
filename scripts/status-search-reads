@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""status-search-reads: how many web searches a research run sends and whether it
-read what it held before it searched again (the deployed proof of the read-first
-rule, docs/design/semantic-layer-2026-11-20.md section 4).
-It also says where searches come from: by desk (research, research_web) from the
-gateway, and the children and searches by desk of the ended runs' summary lines.
+"""status-search-reads: how many web searches a research run sends, and whether it
+USES AND BUILDS ON the paper's corpus: the deployed proof of the graph-first change
+(docs/design/semantic-layer-2026-11-20.md section 4; owner, 2026-11-22: "the goal of any
+run shouldnt just be to write the best story, but to be building on and using our
+corpus, and then the story adds to our corpus"). There is no refusal to count: no
+search is refused for what the run holds; the run is given a digest of the paper's graph
+and told to search it first.
 
 Read only against Node B (one ssh, `sudo -n` reads; nothing is written there).
-Counts and ids only; a SearchFresh reason is shown as a hash and a length (the text,
-which can carry a query, stays on the tape rows): the gateway's query text is cut on the host and never printed or
-stored.
+Counts and ids only: the gateway's and the corpus search's query text is cut on the host
+and never printed or stored.
 
   status-search-reads [--since T] [--until T] [--node HOST] [--json] [--fixture FILE]
 
@@ -18,23 +19,31 @@ T is YYYY-MM-DDTHH:MMZ (UTC); default: the start of today (UTC). The window is
 Sources:
   gateway journal   `gateway: search request from autoputer <vm> (... run= desk=research ...)`
                     one line per web search sent: runs, searches, mean, the 1/2/3/4+
-                    distribution, the 7-or-more tail.
-  paper console     `corpus read run=` (one per page read by a run) and
-                    `runtime: search run= desk=research started= ... not_sent=N (reason=n ...)
-                    pages_returned= pages_read= fresh_sent=` (one per ended run).
-                    The console keeps about 2.5 hours, so the two reads figures cover
-                    only the runs whose first search falls inside the console's span.
+                    distribution, the 7-or-more tail, searches by desk.
+  paper console     `corpus read run=` (one per page read by a run, held=true for a capture
+                    the corpus had before the run), `corpus search ... run= ... caller=cell`
+                    (the run's own graph searches; caller=brief is the host's),
+                    `runtime: research brief run= ... digest_tokens= digest_captures=`
+                    (what the run was handed), `runtime: research report run= final=
+                    sources= from_corpus= by_run= gap=` (what its Report cites and whether
+                    it names what the corpus lacked) and `runtime: search run= desk=`
+                    (one per ended run). The console keeps about 2.5 hours, so the console
+                    figures cover only that span.
 
-Printed: runs, searches, mean per run, the 1/2/3/4+ distribution, searches from
-runs of 7+; later searches (second and later of a run, console span) sent with
-zero reads since the run's previous search; pages returned and read and
-refusals by reason (ended runs, console span); SearchFresh sends.
-"No successful read since the previous search" compares the paper console's
-clock (corpus read lines) with the gateway's (search request lines): the two
-may differ by a few seconds, so a read within seconds of a search can fall on
-either side; the figure is a count, not a gate.
-Exit 0, or 2 when the fetch failed. --fixture FILE reads the five sections
-(##READS, ##SUM, ##FRESH, ##LOST, ##GW) that fetch() builds, with no network.
+Printed: runs, searches, mean per run, the 1/2/3/4+ distribution, the 7+ tail, searches by
+desk; later searches with no successful read since the run's previous search; pages
+returned and read; THEN the measures of using and building on the corpus: the digest (runs
+handed one, median tokens), the share of runs whose first search was a graph search, graph
+searches per web search, the share of runs with no web search at all, the share of the
+digest's captures the runs read, the share of cited sources that were in the corpus before
+the run versus captured by it, and the share of runs whose Report names a gap (what the
+corpus lacked).
+"No successful read since the previous search" compares the paper console's clock (corpus
+read lines) with the gateway's (search request lines): the two may differ by a few
+seconds, so a read within seconds of a search can fall on either side; the figure is a
+count, not a gate.
+Exit 0, or 2 when the fetch failed. --fixture FILE reads the sections (##READS, ##SUM,
+##BRIEF, ##GRAPH, ##REPORT, ##GW) that fetch() builds, with no network.
 """
 import argparse
 import calendar
@@ -49,12 +58,12 @@ NODE = "node-b"
 STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
 # desk=research and desk=research_web (a choir.Research child's searches carry the latter)
 GW_RE = re.compile("^" + STAMP + r" gateway: search request from autoputer (\S+) \(.*?run=(\S+) desk=(research(?:_web)?) ")
-FRESH_RE = re.compile(STAMP + r" runtime: search fresh run=(\S+) why_len=(\d+) why_hash=([0-9a-f]+)")
-LOST_RE = re.compile(STAMP + r" runtime: search gate state lost at resume run=(\S+)")
-READ_RE = re.compile(STAMP + r" corpus read run=(\S+) ")
+READ_RE = re.compile(STAMP + r" corpus read run=(\S+) desk=\S+ conv=\S+ capture=(\S+) held=(\S+) via=(\S+)")
 SUM_RE = re.compile(STAMP + r" runtime: search run=(\S+) desk=research(?:_web)? (.*)$")
+BRIEF_RE = re.compile(STAMP + r" runtime: research brief run=(\S+) .*? digest_tokens=(\d+).*? digest_captures=(\S*)")
+GRAPH_RE = re.compile(STAMP + r" corpus search .*? run=(\S+) desk=research .*? caller=cell")
+REPORT_RE = re.compile(STAMP + r" runtime: research report run=(\S+) final=(true|false) sources=(\d+) from_corpus=(\d+) by_run=(\d+) no_capture=(\d+) claims=(\d+) adds=(true|false) gap=(true|false)")
 KV_RE = re.compile(r"(\w+)=(\d+)")
-REASONS_RE = re.compile(r"not_sent=\d+ \(([^)]*)\)")
 
 
 def epoch(s):
@@ -65,18 +74,32 @@ def arg_time(s):
     return calendar.timegm(time.strptime(s, "%Y-%m-%dT%H:%MZ"))
 
 
+def median(xs):
+    xs = sorted(xs)
+    if not xs:
+        return None
+    return xs[len(xs) // 2] if len(xs) % 2 else (xs[len(xs) // 2 - 1] + xs[len(xs) // 2]) / 2.0
+
+
+def pct(a, b):
+    return round(100.0 * a / b, 1) if b else None
+
+
 def compute(text, since, until):
     sec = ""
     gw, reads, sums = [], {}, []
     by_desk = {}
-    fresh_texts = {}  # (hash, length) of a SearchFresh reason -> sends
-    lost_runs = set()
+    briefs = {}   # run -> (digest tokens, set of the digest's capture ids)
+    graph = {}    # run -> times of the run's own graph searches
+    reports = {}  # run -> (final, sources, from_corpus, by_run, gap) of its last (final preferred) report line
+    capture_reads = {}  # run -> set of capture ids read via read_capture
     console_first = None  # the console's earliest line of any section: where its span starts
 
     def seen(t):
         nonlocal console_first
         if console_first is None or t < console_first:
             console_first = t
+
     for ln in text.splitlines():
         if ln.startswith("##"):
             sec = ln
@@ -96,18 +119,32 @@ def compute(text, since, until):
                 t = epoch(m.group(1))
                 seen(t)
                 reads.setdefault(m.group(2), []).append(t)
-        elif sec == "##FRESH":
-            m = FRESH_RE.search(ln)
+                if m.group(5) == "read_capture":
+                    capture_reads.setdefault(m.group(2), set()).add(m.group(3))
+        elif sec == "##BRIEF":
+            m = BRIEF_RE.search(ln)
             if m:
                 t = epoch(m.group(1))
                 seen(t)
-                if t >= since and t < until:
-                    key = (m.group(4), int(m.group(3)))
-                    fresh_texts[key] = fresh_texts.get(key, 0) + 1
-        elif sec == "##LOST":
-            m = LOST_RE.search(ln)
-            if m and since <= epoch(m.group(1)) < until:
-                lost_runs.add(m.group(2))
+                if since <= t < until:
+                    briefs[m.group(2)] = (int(m.group(3)), set(x for x in m.group(4).split(",") if x and x != "-"))
+        elif sec == "##GRAPH":
+            m = GRAPH_RE.search(ln)
+            if m:
+                t = epoch(m.group(1))
+                seen(t)
+                if since <= t < until:
+                    graph.setdefault(m.group(2), []).append(t)
+        elif sec == "##REPORT":
+            m = REPORT_RE.search(ln)
+            if m:
+                t = epoch(m.group(1))
+                seen(t)
+                if since <= t < until:
+                    run, final = m.group(2), m.group(3) == "true"
+                    prev = reports.get(run)
+                    if prev is None or final or not prev[0]:
+                        reports[run] = (final, int(m.group(4)), int(m.group(5)), int(m.group(6)), m.group(10) == "true")
         elif sec == "##SUM":
             m = SUM_RE.search(ln)
             if m:
@@ -147,35 +184,50 @@ def compute(text, since, until):
             if not any(ts[i - 1] <= rt <= ts[i] for rt in reads.get(r, [])):
                 zero += 1
         win_runs += counted
-    tot = {"returned": 0, "read": 0, "started": 0, "fresh": 0, "children": 0}
+    tot = {"returned": 0, "read": 0, "started": 0, "children": 0}
     started_by_desk = {}
-    refusals = {}
     for body in sums:
         kv = dict(KV_RE.findall(body))
         tot["returned"] += int(kv.get("pages_returned", 0))
         tot["read"] += int(kv.get("pages_read", 0))
         tot["started"] += int(kv.get("started", 0))
-        tot["fresh"] += int(kv.get("fresh_sent", 0))
         tot["children"] += int(kv.get("children", 0))
         for k, v in kv.items():
             if k.startswith("started_"):
                 started_by_desk[k[len("started_"):]] = started_by_desk.get(k[len("started_"):], 0) + int(v)
-        m = REASONS_RE.search(body)
-        if m:
-            for k, v in re.findall(r"([a-z_]+)=(\d+)", m.group(1)):
-                refusals[k] = refusals.get(k, 0) + int(v)
+
+    # Using and building on the corpus.
+    digest_tokens = [tok for tok, _ in briefs.values() if tok > 0]
+    searched = set(graph) | set(by_run)
+    graph_first = sum(1 for r in searched if graph.get(r) and (not by_run.get(r) or min(graph[r]) <= min(by_run[r])))
+    graph_searches = sum(len(v) for v in graph.values())
+    web_searches_graph_runs = n  # the gateway's searches in the window
+    console_runs = set(briefs)
+    zero_web = sum(1 for r in console_runs if not by_run.get(r))
+    named = read_named = 0
+    for r, (_, ids) in briefs.items():
+        named += len(ids)
+        read_named += len(ids & capture_reads.get(r, set()))
+    corpus_src = sum(v[2] for v in reports.values())
+    run_src = sum(v[3] for v in reports.values())
+    gap_runs = sum(1 for v in reports.values() if v[4])
     return {
         "since": time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(since)),
         "runs": runs, "searches": n, "mean_per_run": round(n / runs, 2) if runs else None,
         "runs_by_searches": dist, "runs_7plus": tail_runs, "searches_from_7plus": tail_searches,
         "console_empty": console_first is None,
         "console_span_runs": win_runs, "later_searches": later, "later_no_successful_read": zero,
-        "fresh_reasons": sorted(([h, ln, n] for (h, ln), n in fresh_texts.items()), key=lambda r: (-r[2], r[0])),
-        "gate_state_lost_runs": len(lost_runs),
         "ended_runs": len(sums), "ended_runs_started": tot["started"],
         "pages_returned": tot["returned"], "pages_read": tot["read"],
         "searches_by_desk": by_desk, "children": tot["children"], "started_by_desk": started_by_desk,
-        "refusals": refusals, "refused": sum(refusals.values()), "search_fresh": tot["fresh"],
+        "digest_runs": len(digest_tokens), "brief_runs": len(briefs), "digest_tokens_median": median(digest_tokens),
+        "searched_runs": len(searched), "graph_first_runs": graph_first, "graph_first_pct": pct(graph_first, len(searched)),
+        "graph_searches": graph_searches, "graph_per_web_search": round(graph_searches / web_searches_graph_runs, 2) if web_searches_graph_runs else None,
+        "zero_web_runs": zero_web, "zero_web_pct": pct(zero_web, len(console_runs)),
+        "digest_captures_named": named, "digest_captures_read": read_named, "digest_captures_read_pct": pct(read_named, named),
+        "report_runs": len(reports), "cited_from_corpus": corpus_src, "cited_by_run": run_src,
+        "cited_from_corpus_pct": pct(corpus_src, corpus_src + run_src),
+        "gap_runs": gap_runs, "gap_pct": pct(gap_runs, len(reports)),
     }
 
 
@@ -187,39 +239,42 @@ def render(r):
     o.append("runs sending 7+: %d, %d searches (%s of all)" % (
         r["runs_7plus"], r["searches_from_7plus"],
         "%.0f%%" % (100.0 * r["searches_from_7plus"] / r["searches"]) if r["searches"] else "n/a"))
-    if r["console_empty"]:
-        o.append("console window empty: the guest console holds no read line, so the read figures (later searches with no successful read, pages read) are unavailable, not zero")
-    else:
-        o.append("console span: %d runs; later searches %d, sent with no SUCCESSFUL read since the run's previous search: %d (the corpus read line is written only when a read succeeds; a failed attempt is not counted)" % (
-            r["console_span_runs"], r["later_searches"], r["later_no_successful_read"]))
-    o.append("ended runs %d (console span): searches started %d, pages returned %d, pages read %d" % (
-        r["ended_runs"], r["ended_runs_started"], r["pages_returned"], r["pages_read"]))
     o.append("searches by desk (gateway): %s" % (" ".join("%s=%d" % kv for kv in sorted(r["searches_by_desk"].items())) or "-"))
-    o.append("ended runs' children %d; searches started by desk (run lines): %s" % (
-        r["children"], " ".join("%s=%d" % kv for kv in sorted(r["started_by_desk"].items())) or "-"))
-    o.append("refusals %d by reason: %s" % (r["refused"], " ".join("%s=%d" % kv for kv in sorted(r["refusals"].items())) or "-"))
-    o.append("SearchFresh sends (ended runs): %d" % r["search_fresh"])
-    reasons = r["fresh_reasons"]
-    o.append("SearchFresh reasons by distinct hash (console, %d sends, %d distinct; the text is on the tape rows, never here)%s" % (
-        sum(n for _, _, n in reasons), len(reasons), ":" if reasons else ": none"))
-    for h, ln, n in reasons[:10]:
-        o.append("  %4d  hash %s  %d characters" % (n, h, ln))
-    o.append("runs resumed after a planned restart with the gate's state lost (its first segment's reads and pages are not in it): %d" % r["gate_state_lost_runs"])
+    if r["console_empty"]:
+        o.append("console window empty: the guest console holds no line, so the read and corpus figures are unavailable, not zero")
+        return "\n".join(o)
+    o.append("console span: %d runs; later searches %d, sent with no SUCCESSFUL read since the run's previous search: %d (the corpus read line is written only when a read succeeds; a failed attempt is not counted)" % (
+        r["console_span_runs"], r["later_searches"], r["later_no_successful_read"]))
+    o.append("ended runs %d (console span): searches started %d, pages returned %d, pages read %d; children %d; searches started by desk: %s" % (
+        r["ended_runs"], r["ended_runs_started"], r["pages_returned"], r["pages_read"], r["children"],
+        " ".join("%s=%d" % kv for kv in sorted(r["started_by_desk"].items())) or "-"))
+    o.append("USING THE CORPUS (console span):")
+    o.append("  digest: %d of %d runs with a brief line were handed one; median %s tokens" % (r["digest_runs"], r["brief_runs"], r["digest_tokens_median"]))
+    o.append("  runs whose first search was a graph search: %d of %d that searched (%s%%)" % (r["graph_first_runs"], r["searched_runs"], r["graph_first_pct"]))
+    o.append("  graph searches %d, per web search %s; runs with no web search at all: %d of %d (%s%%)" % (
+        r["graph_searches"], r["graph_per_web_search"], r["zero_web_runs"], r["brief_runs"], r["zero_web_pct"]))
+    o.append("  the digest's captures the runs then read by capture id: %d of %d (%s%%)" % (r["digest_captures_read"], r["digest_captures_named"], r["digest_captures_read_pct"]))
+    o.append("BUILDING ON IT:")
+    o.append("  cited sources in the runs' Reports: %d were in the corpus before the run, %d captured by it (%s%% from the corpus; %d Reports)" % (
+        r["cited_from_corpus"], r["cited_by_run"], r["cited_from_corpus_pct"], r["report_runs"]))
+    o.append("  Reports naming a gap (what the corpus lacked): %d of %d (%s%%)" % (r["gap_runs"], r["report_runs"], r["gap_pct"]))
     return "\n".join(o)
 
 
 # One read-only pass over the console files and the gateway journal, through pipes
 # only: nothing is written on Node B. Each kept line leaves with a one-letter tag
-# (R read, S run summary, F SearchFresh reason hash, L gate state lost at a resume, G gateway request) that fetch()
-# turns into the sections compute() reads.
+# (R read, S run summary, B research brief, C corpus search by a run's cell, P research
+# report, G gateway request) that fetch() turns into the sections compute() reads.
 REMOTE = r"""
 dir=/var/lib/go-choir/vm-state/@VM@
 sudo -n true 2>/dev/null || echo "##NOSUDO"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
+  sed -E 's/ query="([^"\\]|\\.)*"//' |
   awk '/ corpus read run=/ {print "R|" $0; next}
        / runtime: search run=/ {print "S|" $0; next}
-       / runtime: search fresh run=/ {print "F|" $0; next}
-       / runtime: search gate state lost at resume run=/ {print "L|" $0; next}'
+       / runtime: research brief run=/ {print "B|" $0; next}
+       / corpus search computer=/ && / caller=cell/ {print "C|" $0; next}
+       / runtime: research report run=/ {print "P|" $0; next}'
 sudo -n journalctl --no-pager -o cat --utc --since "@DAY@ 00:00:00 UTC" -u go-choir-gateway 2>/dev/null |
   grep -a 'gateway: search request from autoputer' | sed -E 's/query="([^"\\]|\\.)*"//; s/^/G|/'
 echo "##END"
@@ -234,11 +289,11 @@ def fetch(node, since):
         raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
     if "##NOSUDO" in p.stdout:
         raise RuntimeError("sudo -n is not allowed on %s" % node)
-    secs = {"R": [], "S": [], "F": [], "L": [], "G": []}
+    secs = {"R": [], "S": [], "B": [], "C": [], "P": [], "G": []}
     for ln in p.stdout.splitlines():
         if len(ln) > 2 and ln[1] == "|" and ln[0] in secs:
             secs[ln[0]].append(ln[2:])
-    return "\n".join(["##READS"] + secs["R"] + ["##SUM"] + secs["S"] + ["##FRESH"] + secs["F"] + ["##LOST"] + secs["L"] + ["##GW"] + secs["G"])
+    return "\n".join(["##READS"] + secs["R"] + ["##SUM"] + secs["S"] + ["##BRIEF"] + secs["B"] + ["##GRAPH"] + secs["C"] + ["##REPORT"] + secs["P"] + ["##GW"] + secs["G"])
 
 
 def main(argv):

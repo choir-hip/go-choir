@@ -2,92 +2,47 @@ package agentcore
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/url"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
-	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// A story's research trajectory (docs/design/semantic-layer-2026-11-20.md
-// section 3, the owner's rulings of 2026-11-21: captures join existing
-// trajectories with their accumulated context).
-//
-// What the code keeps today. A story has one research agent inbox
-// (research:<doc>) and one conversation with its Texture
-// (texture:<doc> to research:<doc>); every Texture Cast to research opens a
-// new round and wakes a NEW run with a fresh session and a fresh corpus brief
-// (research_brief.go builds it from the Cast's objective alone). The pages an
-// earlier run read survive only as captures in corpusd and, since the search
-// leads landed, as leads marked tried with the capture they made and the
-// conversations whose searches returned them. Nothing carried them into the
-// next run's first message; a fed capture reached the story as a record and
-// nothing asked that it be read before research began again.
-//
-// What this file adds, all host-side and no model call:
-//
-//   - storyResearchContext: for a research run on a story, the pages earlier
-//     runs on that story read (leads of its conversation), the captures the
-//     story holds (opened with or fed), the outlets those hold, and, through
-//     the story's succeeds ref, the same for the story it continues. It is
-//     appended to the run's first message beside the corpus brief. The
-//     read-first rule (search_decision.go) takes the same pages as HELD pages
-//     of the run's root session, in FRONT of the corpus brief's (noteStoryHeld):
-//     the run tries what the story already holds, newest fed capture first,
-//     before its first web search. The rule demands the first five of that one
-//     search zero (story pages, then the brief's), the same five it demands of
-//     any search; the section lists up to 40 so the model sees the rest, and
-//     is not required to read them. Pages whose URL is not known (a capture
-//     the store did not return) are listed but not held: the rule keys a page
-//     by its URL. Owner, 2026-11-21: "the more that we send a capture to
-//     existing trajectories with accumulated context, the better" and "we
-//     should be reading much more and searching less".
-//   - requireFedCapturesRead: a Texture's Cast to research for a story that
-//     already had research is refused while captures fed since its last
-//     research Cast are not yet read by it. The same shape as the need test's
-//     holds_unread: the reason and the capture ids to read.
+// What a story holds, for the research run on it (docs/design/semantic-layer-2026-11-20.md
+// sections 3 and 4). A story has one research agent inbox (research:<doc>) and one
+// conversation with its Texture (texture:<doc> to research:<doc>); every Texture Cast to
+// research opens a new round and wakes a NEW run with a fresh session. This file reads
+// what the story holds from its inboxes (storyMaterialOf: the captures it was opened with
+// or fed, and which were fed since its last research Cast), keeps the read bounded to the
+// newest records of each inbox (newestInboxRecords), and gates a Texture's Cast to research
+// while captures fed since its last research Cast are unread (unreadFedCaptures: the same
+// shape as the need test's reason and the capture ids to read). What a research run is
+// GIVEN is research_digest.go's.
 
 const (
-	// storyContextMaxPages bounds the pages one story's section lists; the
+	// storyContextMaxPages bounds the pages one story's digest section lists; the
 	// section also states how many it left out.
 	storyContextMaxPages = 40
-	// storyContextMaxOutlets bounds the outlets listed.
-	storyContextMaxOutlets = 20
-	// storyMaterialMaxRecords is how many of a story's newest inbox records its
-	// material reads.
+	// storyMaterialMaxRecords is how many of a story's newest Texture-inbox records its
+	// material and its Reports are read from; storyCastWindow how many of the newest
+	// records of its research inbox (the Texture's Casts to research). A story with
+	// hundreds of records must not make a run's start slower the older the story gets:
+	// the read is by (inbox, seq) from a cursor, so it is bounded at the index.
 	storyMaterialMaxRecords = 300
-	// storyContextMaxPredecessorPages is the share of the section a predecessor
-	// story's pages take (a story's own take storyContextMaxPages).
-	storyContextMaxPredecessorPages = 20
-	// storyContextReadTimeout bounds each capture read of the context,
-	// storyContextReadTotal the capture reads of one story and
-	// storyContextLeadTimeout its one lead read; storyContextTotal bounds the
-	// whole section, the successor's part included: the context never delays a
-	// research start by more than storyContextTotal, and what it did not reach
-	// in time is left out (the lead read logs a timeout).
-	storyContextReadTimeout = 2 * time.Second
-	storyContextReadTotal   = 6 * time.Second
+	storyCastWindow         = 64
+	// storyContextLeadTimeout bounds the one lead read.
 	storyContextLeadTimeout = 3 * time.Second
-	storyContextTotal       = 10 * time.Second
-	// storyContextURLRunes clips a page's URL.
-	storyContextURLRunes = 200
-	// storyContextMaxFed bounds the fed captures the section names.
-	storyContextMaxFed = 10
-	// storyContextTitleRunes clips a provider's title.
+	// storyContextURLRunes clips a page's URL; storyContextTitleRunes a provider's title.
+	storyContextURLRunes   = 200
 	storyContextTitleRunes = 120
 )
 
-// storyHeldPage is one page a story already holds, in the shape of the
-// read-first lane's yaegikernel.HeldPage (URL, Title, CaptureID).
+// storyHeldPage is one page a story already holds (URL, Title, CaptureID).
 type storyHeldPage struct {
 	URL       string
 	Title     string
@@ -101,6 +56,9 @@ type storyMaterial struct {
 	FedSince     []string
 	HasResearch  bool
 	LastResearch time.Time
+	// WindowCut says the story's inbox holds older records than the newest
+	// storyMaterialMaxRecords this read looked at: Captures is then a floor.
+	WindowCut bool
 }
 
 // storyDocOfDeskAgent is the story a Texture desk agent serves: its agent id
@@ -114,28 +72,40 @@ func storyRecordTime(rec types.CommitmentRecord) time.Time {
 	return t
 }
 
-// storyMaterialOf reads the story's own inbox (the captures it was opened with
-// and fed, each record's time) and its conversation with research (the times
-// of its Texture's research Casts).
+// newestInboxRecords reads the newest window records of an inbox (by seq, from a cursor,
+// so the read is bounded at the index) and says whether older records were left unread.
+func (rt *Runtime) newestInboxRecords(ctx context.Context, ownerID, computerID, inbox string, window int64) (recs []types.CommitmentRecord, cut bool, err error) {
+	head, err := rt.store.InboxHead(ctx, ownerID, computerID, inbox)
+	if err != nil {
+		return nil, false, err
+	}
+	var after int64
+	if head > window {
+		after, cut = head-window, true
+	}
+	recs, err = rt.store.ListInboxRecords(ctx, ownerID, computerID, inbox, after, 0)
+	return recs, cut, err
+}
+
+// storyMaterialOf reads the story's own inbox (the captures it was opened with and fed,
+// each record's time) and its Texture's Casts to research (their times): the newest
+// storyMaterialMaxRecords and storyCastWindow records of each. Older captures are older
+// material, the fed-since set is always recent, and a Cast older than the window is not
+// the last one unless the window holds none (then the story is read as it was before
+// research: HasResearch false).
 func (rt *Runtime) storyMaterialOf(ctx context.Context, ownerID, computerID, doc string) (storyMaterial, error) {
 	var m storyMaterial
 	inbox := deskmanifest.DocumentInbox(doc)
-	// Only the newest storyMaterialMaxRecords records are read: a story with
-	// hundreds of records must not delay a research start. Older captures are
-	// older material, and the fed-since set is always recent.
-	var after int64
-	if head, err := rt.store.InboxHead(ctx, ownerID, computerID, inbox); err == nil && head > storyMaterialMaxRecords {
-		after = head - storyMaterialMaxRecords
-	}
-	recs, err := rt.store.ListInboxRecords(ctx, ownerID, computerID, inbox, after, 0)
+	recs, cut, err := rt.newestInboxRecords(ctx, ownerID, computerID, inbox, storyMaterialMaxRecords)
 	if err != nil {
 		return m, err
 	}
-	conv, err := rt.store.ConversationRecords(ctx, ownerID, computerID, types.InboxConversationID(inbox, deskmanifest.ResearchInbox(doc)))
+	m.WindowCut = cut
+	casts, _, err := rt.newestInboxRecords(ctx, ownerID, computerID, deskmanifest.ResearchInbox(doc), storyCastWindow)
 	if err != nil {
 		return m, err
 	}
-	for _, rec := range conv {
+	for _, rec := range casts {
 		if rec.IsCast() && strings.TrimSpace(rec.SenderInbox) == inbox {
 			m.HasResearch = true
 			if t := storyRecordTime(rec); t.After(m.LastResearch) {
@@ -234,91 +204,8 @@ func unreadFedMessage(unread []string) string {
 	return fmt.Sprintf("research for this story was last asked before %d captures were fed to it that you have not read: read what you were fed before you research again (choir.ReadCapture on each of %s), revise from them, and cast research only for what they leave open", len(unread), strings.Join(unread, ", "))
 }
 
-// requireFedCapturesRead refuses a story Texture's Cast to research while
-// captures fed since its last research Cast are unread by it. A story with no
-// earlier research is never refused (its opening captures are its first
-// material, and the open path's Texture reads them as it writes V1).
-func (rt *Runtime) requireFedCapturesRead(ctx context.Context, ownerID, computerID, doc, runID string) error {
-	unread := rt.unreadFedCaptures(ctx, ownerID, computerID, doc, runID)
-	if len(unread) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%s (nothing was sent)", unreadFedMessage(unread))
-}
-
 func storyResearchRefusedLine(runID, story string, unread int) string {
 	return fmt.Sprintf("story research refused run=%s story=%s unread=%d", runID, story, unread)
-}
-
-// storyPages gathers the pages a story holds, at most max: the captures it was
-// opened with or fed (newest first, their URLs read from the capture store,
-// private ones left out) and the leads its conversation's searches returned and
-// a run read. The budget is shared: leads take at most half of it while the
-// story has captures to show, so pages read earlier never push out what the
-// story was just fed.
-func (rt *Runtime) storyPages(ctx context.Context, ownerID, computerID, doc string, max int) (pages []storyHeldPage, held int, fed []string) {
-	var captures any
-	if rt.researchDeps != nil {
-		captures = rt.researchDeps.Captures
-	}
-	var leads []storyHeldPage
-	if lr, ok := captures.(researchtools.SearchLeadPageReader); ok {
-		start := time.Now()
-		callCtx, cancel := context.WithTimeout(ctx, storyContextLeadTimeout)
-		got, err := lr.SearchLeadPages(callCtx, ownerID, computerID, doc, max)
-		timedOut := callCtx.Err() == context.DeadlineExceeded
-		cancel()
-		if err != nil {
-			// A timeout drops the story's read pages from the section: it is
-			// logged as one, so a read that grows past its bound is seen.
-			log.Printf("story research context: lead pages failed story=%s elapsed=%s timeout=%t: %v", doc, time.Since(start).Round(time.Millisecond), timedOut, err)
-		}
-		for _, p := range got {
-			if p.CaptureID != "" {
-				leads = append(leads, storyHeldPage{URL: p.URL, Title: p.Title, CaptureID: p.CaptureID})
-			}
-		}
-	}
-	m, err := rt.storyMaterialOf(ctx, ownerID, computerID, doc)
-	if err != nil {
-		return takePages(nil, leads, max), len(leads), nil
-	}
-	cr, _ := captures.(interface {
-		ReadCapture(ctx context.Context, captureID string, fromBlock, maxChars int) (json.RawMessage, error)
-	})
-	readCtx, cancelReads := context.WithTimeout(ctx, storyContextReadTotal)
-	defer cancelReads()
-	// Newest first, and only as many as the share allows: the pages the story
-	// holds beyond that are found with choir.SearchWireCorpus.
-	slots := max - len(leads)
-	if half := max / 2; slots < half {
-		slots = half
-	}
-	var own []storyHeldPage
-	for i := len(m.Captures) - 1; i >= 0 && len(own) < slots; i-- {
-		id := m.Captures[i]
-		page := storyHeldPage{CaptureID: id}
-		if cr != nil && readCtx.Err() == nil {
-			callCtx, cancel := context.WithTimeout(readCtx, storyContextReadTimeout)
-			raw, err := cr.ReadCapture(callCtx, id, 0, 1)
-			cancel()
-			if err == nil {
-				var meta struct {
-					URL    string   `json:"url"`
-					Labels []string `json:"labels"`
-				}
-				if json.Unmarshal(raw, &meta) == nil {
-					if types.NewLabelSet(meta.Labels...).OwnerPrivate() {
-						continue
-					}
-					page.URL = meta.URL
-				}
-			}
-		}
-		own = append(own, page)
-	}
-	pages = takePages(own, leads, max)
-	return pages, len(pages), m.FedSince
 }
 
 // takePages is the story's own captures, then as many leads as the budget has
@@ -344,150 +231,8 @@ func takePages(own, leads []storyHeldPage, max int) []storyHeldPage {
 	return append(out, fill...)
 }
 
-func outletOf(raw string) string {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
-}
-
-// storyResearchContext is the section a research run on a story gets.
-type storyResearchContext struct {
-	text string
-	// held are the pages the section lists, with a known URL, the story's own
-	// first and then its predecessor's: the run's search zero (noteStoryHeld).
-	held []yaegikernel.HeldPage
-}
-
-func heldOf(pages []storyHeldPage) []yaegikernel.HeldPage {
-	var out []yaegikernel.HeldPage
-	for _, p := range pages {
-		if strings.TrimSpace(p.URL) != "" && p.CaptureID != "" {
-			out = append(out, yaegikernel.HeldPage{URL: p.URL, Title: p.Title, CaptureID: p.CaptureID})
-		}
-	}
-	return out
-}
-
-func (c *storyResearchContext) openingText() string {
-	if c == nil || strings.TrimSpace(c.text) == "" {
-		return ""
-	}
-	return "\n\n" + frameOpeningSection(worldReadLabels, c.text)
-}
-
 func clipTitle(s string) string {
 	return intakeClip(strings.Join(strings.Fields(s), " "), storyContextTitleRunes)
-}
-
-// describeStoryPages writes one story's held pages and outlets.
-func describeStoryPages(b *strings.Builder, pages []storyHeldPage) {
-	outlets := map[string]int{}
-	for _, p := range pages {
-		if o := outletOf(p.URL); o != "" {
-			outlets[o]++
-		}
-	}
-	shown := pages
-	if len(shown) > storyContextMaxPages {
-		shown = shown[:storyContextMaxPages]
-	}
-	for _, p := range shown {
-		fmt.Fprintf(b, "- capture_id %s", p.CaptureID)
-		if p.URL != "" {
-			fmt.Fprintf(b, " %s", intakeClip(p.URL, storyContextURLRunes))
-		}
-		if t := clipTitle(p.Title); t != "" {
-			fmt.Fprintf(b, " (%s)", t)
-		}
-		b.WriteString("\n")
-	}
-	if len(pages) > len(shown) {
-		fmt.Fprintf(b, "(%d more pages are held and not listed; choir.SearchWireCorpus finds them)\n", len(pages)-len(shown))
-	}
-	type oc struct {
-		name string
-		n    int
-	}
-	var list []oc
-	for o, n := range outlets {
-		list = append(list, oc{o, n})
-	}
-	sort.Slice(list, func(i, j int) bool {
-		if list[i].n != list[j].n {
-			return list[i].n > list[j].n
-		}
-		return list[i].name < list[j].name
-	})
-	if len(list) > 0 {
-		b.WriteString("Outlets held:")
-		for i, o := range list {
-			if i == storyContextMaxOutlets {
-				fmt.Fprintf(b, " (+%d more)", len(list)-i)
-				break
-			}
-			fmt.Fprintf(b, " %s (%d)", o.name, o.n)
-		}
-		b.WriteString("\n")
-	}
-}
-
-// storyResearchContextOpening builds the section for a story's research run,
-// or nil when the run is no story's or the story holds nothing yet. It marks
-// nothing and calls no model.
-func (rt *Runtime) storyResearchContextOpening(ctx context.Context, rec *types.RunRecord) *storyResearchContext {
-	if rt == nil || rt.store == nil || rec == nil || !deskmanifest.IsResearchInbox(agentIDForRun(rec)) || !deskmanifest.SpawnsResearch(agentProfileForRun(rec)) {
-		return nil
-	}
-	doc := strings.TrimSpace(channelIDForRun(rec))
-	if doc == "" || strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.ComputerID) == "" {
-		return nil
-	}
-	ctx = withDeskReader(ctx, rec.AgentProfile)
-	ctx, cancelTotal := context.WithTimeout(ctx, storyContextTotal)
-	defer cancelTotal()
-	pages, _, fed := rt.storyPages(ctx, rec.OwnerID, rec.ComputerID, doc, storyContextMaxPages)
-	var b strings.Builder
-	found := false
-	held := heldOf(pages)
-	mainPoint, succeeds := rt.store.StoryPointOf(ctx, rec.OwnerID, rec.ComputerID, doc)
-	if len(pages) > 0 {
-		b.WriteString("Story research so far. This story's earlier research runs read, and the story holds, these pages; read one with choir.ReadCapture(capture_id) before you search the web for what it already answers.\n")
-		if mainPoint != "" {
-			fmt.Fprintf(&b, "The story's main point: %s\n", intakeClip(mainPoint, mainPointMaxRunes))
-		}
-		describeStoryPages(&b, pages)
-		found = true
-		if len(fed) > 0 {
-			shown := fed
-			if len(shown) > storyContextMaxFed {
-				shown = shown[:storyContextMaxFed]
-			}
-			fmt.Fprintf(&b, "Fed since the last research round: %s", strings.Join(shown, ", "))
-			if len(fed) > len(shown) {
-				fmt.Fprintf(&b, " (+%d more)", len(fed)-len(shown))
-			}
-			b.WriteString(".\n")
-		}
-	}
-	if succeeds != "" {
-		prior, _, _ := rt.storyPages(ctx, rec.OwnerID, rec.ComputerID, succeeds, storyContextMaxPredecessorPages)
-		if len(prior) > 0 {
-			pm, _ := rt.store.StoryPointOf(ctx, rec.OwnerID, rec.ComputerID, succeeds)
-			b.WriteString("\nThis story succeeds an earlier one (its main beat moved on); the earlier story's research read and holds these pages, so start from them.\n")
-			if pm != "" {
-				fmt.Fprintf(&b, "The earlier story's main point: %s\n", intakeClip(pm, mainPointMaxRunes))
-			}
-			describeStoryPages(&b, prior)
-			held = append(held, heldOf(prior)...)
-			found = true
-		}
-	}
-	if !found {
-		return nil
-	}
-	return &storyResearchContext{text: strings.TrimSpace(b.String()), held: held}
 }
 
 // syncSet is a set of ids safe for concurrent use.

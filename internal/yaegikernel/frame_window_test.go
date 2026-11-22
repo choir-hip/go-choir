@@ -213,29 +213,3 @@ func TestFitFrameNeverSplitsASeq(t *testing.T) {
 		t.Fatalf("expected some, not all, records stubbed (largest first, only until it fits): %d", stubs)
 	}
 }
-
-// The read-first state rides the frame and is bounded: a tree that tried tens of
-// thousands of pages must not fail every cell with the frame bound.
-func TestFitFrameBoundsTheBriefPagesAndTheTreesState(t *testing.T) {
-	tree := &TreeState{}
-	for i := 0; i < 50000; i++ {
-		tree.Tried = append(tree.Tried, fmt.Sprintf("https://tried.example/%s/%d", strings.Repeat("p", 120), i))
-	}
-	var held []HeldPage
-	for i := 0; i < 5000; i++ {
-		held = append(held, HeldPage{URL: fmt.Sprintf("https://h.example/%d", i), CaptureID: fmt.Sprintf("cap-%d", i)})
-	}
-	raw, sent, err := fitFrame(SessionFrame{ID: "f", RunID: "run-1", Tree: tree, Held: held})
-	if err != nil || len(raw) > MaxFramePayload {
-		t.Fatalf("fitFrame: %d bytes, %v", len(raw), err)
-	}
-	if len(sent.Held) != frameHeldMax || len(sent.Tree.Tried) != frameTreeTriedMax {
-		t.Fatalf("held %d, tried %d", len(sent.Held), len(sent.Tree.Tried))
-	}
-	if sent.Tree.Tried[len(sent.Tree.Tried)-1] != tree.Tried[len(tree.Tried)-1] {
-		t.Fatalf("the most recent tried page must be kept")
-	}
-	if len(tree.Tried) != 50000 {
-		t.Fatalf("the caller's tree was changed")
-	}
-}

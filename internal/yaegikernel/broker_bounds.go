@@ -61,9 +61,9 @@ func numRange(lo, hi float64) payloadFieldBound {
 // the table still gets the structural bounds.
 var payloadBounds = map[BrokerAction]map[string]payloadFieldBound{
 	ActionRead: {"url": strMax(8192)},
-	ActionSearchStart: {"query": strMax(8192), "verb": strMax(32), "fresh_why": strMax(1024),
+	ActionSearchStart: {"query": strMax(8192), "verb": strMax(32),
 		"earlier": numRange(0, 1e6), "returned": numRange(0, 1e6), "tried": numRange(0, 1e6), "read": numRange(0, 1e6),
-		"outlets": numRange(0, 1e6), "held_brief": numRange(0, 1e6), "held_tried": numRange(0, 1e6)},
+		"outlets": numRange(0, 1e6)},
 	ActionSearchWireCorpus:  {"query": strMax(8192), "limit": numRange(0, 1000)},
 	ActionTextureSearch:     {"query": strMax(8192), "limit": numRange(0, 1000)},
 	ActionReadCapture:       {"capture_id": strMax(256), "from_block": numRange(0, 1_000_000), "max_chars": numRange(0, 1_000_000)},

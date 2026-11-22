@@ -18,6 +18,13 @@ func setupLifecycleTextureTargetFixture(t *testing.T) (*Store, types.StartLifecy
 
 func setupLifecycleTextureTargetFixtureWithStore(t *testing.T, s *Store) (*Store, types.StartLifecycleRequest, types.RunRecord, types.WorkItemRecord) {
 	t.Helper()
+	return setupLifecycleTextureTargetFixtureWith(t, s, nil)
+}
+
+// setupLifecycleTextureTargetFixtureWith is the fixture with the start request changed by
+// shape before it is started (a story's kind and its main point, for instance).
+func setupLifecycleTextureTargetFixtureWith(t *testing.T, s *Store, shape func(*types.StartLifecycleRequest)) (*Store, types.StartLifecycleRequest, types.RunRecord, types.WorkItemRecord) {
+	t.Helper()
 	ctx := context.Background()
 	start := lifecycleStartFixture()
 	start.CommandID = "command-start-texture-target"
@@ -29,6 +36,9 @@ func setupLifecycleTextureTargetFixtureWithStore(t *testing.T, s *Store) (*Store
 	start.Agent.ChannelID = start.InitialDocument.DocID
 	start.SubjectRefs["doc_id"] = start.InitialDocument.DocID
 	start.SubjectRefs["artifact"] = "texture://" + start.InitialDocument.DocID
+	if shape != nil {
+		shape(&start)
+	}
 	start.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(start)
 	if _, err := s.StartLifecycle(ctx, start); err != nil {
 		t.Fatalf("start lifecycle: %v", err)

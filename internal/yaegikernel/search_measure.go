@@ -32,17 +32,6 @@ func (s *ChoirScope) noteDeclined(reason string) {
 	s.statsMu.Unlock()
 }
 
-// noteFreshOverMatch counts a search sent with fresh although a finished
-// search of this run would have answered it.
-func (s *ChoirScope) noteFreshOverMatch(query string) {
-	if s == nil || s.searches == nil {
-		return
-	}
-	if c, _, _ := s.searches.reuseVerdict(query); c.ID != "" {
-		s.noteDeclined("fresh")
-	}
-}
-
 // noteOutlets records how many distinct outlets the run held as a search that
 // the host accepted was asked.
 func (s *ChoirScope) noteOutlets(n int) {
@@ -104,6 +93,11 @@ func outletOf(raw string) string {
 // of an aggregator (news.google.com, msn.com: hosts that republish other
 // outlets' stories) belongs to no outlet: it is "".
 func (s *ChoirScope) Outlet(url string) string { return pageOutlet(url) }
+
+// PageOutlet is pageOutlet for the host: the one outlet rule (the registrable domain by the
+// public suffix list, "" for an aggregator's page) the stop rule, the decision's counts,
+// choir.Outlet and the research digest's one-per-outlet choice share.
+func PageOutlet(raw string) string { return pageOutlet(raw) }
 
 // pageOutlet is the outlet a page belongs to: outletOf, or "" for an aggregator's
 // page. The stop rule's counts, the decision's counts and choir.Outlet use it.

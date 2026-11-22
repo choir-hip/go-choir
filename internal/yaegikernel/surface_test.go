@@ -333,7 +333,7 @@ func TestSearchSurfaceIsAsyncOnResearchOnly(t *testing.T) {
 	}
 	block := DeskSurface("research", "", true)
 	for _, want := range []string{
-		"choir.SearchStart(query string, fresh ...bool) (SearchStub, error)",
+		"choir.SearchStart(query string) (SearchStub, error)",
 		"choir.Searches.Get(id string) (Search, error), choir.Searches.List() []Search",
 		"choir.SearchWait(id string, ms int) (SearchCount, error)",
 		"never wakes you",
