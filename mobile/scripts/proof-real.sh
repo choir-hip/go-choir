@@ -541,12 +541,6 @@ SO1="$SHOTS/signedout-first.txt"; awk '{ print } /real-50-so-first-screen/ { exi
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
 SV="$SHOTS/drive-survey.txt"; RD="$SHOTS/drive-read.txt"
-chk() { # name pattern file
-  if grep -qE -- "$2" "$3"; then echo "ok: $1"; else echo "MISSING: $1"; FAILS="$FAILS [$1]"; fi
-}
-bad() { # name pattern file
-  if grep -qE -- "$2" "$3"; then echo "UNWANTED: $1: $(grep -m1 -E -- "$2" "$3" | cut -c1-160)"; FAILS="$FAILS [$1]"; else echo "ok: $1"; fi
-}
 chk "settings: the account row is there" '\[settings-nav-account\]' "$SV"
 chk "paper: the masthead" '\[page-title\] "AUTOPAPER"' "$SV"
 chk "paper: real stories (route ids)" '\[paper-story-/pub/' "$SV"

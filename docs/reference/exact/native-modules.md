@@ -242,7 +242,7 @@ printed; see the open problem in `testing-and-debugging.md`.
   configured playback category alone grants nothing"), and on Android when the
   Activity stops with no promoted foreground-service claim; macOS, Linux and
   Windows never freeze (`docs/contract-for-agents.md:4923-4932`,
-  `recipes/suspending-feed.md:35-41`). Unrun on a phone.
+  `recipes/suspending-feed.md:35-41`). Unrun on a phone. The rule's source and what our app meets: [audio.md](audio.md) "What keeps shared code running in the background".
 
 ## Native views and mutation results
 
