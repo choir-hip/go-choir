@@ -71,7 +71,7 @@ restarts as planned or the staged copy is removed.
 4. The structural one: the store should not need store-sized copies. What is
    in the 51 GiB is not measured by table.
 
-## Where Node B's disk is (read-only `du`, 2026-11-22 12:20Z)
+## Where Node B's disk is (read-only `du`, 2026-11-22 12:10Z)
 
 476 GiB disk, 417 GiB used. `/nix` 39. `/var/lib/go-choir` 390, of which:
 
