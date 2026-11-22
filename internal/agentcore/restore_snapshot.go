@@ -196,24 +196,49 @@ func telemetryPartitionSource(store *choirstore.Store) *snapshot.PartitionSource
 	}
 }
 
-// VerifySnapshotFile checks the unsealed file against the witness the
-// snapshot recorded, before it is installed. Both install paths use it: the
-// staged restore here and the boot install after a lost disk
-// (autoputer/projection_base.go).
+// VerifySnapshotFile checks the unsealed file before it is installed. Both
+// install paths use it: the staged restore here and the boot install after a
+// lost disk (autoputer/projection_base.go).
+//
+// A version 1 record names the logical witness of the file: it is recomputed
+// over the whole store and compared. A version 2 record names a page digest,
+// which the install has already checked against the pages as they were written
+// (snapshot.restoreOne, before this runs); here only the head row of the
+// restored file is read and compared with the record's head. No logical witness
+// is computed for it.
 func VerifySnapshotFile(ctx context.Context, record snapshot.Record, path string) error {
 	db, err := dbx.OpenSQLite(path, dbx.SQLiteOptions{ReadConns: 1})
 	if err != nil {
 		return fmt.Errorf("open unsealed snapshot: %w", err)
 	}
 	defer db.Close()
-	witness, err := LiveStoreWitness(ctx, db.Read)
-	if err != nil {
-		return err
+	switch record.Version {
+	case snapshot.Version:
+		witness, err := LiveStoreWitness(ctx, db.Read)
+		if err != nil {
+			return err
+		}
+		if witness.ContentRoot != record.WitnessRoot || witness.SchemaHash != record.SchemaHash {
+			return fmt.Errorf("unsealed snapshot has witness root %s, the record names %s", witness.ContentRoot, record.WitnessRoot)
+		}
+		return nil
+	case snapshot.VersionPageDigest:
+		head, err := choirstore.ProjectionHeadOf(ctx, db.Read, record.ComputerID)
+		if err != nil {
+			return fmt.Errorf("read the head row of the unsealed snapshot: %w", err)
+		}
+		if head == nil {
+			if record.StoreHeadSequence != 0 || record.StoreHead != "" {
+				return fmt.Errorf("unsealed snapshot has no head row, the record names head %d (%s)", record.StoreHeadSequence, record.StoreHead)
+			}
+			return nil
+		}
+		if head.Sequence != record.StoreHeadSequence || head.CanonicalEventHead != record.StoreHead {
+			return fmt.Errorf("unsealed snapshot has head %d (%s), the record names head %d (%s)", head.Sequence, head.CanonicalEventHead, record.StoreHeadSequence, record.StoreHead)
+		}
+		return nil
 	}
-	if witness.ContentRoot != record.WitnessRoot || witness.SchemaHash != record.SchemaHash {
-		return fmt.Errorf("unsealed snapshot has witness root %s, the record names %s", witness.ContentRoot, record.WitnessRoot)
-	}
-	return nil
+	return fmt.Errorf("unsealed snapshot record is version %d, which this build does not verify", record.Version)
 }
 
 // replayStateExtractor is the one extractor configuration for live and
