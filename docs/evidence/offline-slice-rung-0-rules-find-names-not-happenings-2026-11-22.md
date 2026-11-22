@@ -190,3 +190,101 @@ absorbing) and aggregator accounts counted as outlets; both are bounded by a
 cap on group age and size and by collapsing re-post accounts to the outlet
 they relay. This supports the design change above. It does not test System 1
 or the model that names a group: that needs spend (decision Q5).
+
+## Rung 1: System 1 scores each arrival against its nearest stories (2026-11-22)
+
+Harness `lane/offline-slice-r0`; the owner granted spend the same day. Inputs: the week's 23,851 source
+arrivals with their five nearest earlier stories (rung 0b). Estimate $3 for both rungs; actual $0.94.
+
+**Method.** One System 1 question an arrival, type `choice`: which of its five stories reports the same
+affair, or `other` (an affair none covers), or `idk`. Model `~typesafe/jev-latest` through OpenRouter's
+decisions endpoint, as the gateway calls it. One call carries as many arrivals as the vendor's limits allow
+(`internal/jevbudget`, 64k and 32k tokens): 432 calls of about 55 arrivals, with the stories shared inside a
+call. A second run of 1,200 arrivals of days 4 to 7 at 12 an arrival a call (100 calls) is the same-captures
+comparison. Keys: `scripts/offline-slice/jev-run.py` and `river-run.py` copy the loader of
+`scripts/event-blind-sample.py` (the environment, else the one named line of the repo `.env`); no key is
+printed or stored. Disclosure: the first 526 of the 534 calls of this rung were sent before the owner's
+constraint on `.env` arrived and used that loader; the lead then ruled the loader allowed.
+
+**Numbers.**
+- 432 calls, 23,851 arrivals answered, none missing, 19.6M input tokens, 1.9M output, **$0.8233** (about
+  $0.035 per 1,000 arrivals); 0.53 s a call, about 10 ms an arrival. The 12-a-call run: $0.0442 for 1,200
+  arrivals ($0.037 per 1,000), 19 ms an arrival.
+- Answers: story 50.3%, other 47.7%, idk 2.0%. **Escalated (other or idk): 49.7% over the week, 50.1% on days 4
+  to 7** (per day 47.5% to 52.7%). 32% of the story picks have confidence under 0.5.
+- Against the oracle, days 4 to 7: of 1,222 arrivals later cited by a story that existed, the cited story was
+  among the five offered for 57.6%; System 1 picked it for 421 (34.5% of those, 59.8% of the reachable), picked
+  another story for 639, answered other or idk for 162. Precision of picks among the cited: 39.7%. Of 635
+  arrivals cited only by a story first published after them, 60.6% picked an existing story. Of the 12,091 that
+  no story cites, 45.7% picked a story.
+- The oracle undercounts. "Picked another story" is often a second story about the same affair (the hand read
+  below: the US measles status has four stories, the Trump-Putin-Xi summit about eight); the cited story is
+  one of several.
+- Batching: on the same 1,200 arrivals the verdict agrees in 1,089 (90.8%); both pick a story for 538 and the
+  same one for 447 (83%); of 104 cited arrivals, 39 right at 55 a call and 43 at 12 a call. Batch size changes
+  little.
+
+**Hand read of 30 answers** (uniform from days 4 to 7, seed 20261126; read by the author of the harness):
+27 agree, 1 disagrees, 2 borderline. The disagreement: a mass-drone-alert post matched with confidence 0.12 to
+one night's attack story that is probably another night. Borderline: two picks of a summit story for a
+different report of the summit (both defensible). Eighteen of the 30 were "other", all correctly: a different
+earthquake, a different company's earnings, a different ransomware victim, a different sentencing.
+
+## Rung 2: naming groups of unmatched arrivals, and kill line (d)
+
+**Grouping.** The rung 0c rule (T 0.795 from days 1 to 3; centroid; G 0.84) with chaining bounded (a group
+takes no member once 48 hours old or at 25 members) and relay accounts collapsed (a post whose first hashtag
+names an outlet counts as that outlet; 961 arrivals changed origin). Capped, the largest group is 25 (105 hit
+the cap); uncapped it was 1,647. 7,687 groups; 165 reach three distinct origins in the week, 80 of them on days
+4 to 7. Groups opened per 1,000 arrivals: 336.8 on days 1 and 2, 316.2 on days 4 to 7. Groups reaching 2, 3, 5
+origins within 24 hours of opening, days 4 to 7: 217, 47, 11 (within 6 hours: 133, 21, 5; within 48: 254, 63,
+19). 80.3% of days 4 to 7 unmatched arrivals sit in groups that never reach two origins. The groups that reach
+three on days 4 to 7 hold 705 member arrivals (5% of the arrivals).
+
+**Naming.** River, `deepseek-ai/DeepSeek-V4.1-Flash-1017`, reasoning high, temperature 0, 25 groups to a call
+(`scripts/offline-slice/river-run.py`): kind (ONE, MOSTLY_ONE, THEME, NOISE), a one-line main point, and whether
+a general newspaper would cover it. 9 calls for 215 groups; about $0.05 at uncached prices (95k tokens out,
+mostly reasoning).
+- The same 50 groups the reader hand-read (ONE 37, MOSTLY 4, THEME 5, NOISE 4): the model gives ONE 37,
+  MOSTLY 4, THEME 7, NOISE 2. Totals only; per-group agreement is not known.
+- The 165 groups: ONE 93, MOSTLY 21, THEME 28, NOISE 23; news yes 126, marginal 14, no 25. Of the 80 reaching
+  three on days 4 to 7: ONE 47, MOSTLY 8, THEME 12, NOISE 13.
+- The paper: of those 80, 35 had a story cite a member (32 first published after the group opened, median 11.6
+  hours later, p25 3.2, p75 25.9; 3 existing) and 45 had none. Of the model's 55 ONE or MOSTLY groups, the paper
+  made a story for 19 after the group opened; 35 of the 55 had none. Of the 32 groups the paper opened a story
+  for, the model calls 19 ONE or MOSTLY and 13 THEME or NOISE (feeds of one account, live-blog rolls).
+- **Hand read of 30 group names** (uniform from the 80, seed 20261128; by the harness's author): 27 agree. Two
+  disagreements: a Le Monde live blog of several different happenings of 17 November named ONE (I read THEME);
+  a mixed lot of video links with a job advert named THEME (I read NOISE). One borderline: the Berlin coalition
+  meeting and the Shenzhen summit as THEME.
+
+**Kill line (d), offline.** 50 stories drawn at random from those last revised on days 2 and 3 (seed
+20261127), as they stood at the end of day 3; River wrote 3 predictions each (150, mean stated probability
+0.131); the prediction was asked as a System 1 noul question of each days 4 to 7 arrival that was offered the
+story among its five nearest (1,848 pairs, 16 calls, $0.008), and settled true if any answer was at least 0.5.
+4 of 150 settled true (base rate 0.027). Brier 0.0307 against 0.0260 for the base rate: **skill -0.18, 95%
+bootstrap interval over stories [-2.19, 0.22]**. The interval includes zero and the point is below it.
+
+**Kill lines of ledger claim C192.**
+
+| Line | Result | Met |
+|---|---|---|
+| (a) escalation at or under 30% over days 4 to 7 | System 1 answers other or idk for 50.1% of arrivals of days 4 to 7 (per arrival). Per group, the model is asked about 80 groups holding 5% of the arrivals | **not met** as written (per arrival); the redesigned escalation (per group) is 5% of arrivals |
+| (b) new subjects per 1,000 under 70% of days 1 and 2 | groups opened per 1,000 arrivals 316.2 on days 4 to 7 against 336.8: 0.94 (the 0b name proxy was 0.57, but proposals are not subjects) | **not met** |
+| (c) the right subject among the candidates for 80 of 100 hand-read | the 0b reader: an actor in the list for 71 of the 100 (71 of the 75 that report a happening); the happening for 29, new for 46 | **not met** (71 under 80; 95% of the 75) |
+| (d) prediction skill above zero with its interval | -0.18, interval [-2.19, 0.22], 4 of 150 settled true | **not met** (interval includes zero; underpowered) |
+
+C192 is false on all four lines by these measures. What the slice does show: for an arrival whose story exists
+the nearest five hold it (72.6% at K=10 against 19.5% for recency) and System 1 picks it for 60% of those
+reachable; about half of arrivals match no story; a handful of groups a day (about 20 on days 4 to 7 reach three
+origins) are what a root would be woken by; the model names them correctly in the cases read (27 of 30); the
+paper made a story for about a third of them, a median 11.6 hours after the group formed.
+
+**Cost.** Jev $0.8765 (550 calls); River about $0.06 (12 calls, 116k tokens in, 95k out). Total about $0.94
+against the $3 estimate.
+
+**Unverified.** The oracle is citation, not the paper's feed decision. The hand reads are one reader who built
+the harness, 30 each. The five stories offered are the top five by vector, in that order (Jev leans to the
+first option). The group names are totals against the hand read, not per group. The settlement of predictions
+reaches only arrivals that were offered the story; the base rate is the pooled outcome rate (hindsight, so
+conservative); 4 settled-true cases cannot carry a skill estimate. Day 1 has no document-frequency statistics.
