@@ -137,7 +137,7 @@ func (c *Cleaner) Drop(m Mention, host string) string {
 }
 
 var (
-	urlRe     = regexp.MustCompile(`(?i)(https?://\S+(\s?/\S+)*|www\.\s?\S+(\s?/\S+)*)`)
+	urlRe     = regexp.MustCompile(`(?i)(?:https?://(?:www\.\s)?|www\.\s?)\S+(?:/\s[a-z0-9][\w.%~-]*-[\w.%~-]*)*`)
 	hashtagRe = regexp.MustCompile(`#\s?[\pL\pN_]+`)
 	mentionRe = regexp.MustCompile(`(?:RT\s+)?@[\pL\pN_.]+(@[\pL\pN_.]+)?:?`)
 )
