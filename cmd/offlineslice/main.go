@@ -64,6 +64,8 @@ func main() {
 		seed := fs.Int64("seed", 20261124, "seed")
 		_ = fs.Parse(os.Args[2:])
 		groupsMain(*data, *in, *out, *key, *seed, *n)
+	case "groups2":
+		groups2Main(os.Args[2], os.Args[3], os.Args[4])
 	case "s1jobs":
 		s1jobsMain(os.Args[2], os.Args[3], 20261125, 1200)
 	case "s1eval":
