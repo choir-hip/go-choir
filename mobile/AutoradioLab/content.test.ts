@@ -21,7 +21,7 @@ import {
   TRANSCRIPTS_PER_RUN, type Db, type Fetchers, type StoredItem,
 } from './content.ts';
 import { Corpus } from './search.ts';
-import { bindNative, resetSession, SignedOutError } from './api.ts';
+import { bindNative, resetSession, dropHeld, SignedOutError } from './api.ts';
 const signedIn = { available: true, later: async (r: { op?: string; account?: string }) => (r.op === 'session' ? { found: true, value: 'test-key-0001-not-real', computerId: 'comp-test' } : { found: true, value: r.account === 'api-key' ? 'test-key-0001-not-real' : 'comp-test' }) };
 import mailList from '../fixtures/content/mail-list.json';
 import mailMessage from '../fixtures/content/mail-message.json';
@@ -155,7 +155,7 @@ describe('C7 to C15 the sync', () => {
     f.stories = async () => { throw new Error('answered 500'); };
     const r = await syncAll(s, f, { now: NOW });
     expect(r.find((x) => x.kind === 'story')?.stoppedBy).toBe('error');
-    bindNative(null); resetSession();
+    bindNative(null); resetSession(); dropHeld();      // signed out means no key held either (resetSession forgets only what was discovered)
     const live = liveFetchers();
     const r2 = await syncAll(s, { ...live, stories: async () => [] }, { now: NOW });
     expect(r2.find((x) => x.kind === 'document')?.stoppedBy).toBe('error'); // the first page throws SignedOutError: counted, nothing written

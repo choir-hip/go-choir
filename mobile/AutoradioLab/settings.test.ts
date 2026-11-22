@@ -1,14 +1,15 @@
 // The account source under bun test, `fetch` and the native key reader stubbed. Every value is made up (fixtures/settings).
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { dig, reopen } from './account-phone.ts';
 import { currentWorld as theWorld } from './api.ts';
-import { bindNative, resetSession, ORIGIN } from './api.ts';
+import { bindNative, resetSession, dropHeld, ORIGIN } from './api.ts';
 import { settingsAccount, parseWhoami, plainAccountError } from './settings.ts';
 import live from '../fixtures/settings/whoami-live.json';
 
 const KEY = 'test-key-0001-not-real';
 let calls: string[] = [];
 let handler: () => Response;
+afterEach(() => { dropHeld(); });      // `reopen` holds the key in the process (api.ts `held`); resetSession does not drop it, so a later file that expects a signed-out process (content.test.ts C15) would find it
 beforeEach(() => {
   calls = []; resetSession(); reopen(dig(KEY), KEY, 'comp-1');
   bindNative({ available: true, later: async (r: { op?: string; account?: string }) => (r.op === 'session' ? { found: true, value: KEY, computerId: 'comp-1' } : r.account === 'api-key' ? { found: true, value: KEY } : r.account === 'computer-id' ? { found: true, value: 'comp-1' } : { found: false }) } as never);

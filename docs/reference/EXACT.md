@@ -129,6 +129,17 @@ binary (`reference.md:2084, 2406, 2761`).
   (`start-here.md:70-71, 75`). `test` and `agent` compile their own copy (no
   `contract build` first, no dev server) on web, iOS, macOS and Windows; on
   Linux and Android they drive a build you made first (`start-here.md:75`).
+- **A test's storage and secrets, and what its first moments are** (found 2026-11-22 on the account partition's
+  `mail.test.contract`, which looked like a hang and was not). A web test drive has a real, empty storage of its own
+  (`reference.md:2977`) and answers `storage.fs` calls to an answer that is still current, as on the device
+  (`host/web-js/ts-data.js:383`; `reference.md:3021-3023`); it never keeps secrets (`reference.md:6417-6436`), so a shared launch
+  there finds no key and opens the anonymous world, quickly. Anything the app does once that world opens (here the first
+  run offers `onboarding:setup`, so `pg.top` stops being empty) happens inside the same few hundred milliseconds a test's
+  `clock +N real` waits out: a `test web` step that reads an address-driven source (`mailFrame` takes `pg.top`) must put
+  its page on top itself, with the launcher (`tap "bar-mark"`, `tap "launcher-open-mailbox:inbox"`), not rely on reading
+  early. Debug a "never answers" with `console.log` inside the answer (the run prints the last eight lines of the data
+  module's log): a launch that logs to its end and a source that is asked with another argument is a changed argument,
+  not a hang.
 - `bun test` runs the data module's `answer(source, args, store, storage, native)`
   directly with a fake `storage`. Shelf does this (`apps/shelf/app.test.ts:1-4,
   35-45`) and Exact runs its own tooling with `bun test ./scripts/`

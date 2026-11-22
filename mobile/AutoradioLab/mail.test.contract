@@ -1,7 +1,7 @@
 // Mail's data on the real plan and the web host. app.ts (mail.ts) answers the mail sources: before mail moved they were the Swift package's placeholders.
 // What this cannot see: the pages. The deck mounts the page on top of the open set: the Swift package's (openPages) where there is one, else the shared set (pages.ts, spine.contract `noNative`). A test here runs as the web host, which has
-// no native package, but the decision (host.ts) waits about 4 s for one and these checks read the first moments, so `pg.top` is still empty here (verified by `bun exact.mjs test web` after the deck change) and the
-// mail sources answer "idle" for it, which is itself the check that they are answered by app.ts and held to their shapes (a missing or extra field fails the build
+// no native package. The launch (account.ts) opens the anonymous world as soon as the shared code has read its markers, and the first run then offers the setup page, so `pg.top` is `onboarding:setup` (not empty) a moment after the
+// start: a check of a mailbox puts the mailbox on top itself (the launcher's `launcher-open-mailbox:inbox`), it does not rely on how early it reads. With no mail page on top the mail sources answer "idle", which is itself the check that they are answered by app.ts and held to their shapes (a missing or extra field fails the build
 // of the answer). The signed-in routes need the stored key, which the web host has no way to read, so a request is never made here: the requests, the offline copy,
 // the seal, the sanitiser and every rule of the old Swift tests are in mail.test.ts. The pages are looked at on the simulator and on Android.
 test "with no mail page on top every mail source is answered by app.ts and says idle"
@@ -16,6 +16,9 @@ test "with no mail page on top every mail source is answered by app.ts and says 
 
 test "the mailbox frame is the same four tabs before any fetch"
   clock +2500 real      // the card answers first (account.ts launch), then the sources it unlocks
+  clock data
+  tap "bar-mark"      // the launcher; the page on top is not left to the launch's timing (the first run offers the setup page as soon as the world opens)
+  tap "launcher-open-mailbox:inbox"
   clock data
   expect state mfr.folder == "inbox"
   expect state mfr.title == "Inbox"
