@@ -146,6 +146,11 @@ decisions_for_the_owner:
     why: a personal root's queries and its model of the owner are private
     options: [nothing, counts only]
     default: nothing; the personal root reads a copy or a read it cannot be identified by, settled in F6's design
+  - id: Q5
+    question: May the offline slice spend on model calls, and up to how much?
+    why: 'rungs 1 and 2 replay captures through System 1 and a language-model step; the plan (docs/design/first-design-offline-slice-plan-2026-11-22.md) estimates under 2 dollars of System 1 and under 6 of escalation for a full week, through the d@e identity; no spending cap for System 1 exists in code and its credit balance is not known to the lead'
+    options: ['yes: 5 dollars for System 1 and 10 for the language-model step', 'yes with other ceilings', 'no: rung 0 only']
+    default: 'no spend. Rung 0 (rules only, no model, a hand read for kill line (c)) runs now; rungs 1 and 2 wait for the owner''s word'
 now:
   status: working
   as_of: 2026-11-22T05:00Z
@@ -166,7 +171,7 @@ now:
   main_uncertainty: 'whether cheap candidate rules propose the right subjects often enough that the escalation desk stays small'
   next_observation: 'F0''s first by-desk count; the same 50 pairs against vector nearness; a score that ranks (it saturates at 1.0 for 35,177 pairs). F1''s read (docs/evidence/subjects-find-duplicate-stories-read-2026-11-22.md): 32 of 50 same or part, 18 same actors and a different happening, none unrelated; one thing sits under several rows and 28% of stories carry no subject.'
   blocker: none
-  next_action: 'land F0; write the custodian and identity rules; set the offline slice''s kill lines and run it. The panel (five members, all proceed with changes; design section 12) reordered the work: nothing is retired before its replacement is proved, and an offline replay of a week of captures comes before any red station. The stations below predate that and are renumbered when the slice has run.'
+  next_action: 'land F0; the next no-spend rung: clean the text to the article, restrict to source arrivals, and offer each capture the subjects of the nearest earlier stories by vector; reread the same 100 under the rewritten kill line (c). Rung 0 (docs/evidence/offline-slice-rung-0-rules-find-names-not-happenings-2026-11-22.md): the rules find an actor for 86 of 94 captures and the happening for about 19 of 92; candidate lists have a median of 28, mostly junk; 65% of captures are research''s own page reads.'
 operating_notes:
   - 'Roles and review seats are in CLAUDE.md; builders work in lanes (lane new <name> --base origin/main) and compile Go on the build VM.'
   - 'A test of anything a desk reads runs with the reader gate in enforce, as production ships (the graph-first digest passed its tests in observe and was empty in production).'
