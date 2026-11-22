@@ -161,10 +161,10 @@ now:
     observer_upgrade: the same 50 pairs scored by vector distance alone, so the read shows what subjects add
     scope_if_supported: build the tables and verbs on this likeness measure (F1's second half)
     ledger_id: C190
-    status: untested
+    status: supported
   believed_state: 'the design is agreed in outline and nothing of it is built; the paper runs the main-point judgment and read-first; graph-first is in rework'
   main_uncertainty: 'whether cheap candidate rules propose the right subjects often enough that the escalation desk stays small'
-  next_observation: 'F0''s first by-desk count; F1''s hub sizes and the hand read'
+  next_observation: 'F0''s first by-desk count; the same 50 pairs against vector nearness; a score that ranks (it saturates at 1.0 for 35,177 pairs). F1''s read (docs/evidence/subjects-find-duplicate-stories-read-2026-11-22.md): 32 of 50 same or part, 18 same actors and a different happening, none unrelated; one thing sits under several rows and 28% of stories carry no subject.'
   blocker: none
   next_action: 'start F0 and F1''s read; run the design panel on draft 2 and record what it disputes'
 operating_notes:
