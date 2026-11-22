@@ -17,6 +17,9 @@ import { syncHeld } from './deck-ops.ts';
 import { parseEpisodeKey } from './podcast-model.ts';
 import type { Entry } from './runsheet-model.ts';
 
+/** How many next entries the deck is kept holding: a dozen is minutes of speech, and building (and handing over) a hundred in one turn went over Exact's 100 ms of CPU (`radioHold` took 145-169 ms in the proof). */
+const HOLD_AHEAD = Math.min(12, DECK_HELD_MAX);
+
 export type NativeFacts = {
   /** The listener's turn is open: the end of an entry waits for it. */
   turnOpen: boolean;
@@ -296,7 +299,7 @@ export class RadioRuntime {
   private holdable(): DeckItem[] {
     const out: DeckItem[] = [];
     for (const e of this.store.ahead()) {
-      if (out.length >= DECK_HELD_MAX) break;
+      if (out.length >= HOLD_AHEAD) break;
       let it: DeckItem | undefined;
       if (SPEAKS.has(e.kind) && e.text) it = deckItem({ id: e.id, kind: 'speech', title: e.title, document: 'rs:' + e.id, paragraphs: e.text, requiresPreviousHeard: e.kind === 'transition', segment: segmentOf(e.kind) });
       else if ((e.kind === 'episode' || e.kind === 'clip') && !e.text && !e.source?.ref.startsWith('file:')) {

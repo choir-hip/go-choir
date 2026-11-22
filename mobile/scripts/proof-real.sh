@@ -467,26 +467,30 @@ run_drive bar light "" --touch platform
 # starting entries while the app is covered. What it cannot prove: the simulator does not suspend an app, so frozen shared code (an iPhone with the screen locked and no sounding audio) is NOT shown, and the
 # order of the sheet is not read (the deck journal that said it is pruned when shared code acknowledges it). The held-entries-while-frozen case is owed on the owner's locked phone (docs/design/autoradio-in-exact-2026-11-18.md).
 BG_SECONDS="${BG_SECONDS:-300}"
-# The app must leave the front WITHOUT exiting: it exits when its driver's socket closes (Agent.exitAfterLanding, ExactKit/Agent.swift:140-146), so the driver stays attached for BG_SECONDS (`clock +N real`: the
-# app's own clock runs, shared code with it) and the Home screen is launched over the app by a watcher that waits for the first screenshot of the drive (the radio has started). What is counted afterwards is the
-# NATIVE console's `on air <entry> voice=` lines (written by the audio code, kept whatever shared code does, never pruned by an acknowledgement as the deck journal is) after that moment.
+# A driven app cannot be put in the background: the driver calls it "suspended" and every op fails (run 59d6d809d: `clock +10000 real`: "the app left the foreground ... so it is suspended"), and the app exits
+# when the driver's socket closes (Agent.exitAfterLanding, ExactKit/Agent.swift:198). So the radio is started by a PLAIN launch (no driver; what a phone does), the Home screen is put over it, and what is counted
+# is the NATIVE console's `on air <entry> voice=` lines after that moment. A first drive (agent) shows the radio starts; this one shows it starts and goes on with no driver.
 step "clock data"; wait_ 8000
 view real-71-radio-starts 3000
 step logs
-n=0; while [ $n -lt $((BG_SECONDS / 10)) ]; do step "clock +10000 real"; n=$((n + 1)); done
-step logs
-rm -f "$SCRATCH/bgt0"
-( until grep -q "real-71-radio-starts" "$SCRATCH/background.txt" 2>/dev/null; do sleep 1; done; date -u '+%Y-%m-%dT%H:%M:%SZ' > "$SCRATCH/bgt0"; SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1 ) &
-BGWATCH=$!
 run_drive background light "" --touch platform
-kill $BGWATCH 2>/dev/null
-BGT0=$(cat "$SCRATCH/bgt0" 2>/dev/null)
+reset_state light ""
+BGCONSOLE="$SHOTS/bg-app-console.txt"
+SIM launch --console "$EXACT_SIM" $APP > "$BGCONSOLE" 2>&1 &
+BGLAUNCH=$!
+sleep 45
 BGCONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
 BGLOG="$BGCONT/Library/Application Support/Autoradio/console.log"
-if [ -z "$BGT0" ] || [ ! -f "$BGLOG" ]; then echo "MISSING: background: no moment of leaving the front ($BGT0) or no native console ($BGLOG)"; FAILS="$FAILS [background journal]"
+echo "background: plain launch, 45 s in: $(grep -c 'AUTORADIO on air ' "$BGLOG") on-air lines in the native console; the app's own output so far:"; tail -8 "$BGCONSOLE" | cut -c1-220
+BGDIR=$(ls -d "$BGCONT"/Library/Application\ Support/exact/*/data "$BGCONT"/Library/Caches/exact/*/agent/*/data 2>/dev/null | head -2 | tr '\n' ' '); echo "background: data dirs: $BGDIR; files: $(ls $BGDIR 2>/dev/null | tr '\n' ' ')"
+BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1           # the Home screen over the app: it is not frontmost
+sleep "$BG_SECONDS"
+kill $BGLAUNCH 2>/dev/null
+if [ ! -f "$BGLOG" ]; then echo "MISSING: background: no native console ($BGLOG)"; FAILS="$FAILS [background journal]"
 else
   BGN=$(awk -v t0="$BGT0" '$1 >= t0 && /AUTORADIO on air / && / voice=/' "$BGLOG" | wc -l | tr -d ' ')
-  if [ "$BGN" -ge 5 ]; then echo "ok: background: $BGN entries started on air after the app left the front (the Home screen over it, driver attached, $BG_SECONDS s)"
+  if [ "$BGN" -ge 5 ]; then echo "ok: background: $BGN entries started on air after the app left the front (the Home screen over a plain-launched app, $BG_SECONDS s)"
   else echo "MISSING: background: needs at least 5 entries started on air after the app left the front; the native console shows $BGN since $BGT0"; FAILS="$FAILS [background entries]"; fi
 fi
 echo "not driven: background: no remote next (a script cannot press the lock screen), and no frozen shared code (the simulator does not suspend it): only the owner's locked phone shows those"
