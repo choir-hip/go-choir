@@ -54,7 +54,7 @@ func dec(v []float64) string {
 	return fmt.Sprintf("n=%d p10 %.3f p25 %.3f p50 %.3f p75 %.3f p90 %.3f", len(s), q(.1), q(.25), q(.5), q(.75), q(.9))
 }
 
-func dist(v []int) string {
+func distInt(v []int) string {
 	if len(v) == 0 {
 		return "n=0"
 	}
@@ -240,8 +240,8 @@ func groupsMain(dataDir, resultsPath, outDir, keyDir string, seed int64, n int) 
 			origs = append(origs, x.final)
 		}
 		fmt.Println("  opened per day:", perDay)
-		fmt.Println("  group size:    ", dist(sizes))
-		fmt.Println("  distinct origins:", dist(origs))
+		fmt.Println("  group size:    ", distInt(sizes))
+		fmt.Println("  distinct origins:", distInt(origs))
 		// size histogram
 		hist := map[string]int{}
 		for _, s := range sizes {
