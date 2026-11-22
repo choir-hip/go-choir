@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Rung 0c export: the week's capture URLs, read-only from Node B to the build VM. Usage: export-urls [DEST]
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+dest="${1:-offline-slice-r0-data}"
+{ echo "set default_transaction_read_only=on;"; cat "$here/export-urls.sql"; } |
+  ssh node-b 'nice -n 19 sudo -n -u postgres psql -d graph -q -v ON_ERROR_STOP=1 -f -' |
+  ssh choir-runner "cat > $dest/urls.csv && wc -l $dest/urls.csv && head -c 400 $dest/urls.csv"
