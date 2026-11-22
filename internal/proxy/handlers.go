@@ -191,12 +191,16 @@ func requestDesktopID(r *http.Request) string {
 
 // Handler provides HTTP and WebSocket handlers for the proxy routes.
 type Handler struct {
-	cfg                        *Config
-	pubKey                     ed25519.PublicKey
-	reverseProxy               *httputil.ReverseProxy
-	upgrader                   websocket.Upgrader
-	dialer                     *websocket.Dialer
-	corpusd                    *http.Client
+	cfg          *Config
+	pubKey       ed25519.PublicKey
+	reverseProxy *httputil.ReverseProxy
+	upgrader     websocket.Upgrader
+	dialer       *websocket.Dialer
+	corpusd      *http.Client
+	// corpusdRelay carries a stream (the resolve bundle) whose body is written
+	// to the reader while it is read, so its total time includes the reader's
+	// drain. Its bound is the server's own write budget, not corpusd's 30 s.
+	corpusdRelay               *http.Client
 	maild                      *http.Client
 	publisherAddresses         publisherAddressCache // short-lived owner id -> numbered address, for the Library
 	autoputerHTTP              *http.Client
@@ -454,6 +458,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		},
 		dialer:                     websocket.DefaultDialer,
 		corpusd:                    &http.Client{Timeout: 30 * time.Second},
+		corpusdRelay:               &http.Client{Timeout: server.WriteTimeoutFromEnv()},
 		maild:                      &http.Client{Timeout: 30 * time.Second},
 		autoputerHTTP:              autoputerHTTP,
 		replayAutoputerHTTP:        replayAutoputerHTTP,

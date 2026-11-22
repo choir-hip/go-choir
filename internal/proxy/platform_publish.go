@@ -818,8 +818,9 @@ func (h *Handler) readTexturePublication(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := readPlatformBody(resp.Body, resp.ContentLength)
 	if err != nil {
+		log.Printf("proxy: owned publication read: %v", err)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read publication"})
 		return
 	}
@@ -865,7 +866,7 @@ func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishT
 		return nil, 0, fmt.Errorf("call corpusd: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := readPlatformBody(resp.Body, resp.ContentLength)
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("read corpusd response: %w", err)
 	}
