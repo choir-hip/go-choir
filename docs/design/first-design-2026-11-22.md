@@ -112,6 +112,55 @@ What exists: the object graph registers `choir.publication_transclusion` and
 `transcludes` edges (`internal/objectgraph/registry.go`); how often a
 published story cites or transcludes another is not measured.
 
+### The line between an event and a story
+
+**First proposal, withdrawn the same day.** The lead proposed "an event is
+observed and settles; a story is authored and predicts; events do not nest; a
+future event is a prediction, not an event". The owner broke it: "events often
+become events before they happen. thats natural. they get planned,
+anticipated, scheduled, discussed, before they happen. and discussed and
+referenced afterwards too. thats why events are nonlocal. so why isnt the war
+in iran an event? its entities, like the us and iran, are fine query
+objects... is it really smart to have an election be an event but a war isnt?
+basically, processes in general arent events even though events are
+processes."
+
+**Second proposal (lead, not ruled): the line is between the world and an
+account of it.**
+
+| | In the world (what accounts are about) | An account (a text) |
+|---|---|---|
+| Lasts and takes part | **entity**: the US, Iran, a government, the Strait of Hormuz | |
+| Happens and unfolds | **event**: an election, a war, a blockade, a strike, at any scale | |
+| Someone else's | | **capture**: an outlet's account |
+| Ours | | **story**: a Texture, our account |
+
+- An event is anything that happens, at any scale. A process is an event. The
+  war is an event, the blockade is an event inside it, the tanker seizure is
+  an event inside that. **Events have parts** (a part-of edge between events).
+- An event is a thing accounts refer to, so it exists as soon as it is
+  referred to: anticipated, under way, over. Its state changes; it is one
+  event throughout. A prediction is about how its state will change.
+- An entity is what lasts and takes part. An event is what happens. That is
+  the only line inside the world, and it is the ordinary one.
+- A story is never in the world. It is our text about events and entities, as
+  a capture is an outlet's. Stories cite and transclude stories; events
+  contain events: two recursions, side by side.
+- A capture attaches to the most specific event it reports; the larger events
+  have it through part-of. That is what the 2026-10-20 ruling was reaching for
+  when it cut events to one incident: the fault then was that "the same
+  occurrence or its development" was one flat event with no parts.
+- The owner's earlier rules hold unchanged: stories have many events; no two
+  stories with exactly the same events; an event's importance is the number of
+  stories it is in (a war that many stories are about ranks high by that
+  count).
+- Not an event and not an entity: a topic (inflation, energy). Vectors carry
+  topics.
+
+Open: when the owner said the blockade "is a story", was that the account of
+it (which this keeps) or its kind (which this changes to an event with a
+story about it)?
+
 ## Two questions, each asked once
 
 | Question | Kind | Unit | Who |
@@ -123,6 +172,97 @@ The event layer is kept and read. Per-capture routing by a management session
 is removed. The intake label's "same event" and the event layer's join become
 one call. The editorial judgment runs on events, so twenty outlets on one
 strike are one decision.
+
+## Desks have one endpoint
+
+The owner, 2026-11-22: "graph traversal should make it easier for autoradio
+desk (which needs to become a go rlm anyway) to compose. but hmm, how does
+autoradio desk connect to root texture? indeed, i think it shuold connect to
+root texture, not to individual textures. thats the whole desk pattern,
+actually, that the desk, regardless of how many agents in it, only has one
+endpoint to other desks..."
+
+- A desk is addressed at one endpoint however many agents run inside it. For
+  the Texture desk that endpoint is the root Texture; story Textures are its
+  sub-calls and are not addressed from outside.
+- The Autoradio desk becomes a desk that runs Go cells (today it is two server
+  routes, one streamed model call each) and talks to the root Texture, never
+  to a story's Texture.
+- Lead's reading, not ruled: the same holds in the other direction. A story
+  Texture that needs research asks through its root, so the root sees every
+  request, can merge two stories' requests for the same gap, and can spend
+  research by its forecasts. Research is a desk with its own single endpoint
+  and its own children. This would answer open question 2.
+
+**Doubted the same day.** The owner, later on 2026-11-22: "one endpoint per
+desk may be wrong." Not a ruling yet; the section above stands as a proposal.
+What the doubt may rest on (lead's list): every request relayed through a root
+session costs a model call and time per hop; a research Report must return to
+the story that asked; a reader or the prompt bar addresses one document; a
+story that transcludes a story reaches it directly; most of what Autoradio
+needs is a read of published objects, which needs no desk endpoint at all. A
+middle form: one interface a desk (a typed address space routed by host code,
+not by a session), many addressees inside it, and the root observing the
+traffic rather than relaying it. Open question 10.
+
+**Ruled, 2026-11-22:** "yes, the middle form. and the question is how does
+the root desk get updates? it should get events. debounced. it can subscribe
+to events because it makes predictions about events and entities and those
+predictions register subscriptions... thats how it ought to be".
+
+## How the root is woken: a prediction is a subscription
+
+- The root Texture states predictions about events and entities (a story will
+  gain an event within a day; this entity will act; this scheduled event will
+  happen). Each prediction names what would settle it. That naming is its
+  subscription.
+- When an event is written (the capture-to-event step, host code), it is
+  matched against open subscriptions: by entity and story ids on the graph,
+  and by nearness for the loose ones. Matches are collected and delivered to
+  the root debounced, as one digest.
+- An arriving event settles the predictions it answers, true or false, and the
+  score is the learning engine's (precommit, then score).
+- So the root is woken by what it has a stake in, and there is no commit log
+  to tail, which is where the earlier root desk failed review.
+
+Ruled the same day (owner: "yes, bingo. useful additions. stories predict next
+events and get woken with them. surprises are key"): the three additions
+below, and that a story's Texture predicts its own next events and is woken by
+them, the same mechanism as the root one level down.
+
+- **Stories predict too.** The root watches the whole; each story watches its
+  own thread.
+
+- **Surprise needs a place.** An event that matches no prediction is the most
+  informative kind. A standing subscription to the unmatched (above an
+  importance line read from the graph) delivers them, and their share is the
+  measure of how well the root models the world.
+- **Expiry settles too.** A prediction whose time passes with no matching
+  event is settled false by the clock, not left open.
+- **The same on a person's computer:** the root predicts what the owner will
+  read, skip or ask, and the owner's acts are the events that settle it.
+
+### What the code supports today (read 2026-11-22, code only)
+
+| Piece | State | Where |
+|---|---|---|
+| A prediction with a probability, weight and resolve-by time | exists | `types/commitment.go:417-428` (`CastHypothesis`), `types/calibration.go:46-62` |
+| Scoring (Brier) and a per-desk digest | exists | `calibration/calibration.go:231`, `commitment_rules.go:869` |
+| Settlement written by a party that is not the claimant | exists | `agentcore/subcall_judge.go:532` |
+| A debounced digest scheduler | exists | `textureowner/texture_root.go:264-288` |
+| A prediction naming an event, entity or story | missing | the rule kinds are closed and engineering-shaped (`commitment_rules.go:110-153`) |
+| A store of open subscriptions; matching at event write | missing | nothing matches an incoming object to open claims; the hook would sit at `event_layer.go:772` |
+| Expiry settles false | missing | `ResolvesBy` is validated and read by nothing; "overdue" is a view status |
+| The score fed back to the predictor | narrower | engineering only, one arm of an experiment (`calibration_feedback.go:66-71`) |
+| An event's entities, stories, time of occurrence | missing | `store/world_event.go:29-67`; the event-to-story link is derived in memory from dispositions |
+| Sub-calls for Texture | narrower | research only; a child has no tape of its own (`research_children.go:306-312`) |
+| Surprise | missing | no matched flag on an event, no importance read |
+
+Found on the way, each against a standing rule: `researchChildCallInterval`
+spaces child model calls at 1.5 s (`research_children.go:77-83`; no limits on
+our own model calls; whether it is applied was not checked); the root digest
+is capped at 20 an hour and sits behind `texture.root_desk`, off by default
+(no switches).
 
 ## How context is found
 
@@ -239,9 +379,14 @@ entities attach through events.
 
 ## Open questions
 
-1. Is the root one long-lived session, or a fresh session per digest that
-   reads its own document to remember? (Lead leans to the second: cheaper,
-   survives restarts, fits "a crash restart never resumes work".)
+1. Ruled 2026-11-22: "root is one long session. but its repl makes it easily
+   resettable. the point of it being root texture is that it writes its own
+   texture, which is a text vector, a list of revisions. so it always has
+   enough context with its latest version and tools to read prior versions in
+   addition to what events and inbound it receives". The session is long and
+   disposable; the root's own Texture is its memory. Follow-on, not ruled: is
+   the paper's root Texture the front page, and a person's root Texture their
+   edition?
 2. Is research a sub-call of a story's Texture (root, story, research), or a
    desk the story Casts to as now? The contract says desks talk only through
    precommitment records: does a sub-call carry one?
@@ -256,5 +401,8 @@ entities attach through events.
 8. What separates an event from a story, now that an event may span time and
    place: is an event the unit captures report in common and a story our
    account of it, an event becoming a story once its parts are told apart?
+10. One endpoint a desk, or one interface with many addressees and a root
+    that observes: which requests must pass through the root, and which only
+    be seen by it?
 9. How often stories cite or transclude stories today, and what the writer's
    prompt and verbs make easy.
