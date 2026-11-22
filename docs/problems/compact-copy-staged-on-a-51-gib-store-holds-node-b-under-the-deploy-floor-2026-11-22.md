@@ -71,6 +71,24 @@ restarts as planned or the staged copy is removed.
 4. The structural one: the store should not need store-sized copies. What is
    in the 51 GiB is not measured by table.
 
+## Where Node B's disk is (read-only `du`, 2026-11-22 12:20Z)
+
+476 GiB disk, 417 GiB used. `/nix` 39. `/var/lib/go-choir` 390, of which:
+
+| What | GiB |
+| --- | --- |
+| the paper's data image (store 51, staged compact copy 51) | 104 |
+| the paper's tape segments (`platform-artifacts/tape-seg/computer-1355b…`) | 89 |
+| snapshot chunks (`platform-artifacts/sha256/file-cas-chunks`) | 43 |
+| capture bodies (`platform-artifacts/capture-bodies`) | 41 |
+| every other computer's tape segments | 21 |
+| platform updates, roots, guest releases, tools, other VMs | about 40 |
+
+One computer, the paper, holds about 330 of the 390. Its tape is larger than
+its store, and each daily snapshot adds about 6.6 GB of new chunks (79% of
+chunks were new after one day). Whether old snapshot chunks and tape segments
+under a snapshot are ever retired was not checked here.
+
 ## Remaining error
 
 Not confirmed: that the staged copy's check has finished (the check has its
