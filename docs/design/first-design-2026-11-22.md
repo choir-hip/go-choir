@@ -112,23 +112,54 @@ What exists: the object graph registers `choir.publication_transclusion` and
 `transcludes` edges (`internal/objectgraph/registry.go`); how often a
 published story cites or transcludes another is not measured.
 
-### The line between an event and a story (proposed by the lead, not ruled)
+### The line between an event and a story
 
-The owner asked for the bright line and the borderline (2026-11-22).
+**First proposal, withdrawn the same day.** The lead proposed "an event is
+observed and settles; a story is authored and predicts; events do not nest; a
+future event is a prediction, not an event". The owner broke it: "events often
+become events before they happen. thats natural. they get planned,
+anticipated, scheduled, discussed, before they happen. and discussed and
+referenced afterwards too. thats why events are nonlocal. so why isnt the war
+in iran an event? its entities, like the us and iran, are fine query
+objects... is it really smart to have an election be an event but a war isnt?
+basically, processes in general arent events even though events are
+processes."
 
-- **An event is observed and settles. A story is authored and predicts.** An
-  event exists whether or not we write about it, is known through captures,
-  and is what a prediction is about and is settled by. A story exists because
-  we wrote it: a Texture with a main point and revisions, which makes
-  predictions and is revised by what settles them.
-- **Events do not nest; stories do.** When the parts of a happening need
-  telling apart, the parts are events and the whole is a story about them. A
-  happening may have both an event and a story about it.
-- **A future event is a prediction.** It becomes an event when captures
-  report it.
-- Borderlines: an ongoing state (a blockade, a drought) is a story, its
-  beginning and end are events; a capture that reports nothing happening
-  (analysis, opinion) attaches to a story as commentary and to no event.
+**Second proposal (lead, not ruled): the line is between the world and an
+account of it.**
+
+| | In the world (what accounts are about) | An account (a text) |
+|---|---|---|
+| Lasts and takes part | **entity**: the US, Iran, a government, the Strait of Hormuz | |
+| Happens and unfolds | **event**: an election, a war, a blockade, a strike, at any scale | |
+| Someone else's | | **capture**: an outlet's account |
+| Ours | | **story**: a Texture, our account |
+
+- An event is anything that happens, at any scale. A process is an event. The
+  war is an event, the blockade is an event inside it, the tanker seizure is
+  an event inside that. **Events have parts** (a part-of edge between events).
+- An event is a thing accounts refer to, so it exists as soon as it is
+  referred to: anticipated, under way, over. Its state changes; it is one
+  event throughout. A prediction is about how its state will change.
+- An entity is what lasts and takes part. An event is what happens. That is
+  the only line inside the world, and it is the ordinary one.
+- A story is never in the world. It is our text about events and entities, as
+  a capture is an outlet's. Stories cite and transclude stories; events
+  contain events: two recursions, side by side.
+- A capture attaches to the most specific event it reports; the larger events
+  have it through part-of. That is what the 2026-10-20 ruling was reaching for
+  when it cut events to one incident: the fault then was that "the same
+  occurrence or its development" was one flat event with no parts.
+- The owner's earlier rules hold unchanged: stories have many events; no two
+  stories with exactly the same events; an event's importance is the number of
+  stories it is in (a war that many stories are about ranks high by that
+  count).
+- Not an event and not an entity: a topic (inflation, energy). Vectors carry
+  topics.
+
+Open: when the owner said the blockade "is a story", was that the account of
+it (which this keeps) or its kind (which this changes to an event with a
+story about it)?
 
 ## Two questions, each asked once
 
