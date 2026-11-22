@@ -169,7 +169,7 @@ var linkRe = regexp.MustCompile(`(?i)https?://(?:www\.\s)?(?:\s)?[^\s/]+[^\s]*`)
 var shorteners = map[string]bool{
 	"dlvr.it": true, "bit.ly": true, "t.co": true, "ow.ly": true, "tinyurl.com": true, "buff.ly": true, "lnkd.in": true,
 	"ift.tt": true, "trib.al": true, "wp.me": true, "apne.ws": true, "reut.rs": true, "cnn.it": true, "nyti.ms": true,
-	"flip.it": true, "goo.gl": true, "is.gd": true, "shorturl.at": true, "fb.me": true, "youtu.be": true, "rb.gy": true,
+	"flip.it": true, "goo.gl": true, "w.st": true, "f24.my": true, "aje.io": true, "bbc.in": true, "cnb.cx": true, "nyp.st": true, "econ.st": true, "politi.co": true, "is.gd": true, "shorturl.at": true, "fb.me": true, "youtu.be": true, "rb.gy": true,
 }
 
 // accountOf is the account a social post URL names, with its instance.
