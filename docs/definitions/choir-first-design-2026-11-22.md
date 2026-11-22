@@ -66,6 +66,10 @@ boundaries:
     - 'Subjects for a capture: "maybe we can predict subjects from keyword extraction and/or vector embedding? and then any prediction can be scored with system1, which can also select subjects from a list, and also suggest more/other/idk which can escalate to llm desk" (2026-11-22).'
     - 'Autoradio''s desk "needs to become a go rlm anyway" (2026-11-22).'
     - 'Earlier, in force: "a story stops growing when the main point, the main beat changes"; "revising not making new stories"; no two stories with the same subjects and claims; a subject''s importance is the number of stories about it.'
+    - 'Q5, model spend for the offline slice: "yes, i definitely want to spend to make it work... obv" (2026-11-22). Read as: rungs 1 and 2 may spend; no amount was named, so each rung states its estimate before it runs and its measured cost after.'
+    - '"unpublished drafts in research are fine" (2026-11-22). Read as: a research run may be given the text of stories not yet published, and its web queries may draw on it.'
+    - '"we should design for user computers being always accessible. todays storage issues wont remain" (2026-11-22). Read as: the app gets no separate mode for an unreachable computer; the host''s storage is what is fixed.'
+    - 'On Node B''s disk (2026-11-22): "we will offload the tape soon. for now, lets do the other efficiencies"; the only computers to keep are the paper, the owner''s own, and the two test accounts; "we should delete the extra computers. we can make more later"; "Retire it and remove old paper snapshots".'
   must_preserve:
     - 'the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging'
     - 'no switches; no limits on our own model calls; one System 1 call a flush with every question in it'
@@ -151,6 +155,7 @@ decisions_for_the_owner:
     why: 'rungs 1 and 2 replay captures through System 1 and a language-model step; the plan (docs/design/first-design-offline-slice-plan-2026-11-22.md) estimates under 2 dollars of System 1 and under 6 of escalation for a full week, through the d@e identity; no spending cap for System 1 exists in code and its credit balance is not known to the lead'
     options: ['yes: 5 dollars for System 1 and 10 for the language-model step', 'yes with other ceilings', 'no: rung 0 only']
     default: 'no spend. Rung 0 (rules only, no model, a hand read for kill line (c)) runs now; rungs 1 and 2 wait for the owner''s word'
+    ruling: 'granted 2026-11-22, see owner_rulings'
 now:
   status: working
   as_of: 2026-11-22T05:00Z
