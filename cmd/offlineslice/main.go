@@ -44,8 +44,18 @@ func main() {
 		seed := fs.Int64("seed", 20261122, "seed")
 		_ = fs.Parse(os.Args[2:])
 		sample(load(*in), *data, *out, *key, *n, *seed)
+	case "sampleb":
+		fs := flag.NewFlagSet("sampleb", flag.ExitOnError)
+		in := fs.String("results", "", "results-b jsonl")
+		data := fs.String("data", "", "export directory")
+		out := fs.String("out", "", "reader folder")
+		key := fs.String("key", "", "key folder (not for the reader)")
+		n := fs.Int("n", 100, "sample size")
+		seed := fs.Int64("seed", 20261123, "seed")
+		_ = fs.Parse(os.Args[2:])
+		sampleB(*in, *data, *out, *key, *n, *seed)
 	default:
-		fmt.Fprintln(os.Stderr, "usage: offlineslice report|sample ...")
+		fmt.Fprintln(os.Stderr, "usage: offlineslice report|sample|sampleb ...")
 		os.Exit(2)
 	}
 }
