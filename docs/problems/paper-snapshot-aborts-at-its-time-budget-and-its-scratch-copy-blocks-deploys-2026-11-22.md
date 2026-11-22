@@ -38,7 +38,7 @@ and on the host. Related: `paper-chunk-writes-drain-node-b-disk-2026-11-12.md`.
 
 Nothing was changed. No remedy that trims or deletes was run.
 
-## 09:10Z: the retry holds the copy again; the deploy of d7d276b55 was refused
+## 09:04Z: the retry holds the copy again; the deploy of d7d276b55 was refused
 
 - CI run 45000646351 (the proxy resolve fix): every test job passed; "Deploy
   to Staging (Node B)" failed at the disk preflight, "root filesystem still
