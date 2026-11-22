@@ -161,6 +161,44 @@ Open: when the owner said the blockade "is a story", was that the account of
 it (which this keeps) or its kind (which this changes to an event with a
 story about it)?
 
+### The typing itself doubted (owner, 2026-11-22)
+
+"im thinking about contradictions, like where one says the war is over and
+another says its still going. basically, what we are calling events are really
+categories. and entities are actors. the strait of hormuz in that context is
+not an entity. but honestly, is this the right way to think about it? if we
+have trouble articulating the distinction, is it well formed?"
+
+Lead's answer, a third proposal, not ruled: two proposals broke in an hour,
+which is the evidence that the type is not needed. Ask what the graph must DO,
+and type only where behaviour differs.
+
+- **One kind of node for what accounts refer to: a subject.** The US, Iran,
+  the war, the blockade, the Strait, the election. A label, aliases, a
+  description with a vector. No "event" or "entity" stored on the node.
+- **The role is on the mention, not the node.** In one account Iran is the
+  actor, the Strait the place, the blockade what happens. Another account may
+  use the same subject in another role. Nobody has to decide what a thing is,
+  only how this account uses it.
+- **What is said is a claim by a source, with its time.** "The war is over" is
+  one outlet's claim about the subject at a time; "it is still going" is
+  another's. The graph holds both and adjudicates neither. A contradiction is
+  two claims about one subject, which is something a story is for.
+- **Accounts stay as they were:** a capture is an outlet's, a story is ours.
+- The owner's rules restated: captures are compared by the subjects they
+  mention and what they claim; no two stories with the same subjects and the
+  same claims; a subject's importance is the number of stories about it; a
+  prediction is a claim about what sources will report of a subject by a time,
+  settled by the claims that arrive; a surprise is a claim no prediction
+  expected.
+- Cost caution: a claim need not be a model-extracted structure. A capture's
+  passage with the subjects it mentions is a claim already, and we hold
+  passages and vectors. The new work is resolving mentions to subjects, which
+  is the entity layer widened to include what happens.
+
+The test of well-formedness to apply to any further type: does any code path
+behave differently because of it? If not, it is not stored.
+
 ## Two questions, each asked once
 
 | Question | Kind | Unit | Who |
