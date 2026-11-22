@@ -182,17 +182,32 @@ func groupsMain(dataDir, resultsPath, outDir, keyDir string, seed int64, n int) 
 	chosen := map[offlineslice.LinkMode]float64{}
 	for _, mode := range []offlineslice.LinkMode{offlineslice.LinkCentroid, offlineslice.LinkAnyMember} {
 		var xs, ys []float64
-		line := ""
+		bestMulti, bestG := -1, 0.0
+		fmt.Printf("%s: G  groups  groups-of-2+  share-of-arrivals-alone  largest-group\n", modeName(mode))
 		for g := 0.60; g <= 0.951; g += 0.01 {
 			gs := offlineslice.GroupArrivals(items[:nEarly], g, mode, 48*time.Hour)
+			multi, alone, maxSize := 0, 0, 0
+			for _, x := range gs {
+				if len(x.Members) >= 2 {
+					multi++
+				} else {
+					alone++
+				}
+				if len(x.Members) > maxSize {
+					maxSize = len(x.Members)
+				}
+			}
 			xs, ys = append(xs, g), append(ys, float64(len(gs)))
-			if int(math.Round(g*100))%5 == 0 {
-				line += fmt.Sprintf(" %.2f:%d", g, len(gs))
+			if multi > bestMulti {
+				bestMulti, bestG = multi, g
+			}
+			if int(math.Round(g*100))%2 == 0 {
+				fmt.Printf("  %.2f %5d %5d %6s %5d\n", g, len(gs), multi, pc(alone, nEarly), maxSize)
 			}
 		}
 		k := offlineslice.Knee(xs, ys)
-		chosen[mode] = xs[k]
-		fmt.Printf("%s: groups opened on days 1-3 by G:%s  -> knee at G=%.2f (%d groups)\n", modeName(mode), line, xs[k], int(ys[k]))
+		chosen[mode] = math.Round(bestG*100) / 100
+		fmt.Printf("%s: the group-count curve's first knee is at G=%.2f (%d groups: one giant group each, chaining); G is instead the value that maximises the number of groups of 2 or more: G=%.2f (%d such groups)\n", modeName(mode), xs[k], int(ys[k]), bestG, bestMulti)
 	}
 	fmt.Println()
 
@@ -318,12 +333,36 @@ func groupsMain(dataDir, resultsPath, outDir, keyDir string, seed int64, n int) 
 			fmt.Printf("    %d members, %d origins, opened %s: %s\n", len(x.g.Members), x.final, x.g.Opened.UTC().Format("01-02 15:04"), strings.Join(ts, " | "))
 		}
 		// 5. cross-check on groups with >=3 origins
+		fmt.Println("  groups of ANY opening day, by the day their Nth distinct origin arrived (the wakes a root would get a day):")
+		for _, N := range []int{2, 3, 5} {
+			row := map[string]int{}
+			for _, x := range all {
+				if dur, ok := offlineslice.ReachTime(x.ats, x.origins, N); ok {
+					row[x.g.Opened.Add(dur).UTC().Format("2006-01-02")]++
+				}
+			}
+			var ds []string
+			for _, d := range sortedKeys(row) {
+				ds = append(ds, fmt.Sprintf("%s:%d", d[5:], row[d]))
+			}
+			fmt.Printf("    >=%d origins: %s\n", N, strings.Join(ds, " "))
+		}
+		// the groups that reach 3 origins on days 4-7 (any opening day)
 		var three []gi
-		for _, x := range d47 {
-			if x.final >= 3 {
+		for _, x := range all {
+			if dur, ok := offlineslice.ReachTime(x.ats, x.origins, 3); ok && !early(x.g.Opened.Add(dur).UTC().Format("2006-01-02")) {
 				three = append(three, x)
 			}
 		}
+		fmt.Printf("  groups whose 3rd distinct origin arrived on days 4-7: %d (opened on days 4-7: %d)\n", len(three), func() int {
+			c := 0
+			for _, x := range three {
+				if !early(x.g.Opened.UTC().Format("2006-01-02")) {
+					c++
+				}
+			}
+			return c
+		}())
 		var lags []float64
 		after, existingOnly, never := 0, 0, 0
 		for _, x := range three {
@@ -354,7 +393,7 @@ func groupsMain(dataDir, resultsPath, outDir, keyDir string, seed int64, n int) 
 				never++
 			}
 		}
-		fmt.Printf("  cross-check, %d groups with >=3 origins (days 4-7): a story first published after the group opened cites a member: %d; only a story that already existed cites a member: %d; no story cites any member: %d\n", len(three), after, existingOnly, never)
+		fmt.Printf("  cross-check, %d groups that reach 3 origins on days 4-7: a story first published after the group opened cites a member: %d; only a story that already existed cites a member: %d; no story cites any member: %d\n", len(three), after, existingOnly, never)
 		fmt.Println("  hours from group opening to that story's first version:", dec(lags))
 		fmt.Println()
 
