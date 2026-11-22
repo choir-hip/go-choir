@@ -51,3 +51,13 @@ reasons. Whether ed73d3de's ten queries were materially different is unknown
 Report; why is not known and is a separate question. Total volume is under
 the 1,000 a day target (about 33 an hour) because the main-point change
 starts fewer research runs, not because of this rule.
+
+## Owner ruling, 2026-11-22
+
+The lead's first plan was a tighter gate (judge need by the stock of untried
+pages; restrict the escape). The owner rejected the frame: "we shouldnt need
+rules. we should be able with prompts to encourage models to search the object
+graph first, and then the web... we should be able to provide a lot of
+compressed context from the object graph, from prior stories, more than a web
+search". The fix is therefore the run's opening context and its prompt, and
+the refusal gates come out. The tighter gate was not built.
