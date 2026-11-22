@@ -89,3 +89,69 @@ each as in the list or absent.
 One reader, one pass; the sample is not stratified by source; neighbours used
 final vectors; alias times are approximated by day; wire copies under
 different URLs count separately.
+
+## Rung 0b, the same day: stories as the source of happenings
+
+Harness `lane/offline-slice-r0` at `495b4fe38`; no model call, no spend.
+
+- **Source arrivals only:** 23,851 in the week (about 3,400 a day) of 67,591
+  captures: 19,278 social, 3,876 RSS, 500 arXiv, 197 official. The rest were
+  research's own page reads.
+- **Cleaned text:** the candidate list from rules fell from a median of 12 to
+  4; the most-proposed are real actors (us, trump, ai, ukraine, russia, iran)
+  with some feed furniture left (computer science, comments url, abstract).
+- **The oracle, no reader:** of 2,282 arrivals later cited by a story that
+  existed before they arrived, that story was among the K nearest earlier
+  stories by vector for 62.4% at K=5, 72.6% at K=10, 82.1% at K=20; the
+  control (the K most recently revised stories) gives 9.2%, 19.5%, 34.9%. By
+  class at K=10: RSS 78.3%, social 70.2%. It falls on the last two days (65%,
+  56%), when citations are still arriving.
+- 20,367 arrivals are cited by no story; 1,202 only by a story first published
+  after they arrived. "Cited" stands in for the paper's feed decision, which
+  is in the paper computer's own store and was not read.
+- **The hand read** (a Sonnet agent, 100 news-like arrivals from days 4 to 7,
+  actors and happening written before opening the list; lists capped at 12,
+  five nearest stories first):
+
+| | all 100 | the 75 that report a happening |
+|---|---|---|
+| at least one actor in the list | 88 | 71 |
+| the happening in the list (a listed story is about this affair) | 30 | 29 |
+| the happening is new (no listed story covers it) | 46 | 46 |
+| neither actor nor happening | 11 | 4 |
+
+  Median 5 of a list's 10 or 11 entries unrelated. 25 of the 100 report no
+  happening (chatter, opinion, promotion).
+
+### Reading (the lead's)
+
+- The rewritten kill line (c) passes at 71 of 75, and it passes too easily:
+  46 of those 71 pass because the reader marked the happening as new. What it
+  shows is that an actor is nearly always offered; the reader cannot tell a
+  story the list missed from a story that does not exist.
+- The oracle is the better evidence: when the paper did have the story, the
+  ten nearest stories by vector contained it about three times in four, at no
+  model cost, against one in five for the control.
+- **Most of what arrives is about something the paper has no story for:** 46
+  of 75 by the read, and 20,367 of 23,851 arrivals cited by nothing. So "none
+  of these" is the common answer, not the exception. If every such capture
+  escalated to a language model, kill line (a) (escalation at or under 30%)
+  would fail by design.
+- A quarter of news-like arrivals report nothing; they need no subject.
+
+### What changes
+
+1. A capture that matches no story does **not** escalate. It is held with its
+   actors and its vector. Unmatched captures are grouped by vector; a group
+   reported by several distinct origins is what the root is woken by ("a
+   subject that matters and has no story"), and a model names it once, for
+   the group. Escalation is per group that crosses the line, not per capture.
+2. The question to System 1 gets a cheap first answer: does this report
+   something that happened at all.
+3. The feed decision should be written where the host may read it, so the
+   oracle is the real decision and not a citation proxy (F0's logging is the
+   start).
+4. Next rung (no spend): group the week's unmatched arrivals by vector and
+   count groups by distinct origin, to see how many a day would reach the
+   root at thresholds of 2, 3 and 5 origins, and hand-read 50 groups for
+   whether each is one happening.
