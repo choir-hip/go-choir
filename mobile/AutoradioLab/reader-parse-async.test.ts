@@ -22,3 +22,14 @@ describe('a large bundle is decoded over several turns', () => {
     expect(short).toBeLessThan(long / 4);
   });
 });
+
+describe('no stretch between two turn ends is long (Hermes runs this about eight times slower than Bun: 100 ms there is about 12 ms here)', () => {
+  test('a 9000-block, 1.9 MB bundle: the longest stretch stays well under the budget (it was 16 ms in the last step alone before it was split)', async () => {
+    const o = bundle(9000);
+    (o as { checks?: unknown }).checks = { citations: Array.from({ length: 3000 }, (_, i) => ({ anchor_id: 'a' + i, status: 'ok', text: 'x'.repeat(100) })) };
+    let last = performance.now(), longest = 0;
+    await parseBundleAsync(o, 'pub:/pub/texture/x', async () => { const n = performance.now(); longest = Math.max(longest, n - last); last = n; });
+    longest = Math.max(longest, performance.now() - last);
+    expect(longest).toBeLessThan(30);
+  });
+});

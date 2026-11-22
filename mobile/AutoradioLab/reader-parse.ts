@@ -524,7 +524,9 @@ function decodeBodyDoc(v: unknown): Obj | null {
 }
 
 /** The blocks as Markdown, a citation as a `cite:` link, for the reader that draws citations as atom pills. */
-export function markdownSource(blocks: Block[]): string {
+export function markdownSource(blocks: Block[]): string { const g = markdownSourceSteps(blocks); let r = g.next(); while (!r.done) r = g.next(); return r.value; }
+/** The same as steps: a `yield` every 64 blocks (a 9000-block story took 16 ms here and Hermes runs this about eight times slower: over a turn's 100 ms). */
+function* markdownSourceSteps(blocks: Block[]): Generator<void, string, void> {
   const md = (runs: Run[]): string => runs.map((r) => {
     switch (r.kind) {
       case 'cite': return `[${r.label}](cite:${r.anchor})`;
@@ -541,7 +543,9 @@ export function markdownSource(blocks: Block[]): string {
     }
   }).join('');
   const out: string[] = [];
+  let n = 0;
   for (const b of blocks) {
+    if (++n % 64 === 0) yield;
     switch (b.kind) {
       case 'h': out.push(`${'#'.repeat(Math.max(1, Math.min(6, b.level)))} ${md(b.runs)}`); break;
       case 'li': out.push(`${'  '.repeat(Math.max(0, b.depth - 1))}${b.marker === '' ? '  ' : b.marker.endsWith('.') ? b.marker : '-'} ${md(b.runs)}`); break;
@@ -579,7 +583,7 @@ function* buildSteps(address: string, title: string, bodyDoc: unknown, markdown:
   doc.sources = sourcesOf(doc.cites);
   doc.plain = blocks.filter((x) => x.kind !== 'code').map((x) => x.text).filter((t) => t !== '').join('\n\n');
   yield;
-  doc.textBlocks = ord; doc.markdown = markdownSource(blocks);
+  doc.textBlocks = ord; doc.markdown = yield* markdownSourceSteps(blocks);
   return doc;
 }
 const runSteps = <T>(g: Generator<void, T, void>): T => { let r = g.next(); while (!r.done) r = g.next(); return r.value; };

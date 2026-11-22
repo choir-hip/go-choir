@@ -130,8 +130,9 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
   state.writer = new Writer({
     rt, front,
     texts: async (routes) => {
+      // the writer sends the first 8 KB of each: the rest of a 1.6 MB story is not read
       const out: Record<string, string[]> = {};
-      await Promise.race([Promise.all(routes.map(async (r) => { try { const d = await loadReader('pub:' + r); out[r] = d.blocks.map((b) => sentenceTexts(b).join(' ')); } catch { /* goes without text */ } })), new Promise((res) => setTimeout(res, 3000))]);
+      await Promise.race([Promise.all(routes.map(async (r) => { try { const d = await loadReader('pub:' + r); { const ps: string[] = []; let n = 0; for (const b of d.blocks) { const t = sentenceTexts(b).join(' '); ps.push(t); n += t.length; if (n > 24 * 1024) break; } out[r] = ps; } } catch { /* goes without text */ } })), new Promise((res) => setTimeout(res, 3000))]);
       return out;
     },
     takes: async () => {
