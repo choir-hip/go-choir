@@ -13,6 +13,7 @@ package platform
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
