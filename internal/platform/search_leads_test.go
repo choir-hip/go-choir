@@ -46,6 +46,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -517,5 +518,165 @@ func TestMarkSearchLeadsTriedClipsALongCaptureIDAndAMegabyteURLStillKeysLikeTheW
 	var id string
 	if err := f.store.corpus().QueryRow(`SELECT capture_id FROM search_leads WHERE owner_id='o1'`).Scan(&id); err != nil || len(id) != searchLeadCaptureIDRunes {
 		t.Fatalf("stored capture id length %d (%v), want %d", len(id), err, searchLeadCaptureIDRunes)
+	}
+}
+
+// Landing A reads the stories whose research searches returned a capture's
+// page. Failure list, written before the code: a capture no lead made is
+// listed; another computer's or owner's conversations are returned; a lead
+// returned by several conversations names only one; the route answers a caller
+// bound to another computer; it returns a lead's text instead of conversation ids.
+func TestSearchLeadConversationsByCaptureAreScopedAndConversationsOnly(t *testing.T) {
+	f := leadFixture(t)
+	ctx := context.Background()
+	a, b := "https://example.com/read-a", "https://example.com/unread-b"
+	for _, conv := range []string{"doc-one", "doc-two"} {
+		if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c1", "q", conv, SearchLeadHit{URL: a, Title: "A", Snippet: "secret snippet"}, SearchLeadHit{URL: b, Title: "B"})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c2", "q", "doc-other-computer", SearchLeadHit{URL: a, Title: "A"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.MarkSearchLeadsTried(ctx, "o1", "c1", []string{a}, "cap-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.MarkSearchLeadsTried(ctx, "o1", "c2", []string{a}, "cap-1"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.store.SearchLeadConversationsByCapture(ctx, "o1", "c1", []string{"cap-1", "cap-none", ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	convs := append([]string(nil), got["cap-1"]...)
+	sort.Strings(convs)
+	if len(got) != 1 || strings.Join(convs, ",") != "doc-one,doc-two" {
+		t.Fatalf("conversations = %v, want only cap-1: doc-one, doc-two (not the other computer's, not an unread lead)", got)
+	}
+	if got, err := f.store.SearchLeadConversationsByCapture(ctx, "o1", "c1", nil); err != nil || len(got) != 0 {
+		t.Fatalf("no captures: %v, %v", got, err)
+	}
+
+	og := f.og
+	h := NewObjectGraphHandler(objectgraph.NewService(objectgraph.Config{Durable: og}), og)
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{"10.200.1.2": {Found: true, UserID: "o1", ComputerID: "c1"}}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureCaptureIndex(f.store)
+	post := func(from string, body any) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(body)
+		r := httptest.NewRequest(http.MethodPost, "/internal/platform/search-leads/by-capture", bytes.NewReader(raw))
+		r.RemoteAddr = from + ":40000"
+		rec := httptest.NewRecorder()
+		hostauth.Middleware(http.HandlerFunc(h.HandleSearchLeadsByCapture)).ServeHTTP(rec, r)
+		return rec
+	}
+	if rec := post("10.200.1.2", map[string]any{"owner_id": "o1", "computer_id": "c2", "capture_ids": []string{"cap-1"}}); rec.Code != http.StatusForbidden {
+		t.Fatalf("a bound guest read another computer's conversations: %d %s", rec.Code, rec.Body)
+	}
+	rec := post("10.200.1.2", map[string]any{"owner_id": "o1", "computer_id": "c1", "capture_ids": []string{"cap-1"}})
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "secret snippet") || !strings.Contains(rec.Body.String(), "doc-one") {
+		t.Fatalf("route answer: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// A story's later research starts from what its earlier runs read: the pages
+// read from leads that the story's conversation's searches returned.
+func TestSearchLeadPagesOfConversationAreReadPagesOfThatConversationOnly(t *testing.T) {
+	f := leadFixture(t)
+	ctx := context.Background()
+	a, b, c := "https://example.com/read-a", "https://example.com/unread-b", "https://example.com/read-c"
+	if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c1", "q", "doc-one", SearchLeadHit{URL: a, Title: "A"}, SearchLeadHit{URL: b, Title: "B"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c1", "q", "doc-two", SearchLeadHit{URL: c, Title: "C"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c2", "q", "doc-one", SearchLeadHit{URL: a, Title: "A elsewhere"})); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []struct{ computer, url, capture string }{{"c1", a, "cap-a"}, {"c1", c, "cap-c"}, {"c2", a, "cap-a2"}} {
+		if _, err := f.store.MarkSearchLeadsTried(ctx, "o1", m.computer, []string{m.url}, m.capture); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := f.store.SearchLeadPagesOfConversation(ctx, "o1", "c1", "doc-one", 10)
+	if err != nil || len(got) != 1 || got[0].CaptureID != "cap-a" || got[0].URL != a || got[0].Title != "A" {
+		t.Fatalf("pages = %+v, %v; want only the read lead of doc-one on this computer", got, err)
+	}
+	if got, _ := f.store.SearchLeadPagesOfConversation(ctx, "o1", "c1", "", 10); len(got) != 0 {
+		t.Fatalf("an empty conversation listed %+v", got)
+	}
+	og := f.og
+	h := NewObjectGraphHandler(objectgraph.NewService(objectgraph.Config{Durable: og}), og)
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{"10.200.1.2": {Found: true, UserID: "o1", ComputerID: "c1"}}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureCaptureIndex(f.store)
+	post := func(computer string) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(map[string]any{"owner_id": "o1", "computer_id": computer, "conversation_id": "doc-one"})
+		r := httptest.NewRequest(http.MethodPost, "/internal/platform/search-leads/by-conversation", bytes.NewReader(raw))
+		r.RemoteAddr = "10.200.1.2:40000"
+		rec := httptest.NewRecorder()
+		hostauth.Middleware(http.HandlerFunc(h.HandleSearchLeadsByConversation)).ServeHTTP(rec, r)
+		return rec
+	}
+	if rec := post("c2"); rec.Code != http.StatusForbidden {
+		t.Fatalf("a bound guest read another computer's pages: %d", rec.Code)
+	}
+	if rec := post("c1"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "cap-a") || strings.Contains(rec.Body.String(), "snippet") {
+		t.Fatalf("route answer: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// The by-conversation read runs at the start of every story research run, under
+// an 8 s timeout that drops the story's context when it is missed; at the
+// table's growth (190,000 rows a day, 30 days kept) a read that scans the
+// computer's read leads would miss it unseen (review round 3, finding 4). The
+// predicate is the one the GIN index on conversation_ids serves, and the
+// planner uses that index for it (measured on the paper: 29.7 ms with a
+// sequential scan of 94,308 rows, 0.23 ms with the index).
+func TestPagesOfConversationReadIsServedByTheConversationIndex(t *testing.T) {
+	f := leadFixture(t)
+	ctx := context.Background()
+	var exists bool
+	if err := f.store.corpus().QueryRowContext(ctx, `SELECT to_regclass('idx_sl_conv') IS NOT NULL`).Scan(&exists); err != nil || !exists {
+		t.Fatalf("idx_sl_conv is not made: %v, %v", exists, err)
+	}
+	// A computer with thousands of read leads, three of them this conversation's:
+	// the planner, with statistics, takes the conversation index, not the
+	// computer's whole captured set.
+	if _, err := f.store.corpus().ExecContext(ctx, `INSERT INTO search_leads (owner_id, computer_id, url_key, url, first_returned_at, last_returned_at, conversation_ids, capture_id)
+		SELECT 'o1', 'c1', 'k' || g, 'https://example.com/' || g, now(), now() - make_interval(secs => g),
+			CASE WHEN g <= 3 THEN ARRAY['doc-one', 'doc-x' || g] ELSE ARRAY['doc-x' || g] END, 'cap-' || g
+		FROM generate_series(1, 4000) g`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.corpus().ExecContext(ctx, `ANALYZE search_leads`); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := f.store.corpus().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `EXPLAIN `+searchLeadPagesSQL, "o1", "c1", "doc-one", 10)
+	if err != nil {
+		t.Fatalf("explain: %v", err)
+	}
+	defer rows.Close()
+	var plan strings.Builder
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatal(err)
+		}
+		plan.WriteString(line + "\n")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("explain rows: %v", err)
+	}
+	if !strings.Contains(plan.String(), "idx_sl_conv") {
+		t.Fatalf("the read does not use idx_sl_conv:\n%s", plan.String())
 	}
 }

@@ -110,10 +110,10 @@ func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 // again"). Failure list: the prompt does not send the desk to the corpus first
 // and to write each thread as held, stale or missing; still tells it to run
 // searches at once or to cover every open thread in each round with several
-// searches; or does not say that SearchAll sends the next wording only while
-// the question lacks pages to read, nor that a wording left out can be sent
-// alone with fresh (v18: nor that Search and SearchStart pass the same test and
-// return the held pages when they refuse).
+// searches; or does not say that SearchAll sends the first wording and names
+// the rest, that no web search is sent while the top pages of earlier searches
+// and the brief's held pages are untried, or that SearchFresh(query, why) is the
+// one way past (v19, 2026-11-21: this replaced the 15-unread line and `fresh`).
 func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
 	if err != nil {
@@ -136,19 +136,22 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"read what it returns before you search again",
 		"the wordings of one missing question",
 		"choir.SearchAll(question, wordings)",
-		"sends the next only while the question holds fewer than 15 pages new to you that you have not tried to read",
+		"it sends the first wording and names the rest",
+		"No web search (choir.Search(query), choir.SearchStart(query) or SearchAll) is sent while you hold pages you have not tried to read",
+		"the top 5 pages of each of your earlier searches, and (if you were shown it) the first pages the corpus brief listed",
+		"The refusal lists them and is not an error: read them",
 		"a page that will not load counts once you have tried it",
 		"then search again for what is still missing, naming it",
+		"A site: search for an outlet whose page you hold is met by reading that page",
+		"choir.SearchFresh(query, why), with a reason of at least 20 characters that is recorded",
 		"mark each page new or held",
-		"choir.Search(query) and choir.SearchStart(query) pass the same test",
-		"they send nothing and return those pages with the reason, which is not an error: read them first",
-		"goes with fresh (choir.Search(query, true))",
+		"a page from a second independent outlet that supports it: report it and do not search again",
 	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("research prompt lacks %q", want)
 		}
 	}
-	for _, absent := range []string{"several searches per thread", "To run searches at once", "Cover every open thread in each round", "all the wordings of one question", "stops when wordings stop finding pages", "start a search with choir.SearchStart(query) and read it with", "what the host's search covered", "The host searched this computer's corpus", "ran in part"} {
+	for _, absent := range []string{"several searches per thread", "To run searches at once", "Cover every open thread in each round", "all the wordings of one question", "stops when wordings stop finding pages", "fewer than 15 pages", "choir.Search(query, true)", "next round of searches", "start a search with choir.SearchStart(query) and read it with", "what the host's search covered", "The host searched this computer's corpus", "ran in part"} {
 		if strings.Contains(flat, absent) {
 			t.Errorf("research prompt still says %q", absent)
 		}

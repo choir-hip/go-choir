@@ -102,3 +102,77 @@ func (h *ObjectGraphHandler) HandleSearchLeadsTried(w http.ResponseWriter, r *ht
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"marked": n})
 }
+
+// HandleSearchLeadsByCapture handles POST /internal/platform/search-leads/by-capture:
+// for named captures, the conversations whose searches returned the lead each
+// capture's page came from. It returns conversation ids only, never a lead.
+func (h *ObjectGraphHandler) HandleSearchLeadsByCapture(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	var req struct {
+		OwnerID    string   `json:"owner_id"`
+		ComputerID string   `json:"computer_id"`
+		CaptureIDs []string `json:"capture_ids"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if len(req.CaptureIDs) > searchLeadMaxURLs {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("too many capture ids: at most %d per call", searchLeadMaxURLs)})
+		return
+	}
+	for _, id := range req.CaptureIDs {
+		if utf8.RuneCountInString(id) > searchLeadCaptureIDRunes {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: fmt.Sprintf("capture id too long: at most %d characters", searchLeadCaptureIDRunes)})
+			return
+		}
+	}
+	if !h.searchLeadsGate(w, r, req.OwnerID, req.ComputerID) {
+		return
+	}
+	got, err := h.captureIndex.SearchLeadConversationsByCapture(r.Context(), req.OwnerID, req.ComputerID, req.CaptureIDs)
+	if err != nil {
+		searchLeadsFailure(w, "lead_by_capture", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"conversations": got})
+}
+
+// HandleSearchLeadsByConversation handles POST /internal/platform/search-leads/by-conversation:
+// the pages read from leads a conversation's searches returned (capture id,
+// URL, title), so a story's later research starts from what earlier runs read.
+func (h *ObjectGraphHandler) HandleSearchLeadsByConversation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	var req struct {
+		OwnerID        string `json:"owner_id"`
+		ComputerID     string `json:"computer_id"`
+		ConversationID string `json:"conversation_id"`
+		Limit          int    `json:"limit"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if utf8.RuneCountInString(req.ConversationID) > searchLeadConvRunes {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "conversation_id too long"})
+		return
+	}
+	if req.Limit <= 0 || req.Limit > searchLeadMaxResults {
+		req.Limit = searchLeadMaxResults
+	}
+	if !h.searchLeadsGate(w, r, req.OwnerID, req.ComputerID) {
+		return
+	}
+	pages, err := h.captureIndex.SearchLeadPagesOfConversation(r.Context(), req.OwnerID, req.ComputerID, req.ConversationID, req.Limit)
+	if err != nil {
+		searchLeadsFailure(w, "lead_by_conversation", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"pages": pages})
+}

@@ -692,7 +692,7 @@ func TestTaskStoryOpenNeedsTheLibraryHead(t *testing.T) {
 		if readFirst {
 			cell += "p, _ := choir.Stories(50, \"\")\nfmt.Println(\"stories\", len(p.Stories))\n"
 		}
-		return cell + `choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
+		return cell + `choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "main_point": "A sentence long enough to be the main point", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
 choir.Done("opened the strike story")`
 	}
 	run := func(task types.ManagementTask, cell string) types.ManagementTask {

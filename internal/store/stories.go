@@ -30,6 +30,12 @@ type StorySummary struct {
 	// story opens with is 1.
 	Version    int    `json:"version"`
 	RevisionID string `json:"revision_id,omitempty"`
+	// MainPoint and Succeeds are the story's main point and the document it
+	// succeeds, written once into the trajectory's subject refs at open by
+	// management's opening Cast and never again; "" for a story opened before
+	// the main-point judgment (its headline and lede stand in).
+	MainPoint string `json:"main_point,omitempty"`
+	Succeeds  string `json:"succeeds,omitempty"`
 }
 
 // storyLedeMaxRunes bounds a lede.
@@ -96,6 +102,7 @@ func (s *Store) StorySummariesOf(ctx context.Context, docs []types.Document) []S
 	out := make([]StorySummary, len(docs))
 	for i, doc := range docs {
 		out[i] = StorySummary{DocID: doc.DocID, TrajectoryID: doc.TrajectoryID, Headline: doc.Title, UpdatedAt: doc.UpdatedAt, RevisionID: doc.CurrentRevisionID}
+		out[i].MainPoint, out[i].Succeeds = s.storyPointOf(ctx, doc.OwnerID, doc.ComputerID, doc.TrajectoryID)
 		if e := entries[i]; e != nil {
 			out[i].Version = types.RevisionNumber(e.version)
 			out[i].Lede = StoryLede(e.content)
@@ -109,6 +116,9 @@ func (s *Store) StorySummariesOf(ctx context.Context, docs []types.Document) []S
 type storyKindCache struct {
 	mu    sync.Mutex
 	kinds map[string]types.TrajectoryKind
+	// points keeps each trajectory's main point and successor ref, written once
+	// at open and never changed, read with the kind.
+	points map[string][2]string
 	// reads counts trajectories read to fill the cache.
 	reads atomic.Uint64
 }
@@ -131,8 +141,38 @@ func (s *Store) storyTrajectoryKind(ctx context.Context, ownerID, computerID, tr
 		s.storyKinds.kinds = map[string]types.TrajectoryKind{}
 	}
 	s.storyKinds.kinds[key] = trajectory.Kind
+	if s.storyKinds.points == nil {
+		s.storyKinds.points = map[string][2]string{}
+	}
+	s.storyKinds.points[key] = [2]string{trajectory.SubjectRefs[types.StoryRefMainPoint], trajectory.SubjectRefs[types.StoryRefSucceeds]}
 	s.storyKinds.mu.Unlock()
 	return trajectory.Kind, nil
+}
+
+// StoryPointOf is a story document's main point and the document it succeeds,
+// read from its trajectory ("" for each when it has none or cannot be read).
+func (s *Store) StoryPointOf(ctx context.Context, ownerID, computerID, docID string) (mainPoint, succeeds string) {
+	doc, err := s.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	if err != nil {
+		return "", ""
+	}
+	return s.storyPointOf(ctx, ownerID, computerID, doc.TrajectoryID)
+}
+
+// storyPointOf is a story trajectory's main point and the document it
+// succeeds ("" for each when the story was opened without them, or the
+// trajectory cannot be read).
+func (s *Store) storyPointOf(ctx context.Context, ownerID, computerID, trajectoryID string) (mainPoint, succeeds string) {
+	if strings.TrimSpace(trajectoryID) == "" || strings.TrimSpace(computerID) == "" {
+		return "", ""
+	}
+	if _, err := s.storyTrajectoryKind(ctx, ownerID, computerID, trajectoryID); err != nil {
+		return "", ""
+	}
+	s.storyKinds.mu.Lock()
+	defer s.storyKinds.mu.Unlock()
+	p := s.storyKinds.points[ownerID+"\x00"+computerID+"\x00"+trajectoryID]
+	return p[0], p[1]
 }
 
 // warmStoryKinds reads the kinds of the listed documents' trajectories a few

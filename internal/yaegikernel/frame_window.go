@@ -192,6 +192,7 @@ func WindowUpdates(updates []PendingUpdate, budget int) (kept []PendingUpdate, r
 // fit: it returns an error having written nothing, so the worker is not
 // poisoned by the failed write.
 func fitFrame(frame SessionFrame) ([]byte, SessionFrame, error) {
+	frame = boundSearchState(frame)
 	limit := MaxFramePayload - frameHeadroom
 	raw, err := json.Marshal(frame)
 	if err != nil {
@@ -301,4 +302,32 @@ func fitFrame(frame SessionFrame) ([]byte, SessionFrame, error) {
 		return nil, frame, fmt.Errorf("desk eval frame is %d bytes with no backlog, over the %d bound: the document, pack or analysis alone does not fit", len(raw), MaxFramePayload)
 	}
 	return raw, frame, nil
+}
+
+// The most the frame carries of the read-first rule's state: the run's brief
+// pages, and the research tree's tried pages (the most recent kept).
+// A run reads tens of pages, so these are far above use; they keep a runaway
+// tree from failing every cell with the frame bound.
+const (
+	frameHeldMax      = 200
+	frameTreeTriedMax = 2000
+)
+
+// boundSearchState returns the frame with Held and Tree cut to their maxima.
+func boundSearchState(frame SessionFrame) SessionFrame {
+	if len(frame.Held) > frameHeldMax {
+		frame.Held = append([]HeldPage(nil), frame.Held[:frameHeldMax]...)
+	}
+	frame.Tree = BoundTree(frame.Tree)
+	return frame
+}
+
+// BoundTree returns the tree state with Tried cut to its most recent
+// frameTreeTriedMax pages (the frame and the host's probe answer both use it);
+// the argument is not changed.
+func BoundTree(t *TreeState) *TreeState {
+	if t == nil || len(t.Tried) <= frameTreeTriedMax {
+		return t
+	}
+	return &TreeState{Tried: append([]string(nil), t.Tried[len(t.Tried)-frameTreeTriedMax:]...)}
 }

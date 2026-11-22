@@ -166,8 +166,13 @@ func (s *Store) planStoryOpenBatch(ctx context.Context, openings []storyOpening,
 		if o.cast.Directive != nil {
 			objective = o.cast.Directive.Objective
 		}
+		var mainPoint, succeeds string
+		if o.cast.Cast != nil {
+			mainPoint = strings.TrimSpace(o.cast.Cast.MainPoint)
+			succeeds = strings.TrimPrefix(strings.TrimSpace(o.cast.Cast.Succeeds), deskmanifest.DocumentCustodianName()+":")
+		}
 		row, cond, err := storyIndexObject(ownerID, computerID, storyIndexRowKey(o.docID), types.StoryIndexEntry{
-			DocID: o.docID, TrajectoryID: o.trajectoryID, RevisionID: o.seedID, Headline: storyTitle(objective), Version: 1, UpdatedAt: now,
+			DocID: o.docID, TrajectoryID: o.trajectoryID, RevisionID: o.seedID, Headline: storyTitle(objective), MainPoint: mainPoint, Succeeds: succeeds, Version: 1, UpdatedAt: now,
 		}, nil, now)
 		if err != nil {
 			return nil, nil, nil, err
@@ -200,6 +205,14 @@ func planStoryObjects(ownerID, computerID, docID, trajectoryID, seedID string, c
 	}
 	if cast.Cast != nil && cast.Cast.Publish == types.CastPublishAuto {
 		subjectRefs[types.StoryRefPublish] = types.CastPublishAuto
+	}
+	if cast.Cast != nil {
+		if mp := strings.TrimSpace(cast.Cast.MainPoint); mp != "" {
+			subjectRefs[types.StoryRefMainPoint] = mp
+		}
+		if su := strings.TrimPrefix(strings.TrimSpace(cast.Cast.Succeeds), deskmanifest.DocumentCustodianName()+":"); su != "" {
+			subjectRefs[types.StoryRefSucceeds] = su
+		}
 	}
 	rule := types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}}
 	if err := validateLifecycleSettlementRule(rule, subjectRefs); err != nil {

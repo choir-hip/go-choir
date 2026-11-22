@@ -31,6 +31,15 @@ type SessionFrame struct {
 	// RunID names the run this cell belongs to. A desk session persists
 	// across runs; the read ledger is per run and resets when RunID changes.
 	RunID string `json:"run_id,omitempty"`
+	// Held carries the pages the paper already held for this run (the corpus
+	// brief's captures): the run's search zero, read before it searches the web
+	// (search_need.go).
+	Held []HeldPage `json:"held,omitempty"`
+	// Tree is what the whole research tree (the root run and every
+	// choir.Research child, which share the run id) has TRIED, kept by the host:
+	// a page any session of the tree tried is tried for this one. Only tried pages
+	// are shared; a session's window is its own searches' pages (search_need.go).
+	Tree *TreeState `json:"tree,omitempty"`
 
 	// Doc carries the cell-start document snapshot for a texture desk cell
 	// (R3d): the bound doc's current revision id + content, so the cell

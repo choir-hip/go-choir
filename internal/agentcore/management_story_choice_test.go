@@ -1,11 +1,15 @@
 package agentcore
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -37,10 +41,10 @@ func TestStoriesShownCountsPerRunAndIsForgotten(t *testing.T) {
 }
 
 func TestManagementStoryChoiceLine(t *testing.T) {
-	if got := managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{}); got != "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=- page_in_window=0 page_left_out=0 offered=- verdicts=-" {
+	if got := managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{}); got != "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=- page_in_window=0 page_left_out=0 offered=- answers=- captures=0 sources=near:0,lead:0 main_point=0 succeeds=-" {
 		t.Fatalf("feed line = %q", got)
 	}
-	if got := managementStoryChoiceLine("run-9", "open", "", 0, 0, choiceDetail{}); got != "management story choice run=run-9 choice=open story=- opening_shown=0 verb_shown=0 candidates_shown=0 window=- page_in_window=0 page_left_out=0 offered=- verdicts=-" {
+	if got := managementStoryChoiceLine("run-9", "open", "", 0, 0, choiceDetail{}); got != "management story choice run=run-9 choice=open story=- opening_shown=0 verb_shown=0 candidates_shown=0 window=- page_in_window=0 page_left_out=0 offered=- answers=- captures=0 sources=near:0,lead:0 main_point=0 succeeds=-" {
 		t.Fatalf("open line = %q", got)
 	}
 }
@@ -81,5 +85,82 @@ func TestStoriesCursorFitsTheBrokerBound(t *testing.T) {
 	junk, _ := json.Marshal(yaegikernel.StoriesPayload{Before: strings.Repeat("x", yaegikernel.MaxStoriesBeforeBytes+1)})
 	if yaegikernel.ValidatePayload(yaegikernel.ActionStories, junk) == nil {
 		t.Error("an oversize before was accepted")
+	}
+}
+
+// Each Cast a story's Texture sends to its research desk leaves one line with
+// its cause decided at the source; nothing else does (another desk's Cast, a
+// Cast to another inbox). A successor is a first round of a story whose
+// trajectory names a succeeds ref.
+func TestStoryResearchCastLineCarriesItsCauseAtTheSource(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer := "owner-research-cause", rt.cfg.ComputerID
+	t0 := time.Now().UTC().Add(-time.Hour)
+	plain := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Plain story", "Whether the plain thing happens at all", "", []string{"c1"}, t0)
+	succ := openStoryOf(t, s, owner, computer, "cell-2:cast:c1", "Next story", "What the plain thing led to afterwards", "texture:"+plain, []string{"c2"}, t0)
+	var out strings.Builder
+	prev := log.Writer()
+	log.SetOutput(&out)
+	defer log.SetOutput(prev)
+	rec := func(inbox string, opened bool, round int) types.InboxRecordReceipt {
+		return types.InboxRecordReceipt{Inbox: inbox, OpenedRound: opened, Round: round}
+	}
+	ctx := context.Background()
+	tex := deskmanifest.DocumentCustodianName()
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec(deskmanifest.ResearchInbox(plain), true, 1))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec(deskmanifest.ResearchInbox(succ), true, 1))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec(deskmanifest.ResearchInbox(plain), true, 3))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec(deskmanifest.ResearchInbox(plain), false, 3))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec("management:o", true, 1))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-m", "management", rec(deskmanifest.ResearchInbox(plain), true, 1))
+	lines := []string{}
+	for _, l := range strings.Split(out.String(), "\n") {
+		if i := strings.Index(l, "story research cast"); i >= 0 {
+			lines = append(lines, l[i:])
+		}
+	}
+	want := []string{
+		"story research cast run=run-t story=" + plain + " round=1 opened=true cause=open",
+		"story research cast run=run-t story=" + succ + " round=1 opened=true cause=successor",
+		"story research cast run=run-t story=" + plain + " round=3 opened=true cause=feed",
+		"story research cast run=run-t story=" + plain + " round=3 opened=false cause=continue",
+	}
+	if strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Fatalf("lines = %q\nwant   %q", lines, want)
+	}
+}
+
+// A feed sent as a Cast (choir.Cast("texture:<doc>", ...)) carries its captures
+// in the spec, not in the intent's Captures: the line counts them from the
+// packet, and names the candidates offered for them (review round 3, finding 2:
+// it logged captures=0 and every candidate).
+func TestFeedSentAsACastLogsItsCapturesFromThePacket(t *testing.T) {
+	rt := &Runtime{}
+	rt.noteOpeningOffer("run-f", &openingOffer{
+		ByCapture: map[string][]string{"c1": {"docA"}, "c2": {"docA", "docB"}, "c9": {"docZ"}},
+		Found:     map[string]map[string][]string{"c1": {"docA": {"near:1"}}, "c2": {"docA": {"lead"}}},
+	})
+	var out strings.Builder
+	prev := log.Writer()
+	log.SetOutput(&out)
+	defer log.SetOutput(prev)
+	rec := types.InboxRecordReceipt{Inbox: deskmanifest.DocumentInbox("docA")}
+	rt.logManagementStoryChoice("run-f", deskmanifest.AdmitterName(), rec, yaegikernel.StagedIntent{
+		Kind: yaegikernel.IntentCast, ToDesk: deskmanifest.DocumentInbox("docA"), Statement: `{"captures":["c1","c2"]}`})
+	line := out.String()
+	for _, want := range []string{"choice=feed", "story=docA", "captures=2", "offered=docA,docB", "sources=near:1,lead:1"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("a feed sent as a Cast: the line lacks %q: %q", want, line)
+		}
+	}
+	if strings.Contains(line, "docZ") {
+		t.Errorf("a candidate offered for a capture the feed does not name is in the line: %q", line)
+	}
+	// choir.Feed carries its captures on the intent and no packet.
+	out.Reset()
+	rt.logManagementStoryChoice("run-f", deskmanifest.AdmitterName(), rec, yaegikernel.StagedIntent{
+		Kind: yaegikernel.IntentFeed, Captures: []string{"c1"}})
+	if !strings.Contains(out.String(), "captures=1") {
+		t.Errorf("a Feed verb's captures are not counted: %q", out.String())
 	}
 }

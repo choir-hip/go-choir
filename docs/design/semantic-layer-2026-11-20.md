@@ -233,6 +233,121 @@ arrival by source. Then the duplicates method re-run on one day's opens by a
 reader who did not build A (C-A1). Numbers the author cannot write: the
 console's lines and the second reader's labels.
 
+**Where the code won, 2026-11-21 (built in lane `story-main-point`).**
+
+- Candidates are up to 12 per capture, not 6 (the task brief), ranked by nearest
+  captures held, then version (the context a trajectory has accumulated: owner,
+  2026-11-21, "the more that we send a capture to existing trajectories with
+  accumulated context, the better"), then newest. Entities are not a source:
+  captures carry none (design, Entities above).
+- `StorySummary.MainPoint` and `Succeeds` come from the trajectory through the
+  kind cache that already reads each trajectory once; the story index row
+  carries them too, so a reconcile does not erase them.
+- The decline is logged as a choice line (`choice=decline`), so the status
+  script counts every disposition; an open's extra captures are the
+  "same as another capture in this batch" answer (one Cast, one story, one
+  trajectory), derived from the line, not a field a model writes.
+- The host does not decide whether Texture starts a research run on a feed:
+  that is Texture's turn (`textureprompts/texture.yaml`, "Dispatch in the same
+  cell"). A Texture prompt line now tells it to read a fed capture and revise
+  before it casts research. The host cannot hand a successor its
+  predecessor's pages: the research brief's threads come from Texture's research
+  Cast, not the opening Cast, so the `succeeds` ref and the prompt line are what
+  a successor has. Both are bets, not mechanisms (C-A2 below).
+- The built task prompt held its bound only after cutting 190 characters of
+  older overlay text (the bound is on the overlay body; this section added
+  about 1,000).
+
+**Second commit, 2026-11-21: the research trajectory (owner: "every capture
+doesnt need to be its own trajectory ... we should be sending captures to
+existing trajectories, and clustering overlapping captures in the same
+trajectory").** What the code kept: a story has one research agent inbox
+(`research:<doc>`) and one conversation with its Texture, but every Texture Cast
+to research opens a new round and wakes a NEW run with a fresh session and a
+fresh corpus brief built from the Cast's objective alone
+(`agentcore/research_brief.go:795`, `runtime.go` `executeWithToolLoop`). A page an
+earlier run read survived only as a capture in corpusd and as a search lead
+marked tried with its capture. Nothing carried it into the next run, and a fed
+capture reached the story as a record that nothing required be read. Built,
+host-side, no model call (`agentcore/story_research_context.go`):
+
+- A research run on a story gets a section beside the brief: the pages its
+  earlier runs read (leads of its conversation, new route
+  `POST /internal/platform/search-leads/by-conversation`), the captures it holds
+  (opened with or fed), the outlets those hold, the captures fed since its last
+  research round, and, through the `succeeds` ref, the same for its predecessor
+  with its main point. `storyPages` returns the pages in the shape of the
+  read-first lane's `HeldPage` (same fields); adopting that lane is one call,
+  `rt.noteBriefHeld(runID, pages)`, once it is on main. I did not edit its files.
+- A research Cast from a story's Texture is refused while captures fed since its
+  last research Cast are unread by it (`requireFedCapturesRead`, called from
+  `rlm_reduce.go` `commitTray`, after the Texture's dispatches are folded into its
+  turn and before anything commits; see the third note below), naming the captures to read;
+  a read counts when asked, refused or not, so no deadlock. A story with no
+  earlier research is never refused. Counted by `story research refused`.
+- Where the design did not foresee: the web searches are run by research
+  children, which have `ChannelID == ""` (`research_children.go` `runResearchChildWork`),
+  so their search leads carried no story; the lineage now carries the story's
+  channel and `leadConversationOf` files the leads under it. Leads written
+  before this change have no story, so the by-conversation read finds only the
+  pages read after deploy. The Texture-read marks are in memory, so a restart
+  asks one re-read, never a missed one. No schema change, no Texture canonical
+  record.
+
+**Third note, 2026-11-21: the review of 9630efefe, and what it found.** One seat
+accepted; the other sent it back, correctly. The refusal and the research-Cast
+log had been written on the records route (`commitRecordsRoute`), which a
+Texture run never takes: its Casts are folded into its `TextureTurn` first
+(`rlm_reduce.go` `commitTray`, `texture_dispatch_fold.go`) and commit through
+`ApplyTextureTurn`. They were dead code for the one desk they were for, and the
+tests that called them directly could not fail; so the status script's research
+numbers would have read 0 on the paper. Fixed on the real path: `commitTray`
+runs `requireFedCapturesRead` for a folded Cast or Ask whose resolved inbox is a
+research inbox, before the fold commits, and the refusal reaches the cell as its
+error ("nothing was sent"); the textureowner committer's receipt now names the
+records its turn sent with their round and whether each opened it
+(`inbox_records`), and `commitTextureAuthorIntent` logs each research Cast from
+it (a replayed turn names none). The proof is
+`TestTextureResearchCastIsGatedLoggedAndFollowedByContextOnTheRealFold`, through a
+real cell, the real fold and the store's records commit, with
+`TestTurnReceiptNamesTheInboxRecordsItSent` for the committer's half. Also: a
+feed sent as a Cast logs its captures from the spec (it logged `captures=0`); an
+empty or non-JSON open is a missing main point (it opened a story with neither);
+the by-conversation read uses array containment served by a new partial GIN index
+`idx_sl_conv` (measured on the paper, read only: 94,308 rows, 6,815 with a
+capture; the read 29.7 ms by sequential scan, 0.23 ms with the index; the
+build 49 ms, 136 kB, a SHARE lock for that long, once) and logs a timeout when
+it misses its 3 s; the context's page budget is shared (the story's own
+captures keep half before leads fill the rest, a predecessor takes 20 pages,
+URLs clipped to 200 characters, the whole section built within 10 s); a lead
+counts as one near capture in a candidate's rank; and the status script prints
+the share of opens with a main point and of opens that answered every candidate.
+Left as they are: an owner's research button and the entity backfill write their
+own Casts directly (`store/story_research_request.go`); they are owner acts, not
+gated and not counted, and the script says so.
+
+**Fourth note, 2026-11-21: the second read of a0a8ba96b (accept, two High risks
+decided).** A research refusal no longer discards the tray: `dropResearchUntilRead`
+(`rlm_reduce.go`, before the fold) takes only the research Cast/Ask out, the
+rest of the turn (a page Write, Done, Wait) commits, and the cell's result
+carries `research_not_sent` saying the page was written at revision N and the
+Cast was NOT sent, naming the captures to read. A cell with no turn to commit
+without its Cast is refused whole and says "nothing was committed". The trigger
+is consumed by the turn the rest made (the dropped Cast is not noted as an
+applied act). Where a whole-tray refusal leaves a fed record unread, the
+controller can wake the Texture again; the worst case is bounded by
+`storyResearchRefusalLimit` (3): the same unread set is refused three times and
+then released with a `story research gate released` line. A store error in the
+gate still fails open and is logged as `story research gate skipped`; both are
+counted by `scripts/status-story-choice`. The test of the replay branch found a
+real defect: a replayed turn's receipt was the stored one, records and all, so
+the runtime would have logged its research Cast twice; a replay now names none.
+
+**Claim C-A2.** Research rounds per capture fall: `story research cast` lines
+per decision on the paper, first full UTC day after A against the 0.68 research
+briefs per decision seen on 2026-11-21 05Z to 07Z (77 runs, 114 decisions).
+p 0.4.
+
 **Claim.** C-A1: on the first full UTC day after A, opened stories that a
 reader who did not build A judges to serve the main point of a story already
 held are at most 8% of opens (from 17.4% exact duplicates, and 24.2% second or
@@ -396,6 +511,131 @@ deployed, one full UTC day has fewer than 1,000 web searches with stories first
 published not more than 10% lower. p 0.20. C-B3: after B, under 10% of later
 searches are sent with no page read since the previous one (from 44%). p 0.70.
 Settle each by its deploy plus 2 days.
+
+### 4.6 As built, 2026-11-21: where the code differs from 4.2 to 4.5
+
+Built in lane `search-read-first`; the code wins where it differs.
+
+- **Rule 1 has no "or an outlet new to the story".** The guest does not know the
+  story's outlets, so the alternative cannot be tested there. The rule is only:
+  the top 5 pages new to the run of every earlier search are tried (fewer when
+  fewer came back). It is stricter than 4.2, in the direction of the owner's
+  ruling ("reading much more and searching less").
+- **No new event kinds, and no standalone decision event.** `search.decision`
+  and `search.result` are not new `EventKind`s (each would need rows in the
+  storage, durability and sealer tables, which is its own red change), and a
+  standalone event before every stream would undo the journal cut R4 (one
+  durable record per cell; the test `TestDeskCellAndEgressRecordRunEvents`
+  holds it). The decision is `decision` on the `search_start` row of the cell's
+  `desk.cell` event, taken from the guest's payload before `client.Stream` opens
+  (`agentcore/search_decision.go`, `searchDecisionOf`, called in the egress
+  handler of `tools_desk.go` before `startSearch`); the result is the existing
+  standalone `search_done` event with `pages_returned`. The decision is the
+  counts at the moment of the send, so it cannot count its own results; it is
+  not written before the stream in time (a crash between the stream and the end
+  of the cell loses it with the row). "Pages new to the corpus" and "outlets new
+  to the story" are not recorded: the leads are written after the stream ends
+  and the guest does not know the story's outlets.
+- **The need state is the guest's own report**, in `SearchStartPayload`
+  (`verb`, `earlier`, `returned`, `tried`, `read`, `outlets`, `held_brief`,
+  `held_tried`, `fresh_why`). It is a record, not a gate: the gate is the guest's
+  refusal.
+- **`SearchAll` sends one wording per call as a consequence, not a special case**:
+  after the first wording is sent its top pages are untried, so the next wording
+  of the same call is refused (`read_first`, one count for the call).
+- **Search zero** is the brief's captures in the brief's own order (top 5), handed
+  to the run's cells in `SessionFrame.Held` from the brief result
+  (`researchBriefResult.held`), kept per run in `Runtime.briefHeld` and
+  forgotten when the run ends.
+- **`SearchFresh(query, why)`** needs a reason of at least 20 characters and
+  overrides every refusal, including the running rule. `Search(q, true)` and
+  `SearchStart(q, true)` keep their signature so an old cell gets the message
+  instead of a compile error. The refusal reasons counted on the run line are
+  `read_first`, `held_first`, `site_held`, `fresh_arg`, `fresh_why`; `fresh_sent`
+  replaces `fresh_over_unread`. `refuseForUnread`, `searchEnoughUnread` and
+  `unreadRefusal` are deleted; `mostly_seen` is kept (it holds a wording once the
+  web has shown what it has).
+- **The 7-or-more tail.** The rule makes a run's 7th search cost the reading of
+  the top 5 pages of each of the six of its own before it (30 pages), and the stop rule in
+  the prompt says to report once a second independent outlet is read. Nothing
+  forces a stop, by design (no quota): a run that reads and still lacks something
+  sends the search, and one that disagrees with the held pages says so in a
+  recorded `SearchFresh` reason. If the tail persists with reasons, the prompt's
+  stop test is not enough (section 7); `scripts/status-search-reads` prints the
+  tail (runs with 7 or more, their share of searches) and the `SearchFresh`
+  count.
+- **Follow-ups after review (2026-11-21).** A brief page is listed in the refusal
+  with its capture id (`SearchHit.CaptureID`) and `choir.ReadCapture(id)` clears it with
+  no web fetch; every read is an attempt recorded BEFORE the call (`Read`,
+  `ReadAll`, `ReadCapture` of a held page), so a hung read or a deleted capture
+  releases the page. A `site:` hunt looks only at the same top-5 window as the
+  rest of the rule; a term naming a subdomain matches that host and its
+  subdomains, a term naming a registrable domain matches its hosts, and a page of
+  an aggregator host (a short list in `search_need.go`; none existed before)
+  never counts as the outlet. The refusal lists the pages, then the exception
+  ("Only if none of these pages can bear on what you lack: SearchFresh"). A
+  `SearchFresh` send writes `runtime: search fresh run= why_len= why_hash=` on the
+  console (the reason itself stays on the tape row: it is the run's own sentence
+  and can carry a query), so the proof script counts reasons by distinct hash. `choirFunctionDocs` Args keep
+  `fresh` because the signature keeps the variadic argument (it is refused with a
+  pointer, and the surface test requires docs to equal the source).
+- **The research tree shares what has been tried, not what has been returned
+  (seat 2 H1, then the lead, 2026-11-21).** Each `choir.Research` child is a
+  session with its own guest store, but it shares the root's run id. The host
+  (`agentcore/search_decision.go`, `treeRead`) sees every read of the tree before
+  it is served (`Read`, `ReadAll`, `ReadCapture` of a held page by id) and hands
+  each cell's frame `SessionFrame.Tree`: the pages any session tried. The guest
+  merges them into its tried set, so a page anyone read or attempted is never
+  demanded of anyone again (parent plus four children no longer read the same
+  five pages five times). When the guest would refuse a search for untried
+  pages it first asks the host once (a `search_start` with `probe`: it starts no
+  search and writes no row) and judges again against the tree as it stands now,
+  so a sibling's read during the cell releases it and the refusal names the
+  current untried pages. A session's window is its OWN: its own searches' first
+  five new pages, and, for the root session only, the brief's pages. No sibling's
+  or parent's search pages are demanded of a child (the first version put every
+  session's top five into every gate: fan-out children have different objectives,
+  so a child was held by five pages that did not bear on its question, and the
+  escape, `SearchFresh`, whose condition is then true by construction, would have
+  become the normal path of the `research_web` children, which are the volume). A
+  page a sibling returned that this session's own search returns again is in its
+  window like any of its results; once anyone tries it, it clears for all. The
+  brief's pages are the root's: its text is delivered to the root run, a child is
+  handed an objective and nothing of the brief, so a child's frame carries no
+  `Held` (the host gives `Held` to a session with a `RunRecord`, the root's, and
+  not to a child's). Consequence, stated plainly: parent plus its children with
+  nothing read may each send their FIRST search (one `choir.Research` call may
+  spawn up to `MaxResearchChildren` = 16, so up to seventeen first searches); the
+  saving is that no branch sends a second search without reading what its own
+  first returned. The run summary line is per root run and now carries
+  `children=` and `started_<desk>=` (research, research_web) so the deployed
+  reading shows where a run's searches come from; the proof script prints
+  searches by desk. A page is one page whatever its scheme or `www.`. The probe's
+  answer is bounded as the frame is (the most recent 2,000 tried pages).
+- **A story's pages are the front of search zero (lead's handover,
+  2026-11-21).** The pages a story's research context lists (earlier runs'
+  reads, the captures the story holds, its predecessor's;
+  `story_research_context.go`) are held pages of the root session exactly like
+  the brief's: `noteStoryHeld` puts them in front of the brief's in the run's one
+  search zero, each page once. The rule demands the FIRST FIVE of that one list,
+  the same five it demands of any search (the section lists up to 40 so the model
+  sees what the story holds; it is not required to read all of them), so a
+  research run on a story tries the story's newest fed captures before its first
+  web search, by `choir.ReadCapture(capture_id, 0, 0)` with no web fetch; an
+  attempt counts. A page whose URL the store did not return is listed in the
+  section but is not a held page (the rule keys a page by its URL). A child is
+  handed none of it.
+- **A planned restart loosens the gate (residual, stated).** The tree's tried set
+  and the brief's pages are in memory (`treeRead`, `briefHeld`), not rebuilt from
+  the journal: a run a planned restart resumes once begins with an empty gate, so
+  it can send a search its first segment's reads and pages would have held. It
+  only loosens, and the host logs `search gate state lost at resume run=` when a
+  tree opens for a run that began before the boot; the proof script counts those
+  runs. A closed run's tree is not reopened by a late cell.
+- **The decision's `earlier_pages_new`** (renamed from `pages_returned`, which
+  meant the earlier searches' new pages) is not `search_done`'s `pages_returned`
+  (this search's own results).
+- **Deployed proof:** `scripts/status-search-reads --since T`.
 
 ---
 

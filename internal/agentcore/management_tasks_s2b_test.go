@@ -176,7 +176,7 @@ func TestConcurrentTasksOpenOneStoryForOneEvent(t *testing.T) {
 			if !barrier.arrive(20 * time.Second) {
 				return "", false
 			}
-			return leased + `choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
+			return leased + `choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "main_point": "A sentence long enough to be the main point", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
 choir.Done("opened the strike story")`, true
 		case 2:
 			if !strings.Contains(last, "story library moved") {
@@ -258,7 +258,7 @@ func TestATaskOpensTwoStoriesWithoutRefusingItself(t *testing.T) {
 for _, r := range choir.Records() { if r.Captures != nil { ids = append(ids, r.RecordID) } }
 choir.Delegate("intake", ids, []any{ids})`}
 	open := func(capture, headline string) string {
-		return `choir.Cast("texture:new", "` + headline + `", map[string]any{"captures": []string{"` + capture + `"}, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "it matters", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`
+		return `choir.Cast("texture:new", "` + headline + `", map[string]any{"captures": []string{"` + capture + `"}, "publish": "auto", "main_point": "A sentence long enough to be the main point", "hypotheses": []any{map[string]any{"statement": "it matters", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`
 	}
 	model.taskCell = func(step int, _ string) (string, bool) {
 		switch step {

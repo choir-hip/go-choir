@@ -69,6 +69,8 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 			return "", err
 		}
 		h.recordCellAuthorReceipt(ctx, rec, revisionIdentity, receipt)
+	} else {
+		receipt = replayedReceipt(receipt)
 	}
 	// The backstop runs on a replay too: an Idle turn whose request close
 	// failed after the turn committed closes it on the retry.
@@ -85,6 +87,23 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 		}
 	}
 	return receipt, nil
+}
+
+// replayedReceipt is a turn's stored receipt as a replay answers it: it says it
+// is one and names no records, which were named when the turn first committed
+// (the runtime logs a research Cast once).
+func replayedReceipt(receipt string) string {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal([]byte(receipt), &fields) != nil {
+		return receipt
+	}
+	delete(fields, "inbox_records")
+	fields["replay"] = json.RawMessage("true")
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return receipt
+	}
+	return string(out)
 }
 
 // textureTurnDocID is the document a Texture run's turn commits on.
@@ -254,10 +273,21 @@ func (h *Handler) commitTextureTurn(ctx context.Context, rec *types.RunRecord, t
 		out, _ := json.Marshal(map[string]any{
 			"turn": string(result.TextureTurn.Outcome), "doc_id": docID, "head_revision_id": result.TextureTurn.HeadRevisionID,
 			"command_id": result.Receipt.CommandID, "replay": result.Replay, "done": turn.Done != "",
+			"inbox_records": sentRecords(result),
 		})
 		return string(out), nil
 	}
 	return h.commitTextureWrite(ctx, rec, doc, mutation, turn, args, reason, durableLifecycle)
+}
+
+// sentRecords are the records a turn's transaction sent, each with the round it
+// opened, for the committer's receipt. A replayed turn names none: its records
+// were named when it first committed.
+func sentRecords(result types.LifecycleResult) []types.InboxRecordReceipt {
+	if result.Replay || result.TextureTurn == nil {
+		return nil
+	}
+	return result.TextureTurn.InboxRecords
 }
 
 // writeChangesNothing reports a Write whose result reads and cites exactly as
@@ -425,6 +455,7 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	if err != nil {
 		return "", fmt.Errorf("build Texture source graph: %w", err)
 	}
+	var sent []types.InboxRecordReceipt
 	if strings.TrimSpace(doc.TrajectoryID) != "" {
 		// A turn on records has no work item (Cut 1); the caller agent and
 		// run authorize it, and the store checks a named work item.
@@ -454,6 +485,7 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 			}
 			return "", fmt.Errorf("apply atomic Texture turn: %w", applyErr)
 		}
+		sent = sentRecords(applied)
 		h.recordTextureAudit(ctx, "revision_committed", rec.OwnerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, rev.RevisionID, applied.Receipt.CommandID, applied.Receipt.CommandDigest, applied.Trajectory.LifecycleVersion)
 		h.emitUpdateFinished(ctx, rec.OwnerID, doc, baseRev, rev.RevisionID)
 		// The commit listed its new citation pairs; Jev judges them off
@@ -502,6 +534,9 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 		"turn": string(types.TextureTurnRevision), "doc_id": stored.DocID, "revision_id": stored.RevisionID,
 		"base_revision_id": stored.ParentRevisionID, "trajectory_id": stored.TrajectoryID,
 		"dropped_citations": len(result.Dropped), "done": turn.Done != "",
+		// The records the turn sent, each with the round it opened: the
+		// runtime logs a story's Casts to research from them.
+		"inbox_records": sent,
 	}
 	if publishHeld != "" {
 		committed["publish_held"] = "not published: " + publishHeld

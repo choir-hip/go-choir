@@ -215,6 +215,7 @@ var actionPayloads = map[BrokerAction]any{
 // payloadBounds or payloadListBounds. A field in neither fails
 // TestEveryPayloadFieldIsBounded: "bound every field" (MA6.3).
 var boundElsewhere = map[BrokerAction]map[string]string{
+	ActionSearchStart:   {"probe": "a boolean: there is nothing to bound"},
 	ActionExec:          {"env": "structural only: no desk row serves exec on the host (FrameAllowed refuses it)"},
 	ActionWriteFile:     {"content": "structural only: no desk row serves write_file on the host"},
 	ActionResearch:      {"children": "admission: researchChildBounds per child; handler: ResearchChildrenBounds, then per child researchChildRoleOf and openChildCast"},

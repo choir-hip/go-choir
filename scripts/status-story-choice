@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""status-story-choice: per UTC hour, how the paper's management tasks chose
-between feeding a story and opening one, and whether a held story had been
-offered for the open (docs/evidence/duplicate-stories-on-the-paper-2026-11-20.md,
-options 1 and 2).
+"""status-story-choice: how the paper's management tasks chose between feeding
+a story and opening one, and what the main-point judgment did
+(docs/design/semantic-layer-2026-11-20.md, landing A): per UTC hour and for the
+window.
 
 Read only against Node B: one ssh reads the paper VM's guest console files; nothing is
 written there. fetch() returns text, compute() is pure. --fixture FILE feeds console
@@ -12,19 +12,38 @@ lines with no network (scripts/test-status-scripts.sh).
 
 T is YYYY-MM-DDTHH:MMZ; the window is [since, until). Exit 0, or 2 when the fetch failed.
 
-It reads one console line per decision, written by internal/agentcore
-management_story_choice.go:
-  management story choice run= choice=(open|feed) story= opening_shown= verb_shown=
+It reads two console lines, written by internal/agentcore management_story_choice.go:
+  management story choice run= choice=(open|feed|decline) story= opening_shown= verb_shown=
       candidates_shown= window= page_in_window= page_left_out= offered=(-|doc,doc)
-      verdicts=(-|doc:(same|follow_up|different|none),...)   none: no verdict for an offered story, which the host's check
-      refuses for a task opening, so it is expected to read 0 after the change
-and prints, per hour: decisions, opens, feeds, opens where a held story was offered,
-the verdicts of those opens (same / follow_up / different / none), decisions whose page
-left stories out, and the median page size. A line without window= is from before the
-change: it counts as a decision, and its page is the old newest-50 page.
+      answers=(-|doc:(next|new|none),...) captures=<n> sources=near:<n>,lead:<n>
+      main_point=<chars> succeeds=(-|doc)
+  story research cast run= story= round= opened= cause=   (every Cast a story's Texture sends to research,
+      logged where its turn commits; cause is open, successor, feed or continue. An owner's research
+      button and the entity backfill write their own Casts and are not counted)
+  story research refused run= story= unread=<n>   (its Cast was refused: n fed captures unread)
+  story research gate skipped|released run= story= ...   (the check failed open on a store error; or a set refused
+      its limit of times and was let through)
+and prints, per hour and for the window: decisions; captures judged; answers by kind (a
+feed is `same`; an open's first capture is `next` when it names a succeeds, else `new`, and
+its other captures are `same_as_batch`; a decline is `decline`); candidates offered by
+source (vector, entity, lead; entity is not built, captures carry none); stories opened and
+fed; successor links written; the share of opens with a main point and of opens with an offer
+that answered every candidate offered (an open from before the judgment has no main_point= and
+is in neither count); the share of captures sent to an existing trajectory; research
+runs started by cause (a story's first round after an open, after a successor's open, or a
+later round after a feed); and how many captures each trajectory took. A line from before
+the judgment has no captures= and counts one capture; so does a parent's open (captures=0).
+stories opened and fed are sets, so a replayed commit is one story there and two decisions.
 
-The console rotates at about 1 MB and keeps about 2.5 hours; a window before the oldest
-line is partial. Ids and counts only; the script prints no title.
+Reading the counts: research Casts are every Cast a story's Texture sends to research in the window, not runs confirmed started (each wakes
+the research reader; opened=true is a new round); a Cast is counted in the window of its own line, so a story's first
+round before the window is not seen as an open;  a commit the runtime replays writes its line again and is counted again
+(a replayed open or feed counts twice); candidates by source count each (capture, candidate) pair
+once for each source that found it, so a candidate found by both a nearest capture and a lead is
+counted in both columns, and one offered for two captures of a decision is counted twice.
+
+The console rotates at about 1 MB and keeps about 1.5 to 2.5 hours; a window before the oldest
+line is partial. Ids and counts only; the script prints no title and no query text.
 """
 import argparse
 import calendar
@@ -54,10 +73,55 @@ def hour_label(t):
     return time.strftime("%Y-%m-%dT%HZ", time.gmtime(t - t % 3600))
 
 
+RESEARCH_RE = re.compile(STAMP + r" story research cast (.*)$")
+REFUSED_RE = re.compile(STAMP + r" story research refused (.*)$")
+GATE_RE = re.compile(STAMP + r" story research gate (skipped|released) (.*)$")
+BUCKETS = ("1", "2", "3", "4-5", "6+")
+
+
+def bucket(n):
+    return "1" if n <= 1 else "2" if n == 2 else "3" if n == 3 else "4-5" if n <= 5 else "6+"
+
+
+def new_counts():
+    return {"decisions": 0, "opens": 0, "feeds": 0, "declines": 0, "captures": 0,
+            "same": 0, "next": 0, "same_as_batch": 0, "new": 0, "decline": 0,
+            "opens_judged": 0, "opens_with_main_point": 0, "opens_with_offer": 0, "opens_answering_every_candidate": 0, "cand_near": 0, "cand_lead": 0, "cand_entity": 0,
+            "left_out": 0, "pages": []}
+
+
 def compute(text, since=None, until=None):
-    hours = {}
+    """Rows per UTC hour and one summary for the window. A capture's answer is
+    read from the decision that disposed of it: a feed is `same` (the capture
+    serves a held story's main point), an open's first capture is `next` (the
+    line names a succeeds) or `new`, its other captures are `same_as_batch`
+    (they share its one story), a decline is `decline`. Lines from before the
+    main-point judgment have no captures= and count one capture each."""
+    hours, total = {}, new_counts()
+    story_captures, opened, succ, fed = {}, set(), set(), set()
+    research, refused, gate = [], [], {"skipped": 0, "released": 0}
     for ln in text.splitlines():
         m = LINE_RE.search(ln)
+        r = RESEARCH_RE.search(ln) if not m else None
+        x = REFUSED_RE.search(ln) if not m and not r else None
+        g = GATE_RE.search(ln) if not m and not r and not x else None
+        if g:
+            t = stamp_epoch(g.group(1))
+            if (since is None or t >= since) and (until is None or t < until):
+                gate[g.group(2)] += 1
+            continue
+        if x:
+            t = stamp_epoch(x.group(1))
+            if (since is None or t >= since) and (until is None or t < until):
+                kv = dict(KV_RE.findall(x.group(2)))
+                refused.append(int(kv.get("unread", "0") or 0))
+            continue
+        if r:
+            t = stamp_epoch(r.group(1))
+            if (since is None or t >= since) and (until is None or t < until):
+                kv = dict(KV_RE.findall(r.group(2)))
+                research.append((t, kv.get("story", "-"), kv.get("cause", "open" if kv.get("round") == "1" else "feed"), kv.get("opened", "true") == "true"))
+            continue
         if not m:
             continue
         t = stamp_epoch(m.group(1))
@@ -65,23 +129,55 @@ def compute(text, since=None, until=None):
             continue
         kv = dict(KV_RE.findall(m.group(2)))
         choice = kv.get("choice")
-        if choice not in ("open", "feed"):
+        if choice not in ("open", "feed", "decline"):
             continue
-        h = hours.setdefault(hour_label(t), {"decisions": 0, "opens": 0, "feeds": 0, "opens_offered": 0,
-                                             "same": 0, "follow_up": 0, "different": 0, "none": 0,
-                                             "left_out": 0, "pages": []})
-        h["decisions"] += 1
-        h["opens" if choice == "open" else "feeds"] += 1
-        h["pages"].append(int(kv.get("page_in_window", kv.get("opening_shown", "0")) or 0))
-        if int(kv.get("page_left_out", "0") or 0) > 0:
-            h["left_out"] += 1
-        offered = kv.get("offered", "-")
-        if choice == "open" and offered not in ("-", ""):
-            h["opens_offered"] += 1
-            for part in kv.get("verdicts", "-").split(","):
-                v = part.rsplit(":", 1)[-1]
-                if v in ("same", "follow_up", "different", "none"):
-                    h[v] += 1
+        n = int(kv.get("captures", "1") or 1) if choice != "open" else max(int(kv.get("captures", "1") or 1), 1)
+        story = kv.get("story", "-")
+        succeeds = kv.get("succeeds", "-") not in ("-", "")
+        near, lead = 0, 0
+        for part in kv.get("sources", "").split(","):
+            k, _, v = part.partition(":")
+            if k == "near" and v.isdigit():
+                near = int(v)
+            if k == "lead" and v.isdigit():
+                lead = int(v)
+        h = hours.setdefault(hour_label(t), new_counts())
+        for c in (h, total):
+            c["decisions"] += 1
+            c["captures"] += n
+            c[{"open": "opens", "feed": "feeds", "decline": "declines"}[choice]] += 1
+            c["pages"].append(int(kv.get("page_in_window", kv.get("opening_shown", "0")) or 0))
+            if int(kv.get("page_left_out", "0") or 0) > 0:
+                c["left_out"] += 1
+            c["cand_near"] += near
+            c["cand_lead"] += lead
+            if choice == "feed":
+                c["same"] += n
+            elif choice == "decline":
+                c["decline"] += n
+            else:
+                c["next" if succeeds else "new"] += 1
+                c["same_as_batch"] += n - 1
+                if "main_point" in kv:
+                    # An open from after the judgment: it carries its main
+                    # point's length and, for each candidate offered, an answer.
+                    c["opens_judged"] += 1
+                    if int(kv.get("main_point", "0") or 0) > 0:
+                        c["opens_with_main_point"] += 1
+                    offered = [d for d in kv.get("offered", "-").split(",") if d not in ("-", "")]
+                    if offered:
+                        c["opens_with_offer"] += 1
+                        answers = dict(a.partition(":")[::2] for a in kv.get("answers", "-").split(",") if ":" in a)
+                        if all(answers.get(d) in ("next", "new") for d in offered):
+                            c["opens_answering_every_candidate"] += 1
+        if choice == "open":
+            opened.add(story)
+            story_captures[story] = story_captures.get(story, 0) + n
+            if succeeds:
+                succ.add(story)
+        elif choice == "feed":
+            fed.add(story)
+            story_captures[story] = story_captures.get(story, 0) + n
     rows = []
     for k in sorted(hours):
         h = hours[k]
@@ -89,17 +185,61 @@ def compute(text, since=None, until=None):
         h["hour"] = k
         h["median_page"] = int(statistics.median(pages)) if pages else 0
         rows.append(h)
-    return rows
+    pages = total.pop("pages")
+    total["median_page"] = int(statistics.median(pages)) if pages else 0
+    total["stories_opened"], total["stories_fed"] = len(opened), len(fed)
+    total["successor_links"] = len(succ)
+    judged = total["captures"]
+    total["share_to_existing_trajectory"] = round(total["same"] / judged, 3) if judged else None
+    total["share_to_existing_or_shared"] = round((total["same"] + total["same_as_batch"]) / judged, 3) if judged else None
+    cause = {"open": 0, "successor": 0, "feed": 0, "continue": 0}
+    for _, story, why, opened in research:
+        cause[why if why in cause else "feed"] += 1
+    total["research_runs"] = len(research)
+    total["research_opened_rounds"] = sum(1 for r in research if r[3])
+    total["research_refused_unread"] = len(refused)
+    total["research_refused_captures"] = sum(refused)
+    total["research_by_cause"] = cause
+    total["research_gate_skipped"], total["research_gate_released"] = gate["skipped"], gate["released"]
+    dist = dict.fromkeys(BUCKETS, 0)
+    for n in story_captures.values():
+        dist[bucket(n)] += 1
+    total["captures_per_trajectory"] = dist
+    return {"hours": rows, "summary": total}
 
 
-def render(rows):
-    out = ["hour           decisions  opens  feeds  opens_with_offer  same  follow_up  different  none  page_cut  median_page"]
+def pct(n, d):
+    return "-" if not d else "%.1f%%" % (100.0 * n / d)
+
+
+def render(res):
+    rows, t = res["hours"], res["summary"]
+    out = ["hour           decisions  captures  opens  feeds  declines  same  next  same_as_batch  new  decline  cand_near  cand_lead  page_cut  median_page"]
     for r in rows:
-        out.append("%-14s %9d %6d %6d %17d %5d %10d %10d %5d %9d %12d" % (
-            r["hour"], r["decisions"], r["opens"], r["feeds"], r["opens_offered"], r["same"],
-            r["follow_up"], r["different"], r["none"], r["left_out"], r["median_page"]))
+        out.append("%-14s %9d %9d %6d %6d %9d %5d %5d %14d %4d %8d %10d %10d %9d %12d" % (
+            r["hour"], r["decisions"], r["captures"], r["opens"], r["feeds"], r["declines"], r["same"], r["next"],
+            r["same_as_batch"], r["new"], r["decline"], r["cand_near"], r["cand_lead"], r["left_out"], r["median_page"]))
     if not rows:
         out.append("(no management story choice lines in the window)")
+    share = t["share_to_existing_trajectory"]
+    both = t["share_to_existing_or_shared"]
+    out += ["",
+            "(counts: a replayed commit counts twice; candidates count once per (capture, candidate) pair for each source that found it)",
+            "window: decisions %d, captures judged %d" % (t["decisions"], t["captures"]),
+            "answers by kind: same %d, next %d, same_as_batch %d, new %d, decline %d" % (t["same"], t["next"], t["same_as_batch"], t["new"], t["decline"]),
+            "candidates offered by source: vector %d, entity %d (not built: captures carry no entities), lead %d" % (t["cand_near"], t["cand_entity"], t["cand_lead"]),
+            "opens with a main point: %d of %d (%s); opens that answered every candidate offered: %d of %d (%s)" % (
+                t["opens_with_main_point"], t["opens_judged"], pct(t["opens_with_main_point"], t["opens_judged"]),
+                t["opens_answering_every_candidate"], t["opens_with_offer"], pct(t["opens_answering_every_candidate"], t["opens_with_offer"])),
+            "stories opened %d, stories fed %d, successor links written %d" % (t["stories_opened"], t["stories_fed"], t["successor_links"]),
+            "share of captures sent to an existing trajectory: %s (with captures sharing a new one: %s)" % (
+                "-" if share is None else "%.1f%%" % (100 * share), "-" if both is None else "%.1f%%" % (100 * both)),
+            "research Casts %d (%d opened a round), by cause as logged at the source: open %d, successor %d, feed or later round %d, continue (inside an open round) %d" % (
+                t["research_runs"], t["research_opened_rounds"], t["research_by_cause"]["open"], t["research_by_cause"]["successor"],
+                t["research_by_cause"]["feed"], t["research_by_cause"]["continue"]),
+            "research Casts refused because fed captures were unread: %d (%d captures owed a read)" % (t["research_refused_unread"], t["research_refused_captures"]),
+            "research gate: %d skipped (a store read failed, research went unchecked), %d released (the same unread set refused its limit)" % (t["research_gate_skipped"], t["research_gate_released"]),
+            "captures per trajectory (stories opened or fed in the window): " + ", ".join("%s: %d" % (k, t["captures_per_trajectory"][k]) for k in BUCKETS)]
     return "\n".join(out)
 
 
@@ -108,7 +248,7 @@ dir=/var/lib/go-choir/vm-state/@VM@
 sudo -n true 2>/dev/null || echo "##NOSUDO"
 echo "##CONSOLE"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
-  grep -a -E 'management story choice run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} management story choice)/\1/'
+  grep -a -E 'management story choice run=|story research cast run=|story research refused run=|story research gate (skipped|released) run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} (management story choice|story research cast|story research refused|story research gate (skipped|released)))/\1/'
 echo "##END"
 """.replace("@VM@", PAPER_VM)
 

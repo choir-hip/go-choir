@@ -66,8 +66,8 @@ var managementTaskCallTimeout = 3 * time.Minute
 // (docs/evidence/token-efficiency-2026-11-09/followup/system-prompt-review.md,
 // L5). What it says of the page is what buildOpeningPage builds: every story
 // of the window as headlines, a left_out count and a next cursor when the
-// bound cut it, and held_stories for the captures one may already cover.
-var managementTaskPrompt = fmt.Sprintf("Management delegated captures to you. Your records come with this message, as choir.Records() returns them, and so does the story library: every story updated in the last %d hours, as headlines only (inbox, headline, age since its last version, v the version number), newest first; left_out and next say when the bound cut the list and how to read the rest with choir.Stories(50, next), which returns ledes. Under it, held_stories lists, for a capture, the held stories of the last 72 hours that may already cover it, with a line of lead; a note says so when a section did not fit. The Cast from management names your objective and the captures you lease (r.Cast.Captures); each captures record shows them (r.Captures.Items) with Jev's label (r.Labels). Open, feed or decline every one of them, then end with choir.Done(note). A Cast to texture:new must answer for each held story offered for its captures: held_check, same, follow_up or different.", openingWindowHours)
+// bound cut it, and candidate_stories for the captures whose main point a held story may already hold.
+var managementTaskPrompt = fmt.Sprintf("Management delegated captures to you. Your records come with this message, as choir.Records() returns them, and so does the story library: every story updated in the last %d hours, as headlines only (inbox, headline, age since its last version, v the version number), newest first; left_out and next say when the bound cut the list and how to read the rest with choir.Stories(50, next), which returns ledes. Under it, candidate_stories lists, for a capture, the held stories of any age whose nearest captures or search leads met it, each with its main point; a note says so when a read or a section did not come. The Cast from management names your objective and the captures you lease (r.Cast.Captures); each captures record shows them (r.Captures.Items) with Jev's label (r.Labels). Feed every capture that serves a held story's main point, the one holding the most context; open only for new matter or a main beat that moved on, then end with choir.Done(note). A Cast to texture:new records main_point and answers each candidate offered for its captures: judgment, next or new, and succeeds with next.", openingWindowHours)
 
 // managementTaskOpeningSectionTokens bounds each handed section (the records,
 // the story page): prompts stay within 100,000 tokens. The records over the
@@ -85,11 +85,11 @@ var managementTaskOpeningSectionTokens = 20000
 // read failed) is replaced in the text by a note naming the verb that reads it,
 // so the task never believes it was shown what it was not.
 type taskOpening struct {
-	rt       *Runtime
-	rec      *types.RunRecord
-	text     string
-	records  cellRecords
-	hasRecs  bool
+	rt      *Runtime
+	rec     *types.RunRecord
+	text    string
+	records cellRecords
+	hasRecs bool
 	// arrivals are the captures of the loaded records, delivered or not: the
 	// held stories offered, and the held check, do not depend on the records
 	// section fitting.
@@ -152,7 +152,7 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 			b.WriteString(frameOpeningSection(openingStoryLabels, string(page)))
 			if held != nil {
 				heldJSON, _ := json.Marshal(held)
-				b.WriteString("\n\n" + openingHeldHeading + "\n")
+				b.WriteString("\n\n" + openingCandidateHeading + "\n")
 				b.WriteString(frameOpeningSection(openingStoryLabels, string(heldJSON)))
 			}
 		}
@@ -169,7 +169,7 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 // built to fit the section bound, never a fallback to a count of stories; the
 // page does not come at all only when not even one headline fits, or the story
 // read failed (a note then names the verb that reads it).
-func (rt *Runtime) storiesOpeningPage(ctx context.Context, exec toolregistry.ExecutionContext, arrivals []types.CaptureArrival) (page json.RawMessage, held *openingHeldSection, offer *openingOffer, err error) {
+func (rt *Runtime) storiesOpeningPage(ctx context.Context, exec toolregistry.ExecutionContext, arrivals []types.CaptureArrival) (page json.RawMessage, held *openingCandidateSection, offer *openingOffer, err error) {
 	sums, err := rt.storyIndexRead(ctx, deskmanifest.TaskRoleName(), exec, time.Time{}, "", 0)
 	if err != nil {
 		return nil, nil, nil, err
@@ -190,12 +190,20 @@ func (rt *Runtime) storiesOpeningPage(ctx context.Context, exec toolregistry.Exe
 	}
 	offer = &openingOffer{Leased: leased, Window: info.Window, InWindow: info.InWindow, Shown: info.Shown, LeftOut: info.LeftOut, ByCapture: map[string][]string{}}
 	if len(arrivals) > 0 {
-		var byCapture map[string][]string
-		var unlisted int
-		held, byCapture, unlisted = buildHeldSection(arrivals, newHeldIndex(sums, now), managementTaskOpeningSectionTokens)
-		offer.HeldUnlist = unlisted
-		if held != nil {
-			offer.ByCapture = byCapture
+		byDoc := make(map[string]store.StorySummary, len(sums))
+		for _, s := range sums {
+			byDoc[s.DocID] = s
+		}
+		links, note := rt.candidateLinks(ctx, exec.OwnerID, exec.ComputerID, arrivals)
+		built, cand, _, _ := buildCandidateSection(arrivals, links, byDoc, now, managementTaskOpeningSectionTokens)
+		cand.Leased, cand.Window, cand.InWindow, cand.Shown, cand.LeftOut = leased, info.Window, info.InWindow, info.Shown, info.LeftOut
+		offer = cand
+		held = built
+		if note != "" {
+			if held == nil {
+				held = &openingCandidateSection{Captures: []openingCandidateCapture{}}
+			}
+			held.Note = strings.TrimSpace(held.Note + " " + note)
 		}
 	}
 	return page, held, offer, nil

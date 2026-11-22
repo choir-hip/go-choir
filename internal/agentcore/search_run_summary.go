@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -21,6 +22,11 @@ import (
 type runSearchTotals struct {
 	desk  string
 	stats yaegikernel.SearchStats
+	// children counts the choir.Research children the run's tree started, and
+	// started the searches each desk of the tree sent (research, research_web),
+	// so the deployed reading shows where a run's searches come from.
+	children int
+	started  map[string]int
 	// resumed is set when the run began before this process did: its earlier
 	// segment's counts were in the old process's memory and are not in stats.
 	resumed bool
@@ -47,10 +53,43 @@ func (rt *Runtime) noteRunSearchStats(runID, desk string, stats yaegikernel.Sear
 		created = true
 	}
 	t.stats.Add(stats)
+	if t.started == nil {
+		t.started = map[string]int{}
+	}
+	t.started[desk] += stats.Started
 	runSearchMu.Unlock()
 	if !created {
 		return
 	}
+	resumed := rt.runStartedBeforeBoot(runID)
+	runSearchMu.Lock()
+	if cur, _ := rt.runSearch.Load(runID); cur == any(t) {
+		t.resumed = resumed
+	}
+	runSearchMu.Unlock()
+}
+
+// noteRunChild counts one choir.Research child of the run's tree.
+func (rt *Runtime) noteRunChild(runID string) {
+	runID = strings.TrimSpace(runID)
+	if rt == nil || runID == "" {
+		return
+	}
+	runSearchMu.Lock()
+	v, _ := rt.runSearch.Load(runID)
+	t, _ := v.(*runSearchTotals)
+	created := false
+	if t == nil {
+		t = &runSearchTotals{desk: deskmanifest.ResearcherName()}
+		rt.runSearch.Store(runID, t)
+		created = true
+	}
+	t.children++
+	runSearchMu.Unlock()
+	if !created {
+		return
+	}
+	// The entry this made carries the resumed flag, as noteRunSearchStats' does.
 	resumed := rt.runStartedBeforeBoot(runID)
 	runSearchMu.Lock()
 	if cur, _ := rt.runSearch.Load(runID); cur == any(t) {
@@ -84,7 +123,18 @@ func (rt *Runtime) takeRunSearchSummary(runID string) (string, bool) {
 	if len(reasons) > 0 {
 		line += " (" + strings.Join(reasons, " ") + ")"
 	}
-	line += fmt.Sprintf(" search_all_calls=%d wordings_offered=%d wordings_sent=%d fresh_over_unread=%d untagged=%d wordings_running=%d", s.AllCalls, s.AllOffered, s.AllSent, s.FreshOverUnread, s.Untagged, s.AllRunning)
+	// Where the tree's searches come from: the children it started and the searches
+	// each desk sent (fixed tokens).
+	byDesk := make([]string, 0, len(t.started))
+	for desk, n := range t.started {
+		byDesk = append(byDesk, fmt.Sprintf("started_%s=%d", desk, n))
+	}
+	sort.Strings(byDesk)
+	line += fmt.Sprintf(" children=%d", t.children)
+	if len(byDesk) > 0 {
+		line += " " + strings.Join(byDesk, " ")
+	}
+	line += fmt.Sprintf(" search_all_calls=%d wordings_offered=%d wordings_sent=%d fresh_sent=%d untagged=%d wordings_running=%d", s.AllCalls, s.AllOffered, s.AllSent, s.FreshSent, s.Untagged, s.AllRunning)
 	line += fmt.Sprintf(" pages_returned=%d pages_new=%d pages_read=%d", s.PagesReturned, s.PagesNew, s.PagesRead)
 	// Landing 0 of docs/definitions/corpus-first-search-one-verb-2026-11-19.md:
 	// searches judged and how many came back 75% or more already held; the

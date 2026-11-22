@@ -66,10 +66,14 @@ func TestRunSearchSummaryLineIsCountsOnly(t *testing.T) {
 	if _, ok := rt.takeRunSearchSummary("run-none"); ok {
 		t.Fatal("a run that searched nothing must log nothing")
 	}
-	rt.noteRunSearchStats("run-9", "research", yaegikernel.SearchStats{Started: 3, FromHeld: 1, NotSent: map[string]int{"covered": 2}, PagesReturned: 100, PagesNew: 40, PagesRead: 6, AllCalls: 2, AllOffered: 9, AllSent: 4, FreshOverUnread: 1, Untagged: 2, SeenJudged: 2, SeenMostly: 1, OutletsMax: 5, OutletsLast: 5, OutletsSends: 1, ReuseDeclined: map[string]int{"out_of_window": 2}})
+	rt.noteRunSearchStats("run-9", "research", yaegikernel.SearchStats{Started: 3, FromHeld: 1, NotSent: map[string]int{"covered": 2}, PagesReturned: 100, PagesNew: 40, PagesRead: 6, AllCalls: 2, AllOffered: 9, AllSent: 4, FreshSent: 1, Untagged: 2, SeenJudged: 2, SeenMostly: 1, OutletsMax: 5, OutletsLast: 5, OutletsSends: 1, ReuseDeclined: map[string]int{"out_of_window": 2}})
 	rt.noteRunSearchStats("run-9", "research", yaegikernel.SearchStats{Started: 1, NotSent: map[string]int{"covered": 1, "holds_unread": 4, "stopped_yielding": 2}, PagesReturned: 20, PagesNew: 2, PagesRead: 1, AllCalls: 1, AllOffered: 3, AllSent: 1, Untagged: 1, SeenJudged: 1, OutletsMax: 4, OutletsLast: 4, OutletsSends: 1, ReuseDeclined: map[string]int{"out_of_window": 1}})
+	// Two children of the run's tree, one of which searched on the research_web desk.
+	rt.noteRunChild("run-9")
+	rt.noteRunChild("run-9")
+	rt.noteRunSearchStats("run-9", "research_web", yaegikernel.SearchStats{Started: 2, PagesReturned: 5, PagesNew: 5})
 	line, ok := rt.takeRunSearchSummary("run-9")
-	want := "search run=run-9 desk=research started=4 from_held=1 not_sent=9 (covered=3 holds_unread=4 stopped_yielding=2) search_all_calls=3 wordings_offered=12 wordings_sent=5 fresh_over_unread=1 untagged=3 wordings_running=0 pages_returned=120 pages_new=42 pages_read=7 searches_judged=3 searches_mostly_seen=1 outlets_held_max=5 outlets_held_last=4 reuse_declined_out_of_window=3"
+	want := "search run=run-9 desk=research started=6 from_held=1 not_sent=9 (covered=3 holds_unread=4 stopped_yielding=2) children=2 started_research=4 started_research_web=2 search_all_calls=3 wordings_offered=12 wordings_sent=5 fresh_sent=1 untagged=3 wordings_running=0 pages_returned=125 pages_new=47 pages_read=7 searches_judged=3 searches_mostly_seen=1 outlets_held_max=5 outlets_held_last=4 reuse_declined_out_of_window=3"
 	if !ok || line != want {
 		t.Fatalf("line = %q, want %q", line, want)
 	}

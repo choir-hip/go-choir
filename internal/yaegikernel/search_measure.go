@@ -1,6 +1,7 @@
 package yaegikernel
 
 import (
+	"golang.org/x/net/publicsuffix"
 	"net"
 	"net/url"
 	"strings"
@@ -67,43 +68,48 @@ func (st *SearchStore) outletsHeld() int {
 	defer st.mu.Unlock()
 	seen := map[string]bool{}
 	for key := range st.first {
-		if o := outletOf(key); o != "" {
+		if o := pageOutlet(key); o != "" {
 			seen[o] = true
 		}
 	}
 	return len(seen)
 }
 
-// secondLevel are the labels that make a two-letter country domain a public
-// suffix of three labels (bbc.co.uk, data.gov.uk). A small list, not the
-// public suffix list (not vendored): outlet counts are a measurement, and a
-// miss counts one outlet too few or too many by a registry, never a decision.
-var secondLevel = map[string]bool{"co": true, "com": true, "org": true, "net": true, "gov": true, "ac": true, "edu": true, "or": true, "ne": true, "go": true}
-
-// outletOf is the registrable domain of a page URL: the last two host labels,
-// or three when the last is a two-letter country code and the one before is a
-// second-level label (co, com, gov ...). An IP or a single-label host is
-// itself. Empty for a URL with no host.
+// outletOf is the registrable domain of a page URL, by the public suffix list
+// (golang.org/x/net/publicsuffix): bbc.co.uk, theguardian.co.uk, abc.net.au and
+// asahi.co.jp are each their own outlet, and www.bbc.co.uk and news.bbc.co.uk
+// are one. An IP, a single-label host or a host that is itself a public suffix
+// is itself. Empty for a URL with no host. This is the one function the stop
+// rule, the site: rule and the research worked cell (choir.Outlet) share.
 func outletOf(raw string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
 		return ""
 	}
-	host := strings.ToLower(u.Hostname())
+	host := strings.Trim(strings.ToLower(u.Hostname()), ".")
 	if host == "" {
 		return ""
 	}
 	if net.ParseIP(host) != nil {
 		return host
 	}
-	labels := strings.Split(strings.Trim(host, "."), ".")
-	n := len(labels)
-	switch {
-	case n <= 2:
-		return strings.Join(labels, ".")
-	case len(labels[n-1]) == 2 && secondLevel[labels[n-2]]:
-		return strings.Join(labels[n-3:], ".")
-	default:
-		return strings.Join(labels[n-2:], ".")
+	if d, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
+		return d
 	}
+	return host
+}
+
+// Outlet is the registrable domain of a page URL (choir.Outlet): the outlet a
+// page belongs to, by the same rule the stop rule and the site: rule use. A page
+// of an aggregator (news.google.com, msn.com: hosts that republish other
+// outlets' stories) belongs to no outlet: it is "".
+func (s *ChoirScope) Outlet(url string) string { return pageOutlet(url) }
+
+// pageOutlet is the outlet a page belongs to: outletOf, or "" for an aggregator's
+// page. The stop rule's counts, the decision's counts and choir.Outlet use it.
+func pageOutlet(raw string) string {
+	if aggregatorHosts[hostOf(raw)] {
+		return ""
+	}
+	return outletOf(raw)
 }

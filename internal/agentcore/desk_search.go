@@ -103,6 +103,21 @@ type searchDone struct {
 	err      string
 	// providers is each provider that arrived: answered and results returned.
 	providers []types.SearchServedUsage
+	// urls are the pages the search returned, in arrival order (a page two
+	// providers returned is listed twice; pagesReturned counts it once).
+	urls []string
+}
+
+// pagesReturned is the distinct pages the search returned (a page two providers
+// returned counts once, as the run's summary line counts pages).
+func (d searchDone) pagesReturned() int {
+	seen := map[string]bool{}
+	for _, u := range d.urls {
+		if key := yaegikernel.PageKey(u); key != "" {
+			seen[key] = true
+		}
+	}
+	return len(seen)
 }
 
 // startSearch serves choir.SearchStart for the session key's worker. It
@@ -204,6 +219,9 @@ func forwardSearch(ctx context.Context, worker *yaegikernel.DeskSessionWorker, s
 			arrival.Results = append(arrival.Results, yaegikernel.SearchHit{Title: r.Title, URL: r.URL, Snippet: strings.TrimSpace(r.Snippet), PublishedAt: r.PublishedAt, Score: r.Score, Provider: r.Provider})
 		}
 		batch.add(a.Results)
+		for _, r := range a.Results {
+			done.urls = append(done.urls, r.URL)
+		}
 		done.arrived++
 		done.providers = append(done.providers, types.SearchServedUsage{Provider: a.Provider, Calls: 1, Answered: boolInt(arrival.Answered()), Results: len(a.Results)})
 		if arrival.Answered() {

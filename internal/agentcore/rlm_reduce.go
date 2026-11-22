@@ -709,6 +709,14 @@ type rlmCallReduction struct {
 	verifyResult map[string]any
 	// jobResults carry what became of the cell's job starts and stops.
 	jobResults []map[string]any
+	// researchRefusal is why a Texture's research dispatch was dropped from its
+	// tray, droppedLocalIDs the dispatches dropped and pageRevision the page
+	// revision the rest of the turn committed; researchNotice is what the cell
+	// is told (dropResearchUntilRead, commitTray).
+	researchRefusal string
+	droppedLocalIDs map[string]bool
+	pageRevision    string
+	researchNotice  string
 	// inertCandidates are the request records this cell minted, offered to
 	// the sampled inertness judge once the tray commits (MA1.6).
 	inertCandidates []types.CommitmentRecord
@@ -1152,6 +1160,9 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 		if intents, err = r.attachTextureOwnerDirections(ctx, intents); err != nil {
 			return err
 		}
+		if intents, err = r.dropResearchUntilRead(ctx, intents); err != nil {
+			return err
+		}
 		intents, folded, err = foldTextureDispatch(intents, r.scope, r.records)
 		if err != nil {
 			return err
@@ -1276,6 +1287,13 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 		if err := CommitInboxCursor(ctx, r.st, r.scope.OwnerID, r.scope.RunID, r.scope.DeskAgentID, r.scope.ChannelID, highWater); err != nil {
 			return err
 		}
+	}
+	if r.researchRefusal != "" {
+		written := "the rest of your turn was committed"
+		if r.pageRevision != "" {
+			written = "your page was written at revision " + r.pageRevision
+		}
+		r.researchNotice = "The research Cast was NOT sent; " + written + ". " + r.researchRefusal + ", then cast."
 	}
 	r.receipt = receipt
 	r.receipt.Cursor = highWater
@@ -1425,8 +1443,72 @@ func (r *rlmCallReduction) commitTextureAuthorIntent(ctx context.Context, in yae
 	}
 	if strings.TrimSpace(receipt) != "" {
 		log.Printf("runtime: texture cell authored turn (run %s): %s", r.scope.RunID, receipt)
+		// Each Cast the turn sent to its story's research desk leaves its
+		// line, from the records' receipts (round, opened): the Texture's
+		// Casts commit here, with the turn, never on the records route.
+		var sent struct {
+			RevisionID   string                     `json:"revision_id"`
+			InboxRecords []types.InboxRecordReceipt `json:"inbox_records"`
+		}
+		if json.Unmarshal([]byte(receipt), &sent) == nil {
+			r.pageRevision = sent.RevisionID
+			for _, rec := range sent.InboxRecords {
+				rt.logStoryResearchCast(ctx, r.scope.OwnerID, r.scope.ComputerID, r.scope.RunID, deskmanifest.DocumentCustodianName(), rec)
+			}
+		}
 	}
 	return 0, nil
+}
+
+// dropResearchUntilRead takes a story Texture's dispatches to its research
+// desk out of its tray while captures fed since its last research Cast are
+// unread by it, before the tray is folded into the turn. The rest of the turn
+// (its page Write, Done or Wait, and its other acts) commits as it would, so a
+// research refusal never loses a revision, and the cell is told exactly what
+// was and was not sent (researchNotice). A tray with no turn left to commit
+// is refused whole, and says so: nothing was committed.
+func (r *rlmCallReduction) dropResearchUntilRead(ctx context.Context, intents []yaegikernel.StagedIntent) ([]yaegikernel.StagedIntent, error) {
+	rt := r.rt()
+	if rt == nil || rt.store == nil {
+		return intents, nil
+	}
+	isResearch := func(in yaegikernel.StagedIntent) bool {
+		if in.Kind != yaegikernel.IntentCast && in.Kind != yaegikernel.IntentAsk {
+			return false
+		}
+		route, err := ResolveAddress(r.scope.DeskAgentID, r.scope.OwnerID, in.ToDesk)
+		return err == nil && deskmanifest.IsResearchInbox(route.Inbox)
+	}
+	hasResearch := false
+	for _, in := range intents {
+		hasResearch = hasResearch || isResearch(in)
+	}
+	if !hasResearch {
+		return intents, nil
+	}
+	// Read what you were fed before you research again: a correctness
+	// refusal, never a prompt wish (story_research_context.go).
+	unread := rt.unreadFedCaptures(ctx, r.scope.OwnerID, r.scope.ComputerID, storyDocOfDeskAgent(r.scope.DeskAgentID), r.scope.RunID)
+	if len(unread) == 0 {
+		return intents, nil
+	}
+	var kept []yaegikernel.StagedIntent
+	turn := false
+	r.droppedLocalIDs = map[string]bool{}
+	for _, in := range intents {
+		if isResearch(in) {
+			r.droppedLocalIDs[in.LocalID] = true
+			continue
+		}
+		turn = turn || in.Kind == yaegikernel.IntentTextureTurn
+		kept = append(kept, in)
+	}
+	if !turn {
+		r.droppedLocalIDs = nil
+		return nil, fmt.Errorf("reduce: %s (nothing was committed, and nothing was sent: this cell had no page write, Done or Wait to commit without its research Cast)", unreadFedMessage(unread))
+	}
+	r.researchRefusal = unreadFedMessage(unread)
+	return kept, nil
 }
 
 func isSemanticActKind(kind string) bool {

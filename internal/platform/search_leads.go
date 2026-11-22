@@ -18,8 +18,13 @@ package platform
 // it (one call per search) and a read of the URL marks it. Visibility
 // is the captures' rule, owner and computer, in the SQL of every statement.
 // A lead not returned for searchLeadRetention is deleted (PruneSearchLeads).
-// In L1 nothing returns a lead to a guest: ReadSearchLeads
-// is for tests.
+// In L1 nothing returned a lead to a guest. Two routes now return what a
+// lead's page became, never a lead's snippet: the conversations whose
+// searches returned the lead of a capture (by-capture, management's candidate
+// read), and the capture id, URL and provider title of the pages a
+// conversation's searches returned and a run read (by-conversation, a story's
+// research context). Both answer only the caller's own owner and computer.
+// ReadSearchLeads is for tests.
 //
 // The table has its own creation and readiness (ensureSearchLeads, run by
 // StartSearchLeads, never on a request's path) and needs no pgvector; until it
@@ -104,6 +109,30 @@ var searchLeadIndexes = []struct{ name, ddl string }{
 	{"idx_sl_tsv", `CREATE INDEX idx_sl_tsv ON search_leads USING GIN (tsv)`},
 	{"idx_sl_returned", `CREATE INDEX idx_sl_returned ON search_leads(last_returned_at)`},
 	{"idx_sl_scope_recent", `CREATE INDEX idx_sl_scope_recent ON search_leads(owner_id, computer_id, last_returned_at DESC)`},
+	// idx_sl_capture serves SearchLeadConversationsByCapture and
+	// SearchLeadPagesOfConversation: the leads whose page became a capture. A
+	// plain CREATE INDEX on a live table takes a SHARE lock, so lead writes and
+	// the prune wait while it builds and the routes answer 503 until the table is
+	// ready again. Measured on the paper's corpusd (graph database, read only,
+	// 2026-11-21): 74,771 rows, 105 MB of heap, 5,513 with a capture; a scan of
+	// the heap with that filter takes 52 ms, so the build, which indexes only
+	// the 5,513, is about 0.1 s: under a second, so it is not built
+	// CONCURRENTLY (which would also leave an invalid index to drop after a
+	// failed build). The table grows about 190,000 rows a day against a 30-day
+	// retention; the build happens once, at first start after this lands.
+	{"idx_sl_capture", `CREATE INDEX idx_sl_capture ON search_leads(owner_id, computer_id, capture_id) WHERE capture_id IS NOT NULL`},
+	// idx_sl_conv serves SearchLeadPagesOfConversation, which every story
+	// research run starts with, under a timeout that drops the story's context
+	// when missed: a partial GIN index on conversation_ids over the same rows
+	// (those with a capture). Measured on the paper's corpusd (graph database,
+	// read only; the index built on a session-private copy of the table,
+	// 2026-11-21): 94,308 rows, 6,815 with a capture; the read takes 29.7 ms
+	// with a sequential scan today (14,662 buffers read) and 0.23 ms with the
+	// index; the GIN build over the 6,815 takes 49 ms and the index is 136 kB
+	// (idx_sl_capture's 310 ms and 1.8 MB for comparison). A plain CREATE INDEX
+	// takes a SHARE lock: lead writes and the prune wait for that 0.05 to 0.3 s
+	// (the routes answer 503 for it) once, at first start after this lands.
+	{"idx_sl_conv", `CREATE INDEX idx_sl_conv ON search_leads USING GIN (conversation_ids) WHERE capture_id IS NOT NULL`},
 }
 
 // SearchLeadHit is one result of a provider's arrival.
@@ -230,6 +259,93 @@ func (s *Store) SearchLeadsByText(ctx context.Context, ownerID, computerID, quer
 		return nil, errSearchLeadsNotReady
 	}
 	return s.readLeads(ctx, `AND tsv @@ plainto_tsquery('simple', ?) AND plainto_tsquery('simple', ?)::text <> ''`, []any{query, query}, ownerID, computerID, limit)
+}
+
+// SearchLeadConversationsByCapture returns, for each named capture that a
+// lead's page became, the conversations whose searches returned that lead
+// (a story's research run searches in its story's conversation, so these name
+// the stories whose research already met the capture's page), newest lead
+// first within a capture. A capture no lead made is absent. Management's
+// open-or-feed decision reads it (agentcore/management_candidates.go).
+func (s *Store) SearchLeadConversationsByCapture(ctx context.Context, ownerID, computerID string, captureIDs []string) (map[string][]string, error) {
+	if !s.searchLeadsReady() {
+		return nil, errSearchLeadsNotReady
+	}
+	var ids []string
+	for _, id := range captureIDs {
+		if id = strings.TrimSpace(id); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	out := map[string][]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	raw, _ := json.Marshal(ids)
+	rows, err := s.corpus().QueryContext(ctx, `SELECT capture_id, to_jsonb(conversation_ids)::text FROM search_leads
+		WHERE owner_id = ? AND computer_id = ? AND capture_id IN (SELECT jsonb_array_elements_text(?::jsonb))
+		ORDER BY last_returned_at DESC, url_key`, ownerID, computerID, string(raw))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, convs string
+		if err := rows.Scan(&id, &convs); err != nil {
+			return nil, err
+		}
+		var list []string
+		_ = json.Unmarshal([]byte(convs), &list)
+		for _, c := range list {
+			if c = strings.TrimSpace(c); c != "" {
+				out[id] = append(out[id], c)
+			}
+		}
+	}
+	return out, rows.Err()
+}
+
+// LeadPage is a page a conversation's searches returned and a run then read:
+// the capture that read made, its URL and the title the provider gave it.
+type LeadPage struct {
+	CaptureID string `json:"capture_id"`
+	URL       string `json:"url"`
+	Title     string `json:"title,omitempty"`
+}
+
+// searchLeadPagesSQL is the by-conversation read. Its array containment
+// predicate and its capture filter are the ones idx_sl_conv (a partial GIN
+// index) serves.
+const searchLeadPagesSQL = `SELECT capture_id, url, title FROM search_leads
+		WHERE owner_id = ? AND computer_id = ? AND capture_id IS NOT NULL AND conversation_ids @> ARRAY[?::text]
+		ORDER BY last_returned_at DESC, url_key LIMIT ?`
+
+// SearchLeadPagesOfConversation returns the pages read from leads that the
+// named conversation's searches returned (a story's research searches in its
+// story's conversation), newest return first, at most limit. A lead nobody
+// read has no capture and is not listed.
+func (s *Store) SearchLeadPagesOfConversation(ctx context.Context, ownerID, computerID, conversationID string, limit int) ([]LeadPage, error) {
+	if !s.searchLeadsReady() {
+		return nil, errSearchLeadsNotReady
+	}
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" || limit <= 0 {
+		return nil, nil
+	}
+	rows, err := s.corpus().QueryContext(ctx, searchLeadPagesSQL, ownerID, computerID, conversationID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LeadPage
+	for rows.Next() {
+		var p LeadPage
+		if err := rows.Scan(&p.CaptureID, &p.URL, &p.Title); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }
 
 // SearchLeadsByURL returns a computer's lead for each URL (by capture key).

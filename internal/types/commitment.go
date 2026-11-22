@@ -479,6 +479,12 @@ type CommitmentCast struct {
 	Withdrawals   []CastWithdrawal  `json:"withdrawals,omitempty"`
 	Captures      []string          `json:"captures,omitempty"`
 	Publish       string            `json:"publish,omitempty"`
+	// MainPoint and Succeeds are management's opening Cast's own fields
+	// (docs/design/semantic-layer-2026-11-20.md section 2.2): the story's main
+	// point, and the document it succeeds when the main beat changed. The open
+	// path copies them into the story trajectory's subject refs, once.
+	MainPoint string `json:"main_point,omitempty"`
+	Succeeds  string `json:"succeeds,omitempty"`
 }
 
 // CastPublishAuto is the one publish mode an opening Cast may set.
