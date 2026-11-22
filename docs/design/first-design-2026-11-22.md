@@ -156,6 +156,37 @@ middle form: one interface a desk (a typed address space routed by host code,
 not by a session), many addressees inside it, and the root observing the
 traffic rather than relaying it. Open question 10.
 
+**Ruled, 2026-11-22:** "yes, the middle form. and the question is how does
+the root desk get updates? it should get events. debounced. it can subscribe
+to events because it makes predictions about events and entities and those
+predictions register subscriptions... thats how it ought to be".
+
+## How the root is woken: a prediction is a subscription
+
+- The root Texture states predictions about events and entities (a story will
+  gain an event within a day; this entity will act; this scheduled event will
+  happen). Each prediction names what would settle it. That naming is its
+  subscription.
+- When an event is written (the capture-to-event step, host code), it is
+  matched against open subscriptions: by entity and story ids on the graph,
+  and by nearness for the loose ones. Matches are collected and delivered to
+  the root debounced, as one digest.
+- An arriving event settles the predictions it answers, true or false, and the
+  score is the learning engine's (precommit, then score).
+- So the root is woken by what it has a stake in, and there is no commit log
+  to tail, which is where the earlier root desk failed review.
+
+Lead's additions, not ruled:
+
+- **Surprise needs a place.** An event that matches no prediction is the most
+  informative kind. A standing subscription to the unmatched (above an
+  importance line read from the graph) delivers them, and their share is the
+  measure of how well the root models the world.
+- **Expiry settles too.** A prediction whose time passes with no matching
+  event is settled false by the clock, not left open.
+- **The same on a person's computer:** the root predicts what the owner will
+  read, skip or ask, and the owner's acts are the events that settle it.
+
 ## How context is found
 
 The owner, 2026-11-22: "we can run captures through vector search, then for
