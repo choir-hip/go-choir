@@ -7,10 +7,10 @@ import { FAILED_LINE, type Writer } from './edition-writer.ts';
 
 const files = new Map<string, Uint8Array>();
 const storage = { fs: {
-  readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; },
+  readFile: async (p: string) => { const b = files.get(p); if (!b) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); return b; },
   atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); },
   rm: async (p: string) => { files.delete(p); },
-  stat: async (p: string) => { if (!files.has(p)) throw new Error('ENOENT'); return {}; },
+  stat: async (p: string) => { if (!files.has(p)) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); return {}; },
 } } as never;
 const kept = (): Record<string, unknown> => JSON.parse(new TextDecoder().decode(files.get(PROGRESS_FILE)!));
 
@@ -190,5 +190,41 @@ describe('the offer', () => {
     const e = env({ device: null });
     expect((await onboardingPage(undefined, 0, SETUP, e)).step).toBe('welcome');
     expect((await act('begin', '', '', SETUP, e)).step).toBe('setup');
+  });
+});
+
+describe('the progress file is read once, and a failed read is not "no progress"', () => {
+  const logged: string[] = [];
+  const spy = (): (() => void) => { const o = console.log; console.log = (...a: unknown[]) => { logged.push(a.join(' ')); }; return () => { console.log = o; }; };
+  test('an absent file (ENOENT) is no progress and says nothing', async () => {
+    const un = spy(); logged.length = 0;
+    const page = await onboardingPage(v, 0, SETUP, env());
+    un();
+    expect(page.step).toBe('welcome');
+    expect(logged.filter((l) => l.startsWith('onboarding:'))).toEqual([]);
+  });
+  test('a seeded file is read', async () => {
+    files.set(PROGRESS_FILE, new TextEncoder().encode(JSON.stringify({ offered: true, skipped: false, setupDone: false, micRefused: false, topicsStarted: false, editionDone: true, voicePicked: 0 })));
+    expect((await onboardingPage(v, 0, SETUP, env())).step).toBe('done');
+  });
+  test('a step taken while the read is in flight is saved after it, on top of what was stored', async () => {
+    files.set(PROGRESS_FILE, new TextEncoder().encode(JSON.stringify({ offered: true, skipped: false, setupDone: true, micRefused: false, topicsStarted: false, editionDone: false, voicePicked: 2 })));
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    const slow = { fs: { ...(storage as never as { fs: object }).fs, readFile: async (p: string) => { await gate; return files.get(p)!; } } } as never;
+    const first = onboardingPage(v, 0, SETUP, env({ storage: slow }));
+    const step = act('skip', '', '', SETUP, env({ storage: slow }));            // taken before the read resolves
+    release(); await first; await step;
+    expect(kept()).toMatchObject({ skipped: true, setupDone: true, voicePicked: 2 });    // the stored values are kept, the step is added
+  });
+  test('a read that fails refuses the step visibly, writes nothing, and the next try reads', async () => {
+    files.set(PROGRESS_FILE, new TextEncoder().encode(JSON.stringify({ offered: true, skipped: false, setupDone: true, micRefused: false, topicsStarted: false, editionDone: false, voicePicked: 2 })));
+    let fail = true; const writes: string[] = [];
+    const flaky = { fs: { ...(storage as never as { fs: object }).fs, readFile: async (p: string) => { if (fail) throw new Error('dropped'); return files.get(p)!; }, atomicWriteFile: async (p: string) => { writes.push(p); } } } as never;
+    const un = spy();
+    const refused = await act('skip', '', '', SETUP, env({ storage: flaky }));
+    un();
+    expect(refused.message).toContain('could not be read'); expect(writes).toEqual([]);
+    fail = false;
+    expect((await act('skip', '', '', SETUP, env({ storage: flaky }))).step).toBe('skipped'); expect(writes).toContain(PROGRESS_FILE);
   });
 });

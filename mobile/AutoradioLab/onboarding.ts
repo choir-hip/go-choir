@@ -120,7 +120,10 @@ async function load(env: Env): Promise<Mem> {
     m.loading = (async () => {
       let text: string | undefined, failed = false;
       try { if (env.storage) text = new TextDecoder().decode(await env.storage.fs.readFile(PROGRESS_FILE)); }
-      catch (e) { if (!/ENOENT|No such file|not found|absent/i.test(String((e as Error)?.message ?? e))) failed = true; console.log(`onboarding: the progress file could not be read (${String((e as Error)?.message ?? e).slice(0, 120)}): not loaded, read again next time`); }
+      catch (e) {
+        // A storage refusal carries the POSIX name in `code` (Exact js/src/storage.js:32-37): an absent file is "no progress", anything else is a failed read.
+        if ((e as { code?: string } | null)?.code !== 'ENOENT') { failed = true; console.log(`onboarding: the progress file could not be read (${String((e as Error)?.message ?? e).slice(0, 120)}): not loaded, read again next time`); }
+      }
       if (m.gen === accountGeneration() && !failed) { m.p = parseProgress(text); m.step = startStep(m.p); m.picked = m.p.voicePicked; m.loaded = true; }
       m.loading = undefined;
     })();
@@ -225,6 +228,8 @@ export type Op = 'begin' | 'retry' | 'fallback' | 'mic' | 'micNext' | 'hearing' 
 /** Mutation: one button. `arg` is the option of the op (mobile, stage, ok) and `topics` the page's list (one per line) on the done sends. The answer is the page after it. */
 export async function onboardingAct(op: string, arg: string, topics: string, top: string, env: Env): Promise<Onboarding> {
   const m = await load(env);
+  // A step must never be taken on progress that was not read (it could not be saved, and the person's input would be dropped): say so, change nothing, and the next press reads again.
+  if (!m.loaded) { const f = await facts(env); return { ...view(m, f, top), message: 'Your progress could not be read just now. Try again.' }; }
   // The page sends the done ops only once its picks are loaded (`if ep.loaded`), so an empty text is an empty list: the general edition (E4).
   const picks = topics.split('\n').map((t) => t.trim()).filter((t) => t !== '');
   switch (op as Op) {
