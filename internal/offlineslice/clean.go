@@ -14,7 +14,8 @@ import (
 // are model-free and use only what EARLIER DAYS showed: Observe adds a capture
 // to today's counts, StartDay folds them into what Drop may read.
 type Cleaner struct {
-	dfMax       float64 // a key in more than this share of earlier captures is junk
+	dfMax       float64 // a new name in more than this share of earlier captures is junk
+	dfMaxKnown  float64 // the same for a name some entity answers to (an actor can be common; a lexicon's junk entity is commoner)
 	commonRatio float64 // a one-word name that is lower case in more than this share of earlier running text is a common noun
 	commonMin   int     // and was seen at least this often
 	df          map[string]int
@@ -28,11 +29,14 @@ type Cleaner struct {
 
 // NewCleaner builds a cleaner.
 func NewCleaner(dfMax, commonRatio float64, commonMin int) *Cleaner {
-	c := &Cleaner{dfMax: dfMax, commonRatio: commonRatio, commonMin: commonMin}
+	c := &Cleaner{dfMax: dfMax, dfMaxKnown: dfMax, commonRatio: commonRatio, commonMin: commonMin}
 	c.df, c.lower, c.capt = map[string]int{}, map[string]int{}, map[string]int{}
 	c.dayDF, c.dayLower, c.dayCapt = map[string]int{}, map[string]int{}, map[string]int{}
 	return c
 }
+
+// SetKnownDF sets the document-frequency bound for names an entity answers to.
+func (c *Cleaner) SetKnownDF(x float64) { c.dfMaxKnown = x }
 
 // StartDay makes the days observed so far readable.
 func (c *Cleaner) StartDay() {
@@ -124,7 +128,11 @@ func (c *Cleaner) Drop(m Mention, host string) string {
 			return "outlet"
 		}
 	}
-	if c.nDocs > 0 && float64(c.df[m.Key])/float64(c.nDocs) > c.dfMax {
+	lim := c.dfMax
+	if len(m.Cands) > 0 {
+		lim = c.dfMaxKnown
+	}
+	if c.nDocs > 0 && float64(c.df[m.Key])/float64(c.nDocs) > lim {
 		return "df"
 	}
 	if !m.Acronym && !strings.Contains(m.Key, " ") {

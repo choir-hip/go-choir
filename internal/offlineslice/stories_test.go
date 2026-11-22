@@ -172,3 +172,25 @@ func TestCleanText(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanerKnownNamesHaveTheirOwnBound(t *testing.T) {
+	c := NewCleaner(0.01, 0.5, 3)
+	c.SetKnownDF(0.50)
+	c.StartDay()
+	ent := Mention{Key: "trump", Phrase: "Trump", Cands: []Cand{{EntityID: "e1", Name: "Trump", Via: "exact"}}}
+	nm := Mention{Key: "comments url", Phrase: "Comments URL"}
+	for i := 0; i < 10; i++ {
+		ms := []Mention{nm}
+		if i < 3 {
+			ms = append(ms, ent)
+		}
+		c.Observe(ms, "", "")
+	}
+	c.StartDay()
+	if r := c.Drop(ent, ""); r != "" {
+		t.Fatalf("an actor in 30%% of captures dropped: %q", r)
+	}
+	if r := c.Drop(nm, ""); r != "df" {
+		t.Fatalf("furniture kept: %q", r)
+	}
+}

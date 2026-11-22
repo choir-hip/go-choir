@@ -159,6 +159,11 @@ func TestOfflineSliceReplayB(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if v := os.Getenv("OFFLINE_DFMAX_KNOWN"); v != "" {
+		if _, err := fmt.Sscanf(v, "%g", &cfg.DFMaxKnown); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cfg.DFArrivalsOnly = os.Getenv("OFFLINE_DF_ARRIVALS") == "1"
 	tag := os.Getenv("OFFLINE_TAG")
 	if tag == "" {

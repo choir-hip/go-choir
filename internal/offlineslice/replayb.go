@@ -13,6 +13,7 @@ type ConfigB struct {
 	OracleDepth   int     // stories kept for the oracle (20)
 	Cap           int     // list cap (12)
 	DFMax         float64 // see Cleaner
+	DFMaxKnown    float64
 	CommonRatio   float64
 	CommonMin     int
 	EntityStories int // top stories whose central entities are offered (3)
@@ -22,7 +23,7 @@ type ConfigB struct {
 
 // DefaultConfigB is the stated configuration.
 func DefaultConfigB() ConfigB {
-	return ConfigB{ListStories: 5, OracleDepth: 20, Cap: 12, DFMax: 0.01, CommonRatio: 0.5, CommonMin: 20, EntityStories: 3}
+	return ConfigB{ListStories: 5, OracleDepth: 20, Cap: 12, DFMax: 0.01, DFMaxKnown: 0.10, CommonRatio: 0.5, CommonMin: 20, EntityStories: 3}
 }
 
 // IsArrival: a capture a source brought, not a page a desk read for itself.
@@ -103,6 +104,7 @@ func ReplayB(caps []Capture, ents []Entity, stops []Stop, rules Rules, policy Al
 	wg.Wait()
 
 	cl := NewCleaner(cfg.DFMax, cfg.CommonRatio, cfg.CommonMin)
+	cl.SetKnownDF(cfg.DFMaxKnown)
 	var out []ResultB
 	var day time.Time
 	for i, c := range caps {
