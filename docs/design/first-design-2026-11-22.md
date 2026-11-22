@@ -181,7 +181,15 @@ proved, and the design is tried offline before it is wired in.
    existing stories predict on the first three days and settle them on the
    rest under section 6. Reported: was the right subject among the candidates;
    the share escalated; new subjects per 1,000 captures over time; the share
-   later merged; skill against the base rate. Kill lines set before the run.
+   later merged; skill against the base rate. Kill lines, set 2026-11-22
+   before any run (ledger C192): the design is rethought if, over days 4 to 7
+   of the replay, (a) more than 30% of captures escalate; or (b) new subjects
+   per 1,000 captures are 70% or more of what they were over days 1 and 2
+   (the vocabulary is not settling); or (c) in the hand read the right
+   subject was among the candidates for fewer than 80 of 100 captures that
+   have one; or (d) the predictions' skill against the base rate cannot be
+   told from zero (its interval includes zero). A run that cannot measure a
+   line counts as failing it.
 3. The hot path live, written beside the three old mechanisms and compared
    with them. Nothing a reader or a desk sees changes.
 4. Predictions, settlement and the score, as host code and records.
