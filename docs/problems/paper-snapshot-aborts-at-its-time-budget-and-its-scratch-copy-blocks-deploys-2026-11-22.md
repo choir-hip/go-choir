@@ -65,3 +65,50 @@ What the fix should be (not built): a snapshot that does not copy the store
 (read from a consistent view), a trim straight after a capture ends or
 aborts, a stream rate in the log, and a deploy preflight that says what holds
 the space.
+
+## 12:10Z: the retry succeeded; three statements above are corrected
+
+Seen in the paper's console and in the code (a read-only investigation; nothing
+on Node B was changed or restarted).
+
+- The retry finished at 09:27:34Z: "snapshot taken ... 55045910528 bytes
+  (13438943 pages of 4096) in 1h6m26.149s ... 13124 chunks, 10416 uploaded
+  (6653754264 bytes sealed), 2708 already held ... copy 7m17.275s (30733
+  pages/s), pin 7m17.275s, witness 54m51.741s, upload 4m15.148s". Node B had
+  100 GiB free at 10:02Z after the guest's hourly trim.
+- **Correction: the slow stage is the witness, not the stream.** The order is
+  copy, head cross-check, witness over the scratch file, upload
+  (`internal/snapshot/snapshot.go`, about lines 683 to 727). The witness is a
+  digest of the whole store and took 55 of the 66 minutes. It reads the
+  capture's own scratch file, so it does not contend with the running paper;
+  the `store_stalled` lines are the paper's own object reads.
+- **Correction: an aborted capture does remove its scratch** (every path,
+  `snapshot.go` about lines 603 to 617). The image stays large until the
+  guest's trim runs (`choir-data-fstrim`: 10 minutes after boot, then hourly;
+  the volume is ext4 without the `discard` mount option, on purpose,
+  `nix/autoputer-vm.nix` about line 994).
+- **Correction: 55,045,910,528 bytes is 51.3 GiB.**
+- How often: a capture is due when the tail's replay at the assumed 113
+  events a second passes 4 minutes (27,120 events; the paper adds about 8,000
+  an hour), but not before the capture floor: the larger of 10 times the last
+  capture's duration and 24 hours for every 8 GiB sealed
+  (`snapshot_producer.go` `snapshotCaptureFloor`). With 66 minutes and 6.65 GB
+  sealed that is about 18.6 hours, so the paper captures about once a day and
+  the next is due near 04:00Z on 2026-11-23. The 113 is d@e's worst reading
+  of 2026-11-14; a measured rate replaces it only when lower and is kept in
+  memory only.
+- Each capture costs three passes over the whole store (write the copy, read
+  it for the witness, read it again to hash and seal the chunks), and 79% of
+  the chunks were new a day after the last capture, because the chunks are
+  fixed page ranges and SQLite's writes are scattered.
+
+What the fix should be, restated. Removing the scratch copy alone (the witness
+and the upload inside the read transaction) trades 51 GiB of scratch for a WAL
+pinned for an hour, about 2 GiB at the write rate seen. That removes the disk
+swing; it does not remove the hour. The structural cost is the whole-store
+witness and re-seal each day; an earlier incremental design did not converge
+(`incremental-snapshots-design-three-review-rounds-structural-assessment-2026-11-15.md`).
+A trim straight after a capture shortens the swing's tail and nothing else.
+None of this is built. The second store-sized copy, the weekly compaction, is
+its own record:
+`compact-copy-staged-on-a-51-gib-store-holds-node-b-under-the-deploy-floor-2026-11-22.md`.
