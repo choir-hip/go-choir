@@ -138,3 +138,86 @@ func TestOfflineSliceReplay(t *testing.T) {
 	}
 	t.Logf("replay %s; total %s", replay.Round(time.Second), time.Since(start).Round(time.Second))
 }
+
+// TestOfflineSliceReplayB is rung 0b: source arrivals only, cleaned candidates,
+// and the nearest earlier stories as a candidate source. It also needs the
+// story export (scripts/offline-slice/export-stories). Env as above plus
+// OFFLINE_DFMAX (default 0.01).
+func TestOfflineSliceReplayB(t *testing.T) {
+	dir := os.Getenv("OFFLINE_SLICE_DATA")
+	if dir == "" {
+		t.Skip("OFFLINE_SLICE_DATA not set")
+	}
+	outDir := os.Getenv("OFFLINE_SLICE_OUT")
+	if outDir == "" {
+		outDir = dir
+	}
+	cfg := offlineslice.DefaultConfigB()
+	if v := os.Getenv("OFFLINE_DFMAX"); v != "" {
+		if _, err := fmt.Sscanf(v, "%g", &cfg.DFMax); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tag := os.Getenv("OFFLINE_TAG")
+	if tag == "" {
+		tag = "b"
+	}
+	start := time.Now()
+	caps, err := offlineslice.ReadCaptures(filepath.Join(dir, "captures.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vecs, err := offlineslice.ReadVectors(filepath.Join(dir, "vectors.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ents, err := offlineslice.ReadEntities(filepath.Join(dir, "entities.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stops, err := offlineslice.ReadStops(filepath.Join(dir, "stopwords.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	leads, _, err := offlineslice.ReadLeads(filepath.Join(dir, "bodies.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sd, err := offlineslice.ReadStories(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range caps {
+		caps[i].Vec = vecs[caps[i].ID]
+		if caps[i].TextHash != "" {
+			caps[i].Lead = leads[caps[i].TextHash]
+		}
+	}
+	kept, dropped := offlineslice.Dedupe(caps)
+	byCanon := map[string]offlineslice.Entity{}
+	for _, e := range ents {
+		byCanon[e.Canonical] = e
+	}
+	t.Logf("loaded %d captures (%d repeats dropped), %d stories, %d entity rows; load %s", len(caps), dropped, len(sd.Stories), len(ents), time.Since(start).Round(time.Second))
+	t0 := time.Now()
+	res := offlineslice.ReplayB(kept, ents, stops, &offlineRules{}, offlineslice.AliasesAsOf, sd, byCanon, cfg)
+	f, err := os.Create(filepath.Join(outDir, "results-"+tag+".jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := bufio.NewWriterSize(f, 1<<20)
+	enc := json.NewEncoder(w)
+	for _, r := range res {
+		if err := enc.Encode(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	sum, _ := json.MarshalIndent(map[string]any{"dedup_dropped": dropped, "replayed_all": len(kept), "arrivals": len(res), "dfmax": cfg.DFMax,
+		"replay_seconds": time.Since(t0).Seconds(), "total_seconds": time.Since(start).Seconds()}, "", " ")
+	_ = os.WriteFile(filepath.Join(outDir, "summary-"+tag+".json"), sum, 0o644)
+	t.Logf("replay %s", time.Since(t0).Round(time.Second))
+}

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Rung 0b export: stories, story vectors, story entity links and the cite oracle,
+# read-only from Node B to flat files on the build VM. Usage: export-stories [DEST]
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+dest="${1:-offline-slice-r0-data}"
+q() {
+  { echo "set default_transaction_read_only=on;"; cat "$here/$1"; } |
+    ssh node-b 'nice -n 19 sudo -n -u postgres psql -d graph -q -v ON_ERROR_STOP=1 -f -' |
+    ssh choir-runner "cat > $dest/$2"
+}
+q export-story-versions.sql story-versions.csv
+q export-story-vectors.sql story-vectors.csv
+q export-story-entities.sql story-entities.csv
+q export-story-first.sql story-first.csv
+q export-story-cites.sql story-cites.csv
+ssh choir-runner "python3 -c 'import csv
+for r in csv.reader(open(\"$dest/story-versions.csv\",newline=\"\")):
+    print(r[1]+chr(9)+r[3])'" |
+  ssh node-b "sudo -n nice -n 19 ionice -c3 python3 -c \"\$(echo $(base64 < "$here/read-story-text.py" | tr -d '\n') | base64 -d)\"" |
+  ssh choir-runner "cat > $dest/story-text.jsonl"
+ssh choir-runner "cd $dest && ls -l story-* && wc -l story-*.csv"
