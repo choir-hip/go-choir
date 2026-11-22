@@ -35,6 +35,13 @@ claims; a subject's importance is the number of stories about it (owner).
 ## 2. The hot path: a capture arrives (no agent session)
 
 1. **Fetch, clean, passages, embed.** Built.
+   Rung 0 of the offline slice (2026-11-22) corrected this step: the path
+   runs on what sources bring, not on pages a desk read for itself (two
+   thirds of captures); the rules below find actors and proposed the
+   happening for about one capture in five; lists had a median of 28 entries,
+   most of it page furniture. So the text is cleaned to the article first,
+   and the happening is offered from the subjects of the nearest stories by
+   vector, which a story's Texture named.
 2. **Candidate subjects, by rule.** (owner) "maybe we can predict subjects
    from keyword extraction and/or vector embedding". Three cheap sources, no
    model: known labels and aliases found in the text; proper names and rare
@@ -185,9 +192,11 @@ proved, and the design is tried offline before it is wired in.
    before any run (ledger C192): the design is rethought if, over days 4 to 7
    of the replay, (a) more than 30% of captures escalate; or (b) new subjects
    per 1,000 captures are 70% or more of what they were over days 1 and 2
-   (the vocabulary is not settling); or (c) in the hand read the right
-   subject was among the candidates for fewer than 80 of 100 captures that
-   have one; or (d) the predictions' skill against the base rate cannot be
+   (the vocabulary is not settling); or (c) rewritten 2026-11-22 after rung 0 showed the first
+   wording was loose (docs/evidence/offline-slice-rung-0-rules-find-names-not-happenings-2026-11-22.md):
+   for fewer than 80 of 100 news arrivals the candidates include at least one
+   actor and the happening (or the reader marks the happening as new), in a
+   list of 12 or fewer; or (d) the predictions' skill against the base rate cannot be
    told from zero (its interval includes zero). A run that cannot measure a
    line counts as failing it.
 3. The hot path live, written beside the three old mechanisms and compared
