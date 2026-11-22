@@ -562,6 +562,69 @@ describe('nothing is carried from the pre-release build: the kept data is only w
   });
 });
 
+describe('S1 a publish that finished for another account changes nothing of the next one', () => {
+  test('the generation moves while the write of the new id is in flight: no "published as", no done, no discard of the next account\'s take', async () => {
+    const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage };
+    await recorded(h); sl.hold = true;
+    const pub = act(env, h.o, 'publish', '');
+    await sl.entered;
+    nextGeneration(); await wipeKept(sl.storage);
+    sl.release(); await pub;
+    expect(h.dev.log).not.toContain('done'); expect(h.dev.log.filter((x) => x === 'discard').length).toBeLessThanOrEqual(1);       // at most the one `sync` makes for the old account
+    expect(h.o.published).toBe('');
+  });
+});
+
+describe('S4 a write that landed just before the account changed is not kept or sent on', () => {
+  test('a mute whose write was in flight when the generation moved: not sent to the steer queue', async () => {
+    const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage }; sl.hold = true;
+    const mute = act(env, h.o, 'mute', 'voice-OLD');
+    await sl.entered;
+    nextGeneration(); await wipeKept(sl.storage); sl.release(); await mute;
+    expect(h.dev.steered).toEqual([]);
+    expect((await pageFor(env, h.o, IDLE)).muted).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------- review 4
+
+describe('a previous account\'s publish does not touch the next account\'s overlay', () => {
+  async function aPublishInFlight(status: number) {
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    const h = setup(async (x) => { if (x.m === 'POST') { await gate; return status === 201 ? { status, json: publishFx } : { status }; } return { status: 200, json: { takes: [] } }; });
+    await recorded(h);
+    const pub = act(h.env, h.o, 'publish', '');
+    await new Promise((r) => setTimeout(r, 10));
+    nextGeneration();
+    await pageFor(h.env, h.o, IDLE);                 // the next account's first page: the overlay is theirs now
+    return { h, release: () => release(), pub };
+  }
+  test('A\'s failed POST writes no notice onto B\'s page, and its finally does not un-block B\'s own publish', async () => {
+    const { h, release, pub } = await aPublishInFlight(500);
+    h.o.publishing = true;                                  // B is publishing now
+    const logBefore = h.dev.log.length;
+    release(); await pub;
+    expect(h.o.notice).toBe(''); expect(h.o.publishing).toBe(true);
+    expect(h.dev.log.slice(logBefore)).not.toContain('publishing:false');         // and A did not clear the recorder's bit under B
+  });
+  test('A\'s "the recording is gone" is not B\'s page\'s notice either', async () => {
+    const h = setup(); await recorded(h);
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    h.dev.audio = async () => { await gate; return null; };
+    const pub = act(h.env, h.o, 'publish', '');
+    await new Promise((r) => setTimeout(r, 10));
+    nextGeneration(); await pageFor(h.env, h.o, IDLE);
+    release(); await pub; expect(h.o.notice).toBe('');
+  });
+  test('a sign-in completing between the audio and the send: nothing is sent', async () => {
+    const h = setup(); await recorded(h);
+    const real = h.dev.audio.bind(h.dev);
+    h.dev.audio = async () => { const a = await real(); nextGeneration(); return a; };
+    await act(h.env, h.o, 'publish', '');
+    expect(posts(h.seen)).toBe(0); expect(h.dev.log).not.toContain('done');
+  });
+});
+
 describe('review 5: a delete answered for a left account says nothing', () => {
   test('5 a delete answered after the account changed writes no notice and drops no row of the next account', async () => {
     let release!: () => void; const gate = new Promise<void>((r) => { release = r; });

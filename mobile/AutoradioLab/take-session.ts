@@ -7,7 +7,7 @@
 // Native calls (the app module, ModelsEntry.swift, each with the reason only native code can meet):
 //   takeState / takeStart / takeStop / takePreview / takeDiscard / takeDone   the recorder (microphone, gate, file, recogniser, player)
 //   takeAudio                      the file's bytes, base64 (the file is native's: the preview plays it)
-//                                  Nothing is carried from the pre-release build: the old Swift files (takes-own.json, takes-muted.json) are never read here (docs/reference/AUTORADIO-TAKES.md)
+// Nothing is carried from the pre-release build: the old Swift files (takes-own.json, takes-muted.json) are never read here (docs/reference/AUTORADIO-TAKES.md)
 // A take in review belongs to the recorder, not to this module: a restart of the shared code finds it (`takeState`) and can publish it; a failed publish never drops it.
 import type { Storage } from './app.contract.d.ts';
 import { accountGeneration, nativeLater, SignedOutError } from './api.ts';
@@ -118,7 +118,7 @@ async function sync(env: Env, o: Overlay): Promise<boolean> {
   return had;
 }
 async function keptOf(env: Env, o: Overlay): Promise<Kept> { return (o.kept ??= await loadKept(env.storage)); }
-/** Keep it (the write is held to the generation `gen` the data belongs to)*/
+/** Keep it (the write is held to the generation `gen` the data belongs to). */
 async function keep(env: Env, o: Overlay, k: Kept, gen: number): Promise<boolean> {
   if (!(await saveKept(env.storage, k, gen))) return false;
   o.kept = k;
