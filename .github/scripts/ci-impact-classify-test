@@ -95,6 +95,12 @@ assert_output mobile-shared-code $'mobile/AutoradioLab/signin-sheet.ts\n' \
   'mobile=true' 'go=false' 'frontend=false' 'docs_only=false'
 assert_output mobile-contract-file $'mobile/AutoradioLab/account.contract\n' 'mobile=true'
 assert_output mobile-interface $'mobile/exact-package/exact.json\nmobile/scripts/gen-exact-interface.py\n' 'mobile=true'
+# The scheme handoff is shell (mobile/scripts/exact.sh passes SIGNIN_SCHEME=<app-identity.sh id>); the bun lane reads it (signin-sheet.test.ts S8b), so a change to it selects the lane.
+assert_output mobile-exact-sh $'mobile/scripts/exact.sh\n' 'mobile=true'
+assert_output mobile-app-identity $'mobile/scripts/app-identity.sh\n' 'mobile=true'
+assert_output mobile-identity-test $'mobile/scripts/test-app-identity.sh\n' 'mobile=true'
+# The /device page's pure helper is tested under node in the frontend lane; a change to the test alone must run it too.
+assert_output frontend-device-return-test-only $'frontend/tests/device-return.test.mjs\n' 'frontend=true'
 assert_output mobile-workflow-wiring $'.github/workflows/ci.yml\n' 'mobile=true'
 assert_output mobile-swift-only-does-not-select-it $'mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirSignIn.swift\n' 'mobile=false' 'go=false'
 assert_output mobile-docs-and-go-do-not-select-it $'docs/reference/exact/auth-session.md\ninternal/auth/device_login.go\n' 'mobile=false'
