@@ -262,18 +262,18 @@ if [ -n "$READER_STORY" ]; then
   run_drive reader1 light "" --touch platform
   CITE1=$(ids "$SHOTS/drive-reader1.txt" "reader-cite-" | sed -n 1p)
   # Part two: where the citation sits. The agent's tap does not scroll a target into view at this pin (the drive failed twice on "outside the viewport", with and without a real touch), so the page is scrolled
-  # explicitly, by the distance read from the node's own frame: `layout <id>` prints its "space viewport X,Y WxH" at the scroll the page opens at.
+  # explicitly, by the distance read from the node's own frame, to the middle of the screen (430), so a live story's next version, which moves the mark a few lines between the two launches, still leaves it in reach (train2p3's reader2 found the mark out of reach after 188 from a measure taken in another launch; its node ids showed 3 fewer nodes above the mark); the layout step before the tap leaves the frame it tapped at: `layout <id>` prints its "space viewport X,Y WxH" at the scroll the page opens at.
   CITE_SCROLL=""
   if [ -n "$CITE1" ]; then
     step "clock data"; wait_ 6000
     place paper 2500; to_top; step "tap \"$READER_STORY\""; wait_ 5000
     step "layout \"$CITE1\""
     run_drive reader1b light "" --touch platform
-    CITE_SCROLL=$(layout_scroll "$SHOTS/drive-reader1b.txt" "$CITE1" 320) || fail "reader" "the layout of $CITE1 in $SHOTS/drive-reader1b.txt has no viewport frame (or the node is more than 30000 points down): the drive cannot scroll to the citation"
+    CITE_SCROLL=$(layout_scroll "$SHOTS/drive-reader1b.txt" "$CITE1" 430) || fail "reader" "the layout of $CITE1 in $SHOTS/drive-reader1b.txt has no viewport frame (or the node is more than 30000 points down): the drive cannot scroll to the citation"
   fi
   step "clock data"; wait_ 6000
   place paper 2500; to_top; step "tap \"$READER_STORY\""; wait_ 5000
-  [ -n "$CITE1" ] && { step "tap reader-scroll wheel 0 $CITE_SCROLL"; step "clock settle"; step "tap \"$CITE1\""; view real-r3-reader-citation-card 1500; step "tap reader-scroll wheel 0 -30000"; step "clock settle"; }
+  [ -n "$CITE1" ] && { step "tap reader-scroll wheel 0 $CITE_SCROLL"; step "clock settle"; step "layout \"$CITE1\""; step "tap \"$CITE1\""; view real-r3-reader-citation-card 1500; step "tap reader-scroll wheel 0 -30000"; step "clock settle"; }
   step "tap reader-menu"; view real-r4-reader-menu 1200
   step "tap reader-menu-versions"; view real-r5-reader-versions 1500
   step logs
@@ -749,11 +749,12 @@ chk "notebook: the page, from shared code" '\[notebook-page\]' "$NB"
 chk "notebook: the held list is complete (its last row, 13)" '\[notebook-held-13\]' "$NB"
 chk "notebook: the notebook was read (a section, or a plain notice that there is none or it is offline)" '\[notebook-(section-[a-z-]+|doc-notice)\]' "$NB"
 # (Two "not stuck loading" checks were deleted: the only `loading` the page draws is its idle answer, so they could not catch a stuck read; the positive checks above are the proof of the read.)
-# The sync starts at EVERY launch and logs when it ends; the console is a ring of 4096 lines, so whether a given drive's dump still holds those lines depends on its traffic (the notebook drive lost them twice). The
-# lines are looked for in the launch dumps of all the drives (each launched a fresh app): the sync ran at launch if any of them shows it.
-cat "$SHOTS"/drive-*.txt > "$SCRATCH/all-drives.txt" 2>/dev/null
-chk "content sync: the shared sync ran at launch (stories: count and bytes logged)" 'console: content sync story: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$SCRATCH/all-drives.txt"
-chk "content sync: documents ran too" 'console: content sync document: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$SCRATCH/all-drives.txt"
+# The sync starts at EVERY launch and logs when it ends. Two places can show it. A drive's dump reads Exact's journal ring, which a busy launch overflows before the dump (train2p3: 3947 to 27519 earlier lines
+# dropped per drive; the sync's lines ran at launch, were logged, and were pushed out), so a drive may not hold them. The background drive's plain launch has no ring: its console is the simulator's log stream
+# ($BGJSLOG, the same `console.log` lines, whole), which is where train2p3's lines are (03:48:13 story, 03:49:54 document). The sync ran at launch if either source shows it.
+cat "$SHOTS"/drive-*.txt "$BGJSLOG" > "$SCRATCH/all-drives.txt" 2>/dev/null
+chk "content sync: the shared sync ran at launch (stories: count and bytes logged)" 'content sync story: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$SCRATCH/all-drives.txt"
+chk "content sync: documents ran too" 'content sync document: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$SCRATCH/all-drives.txt"
 bad "content sync: stories did not stop on an error" 'content sync story: .*stopped: error' "$NB"
 bad "content sync: the file walk is not a launch job" 'content sync file:' "$NB"
 chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' "$SHOTS/drive-tour.txt"
