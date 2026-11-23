@@ -128,6 +128,8 @@ describe('C3 paused and locked', () => {
 // C4 (the gaps review): the radio's hand-offs in the real pulse wiring.
 //  C4a one radioWrite at a time: the pulse never says `write` while a radioWrite is in flight. A mutation sent again REPLACES the first (Exact: the first is let go), and the first is the one waiting on the desk's
 //      reply: it was let go at the moment the reply arrived, the stretch "failed" after its first entry was placed, and the rest of a 30 s model call was lost (the proof's 11:40:00 hand-off).
+//  C4a2 the flag is the radio's, is marked by the pulse that calls for the write (so a pulse computed between the send and the body cannot call for a second send), and goes stale: a body that never ends (a continuation
+//      that never runs), a sign-out mid-ask and a throw cannot stop the radio asking. Exact's task rules (docs/reference/exact/ui-model.md "Tasks"): closing the gate cancels the pending `after`, a changed key restarts it.
 //  C4b an entry that ends with the next on the sheet and not on the deck: the next starts at once, in front, in the background and while the clock is slow (the deck's journal moves `ds.seq`, which asks the pulse).
 describe('C4a one radioWrite at a time', () => {
   test('while a radioWrite waits for the desk the pulse does not call for another, whatever is pending', async () => {
@@ -144,7 +146,7 @@ describe('C4a one radioWrite at a time', () => {
   });
 });
 
-describe('C4b the next entry starts at once when one ends and the deck holds nothing', () => {
+describe('C4b the HAND-OFF rule: the next entry starts at once when one ends and the deck holds nothing (this pins the rule that held before the C4a guard; it does not test that guard)', () => {
   const item = (id: string) => ({ id, kind: 'story', placed_by: 'desk', state: 'ahead', title: id, text: `Words of ${id}.`, est_seconds: 30, revision: 0 });
   for (const [name, inFront, slow] of [['in front', true, false], ['in the background', false, false], ['with the slow clock', false, true]] as const) {
     test(name, async () => {
@@ -177,4 +179,54 @@ describe('C4b the next entry starts at once when one ends and the deck holds not
       expect(played).toEqual(['a', 'b']);                                           // and b is started: no wait for the clock
     });
   }
+});
+
+describe('C4a2 the write flag cannot stop the radio asking', () => {
+  const setup = async () => {
+    const r = await getRadio(undefined, native as never); r.rt.store.poster = undefined;
+    r.rt.store.pending.push({ op_id: 'p-x', by: 'phone', op: 'aired', id: 'x', state: 'on_air', position_seconds: 0, base_version: 0 } as never);
+    return r;
+  };
+  test('the pulse that calls for a write marks it: the next pulse, computed before any radioWrite starts, does not call again; an unsent mark goes stale in a few seconds', async () => {
+    await setup();
+    expect((await radioPulse(undefined, native as never)).write).toBe(true);
+    expect((await radioPulse(undefined, native as never)).write).toBe(false);       // a second send in the gap between the send and the body would replace the first
+    nowMs += 6000;
+    expect((await radioPulse(undefined, native as never)).write).toBe(true);        // the write was never sent (the gate closed): the mark is stale
+  });
+  test('a radioWrite whose continuation never ends stops blocking after 260 s', async () => {
+    const r = await setup();
+    r.writer.checkAhead = () => true; r.writer.settleWithin = () => new Promise<void>(() => undefined);
+    void radioWrite(undefined, native as never);
+    await new Promise((x) => setTimeout(x, 20));
+    expect((await radioPulse(undefined, native as never)).write).toBe(false);
+    nowMs += 261_000;
+    expect((await radioPulse(undefined, native as never)).write).toBe(true);
+  });
+  test('a sign-out in the middle of an ask: the next radio is not held by the old one\'s flag', async () => {
+    const r = await setup();
+    r.writer.checkAhead = () => true; r.writer.settleWithin = () => new Promise<void>(() => undefined);
+    void radioWrite(undefined, native as never);
+    await new Promise((x) => setTimeout(x, 20));
+    await wipeRadio(undefined);
+    const r2 = await getRadio(undefined, native as never); r2.rt.store.poster = undefined;
+    r2.rt.store.pending.push({ op_id: 'p-y', by: 'phone', op: 'aired', id: 'y', state: 'on_air', position_seconds: 0, base_version: 0 } as never);
+    expect((await radioPulse(undefined, native as never)).write).toBe(true);
+  });
+  test('a radioWrite that throws clears the flag', async () => {
+    const r = await setup();
+    r.writer.checkAhead = () => { throw new Error('boom'); };
+    await radioWrite(undefined, native as never).catch(() => undefined);
+    expect((await radioPulse(undefined, native as never)).write).toBe(true);
+  });
+  test('a radioHold that never ends stops blocking the hold after 260 s', async () => {
+    const r = await getRadio(undefined, native as never);
+    r.rt.needsWork = () => true;
+    r.rt.pump = () => new Promise<void>(() => undefined);
+    void radioHold(undefined, native as never);
+    await new Promise((x) => setTimeout(x, 20));
+    expect((await radioPulse(undefined, native as never)).hold).toBe(false);
+    nowMs += 261_000;
+    expect((await radioPulse(undefined, native as never)).hold).toBe(true);
+  });
 });
