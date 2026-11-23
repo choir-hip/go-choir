@@ -5,7 +5,14 @@
 # Also stage the on-device models into the app's own module: Sources/AutoradioModels/*.swift become
 # AutoradioLab/modules/apple/Models_*.swift (importing the package module instead of AutoradioKit), and any static
 # xcframeworks built by scripts/build-xcframeworks.sh are copied beside them (Exact links modules/apple/*.xcframework).
+#
+# AR_BUILD_KIND (default development; store is archive-store.sh's): the store kind leaves out the developer launch hooks, which a development build keeps:
+# EmbedDeviceTrial.swift and EmbedTrialFixture.swift are not staged, and the two `runFromLaunchArguments()` calls (ModelProof, EmbedDeviceTrial: a launch argument
+# runs a measurement and writes into Documents) are dropped from the staged ModelHub copy. Exact defines EXACT_DEVELOPMENT only for package Swift, not for the
+# app module these files are staged into, so the choice is made here, by file, at build time: a build kind like debug symbols, not a setting the app reads.
 set -eu
+KIND="${AR_BUILD_KIND:-development}"
+case "$KIND" in development|store) ;; *) echo "sync-exact-package: AR_BUILD_KIND must be development or store, not $KIND" >&2; exit 1 ;; esac
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 KIT="$HERE/AutoradioKit/Sources/AutoradioKit"
 MODELS="$HERE/AutoradioKit/Sources/AutoradioModels"
@@ -31,7 +38,16 @@ mkdir -p "$APPMOD"
 rm -f "$APPMOD"/Models_*.swift; rm -rf "$APPMOD"/*.xcframework
 if [ -d "$HERE/.deps/xcframeworks/FluidAudio.xcframework" ]; then
   for f in "$MODELS"/*.swift; do
-    sed -e 's/^import AutoradioKit$/import ExactPkg_autoradio/' "$f" > "$APPMOD/Models_$(basename "$f")"
+    b="$(basename "$f")"
+    if [ "$KIND" = store ]; then
+      case "$b" in EmbedDeviceTrial.swift|EmbedTrialFixture.swift) continue ;; esac
+      if [ "$b" = ModelHub.swift ]; then
+        [ "$(grep -c 'runFromLaunchArguments()' "$f")" = 2 ] || { echo "sync-exact-package: ModelHub.swift no longer has exactly the two launch-hook calls the store kind removes; update this script" >&2; exit 1; }
+        sed -e 's/^import AutoradioKit$/import ExactPkg_autoradio/' "$f" | grep -v 'runFromLaunchArguments()' > "$APPMOD/Models_$b"
+        continue
+      fi
+    fi
+    sed -e 's/^import AutoradioKit$/import ExactPkg_autoradio/' "$f" > "$APPMOD/Models_$b"
   done
   for fw in "$HERE"/.deps/xcframeworks/*.xcframework; do cp -R "$fw" "$APPMOD/"; done
   echo "app module: $(ls "$APPMOD"/Models_*.swift | wc -l | tr -d ' ') model files, $(ls -d "$APPMOD"/*.xcframework | wc -l | tr -d ' ') xcframeworks"

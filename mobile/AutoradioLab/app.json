@@ -1,13 +1,14 @@
 {
   "$schema": "../.exact-src/scripts/app.schema.json",
-  "name": "Autoradio",
-  "short_name": "Autoradio",
-  "id": "news.choir.autoradio.lab",
+  "name": "Autoradio 1",
+  "short_name": "Autoradio 1",
+  "version": "1.0",
+  "id": "news.choir.autoradio",
   "start_url": "/",
   "display": "standalone",
   "app": {
-    "id": "news.choir.autoradio.lab",
-    "name": "Autoradio"
+    "id": "news.choir.autoradio",
+    "name": "Autoradio 1"
   },
   "icons": [
     { "src": "assets/appicon/default.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
@@ -35,7 +36,8 @@
   },
   "env": ["SIGNIN_SCHEME"],
   "variants": {
-    "one": { "idSuffix": ".one", "name": "Autoradio 1", "env": { "SIGNIN_SCHEME": "news.choir.autoradio.lab.one" } }
+    "lab": { "idSuffix": ".lab", "name": "Autoradio", "env": { "SIGNIN_SCHEME": "news.choir.autoradio.lab" } },
+    "lab-one": { "idSuffix": ".lab.one", "name": "Autoradio 1 Dev", "env": { "SIGNIN_SCHEME": "news.choir.autoradio.lab.one" } }
   },
   "audio_session": "playback",
   "typescript": { "sources": { "fixtures": "../fixtures", "layouts": "../layouts", "themes": "../themes" } }

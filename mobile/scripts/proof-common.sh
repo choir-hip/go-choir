@@ -3,7 +3,7 @@
 # Needs HERE (the scripts directory) and SHOTS set by the caller. Provides: fail, SIM, reset_state, step/wait_/shot/view/place/goto,
 # run_drive (a drive that starts from a clean app, retried when the agent socket is refused), must, nomust.
 DD=/Applications/Xcode.app/Contents/Developer
-APP="$("$HERE/app-identity.sh" id)" || exit 1   # AR_VARIANT / AR_APP_ID choose the second app
+APP="$("$HERE/app-identity.sh" id)" || exit 1   # AR_VARIANT / AR_APP_ID choose the app (none: the production id)
 SCRATCH="${TMPDIR:-/tmp}/proof-app.$$"
 mkdir -p "$SCRATCH"
 OUT="$SCRATCH/drive.txt"

@@ -40,8 +40,8 @@ import { signInRun, signInCancel, signInReopen, signInView, type AttemptEnv } fr
 // must equal it; paper.test.ts checks).
 export const ORIGIN = 'https://choir.news';
 // The sign-in sheet (signin-sheet.ts): the approval page opens in the system sign-in sheet and returns by this app's own callback scheme. The scheme is the app's id, so each
-// install has its own (app.json: the default's literal here, each variant's `env.SIGNIN_SCHEME`); two installs never share one. The path is the one the server builds (/signed-in).
-const SIGNIN_SCHEME = import.meta.env.SIGNIN_SCHEME ?? 'news.choir.autoradio.lab';
+// install has its own (app.json: the production app's literal here, each lab variant's `env.SIGNIN_SCHEME`); two installs never share one. The path is the one the server builds (/signed-in).
+const SIGNIN_SCHEME = import.meta.env.SIGNIN_SCHEME ?? 'news.choir.autoradio';
 export const grants = `auth.session ${ORIGIN}
 auth.callback ${SIGNIN_SCHEME}:/signed-in
 device.microphone purpose.microphone

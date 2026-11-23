@@ -1,5 +1,5 @@
 {
-  "purpose.microphone": "Hears you when you talk to the radio.",
-  "purpose.recordingInBackground": "Keeps the radio able to hear you with the screen locked.",
-  "purpose.speech": "Turns what you say into text on this phone."
+  "purpose.microphone": "Autoradio listens when you turn Voice on, so you can talk to the radio and ask about a story. What you say is turned into text on this phone.",
+  "purpose.recordingInBackground": "Autoradio keeps listening for your voice while the screen is locked, only when you have turned Voice on. Turn Voice off to stop.",
+  "purpose.speech": "Autoradio turns what you say into text on this phone, to understand your request."
 }

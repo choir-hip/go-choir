@@ -325,7 +325,18 @@ not author it.
   `"0"` (no update store) so the release path needs neither.
 - A cold build is "tens of minutes"; keep the app's `target/` and
   `~/.cache/exact` between CI runs to get minutes [doc].
-- TestFlight upload is Apple's tooling after the `.ipa`; not exercised.
+- Read at the pin (`f53347503`, source, not run): `--archive` needs `EXACT_IDENTITY` and `EXACT_PROFILE` (an App Store profile and its distribution identity), takes
+  `get-task-allow` from the profile, bakes production trust and Swift's `release` build (`host/apple/build.mjs:594, 729`); `--json` prints one result line
+  (`path`, `trust`, `signing`). **Version and build number** come only from `EXACT_VERSION` and `EXACT_BUILD_NUMBER` (defaults `0.1.0` and `1`; `bundleVersion()`,
+  `build.mjs:408`; no validation on iOS). `app.json`'s `version` is read by `exact share` only, so `archive-store.sh` reads it and passes it as `EXACT_VERSION`.
+  **Export compliance**: `ITSAppUsesNonExemptEncryption` cannot be set in `host.ios.infoPlist` (Exact refuses it as a key it writes itself, `plist.mjs:390`); it is written
+  by a production build only when `EXACT_NON_EXEMPT_ENCRYPTION` is `true` or `false`. **The iOS developer menu is on in a release build** (four-finger tap or hold;
+  `DevMenuIOS.swift`: `enabled = ExactEnv.devMenu ?? true`) unless `EXACT_DEV_MENU=0` is in the build's environment, which stamps `ExactDevMenu` false in Info.plist.
+  `EXACT_DEVELOPMENT` is a Swift condition Exact defines only for package modules of a non-production build (`compose.mjs:195`), not for the app module (`modules/apple`).
+  `exact.sh` runs Exact under `env -i`, so it passes `EXACT_IDENTITY`, `EXACT_PROFILE`, `EXACT_VERSION`, `EXACT_BUILD_NUMBER`, `EXACT_NON_EXEMPT_ENCRYPTION` and `EXACT_DEV_MENU` on when set.
+  Exact refuses (`scripts/variants.mjs`) a variant whose installed name is another app's, selected or not: the production app and the lab apps need four different names.
+- TestFlight upload is Apple's tooling after the `.ipa`: `mobile/scripts/upload-store.sh` runs `xcrun altool --upload-app -f <ipa> --api-key --api-issuer --p8-file-path`
+  (Xcode 27.1's `altool --help` lists these; the flags parse, a missing key file is refused before any network use; **an upload has never been run**; whether `-t ios` is needed: unknown).
 
 ## Over-the-air updates: off for us, not absent in Exact
 
@@ -414,4 +425,4 @@ reapplies them), and expect a rebuild of Exact's Rust host for the old sources.
 - Can the app's `target/` be shared between the spike and the real app?
 - Incremental Swift-only rebuild cost: lanes measured about 60 s warm and 57 s
   for a TypeScript-only change (see above).
-- TestFlight: does Exact's `.ipa` pass processing with `deploy.store: "0"`?
+- TestFlight: does Exact's `.ipa` pass processing with `deploy.store: "0"`? (`archive-store.sh` and `upload-store.sh` are written to find out; the first upload is the proof.)

@@ -4,7 +4,7 @@
 # no Exact build, no Xcode, no simulator, no phone.   sh mobile/scripts/test-app-identity.sh
 #
 # Failure list (written before the code, CLAUDE.md "Proof"):
-#  1. the default build changes: no variant is selected, the id is news.choir.autoradio.lab, the name Autoradio.
+#  1. the default build is not the production app: no variant is selected, the id is news.choir.autoradio, the name "Autoradio 1".
 #  2. a side-by-side build is chosen by something that app.json does not declare, so Exact refuses it late or builds the wrong app:
 #     an unknown variant, an AR_APP_ID that is no declared id, an AR_APP_NAME that is not the declared name must each fail at once.
 #  3. the choice does not reach Exact: exact.sh runs Bun under `env -i`, so an exported variable is dropped unless it is passed on.
@@ -45,47 +45,47 @@ run_build() { # run_build <command...>: over the stubs, the Bun log cleared firs
   : > "$T/bin/bun.log"
   env HOME="$T/home" BUN="$T/bin/bun" ALLOW_NO_MODELS=1 AUTORADIO_BUILD_TREE_FILE="$T/tree" "$@" > "$T/out.txt" 2>&1; rc=$?; [ -n "${TEST_DEBUG:-}" ] && cat "$T/out.txt" >&2; return $rc
 }
-ID=news.choir.autoradio.lab.one
+ID=news.choir.autoradio.lab.one; LAB=news.choir.autoradio.lab; PROD=news.choir.autoradio
 
 # 1. the default
-eq "default id" "$(env -u AR_VARIANT -u AR_APP_ID -u AR_APP_NAME "$M/scripts/app-identity.sh" id 2>&1)" news.choir.autoradio.lab
-eq "default name" "$("$M/scripts/app-identity.sh" name 2>&1)" Autoradio
+eq "default id" "$(env -u AR_VARIANT -u AR_APP_ID -u AR_APP_NAME "$M/scripts/app-identity.sh" id 2>&1)" $PROD
+eq "default name" "$("$M/scripts/app-identity.sh" name 2>&1)" "Autoradio 1"
 eq "default variant is none" "$("$M/scripts/app-identity.sh" variant 2>&1)" ""
-run_build "$M/scripts/build-lab.sh" ios --device --phone X; rc=$?
-eq "default build: Exact sees no variant" "$(cat "$T/bin/bun.log")" "variant=[] args=[exact.mjs ios --device --phone X]"
+run_build "$M/scripts/build-lab.sh" ios; rc=$?
+eq "default build: Exact sees no variant" "$(cat "$T/bin/bun.log")" "variant=[] args=[exact.mjs ios]"
 eq "default build exits 0" "$rc" 0
 
 # 2. the choice is checked against what app.json declares
-eq "AR_VARIANT=one id" "$(AR_VARIANT=one "$M/scripts/app-identity.sh" id 2>&1)" $ID
-eq "AR_VARIANT=one name" "$(AR_VARIANT=one "$M/scripts/app-identity.sh" name 2>&1)" "Autoradio 1"
-eq "AR_APP_ID alone selects the variant" "$(AR_APP_ID=$ID "$M/scripts/app-identity.sh" variant 2>&1)" one
-eq "AR_APP_ID and AR_APP_NAME that agree" "$(AR_APP_ID=$ID AR_APP_NAME="Autoradio 1" "$M/scripts/app-identity.sh" id 2>&1)" $ID
-eq "AR_APP_ID naming the base is the default" "$(AR_APP_ID=news.choir.autoradio.lab "$M/scripts/app-identity.sh" variant 2>&1)" ""
-for bad in "AR_VARIANT=nope" "AR_APP_ID=news.choir.autoradio.one" "AR_VARIANT=one AR_APP_ID=news.choir.autoradio.lab" "AR_VARIANT=one AR_APP_NAME=Other" "AR_APP_NAME=Other"; do
+eq "AR_VARIANT=lab-one id" "$(AR_VARIANT=lab-one "$M/scripts/app-identity.sh" id 2>&1)" $ID
+eq "AR_VARIANT=lab-one name" "$(AR_VARIANT=lab-one "$M/scripts/app-identity.sh" name 2>&1)" "Autoradio 1 Dev"
+eq "AR_APP_ID alone selects the variant" "$(AR_APP_ID=$ID "$M/scripts/app-identity.sh" variant 2>&1)" lab-one
+eq "AR_APP_ID and AR_APP_NAME that agree" "$(AR_APP_ID=$ID AR_APP_NAME="Autoradio 1 Dev" "$M/scripts/app-identity.sh" id 2>&1)" $ID
+eq "AR_APP_ID naming the base is the default" "$(AR_APP_ID=$PROD "$M/scripts/app-identity.sh" variant 2>&1)" ""
+for bad in "AR_VARIANT=nope" "AR_VARIANT=one" "AR_APP_ID=news.choir.autoradio.one" "AR_VARIANT=lab-one AR_APP_ID=news.choir.autoradio.lab" "AR_VARIANT=lab-one AR_APP_NAME=Other" "AR_APP_NAME=Other"; do
   if env $bad "$M/scripts/app-identity.sh" id >/dev/null 2>&1; then no "refused: $bad"; else ok "refused: $bad"; fi
 done
 
 # 3. the choice reaches Exact (through env -i), for the build and for every other verb that goes through exact.sh
-run_build env AR_VARIANT=one "$M/scripts/build-lab.sh" ios --device --phone X
-eq "variant build: Exact sees one" "$(cat "$T/bin/bun.log")" "variant=[one] args=[exact.mjs ios --device --phone X]"
+run_build env AR_VARIANT=lab-one "$M/scripts/build-lab.sh" ios --device --phone X
+eq "variant build: Exact sees lab-one" "$(cat "$T/bin/bun.log")" "variant=[lab-one] args=[exact.mjs ios --device --phone X]"
 run_build env AR_APP_ID=$ID "$M/scripts/exact.sh" agent ios tree
-eq "exact.sh agent: Exact sees one" "$(cat "$T/bin/bun.log")" "variant=[one] args=[exact.mjs agent ios tree]"
+eq "exact.sh agent: Exact sees lab-one" "$(cat "$T/bin/bun.log")" "variant=[lab-one] args=[exact.mjs agent ios tree]"
 run_build env AR_VARIANT=nope "$M/scripts/exact.sh" ios; rc=$?
 [ "$rc" -ne 0 ] && [ ! -s "$T/bin/bun.log" ] && ok "an unknown variant stops before Exact runs" || no "unknown variant ran Exact (rc $rc)"
 
 # 3b. the sign-in callback scheme is the app id, handed to Exact explicitly for EVERY identity (app.ts reads SIGNIN_SCHEME with `??`, which does not catch an empty value):
 #     the default no longer rests on a literal fallback, and a stray empty SIGNIN_SCHEME in the caller's environment cannot reach the grant.
 run_build "$M/scripts/exact.sh" agent ios tree
-eq "default build: SIGNIN_SCHEME is the default id" "$(cat "$T/bin/bun.scheme")" news.choir.autoradio.lab
-run_build env AR_VARIANT=one "$M/scripts/exact.sh" agent ios tree
+eq "default build: SIGNIN_SCHEME is the production id" "$(cat "$T/bin/bun.scheme")" $PROD
+run_build env AR_VARIANT=lab-one "$M/scripts/exact.sh" agent ios tree
 eq "variant build: SIGNIN_SCHEME is the variant's id" "$(cat "$T/bin/bun.scheme")" $ID
 run_build env SIGNIN_SCHEME= "$M/scripts/exact.sh" agent ios tree
-eq "an empty SIGNIN_SCHEME in the caller's environment does not reach Exact" "$(cat "$T/bin/bun.scheme")" news.choir.autoradio.lab
+eq "an empty SIGNIN_SCHEME in the caller's environment does not reach Exact" "$(cat "$T/bin/bun.scheme")" $PROD
 
 # 4. nothing else keeps its own copy of the id
 if grep -n "news\.choir\.autoradio" "$M/scripts/proof-common.sh" "$M/scripts/sim-launch.sh" "$M/scripts/make-profile.sh" "$M/scripts/proof-real.sh" "$M/scripts/exact.sh" "$M/scripts/build-lab.sh" >/dev/null; then no "a script still spells the bundle id"; else ok "no script spells the bundle id"; fi
-for v in "" one; do
-  want="news.choir.autoradio.lab${v:+.$v}"
+for v in "" lab lab-one; do
+  case "$v" in "") want=$PROD ;; lab) want=$LAB ;; lab-one) want=$ID ;; esac
   got="$(env AR_VARIANT="$v" HERE="$M/scripts" SHOTS="" TMPDIR="$T" sh -c '. "$HERE/proof-common.sh"; printf %s "$APP"' 2>&1)"
   eq "proof-common.sh APP (variant '$v')" "$got" "$want"
   # sim-launch.sh: its simctl line, with xcrun replaced by echo
@@ -101,16 +101,16 @@ for v in "" one; do
 done
 
 # 5. the tracked app.json is never touched
-: > "$T/bin/fail"; run_build env AR_VARIANT=one "$M/scripts/build-lab.sh" ios; rc=$?; rm -f "$T/bin/fail"
+: > "$T/bin/fail"; run_build env AR_VARIANT=lab-one "$M/scripts/build-lab.sh" ios; rc=$?; rm -f "$T/bin/fail"
 [ "$rc" -ne 0 ] && ok "a failing Exact command fails the build (rc $rc)" || no "a failing Exact command passed"
 eq "app.json after a failed build" "$(shasum -a 256 < "$APPJSON")" "$SUM0"
 mkdir -p "$T/elsewhere"; printf '%s\n' "$T/elsewhere" > "$T/tree2"
-env HOME="$T/home" BUN="$T/bin/bun" AR_VARIANT=one AUTORADIO_BUILD_TREE_FILE="$T/tree2" "$M/scripts/build-lab.sh" ios >/dev/null 2>&1; rc=$?
+env HOME="$T/home" BUN="$T/bin/bun" AR_VARIANT=lab-one AUTORADIO_BUILD_TREE_FILE="$T/tree2" "$M/scripts/build-lab.sh" ios >/dev/null 2>&1; rc=$?
 [ "$rc" -ne 0 ] && ok "a tree that is not the build tree is refused (rc $rc)" || no "not-the-build-tree build passed"
 eq "app.json after an early refusal" "$(shasum -a 256 < "$APPJSON")" "$SUM0"
 run_build env AR_VARIANT=nope "$M/scripts/build-lab.sh" ios
 eq "app.json after an unknown variant" "$(shasum -a 256 < "$APPJSON")" "$SUM0"
-run_build env AR_VARIANT=one "$M/scripts/build-lab.sh" ios
+run_build env AR_VARIANT=lab-one "$M/scripts/build-lab.sh" ios
 eq "app.json after a variant build" "$(shasum -a 256 < "$APPJSON")" "$SUM0"
 
 [ "$fails" -eq 0 ] && { echo "ALL OK"; exit 0; } || { echo "$fails FAILED"; exit 1; }

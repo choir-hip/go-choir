@@ -1,11 +1,11 @@
 #!/bin/sh
-# Exact never creates provisioning profiles. This builds a stub app with the lab's bundle id (or the second app's: AR_VARIANT=one) under the free
-# team so Xcode (-allowProvisioningUpdates) installs a development profile that Exact then finds.
+# Exact never creates provisioning profiles. This builds a stub app with the chosen app's bundle id (AR_VARIANT=lab or lab-one; none is the production id) under TEAM (default the free
+# team; the paid team is TEAM=S47GERGJZ3) so Xcode (-allowProvisioningUpdates) installs a development profile that Exact then finds.
 # The stub's compile may fail after the profile is made; that is fine.
 set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TEAM="${TEAM:-QSGU6VRJL6}"
-ID="$("$HERE/app-identity.sh" id)"   # AR_VARIANT=one: the second app's id
+ID="$("$HERE/app-identity.sh" id)"   # AR_VARIANT / AR_APP_ID choose the app
 W="$(mktemp -d)"
 cat >"$W/main.swift" <<'EOS'
 import UIKit

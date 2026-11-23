@@ -382,36 +382,82 @@ All Xcode/Swift commands run outside the Nix shell through `mobile/scripts/xe.sh
 
 ## The host app: Exact
 
-`AutoradioLab/` is an Exact app (Contract screens: Player, Lab, Trace; no SwiftUI, no UIKit views of ours). AutoradioKit is attached as the Exact package `@choir/autoradio` (`exact-package/`): `scripts/sync-exact-package.sh` copies the kit sources in and writes `exact-package/apple/exact.json`; `scripts/gen-exact-interface.py` writes the interface.
+`AutoradioLab/` is an Exact app (Contract pages: the radio, paper, reader, notebook, mail, files, podcasts, settings; the Lab and Trace pages were deleted 2026-11-19; no SwiftUI, no UIKit views of ours). AutoradioKit is attached as the Exact package `@choir/autoradio` (`exact-package/`): `scripts/sync-exact-package.sh` copies the kit sources in and writes `exact-package/apple/exact.json`; `scripts/gen-exact-interface.py` writes the interface.
 
 Pinned Exact: `expo/exact` at `f5334750386192245ee76add13a67ab51fb4e2fd` (moved from de212e671 on 2026-11-20, by reading; the first build at it is the lead's: `docs/reference/exact/build-and-ship.md`, "Moving the pin"), checked out at `mobile/.exact-src` (gitignored), Bun 1.4.2 at `~/.bun-1.4.2`. Commands: `mobile/scripts/exact.sh ios` (simulator), `mobile/scripts/exact.sh ios --device --phone 00008120-00114DE80A90C01E`.
 
-Signing: the free provisioning team is `QSGU6VRJL6` ("Yusef Nathanson (Personal Team)"); `N9HKM55LWY` is only the certificate's person id. Exact needs an installed profile for `news.choir.autoradio.lab`; `scripts/make-profile.sh` obtains one with a stub Xcode project and `-allowProvisioningUpdates`.
+Signing: the free provisioning team is `QSGU6VRJL6` ("Yusef Nathanson (Personal Team)"); `N9HKM55LWY` is only the certificate's person id. Exact needs an installed profile for the app's id; `scripts/make-profile.sh` obtains a development one with a stub Xcode project and `-allowProvisioningUpdates` (`TEAM=S47GERGJZ3` for the paid team).
 
-Paid team, 2026-11-23: the owner renewed the developer account and signed in to Xcode. The paid team is `S47GERGJZ3`; a wildcard development profile for it (to 2027-11-23) covers the owner's phone. "Autoradio 1" was moved to it that evening: the same code (`dcc56f2cd`), built in the build tree with `EXACT_IDENTITY=<the new development identity's SHA-1>` and `EXACT_PROFILE=<the wildcard profile's path>`. iOS refuses to install over a copy signed by another team (`MismatchedApplicationIdentifierEntitlement`), so Autoradio 1 alone was removed and installed again; it starts signed out with no models. The first app is still on the free team (`QSGU6VRJL6`, profile to 2026-11-25) and was not touched. Without those two variables Exact may pick the free team's profile while it is still on disk. There is no Apple Distribution identity yet, so nothing can be uploaded.
+Paid team, 2026-11-23: the owner renewed the developer account and signed in to Xcode. The paid team is `S47GERGJZ3`; a wildcard development profile for it (to 2027-11-23) covers the owner's phone. The second development app ("Autoradio 1" then, `news.choir.autoradio.lab.one`) was moved to it that evening: the same code (`dcc56f2cd`), built in the build tree with `EXACT_IDENTITY=<the new development identity's SHA-1>` and `EXACT_PROFILE=<the wildcard profile's path>` (`exact.sh` now passes both through `env -i`). iOS refuses to install over a copy signed by another team (`MismatchedApplicationIdentifierEntitlement`), so that app alone was removed and installed again; it starts signed out with no models. The first app is still on the free team (`QSGU6VRJL6`, profile to 2026-11-25) and was not touched. Without those two variables Exact may pick the free team's profile while it is still on disk. There is no Apple Distribution identity yet, so nothing can be uploaded until the owner makes one (below).
 
-## A second app on the phone ("Autoradio 1" beside "Autoradio")
+## The apps: production, and the two development apps on the phone
 
-Owner, 2026-11-23: two apps side by side. The second is an Exact **variant** (`variants.one` in `AutoradioLab/app.json`; Exact's reference, "Install a development build beside the release one (variants)", present at the pin): id = `app.id` + `.one`, so **`news.choir.autoradio.lab.one`**, name **"Autoradio 1"** (home screen and Settings), same icon. Exact derives the id as a suffix of `app.id`, so it cannot be `news.choir.autoradio.one`. Nothing in the app branches on it, and the tracked `app.json` is never rewritten by a build. Choose it with `AR_VARIANT=one` (or `AR_APP_ID=news.choir.autoradio.lab.one`; `AR_APP_NAME="Autoradio 1"` is accepted only as a check); `scripts/app-identity.sh` reads and checks the choice, `exact.sh` passes it to Exact as `EXACT_VARIANT`, and `proof-common.sh`, `sim-launch.sh` and `make-profile.sh` take their bundle id from it. Without the variable everything builds as before.
+One `AutoradioLab/app.json`, three identities (owner, 2026-11-23: the name is "Autoradio 1"; ids are in the `news.choir` family). **The production id is `app.id` in `app.json`, one value in one place** (also `id`, which Exact wants equal); everything else reads it through `scripts/app-identity.sh`. If the owner registered another id, change `app.id`, `id`, the default in `app.ts` (`SIGNIN_SCHEME ?? '...'`) and the lab variants' `env.SIGNIN_SCHEME`, then the server's list (below): the bun test `store-build.test.ts` fails until they agree.
+
+| Choice | Id | Name | Sign-in scheme |
+| --- | --- | --- | --- |
+| none (production) | `news.choir.autoradio` | Autoradio 1 | same as the id |
+| `AR_VARIANT=lab` (or `AR_APP_ID=news.choir.autoradio.lab`) | `news.choir.autoradio.lab` | Autoradio | same |
+| `AR_VARIANT=lab-one` (or `AR_APP_ID=news.choir.autoradio.lab.one`) | `news.choir.autoradio.lab.one` | Autoradio 1 Dev | same |
+
+The lab apps are Exact **variants** (`variants` in `app.json`: id = `app.id` + `idSuffix`, its own name, `env.SIGNIN_SCHEME`; Exact's reference, "Install a development build beside the release one (variants)"). The lab ids are exactly the ones on the owner's phone, so they stay installable side by side with each other and with the production app. `lab-one` was named "Autoradio 1" until the production app took that name: Exact refuses two apps of one installed name (`scripts/variants.mjs`), so its home-screen name becomes "Autoradio 1 Dev" at its next install (the id, and so its data, is unchanged). `AR_VARIANT=one` is retired and refused (the message lists what is declared). Nothing in the app branches on the identity, and the tracked `app.json` is never rewritten by a build. `AR_APP_NAME` is accepted only as a check. `app-identity.sh id|name|variant|version` reads and checks the choice, `exact.sh` passes it to Exact as `EXACT_VARIANT` and the id as `SIGNIN_SCHEME`, and `proof-common.sh`, `sim-launch.sh` and `make-profile.sh` take their bundle id from it.
+
+**No choice is now the production id, not the lab app.** A build for a phone (`--device`, not `--archive`) must name its development app (`build-lab.sh` refuses otherwise): the production id reaches phones through TestFlight. Simulator builds and the proofs with no choice run the production id on the simulator. The lead's queue scripts outside the repo (`~/.local/state/choir-buildq/device-install.sh`, `side-by-side.sh`, `run-one.sh`) must set `AR_VARIANT=lab` (device-install: the first app) or `AR_VARIANT=lab-one` before they build for the phone.
 
 The lead, through the Mac build queue, in the build tree, the phone connected, unlocked, Developer Mode on:
 
 ```sh
-# (a) once: a development profile for the new id (the stub installs it; its compile may fail afterwards, that is fine)
-AR_VARIANT=one mobile/scripts/make-profile.sh
-# (b) build, sign and install beside the first app (does not touch it)
-AR_VARIANT=one mobile/scripts/build-lab.sh ios --device --phone 00008120-00114DE80A90C01E
-# optional launch, and the container of the second app only
-AR_VARIANT=one mobile/scripts/build-lab.sh ios --device --run --phone 00008120-00114DE80A90C01E
+# (a) once: a development profile for a new id (the stub installs it; its compile may fail afterwards, that is fine)
+AR_VARIANT=lab-one mobile/scripts/make-profile.sh
+# (b) build, sign and install beside the other apps (does not touch them)
+AR_VARIANT=lab-one mobile/scripts/build-lab.sh ios --device --phone 00008120-00114DE80A90C01E
+# optional launch
+AR_VARIANT=lab-one mobile/scripts/build-lab.sh ios --device --run --phone 00008120-00114DE80A90C01E
 ```
 
-Every `devicectl` line above that names `--domain-identifier news.choir.autoradio.lab` reaches the first app; use `news.choir.autoradio.lab.one` for the second.
+Every `devicectl` line that names `--domain-identifier news.choir.autoradio.lab` reaches the first app; use `news.choir.autoradio.lab.one` for the second and `news.choir.autoradio` for the production app.
 
-Shares with the first app: nothing, by the entitlements Exact writes (read from `host/apple/build.mjs` at the pin, not yet from a built app). The signed `application-identifier` is `QSGU6VRJL6.<id>`; Exact adds `keychain-access-groups` and an App Group only for an app with widgets or activities, and this app has neither. Our Keychain code sets no access group, so an item goes in the app's default group, `QSGU6VRJL6.<id>`, and the fixed service strings (`news.choir.autoradio.choir`, `.mailseal`, `news.choir.autoradio`) are keys inside each app's own group. The second app starts signed out, and cannot read, change or delete the first app's sign-in. The sandbox containers differ, so preferences, Documents and Application Support differ. The on-device models live in the app container (`Application Support/AutoradioLab/models` and FluidAudio's `Application Support/FluidAudio/Models`), so the second app downloads its own: the small language model is 0.64 GB, the embedder 0.31 GB, the optional LFM3 pair more (see the model list above); Exact's build output for the second id is also a separate copy on the Mac. Backgrounds modes, the audio session and the `AVAudioSession` are per app; two apps playing at once compete for the audio session like any two apps. No URL scheme, universal link, notification category or background task id is declared by the app, and no server code reads a bundle id (`news.choir.autoradio` is not in the Go tree). Check on the first install: `codesign -d --entitlements - <the .app>` shows no `keychain-access-groups` beyond the application identifier.
+Shares with the other apps: nothing, by the entitlements Exact writes (read from `host/apple/build.mjs` at the pin, not yet from a built app). The signed `application-identifier` is `<team>.<id>`; Exact adds `keychain-access-groups` and an App Group only for an app with widgets or activities, and this app has neither. Our Keychain code sets no access group, so an item goes in the app's default group, `<team>.<id>`, and the fixed service strings (`news.choir.autoradio.choir`, `.mailseal`, `news.choir.autoradio`) are keys inside each app's own group; they are the same strings in all three apps and need no change. The sandbox containers differ, so preferences, Documents and Application Support differ. The on-device models live in the app container (`Application Support/AutoradioLab/models` and FluidAudio's `Application Support/FluidAudio/Models`), so each app downloads its own (the small language model is 0.64 GB, the embedder 0.31 GB, the optional LFM3 pair more); Exact's build output for each id is also a separate copy on the Mac. Background modes, the audio session and the `AVAudioSession` are per app; two apps playing at once compete for the audio session like any two apps. No URL scheme, universal link, notification category or background task id is declared except the sign-in callback scheme (the app's id, a grant). **The server must list every id:** `internal/auth/device_login.go:53` `DeviceReturnSchemes` holds the two lab ids and must gain `news.choir.autoradio` (red: auth; the Go test `TestDeviceReturnSchemesAreTheAppsInAppJSON` reads `app.json` and fails until it does). The server learns no other bundle id.
 
 Free provisioning team (`QSGU6VRJL6`): a profile lasts 7 days (lane experience, `docs/reference/exact/build-and-ship.md`; not checked against Apple's page here), after which the app stops opening until it is built and installed again; the second id needs its own profile, so it is a second app id on the team. Apple's limits on app ids per week and on apps installed per device: not checked.
 
-Remove it: delete "Autoradio 1" from the phone (long press, Remove App), or `xcrun devicectl device uninstall app --device 00008120-00114DE80A90C01E news.choir.autoradio.lab.one`. Removing it deletes only its container and Keychain items; the first app is untouched.
+Remove one: delete it from the phone (long press, Remove App), or `xcrun devicectl device uninstall app --device 00008120-00114DE80A90C01E news.choir.autoradio.lab.one`. Removing it deletes only its container and Keychain items; the others are untouched.
+
+## The store build: archive and upload (TestFlight)
+
+Station P1 of `docs/definitions/choir-shipping-the-app-2026-11-23.md`. Two scripts, both the lead's, neither run by a builder (`archive-store.sh` needs the build tree and the build lock; `upload-store.sh` is an owner act until the owner delegates it).
+
+**What the owner makes first (Xcode signed in to the paid team `S47GERGJZ3`):** an Apple Distribution certificate (Settings, Accounts, Manage Certificates; its key stays in the login keychain); the explicit App ID `news.choir.autoradio` (done 2026-11-23); an **App Store** provisioning profile for it, downloaded to a file; an App Store Connect API key (Users and Access, Integrations; its `.p8` kept outside the repo, mode 600). Agents are given the certificate's SHA-1 and file paths, never key material.
+
+```sh
+# the lead, in the build tree, the build lock held (check-store-signing.py reads only what these two name)
+cd /Users/wiz/Dev/go-choir/.lane/trees/qa-mac && git fetch -q && git checkout --detach origin/lane/store-build   # the queue's clean-tree rule applies
+EXACT_IDENTITY=<SHA-1 of the Apple Distribution identity> EXACT_PROFILE=<path of the App Store profile> \
+  /usr/bin/lockf -k -t 7200 ~/.cache/autoradio-mac-build.lock mobile/scripts/archive-store.sh
+# prints: ipa, bundle id, version, build number, ITSAppUsesNonExemptEncryption (read back from the .ipa)
+ASC_KEY_ID=<key id> ASC_ISSUER_ID=<issuer id> ASC_KEY_FILE=<path of AuthKey.p8> mobile/scripts/upload-store.sh <the ipa>
+```
+
+**Version and build number.** `CFBundleShortVersionString` is `app.json`'s `"version"` ("1.0"), given to Exact as `EXACT_VERSION`; Exact has no other source on iOS. `CFBundleVersion` is `EXACT_BUILD_NUMBER`, set by `archive-store.sh` to whole minutes since 2026-01-01 00:00 UTC (a number of at most 9 digits that rises with every run, so uploading the same commit again is a higher number; two runs in one minute cannot happen under the build lock). `AR_BUILD_NUMBER=<n>` overrides it, for example with App Store Connect's own next number. App Store Connect wants a new build number for every upload of a version; raise `"version"` for a new store version.
+
+**What the archive is.** `AR_BUILD_KIND=store` (only `archive-store.sh` sets it; `build-lab.sh` refuses an archive without it and the kind without an archive) then Exact's `bun exact.mjs ios --device --archive <ipa> --json`: production trust (`deploy.store.ios` is `"0"`, so no update receipt), Swift's release build, signed by `EXACT_IDENTITY` and `EXACT_PROFILE`, no phone. `EXACT_NON_EXEMPT_ENCRYPTION=false` writes `ITSAppUsesNonExemptEncryption = NO` (the app uses the system's HTTPS, Keychain and CryptoKit only). `EXACT_DEV_MENU=0` stamps Exact's four-finger developer menu off (it is on in release builds otherwise). The script then reads the `.ipa` back and fails unless the bundle id, version, build number, export answer, menu stamp and `ExactBuildKind = archive` are as asked, no `ExactDevelopment*` key is present, and a provisioning profile is embedded.
+
+**Developer-only surfaces, and how each is excluded** (a build kind, like debug symbols: no setting the app reads):
+
+| Surface | In a development build | In the store build |
+| --- | --- | --- |
+| Exact's iOS developer menu and reload (four-finger tap or hold) | on | off: `EXACT_DEV_MENU=0` at build, stamped `ExactDevMenu = false` and read back |
+| Exact's development client keys, inspect mode, development trust | `ExactDevelopment*` plist keys, `EXACT_INSPECT` | not written: `--archive` bakes production trust (Exact), checked on read-back |
+| Launch-argument measurements (`-ModelProofStages`, `-EmbedTrial 1`: write into Documents) and the embedder's 24-story fixture | staged into the app module | `sync-exact-package.sh` with `AR_BUILD_KIND=store` does not stage `EmbedDeviceTrial.swift` and `EmbedTrialFixture.swift` and drops the two calls from the staged `ModelHub.swift` (the uncalled `ModelProof.runFromLaunchArguments` definition remains in `ModelProof.swift`, which the product's `ModelProof.frames` needs) |
+| Lab, Trace, Components pages | none exist (deleted 2026-11-19); `lab:` addresses in `pages.ts` are titles only, `PageHost` has no `lab` kind and shows the not-yet page | same |
+| `motion.contract` (motion gallery) | in the tree, imported by nothing | not built |
+| Fixtures, demo mode | `typescript.sources.fixtures` is a source directory for tests; demo mode was deleted 2026-11-20 (`demo-leftovers.ts` only cleans what it left) | same |
+| Internal hostnames, test accounts | none: `ORIGIN` is `https://choir.news`; no drill account is in the app | same |
+| About's Build row (commit, dirty) and Server build | shown | shown (a tester's bug report names the commit); the commit is `build-info.gen.ts`, written by `gen-build-info.sh` |
+
+**What a tester sees, tab by tab** (the launcher's nine places and its More list; read from the contracts, not seen on a phone): Autoradio (the radio page: Play, queue, speed), My notebook, Paper (the front page, stories, the reader), Textures, Files, Mail, Imported documents, Podcasts, Settings (edition, appearance, account and devices, Computer, voice setup, voice and models, what the paper has learned, Activity, About). Signed out, the paper and the radio work; Mail, Files, Textures and the notebook need an account. Version 1's scope (Q2: radio, paper, reader, voice and podcasts; mail, files and takes later) is the owner's: every page above is in the build until the owner says to remove a place. Residual: `NotYetPage` ("... is not built yet") is reachable only for an address kind `PageHost` does not know.
+
+**Info.plist and the privacy manifest.** Microphone, speech and background-audio strings are `AutoradioLab/strings/en.json` (plain wording since 2026-11-23); `UIBackgroundModes = [audio]` is `host.ios.backgroundModes`; no other permission string exists (no camera, photos, location, contacts, Bluetooth, Face ID, tracking). `PrivacyInfo.xcprivacy` declares disk space (E174.1), file timestamps (C617.1), boot time (35F9.1) and user defaults (CA92.1), and Exact merges its own and scans every linked binary, stopping on an undeclared required-reason API; a grep of `AutoradioKit` and the app module finds exactly those four categories. It declares no `NSPrivacyCollectedDataTypes`: that waits for the owner's privacy label (mission station P4). Whether FluidAudio's and llama.cpp's static code use another category: unknown until the archive's scan runs.
 
 ## Audio states: ways it can fail (written before the code)
 
@@ -508,7 +554,7 @@ The agent's tree shows `[hidden]` on elements of tabs that are not showing, but 
 
 **Virtual audio.** The Exact agent plays nothing and opens no device (`state.sounds.output = "agent"`). Under the agent `labStart` starts `LiveAudio` in virtual mode: the same events, claims (those are real, on the simulator's session), yield levels and playback state, with playback as a timed wait and no `AVAudioEngine`. The mic is whatever is pushed into the bus: the Lab screen's "Inject fixture turn" button presses talk, feeds the bundled kept turn (`FixtureTurn.swift`, from `fixtures/turns/plain`) as 32 ms frames in real time, adds silence, and releases: the whole live engine path runs, and the turn lands in Trace like a spoken one. The same button on a phone injects through the real engine, which is a useful smoke test of the live path with a known utterance.
 
-## Trace export
+## Trace export (stale: the Trace page was deleted 2026-11-19; the path below is the old one)
 
 `Export JSON` in Trace writes the turn record to `Documents/AutoradioExports/<id>.json` in the app container, and also copies it to `app:/data/exports/` and offers Exact's `share` hatch (`share(title=, files=[path])`, `Share.swift:1-30`): the system share sheet on a phone; under the agent a hold, never a sheet. Without the sheet, pull it:
 
