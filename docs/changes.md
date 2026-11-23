@@ -20,7 +20,7 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 | Research prompts: one source count, a stop rule, a real gap measure | sent back by its review (four blocking findings); rework pushed, re-review owed | `lane/research-frame` |
 | Phone: "Autoradio 1", the train as a second app beside the first | **on the owner's phone since 2026-11-23 01:33Z**; seven defects found there | `lane/exact-side-by-side` |
 | Phone: position moves while playing; a closed answer card stays closed; the queue is described to the server as it is; the microphone opens on a first launch | built; one review seat accepted with six fixes, being applied; not on the phone | `lane/exact-ar1-next` |
-| Phone: sign-in in a sheet over the app | built (red: the approval route and page change); seat 1 accepted with three fixes, seat 2 running | `lane/signin-sheet` |
+| Phone: sign-in in a sheet over the app | the app part is in review; the server and page part is split out to land first | `lane/signin-sheet`, `lane/signin-server` |
 | A voice ask searches the paper | not started. Today the answering model has no tools and sees at most 40 front-page titles | none |
 | `choir trace run`: one run, step by step, with the reasons its record holds | built; the "model calls 0" defect fixed (the phase is in the payload, not the record field); tested on fixtures only, [page](reference/TRACE-RUN.md); not landed | `lane/trace-run` |
 | Research prompts: one source count, a stop rule, a real gap measure | built; under test; not reviewed | `lane/research-frame` |
@@ -51,6 +51,12 @@ the first table's). Seven designs exist only on lanes.
 - **What:** a command that reads a run through routes that already exist and prints its model calls, cells, module-surface calls, records, turn commits, restarts and resumes in time order, with the reason the record holds for each call (turn-commit Reason, else the model's own text, else "not recorded"), what retirement has taken, and a closing list of what that run's record does not contain. `choir trace runs` lists runs. `--json` and `--full`.
 - **Why:** a run's steps and reasons could only be rebuilt by hand from console lines (owner, 2026-11-22: "show me this run, step by step, with its reasons").
 - **Proof:** 24 tests on fixtures in the route handlers' own types, whole `cmd/choir` suite and gates pass. Not run against a real computer.
+- **Replaced:** nothing. **Undo:** revert.
+
+### Device approval can name the app to return to (`lane/signin-server`, red)
+- **What:** `POST /auth/device/approve` takes optional `return` (an app id from a fixed list: `news.choir.autoradio.lab`, `news.choir.autoradio.lab.one`) and `state` (a nonce) and answers `return_to` only after a successful approval (a denial answers none, and the page does not navigate; the app learns of it by its poll); the decision is recorded first, and a bad hint just omits `return_to`. The page sends the hint only when it has the server's shape (a long or odd hint in a crafted link is dropped). A body over `readJSON`'s 1 KiB cap is a 400 before the code is looked up (no decision, no miss counted, no oracle); a test pins that. The `/device` page follows `return_to` back to the phone's sign-in sheet. Clients that send neither field see no change. The CI frontend job now runs the page's return unit test.
+- **Why:** the phone's sign-in leaves the app for a full browser; the sheet needs a way back. The server and page must be deployed before the app that uses them, so this part lands alone, ahead of the app part (`lane/signin-sheet`).
+- **Proof:** deployed proof owed (`scripts/proofs/device-approve-return-deployed.sh`, a stranger's checks only: 401 with and without the fields, 415 for a form, the page served). The approval answering `return_to` is covered by Go tests, not yet seen on staging or a phone.
 - **Replaced:** nothing. **Undo:** revert.
 
 ### The store can be measured by kind (`0f4421aae`, orange)
