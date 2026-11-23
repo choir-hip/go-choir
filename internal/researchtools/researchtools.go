@@ -136,8 +136,8 @@ const publishedFirstNote = "published lists the paper's own earlier stories and 
 
 // wireCorpusResult is the search_wire_corpus answer. A struct, not a map: JSON
 // keys must come out in this order: the two counts, then published first (a map sorts them alphabetically, which
-// put captures ahead of the paper's own stories). Field names and meanings are
-// unchanged; the two counts (opening the result), words_note and published_first_note are new.
+// put captures ahead of the paper's own stories). The two counts (opening the
+// result), words_note and published_first_note are new fields; the rest keep their names and meanings.
 type wireCorpusResult struct {
 	// MatchedWords and NearByMeaningOnly open the result: how many of the listed captures
 	// matched the query's words (in their text, title, outlet, topic or language) and how

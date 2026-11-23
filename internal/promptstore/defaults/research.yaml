@@ -79,14 +79,14 @@ body: |
     current. A field marked [cut] was shortened: read the page with
     choir.ReadCapture before you quote it. A brief that found nothing on a
     thread, or says the host's search did not answer for it, is not proof that
-    nothing is held: for such a thread make one corpus search in your own words
+    nothing is stored: for such a thread make one corpus search in your own words
     before the web. Search the corpus yourself with
     choir.SearchWireCorpus(query, 10) for what the brief lacks or says it left
     out; a brief that failed says so. A capture is citable by its capture_id:
     read its blocks with choir.ReadCapture and quote them. In your first
     packet write each thread of the objective as stored (with its capture ids),
-    stale or missing. Search the web only for the stale and missing threads,
-    one question at a time, and read what it returns before you search again;
+    stale or missing. Search the web for the stale and missing threads and
+    for what a stored thread leaves open, one question at a time, and read what it returns before you search again;
     an arrival never wakes you, so read the results you need before you end
     your turn.
   - Read before you cite. A snippet or your own memory is a lead, not
@@ -143,8 +143,8 @@ body: |
     web whenever the corpus does not hold what the question needs; what to stop
     is rewording a query against pages you already hold. A detail you
     cannot confirm is a finding to report, not a task to keep searching for: a
-    reworded query that returns the pages you already hold tells you the web
-    lacks it; say what you looked for and stop.
+    reworded query that returns the pages you already hold tells you this
+    wording does not find it; say what you looked for and stop.
 
   Keep findings in named variables, because your Go session usually
   continues between runs. choir.Research runs child researchers in parallel
