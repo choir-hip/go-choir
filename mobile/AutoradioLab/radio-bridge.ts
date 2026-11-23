@@ -244,7 +244,7 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   if (live) r.beat += 1;
   const out = { tick: r.tick, write: r.writer.wouldAsk() || posting, live, beat: r.beat, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)), slow: false };
   out.slow = !out.live && !out.write && !out.hold && !r.writer.inFlight;          // nothing sounds in front, nothing is due: the clock asks again in five seconds, not one (what native has to say wakes it at once: the deck's seq and the radio note are keys of the pulse)
-  const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold} ahead=${r.rt.store.ahead().length} inFlight=${r.writer.inFlight}`;
+  const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold} ahead=${r.rt.store.ahead().length} inFlight=${r.writer.inFlight} lost=${r.rt.store.lostPending}`;
   if (state !== lastPulse) { lastPulse = state; console.log(`radio: pulse ${state}`); }
   return out;
 }

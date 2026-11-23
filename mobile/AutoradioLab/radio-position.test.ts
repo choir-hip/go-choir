@@ -388,3 +388,12 @@ describe('P15 the native place verb is a listener act (seat 2, item 4)', () => {
     expect(n).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('P16 what was lost offline reaches the log line the status reads (seat 2, item 6)', () => {
+  test('the pulse line carries lost=N', async () => {
+    const r = await getRadio(undefined, native as never); r.rt.store.lostPending = 7;
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    try { await radioPulse(undefined, native as never); r.rt.store.lostPending = 8; await radioPulse(undefined, native as never); } finally { console.log = log; }
+    expect(logs.some((l) => l.includes('pulse') && /lost=8/.test(l))).toBe(true);
+  });
+});
