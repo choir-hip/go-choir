@@ -40,7 +40,7 @@ export type PageInput = {
   /** 0...1 through the entry on air. */
   progress?: number;
   /** Remote audio's own labels ("1:12", "-3:40"); the entry is not spoken. */
-  remoteAudio?: boolean; elapsedLabel?: string; remainingLabel?: string;
+  remoteAudio?: boolean; spokenElapsed?: number; elapsedLabel?: string; remainingLabel?: string;
   /** The player's message ("Can't speak: ...", "Could not play ..."); "" when all is well. */
   message?: string; notice?: string; writing?: boolean; dry?: boolean;
   /** The radio is wanted (it was started and not stopped): what is written next starts by itself. */
@@ -219,7 +219,7 @@ export function make(i: PageInput): PageInfo {
     else if (air.est_seconds >= 1) {
       const done = air.est_seconds * o.fraction;
       o.elapsed = clockLabel(done); o.remaining = '-' + clockLabel(Math.max(0, air.est_seconds - done));
-    }
+    } else if ((i.spokenElapsed ?? 0) >= 1) o.elapsed = clockLabel(i.spokenElapsed ?? 0);        // no estimate (a story played from its page before its words were loaded): the time the voice has run, and no time left to say
     if (air.kind === 'answer') { const h = held(i.sheet); if (h) o.thenBack = `Then back to: ${displayTitle(h)}`; }
     // Why this: the desk's own cause and forecast when the entry carries them, else a sentence built from what the entry does carry.
     const f = air.forecast;

@@ -12,12 +12,12 @@ import { relative } from './paper-model.ts';
 
 export type RadioFacts = {
   at: number; sheet: string; playing: boolean; sentences: string[]; sentenceIndex: number; progress: number;
-  remoteAudio: boolean; remoteElapsed: number; remoteDuration: number; wants: boolean; message: string; notice: string; writing: boolean; dry: boolean;
+  remoteAudio: boolean; remoteElapsed: number; spokenElapsed: number; remoteDuration: number; wants: boolean; message: string; notice: string; writing: boolean; dry: boolean;
   /** The title and route of the programme on air (the headline being read and the story it is); "" when none. */
   airTitle: string; airRoute: string; publishedAt: number; versionRoutes: string[]; versionNumbers: number[]; stale: string[]; takeTranscript: string; takeRecord: string;
 };
 export const EMPTY_FACTS: RadioFacts = {
-  at: 0, sheet: '', playing: false, sentences: [], sentenceIndex: 0, progress: 0, remoteAudio: false, remoteElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
+  at: 0, sheet: '', playing: false, sentences: [], sentenceIndex: 0, progress: 0, remoteAudio: false, remoteElapsed: 0, spokenElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
   airTitle: '', airRoute: '', publishedAt: 0, versionRoutes: [], versionNumbers: [], stale: [], takeTranscript: '', takeRecord: '',
 };
 
@@ -71,7 +71,7 @@ export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknow
     remoteAudio: remote, elapsedLabel: remote ? clockLabel(elapsed) : '', remainingLabel: remote && duration > 0 ? '-' + clockLabel(Math.max(0, duration - elapsed)) : '',
     message: str(f.message), notice: str(f.notice), writing: f.writing === true, dry: f.dry === true, wants: f.wants === true,
     published: at > 0 && published > 0 ? relative(published * 1000, at * 1000) : '',
-    stale: strs(f.stale), versions,
+    spokenElapsed: Math.max(0, num(f.spokenElapsed)), stale: strs(f.stale), versions,
     takeLookup: takeTranscript !== '' || takeRecord !== '' ? () => ({ transcript: takeTranscript, record_words: takeRecord }) : undefined,
     now: at * 1000, utcOffsetMinutes: offsetMinutes ?? (at > 0 ? zoneMinutes(at) : 0),
   });

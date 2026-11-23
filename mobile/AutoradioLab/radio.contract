@@ -173,7 +173,7 @@ component RadioPage
               if qv.audio
                 QueueScrub()
               else
-                column gap=4 width="100%" testId="radio-progress"
+                column gap=4 width="100%" testId="radio-progress" aria-label=`Progress ${floor(rp.fraction * 1000) / 10} percent`
                   box height=2 background-color=th.rule width="100%"
                     box height=2 width=`${floor(rp.fraction * 100)}%` background-color=th.accent
                   if rp.elapsed != ""

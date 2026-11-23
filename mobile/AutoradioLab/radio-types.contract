@@ -10,6 +10,7 @@ shape RadioPageFacts
   progress: number
   remoteAudio: bool
   remoteElapsed: number
+  spokenElapsed: number
   remoteDuration: number
   wants: bool
   message: string

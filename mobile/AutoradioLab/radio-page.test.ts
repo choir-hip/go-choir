@@ -155,3 +155,18 @@ describe('remote audio and the story on air', () => {
     expect(radioPage(facts([], { dry: true }), bar(), none, 0).emptyNote).toContain('Nothing is coming up.');
   });
 });
+
+
+describe('spoken time with no estimate (the proof showed no elapsed label on a paper story played from its page)', () => {
+  const noEstimate = entry('a', { state: 'on_air', est_seconds: 0 });
+  test('R11 an entry with no estimate shows the elapsed time the voice has counted and omits only the remaining time', () => {
+    const p = radioPage(facts([noEstimate], { playing: true, progress: 0.2, spokenElapsed: 42 }), bar(), none, 0);
+    expect(p.elapsed).toBe('0:42'); expect(p.remaining).toBe('');
+  });
+  test('R11 with an estimate both stay, as before; with nothing counted yet and no estimate both are empty', () => {
+    const p = radioPage(facts([entry('a', { state: 'on_air', est_seconds: 60 })], { playing: true, progress: 0.5, spokenElapsed: 7 }), bar(), none, 0);
+    expect(p.elapsed).toBe('0:30'); expect(p.remaining).toBe('-0:30');
+    const q = radioPage(facts([noEstimate], { playing: true, spokenElapsed: 0 }), bar(), none, 0);
+    expect(q.elapsed).toBe(''); expect(q.remaining).toBe('');
+  });
+});

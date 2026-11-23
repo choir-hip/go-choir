@@ -253,3 +253,27 @@ describe('P9 the phone locked or the app in the background: the page may still s
     expect((await radioPulse(undefined, plain as never)).live).toBe(true);
   });
 });
+
+describe('P10 the spoken entry\'s own clock: an entry with no estimate still counts the time the voice has run', () => {
+  test('playing counts, a pause holds, resuming goes on; the page facts carry it', async () => {
+    fresh();
+    const r = await getRadio(undefined, native as never);
+    r.rt.play({ id: 'sp-1', kind: 'story', placed_by: 'phone', state: 'ahead', title: 'Played from the paper', est_seconds: 0, revision: 0, text: 'Words of a story.', source: { ref: 'pub:/pub/x', label: 'x' } } as Entry);
+    await r.rt.pump();
+    dk.item = 'sp-1'; dk.why = 'playing'; dk.base = 0; dk.t0 = nowS; dk.seq += 1;
+    await radioPulse(undefined, native as never);
+    for (let i = 0; i < 5; i++) { nowS += 1; await radioPulse(undefined, native as never); }
+    expect((await radioPageFacts(undefined, native as never)).spokenElapsed).toBe(5);
+    dk.why = 'paused_listener'; nowS += 1; await radioPulse(undefined, native as never);
+    for (let i = 0; i < 4; i++) { nowS += 1; await radioPulse(undefined, native as never); }
+    expect((await radioPageFacts(undefined, native as never)).spokenElapsed).toBe(5);
+    dk.why = 'playing'; await radioPulse(undefined, native as never);
+    for (let i = 0; i < 3; i++) { nowS += 1; await radioPulse(undefined, native as never); }
+    expect((await radioPageFacts(undefined, native as never)).spokenElapsed).toBe(8);
+  });
+  test('the contract draws a progress value the dump can read, and the proof reads it', () => {
+    const c = readFileSync(new URL('radio.contract', import.meta.url), 'utf8');
+    expect(c).toMatch(/testId="radio-progress"[^\n]*aria-label=`Progress \$\{/);
+    expect(readFileSync(new URL('../scripts/proof-real.sh', import.meta.url), 'utf8')).toContain('radio-progress');
+  });
+});

@@ -12,6 +12,7 @@ import { Director, previousRestartsCurrent, plan as planEntry, type Command, typ
 import { RunSheetStore, NO_REPORT, type AirReport, type Poster, type Storage } from './runsheet-store.ts';
 import { audioSpec, displayTitle, kindWord } from './runsheet-entries.ts';
 import { clockLabel } from './radio-model.ts';
+import { clock } from './clock.ts';
 import { item as deckItem, DECK_HELD_MAX, type DeckEvent, type DeckItem, type DeckPort, type DeckState } from './deck.ts';
 import { syncHeld } from './deck-ops.ts';
 import { parseEpisodeKey } from './podcast-model.ts';
@@ -51,7 +52,7 @@ export type DeskState = { notice: string; writing: boolean; dry: boolean };
 /** What the screens read of the queue (queue.contract's `QueueInfo`), and what the bar's overlay and the Autoradio page read besides. */
 export type QueueView = {
   onAir: boolean; current: string; currentKind: string; audio: boolean; playing: boolean; paused: boolean; waiting: boolean; clip: boolean;
-  keepTitle: string; canOpenEpisode: boolean; elapsed: number; duration: number; elapsedLabel: string; remainingLabel: string; fraction: number;
+  keepTitle: string; canOpenEpisode: boolean; elapsed: number; spokenElapsed: number; duration: number; elapsedLabel: string; remainingLabel: string; fraction: number;
   message: string; notice: string; writing: boolean; dry: boolean;
 };
 
@@ -77,6 +78,9 @@ export class RadioRuntime {
   private onChange?: () => void;
   private facts: NativeFacts = NO_FACTS;
   private deckState?: DeckState;
+  /** The time the voice has run on the spoken entry on air (milliseconds): counted from the device's clock while the deck says it plays, held when it does not. A spoken entry may carry no estimate (one played from a paper page
+   *  before its words are loaded), and the page still shows the time heard; `last` is the clock at the last read while playing, -1 when it was not. */
+  private spoken = { id: '', ms: 0, last: -1 };
   private desk: DeskState = { notice: '', writing: false, dry: false };
   /** The items handed to the deck (played or held), by entry id: what a journal line is read against. */
   private known = new Map<string, DeckItem>();
@@ -166,7 +170,7 @@ export class RadioRuntime {
       onAir: air !== undefined, current: air ? displayTitle(air) : '', currentKind: air ? kindWord(air) : '', audio: spec !== undefined,
       playing: air !== undefined && why === 'playing', paused: air !== undefined && (why === 'paused_listener' || why === 'paused_system'), waiting: why === 'held_session',
       clip: (spec?.is_clip ?? false) && !(air && this.kept.has(air.id)), keepTitle: air && spec ? (spec.show === '' ? spec.title : `${spec.title} (${spec.show})`) : '', canOpenEpisode: spec?.episode_id !== undefined && parseEpisodeKey(spec.episode_id) !== null,
-      elapsed, duration, elapsedLabel: air && spec ? clockLabel(elapsed) : '',
+      elapsed, spokenElapsed: air && !spec && this.spoken.id === air.id ? Math.floor(this.spoken.ms / 1000) : 0, duration, elapsedLabel: air && spec ? clockLabel(elapsed) : '',
       remainingLabel: air && spec && duration > 0 ? '-' + clockLabel(Math.max(0, duration - elapsed)) : '', fraction: spec && duration > 0 ? Math.min(1, Math.max(0, elapsed / duration)) : 0,
       message: this.director.message, notice: this.desk.notice, writing: this.desk.writing, dry: this.desk.dry && !this.desk.writing,
     };
@@ -320,7 +324,15 @@ export class RadioRuntime {
   /** The app is in front, as of the last read of the native facts. */
   inFront = (): boolean => this.facts.foreground;
   /** One read of the deck and the native facts, no more (what the pulse does): the pump is `radioHold`'s. */
-  async peek(): Promise<void> { await this.refreshFacts(); try { this.deckState = await this.deck.state(); } catch { /* the next pulse reads again */ } }
+  async peek(): Promise<void> { await this.refreshFacts(); try { this.deckState = await this.deck.state(); } catch { /* the next pulse reads again */ } this.countSpoken(); }
+  private countSpoken(): void {
+    const air = this.store.onAir(), st = this.deckState, now = clock.ms;
+    if (!air || audioSpec(air)) { this.spoken = { id: '', ms: 0, last: -1 }; return; }
+    if (this.spoken.id !== air.id) this.spoken = { id: air.id, ms: 0, last: -1 };
+    const playing = st?.item === air.id && st.why === 'playing';
+    if (playing && this.spoken.last >= 0 && now > this.spoken.last) this.spoken.ms += now - this.spoken.last;
+    this.spoken.last = playing ? now : -1;
+  }
   needsWork(): boolean {
     if (this.pendingStarts.length > 0) return true;
     if (this.deckState?.journal.some((l) => l.seq > this.lastSeq)) return true;               // lines the deck wrote that the pump has not read
@@ -375,7 +387,7 @@ export class RadioRuntime {
     try { await this.deck.act('stop'); } catch { /* the deck is gone */ }
     if (this.store.poster) await this.store.settlePending(3000);          // the `left` report reaches the computer while the old key is still held; what is not answered by then is dropped, never sent under a later account
     await this.store.wipe();
-    this.facts = NO_FACTS; this.deckState = undefined;
+    this.facts = NO_FACTS; this.deckState = undefined; this.spoken = { id: '', ms: 0, last: -1 };
     this.onChange?.();
   }
 }

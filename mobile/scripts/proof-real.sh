@@ -698,11 +698,13 @@ if [ -n "$PLAY_BAR" ]; then
     A=$(grep -oE "\\[$id\\] \"[0-9:]+\"" "$SHOTS/seg-elapsed-a.txt" | head -1 | sed -E 's/^[^"]*"//; s/"$//'); B=$(grep -oE "\\[$id\\] \"[0-9:]+\"" "$SHOTS/seg-elapsed-b.txt" | head -1 | sed -E 's/^[^"]*"//; s/"$//')
     if [ -n "$A" ] && [ -n "$B" ]; then ELID=$id; E1=$A; E2=$B; break; fi
   done
+  # The progress line carries its value too (radio.contract: the aria-label of radio-progress, "Progress 12.3 percent"): an entry with no estimate has no elapsed label, and its progress still moves.
+  P1=$(grep -oE '\[radio-progress\][^"]*"Progress [0-9.]+ percent"' "$SHOTS/seg-elapsed-a.txt" | head -1 | sed -E 's/^[^"]*"//; s/"$//'); P2=$(grep -oE '\[radio-progress\][^"]*"Progress [0-9.]+ percent"' "$SHOTS/seg-elapsed-b.txt" | head -1 | sed -E 's/^[^"]*"//; s/"$//')
   T1=$(grep -oE '\[(radio-onair-title|bar-text)\] "[^"]*"' "$SHOTS/seg-elapsed-a.txt" | head -1); T2=$(grep -oE '\[(radio-onair-title|bar-text)\] "[^"]*"' "$SHOTS/seg-elapsed-b.txt" | head -1)
-  if [ -z "$ELID" ]; then echo "MISSING: position: no elapsed label (radio-elapsed or queue-elapsed) in BOTH of the two dumps taken with no tap between"; FAILS="$FAILS [position moves while playing]"
-  elif [ -z "$T1" ] || [ "$T1" != "$T2" ]; then echo "MISSING: position: the entry on air is not the same in both dumps, or its title was not read ([$T1] / [$T2]), so the labels cannot be compared"; FAILS="$FAILS [position moves while playing]"
-  elif [ "$E1" != "$E2" ]; then echo "ok: position: $ELID moved with no tap between two dumps of $T1 ($E1 -> $E2)"
-  else echo "MISSING: position: $ELID did not move in five seconds with no tap ($E1 -> $E2)"; FAILS="$FAILS [position moves while playing]"; fi
+  if [ -z "$ELID" ] && { [ -z "$P1" ] || [ -z "$P2" ]; }; then echo "MISSING: position: neither an elapsed label (radio-elapsed or queue-elapsed) nor the progress value (radio-progress) is in BOTH of the two dumps taken with no tap between"; FAILS="$FAILS [position moves while playing]"
+  elif [ -z "$T1" ] || [ "$T1" != "$T2" ]; then echo "MISSING: position: the entry on air is not the same in both dumps, or its title was not read ([$T1] / [$T2]), so the values cannot be compared"; FAILS="$FAILS [position moves while playing]"
+  elif { [ -n "$ELID" ] && [ "$E1" != "$E2" ]; } || { [ -n "$P1" ] && [ -n "$P2" ] && [ "$P1" != "$P2" ]; }; then echo "ok: position: moved with no tap between two dumps of $T1 (${ELID:-no label}: $E1 -> $E2; $P1 -> $P2)"
+  else echo "MISSING: position: nothing moved in five seconds with no tap (${ELID:-no label}: $E1 -> $E2; $P1 -> $P2)"; FAILS="$FAILS [position moves while playing]"; fi
   chk "position: the page still says On air at the second read" '\[radio-status\] "On air"' "$SHOTS/seg-elapsed-b.txt"
   rm -f "$SHOTS/seg-elapsed-a.txt" "$SHOTS/seg-elapsed-b.txt"
   bad "bar: no error line held the bar" '\[bar-text\] "(Could not|Something went wrong|The voice stopped)' "$BR"
