@@ -111,6 +111,7 @@ async function ask(address: string, net: Net, prefetch = false): Promise<ReaderD
   const key = address;
   const shared = inflight.get(key);
   if (shared) return shared;
+  let self: Promise<ReaderDoc> | undefined;                     // this ask, to tell whether a reload dropped it while it was on its way
   const p = (async (): Promise<ReaderDoc> => {
     let d: ReaderDoc;
     try { d = await fetchDoc(address, net); }
@@ -119,10 +120,10 @@ async function ask(address: string, net: Net, prefetch = false): Promise<ReaderD
       return !(e instanceof SignedOutError) && held.get(address) ? held.get(address)! : failDoc(address, e);
     }
     if (gen !== accountGeneration()) return blankDoc(address, 'loading');           // another account began while this was on its way: neither held nor shown
-    if (d.status === 'ready' && inflight.get(key) === p) { put(d); if (prefetch) unseen.add(address); else unseen.delete(address); }
+    if (d.status === 'ready' && inflight.get(key) === self) { put(d); if (prefetch) unseen.add(address); else unseen.delete(address); }
     return d;
   })().finally(() => { if (inflight.get(key) === p) inflight.delete(key); });
-  inflight.set(key, p);
+  self = p; inflight.set(key, p);
   return p;
 }
 
