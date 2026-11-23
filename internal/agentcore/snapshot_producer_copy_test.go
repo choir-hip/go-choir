@@ -210,9 +210,9 @@ func TestRuntimeStartSweepsTheSnapshotScratch(t *testing.T) {
 	}
 }
 
-// The production constructor sets the hook the producer requires, and the
-// capture it builds has no scratch directory, no store-copy token and a pin
-// deadline.
+// The production constructor sets the hooks the producer requires. What the
+// capture it builds does with its pin deadline and its free-space guard is
+// proved by behaviour in snapshot_producer_wiring_test.go.
 func TestTheProductionConstructorWiresEveryHook(t *testing.T) {
 	st := newStreamStore(t, 20)
 	client, err := computerevent.NewHTTPClient("http://127.0.0.1:1", http.DefaultClient,
@@ -234,18 +234,5 @@ func TestTheProductionConstructorWiresEveryHook(t *testing.T) {
 	}
 	if deps.StagedCopyBytes == nil || deps.Take == nil || deps.FreeBytes == nil {
 		t.Fatalf("a hook is not wired: StagedCopyBytes %v, Take %v, FreeBytes %v", deps.StagedCopyBytes != nil, deps.Take != nil, deps.FreeBytes != nil)
-	}
-	raw, err := os.ReadFile("snapshot_producer.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	src := string(raw)
-	if !strings.Contains(src, "PinDeadline: snapshotPinDeadline") {
-		t.Fatal("the capture is built without its pin deadline")
-	}
-	for _, gone := range []string{"ScratchDir", "TryHoldStoreCopy", "RemoveCaptureLeftovers", "Witness:"} {
-		if strings.Contains(src, gone) {
-			t.Fatalf("the producer still names %q: the old capture path is not deleted", gone)
-		}
 	}
 }

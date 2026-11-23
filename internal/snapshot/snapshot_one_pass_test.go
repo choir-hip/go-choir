@@ -655,18 +655,27 @@ func TestAnIncrementallyVacuumedStoreStreamsAndRestores(t *testing.T) {
 	roundTripDigest(t, f)
 }
 
-// O8, the lock-byte page: a store past 1 GiB. Skipped under -short: it writes
-// about 1.1 GiB.
+// O8, the lock-byte page: a store past 1 GiB, at the production page size of
+// 4096 (the lock-byte page is page 262145) and at 64 KiB (page 16385). Skipped
+// under -short: each writes about 1.1 GiB.
 func TestAStorePastOneGiBStreamsAndRestores(t *testing.T) {
 	if testing.Short() {
 		t.Skip("writes a store past 1 GiB")
 	}
-	f := pagedFixture(t, 65536, false, 0, 0)
-	zero := make([]byte, 1<<20)
-	for i := 0; i < 1100; i++ {
-		if _, err := f.db.Write.Exec(`INSERT INTO blobs (id, body, note) VALUES (?, ?, ?)`, i+1, zero, fmt.Sprintf("row %d", i)); err != nil {
-			t.Fatal(err)
-		}
+	for _, ps := range []int{4096, 65536} {
+		t.Run(fmt.Sprint(ps), func(t *testing.T) {
+			f := pagedFixture(t, ps, false, 0, 0)
+			zero := make([]byte, 1<<20)
+			for i := 0; i < 1100; i++ {
+				if _, err := f.db.Write.Exec(`INSERT INTO blobs (id, body, note) VALUES (?, ?, ?)`, i+1, zero, fmt.Sprintf("row %d", i)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var pages int64
+			if err := f.db.Read.QueryRow(`PRAGMA page_count`).Scan(&pages); err != nil || pages*int64(ps) < 1<<30+1<<20 {
+				t.Fatalf("test premise: %d pages of %d bytes (%v) does not pass the 1 GiB lock-byte page", pages, ps, err)
+			}
+			roundTripDigest(t, f)
+		})
 	}
-	roundTripDigest(t, f)
 }
