@@ -37,3 +37,11 @@ describe('the native deck port', () => {
     expect(await nativeDeck(() => async () => undefined).act('stop')).toEqual(empty);
   });
 });
+
+describe('a state read that fails says so (review B1-5)', () => {
+  test('N-fail the state call throws; the other four names answer the empty state as before', async () => {
+    const d = nativeDeck(() => async () => { throw new Error('gone'); });
+    await expect(d.state()).rejects.toThrow('gone');
+    const e = await d.ack(1); expect(e.why).toBe('empty');
+  });
+});

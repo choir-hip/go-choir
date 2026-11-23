@@ -195,6 +195,19 @@ describe('the deck plays on without shared code', () => {
   });
 });
 
+describe('a deck that cannot be read is not an empty deck (review B1-5)', () => {
+  test('T14 a failed state read during the pump replays nothing: the entry sounding goes on and is not handed over again', async () => {
+    rt.play(story('a', { placed_by: 'listener' })); await idle();
+    expect(playedIds()).toEqual(['a']);
+    let fail = true; const read = deck.state.bind(deck);
+    deck.state = async () => { if (fail) throw new Error('the module did not answer'); return read(); };
+    rt.director.applyFromDesk(placeOp(story('b')), 'extend');
+    await rt.pump(); await idle();
+    fail = false; await rt.pump(); await idle();
+    expect(playedIds()).toEqual(['a']);                                   // not 'a' again from a failed read that looked like an empty deck
+  });
+});
+
 describe('stopping and starting', () => {
   test('T7 skip with nothing ahead stops the deck; a later arrival starts again', async () => {
     rt.play(story('a', { placed_by: 'listener' })); await idle();
@@ -420,7 +433,8 @@ describe('posted ops', () => {
     prt.skip(); await idle(); await prt.store.flushTask;
     expect(prt.store.pending.map((o) => o.op)).toEqual(['place', 'skip']);
     outcome = { kind: 'answered', results: [] }; posts = [];
-    prt.store.flush(); await prt.store.flushTask;
+    prt.store.flush(); await prt.store.flushTask; expect(posts.length).toBe(0);            // backing off after the refusal (30 s): not posted again at once (review B1-3)
+    prt.store.flush(true); await prt.store.flushTask;                                       // the wait over
     expect(posts.flat().map((o) => o.op)).toEqual(['place', 'skip']); expect(prt.store.pending).toEqual([]);
     prt.store.flush(); await prt.store.flushTask; expect(posts.length).toBe(1);
   });

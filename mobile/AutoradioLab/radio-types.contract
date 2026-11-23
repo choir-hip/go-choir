@@ -35,6 +35,8 @@ shape RadioTick
   hold: bool
   // Something is sounding: the position moves, and the screens that show it are asked again each second (spine.contract `posKey`).
   live: bool
+  // Nothing sounds in front and nothing is due: the clock asks again in five seconds (spine.contract).
+  slow: bool
   // Moves once per pulse while `live`, and not otherwise.
   beat: number
 

@@ -2,7 +2,8 @@
 // Why it is native and why it is a single op: the deck is the audio (the session, the engine, the lock screen, interruptions), so only native code can play an item and keep
 // the journal that survives a kill; shared code cannot call a package's names from a function (only a contract can), so it reaches them through the module's `later` like the
 // key and the mail cipher. The interface is item-shaped and says nothing of AVPlayer: Exact's own `audio` element could play a remote item behind the same five names (docs/reference/exact/deck.md).
-// A call that fails or an absent module answers the EMPTY state, never a throw: shared code goes on, and the next pump asks again.
+// An absent module answers the EMPTY state. A `deckPlay`, `deckEnqueue`, `deckAct` or `deckAck` that fails does too (shared code goes on, the next pump asks again), but a failed `deckState` THROWS: an unreadable deck is not an
+// empty one (the pump would hand the sounding entry over again, restart it, and re-enqueue the held list), so its callers keep what they last knew.
 import { nativeLater } from './api.ts';
 import type { DeckEvent, DeckItem, DeckOp, DeckPort, DeckState, DeckWhy } from './deck.ts';
 
@@ -37,7 +38,7 @@ export function nativeDeck(later: () => Later | null = nativeLater as () => Late
   const call = async (name: string, args: Record<string, unknown> = {}): Promise<DeckState> => {
     const l = later();
     if (!l) { if (name === 'deckPlay') console.log('deck: play asked and the app module is not bound here: nothing plays'); return EMPTY_STATE; }
-    try { return readState(await l({ op: 'deck', name, args })); } catch (e) { console.log(`deck: ${name} failed: ${e instanceof Error ? e.message : String(e)}`); return EMPTY_STATE; }
+    try { return readState(await l({ op: 'deck', name, args })); } catch (e) { console.log(`deck: ${name} failed: ${e instanceof Error ? e.message : String(e)}`); if (name === 'deckState') throw e; return EMPTY_STATE; }
   };
   const fields = (i: DeckItem): Record<string, unknown> => ({ ...i });
   return {

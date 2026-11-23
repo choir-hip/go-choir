@@ -312,3 +312,36 @@ describe('P11 a pulse begun before sign-out and delivered after it changes nothi
   });
 });
 
+// P12 native calls a second (review B2-1): what the once-a-second pulse and the screens it wakes ask of native, by scenario. The numbers are logged; the bounds are what the fix holds.
+describe('P12 native calls per second', () => {
+  const perSecond = async (setup: () => Promise<void>, visible = true, seconds = 10): Promise<{ total: number; byOp: Record<string, number>; sheetPushes: number }> => {
+    fresh(); await setup(); await ask(0, visible); await ask(1, visible);
+    calls = []; let sets = 0; const before = calls.length; void before;
+    for (let i = 0; i < seconds; i++) await ask(1, visible);
+    const byOp: Record<string, number> = {};
+    for (const c of calls) { const k = c.op === 'deck' ? `deck:${c.name}` : c.op + (c.peek ? ':peek' : ''); byOp[k] = (byOp[k] ?? 0) + 1; if (c.op === 'radioSet') sets += 1; }
+    return { total: calls.length / seconds, byOp, sheetPushes: sets };
+  };
+  const report = (what: string, r: { total: number; byOp: Record<string, number> }): void => { console.log(`P12 ${what}: ${r.total} native calls a second ${JSON.stringify(r.byOp)}`); };
+  test('playing and visible, paused, idle, backgrounded', async () => {
+    const playing = await perSecond(async () => { await play(); });
+    report('playing (in front)', playing);
+    const paused = await perSecond(async () => { await play(); await queueAct(undefined, native as never, 'toggle', ''); });
+    report('paused', paused);
+    const idle = await perSecond(async () => undefined);
+    report('idle (nothing on air)', idle);
+    front = false;
+    const background = await perSecond(async () => { await play(); }, true);
+    report('backgrounded, audio sounding', background);
+    front = true;
+    // the clock asks again every five seconds, not one, when nothing sounds in front and nothing is due: 0.4 native calls a second in those three (the fake has no server, so its pending ops are cleared: they would be "due")
+    const quiet = async (): Promise<boolean> => { (await getRadio(undefined, native as never)).rt.store.pending.length = 0; return (await radioPulse(undefined, native as never)).slow; };
+    await perSecond(async () => { await play(); await queueAct(undefined, native as never, 'toggle', ''); }); expect(await quiet()).toBe(true);     // paused
+    front = false; await perSecond(async () => { await play(); }); expect(await quiet()).toBe(true); front = true;                              // locked, sounding: the deck holds the next entries; a refill shows as `hold` or `write`
+    await perSecond(async () => { await play(); }); expect((await radioPulse(undefined, native as never)).slow).toBe(false);
+    expect(playing.byOp.radioSet ?? 0).toBeLessThanOrEqual(1);                      // the sheet is sent when it changed, not each second
+    expect(idle.total).toBeLessThanOrEqual(2); expect(paused.total).toBeLessThanOrEqual(2);
+    expect(background.total).toBeLessThanOrEqual(3);
+    expect(playing.total).toBeLessThanOrEqual(4);
+  });
+});

@@ -51,8 +51,12 @@ members Autoradio
   resource ds = deckState() as shape DeckState else empty()
   resource rnote = radioNote() as shape RadioNote else empty()
   resource rpulse = radioPulse(ds.seq, rnote.tick, radioTick) as shape RadioTick else empty()
-  task radioClock when rpulse.tick >= 0 key=radioTick
+  // One second while something sounds in front or something is due; five when nothing is (the pulse says `slow`): an idle, paused or locked phone is not asked about once a second. What native has to say moves `ds.seq`
+  // or `rnote.tick`, which ask the pulse at once, whatever the clock.
+  task radioClock when rpulse.tick >= 0 and not rpulse.slow key=radioTick
     after(1000, radioBump)
+  task radioClockSlow when rpulse.tick >= 0 and rpulse.slow key=radioTick
+    after(5000, radioBump)
   // The position is read again each second WHILE SOMETHING SOUNDS AND THE APP IS IN FRONT (the beat moves once per pulse then), and not otherwise: paused, in the background or the phone locked the key is a constant and nothing is asked.
   // "In front" is native's own `foreground` (radioFacts; UIApplication's notices, the signal the voice uses to give the microphone up), carried in `rpulse.live`, because Exact does not establish that an iPhone delivers `hidden` when it locks (docs/reference/exact/ui-model.md "Page facts"); the page's visibility is kept as a second gate (a web host, the simulator).
   // A seek, Next or a new entry moves `rpulse.tick` (the pump), which is the other half of every key. No second timer: this is the radioClock's pulse above.

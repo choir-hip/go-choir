@@ -196,7 +196,8 @@ export class RadioRuntime {
   private async pumpOnce(): Promise<void> {
     const epoch = this.epoch;
     await this.refreshFacts();
-    const st = await this.deck.state();
+    let st: DeckState;
+    try { st = await this.deck.state(); } catch { return; }              // the deck could not be read: it is not an empty deck. Nothing is decided from nothing; the next pump reads again
     if (epoch !== this.epoch) return;
     this.deckState = st;
     this.inPump = true;
@@ -326,7 +327,9 @@ export class RadioRuntime {
   /** The app is in front, as of the last read of the native facts. */
   inFront = (): boolean => this.facts.foreground;
   /** One read of the deck and the native facts, no more (what the pulse does): the pump is `radioHold`'s. */
-  async peek(): Promise<void> { await this.refreshFacts(); try { this.deckState = await this.deck.state(); } catch { /* the next pulse reads again */ } this.countSpoken(); }
+  /** The native facts a caller has just read (the bridge's `getRadio`): kept as `refreshFacts` would keep them. */
+  useFacts(f: NativeFacts): void { this.facts = f; }
+  async peek(factsFresh = false): Promise<void> { if (!factsFresh) await this.refreshFacts(); try { this.deckState = await this.deck.state(); } catch { /* the next pulse reads again */ } this.countSpoken(); }
   private countSpoken(): void {
     const air = this.store.onAir(), st = this.deckState, now = clock.ms;
     if (!air || audioSpec(air)) { this.spoken = { id: '', ms: 0, last: -1 }; return; }
