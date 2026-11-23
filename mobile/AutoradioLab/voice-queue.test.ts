@@ -307,3 +307,13 @@ describe('Q12 a move is resolved through the list that was sent', () => {
     expect(ids()).toEqual(['d-a', 'd-b', 'd-x']);
   });
 });
+
+describe('Q13 a refusal line is one short plain line (review N6)', () => {
+  test('control characters are stripped and a long id is cut, in the result and in the log', () => {
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    let r: ReturnType<typeof applyTurnOps>;
+    try { r = applyTurnOps(rt, JSON.stringify({ turn_id: 'q13', ops: [{ op: 'remove', id: 'a\nFORGED: line\u001b[31m' + 'x'.repeat(500) }] })); } finally { console.log = log; }
+    expect(r.refused[0]).not.toMatch(/[\u0000-\u001f]/); expect(r.refused[0].length).toBeLessThanOrEqual(300);
+    expect(logs.filter((l) => /[\n\u001b]/.test(l)).length).toBe(0);
+  });
+});

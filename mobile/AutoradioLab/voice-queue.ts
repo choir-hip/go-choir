@@ -134,7 +134,7 @@ export function applyTurnOps(rt: RadioRuntime, text: string): TurnOpsResult {
   let applied = 0, dropped = 0;
   const refused: string[] = [];
   // An op that does not apply is said, never dropped quietly: the server spoke the change before it sent the op, so the phone's log is where "I said I moved it" and "it did not move" meet.
-  const refuse = (what: string, why: string): void => { dropped += 1; const line = `${what}: ${why}`; refused.push(line); console.log(`radio: turn ops refused (turn ${turn || '-'}): ${line}`); };
+  const refuse = (what: string, why: string): void => { dropped += 1; const line = `${what}: ${why}`.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 300); refused.push(line); console.log(`radio: turn ops refused (turn ${turn || '-'}): ${line}`); };
   raw.forEach((any, n) => {
     const d = obj(any);
     if (!d || typeof d.op !== 'string') { refuse(`op ${n}`, 'not an op'); return; }
