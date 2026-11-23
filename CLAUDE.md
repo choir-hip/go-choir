@@ -170,6 +170,11 @@ A commit subject ends with its class and rollback, for example
   (`internal/agentcore/` among them). An expedite keeps the planned,
   marker-backed refresh, the capsule, apply and skew refusals, the health
   guards and automatic rollback. Name every expedite in the next report.
+- **Every landing is in the change log** (owner, 2026-11-22: "its hard to
+  catch up on what claude has done since i last looked"). A landing that
+  changes behavior adds or updates its entry in [docs/changes.md](docs/changes.md)
+  in the same change: what, why, proof (or "not proved"), what it replaced,
+  how to undo it. One entry per thing built, not per commit.
 - **Landing loop** for any behavior change: commit, push `origin main`, watch
   CI, watch the staging deploy, verify the deployed commit, run the deployed
   proof. Local tests are not proof. `origin/main` is the source of truth;
