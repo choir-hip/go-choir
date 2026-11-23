@@ -82,6 +82,7 @@ func (h *Handler) HandlePlatformObjectGraph(w http.ResponseWriter, r *http.Reque
 // upstream autoputer reachability.
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
+	s.HandleFunc(appleAppSiteAssociationPath, h.HandleAppleAppSiteAssociation)
 	s.HandleFunc("/api/shell/bootstrap", h.HandleBootstrap)
 	s.HandleFunc("/api/ws", h.HandleWS)
 	s.HandleFunc("/api/", h.HandleAPI)
