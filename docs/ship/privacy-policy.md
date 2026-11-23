@@ -1,5 +1,8 @@
 # Privacy Policy for Autoradio 1 and choir.news
 
+> **One policy.** The policy people read is the file the site serves at choir.news/privacy: `frontend/public/legal/privacy-policy.md`. This file is the next version of it, waiting for the owner's read. When approved it replaces that file in one change, with its tags removed, and this draft is deleted. The copy that used to sit in `docs/legal/` was a duplicate and is gone (2026-11-24).
+
+
 Effective date: DATE_OF_PUBLICATION
 Published by: Choir Harmonic Intelligence Platform, Inc. ("we", "us")
 Contact: CONTACT_EMAIL

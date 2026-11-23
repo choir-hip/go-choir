@@ -208,20 +208,20 @@ documents:
     witnesses: [docs/memo-per-computer-frontend-2026-08-13.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/archive/choir-supervised-self-development-effects-2026-08-11.md]
     refresh_triggers: [doctrine_change, computer_ontology_change, frontend_app_change, capsule_effect_boundary_change]
 
-  - path: docs/legal/privacy-policy.md
+  - path: frontend/public/legal/privacy-policy.md
     claim_scope: current
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: legal, authority: product_legal, lifecycle: living}
-    witnesses: [docs/legal/privacy-policy.md, frontend/public/legal/privacy-policy.md]
+    witnesses: [frontend/public/legal/privacy-policy.md]
     refresh_triggers: [privacy_policy_change]
 
-  - path: docs/legal/terms-of-service.md
+  - path: frontend/public/legal/terms-of-service.md
     claim_scope: current
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: legal, authority: product_legal, lifecycle: living}
-    witnesses: [docs/legal/terms-of-service.md, frontend/public/legal/terms-of-service.md]
+    witnesses: [frontend/public/legal/terms-of-service.md]
     refresh_triggers: [terms_change]
 
   - path: docs/archive/og-dolt-heresy-completion-2026-07-08.md
