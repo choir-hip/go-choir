@@ -62,6 +62,11 @@ describe('T the transition table', () => {
       expect(step(from, { t: 'timeout', id: ID }).phase).toBe('expired');
     }
   });
+  test('TIMEOUT only ends a running poll: from begun it changes nothing (no poll has started)', () => {
+    const b = newAttempt(ID);
+    expect(step(b, { t: 'timeout', id: ID })).toBe(b);
+    expect(step(open(), { t: 'timeout', id: ID }).phase).toBe('expired');
+  });
   test('CANCEL ends begun, sheet and closed', () => {
     for (const from of [newAttempt(ID), open(), closed(open())]) expect(step(from, { t: 'cancel', id: ID }).phase).toBe('cancelled');
   });
@@ -165,11 +170,12 @@ describe('D the driver', () => {
     expect((await done(w, run)).phase).toBe('cancelled'); expect(w.calls).toContain('signInForget:att-1');
     expect(signInView(ORIGIN)).toMatchObject({ phase: 'cancelled', pending: false, message: '' });          // no noise
   });
-  test('D4 B2 end to end: the card Cancel forgets the code first; the answer that was in flight is ignored', async () => {
-    const w = world();
+  test('D4 B2 end to end: the card Cancel moves the machine first, then native forgets the code; the answer that was in flight is ignored', async () => {
+    const w = world(); const phaseAtForget: string[] = [];
+    const inner = w.env.later; w.env.later = (r) => { if (r.op === 'signInForget') phaseAtForget.push(signInView(ORIGIN).phase); return inner(r); };
     const run = signInRun(w.env); await settle();
     const cancelled = signInCancel(w.env); await settle();
-    expect(w.calls).toContain('signInForget:att-1');
+    expect(w.calls).toContain('signInForget:att-1'); expect(phaseAtForget[0]).toBe('cancelled');          // the machine moved first
     w.polls[0].resolve('approved'); await settle();                          // arrives after Cancel
     await cancelled;
     expect((await done(w, run)).phase).toBe('cancelled'); expect(signInView(ORIGIN).phase).toBe('cancelled');

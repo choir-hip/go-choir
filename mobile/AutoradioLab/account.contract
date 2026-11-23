@@ -74,7 +74,7 @@ members Autoradio
   action signIn
     send signedRun = signInRun()
     sivTick = sivTick + 1
-  // The card's Cancel: the code is forgotten first, so no key is written after it.
+  // The card's Cancel: the machine moves first (every later answer is ignored), then native forgets the code: no key REMAINS after it.
   action cancelSignIn
     send signedCancel = signInCancel()
     sivTick = sivTick + 1
