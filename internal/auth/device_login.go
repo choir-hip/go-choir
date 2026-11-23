@@ -504,6 +504,16 @@ func (h *Handler) sweepChallenges() {
 	}
 }
 
+// sweepAbandonedUsers removes sign-ups that never finished their passkey
+// (Store.SweepAbandonedUsers); a stranger's begin left alone does not stay.
+func (h *Handler) sweepAbandonedUsers(ctx context.Context) {
+	if n, err := h.store.SweepAbandonedUsers(ctx, time.Now().UTC().Add(-AbandonedUserRetention)); err != nil {
+		log.Printf("[auth] operation=abandoned_user_sweep result=error error=%q", err)
+	} else if n > 0 {
+		log.Printf("[auth] operation=abandoned_user_sweep deleted=%d", n)
+	}
+}
+
 // StartDeviceSweeper deletes device authorizations older than 24 hours, expired
 // challenges and stale account sets every interval until ctx ends.
 func (h *Handler) StartDeviceSweeper(ctx context.Context, interval time.Duration) {
@@ -520,6 +530,7 @@ func (h *Handler) StartDeviceSweeper(ctx context.Context, interval time.Duration
 			case <-t.C:
 				h.sweepAccountSets()
 				h.sweepChallenges()
+				h.sweepAbandonedUsers(ctx)
 				if n, err := h.store.SweepDeviceAuthorizations(ctx, time.Now().UTC().Add(-DeviceAuthorizationRetention)); err != nil {
 					log.Printf("[auth] operation=device_sweep result=error error=%q", err)
 				} else if n > 0 {

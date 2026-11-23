@@ -553,6 +553,29 @@ func (s *Store) Close() error {
 	return nil
 }
 
+// AbandonedUserRetention is how long a sign-up that never finished its
+// passkey keeps its users row.
+const AbandonedUserRetention = 24 * time.Hour
+
+// SweepAbandonedUsers deletes users created before the cutoff that hold no
+// passkey, no API key, no session and no account-set membership: a
+// register/begin whose ceremony was never finished. register/begin writes
+// one row per new address and nothing else removed it. The bootstrap admin
+// user (a key-only account) is never swept. Rows that reference the user
+// cascade.
+func (s *Store) SweepAbandonedUsers(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE created_at < ? AND id <> ?
+		AND NOT EXISTS (SELECT 1 FROM credentials c WHERE c.user_id = users.id)
+		AND NOT EXISTS (SELECT 1 FROM api_keys k WHERE k.user_id = users.id)
+		AND NOT EXISTS (SELECT 1 FROM refresh_sessions r WHERE r.user_id = users.id)
+		AND NOT EXISTS (SELECT 1 FROM account_set_member m WHERE m.user_id = users.id)`,
+		cutoff, BootstrapAdminAPIKeyUserID)
+	if err != nil {
+		return 0, fmt.Errorf("sweep abandoned users: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // DB returns the underlying *sql.DB for use by later auth features that need
 // direct query access.
 func (s *Store) DB() *sql.DB {
