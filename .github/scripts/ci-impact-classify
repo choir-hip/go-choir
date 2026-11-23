@@ -202,6 +202,15 @@ else
       internal/agentcore/*|internal/textureowner/*|internal/actor/*|internal/actorruntime/*|internal/events/*|internal/store/*)
         mark high_risk_race "$path -> always-on race-sensitive substrate"
         ;;
+      # The voice ask runs its vector half in a goroutine beside the keyword
+      # half (published_ask.go; capture_rank.go's searchVectorsBounded starts
+      # another under it). The files that hold those goroutines or the state
+      # the halves share (vector_search.go's read, the piece index's mutexes in
+      # publication_pieces_index.go) select -race; the rest of the platform
+      # package does not.
+      internal/platform/published_ask*.go|internal/platform/capture_rank*.go|internal/platform/vector_search*.go|internal/platform/publication_pieces_index*.go)
+        mark high_risk_race "$path -> the voice ask's concurrent search"
+        ;;
     esac
   done
 fi
