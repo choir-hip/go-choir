@@ -7,7 +7,7 @@
 //  G3 (D3) a radioSet native refused (ok: false) is not recorded as sent: the next pulse sends it again with a fresh stamp, once per pulse; an accepted one is not sent again.
 //  G4 (D3) editionMirror returns native's refusal, the mirror is not marked pushed, and the stamp the call carries is the one it checked.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { adoptNative, accountGeneration, nextGeneration, nativeLater, resetBootForTest, resetSeam } from './api.ts';
+import { abortSignOut, adoptNative, accountGeneration, beginSignOut, nextGeneration, nativeLater, resetBootForTest, resetSeam } from './api.ts';
 import { wipeAll } from './account.ts';
 import { radioPulse, wipeRadio, getRadio } from './radio-bridge.ts';
 import { nativeDevice, forgetPicks, picksPage, type Device } from './edition-picks.ts';
@@ -108,5 +108,30 @@ describe('G4b a refused copy is sent again at the next open', () => {
     await picksPage(undefined, {}, env);                                           // opens again: sent again (once per open, no storm)
     await picksPage(undefined, {}, env);                                           // accepted: not sent again
     expect(sent.length).toBe(2); expect(sent.every((c) => c.gen === accountGeneration())).toBe(true);
+  });
+});
+
+describe('G5 the stamp is the generation the radio was made under (seat 2, item 1)', () => {
+  test('a pulse begun after the sign-out began carries the old radio\'s generation and is refused; if the sign-out is given up the radio is still this account\'s and is taken again', async () => {
+    const f = fakeNative(0); adoptNative(f.native as never, 'test');
+    const r = await getRadio(undefined, f.native as never);
+    const made = accountGeneration();
+    await beginSignOut();                                                          // the generation moves; native was told (the signOut call announces it)
+    f.s.newest = accountGeneration();
+    expect(accountGeneration()).toBeGreaterThan(made);
+    await radioPulse(undefined, f.native as never);                                // begun AFTER the move: it reads the new generation, but this radio is the old account's
+    expect(f.s.calls.filter((c) => c.op === 'radioSet').map((c) => c.gen)).toEqual([made]);
+    expect(f.s.pushed.length).toBe(0);
+    abortSignOut();                                                                // given up: nothing was wiped, the radio is the same account's
+    await radioPulse(undefined, f.native as never);
+    expect(f.s.pushed.filter((c) => c.op === 'radioSet').map((c) => c.gen)).toEqual([accountGeneration()]);
+    expect(r.gen).toBe(accountGeneration());
+  });
+  test('a refused push is said in the log', async () => {
+    const f = fakeNative(0); adoptNative(f.native as never, 'test');
+    await getRadio(undefined, f.native as never); f.s.refuse = 1;
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    try { await radioPulse(undefined, f.native as never); } finally { console.log = log; }
+    expect(logs.some((l) => l.includes('native refused') && l.includes('radioSet'))).toBe(true);
   });
 });
