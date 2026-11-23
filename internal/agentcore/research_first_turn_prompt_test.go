@@ -28,7 +28,7 @@ func TestResearchFirstTurnNamesTheCorpusBrief(t *testing.T) {
 }
 
 // A brief that found nothing, or says the search did not answer, is not proof
-// that nothing is held; the first turn sends the desk to one corpus search of
+// that nothing is stored; the first turn sends the desk to one corpus search of
 // its own, and does not describe what the host's search covered.
 func TestResearchFirstTurnSaysAnEmptyBriefIsNotProof(t *testing.T) {
 	p, _ := recordsInboxPromptFor(agentprofile.Research)

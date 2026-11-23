@@ -377,3 +377,21 @@ func TestCorpusCountsATitleMatchTheVectorHalfAlsoReturnedAsAWordMatch(t *testing
 		t.Fatalf("a title-matched page counted as %d matched, %d near only, note %q", body.MatchedWords, body.NearByMeaningOnly, body.WordsNote)
 	}
 }
+
+// words_note must not say the graph likely lacks the subject when something else already
+// answered the query, or when a window hid the matching page (review 5): events or published
+// pieces that matched are what to read, and a since/until window only says none matched in it.
+func TestWordsNoteDoesNotClaimALackWhenEventsMatchedOrAWindowHidPages(t *testing.T) {
+	full := corpusSearchInfo{TextUsed: true, TextIndexed: 3, Captures: 3}
+	if got := wordsNote(0, 3, full, true, 0, false); !strings.Contains(got, "the graph likely lacks this") {
+		t.Fatalf("the plain zero-match note lost its claim: %q", got)
+	}
+	got := wordsNote(0, 3, full, true, 2, false)
+	if got == "" || strings.Contains(got, "likely lacks") || !strings.Contains(got, "2 events or published pieces matched") {
+		t.Fatalf("events or published pieces matched, so the graph does not lack the subject: %q", got)
+	}
+	got = wordsNote(0, 3, full, true, 0, true)
+	if got == "" || strings.Contains(got, "the graph likely lacks this") || !strings.Contains(got, "in this since/until window") {
+		t.Fatalf("a window may have hidden the page, so the note is scoped to it: %q", got)
+	}
+}
