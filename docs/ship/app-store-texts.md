@@ -1,6 +1,16 @@
 # App Store texts for Autoradio 1
 
-Limits are from the research doc (read 2026-11-23): name 30 characters, subtitle 30, promotional text 170, description 4,000, keywords 100 bytes. No other platforms' names (2.3.10), no prices (2.3.7), no unverifiable claims, no placeholder text. The description is written for the version-1 default scope in the shipping mission (radio, paper, reader, voice, podcasts). [WHEN-BUILT] marks a sentence that is not true of today's code. Remove tags before pasting. Mail, files and takes are left out of the description; add them only after each has been used on the owner's phone.
+Limits are from the research doc (read 2026-11-23): name 30 characters, subtitle 30, promotional text 170, description 4,000, keywords 100 bytes. No other platforms' names (2.3.10), no prices (2.3.7), no unverifiable claims, no placeholder text. The description is written for the one app the owner uses, with every page (radio, paper, reader, voice, podcasts, mail, files, takes, notebook), per the ruling of 2026-11-23. [WHEN-BUILT] marks a sentence that is not true of today's code (in-app account creation and deletion, the consent screen). Remove tags before pasting. The publisher is Choir Harmonic Intelligence Platform, Inc.
+
+Still open for the owner:
+
+- Territories and price (the app is free in this draft; no price appears in any text).
+- The privacy policy URL and the support URL (PRIVACY_POLICY_URL, SUPPORT_URL) and the contact email (CONTACT_EMAIL) that the policy prints.
+- Secondary category: none or Reference.
+- Whether the model files move to our own host before release.
+- If sign-up is turned off at the host limit during review, whether to give Apple a demo account.
+
+Rulings applied (owner, 2026-11-23): minimum age 16 (age rating 16+); one app; passkey accounts made and deleted inside the app; downloads only after agreement; during the beta every account is free tier and providers may train on what is sent.
 
 ## Name
 
@@ -22,7 +32,7 @@ Recommended: 1 or 3. Both say what it does and name the sources. 4 says AI in th
 Autoradio 1 reads the day's news aloud. Every story is written by AI from cited web sources and links to them. Listen with no account. Make one to shape your own edition.
 ```
 
-(Exactly 170 characters. Description is about 2,250 characters. Keywords are 91 bytes.)
+(Exactly 170 characters. Description is about 2,700 characters. Keywords are 91 bytes.)
 
 ## Description (under 4,000 characters)
 
@@ -37,25 +47,29 @@ With an account you get more:
 
 A personal edition. Choose the topics you care about, by tapping or by speaking. Tap more of this or less of this on any story and the radio adjusts.
 
-Talk to it. Turn on Voice and ask about the story you are hearing, or tell the radio to skip, pause or play something next. Your speech is turned into text on your phone. The text of a request is sent to your account's computer on our server and to outside AI models that write the answer. The app asks for your agreement before the first request that does this. [WHEN-BUILT]
+Talk to it. Turn on Voice and ask about the story you are hearing, or tell the radio to skip, pause or play something next. Your speech is turned into text on your phone. The text of a request is sent to your account's computer on our server and to outside AI models that write the answer. During the beta every account is on the free tier, and some of those companies may keep what is sent and use it to train their models. The app asks for your agreement before the first request that does this. [WHEN-BUILT]
 
 A reader. Read a story or a document, see its sources and its versions, and hear it read aloud.
 
 Podcasts. Search for shows, subscribe, and listen. Episodes stream from the publisher.
 
-Notes. Keep notes that your computer remembers.
+Mail and files. Read and write mail, and keep files on your computer.
+
+Notebook. Keep notes that your computer remembers.
+
+Takes. Record a take of up to 60 seconds. It is shared with other listeners only if you press Publish, and you can delete it.
 
 Your computer. Each account has its own computer on our server. It holds what you make and what you ask the radio to remember.
 
-Sign in with a passkey. There are no passwords. You can make an account in the app, and you can delete it in the app. Deleting removes your account, your computer and your data. [WHEN-BUILT]
+Sign in with a passkey. There are no passwords and no codes. You make an account in the app with your email address and a passkey, and you can delete it in the app. Access ends at once, and your account, your computer and your data are permanently removed after 72 hours. You must be 16 or older. [WHEN-BUILT]
 
 What to know before you use it:
 
 Stories are written by AI, not by reporters. The sources are cited and linked. Please check them for anything that matters.
 
-Voice uses the microphone only when you turn it on. With the screen locked, Voice can stay on for up to three minutes after you last speak. The iPhone shows its microphone indicator while it is on.
+Voice and takes use the microphone only when you turn them on. With the screen locked, Voice can stay on for up to three minutes after you last speak. The iPhone shows its microphone indicator while it is on.
 
-The app can download speech and language model files to your phone. They are large, so the app tells you the size and asks first. [WHEN-BUILT]
+The app can download speech and language model files to your phone. They are large, so the app tells you the size and downloads only after you agree. [WHEN-BUILT]
 
 The news can include war, crime and other serious subjects.
 
@@ -74,8 +88,8 @@ news,radio,audio news,podcast,headlines,briefing,listen,voice,sources,current ev
 ## Categories
 
 - Primary: News.
-- Secondary: leave empty, or Reference. Do not choose Music or Entertainment. Do not choose Kids. [DECISION]
-- Age rating: answer honestly. The research recommends 16+ (frequent mature themes in news, no unrestricted web access). [DECISION]
+- Secondary: leave empty, or Reference. Do not choose Music or Entertainment. Do not choose Kids.
+- Age rating: 16+, and the minimum age for an account is 16 (owner, 2026-11-23). Answer the questionnaire honestly (frequent mature themes in news, no unrestricted web access).
 - Content rights: answer yes to "contains third-party content" and state that stories cite sources with links and podcasts stream from publishers' own feeds. [CHECK]
 
 ## Screenshot plan (iPhone only, one large size)
@@ -91,11 +105,13 @@ Capture at 1320 x 2868 on a slim simulator named for the run; Apple scales to sm
 | 5 | Voice | Voice on, the words the radio heard, and the answer starting. | Ask about the story you hear |
 | 6 | Edition topics | The topic tree with some topics chosen. | Choose the topics you follow |
 | 7 | Podcasts | Search results and a subscribed show. | Podcasts stream from the publisher |
-| 8 | Sign in | The sign-in sheet with a passkey, signed out state behind it. | Listen first. Sign in later. |
+| 8 | Sign in | The in-app passkey screen over the signed-out radio. | Listen first. Sign in later. |
+| 9 | Mail and files | The mail list and a file open on your computer. | Mail and files, on your computer |
+| 10 | Takes and notebook | A take being recorded, or the notebook with a note. | Notes and takes, yours to keep |
 
-Screens 4 and 8 need the AI label and the signed-out sign-in sheet to exist in the build. [WHEN-BUILT]
+Screens 4 and 8 need the AI label and the in-app passkey screen to exist in the build. [WHEN-BUILT]
 
-If voice, sound or the lock screen have not been used on the owner's phone by the time of capture, drop their screens. Show only what has been used. (Research risk 4.)
+If voice, sound, the lock screen, mail, files or takes have not been used on the owner's phone by the time of capture, drop their screens. Show only what has been used. (Research risk 4.)
 
 ## Preview storyboard (20 seconds, captured footage only)
 

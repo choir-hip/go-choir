@@ -1,30 +1,43 @@
 # Privacy Policy for Autoradio 1 and choir.news
 
 Effective date: DATE_OF_PUBLICATION
-Published by: PUBLISHER_NAME ("we", "us")
+Published by: Choir Harmonic Intelligence Platform, Inc. ("we", "us")
 Contact: CONTACT_EMAIL
 
-Tags in this draft: [CHECK] marks a sentence a lawyer or the owner should verify. [DECISION] marks a sentence that depends on an open owner decision. [WHEN-BUILT] marks a sentence that is true only after a feature that does not exist today is built. Remove every tag before publishing. Sources for each statement are in data-inventory.md.
+Still open for the owner (delete this list before publishing):
+
+- The contact email to print (CONTACT_EMAIL), and the effective date.
+- The server log retention period (section 8). No job enforces any number today.
+- Whether the model files move to our own host before release (section 7).
+- Where past versions of this policy are kept (POLICY_ARCHIVE_URL, section 13).
+- Who has operator access to the server (section 12).
+- The country of the OVH server (section 5).
+
+Tags in this draft: [CHECK] marks a sentence a lawyer or the owner should verify. [WHEN-BUILT] marks a sentence that is true only after a feature that does not exist in the code today is built. Remove every tag before publishing. Sources for each statement are in data-inventory.md. Rulings applied: the owner's of 2026-11-23 (docs/definitions/choir-shipping-the-app-2026-11-23.md).
 
 ## 1. What this covers
 
 This policy covers the Autoradio 1 app for iPhone and the website at choir.news, including the sign-in pages and the paper. It does not cover the websites of the sources that stories cite, the podcast publishers you listen to, or Apple's services. Those have their own policies.
 
-Autoradio 1 is a radio that reads a news paper aloud. The paper is called Autopaper. Its stories are written by AI agents from cited web sources. You can listen without an account. With an account you get a personal edition, you can talk to it, and you get mail, files, a reader, podcasts and notes on a computer that is yours.
+Autoradio 1 is a radio that reads a news paper aloud. The paper is called Autopaper. Its stories are written by AI agents from cited web sources. You can listen without an account. With an account you get a personal edition, you can talk to it, and you get mail, files, a reader, podcasts, takes and a notebook on a computer that is yours.
+
+Read this first. During the beta, every account is on the free tier. What you say or type to the radio goes to outside companies that run AI models, and some of them may keep it and use it to train their models. Section 5 says what is sent and what to do about it.
+
+You must be 16 or older to use an account (section 11).
 
 ## 2. What we collect and why
 
 ### Listening without an account
 
-The app asks our server for the public front page and the stories. Our server receives your IP address and ordinary request details such as the app version. We do not ask for your name or email. No spoken or typed request leaves your phone for a model when you are signed out. [CHECK: the code path was read in the README and the client rules, not traced line by line.]
+Signed out, the app is listening only. It asks our server for the public front page and the stories. Our server receives your IP address and ordinary request details such as the app version. We do not ask for your name or email. A spoken or typed request cannot reach a model when you are signed out. If you ask the radio something, the app asks you to sign in or make an account. [CHECK: the code path was read in the README and the client rules, not traced line by line.]
 
 ### Creating an account
 
-We collect your email address and a passkey. The passkey gives us a public key and some details about it, such as when it was made. The private key stays on your device. We never see a password and we do not store one. We use the email address to identify your account, to send sign-in codes, and for recovery. [CHECK]
+You make an account inside the app, with the phone's own passkey screen. We collect your email address and a passkey. The passkey gives us a public key and some details about it, such as when it was made. The private key stays on your device. We never see a password and we do not store one. The app asks for no codes. We use the email address to identify your account and for recovery. It is the same account on choir.news.
 
 ### Your computer
 
-Each account has its own computer on our server. It is a virtual machine with its own disk. It holds what the app does for you: your edition topics, your play history, the notes and documents you make, files you import, your mail, your podcast subscriptions and your taps of "more of this" and "less of this". We use this to run the features you asked for and to personalise your edition.
+Every account has its own computer on our server. It is a virtual machine with its own disk. It holds what the app does for you: your edition topics, your play history, the notes and documents you make, files you import, your mail, your podcast subscriptions and your taps of "more of this" and "less of this". We use this to run the features you asked for and to personalise your edition.
 
 ### Listening history and your edition
 
@@ -32,15 +45,15 @@ While you are signed in, the app tells your computer what played, what you skipp
 
 ### Talking to the radio
 
-If you turn on Voice and speak, the app turns your speech into text on your phone. The text of your request goes to your computer. It goes with the title and text of the page you have open (which can be a story, a document or a mail message), the last few lines of the conversation, your play queue, and a list of candidate stories. Your computer sends this to an outside AI model to write the answer. Section 7 says exactly what is recorded and where.
+If you turn on Voice and speak, the app turns your speech into text on your phone. The text of your request goes to your computer. It goes with the title and text of the page you have open (which can be a story, a document or a mail message), the last few lines of the conversation, your play queue, and a list of candidate stories. Your computer sends this to an outside AI model to write the answer. When you ask about your mail or files, that content goes too. Section 7 says exactly what is recorded and where.
 
 ### Podcasts
 
 Podcast search and the charts go from your phone to Apple's podcast services, not through us. Podcast feeds and episodes are fetched from each publisher's own server, which can see your phone's IP address. We store the feeds you subscribe to and the episode you are playing so your computer can keep your library in step. [CHECK]
 
-### Takes [DECISION: include this section only if takes ship in version 1]
+### Takes
 
-A take is a short recording of your voice, up to 60 seconds. It is uploaded only when you press Publish. After that it is offered to other Autoradio listeners. You can delete it at any time. A take that contains music or another person's recording will be removed.
+A take is a short recording of your voice, up to 60 seconds. It is uploaded only when you press Publish. After that it is offered to other Autoradio listeners. You can delete it at any time. A take that contains music or another person's recording will be removed. The microphone is asked for only when you turn on a take.
 
 ### Logs
 
@@ -54,7 +67,7 @@ We do not use advertising, tracking or analytics software in the app or on the w
 
 Speech recognition runs on your phone with Apple's on-device recogniser. The app is set to refuse to recognise speech if on-device recognition is not available, so your audio is not sent to Apple or to us for recognition.
 
-Your sign-in key is in the iPhone Keychain, on this device only. Your mail copy on the phone is encrypted with a key in the Keychain. The paper's cached front page, your edition topics, your taps, your podcast library and your settings are kept in the app's own files.
+Your sign-in key is in the iPhone Keychain, on this device only. If the app keeps a copy of your mail on the phone, it is encrypted with a key in the Keychain. [CHECK: the mail copy on the phone may stop being stored; the sentence is true either way.] The paper's cached front page, your edition topics, your taps, your podcast library and your settings are kept in the app's own files.
 
 Each voice turn is saved on your phone as an audio file with a record of the turn, in the app's storage. It is not uploaded. It is deleted when you sign out or delete the app. [CHECK: if the build stops writing this file, replace this paragraph with "We do not keep your voice audio."]
 
@@ -68,29 +81,35 @@ When you are signed in, the app sends the following to your computer on our serv
 - your taps of "more of this", "less of this" and mute;
 - your podcast subscriptions and the episode you are playing;
 - documents and books you import, files and notes you make, and mail you read or write;
-- a published take, if you publish one. [DECISION]
+- a published take, if you publish one.
 
 We do not send your microphone audio to our servers, except in a take you publish.
 
 ## 5. Outside services that process data
 
-We use outside services to run the product. They process data on our behalf. The list changes as we change providers. The current list is at PROCESSORS_URL [DECISION: create this page; today the list is section 3.1 of the web policy, which is out of date]. We update it before a new provider receives data.
+### AI models, and what they may do with your data
 
-These are the categories, and the providers found in our code on DATE_OF_PUBLICATION. [CHECK: re-read the model catalog before publishing.]
+During the beta, every account is on the free tier. What you say or type to the radio, and the content sent with it, goes to outside companies that run AI models. That content is the page you have open, the last few lines of the conversation, your topics and what you recently heard, and your mail or files when you ask about them. Some of these companies may keep it and use it to train their models. Do not put anything into the app that you would not want used that way. A paid tier with stronger protections is planned. It is not available yet.
+
+Deleting your account does not delete what these companies already hold, and we cannot promise that they will delete it. Each of them follows its own terms.
+
+### The list
+
+We use outside services to run the product. They process data on our behalf. The list changes as we change providers. We update this table before a new provider receives data.
+
+These are the categories, and the providers found in our code on DATE_OF_PUBLICATION (internal/modelcatalog/catalog.go, internal/gateway/jev.go and internal/gateway/search.go were read on 2026-11-23). [CHECK: re-read before publishing.]
 
 | Category | What they get | Providers today |
 |---|---|---|
-| AI models that write answers and stretches of radio | Your spoken request text and the context in section 2, your edition topics, time zone, local time and a list of stories you recently heard. For work on your computer, such as documents, your edition and research, the instructions and content of that work. | River (DeepSeek models); Amazon Web Services Bedrock (Anthropic Claude models); OpenRouter; OpenAI (ChatGPT models); Devin; OpenCode; Synthetic |
+| AI models that write answers and stretches of radio | Your spoken request text and the context above, your edition topics, time zone, local time and a list of stories you recently heard. For work on your computer, such as documents, your edition and research, the instructions and content of that work. | River (DeepSeek models); Amazon Web Services Bedrock (Anthropic Claude models); OpenRouter; OpenAI (ChatGPT models); Devin; OpenCode; Synthetic |
 | AI model for quick decisions | The text of your request and a line saying what is playing | OpenRouter |
 | Web search | Search queries written by agents on your computer, which can include your topics | Keenable, SearXNG, Brave, Serper, Parallel, Tavily, SerpAPI, ChatGPT search |
-| Email delivery | Your email address and the body of messages we send for sign-in, recovery and the Mail feature | Resend |
+| Email delivery | Your email address and the body of messages we send for recovery, web sign-in and the Mail feature | Resend |
 | Model file hosting | Your phone's IP address and which model file you asked for | Hugging Face |
 | Podcast search and charts | The search text you type | Apple |
 | Hosting | Everything stored on our server | OVH (bare-metal server) [CHECK: country] |
 
-Each provider has its own privacy terms. We ask providers not to train on your data where they offer that choice, but we cannot promise every provider honours it, and some free tiers may keep data under weaker terms. [CHECK: this sentence is the honest reading of the free-tier members of the default model pool. The owner may prefer to stop sending personal content to free tiers; if so, change the sentence.] Treat anything you say or write to the radio as something outside providers may see.
-
-Before your first request reaches an AI model on a server, the app asks you to agree. If you choose Not now, voice still works for commands on your phone, such as skip and pause. [WHEN-BUILT] You can withdraw agreement in Settings. [WHEN-BUILT]
+Before your first request reaches an AI model on a server, the app asks you to agree, and says the first paragraph of this section in short form. If you choose Not now, listening still works. Voice commands on your phone, such as skip and pause, still work. [WHEN-BUILT] You can withdraw agreement in Settings. [WHEN-BUILT]
 
 We do not sell your data. We do not share it for advertising. We share it only with the providers above, to run the product, and where the law requires it. [CHECK]
 
@@ -110,38 +129,38 @@ Plainly:
 - The text of your request goes to your computer and to the AI models in section 5, as described in section 2.
 - Your computer writes the text of your request and the answer on its event log. The log is kept for the life of the computer (see section 8).
 - Each voice turn is saved on your phone as audio, as described in section 3. [CHECK]
-- The app asks for the microphone and speech recognition permission only when you turn Voice on. If you say no, the radio, paper, reader and podcasts still work.
+- The app asks for the microphone and speech recognition permission only when you turn on Voice or a take. If you say no, the radio, paper, reader and podcasts still work.
 
-The app downloads voice and language model files to your phone. They are data files, not programs. The app asks before it downloads and shows the size. The files come from Hugging Face today. [DECISION: or from our own host]
+The app downloads voice and language model files to your phone. They are data files, not programs. The app downloads them only after you agree, and it shows the size first. The files come from Hugging Face today.
 
 ## 8. How long we keep data
 
 | Data | How long |
 |---|---|
-| Email address, passkey public key | Until you delete your account |
+| Email address, passkey public key | Until your account is deleted (section 9) |
 | Sign-in sessions | Until they expire (up to 30 days for the refresh session) or you sign out |
-| Email sign-in and recovery attempts | Codes expire in 10 minutes for sign-in and 15 minutes for recovery. Attempt records are removed after 24 hours. |
-| Your computer's working data (documents, files, mail, notes, play history) | Until you delete your account |
+| Email sign-in and recovery attempts on choir.news | Codes expire in 10 minutes for sign-in and 15 minutes for recovery. Attempt records are removed after 24 hours. |
+| Your computer's working data (documents, files, mail, notes, play history) | Until your account is deleted |
 | The event log of your computer, including the text of your requests and answers | For the life of the computer. It is sealed under a key that belongs to the computer. We do not edit it. It is removed when your computer is destroyed, as in section 9. |
-| Server logs | Our code sets no fixed period. [CHECK: the existing web policy says 90 days for authentication logs; no job enforcing that was found. Set a period and enforce it, or remove the number.] |
+| Server logs | [CHECK: our code sets no fixed period. The existing web policy says 90 days for authentication logs; no job enforcing that was found. Set a period and enforce it, or remove the number.] |
+| Abuse logs after you delete your account | 30 days |
+| Deletion receipt | Kept. It holds a job number, counts and times, and no content. |
 | Voice audio kept by the app on your phone | Until you sign out or delete the app [CHECK] |
-| Data held by outside providers | Set by each provider |
+| Data held by outside providers | Set by each provider. We cannot promise they delete it. |
 
 ## 9. Deleting your account
 
-You can delete your account in the app: Settings, Account, Delete account. [WHEN-BUILT] The app asks you to confirm with your passkey. [WHEN-BUILT]
+You can delete your account in the app (Settings, Account, Delete account) or at choir.news. You confirm with your passkey. [WHEN-BUILT]
 
-Deleting your account starts these steps. [DECISION: this describes the design the owner has ordered]
+What happens:
 
-- It removes your account, your email address and your passkeys. [WHEN-BUILT]
-- It destroys your computer and the key that seals its event log, which makes the log unreadable. It removes your documents, files, mail, notes, play history and takes. [WHEN-BUILT] [DECISION: confirm that destroying the computer is the meaning of deletion]
-- It signs you out on every device. [WHEN-BUILT]
-- Stories that Autopaper published are public. [DECISION: we remove them / we keep them unless a story contains your personal data. The existing web policy keeps them.]
-- Deletion cannot be undone. [WHEN-BUILT]
-- It does not delete data already sent to outside AI model providers, which follow their own terms. We will ask a provider to delete where its terms allow.
-- It happens at once or within DELETION_TIME [DECISION: immediate, or a stated delay].
-
-Until in-app deletion exists, write to CONTACT_EMAIL and we will delete your account by hand. [CHECK: only say this if it is true at the time the policy is published; the existing web policy says the log is not rewritten and whole-computer deletion is planned.]
+- Access is revoked at once. Every sign-in and key for your account stops working, and you are signed out on every device.
+- Nothing is erased for 72 hours. If you sign in during those 72 hours, the deletion is cancelled.
+- After 72 hours everything is permanently removed: your account, your email address and your passkeys, your computer and everything on it (documents, files, mail, notes and play history), the log of your requests and answers, and the key that seals it. Your takes are removed.
+- Stories that Autopaper already published stay public. Your name is detached from them.
+- We keep a deletion receipt and 30 days of abuse logs. The destroyed computer may be kept in an archive for a further 7 days before it is erased. [CHECK: this 7-day figure is being verified.]
+- After the 72 hours, deletion cannot be undone.
+- Deletion does not remove data already sent to outside AI model providers. Section 5 says why.
 
 You can also sign out at any time. Signing out removes the key and your local data from the phone.
 
@@ -153,24 +172,25 @@ If you live in the European Economic Area, the United Kingdom, California or ano
 
 ## 11. Children
 
-Autoradio 1 is not directed to children under 13, and we do not knowingly collect personal data from them. [DECISION: the existing web policy says under 16; choose one age and use it here and there.] The App Store age rating is 16+ because the news covers war, crime and other mature subjects. [DECISION: confirm the rating.] If you believe a child has given us personal data, write to CONTACT_EMAIL and we will delete it.
+Autoradio 1 is for people 16 and older. Do not make an account if you are under 16. We do not knowingly collect personal data from anyone under 16. The App Store age rating is 16+, because the news covers war, crime and other mature subjects. If you believe a child has given us personal data, write to CONTACT_EMAIL and we will delete it.
 
 ## 12. Security
 
 - Sign-in uses passkeys. There are no passwords to steal or reset.
 - The app talks to our server over HTTPS.
 - Your sign-in key on the phone is in the iPhone Keychain, on this device only.
-- Mail kept on the phone is encrypted with a key in the Keychain.
 - The event log of your computer is sealed under a key that belongs to the computer. [CHECK]
 - Each account's computer is a separate virtual machine with its own disk. Provider keys are held by our gateway and are not given to computers. We operate the server, so people who run the service can reach the data it holds. [CHECK: owner to state who has operator access.]
-- We do not claim any security certification. No system is perfectly secure. [CHECK]
+- We do not claim any security certification. No system is perfectly secure.
 
-Cookies at choir.news: the sign-in service sets cookies for sign-in only. They are choir_access (5 minutes), choir_refresh (up to 30 days), choir_accounts (up to 30 days, for switching accounts) and choir_signin_attempt (10 minutes, for email sign-in). They are secure, HttpOnly and SameSite=Lax. We set no advertising or tracking cookies. The app signs in through the iPhone's sign-in sheet, which shares the system browser's passkeys and cookies. [CHECK]
+Cookies at choir.news: the sign-in service sets cookies for sign-in only. They are choir_access (5 minutes), choir_refresh (up to 30 days), choir_accounts (up to 30 days, for switching accounts) and choir_signin_attempt (10 minutes, for email sign-in). They are secure, HttpOnly and SameSite=Lax. We set no advertising or tracking cookies.
 
 ## 13. Changes to this policy
 
-We will put the new date at the top and, for a material change, show a notice in the app and on choir.news before it takes effect. The list of providers in section 5 changes more often than the rest. Past versions are kept at POLICY_ARCHIVE_URL. [DECISION: where to keep them]
+We will put the new date at the top and, for a material change, show a notice in the app and on choir.news before it takes effect. The list of providers in section 5 changes more often than the rest. Past versions are kept at POLICY_ARCHIVE_URL.
 
 ## 14. Contact
 
-Write to CONTACT_EMAIL. PUBLISHER_NAME publishes the app. [CHECK: add the postal address if Apple's EU trader rules or the law require it.]
+Write to CONTACT_EMAIL, or by post to:
+
+Choir Harmonic Intelligence Platform, Inc., c/o Yusef Mosiah Nathanson, 1414 Andover St, Tewksbury, MA 01876.
