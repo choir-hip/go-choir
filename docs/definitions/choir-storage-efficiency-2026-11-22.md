@@ -75,7 +75,7 @@ stations:
     class: orange
     review: one seat
     depends_on: []
-    lane: lane/store-by-kind (landed 0f4421aae); run on the paper 2026-11-23T21:45Z to 22:02Z, all 30 tables complete: docs/evidence/store-composition-paper-2026-11-23.md
+    lane: 'lane/store-by-kind (landed 0f4421aae); run on the paper 2026-11-23T21:45Z to 22:02Z, all 30 tables complete, docs/evidence/store-composition-paper-2026-11-23.md'
     status: proved
   - id: S1
     name: The layout trigger deleted
