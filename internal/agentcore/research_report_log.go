@@ -18,8 +18,8 @@ import (
 // the run (a capture the run did not make with a Read of its own) and how many the run
 // captured, and whether the packet's Notes carry an "adds:" line and a "missing:" line that says
 // something (what the packet adds, what the corpus lacked); gap is true only for the
-// latter, and gap_text is its words, clipped. Counts only: never a query or a
-// claim. The proof script reads the final line of each run.
+// latter, and gap_text is its words, clipped. Counts, and the words of the "missing:" line (the run's own words about the corpus,
+// clipped to 160 runes and quoted): never a query or a claim of the packet. The proof script reads the final line of each run.
 
 // researchReportLine is the console line for one research Report packet, "" when the
 // packet does not decode or is not a research desk's.
@@ -43,12 +43,15 @@ func researchReportLine(runID, deskAgentID, rawPacket string, final bool) string
 		}
 	}
 	adds, gap := false, ""
-	for _, n := range packet.Notes {
-		switch l := strings.ToLower(strings.TrimSpace(n)); {
-		case strings.HasPrefix(l, "adds:"):
-			adds = true
-		case strings.HasPrefix(l, "missing:") && gap == "":
-			gap = gapText(strings.TrimSpace(n)[len("missing:"):])
+	// A note may hold several lines ("adds: ...\nmissing: ..."): each is read alone.
+	for _, note := range packet.Notes {
+		for _, n := range strings.Split(note, "\n") {
+			switch l := strings.ToLower(strings.TrimSpace(n)); {
+			case strings.HasPrefix(l, "adds:"):
+				adds = true
+			case strings.HasPrefix(l, "missing:") && gap == "":
+				gap = gapText(strings.TrimSpace(n)[len("missing:"):])
+			}
 		}
 	}
 	return fmt.Sprintf("research report run=%s final=%t sources=%d from_corpus=%d by_run=%d no_capture=%d claims=%d adds=%t gap=%t gap_text=%q",
@@ -69,7 +72,7 @@ var gapPlaceholders = map[string]bool{"": true, "none": true, "nothing": true, "
 // corpus, never article text.
 func gapText(after string) string {
 	text := strings.Join(strings.Fields(after), " ")
-	if gapPlaceholders[strings.ToLower(strings.TrimRight(text, " .;"))] {
+	if gapPlaceholders[strings.ToLower(strings.TrimRight(text, " .;,"))] {
 		return ""
 	}
 	if r := []rune(text); len(r) > gapTextRunes {

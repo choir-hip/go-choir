@@ -296,17 +296,22 @@ func TestAResearchReportLineCountsAGapOnlyWhenTheMissingLineSaysSomething(t *tes
 		{"empty", []string{"adds: a", "missing:"}, ` adds=true gap=false gap_text=""`},
 		{"no line", []string{"adds: a"}, ` adds=true gap=false gap_text=""`},
 		{"real", []string{"MISSING:  the prefecture's statement "}, ` adds=false gap=true gap_text="the prefecture's statement"`},
+		{"none with a comma", []string{"missing: none,"}, ` adds=false gap=false gap_text=""`},
+		{"one note holding two lines", []string{"adds: a\nmissing: the filing"}, ` adds=true gap=true gap_text="the filing"`},
 		{"the first line with content wins", []string{"missing: none", "missing: the court filing"}, ` adds=false gap=true gap_text="the court filing"`},
 	} {
 		if got := line(tc.notes...); !strings.HasSuffix(got, tc.want) {
 			t.Errorf("%s: line %q lacks the tail %q", tc.name, got, tc.want)
 		}
 	}
-	// The text is the run's own words, clipped, and one line of the log whatever it holds.
-	long := "missing: " + strings.Repeat("the statement ", 60) + "\nforged=line gap=false"
-	got := line(long)
-	if strings.Contains(got, "\n") || !strings.Contains(got, " gap=true gap_text=\"the statement ") || len(got) > 600 {
-		t.Fatalf("an unclipped or multi-line gap text (%d bytes): %q", len(got), got)
+	// A second line of the same note is a line of its own, never part of the gap text; and a
+	// long line is clipped, says so, and stays one line of the log.
+	if got := line("missing: the statement\nforged=line gap=false"); !strings.HasSuffix(got, ` gap=true gap_text="the statement"`) || strings.Contains(got, "\n") {
+		t.Errorf("a second line leaked into the gap text: %q", got)
+	}
+	got := line("missing: " + strings.Repeat("the   statement ", 60))
+	if strings.Contains(got, "\n") || !strings.Contains(got, " gap=true gap_text=\"the statement the statement ") || len(got) > 600 {
+		t.Fatalf("an unclipped gap text (%d bytes): %q", len(got), got)
 	}
 	if !strings.HasSuffix(got, `…"`) {
 		t.Errorf("a clipped gap text must say it was cut: %q", got)

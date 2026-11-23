@@ -623,7 +623,8 @@ func TestCellMarksReadOnlyRecordsItShowed(t *testing.T) {
 func TestResearchInboxPromptNamesTheDigestAndAsksForNoMoreSources(t *testing.T) {
 	flat := strings.Join(strings.Fields(researchInboxPrompt), " ")
 	for _, want := range []string{
-		"This message opens with the digest of what the paper already holds for the story",
+		"After these instructions this message normally carries the digest of what the paper already holds for the story",
+		"a run on no story, or whose digest could not be built, has none",
 		"read what it names by capture id before you search the web",
 		"the brief's thread marked objective is the Cast's objective",
 		"choir.Records() gives each record whole",

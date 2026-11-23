@@ -333,4 +333,47 @@ func TestCorpusResultOpensWithHowManyCapturesMatchedTheWordsAndHowManyAreNearOnl
 	if !strings.Contains(body.WordsNote, "likely lacks") {
 		t.Fatalf("no word matched and the result does not say the graph likely lacks this: %q", body.WordsNote)
 	}
+	// Part of the page text is not searchable yet: zero word matches does not mean the graph
+	// lacks the words, so the note stays silent (the counts are still written).
+	out, body = call(CaptureSearchAnswer{
+		HitObjects: []objectgraph.Object{a},
+		FullText:   &CaptureTextInfo{Used: true, Indexed: 1, Captures: 3},
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 1, VectorState: "exact", Entries: []RankedCapture{
+			{CaptureID: a.CanonicalID, Reasons: []string{"meaning"}},
+		}},
+	})
+	if body.WordsNote != "" || !strings.HasPrefix(out, `{"captures_matched_words":0,"captures_near_by_meaning_only":1,`) {
+		t.Fatalf("a partly indexed corpus must not claim the graph lacks the words: %q / %.120s", body.WordsNote, out)
+	}
+}
+
+// A page the label half matched by its title is a word match even when the vector half also
+// returned it (review of 6980fdb96, B3): counting only corpusd's text hits called it "near by
+// meaning only" and told the run the graph likely lacks a subject whose title it had just listed.
+func TestCorpusCountsATitleMatchTheVectorHalfAlsoReturnedAsAWordMatch(t *testing.T) {
+	a := rankedObj(t, "a", "Alpha page")
+	answer := CaptureSearchAnswer{
+		Objects:    []objectgraph.Object{a},
+		HitObjects: []objectgraph.Object{a},
+		FullText:   &CaptureTextInfo{Used: true, Indexed: 0, Captures: 1},
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 1, VectorState: "exact", Entries: []RankedCapture{
+			{CaptureID: a.CanonicalID, Reasons: []string{"meaning"}},
+		}},
+	}
+	deps, _ := rankedWorld(t, answer)
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "run-9", OwnerID: "o", ComputerID: "c"})
+	out, err := newSearchWireCorpusTool(deps).Func(ctx, json.RawMessage(`{"query":"alpha"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body wireCorpusResult
+	if err := json.Unmarshal([]byte(out), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Captures) != 1 || !containsString(body.Captures[0].Matched, "title") {
+		t.Fatalf("the listed row does not carry its title match: %+v", body.Captures)
+	}
+	if body.MatchedWords != 1 || body.NearByMeaningOnly != 0 || body.WordsNote != "" {
+		t.Fatalf("a title-matched page counted as %d matched, %d near only, note %q", body.MatchedWords, body.NearByMeaningOnly, body.WordsNote)
+	}
 }

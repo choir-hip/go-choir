@@ -51,6 +51,9 @@ type researchFixture struct {
 	payloads []SearchStartPayload
 	// corpus is the capture ids a corpus search (SearchWireCorpus) returns.
 	corpus []string
+	// nearOnly makes the corpus search say no capture matched the words (every capture it
+	// lists is near by meaning only), as the real search does on a question the graph lacks.
+	nearOnly bool
 	// events are the events a corpus search returns (outlets and capture_ids).
 	events []map[string]any
 	// captureErr makes ReadCapture of a capture id fail (a deleted capture, a
@@ -117,7 +120,11 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				for _, id := range f.corpus {
 					caps = append(caps, map[string]string{"capture_id": id, "url": strings.TrimPrefix(id, "cap:")})
 				}
-				return json.Marshal(map[string]any{"captures": caps, "events": f.events})
+				matched, near := len(caps), 0
+				if f.nearOnly {
+					matched, near = 0, len(caps)
+				}
+				return json.Marshal(map[string]any{"captures_matched_words": matched, "captures_near_by_meaning_only": near, "captures": caps, "events": f.events})
 			case ActionReadCapture:
 				// A capture id "cap:<url>" names the capture of that page.
 				var in ReadCapturePayload
@@ -323,7 +330,7 @@ func TestOverlayWorkedCellIsGraphFirstThenTheWebForWhatIsMissing(t *testing.T) {
 	if f.corpusCalls.Load() != 1 || f.captureReads.Load() != 2 || f.reads.Load() != 0 || f.searchCalls.Load() != 0 {
 		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 2, 0, 0", f.corpusCalls.Load(), f.captureReads.Load(), f.reads.Load(), f.searchCalls.Load())
 	}
-	if !strings.Contains(out.Stdout, "outlets read without error: 2") || !strings.Contains(out.Stdout, "report when the pages you read answer the question") {
+	if !strings.Contains(out.Stdout, "outlets read without error: 2") || !strings.Contains(out.Stdout, "report when a page from a second independent outlet supports the claim") {
 		t.Errorf("the worked cell did not print its stop test:\n%s", out.Stdout)
 	}
 
@@ -340,6 +347,31 @@ func TestOverlayWorkedCellIsGraphFirstThenTheWebForWhatIsMissing(t *testing.T) {
 	}
 	if g.corpusCalls.Load() != 1 || g.captureReads.Load() != 1 || g.reads.Load() != 0 || g.searchCalls.Load() != 0 {
 		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 1, 0, 0", g.corpusCalls.Load(), g.captureReads.Load(), g.reads.Load(), g.searchCalls.Load())
+	}
+
+	// The graph answered only by meaning (no page holds the words), as on a question it lacks:
+	// the cell reads what came back, goes to the web for the lack, and says so in "missing:".
+	// (Review of 6980fdb96, B4: the cell sent no web search here and wrote "missing: none".)
+	m := newResearchFixture(t)
+	m.corpus = []string{"cap:https://www.bbc.co.uk/a", "cap:https://www.itv.co.uk/b"}
+	m.nearOnly = true
+	cell, hooks = m.session(t)
+	hooks.Begin(SessionFrame{RunID: "run-2m"})
+	out = cell(workedCell(t))
+	if !strings.Contains(out.Stdout, "interim packet: 7 sources") || strings.Contains(out.Stdout, "<error") || m.searchCalls.Load() != 1 || m.reads.Load() != 5 {
+		t.Fatalf("a near-by-meaning-only graph answer must send the web search for what it lacks (web searches %d, web reads %d):\n%s", m.searchCalls.Load(), m.reads.Load(), out.Stdout)
+	}
+	var mnotes []string
+	for _, in := range out.Intents {
+		var p struct {
+			Notes []string `json:"notes"`
+		}
+		if json.Unmarshal([]byte(in.Packet), &p) == nil && len(p.Notes) > 0 {
+			mnotes = p.Notes
+		}
+	}
+	if len(mnotes) != 2 || mnotes[1] != "missing: cabinet changes" {
+		t.Fatalf("notes = %q, want the adds line and a missing line naming the lack", mnotes)
 	}
 
 	// The graph's event record lists a second outlet's capture: the cell reads it from the
@@ -441,10 +473,11 @@ func TestResearchRoleAndOverlayStayUnderTheirBound(t *testing.T) {
 	// prompt is to be rewritten as an explanation of the system rather than
 	// rules (owner, 2026-11-16), and a longer explanation must not be refused
 	// by a bound written for the dedupe.
-	// Relaxed 2026-11-22 to 12000, 10000, 22000: the role's version note and the stop
-	// rule's explanation grew it past 9000 while the 8-source target went.
-	if len(overlay) > 12000 || len(raw) > 10000 || len(overlay)+len(raw) > 22000 {
-		t.Fatalf("research overlay %d + role %d chars: past the sanity bounds (12000, 10000, 22000 together)", len(overlay), len(raw))
+	// Relaxed 2026-11-22 to 12000, 10500, 22000. The role figure is the whole YAML file, version
+	// notes included (its body is about 1.5k less); the 8-source target went but the stop rule,
+	// the one-count sentence and the held-mark explanation were added.
+	if len(overlay) > 12000 || len(raw) > 10500 || len(overlay)+len(raw) > 22000 {
+		t.Fatalf("research overlay %d + role %d chars: past the sanity bounds (12000, 10500, 22000 together)", len(overlay), len(raw))
 	}
 }
 
@@ -466,7 +499,7 @@ func TestVerbDocsSayWhatHeldMeansAndWhatTheCorpusCountsMean(t *testing.T) {
 		}
 	}
 	corpus := strings.Join(strings.Fields(choirFunctionDocs["SearchWireCorpus"].Summary), " ")
-	for _, want := range []string{"captures_matched_words", "captures_near_by_meaning_only", "zero captures_matched_words means no page holds your words, so the graph likely lacks this"} {
+	for _, want := range []string{"captures_matched_words", "captures_near_by_meaning_only", "zero captures_matched_words on a search that answered in full means no page holds your words, so the graph likely lacks this"} {
 		if !strings.Contains(corpus, want) {
 			t.Errorf("SearchWireCorpus doc lacks %q", want)
 		}

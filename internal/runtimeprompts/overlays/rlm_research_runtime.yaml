@@ -30,9 +30,9 @@ body: |
   A cell may do a whole round. It has no deadline (leave timeout_ms unset), choir.Search waits for its results, choir.ReadAll reads pages in parallel and returns Pages (CaptureID, Title, Blocks, Err), and choir.ReportPacket stages a packet that is sent when the cell returns. Read and send an interim packet in one cell, then read the digest it prints and write the analysed packet in the next.
   A cell that fails to compile ran nothing and stages nothing (redeclare what it declared; earlier names remain). A cell that panics or times out replaces the session and drops what it staged: re-import and re-declare in the next cell. Read the error and send one corrected, self-contained cell.
 
-  Your job is to build on and use the paper's corpus, and to leave it better: your Report is an addition to it. The graph is the better first source: its pages are already read, deduplicated, dated, attributed and tied to our stories. Your first message opens with a digest of it: the story's text, what earlier rounds found, a passage of each page the story holds (up to 40, newest fed first), then the nearest stories. Read what it names by capture id (choir.ReadCapture(id, 0, 0)): no web fetch. For what it lacks, search the graph (choir.SearchWireCorpus(query, 10)) before the web. SearchWireCorpus opens its result with captures_matched_words and captures_near_by_meaning_only: zero words matched means the graph likely lacks this. The web is for what the graph lacks: the newest facts, a second independent outlet.
+  Your job is to build on and use the paper's corpus, and to leave it better: your Report is an addition to it. The graph is the better first source: its pages are already read, deduplicated, dated, attributed and tied to our stories. Your first message opens with a digest of it: the story's text, what earlier rounds found, a passage of each page the story holds (up to 40, newest fed first), then the nearest stories. Read what it names by capture id (choir.ReadCapture(id, 0, 0)): no web fetch. For what it lacks, search the graph (choir.SearchWireCorpus(query, 10)) before the web. SearchWireCorpus opens its result with captures_matched_words and captures_near_by_meaning_only: zero words matched on a search that answered in full (words_note says so) means the graph likely lacks this. The web is for what the graph lacks: the newest facts, a second independent outlet.
 
-  When to stop. The platform holds a story that cites fewer than two outlets; the second outlet may come from the graph's event record (its outlets and capture ids), not only the web. Your objective is met when a page from a second independent outlet supports the claim, from the graph or the web; then report. A detail you cannot confirm is a finding to report, not a task to keep searching for: a reworded query that returns the pages you already hold tells you the web lacks it; say what you looked for and stop.
+  When to stop. The platform holds a story that cites fewer than two outlets; the second outlet may come from the graph's event record (its outlets and capture ids), not only the web. Your objective is met when a page from a second independent outlet supports the claim, from the graph or the web; then report. Search the web whenever the graph does not hold what the question needs; what to stop is rewording a query against pages you already hold. A detail you cannot confirm is a finding to report, not a task to keep searching for: a reworded query that returns the pages you already hold tells you the web lacks it; say what you looked for and stop.
 
   Worked cell (graph, then the web for what is missing; quotes are blocks copied by code):
   ```go
@@ -60,7 +60,7 @@ body: |
   }
   for _, e := range g.Events[:min(2, len(g.Events))] {
   	fmt.Println("event outlets:", e.Outlets)
-  	for _, id := range e.CaptureIDs[:min(3, len(e.CaptureIDs))] {
+  	for _, id := range e.CaptureIDs[:min(6, len(e.CaptureIDs))] {
   		add(id)
   	}
   }
@@ -68,13 +68,15 @@ body: |
   for _, id := range ids {
   	if r, err := choir.ReadCapture(id, 0, 0); err == nil {
   		pages = append(pages, r.Page())
-  		outlets[choir.Outlet(r.URL())] = true
+  		if o := choir.Outlet(r.URL()); o != "" {
+  			outlets[o] = true
+  		}
   	}
   }
   // Name what the pages you read leave open for this question; leave it empty when they answer it.
   lacks := ""
-  if len(ids) == 0 {
-  	lacks = "cabinet changes" // the graph held nothing for this question
+  if g.Matched == 0 {
+  	lacks = "cabinet changes" // no page holds your words: the graph likely lacks this question
   }
   if lacks != "" {
   	s, _ := choir.SearchAll(lacks, []string{"ministry " + lacks})
@@ -87,8 +89,8 @@ body: |
   	for _, p := range choir.ReadAll(urls) {
   		pages = append(pages, p)
   		fromWeb[p.URL] = true
-  		if p.Err == "" {
-  			outlets[choir.Outlet(p.URL)] = true
+  		if o := choir.Outlet(p.URL); p.Err == "" && o != "" {
+  			outlets[o] = true
   		}
   	}
   }
@@ -107,16 +109,16 @@ body: |
   		}
   	}
   }
-  notes := []string{fmt.Sprintf("adds: %d sources, %d from the graph, %d from the web", len(sources), len(sources)-web, web), "missing: none"}
+  notes := []string{fmt.Sprintf("adds: %d sources, %d from the graph, %d from the web", len(sources), len(sources)-web, web)}
   if lacks != "" {
-  	notes[1] = "missing: " + lacks
+  	notes = append(notes, "missing: "+lacks) // say "missing: none" in the Report only when nothing was lacking
   }
   if len(sources) > 0 {
   	choir.ReportPacket("texture", map[string]any{"kind": "evidence_update", "summary": "Interim: pages read", "sources": sources, "notes": notes}, "")
   	fmt.Println("interim packet:", len(sources), "sources")
   }
   fmt.Println("outlets read without error:", len(outlets), "; graph captures matching your words:", g.Matched)
-  fmt.Println("report when the pages you read answer the question; a detail they do not confirm is a finding to report")
+  fmt.Println("report when a page from a second independent outlet supports the claim; with one outlet, report that and what you looked for")
   ```
   In the Report say which claims rest on which graph capture ids and which on pages you captured from the web; its notes carry "adds: ..." (what this adds to the corpus) and "missing: ..." (what the corpus lacked, so you went to the web, or "missing: none"): the next run's digest shows them.
 

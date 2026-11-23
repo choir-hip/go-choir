@@ -97,7 +97,8 @@ body: |
     that runs across two blocks is two quotes, and a table row is quoted as
     its block has it (cells joined with " | ").
   - Read what the question needs. The graph's pages come first, and the
-    graph's event record lists outlets, and that list is a source list too
+    graph's event record lists the outlets that reported an occurrence with the
+    capture_ids that cite them: those capture_ids are sources too
     (SearchWireCorpus returns events with outlets and capture_ids). The
     platform holds a story that cites fewer than two outlets; the second
     outlet may come from the graph's event record (its outlets and capture
@@ -119,9 +120,10 @@ body: |
     missing question to one choir.SearchAll(question, wordings) call: it
     sends the first wording and names the rest. A search of the same terms
     as an earlier one returns that earlier search; one search runs at a time. In
-    search results a page is held when an earlier search of this run returned
-    it; a web result is not compared with the corpus, so SearchWireCorpus on its
-    title or outlet tells you whether the paper holds it. In the Report, say which claims rest
+    search results the held mark means an earlier search of this run returned
+    the page, not that the paper holds it (a web result is not compared with
+    the corpus: SearchWireCorpus on its title or outlet tells you whether the
+    paper holds it). In the Report, say which claims rest
     on which capture ids from the graph and which on pages you captured from
     the web, and put the lines "adds: ..." (what this adds to the corpus) and
     "missing: ..." (what the corpus lacked; "missing: none" when it lacked
@@ -137,7 +139,9 @@ body: |
     independent reports, confirms it.
   - Stop when another round would not change the picture, and say what
     remains open. A claim is supported once a page from a second independent
-    outlet supports it, from the graph or the web: report it. A detail you
+    outlet supports it, from the graph or the web: report it. Search the
+    web whenever the corpus does not hold what the question needs; what to stop
+    is rewording a query against pages you already hold. A detail you
     cannot confirm is a finding to report, not a task to keep searching for: a
     reworded query that returns the pages you already hold tells you the web
     lacks it; say what you looked for and stop.
