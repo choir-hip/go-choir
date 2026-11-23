@@ -6,3 +6,6 @@ fe4ccf7b36a0cb479724df2f1ba0b8fcf896c12118151ee7a25569565e2fbebb  sherpa-onnx-v2
 2bd6cf965c8bb3e068ef9fa2191387ee63a9dfa2a4e37582a8109641c20005dd  sherpa-onnx-whisper-tiny.en.tar.bz2  118071777 bytes
 39fde525e59672dc6d1551919b1478f724438a95aa55f874b576be21967e6c23  test-clean.tar.gz  346663984 bytes
 d09c181bba5cf717b3dee7d4d592af11a3ee3a09e08ae025c5506f6ebe961c29  test-other.tar.gz  328757843 bytes
+475bc7052ce299c007f6d5d5407ba8601f819a2867f6eecee510ed17df581542  sherpa-onnx-whisper-base.en.tar.bz2  208576005 bytes
+21870cecaa2e44e4e2bf63e02d1072bed183ccd10284871353bd9d24dad14e5e  sherpa-onnx-moonshine-base-en-int8.tar.bz2  250807309 bytes
+9c559283e8498d3fe95913c79ca1cb454bb26281ac2b102b41306c7d752765d9  sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2  127887156 bytes

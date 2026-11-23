@@ -127,6 +127,44 @@ Reading it (numbers only as above):
 - The exact sherpa-onnx source commit of the binaries and the ONNX Runtime build options
   (not published in the tarball).
 
+## Second tranche (same harness, same fixture, run after the commit of the first)
+
+Smoke set at 2 and 4 threads, full set at 4 threads, two runs each
+(`rows-more-smoke.tsv`, `rows-more-full-t4.tsv`; these two files, and their
+hashes in `download-sha256.txt`, were added after the first commit).
+
+| model | set | threads | runs | WER | RTF | load s | peak RSS MiB | thermal (before/after) | status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| moonshine-base-en-int8 | smoke | 2 | 2 | 0.0437 / 0.0437 | 0.0890 / 0.0892 | 2.198 / 2.185 | 414.1 / 413.1 | 0>0 / 0>0 | ok / ok |
+| moonshine-base-en-int8 | smoke | 4 | 2 | 0.0437 / 0.0437 | 0.0767 / 0.0761 | 2.187 / 2.147 | 413.3 / 413.7 | 0>0 / 0>0 | ok / ok |
+| whisper-base.en-int8 | smoke | 2 | 2 | 0.0656 / 0.0656 | 0.2415 / 0.2426 | 1.248 / 1.243 | 465.9 / 466.2 | 0>0 / 0>0 | ok / ok |
+| whisper-base.en-int8 | smoke | 4 | 2 | 0.0656 / 0.0656 | 0.2084 / 0.2086 | 1.242 / 1.232 | 466.2 / 466.7 | 0>0 / 0>0 | ok / ok |
+| streaming-zipformer-en-20M-2023-02-17-int8 | smoke | 2 | 2 | 0.2131 / 0.2131 | 0.0446 / 0.0462 | 1.136 / 1.136 | 169.8 / 169.6 | 0>0 / 0>0 | ok / ok |
+| streaming-zipformer-en-20M-2023-02-17-int8 | smoke | 4 | 2 | 0.2131 / 0.2131 | 0.0488 / 0.0486 | 1.134 / 1.156 | 170.4 / 170.8 | 0>0 / 0>0 | ok / ok |
+| moonshine-base-en-int8 | full | 4 | 2 | 0.0630 / 0.0630 | 0.0748 / 0.0749 | 2.173 / 2.179 | 473.4 / 473.6 | 0>0 / 0>0 | ok / ok |
+| whisper-base.en-int8 | full | 4 | 2 | 0.0816 / 0.0816 | 0.2036 / 0.2053 | 1.238 / 1.247 | 547.1 / 545.6 | 0>0 / 0>0 | ok / ok |
+| streaming-zipformer-en-20M-2023-02-17-int8 | full | 4 | 2 | 0.2268 / 0.2268 | 0.0475 / 0.0475 | 1.14 / 1.136 | 171.3 / 171.1 | 0>0 / 0>0 | ok / ok |
+
+
+- Moonshine base en int8: full-set WER 6.30 % (77 substitutions, 8 deletions, 17
+  insertions), RTF 0.075, peak RSS 473 MiB. Moonshine tiny was 8.78 % at RTF 0.042.
+- Whisper base.en int8: full-set WER 8.16 %, RTF 0.204, peak RSS 546 MiB
+  (whisper tiny.en: 11.25 %, 0.110).
+- Streaming zipformer en 20M (2023-02-17): full-set WER 22.68 % with 222
+  deletions in 1618 words (the 2023-06-26 zipformer: 5.69 %), RTF 0.048, peak RSS
+  171 MiB. It drops words rather than misrecognising them; why was not investigated.
+- `MemAvailable` before every run of the full set was 1.63 to 2.0 GiB; it never went
+  near the 315 MB another researcher reported on a different phone. No run was
+  killed by the system.
+
+## Asked for and not done
+
+Parakeet EOU 120M, Parakeet TDT-CTC 110M, Moonshine streaming small, Whisper
+small.en, the Cactus whistle model, text-to-speech rows (Piper, Kitten, Kokoro),
+Silero VAD cost, the 20-minute sustained run, and the NDK 27.3 / parakeet.cpp
+question were not started. No entry was made in `docs/calibration/claude-ledger.md`
+before the first run (the first run was a probe for the linker error).
+
 ## Files
 
 - `rows-smoke-thread-sweep.tsv`, `rows-full-t4.tsv`: one row per run (column meanings in

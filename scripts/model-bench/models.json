@@ -1,34 +1,143 @@
 {
   "parakeet-tdt-0.6b-v2-int8": {
-    "family": "nemo transducer (TDT)", "quant": "int8", "binary": "sherpa-onnx-offline",
+    "family": "nemo transducer (TDT)",
+    "quant": "int8",
+    "binary": "sherpa-onnx-offline",
     "archive": "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8",
     "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2",
     "licence": "cc-by-4.0 (front matter of the README in the archive; not confirmed on the NVIDIA card)",
-    "files": ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"],
-    "args": ["--encoder={m}/encoder.int8.onnx", "--decoder={m}/decoder.int8.onnx", "--joiner={m}/joiner.int8.onnx", "--tokens={m}/tokens.txt", "--model-type=nemo_transducer"]
+    "files": [
+      "encoder.int8.onnx",
+      "decoder.int8.onnx",
+      "joiner.int8.onnx",
+      "tokens.txt"
+    ],
+    "args": [
+      "--encoder={m}/encoder.int8.onnx",
+      "--decoder={m}/decoder.int8.onnx",
+      "--joiner={m}/joiner.int8.onnx",
+      "--tokens={m}/tokens.txt",
+      "--model-type=nemo_transducer"
+    ]
   },
   "whisper-tiny.en-int8": {
-    "family": "whisper", "quant": "int8", "binary": "sherpa-onnx-offline",
+    "family": "whisper",
+    "quant": "int8",
+    "binary": "sherpa-onnx-offline",
     "archive": "sherpa-onnx-whisper-tiny.en",
     "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2",
     "licence": "MIT (OpenAI Whisper weights)",
-    "files": ["tiny.en-encoder.int8.onnx", "tiny.en-decoder.int8.onnx", "tiny.en-tokens.txt"],
-    "args": ["--whisper-encoder={m}/tiny.en-encoder.int8.onnx", "--whisper-decoder={m}/tiny.en-decoder.int8.onnx", "--tokens={m}/tiny.en-tokens.txt"]
+    "files": [
+      "tiny.en-encoder.int8.onnx",
+      "tiny.en-decoder.int8.onnx",
+      "tiny.en-tokens.txt"
+    ],
+    "args": [
+      "--whisper-encoder={m}/tiny.en-encoder.int8.onnx",
+      "--whisper-decoder={m}/tiny.en-decoder.int8.onnx",
+      "--tokens={m}/tiny.en-tokens.txt"
+    ]
   },
   "moonshine-tiny-en-int8": {
-    "family": "moonshine v1", "quant": "int8", "binary": "sherpa-onnx-offline",
+    "family": "moonshine v1",
+    "quant": "int8",
+    "binary": "sherpa-onnx-offline",
     "archive": "sherpa-onnx-moonshine-tiny-en-int8",
     "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-moonshine-tiny-en-int8.tar.bz2",
     "licence": "MIT, Useful Sensors (LICENSE file in the archive)",
-    "files": ["preprocess.onnx", "encode.int8.onnx", "uncached_decode.int8.onnx", "cached_decode.int8.onnx", "tokens.txt"],
-    "args": ["--moonshine-preprocessor={m}/preprocess.onnx", "--moonshine-encoder={m}/encode.int8.onnx", "--moonshine-uncached-decoder={m}/uncached_decode.int8.onnx", "--moonshine-cached-decoder={m}/cached_decode.int8.onnx", "--tokens={m}/tokens.txt"]
+    "files": [
+      "preprocess.onnx",
+      "encode.int8.onnx",
+      "uncached_decode.int8.onnx",
+      "cached_decode.int8.onnx",
+      "tokens.txt"
+    ],
+    "args": [
+      "--moonshine-preprocessor={m}/preprocess.onnx",
+      "--moonshine-encoder={m}/encode.int8.onnx",
+      "--moonshine-uncached-decoder={m}/uncached_decode.int8.onnx",
+      "--moonshine-cached-decoder={m}/cached_decode.int8.onnx",
+      "--tokens={m}/tokens.txt"
+    ]
   },
   "streaming-zipformer-en-2023-06-26-int8": {
-    "family": "streaming zipformer transducer (chunk 16)", "quant": "int8", "binary": "sherpa-onnx",
+    "family": "streaming zipformer transducer (chunk 16)",
+    "quant": "int8",
+    "binary": "sherpa-onnx",
     "archive": "sherpa-onnx-streaming-zipformer-en-2023-06-26",
     "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2",
     "licence": "apache-2.0 (front matter of the README in the archive)",
-    "files": ["encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx", "decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx", "joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx", "tokens.txt"],
-    "args": ["--encoder={m}/encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx", "--decoder={m}/decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx", "--joiner={m}/joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx", "--tokens={m}/tokens.txt"]
+    "files": [
+      "encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "tokens.txt"
+    ],
+    "args": [
+      "--encoder={m}/encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "--decoder={m}/decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "--joiner={m}/joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "--tokens={m}/tokens.txt"
+    ]
+  },
+  "whisper-base.en-int8": {
+    "family": "whisper",
+    "quant": "int8",
+    "binary": "sherpa-onnx-offline",
+    "archive": "sherpa-onnx-whisper-base.en",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-base.en.tar.bz2",
+    "licence": "MIT (OpenAI Whisper weights)",
+    "files": [
+      "base.en-encoder.int8.onnx",
+      "base.en-decoder.int8.onnx",
+      "base.en-tokens.txt"
+    ],
+    "args": [
+      "--whisper-encoder={m}/base.en-encoder.int8.onnx",
+      "--whisper-decoder={m}/base.en-decoder.int8.onnx",
+      "--tokens={m}/base.en-tokens.txt"
+    ]
+  },
+  "moonshine-base-en-int8": {
+    "family": "moonshine v1",
+    "quant": "int8",
+    "binary": "sherpa-onnx-offline",
+    "archive": "sherpa-onnx-moonshine-base-en-int8",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-moonshine-base-en-int8.tar.bz2",
+    "licence": "MIT, Useful Sensors (LICENSE file in the archive)",
+    "files": [
+      "preprocess.onnx",
+      "encode.int8.onnx",
+      "uncached_decode.int8.onnx",
+      "cached_decode.int8.onnx",
+      "tokens.txt"
+    ],
+    "args": [
+      "--moonshine-preprocessor={m}/preprocess.onnx",
+      "--moonshine-encoder={m}/encode.int8.onnx",
+      "--moonshine-uncached-decoder={m}/uncached_decode.int8.onnx",
+      "--moonshine-cached-decoder={m}/cached_decode.int8.onnx",
+      "--tokens={m}/tokens.txt"
+    ]
+  },
+  "streaming-zipformer-en-20M-2023-02-17-int8": {
+    "family": "streaming zipformer transducer (pruned_transducer_stateless7 small)",
+    "quant": "int8",
+    "binary": "sherpa-onnx",
+    "archive": "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
+    "licence": "apache-2.0 (front matter of the README in the archive)",
+    "files": [
+      "encoder-epoch-99-avg-1.int8.onnx",
+      "decoder-epoch-99-avg-1.int8.onnx",
+      "joiner-epoch-99-avg-1.int8.onnx",
+      "tokens.txt"
+    ],
+    "args": [
+      "--encoder={m}/encoder-epoch-99-avg-1.int8.onnx",
+      "--decoder={m}/decoder-epoch-99-avg-1.int8.onnx",
+      "--joiner={m}/joiner-epoch-99-avg-1.int8.onnx",
+      "--tokens={m}/tokens.txt"
+    ]
   }
 }
