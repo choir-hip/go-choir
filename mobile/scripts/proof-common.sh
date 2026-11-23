@@ -10,7 +10,7 @@ OUT="$SCRATCH/drive.txt"
 STEPS="$SCRATCH/steps.txt"
 : > "$OUT"; : > "$STEPS"
 trap 'rm -rf "$SCRATCH"' EXIT
-fail() { cp "$OUT" "${TMPDIR:-/tmp}/proof-app-last.txt" 2>/dev/null; [ -n "${SHOTS:-}" ] && cp "$OUT" "$SHOTS/drive.txt" 2>/dev/null; echo "PROOF FAILED at $1"; [ -n "${2:-}" ] && echo "$2"; exit 1; }
+fail() { [ -n "${PROOF_JSLOG_PID:-}" ] && kill "$PROOF_JSLOG_PID" 2>/dev/null; cp "$OUT" "${TMPDIR:-/tmp}/proof-app-last.txt" 2>/dev/null; [ -n "${SHOTS:-}" ] && cp "$OUT" "$SHOTS/drive.txt" 2>/dev/null; echo "PROOF FAILED at $1"; [ -n "${2:-}" ] && echo "$2"; exit 1; }
 SIM() { DEVELOPER_DIR=$DD /usr/bin/xcrun simctl "$@"; }
 
 # reset_state is defined by the caller (proof-real.sh): a clean app, signed in with the key file.
@@ -59,6 +59,7 @@ run_drive() {
   cp "$STEPS" "$SCRATCH/steps.$name"
   attempt=1; relaunched=0
   while :; do
+    drive_t0=$(date '+%Y-%m-%d %H:%M:%S')            # the drive's own window in the simulator log stream (PROOF_JSLOG), below
     reset_state "$mode" "$ob"
     set -f; OLDIFS="$IFS"; IFS='
 '
@@ -93,8 +94,20 @@ run_drive() {
     break
   done
   : > "$STEPS"
-  cat "$SCRATCH/$name.txt" >> "$OUT"
-  cp "$SCRATCH/$name.txt" "$SHOTS/drive-$name.txt" 2>/dev/null
+  : > "$SCRATCH/$name.stream"
+  # The dump's console lines come from Exact's journal ring, which a launch's traffic overflows (train2p3 and p4: thousands of lines dropped in every drive, the launch's own lines with them). The app's
+  # `console.log` lines also go to the simulator's log stream (PROOF_JSLOG, started once for the whole proof by proof-real.sh), which has no ring: the drive's window of it is added to its dump in the
+  # dump's own words (`t=stream console: <line>`), so every check that reads a console line reads both.
+  if [ -n "${PROOF_JSLOG:-}" ] && [ -f "$PROOF_JSLOG" ]; then
+    sleep 2                                           # the stream is flushed to its file a moment late
+    drive_t1=$(date '+%Y-%m-%d %H:%M:%S')
+    awk -v a="$drive_t0" -v b="$drive_t1" -v app="[$APP:console] " '
+      { ts = substr($0, 1, 19) }
+      ts >= a && ts <= b && (i = index($0, app)) > 0 { print "t=stream console: " substr($0, i + length(app)) }
+    ' "$PROOF_JSLOG" > "$SCRATCH/$name.stream" 2>/dev/null
+  fi
+  cat "$SCRATCH/$name.txt" "$SCRATCH/$name.stream" >> "$OUT"
+  cat "$SCRATCH/$name.txt" "$SCRATCH/$name.stream" > "$SHOTS/drive-$name.txt" 2>/dev/null
   # The date the app showed is today's date WHEN THE DUMP WAS TAKEN, not when the check runs (a run across local midnight). The drive's start and its end both: the dump is between them.
   echo "$drive_started" > "$SHOTS/drive-$name.date"; date '+%a %-d %b' >> "$SHOTS/drive-$name.date"
   if [ $rc -ne 0 ]; then
