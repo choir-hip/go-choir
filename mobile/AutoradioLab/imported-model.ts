@@ -115,25 +115,39 @@ function parts(blocks: Block[]): DocText {
 }
 
 /** A PDF's text (the computer's pdftotext: a form feed ends a page): a section per page that has words, titled "Page N" with N the real page number. */
-export function fromPdfText(text: string): DocText {
+export function fromPdfText(text: string): DocText { return runSteps(pdfSteps(text)); }
+/** The same, ending the turn between pages (`tick`: Exact's scheduler.yield): a 400-page PDF is read in many short turns, not one long one (a turn is about 100 ms of CPU, and Hermes is slow). */
+export function fromPdfTextAsync(text: string, tick: () => Promise<void>): Promise<DocText> { return runStepsAsync(pdfSteps(text), tick); }
+function* pdfSteps(text: string): Generator<void, DocText, void> {
   const sections: Section[] = [], blocks: Block[] = [];
   const pages = text.split('\f');
+  yield;
   if (pages.length === 1) {
     for (const p of paragraphs(text)) blocks.push({ kind: 'paragraph', level: 0, text: p, marker: '', section: 0 });
     return parts(blocks);
   }
-  pages.forEach((page, i) => {
-    const ps = paragraphs(page);
-    if (ps.length === 0) return;
+  let work = 0;
+  for (let i = 0; i < pages.length; i++) {
+    const ps = paragraphs(pages[i]);
+    work += pages[i].length;
+    if (work >= WORK_CHARS) { work = 0; yield; }
+    if (ps.length === 0) continue;
     const start = blocks.length;
     for (const p of ps) blocks.push({ kind: 'paragraph', level: 0, text: p, marker: '', section: sections.length });
     sections.push({ title: `Page ${i + 1}`, start, count: ps.length });
-  });
+  }
   return { sections, blocks };
 }
 
+/** Characters of text worked through between two yields at most. */
+export const WORK_CHARS = 10000;
+function runSteps<T>(g: Generator<void, T, void>): T { let r = g.next(); while (!r.done) r = g.next(); return r.value; }
+async function runStepsAsync<T>(g: Generator<void, T, void>, tick: () => Promise<void>): Promise<T> { let r = g.next(); while (!r.done) { await tick(); r = g.next(); } return r.value; }
+
 /** An e-book's text as the computer's pandoc writes it (Markdown). Chapters are the level of heading that repeats. */
-export function fromMarkdown(md: string): DocText {
+export function fromMarkdown(md: string): DocText { return runSteps(markdownSteps(md)); }
+export function fromMarkdownAsync(md: string, tick: () => Promise<void>): Promise<DocText> { return runStepsAsync(markdownSteps(md), tick); }
+function* markdownSteps(md: string): Generator<void, DocText, void> {
   const blocks: Block[] = [];
   const push = (kind: Block['kind'], level: number, raw: string, marker = ''): void => {
     const text = kind === 'code' ? raw : plain(raw);
@@ -146,7 +160,9 @@ export function fromMarkdown(md: string): DocText {
     if (quote.length > 0) push('quote', 0, quote.join(' '));
     para = []; quote = []; flushItem();
   };
+  let work = 0;
   for (const raw of md.replace(/\r\n?/g, '\n').split('\n')) {
+    work += raw.length + 1; if (work >= WORK_CHARS) { work = 0; yield; }
     const t = raw.trim();
     if (code) {
       if (/^(```|~~~)/.test(t)) { push('code', 0, code.join('\n')); code = null; } else code.push(raw);
@@ -214,9 +230,16 @@ const fold = (s: string): string => s.normalize('NFKD').replace(/\p{M}/gu, '').t
 export const tokens = (s: string): string[] => fold(s).split(/[^\p{L}\p{N}]+/u).filter((t) => t !== '');
 
 export type Index = { sets: Set<string>[]; lists: string[][]; norms: string[] };
-export function buildIndex(blocks: Block[]): Index {
-  const lists = blocks.map((b) => tokens(b.text));
-  return { lists, sets: lists.map((l) => new Set(l)), norms: lists.map((l) => l.join(' ')) };
+export function buildIndex(blocks: Block[]): Index { return runSteps(indexSteps(blocks)); }
+export function buildIndexAsync(blocks: Block[], tick: () => Promise<void>): Promise<Index> { return runStepsAsync(indexSteps(blocks), tick); }
+function* indexSteps(blocks: Block[]): Generator<void, Index, void> {
+  const lists: string[][] = [], sets: Set<string>[] = [], norms: string[] = [];
+  let work = 0;
+  for (const b of blocks) {
+    const l = tokens(b.text); lists.push(l); sets.push(new Set(l)); norms.push(l.join(' '));
+    work += b.text.length; if (work >= WORK_CHARS) { work = 0; yield; }
+  }
+  return { lists, sets, norms };
 }
 /** Blocks holding every word of the query (the last word may be the start of a word), phrase matches first, then in order. */
 export function search(ix: Index, query: string, limit: number): number[] {

@@ -25,6 +25,9 @@ import * as F from './files.ts';
 import * as FM from './files-model.ts';
 import { textureSource } from './content.ts';
 import * as M from './imported-model.ts';
+import { lapYield } from './lap.ts';
+/** Ends the turn between slices of a long read (Exact's scheduler.yield; a no-op under Bun). */
+const lapTick = (): Promise<void> => lapYield('imported');
 import type { Result } from './app.contract.d.ts';
 
 export type ImportedList = Result<'importedList'>;
@@ -40,6 +43,14 @@ export const UPLOAD_MAX = FM.MEMORY_MAX;
 /** The most the phone keeps a copy of, for the page view and the share sheet. A bigger document is still read (its text is the computer's). */
 export const COPY_MAX = 100_000_000;
 const OPEN_DOCUMENTS = 3;
+/**
+ * THE CACHE RULE (app:/cache/files, where the Files page keeps its own copies too). For imported documents: the original is kept for the COPY_KEEP documents opened last (it can be tens of megabytes),
+ * the small text of every opened document stays (it is what the search reads), and a changed file's old version is removed whole. The record is `imported-lru.json` in the cache folder itself,
+ * so the Files wipe removes it with the rest.
+ */
+export const COPY_KEEP = 6;
+export const LRU_FILE = `${F.CACHE_DIR}/imported-lru.json`;
+const LRU_MAX = 200;
 
 const NO_PLAY = { op: '', id: '', title: '', at: 0, text: '' };
 const ack = (ok: boolean, message: string, play = NO_PLAY): ImportedAck => ({ ok, message, play });
@@ -139,6 +150,7 @@ async function textOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Pr
   if (storage) {
     try {
       const v = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(file)));
+      await lapTick();
       if (Array.isArray(v?.sections) && Array.isArray(v?.blocks) && v.blocks.length > 0) return { status: 'ready', message: '', doc: remember({ key, text: v as M.DocText, index: null }, gen) };
     } catch { /* not kept yet */ }
   }
@@ -146,8 +158,9 @@ async function textOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Pr
     const r = await F.fileTexture(e, storage, net);
     if (r.status !== 'ready' || !r.target.startsWith('texture:')) return { status: 'error', message: r.message === '' ? 'Your computer could not read this document.' : r.message };
     const md = await textureSource(r.target.slice('texture:'.length), async (p) => (await net.json(p)).body);
-    const text = kind === 'pdf' ? M.fromPdfText(md ?? '') : M.fromMarkdown(md ?? '');
+    const text = kind === 'pdf' ? await M.fromPdfTextAsync(md ?? '', lapTick) : await M.fromMarkdownAsync(md ?? '', lapTick);   // a long book is read over several turns (each turn is about 100 ms of CPU)
     if (text.blocks.length === 0) return { status: 'empty', message: NO_TEXT[kind] };
+    await lapTick();
     if (storage && gen === accountGeneration()) {
       try { await storage.fs.mkdir(`${F.CACHE_DIR}/${key}`).catch(() => {}); await writeCurrent(gen, storage, file, new TextEncoder().encode(JSON.stringify(text))); } catch { /* a full disk loses only the copy */ }
     }
@@ -157,7 +170,7 @@ async function textOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Pr
     return { status: 'error', message: say(err) };
   }
 }
-const indexOf = (d: Loaded): M.Index => (d.index ??= M.buildIndex(d.text.blocks));
+const indexOf = async (d: Loaded): Promise<M.Index> => (d.index ??= await M.buildIndexAsync(d.text.blocks, lapTick));
 
 /** The original, for the page view of a PDF and the share sheet: the host writes it under the cache, no bytes in JavaScript. '' when it cannot be had. */
 async function copyOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Promise<string> {
@@ -171,6 +184,22 @@ async function copyOf(e: FM.Entry, storage: Storage | undefined, net: F.Net): Pr
     try { await storage.fs.rm(dest); } catch { /* nothing there */ }
   } catch { try { await storage.fs.rm(dest); } catch { /* nothing there */ } }
   return '';
+}
+
+type Kept = { path: string; key: string; name: string; copy: boolean };
+/** Note that this version was just used: drop the old versions of the same file, keep the original of the last COPY_KEEP, forget the oldest past LRU_MAX. Never throws. */
+async function keepCache(e: FM.Entry, storage: Storage | undefined, gen: number): Promise<void> {
+  if (!storage || gen !== accountGeneration()) return;
+  const key = cacheKey(e);
+  let list: Kept[] = [];
+  try { const v = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(LRU_FILE))); if (Array.isArray(v)) list = v.filter((k): k is Kept => k && typeof k.path === 'string' && typeof k.key === 'string' && typeof k.name === 'string'); } catch { /* none yet */ }
+  const rm = async (p: string): Promise<void> => { try { await storage.fs.rm(p); } catch { /* absent */ } };
+  for (const k of list.filter((k) => k.path === e.path && k.key !== key)) await rm(`${F.CACHE_DIR}/${k.key}`);
+  list = list.filter((k) => k.key !== key && k.path !== e.path);
+  list.push({ path: e.path, key, name: e.name, copy: true });
+  while (list.length > LRU_MAX) { const old = list.shift()!; await rm(`${F.CACHE_DIR}/${old.key}`); }
+  for (const k of list.slice(0, Math.max(0, list.length - COPY_KEEP))) if (k.copy) { await rm(`${F.CACHE_DIR}/${k.key}/${FM.cacheName(k.name)}`); k.copy = false; }
+  if (gen === accountGeneration()) { try { await writeCurrent(gen, storage, LRU_FILE, new TextEncoder().encode(JSON.stringify(list))); } catch { /* the rule runs again next open */ } }
 }
 
 // ---------------------------------------------------------------- the list
@@ -207,6 +236,7 @@ export async function importedDoc(address: string, storage?: Storage, net: F.Net
   if (!e) return { ...base, status: 'notfound', message: GONE };
   const kind = M.kindOfName(e.name)!;
   const [t, copy] = await Promise.all([textOf(e, storage, net), copyOf(e, storage, net)]);
+  await keepCache(e, storage, gen);
   const head = { ...base, title: M.titleOf(e.name), kind, kindLabel: M.kindLabel(kind) };
   if (t.status !== 'ready' || !t.doc) return { ...head, status: t.status === 'empty' ? 'empty' : 'error', message: t.message, shareSrc: copy };
   const text = t.doc.text;
@@ -249,7 +279,7 @@ export async function importedFind(address: string, query: string, storage?: Sto
   const h = await held(address, storage, net);
   if (!h) return none;
   const t = h.d.text;
-  const hits = M.search(indexOf(h.d), q, 50).map((n) => ({ block: n, section: t.blocks[n].section, label: t.sections[t.blocks[n].section]?.title ?? '', snippet: M.snippet(t.blocks[n].text, q) }));
+  const hits = M.search(await indexOf(h.d), q, 50).map((n) => ({ block: n, section: t.blocks[n].section, label: t.sections[t.blocks[n].section]?.title ?? '', snippet: M.snippet(t.blocks[n].text, q) }));
   return { query: q, hits, message: hits.length === 0 ? `Nothing in this document matches “${q}”.` : '' };
 }
 

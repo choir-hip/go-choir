@@ -8,7 +8,8 @@ import { getJSON, nativeLater, accountGeneration } from './api.ts';
 import { Retrieval, nativeEmbedder, parseAsk, launcherSearch, registerSearchProvider, type Found } from './retrieval-run.ts';
 import { onSignOut, type Row } from './search.ts';
 import { contentDocs } from './content-run.ts';
-import { ImportedSource, importedDocs } from './imported-search.ts';
+import { importedDocs } from './imported-search.ts';
+import { ImportedSource } from './imported-source.ts';
 
 /** The one runtime of the process. Document sources register here (`live.setDocSource`: the content store and the imported documents, both wired just below). */
 export const live = new Retrieval();

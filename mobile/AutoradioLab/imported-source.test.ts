@@ -3,7 +3,7 @@
 //  X2 one read at a time: calls while a read is in flight start no second one; a read that finds a change calls `changed` once.
 //  X3 a read that fails keeps what was held; a read that lands after the account moved is dropped.
 import { describe, expect, test } from 'bun:test';
-import { ImportedSource } from './imported-search.ts';
+import { ImportedSource } from './imported-source.ts';
 import type { Doc } from './search.ts';
 
 const d = (id: string): Doc => ({ id, kind: 'document', title: id, text: '', date: 1, source: 'Imported documents', address: `imported:${id}`, key: id });
