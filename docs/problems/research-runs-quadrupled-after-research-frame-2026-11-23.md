@@ -76,3 +76,27 @@ reworded searches still holds.
    unfinished runs, so the mechanism is known rather than guessed.
 5. Texture's prompt and the research prompt changed in separate landings, so a
    step in the hourly counts is attributable.
+
+## After the revert (read 2026-11-23 18:05Z)
+
+The revert (`771fcc088`) deployed at 15:30Z; from that minute every research
+call carries the old system prompt (30,391 characters against 33,278 under the
+change, which ran from 08:02Z to 15:30Z).
+
+| UTC hour | runs active | runs started | calls | median calls a run |
+| --- | --- | --- | --- | --- |
+| 06Z, 07Z (before) | 16, 13 | 15, 12 | 394, 284 | 22, 19 |
+| 08Z to 14Z (changed prompts) | 39 to 82 | 36 to 77 | 668 to 1138 | 9 to 11 |
+| 16Z | 44 | 39 | 626 | 10 |
+| 17Z | 12 | 11 | 578 | 24 |
+
+The prediction (claim C201: 25 or fewer in each of the first two full hours)
+was **false as written**: 16Z had 44. From 17Z the count and the shape of a
+run are back where they were. Belief: the change was the cause, at about 0.8;
+the hour of lag is not explained (stories opened under the changed prompts
+still working through their rounds is a guess, not read from a run ledger).
+Remaining error: two hours is thin, and before the change three hours of
+twelve passed 25 on their own (32, 34 and 31). Claim C202 covers 18Z to 21Z.
+Two runs in 17Z made 160 and 142 model calls each; runs of 72 and 108 were
+seen before and during the change too, and none has been read step by step.
+
