@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { adoptNative } from './api.ts';
 import { forgetOnboarding } from './onboarding.ts';
-import { barRun, getRadio, queueAct, queueView, radioPageFacts, radioPlayAudio, radioPulse, wipeRadio } from './radio-bridge.ts';
+import { radioHold, radioWrite, barRun, getRadio, queueAct, queueView, radioPageFacts, radioPlayAudio, radioPulse, wipeRadio } from './radio-bridge.ts';
 import { radioPage } from './radio-page.ts';
 import { barInfo } from './bar.ts';
 
@@ -123,4 +123,58 @@ describe('C3 paused and locked', () => {
     const r = await simulate(60);
     for (const n of ['brun', 'qv', 'rpfacts']) expect(r.asks[n], n).toBeLessThanOrEqual(3);
   });
+});
+
+// C4 (the gaps review): the radio's hand-offs in the real pulse wiring.
+//  C4a one radioWrite at a time: the pulse never says `write` while a radioWrite is in flight. A mutation sent again REPLACES the first (Exact: the first is let go), and the first is the one waiting on the desk's
+//      reply: it was let go at the moment the reply arrived, the stretch "failed" after its first entry was placed, and the rest of a 30 s model call was lost (the proof's 11:40:00 hand-off).
+//  C4b an entry that ends with the next on the sheet and not on the deck: the next starts at once, in front, in the background and while the clock is slow (the deck's journal moves `ds.seq`, which asks the pulse).
+describe('C4a one radioWrite at a time', () => {
+  test('while a radioWrite waits for the desk the pulse does not call for another, whatever is pending', async () => {
+    const r = await getRadio(undefined, native as never); r.rt.store.poster = undefined;      // no server: the pending op stays due
+    let release: () => void = () => undefined; const gate = new Promise<void>((res) => { release = res; });
+    r.writer.checkAhead = () => true; r.writer.settleWithin = () => gate;           // an ask in flight that the first radioWrite waits for
+    r.rt.store.pending.push({ op_id: 'p-x', by: 'phone', op: 'aired', id: 'x', state: 'on_air', position_seconds: 0, base_version: 0 } as never);
+    expect((await radioPulse(undefined, native as never)).write).toBe(true);        // posting is due: a radioWrite is sent
+    const first = radioWrite(undefined, native as never);
+    await new Promise((x) => setTimeout(x, 20));
+    for (let i = 0; i < 3; i++) expect((await radioPulse(undefined, native as never)).write, 'pulse ' + i).toBe(false);
+    release(); await first;
+    expect((await radioPulse(undefined, native as never)).write).toBe(true);        // done: the posting still due is sent again
+  });
+});
+
+describe('C4b the next entry starts at once when one ends and the deck holds nothing', () => {
+  const item = (id: string) => ({ id, kind: 'story', placed_by: 'desk', state: 'ahead', title: id, text: `Words of ${id}.`, est_seconds: 30, revision: 0 });
+  for (const [name, inFront, slow] of [['in front', true, false], ['in the background', false, false], ['with the slow clock', false, true]] as const) {
+    test(name, async () => {
+      front = inFront;
+      const played: string[] = []; let seq = 0, current = ''; const journal: Record<string, unknown>[] = [];
+      const deck = { available: true, later: async (rq: { op: string; name?: string; peek?: boolean; args?: Record<string, unknown> }) => {
+        if (rq.op === 'radioFacts') return { at: BASE + nowMs, ready: true, inbox: [], position: { block: 0, seconds: 0 }, foreground: front };
+        if (rq.op === 'deck') {
+          const a = rq.args ?? {};
+          if (rq.name === 'deckPlay') { current = String(a.id); played.push(current); seq += 1; journal.push({ seq, type: 'started', item: current, at: '2023-11-14T22:00:00Z', block: 0, seconds: 0, final: 0, rendered: false, end: '', command: '', reason: '' }); }
+          if (rq.name === 'deckAck') { const t = Number(a.through); for (let i = journal.length - 1; i >= 0; i--) if ((journal[i].seq as number) <= t) journal.splice(i, 1); }
+          return { why: current ? 'playing' : 'empty', item: current, block: 0, seconds: 0, duration: 30, held: [], seq, acked: 0, journal: [...journal] };
+        }
+        return { ok: true };
+      } };
+      adoptNative(deck as never, 'test');
+      const r = await getRadio(undefined, deck as never); r.rt.store.poster = undefined;
+      r.rt.play(item('a') as never); r.rt.queue(item('b') as never);
+      await radioHold(undefined, deck as never);
+      expect(played).toEqual(['a']);                                                // b is on the sheet, not on the deck (this deck holds nothing)
+      if (slow) {                                                                   // the pulse is on the five-second clock: nothing sounds in front and nothing is due as far as it can tell (this deck cannot hold b)
+        r.rt.store.pending.length = 0; const real = r.rt.needsWork.bind(r.rt); r.rt.needsWork = () => false;
+        expect((await radioPulse(undefined, deck as never)).slow).toBe(true); r.rt.needsWork = real;
+      }
+      nowMs += 20_000;                                                              // a's end comes: the deck writes the line, which moves ds.seq and asks the pulse
+      seq += 1; journal.push({ seq, type: 'ended', item: 'a', at: '2023-11-14T22:00:20Z', block: 2, seconds: 20, final: 0, rendered: true, end: 'finished', command: '', reason: '' }); current = '';
+      const p = await radioPulse(undefined, deck as never);
+      expect(p.hold).toBe(true);                                                    // the pump is asked for, in the same turn
+      await radioHold(undefined, deck as never);
+      expect(played).toEqual(['a', 'b']);                                           // and b is started: no wait for the clock
+    });
+  }
 });
