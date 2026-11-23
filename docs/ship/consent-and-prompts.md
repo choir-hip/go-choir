@@ -5,8 +5,6 @@ Short, plain, no exclamation marks. Every text here is for the app as it will be
 Still open for the owner:
 
 - The contact email (CONTACT_EMAIL, used in the error text of section 5).
-- Whether model files move to our own host before release (the download prompt names Hugging Face until then).
-- Whether the optional hearing file stays in the download prompt (dropping it cuts about 0.5 GB).
 
 Rulings applied (owner, 2026-11-23): during the beta every account is free tier and providers may train on what is sent; minimum age 16; passkey sign-in and account creation inside the app, no codes; deletion with a 72 hour hold; downloads only after the person agrees; the microphone asked for only when voice or a take is turned on; signed out is listening only.
 

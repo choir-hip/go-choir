@@ -11,7 +11,6 @@ Still open for the owner (delete this list before publishing):
 
 - The contact email to print (CONTACT_EMAIL), and the effective date.
 - The server log retention period (section 8). No job enforces any number today.
-- Whether the model files move to our own host before release (section 7).
 - Where past versions of this policy are kept (POLICY_ARCHIVE_URL, section 13).
 - Who has operator access to the server (section 12).
 - The country of the OVH server (section 5).

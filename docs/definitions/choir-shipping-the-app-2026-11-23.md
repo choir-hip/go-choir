@@ -131,6 +131,15 @@ boundaries:
   - decision: 'the app''s key and other secrets are kept through Exact''s own Keychain storage; the lead read Exact at the pin: Keychain storage is covered, ciphers are not (digests and ECDSA only)'
     said: research what exact provides for the keychain and crypto... i think it covers that
     'on': '2026-11-23'
+  - decision: the downloaded voice models (hearing and speaking) are needed, not optional; they come from Hugging Face and will be replaced as better ones appear; Apple's built-in recogniser and voice are not good enough
+    said: yes, we do need to download the "optional" voice model downloads. from hugging face. we will keep updating the models as better ones come. apple builtin recognizer and voice isnt good enough
+    'on': '2026-11-24'
+  - decision: the mail seal is removed; mail is stored on the phone's disk
+    said: yes, get rid of mail seal. i do want mail stored on phone's disk
+    'on': '2026-11-24'
+  - decision: one current privacy policy; older copies removed and links point to it
+    said: the older ones should be removed so its only one current one and they link to it appropriately
+    'on': '2026-11-24'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
   - signing keys and API keys never enter the repo or an agent's output; key files are passed by path
