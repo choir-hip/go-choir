@@ -73,7 +73,7 @@ describe('an ask of the desk starts only from a mutation\'s own body (the radio 
     const b = src('radio-bridge.ts');
     const at = [...b.matchAll(/checkAhead\(/g)].map((m) => m.index as number);
     expect(at.length).toBe(1);
-    const write = b.slice(b.indexOf('export async function radioWrite('));
+    const write = b.slice(b.indexOf('async function writeInner('));
     expect(write.indexOf('checkAhead(')).toBeGreaterThan(-1);
     expect(write.indexOf('checkAhead(')).toBeLessThan(write.indexOf('\n}\n'));
   });
