@@ -146,7 +146,7 @@ describe('G6 the window while the kept session is read', () => {
   test('sealingBlocked is true and the radio keeps its stamp while beginSignOut is still reading the key', async () => {
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
     const f = fakeNative(0);
-    const held = { available: true, later: async (r: Call) => { if (r.op === 'get') { await gate; return { found: false }; } return f.native.later(r); } };
+    const held = { available: true, later: async (r: Call) => { if (r.op === 'session') { await gate; return { found: false }; } return f.native.later(r); } };
     adoptNative(held as never, 'test');
     const r = await getRadio(undefined, held as never); const made = r.gen;
     const begun = beginSignOut();                                                  // not awaited: it is inside keptSession
