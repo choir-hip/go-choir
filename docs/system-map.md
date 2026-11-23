@@ -307,7 +307,9 @@ Key paths: `internal/proxy/handlers.go`, `internal/apihandler/routes.go`,
 
 Not true, though a reader would assume it:
 - There is no web page that shows a run or trace; the routes and `choir
-  trace` exist, the page does not [7].
+  trace` exist, the page does not [7]. `choir trace run <run_id>` (lane
+  `trace-run`, not landed; [reference/TRACE-RUN.md](reference/TRACE-RUN.md))
+  shows one run step by step on the client.
 - Package publish and install have no deployed proof I could find [7].
 - Public routes (front, search, resolve) have no rate limit in the proxy or
   Caddy [7].

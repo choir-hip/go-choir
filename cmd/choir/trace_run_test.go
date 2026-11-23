@@ -256,11 +256,14 @@ func toolLoop(seq, ms int64, words string, extra map[string]any) fixEvent {
 	p := map[string]any{"desk": "research", "iteration": 1, "stop_reason": "tool_use", "tool_calls": 1,
 		"tool_call_names": []string{"desk_go_eval"}, "response_text": words, "response_text_chars": len(words),
 		"model": "swe-2-flash", "llm_provider": "devin", "llm_model": "swe-2-flash", "input_tokens": 9000,
-		"output_tokens": 300, "cached_input_tokens": 8000, "provider_call_ms": 1000, "messages": 3, "tools": 4}
+		"output_tokens": 300, "cached_input_tokens": 8000, "provider_call_ms": 1000, "messages": 3, "tools": 4,
+		// The runtime stores the phase inside the payload (payloadWithPhase);
+		// the record's own phase field stays empty for run events.
+		"phase": "tool_loop"}
 	for k, v := range extra {
 		p[k] = v
 	}
-	return fixEvent{seq: seq, ms: ms, kind: types.EventRunProgress, phase: "tool_loop", payload: p}
+	return fixEvent{seq: seq, ms: ms, kind: types.EventRunProgress, payload: p}
 }
 
 func cellEvent(seq, startMs, endMs int64, egress []map[string]any) fixEvent {
@@ -477,7 +480,7 @@ func TestTraceRunSearchWithAndWithoutRecordedCounts(t *testing.T) {
 		t.Fatalf("queries = %q %q", first.Query, second.Query)
 	}
 	text, _, _ := runTraceCmd(t, newFake(mainFixture()), "run-1")
-	for _, want := range []string{"query: not recorded", "counts: not recorded", "no end recorded"} {
+	for _, want := range []string{"no end recorded"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text view lacks %q:\n%s", want, text)
 		}
@@ -573,7 +576,7 @@ func TestTraceRunReasonOrderTurnCommitThenWordsThenNotRecorded(t *testing.T) {
 		t.Fatalf("turn_commit steps = %d", n)
 	}
 	text, _, _ := runTraceCmd(t, newFake(fx), "run-1")
-	for _, want := range []string{"reason: turn commit:", "the model's words before this cell:", "reason: not recorded"} {
+	for _, want := range []string{"why: turn commit:", "the model said before this cell:"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text lacks %q:\n%s", want, text)
 		}
@@ -1084,5 +1087,170 @@ func TestTraceRunSaysResearchChildrenEventsAreNotAttached(t *testing.T) {
 	}
 	if gapIDs(traceDoc(t, newFake(mainFixture()), "run-1"))["research_children_events"] {
 		t.Fatal("a run with no research call lists the children gap")
+	}
+}
+
+// ---- model calls under each desk's real event shapes ----
+
+// runAs makes a run of a given desk whose events carry the real stored shape:
+// the record's phase field is empty and the phase rides in the payload.
+func deskFixture(desk, profile string, events []fixEvent) *runFixture {
+	r := baseRun("run-1")
+	r.AgentProfile, r.AgentRole = profile, profile
+	r.AgentID = profile + ":doc-1"
+	for i := range events {
+		if events[i].payload != nil && events[i].payload["desk"] != nil {
+			events[i].payload["desk"] = desk
+		}
+	}
+	return &runFixture{run: r, events: events}
+}
+
+func servedEvent(seq, ms int64, role string, calls, in, out int) fixEvent {
+	p := map[string]any{"schema": "choir.model_served.v1", "purpose": "tool_loop",
+		"models": []map[string]any{{"provider": "devin", "model": "swe-2-flash", "calls": calls, "input_tokens": in, "output_tokens": out}}}
+	if role != "" {
+		p["role"] = role
+	}
+	return fixEvent{seq: seq, ms: ms, kind: types.EventModelServed, payload: p}
+}
+
+func TestTraceRunCountsModelCallsForEveryDesk(t *testing.T) {
+	for _, desk := range []string{"management", "texture", "research"} {
+		fx := deskFixture(desk, desk, []fixEvent{
+			{seq: 1, ms: 0, kind: types.EventRunSubmitted},
+			toolLoop(2, 1200, "", nil),
+			cellEvent(3, 1300, 1400, nil),
+			toolResult(4, 1300, 1400, `choir.Records()`, `{"stdout":"2"}`),
+			toolLoop(5, 3000, "Reading the second record.", map[string]any{"iteration": 2}),
+			cellEvent(6, 3100, 3200, nil),
+			toolResult(7, 3100, 3200, `choir.Records()`, `{"stdout":"3"}`),
+			{seq: 8, ms: 6000, kind: types.EventRunCompleted},
+		})
+		doc := traceDoc(t, newFake(fx), "run-1")
+		if doc.Totals.ModelCalls != 2 || doc.Totals.ModelCallsStatus != "rows" || doc.Totals.InputTokens != 18000 {
+			t.Fatalf("%s: totals = %+v", desk, doc.Totals)
+		}
+		if len(doc.Run.Models) != 1 || doc.Run.Models[0].Calls != 2 {
+			t.Fatalf("%s: models = %+v", desk, doc.Run.Models)
+		}
+		for _, c := range ofKind(flatten(doc.Steps), "cell") {
+			if c.Reason != nil && strings.Contains(c.Reason.Note, "no model call row") {
+				t.Fatalf("%s: a cell has no model call: %+v", desk, c.Reason)
+			}
+		}
+		out, _, _ := runTraceCmd(t, newFake(fx), "run-1")
+		if strings.Contains(out, "model calls 0") {
+			t.Fatalf("%s: text says model calls 0:\n%s", desk, out)
+		}
+	}
+}
+
+func TestTraceRunProgressRowsOtherThanModelCallsAreNamed(t *testing.T) {
+	fx := deskFixture("management", "management", []fixEvent{
+		{seq: 1, ms: 0, kind: types.EventRunSubmitted},
+		toolLoop(2, 1200, "", nil),
+		{seq: 3, ms: 1500, kind: types.EventRunProgress, payload: map[string]any{"phase": "terminal_tool_success", "tool": "report"}},
+		{seq: 4, ms: 6000, kind: types.EventRunCompleted},
+	})
+	out, _, _ := runTraceCmd(t, newFake(fx), "run-1")
+	if !strings.Contains(out, "terminal_tool_success") {
+		t.Fatalf("a progress row with a payload phase is unnamed:\n%s", out)
+	}
+	if strings.Contains(out, "loop.progress \n") {
+		t.Fatalf("an unnamed loop.progress step:\n%s", out)
+	}
+}
+
+func TestTraceRunNoModelRowsIsNotRecordedNeverZero(t *testing.T) {
+	fx := deskFixture("management", "management", []fixEvent{
+		{seq: 1, ms: 0, kind: types.EventRunSubmitted},
+		cellEvent(2, 1300, 1400, nil),
+		toolResult(3, 1300, 1400, `choir.Records()`, `{"stdout":"2"}`),
+		{seq: 4, ms: 6000, kind: types.EventRunCompleted},
+	})
+	doc := traceDoc(t, newFake(fx), "run-1")
+	if doc.Totals.ModelCallsStatus != "not_recorded" {
+		t.Fatalf("status = %q", doc.Totals.ModelCallsStatus)
+	}
+	out, _, _ := runTraceCmd(t, newFake(fx), "run-1")
+	if !strings.Contains(out, "model calls not recorded") || strings.Contains(out, "model calls 0") || strings.Contains(out, "tokens in 0") {
+		t.Fatalf("text:\n%s", out)
+	}
+}
+
+func TestTraceRunAgedOutModelRowsSayAgedOut(t *testing.T) {
+	fx := deskFixture("management", "management", []fixEvent{
+		{seq: 1, ms: 0, kind: types.EventRunSubmitted},
+		cellEvent(2, 1300, 1400, nil),
+		{seq: 3, ms: 6000, kind: types.EventRunCompleted},
+	})
+	f := newFake(fx)
+	srv := httptest.NewServer(f)
+	defer srv.Close()
+	old := traceRunNow
+	defer func() { traceRunNow = old }()
+	traceRunNow = func() time.Time { return at(20 * 24 * 3600 * 1000) }
+	var out, errb bytes.Buffer
+	if code := run([]string{"trace", "run", "run-1", "--host", srv.URL}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(out.String(), "model calls aged out") || strings.Contains(out.String(), "model calls 0") {
+		t.Fatalf("text:\n%s", out.String())
+	}
+	out.Reset()
+	run([]string{"trace", "run", "run-1", "--json", "--host", srv.URL}, &out, &errb)
+	var doc traceRunDoc
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil || doc.Totals.ModelCallsStatus != "aged_out" {
+		t.Fatalf("status = %q err=%v", doc.Totals.ModelCallsStatus, err)
+	}
+}
+
+func TestTraceRunFallsBackToTheServedRecordAndCountsChildren(t *testing.T) {
+	// A run past the 14-day window keeps model.served (kept for good), which
+	// also carries a research child's calls under the child's role.
+	fx := deskFixture("research", "research", []fixEvent{
+		{seq: 1, ms: 0, kind: types.EventRunSubmitted},
+		cellEvent(2, 1300, 1400, nil),
+		servedEvent(3, 5000, "", 4, 40000, 1200),
+		servedEvent(4, 5500, "research_web", 3, 9000, 700),
+		{seq: 5, ms: 6000, kind: types.EventRunCompleted},
+	})
+	doc := traceDoc(t, newFake(fx), "run-1")
+	if doc.Totals.ModelCalls != 7 || doc.Totals.ModelCallsStatus != "served_only" {
+		t.Fatalf("totals = %+v", doc.Totals)
+	}
+	if len(doc.Run.Served) != 2 || doc.Run.Served[1].Role != "research_web" || doc.Run.Served[1].Calls != 3 {
+		t.Fatalf("served = %+v", doc.Run.Served)
+	}
+	out, _, _ := runTraceCmd(t, newFake(fx), "run-1")
+	if !strings.Contains(out, "model calls 7 (from model.served; per-call rows not recorded)") || !strings.Contains(out, "research_web") {
+		t.Fatalf("text:\n%s", out)
+	}
+}
+
+func TestTraceRunRowsAndServedBothPresentCountsRowsAndShowsChildrenSeparately(t *testing.T) {
+	fx := deskFixture("research", "research", []fixEvent{
+		{seq: 1, ms: 0, kind: types.EventRunSubmitted},
+		toolLoop(2, 1200, "", nil),
+		servedEvent(3, 5000, "", 1, 9000, 300),
+		servedEvent(4, 5500, "research_web", 3, 9000, 700),
+		{seq: 5, ms: 6000, kind: types.EventRunCompleted},
+	})
+	doc := traceDoc(t, newFake(fx), "run-1")
+	if doc.Totals.ModelCalls != 1 || doc.Totals.ModelCallsStatus != "rows" || doc.Totals.ChildModelCalls != 3 {
+		t.Fatalf("totals = %+v", doc.Totals)
+	}
+}
+
+func TestTraceRunStepsSayNothingAboutWhatTheRecordLacks(t *testing.T) {
+	out, _, _ := runTraceCmd(t, newFake(mainFixture()), "run-1")
+	i := strings.Index(out, "What this run's record does not contain")
+	if i < 0 {
+		t.Fatalf("no closing list:\n%s", out)
+	}
+	steps := out[strings.Index(out, "Steps ("):i]
+	if strings.Contains(steps, "not recorded") {
+		t.Fatalf("a step repeats what the closing list says once:\n%s", steps)
 	}
 }

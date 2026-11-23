@@ -265,7 +265,14 @@ func assembleTraceRun(in *traceRunInput) traceRunDoc {
 			}
 			seenID[e.EventID] = true
 		}
-		evs = append(evs, tev{raw: e, ts: parseTraceTime(e.TS), p: payloadMap(e.Payload)})
+		pm := payloadMap(e.Payload)
+		// The runtime stores a run event's phase inside its payload
+		// (payloadWithPhase); the record's own phase field is empty for run
+		// events. Read either.
+		if e.Phase == "" {
+			e.Phase = mStr(pm, "phase")
+		}
+		evs = append(evs, tev{raw: e, ts: parseTraceTime(e.TS), p: pm})
 	}
 	sort.SliceStable(evs, func(i, j int) bool {
 		if !evs[i].ts.Equal(evs[j].ts) {
@@ -298,6 +305,7 @@ func assembleTraceRun(in *traceRunInput) traceRunDoc {
 
 	var top []orderedStep
 	var models []*modelUnit
+	var servedRows []tev
 	var trs, dcs []tev
 	var dones []tev
 	var standalone []tev
@@ -469,7 +477,11 @@ func assembleTraceRun(in *traceRunInput) traceRunDoc {
 				s.Fields = scalarFields(p, "phase", "llm_provider", "llm_model")
 				addTop(e.ts, 0, seq, s)
 			default:
-				s := base("event", e.ts, seq, e.raw.EventID, "loop.progress "+e.raw.Phase)
+				title := "loop.progress"
+				if e.raw.Phase != "" {
+					title = "progress: " + e.raw.Phase
+				}
+				s := base("event", e.ts, seq, e.raw.EventID, title)
 				s.Fields = scalarFields(p)
 				addTop(e.ts, 0, seq, s)
 			}
@@ -488,6 +500,9 @@ func assembleTraceRun(in *traceRunInput) traceRunDoc {
 			s.Fields = scalarFields(p)
 			addTop(e.ts, 0, seq, s)
 		case "model.served", "search.served":
+			if e.raw.Kind == "model.served" {
+				servedRows = append(servedRows, e)
+			}
 			s := base("served", e.ts, seq, e.raw.EventID, e.raw.Kind)
 			s.Fields = scalarFields(p)
 			addTop(e.ts, 0, seq, s)
@@ -993,6 +1008,43 @@ func assembleTraceRun(in *traceRunInput) traceRunDoc {
 			doc.Retention = append(doc.Retention, traceRunRetention{Kind: rule.kind, Days: rule.days, Status: "partial", Rows: present,
 				Text: fmt.Sprintf("%s rows (%s) are kept %d days; this run began %s, before the cutoff %s, so its earlier rows are retired%s",
 					rule.kind, rule.note, rule.days, start.Format(time.RFC3339), cutoff.Format(time.RFC3339), presentNote(present))})
+		}
+	}
+
+	// ---- model calls: the tool_loop rows, else the model.served summary,
+	// else "aged out" or "not recorded"; never a zero that means unknown ----
+	for _, e := range servedRows {
+		ms, _ := e.p["models"].([]any)
+		for _, m := range ms {
+			mm, _ := m.(map[string]any)
+			if mm == nil {
+				continue
+			}
+			u := traceRunServed{Purpose: mStr(e.p, "purpose"), Role: mStr(e.p, "role"), Provider: mStr(mm, "provider"), Model: mStr(mm, "model"),
+				Calls: int(mInt(mm, "calls")), InputTokens: mInt(mm, "input_tokens"), OutputTokens: mInt(mm, "output_tokens")}
+			doc.Run.Served = append(doc.Run.Served, u)
+			if u.Role != "" {
+				doc.Totals.ChildModelCalls += u.Calls
+			}
+		}
+	}
+	switch {
+	case doc.Totals.ModelCalls > 0:
+		doc.Totals.ModelCallsStatus = "rows"
+	case len(doc.Run.Served) > 0:
+		doc.Totals.ModelCallsStatus = "served_only"
+		for _, u := range doc.Run.Served {
+			doc.Totals.ModelCalls += u.Calls
+			doc.Totals.InputTokens += u.InputTokens
+			doc.Totals.OutputTokens += u.OutputTokens
+		}
+		doc.Totals.ChildModelCalls = 0
+	default:
+		doc.Totals.ModelCallsStatus = "not_recorded"
+		for _, r := range doc.Retention {
+			if r.Kind == "loop.progress" {
+				doc.Totals.ModelCallsStatus = "aged_out"
+			}
 		}
 	}
 

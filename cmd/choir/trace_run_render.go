@@ -92,16 +92,45 @@ func renderTraceRun(w io.Writer, d traceRunDoc, full bool) {
 			ms = append(ms, fmt.Sprintf("%s/%s x%d", m.Provider, m.Model, m.Calls))
 		}
 		fmt.Fprintf(w, "models       %s\n", strings.Join(ms, ", "))
+	} else if len(h.Served) > 0 {
+		fmt.Fprintf(w, "models       %s\n", servedLine(h.Served))
+	} else if d.Totals.ModelCallsStatus == "aged_out" {
+		fmt.Fprintln(w, "models       aged out (the model-call rows are kept 14 days; this run is older)")
 	} else {
-		fmt.Fprintln(w, "models       not recorded (no model-call rows in this run's events)")
+		fmt.Fprintln(w, "models       not recorded (no model-call or model.served rows in this run's events)")
+	}
+	var kids []traceRunServed
+	for _, u := range h.Served {
+		if u.Role != "" {
+			kids = append(kids, u)
+		}
+	}
+	if len(kids) > 0 && len(h.Models) > 0 {
+		fmt.Fprintf(w, "children     %s (from model.served; their calls are in no row of this run)\n", servedLine(kids))
 	}
 	fmt.Fprintf(w, "%s\n", h.WokenBy.Text)
 	if h.WokenBy.Candidate != "" {
 		fmt.Fprintf(w, "             candidate: %s\n", h.WokenBy.Candidate)
 	}
 	t := d.Totals
-	fmt.Fprintf(w, "totals       model calls %d | tokens in %d out %d cached %d | cells %d | errors %d\n",
-		t.ModelCalls, t.InputTokens, t.OutputTokens, t.CachedTokens, t.Cells, t.Errors)
+	switch t.ModelCallsStatus {
+	case "served_only":
+		fmt.Fprintf(w, "totals       model calls %d (from model.served; per-call rows not recorded) | tokens in %d out %d | cells %d | errors %d\n",
+			t.ModelCalls, t.InputTokens, t.OutputTokens, t.Cells, t.Errors)
+	case "aged_out", "not_recorded":
+		why := "not recorded"
+		if t.ModelCallsStatus == "aged_out" {
+			why = "aged out"
+		}
+		fmt.Fprintf(w, "totals       model calls %s, tokens %s | cells %d | errors %d\n", why, why, t.Cells, t.Errors)
+	default:
+		child := ""
+		if t.ChildModelCalls > 0 {
+			child = fmt.Sprintf(" (+%d by children, from model.served)", t.ChildModelCalls)
+		}
+		fmt.Fprintf(w, "totals       model calls %d%s | tokens in %d out %d cached %d | cells %d | errors %d\n",
+			t.ModelCalls, child, t.InputTokens, t.OutputTokens, t.CachedTokens, t.Cells, t.Errors)
+	}
 	var verbs []string
 	for v := range t.ModuleCalls {
 		verbs = append(verbs, v)
@@ -170,20 +199,15 @@ func renderReason(w io.Writer, ind string, r *traceRunReason) {
 	}
 	switch r.Source {
 	case "turn_commit":
-		fmt.Fprintf(w, "%sreason: turn commit: %q%s\n", ind, r.Text, cutMarks(len([]rune(r.Text)), r.Cut, false))
+		fmt.Fprintf(w, "%swhy: turn commit: %q%s\n", ind, r.Text, cutMarks(len([]rune(r.Text)), r.Cut, false))
 		if r.Note != "" {
 			fmt.Fprintf(w, "%s        (%s)\n", ind, r.Note)
 		}
 	case "model_words":
-		fmt.Fprintf(w, "%sreason: the model's words before this cell: %q%s\n", ind, r.Text, cutMarks(r.Chars, r.Cut, r.StoredCut))
-	case "cell":
-		fmt.Fprintf(w, "%sreason: as the cell's\n", ind)
+		fmt.Fprintf(w, "%swhy: the model said before this cell: %q%s\n", ind, r.Text, cutMarks(r.Chars, r.Cut, r.StoredCut))
 	default:
-		note := ""
-		if r.Note != "" {
-			note = " (" + r.Note + ")"
-		}
-		fmt.Fprintf(w, "%sreason: not recorded%s\n", ind, note)
+		// "cell" (as the cell's) and "not_recorded" print nothing: what the
+		// record lacks is listed once, at the end.
 	}
 }
 
@@ -200,13 +224,8 @@ func renderStep(w io.Writer, s traceRunStep, depth int) {
 		m := s.Model
 		fmt.Fprintf(w, "%sMODEL CALL  %s%s  in %d out %d cached %d  stop=%s  calls=%d %s\n", head, s.Title, dur,
 			m.InputTokens, m.OutputTokens, m.CachedTokens, m.StopReason, m.ToolCalls, strings.Join(m.ToolNames, ","))
-		if strings.TrimSpace(m.Words.Text) == "" {
-			fmt.Fprintf(w, "%swords: none stored for this turn\n", body)
-		} else {
-			writeBlock(w, body, "words:"+cutMarks(m.Words.Chars, m.Words.Cut, m.Words.StoredCut), m.Words.Text)
-		}
-		if s.Reason != nil && s.Reason.Source == "not_recorded" {
-			renderReason(w, body, s.Reason)
+		if strings.TrimSpace(m.Words.Text) != "" {
+			writeBlock(w, body, "said:"+cutMarks(m.Words.Chars, m.Words.Cut, m.Words.StoredCut), m.Words.Text)
 		}
 	case "cell", "tool_call":
 		c := s.Cell
@@ -243,17 +262,12 @@ func renderStep(w io.Writer, s traceRunStep, depth int) {
 			errText = "  ERROR " + c.Error
 		}
 		fmt.Fprintf(w, "%s%s%s%s\n", head, c.Verb, dur, errText)
-		if c.Query != "" {
+		if c.Query != "" && c.Query != "not recorded" {
 			fmt.Fprintf(w, "%squery: %s\n", body, c.Query)
-			if c.Decision != nil {
-				d := c.Decision
-				fmt.Fprintf(w, "%scounts: earlier searches %d, earlier pages new %d, pages tried %d, pages read %d, outlets read %d\n", body,
-					d.EarlierSearches, d.EarlierPagesNew, d.PagesTried, d.PagesRead, d.OutletsRead)
-			} else if isSearchVerb(c.Verb) {
-				fmt.Fprintf(w, "%scounts: not recorded\n", body)
-			}
-		} else if c.Verb != "search_done" {
-			fmt.Fprintf(w, "%sarguments and result: not recorded\n", body)
+		}
+		if d := c.Decision; d != nil {
+			fmt.Fprintf(w, "%scounts: earlier searches %d, earlier pages new %d, pages tried %d, pages read %d, outlets read %d\n", body,
+				d.EarlierSearches, d.EarlierPagesNew, d.PagesTried, d.PagesRead, d.OutletsRead)
 		}
 		if e := c.End; e != nil {
 			fmt.Fprintf(w, "%send: %s (%s) answered %d/%d providers, arrived %d, pages returned %d%s [paired by %s]\n", body,
@@ -330,4 +344,19 @@ func killNote(c *traceRunCell) string {
 		return ""
 	}
 	return "  [" + strings.Join(parts, "; ") + "]"
+}
+
+func servedLine(us []traceRunServed) string {
+	var ps []string
+	for _, u := range us {
+		who := u.Purpose
+		if u.Role != "" {
+			who = u.Role
+		}
+		if who == "" {
+			who = "run"
+		}
+		ps = append(ps, fmt.Sprintf("%s: %s/%s x%d", who, u.Provider, u.Model, u.Calls))
+	}
+	return strings.Join(ps, ", ")
 }

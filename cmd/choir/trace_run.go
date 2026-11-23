@@ -50,7 +50,7 @@ never printed.
 
 For each model call, cell and module-surface call, the reason shown is the
 one the record holds, in this order: the turn commit's Reason, the model's
-own text before the cell, or "reason: not recorded". The closing section
+own text before the cell, or nothing (a step says only what is recorded). The closing section
 "What this run's record does not contain" lists what was absent in this
 run's data. Events are kept 7 or 14 days by kind; a run older than a kind's
 retention says so. A run whose events could not all be read is printed as

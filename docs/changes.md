@@ -22,9 +22,8 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 | Phone: position moves while playing; a closed answer card stays closed; the queue is described to the server as it is; the microphone opens on a first launch | built; one review seat accepted with six fixes, being applied; not on the phone | `lane/exact-ar1-next` |
 | Phone: sign-in in a sheet over the app | built (red: the approval route and page change); seat 1 accepted with three fixes, seat 2 running | `lane/signin-sheet` |
 | A voice ask searches the paper | not started. Today the answering model has no tools and sees at most 40 front-page titles | none |
-| `choir trace run`: one run, step by step, with the reasons its record holds | built and run on the drill account; shows 0 model calls for a run that made some; not landed | `lane/trace-run` |
+| `choir trace run`: one run, step by step, with the reasons its record holds | built; the "model calls 0" defect fixed (the phase is in the payload, not the record field); tested on fixtures only, [page](reference/TRACE-RUN.md); not landed | `lane/trace-run` |
 | Research prompts: one source count, a stop rule, a real gap measure | built; under test; not reviewed | `lane/research-frame` |
-| `choir trace run`: one run, step by step, with the reasons its record holds | built; tested on fixtures only; not run against a real computer; not landed | `lane/trace-run` |
 | Phone model benchmark on the Motorola | first rows; not landed | `lane/model-bench` |
 | Snapshot capture in one pass (no store-sized scratch copy) | not started; the reader half landed 11-22 | `lane/snapshot-one-pass` |
 | Redesign of capture (subjects and mentions), offline slice | **failed all four of its kill lines** (claim C192); design panel not yet run | `lane/offline-slice-r0` |

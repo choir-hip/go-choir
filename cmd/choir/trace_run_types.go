@@ -86,18 +86,42 @@ type traceRunHeader struct {
 	ChildRuns     []string           `json:"child_runs,omitempty"`
 	ChildRunsNote string             `json:"child_runs_note,omitempty"`
 	Models        []traceRunModelUse `json:"models,omitempty"`
-	WokenBy       traceRunWoke       `json:"woken_by"`
-	Prompt        traceRunText       `json:"prompt"`
-	Result        traceRunText       `json:"result"`
-	Error         string             `json:"error,omitempty"`
+	// Served is the model.served summary rows (kept, not retired): per
+	// purpose and role, the calls and tokens each model served. A research
+	// child's calls are recorded here on the parent, under the child's role.
+	Served  []traceRunServed `json:"served,omitempty"`
+	WokenBy traceRunWoke     `json:"woken_by"`
+	Prompt  traceRunText     `json:"prompt"`
+	Result  traceRunText     `json:"result"`
+	Error   string           `json:"error,omitempty"`
+}
+
+// traceRunServed is one model's share of a model.served row.
+type traceRunServed struct {
+	Purpose      string `json:"purpose,omitempty"`
+	Role         string `json:"role,omitempty"`
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	Calls        int    `json:"calls"`
+	InputTokens  int64  `json:"input_tokens,omitempty"`
+	OutputTokens int64  `json:"output_tokens,omitempty"`
 }
 
 type traceRunTotals struct {
-	ModelCalls   int   `json:"model_calls"`
-	InputTokens  int64 `json:"input_tokens"`
-	OutputTokens int64 `json:"output_tokens"`
-	CachedTokens int64 `json:"cached_tokens"`
-	Cells        int   `json:"cells"`
+	ModelCalls int `json:"model_calls"`
+	// ModelCallsStatus says where ModelCalls came from: rows (the tool_loop
+	// rows), served_only (the model.served summary; per-call rows absent),
+	// aged_out (the rows are past retention) or not_recorded (no row of
+	// either kind). For the last two ModelCalls and the tokens are unknown,
+	// not zero.
+	ModelCallsStatus string `json:"model_calls_status"`
+	// ChildModelCalls counts calls model.served records under a child's role
+	// (research children); they are in no tool_loop row of this run.
+	ChildModelCalls int   `json:"child_model_calls,omitempty"`
+	InputTokens     int64 `json:"input_tokens"`
+	OutputTokens    int64 `json:"output_tokens"`
+	CachedTokens    int64 `json:"cached_tokens"`
+	Cells           int   `json:"cells"`
 	// ModuleCalls counts module-surface calls by verb, from the rows the
 	// record holds; ModuleCallsOmitted counts rows the writer dropped past
 	// its bound, by verb (the record says how many, not what they were).
