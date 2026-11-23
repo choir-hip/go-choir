@@ -119,6 +119,18 @@ boundaries:
   - decision: the rest of the Exact cutover (all Swift that is not voice) is done overnight with the shipping work; the owner does QA on the phone on 2026-11-24 and then the build is submitted
     said: we should get all this converted to exact overnight as well. i do want to prioritize this. its been dragging for too long. then tomorrow i will do qa on phone and we will submit to app store connect
     'on': '2026-11-23'
+  - decision: during the beta every account is free tier and the policy and consent say plainly that model providers may train on what people send; a paid tier with more protections comes later
+    said: during beta, all users are free tier. yes, we should expect model providers to train on user data. we will have a paid tier with more protections later
+    'on': '2026-11-23'
+  - decision: minimum age 16
+    said: min age 16
+    'on': '2026-11-23'
+  - decision: the publisher is Choir Harmonic Intelligence Platform; the owner gave the postal address for the policy (written in docs/ship/privacy-policy.md)
+    said: and my address is Choir Harmonic Intelligence Platform ...
+    'on': '2026-11-23'
+  - decision: 'the app''s key and other secrets are kept through Exact''s own Keychain storage; the lead read Exact at the pin: Keychain storage is covered, ciphers are not (digests and ECDSA only)'
+    said: research what exact provides for the keychain and crypto... i think it covers that
+    'on': '2026-11-23'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
   - signing keys and API keys never enter the repo or an agent's output; key files are passed by path
