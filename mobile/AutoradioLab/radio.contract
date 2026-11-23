@@ -167,7 +167,6 @@ component RadioPage
               if rp.sentence != ""
                 column gap=6 width="100%"
                   text rp.sentence font-family=th.fontText font-size="-exact-title3" line-height=1.5 color=th.fg line-clamp=4 testId="radio-onair-sentence"
-                  text `${rp.sentenceNumber} of ${rp.sentenceCount}` font-family=th.fontLabel font-size="-exact-footnote" font-variant-numeric="tabular-nums" color=th.muted testId="radio-onair-sentence-number"
               if rp.thenBack != ""
                 text rp.thenBack font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-then-back"
               // the thin progress line, with time heard and time left (remote audio has its scrubber)

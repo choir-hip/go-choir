@@ -150,7 +150,7 @@ describe('typography rules', () => {
 
   // T7
   test('T7 figures are tabular', () => {
-    const ids = ['queue-elapsed', 'queue-remaining', 'radio-speed', 'radio-elapsed', 'radio-remaining', 'radio-onair-sentence-number', 'doc-position'];
+    const ids = ['queue-elapsed', 'queue-remaining', 'radio-speed', 'radio-elapsed', 'radio-remaining', 'doc-position'];
     const bad: string[] = []; let found = 0;
     for (const els of allElements()) for (const e of els) {
       if (!isText(e)) continue;

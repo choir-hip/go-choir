@@ -8,7 +8,7 @@ members Autoradio
   // The radio view: what plays, the block's sentences, the programme's items, the yield level, the talk mode.
   resource ri = radioView() as shape RadioInfo else empty()
   mutation rm as shape RadioInfo
-  mutation rm2 as shape SettingsAck
+  mutation rm2 as shape SettingsAck refreshes rpulse
 
   // The bar's field has the keyboard: the bar grows, the pages button gives way and Send replaces the voice button.
   state barFocused = false

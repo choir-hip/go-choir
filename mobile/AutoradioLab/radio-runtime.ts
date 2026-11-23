@@ -158,7 +158,8 @@ export class RadioRuntime {
     const air = this.store.onAir(), st = this.deckState;
     const spec = air ? audioSpec(air) : undefined;
     const why = st?.why ?? 'empty';
-    const duration = st?.duration ?? 0, elapsed = air && spec ? (st?.seconds ?? 0) : 0;
+    const duration = st?.duration ?? 0, raw = air && spec ? (st?.seconds ?? 0) : 0;
+    const elapsed = duration > 0 ? Math.min(raw, duration) : raw;       // the audio's place can run a moment past its length before the deck ends it: never shown past the end
     return {
       onAir: air !== undefined, current: air ? displayTitle(air) : '', currentKind: air ? kindWord(air) : '', audio: spec !== undefined,
       playing: air !== undefined && why === 'playing', paused: air !== undefined && (why === 'paused_listener' || why === 'paused_system'), waiting: why === 'held_session',

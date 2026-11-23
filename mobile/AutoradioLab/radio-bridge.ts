@@ -36,7 +36,7 @@ const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-type Radio = { rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
+type Radio = { rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
 let restored: Promise<void> | undefined;
 
@@ -105,7 +105,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  const state: Radio = { rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
+  const state: Radio = { rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
     deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
@@ -215,7 +215,8 @@ export async function queueView(storage: Store | undefined, native: NativeReader
  *  (Exact: js/src/fetch.js "the answer was let go before this fetch"; host/web-js/ts-fetch.js `letGo`), so a pulse that began work with several native calls or a fetch lost it half done.
  *  The work is in mutations, which stay until they are done: `radioHold` (what the voice handed over, the radio's start, the deck's journal and held list) and `radioWrite` (the desk's ask, the sheet's post).
  *  docs/reference/exact/answers-let-go.md; radio-pulse-rule.test.ts fails when this body fetches or pumps. */
-export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
+export type Pulse = { tick: number; write: boolean; hold: boolean; live: boolean; beat: number };
+export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   const r = await getRadio(storage, native);
   await r.rt.peek();
   if (!r.ready) r.ready = await firstRunOver(storage as never);          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after peek: reading the facts sets it from native)
@@ -224,7 +225,11 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const later = nativeLater();
   if (later) { try { await later({ op: 'radioSet', snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); } catch { /* the next pulse sets it */ } }
   const posting = r.rt.store.pending.length > 0 && !r.rt.store.isFlushing;
-  const out = { tick: r.tick, write: r.writer.wouldAsk() || posting, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)) };
+  // `live`: something is sounding, so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:
+  // the key is the beat, so the screens are asked after THIS pulse's read of the deck (they never read a position older than the pulse that said so), and a pause or a hidden page leaves the key still.
+  const live = r.rt.view().playing;
+  if (live) r.beat += 1;
+  const out = { tick: r.tick, write: r.writer.wouldAsk() || posting, live, beat: r.beat, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)) };
   const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold}`;
   if (state !== lastPulse) { lastPulse = state; console.log(`radio: pulse ${state}`); }
   return out;
@@ -236,11 +241,11 @@ const startDue = (r: Radio): boolean => !r.started && r.ready && !r.rt.store.onA
 /** The work the pulse says is due: the voice's messages, the radio's start, the pump (starts, the journal, the held list). A mutation: it is not let go when the next pulse is asked. */
 let lastPulse = '';
 let holding = false;                                  // one radioHold at a time: a second send would take the first's place, and the first would be let go
-export async function radioHold(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
+export async function radioHold(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   holding = true;
   try { return await holdInner(storage, native); } finally { holding = false; }
 }
-async function holdInner(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
+async function holdInner(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   const r = await getRadio(storage, native);
   await r.rt.pump();
   if (!r.ready) r.ready = await firstRunOver(storage as never);
@@ -254,11 +259,11 @@ async function holdInner(storage: Store | undefined, native: NativeReader | unde
   }
   await r.rt.peek();
   console.log(`radio: hold: ${r.rt.store.ahead().length} ahead on the sheet, the deck holds ${r.rt.deckLine().held}, playing ${r.rt.deckLine().item || 'nothing'}`);
-  return { tick: r.tick, write: false, hold: false };
+  return { tick: r.tick, write: false, hold: false, live: false, beat: 0 };
 }
 
 /** The desk's ask and the sheet's post, in one answer that waits for both. */
-export async function radioWrite(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
+export async function radioWrite(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   lap('radioWrite: start');
   const r = await getRadio(storage, native);
   lap('radioWrite: radio ready');
@@ -268,7 +273,7 @@ export async function radioWrite(storage: Store | undefined, native: NativeReade
   if (asked) waits.push(r.writer.settle());
   if (r.rt.store.flushTask) waits.push(r.rt.store.flushTask);
   await Promise.all(waits.map((t) => t.catch(() => undefined)));
-  return { tick: r.tick, write: false, hold: false };
+  return { tick: r.tick, write: false, hold: false, live: false, beat: 0 };
 }
 
 

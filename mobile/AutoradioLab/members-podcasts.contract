@@ -23,7 +23,7 @@ members Autoradio
   resource podShow = podcastShow(pg.top, podTick, podNow.episodeId, podHead.rev) as shape PodShowView else empty()
   resource podEp = podcastEpisode(pg.top, podFind, podTick, podNow.episodeId, podNow.clip, podNow.start, podNow.elapsed, podNow.duration, podHead.rev) as shape PodEpisodeView else empty()
   mutation pak as shape PodAck then afterPod
-  mutation podHanded as shape PodDone
+  mutation podHanded as shape PodDone refreshes rpulse
 
   derive podNoteRaw = match pak { case some(a) => a.message, case none => "" }
   derive podNote = podNoteFor == pg.top ? podNoteRaw : ""

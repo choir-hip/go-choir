@@ -53,7 +53,10 @@ members Autoradio
   resource rpulse = radioPulse(ds.seq, rnote.tick, radioTick) as shape RadioTick else empty()
   task radioClock when rpulse.tick >= 0 key=radioTick
     after(1000, radioBump)
-  resource brun = barRun(rpulse.tick) as shape BarRun else empty()
+  // The position is read again each second WHILE SOMETHING SOUNDS AND THE PAGE IS VISIBLE (the beat moves once per pulse then), and not otherwise: paused, in the background or hidden the key is a constant and nothing is asked.
+  // A seek, Next or a new entry moves `rpulse.tick` (the pump), which is the other half of every key. No second timer: this is the radioClock's pulse above.
+  derive posKey = rpulse.live and hpg.visibilityState == "visible" ? rpulse.beat : 0
+  resource brun = barRun(rpulse.tick, posKey) as shape BarRun else empty()
   resource bi = barInfo(bf, brun, cvraw, `${barTick}|${signedOutTick}`) as shape BarInfo else empty()
   // The shared set's handles (pages.ts); each refreshes the shared view.
   mutation pms as shape PageList refreshes pgs

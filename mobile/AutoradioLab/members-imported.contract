@@ -28,7 +28,7 @@ members Autoradio
   resource ldFollowAt = importedLocate(ldFollow.address, ldFollow.block) as shape ImportedLocate else empty()
   // The answer of a place, a read aloud or a queue: a read aloud or queue answers the words, and the player is handed them.
   mutation ldAck as shape ImportedAck then ldAcked
-  mutation ldHanded as shape ImportedHanded
+  mutation ldHanded as shape ImportedHanded refreshes rpulse
   derive ldPlayOp = match ldAck { case some(a) => a.play.op, case none => "" }
   derive ldPlayId = match ldAck { case some(a) => a.play.id, case none => "" }
   derive ldPlayTitle = match ldAck { case some(a) => a.play.title, case none => "" }

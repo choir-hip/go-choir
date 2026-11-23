@@ -46,7 +46,7 @@ members Autoradio
   derive bannerOn = acs.message != "" and au.status != "pending" and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
   resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}`, pg.top, hc.mode) as shape AccountView else empty()
   mutation acct as shape LabState
-  mutation racct as shape SettingsAck
+  mutation racct as shape SettingsAck refreshes rpulse
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult
   derive signOutNote = match so { case some(a) => a.message, case none => "" }

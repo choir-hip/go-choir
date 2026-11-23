@@ -459,7 +459,7 @@ step "clock data"; wait_ 6000
 place paper 2500
 step tree
 view real-66-bar-on-page 600
-[ -n "$PLAY_BAR" ] && { to_top; step "tap \"$PLAY_BAR\""; wait_ 5000; view real-67-bar-playing 800; step "tap bar-play"; wait_ 1500; view real-68-bar-paused 800; step "tap bar-play"; wait_ 3000; view real-69-bar-resumed 800; step "tap bar-now"; view real-70-bar-run-sheet 1500; }
+[ -n "$PLAY_BAR" ] && { to_top; step "tap \"$PLAY_BAR\""; wait_ 5000; view real-67-bar-playing 800; step "tap bar-play"; wait_ 1500; view real-68-bar-paused 800; step "tap bar-play"; wait_ 3000; view real-69-bar-resumed 800; step "tap bar-now"; view real-70-bar-run-sheet 1500; view real-70b-elapsed-a 200; view real-70c-elapsed-b 5000; }   # the last two views: no tap between them, five seconds apart (the position must move by itself)
 step logs
 run_drive bar light "" --touch platform
 
@@ -689,6 +689,12 @@ if [ -n "$PLAY_BAR" ]; then
   bad "radio page: Built on does not show a raw route" 'radio-builton-0\] label="Open /?pub/' "$BR"
   chk "radio page: the status line says On air or Paused" '\[radio-status\] "(On air|Paused)"' "$BR"
   bad "radio page: the status line is not an error" '\[radio-status\] "Can.t speak' "$BR"
+  # The position moves while it plays with NO tap between two reads (the simulator proof only ever read after a tap, which a stale position passes: owner, on a phone, 2026-11-22). The labels of the
+  # last two dumps of the drive, taken five seconds apart with nothing pressed between them: a story shows radio-elapsed (spoken, an estimate from the voice's clock), podcast audio queue-elapsed.
+  ELAPSED=$(grep -oE '\[(radio|queue)-elapsed\] "[0-9:]+"' "$BR" | tail -2)
+  E1=$(printf '%s\n' "$ELAPSED" | head -1); E2=$(printf '%s\n' "$ELAPSED" | tail -1)
+  if [ -n "$E1" ] && [ "$(printf '%s\n' "$ELAPSED" | wc -l | tr -d ' ')" = 2 ] && [ "$E1" != "$E2" ]; then echo "ok: position: the elapsed label moved with no tap between two reads ($E1 -> $E2)"; else echo "MISSING: position: the elapsed label did not move in five seconds with no tap ($E1 -> $E2)"; FAILS="$FAILS [position moves while playing]"; fi
+  chk "position: the page still says On air at the second read" '\[radio-status\] "On air"' "$BR"
   bad "bar: no error line held the bar" '\[bar-text\] "(Could not|Something went wrong|The voice stopped)' "$BR"
 fi
 # the search drives: the paper-wide rows land under the typed query, and a query nothing matches says so (the answer is for THIS query: a stale or never-merged answer shows neither)

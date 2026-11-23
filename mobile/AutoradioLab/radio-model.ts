@@ -26,7 +26,7 @@ export type PageRow = { n: number; id: string; kind: string; title: string; leng
 export type HeardRow = { n: number; id: string; kind: string; title: string; outcome: string; builtOn: BuiltOn[]; publisher: string };
 export type PageInfo = {
   state: string; statusLine: string; dim: boolean; playing: boolean; dateLine: string;
-  onAir: boolean; kindLabel: string; title: string; source: string; published: string; sentence: string; sentenceNumber: number; sentenceCount: number;
+  onAir: boolean; kindLabel: string; title: string; source: string; published: string; sentence: string;
   elapsed: string; remaining: string; fraction: number; thenBack: string; openAddress: string; why: string; forecast: string; canWhy: boolean;
   cannotSpeak: string; action: string; heardWords: string; greeting: string; ahead: PageRow[]; aheadMore: number; writing: boolean; emptyNote: string;
   notice: string; heard: HeardRow[]; builtOn: BuiltOn[]; canPlay: boolean; takePublisher: string; takeTranscript: string; takeRecord: string;
@@ -191,7 +191,7 @@ export function make(i: PageInput): PageInfo {
   const playing = i.playing ?? false, notice = i.notice ?? '', writing = i.writing ?? false;
   const o: PageInfo = {
     state: 'ready', statusLine: '', dim: false, playing: air !== undefined && playing, dateLine: i.now > 0 ? dateLine(i.now, off) : '', onAir: false, kindLabel: '', title: '',
-    source: '', published: '', sentence: '', sentenceNumber: 0, sentenceCount: 0, elapsed: '', remaining: '', fraction: 0, thenBack: '', openAddress: '',
+    source: '', published: '', sentence: '', elapsed: '', remaining: '', fraction: 0, thenBack: '', openAddress: '',
     why: '', forecast: '', canWhy: false, cannotSpeak: '', action: '', heardWords: '', greeting: '', ahead: [], aheadMore: 0, writing, emptyNote: '', notice,
     heard: [], builtOn: [], canPlay: true, takePublisher: '', takeTranscript: '', takeRecord: '',
   };
@@ -212,7 +212,7 @@ export function make(i: PageInput): PageInfo {
       const id = takeId(air), t = id ? i.takeLookup?.(id) : undefined;
       if (t) { o.takeTranscript = t.transcript; o.takeRecord = t.record_words; }
     }
-    if (!i.remoteAudio && idx >= 0 && idx < sentences.length) { o.sentence = sentences[idx]; o.sentenceNumber = idx + 1; o.sentenceCount = sentences.length; }
+    if (!i.remoteAudio && idx >= 0 && idx < sentences.length) { o.sentence = sentences[idx]; }   // no "N of M": native hands over only the sentences of the current BLOCK, so a total would change under the listener ("1 of 1", then "2 of 2" in one story)
     const p = i.progress ?? 0;
     o.fraction = Math.min(1, Math.max(0, Number.isFinite(p) ? p : 0));
     if (i.remoteAudio) { o.elapsed = i.elapsedLabel ?? ''; o.remaining = i.remainingLabel ?? ''; }

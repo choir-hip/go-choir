@@ -32,6 +32,10 @@ shape RadioTick
   write: bool
   // Starts or the held list wait for a pump: `radioHold`.
   hold: bool
+  // Something is sounding: the position moves, and the screens that show it are asked again each second (spine.contract `posKey`).
+  live: bool
+  // Moves once per pulse while `live`, and not otherwise.
+  beat: number
 
 shape RadioBuiltOn
   n: number
@@ -72,8 +76,6 @@ shape RadioPageInfo
   source: string
   published: string
   sentence: string
-  sentenceNumber: number
-  sentenceCount: number
   elapsed: string
   remaining: string
   fraction: number

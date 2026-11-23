@@ -6,8 +6,8 @@ use StackVp from "./ui.contract"
 
 members Autoradio
   // asked again when the pump says something changed (`rpulse`, spine.contract)
-  resource qv = queueView(rpulse.tick) as shape QueueInfo else empty()
-  mutation qm as shape QueueInfo refreshes qv
+  resource qv = queueView(rpulse.tick, posKey) as shape QueueInfo else empty()
+  mutation qm as shape QueueInfo refreshes qv, rpulse
   resource qVp = exactViewport() as shape StackVp
 
   // Play now, or add to the end: kind "story" (ref a route or a pub: address) or "page" (ref a web address).
