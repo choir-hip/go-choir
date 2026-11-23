@@ -213,3 +213,14 @@ describe('H3 the native side is handed the clip, not asked to find it', () => {
     expect((await C.clipAct('open', 'clip-000000000001')).play.record).toBe('');
   });
 });
+
+describe('A-6 a show fetch does not reorder a story\'s clips', () => {
+  test('the server\'s best-first order of the whole set stays when a show page fetches a part of it', async () => {
+    const before = (await C.storyClips('pub:a', 0)).rows.map((x) => x.clipID);
+    expect(before).toEqual(['clip-000000000001', 'clip-000000000002', 'clip-000000000004']);
+    const part = [body.clips[3], body.clips[0]];                                         // the show's own fetch answers two of the three, the worst first
+    handler = (u) => new Response(JSON.stringify(u.searchParams.has('feed') ? { clips: part } : body), { status: 200 });
+    await C.showClips('podcast:show/' + encodeURIComponent(FEED), 0);
+    expect((await C.storyClips('pub:a', 0)).rows.map((x) => x.clipID)).toEqual(before);
+  });
+});

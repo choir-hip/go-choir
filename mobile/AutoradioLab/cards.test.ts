@@ -247,3 +247,21 @@ describe('steering', () => {
   });
   test('a mute names the handle and no entry', () => { expect(S.body(S.mute('voice-1'), false)).toEqual({ direction: 'mute', handle: 'voice-1' }); });
 });
+
+describe('A-4 and A-7', () => {
+  test('A-4 a sign-out during the front list: the act is not recorded in the next account\'s memory', async () => {
+    const front = async () => { nextGeneration(); return [S1('a', 'A', 'World', ['X'])]; };
+    await C.storyMore({ address: 'pub:a', surface: 'page', sheet: '' }, storage, front);
+    expect((await C.acts(storage)).length).toBe(0);
+  });
+  test('A-7 acts older than eight half-lives are dropped when a new one is recorded, and lift is not changed by it', () => {
+    const p = toldOf();
+    p.record('more', story('old', 'Old', 'World', ['Old thing']));
+    clock += 9 * C.HALF_LIFE_DAYS * 86400;
+    p.record('more', story('new', 'New', 'World', ['New thing']));
+    expect(p.acts.map((a) => a.route)).toEqual(['new']);
+    for (let i = 0; i < 300; i++) { clock += 5; p.record('more', story(`r${i}`, 'T', 'World', [`E${i}`])); }
+    expect(p.acts.length).toBe(301);
+    expect(p.lift(story('x', 'X', 'World', ['E5']))).toBeGreaterThan(0);
+  });
+});

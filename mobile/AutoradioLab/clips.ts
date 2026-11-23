@@ -94,7 +94,8 @@ export const remembered = (): number => byID.size;
 
 export function forget(): void { byID.clear(); askedFeeds.clear(); asked = false; asking = null; lastTick = 0; lastStory = ''; }
 
-function merge(clips: Clip[]): void { for (const c of clips) byID.set(c.clipID, { ...c, rank: ++seq }); }
+/** `whole`: the whole set's answer, whose order is the server's best-first; a part (a show's fetch) keeps the rank a clip already has, and a clip new to us ranks after the whole set. */
+function merge(clips: Clip[], whole = false): void { for (const c of clips) byID.set(c.clipID, { ...c, rank: whole ? ++seq : (byID.get(c.clipID)?.rank ?? ++seq) }); }
 
 /** A retry resets what was asked, so the next draw asks again. */
 function tickOver(tick: number): void { if (tick !== lastTick) { lastTick = tick; askedFeeds.clear(); asked = false; } }
@@ -104,7 +105,7 @@ function ensureAll(): Promise<void> {
   if (asked) return asking ?? Promise.resolve();
   asked = true;                                                       // once a retry: a failure is asked again by the next one, never on every draw
   const gen = accountGeneration();                                    // a clip set that lands after the account changed is not kept
-  const mine = (async () => { try { const body = (await getJSON(CLIPS_PATH, { limit: 200 })).body; if (gen === accountGeneration()) merge(parseClips(body)); } catch { /* the route is missing or down: nothing, silently */ } })();
+  const mine = (async () => { try { const body = (await getJSON(CLIPS_PATH, { limit: 200 })).body; if (gen === accountGeneration()) merge(parseClips(body), true); } catch { /* the route is missing or down: nothing, silently */ } })();
   asking = mine;
   return mine;
 }

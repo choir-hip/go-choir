@@ -15,7 +15,12 @@ import type { Doc } from './search.ts';
 type Closable = Db & { close?: () => Promise<void> };
 let held: { store: ContentStore; db: Closable; gen: number } | null = null;
 let opening: Promise<ContentStore | null> | null = null;
-export function forgetContent(): void { held = null; opening = null; last = null; running = null; }
+/** Drop the held store, closing it as `contentStore` does (the store's timers and the sqlite handle must not outlive the file a wipe removed). */
+export async function forgetContent(): Promise<void> {
+  const h = held;
+  held = null; opening = null; last = null; running = null;
+  if (h) { h.store.dispose(); try { await h.db.close?.(); } catch { /* closed */ } }
+}
 
 /** The one store of this process, made on first use. After a sign-out wipe (the generation moved; the file is gone) the old handle is closed and a fresh store opens. Null when it cannot open. */
 export function contentStore(storage: Storage | undefined): Promise<ContentStore | null> {

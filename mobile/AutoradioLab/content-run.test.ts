@@ -24,7 +24,7 @@ let opened: number, closed: number;
 const storage = { sqlite: { open: async () => { opened++; const d = adapter(); const c = d.close; d.close = async () => { closed++; await c(); }; return d; } } } as never;
 const fetchers = (o: Partial<Fetchers> = {}): Fetchers => ({ ...noFetchers(), ...o });
 const env = (f: Fetchers, o: Partial<Env> = {}): Env => ({ fetchers: f, now: async () => NOW, busy: async () => false, ...o });
-beforeEach(() => { opened = 0; closed = 0; forgetContent(); });
+beforeEach(async () => { await forgetContent(); opened = 0; closed = 0; });   // forgetContent now closes the last test's store: let that finish before counting
 
 describe('S1 and S2 opening', () => {
   test('S1 opened once, made, the same store again; nothing to open with is unavailable', async () => {
@@ -42,6 +42,15 @@ describe('S1 and S2 opening', () => {
     await a.wipe();
     const b = (await contentStore(storage))!;
     expect(b).not.toBe(a); expect(opened).toBe(2); expect(closed).toBe(1); expect(await b.get('x')).toBeNull();
+  });
+});
+
+describe('A-5 forgetContent closes what it drops', () => {
+  test('the handle is closed and the store disposed', async () => {
+    const a = (await contentStore(storage))!;
+    let disposed = 0; const d = a.dispose.bind(a); a.dispose = () => { disposed++; d(); };
+    await forgetContent();
+    expect(disposed).toBeGreaterThanOrEqual(1); expect(closed).toBe(1);
   });
 });
 

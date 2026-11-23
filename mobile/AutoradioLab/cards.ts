@@ -29,6 +29,7 @@ export const MAX_LIFT = 0.25;
 export const HALF_LIFE_DAYS = 14;
 export const PLACES_PER_LIFT = 3;
 export const DOUBLE_FIRE_SECONDS = 2;
+export const ACT_KEEP_HALF_LIVES = 8;
 
 export type ToldAct = { at: number; kind: 'more' | 'less'; route: string; title: string; entities: string[]; topic: string };
 export type StoryFacts = { route: string; title: string; dek: string; section: string; entities: string[] };
@@ -54,6 +55,10 @@ export function note(kind: 'more' | 'less', f: StoryFacts): string {
   return kind === 'more' ? `More on ${p}` : `Less of ${p}`;
 }
 
+const entitySets = new WeakMap<ToldAct, Set<string>>();
+/** An act's normalised entities, made once per act (the launcher's lift runs on every keystroke for every story). */
+function entitySet(a: ToldAct): Set<string> { let s = entitySets.get(a); if (!s) { s = new Set(a.entities.map(norm)); entitySets.set(a, s); } return s; }
+
 export class Told {
   acts: ToldAct[] = [];
   /** The clock: a data source has none, so the caller's `now` (epoch seconds) is set before each use (`at`), and with none the newest act's time plus the double-fire window. */
@@ -68,6 +73,7 @@ export class Told {
     if (last && Math.abs(t - last.at) < DOUBLE_FIRE_SECONDS) return null;
     const a: ToldAct = { at: t, kind, route: f.route, title: f.title, entities: subj, topic: f.section };
     this.acts.push(a);
+    this.acts = this.acts.filter((x) => t - x.at <= ACT_KEEP_HALF_LIVES * HALF_LIFE_DAYS * 86400);   // an act past eight half-lives weighs under 0.4%: it is dropped, so the list (and the launcher's cost per keystroke) stays bounded
     return a;
   }
   /** Forget the acts on one story. Returns how many were removed. */
@@ -81,7 +87,7 @@ export class Told {
     const t = this.now();
     let s = 0;
     for (const a of this.acts) {
-      const theirs = new Set(a.entities.map(norm));
+      const theirs = entitySet(a);
       let shared = 0;
       for (const m of mine) if (theirs.has(m)) shared += 1;
       let m = Math.min(shared, 2);
@@ -305,8 +311,8 @@ export async function storyMore(a: { address: string; surface: string; sheet: st
   const s = list.find((x) => x.route === route);
   if (!s) return { message: '' };
   const f = factsOf(s);
+  if (gen !== accountGeneration()) return { message: '' };          // before the act is recorded: a sign-out that landed during the front list must not put it in the next account's memory
   if (!told.record('more', f)) return { message: '' };
-  if (gen !== accountGeneration()) return { message: '' };
   await save(storage, gen);
   let entry;
   try { entry = onAir(a.sheet ? decodeSheet(JSON.parse(a.sheet)) : undefined); } catch { entry = undefined; }
