@@ -702,6 +702,44 @@ func TestEdgesIndexBuildTimesOutLeavesAnInvalidIndexAndTheNextTryRepairsIt(t *te
 	}
 }
 
+// The retry after a timed-out build can start while the timed-out session is
+// still on the server (its cancel is in flight, or its backend has not yet
+// noticed the closed socket) and so still holds the session advisory lock.
+// The retry must wait for that holder, not take the missed lock for "another
+// process is building it" and return with the index still invalid. The holder
+// here is a second connection that lets go after a moment.
+func TestEdgesIndexRetryWaitsForALingeringHolderOfTheBuildLock(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	if err := f.store.ensureEdgesToKindCreatedIndex(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if exists, valid := edgesIndexState(t, f.store); !exists || !valid {
+		t.Fatalf("setup: exists %v valid %v", exists, valid)
+	}
+	if _, err := f.store.corpus().Exec(`UPDATE pg_index SET indisvalid = FALSE WHERE indexrelid = '` + idxEdgesToKindCreated + `'::regclass`); err != nil {
+		t.Fatal(err)
+	}
+	holder, err := f.store.corpus().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+	if _, err := holder.ExecContext(ctx, `SELECT pg_advisory_lock(?)`, edgesToKindCreatedLockKey); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_, _ = holder.ExecContext(context.Background(), `SELECT pg_advisory_unlock(?)`, edgesToKindCreatedLockKey)
+	}()
+	if err := f.store.ensureEdgesToKindCreatedIndex(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if exists, valid := edgesIndexState(t, f.store); !exists || !valid {
+		t.Fatalf("after the retry: exists %v valid %v, want the invalid index rebuilt", exists, valid)
+	}
+}
+
 func TestMigrateRetrievalDoesNotBuildTheEdgesIndexAndTheKickIsSingleFlight(t *testing.T) {
 	f := newVecFixture(t)
 	ctx := context.Background()
