@@ -192,6 +192,7 @@ export function sourcesOf(cites: Cite[]): ReaderDoc['sources'] {
 
 const ABBREV = new Set(['dr', 'mr', 'mrs', 'ms', 'prof', 'sr', 'jr', 'st', 'vs', 'etc', 'inc', 'ltd', 'no', 'u.s', 'u.k', 'e.g', 'i.e']);
 /** UTF-16 end offsets of each sentence, the white space after it included. */
+const WORD_LOOKBACK = 16;
 export function sentenceEnds(plain: string): number[] {
   const ends: number[] = []; const n = plain.length;
   let i = 0;
@@ -206,7 +207,9 @@ export function sentenceEnds(plain: string): number[] {
       if (!/\s/.test(plain[j])) { i = j; continue; }
       let k = j; while (k < n && /\s/.test(plain[k]) && plain[k] !== '\n') k++;
       const next = plain[k];
-      const word = /([A-Za-z.]+)$/.exec(plain.slice(0, i))?.[1]?.toLowerCase() ?? '';
+      // the word before the stop, read backwards over letters and dots: at most WORD_LOOKBACK of them (the longest abbreviation is 4), so a stop costs O(1), not O(its position)
+      let w = i; while (w > 0 && i - w < WORD_LOOKBACK && /[A-Za-z.]/.test(plain[w - 1])) w--;
+      const word = plain.slice(w, i).toLowerCase();
       if (c === '.' && j === i + 1 && (ABBREV.has(word) || (word.length === 1 && /[a-z]/.test(word)))) { i = j; continue; }
       if (next !== undefined && next !== '\n' && /[a-z]/.test(next) && c === '.') { i = j; continue; }
       ends.push(k); i = k; continue;
@@ -234,10 +237,10 @@ export function assignSentences(runs: Run[], plain: string): number {
       consumed += take; offset += take;
     }
   }
+  let lastText = -1;                                            // a mark takes the sentence of the nearest text before it: one pass, not a look back past every earlier mark
   for (let i = 0; i < out.length; i++) {
-    if (out[i].kind === 'cite' || out[i].kind === 'ref') {
-      for (let j = i - 1; j >= 0; j--) if (out[j].kind !== 'cite' && out[j].kind !== 'ref') { out[i].sent = out[j].sent; break; }
-    }
+    if (out[i].kind === 'cite' || out[i].kind === 'ref') { if (lastText >= 0) out[i].sent = lastText; }
+    else lastText = out[i].sent;
   }
   out.forEach((r, i) => { r.id = `x${i}`; });
   runs.length = 0; runs.push(...out);
@@ -309,10 +312,18 @@ export function mdBlocks(src: string): MdBlock[] {
 export function mdInline(s: string, idPrefix: string): Run[] {
   const runs: Run[] = [];
   const add = (text: string, weight: number, slant: string, kind = 't', href = ''): void => { if (text !== '') runs.push(run(`${idPrefix}-${runs.length}`, text, { kind, weight, slant, href })); };
-  const find = (a: string[], c: string, from: number): number => { for (let i = from; i < a.length; i++) if (a[i] === c) return i; return -1; };
-  const findPair = (a: string[], p: string, from: number): number => { for (let i = from; i + p.length <= a.length; i++) if (a.slice(i, i + p.length).join('') === p) return i; return -1; };
   const parse = (text: string, weight: number, slant: string): void => {
     const chars = Array.from(text); let buf = ''; let i = 0;
+    // The next place of a marker at or after `from`, from a table built once per marker (O(n) each, O(1) a look): an unmatched marker never rescans to the end of the text.
+    const tables = new Map<string, Int32Array>();
+    const nextOf = (key: string, hit: (k: number) => boolean, from: number): number => {
+      let t = tables.get(key);
+      if (!t) { t = new Int32Array(chars.length + 1); t[chars.length] = -1; for (let k = chars.length - 1; k >= 0; k--) t[k] = hit(k) ? k : t[k + 1]; tables.set(key, t); }
+      return from >= chars.length ? -1 : t[Math.max(0, from)];
+    };
+    const find = (_a: string[], c: string, from: number): number => nextOf(c, (k) => chars[k] === c, from);
+    const findPair = (_a: string[], p: string, from: number): number => nextOf(p + p, (k) => chars[k] === p[0] && chars[k + 1] === p[1], from);
+    const spaceIn = (a: number, b: number): boolean => { const k = nextOf(' ', (x) => chars[x] === ' ', a); return k >= 0 && k < b; };
     const flush = (): void => { add(buf, weight, slant); buf = ''; };
     const before = (idx: number, c: string): boolean => idx === 0 ? true : c === '*' ? true : !wordCh(chars[idx - 1]);
     const after = (j: number, c: string): boolean => j + 1 >= chars.length ? true : c === '*' ? true : !wordCh(chars[j + 1]);
@@ -329,8 +340,8 @@ export function mdInline(s: string, idPrefix: string): Run[] {
         if (close >= 0 && close + 1 < chars.length && chars[close + 1] === '(') {
           const end = find(chars, ')', close + 2);
           if (end >= 0) {
-            const label = chars.slice(i + 1, close).join(''), href = chars.slice(close + 2, end).join('');
-            if (label !== '' && href !== '' && !href.includes(' ')) { flush(); add(label, weight, slant, 'link', href); i = end + 1; continue; }
+            // label and href are tested by position first: the slices are made only for a link that is taken
+            if (close > i + 1 && end > close + 2 && !spaceIn(close + 2, end)) { flush(); add(chars.slice(i + 1, close).join(''), weight, slant, 'link', chars.slice(close + 2, end).join('')); i = end + 1; continue; }
           }
         }
       }
@@ -347,7 +358,7 @@ export function mdInline(s: string, idPrefix: string): Run[] {
 
 class Builder {
   blocks: Block[] = []; cites: Cite[] = []; counter = 0; currentBlock = '';
-  private entityNumber = new Map<string, number>(); private used = new Set<string>();
+  private entityNumber = new Map<string, number>(); private used = new Set<string>(); private nextSuffix = new Map<string, number>();
   constructor(readonly ctx: Ctx) {}
   nextId(p: string): string { this.counter += 1; return `${p}${this.counter}`; }
 
@@ -433,7 +444,7 @@ class Builder {
   private addCite(hint: string, entityId: string, blockId: string, nodeRef: Obj | null): Cite {
     let anchor = trim(hint);
     if (anchor === '') anchor = `c${this.cites.length + 1}`;
-    if (this.used.has(anchor)) { let k = 2; while (this.used.has(`${anchor}-${k}`)) k++; anchor = `${anchor}-${k}`; }
+    if (this.used.has(anchor)) { let k = this.nextSuffix.get(anchor) ?? 2; while (this.used.has(`${anchor}-${k}`)) k++; this.nextSuffix.set(anchor, k + 1); anchor = `${anchor}-${k}`; }   // the counter is kept per anchor: a repeated id is O(1), not a count from 2
     this.used.add(anchor);
     let number: number;
     const have = this.entityNumber.get(entityId);
@@ -563,14 +574,28 @@ function* markdownSourceSteps(blocks: Block[]): Generator<string, string, void> 
   return out.join('\n\n');
 }
 
+/** Characters of block text built between two yields at most (about 1 ms in Bun, 8 ms on Hermes). */
+const WORK_PER_TURN = 6000;
 /** The work of `build` as steps: each `yield` is a place where a caller that must stay inside Exact's 100 ms of CPU per turn may end the turn (`parseBundleAsync`); the plain callers run it straight through. */
 function* buildSteps(address: string, title: string, bodyDoc: unknown, markdown: string, ctx: Ctx): Generator<string, ReaderDoc, void> {
   let b = new Builder(ctx); let parsed = false;
   const root = decodeBodyDoc(bodyDoc);
   yield 'decoded body_doc';
   const content = root ? arr(root.content) : [];
-  if (content.length > 0) { let i = 0; for (const n of content) { b.block(n, 0, 0); if (++i % 8 === 0) yield `nodes ${i} of ${content.length}, blocks ${b.blocks.length}`; } parsed = b.blocks.length > 0; }
-  if (!parsed) { b = new Builder(ctx); let i = 0; for (const m of mdBlocks(markdown)) { b.addMarkdown(m); if (++i % 8 === 0) yield `markdown nodes ${i}`; } }
+  // A yield every 8 nodes, or sooner when the work since the last one is large (WORK_PER_TURN characters): a handful of huge nodes must not run in one turn.
+  if (content.length > 0) {
+    let i = 0, work = 0, seen = 0;
+    for (const n of content) {
+      b.block(n, 0, 0); i++;
+      for (; seen < b.blocks.length; seen++) work += b.blocks[seen].text.length + 1;
+      if (i % 8 === 0 || work >= WORK_PER_TURN) { work = 0; yield `nodes ${i} of ${content.length}, blocks ${b.blocks.length}`; }
+    }
+    parsed = b.blocks.length > 0;
+  }
+  if (!parsed) {
+    b = new Builder(ctx); let i = 0, work = 0;
+    for (const m of mdBlocks(markdown)) { b.addMarkdown(m); i++; work += m.text.length + 1; if (i % 8 === 0 || work >= WORK_PER_TURN) { work = 0; yield `markdown nodes ${i}`; } }
+  }
   yield `built ${b.blocks.length} blocks`;
   let blocks = b.blocks;
   if (blocks.length > 0 && blocks[0].kind === 'h' && title !== '' && trim(blocks[0].text).toLowerCase() === title.toLowerCase()) blocks = blocks.slice(1);
