@@ -213,15 +213,17 @@ export class Writer {
         let items = fromFront(front, now.getTime(), skipping);
         if (items.length === 0 && skipping.size > 0) items = fromFront(front, now.getTime());   // everything told: the desk is still asked, with the whole list
         if (items.length === 0) { failure = { kind: 'empty' }; throw new Error('no story to tell'); }
-        fkey = items.map((c) => `${c.route}@${c.version}`).join('|');
-        const before = this.dryAt >= 0 && this.nowMs() > 0 && this.nowMs() - this.dryAt < DRY_FLOOR_MS;      // inside the floor a dry answer's inputs are compared; after it the desk is asked whatever they say
-        if (cause !== 'open' && before && this.dryFrontKey !== '' && fkey === this.dryFrontKey) { this.dryChecked = this.nowMs(); throw Object.assign(new Error('unchanged'), { kind: 'unchanged' }); }     // the front list is the same as when the desk had nothing: no story loads, no model call
-        const texts = await this.d.texts(items.slice(0, MAX_TEXT_ITEMS).map((c) => c.route));
+        // The takes and the edition are read before the precheck (a local read each): a dry answer's inputs are the front list, the takes the desk may play and the edition; any of them changing is a reason to ask.
         const { takes: all, kept } = await this.d.takes();
+        const editionText = await this.d.edition();
+        const picked = takeCandidates(all, kept);
+        fkey = `${items.map((c) => `${c.route}@${c.version}`).join('|')}#${picked.map((t) => t.takeID).join(',')}#${editionText}`;
+        const before = this.dryAt >= 0 && this.nowMs() > 0 && this.nowMs() - this.dryAt < DRY_FLOOR_MS;      // inside the floor a dry answer's inputs are compared; after it the desk is asked whatever they say
+        if (cause !== 'open' && before && this.dryFrontKey !== '' && fkey === this.dryFrontKey) { this.dryChecked = this.nowMs(); throw Object.assign(new Error('unchanged'), { kind: 'unchanged' }); }     // the same inputs as when the desk had nothing: no story loads, no model call
+        const texts = await this.d.texts(items.slice(0, MAX_TEXT_ITEMS).map((c) => c.route));
         await yieldTurn('after takes');
         await yieldTurn('before candidates');
-        const picked = takeCandidates(all, kept);
-        const body = requestBody(cause, candidateBody(items, texts, picked), store.ahead(20).map((e) => e.title || ''), await this.d.edition(), now, this.d.tz(), this.d.requestId());
+        const body = requestBody(cause, candidateBody(items, texts, picked), store.ahead(20).map((e) => e.title || ''), editionText, now, this.d.tz(), this.d.requestId());
         sig = JSON.stringify([body.candidates, body.edition_text ?? '']);
         if (cause !== 'open' && this.dryAt >= 0 && this.nowMs() - this.dryAt < DRY_FLOOR_MS && this.dryKey !== '' && sig === this.dryKey) throw Object.assign(new Error('unchanged'), { kind: 'unchanged' });     // nothing the desk is given has changed since it had nothing to add: no model call
         await yieldTurn('before post');

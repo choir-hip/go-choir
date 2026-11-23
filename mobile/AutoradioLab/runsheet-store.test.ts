@@ -62,7 +62,7 @@ describe('pending ops and posting', () => {
     expect(s2.pending[0].op_id).toBe(opId);                // the same op, in order
     expect(s2.onAir()).toBeUndefined();
     expect(s2.entry(a.id)?.ended?.outcome).toBe('failed');
-    p2.answer = { kind: 'answered', results: [] }; s2.flush(); await s2.flushTask;
+    p2.answer = { kind: 'answered', results: [] }; s2.flush(true); await s2.flushTask;       // forced: after the refusal the store backs off by the device's time, which another test file in the same process may have set
     expect(s2.pending.length).toBe(0);
     expect(p2.posts.at(-1)?.[0]).toBe(s2.sheet.applied_ops[0]);   // the first op sent is the first applied
   });
@@ -498,5 +498,36 @@ describe('the pending bound drops whole chains and says so (seat 2, item 6)', ()
     const b = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
     const log = console.log; console.log = () => undefined; try { await b.restore(); } finally { console.log = log; }
     expect(b.pending.length).toBeLessThanOrEqual(2000);
+  });
+});
+
+describe('the pending bound keeps the listener\'s acts (gen review)', () => {
+  const rm = (i: number, id: string): Op => ({ op_id: `p-${i}-r`, by: 'listener', op: 'remove', id, base_version: 0 } as Op);
+  const report = (i: number, id: string): Op => ({ op_id: `p-${i}-a`, by: 'phone', op: 'aired', id, state: 'on_air', position_seconds: 0, base_version: 0 } as Op);
+  test('B1-3d acts (remove, move, skip) outlive reports; a skip counts as an end', () => {
+    const s = new RunSheetStore({ retryAfterMs: 3_600_000 });
+    const log = console.log; console.log = () => undefined;
+    try {
+      s.pending.push(rm(0, 'x-act'));                                                // the oldest op is a listener act with no place in the list
+      for (let i = 1; i <= 2100; i++) s.pending.push(report(i, `y-${i}`));           // 2100 chains of reports only
+      s.place(story('l-last', { placed_by: 'listener' }), 'end', { by: 'listener' });
+    } finally { console.log = log; }
+    expect(s.pending.length).toBeLessThanOrEqual(2000);
+    expect(s.pending.some((o) => o.op === 'remove' && o.id === 'x-act')).toBe(true);
+    const t = new RunSheetStore({ retryAfterMs: 3_600_000 });
+    const log2 = console.log; console.log = () => undefined;
+    try {
+      t.pending.push({ op_id: 'p-sk', by: 'listener', op: 'skip', id: 'z-skipped', ended: { outcome: 'skipped', at: '2023-11-14T22:00:00Z', last_block: 0 }, base_version: 0 } as Op);
+      t.pending.push(...Array.from({ length: 2001 }, (_, i) => ({ op_id: `p-pl-${i}`, by: 'listener', op: 'place', at: 'end', entry: { id: `l-${i}`, kind: 'story', placed_by: 'listener', state: 'ahead', title: 'T', text: 'W.', est_seconds: 5, revision: 0 } as Entry, base_version: 0 } as Op)));
+      t.place(story('l-last', { placed_by: 'listener' }), 'end', { by: 'listener' });
+    } finally { console.log = log2; }
+    expect(t.pending.some((o) => o.id === 'z-skipped')).toBe(false);                    // the skipped entry's chain went first (it is over); the places stayed
+    expect(t.pending.filter((o) => o.op === 'place').length).toBeGreaterThan(1990);
+  });
+  test('B1-3e the bound holds even when one chain is the whole excess', () => {
+    const s = new RunSheetStore({ retryAfterMs: 3_600_000 });
+    const log = console.log; console.log = () => undefined;
+    try { for (let i = 0; i < 2100; i++) s.pending.push(report(i, 'only')); s.place(story('l-last', { placed_by: 'listener' }), 'end', { by: 'listener' }); } finally { console.log = log; }
+    expect(s.pending.length).toBeLessThanOrEqual(2000);
   });
 });

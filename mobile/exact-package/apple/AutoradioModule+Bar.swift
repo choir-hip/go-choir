@@ -34,7 +34,7 @@ extension AutoradioModule {
             let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] timer in
                 guard let self else { timer.invalidate(); return }
                 let s = self.runtime.snapshot()
-                if s.running && !s.paused { self.touch(["radioView", "barFacts"]) }
+                if s.running && !s.paused { self.touch(["radioView", "barFacts"], pump: false) }
                 if s.blockIndex != lastBlock { lastBlock = s.blockIndex; self.touch(["queueView"]) }   // lane autoradio-joins: the DJ's coming segments moved on
             }
             RunLoop.main.add(t, forMode: .common)
@@ -48,7 +48,7 @@ extension AutoradioModule {
                 guard let self else { break }
                 if tracker.feedMic(db: f.rmsDb), Date().timeIntervalSince(lastTouch) > 0.09 {
                     lastTouch = Date()
-                    DispatchQueue.main.async { self.touch(["radioView"]) }
+                    DispatchQueue.main.async { self.touch(["radioView"], pump: false) }
                 }
             }
         }

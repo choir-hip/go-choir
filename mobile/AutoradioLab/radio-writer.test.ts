@@ -20,17 +20,17 @@ const deck: DeckPort = { state: async () => EMPTY, play: async () => EMPTY, enqu
 const seg = (o: Record<string, unknown>) => 'event: segment\ndata: ' + JSON.stringify({ stretch_id: 'st-1', ...o }) + '\n\n';
 const answer = (...segs: string[]) => segs.join('') + 'event: done\ndata: {"stretch_id":"st-1"}\n\n';
 
-let skewMs = 0; let frontCalls = 0;                                                                  // the device's clock moving on (the deadline test)
+let skewMs = 0; let frontCalls = 0; let editionText = 'topics: harbours';                                                                  // the device's clock moving on (the deadline test)
 let rt: RadioRuntime, w: Writer, bodies: Record<string, unknown>[], reply: () => Promise<string>, fr: unknown, gen: number, fill: Entry[];
 const settle = async () => { await w.settle(); await new Promise((r) => setTimeout(r, 0)); await w.settle(); };
 beforeEach(() => {
   rt = new RadioRuntime({ deck, now: () => NOW });
-  bodies = []; gen = 1; fill = []; skewMs = 0; frontCalls = 0;
+  bodies = []; gen = 1; fill = []; skewMs = 0; frontCalls = 0; editionText = 'topics: harbours';
   fr = front([row('/pub/a'), row('/pub/b'), row('/pub/c')]);
   reply = async () => answer(seg({ segment_id: 'st-1/0', kind: 'ident', text: 'Hello.' }), seg({ segment_id: 'st-1/1', kind: 'story', title: 'A', text: 'Story A words.', cites: [{ ref: 'pub:/pub/a@v2', role: 'subject', label: 'A' }] }));
   const d: WriterDeps = {
     rt, front: async () => { frontCalls += 1; return fr; }, texts: async (routes) => Object.fromEntries(routes.map((r) => [r, [`Para one of ${r}.`, 'Para two.']])),
-    takes: async () => ({ takes: [], kept: { ids: [], handle: '', muted: [] } }), edition: async () => 'topics: harbours',
+    takes: async () => ({ takes: [], kept: { ids: [], handle: '', muted: [] } }), edition: async () => editionText,
     post: async (b) => { bodies.push(b); return reply(); }, now: () => new Date(NOW.getTime() + skewMs), tz: () => 'UTC', requestId: () => 'radio-test', generation: () => gen, offlineFill: () => fill,
   };
   w = new Writer(d);
@@ -261,5 +261,17 @@ describe('a dry desk is asked again when the front list changes (seat 2, item 5)
     w.openAhead(false); w.checkAhead(); await settle();
     skewMs = DRY_FLOOR_MS + 1000; expect(w.checkAhead()).toBe(true); await settle();
     expect(bodies.length).toBe(2);
+  });
+});
+
+describe('the dry precheck sees the edition (gen review)', () => {
+  test('W15 the front is the same but the listener changed the edition: asked at the next look, not at the floor', async () => {
+    reply = async () => answer();
+    w.openAhead(false); w.checkAhead(); await settle(); expect(bodies.length).toBe(1);
+    skewMs = FRONT_CHECK_MS + 1000; w.checkAhead(); await settle(); expect(bodies.length).toBe(1);       // unchanged: the front is read, the model is not
+    editionText = 'topics: harbours, jazz';
+    skewMs += FRONT_CHECK_MS + 1000; expect(w.wouldAsk()).toBe(true); w.checkAhead(); await settle();
+    expect(bodies.length).toBe(2);
+    expect(bodies[1].edition_text).toBe('topics: harbours, jazz');
   });
 });

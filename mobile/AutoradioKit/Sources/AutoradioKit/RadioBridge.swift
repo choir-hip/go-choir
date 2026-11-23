@@ -71,7 +71,7 @@ public enum SharedGeneration {
     nonisolated(unsafe) private static var newest = 0
     public static func announce(_ gen: Int) { lock.lock(); newest = max(newest, gen); lock.unlock() }
     public static func boot(_ gen: Int) { lock.lock(); newest = gen; lock.unlock() }
-    public static func accepts(_ gen: Int) -> Bool { lock.lock(); defer { lock.unlock() }; guard gen >= newest else { return false }; newest = gen; return true }
+    static func accepts(_ gen: Int) -> Bool { lock.lock(); defer { lock.unlock() }; guard gen >= newest else { return false }; newest = gen; return true }
     /// Check `gen` and, if it is taken, run `write`, under the one lock. The write takes its own store's lock inside (never the other way round: no store calls back here).
     @discardableResult
     public static func admit(_ gen: Int, _ write: () -> Void) -> Bool { lock.lock(); defer { lock.unlock() }; guard gen >= newest else { return false }; newest = gen; write(); return true }

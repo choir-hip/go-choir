@@ -3,7 +3,7 @@
 // What stays native and why: the deck (the audio), a few facts only the audio code knows (`radioFacts`: a turn is open, what is left of the spoken entry, the place in it), the book text (the
 // shelf is native until it moves) and the voice turn's queue snapshot and server ops (`radioSet`, and the inbox in `radioFacts`): the turn engine is native and Exact has no call from native into shared code,
 // so shared code PUSHES the snapshot and native hands back the server's `queue_ops` text, which the pump applies (the retrieval lane's pattern).
-import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, sealingBlocked, type NativeReader } from './api.ts';
+import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, sealingBlocked, signOutUncertain, type NativeReader } from './api.ts';
 import { nativeDeck } from './deck-native.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
 import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
@@ -36,7 +36,7 @@ const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-type Radio = { gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
+type Radio = { beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
 let restored: Promise<void> | undefined;
 
@@ -46,9 +46,14 @@ export async function wipeRadio(storage: Store | undefined): Promise<void> {
   const r = radio; radio = undefined; restored = undefined;
   resetTurnLog();                                                                            // the lists sent with the old account's turns and its turn ids
   forgetLongURLs();                                                                          // the long web addresses of this account's entries (runsheet-entries.ts)
-  if (r) { r.writer.stop(); await r.rt.signOut(); }
-  if (storage) { try { await storage.fs.rm(SHEET_FILE); } catch { /* absent */ } }
+  try { if (r) { r.writer.stop(); await r.rt.signOut(); } }
+  finally {
+    // The old account's sheet file goes whatever the wipe did (a throw above must not leave it for the next radio to restore); a removal that fails is remembered and tried again before any radio restores.
+    if (storage) { try { await storage.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch (e) { if (!/ENOENT|no such file|not found/i.test(String((e as Error)?.message ?? e))) sheetFileStuck = true; } }
+  }
 }
+/** The sheet file could not be removed by the last wipe: the next radio removes it again and starts EMPTY (a sheet that outlived a sign-out is not the next account's). */
+let sheetFileStuck = false;
 
 function runStorage(s: Store | undefined): RunStorage | undefined {
   if (!s) return undefined;
@@ -109,7 +114,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  const state: Radio = { gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
+  const state: Radio = { beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
     deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
@@ -175,7 +180,10 @@ export async function getRadio(storage: Store | undefined, native: NativeReader 
   if (radio !== r) {                                          // signed out meanwhile: this radio is the old account's. What native handed over in that read was drained from native: it goes to the radio that replaced this one, not into the one discarded (review B1-10)
     const next = await getRadio(storage, native, read); next.inbox.unshift(...r.inbox); r.inbox = []; return next;
   }
-  if (!restored) restored = r.rt.restore();
+  if (!restored) {
+    if (sheetFileStuck) { try { await storage?.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch { /* still there: not read either */ } restored = Promise.resolve(); }
+    else restored = r.rt.restore();
+  }
   const done = restored;
   await done;
   return radio === r ? r : getRadio(storage, native, read);
@@ -227,7 +235,7 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const r = await getRadio(storage, native);
   // The generation this RADIO was made under, not the one the pulse happens to read: a pulse that begins after the sign-out began reads the new generation while the radio still holds the old account's sheet, and
   // would carry a stamp native takes. A sign-out under way keeps the radio's own; one that was given up (or never wiped this radio) leaves it the same account's, so it takes the current one.
-  if (!sealingBlocked() && r.gen !== accountGeneration()) r.gen = accountGeneration();
+  if (!sealingBlocked() && !signOutUncertain() && r.gen !== accountGeneration()) r.gen = accountGeneration();
   const gen = r.gen;
   await r.rt.peek(true);                                                   // the facts were just read by getRadio: the deck's state is the one more read
   if (!r.ready) r.ready = await firstRunOver(storage as never);          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after peek: reading the facts sets it from native)
@@ -241,7 +249,10 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   // `live`: something is sounding and the app is in front (native's `foreground`: with the screen off or the app away the audio plays on and nothing here asks again), so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:
   // the key is the beat, so the screens are asked after THIS pulse's read of the deck (they never read a position older than the pulse that said so), and a pause or a hidden page leaves the key still.
   const live = r.rt.view().playing && r.rt.inFront();
-  if (live) r.beat += 1;
+  // The beat moves once per device SECOND, not once per pulse: the pulse is asked again whenever native touches the radio note (the engine's 0.4 s progress timer, a state change), and each beat asks the three screens and
+  // what reads them again. The position label changes once a second at the most.
+  const second = Math.floor(clock.ms / 1000);
+  if (live && (second !== r.beatSecond || clock.ms <= 0)) { r.beat += 1; r.beatSecond = second; }
   const out = { tick: r.tick, write: r.writer.wouldAsk() || posting, live, beat: r.beat, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)), slow: false };
   out.slow = !out.live && !out.write && !out.hold && !r.writer.inFlight;          // nothing sounds in front, nothing is due: the clock asks again in five seconds, not one (what native has to say wakes it at once: the deck's seq and the radio note are keys of the pulse)
   const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold} ahead=${r.rt.store.ahead().length} inFlight=${r.writer.inFlight} lost=${r.rt.store.lostPending}`;

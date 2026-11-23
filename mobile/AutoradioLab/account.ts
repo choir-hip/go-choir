@@ -268,7 +268,7 @@ async function signOutInner(
   if (ans.done !== true) {
     // Not signed out (the key may still be there). An explicit "not done" means the key remains: the marker goes. A throw is unknown: the marker stays and the next
     // reconcile decides by the key (present: the marker is cleared and nothing is wiped).
-    abortSignOut();
+    abortSignOut(!ans.threw);                                                    // a throw is unknown: the radio is not handed the new generation (api.ts)
     if (!ans.threw) await removeFile(storage, PENDING_FILE);
     return { done: false, failed: '', message: 'Sign-out did not finish. Try again.' };
   }

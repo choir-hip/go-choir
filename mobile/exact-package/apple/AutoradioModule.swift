@@ -192,13 +192,15 @@ public final class AutoradioModule: ExactPackage {
     /// Coalesce change notifications to a few per second. `names` are source names without the "autoradio." prefix.
     /// `now`: the change goes out on the next turn of the main loop instead of after the 0.2 s coalescing wait (the page list: a swipe
     /// must not wait for it; the open-page list changes once per gesture, so there is no storm to coalesce).
-    func touch(_ names: [String], now: Bool = false) {
+    /// `pump`: the change wakes the radio's pump (`radioNote`) when it touches `radioView` or `barFacts`. The engine's 0.4 s progress timer and the microphone's level touch them for the screens' sake only and pass false: the pump
+    /// asks the desk, the deck and four screens each time it runs, and was woken two and a half times a second by them while the programme played.
+    func touch(_ names: [String], now: Bool = false, pump: Bool = true) {
         // `dirty` is only touched on the main thread: a background caller (found by a real-data run: readServerBuild called this from a
         // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
         if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now) }; return }
         // The queue and the Autoradio page are shared code's now: what the screens used to ask of the queue, the page and the bar's run sheet facts is `radioNote` (the pump looks again). Old names still work.
         dirty.formUnion(names.map { ["queueView": "radioNote", "radioPage": "radioNote", "radioPageFacts": "radioNote"][$0] ?? $0 })
-        if names.contains(where: { $0 == "radioView" || $0 == "barFacts" }) { dirty.insert("radioNote") }
+        if pump, names.contains(where: { $0 == "radioView" || $0 == "barFacts" }) { dirty.insert("radioNote") }
         if now {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
