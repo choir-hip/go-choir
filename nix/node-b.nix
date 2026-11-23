@@ -15,6 +15,25 @@
 #   access JWTs remain valid after auth restarts (VAL-CROSS-118)
 { config, lib, pkgs, goChoirPackages, choirGo, guestImage ? null, guestImageLayered ? null, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 let
+  # Sign-up capacity (owner, 2026-11-23: "we will monitor usage and turn off
+  # signup once we hit limits. then i will get more infra"). One place, read by
+  # the auth service (it refuses at the cap) and by vmctl (the capacity
+  # reading on /api/pulse/summary shows the same number). The cap counts
+  # accounts holding a passkey whose address is not a test address; test
+  # addresses (CI and drills) have their own cap so they neither use the
+  # room nor bypass it. The owner changes a number here, in a reviewed commit
+  # and a deploy (an owner act: it spends the owner's host); 0 is no cap.
+  # Derivation, from Node B on 2026-11-23 (docs/changes.md, the capacity
+  # entry): the binding limit is disk, not memory. 153 GiB free less the 60
+  # GiB deploy floor less about 40 GiB kept for the paper's growth leaves
+  # about 50 GiB; a new computer takes 2.7 GiB (the lightest measured, with
+  # its snapshot) to 9 GiB (the heaviest measured), so about 20 computers
+  # at the light figure. 17 accounts hold a passkey now (4 hold a computer).
+  # 17 + 23 = 40. Memory carries it: at most 4 to 6 strangers' 2 GiB
+  # computers run at once beside the paper, and the idle ones hibernate.
+  registrationCap = 40;
+  registrationTestCap = 1100; # 908 test accounts exist; about 40 a month join
+  registrationTestDomains = "example.com,example.test";
   # Host fetch route (SDC NET-01; internal/hostfetch,
   # docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md). One
   # list, read by vmctl (writes the grant on the credential disk at cold
@@ -897,9 +916,11 @@ in
         # unconsumed attempts and email sessions at boot.
         "AUTH_EMAIL_SIGN_IN=on"
         "AUTH_EMAIL_CODE_KEY_FILE=${authSigningDir}/email-code-key"
-        # Sign-up cap with a waitlist (L4-03, internal/auth/registration_cap.go):
-        # unset is no cap. FP0 sets "AUTH_REGISTRATION_CAP=<n>" after reading
-        # the count of users holding a passkey (FP8 station, L4-03).
+        # Sign-up cap with a waitlist (L4-03, internal/auth/registration_cap.go);
+        # the numbers are at the top of this file (registrationCap).
+        "AUTH_REGISTRATION_CAP=${toString registrationCap}"
+        "AUTH_REGISTRATION_TEST_CAP=${toString registrationTestCap}"
+        "AUTH_REGISTRATION_TEST_DOMAINS=${registrationTestDomains}"
         internalAuthEnv
       ];
     };
@@ -1621,6 +1642,11 @@ in
         "VM_HOST_BASE_PORT=9000"
         "VM_CPU_COUNT=2"
         "VM_MEM_MIB=4096"
+        # A computer made for a new account is 2 GiB (owner, 2026-11-23); the
+        # size is recorded on its ownership at creation (ownership.mem_size_mib,
+        # internal/vmctl). This setting is the size of every computer made
+        # before that, the paper's and the owner's included, and the ceiling
+        # of a new one.
         # Interactive guest shape: 4 CPU / 8 GiB. A 4 GiB trial on the
         # compacted owner store thrashed (3.67 GB RSS at the cap, 78 ms guest
         # RTT, health unreachable) and was rolled back per the owner-approved

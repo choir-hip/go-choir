@@ -62,6 +62,15 @@ type Config struct {
 	// sign-up is refused and its email waitlisted (registration_cap.go).
 	RegistrationCap int
 
+	// RegistrationTestDomains are the address domains of test accounts (CI
+	// and drills; AUTH_REGISTRATION_TEST_DOMAINS, comma-separated). Such an
+	// address is counted against RegistrationTestCap
+	// (AUTH_REGISTRATION_TEST_CAP) and never against RegistrationCap, so it
+	// neither uses the people's room nor lets a stranger bypass it. Empty:
+	// every address is a person's.
+	RegistrationTestDomains []string
+	RegistrationTestCap     int
+
 	// EmailSignIn is the auth.email_sign_in switch (AUTH_EMAIL_SIGN_IN: on,
 	// true, 1 or yes). Off, begin answers as if every address were unknown,
 	// verify refuses, and unconsumed attempts are deleted at startup.
@@ -141,6 +150,19 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("auth config: AUTH_REGISTRATION_CAP must be a whole number >= 0 (0 is no cap), got %q", v)
 		}
 		cfg.RegistrationCap = n
+	}
+
+	if v := strings.TrimSpace(os.Getenv("AUTH_REGISTRATION_TEST_CAP")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("auth config: AUTH_REGISTRATION_TEST_CAP must be a whole number >= 0 (0 is no cap), got %q", v)
+		}
+		cfg.RegistrationTestCap = n
+	}
+	for _, d := range strings.Split(os.Getenv("AUTH_REGISTRATION_TEST_DOMAINS"), ",") {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
+			cfg.RegistrationTestDomains = append(cfg.RegistrationTestDomains, d)
+		}
 	}
 
 	cfg.EmailSignIn = envOn("AUTH_EMAIL_SIGN_IN")

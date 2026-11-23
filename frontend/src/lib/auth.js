@@ -95,10 +95,7 @@ export async function registerPasskey(email) {
   });
 
   if (beginRes.status === 429) throw new RateLimitError(await retryAfterSeconds(beginRes));
-  if (!beginRes.ok) {
-    const err = await beginRes.json().catch(() => ({}));
-    throw new Error(err.error || `Registration begin failed (${beginRes.status})`);
-  }
+  if (!beginRes.ok) throw await registrationFailure(beginRes, `Registration begin failed (${beginRes.status})`);
 
   return createPasskeyFromOptions(await beginRes.json());
 }
@@ -159,10 +156,7 @@ export async function createPasskeyFromOptions(creationOptions) {
   });
 
   if (finishRes.status === 429) throw new RateLimitError(await retryAfterSeconds(finishRes));
-  if (!finishRes.ok) {
-    const err = await finishRes.json().catch(() => ({}));
-    throw new Error(err.error || `Registration finish failed (${finishRes.status})`);
-  }
+  if (!finishRes.ok) throw await registrationFailure(finishRes, `Registration finish failed (${finishRes.status})`);
 
   return finishRes.json();
 }
@@ -453,6 +447,24 @@ export class RateLimitError extends Error {
   }
 }
 
+/**
+ * Sign-up is closed at the owner's cap (403, code registration_waitlist):
+ * the server's sentence is for the person as it stands ("Sign-up is full for
+ * now. You are on the list."), not a failure to retry.
+ */
+export class RegistrationFullError extends Error {
+  constructor(message) {
+    super(message || 'Sign-up is full for now. You are on the list.');
+    this.name = 'RegistrationFullError';
+  }
+}
+
+async function registrationFailure(res, fallback) {
+  const err = await res.json().catch(() => ({}));
+  if (res.status === 403 && err.code === 'registration_waitlist') return new RegistrationFullError(err.error);
+  return new Error(err.error || fallback);
+}
+
 /** Seconds to wait after a 429: the Retry-After header, else the body's retry_after, else 60. */
 export async function retryAfterSeconds(res) {
   const header = Number(res.headers?.get?.('Retry-After'));
@@ -675,7 +687,7 @@ export async function fetchWithRenewal(url, options = {}) {
  * @returns {string}
  */
 export function passkeyErrorMessage(err, authType = 'login') {
-  if (err instanceof RateLimitError) return err.message;
+  if (err instanceof RateLimitError || err instanceof RegistrationFullError) return err.message;
   const message = String(err?.message || '');
   const normalized = message.toLowerCase();
   if (err?.name === 'NotAllowedError') {

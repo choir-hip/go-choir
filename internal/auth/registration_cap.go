@@ -22,7 +22,10 @@ import (
 
 const registrationWaitlistCode = "registration_waitlist"
 
-const registrationWaitlistMessage = "Choir is full for now. You're on the waitlist, and we'll email you when there's room."
+// registrationWaitlistMessage is shown to the person as it stands, by the
+// site and the phone app (owner, 2026-11-23). It promises only what is true:
+// the email is kept on the list; nobody is told a mail will come.
+const registrationWaitlistMessage = "Sign-up is full for now. You are on the list."
 
 // WaitlistEntry is one waitlisted email.
 type WaitlistEntry struct {
@@ -37,6 +40,46 @@ func (s *Store) CountRegisteredUsers() (int, error) {
 	var n int
 	err := s.db.QueryRow("SELECT COUNT(DISTINCT user_id) FROM credentials").Scan(&n)
 	return n, err
+}
+
+// CountRegisteredUsersSplit counts users holding a passkey, apart by whether
+// their address is on one of testDomains (case-insensitive, lower-case
+// domains): people, then test addresses.
+func (s *Store) CountRegisteredUsersSplit(testDomains []string) (people, test int, err error) {
+	total, err := s.CountRegisteredUsers()
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(testDomains) == 0 {
+		return total, 0, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(testDomains)), ",")
+	args := make([]any, len(testDomains))
+	for i, d := range testDomains {
+		args[i] = d
+	}
+	err = s.db.QueryRow(`SELECT COUNT(DISTINCT c.user_id) FROM credentials c JOIN users u ON u.id = c.user_id
+		WHERE lower(substr(u.email, instr(u.email, '@') + 1)) IN (`+marks+`)`, args...).Scan(&test)
+	if err != nil {
+		return 0, 0, err
+	}
+	return total - test, test, nil
+}
+
+// isTestAddress reports whether email is on one of the configured test
+// domains. With none configured every address is a person's.
+func isTestAddress(email string, testDomains []string) bool {
+	at := strings.LastIndex(email, "@")
+	if at < 0 {
+		return false
+	}
+	domain := strings.ToLower(strings.TrimSpace(email[at+1:]))
+	for _, d := range testDomains {
+		if domain == d {
+			return true
+		}
+	}
+	return false
 }
 
 // AddRegistrationWaitlist records a refused sign-up; a repeat attempt bumps
@@ -68,10 +111,12 @@ func (s *Store) ListRegistrationWaitlist() ([]WaitlistEntry, error) {
 }
 
 // registrationClosed reports whether a sign-up for userID (empty for a new
-// user) must be refused. A user who already holds a passkey is never closed
-// out. An unreadable count closes registration.
-func (h *Handler) registrationClosed(userID string) (bool, error) {
-	if h.config == nil || h.config.RegistrationCap <= 0 {
+// user) with address email must be refused. A user who already holds a
+// passkey is never closed out. An unreadable count closes registration. A
+// test address is bounded by its own cap (RegistrationTestCap), so CI and
+// drills neither use the people's room nor bypass it.
+func (h *Handler) registrationClosed(userID, email string) (bool, error) {
+	if h.config == nil || (h.config.RegistrationCap <= 0 && h.config.RegistrationTestCap <= 0) {
 		return false, nil
 	}
 	if userID != "" {
@@ -83,17 +128,20 @@ func (h *Handler) registrationClosed(userID string) (bool, error) {
 			return false, nil
 		}
 	}
-	n, err := h.store.CountRegisteredUsers()
+	people, test, err := h.store.CountRegisteredUsersSplit(h.config.RegistrationTestDomains)
 	if err != nil {
 		return true, fmt.Errorf("count registered users: %w", err)
 	}
-	return n >= h.config.RegistrationCap, nil
+	if isTestAddress(email, h.config.RegistrationTestDomains) {
+		return h.config.RegistrationTestCap > 0 && test >= h.config.RegistrationTestCap, nil
+	}
+	return h.config.RegistrationCap > 0 && people >= h.config.RegistrationCap, nil
 }
 
 // refuseIfRegistrationClosed answers the request and returns true when the
 // cap refuses this sign-up. email is waitlisted when non-empty.
 func (h *Handler) refuseIfRegistrationClosed(w http.ResponseWriter, operation, emailHash, userID, email string) bool {
-	closed, err := h.registrationClosed(userID)
+	closed, err := h.registrationClosed(userID, email)
 	if !closed {
 		return false
 	}

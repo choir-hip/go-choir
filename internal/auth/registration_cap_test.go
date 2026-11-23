@@ -103,10 +103,10 @@ func TestRegistrationCapRefusesAndWaitlists(t *testing.T) {
 		t.Fatalf("existing user: %d, want 409", rec.Code)
 	}
 	// The finish re-checks: a ceremony begun below the cap cannot finish above it.
-	if closed, err := h.registrationClosed("abandoned"); err != nil || !closed {
+	if closed, err := h.registrationClosed("abandoned", "abandoned@mosiah.org"); err != nil || !closed {
 		t.Fatalf("registrationClosed = %v, %v; want closed", closed, err)
 	}
-	if closed, err := h.registrationClosed("u1"); err != nil || closed {
+	if closed, err := h.registrationClosed("u1", "one@mosiah.org"); err != nil || closed {
 		t.Fatalf("a user who already has a passkey is never closed out: %v, %v", closed, err)
 	}
 	// Raising the cap reopens.
@@ -122,7 +122,7 @@ func TestRegistrationCapFailsClosed(t *testing.T) {
 	if err := h.store.db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if closed, err := h.registrationClosed(""); err == nil || !closed {
+	if closed, err := h.registrationClosed("", "x@mosiah.org"); err == nil || !closed {
 		t.Fatalf("an unreadable count must close registration: %v, %v", closed, err)
 	}
 }
@@ -145,5 +145,85 @@ func TestRegistrationCapFromEnv(t *testing.T) {
 		if _, err := LoadConfig(); err == nil {
 			t.Fatalf("AUTH_REGISTRATION_CAP=%q must be refused at load", bad)
 		}
+	}
+}
+
+// Test addresses (example.com, example.test: the CI and drill accounts, 908
+// of the 925 passkey holders on Node B on 2026-11-23) are counted apart, so
+// they neither fill nor bypass the owner's cap for strangers:
+//  8. test addresses counting against the cap for people (CI would close
+//     sign-up within days);
+//  9. a test address bypassing the cap for people (an address nobody can
+//     verify, so a stranger could use it): it has its own, separate cap;
+//  10. no test domains configured leaving every address a person.
+
+func TestRegistrationCapCountsTestAddressesApart(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	h.config.RegistrationCap = 2
+	h.config.RegistrationTestCap = 3
+	h.config.RegistrationTestDomains = []string{"example.com", "example.test"}
+	addPasskey(t, h, "p1", "person@mosiah.org")
+	addPasskey(t, h, "t1", "ci1@example.com")
+	addPasskey(t, h, "t2", "ci2@Example.Test")
+
+	// Two test accounts do not use the people's room.
+	if rec := registerBegin(t, h, "second@mosiah.org"); rec.Code != http.StatusOK {
+		t.Fatalf("a person below the cap: %d %s", rec.Code, rec.Body.String())
+	}
+	addPasskey(t, h, "p2", "second-done@mosiah.org")
+	if rec := registerBegin(t, h, "third@mosiah.org"); rec.Code != http.StatusForbidden {
+		t.Fatalf("a person at the cap: %d, want 403", rec.Code)
+	}
+	// A test address is bounded by its own cap, not by the people's.
+	if rec := registerBegin(t, h, "ci3@example.com"); rec.Code != http.StatusOK {
+		t.Fatalf("a test address below its cap: %d %s", rec.Code, rec.Body.String())
+	}
+	addPasskey(t, h, "t3", "ci3-done@example.com")
+	rec := registerBegin(t, h, "ci4@example.com")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("a test address at its cap: %d, want 403", rec.Code)
+	}
+	if _, err := h.store.GetUserByEmail("ci4@example.com"); err == nil {
+		t.Fatal("a refused test address created a user")
+	}
+
+	// No test domains: every address is a person.
+	h.config.RegistrationTestDomains = nil
+	h.config.RegistrationCap = 3
+	if rec := registerBegin(t, h, "ci5@example.com"); rec.Code != http.StatusForbidden {
+		t.Fatalf("with no test domains example.com counts as a person: %d, want 403", rec.Code)
+	}
+}
+
+func TestRegistrationTestCapFromEnv(t *testing.T) {
+	t.Setenv("AUTH_REGISTRATION_CAP", "40")
+	t.Setenv("AUTH_REGISTRATION_TEST_CAP", "1100")
+	t.Setenv("AUTH_REGISTRATION_TEST_DOMAINS", " Example.com, example.test ,")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RegistrationTestCap != 1100 || len(cfg.RegistrationTestDomains) != 2 ||
+		cfg.RegistrationTestDomains[0] != "example.com" || cfg.RegistrationTestDomains[1] != "example.test" {
+		t.Fatalf("config = %d %v", cfg.RegistrationTestCap, cfg.RegistrationTestDomains)
+	}
+	t.Setenv("AUTH_REGISTRATION_TEST_CAP", "-2")
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("AUTH_REGISTRATION_TEST_CAP=-2 must be refused at load")
+	}
+}
+
+// 11. the refusal at a full cap being unreadable by a person: the words are
+// the owner's, and the body carries the code the site and the app read.
+func TestFullSignUpIsSaidPlainly(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	h.config.RegistrationCap = 1
+	addPasskey(t, h, "u1", "one@mosiah.org")
+	rec := registerBegin(t, h, "late@mosiah.org")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("at the cap: %d, want 403", rec.Code)
+	}
+	if got, want := rec.Body.String(), `{"error":"Sign-up is full for now. You are on the list.","code":"registration_waitlist"}`; got != want+"\n" && got != want {
+		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
