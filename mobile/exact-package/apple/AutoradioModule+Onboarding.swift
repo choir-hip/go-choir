@@ -112,6 +112,8 @@ final class OnboardingController: @unchecked Sendable {
                     if !here { return }                                                  // shared code left the step: end the check (defer restores)
                     try? await Task.sleep(nanoseconds: 100_000_000)
                     meter.tick(0.1)
+                    // The microphone could not be opened (not allowed, or no input after the bounded retries): say so now, not after twenty seconds of nothing.
+                    if let why = MicLog.onboardingState(rt.audio.micState) { self.set { self.mic = why; self.micActive = false }; return }
                     meter.transcript(rt.snapshot().transcript)
                     let l = meter.level
                     self.set { self.level = l }

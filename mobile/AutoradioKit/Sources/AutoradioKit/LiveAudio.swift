@@ -89,6 +89,23 @@ public final class LiveAudio: @unchecked Sendable {
     /// The input rate of the tap now installed (0: none), for the log line of voice on.
     public private(set) var micTapRate = 0.0
     private var wantMic: Bool { micPermitted && micWanted && !micSuspended }
+    /// The system's answer to "is the microphone allowed now" (a test replaces it).
+    var micPermissionProbe: @Sendable () -> Bool = { LiveAudio.micPermissionGranted() }
+    /// Test seam: the input format's sample rate by engine build number (the real input node is not asked).
+    var inputRateForTest: ((Int) -> Double)?
+    /// Seconds before the first retry of an input that reported rate 0; each retry doubles it.
+    var micRetryBase = 0.4
+    /// Where the microphone stands: `off` it is not wanted, `open` the tap runs, `pending` it is being opened or retried, `refused` it is wanted
+    /// and not allowed, `failed` it is allowed and could not be opened after the retries.
+    public enum MicState: Equatable, Sendable { case off, open, pending, refused, failed }
+    public var micState: MicState {
+        if micActive { return .open }
+        if !micWanted || micSuspended { return .off }
+        if !(micPermitted || micPermissionProbe()) { return .refused }
+        return micGaveUp ? .failed : .pending
+    }
+    /// The retries of an allowed microphone that reported no input are used up.
+    private var micGaveUp = false
     private var observer: NSObjectProtocol?
     /// Flags the audio thread, the notification queue, background tasks and the main thread all read: one lock (the repair of the
     /// app review; `running` was polled by `playProgramme` while `bring` and `takeDown` wrote it).
@@ -177,6 +194,7 @@ public final class LiveAudio: @unchecked Sendable {
         guard !virtual, bus != nil else { return }
         if let mic { micWanted = mic }
         engineGate.lock(); defer { engineGate.unlock() }
+        micRetries = 0; micGaveUp = false                // a new request for the microphone from outside starts the count again
         try bring(voiceProcessing: vp, fresh: fresh)
     }
 
@@ -209,12 +227,12 @@ public final class LiveAudio: @unchecked Sendable {
     public var needsRecovery: Bool { !virtual && bus != nil && (down || !running) }
 
     /// Restart in place (route change, interruption end): the same voice processing setting.
-    public func recover(reason: String) {
+    public func recover(reason: String, fresh: Bool = false) {
         guard !virtual, bus != nil, !restarting else { return }
         engineGate.lock(); defer { engineGate.unlock() }
         restarting = true; defer { restarting = false }
         if running { quiesce() }
-        do { try bring(voiceProcessing: voiceProcessing); onNotice?("engine", "restarted: \(reason)") }
+        do { try bring(voiceProcessing: voiceProcessing, fresh: fresh); onNotice?("engine", "restarted: \(reason)") }
         catch { down = true; Self.printFault("engine restart failed (\(reason))", error); onNotice?("error", "engine restart failed (\(reason)): \(error)") }
     }
 
@@ -318,7 +336,15 @@ public final class LiveAudio: @unchecked Sendable {
         // Voice processing belongs to the input node and stays with the engine object: a playback-only engine after a talking one is a
         // new engine, so nothing of the voice-processing unit is left in the output path. The same for an engine whose input node was used
         // (a capture session before) and for any switch of category (`fresh`).
-        let rebuilt = fresh || (!wantMic && (voiceProcessing || inputTouched))
+        // The microphone may have been allowed after this engine started (onboarding asks for it on its own, with the radio already playing):
+        // `micPermitted` was only ever set when the engine first started, so it is read from the system here. An engine made before the
+        // grant is not trusted with the input node: a new one is built.
+        var newlyAllowed = false
+        if !virtual, !micPermitted, micPermissionProbe() {
+            micPermitted = true; micRetries = 0; micGaveUp = false; newlyAllowed = micWanted
+            print("AUTORADIO voice mic allowed after the engine started; \(newlyAllowed ? "a new engine is built for it" : "not wanted now")")
+        }
+        let rebuilt = fresh || newlyAllowed || (!wantMic && (voiceProcessing || inputTouched))
         if rebuilt { replaceEngine() }
         defer { if !virtual, observer == nil { observe() } }
         do { try attempt(voiceProcessing: vp) }
@@ -336,6 +362,7 @@ public final class LiveAudio: @unchecked Sendable {
         voiceProcessing = false
         if let drive = driveForTest {
             do { try drive(vp, wantMic) } catch { down = true; throw error }
+            if wantMic { inputTouched = true; settleInput(rate: inputRateForTest?(engineBuilds) ?? 48000) }
             running = true; down = false; lastRestart = clock.now
             return
         }
@@ -354,13 +381,8 @@ public final class LiveAudio: @unchecked Sendable {
                     let s = rs.convert(buf)
                     if !s.isEmpty { bus.pushMic(AudioFrame(samples: s, sampleRate: busSampleRate, t: clock.now)) }
                 }
-                micActive = true; micTapRate = inFmt.sampleRate
-                micRetries = 0
-            } else {
-                micTapRate = 0
-                onNotice?("error", "input format has sample rate 0 (no microphone available)")
-                scheduleMicRetry()
             }
+            settleInput(rate: inFmt.sampleRate)
         }
         let mixFmt = engine.mainMixerNode.outputFormat(forBus: 0)
         let rr = Resampler(rate: busSampleRate)
@@ -388,14 +410,29 @@ public final class LiveAudio: @unchecked Sendable {
     /// A route that is still settling (Bluetooth A2DP to the hands-free profile) reports no input for a moment: the tap is tried again, a few times,
     /// instead of leaving the microphone silent for good.
     private var micRetries = 0
+    /// The input format's rate is known: a real rate means the tap runs; 0 with the microphone allowed is retried on a new engine, a bounded number
+    /// of times (the permission was checked before: with none, `wantMic` is false and this is never reached).
+    private func settleInput(rate: Double) {
+        if rate > 0 { micActive = true; micTapRate = rate; micRetries = 0; micGaveUp = false; return }
+        micActive = false; micTapRate = 0
+        onNotice?("error", "input format has sample rate 0 (no microphone available)")
+        scheduleMicRetry()
+    }
     private func scheduleMicRetry() {
-        guard micRetries < 6, !virtual else { return }
+        guard !virtual else { return }
+        guard micRetries < 6 else {
+            micGaveUp = true
+            print("AUTORADIO voice mic gave up: the input still reported rate 0 after \(micRetries) retries on new engines")
+            onNotice?("error", "the microphone could not be opened after \(micRetries) retries on new engines")
+            return
+        }
         micRetries += 1
-        let wait = 0.4 * Double(1 << (micRetries - 1))
+        let n = micRetries
+        let wait = micRetryBase * Double(1 << (n - 1))
         DispatchQueue.global().asyncAfter(deadline: .now() + wait) { [weak self] in
             guard let self, self.wantMic, !self.micActive, !self.restarting else { return }
-            print("AUTORADIO voice mic retry \(self.micRetries): the input was not there yet")
-            self.recover(reason: "microphone input not available yet")
+            print("AUTORADIO voice mic retry \(n) of 6: the input rate was 0 with the microphone allowed; building a new engine")
+            self.recover(reason: "microphone input not available yet", fresh: true)
         }
     }
 
@@ -1110,6 +1147,20 @@ public enum FixtureResources {
         let name = String(ref.dropFirst("fixture:".count))
         if let d = directory, FileManager.default.fileExists(atPath: d.appendingPathComponent(name).path) { return d.appendingPathComponent(name) }
         return FixtureClip.materialise(name: name)
+    }
+}
+
+/// What the log and the first-run screen say about the microphone (pure, so a test can hold them to the truth).
+public enum MicLog {
+    /// "ok" only when the tap runs and has a real input rate.
+    public static func tap(active: Bool, rate: Int) -> String { active && rate > 0 ? "ok" : "fail" }
+    /// The "voice on" line: the tap word comes from the tap and the rate, never from anything else.
+    public static func voiceOnLine(claim: String, rate: Int, active: Bool, state: LiveAudio.MicState) -> String {
+        "voice on claim=\(claim) rate=\(rate) tap=\(tap(active: active, rate: rate)) mic=\(state)"
+    }
+    /// What onboarding's microphone step must show when the microphone cannot be opened (nil: keep listening).
+    public static func onboardingState(_ s: LiveAudio.MicState) -> String? {
+        switch s { case .refused: return "refused"; case .failed: return "silent"; default: return nil }
     }
 }
 
