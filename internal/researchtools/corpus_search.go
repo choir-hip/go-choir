@@ -357,6 +357,10 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			default:
 				info.Body++
 			}
+		} else if len(c.Matched) > 0 {
+			// The label half matched the page (title, outlet, topic, language) and the
+			// vector half returned it too: it matched the words.
+			info.LabelsOnly++
 		} else if containsString(c.Reasons, "meaning") || containsString(c.Reasons, "story") {
 			info.Meaning++
 		} else {

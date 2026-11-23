@@ -54,7 +54,7 @@ type SearchAllResult struct {
 	// already holds pages the run has not tried to read.
 	Next string `json:"next,omitempty"`
 	// Results are the pages of every search sent, each once, in the order
-	// they were found; Held marks a page the desk held before this call.
+	// they were found; Held marks a page an earlier search of this run returned (not a page the corpus holds).
 	Results []SearchHit `json:"results"`
 }
 

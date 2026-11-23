@@ -136,7 +136,7 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"Search the web only for the stale and missing threads, one question at a time",
 		"read what it returns before you search again",
 		"choir.SearchAll(question, wordings)",
-		"a page is held when an earlier search of this run returned it",
+		"the held mark means an earlier search of this run returned the page",
 		"build on and use what the paper already holds",
 		"your Report is an addition to the corpus",
 		"A research run on a story opens with a digest of the graph",
@@ -180,7 +180,9 @@ func TestResearchPromptReadsWhatTheQuestionNeedsAndStatesOneCount(t *testing.T) 
 	flat := strings.Join(strings.Fields(prompt.Content), " ")
 	for _, want := range []string{
 		"Read what the question needs",
-		"the graph's event record lists outlets, and that list is a source list too",
+		"the graph's event record lists the outlets that reported an occurrence with the capture_ids that cite them: those capture_ids are sources too",
+		"Search the web whenever the corpus does not hold what the question needs; what to stop is rewording a query against pages you already hold",
+		"the held mark means an earlier search of this run returned the page, not that the paper holds it",
 		"The platform holds a story that cites fewer than two outlets; the second outlet may come from the graph's event record (its outlets and capture ids), not only the web",
 		"Every capture that supports a claim goes in a packet",
 		"Send an interim packet when you have a claim you can cite",

@@ -393,7 +393,8 @@ func TestPromptCoreCastsResearchForTheOneThingTheFrameLacks(t *testing.T) {
 		"names the page to fetch when a lead links to one",
 		`Never write "corroborate" or "find independent reporting" as a goal in itself`,
 		"carries no detail that is not in the frame: a detail from memory is not a question",
-		"Whatever the frame holds, read it first; cast research only for what it leaves open, never to search again for what the frame already holds",
+		"Whatever the frame holds, read it first; cast research for whatever it leaves open, the web included, never to search again for what the frame already holds",
+		"One report of an event or a statement is enough to state it; the platform's two-outlet gate is on the story as a whole",
 		"The platform holds a story that cites fewer than two outlets; the second outlet may come from the graph's event record (its outlets and capture ids), not only the web",
 	} {
 		if !strings.Contains(flat, want) {

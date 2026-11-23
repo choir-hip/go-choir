@@ -67,10 +67,17 @@ are text and measurement: the Cast asks for the one thing the frame lacks, one
 consistent count, a stop rule that makes an unconfirmed detail a finding, a
 worked cell that goes to the web only for a lack the run names, a corpus
 search that says whether any page matched the words, and a gap figure that
-means something. Belief that this lowers the mean over all runs below 2.0 and
-the heaviest-five share below 30%: about 0.5; it is settled by
+means something. The aim is not fewer web searches as such (owner, 2026-11-23: "the point isnt to
+cut search to zero ... we need to scale corpus utility"): a run still goes to
+the web whenever the corpus does not hold the answer. What the change removes is
+rewording the same query against pages the run already holds, and what it adds
+is a corpus the run can read honestly (the two counts, the held mark's real
+meaning, one source rule, a gap figure that means something). It is judged by
 `scripts/status-search-reads` on a window of 50 or more runs with the
-no-objective runs segmented.
+no-objective runs segmented: the share of searches sent with no read since the
+previous one and with overlapping words, the heaviest-five share, the digest's
+and the graph's pages read by capture id, and the real gaps tabulated; the mean
+over all runs is reported, not targeted.
 
 ## Remaining error
 

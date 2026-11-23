@@ -24,11 +24,12 @@ func TestResearchOverlayStatesTheObjectiveAndIsGraphFirst(t *testing.T) {
 		"search the graph (choir.SearchWireCorpus(query, 10)) before the web",
 		"The web is for what the graph lacks: the newest facts, a second independent outlet",
 		"Your objective is met when a page from a second independent outlet supports the claim, from the graph or the web; then report",
+		"Search the web whenever the graph does not hold what the question needs; what to stop is rewording a query against pages you already hold",
 		"A detail you cannot confirm is a finding to report, not a task to keep searching for",
 		"a reworded query that returns the pages you already hold tells you the web lacks it; say what you looked for and stop",
 		"The platform holds a story that cites fewer than two outlets; the second outlet may come from the graph's event record (its outlets and capture ids), not only the web",
 		"Worked cell (graph, then the web for what is missing",
-		"report when the pages you read answer the question",
+		"report when a page from a second independent outlet supports the claim",
 		"outlets read without error:",
 		`its notes carry "adds: ..." (what this adds to the corpus) and "missing: ..." (what the corpus lacked, so you went to the web, or "missing: none")`,
 	} {

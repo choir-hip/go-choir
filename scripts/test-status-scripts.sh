@@ -1075,6 +1075,7 @@ check "W10 the run's first search precedes the first read: only the gaps that st
 #  X4  a Report line with gap=true but an empty gap_text counts as a real gap; an old line (no gap_text) is
 #      counted as real or dropped from the old gap figure
 #  X5  the gap texts are not listed; the old output lines are gone (W7 reads them)
+#  X7  a window with no later search or no Report prints "None%" instead of n/a
 python3 - "$root" <<'PY'
 import sys
 root = sys.argv[1]
@@ -1103,7 +1104,11 @@ check "X3 8 later searches, 6 with no read since the previous: 75.0%" 'python3 -
 check "X4 the old gap figure counts gap=true lines (2 of 3); real gaps count only lines with a gap_text (1 of 2 that carry one; the old-format line is named, not counted)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"gap_runs\"],d[\"report_runs\"],d[\"real_gap_runs\"],d[\"reports_with_gap_text\"])==(2,3,1,2), d" "$root/out"'
 check "X5 the gap texts are listed" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"gap_texts\"]==[\"the prefecture\x27s statement\"], d" "$root/out"'
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_frame.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
-check "X6 the text report keeps the old lines and adds the new ones" 'grep -q "^runs 7  searches 15  mean per run 2.14" "$root/out" && grep -q "Reports naming a gap (what the corpus lacked): 2 of 3" "$root/out" && grep -q "all runs: 9 (7 searched), mean web searches per run 1.67" "$root/out" && grep -q "five heaviest runs sent 13 of 15 searches (86.7%)" "$root/out" && grep -q "real gaps (a missing line that says something): 1 of 2 Reports" "$root/out" && grep -q "the prefecture" "$root/out"'
+printf '##READS\n[ 1.0] runtime[1]: 2026/11/21 04:59:00 corpus read run=o desk=research conv=c capture=x held=false via=read\n##SUM\n##BRIEF\n##GRAPH\n##REPORT\n##GW\n2026/11/21 05:00:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 ( max_results=40 run=r1 desk=research conv=c)\n' >"$root/sr_one.txt"
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_one.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
+check "X7 one search, no Report: n/a, never None%" '! grep -q "None%" "$root/out" && grep -q "no SUCCESSFUL read since the previous search (console clock): n/a of 0" "$root/out"'
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_frame.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
+check "X6 the text report keeps the old lines and adds the new ones" 'grep -q "^runs 7  searches 15  mean per run 2.14 (over searching runs only)" "$root/out" && grep -q "Reports naming a gap (what the corpus lacked): 2 of 3" "$root/out" && grep -q "all runs: 9 (7 searched), mean web searches per run 1.67" "$root/out" && grep -q "five heaviest runs sent 13 of 15 searches (86.7%)" "$root/out" && grep -q "real gaps (a missing line that says something): 1 of 2 Reports" "$root/out" && grep -q "the prefecture" "$root/out"'
 
 # status-calls-by-desk (first design F0). Failure list, written before the code:
 #  D1  a call is counted under the wrong desk, or a line with no desk= is not its own "not-logged-before-F0" row
