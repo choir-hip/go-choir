@@ -69,7 +69,10 @@ async function readFacts(r: { inbox: string[] } & Partial<Radio>): Promise<Nativ
     if (Array.isArray(o.inbox)) for (const m of o.inbox) if (typeof m === 'string') r.inbox.push(m);
     const pos = obj(o.position), a = obj(o.audio), rem = obj(o.remote);
     return {
-      turnOpen: o.turnOpen === true, remainder: str(o.remainder), position: { block: num(pos.block), seconds: num(pos.seconds) }, wants: o.wants === true, foreground: o.foreground !== false,
+      turnOpen: o.turnOpen === true, remainder: str(o.remainder), position: { block: num(pos.block), seconds: num(pos.seconds) }, wants: o.wants === true,
+      // A host that gives no `foreground` (Android has no native module in this repo, a host with no native package, the web) is taken as IN FRONT: shared code cannot tell otherwise, and the page's own visibility
+      // (spine.contract `posKey`) still gates there. The cost of being wrong is one more read a second, never a frozen position.
+      foreground: o.foreground !== false,
       audio: str(a.url) !== '' ? { url: str(a.url), title: str(a.title), show: str(a.show), start: num(a.start), end: a.end === undefined ? undefined : num(a.end), episode_id: str(a.episode_id) || undefined, elapsed: num(a.elapsed) } : undefined,
       remote: rem.duration !== undefined ? { elapsed: num(rem.elapsed), duration: num(rem.duration) } : undefined,
     };
@@ -268,12 +271,11 @@ export async function radioWrite(storage: Store | undefined, native: NativeReade
   const r = await getRadio(storage, native);
   lap('radioWrite: radio ready');
   r.rt.store.flush();
-  const asked = r.writer.checkAhead();
+  const asked = r.writer.checkAhead(), mine = r.writer.lastId;     // the ask THIS answer started: it waits for that one and abandons only that one
   const waits: Promise<unknown>[] = [];
-  if (asked) waits.push(r.writer.settleWithin(ASK_DEADLINE_MS));
+  if (asked) waits.push(r.writer.settleWithin(2 * ASK_DEADLINE_MS, mine));
   if (r.rt.store.flushTask) waits.push(r.rt.store.flushTask);
   await Promise.all(waits.map((t) => t.catch(() => undefined)));
-  if (asked) r.writer.abandon('radioWrite returned with its ask unsettled');   // nothing may stay in flight that no answer waits for (only the ask this answer started: another radioWrite may own one)
   return { tick: r.tick, write: false, hold: false, live: false, beat: 0 };
 }
 

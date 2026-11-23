@@ -107,66 +107,80 @@ export type WriterDeps = {
   offlineFill?(): Entry[] | Promise<Entry[]>;
 };
 
-/** An ask that has not answered in this long can no longer answer (an answer that was let go, a fetch that was dropped, a continuation that never ran): it is abandoned, said in the log, and asked again by the next pulse.
- *  This is a deadline on a hang, not a limit on calls: a stretch is one model call that streams for tens of seconds (the desk's own whole-turn bound is 30 s per call; two minutes covers the front list, the
- *  story texts and the post with room), and an ask that is merely slow past it costs one more ask, not a stuck radio. */
+/** An ask that has not answered in this long is OVERDUE: it may still answer (a desk that streams for two minutes), and when it does its entries are used if nothing newer was applied. Being overdue lets the pulse start
+ *  ONE more ask for the dry spell, not a loop: a slow desk costs two calls, not one every 120 s, and the first answer to arrive is the one that is applied (the other is dropped as older). An ask that has not answered
+ *  in twice this long can no longer answer (an answer let go, a fetch dropped, a continuation that never ran) and is abandoned. A deadline on a hang, not a limit on calls. The transport's own timeout is the same
+ *  120 s (api.ts AUTHED_TIMEOUT_MS), so a real request slower than this fails there; the request itself cannot be cancelled from here (no abort signal reaches Exact's fetch in the reference), so an overdue ask
+ *  that is passed is left to end. */
 export const ASK_DEADLINE_MS = 120_000;
+const GIVE_UP_MS = 2 * ASK_DEADLINE_MS;
 
 /** Between two entries of a long answer: lets the next turn start (Exact gives a turn about 100 ms of CPU; Bun has no scheduler). */
 const yieldTurn = (label: string): Promise<void> => lapYield(`writer: ${label}`);
 
+type Flight = { id: number; startedAt: number; epoch: number; task?: Promise<void> };
+
 export class Writer {
-  latency = 0; inFlight = false; private startedAt = 0; dry = false; notice = ''; asks: string[] = [];
-  private opened = false; private quietOn?: string; private stops = 0; private task?: Promise<void>;
+  latency = 0; dry = false; notice = ''; asks: string[] = [];
+  /** The id of the ask `checkAhead` last started: a caller that waits for its ask names it, so it can abandon only that one (never another ask that started meanwhile). */
+  lastId = 0;
+  private opened = false; private quietOn?: string; private stops = 0;
+  private flights: Flight[] = []; private nextId = 0;
+  /** Entries the desk placed so far: an answer is used only when nothing newer was applied since its ask began. */
+  private applied = 0;
+  /** The one extra ask of this dry spell has been made. Cleared when an answer is applied or an ask fails, or a new spell begins (an ask starts with none in flight). */
+  private reasked = false;
   constructor(private d: WriterDeps) {}
-  settle(): Promise<void> { return this.task ?? Promise.resolve(); }
+  get inFlight(): boolean { return this.flights.length > 0; }
+  settle(): Promise<void> { return Promise.all(this.flights.map((f) => f.task ?? Promise.resolve())).then(() => undefined); }
   open(): void { this.opened = true; this.ask('open'); }
   /** The radio opened: the desk is asked from now on. `start` false only marks it (the pulse starts the ask inside an answer that waits for it). */
   openAhead(start = true): void { this.opened = true; if (start) this.checkAhead(); }
+  private quiet(): boolean { return this.quietOn !== undefined && this.quietOn === this.d.rt.store.onAir()?.id; }
+  private age(f: Flight): number { return this.d.now().getTime() - f.startedAt; }
   /** The sheet changed or an entry started: is the time ahead short? */
   checkAhead(): boolean {
     if (!this.opened) return false;
-    if (this.inFlight) { if (!this.overdue()) return false; this.abandon('no answer within its deadline'); }
-    const store = this.d.rt.store;
-    if (this.quietOn !== undefined && this.quietOn === store.onAir()?.id) return false;
-    if (!shouldAskMore(store.ahead(), this.latency)) return false;
+    for (const f of this.flights.filter((x) => this.age(x) > GIVE_UP_MS)) this.abandon('no answer in twice its deadline', f.id);
+    if (!this.wouldAsk()) return false;
+    if (this.flights.length === 0) this.reasked = false;
+    else { this.reasked = true; console.log(`writer: the desk's ask is overdue (${Math.round(this.age(this.flights[0]) / 1000)} s); one more is made for this spell and the first answer to arrive is used`); }
     this.ask('extend');
     return true;
   }
   /** Would an ask start now? (The pulse says so; a mutation then asks, and waits: a long fetch needs an answer that stays.) */
   wouldAsk(): boolean {
-    if (!this.opened) return false;
-    if (this.inFlight) return this.overdue();                                       // an ask past its deadline is no ask: the pulse says write and `checkAhead` abandons it
-    const store = this.d.rt.store;
-    if (this.quietOn !== undefined && this.quietOn === store.onAir()?.id) return false;
-    return shouldAskMore(store.ahead(), this.latency);
+    if (!this.opened || this.quiet() || !shouldAskMore(this.d.rt.store.ahead(), this.latency)) return false;
+    if (this.flights.length === 0) return true;
+    return this.flights.length === 1 && !this.reasked && this.age(this.flights[0]) > ASK_DEADLINE_MS;      // overdue: one more, once per spell
   }
-  private overdue(): boolean { return this.inFlight && this.d.now().getTime() - this.startedAt > ASK_DEADLINE_MS; }
-  /** The ask in flight can no longer answer, or its answer is not wanted: it is let go (its late result is dropped whole, as after a stop) and the next pulse asks again. */
-  abandon(why: string): void {
-    if (!this.inFlight) return;
-    console.log(`writer: the desk's ask did not answer (${why}); asking again`);
-    this.stops += 1; this.inFlight = false; this.publish(false);
+  /** One ask can no longer answer, or its answer is not wanted: it is let go (its late result is dropped whole, as after a stop). Only the ask named: another that started meanwhile is not touched. */
+  abandon(why: string, id: number): void {
+    const i = this.flights.findIndex((f) => f.id === id);
+    if (i < 0) return;
+    console.log(`writer: the desk's ask ${id} did not answer (${why}); letting it go`);
+    this.flights.splice(i, 1);
+    this.publish(this.flights.length > 0);
   }
-  /** Wait for the ask, but not for ever: past `ms` it is abandoned, so a mutation that waits on it returns and the pulse starts the next. */
-  async settleWithin(ms: number): Promise<void> {
-    const t = this.task;
-    if (!t || !this.inFlight) return;
+  /** Wait for the ask `id`, but not for ever: at `ms` that ask (and no other) is abandoned, so a mutation that waits on it returns. */
+  async settleWithin(ms: number, id: number): Promise<void> {
+    const f = this.flights.find((x) => x.id === id);
+    if (!f?.task) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<boolean>((res) => { timer = setTimeout(() => res(true), ms); });
-    const timedOut = await Promise.race([t.then(() => false, () => false), late]);
+    const timedOut = await Promise.race([f.task.then(() => false, () => false), late]);
     if (timer !== undefined) clearTimeout(timer);
-    if (timedOut || this.inFlight) this.abandon(timedOut ? `no answer in ${Math.round(ms / 1000)} s` : 'its answer ended before it did');
+    if (timedOut) this.abandon(`no answer in ${Math.round(ms / 1000)} s`, id);
   }
-  stop(): void { this.stops += 1; this.inFlight = false; this.quietOn = undefined; this.publish(false); }
+  stop(): void { this.stops += 1; this.flights = []; this.reasked = false; this.quietOn = undefined; this.publish(false); }
   private publish(writing: boolean): void { this.d.rt.setDesk({ notice: this.notice, writing, dry: this.dry }); }
 
   private ask(cause: string): void {
-    if (this.inFlight) return;
-    this.inFlight = true; this.asks.push(cause); this.publish(true);
     const gen = this.d.generation(), stops = this.stops, store = this.d.rt.store, airId = store.onAir()?.id, started = this.d.now().getTime();
-    this.startedAt = started;
-    this.task = (async () => {
+    const fl: Flight = { id: ++this.nextId, startedAt: started, epoch: this.applied };
+    this.lastId = fl.id; this.flights.push(fl); this.asks.push(cause); this.publish(true);
+    const live = (): boolean => gen === this.d.generation() && stops === this.stops && this.flights.includes(fl);
+    fl.task = (async () => {
       let added = 0, received = 0, dropped = 0, firstAt: number | undefined, failure: { kind: 'cancelled' | 'empty' | 'signedOut' | 'transport' | 'other' } | undefined;
       try {
         const now = this.d.now();
@@ -185,19 +199,20 @@ export class Writer {
         await yieldTurn('before post');
         const raw = await this.post(body);
         lap(`writer: the desk's reply received (${raw.length} chars)`);
-        if (gen !== this.d.generation() || stops !== this.stops) return;                      // signed out meanwhile: nothing of the answer is applied
+        if (!live()) return;                                                                  // signed out, stopped or let go meanwhile: nothing of the answer is applied
+        if (this.applied !== fl.epoch) { console.log(`writer: the desk's ask ${fl.id} answered after a newer one was applied; its answer is dropped`); this.drop(fl); return; }
         const dec = new StretchDecoder();
         const takeById = new Map(picked.map((t) => [t.takeID, t]));
         const look = { clip: () => undefined, take: (id: string) => { const t = takeById.get(id); return t ? { take_id: t.takeID, publisher: t.publisher, duration: t.duration, title: takeTitle(t.transcript), responds_to: t.respondsTo ? { route: t.respondsTo.route, title: t.respondsTo.title } : undefined } : undefined; } };
         for (const ev of [...dec.feed(raw), ...dec.finish()]) {
           if (ev.type === 'segment') {
-            if (stops !== this.stops) return;                                  // abandoned or stopped meanwhile: nothing more of its answer is placed
+            if (!live() || this.applied !== fl.epoch + added) return;          // let go, stopped, or another ask placed entries meanwhile: nothing more of its answer is placed
             const e = entryFrom(ev.segment as Incoming, look as never);
             if (!e) continue;
             if (firstAt === undefined) firstAt = this.d.now().getTime();
             received += 1;
             const r = this.d.rt.director.applyFromDesk(placeOp(e, cause), cause);
-            if (r?.applied) added += 1; else dropped += 1;
+            if (r?.applied) { added += 1; this.applied += 1; } else dropped += 1;
             await yieldTurn('after placing an entry');                        // each placement saves the whole sheet: one turn is 100 ms of CPU, and a stretch is dozens of entries
           } else if (ev.type === 'error' && added === 0) failure = { kind: 'other' };
         }
@@ -206,10 +221,12 @@ export class Writer {
         console.log(`writer: the desk's stretch failed (${cause}): ${k ?? 'other'}, status ${(err as { status?: number } | undefined)?.status ?? 'none'}, ${err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)}`);
         if (!failure) failure = { kind: k === 'signedOut' || k === 'transport' ? k : 'other' };
       }
-      if (gen !== this.d.generation() || stops !== this.stops) return;                       // stop() already cleared the flags; a later ask owns them now
+      if (!live()) return;                                                                   // stop() already cleared the flags; a later ask owns them now
       if (firstAt !== undefined) this.latency = Math.max(0.5, (firstAt - started) / 1000);
       const out = askOutcome({ added, received, dropped, failed: failure !== undefined && failure.kind !== 'empty', cause, airId });
-      this.inFlight = false; this.dry = out.dry;
+      this.drop(fl); this.dry = out.dry;
+      if (added > 0) this.flights = [];                                                      // answered: any other ask of the spell is older, its answer would be dropped as such
+      if (added > 0 || failure) this.reasked = false;
       if (out.clearQuiet) this.quietOn = undefined; else if (out.quietOn !== undefined) this.quietOn = out.quietOn;
       if (out.notice === 'clear') this.notice = ''; else if (out.notice === 'say') this.notice = plainWords(failure) ?? '';
       this.publish(false);
@@ -222,6 +239,7 @@ export class Writer {
       }
     })();
   }
+  private drop(f: Flight): void { const i = this.flights.indexOf(f); if (i >= 0) this.flights.splice(i, 1); }
   private async post(body: Record<string, unknown>): Promise<string> {
     try { return await this.d.post(body); }
     catch (e) {

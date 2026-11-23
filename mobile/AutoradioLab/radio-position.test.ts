@@ -21,7 +21,7 @@ import { barRun, getRadio, queueAct, queueView, radioMove, radioPageFacts, radio
 type Call = { op: string; name?: string; peek?: boolean };
 let calls: Call[] = [];
 let nowS = 1_700_000_000;
-let front = true;                                                    // the native fact `foreground`: the app is in front (UIApplication, the voice's own signal)                                            // the device's clock, seconds
+let front = true;                                                    // the native fact `foreground`: the app is in front (UIApplication, the voice's own signal)
 type Fake = { why: string; item: string; base: number; t0: number; duration: number; seq: number; journal: Record<string, unknown>[]; acked: number };
 let dk: Fake;
 const pos = (): number => (dk.why === 'playing' ? dk.base + (nowS - dk.t0) : dk.base);

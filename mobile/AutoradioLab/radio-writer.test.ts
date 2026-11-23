@@ -132,8 +132,8 @@ describe('the phone\'s opening', () => {
 
 // W8 to W11 (the radio runs dry when the writer's chained ask hangs; the failure list, written first):
 //  W8  an ask never starts another from its own tail: after an ask that added entries and left the time ahead short, exactly one ask has run; the next is the pulse's (`checkAhead` from `radioWrite`).
-//  W9  an ask in flight past its deadline can no longer answer: `wouldAsk` says so (the pulse names it), `checkAhead` abandons it, says so in the log, and asks again; the late answer of the abandoned ask is dropped.
-//  W10 `settleWithin(ms)` returns at the deadline with the ask still unsettled, and then nothing is in flight (the mutation `radioWrite` returns and the pulse restarts it).
+//  W9  a desk slower than the deadline is asked once more for the spell, not in a loop (a 150 s desk: ten minutes make two calls), and the first answer to arrive is used; an ask that never answers is let go at twice the deadline and asked again; `abandon` names its ask.
+//  W10 `settleWithin(ms, id)` returns at its deadline and lets go that ask only.
 //  W11 a dry sheet leads to an ask at the next pulse: nothing ahead, nothing in flight, the radio opened, the entry it last found nothing for no longer on air.
 describe('the writer never hangs the radio dry', () => {
   test('W8 an ask does not start another from its own tail', async () => {
@@ -141,27 +141,53 @@ describe('the writer never hangs the radio dry', () => {
     expect(w.asks).toEqual(['open']);
     expect(bodies.length).toBe(1);
   });
-  test('W9 an ask past its deadline is abandoned, said, and asked again; its late answer is dropped', async () => {
-    let release: (s: string) => void = () => undefined;
-    reply = () => new Promise((r) => { release = r; });
-    w.openAhead(false); expect(w.checkAhead()).toBe(true); await new Promise((r) => setTimeout(r, 0));
-    expect(w.inFlight).toBe(true); expect(w.wouldAsk()).toBe(false);
-    skewMs = ASK_DEADLINE_MS + 1000;
-    expect(w.wouldAsk()).toBe(true);                                                  // the pulse says write: the ask can no longer answer
-    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
-    reply = async () => answer(seg({ segment_id: 'n/0', kind: 'story', title: 'New', text: 'Fresh words.' }));
-    try { expect(w.checkAhead()).toBe(true); await settle(); } finally { console.log = log; }
-    expect(logs.some((l) => l.includes('writer: the desk\'s ask did not answer') && l.includes('asking again'))).toBe(true);
-    expect(rt.store.ahead().map((e) => e.title)).toContain('New');
-    const before = rt.store.sheet.entries.length;
-    release(answer(seg({ segment_id: 'old/0', kind: 'story', title: 'Old', text: 'Late words.' }))); await settle();
-    expect(rt.store.sheet.entries.length).toBe(before);
+  const longStory = (n: string): string => seg({ segment_id: `s/${n}`, kind: 'story', title: `Story ${n}`, text: 'word '.repeat(700) });     // minutes of speech each
+  test('W9 a desk slower than the deadline: ten minutes make fewer than five calls, the first answer to arrive is used, the other is dropped', async () => {
+    const waiting: ((s: string) => void)[] = [];
+    reply = () => new Promise((r) => { waiting.push(r); });
+    w.openAhead(false);
+    const answerAt = new Map<number, number>();                                        // call number -> the clock second its answer arrives (150 s after it was asked)
+    let seenCalls = 0;
+    for (let t = 0; t <= 600; t += 10) {
+      skewMs = t * 1000;
+      if (w.wouldAsk()) w.checkAhead();
+      await new Promise((r) => setTimeout(r, 0));
+      while (seenCalls < bodies.length) { answerAt.set(seenCalls, t + 150); seenCalls += 1; }
+      for (const [n, at] of [...answerAt]) if (at <= t) { answerAt.delete(n); waiting[n](answer(longStory(`${n}a`), longStory(`${n}b`), longStory(`${n}c`))); await new Promise((r) => setTimeout(r, 40)); }
+    }
+    expect(bodies.length).toBeLessThan(5); expect(bodies.length).toBeLessThanOrEqual(2);
+    const titles = rt.store.ahead().map((e) => e.title);
+    expect(titles.length).toBe(3); expect(new Set(titles).size).toBe(3);               // entries arrived, once: the second answer was dropped as older
+    await new Promise((r) => setTimeout(r, 40)); expect(w.inFlight).toBe(false);
   });
-  test('W10 settleWithin returns at its deadline and leaves nothing in flight', async () => {
+  test('W9 an ask that never answers is let go at twice the deadline and the radio is asked again', async () => {
     reply = () => new Promise(() => undefined);
     w.openAhead(false); w.checkAhead(); await new Promise((r) => setTimeout(r, 0));
+    skewMs = 2 * ASK_DEADLINE_MS + 1000;
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    try { expect(w.checkAhead()).toBe(true); } finally { console.log = log; }
+    await new Promise((r) => setTimeout(r, 20));
+    expect(logs.some((l) => l.includes('did not answer') && l.includes('letting it go'))).toBe(true);
+    expect(bodies.length).toBe(2);
+  });
+  test('W9 abandon names the ask it lets go: another ask that started meanwhile is left alone', async () => {
+    reply = async () => answer(seg({ segment_id: 'a/0', kind: 'story', title: 'A', text: 'Short.' }));
+    w.openAhead(false); w.checkAhead(); const first = w.lastId; await settle();
+    let release: (s: string) => void = () => undefined;
+    reply = () => new Promise((r) => { release = r; });
+    expect(w.checkAhead()).toBe(true); const second = w.lastId; await new Promise((r) => setTimeout(r, 0));
+    expect(second).not.toBe(first); expect(w.inFlight).toBe(true);
+    w.abandon('a stale caller', first);                                               // the first radioWrite wakes late and abandons ITS ask, which is long gone
     expect(w.inFlight).toBe(true);
-    const t0 = Date.now(); await w.settleWithin(30);
+    w.abandon('the right caller', second);
+    expect(w.inFlight).toBe(false);
+    release(answer());
+  });
+  test('W10 settleWithin returns at its deadline, lets go only the ask it waited for', async () => {
+    reply = () => new Promise(() => undefined);
+    w.openAhead(false); w.checkAhead(); const id = w.lastId; await new Promise((r) => setTimeout(r, 0));
+    expect(w.inFlight).toBe(true);
+    const t0 = Date.now(); await w.settleWithin(30, id);
     expect(Date.now() - t0).toBeLessThan(1000);
     expect(w.inFlight).toBe(false); expect(w.wouldAsk()).toBe(true);
   });

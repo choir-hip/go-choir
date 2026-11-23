@@ -59,6 +59,8 @@ describe('nothing is started and forgotten', () => {
 });
 
 
+// These three are a cheap tripwire made of greps: a chain through an alias, a callback or a helper would pass them. The behavioral protection is radio-writer.test.ts W8 (an ask starts no other)
+// and W9 (a slow desk, an ask that never answers, abandon scoped to its ask); cite those, not this, as the proof.
 describe('an ask of the desk starts only from a mutation\'s own body (the radio ran dry when a chained ask hung)', () => {
   test('the writer\'s `ask` body starts no other ask', () => {
     const w = src('radio-writer.ts');
