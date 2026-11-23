@@ -38,6 +38,7 @@ component SignInScreen
     signIn: action
     cancelSignIn: action
     openApproval: action
+    sheetNote: string
   view
     column position="absolute" inset=0 padding=24 gap=20 align-items="center" justify-content="center"
       box testId="ob-mark-slot" width=72 height=72 align-items="center" justify-content="center"
@@ -50,7 +51,9 @@ component SignInScreen
           column padding=20 gap=12 align-items="center"
             text "Your code" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             text au.userCode testId="signin-code" font-size="-exact-large-title" font-weight=600 font-family=th.fontMono color=th.fg
-            text "Approve this sign-in in your browser." font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted text-align="center"
+            text "Approve this sign-in in the window that opened." font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted text-align="center"
+            if sheetNote != ""
+              text sheetNote testId="signin-sheet-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
             button press=openApproval testId="signin-open" appearance="none"
               Btn(label="Open the approval page", primary=true, wide=false)
             button press=cancelSignIn testId="signin-cancel" appearance="none"

@@ -5,3 +5,9 @@ shape SignOutResult
   message: string
   // Counts every completed wipe (monotonic): the sources that keep state in memory are asked again when it changes.
   epoch: number
+
+// How the system sign-in sheet ended (signin-sheet.ts, `signInSheet`): returned (the page closed it: a hint to wait for the poll, not proof), cancelled (the
+// owner closed it: the pending code is abandoned) or failed (it could not open: `message` says so in plain words). Never a key, a code or a URL.
+shape SignInSheet
+  outcome: string
+  message: string

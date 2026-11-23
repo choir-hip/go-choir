@@ -75,6 +75,7 @@ component Autoradio
     signIn
     cancelSignIn
     openApproval
+    sheetNote
     signOut
     signOutNote
     acs
