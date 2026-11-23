@@ -65,6 +65,31 @@ final class HandsFreeToggleTests: XCTestCase {
         XCTAssertTrue(heard)
         rt.player.pause()
     }
+    /// The decision at the call site (review S5): turning voice on with the microphone not open says an error only for a FINAL state. A pending retry that then opens says nothing; one that fails says it once.
+    func listenErrors(_ rt: LabRuntime) -> [String] { rt.log.events.compactMap { if case .error(let stage, let m) = $0.event, stage == "listen" { return m } else { return nil } } }
+    func testAPendingMicrophoneThatOpensSaysNoError() async {
+        HandsFreeSwitch.shared.set(false)
+        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("hf-\(UUID().uuidString)"), session: NullSessionOwner())
+        rt.micSettleNanos = 10_000_000; rt.micPollNanos = 10_000_000
+        let reads = Locked<Int>(0)
+        rt.micStateNow = { reads.write { $0 += 1 }; return reads.value < 6 ? .pending : .open }
+        rt.setHandsFree(true, persist: false)
+        _ = await poll(3) { reads.value >= 6 }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(listenErrors(rt), [], "a retry that opens the microphone left no error line")
+        rt.setHandsFree(false, persist: false)
+    }
+    func testAFailedMicrophoneSaysItOnce() async {
+        HandsFreeSwitch.shared.set(false)
+        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("hf-\(UUID().uuidString)"), session: NullSessionOwner())
+        rt.micSettleNanos = 10_000_000; rt.micPollNanos = 10_000_000
+        let reads = Locked<Int>(0)
+        rt.micStateNow = { reads.write { $0 += 1 }; return reads.value < 4 ? .pending : .failed }
+        rt.setHandsFree(true, persist: false)
+        _ = await poll(3) { !self.listenErrors(rt).isEmpty }
+        XCTAssertEqual(listenErrors(rt).count, 1)
+        rt.setHandsFree(false, persist: false)
+    }
     func testOnStaysOnForTheQuietTimeoutThenGoesOffSilently() {
         let c = TestClock(); let s = make(c); s.set(true)
         let told = Locked<Int>(0)

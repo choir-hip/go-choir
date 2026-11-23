@@ -307,19 +307,23 @@ public final class LabRuntime: @unchecked Sendable {
             await engine.handsFreeSet(on)
             if on {
                 print("AUTORADIO " + MicLog.voiceOnLine(claim: coordinator.describe(), rate: Int(audio.micTapRate), active: audio.micActive, state: audio.micState))
-                if !audio.micActive, !audio.virtual {
-                    // The route may still be settling: look again before saying so.
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    let rate = Int(audio.micTapRate)
-                    print("AUTORADIO voice mic after the route settled rate=\(rate) tap=\(MicLog.tap(active: audio.micActive, rate: rate)) mic=\(audio.micState)")
-                    // An error only when it is final: while a retry is pending the microphone may still open, so the line says it is still trying (log only) and the state is looked at again.
-                    var waited = 0
-                    while audio.micState == .pending, self.handsFreeIsOn, waited < 40 { if waited == 0 { print("AUTORADIO voice mic still trying") }; try? await Task.sleep(nanoseconds: 1_000_000_000); waited += 1 }
-                    if self.handsFreeIsOn, let say = MicLog.finalError(audio.micState, rate: Int(audio.micTapRate)) { log.emit(.error(stage: "listen", message: say)) }
-                }
+                if !audio.micActive, !audio.virtual { await reportMicWhenSettled() }
             }
         }
         refresh()
+    }
+    /// Voice was turned on and the microphone is not open: look again after the route settles, and say it is an error only when that is FINAL (failed after its retries, or not allowed); while a retry is pending the microphone may still open.
+    /// The delays and the state read are seams for the test of this decision (HandsFreeToggleTests): the call site is what must not say an error for a pending retry.
+    var micSettleNanos: UInt64 = 3_000_000_000, micPollNanos: UInt64 = 1_000_000_000
+    var micStateNow: (() -> LiveAudio.MicState)?
+    func reportMicWhenSettled() async {
+        let state: () -> LiveAudio.MicState = { self.micStateNow?() ?? self.audio.micState }
+        try? await Task.sleep(nanoseconds: micSettleNanos)
+        let rate = Int(audio.micTapRate)
+        print("AUTORADIO voice mic after the route settled rate=\(rate) tap=\(MicLog.tap(active: audio.micActive, rate: rate)) mic=\(state())")
+        var waited = 0
+        while state() == .pending, handsFreeIsOn, waited < 40 { if waited == 0 { print("AUTORADIO voice mic still trying") }; try? await Task.sleep(nanoseconds: micPollNanos); waited += 1 }
+        if handsFreeIsOn, let say = MicLog.finalError(state(), rate: Int(audio.micTapRate)) { log.emit(.error(stage: "listen", message: say)) }
     }
     /// The stored state again, after a screen's own turn-on.
     public func restoreHandsFree() { setHandsFree(HandsFreeSwitch.shared.isOn) }
