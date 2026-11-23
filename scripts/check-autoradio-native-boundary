@@ -3,7 +3,7 @@
 station XG). Owner rule (CLAUDE.md, Product): the phone app is Exact; only voice is native.
 
 It counts, on the tree it is run in:
-  files, lines  Swift (and Kotlin) source under mobile/AutoradioKit/ and mobile/exact-package/apple/,
+  files, lines  Swift (and Kotlin) source under mobile/AutoradioKit/, mobile/exact-package/apple/ and mobile/AutoradioLab/modules/ (the app's own native module, ModelsEntry.swift),
                 Tests/ excluded, that is NOT on the voice-and-deck list;
   names         names in the native interface (mobile/exact-package/exact.json plus the lane
                 fragments in mobile/exact-package/interface/) that are NOT on the list.
@@ -22,7 +22,7 @@ Run with python3 -I (scripts/gates does).
 """
 import argparse, fnmatch, json, os, subprocess, sys
 
-ROOTS = ("mobile/AutoradioKit/", "mobile/exact-package/apple/")
+ROOTS = ("mobile/AutoradioKit/", "mobile/exact-package/apple/", "mobile/AutoradioLab/modules/")
 EXACT_JSON = "mobile/exact-package/exact.json"
 FRAGMENTS = "mobile/exact-package/interface/"
 KEYS = ("files", "lines", "names")

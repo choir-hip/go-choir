@@ -85,6 +85,8 @@ case("a deleted non-voice file without lowering the ceiling fails", 1, "below th
      lambda r: os.remove(os.path.join(r, KIT + "Pages.swift")))
 case("a new file on the voice list is not counted", 0, "native boundary holds",
      lambda r: put(r, KIT + "Voice/More.swift", "v\n" * 500))
+case("a new Swift file in the app's own native module counts", 1, "lines is 6, above the ceiling 5",
+     lambda r: put(r, "mobile/AutoradioLab/modules/apple/Entry.swift", "n\n"))
 case("a new Kotlin file outside the list fails", 1, "files is 3",
      lambda r: put(r, "mobile/android/Page.kt", "k\n"))
 case("a new native interface name fails", 1, "names is 2, above the ceiling 1",
