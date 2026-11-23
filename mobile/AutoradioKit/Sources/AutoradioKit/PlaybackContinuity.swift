@@ -181,10 +181,12 @@ public final class SessionWatcher: @unchecked Sendable {
         switch name {
         case "didEnterBackground":
             runtime.coordinator.markSuspect("app in the background")
-            Task { await runtime.coordinator.setBackgrounded(true) }       // voice on: the microphone is given up, the radio plays on
+            runtime.coordinator.noteBackgrounded(true)                      // the fact now, in the order of the notices
+            Task { await runtime.coordinator.applyBackgrounded() }          // voice on: the microphone is given up, the radio plays on
         case "didBecomeActive":
+            runtime.coordinator.noteBackgrounded(false)
             Task { @MainActor in
-                await runtime.coordinator.setBackgrounded(false)
+                await runtime.coordinator.applyBackgrounded()
                 returnedToForeground()
             }
         default: break

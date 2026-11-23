@@ -146,11 +146,17 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     /// interruption's end and a press of Play.
     public var isInterrupted: Bool { lock.lock(); defer { lock.unlock() }; return _interrupted }
     /// The app left or came back to the foreground: voice on gives the microphone up (a playback session) and takes it back.
-    public func setBackgrounded(_ b: Bool) async {
-        lock.lock(); let was = _backgrounded; _backgrounded = b; lock.unlock()
-        guard was != b, voiceOn() else { return }
-        audio.micSuspended = b
-        print(b ? "AUTORADIO voice mic released why=background" : "AUTORADIO voice mic taken why=foreground")
+    public func setBackgrounded(_ b: Bool) async { noteBackgrounded(b); await applyBackgrounded() }
+    /// The fact, at once and in order: the lifecycle notices arrive on the main queue in the order they happened, so this is called from the notice itself. The work that follows (`applyBackgrounded`) is a Task and
+    /// Tasks do not run in order: it reads the value as it is by then, so a quick lock and unlock cannot leave the flag `true` while the app is in front (review F6).
+    public func noteBackgrounded(_ b: Bool) { lock.lock(); _backgrounded = b; lock.unlock() }
+    private var _bgApplied = false
+    /// Carry out what the flag says: the microphone given up in the background and taken back in front.
+    public func applyBackgrounded() async {
+        lock.lock(); let now = _backgrounded, was = _bgApplied; _bgApplied = now; lock.unlock()
+        guard was != now, voiceOn() else { return }
+        audio.micSuspended = now
+        print(now ? "AUTORADIO voice mic released why=background" : "AUTORADIO voice mic taken why=foreground")
         await reapply()
     }
 

@@ -31,6 +31,18 @@ final class VoiceCoexistTests: XCTestCase {
         XCTAssertFalse(c.audio.micSuspended)
     }
 
+    /// F6: the lifecycle notices set the fact in order; the tasks that carry it out may run in any order and still end with the app in front when it is.
+    func testALockAndUnlockInAQuickSuccessionLeavesTheAppInFront() async {
+        let (c, _) = coordinator()
+        c.noteBackgrounded(true); c.noteBackgrounded(false)       // didEnterBackground, then didBecomeActive
+        await c.applyBackgrounded(); await c.applyBackgrounded()    // the two tasks, in either order
+        XCTAssertFalse(c.isBackgrounded); XCTAssertFalse(c.audio.micSuspended)
+        c.noteBackgrounded(true); await c.applyBackgrounded()
+        XCTAssertTrue(c.isBackgrounded); XCTAssertTrue(c.audio.micSuspended)
+        c.noteBackgrounded(false); await c.applyBackgrounded(); await c.applyBackgrounded()
+        XCTAssertFalse(c.isBackgrounded); XCTAssertFalse(c.audio.micSuspended)
+    }
+
     /// B(a),(c): while another app has the session nothing here asks for it back, except the foreground, the interruption's end and Play.
     func testWhileAnotherAppHasTheSessionTheRetryDoesNotAskForItBack() async {
         let (c, o) = coordinator()
