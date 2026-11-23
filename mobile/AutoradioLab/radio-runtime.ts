@@ -120,7 +120,8 @@ export class RadioRuntime {
   async toggle(): Promise<'paused' | 'resumed' | 'started' | 'nothing'> {
     const st = await this.deck.state(); this.deckState = st;
     if (this.store.onAir()) {
-      if (st.why === 'playing') { await this.deck.act('pause'); return 'paused'; }
+      if (st.why === 'playing') { this.pauseEpoch += 1; this.listenerPaused = true; await this.deck.act('pause'); return 'paused'; }
+      this.pauseEpoch += 1; this.listenerPaused = false;
       await this.deck.act('resume'); return 'resumed';
     }
     this.director.advanceIfIdle();
@@ -274,6 +275,8 @@ export class RadioRuntime {
     if (!this.inPump) void this.pump();
   }
   private inPump = false;
+  /** The listener's own Pause and Play (`toggle`): counted, so a start whose words were being fetched when it was pressed can tell it was paused meanwhile and does not play over it. */
+  private pauseEpoch = 0; private listenerPaused = false;
   /** What was last handed the deck for each held id (deck-ops.ts `heldPlan`): a held entry the desk has rewritten since is handed over again. */
   private heldSent = new Map<string, string>();
   /** Clips the listener kept listening to: the episode went on past the clip's end. */
@@ -281,7 +284,7 @@ export class RadioRuntime {
 
   private async startEntry(e: Entry, st: DeckState): Promise<void> {
     if (st.item === e.id) return;                               // the deck is already playing it
-    const gen = this.director.generation, epoch = this.epoch;
+    const gen = this.director.generation, epoch = this.epoch, pe = this.pauseEpoch;
     const p = planEntry(e, this.director.provided.get(e.id), audioSpec(e));
     let item: DeckItem | undefined, why = '';
     const speech = (id: string, title: string, document: string, paragraphs: string[]) => deckItem({ id, kind: 'speech', title, document, paragraphs: paragraphs.join('\n\n'), requiresPreviousHeard: e.kind === 'transition', segment: segmentOf(e.kind) });
@@ -302,6 +305,7 @@ export class RadioRuntime {
     if (!item) { console.log(`radio: ${e.id} did not start: ${why}`); this.director.failedToStart(e.id, why); return; }
     this.known.set(e.id, item);
     await this.deck.play(item);
+    if (this.pauseEpoch !== pe && this.listenerPaused) await this.deck.act('pause');        // the listener pressed Pause while the words were on their way: the entry is on air, and paused (Play starts it)
     await this.keepHeld();
   }
 
@@ -326,6 +330,7 @@ export class RadioRuntime {
   /** Is there pump work a pulse might be let go in the middle of: an entry to start, or a held list that is not the sheet's next entries? (A mutation then does it and stays until it is done.) */
   /** What the deck last said it holds and plays (for the console). */
   knownCount(): number { return this.known.size; }
+  heldSentCount(): number { return this.heldSent.size; }
   deckLine(): { held: number; item: string } { return { held: this.deckState?.held.length ?? 0, item: this.deckState?.item ?? '' }; }
   /** The app is in front, as of the last read of the native facts. */
   inFront = (): boolean => this.facts.foreground;
@@ -357,6 +362,7 @@ export class RadioRuntime {
     if (epoch !== this.epoch) return;
     for (const w of wanted) this.known.set(w.id, w);
     for (const id of [...this.known.keys()]) if (!this.store.entry(id)) this.known.delete(id);        // what left the sheet is forgotten (each held up to 8 KB of words)
+    for (const id of [...this.heldSent.keys()]) if (!this.store.entry(id)) this.heldSent.delete(id);   // and so is what was handed to the deck for it (whole items as JSON)
     try { await syncHeld(this.deck, wanted, this.heldSent); } catch { /* the deck did not answer: the next pump holds again */ }
   }
 

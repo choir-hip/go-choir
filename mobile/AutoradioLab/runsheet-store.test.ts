@@ -469,3 +469,34 @@ describe('posting backs off and the pending list is bounded', () => {
     expect(logs.some((l) => /could not be read/.test(l) && /1/.test(l))).toBe(true);
   });
 });
+
+describe('the pending bound drops whole chains and says so (seat 2, item 6)', () => {
+  const chain = (i: number): Op[] => {
+    const id = `l-${String(i).padStart(5, '0')}`;
+    return [
+      { op_id: `p-${i}-a`, by: 'listener', op: 'place', at: 'end', entry: { id, kind: 'story', placed_by: 'listener', state: 'ahead', title: 'T', text: 'W.', est_seconds: 5, revision: 0 } as Entry, base_version: 0 } as Op,
+      { op_id: `p-${i}-b`, by: 'phone', op: 'aired', id, state: 'on_air', position_seconds: 0, base_version: 0 } as Op,
+      { op_id: `p-${i}-c`, by: 'phone', op: 'aired', id, state: 'heard', ended: { outcome: 'finished', at: '2023-11-14T22:00:00Z', last_block: 0 }, position_seconds: 1, base_version: 0 } as Op,
+    ];
+  };
+  test('B1-3b a long offline stretch of place, air and end ops is bounded by whole entries: no entry keeps its end without its place', () => {
+    const s = new RunSheetStore({ retryAfterMs: 3_600_000 });
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    try { for (let i = 0; i < 720; i++) s.pending.push(...chain(i)); s.place(story('l-last', { placed_by: 'listener' }), 'end', { by: 'listener' }); } finally { console.log = log; }
+    expect(s.pending.length).toBeLessThanOrEqual(2000);
+    const by = new Map<string, string[]>();
+    for (const o of s.pending) { const k = o.entry?.id ?? o.id ?? ''; by.set(k, [...(by.get(k) ?? []), o.op + ':' + (o.state ?? '')]); }
+    for (const [k, v] of by) if (k.startsWith('l-0')) expect(v, k).toEqual(['place:', 'aired:on_air', 'aired:heard']);
+    expect(s.lostPending).toBeGreaterThan(0); expect(logs.some((l) => l.includes('dropped'))).toBe(true);
+    expect(by.get('l-last')?.[0]).toBe('place:');                                     // the newest act is never the one dropped
+  });
+  test('B1-3c a restore trims a list that is over the bound', async () => {
+    const mem = memory();
+    const a = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
+    for (let i = 0; i < 720; i++) a.pending.push(...chain(i));
+    await a.save();
+    const b = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
+    const log = console.log; console.log = () => undefined; try { await b.restore(); } finally { console.log = log; }
+    expect(b.pending.length).toBeLessThanOrEqual(2000);
+  });
+});

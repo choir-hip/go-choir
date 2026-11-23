@@ -51,12 +51,12 @@ public final class HeldPages: @unchecked Sendable {
     // read the page under, and one older than the newest known (`SharedGeneration`, the radioSet and editionMirror rule) is dropped, so the next account's voice never holds the old account's page.
     @discardableResult
     public func hold(gen: Int, _ p: HeldPage) -> Bool {
-        guard SharedGeneration.accepts(gen) else { return false }
-        lock.lock(); defer { lock.unlock() }
-        pages[p.address] = p
-        recency.removeAll { $0 == p.address }; recency.append(p.address)
-        while pages.count > limit, let oldest = recency.first, oldest != p.address { recency.removeFirst(); pages[oldest] = nil }
-        return true
+        SharedGeneration.admit(gen) {
+            lock.lock(); defer { lock.unlock() }
+            pages[p.address] = p
+            recency.removeAll { $0 == p.address }; recency.append(p.address)
+            while pages.count > limit, let oldest = recency.first, oldest != p.address { recency.removeFirst(); pages[oldest] = nil }
+        }
     }
     public func page(_ address: String) -> HeldPage? {
         lock.lock(); defer { lock.unlock() }

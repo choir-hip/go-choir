@@ -92,7 +92,24 @@ export function adoptNative(native: NativeReader | null | undefined, source = ''
 
 /** The app module's `later`, for the native pair that seals mail (mail-seal.ts); null when there is no module. */
 export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }) => Promise<unknown>) | null {
-  return reader && reader.available !== false ? (r) => reader!.later(r) : null;
+  if (!reader || reader.available === false) return null;
+  const native = reader;
+  // The first native call of a JS context announces this context's generation, as a BOOT (the native module instance lives per session, a reload of the bundle does not restart it: docs/reference/exact/native-modules.md "Threading and lifecycle"), before anything else
+  // goes over: native adopts a boot even when it is below the newest generation it saw in an earlier context, so a restart at 0 is not refused for the life of the process (AutoradioKit `SharedGeneration.boot`).
+  // Sent first, not waited for: native takes its calls in the order they arrive, and a native that never answers the announcement must not stop every call behind it.
+  return (r) => {
+    if (r.op !== 'generation' && !bootSent) bootSent = Promise.resolve(native.later({ op: 'generation', gen: generation, boot: true })).then(() => undefined, () => undefined);
+    return native.later(r);
+  };
+}
+let bootSent: Promise<void> | null = null;
+/** For tests: a fresh JS context (the boot is announced again). */
+export function resetBootForTest(): void { bootSent = null; }
+/** Tell native the generation shared code is at NOW (a floor: native refuses what is stamped below it from here on). The wipe's last act, so nothing computed before it can land after it. */
+export async function announceGeneration(): Promise<void> {
+  const later = nativeLater();
+  if (!later) return;
+  try { await later({ op: 'generation', gen: generation }); } catch { /* native refuses by the generation it last knew; the next push says it again */ }
 }
 
 async function keptItem(account: Account): Promise<string | null> {
@@ -325,7 +342,7 @@ export async function keyState(): Promise<{ state: KeyState; digest: string; err
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: the generation and the rest as a fresh process has them. */
-export function resetSeam(): void { resetSession(); generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
+export function resetSeam(): void { resetSession(); bootSent = null; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

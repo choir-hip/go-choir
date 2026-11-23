@@ -423,7 +423,7 @@ describe('the migration from the Swift storage (G1)', () => {
   const load = async (m: ReturnType<typeof memFs>, host = 'native') => { const s = await T.themeStore(m.storage); await T.themeMigrate(host, m.storage); return s; };
   const legacy = (over: Record<string, unknown> = {}, log: string[] = []) => ({
     available: true,
-    later: async (r: { op: string }) => { log.push(r.op); return r.op === 'themeLegacy' ? { found: true, theme: 'mine', mode: 'dark', files: { 'mine.json': JSON.stringify(doc('mine')), 'texture-ember.json': JSON.stringify(T.parseTextureTheme(demo()).theme), 'broken.json': 'nope' }, ...over } : { done: true }; },
+    later: async (r: { op: string }) => { if (r.op !== 'generation') log.push(r.op); return r.op === 'themeLegacy' ? { found: true, theme: 'mine', mode: 'dark', files: { 'mine.json': JSON.stringify(doc('mine')), 'texture-ember.json': JSON.stringify(T.parseTextureTheme(demo()).theme), 'broken.json': 'nope' }, ...over } : { done: true }; },
   });
   test('G1 the old choice and the old themes are carried over once; the old copy is released after; the next launch asks nothing', async () => {
     const m = memFs(); const log: string[] = [];

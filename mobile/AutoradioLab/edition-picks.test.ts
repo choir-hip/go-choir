@@ -231,7 +231,7 @@ describe('P5 the native copy', () => {
 });
 
 describe('P6 the old Swift file is never read', () => {
-  const ALLOWED = ['editionMirror', 'editionMirrorReset', 'editionHeard', 'editionSaid'];
+  const ALLOWED = ['generation', 'editionMirror', 'editionMirrorReset', 'editionHeard', 'editionSaid'];      // 'generation': the boot announcement every JS context sends first (api.ts nativeLater)
   test('the only native calls are the voice\'s and the mirror\'s: no read of the old file, no delete of it', async () => {
     const ops: string[] = [];
     bindNative({ later: async (r: { op: string }) => { ops.push(r.op); return {}; } } as never);

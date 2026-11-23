@@ -28,7 +28,7 @@ export const MAX_BATCH_OPS = 64;
 export const MAX_BATCH_BYTES = 256 * 1024;
 /** After a post the route did not take, the next waits the route's Retry-After, or 30 s doubling to 5 min (a 429 or an offline phone is not posted to every tick). The sign-out's settle posts whatever this says. */
 export const POST_BACKOFF_BASE_MS = 30_000, POST_BACKOFF_MAX_MS = 300_000;
-/** The pending list is bounded: past this many ops the OLDEST air reports (`aired`, the verdicts) are dropped first, said in the log and counted in `lostPending`; a place, remove, move, skip or clear is never dropped by this rule. About 700 entries offline. */
+/** The pending list is bounded: past this many ops the oldest WHOLE ENTRIES' chains are dropped (see `bound`), said in the log and counted in `lostPending`. About 700 entries offline. */
 export const MAX_PENDING = 2000;
 
 /** Where an entry was when it left the air: the server block being spoken (`last_block`) and the seconds into the entry. */
@@ -202,13 +202,24 @@ export class RunSheetStore {
     return result;
   }
 
-  /** The pending list's bound (`MAX_PENDING`): the oldest air reports go first, and it is said. */
+  /** The pending list's bound (`MAX_PENDING`). The rule: whole entries go, never single ops. The ops of one entry (its place, its air reports, its end) are one chain; an end kept without its place, or an `on_air` dropped with its `heard`
+   *  kept, would be refused by the server. Chains of entries that were heard or skipped, or that only report (no place in the list), go first, oldest first, then the oldest of the rest; an op that names no entry (a clear, a previous) is a chain of its own. Said in the log and
+   *  counted in `lostPending` (the pulse's log line carries it). */
   private bound(): void {
     const over = this.pending.length - MAX_PENDING;
     if (over <= 0) return;
-    let dropped = 0;
-    this.pending = this.pending.filter((o) => { if (dropped < over && o.op === 'aired') { dropped += 1; return false; } return true; });
-    if (dropped > 0) { this.lostPending += dropped; console.log(`runsheet: ${this.pending.length + dropped} ops were pending offline, past ${MAX_PENDING}: the ${dropped} oldest air reports were dropped (${this.lostPending} in all this launch)`); }
+    const key = (o: Op): string => o.entry?.id ?? o.id ?? o.op_id;
+    const order: string[] = [], size = new Map<string, number>(), finished = new Set<string>(), placed = new Set<string>();
+    for (const o of this.pending) { const k = key(o); if (!size.has(k)) order.push(k); size.set(k, (size.get(k) ?? 0) + 1); if (o.op === 'aired' && (o.state === 'heard' || o.state === 'skipped')) finished.add(k); if (o.op === 'place') placed.add(k); }
+    const newest = key(this.pending[this.pending.length - 1]);
+    const cheap = (k: string): boolean => finished.has(k) || !placed.has(k);      // an entry already heard, or one whose place is not in the list (only reports: the server has the entry)
+    const victims = [...order.filter(cheap), ...order.filter((k) => !cheap(k))].filter((k) => k !== newest);
+    const drop = new Set<string>(); let n = 0;
+    for (const k of victims) { if (n >= over) break; drop.add(k); n += size.get(k) ?? 0; }
+    if (n === 0) return;
+    this.pending = this.pending.filter((o) => !drop.has(key(o)));
+    this.lostPending += n;
+    console.log(`runsheet: ${this.pending.length + n} ops were pending offline, past ${MAX_PENDING}: ${n} ops of ${drop.size} whole entries (the oldest) were dropped (${this.lostPending} in all this launch)`);
   }
   mintOpId = (): string => mintId('p-');
   /** The deck's own time when it gave one (RFC 3339, the fraction cut), else the clock's. */
@@ -402,6 +413,7 @@ export class RunSheetStore {
     for (const raw of Array.isArray(saved.pending) ? saved.pending : []) { try { pending.push(decodeOp(raw)); } catch { lost += 1; } }
     if (lost > 0) console.log(`runsheet: restore: ${lost} pending op${lost === 1 ? '' : 's'} could not be read and ${lost === 1 ? 'was' : 'were'} dropped; ${pending.length} kept`);
     this.sheet = sheet; this.pending = pending; this.sheetEpoch = saved.epoch ?? 0;
+    this.bound();                                                                       // a file written before the bound, or by a longer offline stretch, is trimmed by the same rule
     recover?.(this);                      // what the deck journalled while shared code was not running (the runtime reads it): a verdict heard stays
     const e = onAirEntry(this.sheet);
     if (e) this.airedEnded(e.id, 'skipped', 'failed', NO_REPORT, 'interrupted by a restart'); else void this.save();
