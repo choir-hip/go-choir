@@ -166,7 +166,7 @@ The phone app uses this same flow. Its Sign in used to open `/device` in the ful
 `state=<the app's nonce>`; `POST /auth/device/approve` accepts them as optional fields and answers `return_to`, built by the server from a fixed
 list of app ids (`DeviceReturnSchemes`), which the page navigates to so the sheet closes. The callback is `<scheme>:/signed-in?state=<nonce>`: no key,
 no code, no account id. Nothing about the flow's security changed: a passkey session still approves, an email session is refused, the key is still
-collected once by the poller that holds the device code. A refused `return` is a 400 before the code is looked up. Rollback: revert; the app then
+collected once by the poller that holds the device code. A `return` or `state` that is not ours never refuses the approval: the decision is recorded and `return_to` is left out. Rollback: revert; the app then
 opens nothing, so the revert must take the app change with it.
 
 ## Rollback
