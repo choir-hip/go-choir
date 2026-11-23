@@ -7,9 +7,10 @@
 //  G3 (D3) a radioSet native refused (ok: false) is not recorded as sent: the next pulse sends it again with a fresh stamp, once per pulse; an accepted one is not sent again.
 //  G4 (D3) editionMirror returns native's refusal, the mirror is not marked pushed, and the stamp the call carries is the one it checked.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { abortSignOut, adoptNative, accountGeneration, beginSignOut, nextGeneration, nativeLater, resetBootForTest, resetSeam } from './api.ts';
+import { setAnnounceDeadlineForTest, abortSignOut, adoptNative, accountGeneration, beginSignOut, nextGeneration, nativeLater, resetBootForTest, resetSeam } from './api.ts';
 import { wipeAll } from './account.ts';
-import { radioPulse, wipeRadio, getRadio } from './radio-bridge.ts';
+import { sealingBlocked } from './api.ts';
+import { radioPulse, wipeRadio, getRadio, SHEET_FILE } from './radio-bridge.ts';
 import { nativeDevice, forgetPicks, picksPage, type Device } from './edition-picks.ts';
 
 type Call = { op: string; gen?: number; boot?: boolean; [k: string]: unknown };
@@ -133,5 +134,84 @@ describe('G5 the stamp is the generation the radio was made under (seat 2, item 
     const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
     try { await radioPulse(undefined, f.native as never); } finally { console.log = log; }
     expect(logs.some((l) => l.includes('native refused') && l.includes('radioSet'))).toBe(true);
+  });
+});
+
+// The third review round (gen-review): the windows that remained.
+//  G6 the block is set before beginSignOut's awaits: while the kept session is being read the radio already keeps its own stamp.
+//  G7 a radio is never restored or restamped across a wipe: the sheet file is removed even when the wipe throws, a removal that failed is tried again and nothing is restored from it, and a sign-out that
+//     was given up after a THROW (unknown whether the key and the native stores went) does not hand the old radio the new generation.
+//  G8 the wipe's announcement has a deadline and says so when it fails; the sign-out still completes.
+describe('G6 the window while the kept session is read', () => {
+  test('sealingBlocked is true and the radio keeps its stamp while beginSignOut is still reading the key', async () => {
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    const f = fakeNative(0);
+    const held = { available: true, later: async (r: Call) => { if (r.op === 'get') { await gate; return { found: false }; } return f.native.later(r); } };
+    adoptNative(held as never, 'test');
+    const r = await getRadio(undefined, held as never); const made = r.gen;
+    const begun = beginSignOut();                                                  // not awaited: it is inside keptSession
+    await new Promise((x) => setTimeout(x, 20));
+    expect(sealingBlocked()).toBe(true);
+    await radioPulse(undefined, held as never);
+    expect(f.s.calls.filter((c) => c.op === 'radioSet').map((c) => c.gen)).toEqual([made]);      // not the new generation
+    release(); await begun;
+  });
+});
+
+describe('G7 never restored or restamped across a wipe', () => {
+  const store = (files: Map<string, Uint8Array>, rmFails: { n: number }) => ({
+    fs: {
+      readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; },
+      atomicWriteFile: async (p: string, b: Uint8Array) => { files.set(p, b); },
+      rm: async (p: string) => { if (rmFails.n > 0) { rmFails.n -= 1; throw new Error('EIO'); } files.delete(p); },
+      stat: async (p: string) => { if (!files.has(p)) throw new Error('ENOENT'); return {}; },
+    },
+  });
+  const oldSheet = JSON.stringify({ sheet: { version: 3, position_seconds: 0, entries: [{ id: 'old-1', kind: 'story', placed_by: 'desk', state: 'ahead', title: 'Old account', text: 'W.', est_seconds: 5, revision: 0 }], applied_ops: [], master_version: 0, sheet_epoch: 0 }, pending: [], epoch: 0 });
+  test('the sheet file is removed even when the wipe throws', async () => {
+    const files = new Map<string, Uint8Array>([[SHEET_FILE, new TextEncoder().encode(oldSheet)]]);
+    const f = fakeNative(0); adoptNative(f.native as never, 'test');
+    const s = store(files, { n: 0 }) as never;
+    const r = await getRadio(s, f.native as never);
+    expect(r.rt.store.entry('old-1')).toBeDefined();
+    r.rt.signOut = async () => { throw new Error('the wipe threw'); };
+    await wipeRadio(s).catch(() => undefined);
+    expect(files.has(SHEET_FILE)).toBe(false);
+  });
+  test('a removal that failed is tried again and the next radio starts empty', async () => {
+    const files = new Map<string, Uint8Array>([[SHEET_FILE, new TextEncoder().encode(oldSheet)]]);
+    const f = fakeNative(0); adoptNative(f.native as never, 'test');
+    const s = store(files, { n: 2 }) as never;      // the store's own removal and the bridge's both fail
+    await getRadio(s, f.native as never);
+    await wipeRadio(s);                                                             // the removal fails once: the file is still there
+    expect(files.has(SHEET_FILE)).toBe(true);
+    const next = await getRadio(s, f.native as never);
+    expect(next.rt.store.entry('old-1')).toBeUndefined();                           // not restored
+    expect(files.has(SHEET_FILE)).toBe(false);                                      // and removed again
+  });
+  test('a sign-out given up after a throw does not give the old radio the new generation', async () => {
+    const f = fakeNative(0); adoptNative(f.native as never, 'test');
+    const r = await getRadio(undefined, f.native as never); const made = r.gen;
+    await beginSignOut(); f.s.newest = accountGeneration();
+    abortSignOut(false);                                                            // native threw: the key may be gone and its stores wiped
+    await radioPulse(undefined, f.native as never);
+    expect(r.gen).toBe(made); expect(f.s.pushed.length).toBe(0);
+  });
+});
+
+describe('G8 the wipe\'s announcement', () => {
+  test('a native that never answers it does not hang the wipe, and the failure is in the log', async () => {
+    const never = { available: true, later: async (r: Call) => (r.op === 'generation' ? new Promise(() => undefined) : {}) };
+    adoptNative(never as never, 'test'); setAnnounceDeadlineForTest(40);
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    try { const t0 = Date.now(); await wipeAll(undefined, undefined, []); expect(Date.now() - t0).toBeLessThan(1500); } finally { console.log = log; setAnnounceDeadlineForTest(undefined); }
+    expect(logs.some((l) => l.includes('generation floor') && l.includes('not announced'))).toBe(true);
+  });
+  test('a native that throws on it is said too', async () => {
+    const bad = { available: true, later: async (r: Call) => { if (r.op === 'generation' && r.boot !== true) throw new Error('no'); return {}; } };
+    adoptNative(bad as never, 'test');
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    try { await wipeAll(undefined, undefined, []); } finally { console.log = log; }
+    expect(logs.some((l) => l.includes('not announced'))).toBe(true);
   });
 });

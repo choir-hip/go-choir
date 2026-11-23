@@ -98,7 +98,7 @@ export function nativeLater(): ((request: { op: string; account?: Account; b64?:
   // goes over: native adopts a boot even when it is below the newest generation it saw in an earlier context, so a restart at 0 is not refused for the life of the process (AutoradioKit `SharedGeneration.boot`).
   // Sent first, not waited for: native takes its calls in the order they arrive, and a native that never answers the announcement must not stop every call behind it.
   return (r) => {
-    if (r.op !== 'generation' && !bootSent) bootSent = Promise.resolve(native.later({ op: 'generation', gen: generation, boot: true })).then(() => undefined, () => undefined);
+    if (r.op !== 'generation' && !bootSent) bootSent = Promise.resolve(native.later({ op: 'generation', gen: generation, boot: true })).then(() => undefined, (e: unknown) => { console.log(`api: the boot announcement failed (${e instanceof Error ? e.message : 'threw'}): native keeps the generation it last saw`); });
     return native.later(r);
   };
 }
@@ -106,10 +106,18 @@ let bootSent: Promise<void> | null = null;
 /** For tests: a fresh JS context (the boot is announced again). */
 export function resetBootForTest(): void { bootSent = null; }
 /** Tell native the generation shared code is at NOW (a floor: native refuses what is stamped below it from here on). The wipe's last act, so nothing computed before it can land after it. */
+/** A deadline, not a limit: a native that does not answer must not hold the sign-out; the failure is said in the log (the proof reads it) and native keeps refusing by the generation it last knew. */
+let announceDeadlineMs = 5000;
+export function setAnnounceDeadlineForTest(ms: number | undefined): void { announceDeadlineMs = ms ?? 5000; }
 export async function announceGeneration(): Promise<void> {
   const later = nativeLater();
   if (!later) return;
-  try { await later({ op: 'generation', gen: generation }); } catch { /* native refuses by the generation it last knew; the next push says it again */ }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const out = await Promise.race([later({ op: 'generation', gen: generation }).then(() => 'ok', (e: unknown) => `threw: ${e instanceof Error ? e.message : String(e)}`), new Promise<string>((res) => { timer = setTimeout(() => res(`no answer in ${announceDeadlineMs} ms`), announceDeadlineMs); })]);
+    if (out !== 'ok') console.log(`account: the generation floor ${generation} was not announced to native (${out}); native refuses by the generation it last knew`);
+  } catch (e) { console.log(`account: the generation floor ${generation} was not announced to native (${e instanceof Error ? e.message : 'threw'})`); }
+  finally { if (timer !== undefined) clearTimeout(timer); }
 }
 
 async function keptItem(account: Account): Promise<string | null> {
@@ -150,11 +158,15 @@ let blockedDigest: string | null = null;      // null: not signing out. '' or a 
 export const sealingBlocked = (): boolean => blockedDigest !== null;
 export async function beginSignOut(): Promise<void> {
   nextGeneration(); resetSession();
+  blockedDigest = '';                                    // the block first, before the awaits below: while the key is being read a pulse must not see a sign-out that is not blocked
   let d = '';
   try { const s = await keptSession(); if (s) d = await digestOf(s.key); } catch { /* no key to name */ }
   blockedDigest = d;
 }
-export function abortSignOut(): void { blockedDigest = null; }
+/** `certain` false: native threw, so whether the key and its stores went is unknown: the radio is NOT handed the new generation (it keeps the old stamp and native refuses it) until the account is settled. */
+export function abortSignOut(certain = true): void { blockedDigest = null; uncertainAbort = !certain; }
+let uncertainAbort = false;
+export const signOutUncertain = (): boolean => uncertainAbort;
 /** A new session clears the block explicitly: called before sealing is judged, so the first sync of the next session is not answered idle. */
 export async function refreshSealBlock(): Promise<void> {
   if (blockedDigest === null) return;
@@ -342,7 +354,7 @@ export async function keyState(): Promise<{ state: KeyState; digest: string; err
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: the generation and the rest as a fresh process has them. */
-export function resetSeam(): void { resetSession(); bootSent = null; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
+export function resetSeam(): void { resetSession(); bootSent = null; uncertainAbort = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

@@ -3,7 +3,7 @@
 // What stays native and why: the deck (the audio), a few facts only the audio code knows (`radioFacts`: a turn is open, what is left of the spoken entry, the place in it), the book text (the
 // shelf is native until it moves) and the voice turn's queue snapshot and server ops (`radioSet`, and the inbox in `radioFacts`): the turn engine is native and Exact has no call from native into shared code,
 // so shared code PUSHES the snapshot and native hands back the server's `queue_ops` text, which the pump applies (the retrieval lane's pattern).
-import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, sealingBlocked, type NativeReader } from './api.ts';
+import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, sealingBlocked, signOutUncertain, type NativeReader } from './api.ts';
 import { nativeDeck } from './deck-native.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
 import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
@@ -46,9 +46,14 @@ export async function wipeRadio(storage: Store | undefined): Promise<void> {
   const r = radio; radio = undefined; restored = undefined;
   resetTurnLog();                                                                            // the lists sent with the old account's turns and its turn ids
   forgetLongURLs();                                                                          // the long web addresses of this account's entries (runsheet-entries.ts)
-  if (r) { r.writer.stop(); await r.rt.signOut(); }
-  if (storage) { try { await storage.fs.rm(SHEET_FILE); } catch { /* absent */ } }
+  try { if (r) { r.writer.stop(); await r.rt.signOut(); } }
+  finally {
+    // The old account's sheet file goes whatever the wipe did (a throw above must not leave it for the next radio to restore); a removal that fails is remembered and tried again before any radio restores.
+    if (storage) { try { await storage.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch (e) { if (!/ENOENT|no such file|not found/i.test(String((e as Error)?.message ?? e))) sheetFileStuck = true; } }
+  }
 }
+/** The sheet file could not be removed by the last wipe: the next radio removes it again and starts EMPTY (a sheet that outlived a sign-out is not the next account's). */
+let sheetFileStuck = false;
 
 function runStorage(s: Store | undefined): RunStorage | undefined {
   if (!s) return undefined;
@@ -175,7 +180,10 @@ export async function getRadio(storage: Store | undefined, native: NativeReader 
   if (radio !== r) {                                          // signed out meanwhile: this radio is the old account's. What native handed over in that read was drained from native: it goes to the radio that replaced this one, not into the one discarded (review B1-10)
     const next = await getRadio(storage, native, read); next.inbox.unshift(...r.inbox); r.inbox = []; return next;
   }
-  if (!restored) restored = r.rt.restore();
+  if (!restored) {
+    if (sheetFileStuck) { try { await storage?.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch { /* still there: not read either */ } restored = Promise.resolve(); }
+    else restored = r.rt.restore();
+  }
   const done = restored;
   await done;
   return radio === r ? r : getRadio(storage, native, read);
@@ -227,7 +235,7 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const r = await getRadio(storage, native);
   // The generation this RADIO was made under, not the one the pulse happens to read: a pulse that begins after the sign-out began reads the new generation while the radio still holds the old account's sheet, and
   // would carry a stamp native takes. A sign-out under way keeps the radio's own; one that was given up (or never wiped this radio) leaves it the same account's, so it takes the current one.
-  if (!sealingBlocked() && r.gen !== accountGeneration()) r.gen = accountGeneration();
+  if (!sealingBlocked() && !signOutUncertain() && r.gen !== accountGeneration()) r.gen = accountGeneration();
   const gen = r.gen;
   await r.rt.peek(true);                                                   // the facts were just read by getRadio: the deck's state is the one more read
   if (!r.ready) r.ready = await firstRunOver(storage as never);          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after peek: reading the facts sets it from native)
