@@ -412,3 +412,60 @@ describe('the deck\'s own time and ids', () => {
     expect(a).not.toBe(b); expect(a.length).toBeGreaterThanOrEqual(2 + 24); expect(a).toMatch(/^p-[0-9a-f]{24}$/);
   });
 });
+
+// B1-3, B1-4, B1-8 (the train review): the post honours the route's Retry-After and backs off; the pending list is bounded by a stated rule that says what it dropped; saves coalesce; a restore that cannot read an op says so
+// and keeps the rest.
+describe('posting backs off and the pending list is bounded', () => {
+  const at = { t: Date.parse('2023-11-14T22:00:00Z') };
+  const mk = (extra: Partial<ConstructorParameters<typeof RunSheetStore>[0]> = {}) => { const p = new FakePoster(); const s = new RunSheetStore({ poster: p, now: () => new Date(at.t), retryAfterMs: 3_600_000, ...extra }); return { p, s }; };
+  test('B1-3 a notYet with a Retry-After holds the next post until then; with none the wait doubles from 30 s to 5 min', async () => {
+    const { p, s } = mk(); at.t = Date.parse('2023-11-14T22:00:00Z');
+    p.answer = { kind: 'notYet', retryAfterMs: 120_000 };
+    deskPlace(s, story('d-a')); s.place(story('l-1', { placed_by: 'listener' }), 'end', { by: 'listener' }); await s.flushTask;
+    expect(p.posts.length).toBe(1);
+    at.t += 60_000; s.flush(); await s.flushTask; expect(p.posts.length).toBe(1);        // inside Retry-After: not sent
+    at.t += 61_000; p.answer = { kind: 'notYet' }; s.flush(); await s.flushTask; expect(p.posts.length).toBe(2);
+    at.t += 59_000; s.flush(); await s.flushTask; expect(p.posts.length).toBe(2);        // the second failure in a row: 60 s (30 s doubling, the first had a Retry-After of its own)
+    at.t += 2_000; s.flush(); await s.flushTask; expect(p.posts.length).toBe(3);
+    at.t += 119_000; s.flush(); await s.flushTask; expect(p.posts.length).toBe(3);       // the third: 120 s
+    at.t += 2_000; p.answer = { kind: 'answered', results: [] }; s.flush(); await s.flushTask; expect(p.posts.length).toBe(4);
+    expect(s.pending.length).toBe(0);
+  });
+  test('B1-3 the sign-out settle posts whatever the hold says', async () => {
+    const { p, s } = mk(); p.answer = { kind: 'notYet', retryAfterMs: 600_000 };
+    s.place(story('l-1', { placed_by: 'listener' }), 'end', { by: 'listener' }); await s.flushTask;
+    p.answer = { kind: 'answered', results: [] }; await s.settlePending(500);
+    expect(s.pending.length).toBe(0);
+  });
+  test('B1-3 offline for long: the pending list is bounded at 2000 ops; the oldest air reports go first, said, counted; a place is never dropped', async () => {
+    const { p, s } = mk(); void p;
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    try {
+      s.place(story('l-keep', { placed_by: 'listener' }), 'end', { by: 'listener' });
+      for (let i = 0; i < 2100; i++) s.pending.push({ op_id: `p-${String(i).padStart(6, '0')}`, by: 'phone', op: 'aired', id: 'x', state: 'on_air', position_seconds: 0, base_version: 0 } as Op);
+      s.place(story('l-two', { placed_by: 'listener' }), 'end', { by: 'listener' });
+    } finally { console.log = log; }
+    expect(s.pending.length).toBeLessThanOrEqual(2000);
+    expect(s.lostPending).toBeGreaterThanOrEqual(100);
+    expect(s.pending.filter((o) => o.op === 'place').length).toBe(2);
+    expect(logs.some((l) => l.includes('pending') && l.includes('dropped'))).toBe(true);
+  });
+  test('B1-4 forty placements in one turn make one write and one trailing write, not forty', async () => {
+    const mem = memory(); let writes = 0; const w = mem.write; mem.write = async (t) => { writes += 1; await new Promise((r) => setTimeout(r, 1)); await w(t); };
+    const { s } = mk({ storage: mem });
+    for (let i = 0; i < 40; i++) deskPlace(s, story('d-' + i));
+    await s.save();
+    expect(writes).toBeLessThanOrEqual(3);
+    expect(JSON.parse(mem.text as string).sheet.entries.length).toBe(40);                // the last state is what is on disk
+  });
+  test('B1-8 a restore that cannot read one pending op keeps the sheet and the other ops, and says how many it lost', async () => {
+    const mem = memory();
+    const a = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 }); a.place(story('l-1', { placed_by: 'listener' }), 'end', { by: 'listener' }); await a.save();
+    const saved = JSON.parse(mem.text as string); saved.pending.push({ nonsense: true }, saved.pending[0]); mem.text = JSON.stringify(saved);
+    const logs: string[] = []; const log = console.log; console.log = (...x: unknown[]) => { logs.push(x.join(' ')); };
+    const b = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
+    try { await b.restore(); } finally { console.log = log; }
+    expect(b.entry('l-1')).toBeDefined(); expect(b.pending.length).toBeGreaterThanOrEqual(1);
+    expect(logs.some((l) => /could not be read/.test(l) && /1/.test(l))).toBe(true);
+  });
+});

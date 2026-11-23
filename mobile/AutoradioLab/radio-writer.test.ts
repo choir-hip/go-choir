@@ -225,6 +225,15 @@ describe('the writer never hangs the radio dry', () => {
     const n = await run(8);
     expect(n).toBeGreaterThanOrEqual(5);                                              // not throttled while it answers
   });
+  test('W13 with no device time (the clock reads 1970) a failure holds until the listener acts, a dry answer likewise, and no deadline fires on a clock that does not move (review B1-9)', async () => {
+    skewMs = -NOW.getTime();                                                         // the clock says 0: native has not said the time
+    reply = async () => { throw Object.assign(new Error('x'), { kind: 'transport' }); };
+    w.openAhead(false); expect(w.checkAhead()).toBe(true); await settle();
+    for (let i = 0; i < 30; i++) expect(w.wouldAsk()).toBe(false);                   // not a loop
+    w.listenerActed(); expect(w.wouldAsk()).toBe(true);
+    reply = () => new Promise(() => undefined); expect(w.checkAhead()).toBe(true); await new Promise((r) => setTimeout(r, 0));
+    expect(w.wouldAsk()).toBe(false);                                                // an ask in flight is not "overdue" on a clock that stands at 0
+  });
   test('W12 a failure is forgotten on success and on the listener\'s act', async () => {
     reply = async () => { throw Object.assign(new Error('x'), { kind: 'transport' }); };
     w.openAhead(false); expect(w.checkAhead()).toBe(true); await settle();
