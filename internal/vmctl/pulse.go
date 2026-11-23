@@ -32,6 +32,7 @@ type PulseSummary struct {
 	Accounts    PulseAccountSummary     `json:"accounts"`
 	Activity    PulseActivitySummary    `json:"activity"`
 	Computers   PulseComputerSummary    `json:"computers"`
+	Capacity    PulseCapacitySummary    `json:"capacity"`
 	Storage     PulseStorageSummary     `json:"storage"`
 	Reliability PulseReliabilitySummary `json:"reliability"`
 	Freshness   PulseFreshnessSummary   `json:"freshness"`
@@ -122,9 +123,125 @@ type PulseFreshnessSummary struct {
 }
 
 type pulseAccountRecord struct {
-	UserID    string
-	Email     string
-	CreatedAt time.Time
+	UserID     string
+	Email      string
+	CreatedAt  time.Time
+	HasPasskey bool
+}
+
+// PulseCapacitySummary is what the owner decides capacity on (the owner,
+// 2026-11-23: "we will monitor usage and turn off signup once we hit
+// limits"). Aggregate numbers only: no address, id or per-user figure.
+type PulseCapacitySummary struct {
+	Memory       PulseCapacityMemory       `json:"memory"`
+	Disk         PulseCapacityDisk         `json:"disk"`
+	Computers    PulseCapacityComputers    `json:"computers"`
+	Registration PulseCapacityRegistration `json:"registration"`
+}
+
+type PulseCapacityMemory struct {
+	TotalBytes     uint64 `json:"total_bytes"`
+	AvailableBytes uint64 `json:"available_bytes"`
+	// FloorBytes is what a start must leave free: below it a computer is
+	// refused with a plain "host memory" answer, never crashed.
+	FloorBytes uint64 `json:"floor_bytes"`
+}
+
+type PulseCapacityDisk struct {
+	AvailableBytes uint64 `json:"available_bytes"`
+	FloorBytes     uint64 `json:"floor_bytes"`
+}
+
+type PulseCapacityComputers struct {
+	Running    int `json:"running"`
+	Hibernated int `json:"hibernated"`
+	Other      int `json:"other"`
+	// RunningGuestMemoryMiB is the guest memory promised to the running
+	// computers: the ceiling their resident memory can grow to.
+	RunningGuestMemoryMiB int `json:"running_guest_memory_mib"`
+}
+
+type PulseCapacityRegistration struct {
+	// Cap is the owner's number of accounts that hold a passkey (test
+	// addresses aside); 0 is no cap.
+	Cap int `json:"cap"`
+	// Counted is the accounts holding a passkey that count against Cap.
+	Counted   int  `json:"counted"`
+	Remaining int  `json:"remaining"`
+	Open      bool `json:"open"`
+	// TestCap and TestCounted are the same for the test addresses.
+	TestCap     int `json:"test_cap"`
+	TestCounted int `json:"test_counted"`
+	// SignUpsLast24h are accounts that finished a passkey in the last day,
+	// test addresses aside.
+	SignUpsLast24h int `json:"sign_ups_last_24h"`
+}
+
+// RegistrationCapConfig is the sign-up cap the auth service enforces
+// (AUTH_REGISTRATION_CAP and its test-address twin), read here from the same
+// nix values so the owner sees the number the service uses.
+type RegistrationCapConfig struct {
+	Cap         int
+	TestCap     int
+	TestDomains []string
+}
+
+// SetRegistrationCapConfig records the cap for the capacity reading.
+func (r *OwnershipRegistry) SetRegistrationCapConfig(cfg RegistrationCapConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.registrationCap = cfg
+}
+
+func pulseCapacity(now time.Time, users []pulseAccountRecord, ownerships []*VMOwnership, sample HostPressureSample, cfg PressureReclaimConfig, reg RegistrationCapConfig) PulseCapacitySummary {
+	out := PulseCapacitySummary{
+		Memory: PulseCapacityMemory{TotalBytes: sample.MemoryTotalBytes, AvailableBytes: sample.MemoryAvailableBytes, FloorBytes: sample.MemoryFloorBytes},
+		Disk:   PulseCapacityDisk{AvailableBytes: sample.StateDirAvailableBytes, FloorBytes: cfg.MinStateDirAvailableBytes},
+	}
+	for _, own := range ownerships {
+		if own == nil {
+			continue
+		}
+		switch own.State {
+		case VMStateActive:
+			out.Computers.Running++
+			_, mem := machineShapeForOwnership(own)
+			out.Computers.RunningGuestMemoryMiB += mem
+		case VMStateHibernated:
+			out.Computers.Hibernated++
+		default:
+			out.Computers.Other++
+		}
+	}
+	isTest := func(email string) bool {
+		domain := emailDomain(strings.ToLower(strings.TrimSpace(email)))
+		for _, d := range reg.TestDomains {
+			if domain != "" && domain == strings.ToLower(strings.TrimSpace(d)) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, u := range users {
+		if !u.HasPasskey {
+			continue
+		}
+		if isTest(u.Email) {
+			out.Registration.TestCounted++
+			continue
+		}
+		out.Registration.Counted++
+		if age := now.Sub(u.CreatedAt); !u.CreatedAt.IsZero() && age >= 0 && age <= 24*time.Hour {
+			out.Registration.SignUpsLast24h++
+		}
+	}
+	out.Registration.Cap = reg.Cap
+	out.Registration.TestCap = reg.TestCap
+	out.Registration.Open = reg.Cap <= 0 || out.Registration.Counted < reg.Cap
+	if reg.Cap > 0 && out.Registration.Counted < reg.Cap {
+		out.Registration.Remaining = reg.Cap - out.Registration.Counted
+	}
+	return out
 }
 
 func (r *OwnershipRegistry) PulseSummary() PulseSummary {
@@ -141,7 +258,15 @@ func (r *OwnershipRegistry) PulseSummary() PulseSummary {
 			userByID[userID] = pulseAccountRecord{UserID: userID, Email: email}
 		}
 	}
-	return pulseSummaryFromSnapshot(now, cfg.StateDir, users, userByID, ownerships, authDataAvailable, warnings)
+	summary := pulseSummaryFromSnapshot(now, cfg.StateDir, users, userByID, ownerships, authDataAvailable, warnings)
+	r.mu.RLock()
+	pcfg, sampler, regCap := normalizePressureReclaimConfig(r.pressureReclaim), r.pressureSampler, r.registrationCap
+	r.mu.RUnlock()
+	if sampler == nil {
+		sampler = sampleHostPressure
+	}
+	summary.Capacity = pulseCapacity(now, users, ownerships, sampler(pcfg), pcfg, regCap)
+	return summary
 }
 
 func ClassifyPulseAccount(email string) string {
@@ -292,7 +417,7 @@ func loadPulseAccountsFromAuthDB(path string) ([]pulseAccountRecord, []string) {
 		return nil, []string{"auth db unavailable; account counts unavailable"}
 	}
 	defer db.Close()
-	rows, err := db.Query(`SELECT id, email, created_at FROM users`)
+	rows, err := db.Query(`SELECT id, email, created_at, EXISTS(SELECT 1 FROM credentials c WHERE c.user_id = users.id) FROM users`)
 	if err != nil {
 		return nil, []string{"auth users unavailable; account counts unavailable"}
 	}
@@ -300,7 +425,7 @@ func loadPulseAccountsFromAuthDB(path string) ([]pulseAccountRecord, []string) {
 	var out []pulseAccountRecord
 	for rows.Next() {
 		var rec pulseAccountRecord
-		if err := rows.Scan(&rec.UserID, &rec.Email, &rec.CreatedAt); err != nil {
+		if err := rows.Scan(&rec.UserID, &rec.Email, &rec.CreatedAt, &rec.HasPasskey); err != nil {
 			return out, []string{"auth users unavailable; account counts partially unavailable"}
 		}
 		rec.UserID = strings.TrimSpace(rec.UserID)

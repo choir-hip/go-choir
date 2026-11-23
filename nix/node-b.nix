@@ -1535,6 +1535,11 @@ in
       # 2026-10-13). The old vmctl-priority.env always-on list is retired.
       Environment = [
         "VMCTL_PORT=8083"
+        # The capacity reading on /api/pulse/summary shows the sign-up cap
+        # the auth service enforces (the same values, at the top of this file).
+        "VMCTL_REGISTRATION_CAP=${toString registrationCap}"
+        "VMCTL_REGISTRATION_TEST_CAP=${toString registrationTestCap}"
+        "VMCTL_REGISTRATION_TEST_DOMAINS=${registrationTestDomains}"
         "VMCTL_GUEST_DNS_PORT=${toString guestDnsPort}"
         # SEC-10 guest side (internal/vmmanager/guest_dns.go): the computers
         # named here boot with choir.dns=<their tap host address> and resolve

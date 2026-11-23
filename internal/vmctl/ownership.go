@@ -655,6 +655,8 @@ type OwnershipRegistry struct {
 	// VM state until a later mission explicitly enables active reclaim.
 	pressureReclaim PressureReclaimConfig
 	pressureSampler hostPressureSampler
+	// registrationCap is the sign-up cap shown on the capacity reading.
+	registrationCap RegistrationCapConfig
 	// pressureWin is the pressure monitor's sustained-signal window and
 	// the hibernate in-flight/cool-down bookkeeping (pressure_sustained.go).
 	pressureWin pressureWindow

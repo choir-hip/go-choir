@@ -15,6 +15,11 @@
   $: privacy = summary?.privacy || {};
   $: freshness = summary?.freshness || {};
   $: classifier = summary?.classifier || {};
+  $: capacity = summary?.capacity || {};
+  $: capMemory = capacity?.memory || {};
+  $: capDisk = capacity?.disk || {};
+  $: capComputers = capacity?.computers || {};
+  $: capReg = capacity?.registration || {};
   $: realComputerStates = computers?.real_primary_by_state || {};
   $: realComputerTotal = Number(computers?.real_primary_total || 0);
   $: realComputerUsable = Number(computers?.real_primary_usable || 0);
@@ -170,6 +175,25 @@
           </div>
         {/each}
       </div>
+    </section>
+
+    <section class="panel" data-pulse-capacity>
+      <div class="panel-heading">
+        <h2>Capacity</h2>
+        <span class="chip">{capReg?.open ? 'sign-up open' : 'sign-up closed'}</span>
+      </div>
+      <dl class="facts">
+        <div><dt>Memory free</dt><dd>{formatBytes(capMemory?.available_bytes)} of {formatBytes(capMemory?.total_bytes)}</dd></div>
+        <div><dt>Memory floor</dt><dd>{formatBytes(capMemory?.floor_bytes)}</dd></div>
+        <div><dt>Disk free</dt><dd>{formatBytes(capDisk?.available_bytes)}</dd></div>
+        <div><dt>Disk floor</dt><dd>{formatBytes(capDisk?.floor_bytes)}</dd></div>
+        <div><dt>Running</dt><dd>{formatNumber(capComputers?.running)}</dd></div>
+        <div><dt>Hibernated</dt><dd>{formatNumber(capComputers?.hibernated)}</dd></div>
+        <div><dt>Accounts counted</dt><dd>{formatNumber(capReg?.counted)} of {capReg?.cap ? formatNumber(capReg.cap) : 'no cap'}</dd></div>
+        <div><dt>Room left</dt><dd>{capReg?.cap ? formatNumber(capReg?.remaining) : 'no cap'}</dd></div>
+        <div><dt>Sign-ups, 24h</dt><dd>{formatNumber(capReg?.sign_ups_last_24h)}</dd></div>
+        <div><dt>Test accounts</dt><dd>{formatNumber(capReg?.test_counted)} of {capReg?.test_cap ? formatNumber(capReg.test_cap) : 'no cap'}</dd></div>
+      </dl>
     </section>
 
     <section class="panel wide" data-pulse-storage>

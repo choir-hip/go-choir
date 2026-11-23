@@ -107,6 +107,7 @@ func main() {
 		idleSweeperEnabled = true
 		log.Printf("vmctl: pressure reclaim mode=%s signal=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.Signal, cfg.MinIdle, cfg.MaxCandidates)
 	}
+	registry.SetRegistrationCapConfig(registrationCapConfigFromEnv())
 	admission := hostAdmissionConfigFromEnv()
 	registry.SetHostAdmissionConfig(admission)
 	log.Printf("vmctl: host admission mode=%s default_need_mib=%d min_need_mib=%d headroom_mib=%d settle=%s make_room=%s make_room_max_victims=%d make_room_settle=%s",
@@ -921,6 +922,24 @@ func retentionRulesFromEnv(cfg *vmctl.RetentionPruneConfig, prefix string) {
 		}
 	}
 	cfg.SelectorNamed = vmctl.RetentionSelectorNamedFromEnviron(os.Environ())
+}
+
+// registrationCapConfigFromEnv reads the sign-up cap the auth service
+// enforces, for the capacity reading only (nix/node-b.nix sets both from one
+// value). A missing or malformed number reads as no cap.
+func registrationCapConfigFromEnv() vmctl.RegistrationCapConfig {
+	num := func(key string) int {
+		n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
+		if err != nil || n < 0 {
+			return 0
+		}
+		return n
+	}
+	var domains []string
+	for _, d := range splitEnvList(os.Getenv("VMCTL_REGISTRATION_TEST_DOMAINS")) {
+		domains = append(domains, strings.ToLower(d))
+	}
+	return vmctl.RegistrationCapConfig{Cap: num("VMCTL_REGISTRATION_CAP"), TestCap: num("VMCTL_REGISTRATION_TEST_CAP"), TestDomains: domains}
 }
 
 func splitEnvList(raw string) []string {
