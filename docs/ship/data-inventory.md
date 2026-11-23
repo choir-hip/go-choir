@@ -1,0 +1,138 @@
+# Data inventory for the Autoradio 1 privacy policy
+
+Read on 2026-11-23 at origin/main 7f75c2c96 (checkout lead-docs2). Read only; nothing was run. "Confirmed" means the line was read and says this. "Inferred" means the conclusion follows from code read but no line states it, or the deployed setting could not be seen from the repo. Where a doc and the code disagree, the code wins and the row says so.
+
+Path shorthand: KIT = mobile/AutoradioKit/Sources/AutoradioKit, LAB = mobile/AutoradioLab.
+
+A policy already exists for the web: frontend/public/legal/privacy-policy.md (effective 2026-10-31). It is out of date in several places (section 4 below). The drafts in this folder are written to replace or extend it.
+
+## 1. What the app does on the phone
+
+| Fact | Where | Status |
+|---|---|---|
+| Speech recognition by default is Apple's recogniser with on-device recognition required. The request sets requiresOnDeviceRecognition = true, and the stage refuses to start if the device does not support on-device recognition. There is no fallback to Apple's servers. | KIT/AppleStages.swift:43, :60; default stage chosen at KIT/Choir/ChoirApp.swift:18 | confirmed |
+| Setup may switch the recogniser to Parakeet (480 MB or 250 MB), also on the phone. Still no audio leaves the phone. | KIT/VoiceSetup.swift:112-114 | confirmed |
+| A second Apple path (SpeechAnalyzer, iOS 26) is registered but is not the default. It may download an Apple language asset. | KIT/AppleStages.swift:10, :104-117 | confirmed |
+| Microphone audio is not sent to our servers by the voice turn. The turn request carries text only (words, page, history, queue, candidates). | KIT/Choir/AutoradioDesk.swift:102-123 | confirmed |
+| Voice is off at launch and turns on only when the listener taps the Voice control. It turns itself off after 3 minutes without the listener speaking. | KIT/HandsFreeSwitch.swift:25, :28 | confirmed |
+| The microphone permission is requested only when voice is on and not yet granted. | KIT/LabRuntime.swift:121, :174 | confirmed |
+| The app declares a background microphone grant, so the microphone can stay open with the screen locked while Voice is on. The build also holds the audio background mode. | LAB/app.ts:47-49; LAB/app.json:20; docs/reference/exact/audio.md:119 | confirmed (behaviour with the screen locked is not proven on a phone) |
+| Current purpose strings: "Hears you when you talk to the radio."; "Keeps the radio able to hear you with the screen locked."; "Turns what you say into text on this phone." | LAB/strings/en.json:2-4 | confirmed |
+| Every voice turn saves its microphone audio (mic.caf), a record and a context file to a "turns" folder in the app's support directory. There is no pruning. The folder is removed at sign-out. It is never uploaded by this code. | KIT/LabRuntime.swift:92, :371-378; KIT/KeptTurns.swift:22-26, :39-40 | confirmed (see finding F6) |
+| The sign-in key (a bearer key beginning choir_sk_) is stored in the iOS Keychain, readable after first unlock, this device only. | KIT/Choir/ChoirClient.swift:94 | confirmed |
+| The phone's copy of the listener's mail is sealed with AES-256-GCM; the key is in the Keychain, this device only. | KIT/Choir/MailSeal.swift:5-8 | confirmed |
+| Sign-out wipes the account's local stores (turn history, kept turns, notebook, mail, reader holds, run sheet and the rest) and revokes the key on the server, best effort. | KIT/AccountWipe.swift:1-12, :32 | confirmed |
+| Edition topics, "what I told the paper" taps, steering queue, podcast library, recent pages, onboarding progress, themes and the paper's cached front page are kept in the app's own files. | LAB/edition-picks.ts:20; LAB/cards.ts:1-5; LAB/steer.ts:6; LAB/podcast.ts:37-38; LAB/app.ts:54-59 | confirmed |
+| Privacy manifest: tracking false, four required-reason API categories (disk space, file timestamp, system boot time, user defaults). It lists no collected data types. | LAB/PrivacyInfo.xcprivacy:5-40 | confirmed |
+| Analytics, advertising, attribution or crash-reporting SDKs: none. The only third-party Swift dependency is FluidAudio 0.18.3 (on-device speech and voice models); llama.cpp is a binary target. No AdSupport, AppTrackingTransparency, MetricKit or crash library was found. The web app's dependencies are text layout, a terminal, zip and PDF libraries. | mobile/AutoradioKit/Package.swift:12-23; frontend/package.json:24-29; grep over KIT, exact-package, LAB for common SDK names returned nothing | confirmed |
+| The app has no age gate and asks for no birth date. | grep for age, birth in the sign-in flow found none | inferred |
+
+## 2. What leaves the phone, and to whom
+
+| Data | Sent to | Where in code | Status |
+|---|---|---|---|
+| Signed out: requests for the public front page, stories and related stories. The request carries the phone's IP address and normal request headers. No key is sent. | choir.news (our server) | LAB/api.ts:4; LAB/paper.ts:21; LAB/radio-bridge.ts:128 | confirmed |
+| Signed out: a spoken or typed request cannot reach a model. Every authenticated call throws "not signed in" before any request is made. | n/a | mobile/README.md "Client and sign-in" rule 1 | confirmed from README; the code path was not traced line by line (inferred) |
+| Signed in, a spoken request that is not a bare transport command ("skip", "pause", "play this next", "clear the queue" are matched on the phone by words only). The recognised text (up to 2,000 bytes), the title, address and text of the page in front (text up to 48 KB), the last 8 lines of the conversation (listener lines and radio lines, each up to 1,000 bytes), what the listener had heard when they cut in, the play queue, and up to 40 candidate stories (route and title). | the listener's computer on our server, route POST /api/autoradio/turns | KIT/Choir/AutoradioDesk.swift:102-123, :168; KIT/QueueVoice.swift (local commands); docs/current-architecture.md:162 | confirmed |
+| The page in front can be a story, a document, a mail message, a podcast page, a file or a web page. Its text goes in the turn. | same | KIT/DeskContext.swift:13-14, :23-35 | confirmed |
+| For the same spoken request, the "quick decisions" stage (the default configuration) sends the listener's words and a line of what is playing, with up to 12 questions, in one call. | the listener's computer, route POST /api/system1/judgments, which the gateway forwards to OpenRouter's Decisions endpoint (model ~typesafe/jev-latest) | KIT/Choir/ChoirSystem1.swift:36, :66; KIT/Choir/ChoirApp.swift:19; internal/gateway/jev.go:22-23 | confirmed; whether the deployed gateway has the route enabled is inferred (the default is off: internal/gateway/config.go:92) |
+| While listening signed in, the programme request: the listener's edition topics as text (edition_text), local time and time zone, titles ahead, and candidate stories. The server adds a "what this listener heard" index from the listener's own records. No voice is needed. | the listener's computer, route POST /api/autoradio/programme, then a model | LAB/radio-writer.ts:14; internal/agentcore/api_autoradio_programme.go:178-186; internal/agentcore/api_autoradio_programme_heard.go:1-25 | confirmed |
+| Run sheet operations: what played, finished, was skipped or removed, with times. | the listener's computer, routes under /api/autoradio/sheet | LAB/runsheet-store.ts:7, :69, :98; docs/reference/AUTORADIO-SHEET.md:1-20 | confirmed |
+| "More of this", "less of this" and mute taps, with story routes and titles. | the listener's computer, POST /api/autoradio/steer | LAB/steer.ts:1-15 | confirmed |
+| The listener's podcast subscriptions (feed URL and title, up to 50) and the episode now playing (feed URL, episode id, audio URL). | the listener's computer, POST /api/platform/podcast-feeds and /api/podcast/subscriptions | LAB/podcast.ts:251, :257; LAB/podcast-model.ts:318-327 | confirmed |
+| A typed podcast search and the chart request go straight from the phone to Apple's podcast search and charts services. Our servers do not see them. | itunes.apple.com; rss.marketingtools.apple.com | LAB/podcast-model.ts:221-225 | confirmed |
+| Podcast feed and episode files are fetched straight from each publisher's server, so the publisher sees the phone's IP address. The grant is net.fetch for any https address. | the publisher | LAB/app.ts:59; LAB/podcast.ts:41 | confirmed |
+| A document or book imported by the listener is uploaded to the listener's own computer. Files, mail and notebook are read from and written to the same computer. | the listener's computer | LAB/imported.ts (header); LAB/files.ts:55; LAB/mail.ts:148-157 | confirmed |
+| A "take" (3 to 60 seconds of recorded voice, with its on-device transcript) is uploaded only when the listener presses Publish, and is then offered to other listeners. The page says so: "Your voice will be offered to other Autoradio listeners. You can delete it at any time." | our server, POST /api/platform/takes | LAB/takes.ts:15-17, :37, :323 | confirmed |
+| Sign-in: the device label (today the fixed text "Autoradio lab") is sent to begin sign-in. The approval page opens in the system sign-in sheet at choir.news, where the passkey is used. | choir.news | KIT/Choir/ChoirSignIn.swift:28, :49; LAB/signin-sheet.ts:1-10 | confirmed |
+| Model files: Qwen3-0.6B Q8 (639,446,688 bytes) and EmbeddingGemma 2 Q8 (309,855,456 bytes) from Hugging Face; four optional language models of 0.4 to 1.1 GB from Hugging Face; Parakeet, Silero and Kokoro through the FluidAudio library, which per the repo's own notes fetches from Hugging Face. Hugging Face learns the phone's IP address and which file was asked for. | huggingface.co | KIT/KnownModels.swift:29-31, :42-44, :51-75; KIT/VoiceSetup.swift:112-123; mobile/AutoradioKit/Sources/AutoradioModels/ModelHub.swift:5 | confirmed for the GGUF files; inferred for FluidAudio's host (a library detail not read) |
+| The embedding model downloads on its own on Wi-Fi when the phone holds items to index. There is no prompt and no size is shown. | huggingface.co | LAB/retrieval-run.ts:233-243; KIT/EmbedDevice.swift:26-35 | confirmed (see finding F8) |
+
+## 3. What our servers hold and who processes it
+
+| Fact | Where | Status |
+|---|---|---|
+| Servers: one host ("Node B") on OVH bare metal. The datacentre country is not stated in the repo. The web policy says United States. | nix/node-b.nix:1; docs/system-map.md:10-23; frontend/public/legal/privacy-policy.md:394 | confirmed that it is OVH bare metal; location inferred |
+| Account row: an email address is required, plus a user id and created time. | internal/auth/store.go:29-33 | confirmed. The research doc says the email is "only if the account keeps one"; the code says NOT NULL UNIQUE. The code wins: declare Email Address. |
+| Passkey: the public key, attestation type, transport, sign count, authenticator id, name and timestamps. The private key never leaves the person's device. There are no passwords. | internal/auth/store.go:35-49 | confirmed |
+| Sessions: refresh sessions are stored hashed with device_info; API keys (the phone's key) are stored hashed with a label. | internal/auth/store.go:63-73, :94-105 | confirmed |
+| Recovery by email: the address, its hash, an IP hash and a token hash, until expiry (15 minutes). Email sign-in attempts and device authorisations keep hashes, a user agent summary and a place summary, swept after 24 hours. | internal/auth/store.go:110-125, :140-155, :164-180; internal/auth/email_signin_store.go:26, :36; internal/auth/device_login_store.go:34-36 | confirmed |
+| Cookies on choir.news: choir_access (access token, HttpOnly, 5 minutes), choir_refresh (refresh token, path /auth, 720 hours), choir_accounts (account switcher, path /auth, 30 days), choir_signin_attempt (email sign-in, 10 minutes). The web policy lists only the first two. All are session cookies for sign-in; no tracking cookie was found. The frontend uses localStorage once (an idle timer). | internal/auth/handlers.go:30, :33; internal/auth/accounts.go:21, :36-47; internal/auth/email_signin.go:43; internal/auth/config.go:104, :107; internal/auth/account_set_store.go:14; frontend/src (grep) | confirmed |
+| Auth access log: one line per request with method, route pattern, status, the first two parts of the IP address (for example 203.0.x.x), the first 8 characters of the user id and a short hash of the session. No email, cookie, token or query string. Raw emails are hashed in logs. | internal/auth/access_log.go:12-39; internal/auth/rate_limit.go:188-201 | confirmed |
+| Outbound email (sign-in codes, recovery, the Mail feature) goes through Resend. | internal/maild/config.go:19; internal/auth/email_signin_mail.go:14 | confirmed |
+| A computer is a Firecracker microVM with its own disk holding state.db (SQLite). Its history is also kept as the tape, an append-only hash-chained log on the host. Shared data lives in PostgreSQL on the host. | docs/system-map.md:26-44; frontend/public/legal/privacy-policy.md:64-72 | confirmed |
+| The listener's words are written to the tape verbatim as an owner directive (Objective and Body), and the answer sentences as a report. The server log line for a turn carries counts and sizes only. | internal/agentcore/api_autoradio.go:472, :488-520, :660 | confirmed |
+| The tape is kept for the life of the computer and is not rewritten by an erasure request (web policy). Real deletion exists for a computer "proven destroyed": tape files, file chunks, per-computer rows and the key escrow entry are removed ("crypto-shred"); the head row and a tombstone stay. No user route triggers it that was found. | frontend/public/legal/privacy-policy.md:256-262, :340-347; internal/platform/tape_purge.go:21-36 | confirmed for the code; the missing user route is inferred from a route grep |
+| Account deletion: no route deletes a user. The auth routes are begin/verify/login/logout/sessions/credentials/api-keys/device/recovery/register. | route list from grep of internal/auth and cmd | confirmed by grep (inferred that nothing else exists) |
+| A paper search for a spoken request sends the words (cut to 300 bytes) to a public read on the same host (BM25 plus vectors). No body, owner header or page text goes with it. | docs/reference/AUTORADIO-TURNS.md ("The paper is searched"); internal/agentcore/api_autoradio_paper.go | confirmed from the doc; code not re-read |
+| The embedding model for server vectors runs on the host (llama.cpp at 127.0.0.1:8090). No third party. The web policy says "no embedding service"; vectors do exist. | internal/embedder/embedder.go:35 | confirmed |
+
+### Model providers a request can reach through the gateway
+
+The gateway is the only path from a guest computer to a provider (docs/system-map.md:21-24). Pools are in internal/modelcatalog/catalog.go.
+
+| Path | Providers in order | Where | Status |
+|---|---|---|---|
+| Voice turns and the programme (roles autoradio and autoradio_programme) | River (DeepSeek V4.1 Flash), then AWS Bedrock (Anthropic Claude Haiku 5.5) as the only fallback | catalog.go:553-556; internal/modelpolicy/model_policy.go:573-606 | confirmed |
+| Quick decisions (System 1, "Jev") | OpenRouter Decisions endpoint, model ~typesafe/jev-latest | internal/gateway/jev.go:22-23 | confirmed; enabled state inferred |
+| The computer's default pool (other agent work on the listener's computer: documents, edition writing, research, typed prompts) | Devin (Codeium endpoint server.codeium.com, a free-until-2026-12-04 member), OpenCode (two free models), OpenRouter (two free models), ChatGPT (OpenAI, gpt-6-luna), then AWS Bedrock (Haiku 5.5), Synthetic (DeepSeek) and River (DeepSeek) | catalog.go:516-531; internal/provider/devin.go:82; internal/provider/provider.go:1522-1536 | confirmed |
+| Other pools | Synthetic and ChatGPT (synthetic-luna, luna-synthetic); Synthetic and River (selfdev) | catalog.go:557-574 | confirmed |
+| Provider code present but not in a pool | Z.AI, Fireworks, Anthropic API relay | internal/provider/provider.go:765, :926; internal/gateway/anthropic_relay.go:70 | confirmed that code exists; whether any is live is unknown |
+
+### Web search providers (used by agents on a computer, not by the spoken turn)
+
+Keenable, SearXNG, Brave, Serper, Parallel, Tavily, SerpAPI and ChatGPT search; free ones start first and paid ones join on shortfall (internal/gateway/search.go:100-110; internal/gateway/searchplane/config.go:112). The gateway logs each search with the full query text and the computer id (internal/gateway/handlers.go:922). The spoken turn has no tools and makes no search call (docs/reference/AUTORADIO-TURNS.md). Queries from research agents on a listener's computer can include the listener's topics (inferred).
+
+### Logs and retention
+
+| Fact | Where | Status |
+|---|---|---|
+| Services write to the systemd journal. No journald retention setting exists in nix/. Journald defaults apply, so the retention is "until the disk limit", not a stated number. | nix/node-b.nix (grep journald: none); nix/autoputer-vm.nix:774 | inferred |
+| The web policy states 90 days for authentication logs and 90 days for email ingestion data. No job enforcing 90 days was found. | frontend/public/legal/privacy-policy.md:250-251 | the claim is unconfirmed in code |
+| No Caddy access-log directive was found in the host config. | nix/node-b.nix:699-817 | inferred |
+| Hourly gateway tallies per computer and provider: counts and input tokens, no text. | internal/gateway/call_tally.go:1-20 | confirmed |
+| The Jev record keeps the distribution of answers and does not store the state text. | internal/jevrecord/jevrecord_test.go:21-27 (the failure list) | confirmed from tests |
+
+## 4. Where the existing web policy disagrees with the code
+
+1. Cookies: the policy names two; the code sets four (section 3).
+2. Providers: the policy names Bedrock, Z.AI, DeepSeek, Xiaomi, Fireworks and OpenAI. The live pools name River, Synthetic, Devin, OpenCode, OpenRouter, ChatGPT and Bedrock. Search providers are not named at all.
+3. "No embedding service": an embedder runs on the host.
+4. Children: the policy says under 16. The shipping brief and the App Store rating answer say 13 and 16+. They must be one rule.
+5. Contact: the policy names a mailbox on choir.news. Use that one address everywhere, or replace it (CONTACT_EMAIL in these drafts).
+6. Retention: the 90-day figures have no job behind them in the code read.
+7. Deletion: the policy says erasure on request by email; the app will say deletion in the app. Both must describe the same thing.
+8. Hosting: "United States" is not in the repo.
+
+## 5. Things the app does today that make a plain privacy promise false or awkward
+
+Fix before submission, or disclose in the policy and the consent screen.
+
+| # | Finding | Evidence | Fix or disclose |
+|---|---|---|---|
+| F1 | A spoken request reaches third-party models (River, then Bedrock; OpenRouter Decisions for quick decisions) with no consent screen. It carries the text of the page in front, which can be a mail message or a private document. | AutoradioDesk.swift:102-123; ChoirSystem1.swift:36; catalog.go:553-556 | Build the one consent screen (consent-and-prompts.md). Disclose in the policy. Consider sending a page's text only when the listener's words refer to it. |
+| F2 | Normal signed-in listening (no voice) sends the listener's edition topics, time zone and a heard-history to a third-party model for the programme. A consent screen shown "before the first spoken request" would miss this. | api_autoradio_programme.go:182-185; api_autoradio_programme_heard.go | Show the consent before the first programme request of a signed-in listener, not only before voice. |
+| F3 | The listener's computer does other agent work on a default pool that starts with Devin (an unofficial client of a private API, free tier) and free OpenCode and OpenRouter models, then ChatGPT, Bedrock, Synthetic and River. Free tiers often carry weaker data terms. The web policy lists a different set. | catalog.go:516-531; devin.go:73-82 | Decide whether personal content may enter free-tier members. Update the processors list to the catalog. |
+| F4 | Web search queries from agents are logged with the full query text and the computer id, and go to up to eight search vendors. | handlers.go:922; search.go:100-110 | Disclose; consider logging a hash. |
+| F5 | The listener's words and the radio's answers are kept on the tape for the life of the computer, and an erasure request does not rewrite the tape. "Delete my data" is only true if deletion destroys the computer (the key). The machinery exists for destroyed computers but no user route. | api_autoradio.go:472; tape_purge.go:21-36; web policy lines 256-262 | The in-app deletion must destroy the computer and its key. This is red work. Until it exists, the policy cannot promise deletion (written with [DECISION] and [WHEN-BUILT]). |
+| F6 | Every voice turn's microphone audio is saved on the phone (mic.caf) and never pruned until sign-out. "Audio is not kept" would be false. It is not uploaded. | LabRuntime.swift:371-378; KeptTurns.swift:39 | Preferred: do not write mic.caf in a release build (it is a lab feature). Until then, say plainly that audio stays on the phone until sign-out. |
+| F7 | The microphone can stay open with the screen locked while Voice is on, for up to 3 minutes after the listener last spoke. | app.ts:48; HandsFreeSwitch.swift:25 | Disclose in the permission string and the notes. Show on-screen state; the system shows the microphone indicator. |
+| F8 | The 310 MB embedding model downloads on its own over Wi-Fi from Hugging Face, with no prompt. Guideline 4.2.3(ii) asks for the size and a prompt. | retrieval-run.ts:233-243; KnownModels.swift:42-44 | Ask first, with the size. |
+| F9 | Voice setup downloads up to about 1.5 GB from Hugging Face (host is a third party that learns the IP address). The prompt's wording and sizes must be real. | VoiceSetup.swift:112-123, :179-182 | Use the prompt in consent-and-prompts.md; host the files ourselves before wide release (decision). |
+| F10 | Typed podcast searches go to Apple, and feeds and episodes load from publishers' servers, with the phone's IP. A line "we never share your searches" would be false. Subscriptions and now playing are also reported to our servers. | podcast-model.ts:221-225; podcast.ts:257; app.ts:59 | Disclose. |
+| F11 | A published take puts the listener's voice in front of other listeners. | takes.ts:37, :323 | Keep takes out of version 1 (shipping decision Q2), or keep the existing publish line and add report and block tools. |
+| F12 | The research doc says the account email is optional. It is required. | store.go:31 | Declare Email Address. |
+| F13 | The web policy's cookie list, provider list, embedding statement and 90-day claims are out of date (section 4). | see above | Replace the web policy with the new one, or fix both. |
+| F14 | No account deletion route exists, so the 5.1.1(v) requirement is unmet today. | route grep | Build it (shipping station P3). |
+| F15 | The device label sent at sign-in is "Autoradio lab". Harmless, but it shows in the listener's session list. | ChoirSignIn.swift:28 | Name it "Autoradio 1" or the phone's name. |
+| F16 | The sign-in sheet shares the system browser's passkeys and session, so cookies set at choir.news in that sheet are the system browser's own. The policy must not say the app "uses no cookies". | signin-sheet.ts:1-10 | Say so as written in the draft. |
+| F17 | Logs on the server record the first 8 characters of a user id and a truncated IP with each auth request. A line "we keep no IP addresses" would be false. | access_log.go:39; rate_limit.go:194 | Say so as written in the draft. |
+
+## 6. Facts not found
+
+- Crash reporting: none in our code. Apple's own TestFlight and App Store crash and feedback reports reach us through Apple, under the tester's or user's own iOS setting.
+- Location: the app asks for none. The programme request sends the time zone name and the local time (LAB/radio-writer.ts, api_autoradio_programme.go:181-182).
+- Advertising identifier, contacts, photos, health data, purchases: none.
+- Selling data: no code that sells or licenses data was found. Sharing is limited to the processors above.
+- Children: nothing in the code is aimed at them; there is no age gate.
+- Where the servers are, any data processing agreements with providers, and which provider endpoints are live in production: not in the repo. Mark [CHECK] in the policy.
