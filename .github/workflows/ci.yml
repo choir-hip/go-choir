@@ -1019,6 +1019,10 @@ jobs:
       - name: Crash guard unit tests
         run: cd frontend && node --test tests/crash-guard.test.mjs
 
+      # The /device page's return to the phone's sign-in sheet (src/lib/device-return.js): pure, node only.
+      - name: Device approval return unit tests
+        run: cd frontend && node --test tests/device-return.test.mjs
+
   # The package modularity gate (docs/design/modularity-check-build-2026-11-04.md):
   # the SDK surface against its lock (a change needs the bump its kind needs),
   # and every first-party package's smoke contract in a shell built from this
