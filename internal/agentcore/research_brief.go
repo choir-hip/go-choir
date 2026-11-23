@@ -25,7 +25,7 @@ import (
 // computer's own corpus for the Cast's objective and each further thread it
 // carries, and appends what is held to the run's first message, the way a
 // management task's opening is delivered (managementTaskOpening). It costs no
-// model turn. The desk then writes each thread as held, stale or missing and
+// model turn. The desk then writes each thread as stored, stale or missing and
 // searches the web only for what the corpus lacks.
 //
 // The bounds below are small because the brief rides on every turn of the run

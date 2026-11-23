@@ -32,7 +32,7 @@ func TestResearchFirstTurnNamesTheCorpusBrief(t *testing.T) {
 // its own, and does not describe what the host's search covered.
 func TestResearchFirstTurnSaysAnEmptyBriefIsNotProof(t *testing.T) {
 	p, _ := recordsInboxPromptFor(agentprofile.Research)
-	for _, want := range []string{"or says the host's search did not answer", "is not proof that nothing is held", "one corpus search in your own words before the web", "The host also searched"} {
+	for _, want := range []string{"or says the host's search did not answer", "is not proof that nothing is stored", "one corpus search in your own words before the web", "The host also searched"} {
 		if !strings.Contains(p, want) {
 			t.Fatalf("research first-turn prompt lacks %q: %s", want, p)
 		}

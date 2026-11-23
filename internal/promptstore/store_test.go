@@ -129,11 +129,11 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"A published story carries no date there",
 		"A field marked [cut] was shortened",
 		"or says the host's search did not answer",
-		"is not proof that nothing is held",
+		"is not proof that nothing is stored",
 		"The host tries to search this computer's corpus",
 		"one corpus search in your own words before the web",
 		"each thread of the objective as stored (with its capture ids), stale or missing",
-		"Search the web only for the stale and missing threads, one question at a time",
+		"Search the web for the stale and missing threads and for what a stored thread leaves open, one question at a time",
 		"read what it returns before you search again",
 		"choir.SearchAll(question, wordings)",
 		"the held mark means an earlier search of this run returned the page",
@@ -145,7 +145,7 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"\"adds: ...\" (what this adds to the corpus) and \"missing: ...\" (what the corpus lacked; \"missing: none\" when it lacked nothing)",
 		"A search of the same terms as an earlier one returns that earlier search; one search runs at a time",
 		"A detail you cannot confirm is a finding to report, not a task to keep searching for",
-		"a reworded query that returns the pages you already hold tells you the web lacks it",
+		"a reworded query that returns the pages you already hold tells you this wording does not find it",
 		"say what you looked for and stop",
 	} {
 		if !strings.Contains(flat, want) {

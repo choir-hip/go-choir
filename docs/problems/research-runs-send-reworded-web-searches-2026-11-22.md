@@ -41,7 +41,8 @@ Window 20:04Z to 23:04Z: 55 research runs, 157 web searches (gateway journal),
   from the graph's event record.
 - The worked cell sent a web search whenever the top five graph hits gave fewer
   than two outlets (`if len(outlets) < 2 { SearchAll(...) }`), so one capture of
-  one outlet, the normal case for a new story, sent the web.
+  one outlet, the normal case for a new story, sent the web. Not changed here:
+  the cell keeps that control flow (see Not in this change).
 - `SearchWireCorpus` returned captures in 224 of 224 searches: it falls back to
   the nearest by meaning. The run could not tell "the graph lacks this" from
   "the graph holds ten pages".
@@ -65,9 +66,12 @@ task, keeps searching until one of those is met; the web often lacks the detail
 supplies the corroborate wording and, once, a detail from memory. The fixes
 are text and measurement: the Cast asks for the one thing the frame lacks, one
 consistent count, a stop rule that makes an unconfirmed detail a finding, a
-worked cell that goes to the web only for a lack the run names, a corpus
-search that says whether any page matched the words, and a gap figure that
-means something. The aim is not fewer web searches as such (owner, 2026-11-23: "the point isnt to
+prompt text that says the corpus counts are hints and the model decides from
+the pages it read whether the corpus holds the answer (the worked cell only
+prints them; a lexical "did the pages answer" gate in the example was tried and
+dropped after three review rounds, since that judgement is the model's), a
+corpus search that says whether any page matched the words, and a gap figure
+that means something. The aim is not fewer web searches as such (owner, 2026-11-23: "the point isnt to
 cut search to zero ... we need to scale corpus utility"): a run still goes to
 the web whenever the corpus does not hold the answer. What the change removes is
 rewording the same query against pages the run already holds, and what it adds
@@ -99,3 +103,6 @@ over all runs is reported, not targeted.
    investigation of the management-replies path.
 2. Capturing the page a lead links to at intake.
 3. Logging the domains of the pages read.
+4. A worked cell that does not send the web search merely because the top graph
+   hits share an outlet, and that reads the event record's capture ids: dropped.
+   It needed the cell to judge whether pages answer, which is the model's call.
