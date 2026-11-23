@@ -333,7 +333,7 @@ func TestARetryAfterAPinDeadlineWithTheStoreChangedUsesTheRetrysBytes(t *testing
 		t.Fatal(err)
 	}
 	reused := 0
-	for _, d := range ref.Record.Chunks {
+	for _, d := range ref.Record.Manifest.Files[0].Chunks {
 		if kept[d] {
 			reused++
 		}
