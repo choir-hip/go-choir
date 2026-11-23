@@ -96,6 +96,17 @@ The server mints the key inside the poll that approves it, before the answer rea
 
 There is no `await` between native receiving a key and the guarded write, so cancellation of the task cannot land between the two.
 
+**The two limits that remain, and the fourth review's judgement of them (2026-11-23).**
+
+- **A revoke that fails (offline).** *Already on main:* sign-out's revoke is best effort and drops the plaintext key (`ChoirSignIn.signOut`), so an offline sign-out leaves the same live key. *What this change adds:* more places that revoke (a Cancel in the gap, a Keychain refusal, a superseded attempt, a sign-out race), each rare
+  (it takes a minted key, a non-store and a failed DELETE together); and it closes one hole main had, a refused Keychain write that left the key live without even trying to revoke. The key is unusable by anyone without the plaintext the app dropped.
+  *Likelihood:* an offline sign-out is ordinary, the new paths are rare. *Judged:* acceptable, documented. *The fix* is a durable client-side queue of key ids to revoke (a server cannot know the client's intent for a key it delivered); not built.
+- **An answer lost between the server's commit and native (the process dies, the connection drops).** *Already on main:* the same mint-inside-the-token-exchange and the same response path (`device_login_store.go`, `PollDeviceAuthorization`), so a kill in that window left the same live key. *New:* nothing,
+  except that a JS reload now loses the machine while native still holds a device code (an orphan code that mints no key). *Likelihood:* rare (a sub-second window, or a drop after the commit). *Judged:* acceptable, documented. *The server-side fix* is two-phase delivery: the token answer carries a handle, a second
+  "claim" call releases the key, and the device-flow sweeper (`StartDeviceSweeper`, which today only deletes old rows) revokes a minted key never claimed or used within a short TTL. Not built; it is a red change to the key mint path.
+- **A superseded code approved anyway.** After a newer sign-in replaced an attempt, approving the OLD code (for example in the browser fallback tab) mints nothing: approval records a decision, and the key is minted only by the token poll, which nothing runs for a forgotten code. It is a missed sign-in; the owner sees the newer attempt's code and no message about the old one.
+- **Follow-ups, not in this change:** the Keychain write of the key's id uses `try?`, so if only that write fails the key is stored but cannot be revoked by sign-out; and `ChoirAuthState.userCode` / `verificationURL` are now unused fields of the `ChoirAuth` shape.
+
 ### What the callback and the close mean
 
 - **The callback is a hint.** It carries our own nonce and nothing else: no key, no device code, no user code, no account id. `signin-sheet.ts` never reads it; it reports `returned`, `cancelled` or
