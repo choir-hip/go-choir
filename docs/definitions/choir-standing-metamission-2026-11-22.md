@@ -99,7 +99,7 @@ now:
   main_uncertainty: 'what the owner heard in Autoradio 1, and which way they rule on feed versus successor and on the definition of importance'
   next_observation: 'C202 at 22:30Z (research runs an hour after the revert); the owner''s reply'
   blocker: none
-  next_action: 'settle C202; with the owner, write the next goal file from the letter and their reply; the account boundary''s structural assessment is still owed'
+  next_action: 'settle C202; with the owner, write the next goal file from the letter and their reply; the account boundary''s structural assessment is written (docs/problems/account-boundary-three-approaches-no-convergence-2026-11-23.md) and waits on the owner''s choice among three candidates'
 receipts:
   - 'M1: docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md'
   - 'M2: docs/definitions/choir-first-design-2026-11-22.md'

@@ -14,7 +14,7 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 
 | What | State | Where |
 | --- | --- | --- |
-| Phone: one data folder per account, sign-out wipes it | 12 review rounds, 5 failed drill runs; stopped for a structural assessment | `lane/account-partition-s1` |
+| Phone: one data folder per account, sign-out wipes it | 12 review rounds across three approaches; frozen; [structural assessment](problems/account-boundary-three-approaches-no-convergence-2026-11-23.md) written 11-23, the choice of boundary is the owner's | `lane/account-partition-s1` |
 | Phone: "Autoradio 1", the train as a second app beside the first | **on the owner's phone**: installed 2026-11-23 13:08Z from `dcc56f2cd` (the train with its review fixes); the owner's tests are owed: a locked phone, a first-launch microphone, the sign-in sheet | main |
 | Phone: sign-in in a sheet over the app | both parts are on main (`977442ff8`, `0a397a684`); never run on a phone | main |
 | Phone model benchmark on the Motorola | first rows; not landed | `lane/model-bench` |
