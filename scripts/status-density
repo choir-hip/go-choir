@@ -1,0 +1,590 @@
+#!/usr/bin/env python3
+"""status-density: does the density of the corpus around an arrival separate
+what then happened (design step 2a, docs/design/first-design-2026-11-22.md
+section 10; ledger claim C203; evidence docs/evidence/density-step-2a-2026-11-23.md).
+
+Density of a point is the cosine similarity between its vector and the vector of
+its k-th nearest EARLIER capture (k = 1, 5, 10, 20), and the mean of the top 10.
+Two parts, one method.
+
+  Part 1 (the claim). For captures the paper's management judged, density against
+  the class of the judgment (feed, open, decline): n per class, quartiles of each
+  density column per class, and the area under the ROC curve (AUC) for "fed versus
+  opened-or-declined" and "fed versus opened", with a bootstrap 95% interval.
+  Needs an outcome per capture id: --outcomes FILE (TSV: capture_id, class). The
+  console's `management story choice` lines name the run, the choice and the
+  story, never a capture id, and the record that does (choir.capture_disposition)
+  lives in the paper VM's own store: without --outcomes the script prints the
+  decision counts it can read and says the per-capture table is unavailable.
+
+  Part 2 (not in the claim). For research's corpus searches in the console
+  window, the density around the question against whether the run then relied on
+  held pages (run summary `from_held=`, `pages_new=` and `pages_returned=`; the
+  run's `corpus read ... held=` lines). The search line logs no similarity score,
+  so the question's vector is made by the host's own loopback query embedder
+  (127.0.0.1:8091, a local model, no paid call) from the query text in the
+  console line, and its nearest captures are read from corpusd's graph database.
+
+Read only against Node B: one ssh reads the paper VM's guest console files, and
+one ssh runs a read-only job on the host: for each question or capture one
+READ ONLY transaction with a 5 s statement timeout and LIMIT 20 on vec_captures,
+sequentially. Nothing is written there. Query text goes over ssh to the host's
+loopback embedder and is never printed or stored; the output carries ids,
+counts and similarities only.
+
+  status-density [--since T] [--until T] [--node HOST] [--outcomes FILE] [--no-part2]
+                 [--json] [--fixture FILE]
+
+--fixture FILE is JSON {"console": text, "search_sims": {"s0": [sims]},
+"capture_sims": {id: [sims]}, "outcomes": [{"capture_id", "cls"}]} and needs no
+network (scripts/test-status-scripts.sh). Exit 0, or 2 when a fetch failed.
+
+What the density cannot say is in the evidence file: "earlier" is by the day of
+the vector row, the nearest-neighbour list is HNSW (approximate) over every
+capture of the computer, private or tombstoned ones included, and management was
+shown vector neighbours as candidates, so density and its choice are not
+independent.
+"""
+import argparse
+import base64
+import calendar
+import json
+import random
+import re
+import subprocess
+import sys
+import time
+
+PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+NODE = "node-b"
+K = 20                      # neighbours read for each point
+COLUMNS = ("d1", "d5", "d10", "d20", "mean10")
+STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
+KV_RE = re.compile(r"(\w+)=(\S*)")
+CHOICE_RE = re.compile(STAMP + r" management story choice (.*)$")
+CS_RE = re.compile(STAMP + r" corpus search computer=(\S+) (.*)$")
+QUERY_RE = re.compile(r'(?<=[ (])query="((?:[^"\\]|\\.)*)"')
+NOTE_RE = re.compile(r'(?<=[ (])note="(?:[^"\\]|\\.)*"')
+SR_RE = re.compile(STAMP + r" runtime: search run=(\S+) desk=(\S+)(.*)$")
+RD_RE = re.compile(STAMP + r" corpus read run=(\S+) desk=(\S+) conv=\S+ capture=\S+ held=(\S+) via=(\S+)")
+NUM_KV_RE = re.compile(r"\b(\w+)=(\d+)\b")
+BOOT = 2000
+SEED = 20261123
+
+
+def stamp_epoch(s):
+    return calendar.timegm(time.strptime(s, "%Y/%m/%d %H:%M:%S"))
+
+
+def parse_arg_time(s):
+    return calendar.timegm(time.strptime(s, "%Y-%m-%dT%H:%MZ"))
+
+
+def day_of(t):
+    return time.strftime("%Y-%m-%d", time.gmtime(t))
+
+
+# ---------------------------------------------------------------- pure compute
+
+def density(sims):
+    """The columns of one point from its neighbours' cosines, any order. A column
+    needs that many neighbours: None when the list is shorter (a young corpus)."""
+    s = sorted(sims, reverse=True)
+    def nth(k):
+        return s[k - 1] if len(s) >= k else None
+    return {"d1": nth(1), "d5": nth(5), "d10": nth(10), "d20": nth(20),
+            "mean10": (sum(s[:10]) / 10.0) if len(s) >= 10 else None}
+
+
+def ranks(xs):
+    """Average ranks (1-based), ties share the mean rank."""
+    order = sorted(range(len(xs)), key=lambda i: xs[i])
+    r = [0.0] * len(xs)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and xs[order[j + 1]] == xs[order[i]]:
+            j += 1
+        for q in range(i, j + 1):
+            r[order[q]] = (i + j) / 2.0 + 1
+        i = j + 1
+    return r
+
+
+def auc(pos, neg):
+    """P(a positive's value is above a negative's), ties half. None if a side is empty."""
+    if not pos or not neg:
+        return None
+    r = ranks(list(pos) + list(neg))
+    sp = sum(r[:len(pos)])
+    return (sp - len(pos) * (len(pos) + 1) / 2.0) / (len(pos) * len(neg))
+
+
+def percentile(xs, p):
+    xs = sorted(xs)
+    i = (len(xs) - 1) * p
+    lo = int(i)
+    hi = min(lo + 1, len(xs) - 1)
+    return xs[lo] + (xs[hi] - xs[lo]) * (i - lo)
+
+
+def auc_ci(pos, neg, boot=BOOT, seed=SEED):
+    """AUC and a percentile bootstrap 95% interval (positives and negatives
+    resampled apart)."""
+    a = auc(pos, neg)
+    if a is None:
+        return None, None, None
+    rng = random.Random(seed)
+    vals = []
+    for _ in range(boot):
+        p = [pos[rng.randrange(len(pos))] for _ in pos]
+        n = [neg[rng.randrange(len(neg))] for _ in neg]
+        vals.append(auc(p, n))
+    return a, percentile(vals, 0.025), percentile(vals, 0.975)
+
+
+def spearman(xs, ys):
+    if len(xs) < 3:
+        return None
+    rx, ry = ranks(xs), ranks(ys)
+    mx, my = sum(rx) / len(rx), sum(ry) / len(ry)
+    sxy = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
+    sxx = sum((a - mx) ** 2 for a in rx)
+    syy = sum((b - my) ** 2 for b in ry)
+    return sxy / (sxx * syy) ** 0.5 if sxx > 0 and syy > 0 else None
+
+
+def spearman_ci(xs, ys, boot=BOOT, seed=SEED):
+    r = spearman(xs, ys)
+    if r is None:
+        return None, None, None
+    rng = random.Random(seed)
+    vals = []
+    n = len(xs)
+    for _ in range(boot):
+        idx = [rng.randrange(n) for _ in range(n)]
+        v = spearman([xs[i] for i in idx], [ys[i] for i in idx])
+        if v is not None:
+            vals.append(v)
+    return r, percentile(vals, 0.025), percentile(vals, 0.975)
+
+
+def quartiles(xs):
+    if not xs:
+        return None
+    if len(xs) == 1:
+        return [xs[0]] * 3
+    s = sorted(xs)
+    return [percentile(s, 0.25), percentile(s, 0.5), percentile(s, 0.75)]
+
+
+def part1(outcomes, capture_sims):
+    """outcomes: [{capture_id, cls}], cls in feed/open/decline. capture_sims: id ->
+    neighbour cosines. Nothing is dropped silently: the exclusions are counted."""
+    classes = ("feed", "open", "decline")
+    rows = {c: [] for c in classes}
+    excl = {"no_vector_or_unmatched": 0, "short_list": 0, "unknown_class": 0, "duplicate": 0}
+    seen = set()
+    for o in outcomes:
+        cid, cls = o["capture_id"], o["cls"]
+        if cls not in classes:
+            excl["unknown_class"] += 1
+            continue
+        if cid in seen:
+            excl["duplicate"] += 1
+            continue
+        seen.add(cid)
+        sims = capture_sims.get(cid)
+        if not sims:
+            excl["no_vector_or_unmatched"] += 1
+            continue
+        d = density(sims)
+        rows[cls].append(d)
+    out = {"n": {c: len(rows[c]) for c in classes}, "exclusions": excl, "columns": {}}
+    for col in COLUMNS:
+        vals = {c: [d[col] for d in rows[c] if d[col] is not None] for c in classes}
+        short = sum(len(rows[c]) - len(vals[c]) for c in classes)
+        entry = {"quartiles": {c: quartiles(vals[c]) for c in classes}, "n_with_column": {c: len(vals[c]) for c in classes},
+                 "short_list": short}
+        a, lo, hi = auc_ci(vals["feed"], vals["open"] + vals["decline"])
+        entry["auc_fed_vs_open_or_decline"] = {"auc": a, "lo": lo, "hi": hi}
+        a, lo, hi = auc_ci(vals["feed"], vals["open"])
+        entry["auc_fed_vs_open"] = {"auc": a, "lo": lo, "hi": hi}
+        out["columns"][col] = entry
+    return out
+
+
+def parse_console(text, since=None, until=None):
+    """Decisions, corpus searches (with the query text, held in memory only), run
+    summaries and reads, in the window."""
+    decisions, searches, summaries, reads = [], [], {}, []
+    lo = hi = None
+
+    def inside(t):
+        return (since is None or t >= since) and (until is None or t < until)
+
+    for ln in text.splitlines():
+        m = CHOICE_RE.search(ln)
+        if m:
+            t = stamp_epoch(m.group(1))
+            lo = t if lo is None else min(lo, t)
+            hi = t if hi is None else max(hi, t)
+            if not inside(t):
+                continue
+            kv = dict(KV_RE.findall(m.group(2)))
+            if kv.get("choice") in ("open", "feed", "decline"):
+                n = int(kv.get("captures", "1") or 1)
+                decisions.append({"t": t, "run": kv.get("run", "-"), "choice": kv["choice"], "story": kv.get("story", "-"),
+                                  "captures": max(n, 1) if kv["choice"] == "open" else n})
+            continue
+        m = CS_RE.search(ln)
+        if m:
+            t = stamp_epoch(m.group(1))
+            lo = t if lo is None else min(lo, t)
+            hi = t if hi is None else max(hi, t)
+            if not inside(t):
+                continue
+            q = QUERY_RE.search(m.group(3))
+            rest = NOTE_RE.sub("", m.group(3))
+            rest = QUERY_RE.sub("", rest)
+            kv = dict(KV_RE.findall(rest))
+            text_q = ""
+            if q:
+                try:
+                    text_q = json.loads('"' + q.group(1) + '"')
+                except ValueError:
+                    text_q = q.group(1)
+            def num(k):
+                v = kv.get(k, "")
+                return int(v) if v.isdigit() else None
+            searches.append({"t": t, "computer": m.group(2), "run": kv.get("run", "-"), "desk": kv.get("desk", "-"),
+                             "caller": "brief" if kv.get("caller") == "brief" else "cell", "query": text_q,
+                             "captures": num("captures") or 0, "by_meaning": num("by_meaning") or 0,
+                             "vector_rows": num("vector")})
+            continue
+        m = SR_RE.search(ln)
+        if m:
+            t = stamp_epoch(m.group(1))
+            if not inside(t):
+                continue
+            rest = re.sub(r"not_sent=\d+ \([^)]*\)", "", m.group(4))
+            kv = {k: int(v) for k, v in NUM_KV_RE.findall(rest)}
+            if "started" in kv:
+                summaries[m.group(2)] = {"desk": m.group(3), "started": kv["started"], "from_held": kv.get("from_held", 0),
+                                         "returned": kv.get("pages_returned", 0), "new": kv.get("pages_new", 0),
+                                         "read": kv.get("pages_read", 0)}
+            continue
+        m = RD_RE.search(ln)
+        if m:
+            t = stamp_epoch(m.group(1))
+            if inside(t):
+                reads.append({"run": m.group(2), "desk": m.group(3), "held": m.group(4)})
+    return {"decisions": decisions, "searches": searches, "summaries": summaries, "reads": reads, "span": (lo, hi)}
+
+
+def part1_decisions(decisions):
+    out = {"decisions": {}, "captures": {}}
+    for c in ("feed", "open", "decline"):
+        d = [x for x in decisions if x["choice"] == c]
+        out["decisions"][c] = len(d)
+        out["captures"][c] = sum(x["captures"] for x in d)
+    return out
+
+
+def part2(parsed, search_sims):
+    """Per search, the density of the question; per run, the mean of its searches'
+    densities against whether the run relied on held pages. The query text is
+    not carried past this function's arguments."""
+    pts = []
+    for i, s in enumerate(parsed["searches"]):
+        sims = search_sims.get("s%d" % i)
+        pts.append({"i": i, "run": s["run"], "caller": s["caller"], "captures": s["captures"], "by_meaning": s["by_meaning"],
+                    "dens": density(sims) if sims else None, "has_query": bool(s["query"])})
+    held_reads = {}
+    for r in parsed["reads"]:
+        h = held_reads.setdefault(r["run"], [0, 0])
+        h[1] += 1
+        if r["held"] in ("true", "own"):
+            h[0] += 1
+    out = {"searches": len(pts), "with_density": sum(1 for p in pts if p["dens"]), "without_density": sum(1 for p in pts if not p["dens"]),
+           "searches_by_caller": {}, "per_search_density": {}, "runs": {}, "outcomes": {}}
+    for p in pts:
+        out["searches_by_caller"][p["caller"]] = out["searches_by_caller"].get(p["caller"], 0) + 1
+    for col in COLUMNS:
+        out["per_search_density"][col] = quartiles([p["dens"][col] for p in pts if p["dens"] and p["dens"][col] is not None])
+    # per run
+    by_run = {}
+    for p in pts:
+        if p["dens"] and p["caller"] == "cell":
+            by_run.setdefault(p["run"], []).append(p)
+    runs = []
+    for run, ps in by_run.items():
+        sm = parsed["summaries"].get(run)
+        if not sm or sm["desk"] != "research":
+            continue
+        mean = {}
+        for col in COLUMNS:
+            v = [p["dens"][col] for p in ps if p["dens"][col] is not None]
+            mean[col] = sum(v) / len(v) if v else None
+        hr = held_reads.get(run, [0, 0])
+        runs.append({"run": run, "n_searches": len(ps), "dens": mean, "from_held": sm["from_held"], "returned": sm["returned"],
+                     "new": sm["new"], "read": sm["read"], "held_reads": hr[0], "reads": hr[1],
+                     "new_share": (sm["new"] / sm["returned"]) if sm["returned"] else None})
+    out["runs"] = {"with_summary_and_density": len(runs),
+                   "cell_runs_with_density_no_summary": sum(1 for r in by_run if r not in parsed["summaries"])}
+    defs = {"from_held>0": lambda r: r["from_held"] > 0,
+            "held_reads>=half_of_reads": lambda r: r["reads"] > 0 and r["held_reads"] * 2 >= r["reads"]}
+    for name, f in defs.items():
+        usable = [r for r in runs if (name != "held_reads>=half_of_reads" or r["reads"] > 0)]
+        pos = [r for r in usable if f(r)]
+        neg = [r for r in usable if not f(r)]
+        o = {"n_positive": len(pos), "n_negative": len(neg), "auc": {}}
+        for col in COLUMNS:
+            a, lo, hi = auc_ci([r["dens"][col] for r in pos if r["dens"][col] is not None],
+                               [r["dens"][col] for r in neg if r["dens"][col] is not None])
+            o["auc"][col] = {"auc": a, "lo": lo, "hi": hi}
+        out["outcomes"][name] = o
+    sp = {}
+    ru = [r for r in runs if r["new_share"] is not None]
+    for col in COLUMNS:
+        xs = [r["dens"][col] for r in ru if r["dens"][col] is not None]
+        ys = [r["new_share"] for r in ru if r["dens"][col] is not None]
+        r_, lo, hi = spearman_ci(xs, ys)
+        sp[col] = {"rho": r_, "lo": lo, "hi": hi, "n": len(xs)}
+    out["spearman_density_vs_new_share_of_returned_pages"] = sp
+    # a search's own answer: the held pages it returned
+    sp2 = {}
+    for col in COLUMNS:
+        xs = [p["dens"][col] for p in pts if p["dens"] and p["dens"][col] is not None and p["caller"] == "cell"]
+        ys = [p["captures"] for p in pts if p["dens"] and p["dens"][col] is not None and p["caller"] == "cell"]
+        r_, lo, hi = spearman_ci(xs, ys)
+        sp2[col] = {"rho": r_, "lo": lo, "hi": hi, "n": len(xs)}
+    out["spearman_density_vs_captures_the_search_returned"] = sp2
+    return out
+
+
+def compute(console, search_sims, capture_sims, outcomes, since=None, until=None, want_part2=True):
+    parsed = parse_console(console, since, until)
+    res = {"span": parsed["span"], "part1_decisions": part1_decisions(parsed["decisions"]),
+           "part1": part1(outcomes, capture_sims) if outcomes else None}
+    res["part2"] = part2(parsed, search_sims) if want_part2 else None
+    res["_searches"] = parsed["searches"]   # for the fetch; removed before printing (it holds query text)
+    return res
+
+
+# ---------------------------------------------------------------- rendering
+
+def f3(x):
+    return "-" if x is None else "%.3f" % x
+
+
+def fq(q):
+    return "-" if q is None else "/".join("%.3f" % v for v in q)
+
+
+def render(res):
+    lo, hi = res["span"]
+    o = ["window of the console lines read: %s to %s" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(lo)) if lo else "-",
+                                                         time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(hi)) if hi else "-")]
+    d = res["part1_decisions"]
+    o.append("management decisions in the console: feed %d, open %d, decline %d; captures they disposed of: feed %d, open %d, decline %d" % (
+        d["decisions"]["feed"], d["decisions"]["open"], d["decisions"]["decline"],
+        d["captures"]["feed"], d["captures"]["open"], d["captures"]["decline"]))
+    p1 = res["part1"]
+    if p1 is None:
+        o.append("part 1: per-capture table UNAVAILABLE: the console names no capture id and the paper's disposition record is in the VM's own store (pass --outcomes FILE)")
+    else:
+        o.append("part 1: judged captures with a density: feed %d, open %d, decline %d; excluded: %s" % (
+            p1["n"]["feed"], p1["n"]["open"], p1["n"]["decline"],
+            ", ".join("%s %d" % kv for kv in sorted(p1["exclusions"].items()))))
+        o.append("%-7s %-26s %-26s %-26s %-22s %-22s" % ("column", "quartiles feed", "quartiles open", "quartiles decline", "AUC fed v open|decline", "AUC fed v open"))
+        for col in COLUMNS:
+            e = p1["columns"][col]
+            a, b = e["auc_fed_vs_open_or_decline"], e["auc_fed_vs_open"]
+            o.append("%-7s %-26s %-26s %-26s %-22s %-22s" % (
+                col, fq(e["quartiles"]["feed"]), fq(e["quartiles"]["open"]), fq(e["quartiles"]["decline"]),
+                "%s [%s, %s]" % (f3(a["auc"]), f3(a["lo"]), f3(a["hi"])), "%s [%s, %s]" % (f3(b["auc"]), f3(b["lo"]), f3(b["hi"]))))
+    p2 = res["part2"]
+    if p2:
+        o.append("")
+        o.append("part 2: corpus searches %d (%s), density made for %d, none for %d" % (
+            p2["searches"], ", ".join("%s %d" % kv for kv in sorted(p2["searches_by_caller"].items())), p2["with_density"], p2["without_density"]))
+        o.append("density of the question, quartiles (25/50/75) over all searches: " + "; ".join("%s %s" % (c, fq(p2["per_search_density"][c])) for c in COLUMNS))
+        o.append("runs (research cell searches) with a summary line and a density: %d; cell runs with a density and no summary line: %d" % (
+            p2["runs"]["with_summary_and_density"], p2["runs"]["cell_runs_with_density_no_summary"]))
+        for name, e in p2["outcomes"].items():
+            o.append("  run relied on held, defined as %s: %d runs yes, %d no; AUC of run-mean density for yes:" % (name, e["n_positive"], e["n_negative"]))
+            for col in COLUMNS:
+                a = e["auc"][col]
+                o.append("    %-7s %s [%s, %s]" % (col, f3(a["auc"]), f3(a["lo"]), f3(a["hi"])))
+        o.append("  Spearman, run-mean density vs the new share of the pages the run's searches returned (pages_new / pages_returned):")
+        for col in COLUMNS:
+            s = p2["spearman_density_vs_new_share_of_returned_pages"][col]
+            o.append("    %-7s %s [%s, %s] n=%d" % (col, f3(s["rho"]), f3(s["lo"]), f3(s["hi"]), s["n"]))
+        o.append("  Spearman, a cell search's density vs the held captures that search returned:")
+        for col in COLUMNS:
+            s = p2["spearman_density_vs_captures_the_search_returned"][col]
+            o.append("    %-7s %s [%s, %s] n=%d" % (col, f3(s["rho"]), f3(s["lo"]), f3(s["hi"]), s["n"]))
+    return "\n".join(o)
+
+
+# ---------------------------------------------------------------- fetching
+
+CONSOLE_REMOTE = r"""
+dir=/var/lib/go-choir/vm-state/@VM@
+sudo -n true 2>/dev/null || echo "##NOSUDO"
+echo "##CONSOLE"
+sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
+  grep -a -E 'management story choice run=|corpus search computer=|runtime: search run=|corpus read run=' |
+  sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} (management story choice|corpus search|runtime: search|corpus read))/\1/'
+echo "##END"
+""".replace("@VM@", PAPER_VM)
+
+# Runs on the host (python3 from stdin data). One question or capture at a time,
+# each a READ ONLY transaction with a 5 s statement timeout and LIMIT 20.
+HOST_JOB = r'''
+import json, re, subprocess, sys, urllib.request, math
+req = json.load(sys.stdin)
+HASH = "2188ac1deca4b77dffefd603c2776a9d76d9d74ec01841392982ebb840b09135"
+K = req["k"]
+def psql(sql):
+    script = "BEGIN READ ONLY;\nSET LOCAL statement_timeout=5000;\nSET LOCAL hnsw.ef_search=200;\nSET LOCAL hnsw.iterative_scan=strict_order;\n" + sql + "\nROLLBACK;\n"
+    p = subprocess.run(["sudo", "-n", "-u", "postgres", "psql", "-d", "graph", "-At", "-q", "-v", "ON_ERROR_STOP=1"], input=script, capture_output=True, text=True, timeout=20)
+    if p.returncode != 0:
+        raise RuntimeError((p.stderr or "psql failed").strip().splitlines()[-1][:160] if (p.stderr or "").strip() else "psql failed")
+    return [l for l in p.stdout.splitlines() if l.strip() and not l.startswith(("SET", "BEGIN", "ROLLBACK"))]
+def embed(q):
+    body = json.dumps({"input": ["task: search result | query: " + q.strip()], "model": "embeddinggemma-2"}).encode()
+    r = urllib.request.Request("http://127.0.0.1:8091/v1/embeddings", data=body, headers={"Content-Type": "application/json"})
+    v = json.load(urllib.request.urlopen(r, timeout=15))["data"][0]["embedding"][:256]
+    n = math.sqrt(sum(x * x for x in v))
+    return [x / n for x in v]
+out = {"search_sims": {}, "capture_sims": {}, "errors": {}, "queries": 0}
+ident = re.compile(r"^[A-Za-z0-9_:.=-]+$")
+owner = None
+if req.get("computer"):
+    if not ident.match(req["computer"]):
+        raise SystemExit("bad computer id")
+    rows = psql("SELECT owner_id FROM vec_captures WHERE computer_id='%s' LIMIT 1;" % req["computer"])
+    out["queries"] += 1
+    owner = rows[0] if rows else None
+    if owner is not None and not ident.match(owner):
+        raise SystemExit("bad owner id")
+out["owner_found"] = bool(owner)
+for it in req.get("items", []):
+    try:
+        v = embed(it["text"])
+        lit = "[" + ",".join("%.6f" % x for x in v) + "]"
+        day = it["day"]
+        if not re.match(r"^\d{4}-\d\d-\d\d$", day):
+            raise RuntimeError("bad day")
+        rows = psql("SELECT 1 - (v.embedding <=> '%s'::halfvec(256)) FROM vec_captures v WHERE v.model='%s' AND v.embedding IS NOT NULL AND v.owner_id='%s' AND v.computer_id='%s' AND v.day <= '%s' ORDER BY v.embedding <=> '%s'::halfvec(256) LIMIT %d;" % (lit, HASH, owner, req["computer"], day, lit, K))
+        out["queries"] += 1
+        out["search_sims"][it["key"]] = [float(r) for r in rows]
+    except Exception as e:
+        out["errors"][it["key"]] = str(e)[:160]
+for cid in req.get("captures", []):
+    try:
+        if not ident.match(cid):
+            raise RuntimeError("bad capture id")
+        rows = psql("SELECT 1 - (v.embedding <=> q.embedding) FROM vec_captures q JOIN vec_captures v ON v.owner_id=q.owner_id AND v.computer_id=q.computer_id AND v.model=q.model AND v.day <= q.day AND v.capture_id <> q.capture_id AND v.embedding IS NOT NULL WHERE q.capture_id='%s' AND q.embedding IS NOT NULL AND q.model='%s' ORDER BY v.embedding <=> q.embedding LIMIT %d;" % (cid, HASH, K))
+        out["queries"] += 1
+        out["capture_sims"][cid] = [float(r) for r in rows]
+    except Exception as e:
+        out["errors"][cid] = str(e)[:160]
+json.dump(out, sys.stdout)
+'''
+
+
+def sections(text):
+    out, cur = {}, None
+    for ln in text.splitlines():
+        if ln.startswith("##"):
+            cur = ln[2:].split(" ", 1)[0]
+            out[cur] = []
+        elif cur:
+            out[cur].append(ln)
+    return out
+
+
+def fetch_console(node):
+    p = subprocess.run(["ssh", "-C", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node, CONSOLE_REMOTE],
+                       capture_output=True, text=True, timeout=240)
+    s = sections(p.stdout)
+    if "END" not in s:
+        raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
+    if "NOSUDO" in s:
+        raise RuntimeError("sudo -n is not allowed on %s: the guest console cannot be read" % node)
+    return "\n".join(s["CONSOLE"])
+
+
+def fetch_sims(node, computer, items, captures):
+    """items: [{key, text, day}] and captures: [id]; returns the host job's JSON."""
+    code = base64.b64encode(HOST_JOB.encode()).decode()
+    payload = json.dumps({"k": K, "computer": computer, "items": items, "captures": captures})
+    p = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node,
+                        "python3 -c 'import base64,sys;exec(base64.b64decode(sys.argv[1]))' " + code],
+                       input=payload, capture_output=True, text=True, timeout=1800)
+    try:
+        return json.loads(p.stdout)
+    except ValueError:
+        raise RuntimeError("the host job failed (rc=%d): %s" % (p.returncode, (p.stderr or "").strip()[-200:]))
+
+
+def read_outcomes(path):
+    rows = []
+    with open(path) as f:
+        for ln in f:
+            c = ln.rstrip("\n").split("\t")
+            if len(c) >= 2 and c[0] and not c[0].startswith("#"):
+                rows.append({"capture_id": c[0], "cls": c[1]})
+    return rows
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="status-density")
+    ap.add_argument("--since")
+    ap.add_argument("--until")
+    ap.add_argument("--node", default=NODE)
+    ap.add_argument("--outcomes")
+    ap.add_argument("--no-part2", action="store_true")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--fixture")
+    a = ap.parse_args(argv)
+    try:
+        since = parse_arg_time(a.since) if a.since else None
+        until = parse_arg_time(a.until) if a.until else None
+        if a.fixture:
+            with open(a.fixture) as f:
+                fx = json.load(f)
+            console, ssims, csims, outcomes = fx.get("console", ""), fx.get("search_sims", {}), fx.get("capture_sims", {}), fx.get("outcomes", [])
+            fetch_errors = {}
+        else:
+            console = fetch_console(a.node)
+            outcomes = read_outcomes(a.outcomes) if a.outcomes else []
+            parsed = parse_console(console, since, until)
+            items, computer = [], None
+            if not a.no_part2:
+                for i, s in enumerate(parsed["searches"]):
+                    computer = computer or s["computer"]
+                    if s["query"]:
+                        items.append({"key": "s%d" % i, "text": s["query"], "day": day_of(s["t"])})
+            caps = sorted({o["capture_id"] for o in outcomes})
+            if items or caps:
+                got = fetch_sims(a.node, computer or "", items, caps)
+            else:
+                got = {"search_sims": {}, "capture_sims": {}, "errors": {}}
+            ssims, csims, fetch_errors = got["search_sims"], got["capture_sims"], got.get("errors", {})
+        res = compute(console, ssims, csims, outcomes, since, until, want_part2=not a.no_part2)
+        res.pop("_searches", None)
+        if fetch_errors:
+            res["fetch_errors"] = len(fetch_errors)
+    except (OSError, RuntimeError, ValueError, KeyError, subprocess.SubprocessError) as e:
+        print("status-density: unavailable: %s" % e, file=sys.stderr)
+        return 2
+    print(json.dumps(res, sort_keys=True) if a.json else render(res) + ("\nhost job errors: %d" % res["fetch_errors"] if res.get("fetch_errors") else ""))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

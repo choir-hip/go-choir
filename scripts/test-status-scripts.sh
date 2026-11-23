@@ -1190,5 +1190,64 @@ python3 -c "import sys; t=open(sys.argv[1]).read().replace('qh=h1 ','qh=h1 run=f
 runcorpus --fixture "$root/gs_c.log" --gateway-fixture "$root/gs_gf.log" --since 2026-11-18T21:00Z --until 2026-11-18T23:00Z
 check "Q6 corpus-reuse: a quoted run=forged is not a run (still 3 runs searched, 12 requests)" 'grep -q "gateway meter (run= on the request lines): 3 runs searched, 12 requests" "$root/out"'
 
+# status-density. Failure list, written before the code:
+#  D1  density is not the k-th largest cosine (d1, d5, d10, d20) and the mean of the top 10
+#  D2  a capture with no vector, a duplicate id or an unknown class is dropped without being counted
+#  D3  the AUC for fed versus opened-or-declined (and versus opened) is wrong: fed above every
+#      other class is 1.0, ties are half
+#  D4  a search's query text, or a note, reaches the output
+#  D5  part 2 does not join a run's searches to its summary and held reads, or counts a run with
+#      no reads as relying on held pages
+#  D6  without outcomes, part 1 claims a table instead of saying it is unavailable
+density="$here/status-density"
+python3 - "$root" <<'PY'
+import sys, json
+root = sys.argv[1]
+P = "[ 1.0] runtime[1]: "
+def cs(ts, run, q, caller):
+    return f'{P}{ts} corpus search computer=computer-x captures_ms=5 captures=4 text_index=true by_body=1 by_title=0 by_both=1 by_labels_only=0 by_meaning=2 note="SECRETNOTE" query="{q}" capture_ids=a,b run={run} desk=research conv=c vector=10 caller={caller}\n'
+def sr(ts, run, new, ret): return f"{P}{ts} runtime: search run={run} desk=research started=2 from_held=0 not_sent=0 pages_returned={ret} pages_new={new} pages_read=3\n"
+def rd(ts, run, held): return f"{P}{ts} corpus read run={run} desk=research conv=c capture=k held={held} via=brief\n"
+def ch(ts, c): return f"{P}{ts} management story choice run=m choice={c} story=s opening_shown=1 verb_shown=0 captures=2\n"
+console = "".join([cs("2026/11/23 10:00:00","r1","SECRETQUERY one","cell"), cs("2026/11/23 10:01:00","r2","SECRETQUERY two","cell"),
+  rd("2026/11/23 10:02:00","r1","true"), rd("2026/11/23 10:02:01","r1","own"), rd("2026/11/23 10:03:00","r2","false"), rd("2026/11/23 10:03:01","r2","false"),
+  sr("2026/11/23 10:05:00","r1",2,20), sr("2026/11/23 10:05:01","r2",18,20), ch("2026/11/23 10:06:00","feed"), ch("2026/11/23 10:06:01","decline")])
+flat = lambda v: [v - 0.001 * i for i in range(20)]
+fx = {"console": console, "search_sims": {"s0": flat(0.9), "s1": flat(0.5)},
+      "capture_sims": {"f1": flat(0.9), "f2": flat(0.85), "o1": flat(0.8), "o2": flat(0.7), "d1": flat(0.6), "d2": flat(0.8)},
+      "outcomes": [{"capture_id": "f1", "cls": "feed"}, {"capture_id": "f2", "cls": "feed"}, {"capture_id": "o1", "cls": "open"},
+                   {"capture_id": "o2", "cls": "open"}, {"capture_id": "d1", "cls": "decline"}, {"capture_id": "d2", "cls": "decline"},
+                   {"capture_id": "nov", "cls": "feed"}, {"capture_id": "f1", "cls": "feed"}, {"capture_id": "z", "cls": "weird"}]}
+json.dump(fx, open(root + "/dens.json", "w"))
+json.dump({"console": console}, open(root + "/dens_nooutcomes.json", "w"))
+PY
+env -u BASH_ENV python3 "$density" --fixture "$root/dens.json" --json >"$root/out" 2>&1
+check "D1 density columns of one list: d1 .9, d5 .896, d10 .891, d20 .881, mean10 .8955 (part 1 fed median d10)" 'python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+q=d[\"part1\"][\"columns\"][\"d10\"][\"quartiles\"][\"feed\"]
+assert abs(q[1]-((0.9-0.009)+(0.85-0.009))/2)<1e-9, q
+" "$root/out"'
+check "D2 exclusions counted: one with no vector, one duplicate, one unknown class; n feed 2 open 2 decline 2" 'python3 -c "
+import json,sys
+p=json.load(open(sys.argv[1]))[\"part1\"]
+assert p[\"n\"]=={\"feed\":2,\"open\":2,\"decline\":2}, p[\"n\"]
+assert p[\"exclusions\"]=={\"no_vector_or_unmatched\":1,\"short_list\":0,\"unknown_class\":1,\"duplicate\":1}, p[\"exclusions\"]
+" "$root/out"'
+check "D3 AUC fed v open and fed v open-or-decline are 1.0 when every fed is above every other" 'python3 -c "
+import json,sys
+c=json.load(open(sys.argv[1]))[\"part1\"][\"columns\"][\"d10\"]
+assert c[\"auc_fed_vs_open\"][\"auc\"]==1.0, c
+assert c[\"auc_fed_vs_open_or_decline\"][\"auc\"]==1.0, c
+" "$root/out"'
+check "D4 no query or note text in the output" '! grep -q "SECRET" "$root/out"'
+check "D5 part 2: r1 (held reads 2 of 2, density .9) vs r2 (0 of 2, .5): 1 yes 1 no, AUC 1.0" 'python3 -c "
+import json,sys
+o=json.load(open(sys.argv[1]))[\"part2\"][\"outcomes\"][\"held_reads>=half_of_reads\"]
+assert (o[\"n_positive\"],o[\"n_negative\"],o[\"auc\"][\"d10\"][\"auc\"])==(1,1,1.0), o
+" "$root/out"'
+env -u BASH_ENV python3 "$density" --fixture "$root/dens_nooutcomes.json" >"$root/out" 2>&1
+check "D6 no outcomes: part 1 says the per-capture table is unavailable and counts decisions" 'grep -q "per-capture table UNAVAILABLE" "$root/out" && grep -q "feed 1, open 0, decline 1; captures they disposed of: feed 2, open 0, decline 2" "$root/out"'
+
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
