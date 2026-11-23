@@ -28,7 +28,7 @@
 // are exactly the SQLite file, byte for byte as a size-ChunkSize cut of it, so
 // a record needs no new format: page size, page count and pages per chunk are
 // extra fields an old reader ignores. The manifest of chunk digests, with the
-// store head sequence, the file-tree root and the witness v3 root, is the
+// store head sequence, the file-tree root and the page digest, is the
 // private payload of the snapshot_recorded event
 // (computerevent.PrivateArtifactCipher), so the sealed artifact digest on the
 // tape names the snapshot and nothing readable leaves the computer.

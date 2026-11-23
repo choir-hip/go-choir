@@ -193,6 +193,9 @@ func TestProductionRestoreTapeSkipsAPrunedCandidateWithoutDownloadingIt(t *testi
 	rcfg := snapshot.RestoreConfig{
 		ComputerID: computerID, DestPath: filepath.Join(t.TempDir(), "state.db"),
 		Source: tape, Chunks: tape, Cipher: cipher,
+		// This test is about the probe; the head tie a version 2 record needs is
+		// tested where a real store carries a head row (snapshot_page_digest_test.go).
+		Verify: func(context.Context, snapshot.Record, string) error { return nil },
 	}
 	record, err := snapshot.Install(ctx, rcfg, candidates)
 	if err != nil || record.StoreHeadSequence != 40 {
