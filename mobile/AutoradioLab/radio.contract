@@ -6,7 +6,7 @@
 // takes testIds: radio-takes, takes-record, takes-stop, takes-elapsed, takes-review, takes-transcript, takes-preview, takes-rerecord, takes-discard, takes-publish, takes-notice, takes-mine-<n>, takes-delete-<n>, takes-muted-<n>, takes-unmute-<n>, radio-take, radio-take-mute, radio-heard-mute-<n>.
 // notebook link: radio-notebook. radio-take-start (the Take control beside Next), radio-take-flow (the flow's panel under the on-air section).
 // testIds: radio-page, radio-scroll, radio-title, radio-date, radio-status, radio-onair, radio-onair-kind, radio-onair-title, radio-onair-open,
-// radio-onair-byline, radio-onair-sentence, radio-onair-sentence-number, radio-greeting, radio-heard-words, radio-cannot, radio-retry, radio-then-back,
+// radio-onair-byline, radio-onair-sentence, radio-greeting, radio-heard-words, radio-cannot, radio-retry, radio-then-back,
 // radio-progress, radio-elapsed, radio-remaining, radio-play, radio-next, radio-why, radio-why-text, radio-forecast, radio-back15, radio-fwd15,
 // radio-speed, radio-speed-slider, radio-speed-down, radio-speed-up, radio-speed-reset, radio-next-list, radio-next-<n>, radio-next-play-<n>,
 // radio-next-grip-<n>, radio-next-all, radio-next-writing, radio-next-empty, radio-notice, radio-builton-<n>, radio-heard-<n>, radio-heard-built-<n>, radio-heard-builton-<n>-<m>.

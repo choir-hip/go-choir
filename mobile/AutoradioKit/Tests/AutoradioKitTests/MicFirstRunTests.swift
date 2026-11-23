@@ -109,6 +109,14 @@ final class MicFirstRunTests: XCTestCase {
         XCTAssertEqual(MicLog.tap(active: false, rate: 0), "fail")
     }
 
+    func testTheErrorLineIsSaidOnlyForAFinalState() {
+        XCTAssertNil(MicLog.finalError(.pending, rate: 0), "a retry may still open it")
+        XCTAssertNil(MicLog.finalError(.open, rate: 48000))
+        XCTAssertNil(MicLog.finalError(.off, rate: 0))
+        XCTAssertNotNil(MicLog.finalError(.failed, rate: 0))
+        XCTAssertNotNil(MicLog.finalError(.refused, rate: 0))
+    }
+
     func testOnboardingLeavesCheckingWhenTheMicrophoneCannotOpen() {
         XCTAssertEqual(MicLog.onboardingState(.refused), "refused")
         XCTAssertEqual(MicLog.onboardingState(.failed), "silent")

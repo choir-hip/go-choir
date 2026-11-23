@@ -312,7 +312,10 @@ public final class LabRuntime: @unchecked Sendable {
                     try? await Task.sleep(nanoseconds: 3_000_000_000)
                     let rate = Int(audio.micTapRate)
                     print("AUTORADIO voice mic after the route settled rate=\(rate) tap=\(MicLog.tap(active: audio.micActive, rate: rate)) mic=\(audio.micState)")
-                    if !audio.micActive, self.handsFreeIsOn { log.emit(.error(stage: "listen", message: "the microphone could not be opened (input rate \(rate), \(audio.micState))")) }
+                    // An error only when it is final: while a retry is pending the microphone may still open, so the line says it is still trying (log only) and the state is looked at again.
+                    var waited = 0
+                    while audio.micState == .pending, self.handsFreeIsOn, waited < 40 { if waited == 0 { print("AUTORADIO voice mic still trying") }; try? await Task.sleep(nanoseconds: 1_000_000_000); waited += 1 }
+                    if self.handsFreeIsOn, let say = MicLog.finalError(audio.micState, rate: Int(audio.micTapRate)) { log.emit(.error(stage: "listen", message: say)) }
                 }
             }
         }

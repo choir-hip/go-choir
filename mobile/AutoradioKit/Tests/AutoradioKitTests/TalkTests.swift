@@ -65,7 +65,7 @@ final class ConversationTests: XCTestCase {
     // This test used to assert that `begin` cleared the dismissed id ("a new question shows its card again"). That was the bug: every voice turn begins before System 1 has judged
     // whether anything was asked, so a phantom turn reopened the card the listener had closed. Closing is shared code's now (AutoradioLab/bar.ts `dismissAnswer`, bar.test.ts B12);
     // the conversation keeps no dismissal, and a turn that begins and is cancelled leaves the answered entry exactly as it was, so the card's choice never depends on a turn's start.
-    func testAPhantomTurnLeavesTheAnsweredEntryAsItWas() {
+    func testTheConversationKeepsAnAnsweredEntryUntouchedByAPhantomTurn() {
         let c = Conversation()
         c.begin(id: "t1", question: "q"); c.addAnswer(id: "t1", sentence: "a"); c.finishAnswer(id: "t1", status: "completed")
         let before = c.entries().first

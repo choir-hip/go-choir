@@ -105,6 +105,7 @@ final class OnboardingController: @unchecked Sendable {
                 let frames = rt.bus.mic()
                 let feeder = Task { for await f in frames { meter.frame(db: f.rmsDb, seconds: f.duration) } }
                 await rt.start(virtual: self.module.virtualEngine)
+                rt.audio.micMayRetry()                           // the listener asks to be heard now: a give-up from an earlier run must not read as this check's "silent" (review N1)
                 if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }
                 defer { feeder.cancel(); rt.restoreHandsFree() }
                 while meter.verdict == .listening {

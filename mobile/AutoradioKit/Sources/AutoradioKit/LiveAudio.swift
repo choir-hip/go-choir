@@ -96,7 +96,7 @@ public final class LiveAudio: @unchecked Sendable {
     /// Something that could change the outcome of opening the microphone happened (the permission changed, the route changed, the app came back to the front, the listener turned voice on
     /// again): the retries start from none. A coordinator state switch is NOT such an event: it resumes the engine with the count it has, so a microphone that cannot open does not cost
     /// six engine rebuilds (each one cutting the programme) on every switch.
-    func micMayRetry() { micRetries = 0; micGaveUp = false }
+    public func micMayRetry() { micRetries = 0; micGaveUp = false }
     /// The route changed (AirPods in or out, a new input): see `micMayRetry`.
     func routeChanged() { micMayRetry() }
     /// The input rate of the tap now installed (0: none), for the log line of voice on.
@@ -1171,6 +1171,14 @@ public enum MicLog {
     /// The "voice on" line: the tap word comes from the tap and the rate, never from anything else.
     public static func voiceOnLine(claim: String, rate: Int, active: Bool, state: LiveAudio.MicState) -> String {
         "voice on claim=\(claim) rate=\(rate) tap=\(tap(active: active, rate: rate)) mic=\(state)"
+    }
+    /// The error line for a microphone that is wanted and not open, only when that is FINAL (`failed`: the retries are used up; `refused`: not allowed). While `pending` a retry may still open it: no error (nil).
+    public static func finalError(_ s: LiveAudio.MicState, rate: Int) -> String? {
+        switch s {
+        case .failed: return "the microphone could not be opened (input rate \(rate), failed after the retries)"
+        case .refused: return "the microphone could not be opened (it is not allowed)"
+        default: return nil
+        }
     }
     /// What onboarding's microphone step must show when the microphone cannot be opened (nil: keep listening).
     public static func onboardingState(_ s: LiveAudio.MicState) -> String? {
