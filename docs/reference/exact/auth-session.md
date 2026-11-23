@@ -24,50 +24,77 @@ Written 2026-11-23 with the sign-in sheet change (owner, 2026-11-23: "A sign-in 
 Only the opening of the approval page and the owner of the sign-in changed; the device flow's server side, the key and its Keychain item (same service and accounts, written by the same native code) did not
 (`docs/design/account-boundary-2026-11-21.md`).
 
-### One sign-in attempt is one state machine, owned in one place (review 2026-11-23, third round)
+### One sign-in attempt is one state machine, owned in one place (review 2026-11-23, third and fourth rounds)
 
 Three review rounds found the same fault in different places (a stale poll answer abandoning an approved key; a card Cancel followed by a key write; a re-opened sheet still carrying a close flag): the sign-in's
 state was spread over a contract status, a result slot, a close flag and a native poll loop, each patched on its own. So an attempt now has an id and **one owner: shared code** (`mobile/AutoradioLab/signin-attempt.ts`,
-a pure reducer plus the driver that runs it). Every event names the attempt it belongs to; an event for another attempt, or for one that has ended, changes nothing. Native keeps only what must be native, the
-device code, the one poll request and the Keychain write, behind three calls that each name an attempt: `signInBegin(attempt)`, `signInPoll(attempt)`, `signInForget(attempt)` (the app module's `later`, ops
-handled by `ChoirSignIn`). Native has no loop, no timer, no close flag and no status of its own.
+a pure reducer plus the driver that runs it). Every event names the attempt it belongs to. Native keeps only what must be native, the device code, the one poll request and the Keychain write, behind three calls that
+each name an attempt: `signInBegin(attempt)`, `signInPoll(attempt)`, `signInForget(attempt)` (the app module's `later`, handled by `ChoirSignIn`). Native has no poll loop, no timer, no close flag and no attempt
+phase of its own. (It still keeps `ChoirAuthState.status` and `message`, only so `ChoirApp` can refresh the stories when a key has just been stored; they say nothing about the attempt.)
 
 ```
 shared code (signin-attempt.ts)                      native (ChoirSignIn, one attempt at a time)            server
- signInRun: id = new, BEGIN(id) ------------------> signInBegin(id): POST /auth/device/begin ----------> codes
+ signInRun: id = new, BEGIN(id) ------------------> signInBegin(id): POST /auth/device/begin ----------> codes   (a begin is serialized: only the LATEST installs its device code)
    BEGUN(userCode, link, interval, expires) <------ {userCode, link, interval, expires}   (device_code stays native)
    open the sheet: openAuthSession(link + return + state)      (signin-sheet.ts; the callback is a hint, never read)
    [the owner signs in with the browser's passkey and approves; the page navigates to the callback]
    every interval: ISSUED(n), signInPoll(id) ------> POST /auth/device/token {device_code} -----------> pending | key | ...
-     on the key: the Keychain write happens only if `id` is still the attempt (checked under the lock) -> "approved"
+     on the key: stored only if `id` is still the live attempt (checked under the lock), else revoked -> "approved" / "stale"
    card Cancel / abandon: signInForget(id) --------> drops the code; a key this attempt wrote is deleted and revoked
 ```
 
-Transition table (`phase` x event -> phase). `n` is the poll's number (polls are issued one at a time); `closedAt` is the number of polls issued when the sheet closed. Any event whose id is not the
-attempt's, and any event after a terminal phase, is ignored (that is the whole of "stale").
+**Publishing.** Every accepted change of the attempt (a new attempt, each transition, the last one of an attempt included) goes through one function, `publish`, which bumps the view's `rev` and tells `env.publish`; an event the
+table ignores publishes nothing, and the poll counter (`ISSUED`) is bookkeeping, not a change of the view. The contract's `siv` resource is keyed on every press's answer, which carries the `rev` the press left behind, and each press
+asks the view once more when it settles (`then bumpSiv`); a half-second tick covers the changes in between. So the card reads the attempt's LAST phase as surely as its first.
+
+Transition table (`phase` x event -> phase). `n` is the poll's number (polls are issued one at a time); `closedAt` is the number of polls issued when the machine learns the sheet has closed (a poll issued between the
+physical close and that moment counts as before the close: conservative by one interval). Any event whose id is not the attempt's, any event after a terminal phase, and any event that does not fit the phase (for
+example a sheet result while `begun`, BEGUN while `sheet`, REOPEN while `begun`) is ignored: it changes nothing and publishes nothing.
 
 | phase | event | next phase | what else |
 |---|---|---|---|
-| (none / terminal) | BEGIN(id) | begun | a previous attempt is forgotten first (`signInForget`) |
+| (none) | BEGIN(id) | begun | |
+| terminal | BEGIN(id) | begun | the ended attempt is NOT forgotten (an approved one owns the key) |
+| begun, sheet, closed | BEGIN(id) (a double tap) | begun (the new attempt) | **the newest wins**: the older attempt is cancelled and `signInForget` is sent for it; its late begin answer is ignored; native installs only the latest begin |
 | begun | BEGUN | sheet | the sheet opens |
 | begun | BEGIN_FAILED | failed | the message says why |
 | sheet | SHEET returned | sheet | nothing: a hint; the poll that is running learns the key |
-| sheet | SHEET failed (501, 502, a throw) | sheet | a note; the same link is offered in the browser; the poll goes on |
+| sheet | SHEET failed (501, 502, a throw) | sheet | a note; the same link is offered in the browser (if the view validates it); the poll goes on |
 | sheet | SHEET cancelled (the owner closed it) | closed | `closedAt = polls issued` |
-| closed | REOPEN (the owner taps "Open the approval page") | sheet | the close is forgotten (`closedAt` cleared) |
-| sheet | REOPEN | sheet | the sheet opens again |
+| closed | REOPEN (the owner taps "Open the approval page") | sheet | the close is forgotten (`closedAt` cleared); not while this attempt's sheet is still up |
+| sheet | REOPEN | sheet | the sheet opens again (not while it is still up) |
 | closed | ANSWER pending, `n > closedAt` | cancelled | a poll that started after the close says nobody approved: the owner walked away; `signInForget` |
 | closed | ANSWER pending, `n <= closedAt` | closed | the poll started before the close: it may predate an approval, it decides nothing |
 | sheet, closed | ANSWER slow_down / error | same | the server answers `slow_down` to a poll inside the interval even when the code is approved: it decides nothing |
 | sheet, closed | ANSWER approved | approved | the key is stored (native wrote it under the attempt's lock) |
 | sheet, closed | ANSWER denied | denied | "the sign-in was denied" |
 | sheet, closed | ANSWER expired, or TIMEOUT | expired | "the code expired; sign in again" |
-| sheet, closed | ANSWER stale / invalid | failed | native does not know the attempt (a restart): "sign in again" |
-| begun, sheet, closed | CANCEL (the card's Cancel) | cancelled | `signInForget` first: **no key is written after it**; a key that was already written by this attempt is deleted and revoked |
-| cancelled, approved, denied, expired, failed | anything | same | ignored |
+| sheet, closed | ANSWER stale / invalid | failed | native does not know the attempt, or the key could not be stored: "sign in again" |
+| begun | CANCEL, then native's begin answers late | cancelled | no sheet opens; `signInForget` is sent again once the begin has answered, so the code it installed does not stay live |
+| begun, sheet, closed | CANCEL (the card's Cancel) | cancelled | the machine moves FIRST, so any later answer is ignored; then `signInForget`: a key that native had already written in that gap is deleted and revoked |
+| ended phases | anything | same | ignored, nothing published |
 
-A key that arrives after CANCEL is never written: the Keychain write is guarded by "this attempt is still the attempt", checked under the same lock `signInForget` takes; a key the server had already minted
-for a forgotten attempt is revoked at once with its own key and not stored.
+**What is not promised.** The card's Cancel cannot make "no key was ever written" true in the instant before the machine hears it; what is promised is that **no key remains after Cancel** (written in the gap, it is deleted and
+revoked; arriving later, it is never written and is revoked). A code approved from another browser AFTER the owner closed the sheet and walked away is abandoned by a poll that starts after the close and still says pending:
+that is a missed sign-in (no key is minted for it), not a leak; the owner signs in again.
+
+### A minted key is either stored and belongs to the live attempt, or revoked
+
+The server mints the key inside the poll that approves it, before the answer reaches the phone. From the moment native holds the answer, every path ends in one of the two:
+
+| path | what native does |
+|---|---|
+| the attempt is live | stores it (under the lock `forget` takes), records `wrote = attempt`, answers "approved" |
+| the Keychain refuses to store it | revokes it at once, ends the attempt (answers "invalid") |
+| the attempt was forgotten (the owner's Cancel, a denial, an expiry) while the answer was on its way | does not store it; revokes it |
+| a newer begin replaced the attempt | does not store it; revokes it |
+| sign-out ran while the answer was on its way | does not store it; revokes it |
+| the attempt is forgotten after the key was stored | deletes the three Keychain items and revokes it |
+| the process stops between the server's commit and the answer (the answer is lost) | **nothing holds the key**: the phone never saw it, the server's row is consumed, so the next poll answers `invalid_grant` and the key stays live on the server until the owner revokes it in Settings (its label is `choir login: <device label>`). No code can close this without a server-side change (for example, a key delivered only with a client acknowledgement); it is recorded here, not fixed |
+| the answer carries no `key_id` (the server always sends one) and the key is not stored | nothing can be revoked by id: recorded as the same limit as the lost answer |
+| a revoke itself fails (offline) | the revoke is best effort and held nowhere: native keeps no queue of keys to revoke, and **no later revoke exists today**; sign-out has the same documented limit. The key stays live on the server until the owner revokes it in Settings. It is unusable by anyone who does not hold the plaintext, which native has just dropped |
+
+There is no `await` between native receiving a key and the guarded write, so cancellation of the task cannot land between the two.
 
 ### What the callback and the close mean
 
