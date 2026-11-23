@@ -17,13 +17,12 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 | Phone: the rest of the pages moved to shared code ("the train") | built; fails 7 checks of its own real-host proof; never on a phone | `lane/exact-train1` |
 | Phone: dead native code removed | built, reviewed once; waits on the train | `lane/native-dead-code` |
 | Phone: one data folder per account, sign-out wipes it | 12 review rounds, 5 failed drill runs; stopped for a structural assessment | `lane/account-partition-s1` |
-| Research prompts: one source count, a stop rule, a real gap measure | sent back by its review (four blocking findings); rework pushed, re-review owed | `lane/research-frame` |
 | Phone: "Autoradio 1", the train as a second app beside the first | **on the owner's phone since 2026-11-23 01:33Z**; seven defects found there | `lane/exact-side-by-side` |
 | Phone: position moves while playing; a closed answer card stays closed; the queue is described to the server as it is; the microphone opens on a first launch | built; one review seat accepted with six fixes, being applied; not on the phone | `lane/exact-ar1-next` |
 | Phone: sign-in in a sheet over the app | built (red: the approval route and page change); seat 1 accepted with three fixes, seat 2 running | `lane/signin-sheet` |
 | A voice ask searches the paper | not started. Today the answering model has no tools and sees at most 40 front-page titles | none |
 | `choir trace run`: one run, step by step, with the reasons its record holds | built; the "model calls 0" defect fixed (the phase is in the payload, not the record field); tested on fixtures only, [page](reference/TRACE-RUN.md); not landed | `lane/trace-run` |
-| Research prompts: one source count, a stop rule, a real gap measure | built; under test; not reviewed | `lane/research-frame` |
+| Research prompts: one source count, a stop rule, a real gap measure | built; reviewed in five rounds, accepted with fixes; waits on the lead to land | `lane/research-frame` |
 | Phone model benchmark on the Motorola | first rows; not landed | `lane/model-bench` |
 | Snapshot capture in one pass (no store-sized scratch copy) | not started; the reader half landed 11-22 | `lane/snapshot-one-pass` |
 | Redesign of capture (subjects and mentions), offline slice | **failed all four of its kill lines** (claim C192); design panel not yet run | `lane/offline-slice-r0` |
@@ -44,6 +43,14 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 Counted 2026-11-23: 520 lane branches on the remote; 468 are landed, 13
 superseded, 11 evidence only, 26 are distinct live work (the rows above and
 the first table's). Seven designs exist only on lanes.
+
+## 2026-11-23
+
+### Research prompts: one source count, a stop rule, a real gap measure, a corpus search that says whether it matched (`lane/research-frame`, orange)
+- **What:** the "read at least 8 independent sources" target and its pick-list are gone; one statement of the two-outlet gate (`MinPublishOutlets`, unchanged) in the research role, the overlay and Texture, with the event record named as a source of the second; Texture's Cast asks for the one thing the frame lacks, names the page to fetch and never says corroborate as a goal; a stop rule (a detail you cannot confirm is a finding; a reworded query that returns pages you already hold says this wording does not find it) beside "search the web whenever the corpus does not hold what the question needs"; `held` in web results means an earlier search of this run returned the page; the first turn names the digest and asks for an interim packet when there is a claim to cite. `SearchWireCorpus` opens its result with `captures_matched_words` and `captures_near_by_meaning_only` and a `words_note` (silent when the text index is partial or events, published pieces or a window explain the zero). The report log counts a gap only for a `missing:` line that says something and logs its words; `scripts/status-search-reads` reports the mean over all runs, the heaviest-five share, the no-read share and real gaps. The worked cell only prints the counts: whether pages answer is the model's judgement.
+- **Why:** in 3 hours of traces 50 of 77 hand-labelled searches were reformulations, runs told to corroborate sent 7.4 searches each, the prompts held three source counts, the corpus search returned captures 224 of 224 times whether or not the graph held the subject, and 55 of 56 Reports "named a gap" because the log counted a placeholder. Not a cap: runs still go to the web when the corpus lacks the answer (owner, 2026-11-23).
+- **Proof:** not deployed. deployed proof owed: the gap measure and the corpus-share line in `scripts/status-hourly` after a day. Built and tested on the build VM: researchtools, runtimeprompts, promptstore, textureprompts, yaegikernel, the whole agentcore and textureowner shards, internal/platform (with pgvector), the status-script fixtures.
+- **Replaced:** the 8-source target, "do not search again", the placeholder `missing:` line, the unset `SearchHit.CaptureID` claim (the field stays, commented). Not done: waking research on a record with no objective, capturing the page a lead links to, logging the domains read, a worked cell that reads the event record. **Undo:** revert.
 
 ## 2026-11-22
 

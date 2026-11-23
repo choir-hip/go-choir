@@ -403,7 +403,7 @@ func TestOverlayWorkedCellCountsOnlyPagesReadWithoutError(t *testing.T) {
 
 // The research prompts are bounded as the model sees them: the role prompt's content (not the
 // YAML file, whose comments hold the version history) and the overlay's body, each with about
-// 16% headroom over its size on 2026-11-23 (6959 and 9215), and the two together. The bounds
+// 16% headroom over its size on 2026-11-23 (6959 and 9324), and the two together. The bounds
 // are a sanity check against unnoticed growth, not a model limit.
 func TestResearchRoleAndOverlayStayUnderTheirBound(t *testing.T) {
 	overlay := runtimeprompts.RLMResearchOverlay()
@@ -411,8 +411,8 @@ func TestResearchRoleAndOverlayStayUnderTheirBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(overlay) > 10800 || len(role.Content) > 8100 || len(overlay)+len(role.Content) > 18800 {
-		t.Fatalf("research overlay %d + role content %d chars: past the sanity bounds (10800, 8100, 18800 together)", len(overlay), len(role.Content))
+	if len(overlay) > 10800 || len(role.Content) > 8100 || len(overlay)+len(role.Content) > 18900 {
+		t.Fatalf("research overlay %d + role content %d chars: past the sanity bounds (10800, 8100, 18900 together)", len(overlay), len(role.Content))
 	}
 }
 
