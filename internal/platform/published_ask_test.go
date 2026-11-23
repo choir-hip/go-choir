@@ -312,8 +312,9 @@ func TestAskPublishedPartialVectorAndSlowIndexStillAnswer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("(P9) an index that cannot catch up inside the deadline failed the ask: %v", err)
 	}
-	if askByTitle(slow, "Harbor reopens") == nil || slow.Vector != "off" {
-		t.Fatalf("(P9) the indexed keyword rows must survive an expired deadline, with the vector note: %v vector %q", askTitles(slow), slow.Vector)
+	// the vector half's own note ("off") or the join's, whichever the deadline let through
+	if askByTitle(slow, "Harbor reopens") == nil || slow.Vector == "answered" || slow.Vector == "" {
+		t.Fatalf("(P9) the indexed keyword rows must survive an expired deadline, with a vector note: %v vector %q", askTitles(slow), slow.Vector)
 	}
 	if !slow.Capped && slow.Partial == "" {
 		t.Fatalf("(P9) an answer made past the deadline must say it may be incomplete: %+v", slow)
@@ -390,5 +391,167 @@ func TestAskPublishedRealVectorHalfFindsAStoryByMeaning(t *testing.T) {
 	}
 	if !found || len(got.Stories) == 0 {
 		t.Fatalf("(P11) no story carries a vector rank: %+v", got.Stories)
+	}
+}
+
+// (P12) The vector half asks for few enough passages that Postgres keeps the
+// fast plan. Measured on staging 2026-11-23 (exact read, the production shape,
+// 72,565 story passages): LIMIT 40 to 80 took 67 to 97 ms; LIMIT 100 and 120
+// took 2.3 to 2.5 s; the first ask asked for 135 and ran out its whole 1 s
+// budget on both proof turns, so the desk was answered by the keyword half
+// alone. The limit never exceeds the last measured fast size, and still asks
+// for more passages than stories (a story has several).
+func TestAskVectorPassageLimitStaysUnderTheMeasuredPlanCliff(t *testing.T) {
+	for n := 1; n <= askMaxLimit*askOverfetch*2; n++ {
+		got := askVectorPassageLimit(n)
+		if got > askMaxPassages {
+			t.Fatalf("(P12) %d stories asked %d passages, over the measured fast size %d", n, got, askMaxPassages)
+		}
+		if want := min(n*2, askMaxPassages); got != want {
+			t.Fatalf("(P12) %d stories asked %d passages, want %d (up to twice the stories, at most %d)", n, got, want, askMaxPassages)
+		}
+	}
+	if askMaxPassages > 80 {
+		t.Fatalf("(P12) askMaxPassages %d is past the last size measured fast (80)", askMaxPassages)
+	}
+}
+
+// (P13) The vector half starts with the keyword half, not after it: a vector
+// half that is slow must not wait for the index walk first, and the keyword
+// rows are not held up by the vector half beyond the join.
+func TestAskPublishedStartsTheVectorHalfBeforeTheKeywordHalfFinishes(t *testing.T) {
+	f := newFrontFixture(t)
+	started := make(chan struct{})
+	f.svc.askVectorHook = func(ctx context.Context, _ string, _ int) ([]askVectorHit, string) {
+		close(started)
+		return nil, ""
+	}
+	// the keyword half's refresh is held until the vector half has started: if
+	// the halves ran one after the other this would never be released
+	f.svc.askRefreshHook = func() {
+		select {
+		case <-started:
+		case <-time.After(3 * time.Second):
+			t.Error("(P13) the vector half had not started while the keyword half waited: the halves run one after the other")
+		}
+	}
+	got, err := f.svc.AskPublished(context.Background(), "harbor", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	default:
+		t.Fatal("(P13) the vector half had not started")
+	}
+	if askByTitle(got, "Harbor reopens") == nil {
+		t.Fatalf("(P13) rows = %v", askTitles(got))
+	}
+}
+
+// (P14) The vector half's own failures never fail, hang or kill the ask, and
+// a shortfall is logged with its measure (run under -race).
+func askLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var b bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&b)
+	t.Cleanup(func() { log.SetOutput(prev) })
+	return &b
+}
+
+func TestAskPublishedAPanicInTheVectorHalfIsAnAnswerNotACrash(t *testing.T) {
+	f := newFrontFixture(t)
+	f.svc.askVectorHook = func(context.Context, string, int) ([]askVectorHit, string) { panic("nil scan target") }
+	logged := askLog(t)
+	got, err := f.svc.AskPublished(context.Background(), "harbor", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if askByTitle(got, "Harbor reopens") == nil || !strings.Contains(got.Vector, "did not answer") {
+		t.Fatalf("(P14) a panic in the vector half: rows %v vector %q", askTitles(got), got.Vector)
+	}
+	if !strings.Contains(logged.String(), "nil scan target") || !strings.Contains(logged.String(), "goroutine") {
+		t.Fatalf("(P14) the panic and its stack must be logged: %q", logged.String())
+	}
+}
+
+func TestAskPublishedASlowVectorHalfIsCutAtTheDeadline(t *testing.T) {
+	f := newFrontFixture(t)
+	old := askDeadline
+	askDeadline = 150 * time.Millisecond
+	t.Cleanup(func() { askDeadline = old })
+	f.svc.askVectorHook = func(ctx context.Context, _ string, _ int) ([]askVectorHit, string) {
+		<-ctx.Done() // a vector half that honours its context
+		return nil, "the caller's deadline passed before the vector half answered"
+	}
+	start := time.Now()
+	got, err := f.svc.AskPublished(context.Background(), "harbor", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took > askDeadline+askRowBudget+200*time.Millisecond {
+		t.Fatalf("(P14) a slow vector half held the answer for %v", took)
+	}
+	if askByTitle(got, "Harbor reopens") == nil || !(strings.Contains(got.Vector, "deadline passed") || strings.Contains(got.Vector, "did not answer")) {
+		t.Fatalf("(P14) rows %v vector %q", askTitles(got), got.Vector)
+	}
+}
+
+func TestAskPublishedAVectorHalfThatIgnoresItsDeadlineDoesNotHoldTheAnswer(t *testing.T) {
+	f := newFrontFixture(t)
+	old := askDeadline
+	askDeadline = 100 * time.Millisecond
+	t.Cleanup(func() { askDeadline = old })
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	f.svc.askVectorHook = func(context.Context, string, int) ([]askVectorHit, string) {
+		<-release // returns only after the test, long past the deadline
+		return []askVectorHit{{PublicationID: canonicalOfDoc(t, "doc-bridge"), Score: 0.9}}, ""
+	}
+	start := time.Now()
+	got, err := f.svc.AskPublished(context.Background(), "harbor", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took > askDeadline+askRowBudget+200*time.Millisecond {
+		t.Fatalf("(P14) the join waited %v for a vector half past its deadline", took)
+	}
+	if askByTitle(got, "Harbor reopens") == nil || got.Vector == "answered" || !strings.Contains(got.Vector, "did not answer") {
+		t.Fatalf("(P14) rows %v vector %q", askTitles(got), got.Vector)
+	}
+}
+
+func TestAskPublishedAFailingVectorHalfKeepsTheKeywordRows(t *testing.T) {
+	f := newFrontFixture(t)
+	f.svc.askVectorHook = func(context.Context, string, int) ([]askVectorHit, string) {
+		return nil, "the vector search failed: connection refused"
+	}
+	got, err := f.svc.AskPublished(context.Background(), "harbor", 5)
+	if err != nil || askByTitle(got, "Harbor reopens") == nil || !strings.Contains(got.Vector, "connection refused") {
+		t.Fatalf("(P14) err %v rows %v vector %q", err, askTitles(got), got.Vector)
+	}
+}
+
+// (P15) every ask with a real vector half logs its query's milliseconds and
+// passage count, and says so when the passages gave fewer stories than wanted,
+// so the planner cliff moving is seen.
+func TestAskPublishedLogsTheVectorQueryAndAShortfall(t *testing.T) {
+	f := newVecFixture(t)
+	f.story(t, "doc-a", 1, "Harbor reopens", storyText("harbor"), time.Time{})
+	f.pass(t)
+	logged := askLog(t)
+	got, err := f.svc.AskPublished(context.Background(), "harbor0 reports the harbor ledger entry", 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Vector != "answered" {
+		t.Fatalf("(P15) vector = %q", got.Vector)
+	}
+	line := logged.String()
+	for _, want := range []string{"published ask vector", "ms=", "passages=", "asked=", "stories=1", "short"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("(P15) the log line lacks %q: %q", want, line)
+		}
 	}
 }

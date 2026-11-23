@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -35,6 +36,14 @@ const (
 	// answer holds at most twice the limit (the halves' union).
 	askDefaultLimit = 15
 	askMaxLimit     = 20
+	// askMaxPassages is the most story passages one ask's vector query reads.
+	// Measured on staging 2026-11-23 on the production shape (72,565 story
+	// passages, an exact read): LIMIT 40, 45, 50, 60 and 80 took 67 to 97 ms;
+	// LIMIT 100, 120 and 135 took 2.3 to 4.3 s, because Postgres changes plan
+	// between 80 and 100. The first version asked for 135 and ran out its whole
+	// budget on both proof turns, so the answer was the keyword half alone. 80 is
+	// the last size measured fast: do not raise it without measuring again.
+	askMaxPassages = 80
 	// askOverfetch is how many candidates each half is asked for per story it
 	// may return: an opinion piece, an owner-mode essay or a withdrawn story
 	// can match too, and is dropped when its row is read, so a half asks for
@@ -86,6 +95,12 @@ type askVectorHit struct {
 	Score         float64
 }
 
+// askVectorPassageLimit is how many passages to read for n stories: up to twice
+// the stories (a story has several passages), never past askMaxPassages. The
+// query is by passage, so this is not n stories: the yield in distinct stories
+// is logged with every ask (askVectors) and a shortfall is marked "short".
+func askVectorPassageLimit(n int) int { return min(n*2, askMaxPassages) }
+
 // askVectors runs the vector half: the nearest story passages for the query,
 // one hit per publication, best first. why is empty when it answered.
 func (s *Service) askVectors(ctx context.Context, query string, n int) ([]askVectorHit, string) {
@@ -95,8 +110,12 @@ func (s *Service) askVectors(ctx context.Context, query string, n int) ([]askVec
 	if s.store == nil {
 		return nil, "no store"
 	}
-	vr, why := s.store.searchVectorsBounded(ctx, VectorSearchRequest{Query: query, StoryLimit: n * 3})
+	passages := askVectorPassageLimit(n)
+	started := time.Now()
+	vr, why := s.store.searchVectorsBounded(ctx, VectorSearchRequest{Query: query, StoryLimit: passages})
+	ms := time.Since(started).Milliseconds()
 	if why != "" {
+		log.Printf("corpusd: published ask vector: ms=%d asked=%d passages=0 stories=0 failed=%q", ms, passages, why)
 		return nil, why
 	}
 	note := ""
@@ -116,6 +135,15 @@ func (s *Service) askVectors(ctx context.Context, query string, n int) ([]askVec
 			break
 		}
 	}
+	// One line per ask: the vector query's time and yield, so the planner cliff
+	// moving (askMaxPassages) is seen. A shortfall is when the passages gave
+	// fewer distinct stories than the limit asked for.
+	wanted := (n + askOverfetch - 1) / askOverfetch
+	short := ""
+	if len(out) < wanted {
+		short = " short"
+	}
+	log.Printf("corpusd: published ask vector: ms=%d asked=%d passages=%d stories=%d wanted=%d%s", ms, passages, len(vr.Stories), len(out), wanted, short)
 	return out, note
 }
 
@@ -143,11 +171,36 @@ func (s *Service) AskPublished(ctx context.Context, query string, limit int) (*P
 	ctx, cancel := context.WithTimeout(ctx, askDeadline)
 	defer cancel()
 
+	// The vector half starts first and runs beside the keyword half: it is the
+	// slower one (the query embedding, then the passage query), and it must not
+	// wait for the index walk.
+	type vectorAnswer struct {
+		hits []askVectorHit
+		why  string
+	}
+	vecDone := make(chan vectorAnswer, 1)
+	go func() {
+		// A panic here would end the process (no handler goroutine above it):
+		// it becomes "the vector half did not answer", logged with its stack.
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("corpusd: published ask vector half panicked: %v\n%s", r, debug.Stack())
+				vecDone <- vectorAnswer{why: "the vector half did not answer: it failed"}
+			}
+		}()
+		h, w := s.askVectors(ctx, query, limit*askOverfetch)
+		vecDone <- vectorAnswer{h, w}
+	}()
+
 	// An index that cannot catch up inside the deadline is answered from what
 	// is indexed and says so (Capped); only a real store error fails the ask.
+	if s.askRefreshHook != nil {
+		s.askRefreshHook()
+	}
 	complete, err := s.refreshPieceIndex(ctx, publishedPieceSliceBudget, false)
 	if err != nil {
 		if !errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			cancel() // the goroutine ends on its own: vecDone is buffered
 			return nil, fmt.Errorf("platform ask: %w", err)
 		}
 		complete = false
@@ -163,7 +216,19 @@ func (s *Service) AskPublished(ctx context.Context, query string, limit int) (*P
 	}
 	vector := map[string]askVectorHit{}
 	var vecOrder []string
-	hits, why := s.askVectors(ctx, query, limit*askOverfetch)
+	// The join waits no longer than the ask's own deadline, whether or not the
+	// vector half honours its context; a value already there is preferred.
+	var va vectorAnswer
+	select {
+	case va = <-vecDone:
+	case <-ctx.Done():
+		select {
+		case va = <-vecDone:
+		default:
+			va = vectorAnswer{why: "the vector half did not answer before the deadline"}
+		}
+	}
+	hits, why := va.hits, va.why
 	out.Vector = "answered"
 	if why != "" {
 		out.Vector = why

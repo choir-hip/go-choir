@@ -40,6 +40,8 @@ type Service struct {
 	askVectorHook func(ctx context.Context, query string, n int) ([]askVectorHit, string)
 	// askRowFault fails a row read of AskPublished (tests).
 	askRowFault func(id string) error
+	// askRefreshHook runs where the keyword half starts (tests).
+	askRefreshHook func()
 
 	artifactsRoot string
 	signingKey    *SigningKey

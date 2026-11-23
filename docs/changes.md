@@ -17,6 +17,7 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 | Phone: one data folder per account, sign-out wipes it | 12 review rounds, 5 failed drill runs; stopped for a structural assessment | `lane/account-partition-s1` |
 | Phone: "Autoradio 1", the train as a second app beside the first | **on the owner's phone**: installed 2026-11-23 13:08Z from `dcc56f2cd` (the train with its review fixes); the owner's tests are owed: a locked phone, a first-launch microphone, the sign-in sheet | main |
 | Phone: sign-in in a sheet over the app | both parts are on main (`977442ff8`, `0a397a684`); never run on a phone | main |
+| A voice ask's vector half answers inside its budget (the ask landed 11-23 answered by keyword alone on staging) | built; tests pass on the build VM; not deployed. The vector query asked for 135 passages, past a Postgres plan change between 80 and 100 (67 to 97 ms at 80, 2.3 to 4.3 s at 100 to 135), and ran out its 1 s on both proof turns; it now asks for at most 80, and starts beside the keyword half | `lane/ask-vector`, [problem record](problems/ask-vector-half-misses-its-deadline-2026-11-23.md) |
 | Phone model benchmark on the Motorola | first rows; not landed | `lane/model-bench` |
 | Snapshot capture in one pass (no store-sized scratch copy) | not started; the reader half landed 11-22 | `lane/snapshot-one-pass` |
 | Redesign of capture (subjects and mentions), offline slice | **failed all four of its kill lines** (claim C192); design panel not yet run | `lane/offline-slice-r0` |

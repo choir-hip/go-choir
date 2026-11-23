@@ -96,7 +96,7 @@ read: `GET /internal/platform/published/ask?q=&limit=` (`internal/platform/publi
   (the block lists them); ran and found none (the block says the paper holds
   nothing on it, or, when the keyword index was still being built or the vector
   half did not answer or ended partway, that the search may be incomplete); did not run (a refusal, a bad
-  answer or the desk's 1.5 s wait; the platform's own deadline is 1.2 s, so a slow index or vector half comes back as capped or partial first: the block says so and the model is told to say
+  answer or the desk's 1.5 s wait; the platform's own deadline is 1 s (plus 250 ms for the row reads), so a slow index or vector half comes back as capped or partial first: the block says so and the model is told to say
   it could not search). No block at all means no search was made for the turn
   (a bare command, or a computer with no paper to search). A vector half that
   did not run, or ended partway, is named in the block.
