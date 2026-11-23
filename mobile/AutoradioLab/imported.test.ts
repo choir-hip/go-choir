@@ -36,7 +36,7 @@ const storage = {
     writeFile: async (p: string, d: Uint8Array) => { files.set(p, d); },
     stat: async (p: string) => { if (sizes.has(p)) return { size: sizes.get(p)! }; const b = files.get(p); if (!b) throw new Error('no'); return { size: b.length }; },
     mkdir: async () => {},
-    rm: async (p: string) => { files.delete(p); sizes.delete(p); },
+    rm: async (p: string) => { for (const m of [files, sizes]) for (const k of [...m.keys()]) if (k === p || k.startsWith(p + '/')) m.delete(k); },       // a folder goes with what is in it, as the host's rm does
   },
 } as never;
 const NOW = Date.parse('2026-11-21T12:00:00Z');
@@ -115,6 +115,7 @@ describe('I1 to I6 importing', () => {
     files.set('app:/tmp/picked/a.pdf', bytes(300)); texts.set('a.pdf', PDF);
     await I.importedAdd({ from: 'app:/tmp/picked/a.pdf', name: 'a.pdf' }, storage, net);
     calls = [];
+    files.set('app:/tmp/picked/a.pdf', bytes(300));                       // the picker makes a fresh copy for each pick; the first was removed once it landed
     const again = await I.importedAdd({ from: 'app:/tmp/picked/a.pdf', name: 'a.pdf' }, storage, net);
     expect(again.message).toBe('“a” is already imported.'); expect(again.count).toBe(1); expect(calls.some((c) => c.method === 'PUT')).toBe(false);
     files.set('app:/tmp/picked/other.pdf', bytes(400)); texts.set('a 2.pdf', PDF);
@@ -282,5 +283,57 @@ describe('I16 the search sees the documents the phone holds the text of', () => 
     expect(docs[0]).toMatchObject({ kind: 'document', address: 'doc:' + id('b.epub'), source: 'Imported documents' });
     expect(docs[0].parts!.map((p) => [p.label, p.block])).toEqual([['chapter 1: One', 0], ['chapter 2: Two', 3]]);
     expect(await S.importedDocs(undefined, net)).toEqual([]);
+  });
+});
+
+describe('the picked copy', () => {
+  test('is removed once the import landed, and kept when it did not', async () => {
+    files.set('app:/tmp/picked/p.pdf', bytes(300)); texts.set('p.pdf', PDF);
+    await I.importedAdd({ from: 'app:/tmp/picked/p.pdf', name: 'p.pdf' }, storage, net);
+    expect(files.has('app:/tmp/picked/p.pdf')).toBe(false);
+    files.set('app:/tmp/picked/q.pdf', bytes(300));
+    fail = (c) => (c.method === 'PUT' ? Object.assign(new Error('x'), { status: 500 }) : null);
+    await I.importedAdd({ from: 'app:/tmp/picked/q.pdf', name: 'q.pdf' }, storage, net);
+    expect(files.has('app:/tmp/picked/q.pdf')).toBe(true);
+  });
+});
+
+describe('C-7 the files cache has an eviction rule', () => {
+  const originals = (): string[] => [...sizes.keys()].filter((k) => k.startsWith(F.CACHE_DIR + '/'));
+  const texts_ = (): string[] => [...files.keys()].filter((k) => k.endsWith('/text.json'));
+  test('only the last COPY_KEEP originals are kept; the small text of the others stays, and a reopened one is fetched again', async () => {
+    for (let i = 0; i < I.COPY_KEEP + 3; i++) put(`b${i}.pdf`, 100 + i, PDF);
+    for (let i = 0; i < I.COPY_KEEP + 3; i++) await open(`b${i}.pdf`);
+    expect(originals().length).toBe(I.COPY_KEEP);
+    expect(texts_().length).toBe(I.COPY_KEEP + 3);
+    downloads = [];
+    await open('b0.pdf');
+    expect(downloads).toEqual(['b0.pdf']);
+    expect(originals().length).toBe(I.COPY_KEEP);
+    downloads = []; await open('b0.pdf');
+    expect(downloads).toEqual([]);                                         // an open of a held copy downloads nothing
+  });
+  test('a changed file leaves nothing of its old version behind', async () => {
+    put('c.pdf', 100, PDF); await open('c.pdf');
+    const before = [...files.keys(), ...sizes.keys()].filter((k) => k.startsWith(F.CACHE_DIR + '/') && !k.endsWith('lru.json'));
+    expect(before.length).toBe(2);
+    put('c.pdf', 150, PDF); await open('c.pdf');
+    const after = [...files.keys(), ...sizes.keys()].filter((k) => k.startsWith(F.CACHE_DIR + '/') && !k.endsWith('lru.json'));
+    expect(after.length).toBe(2);
+    expect(after.some((k) => before.includes(k))).toBe(false);
+  });
+});
+
+describe('C-4 a large document is read over several turns', () => {
+  test('a long PDF text and a long e-book end the turn many times; the result is the same', async () => {
+    const page = Array.from({ length: 20 }, (_, i) => `Paragraph ${i} of a page with some words in it to make it long enough to count.`).join('\n\n');
+    const pdf = Array.from({ length: 400 }, () => page).join('\f');
+    let a = 0, b = 0, c = 0;
+    const t1 = await M.fromPdfTextAsync(pdf, async () => { a++; });
+    expect(t1).toEqual(M.fromPdfText(pdf)); expect(a).toBeGreaterThan(20);
+    const md = Array.from({ length: 300 }, (_, i) => `# Chapter ${i}\n\n${page}`).join('\n\n');
+    expect(await M.fromMarkdownAsync(md, async () => { b++; })).toEqual(M.fromMarkdown(md)); expect(b).toBeGreaterThan(20);
+    const ix = await M.buildIndexAsync(t1.blocks, async () => { c++; });
+    expect(ix.norms).toEqual(M.buildIndex(t1.blocks).norms); expect(c).toBeGreaterThan(20);
   });
 });

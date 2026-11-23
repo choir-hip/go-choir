@@ -121,6 +121,7 @@ export class Retrieval {
   private running = new Set<Promise<void>>();
   private lastLine = '';
   private restN = 0;
+  private stalled = false;
   private answered = new Map<string, Promise<{ id: string; ok: boolean }>>();
   modelState: 'ok' | 'downloading' | 'absent' = 'absent';
   private prog = { done: 0, total: 0, rate: 0 };
@@ -145,7 +146,7 @@ export class Retrieval {
 
   /** Sign-out: nothing of the account stays in the index; a running pass is stale and writes nothing more. */
   reset(): void {
-    this.gen++; this.wanted = false; this.runnerGen = -1; this.prog = { done: 0, total: 0, rate: 0 }; this.lastLine = '';
+    this.gen++; this.stalled = false; this.wanted = false; this.runnerGen = -1; this.prog = { done: 0, total: 0, rate: 0 }; this.lastLine = '';
     this.loaded = null; this.store = new VectorStore(this.engine, this.dimension); this.cold = null; this.modelState = 'absent';
     this.corpus.reset(); this.answered.clear();
   }
@@ -181,7 +182,7 @@ export class Retrieval {
       const c: Promise<void> = this.refresh().then((changed) => { if (changed && g === this.gen) this.kick(); }, () => undefined);
       this.cold = c;
       await Promise.race([c, sleep(Retrieval.COLD_WAIT_MS)]);
-    } else if (await this.refresh()) this.kick();
+    } else if ((await this.refresh()) || this.stalled) { this.stalled = false; this.kick(); }
     const rs = runSheetDocs(a.facts.runSheet);
     this.corpus.hold('runsheet', rs.docs);
     this.corpus.hold('open-pages', openPageDocs(a.facts.pages));
@@ -242,7 +243,7 @@ export class Retrieval {
     this.modelState = 'ok';
     console.log(`AUTORADIO embed model=ok items=${items.length} done=${this.prog.done} (pass starts)`);
     const store = this.store, started = this.now(), before = store.count;
-    await runJob(store, (p) => n.embed(p), items, {
+    const job = await runJob(store, (p) => n.embed(p), items, {
       busy: async () => { try { const s = await n.deviceState(); return s.radioBusy || s.lowPower || s.thermal; } catch { return true; } },
       save: async () => { if (g === this.gen) await saveVectors(store, this.storage); },
       rest: async () => {
@@ -253,9 +254,11 @@ export class Retrieval {
         }
         await sleep(this.delays.rest);
       },
+      wait: (ms) => sleep(ms), restMs: this.delays.rest,
       cancelled: () => g !== this.gen,
     });
     if (g !== this.gen) { store.wipe(); store.dirty = false; return; }       // a sign-out came while the last slice was running
+    this.stalled = job.gaveUp === true;                                       // the device stayed busy: the next ask or sync starts the pass again (nothing polls)
     this.prog.done = Math.min(store.count, items.length);
   }
 

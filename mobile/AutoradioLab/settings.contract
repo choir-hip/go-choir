@@ -398,7 +398,7 @@ component ComputerScreen
       text "Restart to update asks your computer to restart onto the newest version. It waits if the computer is in the middle of a change." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
       column gap=12 width="100%"
         button press=updateComputer testId="settings-update" appearance="none" width="100%"
-          ActionButton(label=(cmpt.updateAvailable ? "Restart to update" : "Check for an update"), testId="settings-update-box", primary=false, danger=false)
+          ActionButton(label="Restart to update", testId="settings-update-box", primary=false, danger=false)
         button press=wakeComputer testId="settings-wake" appearance="none" width="100%"
           ActionButton(label="Wake the computer", testId="settings-wake-box", primary=false, danger=false)
         button press=refreshComputer testId="settings-computer-refresh" appearance="none" width="100%"
