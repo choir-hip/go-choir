@@ -655,3 +655,29 @@ func TestAccountAccessRevokedFailsClosed(t *testing.T) {
 	}
 	_ = webauthn.SessionData{}
 }
+
+// The numbered-address loop must not hand a new number to an account whose
+// mail the purge has just removed (the user row outlives the mail purge by a
+// step).
+func TestNumberReconcileSkipsAccountsBeingDeleted(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	a := addDelUser(t, h, nil, "real-a")
+	b := addDelUser(t, h, nil, "real-b")
+	// example.com is an ephemeral domain; give both a real domain.
+	for _, e := range []*delEnv{a, b} {
+		if _, err := h.store.db.Exec(`UPDATE users SET email = ? WHERE id = ?`, e.user.ID+"@mail.test-real.org", e.user.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ids, err := h.store.ListNumberCandidates(context.Background())
+	if err != nil || len(ids) != 2 {
+		t.Fatalf("before: %v %v", ids, err)
+	}
+	if _, _, err := h.store.RequestAccountDeletion(a.user.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	ids, _ = h.store.ListNumberCandidates(context.Background())
+	if len(ids) != 1 || ids[0] != b.user.ID {
+		t.Fatalf("after: %v", ids)
+	}
+}
