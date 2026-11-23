@@ -321,7 +321,7 @@ describe('R7 speed at the real size', () => {
     const ts: number[] = []; for (let k = 0; k < 10; k++) { const t = performance.now(); store.search(q, 50); ts.push(performance.now() - t); }
     ts.sort((a, b) => a - b);
     console.log(`RETRIEVAL cold build ${Math.round(build)} ms for ${items} items; ask (read every source, rank, build the context) median ${median.toFixed(2)} ms, worst ${worst.toFixed(2)} ms; vector scan of ${store.count} x 768: median ${ts[5].toFixed(1)} ms, worst ${ts[9].toFixed(1)} ms`);
-    expect(items).toBeGreaterThan(1000);
+    expect(items).toBeGreaterThanOrEqual(1000);   // the 400 stories fit; a book that no longer fits is left out whole (C-1: a document is never half indexed and marked indexed)
     expect(median).toBeLessThan(100);       // the Swift bound was 100 ms for the query alone; a loaded machine moves the worst, not the median
     // No wall-clock bound here (review 2026-11-21): the build took 4 to 9 s and the scan 240 to 257 ms on a loaded Mac; the numbers are logged above, and the index's size is bounded by MAX_INDEX_ITEMS (search.ts).
   }, 60000);
