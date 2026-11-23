@@ -1,6 +1,6 @@
 # The first design: Autopaper and its readers
 
-Draft 3, 2026-11-22 (draft 2 as read by a panel of five; section 12 says what changed), taken from the top after a day's conversation with the
+Draft 4, 2026-11-23 (draft 3 plus the owner's rulings of the evening of 2026-11-22 and the failed offline test; section 13 says what changed; section 12 is the panel's reading of draft 2), taken from the top after a day's conversation with the
 owner. Status: **idea**; nothing here is built unless a line says so, and
 nothing is ratified. Lines marked (owner) are rulings, quoted in
 [first-design-path-2026-11-22.md](first-design-path-2026-11-22.md) with the
@@ -16,8 +16,16 @@ of any run shouldnt just be to write the best story, but to be building on and
 using our corpus, and then the story adds to our corpus". (owner) "we need to
 make this efficient and fast."
 
-The measure of the whole: the **surprise rate** (how much of what arrives the
-paper did not expect), beside cost per capture and per published story.
+The measure of the whole, two numbers side by side. The **surprise rate**:
+how much of what arrives the paper did not expect. The **corpus share**: of
+what a run relies on (the pages it cites and reads to answer), the part the
+paper already held (owner, 2026-11-22: "the point isnt to cut search to zero,
+but to cut it down 50, 75, 80, 90 %. and that doesnt even need to cut search
+volume... now we need to scale corpus utility"). The rungs are 50, 75, 80 and
+90%. Web search volume is not a target and may stay flat or grow. Beside both:
+cost per capture and per published story. The reason it matters outside the
+paper (owner): "the paper should become, at scale, more economical than
+exposing raw web search for any agent looking for current events".
 
 ## 1. The things
 
@@ -30,7 +38,9 @@ paper did not expect), beside cost per capture and per published story.
 
 Stories cite and transclude stories (owner: "textures reference textures is
 the essence of it"). No two stories have the same subjects and the same
-claims; a subject's importance is the number of stories about it (owner).
+claims. A subject's importance is learned and held, not asked of a model each
+time (section 6a); the number of stories about it is one input (owner, draft
+2), no longer the definition.
 
 ## 2. The hot path: a capture arrives (no agent session)
 
@@ -111,6 +121,21 @@ stories, which run as its sub-calls (owner: "concurrency is to be achieved by
 desk subcalls"), merges two that have become one, and spends research by how
 its predictions have scored.
 
+The root is also where the paper's index is held and learned (owner,
+2026-11-22: "counting importance, that sounds like something that gets done
+via the root rlm texture. thats how we hold and learn an index over time, in
+an llm's repl"). Its digest carries **aggregates of the capture process**, not
+captures: arrivals per source and per subject, the share matched, unmatched
+groups and their origins, density of the regions arrivals fell in, what
+settled, what each source cost. In its REPL it may change the index with code:
+add a subject, merge or remove duplicates, change a topic's importance (owner:
+"we can look into letting it write code to dynamically change that"). Those
+edits are the control on source processing: importance and density decide
+which sources are polled how often and how much work an arrival may trigger
+(owner: "a key parameter for global and user paper/radio usage... and thus
+tuning source processing"). Every edit is a revision of the root's Texture, so
+it is seen and can be reverted.
+
 Other desks speak one interface to the Texture desk and may address a story
 inside it; the root is asked about the whole and sees the rest (owner: "the
 middle form"). Management returns to computer-wide coherence and admitting
@@ -126,6 +151,17 @@ Proposed: the paper's root Texture is the front page.
 - **Autoradio** becomes a desk that runs Go cells (owner) and composes by
   walking the graph: a subject, the stories about it, the story behind those.
   It asks the listener's root about the whole and may address a story.
+  A listener's ask is a retrieval over the paper, scored like research's
+  (section 6): keyword and vector search over the corpus, ranked by new,
+  important and cited (owner, 2026-11-23). Today the answering model has no
+  tools and sees at most 40 front-page titles.
+- **The same arrival shape carries more than news** (owner, 2026-11-22: "dont
+  overfit for text research and writing... autoradio will be a conduit for
+  general computer use"): an important email interrupts the programme, is read
+  aloud and answered by voice; an agent's question is asked aloud and the
+  answer decides its next moves, run as code. So an arrival is anything that
+  reaches a computer with a subject and an importance; the hot path and the
+  root's wake must not assume a news capture.
 
 ## 6. The loop that learns
 
@@ -149,6 +185,55 @@ prediction settled true. It is printed beside the count of open predictions. The
 is shown to the predictor. Today predictions are stored and some are scored;
 nothing matches an arrival to a prediction, nothing settles on expiry, and
 Texture is never shown its score.
+
+## 6a. Novelty and importance
+
+Two signals, kept apart (owner, 2026-11-22). **Novelty is semantic
+sparsity**: "whether you are in dense or sparse regions of semantic space...
+sparse semantic space is novelty". It is computed, not asked: the density of
+held captures and stories around an arrival's vector. **Importance is
+learned**: "follow ups to key stories will be important but not sparse.
+novelty needs to be squared with importance"; "importance is something that
+you learn continuously. otherwise you're just answering from model priors".
+It is accumulated state on a region or subject, updated by events (arrivals
+from distinct origins, citations, what readers and listeners do, the root's
+edits), and it is assigned to **captures**, not only to stories (owner: "we
+do need to score captures not stories").
+
+What this replaces: the front-importance job, a host timer every ten minutes
+that asks System 1 for a 1 to 10 score and ten section questions, in practice
+about one story a call (666 calls over 144 runs), used only to order the front
+page. The owner's rule on such jobs: "these scheduled jobs are a real hack.
+thats the stuff that works but doesnt scale". A timer that re-asks a question
+becomes state updated by the event that changes the answer.
+
+**Learning over retrieval** (owner): "predictions then retrieval then scoring
+predictions. and next prediction gets an accumulated sentiment of the past
+predictions scoring". Before a retrieval, the asker predicts what the corpus
+holds (dense or sparse, held or not); the retrieval settles it; the next
+prediction is given the accumulated score. Sparsity is what is predicted.
+This is section 6's loop applied to every search, research's and a
+listener's alike, and its settled predictions are the numerator of the corpus
+share in section 0.
+
+## 6b. Sources and the scaling law
+
+The capture path is designed with the sources, not after them (owner,
+2026-11-22: "that makes sense and gives us a scaling law for our resource
+consumption and ontology growth"). No source is added before this path
+exists. The law to hold and to measure: adding a source costs its fetch, its
+embeddings and a share of one System 1 call per poll; model sessions grow with
+surprises and settled predictions, not with captures; subjects grow slower
+than captures and flatten.
+
+Measured on the paper, 2026-11-23 (store reading, `0f4421aae`): the 49.7 GiB
+store is mostly the machinery's own log, not content. Events 3.6 GiB,
+lifecycle commands 1.7, records between desks 1.3, runs 1.2, agent run memory
+7.3; stories under 2. About 20 GiB is index and page overhead of 8 million
+small objects. No superseded versions, 0.24 GiB of duplicates. Earlier counts:
+about 9 model calls per capture and 58 per published story; 65% of a week's
+captures were research's own web reads. So today cost follows agent activity,
+which follows captures. That is the law this design must break.
 
 ## 7. Queries and their cost
 
@@ -175,7 +260,8 @@ hand-read sample. Only derived tables are written, so a bad pass is redone.
 Per-capture management tasks and their dispatcher; the intake label's "same
 event" question; the event layer as a separate store (its call becomes step
 3); the separate entity layer design; the old root desk, its setting and its
-hourly cap; the 1.5 s spacing of research children; the search refusal gate
+hourly cap (so the lanes that turn it on everywhere are not landed); the
+front-importance timer (section 6a); the 1.5 s spacing of research children; the search refusal gate
 (in flight); `research.related_story`.
 
 ## 10. Order of work
@@ -205,6 +291,20 @@ proved, and the design is tried offline before it is wired in.
    list of 12 or fewer; or (d) the predictions' skill against the base rate cannot be
    told from zero (its interval includes zero). A run that cannot measure a
    line counts as failing it.
+   **Result (2026-11-22, ledger C192): the first run failed all four lines.**
+   The record is in the ledger and
+   `docs/evidence/offline-slice-rung-0-rules-find-names-not-happenings-2026-11-22.md`;
+   the lane is `lane/offline-slice-r0`. By the rule set before the run, the
+   hot path as drawn in section 2 is not proved and steps 3 to 7 do not start.
+   What the run changed is written into section 2 (steps 1 and 4). What it
+   has not yet answered is whether the changed path passes; that is the next
+   run, with sparsity (section 6a) as a measured column.
+2a. A read-only measurement before the next run, from vectors that exist:
+   for one day of research questions and arriving captures, the density of
+   the region each fell in, against what then happened (did the run find its
+   answer in the corpus; did the capture open or feed a story). If density
+   does not separate those outcomes, section 6a is rethought before anything
+   is built on it.
 3. The hot path live, written beside the three old mechanisms and compared
    with them. Nothing a reader or a desk sees changes.
 4. Predictions, settlement and the score, as host code and records.
@@ -231,9 +331,10 @@ merges wrongly is seen.
    subjects that are not proper names.
 7. (panel) Importance: the owner's rule is the number of stories about a
    subject, which is zero for a subject with no story, yet the root must be
-   woken by subjects that matter and have none. Proposed: importance for
-   ranking stays the owner's count; whether a subject with no story deserves
-   one is read from captures (distinct origins in a window).
+   woken by subjects that matter and have none. **Answered by the owner,
+   2026-11-22 (section 6a):** importance is learned state on captures'
+   regions and subjects, held by the root. Still open: the update rule, and
+   what keeps a root's edit from making a subject important by fiat.
 8. (panel) A time span on a subject, optional, so two elections or two rounds
    of talks with one name stay apart. It passes the test "does code behave
    differently", but it is the first step back toward kinds.
@@ -272,3 +373,26 @@ Not adopted, for the owner: a time span on subjects (open question 8);
 importance read from captures (open question 7). Dropped until code needs
 them: roles on mentions.
 
+## 13. Draft 4, 2026-11-23
+
+Added from the owner's rulings of the evening of 2026-11-22, each quoted in
+`docs/definitions/choir-first-design-2026-11-22.md` under `owner_rulings`:
+the corpus share as the second measure (section 0); importance learned and
+held, not counted or asked (sections 1, 6a, open question 7); semantic
+sparsity as novelty and as the thing predicted (6a); learning over retrieval
+(6a); the root given aggregates of the capture process and its index edits as
+the control on source processing (4); the capture path designed with its
+sources, and the scaling law (6b); arrivals that are not news, and a
+listener's ask as a retrieval (5). Added from evidence: the offline test's
+failure and the measurement that comes before its next run (10); the store's
+composition (6b); the front-importance timer retired (6a, 9).
+
+Not changed: the things, the hot path's steps, settlement, the panel's
+adopted points, the rule that nothing is retired before its replacement is
+proved. No panel has read draft 4.
+
+New open questions: how density is computed cheaply at arrival and over what
+window; whether importance lives on subjects, on regions of vector space, or
+both; what a root may change by code without review, and how such an edit is
+scored; how a private computer's root learns importance for its owner without
+its data crossing owners.
