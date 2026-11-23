@@ -1,0 +1,13 @@
+{
+  "source": "internal/autoradioqueue/queue.go: Snapshot, Current, Entry, Item (json tags), validateItem (kinds and what each needs), the bounds and entryID; the deployed server's request.queue (api_autoradio.go ParseSnapshot). Voice-queue.test.ts Q11 fails when this moves away from the Go source.",
+  "snapshot": ["version", "current", "upcoming"],
+  "current": ["id", "item", "position_seconds"],
+  "entry": ["id", "item", "added_by"],
+  "item": ["kind", "route", "url", "id", "title", "at", "show", "start", "end", "episode_id"],
+  "kinds": { "story": "route", "page": "url", "document": "id", "audio": "url" },
+  "bytes": { "title": 300, "route": 256, "url": 1024, "id": 128, "show": 200, "episode_id": 128 },
+  "maxUpcoming": 50,
+  "maxAddedBy": 32,
+  "entryId": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$",
+  "ignored": ["on_air"]
+}

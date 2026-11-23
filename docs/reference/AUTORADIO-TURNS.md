@@ -188,6 +188,25 @@ larger than the same text and reach the `413`). **The phone sends at most 50
 `upcoming` entries**: the first 50, in order. Unknown fields inside `queue` and
 its items are ignored.
 
+What the phone sends (`mobile/AutoradioLab/voice-queue.ts`, pinned against
+`internal/autoradioqueue/queue.go` by `voice-queue.test.ts` Q11). Everything the
+listener sees as playing or up next, in the order shown; the station's
+transitions between entries are not on the page, so they are not sent and a
+`move`'s `to_index` counts what is shown. The run sheet's kinds map onto the four:
+a paper story (`pub:` route) is `story`; the programme's own spoken entries
+(story, opening, transition on air, take, answer, result) are `story` with the
+route of the paper story they tell, else `programme:<entry id>`; a web page is
+`page`; a book, a file or a message is `document`; a clip or episode is `audio`.
+The server cannot yet say what is not true of a `story` item: that an entry is an
+opening, a take or a message, how long it is, or who wrote it. The server change
+that would carry it: a `spoken` kind (or a `role` field on `story`) and a
+`seconds` field on `Item`, rendered by `describeItem` ("opening", "take", "about
+40 seconds"); the phone sends `programme:<id>` routes meanwhile, and a candidate
+equal to a programme story's paper route is answered "already in the queue; move
+it instead". Ops come back by entry id and apply to any kind the phone sent
+(remove, move, skip); an op the sheet refuses is counted and logged
+(`radio: turn ops refused`), never dropped quietly.
+
 The model is shown the queue within a byte budget (12 KB of entry lines, 8 KB of
 candidate lines); past it the farthest entries appear as "and N more entries, not
 shown". The desk's copy holds them all, so an op may name one the model was not
