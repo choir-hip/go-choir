@@ -59,13 +59,15 @@ members Autoradio
 
   // SIGN-IN is one attempt with an id, a state machine owned in one place (signin-attempt.ts; the transition table is in docs/reference/exact/auth-session.md). Native keeps only the device
   // code, the poll request and the Keychain write. This file only renders the machine's view and sends the owner's three presses; it keeps no copy of its state.
-  mutation signedRun as shape SignInEnd
-  mutation signedCancel as shape SignInEnd
-  mutation signedReopen as shape SignInEnd
+  // Each press answers with the machine's `rev` after its last change, and settling bumps the tick (`then`): the view is always read once more after the attempt's LAST transition.
+  mutation signedRun as shape SignInEnd then bumpSiv
+  mutation signedCancel as shape SignInEnd then bumpSiv
+  mutation signedReopen as shape SignInEnd then bumpSiv
   state sivTick = 0
   action bumpSiv
     sivTick = sivTick + 1
-  resource siv = signInView(sivTick) as shape SignInView else empty()
+  derive sivKey = `${sivTick}|${match signedRun { case some(r) => r.rev, case none => 0 }}|${match signedCancel { case some(r) => r.rev, case none => 0 }}|${match signedReopen { case some(r) => r.rev, case none => 0 }}`
+  resource siv = signInView(sivKey) as shape SignInView else empty()
   // The view is asked again twice a second while an attempt runs (the machine changes under a running answer, with no event to carry it), and not at all otherwise.
   task sivWatch when pending(signedRun) key=sivTick
     after(500, bumpSiv)

@@ -1,7 +1,7 @@
 // One sign-in attempt is one state machine with an id, owned in one place (signin-attempt.ts; docs/reference/exact/auth-session.md has the transition table).
 // Failure list, written before the code. Three review rounds found the same fault three ways, so every row of the table is a test, and so are the three the review found:
 //  B1 a poll answer "pending" that STARTED BEFORE the sheet closed (it may predate the approval) must not abandon the attempt; only a poll started after the close may.
-//  B2 after the owner's Cancel no key is written: a poll answer that arrives after it is ignored, the code is forgotten first, and native refuses to write (Swift tests).
+//  B2 after the owner's Cancel no key REMAINS: a poll answer that arrives after it is ignored, native forgets the code, a key written in the gap is deleted and revoked, one arriving later is never written (Swift tests).
 //  B3 re-opening the sheet forgets the close: a later "pending" does not abandon the attempt.
 //  T* every row of the table: the phase it goes to, and "anything after the end changes nothing".
 //  I* an event for another attempt (an old sheet, a late poll answer) changes nothing, and a new sign-in forgets the old attempt first.
@@ -9,7 +9,7 @@
 //  V* the view: what the card shows, a browser fallback only for https on the granted origin, words for each ending.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { begin as newAttempt, step, isTerminal, view, signInRun, signInCancel, signInReopen, signInView, resetAttempt, type Attempt, type AttemptEnv, type Event } from './signin-attempt.ts';
+import { begin as newAttempt, step, isTerminal, view, signInRun, signInCancel, signInReopen, signInView, resetAttempt, type Attempt, type AttemptEnv, type Event, type View } from './signin-attempt.ts';
 
 const ORIGIN = 'https://choir.news';
 const LINK = `${ORIGIN}/device?code=ABCD-EFGH`;
@@ -105,14 +105,14 @@ describe('I events of another attempt', () => {
 // ---- the driver, over a fake native, a fake sheet and a clock that does not wait
 
 type Poll = { resolve: (answer: string) => void; id: string };
-function world(over: { sheet?: (link: string) => Promise<{ outcome: 'returned' | 'cancelled' | 'failed'; message: string }>; begin?: () => unknown } = {}) {
-  const calls: string[] = []; const polls: Poll[] = []; const logs: string[] = []; let t = 0; let n = 0;
+function world(over: { sheet?: (link: string) => Promise<{ outcome: 'returned' | 'cancelled' | 'failed'; message: string }>; begin?: () => unknown; beginAsync?: (n: number) => Promise<unknown> } = {}) {
+  let beginCalls = 0; const calls: string[] = []; const polls: Poll[] = []; const logs: string[] = []; const published: View[] = []; let t = 0; let n = 0;
   const sheets: { link: string; resolve: (r: { outcome: 'returned' | 'cancelled' | 'failed'; message: string }) => void }[] = [];
   const env: AttemptEnv = {
     origin: ORIGIN,
     later: (r) => {
       calls.push(`${r.op}:${r.attempt}`);
-      if (r.op === 'signInBegin') return Promise.resolve(over.begin ? over.begin() : { ok: true, userCode: 'ABCD-EFGH', link: LINK, interval: 5, expires: 600 });
+      if (r.op === 'signInBegin') { beginCalls += 1; return over.beginAsync ? over.beginAsync(beginCalls) : Promise.resolve(over.begin ? over.begin() : { ok: true, userCode: 'ABCD-EFGH', link: LINK, interval: 5, expires: 600 }); }
       if (r.op === 'signInPoll') return new Promise((res) => polls.push({ id: String(r.attempt), resolve: (a) => res({ answer: a }) }));
       return Promise.resolve({ ok: true });
     },
@@ -120,8 +120,9 @@ function world(over: { sheet?: (link: string) => Promise<{ outcome: 'returned' |
     sleep: async (ms) => { t += ms; },
     newId: () => `att-${++n}`,
     log: (l) => logs.push(l),
+    publish: (v) => published.push(v),
   };
-  return { env, calls, polls, sheets, logs, clock: () => t };
+  return { env, calls, polls, sheets, logs, published, clock: () => t };
 }
 /** Close every sheet still open (a person closes them; the run's answer stays until they have ended) and wait for the run. */
 const done = async <T>(w: { sheets: { resolve: (r: { outcome: 'returned' | 'cancelled' | 'failed'; message: string }) => void }[] }, run: Promise<T>): Promise<T> => { for (const x of w.sheets) x.resolve({ outcome: 'returned', message: '' }); await settle(); return run; };
@@ -255,7 +256,7 @@ describe('V the view', () => {
     }
   });
   test('V2 with no attempt the view is idle and empty', () => {
-    expect(signInView(ORIGIN)).toEqual({ phase: 'idle', pending: false, userCode: '', browserLink: '', note: '', message: '' });
+    expect(signInView(ORIGIN)).toEqual({ phase: 'idle', pending: false, userCode: '', browserLink: '', note: '', message: '', rev: 0 });
   });
   test('V3 view() is pure over an attempt: pending covers begun, sheet and closed only', () => {
     expect(view(newAttempt(ID), ORIGIN).pending).toBe(true);
@@ -281,7 +282,9 @@ describe('C the contract only renders and presses', () => {
     expect(account).toMatch(/action signIn\n    send signedRun = signInRun\(\)/);
     expect(account).toMatch(/action cancelSignIn\n    send signedCancel = signInCancel\(\)/);
     expect(account).toMatch(/action openApproval\n    send signedReopen = signInReopen\(\)/);
-    expect(account).toMatch(/resource siv = signInView\(sivTick\)/);
+    expect(account).toMatch(/resource siv = signInView\(sivKey\)/);
+    expect(account).toMatch(/derive sivKey = `\$\{sivTick\}\|\$\{match signedRun \{ case some\(r\) => r\.rev[^`]*signedCancel[^`]*signedReopen[^`]*`/);       // keyed on every press's answer: the last change is read
+    for (const m of ['signedRun', 'signedCancel', 'signedReopen']) expect(account).toContain(`mutation ${m} as shape SignInEnd then bumpSiv`);        // and settling asks once more
   });
   test('C2 the browser fallback is the view\'s validated link, which is empty (no link at all) unless https on the granted origin', () => {
     expect(read('onboarding.contract')).toMatch(/if siv\.note != ""[\s\S]*href=siv\.browserLink/);
@@ -289,5 +292,92 @@ describe('C the contract only renders and presses', () => {
   test('C3 every source the contract sends is answered by app.ts, once', () => {
     const app = read('app.ts');
     for (const n of ['signInRun', 'signInCancel', 'signInReopen', 'signInView']) expect((app.match(new RegExp(`^  ${n}:`, 'gm')) ?? []).length).toBe(1);
+  });
+});
+
+
+// ---- review round 4: every transition publishes the view; BEGIN while begun supersedes
+
+describe('P every transition publishes the view, the last one included', () => {
+  const lastIs = (w: ReturnType<typeof world>, phase: string): void => {
+    const last = w.published[w.published.length - 1];
+    expect(last.phase).toBe(phase); expect(signInView(ORIGIN)).toEqual(last);                // what was published last IS what the card reads
+    const revs = w.published.map((v) => v.rev); expect(revs).toEqual([...revs].sort((a, b) => a - b)); expect(new Set(revs).size).toBe(revs.length);   // strictly increasing: each change once
+  };
+  test('P1 approved', async () => { const w = world(); const run = signInRun(w.env); await settle(); w.polls[0].resolve('approved'); await settle(); const r = await done(w, run); expect(r.phase).toBe('approved'); lastIs(w, 'approved'); expect(r.rev).toBe(signInView(ORIGIN).rev); });
+  test('P2 denied', async () => { const w = world(); const run = signInRun(w.env); await settle(); w.polls[0].resolve('denied'); await settle(); await done(w, run); lastIs(w, 'denied'); });
+  test('P3 expired by the server', async () => { const w = world(); const run = signInRun(w.env); await settle(); w.polls[0].resolve('expired'); await settle(); await done(w, run); lastIs(w, 'expired'); });
+  test('P4 expired by the clock', async () => {
+    const w = world({ begin: () => ({ ok: true, userCode: 'U', link: LINK, interval: 5, expires: 12 }) });
+    const run = signInRun(w.env); await settle();
+    for (let i = 0; i < 6 && !isTerminal(signInView(ORIGIN).phase); i++) { w.polls[i]?.resolve('pending'); await settle(); }
+    await done(w, run); lastIs(w, 'expired');
+  });
+  test('P5 failed: the native side lost the attempt', async () => { const w = world(); const run = signInRun(w.env); await settle(); w.polls[0].resolve('stale'); await settle(); await done(w, run); lastIs(w, 'failed'); });
+  test('P6 failed: begin refused', async () => { const w = world({ begin: () => ({ ok: false, message: 'no' }) }); await signInRun(w.env); lastIs(w, 'failed'); });
+  test('P7 cancelled: abandoned after the close', async () => {
+    const w = world(); const run = signInRun(w.env); await settle();
+    w.sheets[0].resolve({ outcome: 'cancelled', message: '' }); await settle(); w.polls[0].resolve('pending'); await settle(); w.polls[1].resolve('pending'); await settle();
+    await done(w, run); lastIs(w, 'cancelled');
+  });
+  test('P8 cancelled: the card Cancel, and its answer says so', async () => {
+    const w = world(); const run = signInRun(w.env); await settle();
+    const r = await signInCancel(w.env); expect(r.phase).toBe('cancelled'); expect(r.rev).toBe(signInView(ORIGIN).rev); lastIs(w, 'cancelled');
+    w.polls[0].resolve('approved'); await settle(); await done(w, run); lastIs(w, 'cancelled');
+  });
+  test('P9 the beginning and the opening of the sheet are published too', async () => {
+    const w = world(); const run = signInRun(w.env); await settle();
+    expect(w.published.map((v) => v.phase)).toEqual(['begun', 'sheet']);
+    w.polls[0].resolve('approved'); await settle(); await done(w, run);
+  });
+  test('P10 an ignored event publishes nothing', async () => {
+    const w = world(); const run = signInRun(w.env); await settle();
+    const n = w.published.length; w.sheets[0].resolve({ outcome: 'returned', message: '' }); await settle();
+    expect(w.published.length).toBe(n);                                       // a callback changes nothing: nothing to say
+    w.polls[0].resolve('approved'); await settle(); await done(w, run);
+  });
+});
+
+describe('N BEGIN while an attempt is begun supersedes it, deterministically', () => {
+  test('N1 a double tap: the second run wins, the first is forgotten and ends; native is asked to forget the first', async () => {
+    const releases: ((r: unknown) => void)[] = [];
+    const w = world({ beginAsync: () => new Promise((res) => releases.push(res)) });
+    const first = signInRun(w.env); await settle();
+    expect(signInView(ORIGIN).phase).toBe('begun');
+    const second = signInRun(w.env); await settle();                          // the second tap, before the first begin answered
+    expect(w.calls).toContain('signInForget:att-1');
+    releases[0]({ ok: true, userCode: 'OLD', link: LINK, interval: 5, expires: 600 });      // the older begin answers late
+    releases[1]({ ok: true, userCode: 'NEW', link: LINK, interval: 5, expires: 600 }); await settle();
+    expect(signInView(ORIGIN)).toMatchObject({ phase: 'sheet', userCode: 'NEW' });
+    expect(w.sheets.length).toBe(1);                                          // only the newer attempt opened a sheet
+    expect((await first).phase).toBe('cancelled');
+    w.polls[0].resolve('approved'); await settle();
+    expect((await done(w, second)).phase).toBe('approved');
+  });
+});
+
+describe('N2 a Cancel while begun', () => {
+  test('N2 native is told to forget AFTER its begin answers too, so a late begin leaves no live code behind', async () => {
+    const releases: ((r: unknown) => void)[] = [];
+    const w = world({ beginAsync: () => new Promise((res) => releases.push(res)) });
+    const run = signInRun(w.env); await settle();
+    await signInCancel(w.env);                                                // the owner cancels before native has answered
+    releases[0]({ ok: true, userCode: 'U', link: LINK, interval: 5, expires: 600 }); await settle();
+    expect((await run).phase).toBe('cancelled');
+    const forgets = w.calls.filter((c) => c === 'signInForget:att-1').length;
+    expect(forgets).toBe(2);                                                  // once at the Cancel, once when the late begin has installed its code
+    expect(w.calls.indexOf('signInForget:att-1', w.calls.indexOf('signInBegin:att-1'))).toBeGreaterThan(w.calls.indexOf('signInBegin:att-1'));
+    expect(w.sheets.length).toBe(0); expect(signInView(ORIGIN).phase).toBe('cancelled');
+  });
+});
+
+describe('U an entry point that would open a second sheet', () => {
+  test('U1 REOPEN while this attempt\'s sheet is still open changes nothing and opens nothing', async () => {
+    const w = world(); const run = signInRun(w.env); await settle();
+    expect(w.sheets.length).toBe(1);
+    const n = w.published.length;
+    await Promise.race([signInReopen(w.env), settle()]); await settle();
+    expect(w.sheets.length).toBe(1); expect(w.published.length).toBe(n);
+    w.polls[0].resolve('approved'); await settle(); await done(w, run);
   });
 });

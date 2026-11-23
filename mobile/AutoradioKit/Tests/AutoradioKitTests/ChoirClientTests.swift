@@ -205,6 +205,70 @@ final class ChoirClientTests: XCTestCase {
         XCTAssertNil(keys.get(KeyAccount.apiKey)); XCTAssertNil(keys.get(KeyAccount.computerID)); XCTAssertEqual(StubProtocol.seen.last?.path, "/auth/api-keys/k1")
     }
 
+    // MARK: The rule: a minted key is either stored and belongs to the live attempt, or revoked. One test per path after the server mints.
+
+    private func revokedLast(_ si: ChoirSignIn, _ id: String, file: StaticString = #filePath, line: UInt = #line) async {
+        await si.waitForRevoke()
+        XCTAssertEqual(StubProtocol.seen.last?.method, "DELETE", file: file, line: line); XCTAssertEqual(StubProtocol.seen.last?.path, "/auth/api-keys/\(id)", file: file, line: line)
+    }
+
+    func testAKeyTheKeychainRefusedIsRevokedNotLeftLive() async {
+        final class Refusing: KeyStore, @unchecked Sendable { func get(_ a: String) -> String? { nil }; func set(_ v: String, account: String) throws { throw ChoirError.decode("keychain refused") }; func delete(_ a: String) {} }
+        env.keys = Refusing()
+        _ = stubDevice { _ in .init(json: ["api_key": secretKey, "key_id": "k7", "scopes": []]) }
+        let si = ChoirSignIn(env: env); _ = await si.begin(attempt: "a1")
+        let answer = await si.pollOnce(attempt: "a1")
+        XCTAssertEqual(answer, "invalid"); XCTAssertFalse(si.current.signedIn)
+        await revokedLast(si, "k7")
+        let again = await si.pollOnce(attempt: "a1"); XCTAssertEqual(again, "stale")      // the attempt ended
+    }
+
+    func testAKeyMintedWhileAnotherBeginSupersededTheAttemptIsRevoked() async {
+        fresh()
+        _ = stubDevice { n in if n == 1 { Thread.sleep(forTimeInterval: 0.5) }; return .init(json: ["api_key": secretKey, "key_id": "k8", "scopes": []]) }
+        let si = ChoirSignIn(env: env); _ = await si.begin(attempt: "a1")
+        async let answer = si.pollOnce(attempt: "a1")            // in flight: the server is about to mint
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        async let newer = si.begin(attempt: "a2")                 // a newer attempt replaces it (its start clears the live attempt before any network)
+        let got = await answer; _ = await newer
+        XCTAssertEqual(got, "stale"); XCTAssertNil(keys.get(KeyAccount.apiKey))
+        await si.waitForRevoke(); XCTAssertTrue(StubProtocol.seen.contains { $0.method == "DELETE" && $0.path == "/auth/api-keys/k8" })
+    }
+
+    func testAKeyMintedWhileSigningOutIsRevoked() async {
+        fresh()
+        _ = stubDevice { n in if n == 1 { Thread.sleep(forTimeInterval: 0.5) }; return .init(json: ["api_key": secretKey, "key_id": "k6", "scopes": []]) }
+        let si = ChoirSignIn(env: env); _ = await si.begin(attempt: "a1")
+        async let answer = si.pollOnce(attempt: "a1")
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        await si.signOut()
+        let got = await answer
+        XCTAssertEqual(got, "stale"); XCTAssertNil(keys.get(KeyAccount.apiKey))
+        await si.waitForRevoke(); XCTAssertTrue(StubProtocol.seen.contains { $0.method == "DELETE" && $0.path == "/auth/api-keys/k6" })
+    }
+
+    func testTwoBeginsAtOnceLeaveTheNewerAttemptLive() async {
+        // A double tap: the older begin's answer arrives AFTER the newer's. Only the latest begin may install its device code (the begin is serialized under the same lock).
+        fresh(); let polls = Counter(); let calls = Counter()
+        StubProtocol.handler = { req in
+            switch req.path {
+            case "/auth/device/begin":
+                let n = calls.next(); if n == 1 { Thread.sleep(forTimeInterval: 0.4) }
+                return .init(json: ["device_code": "choir_dc_\(n)", "user_code": "USER-\(n)", "verification_uri_complete": "https://choir.news/device?code=\(n)", "expires_in": 600, "interval": 5])
+            case "/auth/device/token": _ = polls.next(); return .init(json: ["api_key": secretKey, "key_id": "k1", "scopes": []])
+            default: return .init()
+            }
+        }
+        let si = ChoirSignIn(env: env)
+        async let older = si.begin(attempt: "a1")
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        let newer = await si.begin(attempt: "a2")
+        let o = await older
+        XCTAssertEqual(newer["ok"] as? Bool, true); XCTAssertEqual(o["ok"] as? Bool, false)          // the older one learns it was replaced
+        let stale = await si.pollOnce(attempt: "a1"); XCTAssertEqual(stale, "stale"); XCTAssertEqual(polls.value, 0)
+        let live = await si.pollOnce(attempt: "a2"); XCTAssertEqual(live, "approved")
+    }
+
     func testSignOutRevokesAndForgets() async {
         try? keys.set("k1", account: KeyAccount.keyID)
         let si = ChoirSignIn(env: env)

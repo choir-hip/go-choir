@@ -19,6 +19,7 @@ public final class ChoirSignIn: @unchecked Sendable {
     private var state = ChoirAuthState()
     private var live: (id: String, device: String)?     // the one attempt in progress; the device code never leaves here
     private var wrote: String?                          // the attempt whose key is in the Keychain
+    private var beginSeq = 0                            // begins are serialized by this count: only the LATEST one installs its device code
     private let env: ChoirEnvironment
     public var baseURL: String
     public var onChange: (@Sendable () -> Void)?
@@ -41,20 +42,20 @@ public final class ChoirSignIn: @unchecked Sendable {
 
     private func client() -> ChoirClient { env.client(baseURL: baseURL) }
 
-    /// Begin attempt `id` (a second begin replaces the first). Answers what the card shows and how to poll; the device code stays here.
+    /// Begin attempt `id` (a later begin replaces it, and only the latest installs its code, whatever order the answers come in). Answers what the card shows and how to poll; the device code stays here.
     public func begin(attempt id: String) async -> [String: Any] {
-        lock.lock(); live = nil; lock.unlock()
+        lock.lock(); beginSeq += 1; let mine = beginSeq; live = nil; lock.unlock()
         do {
             let o = try await client().postJSON("/auth/device/begin", ["label": deviceLabel], authenticated: false).object()
             guard let device = o["device_code"] as? String, let user = o["user_code"] as? String else { throw ChoirError.decode("begin: no codes") }
-            lock.lock(); live = (id, device); lock.unlock()
+            lock.lock(); guard beginSeq == mine else { lock.unlock(); return ["ok": false, "message": "replaced by a newer sign-in"] }; live = (id, device); lock.unlock()
             return ["ok": true, "userCode": user, "link": (o["verification_uri_complete"] as? String) ?? (o["verification_uri"] as? String) ?? "",
                     "interval": max(1, (o["interval"] as? Double) ?? 5), "expires": (o["expires_in"] as? Double) ?? 600]
         } catch { return ["ok": false, "message": "could not start the sign-in (\(error))"] }
     }
 
     /// One poll for attempt `id`: pending | slow_down | approved | denied | expired | error | stale (not the live attempt) | invalid. The key is written only if `id` is STILL the live
-    /// attempt, checked under the lock `forget` takes, so no key is written after the owner's Cancel; a key the server minted for a forgotten attempt is revoked, not stored.
+    /// attempt, checked under the lock `forget` takes: a minted key is either stored and belongs to the live attempt, or revoked (forgotten, replaced, sign-out, a Keychain that refuses). No `await` lies between the answer and that guard.
     public func pollOnce(attempt id: String) async -> String {
         lock.lock(); let device = live?.id == id ? live?.device : nil; lock.unlock()
         guard let device else { return "stale" }
@@ -76,9 +77,8 @@ public final class ChoirSignIn: @unchecked Sendable {
             lock.lock()
             guard live?.id == id else { lock.unlock(); if let keyID { revoke(keyID: keyID, key: key) }; return "stale" }          // forgotten while the answer was on its way: discard
             let stored: Bool = { do { try env.keys.set(key, account: KeyAccount.apiKey); if let keyID { try? env.keys.set(keyID, account: KeyAccount.keyID) }; return true } catch { return false } }()
-            if stored { wrote = id; live = nil }
-            lock.unlock()
-            guard stored else { return "invalid" }
+            if stored { wrote = id }; live = nil; lock.unlock()           // the attempt ends here, key or not
+            guard stored else { if let keyID { revoke(keyID: keyID, key: key) }; return "invalid" }       // minted and not stored: revoked, never left live
             _ = try? await c.computerID()   // best effort now; the first call retries it
             env.log?.emit(.note("choir: signed in to \(baseURL)"))
             update { $0.status = "idle"; $0.message = "signed in" }
@@ -89,8 +89,7 @@ public final class ChoirSignIn: @unchecked Sendable {
 
     /// Drop attempt `id`: its code is abandoned (it expires on the server as it always did). A key this attempt had already written is deleted and revoked.
     public func forget(attempt id: String) {
-        lock.lock()
-        if live?.id == id { live = nil }
+        lock.lock(); if live?.id == id { live = nil }
         let had = wrote == id ? (env.keys.get(KeyAccount.keyID), env.keys.get(KeyAccount.apiKey)) : (nil, nil)
         if wrote == id { wrote = nil; env.keys.delete(KeyAccount.apiKey); env.keys.delete(KeyAccount.keyID); env.keys.delete(KeyAccount.computerID) }
         lock.unlock()
@@ -101,7 +100,7 @@ public final class ChoirSignIn: @unchecked Sendable {
     /// Delete the local key and wipe the account's state at once; then revoke on the server in the background (best effort). The old key is held
     /// only for that one call: it is in no store, and nothing else can use it.
     public func signOut() async {
-        lock.lock(); live = nil; lock.unlock()
+        lock.lock(); live = nil; wrote = nil; lock.unlock()
         let id = env.keys.get(KeyAccount.keyID), key = env.keys.get(KeyAccount.apiKey)
         env.keys.delete(KeyAccount.apiKey); env.keys.delete(KeyAccount.keyID); env.keys.delete(KeyAccount.computerID)
         await onSignOut?()           // everything of the account on the phone goes (AccountWipe)
