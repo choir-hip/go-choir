@@ -46,7 +46,7 @@ value:
   better_means: the time and human minutes from a commit on main to that build in a tester's hands falls, and the first review passes
   goodharting_would_be: screenshots of features that do not work; review notes that describe an app we have not built; a reviewer path that is a hidden switch; shipping the lab build
 homotopy:
-  realism_axis: internal TestFlight (no review) first, then external (beta review), then the App Store; the same build and scripts at each step
+  realism_axis: external TestFlight first (beta review), then the App Store; the same build and scripts at each step
 boundaries:
   mutation_class: yellow for release scripts and metadata; orange for app behaviour; red for account creation, deletion and sign-in
   authority_sources:
@@ -67,6 +67,9 @@ boundaries:
   - decision: several slim simulators may run at once
     said: the one-simulator rule came before we started using simslim. we can do multiple simulators now if they are slim
     'on': '2026-11-23'
+  - decision: external TestFlight as soon as possible; internal TestFlight is not a goal, only the upload it shares
+    said: idc about internal testflight. i want external testflight asap. internal testflight is just for the dev team, which is just me
+    'on': '2026-11-23'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
   - signing keys and API keys never enter the repo or an agent's output; key files are passed by path
@@ -86,7 +89,7 @@ stations:
   status: pending
 - id: P1
   name: A build Apple accepts
-  scope: the release build with no lab or trace pages, its version and build number set, uploaded to internal TestFlight; the first proof that Exact's archive passes processing
+  scope: the release build with no lab or trace pages, its version and build number set, uploaded; the first proof that Exact's archive passes Apple's processing. The upload is the same for internal and external; no internal group is a goal
   class: yellow for scripts; orange for the build's contents
   review: one seat
   depends_on:
@@ -130,15 +133,14 @@ stations:
   - P2
   status: pending
 - id: P7
-  name: External testers
-  scope: beta review, a testers group, what-to-test notes
+  name: External testers, as soon as possible
+  scope: 'the first aim of the mission: beta review passed and a testers group with a public link; the beta description, feedback contact, review information and what-to-test notes. What must be true first is the shortest list that passes beta review and serves a stranger: P0, P1, P2, and whichever of P3 and P4 the owner rules are needed before the first outside tester (Q6)'
   class: yellow
   review: none
   depends_on:
+  - P0
   - P1
   - P2
-  - P3
-  - P4
   status: pending
 - id: P8
   name: The first version submitted
@@ -194,6 +196,13 @@ decisions_for_the_owner:
   - fastlane
   - the raw API
   default: that CLI, pinned, its telemetry turned off, after its reference page is written
+- id: Q6
+  question: Does the first external build wait for an account made and deleted inside the app?
+  why: beta review can see the app through the signed-out radio; a tester who wants more needs an account. In-app creation and deletion are red work with two review seats; without them a first tester makes an account at choir.news and signs in with the device flow
+  options:
+  - go to beta review with the signed-out radio and sign-in to an existing account; in-app creation and deletion follow in the next build
+  - wait for in-app creation and deletion
+  default: wait for in-app creation, as the owner listed it first among the things before we can ship; the owner may choose the faster path
 now:
   status: working
   as_of: 2026-11-23T22:02Z
@@ -205,7 +214,7 @@ now:
   main_uncertainty: whether Exact's archive passes Apple's processing, and what a reviewer makes of AI-written news
   next_observation: the owner's answers on Q1 to Q5
   blocker: none
-  next_action: write up to executable after the owner reads the research; P0 is the owner's
+  next_action: the owner's account steps (P0) and Q1 can start at once; in parallel the release build and the first upload (P1) once the plan is defined; external beta review as soon as Q6's list is true
 operating_notes:
 - The before-we-ship list is kept in docs/design/design-session-2026-11-23.md until this file is executable; then it lives here as stations.
 receipts:
