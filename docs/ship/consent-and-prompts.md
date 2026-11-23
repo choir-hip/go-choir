@@ -4,55 +4,18 @@ Short, plain, no exclamation marks. Every text here is for the app as it will be
 
 Still open for the owner:
 
-- The contact email (CONTACT_EMAIL, used in the error text of section 5).
 
 Rulings applied (owner, 2026-11-23): during the beta every account is free tier and providers may train on what is sent; minimum age 16; passkey sign-in and account creation inside the app, no codes; deletion with a 72 hour hold; downloads only after the person agrees; the microphone asked for only when voice or a take is turned on; signed out is listening only.
 
 Guideline behind the consent screen: 5.1.2(i), "clearly disclose where personal data will be shared with third parties, including with third-party AI, and obtain explicit permission before doing so."
 
-## 1. The consent screen
+## 1. The agreement at account creation
 
-Shown once per account, before the first request that reaches a model on a server. Two requests do this: the first spoken or typed request to the radio, and the first programme request of a signed-in listener (the radio writing the next stretch from your topics and history; see data-inventory.md F2). The screen therefore appears on the first signed-in start of the radio, not only on the first question.
+There is no separate consent screen (owner, 2026-11-24: "we dont need such a before the radio answers consent screen. thats not industry standard"). A person agrees once, by creating an account. Asking the radio needs an account, so everyone who can send personal content has seen this line. It sits above the button on the create-account screen, in ordinary text size:
 
-Title:
+> By creating an account you confirm you are 16 or older and agree to the Privacy Policy and Terms. What you ask the radio is sent to outside AI companies, which during the beta may use it to train their models.
 
-> Before the radio answers
-
-Body (the beta notice comes first and is not folded away):
-
-> During the beta every account is on the free tier. What you say or type to the radio goes to outside companies that run AI models, with the page you have open, the recent conversation, your topics, and any mail or files you ask about.
->
-> Some of them may keep it and use it to train their models, so do not put anything here that you would not want used that way.
->
-> A paid tier with stronger protections is planned. It is not available yet.
->
-> Your voice audio is not sent. It is turned into text on this phone.
-
-Link line (opens the policy page inside the app, at the section on AI models):
-
-> Read the privacy policy
-
-Buttons:
-
-> Allow
-> Not now
-
-If the listener taps Not now:
-
-> The radio still plays. Listening works, and you can still say commands like skip and pause. Questions need your agreement. You can allow it in Settings.
-
-Settings row, off after Not now, on after Allow:
-
-> AI answers from outside models
-> Allowed. Your requests are sent to AI models run by other companies, which may keep them and train on them. Turn off to stop.
-
-Notes for the builder:
-
-- Allow is recorded on the account, with the date, and shown in Settings. Withdrawing stops requests at once. This is consent, not a feature switch.
-- Not now blocks the request before it is made, not after. That includes the programme request: after Not now the radio plays the public front page and does not send topics or history to a model. [CHECK: builder to confirm what the radio plays after Not now.]
-- The provider names are not on this screen. They are in the policy (privacy-policy.md section 5), which this screen links to.
-- Do not add the words "we ask providers not to train" anywhere. We do not promise it.
-- Show the same screen again only if the categories of data change, such as a new kind of data being sent. [CHECK]
+"Privacy Policy" opens choir.news/privacy and "Terms" opens choir.news/terms. Tapping Create account is the agreement; there is no checkbox. Someone signing in to an existing account sees nothing extra. The second sentence stays in some form: Apple's review rule 5.1.2(i) asks an app to disclose sharing personal data with outside AI services and to get permission first.
 
 ## 2. Permission strings (the system prompts)
 
@@ -177,6 +140,6 @@ Confirmation step: the app asks for the passkey. Then:
 
 If it cannot complete (offline, server error):
 
-> The account was not deleted. Check your connection and try again, or write to CONTACT_EMAIL.
+> The account was not deleted. Check your connection and try again, or write to 000@choir.news.
 
 Do not offer "deactivate" as a substitute; Apple requires deletion, not deactivation.

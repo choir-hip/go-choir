@@ -3,7 +3,6 @@
 Still open for the owner:
 
 - Whether a provider's training on request text counts as a further purpose on the label beyond App Functionality (see the note under the table). The owner picks the conservative answer.
-- The contact email and publisher details printed in the policy the label links to (CONTACT_EMAIL).
 
 Rulings applied (owner, 2026-11-23): one app, so mail and takes ship and their rows are Yes; during the beta every account is free tier and providers may train on what is sent; minimum age 16; account created with an email address and a passkey inside the app. The publisher is Choir Harmonic Intelligence Platform, Inc.
 

@@ -4,8 +4,7 @@ Limits are from the research doc (read 2026-11-23): name 30 characters, subtitle
 
 Still open for the owner:
 
-- Territories and price (the app is free in this draft; no price appears in any text).
-- The privacy policy URL and the support URL (PRIVACY_POLICY_URL, SUPPORT_URL) and the contact email (CONTACT_EMAIL) that the policy prints.
+- Territories and price: the owner left this to the lead (2026-11-24). TestFlight needs neither. For the App Store release the default is free, United States only at first, widened later; the owner confirms before release.
 - Secondary category: none or Reference.
 - Whether the model files move to our own host before release.
 - If sign-up is turned off at the host limit during review, whether to give Apple a demo account.

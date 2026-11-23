@@ -5,12 +5,10 @@
 
 Effective date: DATE_OF_PUBLICATION
 Published by: Choir Harmonic Intelligence Platform, Inc. ("we", "us")
-Contact: CONTACT_EMAIL
+Contact: 000@choir.news
 
 Still open for the owner (delete this list before publishing):
 
-- The contact email to print (CONTACT_EMAIL), and the effective date.
-- The server log retention period (section 8). No job enforces any number today.
 - Where past versions of this policy are kept (POLICY_ARCHIVE_URL, section 13).
 - Who has operator access to the server (section 12).
 - The country of the OVH server (section 5).
@@ -144,7 +142,7 @@ The app downloads voice and language model files to your phone. They are data fi
 | Email sign-in and recovery attempts on choir.news | Codes expire in 10 minutes for sign-in and 15 minutes for recovery. Attempt records are removed after 24 hours. |
 | Your computer's working data (documents, files, mail, notes, play history) | Until your account is deleted |
 | The event log of your computer, including the text of your requests and answers | For the life of the computer. It is sealed under a key that belongs to the computer. We do not edit it. It is removed when your computer is destroyed, as in section 9. |
-| Server logs | [CHECK: our code sets no fixed period. The existing web policy says 90 days for authentication logs; no job enforcing that was found. Set a period and enforce it, or remove the number.] |
+| Server logs | Up to 30 days. [CHECK: the owner left this to the lead (2026-11-24); 30 days matches the abuse-log period kept after deletion. No job enforces it yet: it is enforced on the host before this policy is published, or this line changes.] |
 | Abuse logs after you delete your account | 30 days |
 | Deletion receipt | Kept. It holds a job number, counts and times, and no content. |
 | Voice audio kept by the app on your phone | Until you sign out or delete the app [CHECK] |
@@ -168,13 +166,13 @@ You can also sign out at any time. Signing out removes the key and your local da
 
 ## 10. Your choices and rights
 
-You can see, change and delete much of your data in the app. You can ask us for a copy of the data we hold about you, to correct it, or to delete it, by writing to CONTACT_EMAIL. You can withdraw your agreement to AI processing in Settings [WHEN-BUILT], and you can turn the microphone off in iPhone Settings.
+You can see, change and delete much of your data in the app. You can ask us for a copy of the data we hold about you, to correct it, or to delete it, by writing to 000@choir.news. You can withdraw your agreement to AI processing in Settings [WHEN-BUILT], and you can turn the microphone off in iPhone Settings.
 
 If you live in the European Economic Area, the United Kingdom, California or another place whose law gives you rights over your personal data, you have the rights that law gives you. These usually include access, correction, deletion, a portable copy, objection to some processing, and a complaint to your data protection authority. We do not use your data for advertising and we do not sell it. We reply within the time the law sets. [CHECK: lawyer to confirm the lawful bases, the transfer terms for providers outside your country, and whether a representative is needed. We make no claim of certification.]
 
 ## 11. Children
 
-Autoradio 1 is for people 16 and older. Do not make an account if you are under 16. We do not knowingly collect personal data from anyone under 16. The App Store age rating is 16+, because the news covers war, crime and other mature subjects. If you believe a child has given us personal data, write to CONTACT_EMAIL and we will delete it.
+Autoradio 1 is for people 16 and older. Do not make an account if you are under 16. We do not knowingly collect personal data from anyone under 16. The App Store age rating is 16+, because the news covers war, crime and other mature subjects. If you believe a child has given us personal data, write to 000@choir.news and we will delete it.
 
 ## 12. Security
 
@@ -193,6 +191,6 @@ We will put the new date at the top and, for a material change, show a notice in
 
 ## 14. Contact
 
-Write to CONTACT_EMAIL, or by post to:
+Write to 000@choir.news, or by post to:
 
 Choir Harmonic Intelligence Platform, Inc., c/o Yusef Mosiah Nathanson, 1414 Andover St, Tewksbury, MA 01876.
