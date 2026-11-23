@@ -291,7 +291,11 @@ record lands alone first. See
   `AR_SIM_NAME=<your name> mobile/scripts/sim-device.sh`, which slims a new
   simulator with `mobile/scripts/sim-slim.sh` before first use; check with
   `sim-slim.sh <name> --status`, and shut the simulator down when the run
-  ends. Never boot a stock simulator, and never more than one at a time.
+  ends. Never boot a stock simulator. Several slim simulators may run at
+  once (owner, 2026-11-23: "the one-simulator rule came before we started
+  using simslim. we can do multiple simulators now if they are slim"); each
+  has its own name, and the Mac's free disk and memory are checked before
+  another is booted. Native builds still take the one build lock.
 - No secrets, tokens or the owner's email addresses in the repo or in output.
   Per-developer secrets live in the gitignored `.envrc.local`.
 - Risky mutation happens in disposable capsules inside the stable computer.
