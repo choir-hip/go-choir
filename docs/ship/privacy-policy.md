@@ -109,7 +109,7 @@ These are the categories, and the providers found in our code on DATE_OF_PUBLICA
 | Podcast search and charts | The search text you type | Apple |
 | Hosting | Everything stored on our server | OVH (bare-metal server) [CHECK: country] |
 
-Before your first request reaches an AI model on a server, the app asks you to agree, and says the first paragraph of this section in short form. If you choose Not now, listening still works. Voice commands on your phone, such as skip and pause, still work. [WHEN-BUILT] You can withdraw agreement in Settings. [WHEN-BUILT]
+You agree to this when you create an account: the create-account screen says it above the button, with a link to this policy. Listening to the paper needs no account and sends none of your content to a model. If you no longer agree, delete your account (section 9).
 
 We do not sell your data. We do not share it for advertising. We share it only with the providers above, to run the product, and where the law requires it. [CHECK]
 
