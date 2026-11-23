@@ -303,9 +303,13 @@ func TestRestoreLeavesNoSidecarsAfterAnInstallOrAFailedVerify(t *testing.T) {
 func TestARetryAfterAPinDeadlineWithTheStoreChangedUsesTheRetrysBytes(t *testing.T) {
 	ctx := context.Background()
 	f := newCopyFixture(t, ChunkSize*3)
+	var last int64
+	if err := f.db.Read.QueryRow(`PRAGMA page_count`).Scan(&last); err != nil || last <= 3072+12 || last > 4096 {
+		t.Fatalf("test premise: %d pages (%v): chunks 0 to 2 are cut by page 3072 and a fourth chunk holds the rest", last, err)
+	}
 	f.cfg.PinDeadline = 600 * time.Millisecond
 	f.cfg.pageHook = func(pgno int64) {
-		if pgno > 3100 { // chunks 0, 1 and 2 are cut by page 3072, the store has 3116 pages
+		if pgno > 3072+2 { // after chunk 2 is cut, the reader crawls
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
