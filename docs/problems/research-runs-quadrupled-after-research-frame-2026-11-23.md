@@ -95,8 +95,8 @@ was **false as written**: 16Z had 44. From 17Z the count and the shape of a
 run are back where they were. Belief: the change was the cause, at about 0.8;
 the hour of lag is not explained (stories opened under the changed prompts
 still working through their rounds is a guess, not read from a run ledger).
-Remaining error: two hours is thin, and before the change three hours of
-twelve passed 25 on their own (32, 34 and 31). Claim C202 covers 18Z to 21Z.
+Remaining error: two hours is thin, and before the change two hours of
+twelve passed 25 on their own (32 and 34 runs active). Claim C202 covers 18Z to 21Z.
 Two runs in 17Z made 160 and 142 model calls each; runs of 72 and 108 were
 seen before and during the change too, and none has been read step by step.
 
