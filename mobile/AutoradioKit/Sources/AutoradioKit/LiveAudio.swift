@@ -85,7 +85,20 @@ public final class LiveAudio: @unchecked Sendable {
     private var micWanted = false
     /// Another app has the session, or this app is in the background: the microphone is not taken (and not fought for) until it is given back.
     private let suspendedBox = Locked<Bool>(false)
-    public var micSuspended: Bool { get { suspendedBox.value } set { suspendedBox.write { $0 = newValue } } }
+    public var micSuspended: Bool {
+        get { suspendedBox.value }
+        set {
+            let was = suspendedBox.value
+            suspendedBox.write { $0 = newValue }
+            if was, !newValue { micMayRetry() }           // the app is back in front: the outcome may differ now
+        }
+    }
+    /// Something that could change the outcome of opening the microphone happened (the permission changed, the route changed, the app came back to the front, the listener turned voice on
+    /// again): the retries start from none. A coordinator state switch is NOT such an event: it resumes the engine with the count it has, so a microphone that cannot open does not cost
+    /// six engine rebuilds (each one cutting the programme) on every switch.
+    func micMayRetry() { micRetries = 0; micGaveUp = false }
+    /// The route changed (AirPods in or out, a new input): see `micMayRetry`.
+    func routeChanged() { micMayRetry() }
     /// The input rate of the tap now installed (0: none), for the log line of voice on.
     public private(set) var micTapRate = 0.0
     private var wantMic: Bool { micPermitted && micWanted && !micSuspended }
@@ -192,9 +205,8 @@ public final class LiveAudio: @unchecked Sendable {
     /// engine's graph was built for: a new engine and nodes are made rather than the old ones restarted.
     public func resume(voiceProcessing vp: Bool, mic: Bool? = nil, fresh: Bool = false) throws {
         guard !virtual, bus != nil else { return }
-        if let mic { micWanted = mic }
+        if let mic { if mic, !micWanted { micMayRetry() }; micWanted = mic }       // voice turned on (again) starts the count again; a switch that resumes with the mic already wanted does not
         engineGate.lock(); defer { engineGate.unlock() }
-        micRetries = 0; micGaveUp = false                // a new request for the microphone from outside starts the count again
         try bring(voiceProcessing: vp, fresh: fresh)
     }
 
@@ -421,6 +433,7 @@ public final class LiveAudio: @unchecked Sendable {
     private func scheduleMicRetry() {
         guard !virtual else { return }
         guard micRetries < 6 else {
+            if micGaveUp { return }                      // said once, not at every switch that resumes
             micGaveUp = true
             print("AUTORADIO voice mic gave up: the input still reported rate 0 after \(micRetries) retries on new engines")
             onNotice?("error", "the microphone could not be opened after \(micRetries) retries on new engines")
@@ -444,6 +457,7 @@ public final class LiveAudio: @unchecked Sendable {
             // Our own restart posts one too: ignore anything within a second of it.
             if self.restarting || clock.now - self.lastRestart < 1.0 { return }
             self.onNotice?("engine", "configuration change")
+            self.routeChanged()
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.recover(reason: "configuration change") }
         }
     }

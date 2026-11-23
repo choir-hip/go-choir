@@ -66,6 +66,42 @@ final class MicFirstRunTests: XCTestCase {
         XCTAssertEqual(a.engineBuilds, before, "nothing was retried")
     }
 
+    /// Gave up on a persistent rate 0; the builds so far.
+    func gaveUp() async throws -> LiveAudio {
+        let a = try runningForPlayback { true }
+        a.inputRateForTest = { _ in 0 }
+        try a.resume(voiceProcessing: true, mic: true)
+        await waitUntil("gave up") { a.micState == .failed }
+        XCTAssertEqual(a.micState, .failed)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        return a
+    }
+
+    func testTheGiveUpHoldsAcrossTheCoordinatorsSwitches() async throws {
+        let a = try await gaveUp()
+        let builds = a.engineBuilds
+        for _ in 0..<3 { try a.resume(voiceProcessing: true, mic: true, fresh: true) }     // three state switches, each a resume
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(a.micState, .failed)
+        XCTAssertLessThanOrEqual(a.engineBuilds - builds, 3, "a switch builds its own engine and no retry chain follows it")
+    }
+
+    func testARouteChangeTheForegroundOrVoiceTurnedOnAgainStartTheCountAgain() async throws {
+        let a = try await gaveUp()
+        func retriesFollow(_ what: String, _ event: () throws -> Void) async throws {
+            let before = a.engineBuilds
+            try event()
+            try a.resume(voiceProcessing: true, mic: true, fresh: true)
+            await waitUntil(what) { a.micState == .failed && a.engineBuilds - before > 3 }
+            XCTAssertGreaterThan(a.engineBuilds - before, 3, "\(what): retried on new engines again")
+            await waitUntil("gave up again") { a.micState == .failed }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
+        try await retriesFollow("route change") { a.routeChanged() }
+        try await retriesFollow("foreground") { a.micSuspended = true; a.micSuspended = false }
+        try await retriesFollow("voice turned on again") { try a.resume(voiceProcessing: true, mic: false); try a.resume(voiceProcessing: true, mic: true) }
+    }
+
     func testTheLogNeverSaysOkAtRateZero() {
         XCTAssertEqual(MicLog.tap(active: true, rate: 0), "fail")
         XCTAssertEqual(MicLog.tap(active: false, rate: 48000), "fail")
