@@ -43,7 +43,7 @@ export function step(a: Attempt, e: Event): Attempt {
     case 'beginFailed': return a.phase === 'begun' ? to('failed', { message: e.message }) : a;
     case 'issued': return to(a.phase, { issued: Math.max(a.issued, e.n) });
     case 'cancel': return to('cancelled');
-    case 'timeout': return to('expired', { message: WORDS.expired });
+    case 'timeout': return a.phase === 'begun' ? a : to('expired', { message: WORDS.expired });
     case 'reopen': return a.phase === 'sheet' || a.phase === 'closed' ? to('sheet', { closedAt: -1, note: '' }) : a;
     case 'sheet':
       if (a.phase !== 'sheet') return a;
