@@ -152,9 +152,9 @@ func TestProductionRestoreTapeSkipsAPrunedCandidateWithoutDownloadingIt(t *testi
 		Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 			return &computerevent.Head{ComputerID: computerID, Sequence: seq, CanonicalEventHead: strings.Repeat("e", 64)}, nil
 		},
-		Cipher:     cipher,
-		Chunks:     tape, // the production type takes the snapshot too
-		Appender:   hostAppender{host},
+		Cipher:   cipher,
+		Chunks:   tape, // the production type takes the snapshot too
+		Appender: hostAppender{host},
 	}
 	first, err := snapshot.TakeSnapshot(ctx, cfg)
 	if err != nil {

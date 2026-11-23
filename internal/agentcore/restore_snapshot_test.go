@@ -257,9 +257,9 @@ func seedRestoreBase(t *testing.T, ctx context.Context, rt *Runtime, cas *replay
 		Head: func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) {
 			return scratch.HeadTx(ctx, tx, computerID)
 		},
-		Cipher:     rt.privateArtifactCipher,
-		Chunks:     fake,
-		Appender:   capture,
+		Cipher:   rt.privateArtifactCipher,
+		Chunks:   fake,
+		Appender: capture,
 	})
 	if err != nil {
 		t.Fatalf("take test snapshot at %d: %v", baseSeq, err)
