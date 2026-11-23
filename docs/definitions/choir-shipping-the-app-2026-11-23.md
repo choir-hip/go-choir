@@ -1,6 +1,6 @@
 ---
 definition_version: 7
-readiness: drafted
+readiness: executable
 authority: 'the owner, 2026-11-23: "i just renewed my apple developer account. so, another new mission is doing our app store/testflight application... we need to do this and also make screenshots and video previews... and improve the onboarding (voice onboarding as mentioned above) and explanatory materials for the apple reviewers"; "you should be able to make an account (which also applies to choir.news) first inside autoradio app. so, we may have a list of things to do like this before we can ship".'
 review:
   reviewer: none (an intention recorded from the owner's words; reviewed before it becomes executable)
@@ -95,6 +95,24 @@ boundaries:
   - decision: CarPlay is a priority once the iPhone app is on TestFlight
     said: i didnt select any capability requests but yes, carplay is a priority once we get ios working on testflight
     'on': '2026-11-23'
+  - decision: ship tomorrow; the designs are completed tonight and the work is done overnight
+    said: we can ship tomorrow. the security sensitive work can be done quickly enough. tonight, before i go to bed, we will complete all the needed designs. theres no need for this to take 5-8 days. we can do it all overnight
+    'on': '2026-11-23'
+  - decision: 'deletion: takes are removed, stories are kept with the author detached; access is revoked at once and the irreversible purge waits 72 hours, cancelled by signing in; a deletion receipt and 30 days of abuse logs are retained'
+    said: for the 3 decisions for deletion, i agree with defaults
+    'on': '2026-11-23'
+  - decision: every new account gets a computer, with 2 GB of memory; unused computers hibernate; usage is watched and sign-up is turned off when the host reaches its limit, then the owner adds infrastructure
+    said: All new accounts get a computer. but we can do 2gb ram. remember, unused accounts dont cost ram. they get hibernated. and we will monitor usage and turn off signup once we hit limits. then i will get more infra
+    'on': '2026-11-23'
+  - decision: 'one app: what ships is the app the owner uses, with every page; whatever is untested is tested and fixed, not left out (this settles the question of version 1''s contents)'
+    said: we should ship the same app we are using. if something is untested we need to test it and fix it as needed. we shouldnt have a separate build for what we ship. too confusing
+    'on': '2026-11-23'
+  - decision: account creation and sign-in are native passkey screens in the app; no code and no sign-in sheet
+    said: the sign in sheet is totally wrong though. we shuold have native passkey account creation and sign in. no "code". this is a priority
+    'on': '2026-11-23'
+  - decision: model downloads in onboarding come after the person consents
+    said: the audio model downloads in the onboarding should be after user consent btw
+    'on': '2026-11-23'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
   - signing keys and API keys never enter the repo or an agent's output; key files are passed by path
@@ -123,21 +141,21 @@ stations:
   lane: lane/store-build
 - id: P2
   name: The first run, signed out
-  scope: open the app and hear the public paper at once, never blank and never waiting; asking prompts sign-in or sign-up
+  scope: open the app and hear the public paper at once, never blank and never waiting; asking prompts sign-in or sign-up. Lane radio-first-run
   class: orange
   review: one seat
   depends_on: []
-  status: pending
+  status: working
 - id: P3
-  name: An account made and deleted in the app
-  scope: creation with a passkey inside the app, the same account as on choir.news; deletion in the app covering the account, the computer and published objects. Design first (a read-only proposal is being written 2026-11-23); then its stations
+  name: Native passkey account creation and sign-in, and account deletion in the app
+  scope: creation and sign-in by the platform's passkey screen through Exact's passkeys package, the associated-domains file served by choir.news, a server route that gives the phone its key from a passkey ceremony; the device-code flow leaves the app. Deletion started in the app with a fresh passkey assertion, on the defaults the owner accepted. Lanes native-passkey and account-delete
   class: red
   review: two seats
   depends_on: []
   status: working
 - id: P4
   name: Consent, permissions and models
-  scope: the microphone asked only when a signed-in listener turns voice on; one consent before the first request that reaches a model on a server; model files downloaded with their size stated, hosted by us; the privacy label and policy to match
+  scope: one consent at account creation covering what is sent to models on our servers and to outside providers; model files downloaded only after consent, sizes stated; the microphone asked only when a signed-in listener turns voice on, and closed when the screen locks; voice turn audio on the phone pruned. Lane onboard-consent
   class: orange
   review: one seat
   depends_on: []
@@ -188,21 +206,14 @@ stations:
   depends_on:
   - P8
   status: pending
+- id: P10
+  name: Computers for many testers
+  scope: a new account's computer has 2 GB of memory; idle computers hibernate; a reading of host capacity (memory, disk, running and hibernated computers, sign-ups a day) the owner can see; sign-up closes at an owner-set number of accounts and says so plainly. Lane tester-capacity
+  class: red (vmctl and auth)
+  review: two seats
+  depends_on: []
+  status: working
 decisions_for_the_owner:
-- id: Q2
-  question: What is in version 1?
-  why: each page shown to a reviewer must work; mail, files and takes have had little use on a phone
-  options:
-  - radio, paper, reader, voice and podcasts
-  - everything
-  default: radio, paper, reader, voice and podcasts; the rest when each has been used on the owner's phone
-- id: Q3
-  question: What does deleting an account remove?
-  why: Apple requires deletion in the app; published stories and the computer are the question
-  options:
-  - the account, the computer and published objects
-  - the account only
-  default: designed and not built until the owner rules
 - id: Q4
   question: Which territories first, and is the app free?
   why: the EU needs trader status; a price brings purchase rules
@@ -220,8 +231,8 @@ decisions_for_the_owner:
   default: that CLI, pinned, its telemetry turned off, after its reference page is written
 now:
   status: working
-  as_of: 2026-11-23T22:50Z
-  slice: P1 (the release build, lane store-build), P3 (design of in-app creation and deletion), P6 (privacy policy and texts drafted for the owner)
+  as_of: 2026-11-23T23:59Z
+  slice: 'overnight: store-build fixes; native-passkey; account-delete; onboard-consent; tester-capacity; radio-first-run; each reviewed by two seats where red, landed in as few trains as the reviews allow'
   source_ref: origin/main bcea7eefd
   deploy_identity: staging on a2ba96767
   candidate: none
@@ -229,7 +240,7 @@ now:
   main_uncertainty: whether Exact's archive passes Apple's processing, and what a reviewer makes of AI-written news
   next_observation: the three agents' reports; the first upload's processing result
   blocker: none
-  next_action: re-review and land the release build; the first archive and upload (no submission) to learn whether Apple accepts Exact's archive; the owner reads the drafts in docs/ship and rules on the account design's decisions
+  next_action: land the trains overnight, archive and upload, prove on the owner's phone and the drill account; the owner reads the drafts in docs/ship; submit for beta review on the owner's word
 operating_notes:
 - The before-we-ship list is kept in docs/design/design-session-2026-11-23.md until this file is executable; then it lives here as stations.
 receipts:
