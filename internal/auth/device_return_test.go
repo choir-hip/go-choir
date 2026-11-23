@@ -1,0 +1,235 @@
+package auth
+
+import (
+	"encoding/json"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+)
+
+// Written before the code (CLAUDE.md, Testing). The approval page may close the
+// phone's sign-in sheet (docs/reference/exact/auth-session.md): after a decision
+// it navigates to a callback the SERVER builds. How that could fail:
+//
+//  R1 an approve that names an app of ours gets no return_to, or a wrong one.
+//  R2 a return target the client made up (a URL, another scheme, a path, a host
+//     with userinfo, a script) is followed or echoed: an open redirect.
+//  R3 a state that could break out of the query (&, #, %, a space, a newline), or
+//     is empty or huge, is echoed.
+//  R4 a refused return still records the decision (the phone is told "no" by a
+//     400 and the code must stay pending), or counts as a guessed code.
+//  R5 the callback carries something that is not a signal: the device code, the
+//     user code, the label, the user id, a key.
+//  R6 the page without a return changes: no return_to, same body as before.
+//  R7 the gates move: an email session, an API key, a form post and a missing
+//     session are refused exactly as before, with or without a return.
+//  R8 the allowlist drifts from the apps that exist (mobile/AutoradioLab/app.json:
+//     the default id and each variant's), so a build's callback scheme is refused
+//     or an unknown one is admitted.
+//  R9 a deny returns too (the sheet must close either way), and it mints nothing.
+
+const goodState = "k3VqS0m9Zt_xA1b2C3d4-E5f"
+
+func approveBody(code, decision string, extra map[string]string) map[string]string {
+	m := map[string]string{"user_code": code, "decision": decision}
+	for k, v := range extra {
+		m[k] = v
+	}
+	return m
+}
+
+func TestDeviceApproveReturnsTheAppsOwnCallback(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	u, _ := h.store.CreateUser("return-user", "return@example.com")
+	for _, scheme := range []string{"news.choir.autoradio.lab", "news.choir.autoradio.lab.one"} {
+		b := deviceBegin(t, h, "Autoradio", "203.0.113.9")
+		rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve",
+			approveBody(b.UserCode, "approve", map[string]string{"return": scheme, "state": goodState}), priv, u.ID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: approve %d: %s", scheme, rec.Code, rec.Body.String())
+		}
+		body := decodeBody(t, rec)
+		want := scheme + ":/signed-in?state=" + goodState
+		if body["return_to"] != want { // R1
+			t.Fatalf("%s: return_to %v, want %q", scheme, body["return_to"], want)
+		}
+		if body["status"] != "approved" {
+			t.Fatalf("status %v", body["status"])
+		}
+		// R5: nothing else in the body that could be redeemed, and the callback is exactly scheme, path, state.
+		raw := rec.Body.String()
+		for _, secret := range []string{b.DeviceCode, b.UserCode, strings.ReplaceAll(b.UserCode, "-", ""), u.ID, "choir_sk_", APIKeyPrefix} {
+			if secret != "" && strings.Contains(raw, secret) {
+				t.Fatalf("approve body carries %q: %s", secret, raw)
+			}
+		}
+		keys := []string{}
+		for k := range body {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		if strings.Join(keys, ",") != "label,return_to,status" {
+			t.Fatalf("approve body fields %v", keys)
+		}
+		// The key is still collected only by the poller that began the flow.
+		rewindPoll(t, h)
+		if code, m := devicePoll(h, b.DeviceCode); code != http.StatusOK || !strings.HasPrefix(m["api_key"].(string), APIKeyPrefix) {
+			t.Fatalf("collect %d %v", code, m)
+		}
+	}
+}
+
+func TestDeviceDenyReturnsToo(t *testing.T) { // R9
+	h, priv := testHandlerEnv(t)
+	u, _ := h.store.CreateUser("deny-user", "deny@example.com")
+	b := deviceBegin(t, h, "Autoradio", "")
+	rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve",
+		approveBody(b.UserCode, "deny", map[string]string{"return": "news.choir.autoradio.lab", "state": goodState}), priv, u.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("deny %d: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	if body["status"] != "denied" || body["return_to"] != "news.choir.autoradio.lab:/signed-in?state="+goodState {
+		t.Fatalf("deny body %v", body)
+	}
+	rewindPoll(t, h)
+	if code, m := devicePoll(h, b.DeviceCode); code != http.StatusBadRequest || m["error"] != "access_denied" {
+		t.Fatalf("poll after deny: %d %v", code, m)
+	}
+}
+
+func TestDeviceApproveRefusesAReturnItDoesNotKnow(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	u, _ := h.store.CreateUser("refuse-user", "refuse@example.com")
+	b := deviceBegin(t, h, "Autoradio", "")
+	bad := []struct{ name, ret, state string }{
+		{"a web URL", "https://evil.example/cb", goodState},
+		{"a web URL with our scheme in it", "https://news.choir.autoradio.lab/signed-in", goodState},
+		{"another scheme", "evil.app", goodState},
+		{"our scheme with a host", "news.choir.autoradio.lab://evil", goodState},
+		{"our scheme with a path", "news.choir.autoradio.lab:/other", goodState},
+		{"our scheme with userinfo", "news.choir.autoradio.lab@evil.example", goodState},
+		{"a prefix of ours", "news.choir.autoradio", goodState},
+		{"ours with a suffix not in the list", "news.choir.autoradio.lab.two", goodState},
+		{"a script", "javascript:alert(1)", goodState},
+		{"upper case", "News.Choir.Autoradio.Lab", goodState},
+		{"a space", "news.choir.autoradio.lab ", goodState},
+		{"a return with no state", "news.choir.autoradio.lab", ""},
+		{"a state with no return", "", goodState},
+		{"a state that ends the query", "news.choir.autoradio.lab", goodState + "&code=x"},
+		{"a state with a fragment", "news.choir.autoradio.lab", goodState + "#x"},
+		{"a state with a percent", "news.choir.autoradio.lab", "abc%2Fdefghijklmnopqrstuvwx"},
+		{"a state with a space", "news.choir.autoradio.lab", "abcdefghijklmnop qrstuvwx"},
+		{"a state with a newline", "news.choir.autoradio.lab", "abcdefghijklmnop\nqrstuvwx"},
+		{"a short state", "news.choir.autoradio.lab", "abc"},
+		{"a long state", "news.choir.autoradio.lab", strings.Repeat("a", 129)},
+	}
+	for _, c := range bad {
+		rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve",
+			approveBody(b.UserCode, "approve", map[string]string{"return": c.ret, "state": c.state}), priv, u.ID))
+		if rec.Code != http.StatusBadRequest { // R2, R3
+			t.Fatalf("%s: status %d, want 400: %s", c.name, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "return_to") || (c.ret != "" && strings.Contains(rec.Body.String(), c.ret)) {
+			t.Fatalf("%s: the refusal echoes the target: %s", c.name, rec.Body.String())
+		}
+	}
+	// R4: nothing was decided, nothing counted as a wrong code.
+	if code, m := devicePoll(h, b.DeviceCode); code != http.StatusBadRequest || m["error"] != "authorization_pending" {
+		t.Fatalf("after refused returns the code must be pending: %d %v", code, m)
+	}
+	if h.deviceGuessesExhausted(u.ID) || len(h.device.misses[u.ID]) != 0 {
+		t.Fatalf("a refused return counted as a miss: %v", h.device.misses[u.ID])
+	}
+	// And the same code is then approved with no return, as before.
+	rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve", approveBody(b.UserCode, "approve", nil), priv, u.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("approve after refusals %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDeviceApproveWithoutAReturnIsAsBefore(t *testing.T) { // R6
+	h, priv := testHandlerEnv(t)
+	u, _ := h.store.CreateUser("plain-user", "plain@example.com")
+	b := deviceBegin(t, h, "laptop", "")
+	rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve", approveBody(b.UserCode, "approve", nil), priv, u.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d: %s", rec.Code, rec.Body.String())
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := raw["return_to"]; has || len(raw) != 2 {
+		t.Fatalf("plain approve body changed: %s", rec.Body.String())
+	}
+	// begin and lookup do not mention a return either.
+	if strings.Contains(b.VerificationURIComplete, "return") || strings.Contains(b.VerificationURIComplete, "state") {
+		t.Fatalf("begin's link changed: %s", b.VerificationURIComplete)
+	}
+}
+
+func TestDeviceApproveGatesHoldWithAReturn(t *testing.T) { // R7
+	h, priv := testHandlerEnv(t)
+	u, _ := h.store.CreateUser("gate2-user", "gate2@example.com")
+	b := deviceBegin(t, h, "x", "")
+	body := approveBody(b.UserCode, "approve", map[string]string{"return": "news.choir.autoradio.lab", "state": goodState})
+
+	if rec := deviceDecide(h, jsonReq(http.MethodPost, "/auth/device/approve", body, "")); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous: %d", rec.Code)
+	}
+	_, secret, _ := h.store.CreateAPIKey(t.Context(), u.ID, "full", AllScopes(), nil)
+	req := jsonReq(http.MethodPost, "/auth/device/approve", body, "")
+	req.Header.Set("Authorization", "Bearer "+secret)
+	if rec := deviceDecide(h, req); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("api key: %d", rec.Code)
+	}
+	rec := deviceDecide(h, emailSessionCookieReq(http.MethodPost, "/auth/device/approve", body, priv, u.ID))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("email session: %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "return_to") || strings.Contains(rec.Body.String(), goodState) {
+		t.Fatalf("an email session was handed a callback: %s", rec.Body.String())
+	}
+	// The email session decided nothing: the code is pending and a passkey session can still approve it.
+	if code, m := devicePoll(h, b.DeviceCode); code != http.StatusBadRequest || m["error"] != "authorization_pending" {
+		t.Fatalf("after refused sessions: %d %v", code, m)
+	}
+}
+
+// R8: the allowlist is the set of apps that exist. A callback scheme is an app's id.
+func TestDeviceReturnSchemesAreTheAppsInAppJSON(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "mobile", "AutoradioLab", "app.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m struct {
+		App      struct{ ID string } `json:"app"`
+		Variants map[string]struct {
+			IDSuffix string `json:"idSuffix"`
+			Env      map[string]string
+		} `json:"variants"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{m.App.ID}
+	for _, v := range m.Variants {
+		want = append(want, m.App.ID+v.IDSuffix)
+		if got := v.Env["SIGNIN_SCHEME"]; got != m.App.ID+v.IDSuffix {
+			t.Fatalf("variant env SIGNIN_SCHEME %q is not its app id %q", got, m.App.ID+v.IDSuffix)
+		}
+	}
+	sort.Strings(want)
+	got := append([]string(nil), DeviceReturnSchemes...)
+	sort.Strings(got)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("DeviceReturnSchemes %v, app.json ids %v", got, want)
+	}
+	if DeviceReturnPath != "/signed-in" {
+		t.Fatalf("path %q", DeviceReturnPath)
+	}
+}

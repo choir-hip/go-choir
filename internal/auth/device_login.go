@@ -23,7 +23,7 @@ import (
 //
 //   POST /auth/device/begin    {label}               no auth
 //   GET  /auth/device/lookup   ?user_code=           passkey session cookie
-//   POST /auth/device/approve  {user_code, decision} passkey session cookie, JSON
+//   POST /auth/device/approve  {user_code, decision[, return, state]} passkey session cookie, JSON
 //   POST /auth/device/token    {device_code}         no auth (the code is the secret)
 
 const (
@@ -45,6 +45,15 @@ const (
 	deviceUserCodeAlphabet = "BCDFGHJKLMNPQRSTVWXZ"
 	deviceUserCodeLen      = 8
 )
+
+// DeviceReturnSchemes are the apps the approval page may send the phone's
+// sign-in sheet back to: each is an app id of mobile/AutoradioLab/app.json (the
+// default and each variant), and the app's own callback scheme. A client names
+// one of these; it never supplies a URL (an open redirect). Drift is tested.
+var DeviceReturnSchemes = []string{"news.choir.autoradio.lab", "news.choir.autoradio.lab.one"}
+
+// DeviceReturnPath is the callback's fixed path.
+const DeviceReturnPath = "/signed-in"
 
 type deviceState struct {
 	mu     sync.Mutex
@@ -340,6 +349,49 @@ func (h *Handler) HandleDeviceLookup(w http.ResponseWriter, r *http.Request) {
 type deviceApproveRequest struct {
 	UserCode string `json:"user_code"`
 	Decision string `json:"decision"`
+	// Return and State are optional and come together: the phone's sign-in
+	// sheet (ASWebAuthenticationSession, Custom Tabs) names its own app's
+	// callback scheme and an app-chosen nonce so the page can close the sheet.
+	// Return is an identifier from DeviceReturnSchemes, never a URL.
+	Return string `json:"return"`
+	State  string `json:"state"`
+}
+
+// deviceReturnState: the phone's nonce, shaped so it cannot leave the query.
+func validDeviceReturnState(s string) bool {
+	if len(s) < 16 || len(s) > 128 {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// deviceReturnTo builds the callback the sheet is closed with: the app's own
+// scheme, a fixed path and the app's nonce. It carries no key, no code and no
+// account identifier; it is a signal "come back", and the app learns the result
+// by its own poll. Neither field: no callback. One without the other, a scheme
+// not on the allowlist or a state that is not a plain token: an error.
+func deviceReturnTo(scheme, state string) (string, error) {
+	if scheme == "" && state == "" {
+		return "", nil
+	}
+	known := false
+	for _, s := range DeviceReturnSchemes {
+		if scheme == s {
+			known = true
+		}
+	}
+	if !known {
+		return "", errors.New("return is not an app of ours")
+	}
+	if !validDeviceReturnState(state) {
+		return "", errors.New("state must be 16 to 128 letters, digits, - or _")
+	}
+	return scheme + ":" + DeviceReturnPath + "?state=" + state, nil
 }
 
 // HandleDeviceApprove handles POST /auth/device/approve. Only the owner's
@@ -368,6 +420,11 @@ func (h *Handler) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: `decision must be "approve" or "deny"`})
 		return
 	}
+	returnTo, rerr := deviceReturnTo(req.Return, req.State)
+	if rerr != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: rerr.Error()})
+		return
+	}
 	a, _ := h.lookupForUser(w, r, user, req.UserCode)
 	if a == nil {
 		return
@@ -382,7 +439,11 @@ func (h *Handler) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[auth] operation=device_decide user_id=%s id=%s decision=%s result=success", user.ID, a.ID, req.Decision)
-	writeJSON(w, http.StatusOK, map[string]string{"status": map[bool]string{true: DeviceStatusApproved, false: DeviceStatusDenied}[req.Decision == "approve"], "label": a.Label})
+	out := map[string]string{"status": map[bool]string{true: DeviceStatusApproved, false: DeviceStatusDenied}[req.Decision == "approve"], "label": a.Label}
+	if returnTo != "" {
+		out["return_to"] = returnTo
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 type deviceTokenRequest struct {

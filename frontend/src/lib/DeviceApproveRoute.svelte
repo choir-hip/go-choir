@@ -20,10 +20,18 @@
     data-device-approve          — "Approve"
     data-device-deny             — "Deny"
     data-device-error            — error message
+    data-device-return           — "Return to the app" link (only when the app's sign-in sheet opened this page)
+
+  The Autoradio app opens this page in the system sign-in sheet with
+  `&return=<its callback scheme>&state=<its nonce>` (docs/reference/exact/auth-session.md).
+  After a decision the page navigates to the callback the server answers, which
+  closes the sheet. The callback is a signal only: no key, no code. Without those
+  two parameters the page behaves as it always did.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getSession, loginPasskey, fetchWithRenewal, AuthRequiredError, passkeyErrorMessage } from './auth.js';
+  import { approveRequestBody, followableReturn } from './device-return.js';
 
   type RouteState = 'checking' | 'signin' | 'enter' | 'loading' | 'review' | 'working' | 'approved' | 'denied' | 'gone' | 'passkey';
 
@@ -32,6 +40,7 @@
   let email = '';
   let error = '';
   let request = null;
+  let returnTo = '';
 
   onMount(async () => {
     code = new URLSearchParams(window.location.search).get('code') || '';
@@ -110,7 +119,7 @@
       const res = await fetchWithRenewal('/auth/device/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_code: code.trim(), decision }),
+        body: JSON.stringify(approveRequestBody(code, decision, window.location.search)),
       });
       const body = await res.json().catch(() => ({}));
       if (res.status === 403) {
@@ -127,6 +136,9 @@
         return;
       }
       state = decision === 'approve' ? 'approved' : 'denied';
+      const sent = new URLSearchParams(window.location.search).get('state') || '';
+      returnTo = followableReturn(body, sent) || '';
+      if (returnTo) window.location.href = returnTo;
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         state = 'signin';
@@ -205,10 +217,16 @@
       </button>
     {:else if state === 'approved'}
       <h1>Approved</h1>
-      <p class="body">Return to your terminal; it finishes signing in on its own. You can revoke the key any time in Settings, API keys.</p>
+      {#if returnTo}
+        <p class="body">Approved. Returning to the app; it finishes signing in on its own.</p>
+        <a class="primary-action" data-device-return href={returnTo}>Return to the app</a>
+      {:else}
+        <p class="body">Return to your terminal; it finishes signing in on its own. You can revoke the key any time in Settings, API keys.</p>
+      {/if}
     {:else if state === 'denied'}
       <h1>Denied</h1>
       <p class="body">The device gets nothing. You can close this page.</p>
+      {#if returnTo}<a class="secondary-action" data-device-return href={returnTo}>Return to the app</a>{/if}
     {:else if state === 'passkey'}
       <h1>Passkey needed</h1>
       <p class="error" role="alert" data-device-error>You are signed in by email. Sign in with a passkey to approve a device: approving creates an API key.</p>
@@ -347,6 +365,12 @@
     background: transparent;
     color: var(--choir-text-primary);
     border: 1px solid var(--choir-border-strong);
+  }
+
+  a.primary-action,
+  a.secondary-action {
+    text-decoration: none;
+    box-sizing: border-box;
   }
 
   .primary-action:disabled,
