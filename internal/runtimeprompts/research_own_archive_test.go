@@ -28,9 +28,7 @@ func TestRLMResearchOverlayFindsAndReadsTheOwnArchive(t *testing.T) {
 			t.Errorf("research overlay names %q: the reliance link and score are never shown to a desk", absent)
 		}
 	}
-	// Raised from 8000 to 10800 on 2026-11-23: about 16% over the overlay's 9324 bytes (2026-11-23) with the
-	// stop-rule paragraph and the counts hint added.
-	if len(overlay) > 10800 {
-		t.Errorf("research overlay is %d bytes, the budget is 10800", len(overlay))
+	if len(overlay) > 8000 {
+		t.Errorf("research overlay is %d bytes, the budget is 8000", len(overlay))
 	}
 }

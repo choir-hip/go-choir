@@ -265,56 +265,12 @@ func TestAResearchReportLineCountsCorpusAndRunCapturedSourcesAndTheGap(t *testin
 "claims":[{"text":"a","source_ids":["s1"]},{"text":"b","source_ids":["s2"]}]}`
 	researchtools.NoteCaptureMadeByRunForTest("run-rl", "cap-run")
 	line := researchReportLine("run-rl", "research:doc-1", packet, true)
-	want := "research report run=run-rl final=true sources=3 from_corpus=1 by_run=1 no_capture=1 claims=2 adds=true gap=true gap_text=\"the employer's side\""
+	want := "research report run=run-rl final=true sources=3 from_corpus=1 by_run=1 no_capture=1 claims=2 adds=true gap=true"
 	if line != want {
 		t.Fatalf("line = %q\nwant   %q", line, want)
 	}
 	if researchReportLine("run-rl", "texture:doc-1", packet, true) != "" {
 		t.Fatal("only a research desk's Report is counted")
-	}
-}
-
-// A gap is a "missing:" line that says something (2026-11-22: the worked cell wrote the
-// literal "missing: what the graph lacked" and the log counted any line starting with
-// "missing:", so 55 of 56 Reports "named a gap"). Failure list: the placeholder counts;
-// "missing: none" counts; an empty "missing:" counts; real content does not count; the
-// line's text is not logged (so gaps cannot be tabulated), or is logged unclipped, or
-// breaks the log line.
-func TestAResearchReportLineCountsAGapOnlyWhenTheMissingLineSaysSomething(t *testing.T) {
-	line := func(notes ...string) string {
-		raw, _ := json.Marshal(map[string]any{"schema_version": "coagent_source_packet.v1", "kind": "evidence_update", "summary": "x", "notes": notes})
-		return researchReportLine("run-gap", "research:doc-1", string(raw), true)
-	}
-	for _, tc := range []struct {
-		name  string
-		notes []string
-		want  string // the tail of the line
-	}{
-		{"placeholder", []string{"adds: a", "missing: what the graph lacked"}, ` adds=true gap=false gap_text=""`},
-		{"none", []string{"adds: a", "missing: none"}, ` adds=true gap=false gap_text=""`},
-		{"none with a stop", []string{"missing: None."}, ` adds=false gap=false gap_text=""`},
-		{"empty", []string{"adds: a", "missing:"}, ` adds=true gap=false gap_text=""`},
-		{"no line", []string{"adds: a"}, ` adds=true gap=false gap_text=""`},
-		{"real", []string{"MISSING:  the prefecture's statement "}, ` adds=false gap=true gap_text="the prefecture's statement"`},
-		{"none with a comma", []string{"missing: none,"}, ` adds=false gap=false gap_text=""`},
-		{"one note holding two lines", []string{"adds: a\nmissing: the filing"}, ` adds=true gap=true gap_text="the filing"`},
-		{"the first line with content wins", []string{"missing: none", "missing: the court filing"}, ` adds=false gap=true gap_text="the court filing"`},
-	} {
-		if got := line(tc.notes...); !strings.HasSuffix(got, tc.want) {
-			t.Errorf("%s: line %q lacks the tail %q", tc.name, got, tc.want)
-		}
-	}
-	// A second line of the same note is a line of its own, never part of the gap text; and a
-	// long line is clipped, says so, and stays one line of the log.
-	if got := line("missing: the statement\nforged=line gap=false"); !strings.HasSuffix(got, ` gap=true gap_text="the statement"`) || strings.Contains(got, "\n") {
-		t.Errorf("a second line leaked into the gap text: %q", got)
-	}
-	got := line("missing: " + strings.Repeat("the   statement ", 60))
-	if strings.Contains(got, "\n") || !strings.Contains(got, " gap=true gap_text=\"the statement the statement ") || len(got) > 600 {
-		t.Fatalf("an unclipped gap text (%d bytes): %q", len(got), got)
-	}
-	if !strings.HasSuffix(got, `…"`) {
-		t.Errorf("a clipped gap text must say it was cut: %q", got)
 	}
 }
 

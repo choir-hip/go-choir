@@ -5,14 +5,13 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 )
 
@@ -116,7 +115,7 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				for _, id := range f.corpus {
 					caps = append(caps, map[string]string{"capture_id": id, "url": strings.TrimPrefix(id, "cap:")})
 				}
-				return json.Marshal(map[string]any{"captures_matched_words": len(caps), "captures_near_by_meaning_only": 0, "words_note": "", "captures": caps})
+				return json.Marshal(map[string]any{"captures": caps})
 			case ActionReadCapture:
 				// A capture id "cap:<url>" names the capture of that page.
 				var in ReadCapturePayload
@@ -322,7 +321,7 @@ func TestOverlayWorkedCellIsGraphFirstThenTheWebForWhatIsMissing(t *testing.T) {
 	if f.corpusCalls.Load() != 1 || f.captureReads.Load() != 2 || f.reads.Load() != 0 || f.searchCalls.Load() != 0 {
 		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 2, 0, 0", f.corpusCalls.Load(), f.captureReads.Load(), f.reads.Load(), f.searchCalls.Load())
 	}
-	if !strings.Contains(out.Stdout, "outlets read without error: 2") || !strings.Contains(out.Stdout, "graph captures matching your words:") {
+	if !strings.Contains(out.Stdout, "outlets read without error: 2") || !strings.Contains(out.Stdout, "report now only if two independent outlets among them support the claim") {
 		t.Errorf("the worked cell did not print its stop test:\n%s", out.Stdout)
 	}
 
@@ -363,10 +362,6 @@ fmt.Println(len(pages))`)
 	if !strings.Contains(nudged, "cap-a.example-1") || !strings.Contains(nudged, "cap-b.example-2") {
 		t.Errorf("reads with no packet must be nudged with their capture ids:\n%s", nudged)
 	}
-	// The nudge reports progress; it does not ask the run to read or search on.
-	if strings.Contains(nudged, "read on") {
-		t.Errorf("the interim nudge asks for more reading:\n%s", nudged)
-	}
 }
 
 // The worked cell counts what was read WITHOUT error: a web page that failed is neither a
@@ -401,42 +396,19 @@ func TestOverlayWorkedCellCountsOnlyPagesReadWithoutError(t *testing.T) {
 	}
 }
 
-// The research prompts are bounded as the model sees them: the role prompt's content (not the
-// YAML file, whose comments hold the version history) and the overlay's body, each with about
-// 16% headroom over its size on 2026-11-23 (6959 and 9324), and the two together. The bounds
-// are a sanity check against unnoticed growth, not a model limit.
+// The overlay is checked against the bound it was rewritten to meet.
 func TestResearchRoleAndOverlayStayUnderTheirBound(t *testing.T) {
 	overlay := runtimeprompts.RLMResearchOverlay()
-	role, err := promptstore.New(t.TempDir()).Load("user-alice", agentprofile.Research)
+	raw, err := os.ReadFile("../promptstore/defaults/research.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(overlay) > 10800 || len(role.Content) > 8100 || len(overlay)+len(role.Content) > 18900 {
-		t.Fatalf("research overlay %d + role content %d chars: past the sanity bounds (10800, 8100, 18900 together)", len(overlay), len(role.Content))
-	}
-}
-
-// What "held" means, and where the corpus count lives (2026-11-22: the prompts put
-// "held" beside graph-first text, so a run took it for "the corpus holds it"; in code it
-// means an earlier search of this run returned the page, and SearchHit.CaptureID, said to
-// mark a page the corpus holds, was set nowhere). Failure list: a verb doc says held
-// without saying what it means, or still describes it as the paper's pages; the
-// the SearchWireCorpus doc does not say what zero
-// word matches means or does not name the two counts.
-func TestVerbDocsSayWhatHeldMeansAndWhatTheCorpusCountsMean(t *testing.T) {
-	for _, name := range []string{"Search", "SearchAll"} {
-		doc := strings.Join(strings.Fields(choirFunctionDocs[name].Summary), " ")
-		if !strings.Contains(doc, "held means an earlier search of this run returned the page") || !strings.Contains(doc, "a web result is not compared with the corpus") {
-			t.Errorf("%s doc does not say what held means: %s", name, doc)
-		}
-		if strings.Contains(doc, "pages you already hold") {
-			t.Errorf("%s doc still calls held pages ones you hold", name)
-		}
-	}
-	corpus := strings.Join(strings.Fields(choirFunctionDocs["SearchWireCorpus"].Summary), " ")
-	for _, want := range []string{"captures_matched_words", "captures_near_by_meaning_only", "zero captures_matched_words on a search that answered in full means no page holds your words, so the graph likely lacks this"} {
-		if !strings.Contains(corpus, want) {
-			t.Errorf("SearchWireCorpus doc lacks %q", want)
-		}
+	// Before 2026-11-09: overlay 13,100 chars, role 5,586.
+	// Relaxed 2026-11-16 to a sanity check (12k, 9k, 19k together): the research
+	// prompt is to be rewritten as an explanation of the system rather than
+	// rules (owner, 2026-11-16), and a longer explanation must not be refused
+	// by a bound written for the dedupe.
+	if len(overlay) > 12000 || len(raw) > 9000 || len(overlay)+len(raw) > 19000 {
+		t.Fatalf("research overlay %d + role %d chars: past the sanity bounds (12000, 9000, 19000 together)", len(overlay), len(raw))
 	}
 }

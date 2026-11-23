@@ -60,7 +60,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 		Order   string `json:"order,omitempty"`
 	}
 	return toolregistry.Tool{Name: "search_wire_corpus",
-		Description: "Search this computer's own corpus by topic, title, outlet, keywords or a whole question: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at, and passage: the part of the page's own text that matched), strongest first. A capture's full text is searched, not only its title: a fact that appears only in a page's body is found. The page-text search takes every word you write (stop words such as the, of, was are dropped), a \"quoted phrase\" as a phrase (searched as its words when no page holds it), and -word or -\"a phrase\" as an exclusion (a passage holding it is not returned). Words found in no page, or so common they carry no weight, are not searched, and the result names them (capture_words_dropped, and captures_note). Punctuation splits words: C++ is searched as c and AT&T as t, so put the distinctive word beside them. since and until (a date such as 2026-11-18, also written since:2026-11-18) restrict captures to pages published or, when the publish time is not known, fetched in that window; order recent (or order:recent) lists, newest first, only the pages at least half as relevant as the best match, and the note says when only the best 300 passages were ranked. Captures marked owner-private are never listed. Pages are also found by meaning, not only by their words: a page can be listed for its meaning alone (no passage), or because a published story cites it (reasons: text, meaning, story; via_stories names the story, and stories lists each with the captures it cites). Search by meaning can be unavailable; the note says so and the pages are then those whose text matches. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. The result opens with captures_matched_words and captures_near_by_meaning_only (every capture listed is one or the other): zero captures_matched_words on a search whose note does not say the page text was only partly searched means no page holds your words, so the graph likely lacks this (words_note says so; not when events or published pieces matched, and with a since/until window it says only that none matched in it). Search here before the web.",
+		Description: "Search this computer's own corpus by topic, title, outlet, keywords or a whole question: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at, and passage: the part of the page's own text that matched), strongest first. A capture's full text is searched, not only its title: a fact that appears only in a page's body is found. The page-text search takes every word you write (stop words such as the, of, was are dropped), a \"quoted phrase\" as a phrase (searched as its words when no page holds it), and -word or -\"a phrase\" as an exclusion (a passage holding it is not returned). Words found in no page, or so common they carry no weight, are not searched, and the result names them (capture_words_dropped, and captures_note). Punctuation splits words: C++ is searched as c and AT&T as t, so put the distinctive word beside them. since and until (a date such as 2026-11-18, also written since:2026-11-18) restrict captures to pages published or, when the publish time is not known, fetched in that window; order recent (or order:recent) lists, newest first, only the pages at least half as relevant as the best match, and the note says when only the best 300 passages were ranked. Captures marked owner-private are never listed. Pages are also found by meaning, not only by their words: a page can be listed for its meaning alone (no passage), or because a published story cites it (reasons: text, meaning, story; via_stories names the story, and stories lists each with the captures it cites). Search by meaning can be unavailable; the note says so and the pages are then those whose text matches. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, outlet, or keywords"},
 			"limit":    map[string]any{"type": "integer", "description": "Max results per list (default 10, at most 25)"},
@@ -92,7 +92,6 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			capturesStart := time.Now()
 			captures, note, info, err := searchCapturesFor(ctx, deps, ownerID, exec.ComputerID,
 				corpusRequest{Query: query, Terms: corpusQueryTerms(query), Since: window.Since, Until: window.Until, Order: window.Order}, limit)
-			capturesErr := err
 			if err != nil {
 				captures, note = nil, "captures not searched: "+err.Error()
 			}
@@ -112,9 +111,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			// computer: citable once Read captures their read_url.
 			published, publishedNote := searchPublished(ctx, deps, query, limit)
 			logCorpusSearch(ctx, query, exec.ComputerID, capturesElapsed, captures, note, len(published), len(events), info.Capped, info)
-			matched, nearOnly := info.Body+info.Title+info.Both+info.LabelsOnly, info.Meaning
 			body := wireCorpusResult{
-				MatchedWords: matched, NearByMeaningOnly: nearOnly, WordsNote: wordsNote(matched, nearOnly, info, capturesErr == nil, len(events)+len(published), !window.Since.IsZero() || !window.Until.IsZero()),
 				Query:     query,
 				Published: published, PublishedCount: len(published), PublishedNote: publishedNote,
 				Events: events, EventCount: len(events), EventsNote: eventsNote,
@@ -135,17 +132,10 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 const publishedFirstNote = "published lists the paper's own earlier stories and opinion pieces matching these words. Read the ones that bear on the subject at their read_url before the web, then cite the capture Read returns."
 
 // wireCorpusResult is the search_wire_corpus answer. A struct, not a map: JSON
-// keys must come out in this order: the two counts, then published first (a map sorts them alphabetically, which
-// put captures ahead of the paper's own stories). The two counts (opening the
-// result), words_note and published_first_note are new fields; the rest keep their names and meanings.
+// keys must come out published first (a map sorts them alphabetically, which
+// put captures ahead of the paper's own stories). Field names and meanings are
+// unchanged; only the order and published_first_note are new.
 type wireCorpusResult struct {
-	// MatchedWords and NearByMeaningOnly open the result: how many of the listed captures
-	// matched the query's words (in their text, title, outlet, topic or language) and how
-	// many are listed only for their meaning or the stories that cite them. Neither is omitted when zero: a run reads 0 as
-	// "the graph holds no page with these words". Ranking is unchanged.
-	MatchedWords       int              `json:"captures_matched_words"`
-	NearByMeaningOnly  int              `json:"captures_near_by_meaning_only"`
-	WordsNote          string           `json:"words_note,omitempty"`
 	PublishedFirstNote string           `json:"published_first_note,omitempty"`
 	Published          []PublishedPiece `json:"published"`
 	PublishedCount     int              `json:"published_count"`
@@ -163,32 +153,6 @@ type wireCorpusResult struct {
 	// Stories are the published stories found by meaning whose cited
 	// captures are in captures (each capture's via_stories names them).
 	Stories []CorpusStory `json:"stories,omitempty"`
-}
-
-// wordsNote says so when no listed capture matched the query's words: the search falls back
-// to the nearest pages by meaning and so always lists some, which a run cannot tell from a
-// graph that holds the subject (224 of 224 corpus searches on 2026-11-22 listed captures).
-//
-// It speaks only when the search answered in full: the capture search did not fail and the
-// page text of every capture is searchable. With an unindexed rest (or a failed search) zero
-// word matches does not mean the graph lacks the words, and the note stays silent. When events
-// or published pieces already matched, the graph does not lack the subject and the note points
-// at them; when a since/until window was given, the note says only that none matched in it.
-func wordsNote(matched, nearOnly int, info corpusSearchInfo, answered bool, others int, windowed bool) string {
-	if !answered || !info.TextUsed || info.TextIndexed < int64(info.Captures) {
-		return ""
-	}
-	if matched == 0 && nearOnly > 0 {
-		base := fmt.Sprintf("none of the %d listed captures matched your words (in their text, title, outlet, topic or language); they are listed for their meaning or the stories that cite them", nearOnly)
-		switch {
-		case others > 0:
-			return fmt.Sprintf("%s, but %d events or published pieces matched: read those first", base, others)
-		case windowed:
-			return base + " in this since/until window; pages outside it may match"
-		}
-		return base + ", so the graph likely lacks this"
-	}
-	return ""
 }
 
 func firstNonEmptyString(values ...string) string {

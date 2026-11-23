@@ -1,5 +1,7 @@
 # Research runs send reworded web searches because their prompts ask for sources the frame does not need
 
+> **The change this record describes was reverted on 2026-11-23** after research runs rose from 13.2 to 62.3 an hour (`research-runs-quadrupled-after-research-frame-2026-11-23.md`). The evidence below about reworded searches still stands; the fix does not.
+
 Recorded 2026-11-22 from the traces of 20:04Z to 23:04Z, three hours after
 graph-first (`3fc71ee89`) went live. Read-only investigation; the run ledger
 was not read, so a run's own reason for a search is not known (see "Remaining

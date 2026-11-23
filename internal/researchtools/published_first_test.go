@@ -85,10 +85,8 @@ func TestSearchWireCorpusPublishedComesFirstWithNote(t *testing.T) {
 	defer srv.Close()
 	raw := searchWireCorpusRaw(t, srv.URL)
 	keys := topLevelKeys(t, raw)
-	// The result opens with its two counts (2026-11-22: whether the graph answered); the
-	// published pieces still come before the events and the captures.
-	if keys[0] != "captures_matched_words" || keys[1] != "captures_near_by_meaning_only" || keys[2] != "published_first_note" || keys[3] != "published" {
-		t.Fatalf("keys = %v, want the two counts, then published_first_note, then published", keys)
+	if keys[0] != "published_first_note" || keys[1] != "published" {
+		t.Fatalf("keys = %v, want published_first_note then published first", keys)
 	}
 	for _, k := range []string{"captures", "events", "capture_count", "event_count"} {
 		if i := indexOf(keys, k); i < 0 || i < indexOf(keys, "published") {
