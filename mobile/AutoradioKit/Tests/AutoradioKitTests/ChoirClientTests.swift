@@ -36,6 +36,8 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
 
 let secretKey = "choir_sk_TESTKEY_do_not_leak"
 
+final class Counter: @unchecked Sendable { private let l = NSLock(); private var v = 0; func next() -> Int { l.lock(); defer { l.unlock() }; v += 1; return v }; var value: Int { l.lock(); defer { l.unlock() }; return v } }
+
 final class ChoirClientTests: XCTestCase {
     var env: ChoirEnvironment!
     var log: EventLog!
@@ -156,6 +158,75 @@ final class ChoirClientTests: XCTestCase {
         XCTAssertFalse(shown.contains(secretKey))
         noLeak()
         XCTAssertEqual(polls, 3)
+    }
+
+    // MARK: The sign-in sheet was closed (review 2026-11-23): closing it never abandons a sign-in that may have been approved.
+
+    private func beginForSheet(_ answers: @escaping @Sendable (Int) -> StubProtocol.Resp) async -> (ChoirSignIn, Counter) {
+        keys.delete(KeyAccount.apiKey); keys.delete(KeyAccount.computerID); keys.delete(KeyAccount.keyID)
+        let polls = Counter()
+        StubProtocol.handler = { req in
+            switch req.path {
+            case "/auth/device/begin": return .init(json: ["device_code": "choir_dc_x", "user_code": "ABCD-EFGH", "verification_uri_complete": "https://choir.news/device?code=ABCD-EFGH", "expires_in": 600, "interval": 5])
+            case "/auth/device/token": return answers(polls.next())
+            case "/api/compute/status": return .init(json: ["computers": [["computer_id": "comp-2", "kind": "interactive"]]])
+            default: return .init()
+            }
+        }
+        let si = ChoirSignIn(env: env)
+        si.sleep = { _ in await Task.yield() }         // the poll runs at once, a few turns at a time
+        _ = await si.begin()
+        return (si, polls)
+    }
+
+    func testSheetClosedBeforeApprovalAbandonsTheCodeAtTheNextPoll() async {
+        let (si, polls) = await beginForSheet { _ in .init(status: 400, json: ["error": "authorization_pending"]) }
+        si.sheetClosed()
+        await si.wait()
+        XCTAssertEqual(si.current.status, "idle"); XCTAssertEqual(si.current.userCode, ""); XCTAssertEqual(si.current.message, "")   // back to signed out, no noise
+        XCTAssertFalse(si.current.signedIn); XCTAssertNil(keys.get(KeyAccount.apiKey))
+        let n = polls.value
+        await Task.yield(); XCTAssertEqual(polls.value, n)                                     // and it stopped asking
+    }
+
+    func testSheetClosedAfterApprovalTakesTheKey() async {
+        // The page approved and the callback never closed the sheet: the owner swiped it away. The next poll answers with the key.
+        let (si, _) = await beginForSheet { n in n < 3 ? .init(status: 400, json: ["error": "slow_down"]) : .init(json: ["api_key": secretKey, "key_id": "k1", "scopes": ["read:runtime"]]) }
+        si.sheetClosed()
+        await si.wait()
+        XCTAssertEqual(keys.get(KeyAccount.apiKey), secretKey); XCTAssertTrue(si.current.signedIn)
+        XCTAssertEqual(si.current.status, "idle"); XCTAssertEqual(si.current.message, "signed in")
+        noLeak()
+    }
+
+    func testSheetClosedLeavesASlowDownToTheLoop() async {
+        // slow_down is not an answer about the approval: the code is not abandoned on it.
+        let (si, polls) = await beginForSheet { n in n == 1 ? .init(status: 400, json: ["error": "slow_down"]) : .init(status: 400, json: ["error": "authorization_pending"]) }
+        si.sheetClosed()
+        await si.wait()
+        XCTAssertGreaterThanOrEqual(polls.value, 2); XCTAssertEqual(si.current.status, "idle")
+    }
+
+    func testSheetClosedAfterADenialSaysSo() async {
+        let (si, _) = await beginForSheet { _ in .init(status: 400, json: ["error": "access_denied"]) }
+        si.sheetClosed()
+        await si.wait()
+        XCTAssertEqual(si.current.status, "failed"); XCTAssertEqual(si.current.message, "the sign-in was denied")
+    }
+
+    func testANewSignInForgetsAClosedSheet() async {
+        let (si, _) = await beginForSheet { _ in .init(status: 400, json: ["error": "authorization_pending"]) }
+        si.sheetClosed(); await si.wait()
+        keys.delete(KeyAccount.apiKey)
+        nonisolated(unsafe) var n = 0
+        StubProtocol.handler = { req in
+            if req.path == "/auth/device/begin" { return .init(json: ["device_code": "choir_dc_y", "user_code": "WXYZ-WXYZ", "verification_uri_complete": "https://choir.news/device?code=WXYZ-WXYZ", "expires_in": 600, "interval": 5]) }
+            n += 1; return n < 3 ? .init(status: 400, json: ["error": "authorization_pending"]) : .init(json: ["api_key": secretKey, "key_id": "k2", "scopes": []])
+        }
+        _ = await si.begin()
+        // the earlier close does not carry over: this pending answer keeps the code, the third answer is the key
+        await si.wait()
+        XCTAssertTrue(si.current.signedIn)
     }
 
     func testDeviceFlowDenied() async {

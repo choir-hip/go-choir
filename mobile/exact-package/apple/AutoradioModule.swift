@@ -224,7 +224,7 @@ public final class AutoradioModule: ExactPackage {
         case "choirAuth": reply(json(choir.authView()))
         case "choirPlayer": reply(json(choir.playerView()))
         case "choirSignIn": Task { [choir] in _ = await choir?.signIn.begin() }; reply(state())
-        case "choirCancelSignIn": choir.signIn.cancel(); reply(state())
+        case "choirCancelSignIn": if (args["by"] as? String) == "sheet" { choir.signIn.sheetClosed() } else { choir.signIn.cancel() }; reply(state())   // "sheet": the sign-in sheet was closed, the poll answers first
         case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
         case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing
         default: reply(["error": "NotSupportedError"])

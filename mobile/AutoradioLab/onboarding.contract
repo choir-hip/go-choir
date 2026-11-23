@@ -54,6 +54,8 @@ component SignInScreen
             text "Approve this sign-in in the window that opened." font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted text-align="center"
             if sheetNote != ""
               text sheetNote testId="signin-sheet-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
+              // No path is only the sheet: the same link, in the system browser (Exact: an absolute https href leaves the app and opens there). The native poll goes on as before.
+              text "Open it in your browser" href=au.verificationURL testId="signin-browser" font-family=th.fontLabel font-size="-exact-subheadline" color=th.fg text-align="center"
             button press=openApproval testId="signin-open" appearance="none"
               Btn(label="Open the approval page", primary=true, wide=false)
             button press=cancelSignIn testId="signin-cancel" appearance="none"

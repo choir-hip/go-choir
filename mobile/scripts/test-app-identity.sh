@@ -31,6 +31,7 @@ cat > "$T/bin/bun" <<'B'
 D="$(dirname "$0")"
 [ "${1:-}" = install ] && exit 0
 printf 'variant=[%s] args=[%s]\n' "${EXACT_VARIANT:-}" "$*" >> "$D/bun.log"
+printf '%s' "${SIGNIN_SCHEME-unset}" > "$D/bun.scheme"
 [ -f "$D/fail" ] && exit 3
 exit 0
 B
@@ -68,6 +69,15 @@ run_build env AR_APP_ID=$ID "$M/scripts/exact.sh" agent ios tree
 eq "exact.sh agent: Exact sees one" "$(cat "$T/bin/bun.log")" "variant=[one] args=[exact.mjs agent ios tree]"
 run_build env AR_VARIANT=nope "$M/scripts/exact.sh" ios; rc=$?
 [ "$rc" -ne 0 ] && [ ! -s "$T/bin/bun.log" ] && ok "an unknown variant stops before Exact runs" || no "unknown variant ran Exact (rc $rc)"
+
+# 3b. the sign-in callback scheme is the app id, handed to Exact explicitly for EVERY identity (app.ts reads SIGNIN_SCHEME with `??`, which does not catch an empty value):
+#     the default no longer rests on a literal fallback, and a stray empty SIGNIN_SCHEME in the caller's environment cannot reach the grant.
+run_build "$M/scripts/exact.sh" agent ios tree
+eq "default build: SIGNIN_SCHEME is the default id" "$(cat "$T/bin/bun.scheme")" news.choir.autoradio.lab
+run_build env AR_VARIANT=one "$M/scripts/exact.sh" agent ios tree
+eq "variant build: SIGNIN_SCHEME is the variant's id" "$(cat "$T/bin/bun.scheme")" $ID
+run_build env SIGNIN_SCHEME= "$M/scripts/exact.sh" agent ios tree
+eq "an empty SIGNIN_SCHEME in the caller's environment does not reach Exact" "$(cat "$T/bin/bun.scheme")" news.choir.autoradio.lab
 
 # 4. nothing else keeps its own copy of the id
 if grep -n "news\.choir\.autoradio" "$M/scripts/proof-common.sh" "$M/scripts/sim-launch.sh" "$M/scripts/make-profile.sh" "$M/scripts/proof-real.sh" "$M/scripts/exact.sh" "$M/scripts/build-lab.sh" >/dev/null; then no "a script still spells the bundle id"; else ok "no script spells the bundle id"; fi
