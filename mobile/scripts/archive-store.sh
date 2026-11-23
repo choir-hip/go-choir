@@ -12,7 +12,7 @@
 # path, bundle id, version and build number, and fails if they are not what was asked for.
 # The BUILD NUMBER (CFBundleVersion) is whole minutes since 2026-01-01 00:00 UTC, or one more than the last number this script gave if that is higher ($OUTDIR/last-build): it
 # rises with every run, so a re-upload of the same commit is a higher number (App Store Connect takes a build number once per version), and it has at most 9 digits for
-# centuries. AR_BUILD_NUMBER=<n> sets it (a whole number, 1 to 999999999) and raises the record; later default numbers stay above it. The build lock serializes runs.
+# centuries. AR_BUILD_NUMBER=<n> sets it (a whole number, 1 to 999999999) and raises the record; later default numbers stay above it. The caller holds the build lock (the command above), which serializes runs; this script takes none, so the record is what keeps two runs apart.
 # The .ipa goes to $AR_STORE_OUT_DIR (default ~/.cache/autoradio-store), outside the repo. EXACT_PROFILE and AR_STORE_OUT_DIR may be relative to where this is run; they are made absolute.
 # ALLOW_NO_MODELS is refused (a store archive always carries the voice models).
 set -eu
@@ -25,7 +25,8 @@ ID="$("$HERE/scripts/app-identity.sh" id)" || exit 1
 NAME="$("$HERE/scripts/app-identity.sh" name)" || exit 1
 VERSION="$("$HERE/scripts/app-identity.sh" version)" || exit 1
 [ -n "${EXACT_IDENTITY:-}" ] || no "EXACT_IDENTITY is not set: name the Apple Distribution identity by its SHA-1 (40 hex digits)."
-printf '%s' "$EXACT_IDENTITY" | grep -Eq '^[0-9A-Fa-f]{40}$' || no "EXACT_IDENTITY must be the identity's SHA-1: 40 hex digits."
+case "$EXACT_IDENTITY" in *[!0-9A-Fa-f]*) bad=1 ;; *) bad="" ;; esac     # a pattern on the whole value: grep matches one line of a multi-line value
+[ -z "$bad" ] && [ "${#EXACT_IDENTITY}" -eq 40 ] || no "EXACT_IDENTITY must be the identity's SHA-1: 40 hex digits."
 [ -n "${EXACT_PROFILE:-}" ] || no "EXACT_PROFILE is not set: name the App Store provisioning profile for $ID by its path."
 [ -f "$EXACT_PROFILE" ] || no "EXACT_PROFILE is not a file."
 [ -z "${ALLOW_NO_MODELS:-}" ] || no "ALLOW_NO_MODELS is set: a store archive without the on-device voice models is a defect, not a build (run scripts/ensure-deps.sh ios; unset ALLOW_NO_MODELS)"
@@ -40,11 +41,13 @@ OUTDIR="$(cd "$OUTDIR" && pwd -P)"
 LASTF="$OUTDIR/last-build"; LAST=0
 if [ -e "$LASTF" ]; then
   LAST="$(cat "$LASTF")"
-  printf '%s' "$LAST" | grep -Eq '^[0-9]{1,9}$' || no "$LASTF holds no whole number (the last build number given): fix or delete it."
+  case "$LAST" in ''|*[!0-9]*) no "$LASTF holds no whole number (the last build number given): fix or delete it." ;; esac
+  [ "${#LAST}" -le 9 ] || no "$LASTF holds no whole number (the last build number given): fix or delete it."
 fi
 if [ -n "${AR_BUILD_NUMBER:-}" ]; then BUILD="$AR_BUILD_NUMBER"
 else BUILD=$(( ($(date -u +%s) - 1767225600) / 60 )); [ "$BUILD" -gt "$LAST" ] || BUILD=$((LAST + 1)); fi
-printf '%s' "$BUILD" | grep -Eq '^[1-9][0-9]{0,8}$' || no "the build number must be a whole number from 1 to 999999999 (AR_BUILD_NUMBER, or the record in $LASTF)."
+case "$BUILD" in ''|0*|*[!0-9]*) bad=1 ;; *) bad="" ;; esac
+[ -z "$bad" ] && [ "${#BUILD}" -le 9 ] || no "the build number must be a whole number from 1 to 999999999 (AR_BUILD_NUMBER, or the record in $LASTF)."
 [ "$BUILD" -gt "$LAST" ] && printf '%s\n' "$BUILD" > "$LASTF"
 IPA="$OUTDIR/$(printf '%s' "$NAME" | tr -c 'A-Za-z0-9.\n' '-')-$VERSION-$BUILD.ipa"
 rm -f "$IPA"

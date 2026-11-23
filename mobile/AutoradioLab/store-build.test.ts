@@ -31,10 +31,15 @@
 //  R8 make-profile.sh with no choice makes a development profile of the production id (see test-app-identity.sh).
 //  R9 docs still tell a builder to run a phone build with no variant, count four app names, or cite the retired variant `one`.
 //  R10 a store build keeps -AutoradioProofSilent (a developer default) because it is not behind the development condition.
+//  Review round 3 (the second reviewer's review, read after the first fixes):
+//  T1 the microphone purpose string says the app listens only when Voice is on, but Take records the voice and a published take is uploaded.
+//  T2 build-lab.sh takes AR_BUILD_KIND=store with a development variant (it must refuse itself, not only through exact.sh at the end).
+//  T3 upload-store.sh checks the identity before it refuses a variant (the wrong message), and its key-file check does not follow a symlink.
+//  T4 a multi-line EXACT_IDENTITY or AR_BUILD_NUMBER passes a per-line grep; archive-store.sh's comment says the build lock is taken by the script.
 //  R11 check-store-signing.py refuses a valid App Store profile that omits get-task-allow, or one whose App ID prefix is not its team id (legacy prefix).
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, realpathSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { cpSync, existsSync, symlinkSync, realpathSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -605,6 +610,7 @@ describe('the docs say what the scripts do (R9)', () => {
   const read = (...p: string[]) => readFileSync(join(MOBILE, '..', ...p), 'utf8');
   test('R9 no doc line runs a phone build through exact.sh or build-lab.sh with no variant, counts four names, or cites the retired variant', () => {
     for (const f of [['mobile', 'README.md'], ['docs', 'reference', 'exact', 'build-and-ship.md'], ['docs', 'reference', 'exact', 'auth-session.md']]) {
+      if (f[3] === 'auth-session.md') expect(read(...f), 'a printed variant name `variants.one`').not.toContain('variants.one');
       for (const [n, line] of read(...f).split('\n').entries()) {
         const where = `${f.join('/')}:${n + 1}`;
         if (/(exact|build-lab)\.sh[^|\n]*--device(?![^\n]*--archive)/.test(line)) expect(line, where + ' names no variant').toMatch(/AR_VARIANT|AR_APP_ID/);
@@ -614,3 +620,59 @@ describe('the docs say what the scripts do (R9)', () => {
     }
   });
 });
+
+describe('round 3: the second review', () => {
+  test('T1 the microphone string tells the truth about Take: it records, and a published take is uploaded', () => {
+    const en = JSON.parse(readFileSync(join(MOBILE, 'AutoradioLab', 'strings', 'en.json'), 'utf8'));
+    const t: string = en['purpose.microphone'];
+    expect(t).toContain('Voice');
+    expect(t).toMatch(/Take/);
+    expect(t).toMatch(/records/);
+    expect(t).toMatch(/publish/);
+    expect(t).toMatch(/uploaded/);
+    expect(t).toContain('text on this phone');
+  });
+  test('T2 build-lab.sh refuses the store kind with a development variant, in its own words, before anything is staged', () => {
+    const tr = tree();
+    try {
+      for (const v of [{ AR_VARIANT: 'lab' }, { AR_VARIANT: 'lab-one' }, { AR_APP_ID: LAB }]) {
+        const r = run(['/bin/sh', join(tr.m, 'scripts', 'build-lab.sh'), 'ios', '--device', '--archive', join(tr.t, 'x.ipa')], tr.env({ AR_BUILD_KIND: 'store', ...v }));
+        expect(r.code).not.toBe(0); expect(r.err).toContain('build-lab:'); expect(r.err).toContain('production');
+        expect(existsSync(join(tr.bin, 'bun.last'))).toBe(false);
+      }
+    } finally { tr.cleanup(); }
+  });
+  test('T3 upload-store.sh refuses a variant in its own words, and warns about a key reached through a symlink', () => {
+    const tr = tree();
+    try {
+      writeSigning(tr);
+      const keyfile = join(tr.t, 'AuthKey.p8'); writeFileSync(keyfile, 'k'); chmodSync(keyfile, 0o640);
+      const link = join(tr.t, 'link.p8'); symlinkSync(keyfile, link);
+      const good = { ASC_KEY_ID: KEY2, ASC_ISSUER_ID: ISS2, ASC_KEY_FILE: link };
+      const ipa = join(tr.t, 'y.ipa');
+      const mk = run(['/usr/bin/python3', '-I', '-c', 'import plistlib,sys,zipfile\nz=zipfile.ZipFile(sys.argv[1],"w")\nz.writestr("Payload/A.app/Info.plist",plistlib.dumps({"CFBundleIdentifier":"news.choir.autoradio","CFBundleShortVersionString":"1.0","CFBundleVersion":"7","ExactBuildKind":"archive","ExactDevMenu":False,"ITSAppUsesNonExemptEncryption":False}))\nz.writestr("Payload/A.app/embedded.mobileprovision",b"x")\nz.close()', ipa], BASE);
+      expect(mk.code, mk.err).toBe(0);
+      const up = (extra: Record<string, string> = {}) => run(['/bin/sh', join(tr.m, 'scripts', 'upload-store.sh'), ipa], tr.env({ ...good, ...extra }));
+      const w = up();
+      expect(w.code, w.err).toBe(0); expect(w.err).toContain('readable by others');
+      for (const v of [{ AR_VARIANT: 'one' }, { AR_VARIANT: 'lab' }]) {
+        const r = up(v);
+        expect(r.code).not.toBe(0); expect(r.err).toContain('upload-store:'); expect(r.err).not.toContain('app-identity:');
+      }
+    } finally { tr.cleanup(); }
+  });
+  test('T4 a multi-line EXACT_IDENTITY or AR_BUILD_NUMBER is refused, and the script does not claim a lock it does not take', () => {
+    const tr = tree();
+    try {
+      const profile = writeSigning(tr);
+      const a = archive(tr, { EXACT_IDENTITY: SHA + '\nnot hex', EXACT_PROFILE: profile });
+      expect(a.code).not.toBe(0); expect(a.err).toContain('40'); expect(existsSync(join(tr.bin, 'bun.last'))).toBe(false);
+      const b = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile, AR_BUILD_NUMBER: '5\n6' });
+      expect(b.code).not.toBe(0); expect(b.err).toContain('AR_BUILD_NUMBER'); expect(existsSync(join(tr.bin, 'bun.last'))).toBe(false);
+      const text = readFileSync(join(MOBILE, 'scripts', 'archive-store.sh'), 'utf8');
+      expect(text).not.toContain('makes that impossible');
+      expect(text).toContain('caller holds the build lock');
+    } finally { tr.cleanup(); }
+  });
+});
+const KEY2 = 'ZZKEYIDTWO', ISS2 = '99999999-2222-3333-4444-555555555555';

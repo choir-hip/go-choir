@@ -14,9 +14,9 @@ IPA="${1:-}"
 [ -n "${ASC_ISSUER_ID:-}" ] || no "ASC_ISSUER_ID is not set (the issuer id on the API keys page)"
 [ -n "${ASC_KEY_FILE:-}" ] && [ -f "$ASC_KEY_FILE" ] || no "ASC_KEY_FILE must be the path of the API key's .p8 file"
 # a key file readable by its group or by others (either bit): say so, do not touch it
-[ -z "$(find "$ASC_KEY_FILE" \( -perm -040 -o -perm -004 \) 2>/dev/null)" ] || echo "upload-store: warning: ASC_KEY_FILE is readable by others; chmod 600 it" >&2
-ID="$("$HERE/scripts/app-identity.sh" id)" || exit 1
+[ -z "$(find -L "$ASC_KEY_FILE" \( -perm -040 -o -perm -004 \) 2>/dev/null)" ] || echo "upload-store: warning: ASC_KEY_FILE is readable by others; chmod 600 it" >&2
 [ -z "${AR_VARIANT:-}${AR_APP_ID:-}${AR_APP_NAME:-}" ] || no "the upload is for the production app: unset AR_VARIANT, AR_APP_ID and AR_APP_NAME"
+ID="$("$HERE/scripts/app-identity.sh" id)" || exit 1
 /usr/bin/python3 -I "$HERE/scripts/check-store-ipa.py" upload-store "$IPA" "$ID" || exit 1
 echo "upload-store: uploading to App Store Connect (credentials not shown)"
 "$HERE/scripts/xe.sh" /usr/bin/xcrun altool --upload-app -f "$IPA" --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID" --p8-file-path "$ASC_KEY_FILE" || no "altool refused or failed (exit above); the build may still be processing, check App Store Connect before uploading again"
