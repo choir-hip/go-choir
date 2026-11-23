@@ -276,3 +276,122 @@ func TestInWindowDropsACaptureWithNeitherTimeOnEveryKindOfWindow(t *testing.T) {
 		t.Fatal("no window must keep it")
 	}
 }
+
+// The corpus search tells the run whether the graph answered (2026-11-22: it returned
+// captures in 224 of 224 searches because it falls back to the nearest by meaning, so a
+// run could not tell "the graph lacks this" from "the graph holds ten pages"). Failure
+// list: the result opens with no counts; the words count includes pages found by
+// meaning alone; a zero count is left out of the JSON (omitempty) so the run reads
+// nothing; a search with no word match does not say the graph likely lacks this; the
+// counts do not add up to the captures listed.
+func TestCorpusResultOpensWithHowManyCapturesMatchedTheWordsAndHowManyAreNearOnly(t *testing.T) {
+	a, b, c := rankedObj(t, "a", "Alpha page"), rankedObj(t, "b", "Beta page"), rankedObj(t, "c", "Gamma page")
+	call := func(answer CaptureSearchAnswer) (string, wireCorpusResult) {
+		deps, _ := rankedWorld(t, answer)
+		ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "run-9", OwnerID: "o", ComputerID: "c"})
+		out, err := newSearchWireCorpusTool(deps).Func(ctx, json.RawMessage(`{"query":"alpha"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body wireCorpusResult
+		if err := json.Unmarshal([]byte(out), &body); err != nil {
+			t.Fatal(err)
+		}
+		return out, body
+	}
+	// One page whose text holds the words, two found by meaning alone.
+	out, body := call(CaptureSearchAnswer{
+		HitObjects: []objectgraph.Object{a, b, c},
+		Hits:       []CaptureTextHit{{CaptureID: a.CanonicalID, Snippet: "pa", BodyMatch: true}},
+		FullText:   &CaptureTextInfo{Used: true, Indexed: 3, Captures: 3},
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 3, VectorState: "exact", Entries: []RankedCapture{
+			{CaptureID: a.CanonicalID, Reasons: []string{"text", "meaning"}},
+			{CaptureID: b.CanonicalID, Reasons: []string{"meaning"}},
+			{CaptureID: c.CanonicalID, Reasons: []string{"meaning", "story"}, Stories: []string{"p"}},
+		}},
+	})
+	if !strings.HasPrefix(out, `{"captures_matched_words":1,"captures_near_by_meaning_only":2,`) {
+		t.Fatalf("the result does not open with the two counts: %.160s", out)
+	}
+	if body.MatchedWords != 1 || body.NearByMeaningOnly != 2 || body.MatchedWords+body.NearByMeaningOnly != body.CaptureCount || body.WordsNote != "" {
+		t.Fatalf("counts %d + %d of %d captures, note %q", body.MatchedWords, body.NearByMeaningOnly, body.CaptureCount, body.WordsNote)
+	}
+	// No page holds the words: the counts say 0 and 3, and the result says the graph
+	// likely lacks this.
+	out, body = call(CaptureSearchAnswer{
+		HitObjects: []objectgraph.Object{a, b, c},
+		FullText:   &CaptureTextInfo{Used: true, Indexed: 3, Captures: 3},
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 3, VectorState: "exact", Entries: []RankedCapture{
+			{CaptureID: a.CanonicalID, Reasons: []string{"meaning"}},
+			{CaptureID: b.CanonicalID, Reasons: []string{"meaning"}},
+			{CaptureID: c.CanonicalID, Reasons: []string{"meaning"}},
+		}},
+	})
+	if !strings.HasPrefix(out, `{"captures_matched_words":0,"captures_near_by_meaning_only":3,`) {
+		t.Fatalf("a zero count must be written, not omitted: %.160s", out)
+	}
+	if !strings.Contains(body.WordsNote, "likely lacks") {
+		t.Fatalf("no word matched and the result does not say the graph likely lacks this: %q", body.WordsNote)
+	}
+	// Part of the page text is not searchable yet: zero word matches does not mean the graph
+	// lacks the words, so the note stays silent (the counts are still written).
+	out, body = call(CaptureSearchAnswer{
+		HitObjects: []objectgraph.Object{a},
+		FullText:   &CaptureTextInfo{Used: true, Indexed: 1, Captures: 3},
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 1, VectorState: "exact", Entries: []RankedCapture{
+			{CaptureID: a.CanonicalID, Reasons: []string{"meaning"}},
+		}},
+	})
+	if body.WordsNote != "" || !strings.HasPrefix(out, `{"captures_matched_words":0,"captures_near_by_meaning_only":1,`) {
+		t.Fatalf("a partly indexed corpus must not claim the graph lacks the words: %q / %.120s", body.WordsNote, out)
+	}
+}
+
+// A page the label half matched by its title is a word match even when the vector half also
+// returned it (review of 6980fdb96, B3): counting only corpusd's text hits called it "near by
+// meaning only" and told the run the graph likely lacks a subject whose title it had just listed.
+func TestCorpusCountsATitleMatchTheVectorHalfAlsoReturnedAsAWordMatch(t *testing.T) {
+	a := rankedObj(t, "a", "Alpha page")
+	answer := CaptureSearchAnswer{
+		Objects:    []objectgraph.Object{a},
+		HitObjects: []objectgraph.Object{a},
+		FullText:   &CaptureTextInfo{Used: true, Indexed: 0, Captures: 1},
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 1, VectorState: "exact", Entries: []RankedCapture{
+			{CaptureID: a.CanonicalID, Reasons: []string{"meaning"}},
+		}},
+	}
+	deps, _ := rankedWorld(t, answer)
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "run-9", OwnerID: "o", ComputerID: "c"})
+	out, err := newSearchWireCorpusTool(deps).Func(ctx, json.RawMessage(`{"query":"alpha"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body wireCorpusResult
+	if err := json.Unmarshal([]byte(out), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Captures) != 1 || !containsString(body.Captures[0].Matched, "title") {
+		t.Fatalf("the listed row does not carry its title match: %+v", body.Captures)
+	}
+	if body.MatchedWords != 1 || body.NearByMeaningOnly != 0 || body.WordsNote != "" {
+		t.Fatalf("a title-matched page counted as %d matched, %d near only, note %q", body.MatchedWords, body.NearByMeaningOnly, body.WordsNote)
+	}
+}
+
+// words_note must not say the graph likely lacks the subject when something else already
+// answered the query, or when a window hid the matching page (review 5): events or published
+// pieces that matched are what to read, and a since/until window only says none matched in it.
+func TestWordsNoteDoesNotClaimALackWhenEventsMatchedOrAWindowHidPages(t *testing.T) {
+	full := corpusSearchInfo{TextUsed: true, TextIndexed: 3, Captures: 3}
+	if got := wordsNote(0, 3, full, true, 0, false); !strings.Contains(got, "the graph likely lacks this") {
+		t.Fatalf("the plain zero-match note lost its claim: %q", got)
+	}
+	got := wordsNote(0, 3, full, true, 2, false)
+	if got == "" || strings.Contains(got, "likely lacks") || !strings.Contains(got, "2 events or published pieces matched") {
+		t.Fatalf("events or published pieces matched, so the graph does not lack the subject: %q", got)
+	}
+	got = wordsNote(0, 3, full, true, 0, true)
+	if got == "" || strings.Contains(got, "the graph likely lacks this") || !strings.Contains(got, "in this since/until window") {
+		t.Fatalf("a window may have hidden the page, so the note is scoped to it: %q", got)
+	}
+}

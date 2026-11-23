@@ -183,7 +183,8 @@ type corpusSearchInfo struct {
 	TextIndexed int64
 	Captures    int
 	// Of the captures returned: found by the page text only, by the title
-	// only, by both, and by the title and labels without the text search.
+	// only, by both, and found by the title and labels alone (the label half:
+	// the text search did not return the page, or did not run).
 	Body, Title, Both, LabelsOnly int
 	// Meaning counts the pages found by meaning or through a story that the
 	// text half did not find: they are not label-only pages.
@@ -357,6 +358,10 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			default:
 				info.Body++
 			}
+		} else if len(c.Matched) > 0 {
+			// The label half matched the page (title, outlet, topic, language) and the
+			// vector half returned it too: it matched the words.
+			info.LabelsOnly++
 		} else if containsString(c.Reasons, "meaning") || containsString(c.Reasons, "story") {
 			info.Meaning++
 		} else {

@@ -613,3 +613,31 @@ func TestCellMarksReadOnlyRecordsItShowed(t *testing.T) {
 		t.Fatalf("(c) a completed turn that never showed a record it had at start re-armed it: %v", woke)
 	}
 }
+
+// The research run's first user turn names the digest and what it is for, says where the
+// objective is, and asks for no further source (2026-11-22: "as soon as you have read one
+// new source you can cite, and another each time you have read more" read as a reason to
+// fetch another; the turn did not mention the digest). Failure list: the turn does not name
+// the digest; does not say the brief's objective thread is the Cast's objective; still
+// asks for a packet per new source; or loses the final-Report rule.
+func TestResearchInboxPromptNamesTheDigestAndAsksForNoMoreSources(t *testing.T) {
+	flat := strings.Join(strings.Fields(researchInboxPrompt), " ")
+	for _, want := range []string{
+		"After these instructions this message normally carries the digest of what the paper already holds for the story",
+		"a run on no story, or whose digest could not be built, has none",
+		"read what it names by capture id before you search the web",
+		"the brief's thread marked objective is the Cast's objective",
+		"choir.Records() gives each record whole",
+		"Send an interim packet (no work_disposition) when you have a claim you can cite: it reports progress and asks for no further source",
+		"a packet whose work_disposition is completed or empty is your final Report and closes the round",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("the research inbox prompt lacks %q", want)
+		}
+	}
+	for _, absent := range []string{"as soon as you have read one new source", "another each time you have read more"} {
+		if strings.Contains(flat, absent) {
+			t.Errorf("the research inbox prompt still says %q", absent)
+		}
+	}
+}

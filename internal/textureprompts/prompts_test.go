@@ -375,3 +375,35 @@ func TestRootSectionCastsOnlyForARebaseNotice(t *testing.T) {
 		t.Error("the root section teaches a Cast to research")
 	}
 }
+
+// A Cast to research asks for the one thing the frame lacks (2026-11-22: ten research
+// runs whose objective said "corroborate" or "independent reporting" sent 74 of 157
+// web searches, a mean of 7.4, and one run chased a venue name that only the Cast
+// held; docs/problems/research-runs-send-reworded-web-searches-2026-11-22.md).
+// Failure list: the Cast rule does not say an objective asks for the one thing the
+// frame lacks; does not name the page to fetch when a lead links to one; still
+// leaves "corroborate" or "find independent reporting" open as a goal; allows a
+// detail from memory in an objective; keeps the "never search again for what the
+// frame holds" rule for feed records only; or states a source count that disagrees
+// with the platform's two-outlet gate.
+func TestPromptCoreCastsResearchForTheOneThingTheFrameLacks(t *testing.T) {
+	flat := strings.Join(strings.Fields(DefaultSystemPrompt()), " ")
+	for _, want := range []string{
+		"An objective asks for the one thing the frame lacks",
+		"names the page to fetch when a lead links to one",
+		`Never write "corroborate" or "find independent reporting" as a goal in itself`,
+		"carries no detail that is not in the frame: a detail from memory is not a question",
+		"Whatever the frame holds, read it first; cast research for whatever it leaves open, the web included, never to search again for what the frame already holds",
+		"One report of an event or a statement is enough to state it; the platform's two-outlet gate is on the story as a whole",
+		"The platform holds a story that cites fewer than two outlets; the second outlet may come from the graph's event record (its outlets and capture ids), not only the web",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("prompt core lacks %q", want)
+		}
+	}
+	// The rule is stated once for opening Casts and feed records alike, not for
+	// feed records only.
+	if strings.Contains(flat, "A record that feeds captures into this story (it names captures and no new objective) brings pages the story now holds: read them (choir.ReadCapture) and revise from them first; cast research only for what they leave open, never to search again for what they or the frame already hold.") {
+		t.Error("the never-search-again rule is still stated for feed records only")
+	}
+}
