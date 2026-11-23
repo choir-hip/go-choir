@@ -17,6 +17,7 @@ start:
   - 'Signed out, the paper reads and the radio reads the public front page aloud: built, proven on a simulator, not seen by the owner on a phone.'
   - 'Research of 2026-11-23 (docs/research/app-store-automation-2026-11-23.md, read from Apple''s and the tools'' own pages that day): the first submission is mostly automatable; a person must sign agreements, do tax and banking, create the app record and the API key and enter the privacy label. Its ranked rejection risks: a reviewer who cannot sign in; no in-app account deletion; spoken requests reaching a third-party model without consent; completeness; model downloads.'
   - 'unknown: whether Exact''s archive passes Apple''s processing (never uploaded); how Exact sets the version and build number on iOS.'
+  - '2026-11-23 evening: the owner signed in to Xcode with the renewed account. On the Mac: a development identity and a wildcard development profile for the paid team (S47GERGJZ3, to 2027-11-23) that covers the owner''s phone. No Apple Distribution identity yet, and no App Store profile.'
 finish:
   deliver: Autoradio is on TestFlight for testers and then in the App Store, with a release an agent can run end to end except where Apple requires a person.
   artifact: an app record, a build accepted by Apple's processing, internal then external TestFlight groups, a submitted version with screenshots, previews and review notes, and a release script with its metadata as files in the repo
@@ -69,6 +70,12 @@ boundaries:
     'on': '2026-11-23'
   - decision: external TestFlight as soon as possible; internal TestFlight is not a goal, only the upload it shares
     said: idc about internal testflight. i want external testflight asap. internal testflight is just for the dev team, which is just me
+    'on': '2026-11-23'
+  - decision: 'bundle ids are in the news.choir family; the lead''s reading: the production id is news.choir.autoradio unless the owner names another before the app record is made'
+    said: we should use news.choir
+    'on': '2026-11-23'
+  - decision: Autoradio 1's development build moves to the paid team
+    said: yes, move autoradio 1 to the paid team
     'on': '2026-11-23'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
