@@ -18,6 +18,7 @@ start:
   - 'Research of 2026-11-23 (docs/research/app-store-automation-2026-11-23.md, read from Apple''s and the tools'' own pages that day): the first submission is mostly automatable; a person must sign agreements, do tax and banking, create the app record and the API key and enter the privacy label. Its ranked rejection risks: a reviewer who cannot sign in; no in-app account deletion; spoken requests reaching a third-party model without consent; completeness; model downloads.'
   - 'unknown: whether Exact''s archive passes Apple''s processing (never uploaded); how Exact sets the version and build number on iOS.'
   - '2026-11-23 evening: the owner signed in to Xcode with the renewed account. On the Mac: a development identity and a wildcard development profile for the paid team (S47GERGJZ3, to 2027-11-23) that covers the owner''s phone. No Apple Distribution identity yet, and no App Store profile.'
+  - '2026-11-23T22:24Z: the development build "Autoradio 1" (news.choir.autoradio.lab.one, the same code as before, dcc56f2cd) is on the owner''s phone signed by the paid team; iOS refused the upgrade across teams, so that app alone was removed and installed again and starts signed out. The first app was not touched.'
 finish:
   deliver: Autoradio is on TestFlight for testers and then in the App Store, with a release an agent can run end to end except where Apple requires a person.
   artifact: an app record, a build accepted by Apple's processing, internal then external TestFlight groups, a submitted version with screenshots, previews and review notes, and a release script with its metadata as files in the repo
@@ -76,6 +77,9 @@ boundaries:
     'on': '2026-11-23'
   - decision: Autoradio 1's development build moves to the paid team
     said: yes, move autoradio 1 to the paid team
+    'on': '2026-11-23'
+  - decision: the app's name is Autoradio 1
+    said: i have chosen the name Autoradio 1 btw (i like "A1" vs "AI" as it has slang connotations of trust and it implies there will be Autoradios 2..n which i expect competition)
     'on': '2026-11-23'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
@@ -168,12 +172,13 @@ stations:
   status: pending
 decisions_for_the_owner:
 - id: Q1
-  question: What are the production bundle id and name?
+  question: 'What is the production bundle id? (The name is settled: Autoradio 1.)'
   why: the id cannot change after the first upload
   options:
-  - news.choir.autoradio, "Autoradio"
-  - another
-  default: nothing is uploaded until the owner names them
+  - news.choir.autoradio
+  - news.choir.autoradio1
+  - another in the news.choir family
+  default: news.choir.autoradio, registered by the owner; nothing is uploaded before the owner has registered it
 - id: Q2
   question: What is in version 1?
   why: each page shown to a reviewer must work; mail, files and takes have had little use on a phone
