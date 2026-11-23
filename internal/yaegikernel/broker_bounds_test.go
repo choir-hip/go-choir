@@ -306,3 +306,50 @@ func TestResearchChildFieldBounds(t *testing.T) {
 		t.Error("too many children accepted")
 	}
 }
+
+// TestValidatePayloadNumbersAndNeighbours: an accepted payload must be one
+// that a generic decode (json.Unmarshal into any or float64, which the
+// handlers' map[string]any and float fields do) can hold. A number literal
+// that overflows float64 is refused rather than rounded; underflow decodes to
+// zero and is held. CI fuzz finding: {"":1e700}
+// (docs/problems/broker-payload-accepts-a-number-no-decoder-holds-2026-11-23.md).
+func TestValidatePayloadNumbersAndNeighbours(t *testing.T) {
+	deep := func(n int) string { return strings.Repeat(`{"a":`, n) + `1e700` + strings.Repeat(`}`, n) }
+	cases := []struct {
+		name    string
+		payload string
+		accept  bool
+	}{
+		{"overflow under the empty key", `{"":1e700}`, false},
+		{"negative overflow", `{"a":-1e700}`, false},
+		{"overflow in an array", `{"a":[1,2,1e400]}`, false},
+		{"overflow nested", deep(5), false},
+		{"overflow as a bare value", `1e700`, false},
+		{"overflow with a long mantissa", `{"a":` + strings.Repeat("9", 400) + `}`, false},
+		{"overflow in an object key's sibling", `{"x":"y","a":1E+309}`, false},
+		{"underflow decodes to zero", `{"a":1e-700}`, true},
+		{"largest float64", `{"a":1.7976931348623157e308}`, true},
+		{"long integer that fits", `{"a":` + strings.Repeat("9", 300) + `}`, true},
+		{"empty key", `{"":1}`, true},
+		{"duplicate keys", `{"a":1,"a":2}`, true},
+		{"invalid UTF-8 in a string", "{\"a\":\"\xff\xfe\"}", true},
+		{"invalid UTF-8 in a key", "{\"\xff\":1}", true},
+	}
+	for _, c := range cases {
+		for _, action := range []BrokerAction{ActionSourceAPI, ActionResearch} {
+			err := ValidatePayload(action, json.RawMessage(c.payload))
+			if c.accept && err != nil {
+				t.Errorf("%s %s: refused %q: %v", action, c.name, c.payload, err)
+			}
+			if !c.accept && err == nil {
+				t.Errorf("%s %s: accepted %q", action, c.name, c.payload)
+			}
+			if err == nil {
+				var generic any
+				if jerr := json.Unmarshal([]byte(c.payload), &generic); jerr != nil {
+					t.Errorf("%s %s: accepted a payload a generic decode refuses: %v", action, c.name, jerr)
+				}
+			}
+		}
+	}
+}

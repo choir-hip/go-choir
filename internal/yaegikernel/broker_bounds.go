@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -313,6 +314,18 @@ func boundJSON(raw []byte) error {
 		if tokens > maxPayloadTokens {
 			return fmt.Errorf("more than %d tokens", maxPayloadTokens)
 		}
+		if n, ok := tok.(json.Number); ok {
+			// Valid JSON grammar is not enough: a literal that overflows
+			// float64 (1e700) cannot be decoded by any consumer that reads a
+			// number into float64 or any (SourceAPIPayload.Params, the
+			// bounds below, a re-encode), so it is refused here instead of
+			// failing later, differently, in each. The rule is the decoder's
+			// own: refuse what ParseFloat rejects; never round to Inf.
+			// Underflow (1e-700) parses to 0 and is held.
+			if _, err := strconv.ParseFloat(string(n), 64); err != nil {
+				return fmt.Errorf("a number %q that does not fit a float64", truncateForError(string(n)))
+			}
+		}
 		if s, ok := tok.(string); ok {
 			if len(s) > maxPayloadString {
 				return fmt.Errorf("a string of %d bytes, over %d", len(s), maxPayloadString)
@@ -337,4 +350,12 @@ func boundJSON(raw []byte) error {
 		}
 	}
 	return nil
+}
+
+// truncateForError keeps a hostile literal from filling an error message.
+func truncateForError(s string) string {
+	if len(s) > 24 {
+		return s[:24] + "..."
+	}
+	return s
 }
