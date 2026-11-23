@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,8 +22,11 @@ import (
 //     with userinfo, a script) is followed or echoed: an open redirect.
 //  R3 a state that could break out of the query (&, #, %, a space, a newline), or
 //     is empty or huge, is echoed.
-//  R4 a refused return still records the decision (the phone is told "no" by a
-//     400 and the code must stay pending), or counts as a guessed code.
+//  R4 (review, 2026-11-23) the hint refuses an approval. A bad return or state must
+//     never stop the decision: it is recorded, the key is collected by the poll,
+//     and return_to is simply absent. Nor may it count as a guessed code, nor tell
+//     a caller anything about a code (an unknown code is the same 404 with or
+//     without a hint).
 //  R5 the callback carries something that is not a signal: the device code, the
 //     user code, the label, the user id, a key.
 //  R6 the page without a return changes: no return_to, same body as before.
@@ -101,10 +107,9 @@ func TestDeviceDenyReturnsToo(t *testing.T) { // R9
 	}
 }
 
-func TestDeviceApproveRefusesAReturnItDoesNotKnow(t *testing.T) {
+func TestDeviceApproveRecordsTheDecisionAndOmitsAReturnItDoesNotKnow(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 	u, _ := h.store.CreateUser("refuse-user", "refuse@example.com")
-	b := deviceBegin(t, h, "Autoradio", "")
 	bad := []struct{ name, ret, state string }{
 		{"a web URL", "https://evil.example/cb", goodState},
 		{"a web URL with our scheme in it", "https://news.choir.autoradio.lab/signed-in", goodState},
@@ -127,27 +132,66 @@ func TestDeviceApproveRefusesAReturnItDoesNotKnow(t *testing.T) {
 		{"a short state", "news.choir.autoradio.lab", "abc"},
 		{"a long state", "news.choir.autoradio.lab", strings.Repeat("a", 129)},
 	}
-	for _, c := range bad {
+	for i, c := range bad {
+		b := deviceBegin(t, h, "Autoradio", fmt.Sprintf("203.0.113.%d", 10+i))
 		rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve",
 			approveBody(b.UserCode, "approve", map[string]string{"return": c.ret, "state": c.state}), priv, u.ID))
-		if rec.Code != http.StatusBadRequest { // R2, R3
-			t.Fatalf("%s: status %d, want 400: %s", c.name, rec.Code, rec.Body.String())
+		if rec.Code != http.StatusOK { // R4: the hint never refuses an approval
+			t.Fatalf("%s: status %d, want 200: %s", c.name, rec.Code, rec.Body.String())
 		}
-		if strings.Contains(rec.Body.String(), "return_to") || (c.ret != "" && strings.Contains(rec.Body.String(), c.ret)) {
-			t.Fatalf("%s: the refusal echoes the target: %s", c.name, rec.Body.String())
+		body := decodeBody(t, rec)
+		if _, has := body["return_to"]; has || body["status"] != "approved" || len(body) != 2 { // R2, R3: nothing built from a value we do not accept
+			t.Fatalf("%s: body %v", c.name, body)
 		}
-	}
-	// R4: nothing was decided, nothing counted as a wrong code.
-	if code, m := devicePoll(h, b.DeviceCode); code != http.StatusBadRequest || m["error"] != "authorization_pending" {
-		t.Fatalf("after refused returns the code must be pending: %d %v", code, m)
+		for _, echoed := range []string{c.ret, c.state} {
+			if len(echoed) > 3 && strings.Contains(rec.Body.String(), echoed) {
+				t.Fatalf("%s: the response echoes the client's value %q: %s", c.name, echoed, rec.Body.String())
+			}
+		}
+		// The decision was recorded: the poller that began the flow collects its key.
+		rewindPoll(t, h)
+		if code, m := devicePoll(h, b.DeviceCode); code != http.StatusOK || !strings.HasPrefix(fmt.Sprint(m["api_key"]), APIKeyPrefix) {
+			t.Fatalf("%s: collect %d %v", c.name, code, m)
+		}
 	}
 	if h.deviceGuessesExhausted(u.ID) || len(h.device.misses[u.ID]) != 0 {
-		t.Fatalf("a refused return counted as a miss: %v", h.device.misses[u.ID])
+		t.Fatalf("a bad hint counted as a miss: %v", h.device.misses[u.ID])
 	}
-	// And the same code is then approved with no return, as before.
-	rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve", approveBody(b.UserCode, "approve", nil), priv, u.ID))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("approve after refusals %d: %s", rec.Code, rec.Body.String())
+}
+
+// R4: no oracle. An unknown code is the same 404 with a good hint, a bad hint or none, and counts the same miss; the hint is never answered.
+func TestDeviceApproveUnknownCodeIsTheSameWithOrWithoutAHint(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	u, _ := h.store.CreateUser("oracle-user", "oracle@example.com")
+	hints := []map[string]string{nil,
+		{"return": "news.choir.autoradio.lab", "state": goodState},
+		{"return": "evil.app", "state": "x"}}
+	for i, hint := range hints {
+		rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve", approveBody("BCDF-GHJK", "approve", hint), priv, u.ID))
+		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "return_to") {
+			t.Fatalf("hint %d: %d %s", i, rec.Code, rec.Body.String())
+		}
+		if got := len(h.device.misses[u.ID]); got != i+1 {
+			t.Fatalf("hint %d: %d misses, want %d", i, got, i+1)
+		}
+	}
+}
+
+// R7: a form post (the cross-site shape) is refused with a hint present, and nothing is decided.
+func TestDeviceApproveFormPostWithAReturnIsRefused(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	u, _ := h.store.CreateUser("form-user", "form@example.com")
+	b := deviceBegin(t, h, "x", "")
+	form := httptest.NewRequest(http.MethodPost, "/auth/device/approve", bytes.NewBufferString(
+		`{"user_code":"`+b.UserCode+`","decision":"approve","return":"news.choir.autoradio.lab","state":"`+goodState+`"}`))
+	form.Header.Set("Content-Type", "text/plain")
+	form.AddCookie(&http.Cookie{Name: AccessTokenCookieName, Value: issueTestAccessJWTForHandler(priv, u.ID)})
+	rec := deviceDecide(h, form)
+	if rec.Code != http.StatusUnsupportedMediaType || strings.Contains(rec.Body.String(), "return_to") {
+		t.Fatalf("text/plain with a return: %d %s", rec.Code, rec.Body.String())
+	}
+	if code, m := devicePoll(h, b.DeviceCode); code != http.StatusBadRequest || m["error"] != "authorization_pending" {
+		t.Fatalf("after the refused form post: %d %v", code, m)
 	}
 }
 

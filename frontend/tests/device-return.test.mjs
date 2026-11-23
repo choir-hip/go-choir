@@ -15,7 +15,7 @@
 //  P5  The target is followed only when it carries the state the page sent.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { approveRequestBody, followableReturn } from '../src/lib/device-return.js';
+import { approveRequestBody, followableReturn, hasReturnHint } from '../src/lib/device-return.js';
 
 const STATE = 'k3VqS0m9Zt_xA1b2C3d4-E5f';
 
@@ -38,8 +38,8 @@ test('P3 half a link is a normal link', () => {
 
 test('P4 only the one shape is followed', () => {
   const ok = `news.choir.autoradio.lab:/signed-in?state=${STATE}`;
-  assert.equal(followableReturn({ return_to: ok }, STATE), ok);
-  assert.equal(followableReturn({ return_to: `news.choir.autoradio.lab.one:/signed-in?state=${STATE}` }, STATE), `news.choir.autoradio.lab.one:/signed-in?state=${STATE}`);
+  assert.equal(followableReturn({ return_to: ok }, STATE, 'news.choir.autoradio.lab'), ok);
+  assert.equal(followableReturn({ return_to: `news.choir.autoradio.lab.one:/signed-in?state=${STATE}` }, STATE, 'news.choir.autoradio.lab.one'), `news.choir.autoradio.lab.one:/signed-in?state=${STATE}`);
   const bad = [
     `https://evil.example/signed-in?state=${STATE}`, `http://x:/signed-in?state=${STATE}`, `javascript:/signed-in?state=${STATE}`,
     `data:/signed-in?state=${STATE}`, `file:/signed-in?state=${STATE}`, `news.choir.autoradio.lab://evil/signed-in?state=${STATE}`,
@@ -47,13 +47,29 @@ test('P4 only the one shape is followed', () => {
     `news.choir.autoradio.lab:/signed-in?state=${STATE}#x`, 'news.choir.autoradio.lab:/signed-in', `news.choir.autoradio.lab:/signed-in?state=`,
     ` ${ok}`, '', null, undefined, 42, { x: 1 },
   ];
-  for (const b of bad) assert.equal(followableReturn({ return_to: b }, STATE), null, String(b));
-  assert.equal(followableReturn({}, STATE), null);
-  assert.equal(followableReturn(null, STATE), null);
+  for (const b of bad) assert.equal(followableReturn({ return_to: b }, STATE, 'news.choir.autoradio.lab'), null, String(b));
+  assert.equal(followableReturn({}, STATE, 'news.choir.autoradio.lab'), null);
+  assert.equal(followableReturn(null, STATE, 'news.choir.autoradio.lab'), null);
 });
 
 test('P5 only with the state the page sent', () => {
   const ok = `news.choir.autoradio.lab:/signed-in?state=${STATE}`;
-  assert.equal(followableReturn({ return_to: ok }, 'another-state-aaaaaaaaaa'), null);
-  assert.equal(followableReturn({ return_to: ok }, ''), null);
+  assert.equal(followableReturn({ return_to: ok }, 'another-state-aaaaaaaaaa', 'news.choir.autoradio.lab'), null);
+  assert.equal(followableReturn({ return_to: ok }, '', 'news.choir.autoradio.lab'), null);
+});
+
+test('P6 only the scheme the page sent', () => {
+  const sibling = `news.choir.autoradio.lab.one:/signed-in?state=${STATE}`;
+  assert.equal(followableReturn({ return_to: sibling }, STATE, 'news.choir.autoradio.lab'), null);
+  for (const s of ['tel', 'intent', 'mailto', 'shortcuts', 'market'])
+    assert.equal(followableReturn({ return_to: `${s}:/signed-in?state=${STATE}` }, STATE, 'news.choir.autoradio.lab'), null, s);
+  assert.equal(followableReturn({ return_to: `news.choir.autoradio.lab:/signed-in?state=${STATE}` }, STATE, ''), null);
+  assert.equal(followableReturn({ return_to: `news.choir.autoradio.lab:/signed-in?state=${STATE}` }, STATE, undefined), null);
+});
+
+test('P7 a link from the app sheet is told from a normal one', () => {
+  assert.equal(hasReturnHint(`?code=A&return=news.choir.autoradio.lab&state=${STATE}`), true);
+  assert.equal(hasReturnHint('?code=A'), false);
+  assert.equal(hasReturnHint(`?return=news.choir.autoradio.lab`), false);
+  assert.equal(hasReturnHint(''), false);
 });

@@ -31,7 +31,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getSession, loginPasskey, fetchWithRenewal, AuthRequiredError, passkeyErrorMessage } from './auth.js';
-  import { approveRequestBody, followableReturn } from './device-return.js';
+  import { approveRequestBody, followableReturn, hasReturnHint } from './device-return.js';
 
   type RouteState = 'checking' | 'signin' | 'enter' | 'loading' | 'review' | 'working' | 'approved' | 'denied' | 'gone' | 'passkey';
 
@@ -41,6 +41,7 @@
   let error = '';
   let request = null;
   let returnTo = '';
+  let hinted = false; // opened by the app's sign-in sheet
 
   onMount(async () => {
     code = new URLSearchParams(window.location.search).get('code') || '';
@@ -136,8 +137,9 @@
         return;
       }
       state = decision === 'approve' ? 'approved' : 'denied';
-      const sent = new URLSearchParams(window.location.search).get('state') || '';
-      returnTo = followableReturn(body, sent) || '';
+      const link = new URLSearchParams(window.location.search);
+      hinted = hasReturnHint(window.location.search);
+      returnTo = followableReturn(body, link.get('state') || '', link.get('return') || '') || '';
       if (returnTo) window.location.href = returnTo;
     } catch (err) {
       if (err instanceof AuthRequiredError) {
@@ -220,6 +222,8 @@
       {#if returnTo}
         <p class="body">Approved. Returning to the app; it finishes signing in on its own.</p>
         <a class="primary-action" data-device-return href={returnTo}>Return to the app</a>
+      {:else if hinted}
+        <p class="body">Approved. Close this window to return to the app; it finishes signing in on its own.</p>
       {:else}
         <p class="body">Return to your terminal; it finishes signing in on its own. You can revoke the key any time in Settings, API keys.</p>
       {/if}

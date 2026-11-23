@@ -373,25 +373,22 @@ func validDeviceReturnState(s string) bool {
 // deviceReturnTo builds the callback the sheet is closed with: the app's own
 // scheme, a fixed path and the app's nonce. It carries no key, no code and no
 // account identifier; it is a signal "come back", and the app learns the result
-// by its own poll. Neither field: no callback. One without the other, a scheme
-// not on the allowlist or a state that is not a plain token: an error.
-func deviceReturnTo(scheme, state string) (string, error) {
-	if scheme == "" && state == "" {
-		return "", nil
-	}
+// by its own poll. It is a HINT and never a condition: a scheme not on the
+// allowlist, a state that is not a plain token, or only one of the two gives "",
+// and the caller records the decision anyway and answers no return_to (the sheet
+// stays open, the page offers "Return to the app", the poll collects the key).
+// Nothing the client sent is echoed.
+func deviceReturnTo(scheme, state string) string {
 	known := false
 	for _, s := range DeviceReturnSchemes {
 		if scheme == s {
 			known = true
 		}
 	}
-	if !known {
-		return "", errors.New("return is not an app of ours")
+	if !known || !validDeviceReturnState(state) {
+		return ""
 	}
-	if !validDeviceReturnState(state) {
-		return "", errors.New("state must be 16 to 128 letters, digits, - or _")
-	}
-	return scheme + ":" + DeviceReturnPath + "?state=" + state, nil
+	return scheme + ":" + DeviceReturnPath + "?state=" + state
 }
 
 // HandleDeviceApprove handles POST /auth/device/approve. Only the owner's
@@ -420,11 +417,6 @@ func (h *Handler) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: `decision must be "approve" or "deny"`})
 		return
 	}
-	returnTo, rerr := deviceReturnTo(req.Return, req.State)
-	if rerr != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: rerr.Error()})
-		return
-	}
 	a, _ := h.lookupForUser(w, r, user, req.UserCode)
 	if a == nil {
 		return
@@ -439,6 +431,7 @@ func (h *Handler) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[auth] operation=device_decide user_id=%s id=%s decision=%s result=success", user.ID, a.ID, req.Decision)
+	returnTo := deviceReturnTo(req.Return, req.State) // after the decision, from the allowlist only; "" when the hint is not ours
 	out := map[string]string{"status": map[bool]string{true: DeviceStatusApproved, false: DeviceStatusDenied}[req.Decision == "approve"], "label": a.Label}
 	if returnTo != "" {
 		out["return_to"] = returnTo
