@@ -75,8 +75,8 @@ stations:
     class: orange
     review: one seat
     depends_on: []
-    lane: lane/store-by-kind (landed 0f4421aae); started on the paper 2026-11-23T21:45Z through the read-only runtime route, up to 8 h, interrupted by any restart of the paper
-    status: landed
+    lane: lane/store-by-kind (landed 0f4421aae); run on the paper 2026-11-23T21:45Z to 22:02Z, all 30 tables complete: docs/evidence/store-composition-paper-2026-11-23.md
+    status: proved
   - id: S1
     name: The layout trigger deleted
     scope: 'a compact copy is due only by free pages or when forced; the staged copy already on the paper is handled as today at a planned restart'
@@ -176,7 +176,7 @@ now:
     ledger_id: C195
     status: untested
   believed_state: 'S0, S1 and S2 are landed. The weekly layout copy is gone. The daily snapshot still writes a scratch copy until S3 lands (free space dipped to 106 GiB during it on 2026-11-23; 155 GiB free at 21:30Z). The store reading was started on the paper at 21:45Z on 11-23. Disk by kind at 21:40Z: tape 112 GiB (paper 91), the paper''s store 57, capture bodies 42, Postgres 42, snapshot chunks 32.'
-  main_uncertainty: 'what the 36 unattributed GiB of the store are'
+  main_uncertainty: 'which indexes hold the 21 GiB of the file that is not stored values (stored values are 30.2 of 51.6 GiB: object bodies 16.0, run memory 7.5, object headers 5.7)'
   next_observation: 'S0''s report on the paper; S1''s and S2''s commits'
   blocker: none
   next_action: 'review S3 (two seats) and land it; then S8; read S0''s report from the paper when it finishes (about 05:45Z on 11-24 at the latest) and write S6''s design from it; the receipt table swap is held while the disk has room'
