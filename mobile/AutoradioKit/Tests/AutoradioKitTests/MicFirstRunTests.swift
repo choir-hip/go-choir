@@ -97,9 +97,28 @@ final class MicFirstRunTests: XCTestCase {
             await waitUntil("gave up again") { a.micState == .failed }
             try? await Task.sleep(nanoseconds: 300_000_000)
         }
-        try await retriesFollow("route change") { a.routeChanged() }
+        try await retriesFollow("route change") { a.routeChanged("route-\(a.engineBuilds)") }
         try await retriesFollow("foreground") { a.micSuspended = true; a.micSuspended = false }
         try await retriesFollow("voice turned on again") { try a.resume(voiceProcessing: true, mic: false); try a.resume(voiceProcessing: true, mic: true) }
+    }
+
+    func testANoticeWithTheSameRouteResetsNothingAndAStormMakesOneChain() async throws {
+        let a = try await gaveUp()
+        a.routeChanged("airpods")                                // a new route: the count starts again
+        XCTAssertEqual(a.micState, .pending)
+        try a.resume(voiceProcessing: true, mic: true, fresh: true)
+        await waitUntil("gave up again") { a.micState == .failed }
+        let builds = a.engineBuilds
+        for _ in 0..<5 { a.routeChanged("airpods") }              // the same route five more times (notices that say nothing new)
+        XCTAssertEqual(a.micState, .failed, "the same route is not a reason to try again")
+        // a storm of different routes while a retry is waiting: the waiting timers are let go, and only the chain after the last one runs
+        a.micMayRetry()
+        let before = a.engineBuilds
+        try a.resume(voiceProcessing: true, mic: true, fresh: true)
+        for i in 0..<4 { a.routeChanged("storm-\(i)"); try a.resume(voiceProcessing: true, mic: true, fresh: true) }
+        await waitUntil("gave up after the storm") { a.micState == .failed }
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertLessThanOrEqual(a.engineBuilds - before, 5 + 6 + 1, "five resumes of their own and one chain of six retries, not one chain for each notice (was \(builds))")
     }
 
     func testTheLogNeverSaysOkAtRateZero() {

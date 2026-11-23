@@ -96,9 +96,25 @@ public final class LiveAudio: @unchecked Sendable {
     /// Something that could change the outcome of opening the microphone happened (the permission changed, the route changed, the app came back to the front, the listener turned voice on
     /// again): the retries start from none. A coordinator state switch is NOT such an event: it resumes the engine with the count it has, so a microphone that cannot open does not cost
     /// six engine rebuilds (each one cutting the programme) on every switch.
-    public func micMayRetry() { micRetries = 0; micGaveUp = false }
-    /// The route changed (AirPods in or out, a new input): see `micMayRetry`.
-    func routeChanged() { micMayRetry() }
+    public func micMayRetry() { micRetries = 0; micGaveUp = false; micChain += 1 }          // a reset also lets go of any retry already waiting: one chain at a time
+    /// The retry chain now alive: a retry timer fires only when it is still the latest scheduled (a reset or a newer schedule makes the older one a no-op), so the count of rebuilds a route storm can cause is the count of one chain.
+    private var micChain = 0
+    /// The input route as the system names it (the input and output ports; the engine's input rate off the phone), and the one last seen.
+    var routeNow: () -> String = {
+        #if os(iOS)
+        let r = AVAudioSession.sharedInstance().currentRoute
+        return (r.inputs + r.outputs).map { $0.uid }.joined(separator: "|")
+        #else
+        return ""
+        #endif
+    }
+    private var lastRoute: String?
+    /// A configuration-change notice arrived: the retries start again only if the ROUTE differs from the one seen last (a notice alone says nothing: one posts for a rebuild, a format change or a call).
+    func routeChanged(_ route: String) {
+        guard route != lastRoute else { return }
+        lastRoute = route
+        micMayRetry()
+    }
     /// The input rate of the tap now installed (0: none), for the log line of voice on.
     public private(set) var micTapRate = 0.0
     private var wantMic: Bool { micPermitted && micWanted && !micSuspended }
@@ -440,10 +456,11 @@ public final class LiveAudio: @unchecked Sendable {
             return
         }
         micRetries += 1
-        let n = micRetries
+        micChain += 1
+        let n = micRetries, chain = micChain
         let wait = micRetryBase * Double(1 << (n - 1))
         DispatchQueue.global().asyncAfter(deadline: .now() + wait) { [weak self] in
-            guard let self, self.wantMic, !self.micActive, !self.restarting else { return }
+            guard let self, chain == self.micChain, self.wantMic, !self.micActive, !self.restarting else { return }
             print("AUTORADIO voice mic retry \(n) of 6: the input rate was 0 with the microphone allowed; building a new engine")
             self.recover(reason: "microphone input not available yet", fresh: true)
         }
@@ -457,7 +474,7 @@ public final class LiveAudio: @unchecked Sendable {
             // Our own restart posts one too: ignore anything within a second of it.
             if self.restarting || clock.now - self.lastRestart < 1.0 { return }
             self.onNotice?("engine", "configuration change")
-            self.routeChanged()
+            self.routeChanged(self.routeNow())
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.recover(reason: "configuration change") }
         }
     }
