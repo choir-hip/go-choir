@@ -332,6 +332,7 @@ export async function importedAdd(a: { from: string; name: string }, storage?: S
   let landed: FM.Entry | undefined;
   try { landed = (await entries(net)).find((e) => e.name === name && e.size === size); } catch { /* the list below says */ }
   if (!landed) return again(up.message.startsWith('Added') ? 'The file could not be imported.' : up.message);
+  try { await storage.fs.rm(a.from); } catch { /* the picker's copy goes with sign-out at the latest */ }          // the file is on the computer now: the phone keeps no second copy of it
   const t = await textOf(landed, storage, net);
   console.log(`imported: added kind=${kind} text=${t.status}`);
   const title = M.titleOf(name);

@@ -115,6 +115,7 @@ describe('I1 to I6 importing', () => {
     files.set('app:/tmp/picked/a.pdf', bytes(300)); texts.set('a.pdf', PDF);
     await I.importedAdd({ from: 'app:/tmp/picked/a.pdf', name: 'a.pdf' }, storage, net);
     calls = [];
+    files.set('app:/tmp/picked/a.pdf', bytes(300));                       // the picker makes a fresh copy for each pick; the first was removed once it landed
     const again = await I.importedAdd({ from: 'app:/tmp/picked/a.pdf', name: 'a.pdf' }, storage, net);
     expect(again.message).toBe('“a” is already imported.'); expect(again.count).toBe(1); expect(calls.some((c) => c.method === 'PUT')).toBe(false);
     files.set('app:/tmp/picked/other.pdf', bytes(400)); texts.set('a 2.pdf', PDF);
@@ -282,6 +283,18 @@ describe('I16 the search sees the documents the phone holds the text of', () => 
     expect(docs[0]).toMatchObject({ kind: 'document', address: 'doc:' + id('b.epub'), source: 'Imported documents' });
     expect(docs[0].parts!.map((p) => [p.label, p.block])).toEqual([['chapter 1: One', 0], ['chapter 2: Two', 3]]);
     expect(await S.importedDocs(undefined, net)).toEqual([]);
+  });
+});
+
+describe('the picked copy', () => {
+  test('is removed once the import landed, and kept when it did not', async () => {
+    files.set('app:/tmp/picked/p.pdf', bytes(300)); texts.set('p.pdf', PDF);
+    await I.importedAdd({ from: 'app:/tmp/picked/p.pdf', name: 'p.pdf' }, storage, net);
+    expect(files.has('app:/tmp/picked/p.pdf')).toBe(false);
+    files.set('app:/tmp/picked/q.pdf', bytes(300));
+    fail = (c) => (c.method === 'PUT' ? Object.assign(new Error('x'), { status: 500 }) : null);
+    await I.importedAdd({ from: 'app:/tmp/picked/q.pdf', name: 'q.pdf' }, storage, net);
+    expect(files.has('app:/tmp/picked/q.pdf')).toBe(true);
   });
 });
 
