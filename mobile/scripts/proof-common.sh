@@ -55,6 +55,7 @@ DRIVES_FAILED=""
 # run_drive <name> <mode> <onboarding?> <agent flags...>: reset, run the collected steps, retry a refused launch up to 3 times.
 run_drive() {
   name="$1"; mode="$2"; ob="$3"; shift 3
+  drive_started=$(date '+%a %-d %b')
   cp "$STEPS" "$SCRATCH/steps.$name"
   attempt=1; relaunched=0
   while :; do
@@ -82,6 +83,8 @@ run_drive() {
   : > "$STEPS"
   cat "$SCRATCH/$name.txt" >> "$OUT"
   cp "$SCRATCH/$name.txt" "$SHOTS/drive-$name.txt" 2>/dev/null
+  # The date the app showed is today's date WHEN THE DUMP WAS TAKEN, not when the check runs (a run across local midnight). The drive's start and its end both: the dump is between them.
+  echo "$drive_started" > "$SHOTS/drive-$name.date"; date '+%a %-d %b' >> "$SHOTS/drive-$name.date"
   if [ $rc -ne 0 ]; then
     grep -v "^warning" "$SCRATCH/$name.txt" | tail -15
     # PROOF_KEEP_GOING=1: every drive starts a fresh app, so a failed drive is recorded and the next one runs; the end prints every name. Without it the first failure stops the proof.
@@ -93,11 +96,13 @@ run_drive() {
 
 FAILS=""
 must() { if grep -qF -- "$2" "$OUT"; then echo "ok: $1"; else echo "MISSING: $1: $2"; FAILS="$FAILS [$1]"; fi; }
-nomust() { if grep -qF -- "$2" "$OUT"; then echo "UNWANTED: $1: $2"; FAILS="$FAILS [$1]"; else echo "ok: $1"; fi; }
+# A negative check over a missing or empty file proves nothing (a drive that wrote nothing would pass every one): it fails.
+nomust() { if [ ! -s "$OUT" ]; then echo "MISSING: $1: the drive output is missing or empty"; FAILS="$FAILS [$1]"; elif grep -qF -- "$2" "$OUT"; then echo "UNWANTED: $1: $2"; FAILS="$FAILS [$1]"; else echo "ok: $1"; fi; }
 # chk/bad are defined HERE, before any drive: the first-run drive uses them, and a check called before its definition is "command not found" and silently no check at all
 chk() { # name pattern file
   if grep -qE -- "$2" "$3"; then echo "ok: $1"; else echo "MISSING: $1"; FAILS="$FAILS [$1]"; fi
 }
 bad() { # name pattern file
+  if [ ! -s "$3" ]; then echo "MISSING: $1: $3 is missing or empty, so there is nothing to check"; FAILS="$FAILS [$1]"; return 0; fi
   if grep -qE -- "$2" "$3"; then echo "UNWANTED: $1: $(grep -m1 -E -- "$2" "$3" | cut -c1-160)"; FAILS="$FAILS [$1]"; else echo "ok: $1"; fi
 }

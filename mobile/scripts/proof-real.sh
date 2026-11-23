@@ -12,6 +12,7 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SHOTS="${PROOF_SHOTS:-${TMPDIR:-/tmp}/autoradio-proof-real-$(date +%H%M%S)}"
 mkdir -p "$SHOTS"
+rm -f "$SHOTS"/real-*.png      # a reused PROOF_SHOTS must not satisfy the screenshot count with an earlier run's pictures
 . "$HERE/proof-common.sh"
 KEYFILE="${REAL_KEY_FILE:-$HOME/.config/choir-qa/keys/d-e.key}"
 [ -r "$KEYFILE" ] || fail "key file" "cannot read the test key file"
@@ -683,8 +684,10 @@ if [ -n "$PLAY_BAR" ]; then
   chk "bar: play pauses it (the bar says PAUSED)" 'PAUSED|Paused, [^.]{3,}' "$BR"
   chk "bar: the run sheet page shows the entry on air" '\[radio-onair-title\] "[^"]{3,}"' "$BR"
   # the run sheet page (radio-page.ts over the native facts): the date line, the status line while a story plays
-  TODAY=$(date '+%a %-d %b')   # the simulator shares the Mac's clock and zone: a date from 1970 (no clock) or the wrong day fails
-  chk "radio page: the date line is today ($TODAY)" "\\[radio-date\\] \"$TODAY\"" "$BR"
+  # the simulator shares the Mac's clock and zone: a date from 1970 (no clock) or the wrong day fails. The expected day is the one the drive ran on (run_drive wrote it when the dump was taken), so a run that crosses local midnight does not fail it.
+  TODAY=$(sed -n 1p "$SHOTS/drive-bar.date" 2>/dev/null); TODAY_END=$(sed -n 2p "$SHOTS/drive-bar.date" 2>/dev/null)
+  [ -n "$TODAY" ] || fail "bar" "the bar drive left no date stamp"
+  chk "radio page: the date line is the day of the drive ($TODAY)" "\\[radio-date\\] \"($TODAY|$TODAY_END)\"" "$BR"
   bad "radio page: the on-air title is not the kind word (a title the play dropped)" '\[radio-onair-title\] "(Story|Opening|Page|Podcast|Take|Book|Mail|Result|Answer|Transition|Audio|Clip)"' "$BR"
   bad "radio page: Built on does not show a raw route" 'radio-builton-0\] label="Open /?pub/' "$BR"
   chk "radio page: the status line says On air or Paused" '\[radio-status\] "(On air|Paused)"' "$BR"
@@ -808,6 +811,8 @@ bad "drill: Mail shows no rows after sign-out" '\[mail-row-' "$AFTER"
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"
+# A fatal error in the app's own log is a crash of the app under proof: it fails the proof (ERROR lines stay a note: the app logs handled errors that way).
+if grep -q 'Fatal error' "$OUT"; then echo "UNWANTED: a fatal error in the app's log: $(grep -m1 'Fatal error' "$OUT" | sed -E 's/choir_sk_[^[:space:]"'"'"'<>]+/<key>/g' | cut -c1-200)"; FAILS="$FAILS [fatal error in the app log]"; fi
 if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m8 'ERROR\|Fatal error' "$OUT" | sed -E 's/choir_sk_[^[:space:]"'"'"'<>]+/<key>/g' | cut -c1-240; fi
 if [ -n "$DRIVES_FAILED" ]; then echo "PROOF FAILED:$DRIVES_FAILED${FAILS:+ (checks:$FAILS)}"; cp "$OUT" "$SHOTS/drive.txt" 2>/dev/null; exit 1; fi
 [ -z "$FAILS" ] || fail "checks:$FAILS"
