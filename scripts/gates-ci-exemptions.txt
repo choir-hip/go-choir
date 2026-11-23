@@ -13,6 +13,7 @@ scripts/test-guest-floor-commit-free needs nix to evaluate the guest under two c
 scripts/receipts-index-swap-test needs a throwaway PostgreSQL
 scripts/fuzz-broker-protocol.sh a fixed-time fuzz run (15 s plus a build), run in CI's Desk Protocol Lock job
 frontend/scripts/sdk-surface.mjs needs the frontend install and a CI merge base; the Package Modularity job runs it when the SDK changes
+scripts/test-app-identity.sh is mobile/scripts/test-app-identity.sh (CI's Autoradio Shared-Code Tests job runs it from mobile/, which the checker reads as this path); stubbed Bun, no Exact build; the checker cannot read a mobile/ path in a gate script, so the land script does not run it
 scripts/go-test-non-runtime-shards CI's shard runner for the Go suites; the land script shards the Go suites itself on the build machine
 scripts/go-test-integration CI's integration-tagged Go smoke; a Go suite, which the land script owns
 scripts/ci-prune-go-cache CI build-cache housekeeping before the cache save; no gate

@@ -798,6 +798,11 @@ jobs:
       - name: Shared-code tests
         run: cd mobile/AutoradioLab && bun test
 
+      # The app's build identity and the sign-in callback scheme handed to Exact (scripts/app-identity.sh, exact.sh). Stubbed Bun, no Exact build, no Xcode; it needs sh, git, python3 and shasum.
+      # (It fails on the NixOS build VM only because that image has no /usr/bin/python3 or dirname; ubuntu-latest has both.)
+      - name: Build identity and sign-in scheme handoff
+        run: cd mobile && sh scripts/test-app-identity.sh
+
   # scripts/receipts-index-swap runs DDL on the live receipt table (the supervised
   # swap of docs/problems/old-receipts-do-not-compact-2026-11-14.md); its
   # self-test runs it against a throwaway PostgreSQL. Selected whenever the
