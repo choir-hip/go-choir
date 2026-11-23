@@ -128,82 +128,12 @@ final class HostGuardTests: XCTestCase {
         XCTAssertEqual(StubProtocol.seen.first?.headers["authorization"], "Bearer \(secretKey)")
     }
 
-    func testRemoteStagesRefuseAUrlOffTheConfiguredHost() async {
+    func testRemoteHostAllowsOnlyTheConfiguredHost() {
         let env = ChoirEnvironment()                            // the default host
-        XCTAssertThrowsError(try RemoteHost.require(URL(string: "https://evil.example.com/s1")!, env: env))
-        XCTAssertNoThrow(try RemoteHost.require(URL(string: "https://choir.news/api/s1")!, env: env))
+        XCTAssertFalse(RemoteHost.allows(URL(string: "https://evil.example.com/s1")!, env: env))
         XCTAssertTrue(RemoteHost.allows(URL(string: "https://choir.news/review/1")!, env: env))
         env.configuredBaseURL = "https://staging.choir.example:8443"
         XCTAssertFalse(RemoteHost.allows(URL(string: "https://choir.news/review/1")!, env: env), "compares with the configured host, not the default")
         XCTAssertTrue(RemoteHost.allows(URL(string: "https://staging.choir.example:8443/review/1")!, env: env))
-        do {
-            let p = StageParams(["url": .string("https://evil.example.com/s1")])
-            _ = try await RemoteSystem1(p).answer(System1Input(context: "c", listenerWords: "w", questions: []))
-            XCTFail("must refuse")
-        } catch { XCTAssertEqual((error as? ChoirError), .wrongHost("evil.example.com")) }
-        do {
-            _ = try await RemoteProgramme(StageParams(["url": .string("https://evil.example.com/p")])).load()
-            XCTFail("must refuse")
-        } catch { XCTAssertEqual((error as? ChoirError), .wrongHost("evil.example.com")) }
-    }
-}
-
-// MARK: Ids as one path segment
-
-final class PathSegmentTests: XCTestCase {
-    func testEncodeTable() {
-        XCTAssertEqual(PathSegment.encode("m6"), "m6")
-        XCTAssertEqual(PathSegment.encode("a/b"), "a%2Fb")
-        XCTAssertEqual(PathSegment.encode("a?b#c"), "a%3Fb%23c")
-        XCTAssertEqual(PathSegment.encode("100%"), "100%25")
-        XCTAssertEqual(PathSegment.encode(".."), "%2E%2E")
-        XCTAssertEqual(PathSegment.encode("."), "%2E")
-        XCTAssertEqual(PathSegment.encode("../../etc"), "..%2F..%2Fetc")
-        XCTAssertEqual(PathSegment.encode("<id@host>"), "%3Cid%40host%3E")
-        XCTAssertEqual(PathSegment.encode("é"), "%C3%A9")
-        XCTAssertEqual(PathSegment.encode(""), "")
-    }
-}
-
-// MARK: Computer discovery is one call, whoever waits
-
-final class SingleFlightTests: XCTestCase {
-    func testAGivingUpCallerDoesNotLetTheNextOneStartASecondDiscovery() async {
-        let cfg = URLSessionConfiguration.ephemeral
-        cfg.protocolClasses = [StubProtocol.self]
-        let keys = InMemoryKeyStore([KeyAccount.apiKey: secretKey])
-        let env = ChoirEnvironment()
-        env.keys = keys; env.session = URLSession(configuration: cfg)
-        StubProtocol.seen = []
-        StubProtocol.handler = { req in
-            if req.path == "/api/compute/status" { Thread.sleep(forTimeInterval: 0.4) }
-            return .init(json: ["computers": [["computer_id": "comp-7", "kind": "interactive", "current": true]]])
-        }
-        let c = env.client()
-        let a = Task { try? await c.computerID() }
-        try? await Task.sleep(nanoseconds: 80_000_000)
-        a.cancel()
-        _ = await a.value
-        let b = try? await c.computerID()
-        XCTAssertEqual(b, "comp-7")
-        XCTAssertEqual(StubProtocol.seen.filter { $0.path == "/api/compute/status" }.count, 1, "one discovery")
-        // After it ended, the entry is gone: a fresh client with no stored id discovers again.
-        keys.delete(KeyAccount.computerID)
-        _ = try? await c.computerID()
-        XCTAssertEqual(StubProtocol.seen.filter { $0.path == "/api/compute/status" }.count, 2)
-    }
-}
-
-// MARK: Small ones
-
-final class SmallRepairTests: XCTestCase {
-    // (The UTF-8 trim and the cut-text reads moved with the Files page: AutoradioLab/files.test.ts, F6.)
-
-    func testBadSampleRatesAreRefusedNotTrapped() {
-        XCTAssertNil(monoBuffer([0.1, 0.2], rate: 0))
-        XCTAssertNil(monoBuffer([0.1, 0.2], rate: -1))
-        XCTAssertNil(monoBuffer([0.1, 0.2], rate: .nan))
-        XCTAssertNil(pcmBuffer(AudioFrame(samples: [0.1], sampleRate: 0, t: 0)))
-        XCTAssertNotNil(monoBuffer([], rate: 16_000), "an empty buffer is fine and does not trap on baseAddress")
     }
 }

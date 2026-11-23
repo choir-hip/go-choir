@@ -124,7 +124,7 @@ public final class AutoradioModule: ExactPackage {
         owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s); ConsoleFile.write("AUTORADIO \(s)") }
         #endif
         runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barFacts"], now: true) } }
         // The listener path: sign-in (Keychain), the front page, the real stages.
         let appKeys: KeyStore = KeychainKeyStore()
@@ -135,7 +135,7 @@ public final class AutoradioModule: ExactPackage {
         }
         #endif
         choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
-        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
         // The spine's objects.
         // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
         Task { @MainActor in
@@ -146,6 +146,8 @@ public final class AutoradioModule: ExactPackage {
         let filesCache = filesCacheDisk
         // The folder the old lookup fell back to: copies no page could read. Removed once; nothing writes there now.
         try? FileManager.default.removeItem(at: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files"))
+        // The Swift build's run sheet, steer queue, opening cache and front titles: shared code keeps its own now, nothing reads these, and they hold the old account's text. Removed once at boot (and at sign-out).
+        AccountWipe.removeOldBuildFiles(support: support, caches: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0])
         choir.accountWipe.register("open-pages") { OpenPageFacts.shared.wipe() }
         choir.accountWipe.register("app-files") {
             AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })

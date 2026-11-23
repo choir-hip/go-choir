@@ -76,7 +76,7 @@ Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`).
 
 ### What P1 is, where it lives, and what it leaves to P2
 
-- `Choir/RadioProgramme.swift`: `StretchDecoder` (SSE or one JSON object per line), `SplitBlocks`, `SegmentPrep`, `ProgrammeDocument.append`, `RouteStretchSource` (`POST /api/autoradio/programme`, `cause: open`), and the `RadioProgramme` stage (the listener's default programme; with no stretch it plays `ChoirFrontProgramme`'s article exactly as before). `SegmentTracker.swift`: the playback observer. `DemoStretch.swift`: what demo mode answers on the route.
+- `Choir/RadioProgramme.swift`: `SplitBlocks`, `SegmentPrep`, `ProgrammeDocument.append` and the `RadioProgramme` stage (the listener's default programme; it loads nothing: the run sheet decides what plays). The stretch decoder and the route request (`POST /api/autoradio/programme`) are shared code now (`AutoradioLab/programme-model.ts`, `radio-writer.ts`); the Swift `StretchDecoder` lives only in the tests (`Tests/.../StretchDecoder.swift`). `SegmentTracker.swift`: the playback observer. `DemoStretch.swift`: what demo mode answers on the route.
 - `ProgrammePlayer`: `appendSegment`, `next`/`previous`/`jumpToSegment` by segment, `playback` (the tracker). `RadioInfo` gains `kind` and `sources`; with segments its title, position and list are the segment's; `player.contract` shows the kind and the source chips.
 - For P2: `player.playback.observe { PlaybackEvent }`. `lastBlock` is the server's block index; `blockCount` is the server's count. `finished` means the last playback block played to its end; the server refuses a `finished` whose `last_block` is not `block_count - 1` (a mismatch the segment records as `blockCountMismatch`). P2 owns `seq`, ids, hashes, `started_at`/`ended_at`, the buffer and what to send on each kind.
 - Readings taken where the designs were open: the wire shape of a `segment` event is the segment fields of design 1.3 plus `stretch_id`, `segment_id`, `block_count` (nothing pins it until L1); the request body is `request_id`, `cause`, `local_time`, `tz` only (`after`, `heard` and the edition fields are for later stations); the player waits for the first segment before it starts (no time limit but the transport's idle timeout), then appends the rest; the cold-start ladder (design 2.1) and play-on-open are not P1; the first block of a segment is not subdivided to one sentence (only paragraphs over 600 characters are split).
@@ -365,9 +365,9 @@ registry.register(.transcriber, MyParakeet.self) { params in MyParakeet(params) 
 
 Audio: stages never touch AVAudioSession. The host supplies an `AudioSessionOwner` (`claim(.listening|.talking, ...)`); every claim is logged as an `audioSession` event. The Exact app adapts Exact's claims; the replay command uses `NullSessionOwner`.
 
-### Desk contract (not implemented; the server lane supplies it)
+### Desk contract
 
-`ChoirDesk.submit` should POST the turn (`turnID`, `programmeID`, `blockIndex`, `listenerWords`) as a prompt at a place in the document and stream `Revision` values `{id, fromBlock, blocks, keepRest, isFinal}` back. No endpoint is invented here. `RemoteSystem1` posts `{context, listener_words, questions:[{id,text,options}]}` with `Authorization: Bearer <Keychain service news.choir.autoradio, account system1>` and expects `{answers:[{question_id, option, score}]}`.
+The interface-only `ChoirDesk` ("choir") and the bearer-token `RemoteSystem1` and `RemoteProgramme` stand-ins, with their Keychain helper, are deleted (2026-11-22): the listener's turn goes through the Autoradio desk stage (`Choir/AutoradioDesk.swift`, `POST /api/autoradio/turns`). The lab stand-ins `fixed`, `stub-echo` and `fixture` stay for the Mac replay proof configs (`mobile/fixtures/configs`).
 
 ## Running
 

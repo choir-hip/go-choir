@@ -46,6 +46,7 @@ public final class EmbedDevice: @unchecked Sendable {
     nonisolated(unsafe) public static var loader: @Sendable () async throws -> any Embedder & QueryEmbedding = { throw EmbedderError.unavailable("no embedding runtime in this build") }
     private let lock = NSLock()
     private var embedder: (any Embedder & QueryEmbedding)?
+    private var loading: Task<Bool, Never>?
     public init() {}
     private var current: (any Embedder & QueryEmbedding)? { lock.lock(); defer { lock.unlock() }; return embedder }
 
@@ -55,8 +56,18 @@ public final class EmbedDevice: @unchecked Sendable {
         return ["present": present, "loaded": current != nil, "onWiFi": WiFiMonitor.shared.onWiFi, "lowPower": p.isLowPowerModeEnabled,
                 "thermal": p.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue, "radioBusy": RadioDemand.shared.busy]
     }
+    /// One load at a time: a second caller that arrives while the first is loading waits for the same load (two llama loads at once would hold twice the memory).
     public func ensure(download: Bool) async -> Bool {
         if current != nil { return true }
+        lock.lock()
+        if let t = loading { lock.unlock(); return await t.value }
+        let t = Task { await self.load(download: download) }
+        loading = t; lock.unlock()
+        let ok = await t.value
+        lock.lock(); loading = nil; lock.unlock()
+        return ok
+    }
+    private func load(download: Bool) async -> Bool {
         if download, await ModelStore.shared.localFileIfPresent(KnownModels.embeddingGemma2.id) == nil {
             do { _ = try await ModelStore.shared.ensure(KnownModels.embeddingGemma2.id) } catch { fputs("AUTORADIO embed model=absent (download failed)\n", stderr); return false }
         }

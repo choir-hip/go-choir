@@ -132,14 +132,3 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
         for k in ["phase", "elapsed", "seconds", "transcript", "previewing", "publishing", "ended", "detail", "respondsTitle", "respondsRoute"] { XCTAssertNotNil(o[k], k) }
     }
 }
-
-/// A take on the run sheet: played like a clip entry, reported through the same ops (station L7, part 4).
-@MainActor final class TakePlaybackTests: XCTestCase {
-    func entry() -> RunSheetEntry {
-        RunSheetEntry.take(Take(takeID: "take-00000000000000a1", publisher: "voice-3fa2c1", publishedAt: nil, duration: 14, transcript: "Words.", respondsTo: nil, record: nil, audioPath: "", state: "live"),
-                           leadIn: "A neighbour.", id: "d-t1", forecast: RunSheetForecast(pHeard: 0.6, causedBy: "c", claimId: "k"))
-    }
-
-
-    // (the page of a take on air: radio-page.test.ts R8)
-}

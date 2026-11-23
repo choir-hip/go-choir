@@ -65,19 +65,33 @@ cat > "$T/blocks-empty.txt" <<'B'
 B
 if bhas "$T/blocks-empty.txt" 2; then no "blocks_have_text: an empty block passed"; else grep -q "no text in reader-block-b3" "$T/b.out" && ok "blocks_have_text: a block with no child text fails and is named" || no "blocks_have_text empty: $(cat "$T/b.out")"; fi
 if bhas "$T/blocks-ok.txt" 3; then no "blocks_have_text: fewer blocks than asked passed"; else ok "blocks_have_text: fewer blocks than asked fails"; fi
+# bad and nomust: a negative check over a missing or empty file fails (it used to pass: a drive that wrote nothing passed every one)
+sed -n '/^FAILS=""/,/^}/p;/^nomust() {/p;/^bad() {/,/^}/p;/^chk() {/,/^}/p' "$HERE/proof-common.sh" > "$T/n.sh"
+FAILS=""; OUT="$T/out.txt"; . "$T/n.sh"
+printf 'a line\n' > "$T/has.txt"; : > "$T/empty.txt"
+FAILS=""; bad "t" 'nothing like this' "$T/has.txt" >/dev/null; [ -z "$FAILS" ] && ok "bad: a file without the pattern passes" || no "bad: a clean file failed"
+FAILS=""; bad "t" 'a line' "$T/has.txt" >/dev/null; [ -n "$FAILS" ] && ok "bad: a file with the pattern fails" || no "bad: the pattern was not found"
+FAILS=""; bad "t" 'x' "$T/empty.txt" >/dev/null; [ -n "$FAILS" ] && ok "bad: an empty file fails" || no "bad: an empty file passed"
+FAILS=""; bad "t" 'x' "$T/absent.txt" >/dev/null; [ -n "$FAILS" ] && ok "bad: a missing file fails" || no "bad: a missing file passed"
+: > "$OUT"; FAILS=""; nomust "t" "x" >/dev/null; [ -n "$FAILS" ] && ok "nomust: an empty drive output fails" || no "nomust: an empty output passed"
+rm -f "$OUT"; FAILS=""; nomust "t" "x" >/dev/null; [ -n "$FAILS" ] && ok "nomust: a missing drive output fails" || no "nomust: a missing output passed"
+echo "a line" > "$OUT"; FAILS=""; nomust "t" "other" >/dev/null; [ -z "$FAILS" ] && ok "nomust: output without the text passes" || no "nomust: clean output failed"
+FAILS=""; nomust "t" "a line" >/dev/null; [ -n "$FAILS" ] && ok "nomust: output with the text fails" || no "nomust: text not found"
 # run_drive: a first run that ends in the dispatch-log timeout is run again once and logged; a second timeout fails
 mkdir -p "$T/shots"; SHOTS="$T/shots"; export SHOTS
+printf '#!/bin/sh\necho test.app.id\n' > "$T/app-identity.sh"; chmod +x "$T/app-identity.sh"      # proof-common.sh asks it for the app id (this stub directory is its HERE)
 printf '#!/bin/sh\nn=$(cat "%s/n" 2>/dev/null || echo 0); echo $((n + 1)) > "%s/n"\nif [ $n -lt "$FAILN" ]; then echo "op 2/9 `tap place-mail`: tap #1: the dispatch log did not answer within 1 s of the touch; the app'"'"'s carrier and the touch runner were stopped"; exit 1; fi\necho tree\n' "$T" "$T" > "$T/exact.sh"; chmod +x "$T/exact.sh"
 run() { # <FAILN>
   rm -f "$T/n" "$T/shots/retries.txt"
   (
     HERE="$T"; export FAILN="$1"; EXACT_SIM=x; TMPDIR="$T"
-    . "$(dirname "$0")/proof-common.sh" 2>/dev/null
+    . "$(dirname "$0")/proof-common.sh"
     reset_state() { :; }; SIM() { :; }; sleep() { :; }; fail() { echo "FAILED $1"; exit 1; }
     step "tap place-mail"; run_drive d light ""
   ) 2>&1
 }
 out=$(run 1); echo "$out" | grep -q '^retry: d drive' && echo "$out" | grep -q 'drive d ok' && [ "$(wc -l < "$T/shots/retries.txt")" -eq 1 ] && ok "one timeout: the drive is run again, logged, and passes" || no "one timeout: $out"
+[ "$(wc -l < "$T/shots/drive-d.date" | tr -d ' ')" = 2 ] && [ "$(sed -n 1p "$T/shots/drive-d.date")" = "$(date '+%a %-d %b')" ] && ok "run_drive stamps the day the drive started and ended on (the date line is checked against it)" || no "run_drive wrote no date stamp"
 out=$(run 2); echo "$out" | grep -q 'FAILED drive d' && ok "two timeouts: the drive fails" || no "two timeouts: $out"
 # PROOF_KEEP_GOING=1: a failed drive is recorded and the next one runs; without it the proof stops at the first
 out=$(PROOF_KEEP_GOING=1 run 2); echo "$out" | grep -q 'drive d FAILED' && ! echo "$out" | grep -q '^FAILED' && ok "keep going: a failed drive is named and the proof goes on" || no "keep going: $out"

@@ -59,8 +59,6 @@ path mobile/exact-package/apple/AutoradioModule+Deck.swift the deck's names for 
 path mobile/AutoradioKit/Sources/AutoradioKit/TakeSession.swift the take recorder: microphone, recogniser and player behind four protocols
 path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ClipFingerprint.swift clip fingerprinting over decoded PCM
 path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ClipLocator.swift finding a clip again in served audio by its fingerprint
-# --- NOT voice: a platform cipher (an exception the owner has not ruled on; the lead's decision 2026-11-19: hand-made cipher code does not reach main)
-path mobile/AutoradioKit/Sources/AutoradioKit/Choir/MailSeal.swift NOT VOICE: a platform cipher, shared code has none (Exact's crypto.subtle refuses AES): CryptoKit AES-GCM for the mail copy, the key made and kept natively in the Keychain, this device only, never returned. Android owes it in Kotlin
 # --- the host: what binds the native side to Exact
 path mobile/AutoradioKit/Package.swift the Swift package manifest of the native side
 path mobile/exact-package/apple/AutoradioModule.swift the module class that registers the native names with Exact
@@ -68,16 +66,12 @@ path mobile/exact-package/apple/AutoradioModule+Retrieval.swift the native side 
 path mobile/exact-package/apple/AutoradioModule+Voice.swift the voice cards' native side
 path mobile/exact-package/apple/AutoradioModule+Onboarding.swift first run's voice side: the models' setup, the microphone check, the hearing sentence and the voice at the topic screen, as facts and narrow calls (the steps are AutoradioLab/onboarding.ts)
 
-# --- the voice turn's own calls to the computer (the native server client exists ONLY for these, and for the run sheet lane's programme/sheet calls until that lane moves)
+# --- the voice turn's own calls to the computer (the native server client exists ONLY for these: the turn's desk, System 1 and Texture stages)
 path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirDesk.swift the voice turn's Texture desk stage: sends the listener's words at turn time (ChoirDesk.swift:57 onward) and speaks each revision as it streams
 path mobile/AutoradioKit/Sources/AutoradioKit/Choir/AutoradioDesk.swift the voice turn's Autoradio desk stage: POST /api/autoradio/turns, the answer streamed and spoken sentence by sentence (AutoradioDesk.swift:159 onward)
 path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirSystem1.swift the voice turn's System 1 stage: one POST /api/system1/judgments per turn (ChoirSystem1.swift:64 onward)
 path mobile/AutoradioKit/Sources/AutoradioKit/DeskContext.swift what the voice turn tells the model about now (the page in front, what is on air), built from engine state at turn time
-path mobile/AutoradioKit/Sources/AutoradioKit/Conversation.swift the turn engine's record of the question, the answers and their words, kept as the turn runs
 path mobile/AutoradioKit/Sources/AutoradioKit/Concurrency.swift Once, TaskBag and withDeadline: the turn engine's cancellation and deadline pieces
-path mobile/AutoradioKit/Sources/AutoradioKit/ProofKey.swift the simulator-only proof key: writes the Keychain item the signed-in seam reads (compiled out of device builds)
-path mobile/exact-package/apple/AutoradioModule+Platform.swift the platform seam: the audio session owner, the console log file the proof reads and the system's background time for the opening written ahead
-path mobile/exact-package/apple/AutoradioModule+Mail.swift mail's two native sends: the in-app web view for the approval page, and mailRead, which hands text to the radio's voice
 # --- interface names
 name retrievalAsk the voice turn's ask for passages, raised by the native turn engine and answered by shared code (RetrievalFacts.swift)
 name voice* the voice cards and the speaker profile
@@ -85,5 +79,15 @@ name choirTalkCancel cancels the open microphone turn
 name choirHandsFreeToggle opens and closes the microphone
 name importedFollow the block the player is reading now: only the player knows
 name deck* the deck: play, hold, pause, seek, acknowledge, and the state and journal it keeps (the audio session and the lock screen are native)
-# --- the Keychain read behind the signed-in seam (AutoradioLab/api.ts); goes when sign-in moves to Exact's own secret store
-path mobile/AutoradioKit/Sources/AutoradioKit/Choir/CredentialReader.swift reads the Keychain item today's sign-in wrote, in place (Exact's secret store keeps items under another service), so the phone stays signed in
+
+# --- NOT on this list, so COUNTED against the ceiling (non-voice native code: debt, or a platform seam). Only the audio session, the microphone, speech and the on-device models are voice
+# (owner, CLAUDE.md: "only voice is native"). Each of these has its reason, and none of them is voice:
+#   Choir/MailSeal.swift            a platform cipher (CryptoKit AES-GCM; Exact's crypto.subtle refuses AES), key kept natively in the Keychain. Android owes it in Kotlin. Was on this list as an exception.
+#   Choir/CredentialReader.swift    reads the Keychain item today's sign-in wrote, in place (Exact's secret store uses another service); goes when sign-in moves to Exact's own secret store.
+#   AutoradioModule+Mail.swift      an in-app web view for the approval page, and mailRead (hands text to the radio's voice).
+#   AutoradioModule+Platform.swift  the platform seam: the audio session owner (voice), the console log file the proof reads, the system's background time. The session owner is voice and could be split out.
+#   ProofKey.swift                  the simulator-only proof key (a test seam, compiled out of device builds).
+#   Conversation.swift              the turn engine's record of the question, the answers and their words (state of the voice turn; a candidate for the voice list when it is shown to be only that).
+#   TextureEditor.swift, TextureBody.swift, Notebook.swift   the Texture edit page and the notebook in Swift. Debt: they are Swift until those pages move to Exact; nothing about them is voice.
+#   RunSheet*.swift, RadioBridge.swift, BarState.swift, ChoirApp.swift, ChoirClient.swift, RadioProgramme.swift, PodcastClips.swift and the rest of the counted files: see the checker's list (scripts/check-autoradio-native-boundary).
+# AutoradioLab/modules/apple/ModelsEntry.swift (the app's own native module) is counted too since the checker reads that folder.

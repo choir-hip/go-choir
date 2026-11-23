@@ -1,7 +1,6 @@
 // The take RECORDER's native side (the voice): the radio's gate, the microphone, the file, the recogniser, the preview. The Takes section is shared code (AutoradioLab/take-session.ts); this file hands it
 // one snapshot (source `takesRecorder`, interface/takes.json) and answers its ops (`takeOp`, public: ModelsEntry.swift calls it) and fetches another listener's take for the run sheet.
 //   ops: takeState | takeStart(min/maxSeconds, maxBytes) | takeStop | takePreview(mode) | takePublishing(on) | takeDiscard | takeDone | takeAudio
-//        takeMirror (the Swift programme still filters takes by the listener's own ids and muted voices; shared code owns them and pushes a copy, with its account generation: a push older than one already taken was in flight when the account changed and is dropped). The pre-release build's old files are never read.
 import AVFoundation
 import Foundation
 
@@ -13,7 +12,6 @@ import Foundation
     func yieldForTake() async -> String? {
         handsFree = HandsFreeSwitch.shared.isOn
         if handsFree { HandsFreeSwitch.shared.set(false) }
-        RadioBridge.shared.send("level", ["value": "pause"])
         await module.runtime.player.setLevel(.pause)
         do { try await module.runtime.coordinator.setRecordingTake(true) }
         catch { giveBack(); return "the microphone could not be taken (\(error))" }
@@ -23,7 +21,6 @@ import Foundation
         let hf = handsFree; handsFree = false
         Task { @MainActor in
             try? await module.runtime.coordinator.setRecordingTake(false)
-            RadioBridge.shared.send("level", ["value": "play"])
             await module.runtime.player.setLevel(.play)
             if hf { HandsFreeSwitch.shared.set(true) }
         }
@@ -73,10 +70,6 @@ extension AutoradioModule {
 
     /// The shared code's calls on the recorder (take-session.ts `nativeDevice`). Each answers the snapshot, except the ones that answer their own thing.
     @MainActor public func takeOp(_ r: [String: Any]) async -> [String: Any] {
-        switch r["op"] as? String ?? "" {      // the ops that need no recorder never depend on it being up
-        case "takeMirror": if TakeMirror.accept((r["gen"] as? NSNumber)?.intValue ?? 0) { TakeOwn.shared.replace(ids: r["ids"] as? [String] ?? [], handle: r["handle"] as? String ?? ""); TakeMutes.shared.replace(r["muted"] as? [String] ?? []) }; return [:]
-        default: break
-        }
         guard let s = TakesHost.shared?.session else { return (r["op"] as? String) == "takeStart" ? ["ended": "open"] : [:] }
         func num(_ k: String, _ d: Double) -> Double { (r[k] as? NSNumber)?.doubleValue ?? d }
         switch r["op"] as? String ?? "" {
