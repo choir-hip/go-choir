@@ -19,7 +19,7 @@ func TestTheScratchIsSweptBeforeTheRebaseTheOpenAndTheReplay(t *testing.T) {
 	}
 	src := string(raw)
 	run := strings.Index(src, "func Run()")
-	sweep := strings.Index(src, "store.RemoveSnapshotScratch(")
+	sweep := strings.Index(src, "store.RemoveBootScratch(")
 	rebase := strings.Index(src, "store.RebaseOntoCompactCopy(")
 	open := strings.Index(src, "store.Open(rtCfg.StorePath)")
 	if run < 0 || sweep < run || rebase < 0 || open < 0 || !(sweep < rebase && rebase < open) {

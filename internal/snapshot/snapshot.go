@@ -676,9 +676,16 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 
 	// The stream: every page of the snapshot to the uploader, then the pin ends.
 	fs, err := streamFile(pinCtx, runCtx, cfg, dek, cancel, tx, true)
+	// The pin's context is read before the transaction ends: a stream whose last
+	// flush won the race against the deadline still held the WAL past it.
+	pinCause := context.Cause(pinCtx)
 	rollback()
 	if err != nil {
 		return out, err
+	}
+	if errors.Is(pinCause, ErrPinDeadline) {
+		fs.abandon(cancel, pinCause)
+		return out, fmt.Errorf("snapshot: the read transaction outlived its %s pin deadline: %w", cfg.PinDeadline, ErrPinDeadline)
 	}
 	drainStart := time.Now()
 	if err := fs.finish(runCtx); err != nil {
@@ -765,8 +772,10 @@ type fileStream struct {
 // or the run); runCtx is the uploaders'. With wantDigest the pages are also
 // hashed as they are read, before they are copied into a chunk buffer. On an
 // error it stops and drains the uploader itself; on success the caller finishes
-// it (fileStream.finish).
-func streamFile(readCtx, runCtx context.Context, cfg Config, dek []byte, cancel context.CancelCauseFunc, tx *sql.Tx, wantDigest bool) (*fileStream, error) {
+// it (fileStream.finish). Whatever it started is released by defer, a panic in
+// a callback included: the rows are closed, and on any exit but success the run
+// is cancelled and the workers finished.
+func streamFile(readCtx, runCtx context.Context, cfg Config, dek []byte, cancel context.CancelCauseFunc, tx *sql.Tx, wantDigest bool) (_ *fileStream, retErr error) {
 	cause := func(err error) error {
 		if c := context.Cause(readCtx); c != nil {
 			return c
@@ -794,11 +803,21 @@ func streamFile(readCtx, runCtx context.Context, cfg Config, dek []byte, cancel 
 	up := newChunkUploader(cfg, dek, ChunkSize, fs.chunkCount, cancel)
 	up.start(runCtx)
 	fs.up = up
-	fail := func(err error) (*fileStream, error) {
-		cancel(err)
+	succeeded := false
+	defer func() {
+		if succeeded {
+			return
+		}
+		// An error return, or a panic passing through (retErr is nil then): the
+		// workers must not outlive the stream, and a worker blocked on a stalled
+		// upload ends only with the run.
+		if retErr == nil {
+			retErr = errors.New("snapshot: the stream was abandoned by a panic")
+		}
+		cancel(retErr)
 		up.finish()
-		return nil, err
-	}
+	}()
+	fail := func(err error) (*fileStream, error) { return nil, err }
 
 	streamStart := time.Now()
 	var pages int64
@@ -816,6 +835,7 @@ func streamFile(readCtx, runCtx context.Context, cfg Config, dek []byte, cancel 
 	if err != nil {
 		return fail(fmt.Errorf("snapshot: read pages: %w", progress(err)))
 	}
+	defer rows.Close()
 	buf := <-up.free
 	chunkIndex := 0
 	flush := func() error {
@@ -836,11 +856,14 @@ func streamFile(readCtx, runCtx context.Context, cfg Config, dek []byte, cancel 
 		var pgno int64
 		var data sql.RawBytes
 		if err := rows.Scan(&pgno, &data); err != nil {
-			_ = rows.Close()
 			return fail(fmt.Errorf("snapshot: scan page: %w", progress(err)))
 		}
+		if pages >= fs.pageCount {
+			// The cut and the digest list are sized by the counted pages: a page
+			// past them is refused before it is appended to a chunk.
+			return fail(fmt.Errorf("snapshot: the page stream holds page %d, past the counted %d pages", pgno, fs.pageCount))
+		}
 		if pgno != pages+1 || len(data) != pageSize {
-			_ = rows.Close()
 			return fail(fmt.Errorf("snapshot: page stream out of order or short: got page %d of %d bytes after %d pages (page size %d)", pgno, len(data), pages, pageSize))
 		}
 		if cfg.pageHook != nil && wantDigest {
@@ -859,20 +882,17 @@ func streamFile(readCtx, runCtx context.Context, cfg Config, dek []byte, cancel 
 			// The pinned WAL grows on the guest's disk while the stream runs.
 			if cfg.FreeSpace != nil {
 				if err := cfg.FreeSpace(); err != nil {
-					_ = rows.Close()
 					return fail(fmt.Errorf("snapshot: stream aborted after %d of %d pages: %w", pages, fs.pageCount, err))
 				}
 			}
 		}
 		if len(buf) == fs.pagesPerChunk*pageSize {
 			if err := flush(); err != nil {
-				_ = rows.Close()
 				return fail(fmt.Errorf("snapshot: %w", progress(err)))
 			}
 		}
 	}
 	if err := rows.Err(); err != nil {
-		_ = rows.Close()
 		return fail(fmt.Errorf("snapshot: read pages: %w", progress(err)))
 	}
 	_ = rows.Close()
@@ -888,7 +908,15 @@ func streamFile(readCtx, runCtx context.Context, cfg Config, dek []byte, cancel 
 	if digest != nil {
 		fs.pageDigest = digest.Sum()
 	}
+	succeeded = true
 	return fs, nil
+}
+
+// abandon ends a stream that read every page but must not be used: the run is
+// cancelled with cause and the workers finished, so nothing of it is recorded.
+func (fs *fileStream) abandon(cancel context.CancelCauseFunc, cause error) {
+	cancel(cause)
+	fs.up.finish()
 }
 
 // finish waits for the uploader and checks the cut.
@@ -935,16 +963,29 @@ func capturePartition(runCtx context.Context, cfg Config, dek []byte, cancel con
 	if err != nil {
 		return capturedPartition{}, fmt.Errorf("snapshot: begin read of %s: %w", part.Path, cause(err))
 	}
+	// The transaction ends on every return, a panic in a callback included.
+	ptxOpen := true
+	endRead := func() {
+		if ptxOpen {
+			ptxOpen = false
+			_ = ptx.Rollback()
+		}
+	}
+	defer endRead()
 	// The first statement fixes the partition's read snapshot.
 	var one int
 	if err := ptx.QueryRowContext(pinCtx, `SELECT 1`).Scan(&one); err != nil {
-		_ = ptx.Rollback()
 		return capturedPartition{}, fmt.Errorf("snapshot: read %s: %w", part.Path, cause(err))
 	}
 	fs, err := streamFile(pinCtx, runCtx, cfg, dek, cancel, ptx, false)
-	_ = ptx.Rollback()
+	pinCause := context.Cause(pinCtx)
+	endRead()
 	if err != nil {
 		return capturedPartition{}, fmt.Errorf("%s: %w", part.Path, err)
+	}
+	if errors.Is(pinCause, ErrPinDeadline) {
+		fs.abandon(cancel, pinCause)
+		return capturedPartition{}, fmt.Errorf("%s: the read transaction outlived its %s pin deadline: %w", part.Path, cfg.PinDeadline, ErrPinDeadline)
 	}
 	if err := fs.finish(runCtx); err != nil {
 		return capturedPartition{}, fmt.Errorf("%s: %w", part.Path, err)

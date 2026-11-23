@@ -21,13 +21,13 @@ import (
 
 // Ways the page-stream snapshot could fail against the real store (the
 // snapshot package's tests list the stream's own; these are the ones that need
-// the store's head table, the real witness extractor and restore's verifier):
+// the store's head table and restore's verifier):
 //
 //  S1. the head recorded is not the head of the pages (a write commits while
 //      the stream runs): restore replays from the wrong sequence;
-//  S2. the witness recorded in the stream's transaction differs from the one
-//      restore recomputes from the reassembled file (VerifySnapshotFile is the
-//      check restore itself uses, so a mismatch is a refused restore);
+//  S2. the head and the page digest recorded from the stream's transaction
+//      differ from the reassembled file's (the install checks the digest and
+//      VerifySnapshotFile the head row, so a mismatch is a refused restore);
 //  S3. the stream queues the store's writes: with a writer committing
 //      continuously, the commit count during the snapshot must keep growing;
 //  S4. a second snapshot of a store with a small change re-uploads the store.
@@ -208,7 +208,7 @@ func streamCipher(t *testing.T) *computerevent.PrivateArtifactCipher {
 }
 
 // restoreStream installs the newest snapshot with restore's own verifier (the
-// witness check) and opens the result.
+// head tie and the page digest) and opens the result.
 func restoreStream(t *testing.T, tape *streamTape, cipher *computerevent.PrivateArtifactCipher) (*dbx.SQLiteDB, snapshot.Record) {
 	t.Helper()
 	dest := filepath.Join(t.TempDir(), "state.db")
@@ -217,7 +217,7 @@ func restoreStream(t *testing.T, tape *streamTape, cipher *computerevent.Private
 		Verify: VerifySnapshotFile,
 	})
 	if err != nil {
-		t.Fatalf("restore with the witness check: %v", err)
+		t.Fatalf("restore with the head tie: %v", err)
 	}
 	restored, err := dbx.OpenSQLite(dest, dbx.SQLiteOptions{ReadConns: 1})
 	if err != nil {
@@ -228,9 +228,9 @@ func restoreStream(t *testing.T, tape *streamTape, cipher *computerevent.Private
 }
 
 // S1, S2, S3: a writer commits row+head transactions without pause while the
-// snapshot streams; the restore verifier recomputes the witness of the
-// reassembled file and it must equal the recorded one, and the recorded head
-// must be the head of the pages restored.
+// snapshot streams; the restore checks the page digest of the reassembled file
+// and its head row against the record, and the restored file's row count must
+// equal the recorded head (the recorded head is the head of the pages restored).
 func TestSnapshotUnderContinuousWritesRestoresToAWitnessMatch(t *testing.T) {
 	ctx := context.Background()
 	store := newStreamStore(t, 1200) // ~10 MB: three chunks

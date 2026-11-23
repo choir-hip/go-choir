@@ -205,11 +205,14 @@ func Run() {
 
 	// Every store step before the listener logs its start, end and duration:
 	// a boot that hangs names the step that has no end.
-	// A snapshot capture killed in flight leaves a store-sized scratch copy. It is
-	// removed before anything below needs the volume: the rebase, the store open
-	// and the replay all run before Runtime.Start (docs/design/capture-static-copy-2026-11-15.md, 2.4).
+	// A binary from before the one-pass capture leaves a store-sized scratch copy
+	// if it is killed in flight, and a compaction killed in flight leaves its
+	// staging file, also up to the store's size. Both are removed before anything
+	// below needs the volume: the rebase, the store open and the replay all run
+	// before Runtime.Start (the staging file is never trusted after a crash,
+	// store/compact.go).
 	doneScratch := objectgraph.BootPhase("autoputer: startup", "snapshot-scratch-sweep")
-	scratchErr := store.RemoveSnapshotScratch(rtCfg.StorePath)
+	scratchErr := store.RemoveBootScratch(rtCfg.StorePath)
 	doneScratch(scratchErr)
 	if scratchErr != nil {
 		log.Printf("autoputer: %v", scratchErr)

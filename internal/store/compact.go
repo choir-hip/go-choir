@@ -223,16 +223,6 @@ func (s *Store) prepareCompactCopy(ctx context.Context, force bool) (bool, error
 	if !dropPresplitIfLow(statePath) && presplitHeld(statePath) {
 		return false, fmt.Errorf("skipped: the header/body split rollback copy %s is kept until split-finalize", filepath.Base(statePath+presplitSuffix))
 	}
-	// The store-copy token comes before anything is removed or written: a capture
-	// holding it is writing a store-sized scratch on this volume, and a capture
-	// that finds this one holding it refuses before it deletes anything
-	// (store_copy.go). Compaction waits for it, bounded by its context, so a
-	// collision does not cost its 24-hour pass; its own copy budget starts after.
-	release, err := s.HoldStoreCopy(ctx, "compact")
-	if err != nil {
-		return false, fmt.Errorf("skipped: waiting for the store-copy token: %w", err)
-	}
-	defer release()
 	staging := statePath + compactStagingSuffix
 	// A copy from a crashed earlier attempt is never trusted.
 	removeSQLiteFiles(staging)

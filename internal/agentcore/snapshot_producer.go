@@ -273,6 +273,10 @@ type snapshotProducer struct {
 	lastCaptureBytes    int64
 	haveCapture         bool
 	lastStats           snapshot.Stats
+	// walGrowth is the WAL growth of the last capture, in memory only: it sizes the
+	// next attempt's headroom once (see run) and is cleared by a refusal, by
+	// forget and by a restart.
+	walGrowth int64
 }
 
 // snapshotEval is one evaluation of whether a snapshot is due.
@@ -564,11 +568,19 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	// pinned reader would hold for as long as the pin deadline allows. A staged
 	// compact copy needs no term: its bytes are already missing from free.
 	p.mu.Lock()
-	lastGrowth := p.lastStats.PinWALEnd - p.lastStats.PinWALStart
+	lastGrowth := p.walGrowth
 	p.mu.Unlock()
 	headroom := snapshotWALHeadroom(lastGrowth)
 	need := headroom + snapshotFreeFloor
 	if free < need {
+		// The remembered growth raises the need once. A refusal spends it: were
+		// it kept, one burst would raise the need above the free space and every
+		// later attempt would refuse for ever. The next tick asks for the planned
+		// headroom, and the stream's own floor check guards the rest. It is held in
+		// memory only: after a restart the planned headroom is asked for.
+		p.mu.Lock()
+		p.walGrowth = 0
+		p.mu.Unlock()
 		staged := ""
 		if n := d.StagedCopyBytes(); n > 0 {
 			staged = fmt.Sprintf("; a staged compact copy of %d bytes (state.db.compact) is on the volume and a capture never removes it", n)
@@ -630,6 +642,7 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	}
 	p.haveCapture, p.lastCaptureDuration, p.lastCaptureBytes = true, took, sealed
 	p.lastStats = ref.Stats
+	p.walGrowth = max(ref.Stats.PinWALEnd-ref.Stats.PinWALStart, 0)
 	// The block is current right after a capture: the newest snapshot is this
 	// one and nothing is due until the next evaluation.
 	p.eval = snapshotEval{Head: ref.Record.StoreHeadSequence, NewestSeq: ref.Record.StoreHeadSequence, NewestAt: now, Rate: ev.Rate, RateMeasured: ev.RateMeasured}
@@ -657,6 +670,7 @@ func (p *snapshotProducer) forget() {
 	p.eval, p.evalAt = snapshotEval{}, time.Time{}
 	p.streakCount, p.streakSince, p.streakWhy = 0, time.Time{}, ""
 	p.failures, p.failedHead, p.retryAt = 0, 0, time.Time{}
+	p.lastStats, p.walGrowth = snapshot.Stats{}, 0
 }
 
 func (p *snapshotProducer) floorKey() string {
@@ -893,12 +907,15 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 					}
 					return nil
 				},
-				Partitions:  telemetryPartitionSource(store),
-				Cipher:      rt.privateArtifactCipher,
-				Chunks:      chunks,
-				Appender:    rt.eventAppender,
-				MaxDuration: maxDuration,
-				PinDeadline: snapshotPinDeadline,
+				Partitions: telemetryPartitionSource(store),
+				Cipher:     rt.privateArtifactCipher,
+				Chunks:     chunks,
+				Appender:   rt.eventAppender,
+				// While the reader is blocked behind a stalled upload the stream's
+				// own check does not run; this guard does, at compaction's interval.
+				FreeSpaceEvery: snapshotFreeCheckEvery,
+				MaxDuration:    maxDuration,
+				PinDeadline:    snapshotPinDeadline,
 			})
 			if err == nil {
 				if released := releasedHead.Load(); released > ref.Record.StoreHeadSequence {

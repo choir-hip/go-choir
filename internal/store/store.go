@@ -244,9 +244,6 @@ type Store struct {
 	partitions      *telemetryPartitions
 	// walBound is the WAL bound's checkpoint record (wal_bound.go).
 	walBound walBoundState
-	// copyToken orders a capture's scratch copy and a compaction's staging copy
-	// (store_copy.go).
-	copyToken storeCopyToken
 	// searchIdx caches tokenized head text for SearchDocuments
 	// (search_index.go).
 	searchIdx searchIndex
