@@ -21,34 +21,64 @@ Written 2026-11-23 with the sign-in sheet change (owner, 2026-11-23: "A sign-in 
 
 ## How Autoradio uses it
 
-Only the opening of the approval page changed; the device flow, the key and its Keychain item did not (`docs/design/account-boundary-2026-11-21.md`).
+Only the opening of the approval page and the owner of the sign-in changed; the device flow's server side, the key and its Keychain item (same service and accounts, written by the same native code) did not
+(`docs/design/account-boundary-2026-11-21.md`).
+
+### One sign-in attempt is one state machine, owned in one place (review 2026-11-23, third round)
+
+Three review rounds found the same fault in different places (a stale poll answer abandoning an approved key; a card Cancel followed by a key write; a re-opened sheet still carrying a close flag): the sign-in's
+state was spread over a contract status, a result slot, a close flag and a native poll loop, each patched on its own. So an attempt now has an id and **one owner: shared code** (`mobile/AutoradioLab/signin-attempt.ts`,
+a pure reducer plus the driver that runs it). Every event names the attempt it belongs to; an event for another attempt, or for one that has ended, changes nothing. Native keeps only what must be native, the
+device code, the one poll request and the Keychain write, behind three calls that each name an attempt: `signInBegin(attempt)`, `signInPoll(attempt)`, `signInForget(attempt)` (the app module's `later`, ops
+handled by `ChoirSignIn`). Native has no loop, no timer, no close flag and no status of its own.
 
 ```
-shared code (account.contract)           Swift (ChoirSignIn, unchanged but for dropping its browser call)       server
- signIn      -> choirSignIn()  ------------> POST /auth/device/begin {label}  ---------------------------------> codes
- au.status=="pending" and a link  <--------- state: userCode, verificationURL (device_code stays here)
- task openSheet -> signInSheet(link)
-   openAuthSession(link + &return=<scheme>&state=<nonce>, {callback, state})   (signin-sheet.ts)
-   [the sheet shows /device; the owner signs in with the browser's passkey and approves]
-   page POSTs /auth/device/approve {user_code, decision, return, state} ----------------------------------------> {status, label, return_to}
-   page navigates to return_to = <scheme>:/signed-in?state=<nonce>   -> the sheet closes by itself
- outcome returned / cancelled / failed
-                                          poll POST /auth/device/token {device_code} every 5 s  ----------------> the key, once
-                                          Keychain write (same service and accounts as before)
+shared code (signin-attempt.ts)                      native (ChoirSignIn, one attempt at a time)            server
+ signInRun: id = new, BEGIN(id) ------------------> signInBegin(id): POST /auth/device/begin ----------> codes
+   BEGUN(userCode, link, interval, expires) <------ {userCode, link, interval, expires}   (device_code stays native)
+   open the sheet: openAuthSession(link + return + state)      (signin-sheet.ts; the callback is a hint, never read)
+   [the owner signs in with the browser's passkey and approves; the page navigates to the callback]
+   every interval: ISSUED(n), signInPoll(id) ------> POST /auth/device/token {device_code} -----------> pending | key | ...
+     on the key: the Keychain write happens only if `id` is still the attempt (checked under the lock) -> "approved"
+   card Cancel / abandon: signInForget(id) --------> drops the code; a key this attempt wrote is deleted and revoked
 ```
+
+Transition table (`phase` x event -> phase). `n` is the poll's number (polls are issued one at a time); `closedAt` is the number of polls issued when the sheet closed. Any event whose id is not the
+attempt's, and any event after a terminal phase, is ignored (that is the whole of "stale").
+
+| phase | event | next phase | what else |
+|---|---|---|---|
+| (none / terminal) | BEGIN(id) | begun | a previous attempt is forgotten first (`signInForget`) |
+| begun | BEGUN | sheet | the sheet opens |
+| begun | BEGIN_FAILED | failed | the message says why |
+| sheet | SHEET returned | sheet | nothing: a hint; the poll that is running learns the key |
+| sheet | SHEET failed (501, 502, a throw) | sheet | a note; the same link is offered in the browser; the poll goes on |
+| sheet | SHEET cancelled (the owner closed it) | closed | `closedAt = polls issued` |
+| closed | REOPEN (the owner taps "Open the approval page") | sheet | the close is forgotten (`closedAt` cleared) |
+| sheet | REOPEN | sheet | the sheet opens again |
+| closed | ANSWER pending, `n > closedAt` | cancelled | a poll that started after the close says nobody approved: the owner walked away; `signInForget` |
+| closed | ANSWER pending, `n <= closedAt` | closed | the poll started before the close: it may predate an approval, it decides nothing |
+| sheet, closed | ANSWER slow_down / error | same | the server answers `slow_down` to a poll inside the interval even when the code is approved: it decides nothing |
+| sheet, closed | ANSWER approved | approved | the key is stored (native wrote it under the attempt's lock) |
+| sheet, closed | ANSWER denied | denied | "the sign-in was denied" |
+| sheet, closed | ANSWER expired, or TIMEOUT | expired | "the code expired; sign in again" |
+| sheet, closed | ANSWER stale / invalid | failed | native does not know the attempt (a restart): "sign in again" |
+| begun, sheet, closed | CANCEL (the card's Cancel) | cancelled | `signInForget` first: **no key is written after it**; a key that was already written by this attempt is deleted and revoked |
+| cancelled, approved, denied, expired, failed | anything | same | ignored |
+
+A key that arrives after CANCEL is never written: the Keychain write is guarded by "this attempt is still the attempt", checked under the same lock `signInForget` takes; a key the server had already minted
+for a forgotten attempt is revoked at once with its own key and not stored.
+
+### What the callback and the close mean
 
 - **The callback is a hint.** It carries our own nonce and nothing else: no key, no device code, no user code, no account id. `signin-sheet.ts` never reads it; it reports `returned`, `cancelled` or
   `failed`. The key arrives only by the native poll to `/auth/device/token`, which still needs the device code that only Swift holds and an approval by a passkey session (an email session is refused, `device_login.go`).
   Anyone who can trigger the scheme gains nothing; a callback with no approval leaves the poll asking and the account signed out (`signin-sheet.test.ts` S6).
-- **Closing the sheet is a hint too (review, 2026-11-23).** The owner closing it is a 499, and a 499 can also follow an approval whose callback was not taken (the page shows "Approved"
-  and the owner swipes it away). So nothing is abandoned on the close itself: the contract asks native `choirCancelSignIn(by="sheet")`, and Swift's running poll answers first. A key is
-  taken; "still pending" ends the sign-in (back to signed out, no message; the code expires on the server as it always did); `slow_down` and network errors decide nothing (the server
-  answers `slow_down` to a poll inside the interval even when the code is approved, so a second, immediate poll would prove nothing). The card's own Cancel (`by="card"`) abandons at once.
-  Only the pending sign-in's own result counts: the result carries the verification link it was opened for, and the contract compares it with the pending one; a new sign-in clears the last result.
-  The ten-minute bound is the same 499.
+- **Closing the sheet is a hint too.** The owner closing it is a 499, which can also follow an approval whose callback was not taken. So the close alone abandons nothing (table: `closed`): only a poll
+  that started after the close and still answers "pending" ends the sign-in (back to signed out, no message; the code expires on the server as it always did). The ten-minute bound is the same 499.
 - **A sheet that cannot open is not a dead end.** On 501 (no browser), 502 or a throw the card says so and offers the same link in the system browser with Exact's `href`
-  ("One to an absolute URL (`https://…`) leaves the app: natively it opens in the system browser", `docs/contract-grammar.md:1684-1686`) [doc]. The page then opens without `return` and `state`, as
-  any browser visit does, and the native poll collects the key as before. No Swift opens a browser any more. [unrun on a device]
+  ("One to an absolute URL (`https://…`) leaves the app: natively it opens in the system browser", `docs/contract-grammar.md:1684-1686`) [doc], shown only if it is https on the granted origin
+  (`signin-attempt.ts` `browserLink`). The page then opens without `return` and `state`, as any browser visit does, and the poll collects the key as before. [unrun on a device]
 - **Scheme per app id.** `app.ts` reads `const SIGNIN_SCHEME = import.meta.env.SIGNIN_SCHEME ?? 'news.choir.autoradio.lab'` and grants `auth.callback ${SIGNIN_SCHEME}:/signed-in`. The build reads only `?? 'default'` (an `||` is refused: "import.meta.env is read only in a top-level const ..."), and `??` does not catch an empty value (an exported empty `SIGNIN_SCHEME` gives the grant `:/signed-in`, a dead sign-in) [run], so `mobile/scripts/exact.sh` passes `SIGNIN_SCHEME=<app-identity.sh id>` for every identity under `env -i` (tested in `test-app-identity.sh`) and the literal is only the fallback for a bare `bun exact.mjs`. `app.json` declares the
   setting (`"env": ["SIGNIN_SCHEME"]`) and the variant `one` gives it `news.choir.autoradio.lab.one` (the reference's `variants.<name>.env`; `contract-for-agents`/schema `app.schema.json:1566-1627`). The scheme is the
   app id, so two installs do not share one; `signin-sheet.test.ts` S8 and the Go test `TestDeviceReturnSchemesAreTheAppsInAppJSON` keep app.json, app.ts and the server's list together. A web test run with
@@ -57,9 +87,9 @@ shared code (account.contract)           Swift (ChoirSignIn, unchanged but for d
   128 of `A-Za-z0-9_-`; anything else is **not an error**: the decision is recorded, the key is collected by the poll, and `return_to` is left out (the sheet stays open, the page says "Close this window to return to the
   app"). A hint never refuses an approval and answers nothing about a code (an unknown code is the same 404 with or without it). `return_to` exists only after a decision, only from the list, and never echoes
   the client's values. The page follows `return_to` only if it has exactly the shape `<the scheme it sent>:/signed-in?state=<the state it sent>` (`frontend/src/lib/device-return.js`). Without `return` the page and the response are as they were.
-- **Why the begin and poll are still Swift.** The device code and the key must not pass through shared code, and the key's Keychain item is written by native code (account-boundary design). That, and only that, is
-  why `ChoirSignIn` stays; it lost its `openURL` and the native `choirOpenApproval` call, and the native boundary ceiling fell (lines 6224 to 6221, names 30 to 29).
-- **Logs** (shared code, ids only): `signin: sheet opened`, `signin: sheet returned`, `signin: sheet cancelled`, `signin: sheet failed status=<n>` (or `(no callback)`, `(not our link)`, `(no session)`).
+- **Why the begin, the poll request and the key write are still Swift.** The device code and the key must not pass through shared code, and the key's Keychain item is written by native code (account-boundary design).
+  That, and only that, is why `ChoirSignIn` stays. It lost its loop, its status, its close flag and its browser call, and the native boundary ceiling fell (the new numbers are in `scripts/autoradio-native-ceiling.txt`, lowered with `--update`, never by hand).
+- **Logs** (shared code, ids only, no codes and no links): `signin: sheet opened`, `signin: sheet returned`, `signin: sheet cancelled`, `signin: sheet failed status=<n>` (or `(no callback)`, `(not our link)`, `(no session)`), and one line per attempt transition, `signin: attempt <short id> <phase>`.
 
 ## Not done here, and why
 
