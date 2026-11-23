@@ -37,7 +37,10 @@ exit 0
 B
 chmod +x "$T/bin/bun"
 printf "%s\n" "$(cd "$M" && pwd -P)" > "$T/tree"
-APPJSON="$M/AutoradioLab/app.json"; SUM0="$(shasum -a 256 < "$APPJSON")"
+APPJSON="$M/AutoradioLab/app.json"; SUM0="$(shasum -a 256 < "$APPJSON" 2>/dev/null)"
+# the byte checks below compare two checksums: with no shasum both are empty and every one of them would pass
+command -v shasum >/dev/null 2>&1 && ok "shasum is there" || no "shasum is missing: the app.json byte checks cannot run"
+[ -n "$SUM0" ] && ok "app.json has a checksum to compare against" || no "app.json checksum is empty: the byte checks would pass on two empty strings"
 run_build() { # run_build <command...>: over the stubs, the Bun log cleared first
   : > "$T/bin/bun.log"
   env HOME="$T/home" BUN="$T/bin/bun" ALLOW_NO_MODELS=1 AUTORADIO_BUILD_TREE_FILE="$T/tree" "$@" > "$T/out.txt" 2>&1; rc=$?; [ -n "${TEST_DEBUG:-}" ] && cat "$T/out.txt" >&2; return $rc
