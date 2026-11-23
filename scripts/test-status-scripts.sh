@@ -1064,6 +1064,47 @@ PY
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr9.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
 check "W10 the run's first search precedes the first read: only the gaps that start in the console count (2), the same-second read counts, one gap has none (1)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_no_successful_read\"],d[\"console_span_runs\"])==(2,1,1), d" "$root/out"'
 
+# status-search-reads, the reformulation measures (2026-11-22: 55 runs sent 157 searches, 2.85 per
+# run, 4.24 per searching run; the five heaviest runs sent 46%; 31% of later searches had no
+# read since the previous one; 55 of 56 Reports "named a gap" because the log counted any
+# "missing:" line). Failure list, written before the code:
+#  X1  the mean per run is taken over searching runs only, or the all-runs mean leaves out a run that had a
+#      brief and sent no search, or the searching-run mean is not printed with its label
+#  X2  the share of searches from the five heaviest runs is wrong (fewer than five runs, ties)
+#  X3  the share of later searches with no read since the previous is not printed or is wrong
+#  X4  a Report line with gap=true but an empty gap_text counts as a real gap; an old line (no gap_text) is
+#      counted as real or dropped from the old gap figure
+#  X5  the gap texts are not listed; the old output lines are gone (W7 reads them)
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+G = lambda ts, run: f"{ts} gateway: search request from autoputer {VM} ( max_results=40 run={run} desk=research conv=c-{run})\n"
+R = lambda ts, run: f"[ 1.0] runtime[1]: {ts} corpus read run={run} desk=research conv=c capture=obj:x held=false via=read\n"
+B = lambda ts, run: f"[ 1.0] runtime[1]: {ts} runtime: research brief run={run} desk=research ms=5 stories=2 captures=3 outcome=delivered digest_tokens=100 digest_story=1 digest_reports=0 digest_passages=1 digest_pointers=0 digest_predecessor=0 digest_ms=9 digest_degraded=- digest_captures=c1\n"
+P = lambda ts, run, gap, text=None: f"[ 1.0] runtime[1]: {ts} runtime: research report run={run} final=true sources=2 from_corpus=1 by_run=1 no_capture=0 claims=1 adds=true gap={gap}" + ("" if text is None else f' gap_text="{text}"') + "\n"
+out = ["##READS\n", R("2026/11/21 04:59:00", "other"), R("2026/11/21 05:00:30", "a"), R("2026/11/21 05:02:30", "a"),
+       "##SUM\n##BRIEF\n", B("2026/11/21 05:00:00", "a"), B("2026/11/21 05:00:01", "h"), B("2026/11/21 05:00:02", "i"),
+       "##GRAPH\n##REPORT\n",
+       P("2026/11/21 05:30:00", "a", "true", "the prefecture's statement"),
+       P("2026/11/21 05:31:00", "b", "false", ""),
+       P("2026/11/21 05:32:00", "c", "true"),
+       "##GW\n"]
+for i in range(6): out.append(G("2026/11/21 05:%02d:00" % i, "a"))
+for i in range(3): out.append(G("2026/11/21 05:%02d:00" % (10 + i), "b"))
+for i in range(2): out.append(G("2026/11/21 05:%02d:00" % (20 + i), "c"))
+for r in "defg": out.append(G("2026/11/21 05:40:00", r))
+open(root + "/sr_frame.txt", "w").write("".join(out))
+PY
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_frame.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
+check "X1 7 searching runs sent 15 searches (2.14 a searching run); 9 runs counted (the two with a brief and no search), 1.67 a run" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"runs\"],d[\"searches\"],d[\"mean_per_run\"],d[\"mean_per_searching_run\"],d[\"runs_all\"],d[\"mean_per_run_all\"])==(7,15,2.14,2.14,9,1.67), d" "$root/out"'
+check "X2 the five heaviest runs (6, 3, 2, 1, 1) sent 13 of 15 searches: 86.7%" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"heaviest5_searches\"],d[\"heaviest5_share_pct\"])==(13,86.7), d" "$root/out"'
+check "X3 8 later searches, 6 with no read since the previous: 75.0%" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_no_successful_read\"],d[\"later_no_read_pct\"])==(8,6,75.0), d" "$root/out"'
+check "X4 the old gap figure counts gap=true lines (2 of 3); real gaps count only lines with a gap_text (1 of 2 that carry one; the old-format line is named, not counted)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"gap_runs\"],d[\"report_runs\"],d[\"real_gap_runs\"],d[\"reports_with_gap_text\"])==(2,3,1,2), d" "$root/out"'
+check "X5 the gap texts are listed" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"gap_texts\"]==[\"the prefecture\x27s statement\"], d" "$root/out"'
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_frame.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
+check "X6 the text report keeps the old lines and adds the new ones" 'grep -q "^runs 7  searches 15  mean per run 2.14" "$root/out" && grep -q "Reports naming a gap (what the corpus lacked): 2 of 3" "$root/out" && grep -q "all runs: 9 (7 searched), mean web searches per run 1.67" "$root/out" && grep -q "five heaviest runs sent 13 of 15 searches (86.7%)" "$root/out" && grep -q "real gaps (a missing line that says something): 1 of 2 Reports" "$root/out" && grep -q "the prefecture" "$root/out"'
+
 # status-calls-by-desk (first design F0). Failure list, written before the code:
 #  D1  a call is counted under the wrong desk, or a line with no desk= is not its own "not-logged-before-F0" row
 #  D2  another computer's call is counted (the paper's and host:* only), or a line outside the window is

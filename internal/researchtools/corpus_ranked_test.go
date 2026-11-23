@@ -276,3 +276,61 @@ func TestInWindowDropsACaptureWithNeitherTimeOnEveryKindOfWindow(t *testing.T) {
 		t.Fatal("no window must keep it")
 	}
 }
+
+// The corpus search tells the run whether the graph answered (2026-11-22: it returned
+// captures in 224 of 224 searches because it falls back to the nearest by meaning, so a
+// run could not tell "the graph lacks this" from "the graph holds ten pages"). Failure
+// list: the result opens with no counts; the words count includes pages found by
+// meaning alone; a zero count is left out of the JSON (omitempty) so the run reads
+// nothing; a search with no word match does not say the graph likely lacks this; the
+// counts do not add up to the captures listed.
+func TestCorpusResultOpensWithHowManyCapturesMatchedTheWordsAndHowManyAreNearOnly(t *testing.T) {
+	a, b, c := rankedObj(t, "a", "Alpha page"), rankedObj(t, "b", "Beta page"), rankedObj(t, "c", "Gamma page")
+	call := func(answer CaptureSearchAnswer) (string, wireCorpusResult) {
+		deps, _ := rankedWorld(t, answer)
+		ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "run-9", OwnerID: "o", ComputerID: "c"})
+		out, err := newSearchWireCorpusTool(deps).Func(ctx, json.RawMessage(`{"query":"alpha"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body wireCorpusResult
+		if err := json.Unmarshal([]byte(out), &body); err != nil {
+			t.Fatal(err)
+		}
+		return out, body
+	}
+	// One page whose text holds the words, two found by meaning alone.
+	out, body := call(CaptureSearchAnswer{
+		HitObjects: []objectgraph.Object{a, b, c},
+		Hits:       []CaptureTextHit{{CaptureID: a.CanonicalID, Snippet: "pa", BodyMatch: true}},
+		FullText:   &CaptureTextInfo{Used: true, Indexed: 3, Captures: 3},
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 3, VectorState: "exact", Entries: []RankedCapture{
+			{CaptureID: a.CanonicalID, Reasons: []string{"text", "meaning"}},
+			{CaptureID: b.CanonicalID, Reasons: []string{"meaning"}},
+			{CaptureID: c.CanonicalID, Reasons: []string{"meaning", "story"}, Stories: []string{"p"}},
+		}},
+	})
+	if !strings.HasPrefix(out, `{"captures_matched_words":1,"captures_near_by_meaning_only":2,`) {
+		t.Fatalf("the result does not open with the two counts: %.160s", out)
+	}
+	if body.MatchedWords != 1 || body.NearByMeaningOnly != 2 || body.MatchedWords+body.NearByMeaningOnly != body.CaptureCount || body.WordsNote != "" {
+		t.Fatalf("counts %d + %d of %d captures, note %q", body.MatchedWords, body.NearByMeaningOnly, body.CaptureCount, body.WordsNote)
+	}
+	// No page holds the words: the counts say 0 and 3, and the result says the graph
+	// likely lacks this.
+	out, body = call(CaptureSearchAnswer{
+		HitObjects: []objectgraph.Object{a, b, c},
+		FullText:   &CaptureTextInfo{Used: true, Indexed: 3, Captures: 3},
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 3, VectorState: "exact", Entries: []RankedCapture{
+			{CaptureID: a.CanonicalID, Reasons: []string{"meaning"}},
+			{CaptureID: b.CanonicalID, Reasons: []string{"meaning"}},
+			{CaptureID: c.CanonicalID, Reasons: []string{"meaning"}},
+		}},
+	})
+	if !strings.HasPrefix(out, `{"captures_matched_words":0,"captures_near_by_meaning_only":3,`) {
+		t.Fatalf("a zero count must be written, not omitted: %.160s", out)
+	}
+	if !strings.Contains(body.WordsNote, "likely lacks") {
+		t.Fatalf("no word matched and the result does not say the graph likely lacks this: %q", body.WordsNote)
+	}
+}

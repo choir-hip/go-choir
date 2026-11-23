@@ -76,10 +76,14 @@ type SearchHit struct {
 	// Held and Read are set on a copy the desk reads, never on the wire.
 	// Held: an earlier search of this run already returned this page.
 	// Read: this run captured it with choir.Read.
+	// A web result is never compared with the corpus: Held does not mean the paper
+	// holds the page (choir.SearchWireCorpus says that).
 	Held bool `json:"held,omitempty"`
 	Read bool `json:"read,omitempty"`
-	// CaptureID is set on a page the paper already held for the run (the corpus
-	// brief): read it with choir.ReadCapture(CaptureID, 0, 0), not a web fetch.
+	// CaptureID is never set: nothing compares a web result with the corpus, so no
+	// search result names a held capture. Removing the field changes the desk protocol
+	// surface (a major step and a new lock), so it stays until that bump is made for
+	// another reason; do not read it.
 	CaptureID string `json:"capture_id,omitempty"`
 }
 
