@@ -28,7 +28,9 @@ func TestRLMResearchOverlayFindsAndReadsTheOwnArchive(t *testing.T) {
 			t.Errorf("research overlay names %q: the reliance link and score are never shown to a desk", absent)
 		}
 	}
-	if len(overlay) > 8000 {
-		t.Errorf("research overlay is %d bytes, the budget is 8000", len(overlay))
+	// Raised from 8000 on 2026-11-22: the stop rule became its own paragraph and the worked
+	// cell reads the event record's outlets (the 8-source target left the role prompt).
+	if len(overlay) > 9500 {
+		t.Errorf("research overlay is %d bytes, the budget is 9500", len(overlay))
 	}
 }

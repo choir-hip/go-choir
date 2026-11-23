@@ -1,8 +1,9 @@
-version: 3
+version: 4
 role: texture
 flags:
   third_person_text: false
 comments:
+  - "v4 2026-11-22: a Cast to research asks for the one thing the frame lacks, names the page to fetch, never asks to corroborate as a goal, carries no detail from memory, and the never-search-again rule covers opening Casts; the two-outlet gate is stated once, with the graph's event record as a source of the second (ten research runs whose objective said corroborate sent 74 of 157 web searches; docs/problems/research-runs-send-reworded-web-searches-2026-11-22.md)."
   - "v3 2026-11-22: the goal is stated: build on and use the corpus, and the story adds to it (owner, 2026-11-22)."
   - "Texture's prompt core (Cut 2 2a): the frame, Write, citations and the turn verbs. The verb list is generated from the module set and appended by the runtime."
   - "Revision-shape rules are the owner direction of 2026-10-10, carried over from the retired run_system overlay."
@@ -48,5 +49,5 @@ body: |
   - Texture never writes programs. Code and test output come only from engineering's evidence.
   - Model priors may shape structure and tone; they are not evidence.
   - Never write that work was dispatched unless its Cast committed.
-  A record that feeds captures into this story (it names captures and no new objective) brings pages the story now holds: read them (choir.ReadCapture) and revise from them first; cast research only for what they leave open, never to search again for what they or the frame already hold. An opening Cast with "succeeds" continues that earlier story: start from what it held.
+  A Cast to research follows these rules. An objective asks for the one thing the frame lacks (a statement, a document, a figure, a place, a date), and names the page to fetch when a lead links to one. Never write "corroborate" or "find independent reporting" as a goal in itself: say what the frame's captures already show and ask for what they do not. It carries no detail that is not in the frame: a detail from memory is not a question. Whatever the frame holds, read it first; cast research only for what it leaves open, never to search again for what the frame already holds. That includes a record that feeds captures into this story (it names captures and no new objective): read them (choir.ReadCapture) and revise from them first. The platform holds a story that cites fewer than two outlets; the second outlet may come from the graph's event record (its outlets and capture ids), not only the web. An opening Cast with "succeeds" continues that earlier story: start from what it held.
   Stop asking for research when its answers stop changing the document and the story is as full as its sources allow.

@@ -51,6 +51,8 @@ type researchFixture struct {
 	payloads []SearchStartPayload
 	// corpus is the capture ids a corpus search (SearchWireCorpus) returns.
 	corpus []string
+	// events are the events a corpus search returns (outlets and capture_ids).
+	events []map[string]any
 	// captureErr makes ReadCapture of a capture id fail (a deleted capture, a
 	// refused read); captureReads counts ReadCapture calls.
 	captureErr   map[string]string
@@ -115,7 +117,7 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				for _, id := range f.corpus {
 					caps = append(caps, map[string]string{"capture_id": id, "url": strings.TrimPrefix(id, "cap:")})
 				}
-				return json.Marshal(map[string]any{"captures": caps})
+				return json.Marshal(map[string]any{"captures": caps, "events": f.events})
 			case ActionReadCapture:
 				// A capture id "cap:<url>" names the capture of that page.
 				var in ReadCapturePayload
@@ -321,22 +323,49 @@ func TestOverlayWorkedCellIsGraphFirstThenTheWebForWhatIsMissing(t *testing.T) {
 	if f.corpusCalls.Load() != 1 || f.captureReads.Load() != 2 || f.reads.Load() != 0 || f.searchCalls.Load() != 0 {
 		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 2, 0, 0", f.corpusCalls.Load(), f.captureReads.Load(), f.reads.Load(), f.searchCalls.Load())
 	}
-	if !strings.Contains(out.Stdout, "outlets read without error: 2") || !strings.Contains(out.Stdout, "report now only if two independent outlets among them support the claim") {
+	if !strings.Contains(out.Stdout, "outlets read without error: 2") || !strings.Contains(out.Stdout, "report when the pages you read answer the question") {
 		t.Errorf("the worked cell did not print its stop test:\n%s", out.Stdout)
 	}
 
-	// The graph holds one outlet: the cell goes to the web for the second, reads its first
-	// five new pages, and says in the packet's notes what came from each.
+	// The graph holds one outlet and the run names nothing lacking: the cell sends no web
+	// search merely because the top hits share an outlet (2026-11-22 traces: the old
+	// gate sent one whenever fewer than two outlets came back).
 	g := newResearchFixture(t)
 	g.corpus = []string{"cap:https://www.bbc.co.uk/a"}
 	cell, hooks = g.session(t)
 	hooks.Begin(SessionFrame{RunID: "run-2"})
 	out = cell(workedCell(t))
-	if !strings.Contains(out.Stdout, "interim packet: 6 sources") || strings.Contains(out.Stdout, "<error") || strings.Contains(out.Stdout, "refused") {
-		t.Fatalf("the worked cell did not go to the web for what the graph lacks:\n%s", out.Stdout)
+	if !strings.Contains(out.Stdout, "interim packet: 1 sources") || strings.Contains(out.Stdout, "<error") || strings.Contains(out.Stdout, "refused") {
+		t.Fatalf("the worked cell must report the one graph page it read:\n%s", out.Stdout)
 	}
-	if g.corpusCalls.Load() != 1 || g.captureReads.Load() != 1 || g.reads.Load() != 5 || g.searchCalls.Load() != 1 {
-		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 1, 5, 1", g.corpusCalls.Load(), g.captureReads.Load(), g.reads.Load(), g.searchCalls.Load())
+	if g.corpusCalls.Load() != 1 || g.captureReads.Load() != 1 || g.reads.Load() != 0 || g.searchCalls.Load() != 0 {
+		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 1, 0, 0", g.corpusCalls.Load(), g.captureReads.Load(), g.reads.Load(), g.searchCalls.Load())
+	}
+
+	// The graph's event record lists a second outlet's capture: the cell reads it from the
+	// graph and sends no web search.
+	e := newResearchFixture(t)
+	e.corpus = []string{"cap:https://www.bbc.co.uk/a"}
+	e.events = []map[string]any{{"outlets": []string{"bbc.co.uk", "itv.co.uk"}, "capture_ids": []string{"cap:https://www.bbc.co.uk/a", "cap:https://www.itv.co.uk/b"}}}
+	cell, hooks = e.session(t)
+	hooks.Begin(SessionFrame{RunID: "run-2e"})
+	out = cell(workedCell(t))
+	if !strings.Contains(out.Stdout, "interim packet: 2 sources") || !strings.Contains(out.Stdout, "outlets read without error: 2") || e.captureReads.Load() != 2 || e.searchCalls.Load() != 0 || e.reads.Load() != 0 {
+		t.Errorf("the event record's second outlet was not read from the graph (capture reads %d, web searches %d):\n%s", e.captureReads.Load(), e.searchCalls.Load(), out.Stdout)
+	}
+
+	// The run names what the pages leave open: the cell goes to the web for that, reads its
+	// first five new pages, and says in the packet's notes what came from each.
+	n := newResearchFixture(t)
+	n.corpus = []string{"cap:https://www.bbc.co.uk/a"}
+	cell, hooks = n.session(t)
+	hooks.Begin(SessionFrame{RunID: "run-2n"})
+	out = cell(strings.Replace(workedCell(t), `lacks := ""`, `lacks := "cabinet changes"`, 1))
+	if !strings.Contains(out.Stdout, "interim packet: 6 sources") || strings.Contains(out.Stdout, "<error") || strings.Contains(out.Stdout, "refused") {
+		t.Fatalf("the worked cell did not go to the web for a named lack:\n%s", out.Stdout)
+	}
+	if n.corpusCalls.Load() != 1 || n.captureReads.Load() != 1 || n.reads.Load() != 5 || n.searchCalls.Load() != 1 {
+		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 1, 5, 1", n.corpusCalls.Load(), n.captureReads.Load(), n.reads.Load(), n.searchCalls.Load())
 	}
 
 	// The graph holds nothing: the web alone.
@@ -362,6 +391,10 @@ fmt.Println(len(pages))`)
 	if !strings.Contains(nudged, "cap-a.example-1") || !strings.Contains(nudged, "cap-b.example-2") {
 		t.Errorf("reads with no packet must be nudged with their capture ids:\n%s", nudged)
 	}
+	// The nudge reports progress; it does not ask the run to read or search on.
+	if strings.Contains(nudged, "read on") {
+		t.Errorf("the interim nudge asks for more reading:\n%s", nudged)
+	}
 }
 
 // The worked cell counts what was read WITHOUT error: a web page that failed is neither a
@@ -374,7 +407,7 @@ func TestOverlayWorkedCellCountsOnlyPagesReadWithoutError(t *testing.T) {
 	f.failing["https://w4.example/p"] = "HTTP 500"
 	cell, hooks := f.session(t)
 	hooks.Begin(SessionFrame{RunID: "run-err"})
-	out := cell(workedCell(t))
+	out := cell(strings.Replace(workedCell(t), `lacks := ""`, `lacks := "cabinet changes"`, 1))
 	if strings.Contains(out.Stdout, "<error") {
 		t.Fatalf("the worked cell failed:\n%s", out.Stdout)
 	}
@@ -408,7 +441,34 @@ func TestResearchRoleAndOverlayStayUnderTheirBound(t *testing.T) {
 	// prompt is to be rewritten as an explanation of the system rather than
 	// rules (owner, 2026-11-16), and a longer explanation must not be refused
 	// by a bound written for the dedupe.
-	if len(overlay) > 12000 || len(raw) > 9000 || len(overlay)+len(raw) > 19000 {
-		t.Fatalf("research overlay %d + role %d chars: past the sanity bounds (12000, 9000, 19000 together)", len(overlay), len(raw))
+	// Relaxed 2026-11-22 to 12000, 10000, 22000: the role's version note and the stop
+	// rule's explanation grew it past 9000 while the 8-source target went.
+	if len(overlay) > 12000 || len(raw) > 10000 || len(overlay)+len(raw) > 22000 {
+		t.Fatalf("research overlay %d + role %d chars: past the sanity bounds (12000, 10000, 22000 together)", len(overlay), len(raw))
+	}
+}
+
+// What "held" means, and where the corpus count lives (2026-11-22: the prompts put
+// "held" beside graph-first text, so a run took it for "the corpus holds it"; in code it
+// means an earlier search of this run returned the page, and SearchHit.CaptureID, said to
+// mark a page the corpus holds, was set nowhere). Failure list: a verb doc says held
+// without saying what it means, or still describes it as the paper's pages; the
+// the SearchWireCorpus doc does not say what zero
+// word matches means or does not name the two counts.
+func TestVerbDocsSayWhatHeldMeansAndWhatTheCorpusCountsMean(t *testing.T) {
+	for _, name := range []string{"Search", "SearchAll"} {
+		doc := strings.Join(strings.Fields(choirFunctionDocs[name].Summary), " ")
+		if !strings.Contains(doc, "held means an earlier search of this run returned the page") || !strings.Contains(doc, "a web result is not compared with the corpus") {
+			t.Errorf("%s doc does not say what held means: %s", name, doc)
+		}
+		if strings.Contains(doc, "pages you already hold") {
+			t.Errorf("%s doc still calls held pages ones you hold", name)
+		}
+	}
+	corpus := strings.Join(strings.Fields(choirFunctionDocs["SearchWireCorpus"].Summary), " ")
+	for _, want := range []string{"captures_matched_words", "captures_near_by_meaning_only", "zero captures_matched_words means no page holds your words, so the graph likely lacks this"} {
+		if !strings.Contains(corpus, want) {
+			t.Errorf("SearchWireCorpus doc lacks %q", want)
+		}
 	}
 }

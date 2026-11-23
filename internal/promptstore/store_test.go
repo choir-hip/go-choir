@@ -136,15 +136,17 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"Search the web only for the stale and missing threads, one question at a time",
 		"read what it returns before you search again",
 		"choir.SearchAll(question, wordings)",
-		"mark each page new or held",
+		"a page is held when an earlier search of this run returned it",
 		"build on and use what the paper already holds",
 		"your Report is an addition to the corpus",
 		"A research run on a story opens with a digest of the graph",
 		"Graph first, then the web",
 		"which claims rest on which capture ids from the graph",
-		"\"adds: ...\" (what this adds to the corpus) and \"missing: ...\" (what the corpus lacked)",
+		"\"adds: ...\" (what this adds to the corpus) and \"missing: ...\" (what the corpus lacked; \"missing: none\" when it lacked nothing)",
 		"A search of the same terms as an earlier one returns that earlier search; one search runs at a time",
-		"a page from a second independent outlet that supports it: report it and do not search again",
+		"A detail you cannot confirm is a finding to report, not a task to keep searching for",
+		"a reworded query that returns the pages you already hold tells you the web lacks it",
+		"say what you looked for and stop",
 	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("research prompt lacks %q", want)
@@ -162,18 +164,34 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 	}
 }
 
-// The research prompt carries the source floor, the pack-everything rule and
-// the early interim packet (problems/ordinary-prompt-path-2026-11-09.md 1.5
-// item 1): read at least 8 independent sources across hosts or say why fewer.
-func TestResearchPromptCarriesTheSourceFloorAndEarlyReport(t *testing.T) {
+// The research prompt reads what the question needs and states one count: no "8
+// independent sources" target and no Searches.Summary pick-list (2026-11-22: ten runs
+// whose objective said "corroborate" sent 74 of 157 searches, and the prompts carried
+// three source counts, 8, 2 and 1; docs/problems/research-runs-send-reworded-web-searches-2026-11-22.md).
+// Failure list: the 8-source target or its pick-list is still there; the prompt does
+// not say the event record's outlets list is a source list; does not say what "enough"
+// is (the platform holds a story citing fewer than two outlets, and the second may come
+// from the event record); or loses the pack-everything rule and the early interim packet.
+func TestResearchPromptReadsWhatTheQuestionNeedsAndStatesOneCount(t *testing.T) {
 	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
 	if err != nil {
 		t.Fatalf("load research prompt: %v", err)
 	}
 	flat := strings.Join(strings.Fields(prompt.Content), " ")
-	for _, want := range []string{"at least 8 independent sources across distinct hosts", "say in the Report why fewer", "Every capture that supports a claim goes in a packet", "as soon as the first source is captured"} {
+	for _, want := range []string{
+		"Read what the question needs",
+		"the graph's event record lists outlets, and that list is a source list too",
+		"The platform holds a story that cites fewer than two outlets; the second outlet may come from the graph's event record (its outlets and capture ids), not only the web",
+		"Every capture that supports a claim goes in a packet",
+		"Send an interim packet when you have a claim you can cite",
+	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("research prompt lacks %q", want)
+		}
+	}
+	for _, absent := range []string{"at least 8 independent sources", "across distinct hosts", "Searches.Summary", "say in the Report why fewer", "as soon as the first source is captured", "mark each page new or held"} {
+		if strings.Contains(flat, absent) {
+			t.Errorf("research prompt still says %q", absent)
 		}
 	}
 }

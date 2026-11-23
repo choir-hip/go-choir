@@ -322,9 +322,9 @@ func (s *ChoirScope) readNoteLines() []string {
 				ids = append(ids[:5:5], fmt.Sprintf("and %d more", len(fresh)-5))
 			}
 			if !l.packetSent {
-				lines = append(lines, fmt.Sprintf("you have %d captured sources and have sent no packet; send an interim packet now (choir.ReportPacket without work_disposition) so Texture can revise while you read on: %s", captured, strings.Join(ids, ", ")))
+				lines = append(lines, fmt.Sprintf("you have %d captured sources and have sent no packet; send an interim packet now (choir.ReportPacket without work_disposition) so Texture can revise: %s", captured, strings.Join(ids, ", ")))
 			} else {
-				lines = append(lines, fmt.Sprintf("you have %d captured sources no packet carries yet: %s; send another interim packet now (choir.ReportPacket without work_disposition) so Texture can revise while you read on", len(fresh), strings.Join(ids, ", ")))
+				lines = append(lines, fmt.Sprintf("you have %d captured sources no packet carries yet: %s; send another interim packet now (choir.ReportPacket without work_disposition) so Texture can revise", len(fresh), strings.Join(ids, ", ")))
 			}
 		}
 	}
