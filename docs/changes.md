@@ -23,6 +23,22 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 | Snapshot capture in one pass (no store-sized scratch copy) | not started; the reader half landed 11-22 | `lane/snapshot-one-pass` |
 | Redesign of capture (subjects and mentions), offline slice | **failed all four of its kill lines** (claim C192); design panel not yet run | `lane/offline-slice-r0` |
 | "Feeds reported by accounts" | removed after three failed reviews; the phone still posts to the 404 route | main |
+| Phone: onboarding and settings, the reader, the edition picks as shared code | built; not reviewed, or sent back twice | `lane/exact-onboarding-settings`, `lane/exact-reader`, `lane/exact-edition-picks` |
+| Phone: the Texture editor as shared code | stopped for the owner after a third send-back; part landed | `lane/exact-convo-edit` |
+| Phone: an earlier account boundary mechanism, and a settle fix | red; one review seat outstanding | `lane/account-boundary-l1`, `lane/account-settle-memo` |
+| Snapshot capture streaming pages (no scratch copy) | red; stopped for the owner 11-20; main has moved 22 commits in its files | `lane/snapshot-stream` |
+| The old root desk on every computer | red; **superseded by the first design**, which retires it | `lane/root-desk-on`, `lane/root-desk-r3` |
+| Owner acts always enforced | red; held for the owner; two of three commits already on main | `lane/owner-act-enforce` |
+| A planned restart cancels an in-flight snapshot capture | red; parked after five rounds | `lane/restart-cancels-capture` |
+| Restore installs at boot (design and failure list) | parked | `lane/restore-boot-install` |
+| A management reply does not wake research | unreviewed | `lane/reply-wake-fix` |
+| Dispatcher: a log line per slow wake | its suite fails on the build machine | `lane/dispatch-deadlines` |
+| Search starting from Ceramic | kept by the owner's word; main has moved 80 commits in its files | `lane/search-ceramic` |
+| Full-band voice capture while the radio plays | one commit, not merged | `lane/voice-fullband` |
+
+Counted 2026-11-23: 520 lane branches on the remote; 468 are landed, 13
+superseded, 11 evidence only, 26 are distinct live work (the rows above and
+the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-22
 
