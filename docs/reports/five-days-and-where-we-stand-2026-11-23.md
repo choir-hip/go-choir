@@ -34,7 +34,7 @@ A fix to a validator that accepted a number no decoder can hold. The fuzzer foun
 
 And a hole in our own security gate. A change that widens what a guest computer can reach on the host could pass with no security statement. That took four review rounds, because each round found more unlisted places. I changed the approach from listing functions to listing whole packages, and it landed this afternoon.
 
-One thing I landed and took back. A research prompt change deployed at three in the morning Eastern, and research runs went from about thirteen an hour to about sixty. I reverted it at ten thirty. I had written down a prediction first: runs under twenty-five an hour in each of the next two hours. The first hour had forty-four. The second had twelve. So my prediction was false as written, and the direction was right an hour late. I do not know why the lag.
+One thing I landed and took back. A research prompt change deployed at three in the morning Eastern, and research runs rose. I first said from about thirteen an hour to about sixty, a factor of four. That compared night hours before with day hours after. Like for like, it was about a factor of two. I reverted it at ten thirty. I made two predictions about the revert, each with a line of twenty-five runs an hour, and both were false. The hours since read forty-four, twelve, twenty-nine, twenty-four and thirty-four. The same hour yesterday, before the change, had thirty-two. So the revert roughly halved the runs, and my line ignored the time of day. A clean comparison needs tomorrow morning's hours.
 
 This afternoon you gave me a new search key. It is on the server and answering. I should tell you what I saw when I checked: it is the only search provider answering. The other three paid ones are all out of quota.
 
@@ -168,7 +168,7 @@ I told you the Nvidia story's score was stale without reading it. It was fresh, 
 
 I then wrote this letter as though making importance stateful were a new idea, and listed your own rulings as open questions. You had designed it two nights ago, with me. This is the second time this week you have had to tell me we already redesigned something. The cause is that I answer from what is built and do not read the design first.
 
-I made a prediction with a line that the old data crossed on its own two hours in twelve.
+I made two predictions about research runs with a line that ignored the time of day, and both were false. I also told you the rise was fourfold when it was about twofold.
 
 I switched a checkout under a running landing script. I queued a proof under a name the queue refuses. I told you the new train was slower, and then that it left silences between entries, and both were misreadings.
 
