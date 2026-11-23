@@ -8,12 +8,16 @@
 // the answer is one of three words, and whether the phone is signed in is whatever the Keychain says (account-state.ts), which the native poll updates.
 // A callback with no approval behind it therefore changes nothing; the poll goes on asking the server.
 //
+// If the sheet cannot open (501 no browser, 502, a throw), the card offers the same link in the system browser (account.contract / onboarding.contract: Exact's `href`), and the
+// native poll goes on as before: the sign-in has no path that is only the sheet.
+//
 // Which scheme: `authCallback()` is this build's granted `auth.callback` (app.ts: `<app id>:/signed-in`; each variant has its own id, so its own scheme). The
 // page is told the scheme's NAME (not a URL); the server builds the callback from a list of the apps that exist (internal/auth/device_login.go).
 
 export const RETURN_PATH = '/signed-in';
 
-export type SheetResult = { outcome: 'returned' | 'cancelled' | 'failed'; message: string };
+/** `link` is the verification link the sheet was opened for (not secret: the card shows its code): the contract acts on a result only when it is the pending sign-in's own. */
+export type SheetResult = { outcome: 'returned' | 'cancelled' | 'failed'; message: string; link: string };
 export type SheetEnv = {
   /** The one server origin the grant `auth.session` names. */
   origin: string;
@@ -50,14 +54,15 @@ export function sheetUrl(link: string, callback: string, state: string, origin: 
 
 const nonce = (): string => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');   // 32 hex characters
 
-const FAILED = 'The sign-in window could not open. Tap Open the approval page to try again.';
+const FAILED = 'The sign-in window could not open. Open it in your browser instead; this screen finishes the sign-in once you approve.';
 
 /** Open the approval page in the sheet and say how the sheet ended. Never throws; never carries the callback's URL. */
 export async function signInSheet(link: string, env: SheetEnv): Promise<SheetResult> {
-  const failed = (why: string): SheetResult => { env.log(`signin: sheet failed${why}`); return { outcome: 'failed', message: FAILED }; };
+  const failed = (why: string): SheetResult => { env.log(`signin: sheet failed${why}`); return { outcome: 'failed', message: FAILED, link }; };
   let callback: string;
   try { callback = env.authCallback(); } catch { return failed(' (no callback)'); }
-  const state = nonce();
+  let state: string;
+  try { state = nonce(); } catch { return failed(' (no nonce)'); }
   const url = sheetUrl(link, callback, state, env.origin);
   if (url === null) return failed(' (not our link)');
   if (typeof env.openAuthSession !== 'function') return failed(' (no session)');
@@ -65,10 +70,10 @@ export async function signInSheet(link: string, env: SheetEnv): Promise<SheetRes
   try {
     await env.openAuthSession(url, { callback, state, ephemeral: false });      // not ephemeral: the sheet must share the browser's passkeys and session
     env.log('signin: sheet returned');
-    return { outcome: 'returned', message: '' };
+    return { outcome: 'returned', message: '', link };
   } catch (e) {
     const status = (e as { status?: unknown } | null)?.status;
-    if (status === 499) { env.log('signin: sheet cancelled'); return { outcome: 'cancelled', message: '' }; }
+    if (status === 499) { env.log('signin: sheet cancelled'); return { outcome: 'cancelled', message: '', link }; }
     return failed(typeof status === 'number' ? ` status=${status}` : '');
   }
 }

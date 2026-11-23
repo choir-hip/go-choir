@@ -11,3 +11,5 @@ shape SignOutResult
 shape SignInSheet
   outcome: string
   message: string
+  // The verification link this sheet was opened for: a result counts only for the sign-in that is still pending on that link.
+  link: string

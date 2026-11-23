@@ -9,10 +9,13 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 "$HERE/scripts/check-exact-pin.sh" || exit 1      # the wrong Exact must never build quietly (see exact.pin)
 # Which app: AR_VARIANT or AR_APP_ID (app-identity.sh). Exact reads it as EXACT_VARIANT, which `env -i` below would drop unless it is passed on.
 VARIANT="$("$HERE/scripts/app-identity.sh" variant)" || exit 1
+# The sign-in callback scheme is the app's id (app.ts SIGNIN_SCHEME, grant auth.callback): given to Exact explicitly for every identity, so the default never rests on a
+# literal fallback and an empty value in the caller's environment cannot make a dead grant (app.ts reads it with `??`; the build refuses `||`).
+SCHEME="$("$HERE/scripts/app-identity.sh" id)" || exit 1
 BUN="${BUN:-$HOME/.bun-1.4.2/bin/bun}"
 "$HERE/scripts/gen-build-info.sh"                 # About names the commit: never build from the previous commit's build-info.gen.ts
 cd "$HERE/AutoradioLab" || exit 1
-exec env -i HOME="$HOME" USER="$USER" TMPDIR="${TMPDIR:-/tmp}" BUN="$BUN" ${EXACT_SIM:+EXACT_SIM="$EXACT_SIM"} ${VARIANT:+EXACT_VARIANT="$VARIANT"} \
+exec env -i HOME="$HOME" USER="$USER" TMPDIR="${TMPDIR:-/tmp}" BUN="$BUN" ${EXACT_SIM:+EXACT_SIM="$EXACT_SIM"} ${VARIANT:+EXACT_VARIANT="$VARIANT"} SIGNIN_SCHEME="$SCHEME" \
   PATH="$(dirname "$BUN"):$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin" \
   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer EXACT2="$HERE/.exact-src" EXACT_FEEDBACK=0 \
   "$BUN" exact.mjs "$@"

@@ -653,6 +653,9 @@
     },
     {
       "send": "choirCancelSignIn",
+      "options": {
+        "by": "string"
+      },
       "answers": "LabState"
     },
     {

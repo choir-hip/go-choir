@@ -58,9 +58,10 @@ members Autoradio
   mutation up as shape LabState
 
   action signIn
+    signInEnded = none
     send acct = choirSignIn()
   action cancelSignIn
-    send acct = choirCancelSignIn()
+    send acct = choirCancelSignIn(by="card")
   // The approval page opens in the system sign-in sheet over the app (signin-sheet.ts), not in the browser. Swift began the flow and polls for the key; this only opens the page.
   // Once for each begun sign-in (the key is its link), and again when the owner taps "Open the approval page".
   action openApproval
@@ -68,14 +69,15 @@ members Autoradio
   task openSheet when au.status == "pending" and au.verificationURL != "" key=au.verificationURL
     change(openApproval)
   mutation signInEnded as shape SignInSheet then sheetEnded
-  derive sheetOutcome = match signInEnded { case some(r) => r.outcome, case none => "" }
+  derive sheetOutcome = match signInEnded { case some(r) => (r.link == au.verificationURL ? r.outcome : ""), case none => "" }
   // The sentence for a sheet that could not open (empty otherwise): shown on the code screen.
-  derive sheetNote = match signInEnded { case some(r) => r.outcome == "failed" ? r.message : "", case none => "" }
-  // The owner closed the sheet: the pending code is abandoned (Swift stops polling; the code expires on the server as it always did), and the card goes back to signed out with no message.
-  // A callback ("returned") does nothing here: the poll that is already running is what learns the key, and a callback with no approval leaves the poll asking.
+  derive sheetNote = match signInEnded { case some(r) => (r.link == au.verificationURL and r.outcome == "failed" ? r.message : ""), case none => "" }
+  // The owner closed the sheet. That is a hint, like the callback: the page may have approved without closing it. Native is asked (`by="sheet"`) to let its poll answer first: a key is
+  // taken, and only a "still pending" answer ends the sign-in (back to signed out, no message; the code expires on the server as it always did). Only this sign-in's own result counts
+  // (the link). A callback ("returned") and a failed sheet do nothing here: the poll that is already running learns the key.
   action sheetEnded
     if sheetOutcome == "cancelled" and au.status == "pending"
-      send acct = choirCancelSignIn()
+      send acct = choirCancelSignIn(by="sheet")
   action signOut
     // The unsent text of a message being written belongs to the account that is leaving (it may quote that account's mail).
     mailFor = ""

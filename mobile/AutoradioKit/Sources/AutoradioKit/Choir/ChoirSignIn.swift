@@ -1,7 +1,6 @@
 import Foundation
 
-// Sign-in by the device flow: begin, show the code, poll for the key, store it. The approval page is opened by shared code in the system sign-in sheet
-// (AutoradioLab/signin-sheet.ts); this stays native only because the device code, the poll and the Keychain write are here and must not pass through shared code.
+// Sign-in by the device flow: begin, show the code, poll, store the key. Shared code opens the approval page (signin-sheet.ts); the device code, poll and Keychain write stay native.
 // The key goes to the KeyStore and nowhere else: not an event, not a record, not the UI state.
 
 public struct ChoirAuthState: Codable, Sendable, Equatable {
@@ -19,6 +18,7 @@ public final class ChoirSignIn: @unchecked Sendable {
     private let lock = NSLock()
     private var state = ChoirAuthState()
     private var task: Task<Void, Never>?
+    private var closeOnPending = false   // the owner closed the sign-in sheet (a hint, not proof of "no": the page may have approved): the running poll answers first, only "still pending" ends it
     private let env: ChoirEnvironment
     public var baseURL: String
     public var onChange: (@Sendable () -> Void)?
@@ -46,7 +46,7 @@ public final class ChoirSignIn: @unchecked Sendable {
     /// Start the flow. Returns once the code is known (or begin failed); polling continues in the background.
     @discardableResult
     public func begin() async -> ChoirAuthState {
-        lock.lock(); task?.cancel(); task = nil; lock.unlock()   // a second sign-in cancels the first
+        lock.lock(); task?.cancel(); task = nil; closeOnPending = false; lock.unlock()   // a second sign-in cancels the first, and forgets a close of the first's sheet
         update { $0.status = "pending"; $0.userCode = ""; $0.verificationURL = ""; $0.message = "contacting \(baseURL)" }
         let c = client()
         do {
@@ -81,7 +81,9 @@ public final class ChoirSignIn: @unchecked Sendable {
                 let o = try r.object()
                 if r.status == 400 {
                     switch o["error"] as? String ?? "" {
-                    case "authorization_pending": continue
+                    case "authorization_pending":
+                        if lock.withLock({ closeOnPending }) { update { $0.status = "idle"; $0.userCode = ""; $0.verificationURL = ""; $0.message = "" }; return }   // sheet closed and still nobody approved: abandoned (an approval would have been the key)
+                        continue
                     case "slow_down": wait += 5; continue
                     case "access_denied": update { $0.status = "failed"; $0.userCode = ""; $0.message = "the sign-in was denied" }; return
                     case "expired_token": update { $0.status = "failed"; $0.userCode = ""; $0.message = "the code expired; sign in again" }; return
@@ -111,6 +113,7 @@ public final class ChoirSignIn: @unchecked Sendable {
         }
     }
 
+    public func sheetClosed() { lock.lock(); closeOnPending = true; lock.unlock() }
     /// Stop waiting for an approval; keeps any key already stored.
     public func cancel() {
         lock.lock(); task?.cancel(); task = nil; lock.unlock()
