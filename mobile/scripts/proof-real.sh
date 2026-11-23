@@ -689,12 +689,22 @@ if [ -n "$PLAY_BAR" ]; then
   bad "radio page: Built on does not show a raw route" 'radio-builton-0\] label="Open /?pub/' "$BR"
   chk "radio page: the status line says On air or Paused" '\[radio-status\] "(On air|Paused)"' "$BR"
   bad "radio page: the status line is not an error" '\[radio-status\] "Can.t speak' "$BR"
-  # The position moves while it plays with NO tap between two reads (the simulator proof only ever read after a tap, which a stale position passes: owner, on a phone, 2026-11-22). The labels of the
-  # last two dumps of the drive, taken five seconds apart with nothing pressed between them: a story shows radio-elapsed (spoken, an estimate from the voice's clock), podcast audio queue-elapsed.
-  ELAPSED=$(grep -oE '\[(radio|queue)-elapsed\] "[0-9:]+"' "$BR" | tail -2)
-  E1=$(printf '%s\n' "$ELAPSED" | head -1); E2=$(printf '%s\n' "$ELAPSED" | tail -1)
-  if [ -n "$E1" ] && [ "$(printf '%s\n' "$ELAPSED" | wc -l | tr -d ' ')" = 2 ] && [ "$E1" != "$E2" ]; then echo "ok: position: the elapsed label moved with no tap between two reads ($E1 -> $E2)"; else echo "MISSING: position: the elapsed label did not move in five seconds with no tap ($E1 -> $E2)"; FAILS="$FAILS [position moves while playing]"; fi
-  chk "position: the page still says On air at the second read" '\[radio-status\] "On air"' "$BR"
+  # The position moves while it plays with NO tap between two reads (the simulator proof only ever read after a tap, which a stale position passes: owner, on a phone, 2026-11-22). Two separate dumps of the
+  # drive (tseg: the text before each screenshot), taken five seconds apart with nothing pressed between them. The SAME element is read in both (a story shows radio-elapsed, spoken, an estimate from the
+  # voice's clock; podcast audio queue-elapsed), on the SAME entry (its title in both: the story must not have ended and another begun in the window), and an absent element fails.
+  tseg "$BR" real-70b-elapsed-a > "$SHOTS/seg-elapsed-a.txt"; tseg "$BR" real-70c-elapsed-b > "$SHOTS/seg-elapsed-b.txt"
+  ELID=""; E1=""; E2=""
+  for id in radio-elapsed queue-elapsed; do
+    A=$(grep -oE "\\[$id\\] \"[0-9:]+\"" "$SHOTS/seg-elapsed-a.txt" | head -1 | sed -E 's/^[^"]*"//; s/"$//'); B=$(grep -oE "\\[$id\\] \"[0-9:]+\"" "$SHOTS/seg-elapsed-b.txt" | head -1 | sed -E 's/^[^"]*"//; s/"$//')
+    if [ -n "$A" ] && [ -n "$B" ]; then ELID=$id; E1=$A; E2=$B; break; fi
+  done
+  T1=$(grep -oE '\[(radio-onair-title|bar-text)\] "[^"]*"' "$SHOTS/seg-elapsed-a.txt" | head -1); T2=$(grep -oE '\[(radio-onair-title|bar-text)\] "[^"]*"' "$SHOTS/seg-elapsed-b.txt" | head -1)
+  if [ -z "$ELID" ]; then echo "MISSING: position: no elapsed label (radio-elapsed or queue-elapsed) in BOTH of the two dumps taken with no tap between"; FAILS="$FAILS [position moves while playing]"
+  elif [ -z "$T1" ] || [ "$T1" != "$T2" ]; then echo "MISSING: position: the entry on air is not the same in both dumps, or its title was not read ([$T1] / [$T2]), so the labels cannot be compared"; FAILS="$FAILS [position moves while playing]"
+  elif [ "$E1" != "$E2" ]; then echo "ok: position: $ELID moved with no tap between two dumps of $T1 ($E1 -> $E2)"
+  else echo "MISSING: position: $ELID did not move in five seconds with no tap ($E1 -> $E2)"; FAILS="$FAILS [position moves while playing]"; fi
+  chk "position: the page still says On air at the second read" '\[radio-status\] "On air"' "$SHOTS/seg-elapsed-b.txt"
+  rm -f "$SHOTS/seg-elapsed-a.txt" "$SHOTS/seg-elapsed-b.txt"
   bad "bar: no error line held the bar" '\[bar-text\] "(Could not|Something went wrong|The voice stopped)' "$BR"
 fi
 # the search drives: the paper-wide rows land under the typed query, and a query nothing matches says so (the answer is for THIS query: a stale or never-merged answer shows neither)
