@@ -14,13 +14,13 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 
 | What | State | Where |
 | --- | --- | --- |
-| Phone: the rest of the pages moved to shared code ("the train") | built; fails 7 checks of its own real-host proof; never on a phone | `lane/exact-train1` |
-| Phone: dead native code removed | built, reviewed once; waits on the train | `lane/native-dead-code` |
+| Phone: the rest of the pages moved to shared code ("the train") | re-cut with its review fixes, the radio fixes, the dead-code lane and the sign-in sheet's app part as one branch; waits on the simulator proof | `lane/train2` (was `lane/exact-train1`) |
+| Phone: dead native code removed | folded into `lane/train2`; waits on the train's proof | `lane/native-dead-code` |
 | Phone: one data folder per account, sign-out wipes it | 12 review rounds, 5 failed drill runs; stopped for a structural assessment | `lane/account-partition-s1` |
 | Research prompts: one source count, a stop rule, a real gap measure | sent back by its review (four blocking findings); rework pushed, re-review owed | `lane/research-frame` |
 | Phone: "Autoradio 1", the train as a second app beside the first | **on the owner's phone since 2026-11-23 01:33Z**; seven defects found there | `lane/exact-side-by-side` |
 | Phone: position moves while playing; a closed answer card stays closed; the queue is described to the server as it is; the microphone opens on a first launch | built; one review seat accepted with six fixes, being applied; not on the phone | `lane/exact-ar1-next` |
-| Phone: sign-in in a sheet over the app | built (red: the approval route and page change); seat 1 accepted with three fixes, seat 2 running | `lane/signin-sheet` |
+| Phone: sign-in in a sheet over the app | built (red: the approval route and page change); seat 1 accepted with three fixes, seat 2 running; its app half is folded into `lane/train2`, its server half lands on main from `lane/signin-server` | `lane/signin-sheet` |
 | A voice ask searches the paper | not started. Today the answering model has no tools and sees at most 40 front-page titles | none |
 | `choir trace run`: one run, step by step, with the reasons its record holds | built; the "model calls 0" defect fixed (the phase is in the payload, not the record field); tested on fixtures only, [page](reference/TRACE-RUN.md); not landed | `lane/trace-run` |
 | Research prompts: one source count, a stop rule, a real gap measure | built; under test; not reviewed | `lane/research-frame` |
@@ -44,6 +44,20 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 Counted 2026-11-23: 520 lane branches on the remote; 468 are landed, 13
 superseded, 11 evidence only, 26 are distinct live work (the rows above and
 the first table's). Seven designs exist only on lanes.
+
+## 2026-11-23
+
+### Phone: the train as one branch (`lane/train2`, orange; the sign-in part red)
+- **What:** the phone's pages and their logic moved from Swift to shared Exact code, as one branch cut from `lane/exact-ar1-next` (the train and the radio fixes) with three lanes merged in: reader, search, imported documents and the computer page (`lane/train-fix-ac`); the native review fixes (old-build files wiped, audio tests restored, dead Swift deleted, the earlier native-dead-code lane, the voice list made true, the native ceiling set to the true 49 files) (`lane/train-fix-d`); and the sign-in sheet's app part (below). Added here: the page the voice holds (`pageText`) carries the account generation it was read under and native drops a stale one, the same rule `radioSet` and `editionMirror` have; the unread `level` verb case and `LiveAudio.preparedSpeech` are deleted. Areas on shared code: reader, search, imported documents, the computer page, mail, files, podcasts, takes, the notebook, the run sheet, the radio and its queue, sign-in, sync.
+- **Why:** the owner's rule: only voice is native ("get everything in exact, as much as possible").
+- **Proof:** bun suite 1379 tests pass on the merged tree. Simulator proof run id: filled in by the lead. Not on a phone.
+- **Replaced:** the Swift of those pages and the dead native code (native non-voice code is 49 files, 5834 lines, 27 names; the ceiling rose 3 lines over the review lane's 5831 for the generation guard above). **Undo:** revert the merge.
+
+### Phone: sign-in opens the approval page in the system sign-in sheet (app part of `lane/signin-sheet`, orange)
+- **What:** Sign in opens the device-flow approval page in Exact's system sign-in sheet (`openAuthSession`), from shared code; one sign-in attempt is one state machine in shared code (`signin-attempt.ts`); native keeps the device code, one poll and the key write. The return from the approval page is only a signal: the poll learns the key. `app.json` declares `SIGNIN_SCHEME` per variant. The server half (the approval route and page return, red) lands from `lane/signin-server`, not here.
+- **Why:** sign-in left the app for a full browser.
+- **Proof:** shared-code tests only (`signin-sheet.test.ts`, `signin-attempt.test.ts`); **owed on the owner's phone.** The Go test `TestDeviceReturnSchemesAreTheAppsInAppJSON` on main is the relaxed form; the stricter one from `internal/auth` must replace it after this merges.
+- **Replaced:** Swift's browser call and the `choirOpenApproval` op. **Undo:** revert the commits.
 
 ## 2026-11-22
 
