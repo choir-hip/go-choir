@@ -19,6 +19,22 @@ mission we add. so we can keep /goal running continuously"). It lists the
 live missions below and holds only what they share: the landing order and
 the machines.
 
+## Added 2026-11-23: the metamission holds every plan
+
+The owner, 2026-11-23: "i want the metamission to contain all of our plans
+going forward... what we stay on with /goal for the next multiple weeks."
+Five missions were added as intentions, each with its own file:
+[records and measurement](definitions/choir-records-and-measurement-2026-11-23.md) (first),
+[the voice pipeline](definitions/choir-voice-pipeline-2026-11-23.md),
+[shipping the app](definitions/choir-shipping-the-app-2026-11-23.md),
+[operations](definitions/choir-operations-podcasts-and-providers-2026-11-23.md) and
+[Autoradio in the desktop](definitions/choir-autoradio-in-the-desktop-2026-11-23.md) (deferred).
+Android is deferred on the owner's word; storage runs in the background. The
+design is being worked through with the owner in conversation
+([session record](design/design-session-2026-11-23.md),
+[ideal-form draft](design/ideal-form-draft-2026-11-23.md)); experiments come
+before the engine's design is decided.
+
 ## Live goal from 2026-11-22: Autoradio on Android
 
 The owner, 2026-11-22, with two old Android phones plugged in: "lets try to

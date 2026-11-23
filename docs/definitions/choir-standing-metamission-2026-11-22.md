@@ -32,6 +32,36 @@ metamission:
       status: working
       depends_on: []
       note: 'Android: Autoradio running on an old Motorola from the shared codebase, and a measured table of which on-device models such a phone can run. Stations A0 to A5. Added on the owner''s word, 2026-11-22. Deferred on the owner''s word, 2026-11-23: no station starts until they say.'
+    - id: M5
+      path: docs/definitions/choir-records-and-measurement-2026-11-23.md
+      readiness: intent
+      status: working
+      depends_on: []
+      note: 'track T3, first: durable decision and turn records, the measure of the paper against the world with its cost, and the replay experiments (E1 to E5) that decide the engines design. Intent; the first three experiments read only captures and may start on the owners word.'
+    - id: M6
+      path: docs/definitions/choir-voice-pipeline-2026-11-23.md
+      readiness: intent
+      status: pending
+      depends_on: []
+      note: 'track T1: the voice pipeline as the owner specified it, on the phone: kept choices, model speech detection, the named recogniser, model end of turn, the same sound with voice on, the handover to the desk, spoken onboarding. Intent; written up after the design discussion.'
+    - id: M7
+      path: docs/definitions/choir-shipping-the-app-2026-11-23.md
+      readiness: intent
+      status: pending
+      depends_on: []
+      note: 'track T5: TestFlight and the App Store; the radio signed out, an account made and deleted in the app, consent and permissions, screenshots and previews, reviewer notes, a release an agent runs. Intent; the owners account steps come first.'
+    - id: M8
+      path: docs/definitions/choir-operations-podcasts-and-providers-2026-11-23.md
+      readiness: intent
+      status: pending
+      depends_on: []
+      note: 'part of track T4: podcast transcription on a durable host and model calls routed by each providers reported headroom. Intent; built after the plan is defined (owner, 2026-11-23).'
+    - id: M9
+      path: docs/definitions/choir-autoradio-in-the-desktop-2026-11-23.md
+      readiness: intent
+      status: pending
+      depends_on: []
+      note: 'Autoradio as an app in the choir.news desktop, listening only with a local model. Intent; deferred until after M4 (owner, 2026-11-23).'
 start:
   captured_at: 2026-11-22T05:02Z
   source:
@@ -58,7 +88,7 @@ value:
   better_means: 'the landing slot is never idle while a reviewed candidate waits, and no mission stalls because another holds the session''s attention'
   goodharting_would_be: 'landings batched across missions to save a deploy; a mission marked working here that nobody has touched in a day; this file growing station detail'
 homotopy:
-  realism_axis: 'three missions now; another is one more station entry and its own file'
+  realism_axis: 'nine missions; another is one more station entry and its own file'
 boundaries:
   mutation_class: green for this file; each mission states its own
   authority_sources:
@@ -70,6 +100,7 @@ boundaries:
     - '"what we have lost sight of is supervision. we havent been using the self-development feature which has built-in texture supervision... i have put to the side much of my beliefs on supervision to just let models go wild. and it hasnt yielded great results actually. so, we should get more serious" (2026-11-22). Reading: fewer agents at once, each supervised; work on the product moves back toward the product''s own supervised self-development path, and the lead says so when a change goes around it. How and when that path is used again is the owner''s to direct; the lead proposes.'
     - '"we should focus on our core data systems, our core backend infra, our key algorithms and agentic systems, and let the ux stay semi-constant. well, thats something we can do once the ux lands. the exact cutover has been essential for that... i dont want to keep it as merely an ios app" (2026-11-22). Reading: the Exact cutover lands (M1), then the experience holds still while the core is rebuilt (M2, M3). M4 (Android, the model benchmark) and adding sources are written down and wait; adding sources comes after the redesign ("adding the sources comes later. for now we need to redesign").'
     - '"I guess I see 2 tracks... The first one is to the voice system and pipeline. The second one is to the underlying engine, the root texture, the auto radio desk, and the source capture and corpus ingestion pipeline, and subsequent processing with research into publication and post-publication including personalization"; on records and measurement as a third: "Yes, that matches as a third track"; "for the fourth pile, we can really defer the Android stuff... the operations with podcast transcription as something that we want to do earlier, and synthetic as well. I kind of want to do those things after we get our plan defined. So then the building incorporates them. Same for the exact cutover, app faults"; "let''s do these wins in the background. Basically, we should be including all these tracks in the metamission so you can dispatch work as we are planning and defining other work. The storage stuff can be done before and while we do other stuff"; "let''s go slow here, and work through the design iteratively in the chat. So we can then update our docs" (2026-11-23). Reading (the lead''s): four tracks. T1 voice: what runs on the phone (speech detection, recognition, turn-taking, echo, the local answer, the audio session). T2 the engine: intake, the root Texture, the Autoradio desk, research, publication, personalisation (M2 is its file and is rewritten after the design discussion). T3 records and measurement: durable decision records, turn records, the measure of the paper against the world; it goes first because the other two are settled by it. T4 the app and platform outside voice: the Exact cutover and app faults (M1), podcast transcription on a durable host, routing by Synthetic''s reported headroom, storage (M3), Android (M4, deferred). T1, T2 and T3 get goal files after the design is agreed in conversation; until then only storage builds, and investigation is read-only.'
+    - '"i want the metamission to contain all of our plans going forward. my idea is that the metamission will be what we stay on with /goal for the next multiple weeks" (2026-11-23). Reading: every plan is a station here with its own file, the deferred ones too, so nothing lives only in a conversation. Added that day as intentions: M5 records and measurement, M6 the voice pipeline, M7 shipping the app, M8 operations, M9 Autoradio in the desktop. M2 is rewritten after M5''s experiments.'
   must_preserve:
     - 'one landing and one deploy at a time; one Mac native build at a time through the lock; every must_preserve of each station file'
   excluded:
@@ -82,7 +113,7 @@ operating_notes:
   - 'Each hourly tick reads both station files'' now cards and rewrites this one''s.'
 now:
   status: working
-  as_of: 2026-11-23T21:33Z
+  as_of: 2026-11-23T22:10Z
   slice: 'design discussion with the owner (tracks T1 to T3; nothing builds on them yet); storage in the background: S3 building in lane snapshot-capture-s3, a read-only measurement of Node B''s disk running'
   source_ref: origin/main 7866f4027
   deploy_identity: staging and the paper on a2ba96767 (CI run 45248602790)
@@ -100,7 +131,7 @@ now:
   main_uncertainty: 'the measure of the paper against the world and the order of the intake stages; the owner''s rulings on the design draft''s open decisions'
   next_observation: 'the S3 builder''s report; the storage measurement; the owner''s reading of the ideal-form draft'
   blocker: none
-  next_action: 'work the design through with the owner in conversation, then write the goal files for T1, T2 and T3 and rewrite M2; review S3 (two seats) when its builder reports'
+  next_action: 'work the design through with the owner in conversation; on their word start M5''s first three experiments; review S3 (two seats) when its builder reports; write M5, M6 and M7 up to executable as each is agreed'
 receipts:
   - 'M1: docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md'
   - 'M2: docs/definitions/choir-first-design-2026-11-22.md'

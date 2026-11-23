@@ -1435,11 +1435,71 @@ nodes:
     kind: metamission
     entrypoint: true
     depends_on: []
-    enables: [choir-first-design-2026-11-22, choir-exact-cutover-and-ontology-2026-11-20, choir-storage-efficiency-2026-11-22, choir-autoradio-on-android-2026-11-22]
+    enables: [choir-first-design-2026-11-22, choir-exact-cutover-and-ontology-2026-11-20, choir-storage-efficiency-2026-11-22, choir-autoradio-on-android-2026-11-22, choir-records-and-measurement-2026-11-23, choir-voice-pipeline-2026-11-23, choir-shipping-the-app-2026-11-23, choir-operations-podcasts-and-providers-2026-11-23, choir-autoradio-in-the-desktop-2026-11-23]
     settled_by: owner
     note: >-
       Owner 2026-11-22: "make a metamission which covers them both, and any
       3rd or nth mission we add. so we can keep /goal running continuously".
+  - id: choir-records-and-measurement-2026-11-23
+    title: Records and measurement — durable decision records, the measure of the paper against the world, the replay experiments
+    path: docs/definitions/choir-records-and-measurement-2026-11-23.md
+    status: working  # intent; first of the tracks
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-23: "i want the metamission to contain all of our plans
+      going forward". Recorded as an intention that day.
+  - id: choir-voice-pipeline-2026-11-23
+    title: The voice pipeline as specified — on-device models for detection, recognition, end of turn and echo; the same sound; the handover
+    path: docs/definitions/choir-voice-pipeline-2026-11-23.md
+    status: pending  # intent
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-23: "i want the metamission to contain all of our plans
+      going forward". Recorded as an intention that day.
+  - id: choir-shipping-the-app-2026-11-23
+    title: Shipping the app — TestFlight and the App Store, the signed-out radio, accounts made and deleted in the app, reviewer materials
+    path: docs/definitions/choir-shipping-the-app-2026-11-23.md
+    status: pending  # intent
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-23: "i want the metamission to contain all of our plans
+      going forward". Recorded as an intention that day.
+  - id: choir-operations-podcasts-and-providers-2026-11-23
+    title: Operations — podcast transcription on a durable host and routing by provider headroom
+    path: docs/definitions/choir-operations-podcasts-and-providers-2026-11-23.md
+    status: pending  # intent; after the plan is defined
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-23: "i want the metamission to contain all of our plans
+      going forward". Recorded as an intention that day.
+  - id: choir-autoradio-in-the-desktop-2026-11-23
+    title: Autoradio in the choir.news desktop — listening only with a local model
+    path: docs/definitions/choir-autoradio-in-the-desktop-2026-11-23.md
+    status: pending  # intent; deferred until after Android
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-23: "i want the metamission to contain all of our plans
+      going forward". Recorded as an intention that day.
   - id: choir-autoradio-on-android-2026-11-22
     title: Autoradio on Android — the shared codebase running on an old Motorola, and the model benchmark on it
     path: docs/definitions/choir-autoradio-on-android-2026-11-22.md
