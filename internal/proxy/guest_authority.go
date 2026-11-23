@@ -89,9 +89,11 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		}
 		// Published Autopaper stories and opinion pieces are public: any
 		// bound guest searches them (research's SearchWireCorpus). This one
-		// path is the whole carve-out; corpusd serves only pieces a reader
+		// path (and the ask below) is the whole carve-out; corpusd serves only pieces a reader
 		// can already open.
-		if r.URL.Path == "/internal/platform/published/search" {
+		// The ask beside it (one GET path, the same stories): the Autoradio
+		// desk's turn asks the paper for a listener's words.
+		if r.URL.Path == "/internal/platform/published/search" || r.URL.Path == "/internal/platform/published/ask" {
 			return nil
 		}
 		// A computer's own feeds (op-eds on its stories, notices for its

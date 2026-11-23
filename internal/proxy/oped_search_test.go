@@ -125,3 +125,65 @@ func TestGuestPublishedSearchCarveOutIsNarrow(t *testing.T) {
 		t.Fatalf("corpusd was reached by a refused call: %v", reached)
 	}
 }
+
+// A guest's ask of the paper (the Autoradio desk's turn): one more GET path
+// beside published/search, with the same narrowness. The failure list:
+//
+//  X1. a bound guest's GET reaches corpusd and gets its answer;
+//  X2. an unbound caller, a POST/PUT/DELETE and any longer path are refused;
+//  X3. the proxy's routes name it (it is not served by the generic forward).
+func TestGuestPublishedAskCarveOutIsNarrow(t *testing.T) {
+	var reached []string
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = append(reached, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+		_ = json.NewEncoder(w).Encode(platform.PublishedAsk{Query: r.URL.Query().Get("q"), Stories: []platform.AskedStory{{FrontStory: platform.FrontStory{Title: "A story"}, KeywordRank: 1}}, Vector: "answered"})
+	}))
+	defer corpusd.Close()
+	guests := map[string]vmctl.GuestOwnership{"10.200.1.2": {Found: true, UserID: "reader-owner", ComputerID: "computer-reader"}}
+	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RemoteAddr string `json:"remote_addr"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewEncoder(w).Encode(guests[strings.Split(req.RemoteAddr, ":")[0]])
+	}))
+	defer vmctlServer.Close()
+	handler, _, _ := testProxyEnv(t)
+	handler.cfg.CorpusdURL = corpusd.URL
+	handler.vmctlClient = vmctl.NewClient(vmctlServer.URL)
+	srv := server.NewServer("proxy-test", "0")
+	RegisterRoutes(srv, handler)
+	send := func(method, path, from string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader("{}"))
+		req.RemoteAddr = from + ":40000"
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := send(http.MethodGet, "/internal/platform/published/ask?q=taiwan&limit=15", "10.200.1.2"); rec.Code != http.StatusOK ||
+		!strings.Contains(rec.Body.String(), "A story") {
+		t.Fatalf("(X1) a bound guest's ask = %d %s", rec.Code, rec.Body)
+	}
+	if len(reached) != 1 || !strings.HasPrefix(reached[0], "GET /internal/platform/published/ask?q=taiwan") {
+		t.Fatalf("(X1) corpusd saw %v", reached)
+	}
+	reached = nil
+	if rec := send(http.MethodGet, "/internal/platform/published/ask?q=x", "10.200.77.2"); rec.Code != http.StatusForbidden {
+		t.Fatalf("(X2) an unbound caller reached the ask: %d", rec.Code)
+	}
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
+		if rec := send(method, "/internal/platform/published/ask?q=x", "10.200.1.2"); rec.Code != http.StatusForbidden {
+			t.Fatalf("(X2) %s ask by a guest = %d, want 403", method, rec.Code)
+		}
+	}
+	for _, path := range []string{"/internal/platform/published/ask/extra", "/internal/platform/published/asks", "/internal/platform/published/"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.RemoteAddr = "10.200.1.2:40000"
+		if err := handler.requirePlatformObjectGraphCaller(req); err == nil {
+			t.Fatalf("(X2) guest GET %s passed the object graph caller check", path)
+		}
+	}
+	if len(reached) != 0 {
+		t.Fatalf("(X2) corpusd was reached by a refused call: %v", reached)
+	}
+}

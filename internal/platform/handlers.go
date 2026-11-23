@@ -346,15 +346,8 @@ func (h *Handler) HandleInternalRetrievalSearch(w http.ResponseWriter, r *http.R
 // (docs/problems/published-search-refuses-every-guest-2026-11-09.md). It reads
 // Store B alone.
 func (h *Handler) HandleInternalPublishedSearch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	if !h.admitPublishedRead(w, r) {
 		return
-	}
-	if !trustedInternalCaller(r) {
-		if _, err := bindTapCaller(r.Context(), h.guestLookup, r); err != nil {
-			writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
-			return
-		}
 	}
 	limit := 0
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
@@ -369,6 +362,55 @@ func (h *Handler) HandleInternalPublishedSearch(w http.ResponseWriter, r *http.R
 	if err != nil {
 		log.Printf("corpusd: published search: %v", err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to search published pieces"})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// admitPublishedRead is the admission of the published pieces' reads: a GET by
+// a host-internal caller or by any guest vmctl binds to a live computer. It
+// writes the refusal and returns false when the caller is not admitted.
+func (h *Handler) admitPublishedRead(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return false
+	}
+	if !trustedInternalCaller(r) {
+		if _, err := bindTapCaller(r.Context(), h.guestLookup, r); err != nil {
+			writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+			return false
+		}
+	}
+	return true
+}
+
+// HandleInternalPublishedAsk serves GET /internal/platform/published/ask
+// ?q=&limit=: a listener's words asked of the paper, keyword and vector in one
+// answer (published_ask.go), for the Autoradio desk's turn on the listener's
+// computer. The admission is the published search's: the stories are public
+// and the read names no owner. The words are bounded (300 bytes), the limit
+// clamped (20) and the call has a deadline (1 s, and 250 ms more for the row reads).
+func (h *Handler) HandleInternalPublishedAsk(w http.ResponseWriter, r *http.Request) {
+	if !h.admitPublishedRead(w, r) {
+		return
+	}
+	limit := 0
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "limit must be a non-negative integer"})
+			return
+		}
+		limit = n
+	}
+	resp, err := h.service.AskPublished(r.Context(), r.URL.Query().Get("q"), limit)
+	if errors.Is(err, ErrAskQuery) {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	if err != nil {
+		log.Printf("corpusd: published ask: %v", err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to search the paper"})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -685,6 +727,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/publications/related-backfill", h.HandleInternalRelatedBackfill)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
 	s.HandleFunc("/internal/platform/published/search", h.HandleInternalPublishedSearch)
+	s.HandleFunc("/internal/platform/published/ask", h.HandleInternalPublishedAsk)
 	s.HandleFunc(opedFeedPath, h.HandleInternalOpeds)
 	s.HandleFunc(noticeFeedPath, h.HandleInternalNotices)
 	s.HandleFunc(opedVerdictsPath, h.HandleInternalOpedVerdicts)

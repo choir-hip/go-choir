@@ -35,7 +35,12 @@ const (
 )
 
 type Service struct {
-	store         *Store
+	store *Store
+	// askVectorHook replaces the story-vector half of AskPublished (tests).
+	askVectorHook func(ctx context.Context, query string, n int) ([]askVectorHit, string)
+	// askRowFault fails a row read of AskPublished (tests).
+	askRowFault func(id string) error
+
 	artifactsRoot string
 	signingKey    *SigningKey
 	writeMu       sync.Mutex

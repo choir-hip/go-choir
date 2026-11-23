@@ -1850,6 +1850,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// Research's read-only search over published stories and opinion pieces
 	// (guest_authority.go carves out this one GET path).
 	s.HandleFunc("/internal/platform/published/search", h.HandlePlatformObjectGraph)
+	// The Autoradio desk's ask of the paper: the same carve-out, one more path.
+	s.HandleFunc("/internal/platform/published/ask", h.HandlePlatformObjectGraph)
 	// A computer's polls of its op-ed and notice feeds, and the paper's
 	// verdict post (the proxy scopes each to the owner it bound).
 	s.HandleFunc("/internal/platform/opeds", h.HandlePlatformObjectGraph)
