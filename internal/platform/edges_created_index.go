@@ -37,19 +37,24 @@ const (
 	edgesToKindCreatedDDL     = `CREATE INDEX CONCURRENTLY ` + idxEdgesToKindCreated + ` ON og_edges (to_id, kind, created_at DESC, edge_id) WHERE NOT tombstone`
 )
 
-// edgesIndexBuildTimeout bounds one build attempt (a variable so a test can
-// move it). CONCURRENTLY waits for every transaction older than the build; a
-// stuck one would otherwise hold the connection, and whatever waits on this
-// call, for good. A build that times out leaves an invalid index, which the
-// next attempt (the periodic retrieval step) detects, drops and rebuilds.
+// edgesIndexBuildTimeout bounds the wait for the build lock and, separately,
+// the work after it; each bound starts when its stage starts. It is a variable
+// so a test can move it. CONCURRENTLY waits for every transaction older than
+// the build; a stuck one would otherwise hold the connection, and whatever
+// waits on this call, for good. A build that times out leaves an invalid
+// index, which the next attempt (the periodic retrieval step) detects, drops
+// and rebuilds.
 var edgesIndexBuildTimeout = 20 * time.Minute
 
 // ensureEdgesToKindCreatedIndex builds the index if it is missing or invalid.
 // It has its own deadline and is never on the path that starts the periodic
 // retrieval loop: StartRetrievalMigrations runs it in a goroutine of its own
 // and retrievalStep retries it.
-func (s *Store) ensureEdgesToKindCreatedIndex(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, edgesIndexBuildTimeout)
+func (s *Store) ensureEdgesToKindCreatedIndex(parent context.Context) error {
+	// The wait for the lock has one deadline and the work after it has its
+	// own, so a call that waited long behind a live builder does not time out
+	// its own build and leave an invalid index again.
+	ctx, cancel := context.WithTimeout(parent, edgesIndexBuildTimeout)
 	defer cancel()
 	conn, err := s.corpus().Conn(ctx)
 	if err != nil {
@@ -69,6 +74,8 @@ func (s *Store) ensureEdgesToKindCreatedIndex(ctx context.Context) error {
 	defer func() {
 		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(?)`, edgesToKindCreatedLockKey)
 	}()
+	ctx, cancelWork := context.WithTimeout(parent, edgesIndexBuildTimeout)
+	defer cancelWork()
 	// A conflicting lock is waited for a minute, not for good. The setting is
 	// the session's, so it is reset before the connection goes back to the pool.
 	if _, err := conn.ExecContext(ctx, `SET lock_timeout = '60s'`); err != nil {
