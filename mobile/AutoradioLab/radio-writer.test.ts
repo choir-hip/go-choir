@@ -7,7 +7,7 @@
 //  W6 an answer that arrives after a sign-out (stop) is dropped whole.
 //  W7 the phone's opening is a greeting by the hour, the first story with its dek once, at most two more headlines; with none it says it has no front page yet.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { Writer, ASK_DEADLINE_MS, DRY_FLOOR_MS, fromFront, shapeText, candidateBody, requestBody, phoneOpening, type WriterDeps } from './radio-writer.ts';
+import { Writer, ASK_DEADLINE_MS, DRY_FLOOR_MS, FRONT_CHECK_MS, fromFront, shapeText, candidateBody, requestBody, phoneOpening, type WriterDeps } from './radio-writer.ts';
 import { RadioRuntime } from './radio-runtime.ts';
 import type { DeckPort, DeckState } from './deck.ts';
 import type { Entry } from './runsheet-model.ts';
@@ -20,16 +20,16 @@ const deck: DeckPort = { state: async () => EMPTY, play: async () => EMPTY, enqu
 const seg = (o: Record<string, unknown>) => 'event: segment\ndata: ' + JSON.stringify({ stretch_id: 'st-1', ...o }) + '\n\n';
 const answer = (...segs: string[]) => segs.join('') + 'event: done\ndata: {"stretch_id":"st-1"}\n\n';
 
-let skewMs = 0;                                                                  // the device's clock moving on (the deadline test)
+let skewMs = 0; let frontCalls = 0;                                                                  // the device's clock moving on (the deadline test)
 let rt: RadioRuntime, w: Writer, bodies: Record<string, unknown>[], reply: () => Promise<string>, fr: unknown, gen: number, fill: Entry[];
 const settle = async () => { await w.settle(); await new Promise((r) => setTimeout(r, 0)); await w.settle(); };
 beforeEach(() => {
   rt = new RadioRuntime({ deck, now: () => NOW });
-  bodies = []; gen = 1; fill = []; skewMs = 0;
+  bodies = []; gen = 1; fill = []; skewMs = 0; frontCalls = 0;
   fr = front([row('/pub/a'), row('/pub/b'), row('/pub/c')]);
   reply = async () => answer(seg({ segment_id: 'st-1/0', kind: 'ident', text: 'Hello.' }), seg({ segment_id: 'st-1/1', kind: 'story', title: 'A', text: 'Story A words.', cites: [{ ref: 'pub:/pub/a@v2', role: 'subject', label: 'A' }] }));
   const d: WriterDeps = {
-    rt, front: async () => fr, texts: async (routes) => Object.fromEntries(routes.map((r) => [r, [`Para one of ${r}.`, 'Para two.']])),
+    rt, front: async () => { frontCalls += 1; return fr; }, texts: async (routes) => Object.fromEntries(routes.map((r) => [r, [`Para one of ${r}.`, 'Para two.']])),
     takes: async () => ({ takes: [], kept: { ids: [], handle: '', muted: [] } }), edition: async () => 'topics: harbours',
     post: async (b) => { bodies.push(b); return reply(); }, now: () => new Date(NOW.getTime() + skewMs), tz: () => 'UTC', requestId: () => 'radio-test', generation: () => gen, offlineFill: () => fill,
   };
@@ -198,7 +198,7 @@ describe('the writer never hangs the radio dry', () => {
     expect(w.checkAhead()).toBe(true); await settle();
     expect(bodies.length).toBe(1);
     expect(w.dry).toBe(true); expect(w.wouldAsk()).toBe(false);                       // the desk had nothing: not asked again for the same inputs
-    skewMs = DRY_FLOOR_MS - 1000; expect(w.wouldAsk()).toBe(false);
+    skewMs = FRONT_CHECK_MS - 1000; expect(w.wouldAsk()).toBe(false);                 // looked at again (the front list, one read) every two minutes, not before
     w.listenerActed(); expect(w.wouldAsk()).toBe(true);                               // the listener acted: the answer may differ
   });
   /** One pulse a second for `seconds`: the pulse says write, the mutation asks, and the ask settles. Returns the desk's calls. */
@@ -239,5 +239,27 @@ describe('the writer never hangs the radio dry', () => {
     w.openAhead(false); expect(w.checkAhead()).toBe(true); await settle();
     expect(w.wouldAsk()).toBe(false);                                                 // backing off
     w.listenerActed(); expect(w.wouldAsk()).toBe(true);
+  });
+});
+
+describe('a dry desk is asked again when the front list changes (seat 2, item 5)', () => {
+  test('W14 nothing changed: the front list is read every two minutes, the model is not called until the floor; a new story on the front is asked about at once', async () => {
+    reply = async () => answer();                                                   // the desk has nothing
+    w.openAhead(false); expect(w.checkAhead()).toBe(true); await settle();
+    expect(bodies.length).toBe(1);
+    const reads0 = frontCalls;
+    skewMs = FRONT_CHECK_MS - 1000; expect(w.wouldAsk()).toBe(false);
+    skewMs = FRONT_CHECK_MS + 1000; expect(w.wouldAsk()).toBe(true); expect(w.checkAhead()).toBe(true); await settle();
+    expect(frontCalls).toBe(reads0 + 1); expect(bodies.length).toBe(1);               // one cheap read, no model call: the front is the same
+    expect(w.wouldAsk()).toBe(false);                                                // looked at; the next look is two minutes on
+    fr = front([row('/pub/a'), row('/pub/b'), row('/pub/c'), row('/pub/brand-new')]);
+    skewMs += FRONT_CHECK_MS + 1000; expect(w.wouldAsk()).toBe(true); expect(w.checkAhead()).toBe(true); await settle();
+    expect(bodies.length).toBe(2);                                                   // a new story: asked, long before the ten-minute floor
+  });
+  test('W14 the floor is the fallback: after it the desk is asked whatever the front says', async () => {
+    reply = async () => answer();
+    w.openAhead(false); w.checkAhead(); await settle();
+    skewMs = DRY_FLOOR_MS + 1000; expect(w.checkAhead()).toBe(true); await settle();
+    expect(bodies.length).toBe(2);
   });
 });

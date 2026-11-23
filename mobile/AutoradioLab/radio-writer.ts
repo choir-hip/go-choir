@@ -120,6 +120,8 @@ export const BACKOFF_BASE_MS = 10_000, BACKOFF_MAX_MS = 300_000;
 /** After a DRY answer (the desk had nothing to add) the next waits until an input to the ask changed (the candidates, the stories' text, the edition: compared when the floor ends, before any model call), the listener acted, or
  *  this floor: ten minutes, about the time a new story takes to be published on the paper's front page, so new material is looked for without asking every pulse. */
 export const DRY_FLOOR_MS = 600_000;
+/** While a dry answer holds, the front list is READ (one GET, no model call) this often: a story published meanwhile is asked about at once, not behind the floor. */
+export const FRONT_CHECK_MS = 120_000;
 
 /** Between two entries of a long answer: lets the next turn start (Exact gives a turn about 100 ms of CPU; Bun has no scheduler). */
 const yieldTurn = (label: string): Promise<void> => lapYield(`writer: ${label}`);
@@ -139,7 +141,7 @@ export class Writer {
   /** Backoff after failures (the device clock the next ask may start at; 0: none) and how many failed in a row. With no device time (0) a hold stays until the listener acts or an answer arrives: never a loop. */
   private failures = 0; private holdUntil = 0;
   /** The last dry answer: when (device ms; -1 none) and the inputs it was given (the signature a later ask compares before it calls the model). */
-  private dryAt = -1; private dryKey = '';
+  private dryAt = -1; private dryKey = ''; private dryFrontKey = ''; private dryChecked = 0;
   constructor(private d: WriterDeps) {}
   get inFlight(): boolean { return this.flights.length > 0; }
   settle(): Promise<void> { return Promise.all(this.flights.map((f) => f.task ?? Promise.resolve())).then(() => undefined); }
@@ -148,12 +150,12 @@ export class Writer {
   openAhead(start = true): void { this.opened = true; if (start) this.checkAhead(); }
   private nowMs(): number { return this.d.now().getTime(); }
   /** The listener did something (queued, played, skipped, moved, asked): what the desk answered before may differ now. */
-  listenerActed(): void { this.failures = 0; this.holdUntil = 0; this.dryAt = -1; this.dryKey = ''; }
+  listenerActed(): void { this.failures = 0; this.holdUntil = 0; this.dryAt = -1; this.dryKey = ''; this.dryFrontKey = ''; }
   /** Backing off after a failure, or waiting out a dry answer's floor. */
   private held(): boolean {
     const t = this.nowMs(), known = t > 0;
     if (this.holdUntil !== 0 && (!known || t < this.holdUntil)) return true;
-    if (this.dryAt >= 0 && (!known || t - this.dryAt < DRY_FLOOR_MS)) return true;
+    if (this.dryAt >= 0 && (!known || t - Math.max(this.dryAt, this.dryChecked) < FRONT_CHECK_MS)) return true;      // a dry answer: looked at again (the front list, one read) every FRONT_CHECK_MS; the ask path decides whether the model is called
     return false;
   }
   private quiet(): boolean { return this.quietOn !== undefined && this.quietOn === this.d.rt.store.onAir()?.id; }
@@ -201,7 +203,7 @@ export class Writer {
     this.lastId = fl.id; this.flights.push(fl); this.asks.push(cause); this.publish(true);
     const live = (): boolean => gen === this.d.generation() && stops === this.stops && this.flights.includes(fl);
     fl.task = (async () => {
-      let sig = '', unchanged = false;
+      let sig = '', fkey = '', unchanged = false;
       let added = 0, received = 0, dropped = 0, firstAt: number | undefined, failure: { kind: 'cancelled' | 'empty' | 'signedOut' | 'transport' | 'other' } | undefined;
       try {
         const now = this.d.now();
@@ -211,6 +213,9 @@ export class Writer {
         let items = fromFront(front, now.getTime(), skipping);
         if (items.length === 0 && skipping.size > 0) items = fromFront(front, now.getTime());   // everything told: the desk is still asked, with the whole list
         if (items.length === 0) { failure = { kind: 'empty' }; throw new Error('no story to tell'); }
+        fkey = items.map((c) => `${c.route}@${c.version}`).join('|');
+        const before = this.dryAt >= 0 && this.nowMs() > 0 && this.nowMs() - this.dryAt < DRY_FLOOR_MS;      // inside the floor a dry answer's inputs are compared; after it the desk is asked whatever they say
+        if (cause !== 'open' && before && this.dryFrontKey !== '' && fkey === this.dryFrontKey) { this.dryChecked = this.nowMs(); throw Object.assign(new Error('unchanged'), { kind: 'unchanged' }); }     // the front list is the same as when the desk had nothing: no story loads, no model call
         const texts = await this.d.texts(items.slice(0, MAX_TEXT_ITEMS).map((c) => c.route));
         const { takes: all, kept } = await this.d.takes();
         await yieldTurn('after takes');
@@ -218,7 +223,7 @@ export class Writer {
         const picked = takeCandidates(all, kept);
         const body = requestBody(cause, candidateBody(items, texts, picked), store.ahead(20).map((e) => e.title || ''), await this.d.edition(), now, this.d.tz(), this.d.requestId());
         sig = JSON.stringify([body.candidates, body.edition_text ?? '']);
-        if (cause !== 'open' && this.dryKey !== '' && sig === this.dryKey) throw Object.assign(new Error('unchanged'), { kind: 'unchanged' });     // nothing the desk is given has changed since it had nothing to add: no model call
+        if (cause !== 'open' && this.dryAt >= 0 && this.nowMs() - this.dryAt < DRY_FLOOR_MS && this.dryKey !== '' && sig === this.dryKey) throw Object.assign(new Error('unchanged'), { kind: 'unchanged' });     // nothing the desk is given has changed since it had nothing to add: no model call
         await yieldTurn('before post');
         const raw = await this.post(body);
         lap(`writer: the desk's reply received (${raw.length} chars)`);
@@ -254,7 +259,8 @@ export class Writer {
       const t = this.nowMs();
       if (added > 0) { this.failures = 0; this.holdUntil = 0; this.dryAt = -1; this.dryKey = ''; }
       else if (failure) { this.failures += 1; this.holdUntil = Math.max(1, t) + Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (this.failures - 1)); }
-      else { this.failures = 0; this.holdUntil = 0; this.dryAt = Math.max(0, t); if (sig !== '') this.dryKey = sig; }
+      else if (unchanged) { this.dryChecked = Math.max(0, t); }
+      else { this.failures = 0; this.holdUntil = 0; this.dryAt = Math.max(0, t); this.dryChecked = this.dryAt; if (sig !== '') this.dryKey = sig; if (fkey !== '') this.dryFrontKey = fkey; }
       if (out.clearQuiet) this.quietOn = undefined; else if (out.quietOn !== undefined) this.quietOn = out.quietOn;
       if (out.notice === 'clear') this.notice = ''; else if (out.notice === 'say') this.notice = plainWords(failure) ?? '';
       this.publish(false);
