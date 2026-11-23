@@ -77,7 +77,7 @@ func TestSnapshotThroughputOnALargeStore(t *testing.T) {
 	elapsed := time.Since(started)
 	st := ref.Stats
 	t.Logf("snapshot: %d pages (%d bytes), %d chunks, uploaded %d, in %s", st.Pages, ref.Record.PlaintextSize, st.Chunks, st.ChunksUploaded, elapsed.Round(time.Millisecond))
-	t.Logf("copy %s (%.0f MiB/s), pin %s, witness %s, upload %s", st.CopyTime.Round(time.Millisecond), float64(ref.Record.PlaintextSize)/(1<<20)/st.CopyTime.Seconds(), st.PinTime.Round(time.Millisecond), st.WitnessTime.Round(time.Millisecond), st.UploadTime.Round(time.Millisecond))
+	t.Logf("pin %s (%.0f MiB/s), upload after the pin %s", st.PinTime.Round(time.Millisecond), float64(ref.Record.PlaintextSize)/(1<<20)/st.PinTime.Seconds(), st.UploadTime.Round(time.Millisecond))
 
 	dest := filepath.Join(t.TempDir(), "state.db")
 	started = time.Now()

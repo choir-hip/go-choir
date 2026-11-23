@@ -206,8 +206,8 @@ func TestRestoreSkipsAPrunedCandidateWithoutDownloadingIt(t *testing.T) {
 	cfg := f.restoreConfig(filepath.Join(t.TempDir(), "state.db"))
 	cfg.Chunks = counting
 	record, err := Restore(ctx, cfg)
-	if err != nil || record.WitnessRoot != first.Record.WitnessRoot {
-		t.Fatalf("Restore = %v, %v; want the older live snapshot", record.WitnessRoot, err)
+	if err != nil || record.PageDigest != first.Record.PageDigest {
+		t.Fatalf("Restore = %v, %v; want the older live snapshot", record.PageDigest, err)
 	}
 	if want := len(first.Record.Manifest.Files[0].Chunks); counting.gets != want {
 		t.Fatalf("%d chunk downloads, want %d: the pruned candidate must be skipped by a probe", counting.gets, want)

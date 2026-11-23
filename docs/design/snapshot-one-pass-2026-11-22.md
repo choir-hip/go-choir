@@ -47,6 +47,12 @@ restored file's head row. Layout compaction's age trigger is deleted
 
 ## Stage A2: the capture (second commit, after A1 is reviewed)
 
+Status 2026-11-23: built on lane `snapshot-capture-s3`, not landed. Differences
+from this note: the store-copy token stays in `internal/store` (compaction takes
+it; no capture does), the pin deadline also bounds each partition's read
+transaction, and the free-space rule is the floor plus 2 MiB/s over the pin
+deadline (or twice the last growth), asked of the volume before the attempt.
+
 - The state file goes through `streamFile` (today used for the telemetry
   partitions) inside the head's read transaction, with the page digest taken
   inline before the page is copied into the chunk buffer. The record is

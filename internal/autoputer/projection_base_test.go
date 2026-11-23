@@ -16,11 +16,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/dbx"
-	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
@@ -196,8 +196,8 @@ func TestMaterializeRestoresTheNewestSnapshotWhenTheDiskIsMissing(t *testing.T) 
 	}
 
 	// The computer's former store, snapshotted at sequence 7.
-	source := dbxtest.SQLite(t)
-	if _, err := source.Write.Exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT); INSERT INTO notes VALUES (1, 'kept'), (2, 'also kept')`); err != nil {
+	source := headedSource(t, computerID, 7, "b")
+	if _, err := source.DB().Exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT); INSERT INTO notes VALUES (1, 'kept'), (2, 'also kept')`); err != nil {
 		t.Fatal(err)
 	}
 	platform := newBootServer(&computerevent.Head{ComputerID: computerID, Sequence: 12, CanonicalEventHead: strings.Repeat("c", 64)})
@@ -210,16 +210,18 @@ func TestMaterializeRestoresTheNewestSnapshotWhenTheDiskIsMissing(t *testing.T) 
 		}
 		return selfdevprotocol.WitnessFromDigests(digests)
 	}
+	live, err := witnessOf(ctx, source.ReadDB())
+	if err != nil {
+		t.Fatal(err)
+	}
 	ref, err := snapshot.TakeSnapshot(ctx, snapshot.Config{
-		ComputerID: computerID, DB: source.Read,
+		ComputerID: computerID, DB: source.ReadDB(),
 		Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 			return &computerevent.Head{ComputerID: computerID, Sequence: 7, CanonicalEventHead: strings.Repeat("b", 64)}, nil
 		},
-		Witness:    witnessOf,
-		ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
-		Cipher:     cipher,
-		Chunks:     snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
-		Appender:   &snapshotTape{platform: platform},
+		Cipher:   cipher,
+		Chunks:   snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
+		Appender: &snapshotTape{platform: platform},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -242,15 +244,18 @@ func TestMaterializeRestoresTheNewestSnapshotWhenTheDiskIsMissing(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ContentRoot != ref.Record.WitnessRoot {
-		t.Fatalf("restored witness root %s, the snapshot recorded %s", got.ContentRoot, ref.Record.WitnessRoot)
+	if ref.Record.Version != snapshot.VersionPageDigest || ref.Record.PageDigest == "" {
+		t.Fatalf("the capture recorded %+v", ref.Record)
+	}
+	if got.ContentRoot != live.ContentRoot {
+		t.Fatalf("restored witness root %s, the source had %s", got.ContentRoot, live.ContentRoot)
 	}
 }
 
-// A snapshot whose recorded witness disagrees with its own pages is refused
-// at boot, though its chunks open under the computer key: the seal proves
-// who wrote it, not that the producer recorded the right witness.
-func TestMaterializeRefusesASnapshotWhosePagesDisagreeWithItsWitness(t *testing.T) {
+// A snapshot whose recorded head disagrees with its own pages is refused at
+// boot, though its chunks open under the computer key and its page digest holds:
+// the seal proves who wrote it, not that the producer recorded the right head.
+func TestMaterializeRefusesASnapshotWhosePagesDisagreeWithItsHead(t *testing.T) {
 	ctx := context.Background()
 	const computerID = "computer-restore-bad-witness"
 	keyPath := writePrivacyKey(t, computerID)
@@ -259,31 +264,23 @@ func TestMaterializeRefusesASnapshotWhosePagesDisagreeWithItsWitness(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := dbxtest.SQLite(t)
-	if _, err := source.Write.Exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT); INSERT INTO notes VALUES (1, 'kept')`); err != nil {
+	// The pages hold head 9; the record is made to name head 7.
+	source := headedSource(t, computerID, 9, "f")
+	if _, err := source.DB().Exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT); INSERT INTO notes VALUES (1, 'kept')`); err != nil {
 		t.Fatal(err)
 	}
 	platform := newBootServer(&computerevent.Head{ComputerID: computerID, Sequence: 12, CanonicalEventHead: strings.Repeat("c", 64)})
 	server := httptest.NewServer(platform)
 	defer server.Close()
 	if _, err := snapshot.TakeSnapshot(ctx, snapshot.Config{
-		ComputerID: computerID, DB: source.Read,
+		ComputerID: computerID, DB: source.ReadDB(),
+		// A producer bug: a head the pages do not hold.
 		Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 			return &computerevent.Head{ComputerID: computerID, Sequence: 7, CanonicalEventHead: strings.Repeat("b", 64)}, nil
 		},
-		// A producer bug: the witness of other content under the same schema.
-		Witness: func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
-			digests, err := computerversion.SQLiteStateExtractor{DB: db, Database: "texture"}.Digests(ctx)
-			if err != nil {
-				return selfdevprotocol.VMLocalContentWitness{}, err
-			}
-			digests.Tables["notes"] = strings.Repeat("d", 64)
-			return selfdevprotocol.WitnessFromDigests(digests)
-		},
-		ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
-		Cipher:     cipher,
-		Chunks:     snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
-		Appender:   &snapshotTape{platform: platform},
+		Cipher:   cipher,
+		Chunks:   snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
+		Appender: &snapshotTape{platform: platform},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -299,4 +296,21 @@ func TestMaterializeRefusesASnapshotWhosePagesDisagreeWithItsWitness(t *testing.
 	if _, statErr := os.Stat(choirstore.StateDBPath(storePath)); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("a refused snapshot left a state file: %v", statErr)
 	}
+}
+
+// headedSource is a real store holding the projection head row the restore's
+// head tie reads: sequence seq and canonical head of 64 copies of headChar.
+func headedSource(t *testing.T, computerID string, seq int, headChar string) *choirstore.Store {
+	t.Helper()
+	store, err := choirstore.OpenFresh(filepath.Join(t.TempDir(), "source.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	head := strings.Repeat(headChar, 64)
+	if _, err := store.DB().Exec(`INSERT INTO computer_event_projection_heads (computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, desired_state_commitment, effective_state_commitment, reducer_version, credential_revocation_epoch, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		computerID, seq, head, head, head, head, head, computerevent.ReducerVersionV1, 0, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	return store
 }

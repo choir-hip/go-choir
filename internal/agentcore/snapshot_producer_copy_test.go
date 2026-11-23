@@ -1,12 +1,12 @@
 package agentcore
 
-// Tests of the producer side of the static-copy capture, written from the
-// failure list of docs/design/capture-static-copy-2026-11-15.md section 3
-// before the code. Each comment names the failure entry it pins.
+// Tests of the producer side of the capture in one pass
+// (docs/design/snapshot-one-pass-2026-11-22.md): the free-space rule is the
+// floor plus WAL headroom, never the store's size; no store-copy token, no
+// scratch directory and no leftover cleanup belong to an attempt.
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -21,8 +21,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
-
-const copyTestStoreBytes = int64(10) << 30
 
 // dueHarness returns a harness whose snapshot is due by the given kind.
 func dueHarness(t *testing.T, kind string) (*producerHarness, *snapshotProducer, time.Time) {
@@ -45,13 +43,13 @@ func dueHarness(t *testing.T, kind string) (*producerHarness, *snapshotProducer,
 	default:
 		t.Fatalf("unknown kind %q", kind)
 	}
-	h.deps.StoreBytes = func(context.Context) (int64, error) { return copyTestStoreBytes, nil }
 	return h, p, now
 }
 
-// Failure 17: one rule, S + floor, for every trigger kind.
-func TestEveryTriggerKindNeedsTheStoreSizePlusTheFloor(t *testing.T) {
-	need := uint64(copyTestStoreBytes) + snapshotFreeFloor
+// Failure 17: one rule, the floor plus WAL headroom, for every trigger kind, and
+// the store's size is not in it.
+func TestEveryTriggerKindNeedsTheFloorPlusWALHeadroom(t *testing.T) {
+	need := snapshotWALHeadroom(0) + snapshotFreeFloor
 	for _, kind := range []string{"first", "interval", "ceiling", "replay"} {
 		t.Run(kind, func(t *testing.T) {
 			h, p, now := dueHarness(t, kind)
@@ -60,10 +58,9 @@ func TestEveryTriggerKindNeedsTheStoreSizePlusTheFloor(t *testing.T) {
 			if outcome != snapshotRefused || h.takes != 0 {
 				t.Fatalf("free = need-1: outcome=%s takes=%d detail=%q", outcome, h.takes, detail)
 			}
-			if !strings.Contains(detail, fmt.Sprint(h.free)) || !strings.Contains(detail, fmt.Sprint(need)) {
-				t.Fatalf("the refusal must name the free space and the need (%d, %d): %q", h.free, need, detail)
+			if !strings.Contains(detail, fmt.Sprint(h.free)) || !strings.Contains(detail, fmt.Sprint(need)) || !strings.Contains(detail, "WAL headroom") {
+				t.Fatalf("the refusal must name the free space, the need and the WAL term (%d, %d): %q", h.free, need, detail)
 			}
-			// And it is visible in snapshot_producer.refusal (failure 17).
 			if st := p.status(now); st.ConsecutiveRefusals != 1 || !strings.Contains(st.Refusal, fmt.Sprint(need)) {
 				t.Fatalf("the refusal is not visible in status: %+v", st)
 			}
@@ -75,131 +72,39 @@ func TestEveryTriggerKindNeedsTheStoreSizePlusTheFloor(t *testing.T) {
 	}
 }
 
-// Failure 18: a leftover scratch is removed BEFORE the free-space measurement.
-func TestALeftoverScratchIsRemovedBeforeFreeSpaceIsMeasured(t *testing.T) {
+// The headroom is the planned WAL rate over the pin deadline (a few GiB), far
+// under a 51 GiB store, and twice the last capture's own growth when that is
+// larger.
+func TestTheWALHeadroomIsThePlannedRateOrTwiceTheLastGrowth(t *testing.T) {
+	planned := uint64(snapshotWALBytesPerSecond) * uint64(snapshotPinDeadline/time.Second)
+	if got := snapshotWALHeadroom(0); got != planned || got > uint64(8)<<30 {
+		t.Fatalf("headroom %d, want the planned %d (under 8 GiB)", got, planned)
+	}
+	if got := snapshotWALHeadroom(1 << 20); got != planned {
+		t.Fatalf("a small last growth changed the headroom to %d", got)
+	}
+	if got, want := snapshotWALHeadroom(int64(10)<<30), uint64(20)<<30; got != want {
+		t.Fatalf("headroom %d after a 10 GiB growth, want %d", got, want)
+	}
+}
+
+// A capture of a very large store with only the headroom free is taken: nothing
+// in the rule scales with the store.
+func TestAStoreFarLargerThanFreeSpaceIsStillCaptured(t *testing.T) {
 	h, p, now := dueHarness(t, "first")
-	need := uint64(copyTestStoreBytes) + snapshotFreeFloor
-	leftover := filepath.Join(h.deps.DataDir, snapshotScratchDirName)
-	if err := os.MkdirAll(leftover, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(leftover, "state.db"), make([]byte, 100), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var order []string
-	h.deps.Leftovers = func() error { order = append(order, "leftovers"); return os.RemoveAll(leftover) }
-	h.deps.FreeBytes = func(string) (uint64, error) {
-		order = append(order, "free")
-		if _, err := os.Stat(leftover); err == nil {
-			return need - 1, nil // the leftover still occupies the volume
-		}
-		return need, nil
-	}
+	h.free = snapshotWALHeadroom(0) + snapshotFreeFloor
 	if outcome, detail := h.run(p, now); outcome != snapshotTaken {
-		t.Fatalf("outcome=%s detail=%q: the leftover wedged the producer", outcome, detail)
-	}
-	if fmt.Sprint(order) != "[leftovers free]" {
-		t.Fatalf("order %v, want the cleanup before the measurement", order)
-	}
-}
-
-// Failure 19: the token is taken before any deletion or measurement. A held
-// token (also one taken at the afterGates seam, between the read-only gates and
-// the token) refuses the attempt and nothing is deleted.
-func TestAHeldTokenRefusesBeforeAnythingIsDeletedOrMeasured(t *testing.T) {
-	for _, atSeam := range []bool{false, true} {
-		t.Run(fmt.Sprintf("taken at the seam %v", atSeam), func(t *testing.T) {
-			h, p, now := dueHarness(t, "first")
-			leftover := filepath.Join(h.deps.DataDir, snapshotScratchDirName, "state.db")
-			if err := os.MkdirAll(filepath.Dir(leftover), 0o700); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(leftover, []byte("mid-write"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			held := !atSeam
-			if atSeam {
-				h.deps.afterGates = func() { held = true }
-			}
-			h.deps.HoldCopy = func() (func(), string, bool) { return func() {}, "compaction", !held }
-			h.deps.Leftovers = func() error { t.Error("cleanup ran without the token"); return nil }
-			h.deps.FreeBytes = func(string) (uint64, error) { t.Error("free space measured without the token"); return 1 << 40, nil }
-			outcome, detail := h.run(p, now)
-			if outcome != snapshotRefused || h.takes != 0 || !strings.Contains(detail, "compaction") {
-				t.Fatalf("outcome=%s takes=%d detail=%q", outcome, h.takes, detail)
-			}
-			if raw, err := os.ReadFile(leftover); err != nil || string(raw) != "mid-write" {
-				t.Fatalf("the file the holder was writing was touched: %q %v", raw, err)
-			}
-		})
-	}
-}
-
-// Failure 23: a cleanup that fails fails the attempt closed.
-func TestAFailedCleanupFailsTheAttemptClosed(t *testing.T) {
-	h, p, now := dueHarness(t, "first")
-	h.deps.Leftovers = func() error { return errors.New("cannot remove") }
-	if outcome, _ := h.run(p, now); outcome == snapshotTaken || h.takes != 0 {
-		t.Fatalf("outcome=%s takes=%d: a capture ran on top of a file it could not remove", outcome, h.takes)
-	}
-}
-
-// Failures 28 and 39: the token is released, once, on every return after it was
-// taken: success, a free-space error, the attempt guard's refusal, a failed
-// Take and a panic in Take.
-func TestTheTokenIsReleasedOnEveryReturn(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		setup func(h *producerHarness)
-		panic bool
-	}{
-		{"success", func(*producerHarness) {}, false},
-		{"free space read error", func(h *producerHarness) {
-			h.deps.FreeBytes = func(string) (uint64, error) { return 0, errors.New("statfs failed") }
-		}, false},
-		{"attempt guard refusal", func(h *producerHarness) {
-			h.deps.StorePath = filepath.Join(h.t.TempDir(), "store")
-			for i := 0; i < snapshotAttemptLimit; i++ {
-				if err := spendGuestAttempt(h.deps.StorePath, snapshotAttemptKey, h.deps.ComputerID, snapshotAttemptLimit+1); err != nil {
-					h.t.Fatal(err)
-				}
-			}
-		}, false},
-		{"take error", func(h *producerHarness) { h.takeErr = errors.New("take failed") }, false},
-		{"take panic", func(h *producerHarness) {
-			h.deps.Take = func(context.Context, time.Duration) (snapshot.Ref, error) { panic("take panicked") }
-		}, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			h, p, now := dueHarness(t, "first")
-			held, released := 0, 0
-			h.deps.HoldCopy = func() (func(), string, bool) {
-				held++
-				return func() { released++ }, "", true
-			}
-			tc.setup(h)
-			func() {
-				defer func() {
-					if r := recover(); r != nil && !tc.panic {
-						panic(r)
-					}
-				}()
-				h.run(p, now)
-			}()
-			if held != 1 || released != 1 {
-				t.Fatalf("token taken %d times and released %d times, want once each", held, released)
-			}
-		})
+		t.Fatalf("outcome=%s detail=%q", outcome, detail)
 	}
 }
 
 // Failures 26 and 41: a staged compact copy lowers the measured free space and is
 // not added again; below the need the capture refuses, naming the amounts and the
-// staged size. The cleanup and the size are the store's own helpers on real files:
-// the staged copy and its sidecar are byte-identical afterwards.
+// staged size. The size is the store's own helper on real files: a capture never
+// touches the staged copy or its sidecar.
 func TestAStagedCopyIsNamedInTheRefusalAndNeverRemoved(t *testing.T) {
 	h, p, now := dueHarness(t, "first")
-	need := uint64(copyTestStoreBytes) + snapshotFreeFloor
+	need := snapshotWALHeadroom(0) + snapshotFreeFloor
 	marker := filepath.Join(h.deps.DataDir, "store") // StateDBPath(marker) is DataDir/state.db
 	staged := filepath.Join(h.deps.DataDir, "state.db.compact")
 	sidecar := filepath.Join(h.deps.DataDir, "state.db.compact.json")
@@ -209,7 +114,6 @@ func TestAStagedCopyIsNamedInTheRefusalAndNeverRemoved(t *testing.T) {
 	if err := os.WriteFile(sidecar, []byte(`{"sequence":7}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	h.deps.Leftovers = func() error { return choirstore.RemoveCaptureLeftovers(marker) }
 	h.deps.StagedCopyBytes = func() int64 { return choirstore.CompactStagedBytes(marker) }
 	h.free = need - 1
 	outcome, detail := h.run(p, now)
@@ -228,24 +132,6 @@ func TestAStagedCopyIsNamedInTheRefusalAndNeverRemoved(t *testing.T) {
 	}
 	if _, err := os.Stat(staged); err != nil {
 		t.Fatalf("the staged copy was removed by a capture that took: %v", err)
-	}
-}
-
-// Failure 43: many refusals because the token is held touch neither the failure
-// counter nor the backoff.
-func TestRefusalsForAHeldTokenEscalateNothing(t *testing.T) {
-	h, p, now := dueHarness(t, "first")
-	h.deps.HoldCopy = func() (func(), string, bool) { return func() {}, "compaction", false }
-	for i := 0; i < 5; i++ {
-		if outcome, _ := h.run(p, now.Add(time.Duration(i)*snapshotTickEvery)); outcome != snapshotRefused {
-			t.Fatalf("tick %d: %s", i, outcome)
-		}
-	}
-	if p.failures != 0 || !p.retryAt.IsZero() {
-		t.Fatalf("failures=%d retryAt=%v: a held token must not back the producer off", p.failures, p.retryAt)
-	}
-	if st := p.status(now); st.ConsecutiveRefusals != 5 || !strings.Contains(st.Refusal, "compaction") {
-		t.Fatalf("status %+v: the refusals must be visible and name the holder", st)
 	}
 }
 
@@ -287,31 +173,24 @@ func TestThePersistedCaptureDurationIsTheWholeCapture(t *testing.T) {
 // longer calls the pin a "read transaction".
 func TestTheStatusReportsThePinAndThePhases(t *testing.T) {
 	h, p, now := dueHarness(t, "first")
-	if st := p.status(now); st.LastPinSeconds != 0 || st.LastScratchBytes != 0 {
+	if st := p.status(now); st.LastPinSeconds != 0 || st.LastStateBytes != 0 {
 		t.Fatalf("fields before the first capture: %+v", st)
 	}
 	h.deps.Take = func(context.Context, time.Duration) (snapshot.Ref, error) {
 		return snapshot.Ref{EventID: "e", Record: snapshot.Record{StoreHeadSequence: h.head, PlaintextSize: 99},
-			Stats: snapshot.Stats{PinTime: 2 * time.Second, CopyTime: time.Second, WitnessTime: 3 * time.Second, UploadTime: 4 * time.Second,
-				ScratchBytes: 99, PinWALStart: 10, PinWALEnd: 110, PinEvents: 7}}, nil
+			Stats: snapshot.Stats{PinTime: 2 * time.Second, UploadTime: 4 * time.Second,
+				StateBytes: 99, PinWALStart: 10, PinWALEnd: 110, PinEvents: 7}}, nil
 	}
 	if outcome, _ := h.run(p, now); outcome != snapshotTaken {
 		t.Fatal(outcome)
 	}
 	st := p.status(now)
-	if st.LastPinSeconds != 2 || st.LastCopySeconds != 1 || st.LastWitnessSeconds != 3 || st.LastUploadSeconds != 4 ||
-		st.LastScratchBytes != 99 || st.LastPinWALGrowthBytes != 100 || st.LastPinEvents != 7 {
+	if st.LastPinSeconds != 2 || st.LastUploadSeconds != 4 ||
+		st.LastStateBytes != 99 || st.LastPinWALGrowthBytes != 100 || st.LastPinEvents != 7 {
 		t.Fatalf("status %+v", st)
 	}
 	if !strings.Contains(st.LastDetail, "pin ") || strings.Contains(st.LastDetail, "read transaction") {
 		t.Fatalf("last_detail %q must say pin and never read transaction", st.LastDetail)
-	}
-}
-
-// Failure 35: the scratch name is the previous binary's cleanup name.
-func TestTheScratchDirectoryNameIsThePreviousBinarysCleanupName(t *testing.T) {
-	if snapshotScratchDirName != "snapshot-tmp" || choirstore.SnapshotScratchDirName != "snapshot-tmp" {
-		t.Fatalf("names %q and %q must both be snapshot-tmp", snapshotScratchDirName, choirstore.SnapshotScratchDirName)
 	}
 }
 
@@ -331,9 +210,9 @@ func TestRuntimeStartSweepsTheSnapshotScratch(t *testing.T) {
 	}
 }
 
-// The production constructor sets every hook the producer requires and the
-// scratch directory (the guards for a nil hook are gone: a dropped line would
-// otherwise silently remove the compaction exclusion or the store-size rule).
+// The production constructor sets the hook the producer requires, and the
+// capture it builds has no scratch directory, no store-copy token and a pin
+// deadline.
 func TestTheProductionConstructorWiresEveryHook(t *testing.T) {
 	st := newStreamStore(t, 20)
 	client, err := computerevent.NewHTTPClient("http://127.0.0.1:1", http.DefaultClient,
@@ -353,21 +232,20 @@ func TestTheProductionConstructorWiresEveryHook(t *testing.T) {
 	if !ok {
 		t.Fatal("the constructor refused a runtime with a store, an appender, a cipher and an event client")
 	}
-	if deps.StoreBytes == nil || deps.HoldCopy == nil || deps.Leftovers == nil || deps.StagedCopyBytes == nil {
-		t.Fatalf("a hook is not wired: StoreBytes %v, HoldCopy %v, Leftovers %v, StagedCopyBytes %v",
-			deps.StoreBytes != nil, deps.HoldCopy != nil, deps.Leftovers != nil, deps.StagedCopyBytes != nil)
+	if deps.StagedCopyBytes == nil || deps.Take == nil || deps.FreeBytes == nil {
+		t.Fatalf("a hook is not wired: StagedCopyBytes %v, Take %v, FreeBytes %v", deps.StagedCopyBytes != nil, deps.Take != nil, deps.FreeBytes != nil)
 	}
-	// The wired hooks do what the producer relies on: the token excludes, the size
-	// is the store's, and the cleanup removes the scratch directory.
-	release, _, got := deps.HoldCopy()
-	if !got {
-		t.Fatal("the first request for the token was refused")
+	raw, err := os.ReadFile("snapshot_producer.go")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, holder, again := deps.HoldCopy(); again || holder != "capture" {
-		t.Fatalf("a held token granted again (%v) or named %q", again, holder)
+	src := string(raw)
+	if !strings.Contains(src, "PinDeadline: snapshotPinDeadline") {
+		t.Fatal("the capture is built without its pin deadline")
 	}
-	release()
-	if n, err := deps.StoreBytes(context.Background()); err != nil || n <= 0 {
-		t.Fatalf("store bytes %d, %v", n, err)
+	for _, gone := range []string{"ScratchDir", "TryHoldStoreCopy", "RemoveCaptureLeftovers", "Witness:"} {
+		if strings.Contains(src, gone) {
+			t.Fatalf("the producer still names %q: the old capture path is not deleted", gone)
+		}
 	}
 }

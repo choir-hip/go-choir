@@ -197,17 +197,64 @@ func newFixture(t *testing.T, bytesApprox int) *fixture {
 			Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 				return &computerevent.Head{ComputerID: testComputer, Sequence: 41, CanonicalEventHead: strings.Repeat("e", 64)}, nil
 			},
-			Witness:    witnessOf,
-			ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
-			Cipher:     cipher,
-			Chunks:     chunks,
-			Appender:   tape,
+			Cipher:   cipher,
+			Chunks:   chunks,
+			Appender: tape,
 		},
 	}
 }
 
 func (f *fixture) restoreConfig(dest string) RestoreConfig {
-	return RestoreConfig{ComputerID: testComputer, DestPath: dest, Source: f.tape, Chunks: f.chunks, Cipher: f.cipher}
+	return RestoreConfig{ComputerID: testComputer, DestPath: dest, Source: f.tape, Chunks: f.chunks, Cipher: f.cipher, Verify: testVerify}
+}
+
+// testVerify is the head tie a version 2 install needs (the production one is
+// agentcore.VerifySnapshotFile, which reads the projection head row): where the
+// restored file holds a heads table of either test shape, its sequence must be
+// the record's. A file with neither shape (the fixture's fixed fake head) has no
+// head to tie.
+func testVerify(ctx context.Context, record Record, path string) error {
+	db, err := dbx.OpenSQLite(path, dbx.SQLiteOptions{ReadConns: 1})
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var seq uint64
+	if err := db.Read.QueryRowContext(ctx, `SELECT seq FROM heads WHERE id = 1`).Scan(&seq); err != nil {
+		if err := db.Read.QueryRowContext(ctx, `SELECT sequence FROM heads WHERE computer_id = 'c'`).Scan(&seq); err != nil {
+			return nil
+		}
+	}
+	if seq != record.StoreHeadSequence {
+		return fmt.Errorf("restored file holds head %d, the record names %d", seq, record.StoreHeadSequence)
+	}
+	return nil
+}
+
+// legacyV1 re-records ref's snapshot as the version 1 record an older capture
+// wrote: the same chunks, the logical witness of the live store in place of the
+// page digest. It is appended after ref's own event.
+func (f *fixture) legacyV1(t *testing.T, ref Ref) Record {
+	t.Helper()
+	w, err := witnessOf(context.Background(), f.db.Read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := ref.Record
+	rec.Version, rec.PageDigest = Version, ""
+	rec.WitnessRoot, rec.SchemaHash = w.ContentRoot, w.SchemaHash
+	plaintext, err := jsonMarshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: "event-legacy-v1", ComputerID: testComputer,
+		EventKind: computerevent.EventSnapshotRecorded, PrivacyClass: "private",
+	}
+	if _, _, err := f.tape.AppendNewPrivatePayload(context.Background(), event, computerevent.TransitionInput{}, plaintext, RecordMediaType, f.cipher); err != nil {
+		t.Fatal(err)
+	}
+	return rec
 }
 
 func TestSnapshotRoundTripAcrossChunks(t *testing.T) {
@@ -233,8 +280,8 @@ func TestSnapshotRoundTripAcrossChunks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ref.Record.StoreHeadSequence != 41 || ref.Record.WitnessRoot != live.ContentRoot || ref.Record.SchemaHash != live.SchemaHash {
-		t.Fatalf("record does not capture head and witness: %+v", ref.Record)
+	if ref.Record.Version != VersionPageDigest || ref.Record.StoreHeadSequence != 41 || !computerevent.IsSHA256(ref.Record.PageDigest) || ref.Record.WitnessRoot != "" || ref.Record.SchemaHash != "" {
+		t.Fatalf("record does not capture head and page digest (and no witness): %+v", ref.Record)
 	}
 	// The store's pages may still be in its WAL, so compare with the data
 	// written rather than with the main file.
@@ -242,9 +289,9 @@ func TestSnapshotRoundTripAcrossChunks(t *testing.T) {
 		t.Fatalf("plaintext size %d for a store of about %d bytes", ref.Record.PlaintextSize, 2*ChunkSize+ChunkSize/2)
 	}
 
-	// The record is sealed: the envelope does not contain the witness root.
-	if bytes.Contains(f.tape.payloads[ref.ArtifactDigest], []byte(ref.Record.WitnessRoot)) {
-		t.Fatal("the sealed record exposes its witness root")
+	// The record is sealed: the envelope does not contain the page digest.
+	if bytes.Contains(f.tape.payloads[ref.ArtifactDigest], []byte(ref.Record.PageDigest)) {
+		t.Fatal("the sealed record exposes its page digest")
 	}
 	// Another computer's key does not open it.
 	other := testCipher(t, testComputer)
@@ -302,7 +349,7 @@ func TestRestorePrefersTheNewestAndFallsBackWhenItIsUnusable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Record.WitnessRoot == second.Record.WitnessRoot {
+	if first.Record.PageDigest == second.Record.PageDigest {
 		t.Fatal("test premise: the two snapshots should differ")
 	}
 
@@ -311,7 +358,7 @@ func TestRestorePrefersTheNewestAndFallsBackWhenItIsUnusable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if record.WitnessRoot != second.Record.WitnessRoot {
+	if record.PageDigest != second.Record.PageDigest {
 		t.Fatal("Restore did not take the newest snapshot")
 	}
 
@@ -332,11 +379,11 @@ func TestRestorePrefersTheNewestAndFallsBackWhenItIsUnusable(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
-	if record.WitnessRoot != first.Record.WitnessRoot {
+	if record.PageDigest != first.Record.PageDigest {
 		t.Fatal("Restore did not fall back to the older snapshot")
 	}
 	if entries, _ := os.ReadDir(filepath.Dir(dest2)); len(entries) != 1 {
-		t.Fatalf("destination directory has %d entries, want only the state file", len(entries))
+		t.Fatalf("destination directory has %d entries (%v), want only the state file", len(entries), entries)
 	}
 }
 

@@ -187,8 +187,6 @@ func streamConfig(t *testing.T, store *choirstore.Store, tape *streamTape, ciphe
 		Head: func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) {
 			return store.HeadTx(ctx, tx, streamComputer)
 		},
-		Witness:     LiveStoreWitness,
-		ScratchDir:  filepath.Join(t.TempDir(), "snapshot-tmp"),
 		Cipher:      cipher,
 		Chunks:      tape,
 		Appender:    tape,
@@ -276,7 +274,7 @@ func TestSnapshotUnderContinuousWritesRestoresToAWitnessMatch(t *testing.T) {
 	}
 
 	restored, record := restoreStream(t, tape, cipher)
-	if record.WitnessRoot != ref.Record.WitnessRoot {
+	if record.PageDigest != ref.Record.PageDigest {
 		t.Fatal("restore chose another snapshot")
 	}
 	var rows, headSeq uint64

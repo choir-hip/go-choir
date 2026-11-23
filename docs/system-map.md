@@ -161,6 +161,8 @@ Numbers, the paper [2]; store composition is later [CH]:
   GiB receipt table, about 12 live), 41 GiB capture bodies [2].
 - Capture of 2026-11-22: 51.3 GiB, 66 min (copy 7 min, whole-store witness
   55 min, upload 4 min); 79% of chunks new a day later [2].
+  The capture on lane `snapshot-capture-s3` (not landed) writes no copy and
+  no witness; it is unmeasured on the paper.
 - Recovery proved only on the drill account: lost-disk rebuild 2026-10-30
   (1,007 of 1,007 files); in-place rematerialize 2026-11-15, witness
   matched, 283 s; its store is about 1.1 GB [2].

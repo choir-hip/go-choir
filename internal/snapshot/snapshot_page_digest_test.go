@@ -33,7 +33,8 @@ import (
 // v2Case is one record on an otherwise empty tape.
 type v2Case struct {
 	f     *fixture
-	base  Record // the version-1 record the capture made
+	base  Record // the version-2 record the capture made
+	v1    Record // the same chunks recorded as a version-1 record (legacyV1)
 	plain []byte // the state file's plaintext
 }
 
@@ -63,7 +64,7 @@ func newV2Case(t *testing.T) *v2Case {
 	if len(plain) != int(ref.Record.PlaintextSize) || len(plain) < 2*ChunkSize+20*int(ref.Record.PageSize) {
 		t.Fatalf("test premise: %d bytes of plaintext for %d recorded", len(plain), ref.Record.PlaintextSize)
 	}
-	return &v2Case{f: f, base: ref.Record, plain: plain}
+	return &v2Case{f: f, base: ref.Record, v1: f.legacyV1(t, ref), plain: plain}
 }
 
 func (c *v2Case) digestOf(plain []byte, pageSize int, pageCount int64) string {
@@ -161,13 +162,19 @@ func (c *v2Case) refused(t *testing.T, wantErr string) {
 // D1, D5
 func TestPageDigestRecordRestoresAndVersionOneStillDoes(t *testing.T) {
 	c := newV2Case(t)
-	// The capture's own version-1 record, verified by Verify as today.
+	// An older capture's version-1 record, verified by Verify as today.
+	c.only(t, c.v1)
 	rec, dest, calls, err := c.restore(t)
 	if err != nil || rec.Version != Version || calls != 1 {
 		t.Fatalf("version 1 restore = %+v, verify calls %d, %v", rec, calls, err)
 	}
 	if got, _ := os.ReadFile(dest); !bytes.Equal(got, c.plain) {
 		t.Fatal("version 1 restored other bytes")
+	}
+	// The capture's own record is version 2, and its digest is that of the
+	// plaintext the chunks hold.
+	if c.base.Version != VersionPageDigest || c.base.PageDigest != c.digestOf(c.plain, c.base.PageSize, c.base.PageCount) {
+		t.Fatalf("the capture's record %+v does not digest the pages it uploaded", c.base)
 	}
 	c.only(t, c.v2(t, c.plain, c.plain))
 	rec, dest, calls, err = c.restore(t)
@@ -188,16 +195,16 @@ func TestRecordFormMatrix(t *testing.T) {
 		rec  func() Record
 		want string // empty: restores
 	}{
-		{"v1 with its witness", func() Record { return c.base }, ""},
+		{"v1 with its witness", func() Record { return c.v1 }, ""},
 		{"v2 with its digest", func() Record { return good2 }, ""},
-		{"v1 with neither form", func() Record { r := c.base; r.WitnessRoot, r.SchemaHash = "", ""; return r }, "carries no witness"},
-		{"v1 without a schema hash", func() Record { r := c.base; r.SchemaHash = ""; return r }, "carries no witness"},
-		{"v1 without a witness root", func() Record { r := c.base; r.WitnessRoot = ""; return r }, "carries no witness"},
-		{"v1 that also carries a digest", func() Record { r := c.base; r.PageDigest = good2.PageDigest; return r }, "version 1 record carries a page digest"},
+		{"v1 with neither form", func() Record { r := c.v1; r.WitnessRoot, r.SchemaHash = "", ""; return r }, "carries no witness"},
+		{"v1 without a schema hash", func() Record { r := c.v1; r.SchemaHash = ""; return r }, "carries no witness"},
+		{"v1 without a witness root", func() Record { r := c.v1; r.WitnessRoot = ""; return r }, "carries no witness"},
+		{"v1 that also carries a digest", func() Record { r := c.v1; r.PageDigest = good2.PageDigest; return r }, "version 1 record carries a page digest"},
 		{"v2 with neither form", func() Record { r := good2; r.PageDigest = ""; return r }, "page digest"},
 		{"v2 with a malformed digest", func() Record { r := good2; r.PageDigest = "not-a-digest"; return r }, "page digest"},
-		{"v2 that also carries a witness root", func() Record { r := good2; r.WitnessRoot = c.base.WitnessRoot; return r }, "version 2 record carries a witness"},
-		{"v2 that also carries a schema hash", func() Record { r := good2; r.SchemaHash = c.base.SchemaHash; return r }, "version 2 record carries a witness"},
+		{"v2 that also carries a witness root", func() Record { r := good2; r.WitnessRoot = c.v1.WitnessRoot; return r }, "version 2 record carries a witness"},
+		{"v2 that also carries a schema hash", func() Record { r := good2; r.SchemaHash = c.v1.SchemaHash; return r }, "version 2 record carries a witness"},
 		{"v2 without page geometry", func() Record {
 			r := good2
 			r.PageSize, r.PageCount, r.PagesPerChunk = 0, 0, 0
@@ -310,7 +317,9 @@ func TestVersionTwoRecordIsRefusedWhenThereIsNoVerify(t *testing.T) {
 	c := newV2Case(t)
 	c.only(t, c.v2(t, c.plain, c.plain))
 	dest := filepath.Join(t.TempDir(), "state.db")
-	_, err := Restore(context.Background(), c.f.restoreConfig(dest)) // Verify is nil
+	noVerify := c.f.restoreConfig(dest)
+	noVerify.Verify = nil
+	_, err := Restore(context.Background(), noVerify)
 	if err == nil || !strings.Contains(err.Error(), "needs a Verify") {
 		t.Fatalf("a version 2 record installed with no Verify: %v", err)
 	}
@@ -318,8 +327,10 @@ func TestVersionTwoRecordIsRefusedWhenThereIsNoVerify(t *testing.T) {
 		t.Fatal("the refused install left a state file")
 	}
 	// Version 1 with no Verify installs as before.
-	c.only(t, c.base)
-	if _, err := Restore(context.Background(), c.f.restoreConfig(filepath.Join(t.TempDir(), "state.db"))); err != nil {
+	c.only(t, c.v1)
+	noVerify = c.f.restoreConfig(filepath.Join(t.TempDir(), "state.db"))
+	noVerify.Verify = nil
+	if _, err := Restore(context.Background(), noVerify); err != nil {
 		t.Fatalf("version 1 with no Verify: %v", err)
 	}
 }

@@ -15,9 +15,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
-	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
 )
 
@@ -154,14 +152,6 @@ func TestProductionRestoreTapeSkipsAPrunedCandidateWithoutDownloadingIt(t *testi
 		Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 			return &computerevent.Head{ComputerID: computerID, Sequence: seq, CanonicalEventHead: strings.Repeat("e", 64)}, nil
 		},
-		Witness: func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
-			digests, err := computerversion.SQLiteStateExtractor{DB: db, Database: "texture"}.Digests(ctx)
-			if err != nil {
-				return selfdevprotocol.VMLocalContentWitness{}, err
-			}
-			return selfdevprotocol.WitnessFromDigests(digests)
-		},
-		ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
 		Cipher:     cipher,
 		Chunks:     tape, // the production type takes the snapshot too
 		Appender:   hostAppender{host},

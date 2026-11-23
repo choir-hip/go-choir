@@ -136,12 +136,25 @@ func TestVersionOneRecordIsStillVerifiedByItsWitness(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, err := installV2(t, tape, cipher); err != nil {
+		t.Fatalf("version 2: %v", err)
+	}
+	w, err := LiveStoreWitness(context.Background(), store.ReadDB())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The capture writes version 2; a version 1 record of the same chunks, as an
+	// older capture wrote it, is verified by its witness.
+	v2Of(t, tape, cipher, ref, func(r *snapshot.Record) {
+		r.Version, r.PageDigest = snapshot.Version, ""
+		r.WitnessRoot, r.SchemaHash = w.ContentRoot, w.SchemaHash
+	})
+	if _, _, err := installV2(t, tape, cipher); err != nil {
 		t.Fatalf("version 1: %v", err)
 	}
 	// A record naming another witness refuses.
 	v2Of(t, tape, cipher, ref, func(r *snapshot.Record) {
 		r.Version, r.PageDigest = snapshot.Version, ""
-		r.WitnessRoot, r.SchemaHash = strings.Repeat("a", 64), ref.Record.SchemaHash
+		r.WitnessRoot, r.SchemaHash = strings.Repeat("a", 64), w.SchemaHash
 	})
 	if _, _, err := installV2(t, tape, cipher); err == nil || !strings.Contains(err.Error(), "witness root") {
 		t.Fatalf("a version 1 record with another witness restored or failed otherwise: %v", err)

@@ -64,11 +64,7 @@ func newProducerHarness(t *testing.T) *producerHarness {
 		HeadSequence: func(context.Context) (uint64, bool, error) { return h.head, h.head > 0, nil },
 		Busy:         func(context.Context) (string, error) { return h.busy, nil },
 		FreeBytes:    func(string) (uint64, error) { return h.free, nil },
-		// The wired shape: every hook the constructor sets is set here too, so no
-		// producer test runs without the token, the cleanup or the store-size rule.
-		StoreBytes:      func(context.Context) (int64, error) { return 1 << 20, nil },
-		HoldCopy:        func() (func(), string, bool) { return func() {}, "", true },
-		Leftovers:       func() error { return nil },
+		// The wired shape: every hook the constructor sets is set here too.
 		StagedCopyBytes: func() int64 { return 0 },
 		Ready:           func() bool { return true },
 		Take: func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error) {

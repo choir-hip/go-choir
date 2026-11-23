@@ -110,11 +110,42 @@ func TestStreamedFileIsAValidStoreWithTheRecordedWitness(t *testing.T) {
 	if err := selfdevprotocol.WitnessContentMatches(got, live); err != nil {
 		t.Fatalf("restored witness differs from the live store: %v", err)
 	}
-	if rec.WitnessRoot != got.ContentRoot || rec.SchemaHash != got.SchemaHash {
-		t.Fatalf("the recorded witness %s is not what restore recomputes %s", rec.WitnessRoot, got.ContentRoot)
+	if want := restoredPageDigest(t, restored); rec.PageDigest != want {
+		t.Fatalf("the recorded page digest %s is not the digest of the restored pages %s", rec.PageDigest, want)
 	}
 	// The transaction ended: the WAL can be truncated.
 	assertWALReleased(t, f)
+}
+
+// restoredPageDigest is the page digest of an opened store, computed here from
+// sqlite_dbpage and not through the capture's code path.
+func restoredPageDigest(t *testing.T, db *dbx.SQLiteDB) string {
+	t.Helper()
+	var pageSize int
+	var pageCount int64
+	if err := db.Read.QueryRow(`PRAGMA page_size`).Scan(&pageSize); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Read.QueryRow(`PRAGMA page_count`).Scan(&pageCount); err != nil {
+		t.Fatal(err)
+	}
+	d := NewPageDigest(pageSize, pageCount)
+	rows, err := db.Read.Query(`SELECT data FROM sqlite_dbpage ORDER BY pgno`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var data []byte
+		if err := rows.Scan(&data); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = d.Write(data)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return d.Sum()
 }
 
 func assertWALReleased(t *testing.T, f *fixture) {
@@ -203,14 +234,15 @@ func TestWritesInsideTheStreamStayOutOfTheSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ContentRoot != ref.Record.WitnessRoot {
-		t.Fatalf("restored witness %s differs from the recorded %s", got.ContentRoot, ref.Record.WitnessRoot)
+	// The restored file is the pre-write state, not the live one, and its pages
+	// are the pages the record's digest was taken over.
+	if got.ContentRoot != liveBefore.ContentRoot {
+		t.Fatalf("restored witness %s, the store at the snapshot point had %s", got.ContentRoot, liveBefore.ContentRoot)
 	}
-	// The recorded witness is the pre-write state, not the live one.
-	if ref.Record.WitnessRoot != liveBefore.ContentRoot {
-		t.Fatalf("recorded witness %s, the store at the snapshot point had %s", ref.Record.WitnessRoot, liveBefore.ContentRoot)
+	if want := restoredPageDigest(t, restored); ref.Record.PageDigest != want {
+		t.Fatalf("recorded page digest %s, the restored pages digest to %s", ref.Record.PageDigest, want)
 	}
-	if liveNow := liveWitness(t, f); liveNow.ContentRoot == ref.Record.WitnessRoot {
+	if liveNow := liveWitness(t, f); liveNow.ContentRoot == got.ContentRoot {
 		t.Fatal("test premise: the live store should have moved on")
 	}
 	assertWALReleased(t, f)
@@ -285,7 +317,7 @@ func TestSecondSnapshotUploadsOnlyTheChangedChunks(t *testing.T) {
 
 	// Both restore to their own state.
 	restored, record := restoreAndOpen(t, f)
-	if record.WitnessRoot != second.Record.WitnessRoot {
+	if record.PageDigest != second.Record.PageDigest {
 		t.Fatal("restore did not take the newest snapshot")
 	}
 	var v string
@@ -546,13 +578,6 @@ func TestRestoreRefusesGeometryThatContradictsTheManifest(t *testing.T) {
 func TestTheTimeBudgetAbortsTheStreamAndRecordsNothing(t *testing.T) {
 	f := newFixture(t, ChunkSize*3)
 	f.cfg.MaxDuration = 100 * time.Millisecond
-	// The witness runs before the pages; with the real one the budget can end
-	// inside it (a slow race build), which TestABudgetAbortInTheWitness
-	// covers. Here the stream is what runs out.
-	fixed := liveWitness(t, f)
-	f.cfg.Witness = func(context.Context, *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
-		return fixed, nil
-	}
 	f.cfg.pageHook = func(pgno int64) {
 		if pgno%16 == 0 {
 			time.Sleep(2 * time.Millisecond)
@@ -563,7 +588,7 @@ func TestTheTimeBudgetAbortsTheStreamAndRecordsNothing(t *testing.T) {
 	if !errors.Is(err, ErrTimeBudget) {
 		t.Fatalf("err = %v, want ErrTimeBudget", err)
 	}
-	if !strings.Contains(err.Error(), "pages copied") {
+	if !strings.Contains(err.Error(), "pages read") {
 		t.Fatalf("the abort does not say how far it got: %v", err)
 	}
 	if time.Since(started) > 10*time.Second {
@@ -660,6 +685,10 @@ func TestPageSizesOtherThan4096RoundTrip(t *testing.T) {
 			f := newFixture(t, 1<<10)
 			f.db = db
 			f.cfg.DB = db.Read
+			live, err := witnessOf(ctx, db.Read)
+			if err != nil {
+				t.Fatal(err)
+			}
 			ref, err := TakeSnapshot(ctx, f.cfg)
 			if err != nil {
 				t.Fatal(err)
@@ -675,8 +704,11 @@ func TestPageSizesOtherThan4096RoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.ContentRoot != ref.Record.WitnessRoot {
+			if got.ContentRoot != live.ContentRoot {
 				t.Fatal("restored witness differs")
+			}
+			if want := restoredPageDigest(t, restored); ref.Record.PageDigest != want {
+				t.Fatalf("recorded page digest %s, the restored pages digest to %s", ref.Record.PageDigest, want)
 			}
 			var check string
 			if err := restored.Read.QueryRow(`PRAGMA integrity_check`).Scan(&check); err != nil || check != "ok" {
@@ -696,7 +728,7 @@ func TestSnapshotRegistersItsChunksBeforeTheEvent(t *testing.T) {
 	if len(f.chunks.roots) != 1 || !equalStrings(f.chunks.roots[0], ref.Record.Manifest.Files[0].Chunks) {
 		t.Fatalf("registered roots %v", f.chunks.roots)
 	}
-	if ref.Stats.UploadTime <= 0 || ref.Stats.PinTime < ref.Stats.CopyTime || ref.Stats.CopyTime <= 0 || ref.Stats.Pages != ref.Record.PageCount {
+	if ref.Stats.PinTime <= 0 || ref.Stats.UploadTime < 0 || ref.Stats.StateBytes != ref.Record.PlaintextSize || ref.Stats.Pages != ref.Record.PageCount {
 		t.Fatalf("stats %+v", ref.Stats)
 	}
 	if !bytes.Equal([]byte(ref.Record.Manifest.ComputerID), []byte(testComputer)) {

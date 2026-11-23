@@ -2,12 +2,9 @@ package snapshot
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
 var errTestLowDisk = errors.New("test: free space under the floor")
@@ -27,15 +24,8 @@ func TestTheCaptureAbortsWhenFreeSpaceFallsUnderTheFloor(t *testing.T) {
 		}
 		return nil
 	}
-	// A long witness: only the free-space check can end it.
-	f.cfg.Witness = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
-		select {
-		case <-ctx.Done():
-			return selfdevprotocol.VMLocalContentWitness{}, ctx.Err()
-		case <-time.After(20 * time.Second):
-			return selfdevprotocol.VMLocalContentWitness{}, errors.New("the free-space check never ended the capture")
-		}
-	}
+	// A slow stream: only the free-space check can end it.
+	f.cfg.pageHook = func(int64) { time.Sleep(time.Millisecond) }
 	started := time.Now()
 	_, err := TakeSnapshot(context.Background(), f.cfg)
 	if !errors.Is(err, errTestLowDisk) {
