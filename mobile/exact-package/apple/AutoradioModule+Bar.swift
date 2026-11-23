@@ -121,6 +121,7 @@ extension AutoradioModule {
     }
 
     /// What only the audio code knows, for the radio's pump (shared code: radio-bridge.ts `readFacts`), and the inbox of what native callers and the voice turn handed over (RadioBridge). It decides nothing.
+    /// `foreground`: the app is in front. Only native knows it on a locked iPhone (Exact does not establish that the page turns hidden there); shared code stops asking the screens again each second while it is false (spine.contract `posKey`).
     /// `at` is the device's time in milliseconds (a data source may not read the clock); `ready`: onboarding is complete and no other audio holds the phone, so the radio may start by itself.
     @MainActor public func radioFacts(peek: Bool) -> [String: Any] {
         let s = runtime.snapshot(), tracker = BarTracker.shared, deck = Deck.shared
@@ -128,7 +129,7 @@ extension AutoradioModule {
         let info = tracker.radioInfo(player: choir.playerView(), snapshot: s, document: runtime.player.document, route: route, nextTitle: "")
         let pos = runtime.player.storyPosition()
         var o: [String: Any] = ["at": Date().timeIntervalSince1970 * 1000, "turnOpen": s.phase != "playing", "remainder": runtime.player.remainingText() ?? "",
-                                "position": ["block": pos.block, "seconds": pos.seconds], "wants": !runtime.player.userPaused, "ready": OnboardingController.shared?.finished ?? false,
+                                "position": ["block": pos.block, "seconds": pos.seconds], "wants": !runtime.player.userPaused, "foreground": !runtime.coordinator.isBackgrounded, "ready": OnboardingController.shared?.finished ?? false,
                                 "sentences": info.sentences, "sentenceIndex": info.sentenceIndex, "progress": info.progress, "inbox": peek ? [] : RadioBridge.shared.drain()]
         if let c = deck.current, c.kind == "audio", let r = deck.engine?.remotePosition() {
             o["audio"] = ["url": c.url, "title": c.title, "show": c.show, "start": c.start, "elapsed": r.elapsed] as [String: Any]

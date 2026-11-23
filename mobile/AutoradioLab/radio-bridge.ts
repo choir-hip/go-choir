@@ -69,7 +69,7 @@ async function readFacts(r: { inbox: string[] } & Partial<Radio>): Promise<Nativ
     if (Array.isArray(o.inbox)) for (const m of o.inbox) if (typeof m === 'string') r.inbox.push(m);
     const pos = obj(o.position), a = obj(o.audio), rem = obj(o.remote);
     return {
-      turnOpen: o.turnOpen === true, remainder: str(o.remainder), position: { block: num(pos.block), seconds: num(pos.seconds) }, wants: o.wants === true,
+      turnOpen: o.turnOpen === true, remainder: str(o.remainder), position: { block: num(pos.block), seconds: num(pos.seconds) }, wants: o.wants === true, foreground: o.foreground !== false,
       audio: str(a.url) !== '' ? { url: str(a.url), title: str(a.title), show: str(a.show), start: num(a.start), end: a.end === undefined ? undefined : num(a.end), episode_id: str(a.episode_id) || undefined, elapsed: num(a.elapsed) } : undefined,
       remote: rem.duration !== undefined ? { elapsed: num(rem.elapsed), duration: num(rem.duration) } : undefined,
     };
@@ -225,9 +225,9 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const later = nativeLater();
   if (later) { try { await later({ op: 'radioSet', snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); } catch { /* the next pulse sets it */ } }
   const posting = r.rt.store.pending.length > 0 && !r.rt.store.isFlushing;
-  // `live`: something is sounding, so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:
+  // `live`: something is sounding and the app is in front (native's `foreground`: with the screen off or the app away the audio plays on and nothing here asks again), so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:
   // the key is the beat, so the screens are asked after THIS pulse's read of the deck (they never read a position older than the pulse that said so), and a pause or a hidden page leaves the key still.
-  const live = r.rt.view().playing;
+  const live = r.rt.view().playing && r.rt.inFront();
   if (live) r.beat += 1;
   const out = { tick: r.tick, write: r.writer.wouldAsk() || posting, live, beat: r.beat, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)) };
   const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold}`;

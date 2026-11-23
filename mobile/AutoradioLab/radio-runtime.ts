@@ -30,8 +30,10 @@ export type NativeFacts = {
   position: { block: number; seconds: number };
   remote?: { elapsed: number; duration: number };
   wants: boolean;
+  /** The app is in front (not backgrounded, the phone not locked): native's own fact, the one the voice already uses to give the microphone up. A host that does not say is in front (the page's visibility still gates). */
+  foreground: boolean;
 };
-export const NO_FACTS: NativeFacts = { turnOpen: false, remainder: '', position: { block: 0, seconds: 0 }, wants: false };
+export const NO_FACTS: NativeFacts = { turnOpen: false, remainder: '', position: { block: 0, seconds: 0 }, wants: false, foreground: true };
 
 /** What the phone fetches before the deck is told: the sound of these is not in the entry. Each answers undefined when it cannot be had. */
 export type Resolvers = {
@@ -316,6 +318,8 @@ export class RadioRuntime {
   /** What the deck last said it holds and plays (for the console). */
   deckLine(): { held: number; item: string } { return { held: this.deckState?.held.length ?? 0, item: this.deckState?.item ?? '' }; }
   /** One read of the deck and the native facts, no more (what the pulse does): the pump is `radioHold`'s. */
+  /** The app is in front, as of the last read of the native facts. */
+  inFront = (): boolean => this.facts.foreground;
   async peek(): Promise<void> { await this.refreshFacts(); try { this.deckState = await this.deck.state(); } catch { /* the next pulse reads again */ } }
   needsWork(): boolean {
     if (this.pendingStarts.length > 0) return true;

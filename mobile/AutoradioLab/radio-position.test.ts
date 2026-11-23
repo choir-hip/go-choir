@@ -6,6 +6,8 @@
 //  P4  native asks per second: playing and visible adds exactly ONE (the page facts' `radioFacts` peek); paused adds none.
 //  P5  a seek, Next and a new entry change the pulse's tick at once (the mutation's own pump), so the screens re-anchor on the next key, not a second later; and the contract refreshes the pulse after them.
 //  P6  never past the entry's end: the elapsed label, the remaining label (never negative) and the fraction (never above 1).
+//  P9  the app in the background or the phone locked (the native fact `foreground` false, with the page still saying "visible", as the reference says an iPhone may): the pulse is not live, the beat stands still, nothing
+//      is asked again for hours; in front again the beat moves at once.
 //  P7  the contract wires it: `posKey` is derived from the pulse's `live` and `beat` and the page's visibility, and the three screens' resources take it.
 // The contract's rule (spine.contract): a resource is asked again when its arguments change. `ask` below is that rule: the screens are read when `tick` or `posKey` moved since the last second.
 import { beforeEach, describe, expect, test } from 'bun:test';
@@ -18,7 +20,8 @@ import { barRun, getRadio, queueAct, queueView, radioMove, radioPageFacts, radio
 
 type Call = { op: string; name?: string; peek?: boolean };
 let calls: Call[] = [];
-let nowS = 1_700_000_000;                                            // the device's clock, seconds
+let nowS = 1_700_000_000;
+let front = true;                                                    // the native fact `foreground`: the app is in front (UIApplication, the voice's own signal)                                            // the device's clock, seconds
 type Fake = { why: string; item: string; base: number; t0: number; duration: number; seq: number; journal: Record<string, unknown>[]; acked: number };
 let dk: Fake;
 const pos = (): number => (dk.why === 'playing' ? dk.base + (nowS - dk.t0) : dk.base);
@@ -27,7 +30,7 @@ const native = {
   available: true,
   later: async (r: { op: string; name?: string; args?: Record<string, unknown>; peek?: boolean; [k: string]: unknown }) => {
     calls.push({ op: r.op, name: r.name, peek: r.peek });
-    if (r.op === 'radioFacts') return { at: nowS * 1000, ready: true, turnOpen: false, position: { block: 0, seconds: 0 }, wants: false, inbox: [], sentences: [], sentenceIndex: 0, progress: 0 };
+    if (r.op === 'radioFacts') return { foreground: front, at: nowS * 1000, ready: true, turnOpen: false, position: { block: 0, seconds: 0 }, wants: false, inbox: [], sentences: [], sentenceIndex: 0, progress: 0 };
     if (r.op === 'deck') {
       const a = r.args ?? {};
       if (r.name === 'deckPlay') { dk.item = String(a.id); dk.why = 'playing'; dk.base = Number(a.start ?? 0); dk.t0 = nowS; dk.seq += 1; dk.journal.push({ seq: dk.seq, type: 'started', item: dk.item, at: '2023-11-14T22:00:00Z', block: 0, seconds: 0, final: 0, rendered: false, end: '', command: '', reason: '' }); }
@@ -50,7 +53,7 @@ beforeEach(async () => {
   forgetOnboarding();
   await wipeRadio(undefined);
   adoptNative(native as never, 'test');
-  calls = []; nowS = 1_700_000_000;
+  calls = []; nowS = 1_700_000_000; front = true;
   dk = { why: 'empty', item: '', base: 0, t0: 0, duration: 240, seq: 0, journal: [], acked: 0 };
 });
 
@@ -223,5 +226,30 @@ describe('P8 one second of the position, on a large run sheet', () => {
       expect(out).toBe(before + 1);
       expect((await radioPageFacts(undefined, native as never)).sheet).toBe((await radioPageFacts(undefined, native as never)).sheet);
     } finally { JSON.stringify = realStringify; JSON.parse = realParse; }
+  });
+});
+
+describe('P9 the phone locked or the app in the background: the page may still say visible, and nothing is asked again', () => {
+  test('foreground false: not live, the beat stands, no re-ask in a long stretch; foreground true: it moves again at once', async () => {
+    fresh(); dk.duration = 10_000; await play(); await ask(0, true); await ask(1, true);
+    front = false;
+    const gone = await ask(1, true);                                         // `visible` is passed as true: the page fact is not what this rests on
+    expect(gone.pulse.live).toBe(false);
+    const before = screens.reasks; calls = [];
+    for (let i = 0; i < 3600; i++) await ask(1, true);                       // an hour with the screen off, the audio sounding
+    expect(screens.reasks).toBe(before);
+    expect(calls.filter((c) => c.op === 'radioFacts' && c.peek === true).length).toBe(0);
+    front = true;
+    const back = await ask(0, true);
+    expect(back.pulse.live).toBe(true);
+    expect((screens.shown as Shown).elapsed).toBeGreaterThan(3000);          // the true place at once on return (clamped to the entry's end)
+    const n = screens.reasks; await ask(1, true); await ask(1, true);
+    expect(screens.reasks).toBe(n + 2);
+  });
+  test('a host that gives no such fact (Android, a host with no native package) is taken as in front: the page\'s own visibility still gates', async () => {
+    fresh(); await play();
+    const plain = { ...native, later: async (r: { op: string; [k: string]: unknown }) => { const o = await native.later(r as never) as Record<string, unknown>; if (r.op === 'radioFacts') delete o.foreground; return o; } };
+    adoptNative(plain as never, 'test');
+    expect((await radioPulse(undefined, plain as never)).live).toBe(true);
   });
 });
