@@ -659,6 +659,19 @@ func (r *IdentityRegistry) RevokeCredential(computerID string) {
 	}
 }
 
+// ForgetIdentity removes a computer's identity record entirely (an account
+// deletion; the computer is destroyed and never boots again). It reports
+// whether a record existed. Removal is persisted before it returns.
+func (r *IdentityRegistry) ForgetIdentity(computerID string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.identities[computerID]; !ok {
+		return false, nil
+	}
+	delete(r.identities, computerID)
+	return true, r.persistLocked()
+}
+
 // RotateCredential revokes the existing credential and issues a new one.
 // This is used when autoputer credentials are rotated for security or
 // after lifecycle changes.
