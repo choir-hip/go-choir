@@ -12,12 +12,12 @@ import { relative } from './paper-model.ts';
 
 export type RadioFacts = {
   at: number; sheet: string; playing: boolean; sentences: string[]; sentenceIndex: number; progress: number;
-  remoteAudio: boolean; remoteElapsed: number; spokenElapsed: number; remoteDuration: number; wants: boolean; message: string; notice: string; writing: boolean; dry: boolean;
+  ready: boolean; onAir: boolean; waiting: boolean; remoteAudio: boolean; remoteElapsed: number; spokenElapsed: number; remoteDuration: number; wants: boolean; message: string; notice: string; writing: boolean; dry: boolean;
   /** The title and route of the programme on air (the headline being read and the story it is); "" when none. */
   airTitle: string; airRoute: string; publishedAt: number; versionRoutes: string[]; versionNumbers: number[]; stale: string[]; takeTranscript: string; takeRecord: string;
 };
 export const EMPTY_FACTS: RadioFacts = {
-  at: 0, sheet: '', playing: false, sentences: [], sentenceIndex: 0, progress: 0, remoteAudio: false, remoteElapsed: 0, spokenElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
+  at: 0, sheet: '', playing: false, sentences: [], sentenceIndex: 0, progress: 0, ready: false, onAir: false, waiting: false, remoteAudio: false, remoteElapsed: 0, spokenElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
   airTitle: '', airRoute: '', publishedAt: 0, versionRoutes: [], versionNumbers: [], stale: [], takeTranscript: '', takeRecord: '',
 };
 
@@ -56,7 +56,7 @@ const zoneMinutes = (at: number): number => { try { return -new Date(at * 1000).
 export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknown, offsetMinutes?: number): PageInfo {
   const f = obj(rawFacts);
   const at = num(f.at) > 0 ? num(f.at) : 0;   // a non-positive time is no clock (a host with no native facts): no date, no greeting, no relative time
-  const b = barInfo(rawBar, rawEntries);
+  const b = barInfo({ ...obj(rawBar), ready: f.ready === true, onAir: f.onAir === true, waiting: f.waiting === true }, rawEntries);       // the same run overlay the bar applies (bar.ts), so the page and the bar say the same about playing
   const versions: Record<string, number> = {};
   const routes = strs(f.versionRoutes), numbers = Array.isArray(f.versionNumbers) ? f.versionNumbers.map(num) : [];
   if (routes.length === numbers.length) routes.forEach((r, i) => { versions[r] = numbers[i]; });

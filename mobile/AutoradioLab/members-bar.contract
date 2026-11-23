@@ -17,7 +17,7 @@ members Autoradio
   action barBlur
     barFocused = false
   // Typing is the field focused with words in it (the aim line then shows above, because the placeholder is gone).
-  derive typing = barFocused and ask != "" and bi.state == "idle"
+  derive typing = barFocused and ask != ""
 
   action jumpTo(index: number)
     send rm = radioJump(index=`${index}`)
@@ -34,11 +34,14 @@ members Autoradio
   // The speed slider, 0.5 to 3. `speedLive` is what the finger (or a step) last chose, 0 until it is touched; until then the speed is the
   // radio's own (the saved one). The finger's move is relative: a drag across the track's width is the whole range. Sent when it lifts.
   resource spVp = exactViewport() as shape StackVp
+  // `speedBase` is the radio's speed when the finger chose: if the radio's speed changes after that (a voice command, the saved one reapplied) the control follows the radio again.
   state speedLive = 0
-  derive speedNow = speedLive > 0 ? speedLive : ri.speedValue
+  state speedBase = 0
+  derive speedNow = speedLive > 0 and speedBase == ri.speedValue ? speedLive : ri.speedValue
   derive speedShown = floor(speedNow * 20 + 0.5) / 20
   derive speedPct = floor((speedNow - 0.5) / 2.5 * 100)
   action speedMove(dx: number, dy: number)
+    speedBase = ri.speedValue
     speedLive = min(max(speedNow + dx / max(spVp.width - 250, 1) * 2.5, 0.5), 3)
   action speedEnd(vx: number, vy: number)
     if speedLive > 0
@@ -47,8 +50,10 @@ members Autoradio
       send rm = radioSpeed(speed=`${v}`)
   action speedNudge(d: number)
     let v = min(max(floor((speedNow + d) * 20 + 0.5) / 20, 0.5), 3)
+    speedBase = ri.speedValue
     speedLive = v
     send rm = radioSpeed(speed=`${v}`)
   action speedReset
+    speedBase = ri.speedValue
     speedLive = 1
     send rm = radioSpeed(speed="1")

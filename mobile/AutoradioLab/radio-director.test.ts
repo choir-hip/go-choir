@@ -360,3 +360,15 @@ describe('what each kind of entry starts with', () => {
     expect(audioSpec(audio({ url: 'https://x.test/a.mp3', title: 'T', show: 'S', start: 5, end: 9 }, 'clip-abc'))?.episode_id).toBeUndefined();
   });
 });
+
+describe('a message that is not a failure to speak goes by itself (review B2-4)', () => {
+  test('the too-long-address line is gone eight seconds later, the speech failure stays', () => {
+    let t = Date.parse('2023-11-14T22:00:00Z');
+    store = new RunSheetStore({ now: () => new Date(t) }); d = new Director(store); d.onCommand = () => undefined;
+    d.queue({ ...paperStory('x', 'P'), source: { ref: 'url:https://x.test/' + 'b'.repeat(2200), label: 'x' } });
+    expect(d.visibleMessage()).toBe('That address is too long to add.');
+    t += 9_000; expect(d.visibleMessage()).toBe('');
+    d.message = 'Can’t speak: no sound'; d.messageAt = 0; t += 60_000;
+    expect(d.visibleMessage()).toBe('Can’t speak: no sound');
+  });
+});

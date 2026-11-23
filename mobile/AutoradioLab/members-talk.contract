@@ -16,8 +16,8 @@ members Autoradio
     send tk = answerAction(action="retry", id=id)
   // Close is shared code's (bar.ts `dismissAnswer`): the id of the entry the card shows is remembered there, so no later turn can bring that card back. Native keeps no dismissal.
   mutation dm as shape SettingsAck refreshes bi
-  action answerDismiss
-    send dm = answerDismissShared(bi.answerId)
+  action answerDismiss(id: string)
+    send dm = answerDismissShared(id)
   action answerCancel
     send tk = answerAction(action="cancel", id="")
   // Settings, Listening: the learned voice (kept on this phone only).

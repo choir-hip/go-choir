@@ -26,6 +26,8 @@ export const OPENING_WINDOW_SECONDS = 30 * 60;
 export const SESSION_RETRY_DELAYS = [1, 2, 4, 8, 15] as const;
 export const retryDelay = (attempt: number): number => SESSION_RETRY_DELAYS[Math.min(Math.max(attempt, 1) - 1, SESSION_RETRY_DELAYS.length - 1)];
 
+/** How long a message that is not a failure to speak stays on the page (the bar holds a message for four). */
+export const MESSAGE_SECONDS = 8;
 export type Command = { kind: 'start'; entry: Entry; press: boolean } | { kind: 'stop'; gen: number };
 export type Words = { title: string; paragraphs: string[] };
 
@@ -100,6 +102,12 @@ export class Director {
   wants = false;
   /** A plain line about the last thing that could not play ("" when nothing is wrong). */
   message = '';
+  /** When a transient message was set (device ms; 0: not transient). A message that is not a failure to speak goes by itself after MESSAGE_SECONDS: `visibleMessage`. */
+  messageAt = 0;
+  visibleMessage(): string {
+    if (this.message !== '' && this.messageAt > 0) { const t = this.store.now().getTime(); if (t > 0 && (t - this.messageAt) / 1000 > MESSAGE_SECONDS) { this.message = ''; this.messageAt = 0; } }
+    return this.message;
+  }
   /** Which start this is; the deck's ends belong to the start they report. */
   generation = 0;
   /** The phone's opening of this listening, and what became of desk entries the sheet did not take. */
@@ -178,7 +186,7 @@ export class Director {
   /** "Queue this": after what the listener placed before it. */
   queue(e: Entry, words?: Words): void { if (words) this.provided.set(e.id, words); this.placed(this.store.place(e, 'queued')); }
   /** An address too long for the server is not placed, and the listener is told so. */
-  private placed(r: { dropped?: string }): void { if (r.dropped === 'ref_too_long') { this.message = 'That address is too long to add.'; this.changed(); } }
+  private placed(r: { dropped?: string }): void { if (r.dropped === 'ref_too_long') { this.message = 'That address is too long to add.'; this.messageAt = this.store.now().getTime(); this.changed(); } }
   remove(index: number): void { const a = this.store.ahead(index + 1); if (index >= 0 && index < a.length) this.store.remove(a[index].id); }
   /** Tap an item in Up next: play it now. The entries before it stay ahead. */
   playUpcoming(index: number): void {
@@ -357,12 +365,12 @@ export class Director {
   // ---- reports from the deck driver ----
 
   /** The start of the playing entry made its document (the deck's id for what it is speaking). */
-  started(entryId: string, document?: string): void { if (entryId === this.playingId) { this.playingDocument = document; this.silent = 0; this.message = ''; this.changed(); } }
+  started(entryId: string, document?: string): void { if (entryId === this.playingId) { this.playingDocument = document; this.silent = 0; this.message = ''; this.messageAt = 0; this.changed(); } }
 
   /** What cannot play is skipped, once, and the radio goes on. Two in a row that made no sound stop it. */
   failedToStart(id: string, why: string): void {
     this.silent += 1;
-    if (this.silent >= 2 && this.wants) { this.wants = false; if (this.message === '') this.message = 'The radio could not play the next entries. Tap play to try again.'; }
+    if (this.silent >= 2 && this.wants) { this.wants = false; if (this.message === '') { this.message = 'The radio could not play the next entries. Tap play to try again.'; this.messageAt = 0; } }
     this.finish(id, false, undefined, 'failed to start: ' + (why || this.message));
   }
 
@@ -386,7 +394,7 @@ export class Director {
     if (anyPlayed) this.silent = 0;
     else {
       this.silent += 1;
-      this.message = `Can’t speak: ${failure || 'the voice made no sound'}`;
+      this.message = `Can’t speak: ${failure || 'the voice made no sound'}`; this.messageAt = 0;
       if (this.silent >= 2) this.wants = false;
     }
     this.finish(eid, anyPlayed, report);

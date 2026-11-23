@@ -170,3 +170,18 @@ describe('spoken time with no estimate (the proof showed no elapsed label on a p
     expect(q.elapsed).toBe(''); expect(q.remaining).toBe('');
   });
 });
+
+describe('B2-7 the page and the bar agree on playing (review)', () => {
+  test('a run that says the entry is held for the audio session or not on air is not "On air"', () => {
+    const f = (o: Record<string, unknown>) => facts([air], { playing: false, ready: true, onAir: true, ...o });
+    expect(radioPage(f({ waiting: true }), bar({ phase: 'playing', playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).toBe('paused');
+    expect(radioPage(f({}), bar({ playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).toBe('onair');
+    expect(radioPage(f({ onAir: false }), bar({ playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).not.toBe('onair');
+  });
+  test('B2-4 only a speech failure is labelled Can\'t speak; another message is shown as it is', () => {
+    const p = radioPage(facts([air], { message: 'That address is too long to add.' }), bar({ playing: false }), none, 0);
+    expect(p.statusLine).toBe('That address is too long to add.'); expect(p.cannotSpeak).toBe('');
+    const q = radioPage(facts([air], { message: 'Can’t speak: the voice made no sound' }), bar({ playing: false }), none, 0);
+    expect(q.statusLine).toBe('Can’t speak: the voice made no sound'); expect(q.cannotSpeak).toBe('the voice made no sound');
+  });
+});

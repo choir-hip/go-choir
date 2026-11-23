@@ -172,7 +172,7 @@ export class RadioRuntime {
       clip: (spec?.is_clip ?? false) && !(air && this.kept.has(air.id)), keepTitle: air && spec ? (spec.show === '' ? spec.title : `${spec.title} (${spec.show})`) : '', canOpenEpisode: spec?.episode_id !== undefined && parseEpisodeKey(spec.episode_id) !== null,
       elapsed, spokenElapsed: air && !spec && this.spoken.id === air.id ? Math.floor(this.spoken.ms / 1000) : 0, duration, elapsedLabel: air && spec ? clockLabel(elapsed) : '',
       remainingLabel: air && spec && duration > 0 ? '-' + clockLabel(Math.max(0, duration - elapsed)) : '', fraction: spec && duration > 0 ? Math.min(1, Math.max(0, elapsed / duration)) : 0,
-      message: this.director.message, notice: this.desk.notice, writing: this.desk.writing, dry: this.desk.dry && !this.desk.writing,
+      message: this.director.visibleMessage(), notice: this.desk.notice, writing: this.desk.writing, dry: this.desk.dry && !this.desk.writing,
     };
   }
 

@@ -364,3 +364,16 @@ describe('P13 a voice turn\'s messages survive a radio that is replaced while th
     expect(r2.inbox).toContain(msg);
   });
 });
+
+describe('P14 a sign-out forgets the lists sent with the turns (review B2 nit)', () => {
+  test('wipeRadio resets the sent lists and the turn log', async () => {
+    const { turnQueueJSON, applyTurnOps } = await import('./voice-queue.ts');
+    const r = await getRadio(undefined, native as never);
+    turnQueueJSON(r.rt, 0);
+    const v = r.rt.store.sheet.version;
+    await wipeRadio(undefined);
+    const r2 = await getRadio(undefined, native as never);
+    const out = applyTurnOps(r2.rt, JSON.stringify({ turn_id: 'after-wipe', base_version: v, ops: [{ op: 'move', id: 'x', to_index: 0 }] }));
+    expect(out.refused[0]).toContain('is not one this phone sent');            // the sent lists went with the account
+  });
+});

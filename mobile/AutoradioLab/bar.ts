@@ -20,7 +20,7 @@ export const PICK_A_STORY = 'Pick a story below.';
 
 export type BarInfo = {
   state: string; text: string; playing: boolean; talking: boolean; signedIn: boolean; handsFree: boolean; progress: number;
-  question: string; answerId: string; answerText: string; answerLabel: string; answerState: string; answerNote: string; canRetry: boolean;
+  question: string; answerId: string; answerText: string; answerLabel: string; answerState: string; answerNote: string; canRetry: boolean; answering: boolean;
   /** Seconds until a timed state ends (0: none), so the contract asks again then and not before. */
   until: number;
 };
@@ -66,7 +66,7 @@ function plain(stage: string, message: string): string {
 export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): BarInfo {
   const f = obj(rawFacts);
   now = now ?? num(f.at);
-  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.playing), talking: false, signedIn: bool(f.signedIn), handsFree: bool(f.handsFree), progress: 0, question: '', answerId: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, until: 0 };
+  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.playing), talking: false, signedIn: bool(f.signedIn), handsFree: bool(f.handsFree), progress: 0, question: '', answerId: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, answering: false, until: 0 };
   const blockCount = Math.max(0, Math.floor(num(f.blockCount)));
   if (blockCount > 0) b.progress = Math.min(1, Math.max(0, (Math.max(0, num(f.blockIndex)) + Math.max(0, num(f.blockFraction))) / blockCount));
 
@@ -96,8 +96,9 @@ export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): B
   else if (str(f.title) !== '' && blockCount > 0 && bool(f.running)) { b.state = 'paused'; b.text = str(f.title); }
 
   // The run sheet's overlay (what is on air, held for the audio session, remote audio shown as the radio).
-  const remote = bool(f.remote), onAir = f.onAir !== false;
-  if (bool(f.waiting) && !remote && b.state === 'playing') { b.state = 'paused'; b.playing = false; }
+  // Only a run that has answered says anything (`ready`): the shape's empty form (the first `barRun` not back yet, or one that threw) has `onAir` false and must not blank a bar that sounds.
+  const ran = bool(f.ready), remote = ran && bool(f.remote), onAir = !ran || f.onAir !== false;
+  if (ran && bool(f.waiting) && !remote && b.state === 'playing') { b.state = 'paused'; b.playing = false; }
   else if (!onAir && !remote && (b.state === 'playing' || b.state === 'paused')) { b.state = 'idle'; b.text = ''; b.playing = false; b.progress = 0; }
   else if (remote && (b.state === 'idle' || b.state === 'playing' || b.state === 'paused')) {
     const p = bool(f.remotePlaying);
@@ -115,7 +116,7 @@ export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): B
     if (status === 'failed') { b.answerState = 'failed'; b.answerNote = note; b.canRetry = true; }
     else if (status === 'answered' || status === 'answering') {
       if (answer !== '') { b.answerState = 'full'; b.answerText = answer; } else { b.answerState = 'first'; b.answerText = saved; b.answerLabel = 'From your saved stories'; }
-      b.answerNote = note; b.canRetry = status === 'answered' && note !== '';
+      b.answerNote = note; b.canRetry = status === 'answered' && note !== ''; b.answering = status === 'answering';
     } else if (first === '') b.answerState = 'working';
     else { b.answerState = 'first'; b.answerText = saved; b.answerLabel = 'From your saved stories'; }
   }

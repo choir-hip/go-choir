@@ -8,6 +8,10 @@ shape RadioPageFacts
   sentences: string[]
   sentenceIndex: number
   progress: number
+  // The run sheet's own words, as the bar's overlay has them (bar.ts): the page and the bar agree on playing.
+  ready: bool
+  onAir: bool
+  waiting: bool
   remoteAudio: bool
   remoteElapsed: number
   spokenElapsed: number

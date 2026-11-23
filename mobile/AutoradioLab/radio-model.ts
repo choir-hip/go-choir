@@ -183,6 +183,8 @@ function isCold(tail: Entry[], now: number): boolean {
 
 const takeId = (e: Entry): string | undefined => (e.source?.ref.startsWith('take:') ? e.source.ref.slice(5) : undefined);
 
+/** What the radio says that is not a failure to play or speak. */
+const PLAIN_WORDS = ['That address is too long to add.'];
 export function make(i: PageInput): PageInfo {
   const off = i.utcOffsetMinutes ?? 0;
   const air = onAirEntry(i.sheet);
@@ -263,7 +265,9 @@ export function make(i: PageInput): PageInfo {
   } else if (failure !== '') {
     let why = failure;
     for (const p of ['Can’t speak: ', "Can't speak: "]) if (why.startsWith(p)) why = why.slice(p.length);
-    o.state = 'error'; o.cannotSpeak = why; o.statusLine = `Can’t speak: ${why}`; o.action = 'Try again';
+    // A word from the radio that is not a failure to speak (an address too long to add) is said as it is, not labelled "Can’t speak".
+    const spoke = !PLAIN_WORDS.includes(failure);
+    o.state = 'error'; o.cannotSpeak = spoke ? why : ''; o.statusLine = spoke ? `Can’t speak: ${why}` : failure; o.action = spoke || /Tap play/.test(failure) ? 'Try again' : '';
   } else if (notice !== '') {
     o.state = 'offline'; o.statusLine = 'Offline: the desk cannot write ahead';
   } else if (air) {

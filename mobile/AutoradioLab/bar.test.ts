@@ -233,17 +233,17 @@ describe('a closed card stays closed (B12)', () => {
 
 describe('the run sheet overlay', () => {
   test('B9 an entry held for the audio session shows paused, not playing', () => {
-    expect(barInfo(play({ waiting: true }), none, at())).toMatchObject({ state: 'paused', playing: false });
-    expect(barInfo(play({ waiting: true, remote: true, remotePlaying: true, remoteTitle: 'Episode' }), none, at()).state).toBe('playing');   // remote audio is on its own
+    expect(barInfo(play({ waiting: true, ready: true }), none, at())).toMatchObject({ state: 'paused', playing: false });
+    expect(barInfo(play({ waiting: true, ready: true, remote: true, remotePlaying: true, remoteTitle: 'Episode' }), none, at()).state).toBe('playing');   // remote audio is on its own
   });
   test('B9 nothing on air shows idle with nothing in it', () => {
-    expect(barInfo(play({ onAir: false, progress: 0.7, blockIndex: 2 }), none, at())).toMatchObject({ state: 'idle', text: '', playing: false, progress: 0 });
-    expect(barInfo(play({ onAir: false, playing: false }), none, at())).toMatchObject({ state: 'idle', text: '', progress: 0 });
-    expect(barInfo(play({ onAir: false, phase: 'capturing' }), none, at()).state).toBe('talking');   // a turn is not the programme
-    expect(barInfo(play({ onAir: false, errorAt: at(), errorStage: 'voice' }), none, at(1)).state).toBe('error');
+    expect(barInfo(play({ onAir: false, ready: true, progress: 0.7, blockIndex: 2 }), none, at())).toMatchObject({ state: 'idle', text: '', playing: false, progress: 0 });
+    expect(barInfo(play({ onAir: false, ready: true, playing: false }), none, at())).toMatchObject({ state: 'idle', text: '', progress: 0 });
+    expect(barInfo(play({ onAir: false, ready: true, phase: 'capturing' }), none, at()).state).toBe('talking');   // a turn is not the programme
+    expect(barInfo(play({ onAir: false, ready: true, errorAt: at(), errorStage: 'voice' }), none, at(1)).state).toBe('error');
   });
   test('B9 remote audio shows as the radio: its play state, its title, its place', () => {
-    const f = facts({ remote: true, remotePlaying: true, remoteTitle: 'Episode 12', remoteFraction: 0.25, onAir: true });
+    const f = facts({ remote: true, remotePlaying: true, remoteTitle: 'Episode 12', remoteFraction: 0.25, onAir: true, ready: true });
     expect(barInfo(f, none, at())).toMatchObject({ state: 'playing', text: 'Episode 12', playing: true, progress: 0.25 });
     expect(barInfo({ ...f, remotePlaying: false }, none, at())).toMatchObject({ state: 'paused', text: 'Episode 12', playing: false, progress: 0.25 });
     expect(barInfo({ ...f, phase: 'capturing' }, none, at()).state).toBe('talking');            // a phase wins over the overlay
@@ -282,5 +282,32 @@ describe('the native answer', () => {
     expect(barInfo({}, {}, at()).state).toBe('idle');
     expect(barInfo({ playing: 'yes', blockCount: 'many', phase: 4, running: 1 }, { entries: 'none' }, at()).state).toBe('idle');
     expect(barInfo({ ...play(), surprise: [1, 2] }, { entries: [null, 3, 'x', entry()], dismissed: 7 }, at()).answerState).toBe('working');
+  });
+});
+
+describe('B2 the review of the pages and the bar', () => {
+  const read = (f: string): string => require('node:fs').readFileSync(new URL(f, import.meta.url), 'utf8');
+  test('B2-6 an empty run (not yet answered) never blanks a playing or paused bar; an answered one that says not on air does', () => {
+    expect(barInfo({ playing: true, title: 'A story', blockCount: 3, running: true, onAir: false }, { entries: [] }, 1).state).toBe('playing');       // no `ready`: the run has not answered
+    expect(barInfo({ playing: true, title: 'A story', blockCount: 3, running: true, onAir: false, ready: true }, { entries: [] }, 1).state).toBe('idle');
+  });
+  test('B2-8 a streaming answer says so, so the card can offer Cancel', () => {
+    const b = barInfo({}, { entries: [{ id: 'ask-1', question: 'q', status: 'answering', answer: 'Part of it', first: '', note: '' }] }, 1);
+    expect(b).toMatchObject({ answerState: 'full', answering: true });
+    expect(barInfo({}, { entries: [{ id: 'ask-2', question: 'q', status: 'answered', answer: 'All', first: '', note: '' }] }, 1).answering).toBe(false);
+  });
+  test('B2-2 Send and the aim line are not tied to the bar being idle', () => {
+    expect(read('members-bar.contract')).toMatch(/derive typing = barFocused and ask != ""\n/);
+    expect(read('bar.contract')).toMatch(/\(st == "error" \? "error" : \(typing \? "aim" : \(st == "playing"/);
+  });
+  test('B2-3 Try again asks the answer the card shows; Close closes the card it was drawn for', () => {
+    expect(read('bar.contract')).toContain('press=answerRetry(bi.answerId)'); expect(read('bar.contract')).toContain('press=answerDismiss(bi.answerId)');
+    expect(read('members-talk.contract')).toMatch(/action answerDismiss\(id: string\)\n    send dm = answerDismissShared\(id\)/);
+  });
+  test('B2-5 the speed shown follows the radio again when it changed after the finger chose', () => {
+    expect(read('members-bar.contract')).toContain('derive speedNow = speedLive > 0 and speedBase == ri.speedValue ? speedLive : ri.speedValue');
+  });
+  test('B2-8 Cancel is offered while the answer streams', () => {
+    expect(read('bar.contract')).toContain('if bi.answerState == "working" or bi.answerState == "first" or bi.answering');
   });
 });

@@ -7,7 +7,7 @@ import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, type
 import { nativeDeck } from './deck-native.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
 import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
-import { applyTurnOps, turnQueueJSON } from './voice-queue.ts';
+import { applyTurnOps, resetTurnLog, turnQueueJSON } from './voice-queue.ts';
 import { routePoster, signedInRequester } from './runsheet-store.ts';
 import { authedJSON } from './api.ts';
 import { audioSpec, audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds, heldStory, forgetLongURLs } from './runsheet-entries.ts';
@@ -44,6 +44,7 @@ let restored: Promise<void> | undefined;
 export function resetRadio(): void { radio = undefined; restored = undefined; }
 export async function wipeRadio(storage: Store | undefined): Promise<void> {
   const r = radio; radio = undefined; restored = undefined;
+  resetTurnLog();                                                                            // the lists sent with the old account's turns and its turn ids
   forgetLongURLs();                                                                          // the long web addresses of this account's entries (runsheet-entries.ts)
   if (r) { r.writer.stop(); await r.rt.signOut(); }
   if (storage) { try { await storage.fs.rm(SHEET_FILE); } catch { /* absent */ } }
@@ -430,7 +431,7 @@ export async function radioPageAct(storage: Store | undefined, native: NativeRea
 export async function barRun(storage: Store | undefined, native: NativeReader | undefined): Promise<Record<string, unknown>> {
   const r = await getRadio(storage, native, false);
   const v = r.rt.view();
-  return { onAir: v.onAir, waiting: v.waiting, remote: v.audio, remotePlaying: v.audio && v.playing, remoteTitle: v.current, remoteFraction: v.fraction };
+  return { ready: true, onAir: v.onAir, waiting: v.waiting, remote: v.audio, remotePlaying: v.audio && v.playing, remoteTitle: v.current, remoteFraction: v.fraction };
 }
 
 /** The sheet as the page's facts carry it. The facts are asked again every second while the radio sounds (spine.contract `posKey`), and the sheet can be a megabyte: it is written out when it moved
@@ -455,7 +456,7 @@ export async function radioPageFacts(storage: Store | undefined, native: NativeR
   const versions = Object.entries(r.front.versions);
   return {
     at: clock.ms / 1000, sheet: sheetText(r.rt.store.sheet), playing: v.playing, sentences, sentenceIndex, progress: v.audio ? v.fraction : progress,
-    remoteAudio: v.audio, remoteElapsed: v.elapsed, spokenElapsed: v.spokenElapsed, remoteDuration: v.duration, wants: r.rt.director.wants, message: v.message, notice: v.notice, writing: v.writing, dry: v.dry,
+    ready: true, onAir: v.onAir, waiting: v.waiting, remoteAudio: v.audio, remoteElapsed: v.elapsed, spokenElapsed: v.spokenElapsed, remoteDuration: v.duration, wants: r.rt.director.wants, message: v.message, notice: v.notice, writing: v.writing, dry: v.dry,
     airTitle: prog.title, airRoute: route, publishedAt: published, versionRoutes: versions.map(([k]) => k), versionNumbers: versions.map(([, n]) => n),
     stale: r.rt.store.ahead().filter((e) => r.rt.store.isStale(e)).map((e) => e.id), takeTranscript: take?.transcript ?? '', takeRecord: take?.record?.summary ?? '',
   };

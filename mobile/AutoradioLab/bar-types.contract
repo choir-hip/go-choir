@@ -16,10 +16,14 @@ shape BarInfo
   answerState: string
   answerNote: string
   canRetry: bool
+  // The answer is still streaming: the card offers Cancel.
+  answering: bool
   until: number
 
 // What the run sheet says to the bar (radio-bridge.ts `barRun`): something on air, held for the audio session, audio of its own (a clip, an episode) and where it is.
 shape BarRun
+  // The run sheet has answered (an empty one has not: the bar then trusts the player's own facts).
+  ready: bool
   onAir: bool
   waiting: bool
   remote: bool
