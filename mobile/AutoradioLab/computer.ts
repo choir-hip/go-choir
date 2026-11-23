@@ -55,6 +55,7 @@ export function plain(e: unknown): string {
   if (e instanceof SignedOutError) return 'Not signed in.';
   if (e instanceof NoComputer) return e.message;
   if (e instanceof HTTPError && e.status === 401) return "This phone's sign-in is no longer accepted.";
+  if (e instanceof HTTPError && e.status === 403) return "This phone's key may not restart your computer.";
   if (e instanceof HTTPError && e.status === 429) return 'Your computer is busy right now. Try again in a moment.';
   return 'Could not reach your computer.';
 }
@@ -68,7 +69,8 @@ export class Computer {
   constructor(private call: Call = live) {}
 
   view(): ComputerView { return { ...this.v }; }
-  private idle(): boolean { return this.v.phase === 'idle' || this.v.phase === 'failed' || this.v.phase === 'current'; }
+  /** `paused` (the computer was busy) is a rest like `failed`: pressing again is the listener's own retry (C2: nothing retries by itself). */
+  private idle(): boolean { return this.v.phase === 'idle' || this.v.phase === 'failed' || this.v.phase === 'current' || this.v.phase === 'paused'; }
 
   async refresh(): Promise<ComputerView> {
     const g = ++this.gen;
@@ -102,7 +104,8 @@ export class Computer {
       else { this.polls = POLLS; this.v = { ...this.v, id }; }                                                              // started: the page polls
     } catch (e) {
       if (e instanceof HTTPError && e.status === 409) {                                                                    // C2
-        this.v = { ...this.v, phase: 'paused', message: e.message === '' ? 'Your computer is busy and will update when it is idle.' : `Your computer is busy (${[...e.message].slice(0, 80).join('')}) and will update when it is idle.` };
+        const why = e.message.replace(/^HTTP 409:?\s*/, '');                                                               // api.ts check(): "HTTP 409: <the server's error string>"
+        this.v = { ...this.v, phase: 'paused', message: why === '' ? 'Your computer is busy and will update when it is idle.' : `Your computer is busy (${[...why].slice(0, 80).join('')}) and will update when it is idle.` };
       } else if (e instanceof HTTPError && (e.status === 502 || e.status === 504)) { this.polls = POLLS; }                  // C3: the act does not stop
       else if (e instanceof SignedOutError || (e instanceof HTTPError && (e.status === 401 || e.status === 429 || e.status < 500))) this.v = { ...this.v, phase: 'failed', message: plain(e) };
       else this.polls = POLLS;                                                                                              // a dropped connection or a timeout (C3)

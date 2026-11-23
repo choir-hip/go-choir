@@ -50,6 +50,25 @@ describe('computer', () => {
     expect(c.v.phase).toBe('paused'); expect(c.v.message).toContain('when it is idle'); expect(c.v.message).toContain('capsule_live'); expect(c.v.updateAvailable).toBe(true);
     await c.poll(); expect(c.v.phase).toBe('paused');                           // nothing retries by itself
   });
+  test('C2b after a 409 the listener can press Restart again and it goes through; Wake works too', async () => {
+    let busy = true;
+    const f = fake([{ target: 't2' }], { update: undefined });
+    const call: typeof f.call = async (m, p, b) => { if (busy && p.includes('lifecycle/update')) throw new HTTPError(409, 'HTTP 409'); return f.call(m, p, b); };
+    const c = new Computer(call);
+    await c.refresh(); await c.restartToUpdate();
+    expect(c.v.phase).toBe('paused'); expect(c.v.message).toBe('Your computer is busy and will update when it is idle.');
+    await c.refresh(); expect(c.v.phase).toBe('paused');
+    busy = false; await c.restartToUpdate();
+    expect(c.v.phase).toBe('updating');
+    const w = new Computer(call); await w.refresh();
+    busy = true; await w.restartToUpdate(); await w.wake();
+    expect(f.log.some((l) => l.includes('recovery'))).toBe(true);
+  });
+  test('C5b a refused scope (403) is told as such, not as "could not reach"', async () => {
+    const c = new Computer(fake([{ target: 't2' }], { update: new HTTPError(403, '403: the key lacks the scope for x') }).call);
+    await c.refresh(); await c.restartToUpdate();
+    expect(c.v.phase).toBe('failed'); expect(c.v.message).toBe("This phone's key may not restart your computer.");
+  });
   test('already current, and wake', async () => {
     const f = fake([{}], { update: { outcome: 'current' } });
     const c = new Computer(f.call);
