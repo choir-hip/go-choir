@@ -66,6 +66,9 @@ boundaries:
   owner_rulings:
     - '"autoradio is already a compelling product imo. now we are sprinting towards production grade, scalable"; "and above all, software quality. craft matters" (2026-11-22). Reading (the lead''s): when speed and quality pull apart, quality wins; a station is done when its replacement is proved and the old mechanism is deleted, not when the new one runs beside it.'
     - '"we are still working on exact train arent we. we should of course continue that" (2026-11-22). Reading: the phone cutover is not displaced by the redesign.'
+    - '"priority: A tool that answers show me this run, step by step, with its reasons"; "yes, we need to improve our systemic learning"; "we need shorter more honest and coherent documentation"; "we need to land our work in flight" (2026-11-22, evening, after the lead listed what is broken). Reading: these four come before anything new. The run viewer is first. Nothing new starts until the lanes in flight are landed or dropped.'
+    - '"what we have lost sight of is supervision. we havent been using the self-development feature which has built-in texture supervision... i have put to the side much of my beliefs on supervision to just let models go wild. and it hasnt yielded great results actually. so, we should get more serious" (2026-11-22). Reading: fewer agents at once, each supervised; work on the product moves back toward the product''s own supervised self-development path, and the lead says so when a change goes around it. How and when that path is used again is the owner''s to direct; the lead proposes.'
+    - '"we should focus on our core data systems, our core backend infra, our key algorithms and agentic systems, and let the ux stay semi-constant. well, thats something we can do once the ux lands. the exact cutover has been essential for that... i dont want to keep it as merely an ios app" (2026-11-22). Reading: the Exact cutover lands (M1), then the experience holds still while the core is rebuilt (M2, M3). M4 (Android, the model benchmark) and adding sources are written down and wait; adding sources comes after the redesign ("adding the sources comes later. for now we need to redesign").'
   must_preserve:
     - 'one landing and one deploy at a time; one Mac native build at a time through the lock; every must_preserve of each station file'
   excluded:
@@ -78,8 +81,8 @@ operating_notes:
   - 'Each hourly tick reads both station files'' now cards and rewrites this one''s.'
 now:
   status: working
-  as_of: 2026-11-22T16:31Z
-  slice: 'M1: the Exact train waits on a staging that can wake the drill computer; graph-first is reviewed and rebased, waiting for the landing slot; the account boundary is being rebuilt on Exact''s secret store. M2: F0 landed and deploying; offline slice rungs 1 and 2 running with spend granted. M3: S0, S1 and S2 building.'
+  as_of: 2026-11-23T00:05Z
+  slice: 'landing what is in flight (the store reading in its landing run; the research prompt repair; the Exact train); the run viewer first among new work; M4 and sources waiting'
   source_ref: origin/main c8d48a589
   deploy_identity: staging and the paper on c27a50d98; a deploy of main (run 45044023185) in flight
   candidate: 'graph-first (.lane/trees/gf-land, to be rebased again before landing)'
@@ -96,7 +99,7 @@ now:
   main_uncertainty: 'whether the deploy in flight restarts the paper cleanly and swaps in the staged compact copy'
   next_observation: 'the deploy''s result and Node B''s free space after it; then F0''s by-desk count (C194)'
   blocker: none
-  next_action: 'after the deploy: land graph-first, then S1; prove the train against a staging that wakes d@e and land it; install on the owner''s phone'
+  next_action: 'find what of a run''s ledger can be read today and design the run viewer; land the store reading; write the account boundary''s structural assessment instead of a sixth patch; run the design panel on the capture path with the day''s evidence'
 receipts:
   - 'M1: docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md'
   - 'M2: docs/definitions/choir-first-design-2026-11-22.md'
