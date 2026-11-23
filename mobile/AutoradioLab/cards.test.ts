@@ -247,3 +247,12 @@ describe('steering', () => {
   });
   test('a mute names the handle and no entry', () => { expect(S.body(S.mute('voice-1'), false)).toEqual({ direction: 'mute', handle: 'voice-1' }); });
 });
+
+describe('a steer tap is kept for the statuses the store keeps its ops for (review B1-11)', () => {
+  test('401, 403, 408 and 409 are "not refused": the tap stays queued; 400-class bodies the server will not take are refused', async () => {
+    const { HTTPError } = await import('./api.ts');
+    const tap = { id: 't1', entryID: 'e1', direction: 'more' as const, stories: ['/pub/a'], title: 'T', at: '2023-11-14T22:00:00Z' };
+    for (const st of [401, 403, 408, 409, 429]) expect(await S.sendOne(tap, async () => { throw new HTTPError(st, 'x'); }), String(st)).not.toBe('refused');
+    expect(await S.sendOne(tap, async () => { throw new HTTPError(413, 'x'); })).toBe('refused');
+  });
+});

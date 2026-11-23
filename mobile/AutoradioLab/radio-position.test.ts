@@ -345,3 +345,22 @@ describe('P12 native calls per second', () => {
     expect(playing.total).toBeLessThanOrEqual(4);
   });
 });
+
+describe('P13 a voice turn\'s messages survive a radio that is replaced while they are read (review B1-10)', () => {
+  test('the facts read for a radio that a sign-out replaced hand their inbox to the new radio', async () => {
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    const msg = JSON.stringify({ verb: 'turnEnded' });
+    let first = true;
+    const slow = { available: true, later: async (r: { op: string; peek?: boolean }) => {
+      if (r.op === 'radioFacts' && r.peek !== true && first) { first = false; await gate; return { at: nowS * 1000, ready: true, inbox: [msg], position: { block: 0, seconds: 0 } }; }
+      return native.later(r as never);
+    } };
+    adoptNative(slow as never, 'test');
+    const pending = getRadio(undefined, slow as never);
+    await new Promise((r) => setTimeout(r, 20));
+    await wipeRadio(undefined);                                               // the sign-out replaces the radio while its facts are being read
+    release();
+    const r2 = await pending;
+    expect(r2.inbox).toContain(msg);
+  });
+});

@@ -208,6 +208,17 @@ describe('a deck that cannot be read is not an empty deck (review B1-5)', () => 
   });
 });
 
+describe('what the runtime remembers does not grow without end (review B1-7)', () => {
+  test('T14b an entry that left the sheet is forgotten by the next pump', async () => {
+    rt.play(story('a', { placed_by: 'listener' }));
+    for (const id of ['b', 'c', 'd']) rt.director.applyFromDesk(placeOp(story(id)), 'extend');
+    await idle(); await rt.pump(); await idle();
+    expect(rt.knownCount()).toBeGreaterThanOrEqual(4);
+    rt.clear(); await idle(); await rt.pump(); await idle();
+    expect(rt.knownCount()).toBeLessThanOrEqual(1);                       // the one on air (and what the sheet still holds)
+  });
+});
+
 describe('stopping and starting', () => {
   test('T7 skip with nothing ahead stops the deck; a later arrival starts again', async () => {
     rt.play(story('a', { placed_by: 'listener' })); await idle();

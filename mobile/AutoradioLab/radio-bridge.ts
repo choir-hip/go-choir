@@ -171,7 +171,9 @@ export async function getRadio(storage: Store | undefined, native: NativeReader 
   if (!radio) radio = await makeRadio(storage, native);
   const r = radio;                                          // held locally: a sign-out (`wipeRadio`) clears the module's variable at any await below
   if (read) { const f = await readFacts(r); if (f !== NO_FACTS) r.rt.useFacts(f); }      // the device's time first: nothing below may run on a stale clock; the runtime keeps what was read (the pulse's peek does not read it again)
-  if (radio !== r) return getRadio(storage, native, read);       // signed out meanwhile: this radio is the old account's
+  if (radio !== r) {                                          // signed out meanwhile: this radio is the old account's. What native handed over in that read was drained from native: it goes to the radio that replaced this one, not into the one discarded (review B1-10)
+    const next = await getRadio(storage, native, read); next.inbox.unshift(...r.inbox); r.inbox = []; return next;
+  }
   if (!restored) restored = r.rt.restore();
   const done = restored;
   await done;

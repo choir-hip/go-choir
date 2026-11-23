@@ -65,6 +65,8 @@ export function body(t: SteerTap, bare: boolean): Record<string, unknown> {
 
 const realPost: Post = async (b) => { await authedJSON(STEER_PATH, { method: 'POST', body: b }); };
 
+/** The statuses after which the tap is kept and sent again (the run sheet store keeps its ops for the same ones: runsheet-store.ts routePoster): a key that is not accepted yet, a timeout, a conflict, a rate limit. */
+const KEEP = new Set([401, 403, 408, 409, 429]);
 export async function sendOne(t: SteerTap, post: Post = realPost): Promise<SteerSend> {
   const status = (e: unknown): number => (e instanceof HTTPError ? e.status : 0);
   try { await post(body(t, false)); return 'sent'; } catch (e) {
@@ -75,11 +77,11 @@ export async function sendOne(t: SteerTap, post: Post = realPost): Promise<Steer
       try { await post(body(t, true)); return 'sent'; } catch (e2) {
         const s2 = status(e2);
         if (s2 === 404 || s2 === 501) return 'notYet';
-        if (s2 >= 400 && s2 < 500) return 'refused';
+        if (s2 >= 400 && s2 < 500 && !KEEP.has(s2)) return 'refused';
         return 'offline';
       }
     }
-    if (s >= 400 && s < 500 && s !== 429) return 'refused';
+    if (s >= 400 && s < 500 && !KEEP.has(s)) return 'refused';
     return 'offline';
   }
 }

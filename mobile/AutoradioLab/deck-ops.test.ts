@@ -104,3 +104,14 @@ describe('D13 one list of names', () => {
   });
 });
 
+
+describe('D7 an entry the desk rewrote while the deck held it is handed over again (review B1-6)', () => {
+  const it = (id: string): DeckItem => item({ id, kind: 'speech', paragraphs: id });
+  test('heldPlan with what was sent: the same id with other words is not kept', () => {
+    const a = it('a'), b = { ...it('b'), paragraphs: 'new words' }, c = it('c');
+    const sent = new Map([['a', JSON.stringify(a)], ['b', JSON.stringify(it('b'))], ['c', JSON.stringify(c)]]);
+    expect(heldPlan(['a', 'b', 'c'], [a, b, c], undefined, sent)).toEqual({ keep: 1, enqueue: [{ at: 1, item: b }, { at: 2, item: c }] });
+    expect(heldPlan(['a', 'b', 'c'], [a, it('b'), c], undefined, sent)).toEqual({ keep: 3, enqueue: [] });
+    expect(heldPlan(['a', 'b'], [a, it('b')], undefined, new Map())).toEqual({ keep: 2, enqueue: [] });         // an item the deck holds that was not handed over by this process: kept
+  });
+});

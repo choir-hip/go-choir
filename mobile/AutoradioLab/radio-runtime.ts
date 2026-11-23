@@ -274,6 +274,8 @@ export class RadioRuntime {
     if (!this.inPump) void this.pump();
   }
   private inPump = false;
+  /** What was last handed the deck for each held id (deck-ops.ts `heldPlan`): a held entry the desk has rewritten since is handed over again. */
+  private heldSent = new Map<string, string>();
   /** Clips the listener kept listening to: the episode went on past the clip's end. */
   private kept = new Set<string>();
 
@@ -323,6 +325,7 @@ export class RadioRuntime {
   }
   /** Is there pump work a pulse might be let go in the middle of: an entry to start, or a held list that is not the sheet's next entries? (A mutation then does it and stays until it is done.) */
   /** What the deck last said it holds and plays (for the console). */
+  knownCount(): number { return this.known.size; }
   deckLine(): { held: number; item: string } { return { held: this.deckState?.held.length ?? 0, item: this.deckState?.item ?? '' }; }
   /** The app is in front, as of the last read of the native facts. */
   inFront = (): boolean => this.facts.foreground;
@@ -353,7 +356,8 @@ export class RadioRuntime {
     const wanted = this.director.wants || this.store.onAir() ? this.holdable() : [];
     if (epoch !== this.epoch) return;
     for (const w of wanted) this.known.set(w.id, w);
-    try { await syncHeld(this.deck, wanted); } catch { /* the deck did not answer: the next pump holds again */ }
+    for (const id of [...this.known.keys()]) if (!this.store.entry(id)) this.known.delete(id);        // what left the sheet is forgotten (each held up to 8 KB of words)
+    try { await syncHeld(this.deck, wanted, this.heldSent); } catch { /* the deck did not answer: the next pump holds again */ }
   }
 
   // ---- restart and sign-out ----
@@ -392,7 +396,7 @@ export class RadioRuntime {
     try { await this.deck.act('stop'); } catch { /* the deck is gone */ }
     if (this.store.poster) await this.store.settlePending(3000);          // the `left` report reaches the computer while the old key is still held; what is not answered by then is dropped, never sent under a later account
     await this.store.wipe();
-    this.facts = NO_FACTS; this.deckState = undefined; this.spoken = { id: '', ms: 0, last: -1 };
+    this.facts = NO_FACTS; this.deckState = undefined; this.heldSent.clear(); this.spoken = { id: '', ms: 0, last: -1 };
     this.onChange?.();
   }
 }
