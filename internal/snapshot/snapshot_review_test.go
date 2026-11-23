@@ -296,18 +296,18 @@ func TestRestoreLeavesNoSidecarsAfterAnInstallOrAFailedVerify(t *testing.T) {
 	}
 }
 
-// R6: the store changes between a timed-out attempt and its retry. Chunk 0 was
-// uploaded and its pages did not change: the retry holds it. Chunk 1 was
-// uploaded and changed: the retry uploads the new bytes, the old digest is not
-// in the record, and the record's page digest and the restored file are the
-// retry's state.
+// R6: the store changes between a timed-out attempt and its retry. Chunk 2 was
+// uploaded and its pages did not change: the retry holds it. Chunks 1 (a row)
+// and 0 (page 1) were uploaded and changed: the retry uploads the new bytes,
+// the old digests are not in the record, only the unchanged chunk is held, and
+// the record's page digest and the restored file are the retry's state.
 func TestARetryAfterAPinDeadlineWithTheStoreChangedUsesTheRetrysBytes(t *testing.T) {
 	ctx := context.Background()
 	f := newCopyFixture(t, ChunkSize*3)
 	f.cfg.PinDeadline = 600 * time.Millisecond
 	f.cfg.pageHook = func(pgno int64) {
-		if pgno > 2100 { // chunks 0 and 1 are cut by page 2048
-			time.Sleep(20 * time.Millisecond)
+		if pgno > 3100 { // chunks 0, 1 and 2 are cut by page 3072, the store has 3116 pages
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 	if _, err := TakeSnapshot(ctx, f.cfg); !errors.Is(err, ErrPinDeadline) {
@@ -319,11 +319,12 @@ func TestARetryAfterAPinDeadlineWithTheStoreChangedUsesTheRetrysBytes(t *testing
 		kept[d] = true
 	}
 	f.chunks.mu.Unlock()
-	if len(kept) < 2 {
-		t.Fatalf("test premise: %d chunks uploaded before the deadline, want 2", len(kept))
+	if len(kept) != 3 {
+		t.Fatalf("test premise: %d chunks uploaded before the deadline, want 3", len(kept))
 	}
 	before := liveWitness(t, f)
-	// Row 100's pages are in chunk 1 (about 17 pages a row).
+	// Row 100's pages are in chunk 1 (about 17 pages a row); page 1 (chunk 0)
+	// changes with any commit.
 	if _, err := f.db.Write.Exec(`UPDATE blobs SET body = randomblob(65536), note = 'changed' WHERE id = 100`); err != nil {
 		t.Fatal(err)
 	}
@@ -338,8 +339,8 @@ func TestARetryAfterAPinDeadlineWithTheStoreChangedUsesTheRetrysBytes(t *testing
 			reused++
 		}
 	}
-	if reused != 1 || ref.Stats.ChunksHeld != 1 {
-		t.Fatalf("the retry reused %d of the first attempt's chunks and held %d, want exactly chunk 0: %+v", reused, ref.Stats.ChunksHeld, ref.Stats)
+	if reused < 1 || reused >= len(kept) || ref.Stats.ChunksHeld != reused {
+		t.Fatalf("the retry reused %d of the first attempt's %d chunks and held %d: want some reused (chunk 2 did not change) and not all (chunk 1 did), held = reused: %+v", reused, len(kept), ref.Stats.ChunksHeld, ref.Stats)
 	}
 	restored, _ := restoreAndOpen(t, f)
 	got, err := witnessOf(ctx, restored.Read)
@@ -355,7 +356,9 @@ func TestARetryAfterAPinDeadlineWithTheStoreChangedUsesTheRetrysBytes(t *testing
 }
 
 // R7: a VACUUM and a truncating checkpoint attempted during the pin neither
-// block nor change the snapshot.
+// block the writer nor change the snapshot. The VACUUM runs while the stream
+// is held at page 600; the truncating checkpoint, which waits for readers as
+// the store's own maintenance does, runs beside the stream and is joined after.
 func TestAVacuumAndATruncatingCheckpointDuringThePinLeaveTheSnapshotAlone(t *testing.T) {
 	ctx := context.Background()
 	f := newCopyFixture(t, ChunkSize*3)
@@ -364,6 +367,7 @@ func TestAVacuumAndATruncatingCheckpointDuringThePinLeaveTheSnapshotAlone(t *tes
 	}
 	liveBefore := liveWitness(t, f)
 	ran := false
+	checkpointDone := make(chan error, 1)
 	f.cfg.pageHook = func(pgno int64) {
 		if pgno != 600 {
 			return
@@ -371,25 +375,25 @@ func TestAVacuumAndATruncatingCheckpointDuringThePinLeaveTheSnapshotAlone(t *tes
 		ran = true
 		done := make(chan error, 1)
 		go func() {
-			var busy, logFrames, checkpointed int
-			if _, err := f.db.Write.Exec(`VACUUM`); err != nil {
-				done <- fmt.Errorf("vacuum: %w", err)
-				return
-			}
-			if err := f.db.Write.QueryRow(`PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
-				done <- fmt.Errorf("checkpoint: %w", err)
-				return
-			}
-			done <- nil
+			_, err := f.db.Write.Exec(`VACUUM`)
+			done <- err
 		}()
 		select {
 		case err := <-done:
 			if err != nil {
-				t.Errorf("maintenance during the pin failed: %v", err)
+				t.Errorf("vacuum during the pin failed: %v", err)
 			}
 		case <-time.After(30 * time.Second):
-			t.Errorf("a VACUUM or checkpoint waited for the stream")
+			t.Errorf("a VACUUM waited for the stream")
+			return
 		}
+		// The write pool is one connection: the checkpoint, which waits for the
+		// reader, starts after the VACUUM and holds it until the pin ends.
+		go func() {
+			var busy, logFrames, checkpointed int
+			err := f.db.Write.QueryRow(`PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed)
+			checkpointDone <- err
+		}()
 	}
 	ref, err := TakeSnapshot(ctx, f.cfg)
 	if err != nil {
@@ -397,6 +401,14 @@ func TestAVacuumAndATruncatingCheckpointDuringThePinLeaveTheSnapshotAlone(t *tes
 	}
 	if !ran {
 		t.Fatal("test premise: the maintenance never ran")
+	}
+	select {
+	case err := <-checkpointDone:
+		if err != nil {
+			t.Fatalf("the truncating checkpoint failed: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the truncating checkpoint never returned after the pin ended")
 	}
 	restored, _ := restoreAndOpen(t, f)
 	got, err := witnessOf(ctx, restored.Read)
