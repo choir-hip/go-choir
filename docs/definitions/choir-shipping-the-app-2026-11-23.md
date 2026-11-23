@@ -113,6 +113,12 @@ boundaries:
   - decision: model downloads in onboarding come after the person consents
     said: the audio model downloads in the onboarding should be after user consent btw
     'on': '2026-11-23'
+  - decision: '"native" passkeys means the platform passkey screen reached through Exact, the whole flow written in Exact, no new Swift'
+    said: by native, i mean exact
+    'on': '2026-11-23'
+  - decision: the rest of the Exact cutover (all Swift that is not voice) is done overnight with the shipping work; the owner does QA on the phone on 2026-11-24 and then the build is submitted
+    said: we should get all this converted to exact overnight as well. i do want to prioritize this. its been dragging for too long. then tomorrow i will do qa on phone and we will submit to app store connect
+    'on': '2026-11-23'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
   - signing keys and API keys never enter the repo or an agent's output; key files are passed by path
@@ -213,6 +219,13 @@ stations:
   review: two seats
   depends_on: []
   status: working
+- id: P11
+  name: The rest of the Exact cutover, before the first build
+  scope: 'the radio run sheet, queue and player flip to the shared runtime (lane exact-flip-player); every other non-voice Swift file ported or deleted (lane exact-rest). Measured before: 49 files, 5,844 lines of Swift that is not voice. This is mission M1''s remaining work, done here because the owner wants testers to get the shared app'
+  class: orange
+  review: one seat each
+  depends_on: []
+  status: working
 decisions_for_the_owner:
 - id: Q4
   question: Which territories first, and is the app free?
@@ -232,7 +245,7 @@ decisions_for_the_owner:
 now:
   status: working
   as_of: 2026-11-23T23:59Z
-  slice: 'overnight: store-build fixes; native-passkey; account-delete; onboard-consent; tester-capacity; radio-first-run; each reviewed by two seats where red, landed in as few trains as the reviews allow'
+  slice: 'overnight: store-build fixes; native-passkey; account-delete; onboard-consent; tester-capacity; radio-first-run; each reviewed by two seats where red, landed in as few trains as the reviews allow; exact-flip-player; exact-rest'
   source_ref: origin/main bcea7eefd
   deploy_identity: staging on a2ba96767
   candidate: none
