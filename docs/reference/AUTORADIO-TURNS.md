@@ -65,6 +65,51 @@ being answered right now, or was used before for different words (use a new id),
 has no streaming model bound. Once the stream has begun the status is `200` and
 a failure is an `error` event.
 
+## The paper is searched for the words (lane `ask-search`, not deployed)
+
+Before the one model call the desk asks the paper for the listener's words,
+unless the words are a bare transport command ("pause", "skip this", "next
+please"). Nothing changes in the request or the response: the phone sends what
+it always sent. Code: `internal/agentcore/api_autoradio_paper.go`; the platform
+read: `GET /internal/platform/published/ask?q=&limit=` (`internal/platform/published_ask.go`).
+
+- **What leaves the computer:** the words, one line, cut to 300 bytes, as the
+  query of one public GET. No body, no owner header, no page text, queue,
+  history or turn id. What returns is published stories, which any reader can
+  open.
+- **One call, both halves:** BM25 over published Autopaper stories and the
+  nearest story passages by vector (the platform embeds the words), up to 15 of
+  each, in one answer; each row carries its rank in each half, its update time,
+  importance (the front list's stored 1 to 10, if scored), distinct source
+  count, section, lede and route. If the vector half cannot run the keyword
+  rows are still answered and the answer says why.
+- **Rank** (`paperScore`, one place, no settings): relevance (reciprocal rank
+  fusion, k 60) x recency (half life 72 h, floor 0.3) x importance (0.6 to 1,
+  unscored 5 of 10) x citations (0.7 to 1, log of sources, saturating at 12).
+- **What the model sees:** a fenced block `<<<AR... from the paper>>>` ... `<<<AR...
+  end from the paper>>>` in the volatile part, before the queue block: the top
+  10 stories, each one line (route, title, section, age, sources) and its lede,
+  every field one fence-safe line, the block marked untrusted. Their routes are
+  added to the candidates the model may name in a queue op, validated as any
+  candidate.
+- **Three cases, told apart to the model:** the search ran and found stories
+  (the block lists them); ran and found none (the block says the paper holds
+  nothing on it, or, when the keyword index was still being built or the vector
+  half did not answer or ended partway, that the search may be incomplete); did not run (a refusal, a bad
+  answer or the desk's 1.5 s wait; the platform's own deadline is 1.2 s, so a slow index or vector half comes back as capped or partial first: the block says so and the model is told to say
+  it could not search). No block at all means no search was made for the turn
+  (a bare command, or a computer with no paper to search). A vector half that
+  did not run, or ended partway, is named in the block.
+- **Failure:** logs one line (`paper search failed`) and the turn goes on.
+- **Log line per turn:** `autoradio: turn=<id> paper found=N given=M
+  search_ms=T named=K vector="answered" capped=false`; `named` counts queue
+  ops that named a searched story. The same facts ride in the `done` event as
+  `paper: {state, found, given, search_ms, vector, capped, named}` (absent
+  when no search was made), so a deployed proof can read them.
+- **Cost:** no second answering call (the one new model call is the platform's query embedding); one request before the call (measured on the
+  platform's search path, 100 to 250 ms; not yet measured end to end on
+  staging) and about 1.5 to 3 k more input tokens.
+
 ## Response
 
 `200`, `Content-Type: text/event-stream`, `Cache-Control: no-cache`,

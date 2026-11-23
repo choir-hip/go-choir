@@ -321,6 +321,9 @@ type autoradioTurn struct {
 	model     string
 	reportID  string
 	fenceTok  string
+	// paper is what the paper search found for this turn's words (nil when it
+	// was not made or failed); see api_autoradio_paper.go.
+	paper *paperLook
 	// queue is the desk's working copy of the phone's queue (nil when the
 	// request carried none); queueOps are the ops that survived validation.
 	queue    *autoradioqueue.Desk
@@ -565,9 +568,10 @@ func (t *autoradioTurn) frame() (stable, volatile string) {
 	if t.req.Programme != "" {
 		b.WriteString("\nProgramme: " + oneLine(t.req.Programme) + "\n")
 	}
+	b.WriteString(t.paperBlock(fence))
 	if t.req.queue != nil {
 		b.WriteString("\n" + fence("queue"))
-		b.WriteString(describeQueue(t.req.queue, t.req.cands, token))
+		b.WriteString(describeQueue(t.req.queue, t.candidates(), token))
 		b.WriteString(fence("end queue"))
 	}
 	if t.req.Heard != nil && strings.TrimSpace(t.req.Heard.Text) != "" {
@@ -643,6 +647,9 @@ func (t *autoradioTurn) done(status string, replayed bool, recordErr, reportErr 
 	if t.req.queue != nil {
 		data["queue_ops"] = len(t.queueOps)
 	}
+	if sum := t.paperSummary(); sum != nil {
+		data["paper"] = sum
+	}
 	if recordErr != "" {
 		data["record_error"] = recordErr
 	}
@@ -708,12 +715,16 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 
 	prompt, _ := appdesk.FirstPartyPrompt("autoradio")
 	promptSum := sha256Hex(prompt)
+	// Before the one model call: the paper searched for the listener's words
+	// (api_autoradio_paper.go). It waits at most autoradioPaperDeadline and
+	// never fails the turn.
+	t.searchPaper(ctx)
 	stable, volatile := t.frame()
 	chain := t.rt.modelPolicy.PoolChain(ctx, t.ownerID, modelpolicy.AutoradioRole)
 
 	var answerCut *autoradioqueue.Cut
 	if t.req.queue != nil {
-		t.queue = autoradioqueue.New(*t.req.queue, t.req.cands)
+		t.queue = autoradioqueue.New(*t.req.queue, t.candidates())
 	}
 	status, reason := "failed", "no model answered"
 	for _, sel := range chain {
@@ -835,6 +846,7 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 	if status == "completed" {
 		t.resolveQueue(answerCut)
 	}
+	t.paperLogLine()
 	settled = true
 	t.settle(ctx, status, reason, recordErr)
 }

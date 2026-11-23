@@ -78,6 +78,9 @@ not released [6][CH].
     turn policy, then plain-word queue commands (no model) or a first answer
     from an on-device model and a streamed `POST /api/autoradio/turns`
     (queue plus 40 candidate stories), spoken sentence by sentence [6].
+    On `lane/ask-search` (not deployed) the turn first searches the paper
+    for the words (one public read, keyword plus vector) and adds the top
+    10 stories to what the model sees; on main it sees 40 titles only.
 
 Cost of steps 1 to 8 on 2026-11-22: about 9.3 model calls per capture
 judged, about 23 per story woken, 31.2 per publish [3] or 58 per distinct
