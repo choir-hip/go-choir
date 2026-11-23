@@ -397,6 +397,10 @@ func (s *Store) bootstrap() error {
 		}
 	}
 
+	if err := s.migrateDeletion(); err != nil {
+		return err
+	}
+
 	// Hard cutover: remove username column by recreating the users table.
 	// This is idempotent and safe to run multiple times.
 	if err := s.migrateDropUsernameColumn(); err != nil {

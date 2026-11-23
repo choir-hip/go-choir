@@ -78,6 +78,11 @@ type Handler struct {
 
 	// The phone app's sign-in challenges (app_ceremony.go), held in memory.
 	appChallenges appChallenges
+
+	// Account deletion (deletion_handlers.go): the host side of a request
+	// (stop the computer, suspend takes, refuse a protected account). nil in
+	// tests that do not exercise it.
+	deletionHost DeletionHost
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -403,6 +408,12 @@ func (h *Handler) buildRefreshSession(user *User, deviceInfo, method string, exp
 }
 
 func (h *Handler) createRefreshSessionRow(user *User, deviceInfo, method string, expiresAt *time.Time) (string, *RefreshSession, error) {
+	// No session is ever made for an account that asked to be deleted: the
+	// one place every sign-in path (passkey, email, desktop handoff,
+	// registration of a recovery passkey) passes through.
+	if h.store.AccountAccessRevoked(user.ID) {
+		return "", nil, ErrDeletionPending
+	}
 	raw, rs := h.buildRefreshSession(user, deviceInfo, method, expiresAt)
 	if err := h.store.CreateRefreshSession(rs); err != nil {
 		return "", nil, fmt.Errorf("create refresh session: %w", err)
@@ -456,6 +467,9 @@ func (h *Handler) issueSessionExpiring(w http.ResponseWriter, r *http.Request, u
 
 func (h *Handler) issueSessionRow(w http.ResponseWriter, r *http.Request, user *User, method string, expiresAt *time.Time) (*userInfo, *RefreshSession, error) {
 	method = normalizeAuthMethod(method)
+	if h.store.AccountAccessRevoked(user.ID) {
+		return nil, nil, ErrDeletionPending
+	}
 	accessToken, err := h.issueAccessJWT(user, method)
 	if err != nil {
 		return nil, nil, fmt.Errorf("issue access JWT: %w", err)
@@ -515,6 +529,10 @@ func (h *Handler) validateRefreshCookie(r *http.Request) (*RefreshSession, *User
 	// Update last_used_at (non-fatal).
 	_ = h.store.TouchRefreshSessionLastUsed(rs.ID)
 
+	if h.store.AccountAccessRevoked(rs.UserID) {
+		_ = h.store.DeleteRefreshSessionByID(rs.ID)
+		return nil, nil, ErrDeletionPending
+	}
 	user, err := h.store.GetUserByID(rs.UserID)
 	if err != nil {
 		return nil, nil, errors.New("user not found for refresh session")
@@ -761,6 +779,10 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 
 	// Issue cookie-backed auth state.
 	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
+	if errors.Is(err, ErrDeletionPending) {
+		writeDeletionPending(w)
+		return
+	}
 	if err != nil {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=issue_session error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
@@ -1034,6 +1056,13 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 	// Update last_used_at for the credential (non-fatal).
 	if err := h.store.TouchCredentialLastUsed(string(credential.ID)); err != nil {
 		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=touch_last_used error=%q", user.ID, string(credential.ID), err)
+	}
+
+	// An account that asked to be deleted signs in to nothing but the
+	// cancel path: the assertion proved the person, so offer that and issue
+	// no session (deletion_handlers.go).
+	if h.offerDeletionCancel(w, user.ID) {
+		return
 	}
 
 	// Issue cookie-backed auth state.
@@ -1438,6 +1467,11 @@ func transportListToJSON(transports []protocol.AuthenticatorTransport) string {
 // This is used by the proxy to verify auth state.
 func (h *Handler) ValidateAccessToken(tokenStr string) (string, error) {
 	userID, _, err := h.validateAccessTokenMethod(tokenStr)
+	if err == nil && h.store.AccountAccessRevoked(userID) {
+		// A token signed before the deletion request is still inside its
+		// five minutes; the record, not the signature, decides.
+		return "", ErrDeletionPending
+	}
 	return userID, err
 }
 
@@ -1603,6 +1637,10 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userState, err := h.issueSessionExpiring(w, r, user, exchange.AuthMethod, exchange.NotAfter)
+	if errors.Is(err, ErrDeletionPending) {
+		writeDeletionPending(w)
+		return
+	}
 	if err != nil {
 		log.Printf("[auth] operation=desktop_redeem user_id=%s result=error step=issue_session error=%q", exchange.UserID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create desktop session"})
@@ -1799,7 +1837,7 @@ func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) (*U
 			if err == nil && ak != nil && ak.RevokedAt == nil &&
 				(ak.ExpiresAt == nil || ak.ExpiresAt.After(time.Now())) {
 				user, err := h.store.GetUserByID(ak.UserID)
-				if err == nil {
+				if err == nil && !h.store.AccountAccessRevoked(ak.UserID) {
 					// Update last_used_at (best-effort, ignore errors).
 					_ = h.store.TouchAPIKeyLastUsed(r.Context(), ak.ID)
 					return user, ak

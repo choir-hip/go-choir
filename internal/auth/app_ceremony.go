@@ -200,6 +200,10 @@ func writeKeyJSON(w http.ResponseWriter, key *appKeyResponse) {
 // mintAppKey gives the app the grant a device approval gives: a full-access key
 // (every scope), owner-wide, until revoked.
 func (h *Handler) mintAppKey(ctx context.Context, user *User, app string) (*appKeyResponse, error) {
+	// No key is minted for an account that asked to be deleted.
+	if h.store.AccountAccessRevoked(user.ID) {
+		return nil, ErrDeletionPending
+	}
 	scopes := AllScopes()
 	label := appKeyLabel + app
 	id, secret, err := h.store.CreateAPIKey(ctx, user.ID, label, scopes, nil)
@@ -238,6 +242,10 @@ func (h *Handler) HandleAppRegisterFinish(w http.ResponseWriter, r *http.Request
 		return
 	}
 	key, err := h.mintAppKey(r.Context(), user, app)
+	if errors.Is(err, ErrDeletionPending) {
+		writeDeletionPending(w)
+		return
+	}
 	if err != nil {
 		log.Printf("[auth] operation=app_register_finish user_id=%s result=error step=mint_key error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create the key"})
@@ -294,6 +302,11 @@ func (h *Handler) HandleAppLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.store.TouchCredentialLastUsed(string(cred.ID)); err != nil {
 		log.Printf("[auth] operation=app_login_finish user_id=%s result=warning step=touch_last_used error=%q", user.ID, err)
+	}
+	// A verified passkey of an account that asked to be deleted gets the
+	// cancel offer and no key (deletion_handlers.go).
+	if h.offerDeletionCancel(w, user.ID) {
+		return
 	}
 	key, err := h.mintAppKey(r.Context(), user, app)
 	if errors.Is(err, ErrAddressUnproved) {

@@ -140,6 +140,13 @@ func authRoutes(handler *auth.Handler) []authRoute {
 		{"GET /auth/sessions", read, handler.HandleListSessions},
 		{"DELETE /auth/sessions/{id}", act, handler.HandleRevokeSession},
 
+		// Account deletion (docs/design/account-create-delete-2026-11-23.md):
+		// a fresh passkey assertion starts it; a passkey sign-in during the
+		// 72 hours offers the cancel.
+		{"POST /auth/account/delete/begin", sensitive, handler.HandleDeleteBegin},
+		{"POST /auth/account/delete/finish", sensitive, handler.HandleDeleteFinish},
+		{"POST /auth/account/delete/cancel", ceremony, handler.HandleDeleteCancel},
+
 		// Email sign-in and address verification (switch auth.email_sign_in).
 		{"POST /auth/email/begin", sensitive, handler.HandleEmailBegin},
 		{"POST /auth/email/verify", sensitive, handler.HandleEmailVerify},
