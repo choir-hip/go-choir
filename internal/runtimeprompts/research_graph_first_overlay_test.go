@@ -24,6 +24,7 @@ func TestResearchOverlayStatesTheObjectiveAndIsGraphFirst(t *testing.T) {
 		"search the graph (choir.SearchWireCorpus(query, 10)) before the web",
 		"The web is for what the graph lacks: the newest facts, a second independent outlet",
 		"Your objective is met when a page from a second independent outlet supports the claim, from the graph or the web; then report",
+		"The counts say where to look; the pages you read decide whether the graph holds the answer, and a gap is written only for a lack you established",
 		"Search the web whenever the graph does not hold what the question needs; what to stop is rewording a query against pages you already hold",
 		"A detail you cannot confirm is a finding to report, not a task to keep searching for",
 		"a reworded query that returns the pages you already hold tells you the web lacks it; say what you looked for and stop",
