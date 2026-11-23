@@ -723,6 +723,30 @@ func buildRegistry() []*command {
 			legacy:  runTraceTailCLI,
 		},
 
+		{
+			path: []string{"trace", "run"}, summary: "Show one run step by step with the reasons its record holds (read-only; no model call)",
+			params: []param{
+				pStr("run_id", "Run id").req().one(),
+				pBool("json", "Print the assembled run as one JSON document"),
+				pBool("full", "Do not clip sources, outputs or texts"),
+			},
+			scopes: []string{"read:runtime"}, readOnly: true,
+			cliOnly: "prints a long, step-by-step reading of one run to the terminal; a model reads `trace export` bundles instead",
+			legacy:  runTraceRun,
+		},
+		{
+			path: []string{"trace", "runs"}, summary: "List recent runs with enough to choose one for `trace run` (read-only)",
+			params: []param{
+				pStr("desk", "Only runs of this desk (agent id prefix, profile or role)"),
+				pInt("limit", "How many runs to list").dflt(20).atLeast(1),
+				pStr("sort", "started or duration"),
+				pBool("json", "Print JSON"),
+			},
+			scopes: []string{"read:runtime"}, readOnly: true,
+			cliOnly: "a terminal table for choosing a run",
+			legacy:  runTraceRuns,
+		},
+
 		// precommitments (calibration level 2)
 		{
 			path: []string{"precommit", "add"}, tool: "precommit_add",

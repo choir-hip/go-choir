@@ -72,7 +72,7 @@ var wantCLIOnly = []string{
 	// Owner act: abandoning an open operation.
 	"self-dev abandon",
 	// Owner act: rolling an applied operation back.
-	"self-dev mode set", "self-dev rollback", "self-dev wait", "texture watch", "trace export", "trace tail", "version",
+	"self-dev mode set", "self-dev rollback", "self-dev wait", "texture watch", "trace export", "trace run", "trace runs", "trace tail", "version",
 }
 
 func TestRegistryParityCLIAndMCP(t *testing.T) {

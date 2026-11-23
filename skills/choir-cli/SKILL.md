@@ -71,8 +71,8 @@ becomes `texture_read`. The precommit tools keep their earlier names:
 `precommit_add`, `precommit_settle`, `precommit_list` and
 `calibration_summary`.
 
-- Eight commands are CLI-only, each with a reason in its `--help`:
-  `texture watch`, `self-dev wait`, `trace export`,
+- Ten commands are CLI-only, each with a reason in its `--help`:
+  `texture watch`, `self-dev wait`, `trace export`, `trace run`, `trace runs`,
   `precommit import-ledger`, `api-key create`, `mcp`, `version`, `help`.
 - The key and host are the server's environment, never tool arguments.
   Every tool takes an optional `computer`.
@@ -258,6 +258,42 @@ which terminal states end the tail; the others print as ignored.
 Needs `read:runtime`, `read:texture` and `computer:self_development:read`
 (without the last, candidate detection is reported unavailable and the rest
 still works).
+
+### Trace run
+
+```sh
+choir trace run <run_id> [--json] [--full] [--no-records] [--max-events 50000] [--inbox-window 500]
+choir trace runs [--desk research] [--sort started|duration] [--limit 20] [--json]
+```
+
+Shows one run step by step with the reasons its record holds. Client-side
+over routes that already exist and only read: `GET /api/runs/{id}`,
+`/api/runs/{id}/events` (every page), `/api/trajectories/{id}/events`
+(turn commits, controls and work items, read from the newest window back to
+the run's start), `/api/inboxes/{inbox}/records` (records the run sent or
+received; the newest `--inbox-window` of each) and `/api/runs?channel_id=`
+(child runs). No model call, nothing written. Needs only `read:runtime` (or
+`admin`); a 401 or 403 names that and the key is never printed.
+
+The output is a header (agent, computer, state, times, parent and child runs,
+models, totals, and what woke it: the recorded fields, or "woken by: not
+recorded"), the steps in time order (model call with tokens, latency and its
+own text, marked when the writer cut it at 2000 characters; the cell with
+its source and output head and size; the module-surface calls inside it,
+with a search's counts, "query: not recorded", and its paired end or "no end
+recorded"; records, turn commits, controls, restart and resume), and a
+closing section "What this run's record does not contain", built from what
+was absent in this run. Each call's reason is the turn commit's Reason, then
+the model's words before the cell, else "reason: not recorded". A run older
+than a kind's retention (7 days `tool.result`; 14 days `desk.cell`,
+`desk.egress`, `loop.progress`) says which kinds are gone. A run that could
+not be read in full prints as PARTIAL. `--json` is one document
+(`choir.trace_run.v1`) with stable field names; `--full` does not clip.
+
+`trace runs` lists recent runs from `GET /api/runs` (id, agent, state,
+started, duration). Counts of model calls, tokens and searches are not
+available from that route, so there is no such column and `--sort` accepts
+only `started` and `duration`.
 
 ### Search
 

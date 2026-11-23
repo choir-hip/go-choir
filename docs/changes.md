@@ -23,6 +23,8 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 | Phone: sign-in in a sheet over the app | built (red: the approval route and page change); seat 1 accepted with three fixes, seat 2 running | `lane/signin-sheet` |
 | A voice ask searches the paper | not started. Today the answering model has no tools and sees at most 40 front-page titles | none |
 | `choir trace run`: one run, step by step, with the reasons its record holds | built and run on the drill account; shows 0 model calls for a run that made some; not landed | `lane/trace-run` |
+| Research prompts: one source count, a stop rule, a real gap measure | built; under test; not reviewed | `lane/research-frame` |
+| `choir trace run`: one run, step by step, with the reasons its record holds | built; tested on fixtures only; not run against a real computer; not landed | `lane/trace-run` |
 | Phone model benchmark on the Motorola | first rows; not landed | `lane/model-bench` |
 | Snapshot capture in one pass (no store-sized scratch copy) | not started; the reader half landed 11-22 | `lane/snapshot-one-pass` |
 | Redesign of capture (subjects and mentions), offline slice | **failed all four of its kill lines** (claim C192); design panel not yet run | `lane/offline-slice-r0` |
@@ -45,6 +47,12 @@ superseded, 11 evidence only, 26 are distinct live work (the rows above and
 the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-22
+
+### `choir trace run <run_id>` shows one run step by step with its reasons (`lane/trace-run`, yellow)
+- **What:** a command that reads a run through routes that already exist and prints its model calls, cells, module-surface calls, records, turn commits, restarts and resumes in time order, with the reason the record holds for each call (turn-commit Reason, else the model's own text, else "not recorded"), what retirement has taken, and a closing list of what that run's record does not contain. `choir trace runs` lists runs. `--json` and `--full`.
+- **Why:** a run's steps and reasons could only be rebuilt by hand from console lines (owner, 2026-11-22: "show me this run, step by step, with its reasons").
+- **Proof:** 24 tests on fixtures in the route handlers' own types, whole `cmd/choir` suite and gates pass. Not run against a real computer.
+- **Replaced:** nothing. **Undo:** revert.
 
 ### The store can be measured by kind (`0f4421aae`, orange)
 - **What:** a background reading of a computer's store: rows and bytes per table and per object kind, current against superseded, duplicates, run memory by age.
