@@ -26,7 +26,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
