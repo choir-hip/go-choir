@@ -25,6 +25,16 @@
 # cannot see the base is open exactly when a fetch fails. Exit 1 on failure.
 #
 # Rules:
+#   0. A surface entry is a directory prefix (matches every path under it) or one
+#      file path (matches that file only, so a file that holds one decision
+#      does not pull in its whole package). An entry written `host:<path>` is
+#      a HOST-side surface: code whose decision runs on the host (the host's
+#      build is not a guest snapshot, even where a guest binary links the
+#      package), so an epoch raise cannot carry its fix (rule 4). Every entry must exist
+#      at the head (a file or a directory in the head's tree): a path that does
+#      not exist fails, in a full run and in --lists-only (--lists-only reads
+#      the working tree), so a typo or a deleted file cannot leave a dead entry
+#      that guards nothing.
 #   1. range = base..head; commits = rev-list --no-merges; touched paths of a
 #      commit = diff-tree against its first parent, minus *_test.go,
 #      */testdata/* and *.md.
@@ -33,9 +43,12 @@
 #      changed it fails.
 #   3. Monotone: every commit that changed the policy file has E(c) >= E(c^),
 #      and E(head) >= E(base). No override.
-#   4. Coverage: if E(head) > E(base) the range passes (every older release-bound
-#      snapshot refuses at wake). Otherwise each commit touching a surface needs
-#      both trailers in its own message (a later commit does not cover it).
+#   4. Coverage: if E(head) > E(base) the range passes for a GUEST surface (every
+#      older release-bound snapshot refuses at wake). Otherwise each commit
+#      touching a surface needs both trailers in its own message (a later commit
+#      does not cover it). A commit touching a `host:` entry needs both trailers
+#      whatever the epoch does: a raise cold boots hibernated computers onto a
+#      new guest release and changes nothing the host runs.
 #   5. Sanity: the surfaces file exists at the head; no surface prefix equals,
 #      contains, or lies under a path in nix/guest-floor-paths.txt.
 #   6. The gate protects itself: a commit that touches a gate file (the surfaces
@@ -85,14 +98,38 @@ done
 fails=0
 fail() { echo "guest-security-epoch: FAIL: $*" >&2; fails=$((fails + 1)); }
 
-# prefixes TEXT: normalized lines (comments and blanks dropped, trailing / removed).
-prefixes() { sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$' | sed 's|/*$||' || true; }
+# prefixes TEXT: normalized lines (comments and blanks dropped, trailing / removed
+# after a non-slash character). A line of only slashes is kept as it is, so
+# entry_problem refuses it instead of it normalizing to an empty line and vanishing.
+prefixes() { sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$' | sed -E 's|([^/])/+$|\1|' || true; }
+
+# entry_path ENTRY: the path of an entry, without a host: marker.
+entry_path() { printf '%s' "${1#host:}"; }
+
+# entry_problem ENTRY: why an entry can never match, or "". A path is canonical
+# (repo-relative, no ./ or .. segment, no empty segment) because git resolves
+# some non-canonical forms (./a.go, a bare host:) that the matcher never
+# matches; and a path the matcher excludes (_test.go, a nested testdata, .md)
+# guards nothing. The refusal is a little wider than the matcher: a root
+# testdata path, and a directory named like foo_test.go or foo.md, are refused
+# too. Fail-closed, and none is a realistic surface.
+entry_problem() {
+	local p
+	p=$(entry_path "$1")
+	case $p in
+	"") echo "it names no path" ;;
+	/* | */) echo "it is not a clean repo-relative path" ;;
+	. | .. | ./* | ../* | */. | */.. | */./* | */../* | *//*) echo "it is not a canonical repo-relative path (no ./ or .. segment, no empty segment)" ;;
+	*_test.go | *.md | testdata | testdata/* | */testdata | */testdata/*) echo "the matcher excludes _test.go, testdata and .md paths, so it could never match" ;;
+	esac
+}
 
 # sanity_lists SURFACES_TEXT FLOOR_TEXT: rule 5.
 sanity_lists() {
 	local s f
 	while IFS= read -r s; do
 		[ -n "$s" ] || continue
+		s=$(entry_path "$s")
 		while IFS= read -r f; do
 			[ -n "$f" ] || continue
 			if [ "$s" = "$f" ] || [[ $s == "$f"/* ]] || [[ $f == "$s"/* ]]; then
@@ -108,6 +145,11 @@ if [ "$lists_only" = true ]; then
 	surfaces=$(prefixes <"$SURFACES")
 	[ -n "$surfaces" ] || fail "$SURFACES lists no prefixes"
 	sanity_lists "$surfaces" "$(prefixes <"$FLOOR")"
+	while IFS= read -r e; do
+		[ -n "$e" ] || continue
+		if why=$(entry_problem "$e") && [ -n "$why" ]; then fail "surface entry \"$e\" is refused: $why"; continue; fi
+		[ -e "$(entry_path "$e")" ] || fail "surface entry $e names a path that does not exist in this tree (a typo, or a file that moved or was deleted: correct or remove the entry)"
+	done <<<"$surfaces"
 	[ "$fails" -eq 0 ] || exit 1
 	echo "guest-security-epoch: lists ok ($(printf '%s\n' "$surfaces" | grep -c .) surface prefixes, none in the floor)"
 	exit 0
@@ -171,6 +213,12 @@ if [ -z "$floor_paths" ]; then
 	fail "$FLOOR does not exist (or lists nothing) at head $head; the surfaces cannot be checked against the floor"
 fi
 sanity_lists "$union_surfaces" "$floor_paths"
+# Every entry of the head's list must exist in the head's tree (rule 0).
+while IFS= read -r e; do
+	[ -n "$e" ] || continue
+	if why=$(entry_problem "$e") && [ -n "$why" ]; then fail "surface entry \"$e\" is refused: $why"; continue; fi
+	git cat-file -e "$head:$(entry_path "$e")" 2>/dev/null || fail "surface entry $e names a path that does not exist at head $head (a typo, or a file that moved or was deleted: correct or remove the entry)"
+done <<<"$head_surfaces"
 
 # --- the CI step (rule 6) -----------------------------------------------------
 ci_text=$(show "$head" "$CI_YML") || ci_text=""
@@ -296,6 +344,7 @@ for c in $commits; do
 
 	policy_changed=false
 	surface_hits=()
+	host_hits=()
 	gate_hits=()
 	while IFS= read -r f; do
 		[ -n "$f" ] || continue
@@ -308,10 +357,23 @@ for c in $commits; do
 		# the gate without touching a line that names this script.
 		[ "$f" != "$CI_YML" ] || gate_hits+=("$f")
 		case $f in *_test.go | */testdata/* | *.md) continue ;; esac
+		# A path matched by any host: entry is a host-side hit, even when a plain
+		# entry also matches it.
+		hit=false is_host=false
 		while IFS= read -r p; do
 			[ -n "$p" ] || continue
-			case $f in "$p"/*) surface_hits+=("$f"); break ;; esac
+			e=$p
+			p=$(entry_path "$p")
+			case $f in "$p"/* | "$p")
+				hit=true
+				[ "$e" = "$p" ] || is_host=true
+				;;
+			esac
 		done <<<"$union_surfaces"
+		if [ "$hit" = true ]; then
+			surface_hits+=("$f")
+			[ "$is_host" != true ] || host_hits+=("$f")
+		fi
 	done <<<"$files"
 
 	if [ "$policy_changed" = true ]; then
@@ -329,6 +391,8 @@ for c in $commits; do
 	if [ ${#surface_hits[@]} -gt 0 ] && [ "$head_epoch" -le "$base_epoch" ]; then
 		need_none=true
 	fi
+	# A host-side surface is not excused by a raise (rule 4).
+	[ ${#host_hits[@]} -eq 0 ] || need_none=true
 	[ "$need_gate" = true ] || [ "$need_none" = true ] || continue
 
 	tr=$(trailers_of "$c")
@@ -344,7 +408,11 @@ for c in $commits; do
 		missing+=("Security-Effect: gate change; <why, at least 20 characters> (a gate file changed: ${gate_hits[*]}; an epoch raise does not excuse it)")
 	fi
 	if [ "$need_none" = true ] && [ "$has_none" != true ]; then
-		missing+=("Security-Effect: none; <why, at least 20 characters>, or raise security_epoch in $POLICY")
+		if [ ${#host_hits[@]} -gt 0 ]; then
+			missing+=("Security-Effect: none; <why, at least 20 characters> (host-side surface ${host_hits[*]}: an epoch raise does not excuse it, the host's code is not in a guest snapshot)")
+		else
+			missing+=("Security-Effect: none; <why, at least 20 characters>, or raise security_epoch in $POLICY")
+		fi
 	fi
 	if [ "$has_rev" != true ]; then
 		missing+=("Security-Effect-Reviewed-By: <reviewing agent|owner>; <review N | owner YYYY-MM-DD>")
@@ -378,15 +446,15 @@ if [ "$fails" -ne 0 ]; then
 guest-security-epoch: $fails problem(s) in $base..$head.
 Remedies. Before the commit lands on main: amend it with the trailers after its
 review (Security-Effect: none|gate change; <why>, Security-Effect-Reviewed-By:
-<seat>; <ref>), or, for a surface change that is not a gate file, raise
-security_epoch in $POLICY in the same commit.
+<seat>; <ref>), or, for a guest-surface change that is not a gate file or a
+host: entry, raise security_epoch in $POLICY in the same commit.
 After it is on main (trailers cannot be added to a pushed commit), get the
 commit reviewed, then push a follow-up commit whose own message carries
   Security-Effect-Covers: <the commit's full sha>; <none|gate change>; <why>
   Security-Effect-Reviewed-By: <seat>; <review N | owner YYYY-MM-DD>
 ("gate change" for a gate file). For a surface change that is not a gate file,
-a follow-up that raises security_epoch also covers the range from the deployed
-base; a raise never excuses a gate-file change. The epoch never falls.
+a follow-up that raises security_epoch also covers (a guest surface only, never a host: entry) the range from the deployed
+base; a raise never excuses a gate-file change or a host: entry. The epoch never falls.
 MSG
 	exit 1
 fi

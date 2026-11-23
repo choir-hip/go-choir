@@ -491,7 +491,6 @@ type ManagerConfig struct {
 	// (VMCTL_GUEST_DNS_ONLY; empty selects none). See guest_dns.go.
 	GuestDNSOnly []string
 
-
 	// CapsuleMirrors is the capsule package mirror grant switch
 	// (CHOIR_CAPSULE_MIRROR_*; empty by default). See capsule_mirrors.go.
 	CapsuleMirrors CapsuleMirrorConfig
@@ -3896,24 +3895,6 @@ func (m *Manager) reconcileTapIsolation(vmID, hostURL string) {
 	comment := tapComment(tapName)
 	h.deleteMatching("nat", "PREROUTING", fmt.Sprintf("--dport 8085 -m comment --comment %s ", comment))
 	h.deleteMatching("nat", "PREROUTING", fmt.Sprintf("--dport 8085 -m comment --comment %q", comment))
-}
-
-func tapReachableHostServicePorts() []string {
-	return []string{
-		"8082", // proxy / platform publish path
-		"8083", // vmctl
-		"8084", // gateway
-		// :8085 removed 2026-10-04 (S1a): no production host autoputer serves
-		// it; the rule only let guests reach a dead port.
-		"8086", // corpusd durable Texture verification
-		"8087", // maild draft persistence
-		// Go module proxy for L2 capsules' goproxy.choir.internal route
-		// (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).
-		"8088",
-		// Package mirror for L2 capsules' mirror.choir.internal route
-		// (station FP10, docs/definitions/choir-launch-fp10-net02-mirrors-2026-10-21.md).
-		"8089",
-	}
 }
 
 func tapNameForVMID(vmID string) string {

@@ -55,7 +55,7 @@ YML
 new_repo() {
 	local d=$1
 	git init -q "$d"
-	mkdir -p "$d/nix" "$d/scripts" "$d/.github/workflows" "$d/.github/scripts" "$d/internal/agentcore" "$d/internal/capsule" "$d/internal/other"
+	mkdir -p "$d/nix" "$d/scripts" "$d/.github/workflows" "$d/.github/scripts" "$d/internal/agentcore" "$d/internal/capsule" "$d/internal/other" "$d/internal/server"
 	printf 'internal/agentcore/\ninternal/server/\n' >"$d/nix/guest-security-surfaces.txt"
 	printf '# floor\nflake.nix\ninternal/capsule\n' >"$d/nix/guest-floor-paths.txt"
 	policy 1 >"$d/nix/guest-release-policy.json"
@@ -67,6 +67,7 @@ new_repo() {
 	ci_yml >"$d/.github/workflows/ci.yml"
 	echo 'package agentcore' >"$d/internal/agentcore/a.go"
 	echo 'package other' >"$d/internal/other/o.go"
+	echo 'package server' >"$d/internal/server/s.go"
 	echo 'package capsule' >"$d/internal/capsule/c.go"
 	git -C "$d" add -A
 	git -C "$d" commit -q -m init
@@ -81,6 +82,7 @@ rev() { git -C "$1" rev-parse "${2:-HEAD}"; }
 # when the base has one, and the head's copy; both must pass.
 ci_run() {
 	local d=$1 base=$2 head=$3 rc=0
+	rm -f "$tmp/out-base" "$tmp/out-head"
 	# Review 318 DeepSeek 3: a base that is not in the checkout is fetched
 	# before "first adoption" is decided, and an unreadable base fails the step.
 	if ! git -C "$d" cat-file -e "$base^{commit}" 2>/dev/null; then
@@ -267,6 +269,131 @@ else
 	echo "ok:   the real surfaces and floor lists pass the sanity rule"
 fi
 
+# --- a file entry in the surfaces list (docs/problems/guest-reach-file-is-not-a-security-surface-2026-11-23.md)
+r=$tmp/f1; new_repo "$r"
+mkdir -p "$r/internal/proxy"; echo 'package proxy' >"$r/internal/proxy/guest_authority.go"
+printf 'internal/agentcore/\ninternal/proxy/guest_authority.go\n' >"$r/nix/guest-security-surfaces.txt"
+commit "$r" "$(msg 'list a file' "$GATE_EFFECT" "$OK_REVIEW")"; base=$(rev "$r")
+mkdir -p "$r/internal/proxy"; echo 'package proxy // touched' >"$r/internal/proxy/guest_authority.go"; commit "$r" "touch the listed file, no trailer"
+expect "a file entry: the listed file, touched with no trailer, fails" 1 "$r" "$base" "$(rev "$r")"
+r=$tmp/f2; new_repo "$r"
+mkdir -p "$r/internal/proxy"; echo 'package proxy' >"$r/internal/proxy/guest_authority.go"
+printf 'internal/agentcore/\ninternal/proxy/guest_authority.go\n' >"$r/nix/guest-security-surfaces.txt"
+commit "$r" "$(msg 'list a file' "$GATE_EFFECT" "$OK_REVIEW")"; base=$(rev "$r")
+mkdir -p "$r/internal/proxy"; echo 'package proxy // touched' >"$r/internal/proxy/guest_authority.go"
+commit "$r" "$(msg 'touch the listed file' "$OK_EFFECT" "$OK_REVIEW")"
+expect "a file entry: the listed file, touched with the trailers, passes" 0 "$r" "$base" "$(rev "$r")"
+r=$tmp/f3; new_repo "$r"
+mkdir -p "$r/internal/proxy"; echo 'package proxy' >"$r/internal/proxy/guest_authority.go"
+printf 'internal/agentcore/\ninternal/proxy/guest_authority.go\n' >"$r/nix/guest-security-surfaces.txt"
+commit "$r" "$(msg 'list a file' "$GATE_EFFECT" "$OK_REVIEW")"; base=$(rev "$r")
+mkdir -p "$r/internal/proxy"; echo 'package proxy' >"$r/internal/proxy/guest_authority_other.go"; echo 'package proxy' >"$r/internal/proxy/other.go"; commit "$r" "touch siblings, no trailer"
+expect "a file entry names that file only: a sibling, even one sharing its stem, passes" 0 "$r" "$base" "$(rev "$r")"
+
+# Every entry of the REAL list, touched alone with no trailer, fails; the file
+# that decides what a guest may call is among them.
+r=$tmp/real; new_repo "$r"
+cp "$root/nix/guest-security-surfaces.txt" "$r/nix/guest-security-surfaces.txt"
+# every entry must exist at the head: a file for a file entry, x.go under a directory
+real_entries() { sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's/^host://' "$root/nix/guest-security-surfaces.txt" | grep -v '^$' | sed 's|/*$||'; }
+for p in $(real_entries); do
+	case $p in *.go) f=$p ;; *) f=$p/x.go ;; esac
+	mkdir -p "$r/$(dirname "$f")"; echo 'package y' >"$r/$f"
+done
+commit "$r" "$(msg 'the real list' "$GATE_EFFECT" "$OK_REVIEW")"
+r2=$tmp/real-ga; cp -R "$r" "$r2"; base=$(rev "$r2")
+mkdir -p "$r2/internal/proxy"; echo 'package proxy // touched' >"$r2/internal/proxy/guest_authority.go"; commit "$r2" "grant every guest a host route, no trailer"
+expect "a commit touching internal/proxy/guest_authority.go with no trailer fails against the real list" 1 "$r2" "$base" "$(rev "$r2")"
+for p in $(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's/^host://' "$root/nix/guest-security-surfaces.txt" | grep -v '^$' | sed 's|/*$||'); do
+	r2=$tmp/real-$(printf '%s' "$p" | tr '/.' '__'); rm -rf "$r2"; cp -R "$r" "$r2"; base=$(rev "$r2")
+	case $p in *.go) f=$p ;; *) f=$p/x.go ;; esac
+	mkdir -p "$r2/$(dirname "$f")"; echo 'package x // touched' >"$r2/$f"; commit "$r2" "touch $f, no trailer"
+	expect "the real list: $f touched with no trailer fails" 1 "$r2" "$base" "$(rev "$r2")"
+done
+
+# --- the entry must exist, and a host: entry is not excused by an epoch raise
+r=$tmp/e1; new_repo "$r"
+printf 'internal/agentcore/\ninternal/proxy/guest_authorit.go\n' >"$r/nix/guest-security-surfaces.txt"
+mkdir -p "$r/internal/proxy"; echo 'package proxy' >"$r/internal/proxy/guest_authority.go"
+base=$(rev "$r"); commit "$r" "$(msg 'list a typo' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "an entry naming a path that does not exist at the head fails (typo)" 1 "$r" "$base" "$(rev "$r")"
+r=$tmp/e2; new_repo "$r"
+printf 'internal/agentcore/\ninternal/gone/\n' >"$r/nix/guest-security-surfaces.txt"
+base=$(rev "$r"); commit "$r" "$(msg 'list a dead directory' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "an entry naming a directory that does not exist at the head fails" 1 "$r" "$base" "$(rev "$r")"
+r=$tmp/e3; new_repo "$r"
+printf 'internal/agentcore/\nhost:internal/proxy/guest_authorit.go\n' >"$r/nix/guest-security-surfaces.txt"
+base=$(rev "$r"); commit "$r" "$(msg 'list a host typo' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a host: entry naming a path that does not exist fails" 1 "$r" "$base" "$(rev "$r")"
+n=$((n + 1)); got=0
+r=$tmp/e4; new_repo "$r"; printf 'internal/agentcore/\ninternal/proxy/typo.go\n' >"$r/nix/guest-security-surfaces.txt"
+out=$(cd "$r" && ./scripts/check-guest-security-epoch --lists-only 2>&1) || got=$?
+if [ "$got" = 1 ]; then echo "ok:   --lists-only fails for an entry that does not exist"; else echo "FAIL: --lists-only passes a dead entry: exit $got"; fails=$((fails + 1)); fi
+
+# An entry that can never match, or that git resolves but the matcher does not,
+# is a dead entry: the check refuses it loudly (full run and --lists-only).
+bad_entry() { # NAME ENTRY [FILE]: the list names ENTRY; FILE exists at the head
+	local name=$1 entry=$2 file=${3:-} d
+	d=$tmp/bad-$(printf '%s' "$name" | tr -c 'a-z0-9' '_')
+	new_repo "$d"
+	[ -z "$file" ] || { mkdir -p "$d/$(dirname "$file")"; echo 'package proxy' >"$d/$file"; }
+	printf 'internal/agentcore/\n%s\n' "$entry" >"$d/nix/guest-security-surfaces.txt"
+	base=$(rev "$d"); commit "$d" "$(msg "list $name" "$GATE_EFFECT" "$OK_REVIEW")"
+	expect "a dead entry ($name) fails the full run" 1 "$d" "$base" "$(rev "$d")"
+	n=$((n + 1)); local got=0
+	(cd "$d" && ./scripts/check-guest-security-epoch --lists-only >/dev/null 2>&1) || got=$?
+	if [ "$got" = 1 ]; then echo "ok:   a dead entry ($name) fails --lists-only"; else echo "FAIL: --lists-only passes a dead entry ($name): exit $got"; fails=$((fails + 1)); fi
+}
+bad_entry "dot-slash" "./internal/proxy/a.go" internal/proxy/a.go
+bad_entry "bare host marker" "host:"
+bad_entry "dot-dot segment" "internal/agentcore/../proxy/a.go" internal/proxy/a.go
+bad_entry "double slash" "internal//proxy/a.go" internal/proxy/a.go
+bad_entry "absolute path" "/internal/proxy/a.go" internal/proxy/a.go
+bad_entry "test file never matches" "host:internal/proxy/a_test.go" internal/proxy/a_test.go
+bad_entry "markdown never matches" "host:internal/proxy/a.md" internal/proxy/a.md
+bad_entry "testdata never matches" "host:internal/proxy/testdata" internal/proxy/testdata/x.go
+bad_entry "root as a prefix" "." internal/proxy/a.go
+bad_entry "one slash" "/"
+bad_entry "two slashes" "//"
+bad_entry "three slashes" "///"
+bad_entry "host marker and a slash" "host:/"
+bad_entry "host marker and slashes" "host://"
+bad_entry "host marker and a space" "host: "
+bad_entry "host marker and a dot" "host:."
+bad_entry "host marker and a dot slash" "host:./"
+
+host_repo() { # DIR: a list with one guest file and one host file, both present
+	local d=$1
+	new_repo "$d"
+	mkdir -p "$d/internal/proxy"; echo 'package proxy' >"$d/internal/proxy/hostside.go"; echo 'package server' >"$d/internal/server/s.go"
+	printf 'internal/agentcore/\nhost:internal/proxy/hostside.go\n' >"$d/nix/guest-security-surfaces.txt"
+	commit "$d" "$(msg 'list a host file' "$GATE_EFFECT" "$OK_REVIEW")"
+}
+r=$tmp/h1; host_repo "$r"; base=$(rev "$r")
+echo 'package proxy // touched' >"$r/internal/proxy/hostside.go"; policy 2 >"$r/nix/guest-release-policy.json"
+commit "$r" "touch the host file and raise the epoch, no trailer"
+expect "a host: entry touched with an epoch raise and no trailer fails" 1 "$r" "$base" "$(rev "$r")"
+r=$tmp/h2; host_repo "$r"; base=$(rev "$r")
+echo 'package proxy // touched' >"$r/internal/proxy/hostside.go"; policy 2 >"$r/nix/guest-release-policy.json"
+commit "$r" "$(msg 'touch the host file and raise the epoch' "$OK_EFFECT" "$OK_REVIEW")"
+expect "a host: entry touched with an epoch raise and the trailers passes" 0 "$r" "$base" "$(rev "$r")"
+r=$tmp/h3; host_repo "$r"; base=$(rev "$r")
+echo 'package proxy // touched' >"$r/internal/proxy/hostside.go"; commit "$r" "touch the host file, no trailer, no raise"
+expect "a host: entry touched with no trailer and no raise fails" 1 "$r" "$base" "$(rev "$r")"
+r=$tmp/h4; host_repo "$r"; base=$(rev "$r")
+echo 'package agentcore // touched' >"$r/internal/agentcore/a.go"; policy 2 >"$r/nix/guest-release-policy.json"
+commit "$r" "touch a guest surface and raise the epoch, no trailer"
+expect "a guest surface touched with an epoch raise and no trailer still passes" 0 "$r" "$base" "$(rev "$r")"
+r=$tmp/h5; host_repo "$r"; base=$(rev "$r")
+echo 'package agentcore // touched' >"$r/internal/agentcore/a.go"; echo 'package proxy // touched' >"$r/internal/proxy/hostside.go"
+policy 2 >"$r/nix/guest-release-policy.json"; commit "$r" "touch both and raise the epoch, no trailer"
+expect "a commit touching a guest surface and a host: entry, with a raise and no trailer, fails" 1 "$r" "$base" "$(rev "$r")"
+r=$tmp/h6; host_repo "$r"
+printf 'internal/agentcore/\nhost:internal/proxy/hostside.go\ninternal/proxy/hostside.go\n' >"$r/nix/guest-security-surfaces.txt"
+commit "$r" "$(msg 'list the file both ways' "$GATE_EFFECT" "$OK_REVIEW")"; base=$(rev "$r")
+echo 'package proxy // touched' >"$r/internal/proxy/hostside.go"; policy 2 >"$r/nix/guest-release-policy.json"; commit "$r" "touch with a raise, no trailer"
+expect "a file listed both plain and host: counts as host-side: a raise does not excuse it" 1 "$r" "$base" "$(rev "$r")"
+
 # --- rule 6: the gate protects itself ---------------------------------------
 r=$tmp/g1; new_repo "$r"; base=$(rev "$r")
 printf 'internal/server/\n' >"$r/nix/guest-security-surfaces.txt"; commit "$r" "$(msg 'drop agentcore from the list' "$GATE_EFFECT" "$OK_REVIEW")"
@@ -433,7 +560,7 @@ expect "a ci.yml change to the line that carries the check needs the gate traile
 
 # first adoption: the base has no script, no lists and no policy
 r=$tmp/a1; git init -q "$r"; echo x >"$r/readme"; commit "$r" init; base=$(rev "$r")
-mkdir -p "$r/nix" "$r/scripts" "$r/.github/workflows"
+mkdir -p "$r/nix" "$r/scripts" "$r/.github/workflows" "$r/internal/agentcore"; echo 'package agentcore' >"$r/internal/agentcore/a.go"
 printf 'internal/agentcore/\n' >"$r/nix/guest-security-surfaces.txt"; printf 'internal/capsule\n' >"$r/nix/guest-floor-paths.txt"
 policy 1 >"$r/nix/guest-release-policy.json"; cp "$script" "$r/scripts/check-guest-security-epoch"; ci_yml >"$r/.github/workflows/ci.yml"
 commit "$r" "$(msg 'adopt the gate' "$GATE_EFFECT" "$OK_REVIEW")"

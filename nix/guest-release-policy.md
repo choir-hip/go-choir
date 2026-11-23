@@ -8,12 +8,17 @@ compares a hibernated computer's release with the current one at every wake.
 - **security_epoch.** A monotone integer. Raise it in the commit that carries
   a security fix to guest code outside the floor (the runtime, a desk, a
   credential or authority path; the prefixes are in
-  nix/guest-security-surfaces.txt). It never falls: a revert of a commit that
+  nix/guest-security-surfaces.txt; an entry is a directory or one file, and
+  the host files that decide what a guest may reach are listed by file or, for a package that is a guest-reach authority throughout, as a whole package). It never falls: a revert of a commit that
   raised it keeps the raised value. Raising it makes every older release-bound
   snapshot cold boot onto the fixed release. A fix to floor code needs no
   raise: it moves `floor_digest` by itself. `scripts/check-guest-security-epoch`
   refuses a change to a named surface that neither raises it nor carries the
-  reviewed `Security-Effect` trailers.
+  reviewed `Security-Effect` trailers. A raise cannot fix a host-side file
+  (the host's code is not in a snapshot), so an entry written `host:<path>`
+  is not excused by a raise: a commit touching one needs the trailers
+  whatever the epoch does. An entry that names a path that does not exist
+  fails the check.
 - **guest_abi.** The host-guest protocol version this build speaks.
 - **guest_abi_min.** The oldest guest protocol this build's host services
   still serve. Raise it in the commit that makes a host service stop serving

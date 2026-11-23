@@ -1,6 +1,6 @@
 # Guest code outside the floor that decides what a guest may do, read or reach
 # (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md 6.6). One
-# repo-relative directory prefix per line; `#` starts a comment.
+# repo-relative directory prefix, or one file path, per line; `#` starts a comment.
 #
 # scripts/check-guest-security-epoch refuses a change to a path under one of
 # these prefixes unless the same change raises security_epoch in
@@ -43,7 +43,6 @@ internal/keyescrow/
 
 # grants and authority
 internal/capfloor/
-internal/eventtablegrant/
 internal/owneract/
 
 # self-development
@@ -56,3 +55,61 @@ internal/gatewayruntime/
 
 # the Mail custodian: the guest path to owner-private mail
 internal/maildesk/
+
+# Host code that decides what a guest computer may reach on the host. This is a
+# BEST-EFFORT MAP, not a proof of completeness: it was drawn by reading how each
+# door authorizes a guest (docs/problems/guest-reach-file-is-not-a-security-surface-2026-11-23.md),
+# and every review round has found one more decision. Where a package is a
+# guest-reach authority throughout, the whole package is listed; elsewhere one
+# file. The host: marker says the decision runs on the host (a guest binary may
+# link the package, as with platform and vmctl, but the host's build is not a
+# guest snapshot), so an epoch raise does not excuse a change to it: it needs the
+# reviewed trailers whatever the epoch does. The entries above carry no marker
+# because nobody has classified them as host or guest side.
+#
+# A guest reaches the host by the tap firewall (which host ports exist for it,
+# internal/vmmanager/guest_reach.go tapReachableHostServicePorts: 8082 proxy,
+# 8083 vmctl, 8084 gateway, 8086 corpusd, 8087 maild, 8088 Go module proxy,
+# 8089 package mirror) and by the services behind those ports.
+#   vmctl (8083): the whole package. It binds a guest's source address to its
+#     computer (ownership.go GuestOwnershipForAddress, the rule the proxy and
+#     corpusd also use), admits internal callers by transport (handlers.go),
+#     and routes guests (capsule_reservations, self_development_route,
+#     reported_release).
+#   gateway (8084): the whole package. Guest authentication is spread over
+#     config.go (the registry and the SEC-05 pin, CheckPeer), bearer_binding.go,
+#     guest_reach.go, jev.go and anthropic_relay.go (each applies the pin
+#     itself), host_fetch.go and the credential routes of handlers.go.
+#   proxy (8082): guest_authority.go, guest_feeds.go, guest_reach.go (the route
+#     table, the corpusd relay, the guest story publication).
+#   corpusd (8086): authority.go, objectgraph_handlers.go, key_escrow_http.go,
+#     event_capability.go, guest_reach.go (the route table and
+#     admitPublishedRead).
+#   tap firewall: hostfirewall.go, guest_egress.go, guest_reach.go.
+#   maild (8087): internal/maild/api.go, the guest binding (the tap source bound
+#     to a live ownership through vmctl, and to the asserted owner).
+# NOT covered: per-route handler bodies in platform, proxy and maild (they call
+# the bind helpers listed above; a new file that calls bindTapCaller,
+# requireInternalOrBoundGuest*, a vmctl bind helper or maild's guest binding is
+# not listed until someone lists it); the older unmarked entries above can
+# still be excused by an epoch raise; moving a rule out of a listed file hides
+# it. Out of scope on purpose: the Go module proxy (8088,
+# internal/goproxy) and the package mirror (8089, internal/pkgmirror) authorize
+# no caller (the source address is attribution for the log, never authority) and
+# serve public packages; their upstream host allow-lists bound what the host
+# fetches, not what a guest may do on the host. The per-computer mirror grant
+# (internal/mirrorgrant, written by vmmanager's capsule_mirrors.go) is not listed.
+host:internal/vmctl/
+host:internal/gateway/
+host:internal/maild/api.go
+host:internal/proxy/guest_authority.go
+host:internal/proxy/guest_feeds.go
+host:internal/proxy/guest_reach.go
+host:internal/platform/authority.go
+host:internal/platform/objectgraph_handlers.go
+host:internal/platform/key_escrow_http.go
+host:internal/platform/event_capability.go
+host:internal/platform/guest_reach.go
+host:internal/vmmanager/hostfirewall.go
+host:internal/vmmanager/guest_egress.go
+host:internal/vmmanager/guest_reach.go

@@ -225,35 +225,6 @@ func (h *Handler) HandleOpinionPublication(w http.ResponseWriter, r *http.Reques
 	h.publishTextureRevision(w, r, authResult.UserID, autoputerURL, req, platform.PublishModeOpinion, started)
 }
 
-// HandleGuestTexturePublication serves POST types.StoryPublishPath: a
-// computer publishing one revision of its own story (Cut 2 2b). The proxy
-// binds the calling guest to its owner and computer and runs the owner's
-// publish path for it, reading the document and revision from that
-// computer; the guest names only the document and revision.
-func (h *Handler) HandleGuestTexturePublication(w http.ResponseWriter, r *http.Request) {
-	started := time.Now()
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
-		return
-	}
-	ownership, err := h.boundProxyGuest(r)
-	if err != nil || strings.TrimSpace(ownership.UserID) == "" || strings.TrimSpace(ownership.ComputerURL) == "" {
-		writeJSON(w, http.StatusForbidden, errorResponse{Error: "guest caller is not bound to a live computer"})
-		h.lifecycle.record("platform_publish.guest", "forbidden", time.Since(started))
-		return
-	}
-	var story types.StoryPublishRequest
-	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<16))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&story); err != nil || strings.TrimSpace(story.DocID) == "" || strings.TrimSpace(story.RevisionID) == "" {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "doc_id and revision_id are required"})
-		return
-	}
-	req := publishTextureRequest{DocID: strings.TrimSpace(story.DocID), RevisionID: strings.TrimSpace(story.RevisionID)}
-	// A computer's own publish is an Autopaper story: publish_mode auto.
-	h.publishTextureRevision(w, r, strings.TrimSpace(ownership.UserID), strings.TrimSpace(ownership.ComputerURL), req, platform.PublishModeAuto, started)
-}
-
 // publishTextureRevision is the publish path once the caller is bound to an
 // owner and a computer: read the owner's document and revision from that
 // computer, prepare its source metadata, and publish it to corpusd as
