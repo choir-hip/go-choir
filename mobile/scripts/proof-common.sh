@@ -78,6 +78,18 @@ run_drive() {
       echo "$name: $op" >> "$SHOTS/retries.txt"
       SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 5; continue
     fi
+    # A settle that gave up on a slow launch's requests in the first few ops (`clock settle: TimerFireLimit`: the radio's timers ran out before the requests of a launch that took 41 s came back; train2p1's
+    # drill died so at op 4/79, the app stayed signed in and every later signed-out drive was a signed-in app) changes nothing yet: the drive is run again once from a clean app, logged and counted. Later, or twice, it fails.
+    if [ $rc -ne 0 ] && [ $relaunched -eq 0 ] && grep -q "TimerFireLimit" "$SCRATCH/$name.txt"; then
+      op=$(grep -o "op [0-9]*/[0-9]* ['\`][^'\`]*['\`]" "$SCRATCH/$name.txt" | head -1)
+      opn=$(printf '%s' "$op" | sed -n 's/^op \([0-9]*\)\/.*/\1/p')
+      if [ -n "$opn" ] && [ "$opn" -le 8 ]; then
+        relaunched=1
+        echo "retry: $name drive, $op"
+        echo "$name: $op" >> "$SHOTS/retries.txt"
+        SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 5; continue
+      fi
+    fi
     break
   done
   : > "$STEPS"

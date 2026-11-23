@@ -524,6 +524,9 @@ CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
 LEFT_FILES=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/dev/null)
 LEFT=$(printf '%s' "$LEFT_FILES" | grep -c . | tr -d ' ')
 
+# A failed drill never signed out: the Keychain still holds the key, so the signed-out tour below launches a SIGNED-IN app and every check of it fails for that reason (train2p1). Say so once, so the cause is not sought in the tour.
+case "$DRIVES_FAILED" in *drill*) echo "note: the sign-out drill failed, so the app below is still signed in: read the drill's failure first, not the signed-out checks";; esac
+
 # ---- 3h. SIGNED-OUT TOUR (the drill above left the Keychain empty): launch with no key. The first screen (the radio) says what is true and offers the one way in; the paper lists the public stories and a
 # story reads; the radio offers to read the public paper; Settings > Account has a Sign in button. Nothing here needs the owner's computer.
 export NOKEY=1
