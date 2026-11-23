@@ -423,19 +423,28 @@ export async function barRun(storage: Store | undefined, native: NativeReader | 
   return { onAir: v.onAir, waiting: v.waiting, remote: v.audio, remotePlaying: v.audio && v.playing, remoteTitle: v.current, remoteFraction: v.fraction };
 }
 
+/** The sheet as the page's facts carry it. The facts are asked again every second while the radio sounds (spine.contract `posKey`), and the sheet can be a megabyte: it is written out when it moved
+ *  (a new object from the reducer, or a version or a length that changed: the store's own splice keeps the object) and the same text is handed over while it did not (radio-position.test.ts P8). */
+let sheetSeen: { sheet: Sheet; version: number; length: number; text: string } | undefined;
+function sheetText(sheet: Sheet): string {
+  if (sheetSeen && sheetSeen.sheet === sheet && sheetSeen.version === sheet.version && sheetSeen.length === sheet.entries.length) return sheetSeen.text;
+  const text = JSON.stringify({ ...sheet, applied_ops: [] });
+  sheetSeen = { sheet, version: sheet.version, length: sheet.entries.length, text };
+  return text;
+}
+
 export async function radioPageFacts(storage: Store | undefined, native: NativeReader | undefined): Promise<RadioFacts> {
   const r = await getRadio(storage, native);
   const v = r.rt.view(), later = nativeLater();
   let sentences: string[] = [], sentenceIndex = 0, progress = 0;
   if (later) { try { const o = obj(await later({ op: 'radioFacts', peek: true })); sentences = Array.isArray(o.sentences) ? o.sentences.filter((x): x is string => typeof x === 'string') : []; sentenceIndex = num(o.sentenceIndex); progress = num(o.progress); } catch { /* none */ } }
-  const sheet = { ...r.rt.store.sheet, applied_ops: [] };
   const prog = r.rt.programme(), route = prog.route;
   const airEntry = r.rt.store.onAir(), takeRef = airEntry?.kind === 'take' && airEntry.source?.ref.startsWith('take:') ? airEntry.source.ref.slice(5) : '';
   const take = takeRef !== '' ? r.takeList.find((t) => t.takeID === takeRef) : undefined;
   const published = route !== '' ? r.front.published[route] ?? 0 : 0;
   const versions = Object.entries(r.front.versions);
   return {
-    at: clock.ms / 1000, sheet: JSON.stringify(sheet), playing: v.playing, sentences, sentenceIndex, progress: v.audio ? v.fraction : progress,
+    at: clock.ms / 1000, sheet: sheetText(r.rt.store.sheet), playing: v.playing, sentences, sentenceIndex, progress: v.audio ? v.fraction : progress,
     remoteAudio: v.audio, remoteElapsed: v.elapsed, remoteDuration: v.duration, wants: r.rt.director.wants, message: v.message, notice: v.notice, writing: v.writing, dry: v.dry,
     airTitle: prog.title, airRoute: route, publishedAt: published, versionRoutes: versions.map(([k]) => k), versionNumbers: versions.map(([, n]) => n),
     stale: r.rt.store.ahead().filter((e) => r.rt.store.isStale(e)).map((e) => e.id), takeTranscript: take?.transcript ?? '', takeRecord: take?.record?.summary ?? '',

@@ -26,9 +26,14 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
+let readLast: { text: string; sheet: Sheet } | undefined;       // the same text is the same sheet: the page is asked every second while the radio sounds, and the text can be a megabyte
 function readSheet(text: string): Sheet {
   if (text === '') return emptySheet();
-  try { return decodeSheet(JSON.parse(text)); } catch { return emptySheet(); }
+  if (readLast && readLast.text === text) return readLast.sheet;
+  let sheet: Sheet;
+  try { sheet = decodeSheet(JSON.parse(text)); } catch { return emptySheet(); }
+  readLast = { text, sheet };
+  return sheet;
 }
 
 /** An entry placed by a play that carried no title (the native play took only the route) has an empty title and label; the programme on air has the headline. The on-air entry of a story or

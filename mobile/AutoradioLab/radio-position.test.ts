@@ -12,7 +12,9 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { adoptNative } from './api.ts';
 import { forgetOnboarding } from './onboarding.ts';
-import { barRun, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPulse, wipeRadio } from './radio-bridge.ts';
+import { radioPage } from './radio-page.ts';
+import type { Entry } from './runsheet-model.ts';
+import { barRun, getRadio, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPulse, wipeRadio } from './radio-bridge.ts';
 
 type Call = { op: string; name?: string; peek?: boolean };
 let calls: Call[] = [];
@@ -182,5 +184,44 @@ describe('P7 the contract is wired to the key', () => {
   test('the pulse says live and beat (RadioTick)', () => {
     const t = c('radio-types.contract');
     expect(t).toMatch(/live: bool/); expect(t).toMatch(/beat: number/);
+  });
+});
+
+// P8 the cost of one second (the review's S2): the per-second path on a run sheet at its bounds (150 entries of 8 KB of text, about 1.2 MB as JSON) is measured, and the sheet is not
+// serialised and read again when nothing in it moved. The turn budget is 100 ms (Exact answers over it fail the resource); the bound below leaves a slow phone a margin of ten.
+describe('P8 one second of the position, on a large run sheet', () => {
+  const big = async (): Promise<void> => {
+    await play();
+    const r = await getRadio(undefined, native as never);
+    const text = 'Words of a story, sentence after sentence. '.repeat(190);              // about 8 KB
+    const entries: Entry[] = [];
+    for (let i = 0; i < 150; i++) entries.push({ id: `l-${String(i).padStart(4, '0')}`, kind: 'story', placed_by: 'desk', state: i < 50 ? 'heard' : 'ahead', title: `Story ${i}`, est_seconds: 60, revision: 0, text } as Entry);
+    r.rt.store.sheet = { ...r.rt.store.sheet, entries: [...entries, ...r.rt.store.sheet.entries] };
+  };
+  test('radioPageFacts + radioPage per second: time reported, and the sheet is read once while it does not move', async () => {
+    fresh(); await big(); await ask(0, true);
+    const wire = (await radioPageFacts(undefined, native as never)).sheet;
+    const reps = 40; const t0 = performance.now();
+    for (let i = 0; i < reps; i++) { nowS += 1; await radioPulse(undefined, native as never); const f = await radioPageFacts(undefined, native as never); radioPage(f, {}, { entries: [] }, 0); }
+    const perSecond = (performance.now() - t0) / reps;
+    console.log(`P8: sheet ${(wire.length / 1024).toFixed(0)} KiB; per second (pulse + page facts + page) ${perSecond.toFixed(2)} ms`);
+    expect(wire.length).toBeGreaterThan(1_000_000);
+    expect(perSecond).toBeLessThan(10);
+  });
+  test('the sheet is written out and read back once while it does not move, and again when it does', async () => {
+    fresh(); await big(); await ask(0, true);
+    const realStringify = JSON.stringify, realParse = JSON.parse; let out = 0, back = 0;
+    JSON.stringify = ((v: unknown, ...rest: unknown[]) => { if (v && typeof v === 'object' && Array.isArray((v as { entries?: unknown[] }).entries) && (v as { entries: unknown[] }).entries.length >= 150) out++; return (realStringify as (...a: unknown[]) => string)(v, ...rest); }) as typeof JSON.stringify;
+    JSON.parse = ((t: string, ...rest: unknown[]) => { if (typeof t === 'string' && t.length > 1_000_000) back++; return (realParse as (...a: unknown[]) => unknown)(t, ...rest); }) as typeof JSON.parse;
+    try {
+      for (let i = 0; i < 6; i++) { nowS += 1; await radioPulse(undefined, native as never); radioPage(await radioPageFacts(undefined, native as never), {}, { entries: [] }, 0); }
+      expect(out).toBeLessThanOrEqual(1); expect(back).toBeLessThanOrEqual(1);
+      const r = await getRadio(undefined, native as never);
+      r.rt.store.sheet = { ...r.rt.store.sheet, version: r.rt.store.sheet.version + 1, entries: r.rt.store.sheet.entries.slice(1) };      // the sheet moved (a skip, an op)
+      const before = out;
+      radioPage(await radioPageFacts(undefined, native as never), {}, { entries: [] }, 0);
+      expect(out).toBe(before + 1);
+      expect((await radioPageFacts(undefined, native as never)).sheet).toBe((await radioPageFacts(undefined, native as never)).sheet);
+    } finally { JSON.stringify = realStringify; JSON.parse = realParse; }
   });
 });
