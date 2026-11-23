@@ -1,10 +1,10 @@
 # Five days of work, and where we stand
 
-I wrote this on Monday the twenty-third of November, in the middle of the afternoon Eastern. It covers the five days from Thursday the nineteenth to today, with the most detail on last night and this morning. It replaces this morning's letter about the night. It is long on purpose, so you can listen to it while you work out and then answer all of it at once.
+I wrote this on Monday the twenty-third of November, in the middle of the afternoon Eastern. It covers the five days from Thursday the nineteenth to today, with the most detail on last night and this morning. It replaces this morning's letter about the night. I corrected it once, an hour after publishing, when you pointed out that it treated as open several things you had already ruled on in our design sessions. It is long on purpose, so you can listen to it while you work out and then answer all of it at once.
 
 The system moved forward on almost every front this week, and today showed that the paper's sense of what matters is the weakest part of it.
 
-Here is the short version. The phone app is now mostly shared code, and that version is on your phone as Autoradio One, waiting for your ears. The paper has vectors, an event layer, a search over its own stories, and a voice ask that uses that search. Main is green and staging runs it. Against that, three things are wrong in ways you can feel. The radio has silences and rough edges in the voice pipeline that nobody has measured stage by stage. The paper wrote today's biggest story and then ranked it near the bottom. And the plan for fixing the paper is spread across about ten design documents that contradict each other in places. This letter walks through all three, and ends with what I think the next mission is.
+Here is the short version. The phone app is now mostly shared code, and that version is on your phone as Autoradio One, waiting for your ears. The paper has vectors, an event layer, a search over its own stories, and a voice ask that uses that search. Main is green and staging runs it. Against that, three things are wrong in ways you can feel. The radio has silences and rough edges in the voice pipeline that nobody has measured stage by stage. The paper wrote today's biggest story and then ranked it near the bottom. And you already redesigned the part that failed today, two nights ago, and none of that redesign is built. The older documents around it still contradict it in places. This letter walks through all three, and ends with what I think the next mission is.
 
 ## The five days in order
 
@@ -116,29 +116,27 @@ There are five families of ideas.
 
 The first family is about what a story is. One main point per story, fixed at opening. Four answers for each capture: same story, next story, new story, or decline. That is built and running. A daily check for stories that have blended two points is designed and not built. It would have caught today's case after the fact.
 
-The second family is about importance. What is built is the timer I just described. What is designed, in the first design, is the thing you are asking for: importance as accumulated state on a subject, moved by arrivals from distinct origins, by citations, and by what readers and listeners do. Separately, novelty would be computed from how sparse the neighbourhood is in vector space, not asked of a model. None of that is built. Its open questions are the update rule, and what stops the root from declaring a subject important by fiat. An older document proposes importance as a forecast that is settled later by reader behaviour. An older ruling of yours says importance is the number of stories about a subject. So importance is defined three ways across the documents.
+The second family is about importance, and here you have already ruled. What is built is the timer I just described. What you designed on the evening of the twenty-second, in section six A of the first design, replaces it. Your words were these. "Importance is something that you learn continuously. Otherwise you're just answering from model priors." "These scheduled jobs are a real hack. That's the stuff that works but doesn't scale." "We do need to score captures, not stories." And "follow ups to key stories will be important but not sparse. Novelty needs to be squared with importance."
 
-The third family is about the front page. No document says how the front should be ordered. That is simply missing. Sections as yes or no questions are built. A reader's own sections are designed only.
+So the design is: importance is accumulated state on a subject or a region, moved by arrivals from distinct origins, by citations, by what readers and listeners do, and by the root's own edits. It is held by the root Texture, which keeps the index of topics over time. It is assigned to captures, not only to stories. Novelty is a separate signal, computed from how sparse the neighbourhood is in vector space, never asked of a model. And the timer is on the list of things to retire.
 
-The fourth family is about events and entities as the unit instead of the document. The event layer is deployed, but eighty-four percent of captures mint their own event, so it groups almost nothing. Entities have a list and a public read, and the quality is poor. The first design replaces both with subjects and mentions, and that is the trial that failed its kill lines.
+Today's failure is that design's own example. A follow-up to a key story, dense and not novel, and important. The timer could not see it. Your design would have.
+
+None of it is built. What is still open inside it is the update rule, what stops the root from declaring a subject important by fiat, and whether importance lives on subjects, on regions, or both. Older documents still carry two other definitions, a count of stories and a forecast settled by readers. Your ruling supersedes them, and they should be marked so.
+
+The third family is about the front page. The first design asks whether the root Texture simply is the front page, and leaves that until the root exists. Until then nothing says how the front should be ordered. Sections as yes or no questions are built. A reader's own sections are designed only.
+
+The fourth family is about events and entities as the unit instead of the document. The event layer is deployed, but eighty-four percent of captures mint their own event, so it groups almost nothing. Entities have a list and a public read, and the quality is poor. You ruled on this too, on the twenty-first: one bucket of subjects, no separate events and entities. The first design replaces both layers with subjects and mentions. That is the trial that failed its kill lines.
 
 The fifth family is about learning. Forecast, outcome, lesson, trust. Forecasts are written at fourteen places. Many are settled by the party that made them. The lesson stroke is not built. The radio's notebook is the one place where a score is shown back to the thing that made the prediction, and it has had no real listener yet.
 
-Now the contradictions, because these are what you need to rule on.
+Now what is actually unsettled. I first wrote this part as a list of contradictions for you to rule on. Most of them you had already ruled on, and I had not checked. So here is what is settled, and then what is not.
 
-Lean toward revising, against one main point per story. Today's failure is this contradiction.
+Settled by you. Importance is learned state, not a count and not a question. Subjects are one bucket. The aim for search is the share of what a run takes from the corpus, not fewer searches. Nothing is retired before its replacement is proved.
 
-Importance defined three ways.
+Not settled. First, feed or successor. Your rule is that a story stops growing when its main beat changes, and also to lean toward revising. Today those two pulled apart, and the lean won. I think the rule needs an example like today's written into it. Second, the hot path. The offline trial failed all four of its kill lines. By the rule set before the run, the later stations do not start. The design says what comes next: a read-only measurement of whether density separates outcomes, then a second trial of the changed path. Neither has been run. Third, no panel has read draft four. Fourth, two settings and two rate limits still exist that break our own rules.
 
-Events as the unit, against subjects as the unit.
-
-The first design says its later stations do not start until the offline trial passes. The trial failed. The mission still lists the design as in progress.
-
-The first design says no red work starts before a panel reads it. No panel has read draft four.
-
-An older document aims to cut web searches by thirty percent. You have since said the aim is to scale what the corpus is good for, not to cut search.
-
-Two settings and two rate limits still exist that break our own rules against switches and limits.
+So the honest state of the redesign is that the thinking is ahead of the proof. The design that answers today's failure exists and has your rulings in it. Its first trial failed, its next measurement has not been run, and nothing of it is built.
 
 And one thing no document has at all: a measure of whether the paper is current. Nothing compares our front page against what the world's front pages say. That is why I could not tell you this afternoon whether throughput is down from last week. I still cannot.
 
@@ -147,6 +145,8 @@ And one thing no document has at all: a measure of whether the paper is current.
 I landed a prompt change whose proof was owed after a day, and the damage showed in fifteen minutes.
 
 I told you the Nvidia story's score was stale without reading it. It was fresh, and the truth was more damning.
+
+I then wrote this letter as though making importance stateful were a new idea, and listed your own rulings as open questions. You had designed it two nights ago, with me. This is the second time this week you have had to tell me we already redesigned something. The cause is that I answer from what is built and do not read the design first.
 
 I made a prediction with a line that the old data crossed on its own two hours in twelve.
 
@@ -160,11 +160,11 @@ If I were holding the phone, I would answer four things.
 
 First, what did you hear in Autoradio One. Use the stages. Thin sound is stage one. Ignored is two or three. Cut off is four. Talked over is five. Slow or vague is seven or eight. Flat voice or a long first wait is nine.
 
-Second, importance. I think the next mission's center is making importance and story identity stateful, with a measure of currency against the real news as its test. Not a tune of the scoring prompt.
+Second, the redesign. You already designed stateful importance. What it needs is the path from design to proof: the density measurement, the second trial, and a measure of whether the paper is current against the real news as its test. I think the next mission is that path, and not a tune of the scoring prompt.
 
 Third, the two-day items. Your current app's signing ends Tuesday evening. The developer menu. The silence after the opening.
 
-Fourth, the rulings: lean to revise or split on a changed beat, which definition of importance, and whether the first design continues after its failed trial or is redrawn.
+Fourth, the one ruling that is really open: when a running story's beat changes, does the lean to revise still apply, or does it open a successor.
 
 The one thing to remember is this. The machinery works and is mostly proven. What it lacks is memory in its judgements, and a way to see for ourselves when it is wrong.
 

@@ -59,15 +59,33 @@ story. That was wrong and said before reading the row.
   story puts it at 18:19Z or before.
 - Whether throughput is down against last week, as the owner believes, is
   not measured: the console lines the count needs reach back only hours.
-- No document says how the front should be ordered, and nothing measures
-  whether the paper is current against the day's real news. Both are missing
-  designs, not missing code.
+- Nothing measures whether the paper is current against the day's real
+  news. That is a missing design, not missing code.
+
+## Already designed, not built
+
+The owner redesigned this on 2026-11-22, before it failed in front of them:
+`docs/design/first-design-2026-11-22.md` section 6a. "importance is something
+that you learn continuously. otherwise you're just answering from model
+priors"; "we do need to score captures not stories"; "follow ups to key
+stories will be important but not sparse. novelty needs to be squared with
+importance". Importance becomes accumulated state on subjects or regions,
+held by the root; novelty is computed from vector density; the timer is on
+the list of things retired (section 9). Today's case is that design's own
+example: a follow-up to a key story, dense, not novel, important.
+
+None of it is built. The design's first offline trial failed its kill lines
+(claim C192); the measurement that comes before the next trial (step 2a,
+whether density separates outcomes) has not been run.
+
+The lead wrote this record and the letter of 2026-11-23 at first as though
+stateful importance were a new idea and the owner's rulings were open. They
+were not; both are corrected.
 
 ## Not a fix
 
 Rewording the scoring prompt would move this story and leave the mechanism.
-The design work is gathered in
-[the letter of 2026-11-23](../reports/five-days-and-where-we-stand-2026-11-23.md);
-the owner's rulings come first: lean to revise or open a successor on a
-changed beat; which of three definitions of importance; whether the first
-design continues after its failed trial.
+What is open is narrower than first written: whether a changed beat opens a
+successor when the rule also says "lean to revising"; the update rule for
+learned importance and what keeps a root's edit from making a subject
+important by fiat; and how the front is ordered before the root exists.
