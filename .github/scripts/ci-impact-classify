@@ -123,7 +123,7 @@ else
     # The phone app's shared code (Exact contracts and TypeScript, mobile/AutoradioLab) has its own `bun test`; it also reads the native interface it is typed against.
     # Swift under mobile/AutoradioKit and mobile/exact-package/apple is tested on the Mac (CLAUDE.md, One Mac build at a time), not here.
     case "$path" in
-      mobile/AutoradioLab/*|mobile/fixtures/*|mobile/layouts/*|mobile/themes/*|mobile/exact-package/exact.json|mobile/exact-package/interface/*|mobile/scripts/gen-exact-interface.py|mobile/scripts/exact.sh|mobile/scripts/app-identity.sh|mobile/scripts/test-app-identity.sh|.github/workflows/ci.yml|.github/scripts/ci-impact-classify)
+      mobile/AutoradioLab/*|mobile/fixtures/*|mobile/layouts/*|mobile/themes/*|mobile/exact-package/exact.json|mobile/exact-package/interface/*|mobile/scripts/gen-exact-interface.py|mobile/scripts/*.sh|.github/workflows/ci.yml|.github/scripts/ci-impact-classify)
         mark mobile "$path -> the phone app's shared-code tests"
         ;;
     esac

@@ -103,6 +103,10 @@ assert_output mobile-identity-test $'mobile/scripts/test-app-identity.sh\n' 'mob
 assert_output frontend-device-return-test-only $'frontend/tests/device-return.test.mjs\n' 'frontend=true'
 # The server's allowlist of apps (TestDeviceReturnSchemesAreTheAppsInAppJSON) reads app.json: a new variant must run it.
 assert_output app-json-runs-the-go-allowlist-test $'mobile/AutoradioLab/app.json\n' 'go=true' 'mobile=true'
+# test-app-identity.sh copies the whole of mobile/scripts and runs build-lab.sh, proof-common.sh, sim-launch.sh, make-profile.sh, proof-real.sh, gen-build-info.sh and check-exact-pin.sh over stubs: a change to any of them selects the lane.
+for f in build-lab proof-common sim-launch make-profile proof-real gen-build-info check-exact-pin; do
+  assert_output "mobile-script-$f" "mobile/scripts/$f.sh"$'\n' 'mobile=true' 'go=false'
+done
 assert_output mobile-workflow-wiring $'.github/workflows/ci.yml\n' 'mobile=true'
 assert_output mobile-swift-only-does-not-select-it $'mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirSignIn.swift\n' 'mobile=false' 'go=false'
 assert_output mobile-docs-and-go-do-not-select-it $'docs/reference/exact/auth-session.md\ninternal/auth/device_login.go\n' 'mobile=false'
