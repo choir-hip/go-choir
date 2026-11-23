@@ -43,8 +43,6 @@ public struct PodcastClip: Sendable, Equatable {
     public var episodeEntry: RunSheetEntry {
         .audio(RunSheetAudio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: nil, end: nil, episodeId: episodeKey))
     }
-    /// How far the file's length may differ from the transcribed file's before the range is distrusted.
-    public static let durationTolerance = 3.0
 
     static func bare(_ route: String) -> String { route.hasPrefix("/") ? String(route.dropFirst()) : route }
 
