@@ -95,4 +95,9 @@ out=$(run 1); echo "$out" | grep -q '^retry: d drive' && echo "$out" | grep -q '
 out=$(run 2); echo "$out" | grep -q 'FAILED drive d' && ok "two timeouts: the drive fails" || no "two timeouts: $out"
 # PROOF_KEEP_GOING=1: a failed drive is recorded and the next one runs; without it the proof stops at the first
 out=$(PROOF_KEEP_GOING=1 run 2); echo "$out" | grep -q 'drive d FAILED' && ! echo "$out" | grep -q '^FAILED' && ok "keep going: a failed drive is named and the proof goes on" || no "keep going: $out"
+# a settle that gave up at the start of a drive (`clock settle: TimerFireLimit`, first ops: requests still in flight from a slow launch; train2p1 drill, op 4/79) is run again once, logged; one later in the drive, or a second one, fails
+printf '#!/bin/sh\nn=$(cat "%s/n" 2>/dev/null || echo 0); echo $((n + 1)) > "%s/n"\nif [ $n -lt "$FAILN" ]; then echo "op ${FAILOP:-4}/79 '"'"'clock settle'"'"': clock: clock: TimerFireLimit { limit: 4096 }"; exit 1; fi\necho tree\n' "$T" "$T" > "$T/exact.sh"; chmod +x "$T/exact.sh"
+out=$(run 1); echo "$out" | grep -q '^retry: d drive, op 4/79' && echo "$out" | grep -q 'drive d ok' && ok "TimerFireLimit at op 4: the drive is run again once and passes" || no "TimerFireLimit at op 4: $out"
+out=$(run 2); echo "$out" | grep -q 'FAILED drive d' && ok "TimerFireLimit twice: the drive fails" || no "TimerFireLimit twice: $out"
+out=$(FAILOP=60 run 1); echo "$out" | grep -q 'FAILED drive d' && ! echo "$out" | grep -q '^retry:' && ok "TimerFireLimit at op 60: no retry (state may have changed)" || no "TimerFireLimit at op 60: $out"
 [ "$fails" -eq 0 ] && echo "all ok" || { echo "$fails failed"; exit 1; }
