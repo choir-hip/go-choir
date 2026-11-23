@@ -87,6 +87,8 @@ type Service struct {
 	// tapeSweep is the tape sweep's run lock, policy, registry and jobs
 	// (tape_sweep.go).
 	tapeSweep tapeSweepState
+	// acctTape holds the tape purge jobs of account deletions (account_purge.go).
+	acctTape accountTapeState
 	// tapeReaders caches the segment-first tape reader per artifacts root
 	// (event_artifacts.go tapeReader).
 	tapeReaderMu  sync.Mutex

@@ -159,6 +159,13 @@ type TapeSweepRequest struct {
 	Pause          string `json:"pause,omitempty"`
 	ComputerID     string `json:"computer_id,omitempty"`
 	OlderThan      string `json:"older_than,omitempty"`
+	// Computers, when set, restricts the destroyed sweep to these computers:
+	// every other computer is classified "not named by this request" and is
+	// neither listed nor deleted. Orphans cannot be combined with it. It is
+	// how an account deletion purges one account's computers alone
+	// (account_purge.go); a computer on the hard refusal list is refused at
+	// the request.
+	Computers []string `json:"computers,omitempty"`
 }
 
 type tapeSweepParams struct {
@@ -177,6 +184,8 @@ type tapeSweepParams struct {
 	pause       time.Duration
 	computerID  string
 	olderThan   time.Duration
+	// only, when non-empty, names the computers the destroyed sweep may list.
+	only map[string]bool
 }
 
 // TapeSweepComputerProof is the destroyed proof recorded for one computer.
@@ -434,6 +443,22 @@ func (s *Service) clampTapeSweepRequest(req TapeSweepRequest) (tapeSweepParams, 
 	p.maxBytes = req.MaxBytes
 	if p.maxBytes <= 0 || p.maxBytes > DefaultTapeSweepMaxBytes {
 		p.maxBytes = DefaultTapeSweepMaxBytes
+	}
+	if len(req.Computers) > 0 {
+		p.only = map[string]bool{}
+		for _, id := range req.Computers {
+			id = strings.TrimSpace(id)
+			if !purgeIDOK(id) {
+				return p, fmt.Errorf("tape sweep: %q is not a computer id", id)
+			}
+			if err := tapeSweepProtected(id); err != nil {
+				return p, err
+			}
+			p.only[id] = true
+		}
+		if len(req.Sweeps) != 1 || strings.TrimSpace(req.Sweeps[0]) != TapeSweepDestroyed {
+			return p, errors.New("tape sweep: a request that names computers runs the destroyed sweep alone")
+		}
 	}
 	if len(req.Sweeps) == 0 {
 		p.orphans, p.destroyed = true, true
@@ -1368,6 +1393,9 @@ func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegi
 		}
 		out[id] = pr
 		switch {
+		case len(p.only) > 0 && !p.only[id]:
+			pr.Reason = "not named by this request"
+			continue
 		case tapeSweepProtected(id) != nil:
 			pr.Reason = "protected computer: hard refusal list"
 			continue
