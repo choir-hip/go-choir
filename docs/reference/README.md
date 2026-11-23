@@ -26,7 +26,7 @@ Pages:
   Autoradio phone app; sources fetched 2026-11-11 (section 8); only Silero
   and Parakeet EOU are measured on a phone by us.
 - [EMBEDDINGGEMMA.md](EMBEDDINGGEMMA.md): EmbeddingGemma 2 (Core AI port by Everpaper, macOS 27 only as declared; files, prompts, Matryoshka, licence), the GGUF alternative, the on-device vector store pick (brute force first, sqlite-vec later) and BM25 + RRF hybrid ranking; sources fetched 2026-11-17, nothing measured on a phone.
-- [EXACT.md](EXACT.md): the Exact app-shell runtime (pinned commit, model, surprises, decision guide), with subpages in [exact/](exact/): ui-model, native-modules, deck, audio, build-and-ship, testing-and-debugging, internals, gaps. The runnable example is [mobile/exact-spike/](../../mobile/exact-spike/README.md).
+- [EXACT.md](EXACT.md): the Exact app-shell runtime (pinned commit, model, surprises, decision guide), with subpages in [exact/](exact/): ui-model, native-modules, deck, audio, build-and-ship, testing-and-debugging, internals, gaps, auth-session. The runnable example is [mobile/exact-spike/](../../mobile/exact-spike/README.md).
 - [CERAMIC.md](CERAMIC.md): Ceramic, a lexical web search service (English pages, keyword queries, 50 words, 20 results): the call, query rules, errors, limits, price, and what its documents do not say.
 - [RIVER.md](RIVER.md): River, the host for DeepSeek V4.1 Flash 1017: the one model we use, Chat Completions versus Responses, reasoning values, caching, the gateway variables and the procedure to register the key on Node B (not yet done on 2026-11-14).
 - [AUTORADIO-TURNS.md](AUTORADIO-TURNS.md): `POST /api/autoradio/turns`, the Autoradio desk's fast answer: request, server-sent event shapes, records, pool order, measuring (slice 1).
