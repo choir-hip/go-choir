@@ -43,6 +43,7 @@ const (
 	defaultRetentionTestIdleMinAge   = 7 * 24 * time.Hour
 	defaultRetentionQuarantineMinAge = 7 * 24 * time.Hour
 	lifecycleRetention               = lifecycleHolder("retention removal")
+	lifecycleAccountDeletion         = lifecycleHolder("account deletion")
 	retentionMinAgeFloor             = 24 * time.Hour
 )
 

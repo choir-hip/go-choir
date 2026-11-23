@@ -671,8 +671,13 @@ type OwnershipRegistry struct {
 
 	// retentionPrune controls durable VM-state deletion for explicitly
 	// disposable computers such as staging Playwright accounts.
-	retentionPrune      RetentionPruneConfig
-	retentionUserEmails map[string]string
+	retentionPrune RetentionPruneConfig
+	// accountPurgeAuthDB is the auth database whose deletion records the
+	// account destroy route reads; accountPurgeEligible replaces that read in
+	// tests (account_deletion.go).
+	accountPurgeAuthDB   string
+	accountPurgeEligible func(userID string, now time.Time) error
+	retentionUserEmails  map[string]string
 	// retentionClock is time.Now outside tests (the test-class idle rule
 	// and the quarantine age-out compare ages against it).
 	retentionClock func() time.Time
