@@ -517,6 +517,19 @@ func (h *Handler) setTrustedAuthHeaders(r *http.Request, authResult *AuthResult)
 	}
 }
 
+// accountAccessRevoked asks the auth store whether the account has a deletion
+// record. A validator that has no such question (a test double) revokes
+// nothing; the real store answers true on a read error.
+func (h *Handler) accountAccessRevoked(userID string) bool {
+	if h.authStore != nil {
+		return h.authStore.AccountAccessRevoked(userID)
+	}
+	if q, ok := h.apiKeyValidator.(interface{ AccountAccessRevoked(string) bool }); ok {
+		return q.AccountAccessRevoked(userID)
+	}
+	return false
+}
+
 // validateAccessJWT validates the access JWT from the choir_access cookie.
 // It returns the user ID if valid, or an error if the token is missing,
 // invalid, expired, tampered, or not an access-scoped token.
@@ -562,6 +575,12 @@ func (h *Handler) validateAccessJWT(r *http.Request) (*AuthResult, error) {
 	// forged without it) and is refused here exactly as the auth service refuses it.
 	if ev, _ := claims["ev"].(float64); ev <= 0 {
 		return nil, errors.New("access token carries no proof of the address")
+	}
+	// An account that asked to be deleted has no access from that moment, not
+	// five minutes later: the record, not the signature, decides. The store
+	// answers true on a read error (fail closed).
+	if h.accountAccessRevoked(userID) {
+		return nil, errors.New("account deletion is pending")
 	}
 	email, _ := claims["email"].(string)
 	signInMethod, _ := claims["am"].(string)
@@ -681,6 +700,10 @@ func (h *Handler) validateAPIKey(r *http.Request) (*AuthResult, error) {
 	// Check expiry.
 	if ak.ExpiresAt != nil && time.Now().UTC().After(*ak.ExpiresAt) {
 		return nil, errors.New("api key expired")
+	}
+
+	if h.accountAccessRevoked(ak.UserID) {
+		return nil, errors.New("account deletion is pending")
 	}
 
 	// Look up the user to get the email for header injection.
