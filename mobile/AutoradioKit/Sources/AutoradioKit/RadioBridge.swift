@@ -17,7 +17,7 @@ public final class RadioBridge: @unchecked Sendable {
     /// Set by the app module: asks shared code to look again (touches `radioNote`).
     public var changed: @Sendable () -> Void = {}
 
-    /// A verb for shared code: `{verb: ..., ...}`. Verbs: turnOps {json}, turnEnded, level {value: pause|play|duck}, stopAll, openWeb {url}, closeWeb.
+    /// A verb for shared code: `{verb: ..., ...}`. Verbs: turnOps {json}, turnEnded, stopAll, openWeb {url}, closeWeb.
     public func send(_ verb: String, _ fields: [String: Any] = [:]) {
         var m = fields; m["verb"] = verb
         guard let d = try? JSONSerialization.data(withJSONObject: m), let s = String(data: d, encoding: .utf8) else { return }

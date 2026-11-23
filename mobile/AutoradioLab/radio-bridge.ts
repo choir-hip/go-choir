@@ -295,7 +295,6 @@ async function handle(r: Radio, text: string): Promise<void> {
   switch (m.verb) {
     case 'turnOps': applyTurnOps(r.rt, str(m.json)); break;
     case 'turnEnded': await r.rt.turnEnded(); break;
-    case 'level': break;      // the voice's yield acted on the deck natively at once (ChoirApp.swift `onLevel`); its lines are in the journal
     case 'stopAll': {
       await r.rt.signOut();
       const later = nativeLater();                                            // native waits for this before the key goes (ChoirApp.signOut): the wait is for the answer, not a guess

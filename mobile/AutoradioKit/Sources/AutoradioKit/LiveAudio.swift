@@ -722,8 +722,6 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         installRemoteCommands()
     }
     public func setConfiguration(_ c: LabConfiguration) { lock.lock(); configuration = c; lock.unlock() }
-    /// Audio made before it was wanted, by the block's text (the host sets it from `OpeningCache.prepared`). Nil or no answer: the block is made.
-    public var preparedSpeech: (@Sendable (String) -> PreparedAudio?)?
     /// The chosen voice, as the cache keys it: a changed voice is another key.
     public var voiceKey: String { lock.lock(); defer { lock.unlock() }; return String(describing: configuration.setting(.voice)) }
     /// Load the chosen voice by making one short line (never played, never timed into the launch line).
@@ -967,10 +965,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 a = nil; return x.task
             }
             let made: Synthesized?
-            var source = "live"
-            // Audio written ahead of the launch (OpeningCache): the block's samples are handed over instead of made; the rest of the path is the same.
-            if let p = preparedSpeech?(t) { made = Synthesized(samples: p.samples, rate: p.rate); source = "cached" }
-            else if let hit { made = await hit.value } else { made = await synthesize(t) }
+            if let hit { made = await hit.value } else { made = await synthesize(t) }
             if Task.isCancelled { return false }
             guard let made else {
                 if tag == firstTag { print("AUTORADIO on air \(st.read { $0.document.id }) FAILED \(speakFailure ?? "no sound")") }
@@ -979,7 +974,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             if tag == firstTag {
                 let ms = Int((Date().timeIntervalSince(startedAt)) * 1000)
                 print("AUTORADIO on air \(st.read { $0.document.id }) voice=\(current.setting(.voice)?.id ?? "") samples=\(made.samples.count) first_audio_ms=\(ms)")
-                LaunchTimings.shared.printLine(source: source)
+                LaunchTimings.shared.printLine(source: "live")
             } else {
                 print("AUTORADIO on air \(st.read { $0.document.id }) block=\(tag) samples=\(made.samples.count)")
             }
