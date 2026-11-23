@@ -18,6 +18,7 @@ use Card, PaperCard, PageScroll, Btn, ListGroup, RowRule, SelectMark, PageHeader
 use Mark from "./mark.contract"
 use VoiceStep from "./voice.contract"
 use AccountView from "./account-state-types.contract"
+use SignInView from "./account-types.contract"
 use EditionPage from "./edition-types.contract"
 
 keyframes obBreathe
@@ -33,12 +34,11 @@ keyframes obReveal
 component SignInScreen
   inject
     th: Theme
-    au: ChoirAuth
+    siv: SignInView
     acs: AccountView
     signIn: action
     cancelSignIn: action
     openApproval: action
-    sheetNote: string
   view
     column position="absolute" inset=0 padding=24 gap=20 align-items="center" justify-content="center"
       box testId="ob-mark-slot" width=72 height=72 align-items="center" justify-content="center"
@@ -46,24 +46,24 @@ component SignInScreen
       column gap=8 align-items="center"
         text "Autoradio" font-size="-exact-large-title" font-weight=700 role="heading" aria-level=2 font-family=th.fontHead color=th.fg
         text "Sign in to hear the paper and talk to your computer." testId="signin-intro" text-align="center" font-size="-exact-body" line-height=1.45 font-family=th.fontText color=th.muted
-      if au.status == "pending"
+      if siv.pending
         Card(level=2, testId="signin-card", minHeight=0)
           column padding=20 gap=12 align-items="center"
             text "Your code" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-            text au.userCode testId="signin-code" font-size="-exact-large-title" font-weight=600 font-family=th.fontMono color=th.fg
+            text siv.userCode testId="signin-code" font-size="-exact-large-title" font-weight=600 font-family=th.fontMono color=th.fg
             text "Approve this sign-in in the window that opened." font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted text-align="center"
-            if sheetNote != ""
-              text sheetNote testId="signin-sheet-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
-              // No path is only the sheet: the same link, in the system browser (Exact: an absolute https href leaves the app and opens there). The native poll goes on as before.
-              text "Open it in your browser" href=au.verificationURL testId="signin-browser" font-family=th.fontLabel font-size="-exact-subheadline" color=th.fg text-align="center"
+            if siv.note != ""
+              text siv.note testId="signin-sheet-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
+              // No path is only the sheet: the same link, in the system browser (Exact: an absolute https href leaves the app and opens there). The attempt's poll goes on as before.
+              text "Open it in your browser" href=siv.browserLink testId="signin-browser" font-family=th.fontLabel font-size="-exact-subheadline" color=th.fg text-align="center"
             button press=openApproval testId="signin-open" appearance="none"
               Btn(label="Open the approval page", primary=true, wide=false)
             button press=cancelSignIn testId="signin-cancel" appearance="none"
               Btn(label="Cancel", primary=false, wide=false)
-      if au.status != "pending" and acs.action == "signIn"
+      if not siv.pending and acs.action == "signIn"
         button press=signIn testId="signin" appearance="none"
           Btn(label="Sign in", primary=true, wide=true)
-      text au.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
+      text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
 
 // ---------------------------------------------------------------- the page
 

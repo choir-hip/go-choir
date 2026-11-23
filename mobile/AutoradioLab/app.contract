@@ -75,7 +75,7 @@ component Autoradio
     signIn
     cancelSignIn
     openApproval
-    sheetNote
+    siv
     signOut
     signOutNote
     acs
@@ -467,6 +467,6 @@ component Autoradio
       BarShell()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
       // Settings, Account): the code screen then covers the app until it is approved or cancelled.
-      if au.status == "pending"
+      if siv.pending
         column position="absolute" inset=0 background-color=th.paper z-index=50
           SignInScreen()

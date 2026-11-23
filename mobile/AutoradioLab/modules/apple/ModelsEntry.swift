@@ -114,6 +114,10 @@ final class ModelsModule: ExactModule {
             Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
             return
         }
+        if let op = op, op.hasPrefix("signIn") {      // the sign-in attempt's three native calls (AutoradioModule.signInOp)
+            Task { @MainActor in reply.send(await AutoradioModule.current?.signInOp(request) ?? [:]) }
+            return
+        }
         if op == "pagesMirror" {
             // Shared code (AutoradioLab/pages.ts) owns the open pages and hands the voice their facts after every change (AutoradioModule+Spine.swift `holdPages`). Only native code can use them: the
             // voice engine, the local model's warm-up and the Texture editor's flush on leaving a page are native. Answers {ok}.
