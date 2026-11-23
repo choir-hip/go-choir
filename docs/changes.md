@@ -19,10 +19,8 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 | Phone: one data folder per account, sign-out wipes it | 12 review rounds, 5 failed drill runs; stopped for a structural assessment | `lane/account-partition-s1` |
 | Phone: "Autoradio 1", the train as a second app beside the first | **on the owner's phone since 2026-11-23 01:33Z**; seven defects found there | `lane/exact-side-by-side` |
 | Phone: position moves while playing; a closed answer card stays closed; the queue is described to the server as it is; the microphone opens on a first launch | built; one review seat accepted with six fixes, being applied; not on the phone | `lane/exact-ar1-next` |
-| Phone: sign-in in a sheet over the app | the app part is in review; the server and page part is split out to land first | `lane/signin-sheet`, `lane/signin-server` |
-| A voice ask searches the paper | not started. Today the answering model has no tools and sees at most 40 front-page titles | none |
-| `choir trace run`: one run, step by step, with the reasons its record holds | built; the "model calls 0" defect fixed (the phase is in the payload, not the record field); tested on fixtures only, [page](reference/TRACE-RUN.md); not landed | `lane/trace-run` |
-| Research prompts: one source count, a stop rule, a real gap measure | built; reviewed in five rounds, accepted with fixes; waits on the lead to land | `lane/research-frame` |
+| Phone: sign-in in a sheet over the app | the server and page part is deployed (`977442ff8`); the app part is reviewed and rides the re-cut train; never run on a phone | `lane/signin-sheet`, `lane/exact-train2` |
+| A voice ask searches the paper | built: keyword and vector search over published stories, ranked by relevance, age, importance and sources, in the same single model call; sent back twice by its review, third round in progress | `lane/ask-search` |
 | Phone model benchmark on the Motorola | first rows; not landed | `lane/model-bench` |
 | Snapshot capture in one pass (no store-sized scratch copy) | not started; the reader half landed 11-22 | `lane/snapshot-one-pass` |
 | Redesign of capture (subjects and mentions), offline slice | **failed all four of its kill lines** (claim C192); design panel not yet run | `lane/offline-slice-r0` |
@@ -46,24 +44,30 @@ the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-23
 
-### Research prompts: one source count, a stop rule, a real gap measure, a corpus search that says whether it matched (`lane/research-frame`, orange)
+### The edges index retry waits for its build lock (`3b5f6fd34`, `6229cd73a`, orange)
+- **What:** the retry that repairs an invalid edges index waits for the build lock instead of returning as if done when another builder holds it, re-reads the index after the wait, and gives the build its own deadline after a long wait.
+- **Why:** CI failed twice on `bd643bc55` in the platform suite. It looked like a flaky test and was a real defect: a retry that lost the lock race left the index invalid and reported success.
+- **Proof:** CI green on both commits; the three index tests ran 90 times under CPU load with no failure and the new deadline test fails on the old code. No deployed proof beyond the deploy's health checks: the path runs only when an index build is interrupted.
+- **Replaced:** `pg_try_advisory_lock` and its silent return. **Undo:** revert both.
+
+### Research prompts: one source count, a stop rule, a real gap measure, a corpus search that says whether it matched (`3dcddbe86` to `33fc8ff10`, orange)
 - **What:** the "read at least 8 independent sources" target and its pick-list are gone; one statement of the two-outlet gate (`MinPublishOutlets`, unchanged) in the research role, the overlay and Texture, with the event record named as a source of the second; Texture's Cast asks for the one thing the frame lacks, names the page to fetch and never says corroborate as a goal; a stop rule (a detail you cannot confirm is a finding; a reworded query that returns pages you already hold says this wording does not find it) beside "search the web whenever the corpus does not hold what the question needs"; `held` in web results means an earlier search of this run returned the page; the first turn names the digest and asks for an interim packet when there is a claim to cite. `SearchWireCorpus` opens its result with `captures_matched_words` and `captures_near_by_meaning_only` and a `words_note` (silent when the text index is partial or events, published pieces or a window explain the zero). The report log counts a gap only for a `missing:` line that says something and logs its words; `scripts/status-search-reads` reports the mean over all runs, the heaviest-five share, the no-read share and real gaps. The worked cell only prints the counts: whether pages answer is the model's judgement.
 - **Why:** in 3 hours of traces 50 of 77 hand-labelled searches were reformulations, runs told to corroborate sent 7.4 searches each, the prompts held three source counts, the corpus search returned captures 224 of 224 times whether or not the graph held the subject, and 55 of 56 Reports "named a gap" because the log counted a placeholder. Not a cap: runs still go to the web when the corpus lacks the answer (owner, 2026-11-23).
-- **Proof:** not deployed. deployed proof owed: the gap measure and the corpus-share line in `scripts/status-hourly` after a day. Built and tested on the build VM: researchtools, runtimeprompts, promptstore, textureprompts, yaegikernel, the whole agentcore and textureowner shards, internal/platform (with pgvector), the status-script fixtures.
+- **Proof:** deployed 2026-11-23 07:58Z (staging serves `33fc8ff10`). Deployed proof owed: the gap measure and the corpus-share line in `scripts/status-hourly` after a day. Built and tested on the build VM: researchtools, runtimeprompts, promptstore, textureprompts, yaegikernel, the whole agentcore and textureowner shards, internal/platform (with pgvector), the status-script fixtures.
 - **Replaced:** the 8-source target, "do not search again", the placeholder `missing:` line, the unset `SearchHit.CaptureID` claim (the field stays, commented). Not done: waking research on a record with no objective, capturing the page a lead links to, logging the domains read, a worked cell that reads the event record. **Undo:** revert.
 
 ## 2026-11-22
 
-### `choir trace run <run_id>` shows one run step by step with its reasons (`lane/trace-run`, yellow)
+### `choir trace run <run_id>` shows one run step by step with its reasons (`99338db60`, `bd643bc55`, yellow)
 - **What:** a command that reads a run through routes that already exist and prints its model calls, cells, module-surface calls, records, turn commits, restarts and resumes in time order, with the reason the record holds for each call (turn-commit Reason, else the model's own text, else "not recorded"), what retirement has taken, and a closing list of what that run's record does not contain. `choir trace runs` lists runs. `--json` and `--full`.
 - **Why:** a run's steps and reasons could only be rebuilt by hand from console lines (owner, 2026-11-22: "show me this run, step by step, with its reasons").
 - **Proof:** 24 tests on fixtures in the route handlers' own types, whole `cmd/choir` suite and gates pass. Not run against a real computer.
 - **Replaced:** nothing. **Undo:** revert.
 
-### Device approval can name the app to return to (`lane/signin-server`, red)
+### Device approval can name the app to return to (`977442ff8`, red)
 - **What:** `POST /auth/device/approve` takes optional `return` (an app id from a fixed list: `news.choir.autoradio.lab`, `news.choir.autoradio.lab.one`) and `state` (a nonce) and answers `return_to` only after a successful approval (a denial answers none, and the page does not navigate; the app learns of it by its poll); the decision is recorded first, and a bad hint just omits `return_to`. The page sends the hint only when it has the server's shape (a long or odd hint in a crafted link is dropped). A body over `readJSON`'s 1 KiB cap is a 400 before the code is looked up (no decision, no miss counted, no oracle); a test pins that. The `/device` page follows `return_to` back to the phone's sign-in sheet. Clients that send neither field see no change. The CI frontend job now runs the page's return unit test.
 - **Why:** the phone's sign-in leaves the app for a full browser; the sheet needs a way back. The server and page must be deployed before the app that uses them, so this part lands alone, ahead of the app part (`lane/signin-sheet`).
-- **Proof:** deployed proof owed (`scripts/proofs/device-approve-return-deployed.sh`, a stranger's checks only: 401 with and without the fields, 415 for a form, the page served). The approval answering `return_to` is covered by Go tests, not yet seen on staging or a phone.
+- **Proof:** deployed 2026-11-23 07:58Z; `scripts/proofs/device-approve-return-deployed.sh` passed all six checks against staging at 08:12Z (a stranger's checks only: 401 with and without the fields and identical bodies, 415 for a form, the page served). The approval answering `return_to` is covered by Go tests, not yet seen on staging or a phone.
 - **Replaced:** nothing. **Undo:** revert.
 
 ### The store can be measured by kind (`0f4421aae`, orange)
