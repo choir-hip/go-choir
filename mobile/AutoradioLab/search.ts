@@ -732,7 +732,10 @@ export function todo(items: WorkItem[], store: VectorStore): { todo: WorkItem[];
 
 export type JobBudget = { passagesPerSlice: number; savesEverySlices: number; maxChars: number };
 export const JOB_BUDGET: JobBudget = { passagesPerSlice: 4, savesEverySlices: 40, maxChars: 1800 };
-export type Progress = { embedded: number; skipped: number; removed: number; waitedForSpeech: number; failed: number; finished: boolean };
+export type Progress = { embedded: number; skipped: number; removed: number; waitedForSpeech: number; failed: number; finished: boolean; gaveUp?: boolean };
+/** While the device is busy the wait doubles from the rest delay up to this, and the pass ends after this many busy answers in a row (about 16 minutes): it is started again by the next ask or sync, not polled for. */
+export const BUSY_WAIT_MAX_MS = 30000;
+export const BUSY_GIVE_UP = 40;
 
 /**
  * Bring a store in line with the items. Embeds only what is new or changed, in small slices, calls `save` every `savesEverySlices` slices
@@ -741,15 +744,23 @@ export type Progress = { embedded: number; skipped: number; removed: number; wai
  */
 export async function runJob(store: VectorStore, embed: Embed, items: WorkItem[], o: {
   busy?: () => boolean | Promise<boolean>; save?: () => Promise<void>; rest?: () => Promise<void>; cancelled?: () => boolean; budget?: JobBudget;
+  /** The wait while busy, in ms (it grows); without it `rest` is used. `restMs` is the first wait. */
+  wait?: (ms: number) => Promise<void>; restMs?: number;
 } = {}): Promise<Progress> {
   const budget = o.budget ?? JOB_BUDGET;
-  const p: Progress = { embedded: 0, skipped: 0, removed: 0, waitedForSpeech: 0, failed: 0, finished: false };
+  const p: Progress = { embedded: 0, skipped: 0, removed: 0, waitedForSpeech: 0, failed: 0, finished: false, gaveUp: false };
   const t = todo(items, store);
   for (const id of t.removed) store.remove(id);
   p.removed = t.removed.length; p.skipped = t.skipped;
-  let i = 0, since = 0;
+  let i = 0, since = 0, busyRun = 0;
   while (i < t.todo.length && !(o.cancelled?.() ?? false)) {
-    if (o.busy && (await o.busy())) { p.waitedForSpeech++; await o.rest?.(); continue; }
+    if (o.busy && (await o.busy())) {
+      p.waitedForSpeech++; busyRun++;
+      if (busyRun >= BUSY_GIVE_UP) { p.gaveUp = true; break; }
+      if (o.wait) await o.wait(Math.min(BUSY_WAIT_MAX_MS, (o.restMs ?? 150) * 2 ** (busyRun - 1))); else await o.rest?.();
+      continue;
+    }
+    busyRun = 0;
     const slice = t.todo.slice(i, i + budget.passagesPerSlice);
     try {
       const vs = await embed(slice.map((x) => embedPrompt.document(x.title, x.text.slice(0, budget.maxChars))));

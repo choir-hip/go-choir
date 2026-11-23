@@ -5,7 +5,7 @@
 //  K4 a newer unpinned document evicts an older one; an older one does not evict a newer one.
 //  K5 through Corpus.hold the groups the radio asks about ('page', 'runsheet', 'open-pages', 'edition-topics') are pinned.
 import { describe, expect, test } from 'bun:test';
-import { Index, Corpus, MAX_INDEX_ITEMS, type Doc } from './search.ts';
+import { Index, Corpus, MAX_INDEX_ITEMS, runJob, VectorStore, workItems, BUSY_WAIT_MAX_MS, BUSY_GIVE_UP, type Doc } from './search.ts';
 
 const doc = (id: string, text: string, date: number | null = 1000): Doc => ({ id, kind: 'story', title: id, text, date, source: 'store', address: `pub:${id}` });
 const fill = (c: Corpus | Index, n: number, date = 1000): void => {
@@ -53,5 +53,27 @@ describe('the index at its cap', () => {
     c.hold('edition-topics', [doc('topic:1', 'okapi topic', 10)]);
     c.hold('open-pages', [doc('open:1', 'tapir page', 10)]);
     for (const w of ['zebra', 'giraffe', 'okapi', 'tapir']) expect(c.retrieve({ words: w, now: 99999 }).items.length).toBeGreaterThan(0);
+  });
+});
+
+// C-5: the embedding pass waited 150 ms, forever, while the radio was busy, the phone in Low Power Mode or the native state call failing.
+//  B1 the wait grows (doubling, from the rest delay to BUSY_WAIT_MAX_MS) and the pass ends after BUSY_GIVE_UP busy answers in a row; it reports `gaveUp`.
+//  B2 a busy answer that clears resets the wait; the job then finishes.
+describe('the embedding pass while the device is busy', () => {
+  const items = () => workItems((() => { const ix = new Index(); for (let i = 0; i < 6; i++) ix.upsert(doc(`d${i}`, `passage ${i}`)); return ix; })());
+  const embed = async (p: string[]) => p.map(() => { const v = new Float32Array(8); v[0] = 1; return v; });
+  test('B1 always busy: growing waits, a bounded count, then the pass ends', async () => {
+    const waits: number[] = []; let asks = 0;
+    const p = await runJob(new VectorStore('f', 8), embed as never, items(), { busy: () => { asks++; return true; }, rest: async () => undefined, wait: async (ms) => { waits.push(ms); }, restMs: 150 });
+    expect(p.finished).toBe(false); expect(p.gaveUp).toBe(true);
+    expect(asks).toBe(BUSY_GIVE_UP);
+    expect(waits.slice(0, 4)).toEqual([150, 300, 600, 1200]);
+    expect(Math.max(...waits)).toBe(BUSY_WAIT_MAX_MS);
+  });
+  test('B2 a busy answer that clears resets the wait', async () => {
+    const waits: number[] = []; let n = 0;
+    const p = await runJob(new VectorStore('f', 8), embed as never, items(), { busy: () => (n++ % 3) !== 2, rest: async () => undefined, wait: async (ms) => { waits.push(ms); }, restMs: 150, budget: { passagesPerSlice: 1, savesEverySlices: 40, maxChars: 1800 } });
+    expect(p.finished).toBe(true); expect(p.gaveUp).toBe(false);
+    expect(Math.max(...waits)).toBe(300);
   });
 });
