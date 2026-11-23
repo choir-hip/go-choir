@@ -267,13 +267,6 @@ func TestDeviceApproveGatesHoldWithAReturn(t *testing.T) { // R7
 }
 
 // R8: the allowlist is the set of apps that exist. A callback scheme is an app's id.
-// DeviceReturnSchemes is deployed before the app that uses it, so on main the
-// Go list may hold an id app.json does not declare yet (the second app id,
-// news.choir.autoradio.lab.one, arrives with the phone train). The check here
-// is therefore one-way: every app id app.json declares (the default and any
-// variants present) must be in the Go list. The phone train's stricter test,
-// which asserts equality and the variants' SIGNIN_SCHEME, replaces this one
-// when the train lands.
 func TestDeviceReturnSchemesAreTheAppsInAppJSON(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "mobile", "AutoradioLab", "app.json"))
 	if err != nil {
@@ -283,26 +276,24 @@ func TestDeviceReturnSchemesAreTheAppsInAppJSON(t *testing.T) {
 		App      struct{ ID string } `json:"app"`
 		Variants map[string]struct {
 			IDSuffix string `json:"idSuffix"`
+			Env      map[string]string
 		} `json:"variants"`
 	}
 	if err := json.Unmarshal(raw, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.App.ID == "" {
-		t.Fatal("app.json declares no app id")
-	}
-	declared := []string{m.App.ID}
+	want := []string{m.App.ID}
 	for _, v := range m.Variants {
-		declared = append(declared, m.App.ID+v.IDSuffix)
-	}
-	have := map[string]bool{}
-	for _, s := range DeviceReturnSchemes {
-		have[s] = true
-	}
-	for _, id := range declared {
-		if !have[id] {
-			t.Fatalf("app.json declares app id %q, missing from DeviceReturnSchemes %v", id, DeviceReturnSchemes)
+		want = append(want, m.App.ID+v.IDSuffix)
+		if got := v.Env["SIGNIN_SCHEME"]; got != m.App.ID+v.IDSuffix {
+			t.Fatalf("variant env SIGNIN_SCHEME %q is not its app id %q", got, m.App.ID+v.IDSuffix)
 		}
+	}
+	sort.Strings(want)
+	got := append([]string(nil), DeviceReturnSchemes...)
+	sort.Strings(got)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("DeviceReturnSchemes %v, app.json ids %v", got, want)
 	}
 	if DeviceReturnPath != "/signed-in" {
 		t.Fatalf("path %q", DeviceReturnPath)
