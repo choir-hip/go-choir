@@ -81,11 +81,11 @@ operating_notes:
   - 'Each hourly tick reads both station files'' now cards and rewrites this one''s.'
 now:
   status: working
-  as_of: 2026-11-23T00:05Z
-  slice: 'landing what is in flight (the store reading in its landing run; the research prompt repair; the Exact train); the run viewer first among new work; M4 and sources waiting'
-  source_ref: origin/main c8d48a589
-  deploy_identity: staging and the paper on c27a50d98; a deploy of main (run 45044023185) in flight
-  candidate: 'graph-first (.lane/trees/gf-land, to be rebased again before landing)'
+  as_of: 2026-11-23T19:45Z
+  slice: 'nothing in flight; the overnight queue is landed and deployed; waiting on the owner''s reply to the letter of 2026-11-23, their tests of Autoradio 1, and their rulings on story identity and importance before the next goal file'
+  source_ref: origin/main 7866f4027
+  deploy_identity: staging and the paper on a2ba96767 (CI run 45248602790)
+  candidate: none
   conjecture:
     claim: 'see M1 (ledger C183, C191), M2 (C190, C192, C194) and M3 (C195); this file makes no claim of its own'
     test: the station files' tests
@@ -95,11 +95,11 @@ now:
     scope_if_supported: none of its own
     ledger_id: C190
     status: untested
-  believed_state: 'deployed today: the main-point judgment, read-first, the proxy fix. Landed and deploying: F0, a spend test fix. Nothing landed for ten hours because Node B''s disk refused deploys; it has room again (70 GiB at 16:28Z).'
-  main_uncertainty: 'whether the deploy in flight restarts the paper cleanly and swaps in the staged compact copy'
-  next_observation: 'the deploy''s result and Node B''s free space after it; then F0''s by-desk count (C194)'
+  believed_state: 'landed and deployed 11-23: the index lock, device approval return, the phone train (on the owner''s phone as Autoradio 1, untested by the owner), the voice ask''s search with its vector fix (deployed proof passes), the broker number fix, the guest-reach gate. Reverted: the research-frame prompts (C201 false on its first hour). Found: the day''s top story ranked low because importance holds no state (docs/problems/the-days-top-story-ranked-low-2026-11-23.md). M2''s offline slice failed its kill lines (C192) and no panel has read draft 4.'
+  main_uncertainty: 'what the owner heard in Autoradio 1, and which way they rule on feed versus successor and on the definition of importance'
+  next_observation: 'C202 at 22:30Z (research runs an hour after the revert); the owner''s reply'
   blocker: none
-  next_action: 'find what of a run''s ledger can be read today and design the run viewer; land the store reading; write the account boundary''s structural assessment instead of a sixth patch; run the design panel on the capture path with the day''s evidence'
+  next_action: 'settle C202; with the owner, write the next goal file from the letter and their reply; the account boundary''s structural assessment is still owed'
 receipts:
   - 'M1: docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md'
   - 'M2: docs/definitions/choir-first-design-2026-11-22.md'
