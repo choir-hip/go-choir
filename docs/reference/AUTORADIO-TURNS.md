@@ -191,8 +191,11 @@ its items are ignored.
 What the phone sends (`mobile/AutoradioLab/voice-queue.ts`, pinned against
 `internal/autoradioqueue/queue.go` by `voice-queue.test.ts` Q11). Everything the
 listener sees as playing or up next, in the order shown; the station's
-transitions between entries are not on the page, so they are not sent and a
-`move`'s `to_index` counts what is shown. The run sheet's kinds map onto the four:
+transitions between entries are not on the page, so they are not sent, and a
+`move`'s `to_index` is a place in the list that was sent (an entry with no wire
+item, or past the 50, is not in it): the phone keeps each sent list by its
+version and resolves the move through it by entry ids (`base_version` names it;
+an unknown list or an entry not in it is refused loudly). The run sheet's kinds map onto the four:
 a paper story (`pub:` route) is `story`; the programme's own spoken entries
 (story, opening, transition on air, take, answer, result) are `story` with the
 route of the paper story they tell, else `programme:<entry id>`; a web page is

@@ -61,12 +61,22 @@ export function wireItem(e: Entry): Record<string, unknown> | undefined {
   }
 }
 
+/** The lists that were sent, by the sheet's version (the snapshot's `version`, which the server answers as `base_version`): the entry ids of `upcoming`, in the order the server counted them. A `move`'s
+ *  `to_index` is a place in THAT list, not in what the sheet shows when the reply arrives (an entry with no wire item, the 50 bound, an entry that ended or was added in the 5 to 10 s of a turn). */
+const sentLists: { version: number; ids: string[] }[] = [];
+const rememberSent = (version: number, ids: string[]): void => {
+  const i = sentLists.findIndex((l) => l.version === version);
+  if (i >= 0) sentLists.splice(i, 1);
+  sentLists.push({ version, ids }); if (sentLists.length > 16) sentLists.shift();
+};
+
 /** The run sheet as the turn route's `queue` field (JSON text, sorted keys): what is on air and what is up next, as the listener sees them, in order. */
 export function turnQueueJSON(rt: RadioRuntime, positionBlock = 0, maxUpcoming = 50): string {
   const by = (b: Entry['placed_by']): string => (b === 'listener' ? 'listener' : b === 'desk' ? 'dj' : 'programme');
   const store = rt.store, air = store.onAir();
   const airItem = air ? wireItem(air) : undefined;
   const upcoming = visibleAhead(rt).flatMap((e) => { const i = wireItem(e); return i ? [{ id: e.id, item: i, added_by: by(e.placed_by) }] : []; }).slice(0, maxUpcoming);
+  rememberSent(store.sheet.version, upcoming.map((u) => u.id));
   const o: Record<string, unknown> = { version: store.sheet.version, current: air && airItem ? { id: air.id, item: airItem, position_seconds: Math.min(Math.max(positionBlock, 0), 10_000_000) } : null, upcoming };
   if (air) {
     const a: Record<string, unknown> = { id: air.id, title: clamp(displayTitle(air), 300) };
@@ -103,7 +113,7 @@ function entryFromWire(item: Record<string, unknown>): Entry | undefined {
 }
 
 const turnLog: string[] = [];
-export const resetTurnLog = (): void => { turnLog.length = 0; };
+export const resetTurnLog = (): void => { turnLog.length = 0; sentLists.length = 0; };
 
 /** What the turn route answered (the `queue_ops` event, JSON text). The old rebase rule holds by the reducer's own rules: an op that names an entry applies only while that entry is ahead; additions
  *  always apply; `clear` and `previous` only when the sheet is still at `base_version`. */
@@ -146,8 +156,15 @@ export function applyTurnOps(rt: RadioRuntime, text: string): TurnOpsResult {
       case 'move': {
         const to = typeof d.to_index === 'number' ? Math.trunc(d.to_index) : undefined;
         if (!id || to === undefined) { refuse(named, 'a move needs an entry and a place'); return; }
-        const ahead = visibleAhead(rt).filter((e) => e.id !== id);          // the places the listener sees, the same list the server counted
-        op = to <= 0 || ahead.length === 0 ? { op_id, by: 'desk', op: 'move', at: 'next', id, reason, base_version: 0 } : { op_id, by: 'desk', op: 'move', at: 'after', after: ahead[Math.min(to, ahead.length) - 1].id, id, reason, base_version: 0 };
+        // The places are those of the list SENT with this turn (the snapshot of `base_version`; the latest sent when the op names none), so what was left out of it, cut at 50, ended or added since cannot shift the place.
+        const want = typeof d.base_version === 'number' ? d.base_version : base;
+        const list = want === undefined ? sentLists[sentLists.length - 1] : sentLists.find((l) => l.version === want);
+        if (!list) { refuse(named, `the list the desk was shown (version ${want ?? 'latest'}) is not one this phone sent`); return; }
+        if (!list.ids.includes(id)) { refuse(named, 'it was not in the list the desk was shown'); return; }
+        const others = list.ids.filter((x) => x !== id), now = new Set(store.ahead().map((e) => e.id));
+        let anchor: string | undefined;                                      // the entry it goes after: the nearest one at or before that place that is still ahead (one that has aired is behind it)
+        for (let k = Math.min(Math.max(to, 0), others.length) - 1; k >= 0; k--) if (now.has(others[k])) { anchor = others[k]; break; }
+        op = anchor === undefined ? { op_id, by: 'desk', op: 'move', at: 'next', id, reason, base_version: 0 } : { op_id, by: 'desk', op: 'move', at: 'after', after: anchor, id, reason, base_version: 0 };
         break;
       }
       case 'skip': {

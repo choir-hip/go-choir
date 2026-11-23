@@ -40,6 +40,7 @@ describe('the ops', () => {
     const a = applyTurnOps(rt, JSON.stringify({ turn_id: 't1', ops: [{ op: 'enqueue', item: { kind: 'story', route: '/pub/b', title: 'B' } }, { op: 'play_next', item: { kind: 'story', route: '/pub/c', title: 'C' } }, { op: 'remove', id: 'nope' }] }));
     expect(a).toMatchObject({ applied: 2, dropped: 1 });
     expect(rt.store.ahead().map((e) => e.title)).toEqual(['C', 'B']);
+    turnQueueJSON(rt);                                                      // every turn is sent with a snapshot, and a move is resolved through it
     const mv = applyTurnOps(rt, JSON.stringify({ turn_id: 't2', ops: [{ op: 'move', id: rt.store.ahead()[1].id, to_index: 0 }] }));
     expect(mv.applied).toBe(1); expect(rt.store.ahead().map((e) => e.title)).toEqual(['B', 'C']);
     expect(applyTurnOps(rt, JSON.stringify({ turn_id: 't3', ops: [{ op: 'skip' }] })).applied).toBe(1);
@@ -158,7 +159,7 @@ describe('what the server answers for programme entries', () => {
     for (const n of ['1', '2', '3']) r.store.place(spoken('d-' + n, 'story', 'Story ' + n), 'end');
   };
   test('Q10 remove, move and skip reach programme entries', () => {
-    programme();
+    programme(); turnQueueJSON(rt);
     const mv = applyTurnOps(rt, JSON.stringify({ turn_id: 'm1', ops: [{ op: 'move', id: 'd-3', to_index: 0, reason: 'asked' }] }));
     expect(mv).toMatchObject({ applied: 1, dropped: 0 }); expect(rt.store.ahead().map((e) => e.id)).toEqual(['d-3', 'd-1', 'd-2']);
     expect(applyTurnOps(rt, JSON.stringify({ turn_id: 'm2', ops: [{ op: 'remove', id: 'd-1' }] }))).toMatchObject({ applied: 1, dropped: 0 });
@@ -171,8 +172,10 @@ describe('what the server answers for programme entries', () => {
     for (const [id, k] of [['d-a', 'story'], ['d-t', 'transition'], ['d-b', 'story'], ['d-c', 'story']] as const) rt.store.place(spoken(id, k), 'end');
     // the server saw [a, b, c]; "put a second" is to_index 1: a goes after b, and the transition the listener never sees must not count as a place
     const seen = (): string[] => rt.store.ahead().filter((e) => e.kind !== 'transition').map((e) => e.id);
+    turnQueueJSON(rt);
     expect(applyTurnOps(rt, JSON.stringify({ turn_id: 'm4', ops: [{ op: 'move', id: 'd-a', to_index: 1 }] })).applied).toBe(1);
     expect(seen()).toEqual(['d-b', 'd-a', 'd-c']);
+    turnQueueJSON(rt);
     expect(applyTurnOps(rt, JSON.stringify({ turn_id: 'm5', ops: [{ op: 'move', id: 'd-c', to_index: 0 }] })).applied).toBe(1);
     expect(seen()).toEqual(['d-c', 'd-b', 'd-a']);
   });
@@ -251,5 +254,56 @@ describe('the wire is the server\'s request type', () => {
     expect(n).toBe(entries.length + 1);
     for (const u of q.upcoming) expect(bytes(u.added_by)).toBeLessThanOrEqual(wirefix.maxAddedBy);
     expect(q.current!.position_seconds).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// Q12 (the review's S4): a move is resolved by the entry ids of the list that was SENT with the turn, not by the places the sheet shows when the reply arrives. The failure list, written first:
+//  Q12a an entry with no wire item (an over-long page address) is not in the list the server counted: "put A after C" (to_index 1 of [A, C, D]) puts A after C, not after B.
+//  Q12b the on-air entry ended between the snapshot and the reply: the place the desk named was after it; it is gone from ahead, so the move goes to the front, not one place further.
+//  Q12c the sheet changed after the snapshot (an entry added at the front): the sent list still decides where after.
+//  Q12d a version the phone never sent, or an entry the list did not hold, is refused loudly with its reason, and nothing moves.
+describe('Q12 a move is resolved through the list that was sent', () => {
+  const spokenEntry = (id: string): Entry => ({ id, kind: 'story', placed_by: 'desk', state: 'ahead', title: `T ${id}`, text: 'W.', est_seconds: 5, revision: 0 });
+  const long = (id: string): Entry => ({ ...webPage('https://e.org/' + 'p'.repeat(1100), 'Long'), id });
+  const ids = (): string[] => rt.store.ahead().map((e) => e.id);
+  test('Q12a an entry with no wire item is not a place the server counted', () => {
+    rt.play(spokenEntry('d-air'));
+    rt.store.place(spokenEntry('d-a'), 'end'); rt.store.place(long('d-b'), 'end'); rt.store.place(spokenEntry('d-c'), 'end'); rt.store.place(spokenEntry('d-d'), 'end');
+    const sent = JSON.parse(turnQueueJSON(rt, 0));
+    expect(sent.upcoming.map((u: { id: string }) => u.id)).toEqual(['d-a', 'd-c', 'd-d']);
+    const r = applyTurnOps(rt, JSON.stringify({ turn_id: 'q12a', base_version: sent.version, ops: [{ op: 'move', id: 'd-a', to_index: 1 }] }));
+    expect(r.applied).toBe(1); expect(ids()).toEqual(['d-b', 'd-c', 'd-a', 'd-d']);
+  });
+  test('Q12b the entry on air ended before the reply: the move still lands where the desk meant', () => {
+    rt.play(spokenEntry('d-air'));
+    for (const n of ['n', 'a', 'b']) rt.store.place(spokenEntry('d-' + n), 'end');
+    const sent = JSON.parse(turnQueueJSON(rt, 0));                          // the desk saw [n, a, b]; "put b right after n" is to_index 1
+    rt.store.applyFromDesk({ op_id: 'q12b-gone', by: 'desk', op: 'remove', id: 'd-n', reason: 'n aired: it is no longer ahead', base_version: 0 });   // n left the places ahead (it went on air): ahead is [a, b]
+    expect(ids()).toEqual(['d-a', 'd-b']);
+    expect(applyTurnOps(rt, JSON.stringify({ turn_id: 'q12b', base_version: sent.version, ops: [{ op: 'move', id: 'd-b', to_index: 1 }] })).applied).toBe(1);
+    expect(ids()).toEqual(['d-b', 'd-a']);
+  });
+  test('Q12c an entry added after the snapshot does not shift the places', () => {
+    rt.play(spokenEntry('d-air'));
+    for (const n of ['a', 'b', 'c']) rt.store.place(spokenEntry('d-' + n), 'end');
+    const sent = JSON.parse(turnQueueJSON(rt, 0));
+    rt.store.place(spokenEntry('d-new'), 'next');
+    expect(applyTurnOps(rt, JSON.stringify({ turn_id: 'q12c', base_version: sent.version, ops: [{ op: 'move', id: 'd-a', to_index: 2 }] })).applied).toBe(1);
+    expect(ids()).toEqual(['d-new', 'd-b', 'd-c', 'd-a']);
+  });
+  test('Q12d a list the phone never sent, or an entry it did not hold, is refused loudly', () => {
+    rt.play(spokenEntry('d-air'));
+    for (const n of ['a', 'b']) rt.store.place(spokenEntry('d-' + n), 'end'); rt.store.place(long('d-x'), 'end');
+    const sent = JSON.parse(turnQueueJSON(rt, 0));
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    let unknown: ReturnType<typeof applyTurnOps>, held: ReturnType<typeof applyTurnOps>;
+    try {
+      unknown = applyTurnOps(rt, JSON.stringify({ turn_id: 'q12d1', base_version: sent.version + 77, ops: [{ op: 'move', id: 'd-a', to_index: 1 }] }));
+      held = applyTurnOps(rt, JSON.stringify({ turn_id: 'q12d2', base_version: sent.version, ops: [{ op: 'move', id: 'd-x', to_index: 0 }] }));
+    } finally { console.log = log; }
+    expect(unknown.applied).toBe(0); expect(unknown.refused[0]).toContain('list');
+    expect(held.applied).toBe(0); expect(held.refused[0]).toContain('d-x');
+    expect(logs.filter((l) => l.includes('turn ops refused')).length).toBe(2);
+    expect(ids()).toEqual(['d-a', 'd-b', 'd-x']);
   });
 });
