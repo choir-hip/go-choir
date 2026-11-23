@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// The store.compact_force setting makes a small, unfragmented store take a
-// copy: the proof ring (d@e) is under the layout trigger's 1 GiB, so without
-// it the copy and swap would first run on the paper.
+// The store.compact_force setting makes a store with no freelist take a copy:
+// the proof ring (d@e) has none, so without it the copy and swap would first
+// run on the paper.
 func TestCompactCopyForced(t *testing.T) {
 	s, _ := compactTestStore(t, 2, 3000, 50)
 	if done, err := s.prepareCompactCopy(context.Background(), false); done || err != nil {

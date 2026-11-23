@@ -20,6 +20,16 @@ func (s *Store) Head(ctx context.Context, computerID string) (*computerevent.Hea
 	return scanProjectionHead(s.db.QueryRowContext(ctx, projectionHeadSQL, computerID))
 }
 
+// ProjectionHeadOf reads computerID's projection head from db, the handle of a
+// store file opened outside a Store (a restored snapshot being verified). It
+// returns nil when the file holds no head row.
+func ProjectionHeadOf(ctx context.Context, db *sql.DB, computerID string) (*computerevent.Head, error) {
+	if db == nil {
+		return nil, fmt.Errorf("computer event projection: nil database")
+	}
+	return scanProjectionHead(db.QueryRowContext(ctx, projectionHeadSQL, computerID))
+}
+
 // ReadDB returns the store's read pool: WAL readers that never take the write
 // connection, so a long read (a full-store witness) does not queue writers.
 // Each read transaction sees one committed snapshot. It falls back to the

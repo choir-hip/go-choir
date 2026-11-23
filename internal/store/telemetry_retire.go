@@ -284,7 +284,7 @@ var retirementWakeDone = func() {}
 // file-tree hydration is pending, or whose store.telemetry_retire setting is
 // off, skips the run and looks again ten minutes later. It never fails the
 // process. forceCompact, when set, is read at each run: on, the compact copy
-// is due whatever the file's size and age (SettingCompactForce).
+// is due whatever the file's free pages (SettingCompactForce).
 func (s *Store) StartTelemetryRetirement(ctx context.Context, ready, forceCompact func() bool) {
 	if s == nil {
 		return
@@ -335,9 +335,8 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready, forceCompac
 			} else if freed > 0 {
 				log.Printf("store: incremental vacuum: %d pages returned", freed)
 			}
-			// A file the retirements left mostly free, or a big one not
-			// rewritten compactly for a week, gets a compact copy, swapped in
-			// at the next planned restart (compact.go,
+			// A file the retirements left mostly free gets a compact copy,
+			// swapped in at the next planned restart (compact.go,
 			// docs/design/paper-compaction-2026-10-31.md).
 			if _, cErr := s.prepareCompactCopy(ctx, forceCompact != nil && forceCompact()); cErr != nil {
 				log.Printf("store: compact copy: %v", cErr)

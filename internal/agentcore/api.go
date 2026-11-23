@@ -34,6 +34,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storecomposition"
 	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -982,6 +983,13 @@ type guestObservabilityResponse struct {
 	// transaction. A tree cut at its share says partial and its numbers are
 	// a floor. A plain read shows the last reading, if any.
 	StoreTables *storetables.Report `json:"store_tables,omitempty"`
+	// StoreComposition is what state.db is made of, by table, object kind,
+	// version state and run-memory age, in sizes and counts only
+	// (internal/storecomposition). A background reading that outlives the
+	// request: ?store_composition=start begins one (one at a time; a start
+	// while one runs returns the running one), ?store_composition=1 reads the
+	// running one's progress or the last finished report.
+	StoreComposition *storecomposition.Report `json:"store_composition,omitempty"`
 	// ObjectGraphWriterGate is the object graph writer gate's mode and the
 	// violations it has seen since boot, keyed "kind|declared writer|reason"
 	// (ARCH-04): the gate's refusals, read here instead of over SSH. This process's counts only (corpusd keeps its own).
@@ -1113,6 +1121,15 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	if h.rt.cfg.StorePath != "" {
 		report := h.rt.dataVolume.Read(r.Context(), filepath.Dir(filepath.Clean(h.rt.cfg.StorePath)), datavolume.DefaultLimits, r.URL.Query().Get("data_volume") == "detail")
 		resp.DataVolume = &report
+	}
+	if sc := h.rt.storeCompositionScanner(); sc != nil {
+		switch r.URL.Query().Get("store_composition") {
+		case "start":
+			rep, _ := sc.Start(h.rt.store.ReadDB)
+			resp.StoreComposition = &rep
+		case "1":
+			resp.StoreComposition = sc.Status()
+		}
 	}
 	if h.rt.store != nil {
 		var budget time.Duration

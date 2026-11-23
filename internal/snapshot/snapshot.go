@@ -48,6 +48,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,8 +71,13 @@ import (
 )
 
 const (
-	// Version is the snapshot format version.
+	// Version is the snapshot format version of a record that carries the
+	// logical witness (WitnessRoot, SchemaHash) and no page digest.
 	Version = 1
+	// VersionPageDigest is the format version of a record that carries a
+	// PageDigest and no witness. A binary that does not know it refuses the
+	// record (restoreOne) and restores an older snapshot.
+	VersionPageDigest = 2
 	// RecordMediaType is the media type of the sealed snapshot record.
 	RecordMediaType = "application/vnd.choir.snapshot-record+json"
 	// StateFileName is the manifest path of the SQLite file.
@@ -118,9 +125,14 @@ type Record struct {
 	// when the computer has one.
 	FileTreeRoot string `json:"file_tree_root,omitempty"`
 	// WitnessRoot and SchemaHash are the witness v3 content root and schema
-	// hash of the captured file.
-	WitnessRoot string `json:"witness_root"`
-	SchemaHash  string `json:"schema_hash"`
+	// hash of the captured file. A Version record carries both; a
+	// VersionPageDigest record carries neither.
+	WitnessRoot string `json:"witness_root,omitempty"`
+	SchemaHash  string `json:"schema_hash,omitempty"`
+	// PageDigest is the lowercase hex of NewPageDigest over the file's pages in
+	// page order. A VersionPageDigest record carries it (and its page geometry);
+	// a Version record does not.
+	PageDigest string `json:"page_digest,omitempty"`
 	// Manifest addresses the sealed chunks of the file (one entry,
 	// StateFileName).
 	Manifest filecas.Manifest `json:"manifest"`
@@ -133,6 +145,32 @@ type Record struct {
 	// every snapshot, so a repeat snapshot uploads none of them.
 	Partitions []PartitionEntry `json:"partitions,omitempty"`
 }
+
+// pageDigestDomain separates the page digest from every other SHA-256 here.
+const pageDigestDomain = "choir.snapshot.page-digest.v1\x00"
+
+// PageDigest is the running digest of a state file's pages: SHA-256 over a
+// domain tag, the page size (4 bytes, big endian), the page count (8 bytes,
+// big endian) and then the plaintext pages in page order. The geometry is
+// inside the digest, so the same bytes under another page size do not match.
+type PageDigest struct{ h hash.Hash }
+
+// NewPageDigest starts the digest of a file of pageCount pages of pageSize bytes.
+func NewPageDigest(pageSize int, pageCount int64) *PageDigest {
+	h := sha256.New()
+	var head [12]byte
+	binary.BigEndian.PutUint32(head[:4], uint32(pageSize))
+	binary.BigEndian.PutUint64(head[4:], uint64(pageCount))
+	h.Write([]byte(pageDigestDomain))
+	h.Write(head[:])
+	return &PageDigest{h: h}
+}
+
+// Write adds plaintext pages; it never fails.
+func (d *PageDigest) Write(p []byte) (int, error) { return d.h.Write(p) }
+
+// Sum is the digest as lowercase hex.
+func (d *PageDigest) Sum() string { return hex.EncodeToString(d.h.Sum(nil)) }
 
 // PartitionEntry is one partition file of a snapshot.
 type PartitionEntry struct {
@@ -1222,8 +1260,11 @@ type RestoreConfig struct {
 	// MaxSequence, when set, restricts the choice to snapshots whose store
 	// head sequence is at or below it (a restore to an earlier point).
 	MaxSequence uint64
-	// Verify optionally checks the unsealed file (for example its witness
-	// against Record.WitnessRoot) before it is installed.
+	// Verify checks the unsealed file before it is installed: a version 1
+	// record's witness against Record.WitnessRoot, a version 2 record's head row
+	// against Record.StoreHeadSequence and StoreHead (the page digest is checked
+	// by the install itself). Optional for a version 1 record; a version 2
+	// record is refused when it is nil, because the head tie would be skipped.
 	Verify func(ctx context.Context, record Record, path string) error
 	// PartitionDir is the store's telemetry partition directory
 	// (store.TelemetryPartitionDir). When set, whatever it holds is removed
@@ -1387,8 +1428,16 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 	if err := json.Unmarshal(plaintext, &record); err != nil {
 		return Record{}, fmt.Errorf("decode record: %w", err)
 	}
-	if record.Version != Version || record.ComputerID != cfg.ComputerID {
+	if (record.Version != Version && record.Version != VersionPageDigest) || record.ComputerID != cfg.ComputerID {
 		return Record{}, fmt.Errorf("record is version %d of computer %q", record.Version, record.ComputerID)
+	}
+	if err := checkRecordForm(record); err != nil {
+		return Record{}, err
+	}
+	// The head tie of a page-digest record is Verify's (the install does not
+	// know the store's schema), so an install without one would skip it.
+	if record.Version == VersionPageDigest && cfg.Verify == nil {
+		return Record{}, errors.New("a version 2 record needs a Verify that checks its head row")
 	}
 	if cfg.MaxSequence != 0 && record.StoreHeadSequence > cfg.MaxSequence {
 		return Record{}, fmt.Errorf("snapshot head %d is above the restore point %d", record.StoreHeadSequence, cfg.MaxSequence)
@@ -1464,8 +1513,19 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 			_ = os.Remove(tempPath)
 		}
 	}()
-	if err := assemble(ctx, cfg, dek, entry.Chunks, entry.Size, chunkBytes, record.PageSize, temp); err != nil {
+	// A page-digest record is checked as the pages are written, before
+	// anything opens the file (Verify included).
+	var pages *PageDigest
+	var sum io.Writer // stays a nil interface for a version 1 record
+	if record.Version == VersionPageDigest {
+		pages = NewPageDigest(record.PageSize, record.PageCount)
+		sum = pages
+	}
+	if err := assemble(ctx, cfg, dek, entry.Chunks, entry.Size, chunkBytes, record.PageSize, temp, sum); err != nil {
 		return Record{}, err
+	}
+	if pages != nil && pages.Sum() != record.PageDigest {
+		return Record{}, errors.New("the restored pages do not match the record's page digest")
 	}
 	if cfg.Verify != nil {
 		if err := cfg.Verify(ctx, record, tempPath); err != nil {
@@ -1496,6 +1556,34 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 
 // noProbeOnce makes the skipped probe a log line once, not a silence.
 var noProbeOnce sync.Once
+
+// checkRecordForm refuses a record whose form disagrees with its version, or
+// that carries neither form: a Version record holds the logical witness and no
+// page digest, a VersionPageDigest record holds the page digest, its geometry
+// and no witness. It is the install's own check, so it does not depend on
+// RestoreConfig.Verify, which may be absent.
+func checkRecordForm(record Record) error {
+	switch record.Version {
+	case Version:
+		if record.PageDigest != "" {
+			return errors.New("a version 1 record carries a page digest")
+		}
+		if record.WitnessRoot == "" || record.SchemaHash == "" {
+			return errors.New("a version 1 record carries no witness")
+		}
+	case VersionPageDigest:
+		if record.WitnessRoot != "" || record.SchemaHash != "" {
+			return errors.New("a version 2 record carries a witness")
+		}
+		if !computerevent.IsSHA256(record.PageDigest) {
+			return errors.New("a version 2 record carries no valid page digest")
+		}
+		if record.PageSize <= 0 || record.PageCount <= 0 || record.PagesPerChunk <= 0 {
+			return errors.New("a version 2 record states no page geometry")
+		}
+	}
+	return nil
+}
 
 // recordChunkDigests is every chunk an install fetches: the state file's and
 // the telemetry partitions'.
@@ -1551,7 +1639,7 @@ func probeChunks(ctx context.Context, prober ChunkProber, chunks []string) error
 
 // assemble fetches, opens and writes the chunks of one file to w, checking
 // the cut, and syncs and closes w.
-func assemble(ctx context.Context, cfg RestoreConfig, dek []byte, chunks []string, size, chunkBytes int64, pageSize int, w *os.File) error {
+func assemble(ctx context.Context, cfg RestoreConfig, dek []byte, chunks []string, size, chunkBytes int64, pageSize int, w *os.File, sum io.Writer) error {
 	var written int64
 	for i, digest := range chunks {
 		if err := ctx.Err(); err != nil {
@@ -1572,6 +1660,9 @@ func assemble(ctx context.Context, cfg RestoreConfig, dek []byte, chunks []strin
 		}
 		if pageSize != 0 && len(plain)%pageSize != 0 {
 			return fmt.Errorf("chunk %d has %d bytes, not a whole number of %d-byte pages", i, len(plain), pageSize)
+		}
+		if sum != nil {
+			_, _ = sum.Write(plain)
 		}
 		n, err := w.Write(plain)
 		written += int64(n)
@@ -1610,7 +1701,7 @@ func installPartitions(ctx context.Context, cfg RestoreConfig, dek []byte, parts
 		if err != nil {
 			return err
 		}
-		if err := assemble(ctx, cfg, dek, part.Chunks, part.Size, int64(part.PageSize)*int64(part.PagesPerChunk), part.PageSize, temp); err != nil {
+		if err := assemble(ctx, cfg, dek, part.Chunks, part.Size, int64(part.PageSize)*int64(part.PagesPerChunk), part.PageSize, temp, nil); err != nil {
 			_ = temp.Close()
 			_ = os.Remove(temp.Name())
 			return fmt.Errorf("%s: %w", part.Path, err)

@@ -1,5 +1,8 @@
 # A store snapshot without the scratch copy (2026-11-20)
 
+Superseded on 2026-11-22 by [snapshot-one-pass-2026-11-22.md](snapshot-one-pass-2026-11-22.md):
+the witness it keeps inside the read transaction takes 55 minutes on the paper.
+
 Class of this file: green (a design; nothing changes until the landings
 below). Problem: [the paper's data image grows by the store's size at every
 capture](../problems/paper-data-image-grew-40-gib-in-eleven-minutes-2026-11-16.md).

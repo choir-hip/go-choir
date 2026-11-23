@@ -13,9 +13,9 @@ func TestResearchOverlaySendsTheFirstPacketAfterTheFirstSource(t *testing.T) {
 	overlay := RLMResearchOverlay()
 	// The cadence is stated once, in the role prompt (promptstore's
 	// TestResearchPromptCarriesTheSourceFloorAndEarlyReport); the overlay
-	// teaches the cell shape that makes it cheap: search, read and the
+	// teaches the cell shape that makes it cheap: graph, web, read and the
 	// interim packet in one cell, shown by a worked cell.
-	for _, want := range []string{"Search, read the top pages and send an interim packet in one cell", "choir.ReadAll(urls)", `choir.ReportPacket("texture"`, "not yet analysed"} {
+	for _, want := range []string{"Read and send an interim packet in one cell", "choir.ReadAll(urls)", `choir.ReportPacket("texture"`, "Interim: pages read"} {
 		if !strings.Contains(overlay, want) {
 			t.Fatalf("research overlay missing %q", want)
 		}

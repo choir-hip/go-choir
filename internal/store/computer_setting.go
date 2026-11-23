@@ -151,13 +151,13 @@ const SettingTelemetryRetire = "store.telemetry_retire"
 // by hand once no partition holds a row.
 const SettingTelemetryPartitions = "store.telemetry_partitions"
 
-// SettingCompactForce makes the daily compact copy due whatever the store
-// file's size and age (compact.go), so the copy and its swap at a planned
-// restart can be proved on a computer under the 1 GiB layout trigger (d@e,
+// SettingCompactForce makes the daily compact copy due even when the store
+// file has few free pages (compact.go), so the copy and its swap at a planned
+// restart can be proved on a computer with no freelist (d@e,
 // docs/design/paper-compaction-2026-10-31.md) before they run on the paper.
 // A fresh staged copy is still kept. Off by default and for every computer
-// but the proof ring; off is the rollback: the size and age triggers decide
-// again.
+// but the proof ring; off is the rollback: the freelist trigger decides
+// alone.
 const SettingCompactForce = "store.compact_force"
 
 // The calibration experiment E1's arm assignments

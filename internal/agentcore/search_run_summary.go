@@ -134,7 +134,7 @@ func (rt *Runtime) takeRunSearchSummary(runID string) (string, bool) {
 	if len(byDesk) > 0 {
 		line += " " + strings.Join(byDesk, " ")
 	}
-	line += fmt.Sprintf(" search_all_calls=%d wordings_offered=%d wordings_sent=%d fresh_sent=%d untagged=%d wordings_running=%d", s.AllCalls, s.AllOffered, s.AllSent, s.FreshSent, s.Untagged, s.AllRunning)
+	line += fmt.Sprintf(" search_all_calls=%d wordings_offered=%d wordings_sent=%d untagged=%d wordings_running=%d", s.AllCalls, s.AllOffered, s.AllSent, s.Untagged, s.AllRunning)
 	line += fmt.Sprintf(" pages_returned=%d pages_new=%d pages_read=%d", s.PagesReturned, s.PagesNew, s.PagesRead)
 	// Landing 0 of docs/definitions/corpus-first-search-one-verb-2026-11-19.md:
 	// searches judged and how many came back 75% or more already held; the

@@ -37,20 +37,14 @@ func TestDeskCellAndEgressRecordRunEvents(t *testing.T) {
 	execCtx.RunRecord = &types.RunRecord{RunID: execCtx.RunID, AgentID: "research:trace", OwnerID: execCtx.OwnerID, TrajectoryID: "traj-trace"}
 	ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
 
-	src, _ := json.Marshal(`done := make(chan error, 3)
-for _, q := range []string{"q1", "q2", "q3"} {
-	q := q
-	go func() {
-		s, err := choir.SearchFresh(q, "three searches at once are the point of this test") // over the running rule, with a reason
-		if err == nil && s.Refused != "" {
-			err = fmt.Errorf("refused: %s", s.Refused)
-		}
-		done <- err
-	}()
-}
-for i := 0; i < 3; i++ {
-	if err := <-done; err != nil {
+	// One search of a run runs at a time (the running rule): three searches, one after another.
+	src, _ := json.Marshal(`for _, q := range []string{"q1", "q2", "q3"} {
+	s, err := choir.Search(q)
+	if err != nil {
 		panic(err)
+	}
+	if s.Refused != "" {
+		panic("refused: " + s.Refused)
 	}
 }`)
 	out, err := tool.Func(ctx, json.RawMessage(`{"source":`+string(src)+`,"timeout_ms":30000}`))

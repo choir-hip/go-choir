@@ -256,11 +256,6 @@ func (s *ChoirScope) BindCell() CellHooks {
 			if s.ledger.beginRun(frame.RunID) {
 				s.searches.markRunStart(frame.RunID)
 			}
-			// The pages the paper held for the run are its search zero.
-			s.searches.seedHeld(frame.RunID, frame.Held)
-			if frame.RunID != "" {
-				s.searches.setTree(frame.Tree)
-			}
 			s.tray.Store(&Tray{})
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc
@@ -466,7 +461,6 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"ReadAll":          func() reflect.Value { return reflect.ValueOf(s.ReadAll) },
 		"Search":           func() reflect.Value { return reflect.ValueOf(s.Search) },
 		"SearchAll":        func() reflect.Value { return reflect.ValueOf(s.SearchAll) },
-		"SearchFresh":      func() reflect.Value { return reflect.ValueOf(s.SearchFresh) },
 		"Cut":              func() reflect.Value { return reflect.ValueOf(s.Cut) },
 		"Outlet":           func() reflect.Value { return reflect.ValueOf(s.Outlet) },
 		"Captures":         func() reflect.Value { return reflect.ValueOf(s.Captures) },
@@ -830,9 +824,6 @@ func (s *ChoirScope) ReadCapture(captureID string, fromBlock, maxChars int) (JSO
 		captureID = id
 	}
 	var out JSON
-	// A held page of the corpus brief read by its capture id is tried by the
-	// attempt, whether or not the capture is still there.
-	s.noteAttempt(s.searches.heldURLForCapture(strings.TrimSpace(captureID)))
 	err := s.call(ActionReadCapture, ReadCapturePayload{CaptureID: captureID, FromBlock: fromBlock, MaxChars: maxChars}, &out)
 	if err == nil {
 		s.noteCaptureRead(out)

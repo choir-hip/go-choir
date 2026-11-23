@@ -54,7 +54,9 @@ done
 for s in "" -wal -shm; do
 	[ -e "$pre$s" ] && mv -f "$pre$s" "$state$s"
 done
-# The split's layout marker and summary describe the split file.
+# The split's layout marker and summary describe the split file. The marker
+# is for the prior release this script installs, which still reads it (the
+# current release does not).
 [ -e "$state.layout.json" ] && mv -f "$state.layout.json" "$aside.layout.json"
 [ -e "$state.presplit.json" ] && mv -f "$state.presplit.json" "$aside.presplit.json"
 sync

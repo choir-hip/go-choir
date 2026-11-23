@@ -596,7 +596,8 @@ Three things return space:
 2. The compact copy (`VACUUM INTO`, `compact.go:332`), swapped in at the next
    planned restart; it needs 1.2 times the live size free in the guest
    (`compact.go:314-322`), and runs only when the freelist is over 10% or
-   2 GiB, or the file is over 1 GiB and not rewritten in 7 days.
+   2 GiB (or `store.compact_force` is on). Until 2026-11-22 it also ran for a
+   file over 1 GiB not rewritten in 7 days; that trigger was removed.
 3. Reuse: a free page is the next insert's page, so a file that deletes as
    fast as it inserts does not grow.
 
@@ -657,7 +658,7 @@ products read; these may only be bounded by tiering, not by deletion.
 | `store.event_table` (`choir_events`: 4 b-trees an insert instead of 13) | switch deleted 2026-11-19 (owner ruling 2026-11-03); `choir_events` 0 rows | the setting, host grant and `agentcore/event_table.go` are gone; the table and readers stay |
 | `store.telemetry_partitions` (tool.result per-day files, retired by dropping the file, no row deletes) | built, default off; the paper has it on in part [I from the 11-12 trace] | `computer_setting.go:233`, `agentcore/telemetry_partitions.go:25` |
 | `store.telemetry_retire` | on by default | `computer_setting.go:232` |
-| `store.compact_force`, layout-age compaction | on by the layout rule (7 days); needs 1.2x live free and a planned restart | `compact.go`, `docs/design/paper-compaction-2026-10-31.md` |
+| `store.compact_force`, freelist compaction | on by the freelist rule (10% or 2 GiB; the 7-day layout rule was removed 2026-11-22); needs 1.2x live free and a planned restart | `compact.go`, `docs/design/paper-compaction-2026-10-31.md` |
 | `store.tape_group_commit` | off | `computer_setting.go:234` |
 | `RetireRunMemory` | wired, daily, limited to terminal runs | `telemetry_retire.go:305` |
 | `vm-state/store-compact-attempts.json` | dead record, the host routine was deleted 10-30 (`docs/problems/node-b-storage-clustering-assessment-2026-11-11.md`) | |

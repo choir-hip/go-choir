@@ -84,13 +84,6 @@ var (
 	// a fresher one at the next run; a younger one is kept, so a copy is not
 	// rewritten daily for nothing.
 	compactRestageShare = 0.5
-	// compactLayoutMaxAge is how long a file may go without being rewritten
-	// compactly, and compactLayoutMinBytes the size below which it does not
-	// matter. A grown file spreads every B-tree across itself, so an hour of
-	// writes changes every snapshot chunk; a compact copy keeps most of them
-	// for a day (docs/design/paper-compaction-2026-10-31.md).
-	compactLayoutMaxAge         = 7 * 24 * time.Hour
-	compactLayoutMinBytes int64 = 1 << 30
 	// compactMinAvailableMemory is the memory the guest must have available
 	// to start the copy: the copy connection's cache, the Go heap and a
 	// margin. compactAvailableMemory reads it (false when unknown).
@@ -112,40 +105,8 @@ const (
 	compactStagedSuffix  = ".compact"
 	compactSidecarSuffix = ".compact.json"
 	precompactSuffix     = ".precompact"
-	layoutMarkerSuffix   = ".layout.json"
 	leaseMarkerRebase    = "compact-rebase"
 )
-
-// layoutMarker records when the file was last rewritten compactly, by a
-// rebase at a planned boot. No marker means never (or a restored file).
-type layoutMarker struct {
-	CompactedAt time.Time `json:"compacted_at"`
-	Sequence    uint64    `json:"sequence"`
-}
-
-func readLayoutMarker(statePath string) (layoutMarker, bool) {
-	raw, err := os.ReadFile(statePath + layoutMarkerSuffix)
-	if err != nil {
-		return layoutMarker{}, false
-	}
-	var m layoutMarker
-	if json.Unmarshal(raw, &m) != nil || m.CompactedAt.IsZero() {
-		return layoutMarker{}, false
-	}
-	return m, true
-}
-
-// writeLayoutMarker is best effort: a lost marker only makes the next
-// compaction due sooner.
-func writeLayoutMarker(statePath string, at time.Time, sequence uint64) {
-	raw, err := json.Marshal(layoutMarker{CompactedAt: at.UTC(), Sequence: sequence})
-	if err == nil {
-		err = writeFileDurable(statePath+layoutMarkerSuffix, raw)
-	}
-	if err != nil {
-		log.Printf("store: compact copy: layout marker: %v", err)
-	}
-}
 
 // readAvailableMemory reads MemAvailable from /proc/meminfo.
 func readAvailableMemory() (int64, bool) {
@@ -165,10 +126,14 @@ func readAvailableMemory() (int64, bool) {
 }
 
 // compactReason says why a copy is due: "freelist" when enough of the file is
-// free, "layout" when the file is big and has not been rewritten compactly
-// for compactLayoutMaxAge, "forced" when the store.compact_force setting is
-// on, "" when none.
-func compactReason(statePath string, pageCount, freelist, pageSize int64, now time.Time, force bool) string {
+// free, "forced" when the store.compact_force setting is on, "" when none. The
+// age of the file's layout is not a reason (removed 2026-11-22): the paper's
+// copy of that day was due by layout with 0 of 13,383,190 pages free, reclaimed
+// nothing and held the volume under the deploy floor
+// (docs/problems/compact-copy-staged-on-a-51-gib-store-holds-node-b-under-the-deploy-floor-2026-11-22.md).
+// The layout claim's only evidence was a synthetic bench; its effect on the
+// daily snapshot's upload was never measured on the paper.
+func compactReason(pageCount, freelist, pageSize int64, force bool) string {
 	if pageCount == 0 {
 		return ""
 	}
@@ -177,12 +142,6 @@ func compactReason(statePath string, pageCount, freelist, pageSize int64, now ti
 	}
 	if force {
 		return "forced"
-	}
-	if pageCount*pageSize < compactLayoutMinBytes {
-		return ""
-	}
-	if m, ok := readLayoutMarker(statePath); !ok || now.Sub(m.CompactedAt) >= compactLayoutMaxAge {
-		return "layout"
 	}
 	return ""
 }
@@ -251,7 +210,7 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 }
 
 // prepareCompactCopy is PrepareCompactCopy; force makes the copy due whatever
-// the file's size and age (SettingCompactForce). A fresh staged copy is still
+// the file's free pages (SettingCompactForce). A fresh staged copy is still
 // kept: force picks the trigger, not the cadence.
 func (s *Store) prepareCompactCopy(ctx context.Context, force bool) (bool, error) {
 	if s == nil || s.statePath == "" || s.ReadDB() == nil {
@@ -305,7 +264,7 @@ func (s *Store) prepareCompactCopy(ctx context.Context, force bool) (bool, error
 			return false, fmt.Errorf("%s: %w", q, err)
 		}
 	}
-	reason := compactReason(statePath, pageCount, freelist, pageSize, time.Now(), force)
+	reason := compactReason(pageCount, freelist, pageSize, force)
 	if reason == "" {
 		log.Printf("store: compact copy: not needed, %d of %d pages free", freelist, pageCount)
 		return false, nil
@@ -614,7 +573,6 @@ func RebaseOntoCompactCopy(dbPath string, planned bool) (string, error) {
 			if err := finishSwap(dbPath, staged, sidecarPath, statePath); err != nil {
 				return "", err
 			}
-			writeLayoutMarker(statePath, time.Now(), stagedSide.Sequence)
 			return fmt.Sprintf("finished an interrupted rebase onto the copy at sequence %d", stagedSide.Sequence), nil
 		}
 		if err := undoSwap(statePath, pre); err != nil {
@@ -703,7 +661,6 @@ func RebaseOntoCompactCopy(dbPath string, planned bool) (string, error) {
 	if err := finishSwap(dbPath, staged, sidecarPath, statePath); err != nil {
 		return "", errors.Join(err, undoSwap(statePath, pre))
 	}
-	writeLayoutMarker(statePath, time.Now(), stagedSide.Sequence)
 	return fmt.Sprintf("rebased onto the compact copy at sequence %d: %d -> %d bytes, %d events to replay", stagedSide.Sequence, before, stagedSide.Size, tail), nil
 }
 
@@ -858,7 +815,6 @@ func RestorePrecompact(dbPath string) (bool, error) {
 		return false, nil
 	}
 	removeSQLiteFiles(statePath)
-	_ = os.Remove(statePath + layoutMarkerSuffix)
 	if err := undoSwap(statePath, pre); err != nil {
 		return false, err
 	}

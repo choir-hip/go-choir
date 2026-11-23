@@ -58,6 +58,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storecomposition"
 	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -141,17 +142,6 @@ type Runtime struct {
 	// runSearch holds each running run's search counts until its summary
 	// line is logged (search_run_summary.go).
 	runSearch sync.Map
-	// briefHeld holds each running research run's search zero: the pages its
-	// corpus brief delivered (run id -> []yaegikernel.HeldPage), handed to the
-	// run's cells so it reads them before it searches the web
-	// (search_decision.go). Forgotten when the run ends.
-	briefHeld sync.Map
-	// treeRead holds each running research tree's reading (run id -> *treeRead,
-	// search_decision.go).
-	treeRead sync.Map
-	// treeClosed remembers the runs whose tree was closed (run id -> time), so a
-	// late cell does not reopen one (search_decision.go).
-	treeClosed sync.Map
 	// calibrationRunReads holds each running run's calibration read state
 	// (run id -> *calibrationRunReads, calibration_reads.go).
 	calibrationRunReads sync.Map
@@ -555,6 +545,13 @@ type Runtime struct {
 	// storeTables runs the state file's per-table readings one at a time and
 	// keeps the last (internal/storetables).
 	storeTables storetables.Scanner
+	// storeComposition is the background store composition reading, started
+	// and read through the observability route (internal/storecomposition).
+	// Opened by New at boot (a Runtime built without New opens it on first
+	// use): storeCompositionScanner.
+	storeComposition     *storecomposition.Scanner
+	storeCompositionOnce sync.Once
+	storeCompositionStop atomic.Bool
 	selfdevComputerID     string
 	selfdevRealizationID  string
 	selfdevStartupMarker  string
@@ -774,6 +771,9 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	if path := quotaLedgerPath(cfg.StorePath); path != "" {
 		_ = rt.quotaLedger.Persist(path, time.Now())
 	}
+	// Opening the scanner at boot rewrites a report a dead process left
+	// "running" as "interrupted", before anything asks for it.
+	_ = rt.storeCompositionScanner()
 	if rt.mailbox == nil && strings.TrimSpace(cfg.MaildURL) != "" {
 		rt.mailbox = maildesk.NewHTTPMailbox(cfg.MaildURL)
 	}
@@ -784,8 +784,6 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		s.SetRunTerminalObserver(func(runID string) {
 			rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded)
 			rt.logRunSearchSummary(runID)
-			rt.briefHeld.Delete(runID)
-			rt.closeTree(runID)
 			rt.forgetStoriesShown(runID)
 		})
 		// A closed round with a scorable desk-to-desk Cast is judged
@@ -1438,6 +1436,11 @@ func (rt *Runtime) MaintenanceHeld() bool {
 // Stop gracefully shuts down the runtime, cancelling all in-flight runs.
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
+	// A composition reading ends first, so it is not reading while the rest
+	// of Stop winds the runtime down, and no new one may start. (Stop does
+	// not close the store; the process's shutdown hook calls
+	// StopStoreComposition itself, because nothing calls Stop there.)
+	rt.stopStoreComposition()
 	rt.stopCheckpointCadence()
 	rt.stopSnapshotProducer()
 	rt.stopProjector()
@@ -4120,13 +4123,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// A return before the run memory takes the text writes the brief's line
 	// as dropped (a second call after commitAfter writes nothing).
 	defer brief.finish(false)
-	// A story's research run also gets what the story already holds and what
-	// its earlier runs read (story_research_context.go).
-	storyCtx := rt.storyResearchContextOpening(ctx, rec)
-	// The pages it lists are held pages of the run's root session, in front of the
-	// brief's: the run tries them before its first web search (search_decision.go).
-	rt.noteStoryHeld(rec.RunID, storyCtx)
-	openingText := rec.Prompt + opening.openingText() + brief.openingText() + storyCtx.openingText()
+	// A research run on a story also gets the story digest (research_digest.go), which
+	// the brief carries: the story's text, what earlier rounds found, a passage of each
+	// capture it holds, then the corpus brief.
+	openingText := rec.Prompt + opening.openingText() + brief.openingText()
 	userMsg, _ := json.Marshal(map[string]any{
 		"role": "user",
 		"content": []any{
@@ -5591,4 +5591,33 @@ func (rt *Runtime) inheritTrajectoryPolicyOverlay(ctx context.Context, ownerID s
 	}
 	metadata[modelpolicy.MetadataPolicyOverlayID] = overlayID
 	return metadata, true
+}
+
+// storeCompositionScanner is the store composition scanner, opened by New at
+// boot (or on first use for a Runtime built without New): its report file sits beside the state file, and a reading a dead
+// process left running is reported interrupted at that open, never resumed.
+// Nil without a store.
+func (rt *Runtime) storeCompositionScanner() *storecomposition.Scanner {
+	if rt == nil || rt.store == nil || strings.TrimSpace(rt.cfg.StorePath) == "" || rt.storeCompositionStop.Load() {
+		return nil
+	}
+	rt.storeCompositionOnce.Do(func() {
+		state := store.StateDBPath(rt.cfg.StorePath)
+		rt.storeComposition = storecomposition.Open(filepath.Join(filepath.Dir(state), "store-composition.json"), storecomposition.Config{StateFile: state})
+	})
+	return rt.storeComposition
+}
+
+// StopStoreComposition ends a running composition reading and refuses new
+// ones; the autoputer's graceful shutdown calls it.
+func (rt *Runtime) StopStoreComposition() { rt.stopStoreComposition() }
+
+// stopStoreComposition ends a running composition reading (bounded wait) and
+// refuses every later one: the route answers nothing for it after Stop.
+func (rt *Runtime) stopStoreComposition() {
+	rt.storeCompositionStop.Store(true)
+	rt.storeCompositionOnce.Do(func() {}) // waits for an open in progress; none starts after
+	if rt.storeComposition != nil {
+		rt.storeComposition.Close(10 * time.Second)
+	}
 }

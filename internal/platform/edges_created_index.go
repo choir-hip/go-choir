@@ -8,7 +8,7 @@ package platform
 //
 // It is partial (live edges only, as every one of these reads is) and is
 // built the way the term table's covering index is: CONCURRENTLY, outside a
-// transaction, under a session advisory lock, from a goroutine of its own at start
+// transaction, under a session advisory lock (waited for), from a goroutine of its own at start
 // (StartRetrievalMigrations) and from the periodic step, never on a request
 // and never in MigrateRetrieval, so a build that waits cannot keep the
 // periodic loop from starting. A plain CREATE INDEX would block capture
@@ -56,13 +56,15 @@ func (s *Store) ensureEdgesToKindCreatedIndex(ctx context.Context) error {
 		return err
 	}
 	defer conn.Close()
-	var got bool
-	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(?)`, edgesToKindCreatedLockKey).Scan(&got); err != nil {
+	// The lock is waited for, not tried: a holder is a build in another
+	// process or the session of an earlier attempt that timed out and is still
+	// on the server (its cancel is in flight). A try that missed the lock and
+	// returned nil left the invalid index in place for a whole period. After
+	// the wait the state is read again, so a holder that finished its build
+	// leaves nothing to do. The wait ends at this call's own deadline.
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock(?)`, edgesToKindCreatedLockKey); err != nil {
 		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		return err
-	}
-	if !got {
-		return nil // another process is building it
 	}
 	defer func() {
 		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(?)`, edgesToKindCreatedLockKey)

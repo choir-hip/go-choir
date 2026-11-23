@@ -673,7 +673,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	// A revision's new citation pairs are listed in this transaction by
 	// their check memos; the runtime judges them with Jev after the commit
 	// (support-judgement-to-jev-design-2026-10-14). No record is sent.
-	inboxRecords := req.InboxRecords
+	inboxRecords := s.attachStoryToResearchCasts(ctx, req.InboxRecords, resultDocument, head, resultRevision, ownerID, computerID)
 	if req.Outcome == types.TextureTurnRevision {
 		supportObjects, supportConditions, supportErr := s.planSupportPairs(ctx, ownerID, computerID, req, now)
 		if supportErr != nil {

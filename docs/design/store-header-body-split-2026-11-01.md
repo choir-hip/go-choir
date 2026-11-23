@@ -353,7 +353,7 @@ Details in section 8.
 10. `swap`:
     - Re-read the old projection head. If it differs from the sidecar's, an old binary ran in between: discard and redo.
     - Rename `state.db` to `state.db.presplit` (`moveWAL` first), rename the staging file to `state.db`, `syncDir`.
-    - Then write the floor (6) and the `.layout.json` marker, so compaction is not due immediately.
+    - Then write the floor (6). (Until 2026-11-22 this step also wrote a `.layout.json` marker so compaction was not due immediately; the layout trigger is gone and nothing reads the marker.)
     - `WriteLeaseUntrusted` is not needed: the lease row is copied and the head is unchanged.
 11. `partitions`: done later, in `openTelemetryPartitions` → `openFile` → `migratePartitionSplit`, one transaction per file:
     - Rename to `choir_events_presplit` and drop its five indexes.

@@ -215,12 +215,20 @@ func TestTextureResearchCastIsGatedLoggedAndFollowedByContextOnTheRealFold(t *te
 	}
 	woken := &types.RunRecord{RunID: "run-research-woken", OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, State: types.RunRunning,
 		Metadata: map[string]any{runMetadataAgentProfile: agentprofile.Research, runMetadataAgentRole: agentprofile.Research, runMetadataAgentID: "research:" + doc, runMetadataChannelID: doc}}
-	c := rt.storyResearchContextOpening(ctx, woken)
-	if c == nil {
-		t.Fatal("P6: the research run a Texture's Cast woke got no story context")
+	c := rt.researchDigestOpening(ctx, woken)
+	if c == nil || c.text == "" {
+		t.Fatal("P6: the research run a Texture's Cast woke got no story digest")
 	}
-	text := c.openingText()
-	for _, w := range []string{"cap-r1", "capture_id c4 https://port.example/4", "main point: Whether the dock strike ends"} {
+	text := c.text
+	// This harness commits the turn's records through CommitInboxRecords (the records half
+	// of ApplyTextureTurn), so its Cast carries no story: the real turn commit attaches it
+	// (store.attachStoryToResearchCasts, tested in the store) and the digest then has the
+	// story section. Here the digest has the captures and what earlier rounds found, and
+	// never goes to the document for the story.
+	if strings.Contains(text, "[This story]") {
+		t.Errorf("P6: a story section without a Cast that carries it:\n%s", text)
+	}
+	for _, w := range []string{"cap-r1", "capture_id c4 https://port.example/4"} {
 		if !strings.Contains(text, w) {
 			t.Errorf("P6: the context lacks %q:\n%s", w, text)
 		}

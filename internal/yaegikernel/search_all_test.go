@@ -182,7 +182,7 @@ for _, h := range r.Results { if h.Held { held++ } }
 fmt.Println("merged", len(r.Results), "held", held)`)
 	for _, want := range []string{
 		`1 "x": not sent (no word of two or more letters or digits)`,
-		`2 "strike harbor": not sent (answered from your search s1, under a minute ago; its 5 pages are in the list, marked held; send it alone with choir.SearchFresh)`,
+		`2 "strike harbor": not sent (answered from your search s1, under a minute ago (same question); its 5 pages are in the list, marked held)`,
 		`3 "harbor strike mauritius": sent s2`,
 		`4 "": not sent (empty)`,
 		"merged 10 held 5",
@@ -212,8 +212,8 @@ for _, h := range r.Results { fmt.Println(h.URL, h.Held) }`)
 }
 
 // A first wording whose first ten pages are already 80% held ends the call;
-// the wording left out can still be sent alone with fresh.
-func TestSearchAllFirstWordingHeldThenAWordingSentWithFresh(t *testing.T) {
+// the wording left out can still be sent alone.
+func TestSearchAllFirstWordingHeldThenAWordingSentAlone(t *testing.T) {
 	f := newResearchFixture(t)
 	seed := pagesN("h", 1, 10)
 	f.urlsFor = map[string][]string{"seed words": seed, "alpha one": append(append([]string{}, seed[:9]...), "https://h.example/p11"), "dockers mauritius": pagesN("d", 1, 10)}
@@ -222,7 +222,7 @@ func TestSearchAllFirstWordingHeldThenAWordingSentWithFresh(t *testing.T) {
 ` + readTop(10, "h") + `
 r, _ := choir.SearchAll("q", []string{"alpha one", "dockers mauritius"})
 fmt.Println(r)
-d, _ := choir.SearchFresh("dockers mauritius", "the first wording found only pages already held")
+d, _ := choir.Search("dockers mauritius")
 fmt.Println("alone:", d.ID, len(d.Results), d.NewPages)`)
 	for _, want := range []string{
 		`1 "alpha one": sent s2 (1 new in first 10, 1 of 10 pages new)`,

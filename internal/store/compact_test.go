@@ -43,7 +43,8 @@ import (
 const compactTestComputer = "computer-compact-test"
 
 // compactTestStore opens a store holding a chain of n events (heads and
-// index rows), a probe table with kept rows, and many freed pages.
+// index rows), a probe table with kept rows, and (when deleted is more than
+// zero) many freed pages; with none deleted the store has no freelist.
 func compactTestStore(t *testing.T, n uint64, kept, deleted int) (*Store, string) {
 	t.Helper()
 	s, path := trimTestOpen(t)

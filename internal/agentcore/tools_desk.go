@@ -665,12 +665,6 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					if err := yaegikernel.ValidatePayload(action, payload); err != nil {
 						return nil, fmt.Errorf("refused: %w", err)
 					}
-					// A probe of the research tree starts no search and is no row: the
-					// guest asks before it refuses, to see what a sibling tried since
-					// the cell began (search_decision.go).
-					if action == yaegikernel.ActionSearchStart && searchProbeOf(payload) {
-						return rt.searchProbe(cellExec.RunID)
-					}
 					started := time.Now().UTC()
 					requestID, pid := yaegikernel.EgressFrameFromContext(egrCtx)
 					var out json.RawMessage
@@ -692,7 +686,6 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 						// payload before the stream opens, so a search cannot count its own
 						// results as held; it rides the search_start row (search_decision.go).
 						decision = searchDecisionOf(payload)
-						logSearchFresh(cellExec.RunID, decision)
 						// An async search belongs to this desk session: its
 						// stream outlives the cell and ends with the session.
 						out, err = workers.startSearch(search.WithAttribution(egrCtx, search.Attribution{RunID: cellExec.RunID, Desk: deskRole, Conversation: cellExec.ChannelID}), sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, func(done searchDone) {
@@ -720,9 +713,6 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 							rt.noteEgressRead(egrCtx, cellExec, action, payload, out)
 						}
 					} else {
-						// A read is an attempt for the whole research tree, recorded
-						// before it is served (search_decision.go).
-						rt.noteTreeRead(cellExec.RunID, action, payload)
 						out, err = rt.deskEgress(egrCtx, deskRole, cellExec, action, payload)
 					}
 					ev := map[string]any{
@@ -809,11 +799,8 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// their labels: the values they defined are still defined.
 			rt.seedRunLabels(execCtx.RunID, workers.sessionLabels(lease))
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
-			if deskmanifest.InResearchFamily(deskRole) {
-				rt.openTree(execCtx.RunID)
-			}
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, RunID: execCtx.RunID, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
-				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration, Held: rt.briefHeldForSession(execCtx), Tree: rt.treeStateFor(execCtx.RunID),
+				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration,
 				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining, updatesTooLarge)})
 			// The host consumes only the updates the cell was shown whole.
 			// A cell that failed consumes nothing.

@@ -3,9 +3,9 @@ package store
 // Compaction that reaches the paper (docs/design/paper-compaction-2026-10-31.md).
 // Ways it can fail, written before the code:
 //
-//   - P1: a grown file with no freelist is never copied, so every index stays
-//     spread across it and no snapshot chunk survives an hour; or a small
-//     file, or one compacted a day ago, is copied again and again;
+//   - P1: a file with no freelist is copied because of the age of its layout
+//     (removed 2026-11-22: a store-sized copy for a gain the paper did not
+//     show); or a leftover .layout.json changes what is due;
 //   - P2: the staged copy ages past the replay bound and the boot drops it,
 //     so compaction never lands; or the bound is a bare event count that no
 //     longer means a time;
@@ -18,8 +18,8 @@ package store
 //     sidecar, or touches the original;
 //   - P7: the copy's witness differs from the original's at the same head,
 //     so the replay-eligibility gate refuses the computer after the rebase;
-//   - P8: the layout clock restarts on a discard or a crash boot, or never
-//     restarts after a rebase.
+//   - P8: removing the layout trigger changes what the boot does with a copy
+//     that was already staged by it, or a rebase writes a layout marker.
 
 import (
 	"context"
@@ -33,14 +33,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/dbx"
 )
 
-// withCompactKnobs sets the cadence knobs for one test.
-func withCompactKnobs(t *testing.T, minBytes int64, maxAge time.Duration) {
-	t.Helper()
-	oldMin, oldAge := compactLayoutMinBytes, compactLayoutMaxAge
-	compactLayoutMinBytes, compactLayoutMaxAge = minBytes, maxAge
-	t.Cleanup(func() { compactLayoutMinBytes, compactLayoutMaxAge = oldMin, oldAge })
-}
-
 func openRawDB(t *testing.T, path string) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", dbx.SQLiteDSN(path, dbx.SQLiteOptions{}, false))
@@ -51,32 +43,52 @@ func openRawDB(t *testing.T, path string) *sql.DB {
 	return db
 }
 
-// P1: the layout trigger.
-func TestCompactLayoutAgeTriggersACopyWithNoFreelist(t *testing.T) {
-	cases := []struct {
-		name     string
-		minBytes int64
-		marker   func(statePath string)
-		want     bool
-	}{
-		{"never compacted", 1, func(string) {}, true},
-		{"compacted long ago", 1, func(p string) { writeLayoutMarker(p, time.Now().Add(-8*24*time.Hour), 1) }, true},
-		{"compacted a day ago", 1, func(p string) { writeLayoutMarker(p, time.Now().Add(-24*time.Hour), 1) }, false},
-		{"file below the size floor", 1 << 40, func(string) {}, false},
+// P1: layout age alone never makes a copy due. A file with no freelist is
+// not copied however old its layout is and whatever a leftover .layout.json
+// says; the freelist and forced triggers are tested in compact_test.go and
+// compact_force_test.go.
+func TestCompactLayoutAgeNeverMakesACopyDue(t *testing.T) {
+	// A file larger than the old 1 GiB floor and older than the old 7 days.
+	const pages, pageSize = 13383190, 4096
+	// This is the assertion that discriminates: the removed code returned
+	// "layout" here for any file over 1 GiB with no marker or a marker older
+	// than 7 days (checked against the removed code on the build VM).
+	for _, pages := range []int64{1 << 18 /* exactly 1 GiB */, 1<<18 + 1, pages} {
+		if got := compactReason(pages, 0, pageSize, false); got != "" {
+			t.Fatalf("compactReason(%d pages, 0 free) = %q; want none", pages, got)
+		}
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			withCompactKnobs(t, tc.minBytes, 7*24*time.Hour)
-			s, _ := compactTestStore(t, 5, 100, 0) // nothing deleted: no freelist
-			tc.marker(s.statePath)
-			done, err := s.PrepareCompactCopy(context.Background())
-			if err != nil || done != tc.want {
-				t.Fatalf("PrepareCompactCopy = %v, %v; want staged=%v", done, err, tc.want)
+	cases := map[string]func(statePath string){
+		"no marker": func(string) {},
+		"marker from a year ago": func(p string) {
+			raw := []byte(`{"compacted_at":"2025-11-22T00:00:00Z","sequence":1}`)
+			if err := os.WriteFile(p+".layout.json", raw, 0o644); err != nil {
+				t.Fatal(err)
 			}
-			if exists(s.statePath+compactStagedSuffix) != tc.want {
-				t.Fatalf("staged copy present = %v, want %v", !tc.want, tc.want)
+		},
+		"marker that is not JSON": func(p string) {
+			if err := os.WriteFile(p+".layout.json", []byte("{"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, leftover := range cases {
+		t.Run(name, func(t *testing.T) {
+			s, _ := compactTestStore(t, 5, 100, 0) // nothing deleted: no freelist
+			leftover(s.statePath)
+			done, err := s.PrepareCompactCopy(context.Background())
+			if err != nil || done || exists(s.statePath+compactStagedSuffix) {
+				t.Fatalf("PrepareCompactCopy = %v, %v; want a quiet skip", done, err)
 			}
 		})
+	}
+	// A stale marker does not stop the freelist trigger either.
+	s, _ := compactTestStore(t, 5, 10, 3000)
+	if err := os.WriteFile(s.statePath+".layout.json", []byte(`{"compacted_at":"2099-01-01T00:00:00Z","sequence":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if done, err := s.PrepareCompactCopy(context.Background()); err != nil || !done {
+		t.Fatalf("PrepareCompactCopy with a freelist and a stale marker = %v, %v", done, err)
 	}
 }
 
@@ -246,9 +258,14 @@ func TestCompactCopyKeepsTheWitness(t *testing.T) {
 	}
 }
 
-// P8: the layout clock restarts on a rebase and only then.
-func TestCompactLayoutClockRestartsOnARebaseOnly(t *testing.T) {
-	// A crash boot does not swap, so it does not restart the clock.
+// P8: a copy staged before the layout trigger was removed (the paper's, "due
+// by layout") is handled exactly as before at a planned restart: swapped in
+// when it is on the chain and its tail is short, dropped when the tail is
+// past the bound, left alone by a crash boot. No layout marker is written by
+// any of it, and a leftover one changes nothing.
+func TestCompactRebaseOfAnAlreadyStagedCopyIsUnchanged(t *testing.T) {
+	stale := []byte(`{"compacted_at":"2020-01-01T00:00:00Z","sequence":1}`)
+	// A crash boot does not swap.
 	s, path := compactTestStore(t, 5, 10, 3000)
 	statePath := s.statePath
 	if done, err := s.PrepareCompactCopy(context.Background()); err != nil || !done {
@@ -257,36 +274,104 @@ func TestCompactLayoutClockRestartsOnARebaseOnly(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := RebaseOntoCompactCopy(path, false); err != nil {
+	if outcome, err := RebaseOntoCompactCopy(path, false); err != nil || outcome != "" || !exists(statePath+compactStagedSuffix) {
+		t.Fatalf("crash boot = %q, %v", outcome, err)
+	}
+	// A planned boot that swaps, with a stale marker beside the file.
+	if err := os.WriteFile(statePath+".layout.json", stale, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := readLayoutMarker(statePath); ok {
-		t.Fatal("a crash boot restarted the layout clock")
+	outcome, err := RebaseOntoCompactCopy(path, true)
+	if err != nil || !strings.HasPrefix(outcome, "rebased onto the compact copy at sequence 5") {
+		t.Fatalf("planned boot = %q, %v", outcome, err)
 	}
-	// A planned boot that discards the copy does not either.
-	if err := os.WriteFile(statePath+compactSidecarSuffix, []byte(`{`), 0o644); err != nil {
-		t.Fatal(err)
+	if raw, _ := os.ReadFile(statePath + ".layout.json"); string(raw) != string(stale) {
+		t.Fatalf("the rebase rewrote the layout marker: %q", raw)
 	}
-	if _, err := RebaseOntoCompactCopy(path, true); err != nil {
-		t.Fatal(err)
+	// A just-swapped store is not due again: the new file has no free pages.
+	swapped := openRawDB(t, statePath)
+	var pageCount, freelist, pageSize int64
+	for q, dst := range map[string]*int64{"PRAGMA page_count": &pageCount, "PRAGMA freelist_count": &freelist, "PRAGMA page_size": &pageSize} {
+		if err := swapped.QueryRow(q).Scan(dst); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, ok := readLayoutMarker(statePath); ok {
-		t.Fatal("a discard restarted the layout clock")
+	_ = swapped.Close()
+	if freelist != 0 || compactReason(pageCount, freelist, pageSize, false) != "" {
+		t.Fatalf("after the swap: %d pages, %d free; want none free and not due", pageCount, freelist)
 	}
-	// A planned boot that swaps does.
+	// A planned boot drops a copy whose tail is past the bound.
 	s, path = compactTestStore(t, 5, 10, 3000)
 	statePath = s.statePath
 	if done, err := s.PrepareCompactCopy(context.Background()); err != nil || !done {
 		t.Fatalf("PrepareCompactCopy = %v, %v", done, err)
 	}
+	for seq := uint64(6); seq <= 20; seq++ {
+		compactTestAppend(t, s, seq)
+	}
+	old := compactRebaseMaxTail
+	compactRebaseMaxTail = 5
+	defer func() { compactRebaseMaxTail = old }()
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if outcome, err := RebaseOntoCompactCopy(path, true); err != nil || !strings.HasPrefix(outcome, "rebased") {
-		t.Fatalf("RebaseOntoCompactCopy = %q, %v", outcome, err)
+	if outcome, err := RebaseOntoCompactCopy(path, true); err != nil || strings.HasPrefix(outcome, "rebased") {
+		t.Fatalf("a copy past the bound = %q, %v; want it dropped", outcome, err)
 	}
-	m, ok := readLayoutMarker(statePath)
-	if !ok || time.Since(m.CompactedAt) > time.Minute || m.Sequence != 5 {
-		t.Fatalf("layout marker %+v, ok=%v", m, ok)
+	if exists(statePath+compactStagedSuffix) || exists(statePath+compactSidecarSuffix) {
+		t.Fatal("the copy past the bound was kept")
 	}
+	if exists(statePath + ".layout.json") {
+		t.Fatal("a layout marker appeared")
+	}
+}
+
+// The interrupted-swap finish path and a copy dropped for being off the chain
+// write no layout marker either (the marker writes after finishSwap are gone).
+func TestCompactRebaseWritesNoLayoutMarkerOnEveryPath(t *testing.T) {
+	t.Run("finishes an interrupted swap", func(t *testing.T) {
+		s, path := compactTestStore(t, 5, 10, 3000)
+		statePath := s.statePath
+		if done, err := s.PrepareCompactCopy(context.Background()); err != nil || !done {
+			t.Fatalf("PrepareCompactCopy = %v, %v", done, err)
+		}
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(statePath, statePath+precompactSuffix); err != nil {
+			t.Fatal(err)
+		}
+		outcome, err := RebaseOntoCompactCopy(path, false)
+		if err != nil || !strings.HasPrefix(outcome, "finished an interrupted rebase") {
+			t.Fatalf("RebaseOntoCompactCopy = %q, %v", outcome, err)
+		}
+		if exists(statePath + ".layout.json") {
+			t.Fatal("a layout marker appeared")
+		}
+	})
+	t.Run("drops a copy off the chain", func(t *testing.T) {
+		s, path := compactTestStore(t, 5, 10, 3000)
+		statePath := s.statePath
+		if done, err := s.PrepareCompactCopy(context.Background()); err != nil || !done {
+			t.Fatalf("PrepareCompactCopy = %v, %v", done, err)
+		}
+		// The store moved to another history after the copy (as in
+		// TestCompactRebaseRefusesAMisfitCopy): event 6 does not follow it.
+		if _, err := s.db.Exec(`INSERT INTO computer_event_index (event_digest, computer_id, sequence, previous_head, event_kind, event_artifact_digest, event_pin_receipt_digest, payload_pin_receipt_digests_json, request_commitment, idempotency_key, status, next_desired_event_head, next_effective_event_head, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch, prepared_at)
+VALUES ('digest-fork', ?, 6, 'another-head', 'k', 'a', 'b', '[]', 'r', 'key-fork', 'finalized', 'd', 'e', 'c', 'f', 1, 0, ?)`, compactTestComputer, time.Now().UTC()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.Exec(`UPDATE computer_event_projection_heads SET sequence=6, canonical_event_head='fork-6'`); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if outcome, err := RebaseOntoCompactCopy(path, true); err != nil || !strings.HasPrefix(outcome, "discarded") {
+			t.Fatalf("RebaseOntoCompactCopy = %q, %v; want discarded", outcome, err)
+		}
+		if exists(statePath + ".layout.json") {
+			t.Fatal("a layout marker appeared")
+		}
+	})
 }

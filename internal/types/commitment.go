@@ -473,6 +473,14 @@ type CastWithdrawal struct {
 // publishes every committed revision of the document (2b). Texture reads
 // them in its frame and never writes them.
 type CommitmentCast struct {
+	// Story is the Texture's own account of its story at the moment it casts research:
+	// the main point, the text of the revision its turn committed (or the current one
+	// when the turn wrote none), and its labels. It carries the committed head whether or
+	// not that head is published: there is no publication field.
+	// Texture's turn writes it (store.attachStoryToResearchCasts, atomic with the
+	// revision), never a cell: research is handed the story's text inside the Cast and
+	// never reads the document (the document's custodian sends it; owner, 2026-11-22).
+	Story         *CastStory        `json:"story,omitempty"`
 	Hypotheses    []CastHypothesis  `json:"hypotheses,omitempty"`
 	Uncertainties []CastUncertainty `json:"uncertainties,omitempty"`
 	Revisions     []CastRevision    `json:"revisions,omitempty"`
@@ -486,6 +494,26 @@ type CommitmentCast struct {
 	MainPoint string `json:"main_point,omitempty"`
 	Succeeds  string `json:"succeeds,omitempty"`
 }
+
+// CastStory is a story's account of itself carried on a Texture's Cast to research.
+type CastStory struct {
+	Title      string `json:"title,omitempty"`
+	MainPoint  string `json:"main_point,omitempty"`
+	RevisionID string `json:"revision_id,omitempty"`
+	// Text is the revision's text, bounded (CastStoryTextRunes); TextCut says it was cut.
+	Text    string `json:"text,omitempty"`
+	TextCut bool   `json:"text_cut,omitempty"`
+	// Labels are the document's own labels: the text is owner_private:document, so a
+	// run that holds it is tainted as any run holding private text is.
+	Labels []string `json:"labels,omitempty"`
+	// Succeeds is the document the story continues and SucceedsMainPoint its main
+	// point, when the story has a predecessor.
+	Succeeds          string `json:"succeeds,omitempty"`
+	SucceedsMainPoint string `json:"succeeds_main_point,omitempty"`
+}
+
+// CastStoryTextRunes bounds the text a Cast carries of its story.
+const CastStoryTextRunes = 7000
 
 // CastPublishAuto is the one publish mode an opening Cast may set.
 const CastPublishAuto = "auto"
@@ -521,6 +549,14 @@ type HypothesisDrop struct {
 // Final flag; StopReason says why the recipient stopped and is required on
 // a final Report.
 type CommitmentReport struct {
+	// Summary and Notes are the packet's own (coagent_source_packet.v1): what the
+	// round found in a few lines, and its notes. A research Report's Notes carry
+	// "what this adds / what was missing" (lines beginning "adds:" and "missing:")
+	// and which claims rest on which capture ids, so the next run's digest shows
+	// what an earlier round already found and what the corpus lacked
+	// (research_digest.go). Optional: a record written before them has neither.
+	Summary    string                 `json:"summary,omitempty"`
+	Notes      []string               `json:"notes,omitempty"`
 	Claims     []ReportClaim          `json:"claims,omitempty"`
 	Findings   []ReportFinding        `json:"findings,omitempty"`
 	Settled    []HypothesisSettlement `json:"settled,omitempty"`

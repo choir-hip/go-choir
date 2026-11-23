@@ -36,6 +36,12 @@ wins unless this file carries a newer, explicitly promoted update.
   [docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md](docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md).
 - The roadmap is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md); the
   live station is [docs/ACTIVE.md](docs/ACTIVE.md).
+- **Read [docs/system-map.md](docs/system-map.md) first** (owner, 2026-11-22:
+  "each compaction you lose context on the complex system"). One page: the
+  parts, the numbers, what is not true that a reader would assume, where the
+  docs disagree, and what to read next. It is corrected in the same change
+  that makes one of its facts false. What changed lately:
+  [docs/changes.md](docs/changes.md).
 - **What exists today is [docs/current-architecture.md](docs/current-architecture.md)**
   (owner, 2026-11-16). Read it before saying what the system does; a name, a
   comment or a design doc is not evidence that a thing is built. A landing
@@ -170,6 +176,11 @@ A commit subject ends with its class and rollback, for example
   (`internal/agentcore/` among them). An expedite keeps the planned,
   marker-backed refresh, the capsule, apply and skew refusals, the health
   guards and automatic rollback. Name every expedite in the next report.
+- **Every landing is in the change log** (owner, 2026-11-22: "its hard to
+  catch up on what claude has done since i last looked"). A landing that
+  changes behavior adds or updates its entry in [docs/changes.md](docs/changes.md)
+  in the same change: what, why, proof (or "not proved"), what it replaced,
+  how to undo it. One entry per thing built, not per commit.
 - **Landing loop** for any behavior change: commit, push `origin main`, watch
   CI, watch the staging deploy, verify the deployed commit, run the deployed
   proof. Local tests are not proof. `origin/main` is the source of truth;

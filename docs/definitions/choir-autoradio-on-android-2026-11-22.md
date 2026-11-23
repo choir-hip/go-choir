@@ -1,0 +1,185 @@
+---
+definition_version: 7
+readiness: executable
+authority: 'the owner, 2026-11-22: "the android phone is quite old so it would be limited in the local models it can run, but its a good benchmark for that reason. lets try to get autoradio running on it... thats a new mission to add to the metamission".'
+review:
+  reviewer: none (the owner's statement is the authority; each station names its own review tier)
+  frozen_ref: none
+  verdict: none
+start:
+  captured_at: 2026-11-22T22:24Z
+  source:
+    canonical_ref: origin/main 5a0ce4ebe
+    deploy_identity: 'staging and the paper on 5a0ce4ebe; the phone app''s Exact train (lane/exact-train1, 50ceb7041) is built and not landed'
+  what_is_true_now:
+    - 'Two Android phones are plugged into the lead''s Mac and answer adb with debugging authorised. A Motorola moto g stylus 5G (2023), serial ZY22H5K8QR: Android 14, Snapdragon 6 Gen 1, arm64-v8a, about 3.4 GiB of memory, 70 GiB free; its touch screen does not register touches. A Samsung Galaxy A13 (SM-A135U1), serial R58T33LPWWH: Android 14, Exynos 850, a 32-bit system (zygote32, no 64-bit ABI list), about 2.6 GiB of memory, 4.7 GiB free, bootloader locked.'
+    - 'Exact builds an Android app for aarch64 and x86_64 only (host/android/README.md in the pinned checkout: "arm64-v8a by default"). So the Samsung cannot load the app as Exact stands.'
+    - 'The app has been built for Android once, on an emulator, and driven to the paper page (the build queue''s android mode, 2026-11-20, the themes work). It has never run on a physical Android phone.'
+    - 'Everything native is Swift: the module, the voice, the on-device models, the audio session. mobile/exact-package has an apple implementation and no android one; mobile/AutoradioLab/modules has apple only. On Android a native call answers its substitute or is not supported.'
+    - 'About 5,300 lines of non-voice Swift remain on the train plus its dead-code lane; each page still in Swift is a page Android does not have.'
+    - 'unknown: which shared pages work on Android today without the native module; whether Exact''s audio plays our radio and podcasts on Android; whether Exact''s secret store (Keystore files) carries the sign-in there; which speech and language models fit in 3.4 GiB and how fast they run.'
+  branches_in_flight:
+    - 'lane/exact-train1 and lane/native-dead-code (M1): the base an Android build should be made from.'
+    - 'lane/account-partition-s1 (M1): sign-in in shared code on Exact''s secret store; Android sign-in depends on it.'
+finish:
+  deliver: 'Autoradio runs on the Motorola: it installs from the shared codebase, signs in, shows the paper, plays the radio and podcasts, and a measured table says which on-device models an old phone can run and how fast.'
+  artifact: 'on main: an android implementation of the package holding only what Android needs natively, the build queue''s android mode aimed at a physical phone, a rerunnable drive on the Motorola with its trees and screenshots, and docs/evidence with the model benchmark on that phone.'
+  acceptance:
+    - action: build from main and install on the Motorola, then drive it by Exact's agent to the paper page and a story
+      proves: the shared pages run on a physical Android phone with no hand edits
+      evidence_class: device drive, rerunnable
+    - action: sign in on the Motorola as d@e through the device flow, relaunch, sign out
+      proves: the account boundary holds on Android (the key in Exact's store, the account's data removed at sign-out)
+      evidence_class: device drive
+    - action: play a radio story and a podcast episode for a minute each with the screen off
+      proves: audio plays and keeps playing in the background on Android
+      evidence_class: device drive with the audio position read back
+    - action: load each candidate speech and language model on the Motorola and time it on fixed inputs
+      proves: which models load in 3.4 GiB, their real-time factor and their peak memory
+      evidence_class: measured table, rerunnable
+  rollback: each station is a commit that reverts; nothing on Android ships to anyone but the two named phones.
+  landing:
+    required: true
+    environment: the Motorola, against staging
+    required_receipts: [pushed_commit, ci, device_drive]
+value:
+  better_means: 'the share of Autoradio that runs on Android with no Android-only code rises, and the cost of the voice on a cheap phone is known from measurement'
+  goodharting_would_be: 'a build that installs and shows one page; an Android copy of page logic in Kotlin; a benchmark of models nobody would ship; a demo on the emulator called a phone; features hidden on Android so the drive passes'
+homotopy:
+  realism_axis: 'from signed-out pages, to signed-in pages, to audio, to voice; the same shared code and contracts as the iPhone at each step, and a native part only where voice or the platform leaves no other way'
+boundaries:
+  mutation_class: orange for the shared code and scripts; red where sign-in and the account boundary are touched
+  authority_sources:
+    - 'the owner''s words above; CLAUDE.md, "The phone app is Exact; only voice is native"'
+  owner_rulings:
+    - '"only the voice stuff should be swift. the rest should be exact" (2026-11-18). Reading: on Android only the voice is Kotlin; a page that needs Kotlin to work is a page not yet moved to Exact, and the fix is in M1.'
+    - '"i need to publish all these benchmarks. this is great open source data. then when new models come out we update the benchmarks. the better we test them, the better decisions we make on deployment" (2026-11-22). Reading: the benchmark is a maintained public dataset, not a one-off table. This repository is public, so the dataset is published by landing it here; a second venue is the owner''s to name (Q3).'
+    - '"my budget and privacy and taste doesnt want me to send voice to other services. and i dont yet want the infra demand to process voice server side... client side voice is such an unlock, as it dramatically improves the value of old devices" (2026-11-22). Reading: the voice stays on the device at every rung of the ladder; a cloud or server voice is not a fallback this mission may choose.'
+    - '"we should think about the up-spec. for devices like my current iphone and much better... what could be done with full interaction models. full duplex voice etc. i dont believe that you want those as the sole model in your system... you want the interaction model, and the persistent rlm desks" (2026-11-22). Reading: a design station (A7), not a build; the interaction model is the device''s ears and mouth and the desks remain the mind.'
+    - '"remember, we will keep going up-spec. and yes, we can include bigger models in mac (and eventual windows and linux) builds. the point now is to get the baseline, the framework, and to get it working for beta users, ios and android. i mean, the first thing is like, what are the minimum system requirements and recommended settings. the point is to be inclusive, to say that that old phone you have that you use as a music player and camera is still useful, growing in value actually" (2026-11-22). Reading: the order is baseline first (A8, from A4''s measurements), then the ladder upward; desktop builds may carry larger models; LFM3-Omni-2B joins A7 as the candidate for a phone that sees. Being ready for beta users is this mission''s aim; sending a build to testers is still the owner''s act.'
+    - '"especially we need to increase the podcast sources. one way is for users to subscribe to podcasts turning that into a source"; "yes, on-device transcription is lit" (2026-11-22). Reading: transcribing what a listener plays, on the listener''s own device, is wanted; it is a second job for the recogniser A4 measures (long-form, offline, hours of audio), so A4 measures that case too. Corrected by the owner the same day: "no, podcast transcription has to be faster than hands-free." Reading: the podcast case is judged on throughput, many times faster than real time, so an episode is text in minutes and a backlog is workable; hands-free needs only to keep up with speech at low delay. A slow, larger model is not the answer for podcasts. How a transcript or a subscription becomes a source across owners is a design not yet made (the sources work, under the first-design mission).'
+  must_preserve:
+    - 'no page logic in Kotlin; a native call needs a reason only native code can meet, written beside it'
+    - 'one native build at a time through the Mac build lock; builders never run native builds, emulators or a phone'
+    - 'the phones are the owner''s: nothing is wiped, rooted or reflashed; only our own app is installed and removed'
+    - 'sign-in drills use d@e; no secrets in the repo or output'
+    - 'no switches: Android gets the same features or an honest "not on this phone yet", never a hidden one'
+  excluded:
+    - 'sending a build to a store or to testers (the mission makes the app ready for beta users; the release is the owner''s act)'
+    - 'a 32-bit build (the Samsung), unless the owner rules otherwise (Q1)'
+    - 'tablets, wear and car surfaces'
+stations:
+  - id: A0
+    name: The app on the Motorola, signed out
+    scope: 'the android mode of the build queue aimed at a physical phone by serial; build from the train, install, drive to the paper page and one story; every page listed as works, substitute or broken'
+    class: yellow (scripts) and orange where shared code changes
+    review: one seat for shared code
+    depends_on: []
+    status: working
+  - id: A1
+    name: What Android lacks, page by page
+    scope: 'from A0''s list: each page that fails for want of the native module is either already queued in M1 (a Swift page to move to Exact) or a new station there; this mission adds no Kotlin for it'
+    class: green
+    review: none
+    depends_on: [A0]
+    status: pending
+  - id: A2
+    name: Sign-in and the account boundary on Android
+    scope: 'the device flow, the key in Exact''s store, sign-out and the launch sweep, drilled on the Motorola as on the simulator'
+    class: red
+    review: two seats
+    depends_on: [A0, 'M1: the account boundary landed']
+    status: pending
+  - id: A3
+    name: Audio on Android
+    scope: 'the radio and podcasts through Exact''s audio, in the background, with the lock-screen controls; what needs a native audio session says why'
+    class: orange
+    review: one seat
+    depends_on: [A0]
+    status: pending
+  - id: A4
+    name: The model benchmark on an old phone
+    scope: 'a harness that loads each candidate speech-to-text, text-to-speech and language model on the Motorola and records load time, real-time factor, peak memory and heat on fixed inputs; a table in docs/evidence; read docs/reference for each model first; and the long-form case: an hour of podcast audio transcribed on the device as fast as it will go, with throughput (times real time, sustained, after heat settles), battery and error rate'
+    class: yellow
+    review: none
+    depends_on: []
+    status: pending
+  - id: A6
+    name: The benchmark, published and kept
+    scope: 'the harness (scripts/model-bench) and its results as an open dataset: every row with its model build, hashes, device, runtime, protocol and harness commit, so anyone can rerun it; a page that says what is measured and what is not; a routine for adding a model when one comes out. The owner''s own recordings are never published: only numbers from them. Each model''s licence is read for terms on publishing results before its row is published.'
+    class: yellow for the harness and the dataset in this repository; an outward act for any other venue (Q3)
+    review: one seat on the dataset''s claims before it is posted
+    depends_on: [A4]
+    status: pending
+  - id: A7
+    name: The up-spec, full interaction models
+    scope: 'a design note: what a full-duplex interaction model does on a phone of this iPhone''s class and above (listening while speaking, turn-taking, barge-in, echo, the owner''s voice among others) as one model in place of the pipeline of small ones; the one contract both the pipeline and an interaction model answer, so the ladder of devices is one ladder; what stays with the desks (what is said is authored by a desk, never invented by the voice); which open models exist and on what hardware they are real (2026-11-22 survey: Mac demos only, none on a phone; LFM3-Audio-2B and LFM3-Omni-2B are streaming and turn-based, not full-duplex); LFM3-Omni-2B as the candidate for a phone that sees (camera and screen), on phones of 8 GB and more and on desktop builds, which may carry larger models; a first experiment on the Mac'
+    class: green
+    review: a panel on the design
+    depends_on: [A4]
+    status: pending
+  - id: A8
+    name: Minimum system requirements and recommended settings
+    scope: 'from measured rows only: for each class of device (by memory, chip class and system version, iPhone and Android), the smallest set of models with which hands-free voice works with no audio leaving the device (the minimum), and the set we recommend; published as a table a person can read ("your phone: works, with these settings") and held in one shared data file the app reads to choose its models on that device, so the page and the app cannot disagree. The oldest class that works is the headline number, and it is re-measured when a model is added.'
+    class: green for the table; orange for the app reading it
+    review: one seat for the app change
+    depends_on: [A4]
+    status: pending
+  - id: A5
+    name: The voice in Kotlin
+    scope: 'design first, from A4''s table: the audio session, the microphone, speech and the models behind the same contract names the Swift voice answers; then its stations'
+    class: red
+    review: a panel on the design; two seats on the code
+    depends_on: [A3, A4]
+    status: pending
+decisions_for_the_owner:
+  - id: Q1
+    question: Should the 32-bit Samsung be supported?
+    why: 'it needs a 32-bit ARM target added to Exact itself, and its 2.6 GiB of memory and 4.7 GiB of free storage leave little room for models'
+    options: [not pursued, add a 32-bit target to Exact]
+    default: not pursued
+  - id: Q3
+    question: Where else is the benchmark published, beyond this public repository?
+    why: 'a model hub dataset or a page of its own is where others would find it; posting there is outward and is the owner''s act'
+    options: ['a public repository of its own', 'a dataset on a model hub', 'a page of the Autopaper', 'more than one']
+    default: this repository only (docs/evidence and scripts/model-bench); nothing posted elsewhere until the owner names the venue
+  - id: Q2
+    question: May the Motorola be signed in with the owner's own account, or only d@e?
+    why: the phone's touch is broken, so it is driven by adb and is a test device in practice
+    options: [d@e only, the owner's account too]
+    default: d@e only
+now:
+  status: working
+  as_of: 2026-11-22T22:24Z
+  slice: 'A0: a first build from the train onto the Motorola'
+  source_ref: origin/main 5a0ce4ebe
+  deploy_identity: staging on 5a0ce4ebe
+  candidate: none frozen
+  conjecture:
+    claim: 'the Exact train builds for Android and, installed on the Motorola, is driven signed out to the paper page showing at least one story, with no change to shared code'
+    test: the queue's android build and Exact's agent tree and screenshot from the phone
+    edge: missing_oracle
+    edge_note: 'the emulator drive of 2026-11-20 is the only earlier evidence and predates most of the train; a page can render and still be dead where it calls the native module'
+    observer_upgrade: the page-by-page list of A0, which names each native call that answered its substitute
+    scope_if_supported: A3 and A4 may start on the same build
+    ledger_id: C198
+    status: untested
+  believed_state: 'the phones are reachable; the app has never run on a physical Android phone'
+  main_uncertainty: 'how much of the app is alive on Android without a native module'
+  next_observation: 'the first build and drive on the Motorola'
+  blocker: none
+  next_action: 'aim the android mode at the Motorola''s serial and run it on the train'
+operating_notes:
+  - 'The Motorola''s touch is broken: everything is driven by adb and Exact''s agent.'
+  - 'The Mac build lock covers Android builds too; the simulator is shut down first.'
+receipts:
+  - 'docs/reference/EXACT.md; the pinned Exact checkout''s host/android/README.md'
+---
+
+# Autoradio on Android
+
+The owner plugged in two old Android phones on 2026-11-22. The Motorola can
+take the Exact build and is the low-end benchmark. The Samsung runs a 32-bit
+system, which Exact does not build for, and is left out unless the owner
+rules otherwise. The rule from the iPhone holds: only the voice is native.
+What Android lacks beyond the voice is a measure of what is still Swift.

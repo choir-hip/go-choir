@@ -502,6 +502,22 @@ func reportSelfScore(rawPacket string) *float64 {
 	return packet.PComplete
 }
 
+// What a Report record keeps of its packet's own words, bounded at write: the digest
+// of a later run shows them (research_digest.go), and a record is for ever.
+const (
+	reportSummaryRunes = 2000
+	reportNotesMax     = 8
+	reportNoteRunes    = 600
+)
+
+func clipReportText(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > max {
+		return strings.TrimSpace(string(r[:max]))
+	}
+	return s
+}
+
 // reportBodyFromPacket maps a report packet onto the typed Report body. The
 // packet's work disposition marks the end of the round: completed or empty
 // is a final Report, with that as its stop reason. Settled and dropped
@@ -526,6 +542,12 @@ func reportBodyFromPacket(rawPacket, claim string) (*types.CommitmentReport, boo
 	}
 	for _, c := range packet.Claims {
 		report.Claims = append(report.Claims, types.ReportClaim{Text: c.Text, Sources: c.SourceIDs})
+	}
+	report.Summary = clipReportText(packet.Summary, reportSummaryRunes)
+	for _, n := range packet.Notes {
+		if n = clipReportText(n, reportNoteRunes); n != "" && len(report.Notes) < reportNotesMax {
+			report.Notes = append(report.Notes, n)
+		}
 	}
 	report.Settled, report.Dropped = packet.Settled, packet.Dropped
 	final := packet.Final
@@ -850,6 +872,11 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		seq, opened := int64(0), ""
 		if i < len(committed.Records) {
 			rt.logManagementStoryChoice(r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i], in)
+			if in.Kind == yaegikernel.IntentReport && i < len(records) && records[i].Report != nil {
+				// A research Report counts once its record is committed: a Report the
+				// commit refused or dropped is never logged.
+				logResearchReport(r.scope.RunID, r.scope.DeskAgentID, in.Packet, records[i].Final)
+			}
 			seq = committed.Records[i].InboxSeq
 			if committed.Records[i].OpenedStory || in.Kind == yaegikernel.IntentDelegate {
 				// The receipt names the story a Cast to texture:new opened,
