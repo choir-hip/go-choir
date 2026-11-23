@@ -104,6 +104,14 @@ type VMOwnership struct {
 	// Kind identifies the interactive computer implementation.
 	Kind VMKind `json:"kind,omitempty"`
 
+	// MemSizeMib is the guest memory the computer was created with, recorded
+	// once at creation (newComputerMemSizeMib). Zero is a computer made
+	// before the record existed, or a platform computer: it takes the
+	// host's interactive shape (platform: its own), exactly as before. A
+	// computer's snapshot is only valid at the size it was made with, so
+	// the value never changes after creation.
+	MemSizeMib int `json:"mem_size_mib,omitempty"`
+
 	// WarmnessClass is the typed lifecycle policy class for keepalive and
 	// reclaim decisions. Public health exposes only aggregate counts.
 	WarmnessClass WarmnessClass `json:"warmness_class,omitempty"`
@@ -1403,7 +1411,35 @@ func machineShapeForOwnership(own *VMOwnership) (int, int) {
 	if own != nil && isPlatformOwnership(own) {
 		return platformVMCPUCount, platformVMMemSizeMib
 	}
-	return interactiveMachineShape()
+	cpu, mem := interactiveMachineShape()
+	if own != nil && own.MemSizeMib > 0 {
+		mem = own.MemSizeMib
+	}
+	return cpu, mem
+}
+
+// newAccountVMMemSizeMib is the memory of a computer made for a new account
+// (owner, 2026-11-23: "All new accounts get a computer. but we can do 2gb
+// ram ... unused accounts dont cost ram. they get hibernated"). It is
+// recorded on the ownership at creation; computers made before it, the
+// paper and the owner's among them, keep the interactive size they have.
+const newAccountVMMemSizeMib = 2048
+
+// newComputerMemSizeMib is the size to record for a computer created now
+// with warmness class class, or 0 to record none (the host's interactive
+// shape, or the platform shape, applies). A protected platform computer is
+// never made small, so the paper cannot come back at 2 GiB if its ownership
+// is ever recreated. The size never exceeds the host's interactive setting.
+func newComputerMemSizeMib(class WarmnessClass) int {
+	switch class {
+	case WarmnessClassCriticalProtected, WarmnessClassPublicPlatform:
+		return 0
+	}
+	_, interactive := interactiveMachineShape()
+	if interactive < newAccountVMMemSizeMib {
+		return interactive
+	}
+	return newAccountVMMemSizeMib
 }
 
 // interactiveMachineShape returns the interactive guest CPU/memory shape,
@@ -2488,9 +2524,11 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 	// host would fall below its memory floor, counting the starts already in
 	// flight (host_admission.go). The reservation ends with this boot.
 	booted := false
+	newMemMib := newComputerMemSizeMib(warmnessClassForOwnership(
+		&VMOwnership{UserID: userID, DesktopID: desktopID, ComputerID: stableComputerID(userID, desktopID, "")}, r.warmnessPolicy))
 	if r.vmManager != nil {
 		candidate := &VMOwnership{VMID: vmID, UserID: userID, DesktopID: desktopID, Kind: VMKindInteractive,
-			ComputerID: stableComputerID(userID, desktopID, "")}
+			ComputerID: stableComputerID(userID, desktopID, ""), MemSizeMib: newMemMib}
 		class := warmnessClassForOwnership(candidate, r.warmnessPolicy)
 		ticket, err := r.admitHostMemoryLocked(candidate, class)
 		if err != nil && makeRoomRefusal(err) && r.makeRoomEnabledLocked() {
@@ -2535,6 +2573,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		DesktopID:    desktopID,
 		ComputerID:   stableComputerID(userID, desktopID, ""),
 		Kind:         VMKindInteractive,
+		MemSizeMib:   newMemMib,
 		ComputerURL:  r.autoputerURLForVM(vmID),
 		State:        VMStateBooting,
 		CreatedAt:    time.Now(),
@@ -2614,7 +2653,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		if credentialEnvelope == "" && corpusdConfigured {
 			err = fmt.Errorf("realization credential unavailable")
 		} else {
-			shapeCPU, shapeMem := interactiveMachineShape()
+			shapeCPU, shapeMem := machineShapeForOwnership(own)
 			warmness := r.bootWarmnessClass(own)
 			info, err = mgr.BootVM(VMManagerConfig{
 				VMID:                       vmID,

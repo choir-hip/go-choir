@@ -718,7 +718,7 @@ func (r *OwnershipRegistry) admitGuestSize(own *VMOwnership, class WarmnessClass
 		return nil // unknown; never refuse on a missing sample
 	}
 	floor := memoryFloorBytes(cfg, sample.MemoryTotalBytes)
-	_, memMib := interactiveMachineShape()
+	_, memMib := machineShapeForOwnership(own)
 	need := uint64(memMib) * 1024 * 1024
 	d := HostAdmissionDecision{
 		At:             r.now().UTC().Format(time.RFC3339),
