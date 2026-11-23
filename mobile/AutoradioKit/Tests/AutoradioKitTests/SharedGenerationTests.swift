@@ -3,8 +3,8 @@ import XCTest
 
 /// D-2 (cross-account write): what shared code pushes to a native mirror carries the account generation it was computed under, and a push from before a sign-out that lands after it changes nothing.
 final class SharedGenerationTests: XCTestCase {
-    override func setUp() { SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); EditionPicksMirror.shared.reset() }
-    override func tearDown() { SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); EditionPicksMirror.shared.reset() }
+    override func setUp() { SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); EditionPicksMirror.shared.reset(); HeldPages.shared.wipe() }
+    override func tearDown() { SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); EditionPicksMirror.shared.reset(); HeldPages.shared.wipe() }
 
     func testAPushOfTheOldAccountThatLandsAfterTheWipeIsDropped() {
         XCTAssertTrue(RadioBridge.shared.set(gen: 4, snapshot: Data("A".utf8), onAir: nil, sheet: nil))
@@ -27,5 +27,19 @@ final class SharedGenerationTests: XCTestCase {
         XCTAssertFalse(EditionPicksMirror.shared.known); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty)
         XCTAssertTrue(EditionPicksMirror.shared.set(gen: 3, ["jazz"]))
         XCTAssertEqual(EditionPicksMirror.shared.topics, ["jazz"])
+    }
+    func testALatePageTextIsNotHeldForTheNextAccount() {
+        XCTAssertTrue(HeldPages.shared.hold(gen: 2, HeldPage(address: "pub:a", title: "A")))
+        SharedGeneration.announce(3); HeldPages.shared.wipe()
+        XCTAssertFalse(HeldPages.shared.hold(gen: 2, HeldPage(address: "pub:old", title: "old account")), "the page read under generation 2 lands after the sign-out")
+        XCTAssertNil(HeldPages.shared.page("pub:old")); XCTAssertEqual(HeldPages.shared.count, 0)
+        XCTAssertTrue(HeldPages.shared.hold(gen: 3, HeldPage(address: "pub:new")))
+        XCTAssertNotNil(HeldPages.shared.page("pub:new"))
+    }
+    func testThePageTextOpWithNoGenerationIsDroppedOnceOneIsKnown() {
+        SharedGeneration.announce(1)
+        let r: [String: Any] = ["address": "pub:a"]
+        XCTAssertEqual(HeldPage.generation(of: r), 0); XCTAssertEqual(HeldPage.generation(of: ["gen": 7]), 7)
+        XCTAssertFalse(HeldPages.shared.hold(gen: HeldPage.generation(of: r), HeldPage.parse(r)!), "an unstamped hand-over is refused, not trusted")
     }
 }

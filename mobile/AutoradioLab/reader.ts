@@ -129,7 +129,7 @@ async function ask(address: string, net: Net, prefetch = false): Promise<ReaderD
 
 // THE VOICE HOLDS THE PAGE IN FRONT. The one native call this file makes, with the reason only native code can meet: the voice turn (Swift today, Kotlin on Android) answers "what is this page
 // about" and matches what the radio is saying against the page, and it runs in the native engine, which cannot ask this module. So the page in front, once read, is handed over as its blocks with their
-// sentences (`{op: 'pageText'}` on the app module; it holds at most 40 and forgets them at sign-out). Nothing is read back. A host with no native module, a failed call or a stale account is silent.
+// sentences (`{op: 'pageText', gen}` on the app module, `gen` the account generation the page was read under: native drops a hand-over older than the newest it knows, so one in flight at sign-out cannot hold the old account's page for the next account's voice; it holds at most 40 and forgets them at sign-out). Nothing is read back. A host with no native module, a failed call or a stale account is silent.
 type HandOver = (request: Record<string, unknown>) => Promise<unknown>;
 let handOver: HandOver | null | undefined;
 /** Test only: the native hand-over (null: no native module; undefined: the real one). */
@@ -142,7 +142,7 @@ function hand(d: ReaderDoc, gen: number): void {
   if (lastHanded !== null && lastHanded.gen === gen && lastHanded.doc === d) return;
   lastHanded = { gen, doc: d };
   const blocks = d.blocks.filter((b) => b.text !== '').map((b) => ({ id: b.id, kind: b.kind, text: b.text, sentences: sentenceTexts(b) }));
-  void Promise.resolve().then(() => send({ op: 'pageText', address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { const took = obj(r) && r.ok === true; if (!took && lastHanded?.doc === d) lastHanded = null; console.log(took ? `reader: handed to the voice blocks=${blocks.length}` : 'reader: the voice did not take the page'); }, () => { if (lastHanded?.doc === d) lastHanded = null; });
+  void Promise.resolve().then(() => send({ op: 'pageText', gen, address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { const took = obj(r) && r.ok === true; if (!took && lastHanded?.doc === d) lastHanded = null; console.log(took ? `reader: handed to the voice blocks=${blocks.length}` : 'reader: the voice did not take the page'); }, () => { if (lastHanded?.doc === d) lastHanded = null; });
 }
 
 /** The source behind the reader page. `accState` and `saved` are only there to ask again: a sign-in from the banner, and the editor's save. */

@@ -5,6 +5,7 @@ import XCTest
 // the blocks with text and no code; H3 the page source answers the held page and "loading" before the hand-over; H4 at most `limit`, least recently used first, a page just held stays; H5 sign-out forgets
 // every page; H6 the follow-along finds the block and the sentence by the spoken words, never a wrong block; H7 the corpus body has no code or embeds.
 final class HeldPagesTests: XCTestCase {
+    override func setUp() { SharedGeneration.resetForTest() }
     let request: [String: Any] = ["op": "pageText", "address": "pub:a/x", "title": "Harbor", "dek": "A dek.", "kind": "story", "blocks": [
         ["id": "b1", "kind": "p", "text": "The first sentence is here. The second sentence follows it.", "sentences": ["The first sentence is here.", "The second sentence follows it."]],
         ["id": "b2", "kind": "code", "text": "let a = 1", "sentences": ["let a = 1"]],
@@ -25,21 +26,21 @@ final class HeldPagesTests: XCTestCase {
         XCTAssertTrue(s.handles("pub:a/x")); XCTAssertTrue(s.handles("texture:d1")); XCTAssertFalse(s.handles("paper:front"))
         let before = try await s.load("pub:a/x")
         XCTAssertEqual(before.status, "loading"); XCTAssertTrue(before.lines.isEmpty)
-        h.hold(HeldPage.parse(request)!)
+        h.hold(gen: 0, HeldPage.parse(request)!)
         let after = try await s.load("pub:a/x")
         XCTAssertEqual(after.status, "ready"); XCTAssertEqual(after.title, "Harbor"); XCTAssertEqual(after.kind, "reader"); XCTAssertEqual(after.lines.count, 3)
     }
     func testH4_BoundedLeastRecentlyUsedFirst() {
         let h = HeldPages(limit: 3)
-        for a in ["pub:1", "pub:2", "pub:3"] { h.hold(HeldPage(address: a)) }
+        for a in ["pub:1", "pub:2", "pub:3"] { h.hold(gen: 0, HeldPage(address: a)) }
         _ = h.page("pub:1")
-        h.hold(HeldPage(address: "pub:4"))
+        h.hold(gen: 0, HeldPage(address: "pub:4"))
         XCTAssertEqual(h.count, 3); XCTAssertNil(h.page("pub:2")); XCTAssertNotNil(h.page("pub:1")); XCTAssertNotNil(h.page("pub:4"))
-        for i in 5...30 { h.hold(HeldPage(address: "pub:\(i)")) }
+        for i in 5...30 { h.hold(gen: 0, HeldPage(address: "pub:\(i)")) }
         XCTAssertEqual(h.count, 3)
     }
     func testH5_SignOutForgetsEverything() {
-        let h = HeldPages(); h.hold(HeldPage(address: "pub:1")); h.wipe()
+        let h = HeldPages(); h.hold(gen: 0, HeldPage(address: "pub:1")); h.wipe()
         XCTAssertEqual(h.count, 0); XCTAssertNil(h.page("pub:1")); XCTAssertTrue(h.all().isEmpty)
     }
     func testH6_FollowLocatesByText() {
@@ -49,7 +50,7 @@ final class HeldPagesTests: XCTestCase {
         XCTAssertEqual(ReaderFollow.locate(spoken: "later paragraph about", in: d)?.block, "b3")
         XCTAssertNil(ReaderFollow.locate(spoken: "nothing like this anywhere", in: d))
         XCTAssertNil(ReaderFollow.locate(spoken: "", in: d)); XCTAssertNil(ReaderFollow.locate(spoken: "The", in: nil))
-        let h = HeldPages(); h.hold(d!)
+        let h = HeldPages(); h.hold(gen: 0, d!)
         XCTAssertEqual(ReaderFollow().set(address: "pub:a/x", spoken: "later paragraph about", held: h).blockId, "b3")
         XCTAssertEqual(ReaderFollow().set(address: "pub:other", spoken: "later paragraph about", held: h).blockId, "", "a page that was not handed over highlights nothing")
     }
@@ -63,7 +64,7 @@ final class HeldPagesTests: XCTestCase {
     }
     func testH8_AHandOverWithNoAddressIsNotAPage() {
         let h = HeldPages()
-        h.hold(HeldPage(address: "pub:1"))
+        h.hold(gen: 0, HeldPage(address: "pub:1"))
         XCTAssertEqual(h.count, 1)
         XCTAssertNil(HeldPage.parse(["address": ""]), "a hand-over naming no address is not a page, so nothing is held and the module answers false")
     }

@@ -123,7 +123,7 @@ final class AccountWipeTests: XCTestCase {
         let mailReading = MailReading(); mailReading.request(address: m, text: m)
         let conversation = Conversation(); conversation.begin(id: "q1", question: m)
         let acks = AckHistory(); acks.add(m, page: m)
-        let reader = HeldPages(limit: 4); reader.hold(HeldPage(address: "pub:x", title: m, blocks: [HeldBlock(id: "b1", kind: "p", text: m)]))
+        SharedGeneration.resetForTest(); let reader = HeldPages(limit: 4); reader.hold(gen: 0, HeldPage(address: "pub:x", title: m, blocks: [HeldBlock(id: "b1", kind: "p", text: m)]))
         let kept = KeptTurnStore(root: root.appendingPathComponent("turns")); write("turns/t1/record.json", m)
         write("MikeVoice/speaker.json", m); let voice = SpeakerGate(url: root.appendingPathComponent("MikeVoice/speaker.json"))
         let openPages = OpenPageFacts(); openPages.replace(gen: 1, [FrontPage(address: "mailbox:inbox", title: m, kind: "mailbox")])

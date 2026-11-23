@@ -3,6 +3,10 @@
 # 2026-11-23: the earlier ceiling (46 files, 6224 lines) was UNDERCOUNTED. The voice list filed non-voice code as voice (MailSeal, CredentialReader, +Mail, +Platform, ProofKey,
 # Conversation: 6 files, 481 lines) and the checker did not read mobile/AutoradioLab/modules/ (ModelsEntry.swift: 1 file, 133 lines). The true count of the same tree was 53 files, 6838 lines.
 # This ceiling is the true count AFTER the dead Swift of the same change was deleted (RouteStretchSource and what only it used, the unread stores, the `level` sends: see the commit).
+# 2026-11-23 (the merged train): 49 files, 5834 lines, 27 names. The merge of the radio lane's SharedGeneration guard, the sign-in lane's drop of its browser call and the dead Swift of the review fixes had
+# lowered the count to 5829 lines (27 names); the ceiling rose by 5 over 5831 for ONE reason: the page the shared reader hands the voice (`pageText`) is stamped with the account generation it was read under and
+# HeldPages.hold(gen:) drops a stale one (HeldPages.swift, AutoradioModule+Reader.swift), the same guard radioSet and editionMirror have: it stops one account's page text being held for the next account's voice turn.
+# Set by hand to the exact count, not folded; --update refuses a rise.
 files 49
-lines 5831
-names 30
+lines 5834
+names 27

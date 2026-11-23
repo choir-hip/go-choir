@@ -24,6 +24,8 @@ public struct HeldPage: Sendable, Equatable {
     /// The readable body for the corpus: no code or embeds.
     public var body: String { blocks.filter { !["code", "rule", "embed"].contains($0.kind) }.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n") }
 
+    /// The account generation the hand-over was read under; 0 when unstamped (refused once any generation is known).
+    public static func generation(of r: [String: Any]) -> Int { (r["gen"] as? NSNumber)?.intValue ?? 0 }
     /// The hand-over as the shared code sends it; nil when it names no address.
     public static func parse(_ r: [String: Any]) -> HeldPage? {
         guard let address = r["address"] as? String, !address.isEmpty else { return nil }
@@ -45,13 +47,16 @@ public final class HeldPages: @unchecked Sendable {
     private let limit: Int
     public init(limit: Int = HeldPages.defaultLimit) { self.limit = max(1, limit) }
 
-    // The page of an account that has since gone is dropped by AccountWipe's registration (sign-out). A hand-over still in flight across the change is not refused here: that boundary arrives with the wipe's
-    // own generation in the account change (docs/problems/unclean-sign-out-leaves-the-old-accounts-data-for-the-next-2026-11-21.md, "HeldPages needs the wipe's generation as its boundary").
-    public func hold(_ p: HeldPage) {
+    // The page of an account that has since gone is dropped by AccountWipe's registration (sign-out). A hand-over still in flight across the change is refused here: it carries the account generation shared code
+    // read the page under, and one older than the newest known (`SharedGeneration`, the radioSet and editionMirror rule) is dropped, so the next account's voice never holds the old account's page.
+    @discardableResult
+    public func hold(gen: Int, _ p: HeldPage) -> Bool {
+        guard SharedGeneration.accepts(gen) else { return false }
         lock.lock(); defer { lock.unlock() }
         pages[p.address] = p
         recency.removeAll { $0 == p.address }; recency.append(p.address)
         while pages.count > limit, let oldest = recency.first, oldest != p.address { recency.removeFirst(); pages[oldest] = nil }
+        return true
     }
     public func page(_ address: String) -> HeldPage? {
         lock.lock(); defer { lock.unlock() }

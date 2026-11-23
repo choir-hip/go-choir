@@ -14,7 +14,7 @@
 //  R11 "Hear it": the story's clips come with it; a failing clip route gives none and does not fail the story.   R12 a document the desk is revising says so.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as R from './reader.ts';
-import { HTTPError, SignedOutError, nextGeneration, resetSeam, type Reply } from './api.ts';
+import { HTTPError, SignedOutError, accountGeneration, nextGeneration, resetSeam, type Reply } from './api.ts';
 
 const reply = (body: unknown): Reply => ({ body, serverTime: 0, raw: '' });
 const bundle = (title: string, text = 'The council voted.') => ({ publication: { title, kind: 'story' }, route: { bare: 'pub/x', permalink: 'pub/x/v1' }, artifact: { content: `# ${title}\n\n${text}` }, nav: { revision: 1, latest: 1 } });
@@ -266,6 +266,17 @@ describe('the voice holds the page in front', () => {
     expect(sent.length).toBe(2);
     await R.readerDocShared('paper:front', 'in', false, f.net); await R.readerDocShared('pub:pub/gone', 'in', false, fake({ pub: () => new Error('down') }).net);
     expect(sent.length).toBe(2);
+  });
+  test('D-2 the hand-over carries the account generation the page was read under, so native can drop one that lands after a sign-out', async () => {
+    const sent: { gen?: number }[] = [];
+    R.setHandOverForTest(async (r) => { sent.push(r as { gen?: number }); return { ok: true }; });
+    const g = accountGeneration();
+    await R.readerDocShared('pub:pub/gen', 'in', false, fake().net);
+    expect(sent.length).toBe(1);
+    expect(sent[0].gen).toBe(g);
+    nextGeneration();
+    await R.readerDocShared('pub:pub/gen2', 'in', false, fake().net);
+    expect(sent[sent.length - 1].gen).toBe(g + 1);
   });
   test('R13 no native module is fine; a hand-over that fails does not fail the page; a stale account is not handed over', async () => {
     R.setHandOverForTest(null);
