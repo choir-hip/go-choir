@@ -48,9 +48,10 @@ const (
 
 // DeviceReturnSchemes are the apps the approval page may send the phone's
 // sign-in sheet back to: each is an app id of mobile/AutoradioLab/app.json (the
-// default and each variant), and the app's own callback scheme. A client names
+// default, which is the production app, and each variant), and the app's own
+// callback scheme. A client names
 // one of these; it never supplies a URL (an open redirect). Drift is tested.
-var DeviceReturnSchemes = []string{"news.choir.autoradio.lab", "news.choir.autoradio.lab.one"}
+var DeviceReturnSchemes = []string{"news.choir.autoradio", "news.choir.autoradio.lab", "news.choir.autoradio.lab.one"}
 
 // DeviceReturnPath is the callback's fixed path.
 const DeviceReturnPath = "/signed-in"

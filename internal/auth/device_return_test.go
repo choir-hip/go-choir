@@ -36,6 +36,9 @@ import (
 //     the default id and each variant's), so a build's callback scheme is refused
 //     or an unknown one is admitted.
 //  R9 a deny answers no return_to (the app learns of it by its poll), and it mints nothing.
+//  R11 (2026-11-23, the store build) the production app's id, news.choir.autoradio, is
+//     not on the list: its sign-in sheet never returns. Only that exact id, the two
+//     lab ids and no near miss of any of them may be answered.
 //  R10 an over-long hint cannot decide anything: 400 before the lookup.
 
 const goodState = "k3VqS0m9Zt_xA1b2C3d4-E5f"
@@ -51,7 +54,7 @@ func approveBody(code, decision string, extra map[string]string) map[string]stri
 func TestDeviceApproveReturnsTheAppsOwnCallback(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 	u, _ := h.store.CreateUser("return-user", "return@example.com")
-	for _, scheme := range []string{"news.choir.autoradio.lab", "news.choir.autoradio.lab.one"} {
+	for _, scheme := range []string{"news.choir.autoradio", "news.choir.autoradio.lab", "news.choir.autoradio.lab.one"} {
 		b := deviceBegin(t, h, "Autoradio", "203.0.113.9")
 		rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve",
 			approveBody(b.UserCode, "approve", map[string]string{"return": scheme, "state": goodState}), priv, u.ID))
@@ -139,7 +142,17 @@ func TestDeviceApproveRecordsTheDecisionAndOmitsAReturnItDoesNotKnow(t *testing.
 		{"our scheme with a host", "news.choir.autoradio.lab://evil", goodState},
 		{"our scheme with a path", "news.choir.autoradio.lab:/other", goodState},
 		{"our scheme with userinfo", "news.choir.autoradio.lab@evil.example", goodState},
-		{"a prefix of ours", "news.choir.autoradio", goodState},
+		{"a prefix of ours", "news.choir.autoradi", goodState},
+		{"the production id with a suffix not in the list", "news.choir.autoradio.evil", goodState},
+		{"the production id with a letter added", "news.choir.autoradiox", goodState},
+		{"the production id upper case", "News.Choir.Autoradio", goodState},
+		{"the production id with a path", "news.choir.autoradio:/signed-in", goodState},
+		{"the production id with a colon", "news.choir.autoradio:", goodState},
+		{"the production id with a host", "news.choir.autoradio://evil", goodState},
+		{"the production id with userinfo", "news.choir.autoradio@evil.example", goodState},
+		{"the production id with a trailing dot", "news.choir.autoradio.", goodState},
+		{"the production id with a space", "news.choir.autoradio ", goodState},
+		{"empty", "", goodState},
 		{"ours with a suffix not in the list", "news.choir.autoradio.lab.two", goodState},
 		{"a script", "javascript:alert(1)", goodState},
 		{"upper case", "News.Choir.Autoradio.Lab", goodState},
@@ -297,5 +310,25 @@ func TestDeviceReturnSchemesAreTheAppsInAppJSON(t *testing.T) {
 	}
 	if DeviceReturnPath != "/signed-in" {
 		t.Fatalf("path %q", DeviceReturnPath)
+	}
+}
+
+// R11: the exact set. The list is the three declared apps and nothing else, and
+// the callback for each is its own id.
+func TestDeviceReturnToIsExactForEachDeclaredAppOnly(t *testing.T) {
+	for _, s := range []string{"news.choir.autoradio", "news.choir.autoradio.lab", "news.choir.autoradio.lab.one"} {
+		if got, want := deviceReturnTo(s, goodState), s+":/signed-in?state="+goodState; got != want {
+			t.Fatalf("%s: %q, want %q", s, got, want)
+		}
+	}
+	for _, s := range []string{"", "news.choir.autoradio.evil", "news.choir.autoradiox", "News.Choir.Autoradio",
+		"NEWS.CHOIR.AUTORADIO", "news.choir.autoradio:/signed-in", "news.choir.autoradio:", "news.choir.autoradio.lab.two",
+		"news.choir.autoradio.lab.one.x", " news.choir.autoradio", "news.choir.autoradio\n", "news.choir"} {
+		if got := deviceReturnTo(s, goodState); got != "" {
+			t.Fatalf("%q was accepted: %q", s, got)
+		}
+	}
+	if len(DeviceReturnSchemes) != 3 {
+		t.Fatalf("DeviceReturnSchemes %v", DeviceReturnSchemes)
 	}
 }
