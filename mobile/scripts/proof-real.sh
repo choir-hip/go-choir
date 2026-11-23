@@ -514,8 +514,14 @@ echo "background: the radio/hold/writer lines of shared code after the $BG_SECON
 if [ ! -f "$BGLOG" ]; then echo "MISSING: background: no native console ($BGLOG)"; FAILS="$FAILS [background journal]"
 else
   BGN=$(awk -v t0="$BGT0" '$1 >= t0 && /AUTORADIO on air / && / voice=/' "$BGLOG" | wc -l | tr -d ' ')
-  if [ "$BGN" -ge 5 ]; then echo "ok: background: $BGN entries started on air after the app left the front (the Home screen over a plain-launched app, $BG_SECONDS s)"
-  else echo "MISSING: background: needs at least 5 entries started on air after the app left the front; the native console shows $BGN since $BGT0"; FAILS="$FAILS [background entries]"; fi
+  # Desk entries run 60 to 75 s, so 300 s holds four or five: three is the floor that still shows the radio advancing by
+  # itself more than once. What silence would look like is checked beside it: after the first entry of the window, no
+  # entry may start after a gap (native logs gap_ms only when an entry begins after silence).
+  BGGAPS=$(awk -v t0="$BGT0" '$1 >= t0 && /AUTORADIO on air / && / gap_ms=/' "$BGLOG" | wc -l | tr -d ' ')
+  if [ "$BGN" -ge 3 ]; then echo "ok: background: $BGN entries started on air after the app left the front (the Home screen over a plain-launched app, $BG_SECONDS s)"
+  else echo "MISSING: background: needs at least 3 entries started on air after the app left the front; the native console shows $BGN since $BGT0"; FAILS="$FAILS [background entries]"; fi
+  if [ "$BGGAPS" -le 1 ]; then echo "ok: background: $BGGAPS entries began after silence in the window (at most the opening's hand-off)"
+  else echo "MISSING: background: $BGGAPS entries began after silence since $BGT0 (gap_ms lines in the native console)"; FAILS="$FAILS [background gaps]"; fi
 fi
 echo "not driven: background: no remote next (a script cannot press the lock screen), and no frozen shared code (the simulator does not suspend it): only the owner's locked phone shows those"
 SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1
