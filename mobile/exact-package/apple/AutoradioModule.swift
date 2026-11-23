@@ -146,6 +146,8 @@ public final class AutoradioModule: ExactPackage {
         let filesCache = filesCacheDisk
         // The folder the old lookup fell back to: copies no page could read. Removed once; nothing writes there now.
         try? FileManager.default.removeItem(at: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files"))
+        // The Swift build's run sheet, steer queue, opening cache and front titles: shared code keeps its own now, nothing reads these, and they hold the old account's text. Removed once at boot (and at sign-out).
+        AccountWipe.removeOldBuildFiles(support: support, caches: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0])
         choir.accountWipe.register("open-pages") { OpenPageFacts.shared.wipe() }
         choir.accountWipe.register("app-files") {
             AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })

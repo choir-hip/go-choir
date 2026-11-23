@@ -56,6 +56,30 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertTrue(TakeFiles.legacy.allSatisfy { $0?.deletingLastPathComponent().lastPathComponent == "Autoradio" })
     }
 
+    /// The Swift run sheet, steer queue, written-ahead opening and front titles are gone from this build (shared code keeps its own under app:/data): an upgraded phone's copies hold the old account's text,
+    /// so boot removes them once and sign-out removes them again. Only temp folders here, never the real Application Support.
+    func testTheFourOldBuildFilesGoAtBootAndAtSignOut() async {
+        let support = root.appendingPathComponent("Application Support/Autoradio"), caches = root.appendingPathComponent("Library/Caches")
+        func fill() {
+            write("Application Support/Autoradio/runsheet.json", Self.marker); write("Application Support/Autoradio/steer-queue.json", Self.marker)
+            write("Application Support/Autoradio/front-titles.json", Self.marker); write("Library/Caches/AutoradioOpening/opening-1.pcm", Self.marker)
+            write("Application Support/Autoradio/keep.json", "other")
+        }
+        fill(); XCTAssertFalse(markerInFiles().isEmpty)
+        AccountWipe.removeOldBuildFiles(support: support, caches: caches)
+        XCTAssertEqual(markerInFiles(), [], "boot removes the old build's four stores")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: support.appendingPathComponent("keep.json").path), "and nothing else")
+        AccountWipe.removeOldBuildFiles(support: support, caches: caches)      // nothing there: no error
+        fill()
+        let wipe = AccountWipe()
+        wipe.registerStandard(legacyTopicsFile: nil, topicsMarker: nil, notebook: NotebookStore(), takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), legacyTakeFiles: [],
+                              tempDirectory: root.appendingPathComponent("tmp3"),
+                              deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal3.json"))), oldBuildFiles: AccountWipe.oldBuildFiles(support: support, caches: caches))
+        XCTAssertTrue(wipe.names.contains("old-build-files"))
+        await wipe.run()
+        XCTAssertEqual(markerInFiles(), [], "sign-out removes them too")
+    }
+
     /// Row 1 of the takes state table (docs/reference/AUTORADIO-TAKES.md): a take in review is the account's; after sign-out (or an account change) the recorder is idle, its file is gone and the radio is
     /// given back, so the next account is never shown it and can never publish it. Row 4: a mirror push of the old account that lands after the wipe is refused.
     func testATakeInReviewIsGoneAfterTheWipe() async {
