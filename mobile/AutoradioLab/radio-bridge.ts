@@ -6,7 +6,7 @@
 import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, type NativeReader } from './api.ts';
 import { nativeDeck } from './deck-native.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
-import { Writer, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
+import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
 import { applyTurnOps, turnQueueJSON } from './voice-queue.ts';
 import { routePoster, signedInRequester } from './runsheet-store.ts';
 import { authedJSON } from './api.ts';
@@ -230,7 +230,7 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const live = r.rt.view().playing && r.rt.inFront();
   if (live) r.beat += 1;
   const out = { tick: r.tick, write: r.writer.wouldAsk() || posting, live, beat: r.beat, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)) };
-  const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold}`;
+  const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold} ahead=${r.rt.store.ahead().length} inFlight=${r.writer.inFlight}`;
   if (state !== lastPulse) { lastPulse = state; console.log(`radio: pulse ${state}`); }
   return out;
 }
@@ -270,9 +270,10 @@ export async function radioWrite(storage: Store | undefined, native: NativeReade
   r.rt.store.flush();
   const asked = r.writer.checkAhead();
   const waits: Promise<unknown>[] = [];
-  if (asked) waits.push(r.writer.settle());
+  if (asked) waits.push(r.writer.settleWithin(ASK_DEADLINE_MS));
   if (r.rt.store.flushTask) waits.push(r.rt.store.flushTask);
   await Promise.all(waits.map((t) => t.catch(() => undefined)));
+  if (asked) r.writer.abandon('radioWrite returned with its ask unsettled');   // nothing may stay in flight that no answer waits for (only the ask this answer started: another radioWrite may own one)
   return { tick: r.tick, write: false, hold: false, live: false, beat: 0 };
 }
 

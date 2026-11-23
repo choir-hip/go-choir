@@ -57,3 +57,26 @@ describe('nothing is started and forgotten', () => {
     expect(unknown, 'a new `void` call: await it in an answer, or move it to a mutation, or review it into ALLOWED with the reason').toEqual([]);
   });
 });
+
+
+describe('an ask of the desk starts only from a mutation\'s own body (the radio ran dry when a chained ask hung)', () => {
+  test('the writer\'s `ask` body starts no other ask', () => {
+    const w = src('radio-writer.ts');
+    const body = w.slice(w.indexOf('private ask('), w.indexOf('private async post('));
+    expect(body.length).toBeGreaterThan(500);
+    expect(body.includes('this.checkAhead('), 'ask() chains checkAhead() from its own tail').toBe(false);
+    expect(body.includes('this.ask('), 'ask() calls itself').toBe(false);
+  });
+  test('checkAhead is called from radioWrite and nowhere else in the bridge', () => {
+    const b = src('radio-bridge.ts');
+    const at = [...b.matchAll(/checkAhead\(/g)].map((m) => m.index as number);
+    expect(at.length).toBe(1);
+    const write = b.slice(b.indexOf('export async function radioWrite('));
+    expect(write.indexOf('checkAhead(')).toBeGreaterThan(-1);
+    expect(write.indexOf('checkAhead(')).toBeLessThan(write.indexOf('\n}\n'));
+  });
+  test('the pulse\'s log line says what is in flight and how many are ahead, so a dry deck shows in the log', () => {
+    const pulse = bodyOf(src('radio-bridge.ts'), 'export async function radioPulse(');
+    expect(pulse).toContain('inFlight=${r.writer.inFlight}'); expect(pulse).toContain('ahead=${');
+  });
+});

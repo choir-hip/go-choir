@@ -107,11 +107,16 @@ export type WriterDeps = {
   offlineFill?(): Entry[] | Promise<Entry[]>;
 };
 
+/** An ask that has not answered in this long can no longer answer (an answer that was let go, a fetch that was dropped, a continuation that never ran): it is abandoned, said in the log, and asked again by the next pulse.
+ *  This is a deadline on a hang, not a limit on calls: a stretch is one model call that streams for tens of seconds (the desk's own whole-turn bound is 30 s per call; two minutes covers the front list, the
+ *  story texts and the post with room), and an ask that is merely slow past it costs one more ask, not a stuck radio. */
+export const ASK_DEADLINE_MS = 120_000;
+
 /** Between two entries of a long answer: lets the next turn start (Exact gives a turn about 100 ms of CPU; Bun has no scheduler). */
 const yieldTurn = (label: string): Promise<void> => lapYield(`writer: ${label}`);
 
 export class Writer {
-  latency = 0; inFlight = false; dry = false; notice = ''; asks: string[] = [];
+  latency = 0; inFlight = false; private startedAt = 0; dry = false; notice = ''; asks: string[] = [];
   private opened = false; private quietOn?: string; private stops = 0; private task?: Promise<void>;
   constructor(private d: WriterDeps) {}
   settle(): Promise<void> { return this.task ?? Promise.resolve(); }
@@ -120,7 +125,8 @@ export class Writer {
   openAhead(start = true): void { this.opened = true; if (start) this.checkAhead(); }
   /** The sheet changed or an entry started: is the time ahead short? */
   checkAhead(): boolean {
-    if (!this.opened || this.inFlight) return false;
+    if (!this.opened) return false;
+    if (this.inFlight) { if (!this.overdue()) return false; this.abandon('no answer within its deadline'); }
     const store = this.d.rt.store;
     if (this.quietOn !== undefined && this.quietOn === store.onAir()?.id) return false;
     if (!shouldAskMore(store.ahead(), this.latency)) return false;
@@ -129,10 +135,28 @@ export class Writer {
   }
   /** Would an ask start now? (The pulse says so; a mutation then asks, and waits: a long fetch needs an answer that stays.) */
   wouldAsk(): boolean {
-    if (!this.opened || this.inFlight) return false;
+    if (!this.opened) return false;
+    if (this.inFlight) return this.overdue();                                       // an ask past its deadline is no ask: the pulse says write and `checkAhead` abandons it
     const store = this.d.rt.store;
     if (this.quietOn !== undefined && this.quietOn === store.onAir()?.id) return false;
     return shouldAskMore(store.ahead(), this.latency);
+  }
+  private overdue(): boolean { return this.inFlight && this.d.now().getTime() - this.startedAt > ASK_DEADLINE_MS; }
+  /** The ask in flight can no longer answer, or its answer is not wanted: it is let go (its late result is dropped whole, as after a stop) and the next pulse asks again. */
+  abandon(why: string): void {
+    if (!this.inFlight) return;
+    console.log(`writer: the desk's ask did not answer (${why}); asking again`);
+    this.stops += 1; this.inFlight = false; this.publish(false);
+  }
+  /** Wait for the ask, but not for ever: past `ms` it is abandoned, so a mutation that waits on it returns and the pulse starts the next. */
+  async settleWithin(ms: number): Promise<void> {
+    const t = this.task;
+    if (!t || !this.inFlight) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<boolean>((res) => { timer = setTimeout(() => res(true), ms); });
+    const timedOut = await Promise.race([t.then(() => false, () => false), late]);
+    if (timer !== undefined) clearTimeout(timer);
+    if (timedOut || this.inFlight) this.abandon(timedOut ? `no answer in ${Math.round(ms / 1000)} s` : 'its answer ended before it did');
   }
   stop(): void { this.stops += 1; this.inFlight = false; this.quietOn = undefined; this.publish(false); }
   private publish(writing: boolean): void { this.d.rt.setDesk({ notice: this.notice, writing, dry: this.dry }); }
@@ -141,6 +165,7 @@ export class Writer {
     if (this.inFlight) return;
     this.inFlight = true; this.asks.push(cause); this.publish(true);
     const gen = this.d.generation(), stops = this.stops, store = this.d.rt.store, airId = store.onAir()?.id, started = this.d.now().getTime();
+    this.startedAt = started;
     this.task = (async () => {
       let added = 0, received = 0, dropped = 0, firstAt: number | undefined, failure: { kind: 'cancelled' | 'empty' | 'signedOut' | 'transport' | 'other' } | undefined;
       try {
@@ -166,6 +191,7 @@ export class Writer {
         const look = { clip: () => undefined, take: (id: string) => { const t = takeById.get(id); return t ? { take_id: t.takeID, publisher: t.publisher, duration: t.duration, title: takeTitle(t.transcript), responds_to: t.respondsTo ? { route: t.respondsTo.route, title: t.respondsTo.title } : undefined } : undefined; } };
         for (const ev of [...dec.feed(raw), ...dec.finish()]) {
           if (ev.type === 'segment') {
+            if (stops !== this.stops) return;                                  // abandoned or stopped meanwhile: nothing more of its answer is placed
             const e = entryFrom(ev.segment as Incoming, look as never);
             if (!e) continue;
             if (firstAt === undefined) firstAt = this.d.now().getTime();
@@ -187,9 +213,9 @@ export class Writer {
       if (out.clearQuiet) this.quietOn = undefined; else if (out.quietOn !== undefined) this.quietOn = out.quietOn;
       if (out.notice === 'clear') this.notice = ''; else if (out.notice === 'say') this.notice = plainWords(failure) ?? '';
       this.publish(false);
-      if (added === 0 && store.onAir()?.id !== airId) this.checkAhead();
-      if (added > 0) this.checkAhead();
-      else if (failure && this.d.offlineFill && store.ahead().filter((e) => e.kind !== 'transition').length < 2) {
+      // No second ask is started from here (it would run in no answer: the radioWrite that waited for this one has returned, and what a continuation fetches after that is never run). The tick moved
+      // (`publish`), so the pulse says write again and a new radioWrite asks, inside its own answer.
+      if (added === 0 && failure && this.d.offlineFill && store.ahead().filter((e) => e.kind !== 'transition').length < 2) {
         const fill = await this.d.offlineFill();
         if (gen !== this.d.generation() || stops !== this.stops) return;                       // another account or a stop while the store was read
         for (const e of fill) store.place(e, 'end', { by: 'phone', reason: 'the desk could not be reached: a story held on this phone' });

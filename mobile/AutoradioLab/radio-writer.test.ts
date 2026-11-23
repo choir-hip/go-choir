@@ -7,7 +7,7 @@
 //  W6 an answer that arrives after a sign-out (stop) is dropped whole.
 //  W7 the phone's opening is a greeting by the hour, the first story with its dek once, at most two more headlines; with none it says it has no front page yet.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { Writer, fromFront, shapeText, candidateBody, requestBody, phoneOpening, type WriterDeps } from './radio-writer.ts';
+import { Writer, ASK_DEADLINE_MS, fromFront, shapeText, candidateBody, requestBody, phoneOpening, type WriterDeps } from './radio-writer.ts';
 import { RadioRuntime } from './radio-runtime.ts';
 import type { DeckPort, DeckState } from './deck.ts';
 import type { Entry } from './runsheet-model.ts';
@@ -20,17 +20,18 @@ const deck: DeckPort = { state: async () => EMPTY, play: async () => EMPTY, enqu
 const seg = (o: Record<string, unknown>) => 'event: segment\ndata: ' + JSON.stringify({ stretch_id: 'st-1', ...o }) + '\n\n';
 const answer = (...segs: string[]) => segs.join('') + 'event: done\ndata: {"stretch_id":"st-1"}\n\n';
 
+let skewMs = 0;                                                                  // the device's clock moving on (the deadline test)
 let rt: RadioRuntime, w: Writer, bodies: Record<string, unknown>[], reply: () => Promise<string>, fr: unknown, gen: number, fill: Entry[];
 const settle = async () => { await w.settle(); await new Promise((r) => setTimeout(r, 0)); await w.settle(); };
 beforeEach(() => {
   rt = new RadioRuntime({ deck, now: () => NOW });
-  bodies = []; gen = 1; fill = [];
+  bodies = []; gen = 1; fill = []; skewMs = 0;
   fr = front([row('/pub/a'), row('/pub/b'), row('/pub/c')]);
   reply = async () => answer(seg({ segment_id: 'st-1/0', kind: 'ident', text: 'Hello.' }), seg({ segment_id: 'st-1/1', kind: 'story', title: 'A', text: 'Story A words.', cites: [{ ref: 'pub:/pub/a@v2', role: 'subject', label: 'A' }] }));
   const d: WriterDeps = {
     rt, front: async () => fr, texts: async (routes) => Object.fromEntries(routes.map((r) => [r, [`Para one of ${r}.`, 'Para two.']])),
     takes: async () => ({ takes: [], kept: { ids: [], handle: '', muted: [] } }), edition: async () => 'topics: harbours',
-    post: async (b) => { bodies.push(b); return reply(); }, now: () => NOW, tz: () => 'UTC', requestId: () => 'radio-test', generation: () => gen, offlineFill: () => fill,
+    post: async (b) => { bodies.push(b); return reply(); }, now: () => new Date(NOW.getTime() + skewMs), tz: () => 'UTC', requestId: () => 'radio-test', generation: () => gen, offlineFill: () => fill,
   };
   w = new Writer(d);
 });
@@ -84,6 +85,7 @@ describe('placing', () => {
     let n = 0;
     reply = async () => { n += 1; return n === 1 ? answer(seg({ segment_id: 'e/0', kind: 'story', title: 'E0', text: 'Words zero.' })) : answer(seg({ segment_id: 'e/0', kind: 'story', title: 'E0', text: 'Words zero.' })); };
     w.openAhead(); await settle();
+    w.checkAhead(); await settle();                                                 // the pulse says write again and the next radioWrite asks: an ask never starts another from its own tail (W8)
     expect(w.asks.every((c) => c === 'extend')).toBe(true); expect(n).toBe(2);        // the first added one; the repeat added nothing and the writer is quiet
     const asked = w.asks.length;
     w.checkAhead(); await settle();
@@ -125,5 +127,53 @@ describe('the phone\'s opening', () => {
     expect(phoneOpening(lines, new Date('2023-11-14T14:00:00Z'), 0, 'x').text.startsWith('Good afternoon.')).toBe(true);
     expect(phoneOpening([], NOW, 0, 'x').text).toBe("Good evening. This is Autoradio. I don't have the front page yet.");
     expect(phoneOpening([{ title: 'Same', dek: 'Same.' }], NOW, 0, 'x').text).not.toMatch(/Same\. Same\./);
+  });
+});
+
+// W8 to W11 (the radio runs dry when the writer's chained ask hangs; the failure list, written first):
+//  W8  an ask never starts another from its own tail: after an ask that added entries and left the time ahead short, exactly one ask has run; the next is the pulse's (`checkAhead` from `radioWrite`).
+//  W9  an ask in flight past its deadline can no longer answer: `wouldAsk` says so (the pulse names it), `checkAhead` abandons it, says so in the log, and asks again; the late answer of the abandoned ask is dropped.
+//  W10 `settleWithin(ms)` returns at the deadline with the ask still unsettled, and then nothing is in flight (the mutation `radioWrite` returns and the pulse restarts it).
+//  W11 a dry sheet leads to an ask at the next pulse: nothing ahead, nothing in flight, the radio opened, the entry it last found nothing for no longer on air.
+describe('the writer never hangs the radio dry', () => {
+  test('W8 an ask does not start another from its own tail', async () => {
+    w.open(); await settle();
+    expect(w.asks).toEqual(['open']);
+    expect(bodies.length).toBe(1);
+  });
+  test('W9 an ask past its deadline is abandoned, said, and asked again; its late answer is dropped', async () => {
+    let release: (s: string) => void = () => undefined;
+    reply = () => new Promise((r) => { release = r; });
+    w.openAhead(false); expect(w.checkAhead()).toBe(true); await new Promise((r) => setTimeout(r, 0));
+    expect(w.inFlight).toBe(true); expect(w.wouldAsk()).toBe(false);
+    skewMs = ASK_DEADLINE_MS + 1000;
+    expect(w.wouldAsk()).toBe(true);                                                  // the pulse says write: the ask can no longer answer
+    const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    reply = async () => answer(seg({ segment_id: 'n/0', kind: 'story', title: 'New', text: 'Fresh words.' }));
+    try { expect(w.checkAhead()).toBe(true); await settle(); } finally { console.log = log; }
+    expect(logs.some((l) => l.includes('writer: the desk\'s ask did not answer') && l.includes('asking again'))).toBe(true);
+    expect(rt.store.ahead().map((e) => e.title)).toContain('New');
+    const before = rt.store.sheet.entries.length;
+    release(answer(seg({ segment_id: 'old/0', kind: 'story', title: 'Old', text: 'Late words.' }))); await settle();
+    expect(rt.store.sheet.entries.length).toBe(before);
+  });
+  test('W10 settleWithin returns at its deadline and leaves nothing in flight', async () => {
+    reply = () => new Promise(() => undefined);
+    w.openAhead(false); w.checkAhead(); await new Promise((r) => setTimeout(r, 0));
+    expect(w.inFlight).toBe(true);
+    const t0 = Date.now(); await w.settleWithin(30);
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(w.inFlight).toBe(false); expect(w.wouldAsk()).toBe(true);
+  });
+  test('W11 a dry sheet is asked at the next pulse; the cases where it is not are the three named ones', async () => {
+    reply = async () => answer();                                                     // the desk answers with nothing
+    rt.store.place({ id: 'on', kind: 'story', placed_by: 'desk', state: 'ahead', title: 'On', text: 'W.', est_seconds: 5, revision: 0 }, 'end');
+    rt.director.advanceIfIdle();
+    expect(w.wouldAsk()).toBe(false);                                                 // not opened: the desk is asked once the radio is opened (the pulse's start does that, openRadioOf)
+    w.openAhead(false); expect(w.checkAhead()).toBe(true); await settle();
+    expect(w.wouldAsk()).toBe(false);                                                 // it found nothing for the entry on air: quiet while that one is on air
+    rt.store.apply({ op_id: 'p-off', by: 'phone', op: 'skip', id: 'on', ended: { outcome: 'skipped', at: '2023-11-14T22:00:00Z', last_block: 0 }, base_version: 0 } as never);
+    expect(rt.store.onAir()).toBeUndefined(); expect(rt.store.ahead().length).toBe(0);
+    expect(w.inFlight).toBe(false); expect(w.wouldAsk()).toBe(true);                  // nothing on air, nothing ahead: the next pulse asks
   });
 });

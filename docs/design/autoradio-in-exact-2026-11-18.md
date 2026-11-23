@@ -60,7 +60,7 @@ The 181 names come from 19 interface files (143 names; `mark.json` is empty) plu
 
 Everything that decides moves to shared code: the reducer, the store in SQLite, the stream, the writer, the on-air decisions, and an outbox of ops not yet posted.
 
-The native core is a **deck**: a queue of items, each "speak these paragraphs as document D" or "play this URL from start to end". It plays items back to back with no gap, reports started, ended, failed and position, handles interruptions and Now Playing, and keeps playing if shared code stops. Ended events go to a journal file that shared code reads and posts when it runs again; fixture 34 already covers a late on-air report. Shared code keeps two or three entries ahead.
+The native core is a **deck**: a queue of items, each "speak these paragraphs as document D" or "play this URL from start to end". It plays items back to back with no gap, reports started, ended, failed and position, handles interruptions and Now Playing, and keeps playing if shared code stops. Ended events go to a journal file that shared code reads and posts when it runs again; fixture 34 already covers a late on-air report. Shared code hands the deck up to a dozen entries ahead (`HOLD_AHEAD` 12 in `radio-runtime.ts`); the deck holds at most 100 (`DECK_HELD_MAX`, the sheet's bound).
 
 **First Android build, at minimum:** a Kotlin deck of about 500 lines using Android's `TextToSpeech` and Media3 ExoPlayer. Exact already uses Media3, and packages may declare Maven libraries (`README.md:846-851`). No models and no microphone. It plays only while on screen until station 3.
 
