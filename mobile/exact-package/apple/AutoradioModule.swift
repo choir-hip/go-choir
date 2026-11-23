@@ -134,7 +134,7 @@ public final class AutoradioModule: ExactPackage {
             ProofKey.importIfPresent(documents: docs, into: appKeys)
         }
         #endif
-        choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
+        choir = ChoirApp(runtime: runtime, keys: appKeys)
         choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
         // The spine's objects.
         // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
@@ -223,9 +223,6 @@ public final class AutoradioModule: ExactPackage {
         case "choirPlayer": reply(json(choir.playerView()))
         case "choirSignIn": Task { [choir] in _ = await choir?.signIn.begin() }; reply(state())
         case "choirCancelSignIn": choir.signIn.cancel(); reply(state())
-        case "choirOpenApproval":
-            if let u = URL(string: choir.authView().verificationURL) { Platform.open(u) }
-            reply(state())
         case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
         case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing
         default: reply(["error": "NotSupportedError"])

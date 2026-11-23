@@ -29,6 +29,7 @@ import { retrievalServe, paperSearch } from './retrieval-live.ts';
 import * as imported from './imported.ts';
 import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveEnv as takesEnv } from './take-session.ts';
 import * as picks from './edition-picks.ts';
+import { signInSheet, liveSheetEnv } from './signin-sheet.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -37,7 +38,12 @@ import * as picks from './edition-picks.ts';
 // this one constant (api.ts imports it), and the offline copy's path is the literal in the grant (paper.ts CACHE_FILE
 // must equal it; paper.test.ts checks).
 export const ORIGIN = 'https://choir.news';
-export const grants = `device.microphone purpose.microphone
+// The sign-in sheet (signin-sheet.ts): the approval page opens in the system sign-in sheet and returns by this app's own callback scheme. The scheme is the app's id, so each
+// install has its own (app.json: the default's literal here, each variant's `env.SIGNIN_SCHEME`); two installs never share one. The path is the one the server builds (/signed-in).
+const SIGNIN_SCHEME = import.meta.env.SIGNIN_SCHEME ?? 'news.choir.autoradio.lab';
+export const grants = `auth.session ${ORIGIN}
+auth.callback ${SIGNIN_SCHEME}:/signed-in
+device.microphone purpose.microphone
 device.microphone-background purpose.recordingInBackground
 device.speech-recognition purpose.speech
 fs.read app:/data/exports
@@ -167,6 +173,8 @@ const sources: Sources = {
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
   pagesPin: ([address], _store, storage) => pages.pagesPin(storage, address),
   pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
+  // Sign-in (signin-sheet.ts): open the approval page in the system sign-in sheet; the answer is only how the sheet ended. Swift still begins the flow, polls and writes the key.
+  signInSheet: ([link]) => signInSheet(link, liveSheetEnv(ORIGIN)),
   accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),

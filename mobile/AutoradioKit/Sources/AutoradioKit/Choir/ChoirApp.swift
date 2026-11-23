@@ -51,13 +51,12 @@ public final class ChoirApp: @unchecked Sendable {
     public var onChange: (@Sendable () -> Void)?
     nonisolated(unsafe) var continuity: PlaybackContinuity?
 
-    public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL, openURL: (@Sendable (URL) -> Void)?) {
+    public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL) {
         self.runtime = runtime
         LaunchTimings.shared.begin()
         ChoirEnvironment.shared.keys = keys
         ChoirEnvironment.shared.log = runtime.log
         signIn = ChoirSignIn(baseURL: baseURL)
-        signIn.openURL = openURL
         registerAccountWipe()
         signIn.onChange = { [weak self] in
             guard let self else { return }

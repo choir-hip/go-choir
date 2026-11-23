@@ -33,7 +33,7 @@ names = [
     src("choirAuth", "ChoirAuth", default={"signedIn": False, "baseURL": "", "status": "idle", "userCode": "", "verificationURL": "", "message": ""}),
     src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "",
         "playing": False, "talking": False, "heard": "", "message": ""}),
-    snd("choirSignIn"), snd("choirOpenApproval"), snd("choirCancelSignIn"), snd("choirRefresh"),
+    snd("choirSignIn"), snd("choirCancelSignIn"), snd("choirRefresh"),
     snd("choirTalkCancel"), snd("choirHandsFreeToggle"),
     snd("choirAsk", {"text": S, "aim": S}),
 ]

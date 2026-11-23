@@ -142,12 +142,12 @@ final class ChoirClientTests: XCTestCase {
             default: return .init()
             }
         }
-        nonisolated(unsafe) var opened: URL?
         let si = ChoirSignIn(env: env)
         si.sleep = { _ in }
-        si.openURL = { opened = $0 }
         let st = await si.begin()
-        XCTAssertEqual(st.userCode, "ABCD-EFGH"); XCTAssertEqual(opened?.absoluteString, "https://choir.news/device?user_code=ABCD-EFGH")
+        // Begin opens nothing: shared code opens the link in the system sign-in sheet, and the device code stays here, beside the poll.
+        XCTAssertEqual(st.userCode, "ABCD-EFGH"); XCTAssertEqual(st.verificationURL, "https://choir.news/device?user_code=ABCD-EFGH")
+        XCTAssertFalse(String(data: try JSONEncoder().encode(st), encoding: .utf8)!.contains("choir_dc_x"))
         await si.wait()
         XCTAssertEqual(keys.get(KeyAccount.apiKey), secretKey)
         XCTAssertEqual(keys.get(KeyAccount.computerID), "comp-2")

@@ -1,6 +1,7 @@
 import Foundation
 
-// Sign-in by the device flow: begin, show the code and open the approval page, poll for the key, store it.
+// Sign-in by the device flow: begin, show the code, poll for the key, store it. The approval page is opened by shared code in the system sign-in sheet
+// (AutoradioLab/signin-sheet.ts); this stays native only because the device code, the poll and the Keychain write are here and must not pass through shared code.
 // The key goes to the KeyStore and nowhere else: not an event, not a record, not the UI state.
 
 public struct ChoirAuthState: Codable, Sendable, Equatable {
@@ -20,8 +21,6 @@ public final class ChoirSignIn: @unchecked Sendable {
     private var task: Task<Void, Never>?
     private let env: ChoirEnvironment
     public var baseURL: String
-    /// The host opens the approval page (UIApplication.open on iOS); nil on the Mac.
-    public var openURL: (@Sendable (URL) -> Void)?
     public var onChange: (@Sendable () -> Void)?
     /// Poll pacing. Tests set `sleep` to return at once.
     public var sleep: @Sendable (Double) async -> Void = { s in try? await Task.sleep(nanoseconds: UInt64(s * 1e9)) }
@@ -57,8 +56,7 @@ public final class ChoirSignIn: @unchecked Sendable {
             let full = (o["verification_uri_complete"] as? String) ?? (o["verification_uri"] as? String) ?? ""
             let interval = max(1, (o["interval"] as? Double) ?? 5)
             let expires = (o["expires_in"] as? Double) ?? 600
-            update { $0.userCode = user; $0.verificationURL = full; $0.message = "approve this sign-in in the browser" }
-            if let u = URL(string: full), ["https", "http"].contains(u.scheme ?? "") { openURL?(u) }
+            update { $0.userCode = user; $0.verificationURL = full; $0.message = "approve this sign-in in the window that opened" }
             let t = Task { [self] in await poll(device: device, interval: interval, expires: expires) }
             lock.lock(); task = t; lock.unlock()
         } catch {

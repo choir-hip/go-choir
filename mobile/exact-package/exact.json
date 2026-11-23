@@ -652,10 +652,6 @@
       "answers": "LabState"
     },
     {
-      "send": "choirOpenApproval",
-      "answers": "LabState"
-    },
-    {
       "send": "choirCancelSignIn",
       "answers": "LabState"
     },
