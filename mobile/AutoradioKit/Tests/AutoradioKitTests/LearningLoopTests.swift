@@ -41,21 +41,6 @@ final class LearningLoopTests: XCTestCase {
 
 
 
-    // F3
-    func testF3TheRequestCarriesTheNotebookElseTheTopicsElseNothing() throws {
-        let nb = try text("notebook.md")
-        XCTAssertEqual(EditionText.make(notebook: nb, topics: ["Space"]), nb.trimmingCharacters(in: .whitespacesAndNewlines))
-        let t = try XCTUnwrap(EditionText.make(notebook: nil, topics: ["Space", "Chess"]))
-        XCTAssertEqual(t, "What the listener follows:\n- Space\n- Chess")
-        XCTAssertNil(EditionText.make(notebook: nil, topics: [])); XCTAssertNil(EditionText.make(notebook: "  \n", topics: []))
-        let big = String(repeating: "a line of words\n", count: 4000)
-        XCTAssertLessThanOrEqual(try XCTUnwrap(EditionText.make(notebook: big, topics: [])).utf8.count, 32 * 1024)
-        var body = RouteStretchSource.requestBody(cause: "open", candidates: [], aheadTitles: [], editionText: t, now: Date())
-        XCTAssertEqual(body["edition_text"] as? String, t)
-        body = RouteStretchSource.requestBody(cause: "open", candidates: [], aheadTitles: [], editionText: nil, now: Date())
-        XCTAssertNil(body["edition_text"])
-    }
-
     // F4
     func testF4TheNotebookIsReadAsLines() throws {
         let nb = NotebookText.parse(try text("notebook.md"))

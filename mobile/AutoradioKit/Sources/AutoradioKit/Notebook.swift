@@ -117,50 +117,10 @@ public enum NotebookText {
     }
 }
 
-// MARK: What the DJ is sent
-
-public enum EditionText {
-    public static let maxBytes = 32 * 1024
-    /// The notebook text when the phone holds it, else the topics as text, else nil.
-    public static func make(notebook: String?, topics: [String]) -> String? {
-        if let n = notebook?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty { return StretchCandidates.cut(n, bytes: maxBytes) }
-        let t = topics.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        guard !t.isEmpty else { return nil }
-        return StretchCandidates.cut("What the listener follows:\n" + t.map { "- \($0)" }.joined(separator: "\n"), bytes: maxBytes)
-    }
-    public static func current() -> String? {
-        make(notebook: NotebookCache.shared.text, topics: EditionPicksMirror.shared.topics)    // the picks are shared code's; this is its pushed copy (EditionSetup.swift)
-    }
-}
-
-/// The last notebook text read, kept on the phone for the programme request and for the page when the computer cannot be reached.
-public final class NotebookCache: @unchecked Sendable {
-    public static let shared = NotebookCache(file: TakeFiles.url("notebook-cache.md"))
-    private let lock = NSLock()
-    private var _text: String?
-    private let file: URL?
-    public init(file: URL?) {
-        self.file = file
-        if let file, let d = try? Data(contentsOf: file) { _text = String(decoding: d, as: UTF8.self) }
-    }
-    public var text: String? { lock.lock(); defer { lock.unlock() }; return _text }
-    /// Sign-out: the text and the file.
-    public func wipe() {
-        lock.lock(); _text = nil; lock.unlock()
-        if let file { try? FileManager.default.removeItem(at: file) }
-    }
-    public func set(_ t: String) {
-        lock.lock(); _text = t; lock.unlock()
-        guard let file else { return }
-        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? Data(t.utf8).write(to: file, options: .atomic)
-    }
-}
-
 // MARK: The topics write: the one part of the notebook that stays native
 // The page, the scorecard and the learning route are shared code (AutoradioLab/notebook.ts, notebook-run.ts). What stays here is the WRITE of the listener's topics into the notebook:
 // a Texture canonical write through TextureEditor (Swift until the texture edit page moves), so it is a red surface and the shared code asks for it through the one native call
-// `notebookState` (AutoradioModule+Notebook.swift). The text read and the cache below feed the DJ's request (RadioProgramme.swift), which is built natively.
+// `notebookState` (AutoradioModule+Notebook.swift). The DJ's request is built in shared code (radio-writer.ts).
 
 @MainActor public final class NotebookStore {
     public static let shared = NotebookStore()
@@ -168,8 +128,6 @@ public final class NotebookCache: @unchecked Sendable {
     public var lookupEdition: () async -> EditionInfo? = { await EditionLookup.fetch() }
     /// Makes the notebook document; its id, or nil when it could not be made.
     public var createNotebook: () async -> String? = { await NotebookStore.defaultCreate() }
-    /// Where the notebook text is kept on the phone (tests pass their own).
-    public var notebookCache: NotebookCache = .shared
     public init() {}
 
     static func defaultCreate() async -> String? {
@@ -233,7 +191,6 @@ public final class NotebookCache: @unchecked Sendable {
             guard TextureEditor.shared.info(address: address).status == "saved" else { return false }
         }
         guard gen == AccountWipe.generation else { return false }
-        notebookCache.set(merged)
         if let marker { try? FileManager.default.createDirectory(at: marker.deletingLastPathComponent(), withIntermediateDirectories: true); try? Data(key.utf8).write(to: marker, options: .atomic) }
         return true
     }

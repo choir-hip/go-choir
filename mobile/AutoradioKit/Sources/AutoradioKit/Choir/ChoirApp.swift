@@ -113,12 +113,11 @@ public final class ChoirApp: @unchecked Sendable {
                 return true
             }
         }
-        // The voice's yield (a barge-in pauses the radio, the end of the turn plays it again) acts on the deck at once, here, and does not wait for shared code's pulse; the deck's journal tells shared code.
+        // The voice's yield (a barge-in pauses the radio, the end of the turn plays it again) acts on the deck at once, here; the deck's journal tells shared code (the `level` verb that also told it was ignored there, and woke its pump on every duck: removed).
         runtime.player.onLevel = { l in
             Task { @MainActor in
                 switch l { case .pause: Deck.shared.listenerPaused(); case .play: await Deck.shared.resumed(); case .dip: break }
             }
-            RadioBridge.shared.send("level", ["value": l.rawValue])
         }
         BarTracker.shared.speedObservers.append { v in Task { @MainActor in Deck.shared.engine?.setRemoteRate(v) } }
     }
@@ -163,7 +162,6 @@ public final class ChoirApp: @unchecked Sendable {
         do {
             let list = try await ChoirFront.stories(client: ChoirEnvironment.shared.client(baseURL: base), limit: 30)
             lock.lock(); stories = list; lock.unlock()
-            ClipStore.shared.markStale()                          // the front is fresh: the next write asks for the clips again, once
             if list.isEmpty { say("The front page is empty right now.") }
         } catch { say(Self.plain(stage: "programme", message: "\(error)")) }
     }

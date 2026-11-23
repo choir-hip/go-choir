@@ -3,9 +3,8 @@ import Foundation
 // Podcast clips (lane autoradio-dj-clips). The server lane's shapes are fixed in docs/design/podcast-clips-2026-11-15.md section 4:
 //   GET /api/platform/podcast-clips  (public; the clips of every story updated in the last 72 hours, one request)
 //   a candidate may carry `clips` (at most 3, copied from that answer); a `podcast_clip` segment names one by `clip_id`.
-// The phone fetches the set ONCE per front refresh (never a request per story), keeps it for the session, attaches a story's clips to its
-// candidate in the one programme request, and looks the id up here for the audio URL and range when the segment plays. A route that
-// answers 404, an error or an empty list leaves the set empty and the radio behaves exactly as it did.
+// Shared code fetches the set (AutoradioLab/clips.ts, radio-writer.ts) and hands the native player a clip's record when it plays
+// (`ClipStore.put`); this file keeps the record, its parse, and the lookup by id for the audio URL and range.
 
 /// One clip the server cut from a podcast episode for a story.
 public struct PodcastClip: Sendable, Equatable {
@@ -118,20 +117,16 @@ public final class ClipStore: @unchecked Sendable {
     private let lock = NSLock()
     private var byID: [String: PodcastClip] = [:]
     private var byRoute: [String: [PodcastClip]] = [:]
-    private var fetchedAt: Date?
-    private var stale = true
-    private var lastFailed = false
     private var mismatched = Set<String>()
     public init() {}
     /// This clip's audio is not the file that was transcribed (its length differs): it is never played as a clip.
     public func markMismatch(_ id: String) { lock.lock(); mismatched.insert(id); lock.unlock() }
     public func isMismatch(_ id: String) -> Bool { lock.lock(); defer { lock.unlock() }; return mismatched.contains(id) }
 
-    public func replace(_ clips: [PodcastClip], at: Date = Date(), failed: Bool = false) {
+    public func replace(_ clips: [PodcastClip]) {
         lock.lock(); defer { lock.unlock() }
         byID = [:]; byRoute = [:]
         for c in clips where byID[c.clipID] == nil { byID[c.clipID] = c; byRoute[c.route, default: []].append(c) }
-        fetchedAt = at; stale = false; lastFailed = failed
     }
     public func clip(_ id: String) -> PodcastClip? { lock.lock(); defer { lock.unlock() }; return byID[id] }
     public func clips(forRoute route: String) -> [PodcastClip] { lock.lock(); defer { lock.unlock() }; return byRoute[PodcastClip.bare(route)] ?? [] }
@@ -148,14 +143,6 @@ public final class ClipStore: @unchecked Sendable {
         byID[clip.clipID] = clip; byRoute[clip.route, default: []].append(clip)
     }
     public var all: [PodcastClip] { lock.lock(); defer { lock.unlock() }; return byID.values.sorted { $0.clipID < $1.clipID } }
-    /// The front was refreshed: the next stretch asks again.
-    public func markStale() { lock.lock(); stale = true; lock.unlock() }
-    /// Fresh enough not to ask again: fetched, not marked stale, and (after a failure) not older than `failedAge`.
-    func isFresh(now: Date = Date(), maxAge: TimeInterval = 900, failedAge: TimeInterval = 120) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        guard let t = fetchedAt, !stale else { return false }
-        return now.timeIntervalSince(t) < (lastFailed ? failedAge : maxAge)
-    }
 }
 
 // MARK: What the native side still needs of the podcast app's names
@@ -197,71 +184,6 @@ public enum PodcastKey {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let u = URL(string: t), let sc = u.scheme?.lowercased(), sc == "http" || sc == "https", u.host?.isEmpty == false else { return "" }
         return t
-    }
-}
-
-public enum PodcastClips {
-    public static let path = "/api/platform/podcast-clips"
-
-    /// The one bulk request. Nothing thrown: a 404, a failure or a bad body is an empty set (`failed` says which).
-    public static func fetch(client: ChoirClient) async -> (clips: [PodcastClip], failed: Bool) {
-        do {
-            let r = try await client.send("GET", path, query: ["limit": "200"], authenticated: false, route: path)
-            let o = try r.object()
-            return (((o["clips"] as? [[String: Any]]) ?? []).compactMap(PodcastClip.parse), false)
-        } catch { return ([], true) }
-    }
-
-    /// One request per front refresh: skipped while the set is fresh.
-    @discardableResult
-    public static func ensure(client: ChoirClient, store: ClipStore = .shared) async -> Bool {
-        if store.isFresh() { return false }
-        let r = await fetch(client: client)
-        store.replace(r.clips, failed: r.failed)
-        return true
-    }
-}
-
-// MARK: The clips on a candidate
-
-public struct CandidateClip: Sendable, Equatable {
-    public var clipID, show, episodeTitle, published, quote: String
-    public var seconds: Double
-    var json: [String: Any] {
-        ["clip_id": clipID, "show": show, "episode_title": episodeTitle, "published": published, "seconds": (seconds * 10).rounded() / 10, "quote": quote]
-    }
-
-    /// The server's bounds (design 4.2): at most 3 per candidate, ids `clip-` and 12 to 64 hex digits and unique in the request, show and
-    /// episode title one line of at most 200 bytes, quote at most 400 bytes, seconds 5 to 300. A clip outside them is left out, so the
-    /// request is never refused for one.
-    static func make(_ c: PodcastClip) -> CandidateClip? {
-        guard c.clipID.range(of: "^clip-[0-9a-f]{12,64}$", options: .regularExpression) != nil, c.seconds >= 5, c.seconds <= 300 else { return nil }
-        let show = SegmentPrep.oneLine(c.show, maxBytes: 200), ep = SegmentPrep.oneLine(c.episodeTitle, maxBytes: 200)
-        guard !show.isEmpty, !ep.isEmpty else { return nil }
-        // The date is RFC 3339 or the clip is left out: one bad value would make the server refuse the whole request.
-        let published = c.published.trimmingCharacters(in: .whitespaces)
-        guard Take.date(published) != nil else { return nil }
-        return CandidateClip(clipID: c.clipID, show: show, episodeTitle: ep, published: published,
-                             quote: SegmentPrep.oneLine(c.quote, maxBytes: 400), seconds: c.seconds)
-    }
-    public static let maxPerCandidate = 3
-}
-
-/// The one-line explanation of why the DJ would say a clip's lead-in, for tests and the trace.
-extension ClipStore {
-    /// `clips[route]` for the candidates, ids unique across the request, at most 3 each.
-    func candidateClips(forRoutes routes: [String]) -> [String: [CandidateClip]] {
-        var used = Set<String>()
-        var out: [String: [CandidateClip]] = [:]
-        for r in routes {
-            var list: [CandidateClip] = []
-            for c in clips(forRoute: r) where list.count < CandidateClip.maxPerCandidate && !used.contains(c.clipID) {
-                guard let cc = CandidateClip.make(c) else { continue }
-                used.insert(c.clipID); list.append(cc)
-            }
-            if !list.isEmpty { out[r] = list }
-        }
-        return out
     }
 }
 

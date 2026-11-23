@@ -2,7 +2,7 @@ import Foundation
 
 // What the phone hands the desk about the play queue. There is no phrase matching here (owner, 2026-11-17: "we shouldn't have specific commands that work
 // differently than others"): every turn's words go to the desk with its context, and the desk acts through the run sheet's ops (`queue_ops`, applied by
-// RunSheetPlayer.applyTurnOps in TurnQueueWire.swift). The host sets these hooks once; an unset closure means "no queue here".
+// shared code's run sheet, AutoradioLab/voice-queue.ts). The host sets these hooks once; an unset closure means "no queue here".
 
 public enum QueueVoice {
     public struct Hooks: Sendable {

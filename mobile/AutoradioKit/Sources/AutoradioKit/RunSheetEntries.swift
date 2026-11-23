@@ -1,7 +1,7 @@
 import Foundation
 
 // What each thing the listener can play is, as an entry on the run sheet (slice B). There is one list of what is heard; these are the
-// entries the phone and the listener place on it. The desk's entries come through `RunSheetFeed`.
+// entries the phone and the listener place on it. The desk's entries come through shared code's writer (radio-writer.ts).
 //
 //   a paper story read in full      kind page      source.ref pub:<route>
 //   a web page                      kind page      source.ref url:<address>
@@ -72,7 +72,7 @@ extension RunSheetEntry {
     }
 
     /// An audio file in Files. The entry names the file by its Files path (`file:<path>`), never by where the phone keeps a copy: that is a device
-    /// path and goes nowhere. The phone finds its own copy again from the path (`RunSheetPlayer.fileResolver`).
+    /// path and goes nowhere. The phone finds its own copy again from the path (shared code, files.ts).
     public static func filesAudio(address: String, title: String, by: RunSheetBy = .listener) -> RunSheetEntry {
         RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .episode, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: address, label: "Files"))
     }

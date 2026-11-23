@@ -251,7 +251,7 @@ final class DeckTests: XCTestCase {
         let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }
         let d = Deck(journal: DeckJournal(storage: f)); d.began(id: "a")
         let w = AccountWipe()
-        w.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), legacyTakeFiles: [], tempDirectory: f.deletingLastPathComponent().appendingPathComponent("wipe-tmp-\(UUID().uuidString)"), deck: d)
+        w.registerStandard(legacyTakeFiles: [], tempDirectory: f.deletingLastPathComponent().appendingPathComponent("wipe-tmp-\(UUID().uuidString)"), deck: d)
         await w.run()
         XCTAssertEqual(d.journal.seq, 0); XCTAssertTrue(d.journal.lines.isEmpty); XCTAssertFalse(FileManager.default.fileExists(atPath: f.path))
     }
@@ -265,7 +265,7 @@ final class DeckTests: XCTestCase {
         let (d, e) = makeDeck(DeckJournal(storage: f))
         _ = await d.play(speech("a")); d.soundBegan(); d.enqueue(speech("b"))
         XCTAssertNotNil(d.current); XCTAssertEqual(d.held.count, 1)
-        let w = AccountWipe(); w.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), legacyTakeFiles: [], tempDirectory: f.deletingLastPathComponent().appendingPathComponent("wipe-tmp-\(UUID().uuidString)"), deck: d); await w.run()
+        let w = AccountWipe(); w.registerStandard(legacyTakeFiles: [], tempDirectory: f.deletingLastPathComponent().appendingPathComponent("wipe-tmp-\(UUID().uuidString)"), deck: d); await w.run()
         XCTAssertNil(d.current); XCTAssertTrue(d.held.isEmpty); XCTAssertEqual(d.why, .empty)
         XCTAssertTrue(e.log.contains("stopSpoken") || e.log.contains("stopRemote"))
         XCTAssertTrue(d.journal.lines.isEmpty); XCTAssertEqual(d.journal.seq, 0)

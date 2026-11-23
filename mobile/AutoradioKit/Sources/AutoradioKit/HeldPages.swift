@@ -2,7 +2,7 @@ import Foundation
 
 // The page in front, as the shared reader hands it to the voice (AutoradioLab/reader.ts `hand`, the app module's `pageText` op): the native voice cannot ask the shared module what is on the page,
 // and matches what the radio says against it, so the shared page hands over its blocks with their sentences.
-// This holds them (at most `limit`, least recently used first, forgotten at sign-out) for three native readers: the page text a turn reads (HeldPageSource), the saved corpus and the follow-along
+// This holds them (at most `limit`, least recently used first, forgotten at sign-out) for the native readers: the page text a turn reads (HeldPageSource) and the follow-along
 // (ReaderFollow.locate). Nothing here parses a document.
 
 public struct HeldBlock: Sendable, Equatable {

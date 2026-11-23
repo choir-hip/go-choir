@@ -124,7 +124,7 @@ public final class AutoradioModule: ExactPackage {
         owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s); ConsoleFile.write("AUTORADIO \(s)") }
         #endif
         runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barFacts"], now: true) } }
         // The listener path: sign-in (Keychain), the front page, the real stages.
         let appKeys: KeyStore = KeychainKeyStore()
@@ -135,7 +135,7 @@ public final class AutoradioModule: ExactPackage {
         }
         #endif
         choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
-        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
         // The spine's objects.
         // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
         Task { @MainActor in

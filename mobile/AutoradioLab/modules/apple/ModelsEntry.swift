@@ -23,8 +23,8 @@ import Security
 // there), absent (the Keychain answered item-not-found) or unreadable (locked before the first unlock, or any other status). Read only: no data is returned, nothing
 // is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
 //
-// The take recorder's ops (`takeState` ... `takeMirror`, AutoradioModule+Takes.swift `takeOp`): shared code (AutoradioLab/take-session.ts) leads the Takes section; the reason they are native is the
-// microphone, the radio's gate, the recogniser and the player (the voice), the steer queue, and the Swift programme's copy of the listener's own ids and muted voices. Nothing is carried from the pre-release build's files: they are never read.
+// The take recorder's ops (`takeState` ... `takeAudio`, AutoradioModule+Takes.swift `takeOp`): shared code (AutoradioLab/take-session.ts) leads the Takes section; the reason they are native is the
+// microphone, the radio's gate, the recogniser and the player (the voice), and the steer queue. Nothing is carried from earlier builds' files: they are never read.
 //
 // The page in front, `{op: "pageText", address, title, dek, kind, blocks}` (later only): the shared reader hands the voice the page it is showing (HeldPages); nothing is read back. It goes when the voice's page text is its own.
 //

@@ -1,5 +1,5 @@
 // Lane members file (My notebook, station L6): the notebook page reads `nb` and sends `notebookDo`. Both are shared code now (notebook-run.ts); no Swift source or send remains.
-// The one native call (the steer taps waiting, the topics write, the notebook text for the DJ) is made inside notebook-run.ts, `{op: 'notebookState' | 'notebookText'}`, not named here.
+// The one native call (the steer taps waiting and the topics write) is made inside notebook-run.ts, `{op: 'notebookState'}`, not named here.
 // `nbSel` is the selected line (the same again clears it), `nbTick` counts Refresh presses; a select reads nothing, a refresh reads the notebook and the scorecard again.
 // The content store's sync (content-run.ts) is started here: a gated task runs at launch when its gate is already true, and again each time the app returns to the front.
 use NotebookPageInfo, ContentSyncInfo from "./notebook-types.contract"
