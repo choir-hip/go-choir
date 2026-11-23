@@ -107,11 +107,11 @@ export type WriterDeps = {
   offlineFill?(): Entry[] | Promise<Entry[]>;
 };
 
-/** An ask that has not answered in this long is OVERDUE: it may still answer (a desk that streams for two minutes), and when it does its entries are used if nothing newer was applied. Being overdue lets the pulse start
- *  ONE more ask for the dry spell, not a loop: a slow desk costs two calls, not one every 120 s, and the first answer to arrive is the one that is applied (the other is dropped as older). An ask that has not answered
- *  in twice this long can no longer answer (an answer let go, a fetch dropped, a continuation that never ran) and is abandoned. A deadline on a hang, not a limit on calls. The transport's own timeout is the same
- *  120 s (api.ts AUTHED_TIMEOUT_MS), so a real request slower than this fails there; the request itself cannot be cancelled from here (no abort signal reaches Exact's fetch in the reference), so an overdue ask
- *  that is passed is left to end. */
+/** An ask that has not answered in this long is OVERDUE. The Writer itself would then allow ONE more ask for the dry spell (the first answer to arrive is applied, the other dropped as older), but the bridge never reaches that:
+ *  its `radioWrite` waits for its ask and the pulse calls for no second `radioWrite` while one waits (radio-bridge.ts: the flag, stale after 260 s), because a mutation sent again replaces the first and the first is the one waiting
+ *  for the reply. So in the app an overdue ask is not asked twice: it is abandoned at twice this long (an answer let go, a fetch dropped, a continuation that never ran) and the pulse asks again. The re-ask branch below is kept for
+ *  a caller that is not the bridge's radioWrite (the tests). A deadline on a hang, not a limit on calls. The transport's own timeout is the same 120 s (api.ts AUTHED_TIMEOUT_MS), so a real request slower than this fails there; the
+ *  request itself cannot be cancelled from here (no abort signal reaches Exact's fetch in the reference). */
 export const ASK_DEADLINE_MS = 120_000;
 const GIVE_UP_MS = 2 * ASK_DEADLINE_MS;
 /** After a FAILED ask the next waits BACKOFF_BASE_MS, then twice that, and so on up to BACKOFF_MAX_MS (a provider's refusal or a desk that is down is not asked again every pulse: ten minutes make about six asks).
@@ -174,7 +174,7 @@ export class Writer {
   wouldAsk(): boolean {
     if (!this.opened || this.quiet() || this.held() || !shouldAskMore(this.d.rt.store.ahead(), this.latency)) return false;
     if (this.flights.length === 0) return true;
-    return this.flights.length === 1 && !this.reasked && this.age(this.flights[0]) > ASK_DEADLINE_MS;      // overdue: one more, once per spell
+    return this.flights.length === 1 && !this.reasked && this.age(this.flights[0]) > ASK_DEADLINE_MS;      // overdue: one more, once per spell. Not reached through the bridge (see ASK_DEADLINE_MS): its radioWrite is in flight
   }
   /** One ask can no longer answer, or its answer is not wanted: it is let go (its late result is dropped whole, as after a stop). Only the ask named: another that started meanwhile is not touched. */
   abandon(why: string, id: number): void {

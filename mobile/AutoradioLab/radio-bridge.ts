@@ -36,7 +36,9 @@ const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-type Radio = { beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
+/** A mutation in flight (or called for): `due` is a pulse that said the work is due and the mutation not started yet, `running` the mutation's body. Each goes stale (WORK_STALE_MS) so a continuation that never ends cannot stop the radio. */
+type Flag = { phase: 'due' | 'running'; at: number };
+type Radio = { writeFlag?: Flag; holdFlag?: Flag; pulses: number; beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
 let restored: Promise<void> | undefined;
 
@@ -114,7 +116,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  const state: Radio = { beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
+  const state: Radio = { pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
     deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
@@ -253,7 +255,10 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   // what reads them again. The position label changes once a second at the most.
   const second = Math.floor(clock.ms / 1000);
   if (live && (second !== r.beatSecond || clock.ms <= 0)) { r.beat += 1; r.beatSecond = second; }
-  const out = { tick: r.tick, write: !writing && (r.writer.wouldAsk() || posting), live, beat: r.beat, hold: !holding && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)), slow: false };
+  r.pulses += 1;
+  const writeDue = !flagBusy(r, r.writeFlag) && (r.writer.wouldAsk() || posting);
+  if (writeDue) r.writeFlag = { phase: 'due', at: flagNow(r) };            // marked by the pulse that calls for it: a pulse computed before the mutation's body starts cannot call for a second send (the gate closing cancels the first's pending `after`)
+  const out = { tick: r.tick, write: writeDue, live, beat: r.beat, hold: !flagBusy(r, r.holdFlag) && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)), slow: false };
   out.slow = !out.live && !out.write && !out.hold && !r.writer.inFlight;          // nothing sounds in front, nothing is due: the clock asks again in five seconds, not one (what native has to say wakes it at once: the deck's seq and the radio note are keys of the pulse)
   const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold} ahead=${r.rt.store.ahead().length} inFlight=${r.writer.inFlight} lost=${r.rt.store.lostPending}`;
   if (state !== lastPulse) { lastPulse = state; console.log(`radio: pulse ${state}`); }
@@ -265,10 +270,16 @@ const startDue = (r: Radio): boolean => !r.started && r.ready && !r.rt.store.onA
 
 /** The work the pulse says is due: the voice's messages, the radio's start, the pump (starts, the journal, the held list). A mutation: it is not let go when the next pulse is asked. */
 let lastPulse = '';
-let holding = false;                                  // one radioHold at a time: a second send would take the first's place, and the first would be let go
+/** The flags are the RADIO's (a sign-out replaces the radio and its flags go with it), and they go stale: a body whose continuation never runs (an answer let go) must not stop the radio for good. `running` after 260 s (just over the
+ *  240 s at which a writer abandons its ask), `due` (called for, the mutation not started: the gate closed, the send never came) after 5 s. Device time; with none known, one pulse counts as a second. */
+export const WORK_STALE_MS = 260_000, DUE_STALE_MS = 5_000;
+const flagNow = (r: Radio): number => (clock.ms > 0 ? clock.ms : r.pulses * 1000);
+const flagBusy = (r: Radio, f: Flag | undefined): boolean => f !== undefined && flagNow(r) - f.at < (f.phase === 'running' ? WORK_STALE_MS : DUE_STALE_MS);
+// one radioHold at a time: a second send would take the first's place, and the first would be let go
 export async function radioHold(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
-  holding = true;
-  try { return await holdInner(storage, native); } finally { holding = false; }
+  const r = await getRadio(storage, native);
+  const mine: Flag = { phase: 'running', at: flagNow(r) }; r.holdFlag = mine;
+  try { return await holdInner(storage, native); } finally { if (r.holdFlag === mine) r.holdFlag = undefined; }
 }
 async function holdInner(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   const r = await getRadio(storage, native);
@@ -288,10 +299,11 @@ async function holdInner(storage: Store | undefined, native: NativeReader | unde
 }
 
 /** The desk's ask and the sheet's post, in one answer that waits for both. */
-let writing = false;                                  // one radioWrite at a time, like radioHold: a mutation sent again REPLACES the first, which is let go, and the first is the one waiting for the desk's reply (its stretch then fails after the first entry it places)
+// one radioWrite at a time, like radioHold: a mutation sent again REPLACES the first, which is let go, and the first is the one waiting for the desk's reply (its stretch then fails after the first entry it places)
 export async function radioWrite(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
-  writing = true;
-  try { return await writeInner(storage, native); } finally { writing = false; }
+  const r = await getRadio(storage, native);
+  const mine: Flag = { phase: 'running', at: flagNow(r) }; r.writeFlag = mine;
+  try { return await writeInner(storage, native); } finally { if (r.writeFlag === mine) r.writeFlag = undefined; }
 }
 async function writeInner(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   lap('radioWrite: start');
