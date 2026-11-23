@@ -25,7 +25,7 @@ import { parseEpisodeKey, episodeAddress } from './podcast-model.ts';
 import { loadKept, takesOf, type Kept, type Take } from './takes.ts';
 import { seamNet } from './takes.ts';
 import { clock, now as clockNow } from './clock.ts';
-import { decodeEntry, type Entry } from './runsheet-model.ts';
+import { decodeEntry, type Entry, type Sheet } from './runsheet-model.ts';
 import type { Storage as RunStorage } from './runsheet-store.ts';
 import type { RadioFacts } from './radio-page.ts';
 
