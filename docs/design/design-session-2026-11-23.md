@@ -58,3 +58,22 @@ Logs: the paper computer's own decision lines live only in a console file that k
 The first design's offline trial (2026-11-22) failed all four kill lines: rules found names and not what happened; candidate lists were mostly page furniture (median 28 entries); 46 of 75 news arrivals reported something no story covers; when a story exists the ten nearest by vector hold it three times in four.
 
 The radio: nothing puts front-page stories after its opening; the saved queue is discarded after 30 minutes; the server "desk" for turns and for stretches is one streamed model call with no tools; the first stretch takes 40 to 50 s.
+
+## Later the same evening: the App Store, and a list of things before we can ship
+
+The owner: "i just renewed my apple developer account. so, another new mission is doing our app store/testflight application... we need to do this and also make screenshots and video previews... and improve the onboarding (voice onboarding as mentioned above) and explanatory materials for the apple reviewers." And: "you should be able to make an account (which also applies to choir.news) first inside autoradio app. so, we may have a list of things to do like this before we can ship."
+
+Reading (the lead's): a fifth track, T5, shipping the app. Its first product requirement is the owner's: an account is created inside the Autoradio app, and it is the same account as on choir.news. Today the app only signs in to an existing account (the device flow, with the approval page in the system sign-in sheet); it creates nothing.
+
+The list before we can ship, as it stands (the owner's items first; the rest are faults and gaps found today, not yet ruled on as blockers):
+
+1. Create an account inside the app; the same account works on choir.news (owner).
+2. Onboarding by voice: after the voice model downloads, the listener says what they are interested in (owner).
+3. Screenshots, preview videos and explanatory materials for Apple's reviewers (owner).
+4. The radio never waits and never opens blank (owner's rule; today the saved queue is discarded after 30 minutes and nothing plays front-page stories after the opening).
+5. The voice pipeline as specified: a model for speech detection, the recogniser the owner named, a model for end of turn, voice-on sounding the same as voice-off (today the first-commit baseline runs, and setup's picks are not kept across a launch).
+6. The developer menu out of any build a tester or reviewer carries.
+7. A way in for a reviewer who has no account and no second device.
+8. Deleting an account inside the app, which Apple requires of an app that creates one (to be confirmed against the current guideline).
+9. The account boundary: frozen at one account per install, three approaches tried.
+10. Faults the owner reported today: page switches that show a title for ten seconds or more, playback stopping on a switch to another app with voice on, an answer cut off by a stretch arriving, podcasts skipped while transcription has no durable host.
