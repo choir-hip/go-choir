@@ -31,17 +31,6 @@ enum Platform {
     static let willResign = NSApplication.willResignActiveNotification
     static let wentToBackground = NSApplication.didResignActiveNotification
     #endif
-    /// Work that should finish after the app leaves the screen (the next opening written ahead): the phone asks the system for a little
-    /// background time; the Mac keeps running, so the work just runs.
-    static func finishInBackground(_ work: @escaping @Sendable () async -> Void) {
-        #if os(iOS)
-        let box = BackgroundTaskBox()
-        box.id = UIApplication.shared.beginBackgroundTask(withName: "autoradio-write-ahead") { box.end() }
-        Task { await work(); box.end() }
-        #else
-        Task { await work() }
-        #endif
-    }
     /// Notices after which unsaved work must be on disk: the app resigns, and on the Mac it quits (a quit gives no resign).
     static var flushNotes: [Notification.Name] {
         #if os(iOS)
@@ -174,8 +163,4 @@ enum ConsoleFile {
     }
 }
 
-final class BackgroundTaskBox: @unchecked Sendable {
-    var id = UIBackgroundTaskIdentifier.invalid
-    func end() { DispatchQueue.main.async { if self.id != .invalid { let i = self.id; self.id = .invalid; UIApplication.shared.endBackgroundTask(i) } } }
-}
 #endif

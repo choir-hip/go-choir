@@ -9,6 +9,6 @@
 # 2026-11-23 (train2-gen): 49 files, 5844 lines, 27 names, +10, for ONE reason: the account generation guard is complete. `SharedGeneration.boot` (a JS context that starts again while the process lives is adopted even below the newest
 # seen: without it every push is refused until the process dies), `SharedGeneration.admit` (the check and the write under one lock), the `generation` op in ModelsEntry.swift (the boot announcement and the wipe's floor),
 # and editionMirror answering `ok`. Set by hand to the exact count, not folded; --update refuses a rise.
-files 49
-lines 5844
+files 47
+lines 5729
 names 27

@@ -8,9 +8,9 @@ public enum HearIt {
     /// Play: the clip when it can be found in the served file (the player locates it); else the episode from its start. (The shared row offers Play only for a usable fingerprint; the phone no longer marks a mismatch from any live path.)
     @MainActor public static func play(_ clipID: String, store: ClipStore = .shared) async {
         guard let c = store.clip(clipID) else { return }
-        RadioBridge.shared.place(c.isRelocatable && !store.isMismatch(clipID) ? c.clipEntry : c.episodeEntry, mode: "now")
+        RadioBridge.shared.place(c.isRelocatable ? c.clipEntry : c.episodeEntry, mode: "now")
     }
     @MainActor public static func enqueue(_ clipID: String, store: ClipStore = .shared) {
-        if let c = store.clip(clipID) { RadioBridge.shared.place(c.isRelocatable && !store.isMismatch(clipID) ? c.clipEntry : c.episodeEntry, mode: "add") }
+        if let c = store.clip(clipID) { RadioBridge.shared.place(c.isRelocatable ? c.clipEntry : c.episodeEntry, mode: "add") }
     }
 }

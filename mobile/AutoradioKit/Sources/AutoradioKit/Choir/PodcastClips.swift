@@ -117,11 +117,7 @@ public final class ClipStore: @unchecked Sendable {
     private let lock = NSLock()
     private var byID: [String: PodcastClip] = [:]
     private var byRoute: [String: [PodcastClip]] = [:]
-    private var mismatched = Set<String>()
     public init() {}
-    /// This clip's audio is not the file that was transcribed (its length differs): it is never played as a clip.
-    public func markMismatch(_ id: String) { lock.lock(); mismatched.insert(id); lock.unlock() }
-    public func isMismatch(_ id: String) -> Bool { lock.lock(); defer { lock.unlock() }; return mismatched.contains(id) }
 
     public func replace(_ clips: [PodcastClip]) {
         lock.lock(); defer { lock.unlock() }

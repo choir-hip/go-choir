@@ -82,7 +82,7 @@ extension AutoradioModule {
                 let text = args["text"] as? String ?? ""
                 // A URL in the bar is not a question: it opens in place with Read aloud and Add to queue (lane autoradio-queue; the one early branch).
                 if let url = BarURL.detect(text) {
-                    self.barWebURL = url.absoluteString; EmbeddedPage.shared.opened(url.absoluteString)
+                    self.barWebURL = url.absoluteString
                     return reply(self.json(self.runtime.snapshot()))
                 }
                 // `aim` (lane SHELL) is the front page's address; `address` is the older name. Either may be absent.

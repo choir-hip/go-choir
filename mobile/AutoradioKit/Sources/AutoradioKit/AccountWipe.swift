@@ -55,7 +55,6 @@ public final class AccountWipe: @unchecked Sendable {
         reader: HeldPages = .shared,
         keptTurns: KeptTurnStore? = nil,
         voice: SpeakerGate = .shared,
-        heldRest: HeldRest = .shared,
         deck: Deck = .shared,
         oldBuildFiles: [URL] = AccountWipe.oldBuildFiles()
     ) {
@@ -85,7 +84,6 @@ public final class AccountWipe: @unchecked Sendable {
         // The enrolled voice is app-private (Application Support/MikeVoice, not a system setting) and the listener's own: it goes at sign-out.
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
-        register("held-rest") { heldRest.wipe() }
         register("old-build-files") { AccountWipe.removeFiles(oldBuildFiles) }      // a phone upgraded from the Swift run sheet may still hold them (removed at boot too)
         register("retrieval-bridge") { RetrievalBridge.shared.clear() }     // the last turn's record and a pending ask belong to the account that left
     }
@@ -95,7 +93,7 @@ public final class AccountWipe: @unchecked Sendable {
     public static func oldBuildFiles(support: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Autoradio"),
                                      caches: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first) -> [URL] {
         var out: [URL] = []
-        if let support { out += ["runsheet.json", "steer-queue.json", "front-titles.json"].map { support.appendingPathComponent($0) } }
+        if let support { out += ["runsheet.json", "steer-queue.json", "front-titles.json", "local-entries.json"].map { support.appendingPathComponent($0) } }
         if let caches { out.append(caches.appendingPathComponent("AutoradioOpening", isDirectory: true)) }
         return out
     }

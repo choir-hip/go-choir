@@ -195,3 +195,38 @@ Second pass, same day (review seat 1, accepted with fixes):
 - Written-but-never-read stores deleted: `NotebookCache` and the `notebookText` op (native handler and the shared-code sender in `notebook-run.ts`, with its tests R5 and R5b); `TakeOwn`, `TakeMutes`, `TakeMirror` and the `takeMirror` op (native handler and `Device.mirror` in `take-session.ts`, with the tests that asserted the pushes); `ClipStore.isFresh`, `markStale` (and its one call in `ChoirApp`) and the `failed:` and `at:` parameters of `ClipStore.replace`. Sign-out still removes the files earlier builds left (`notebook-cache.md`, `takes-own.json`, `takes-muted.json`, `takes-copy-own.json`, `takes-copy-muted.json`). `TextureText.fetch` stays: `NotebookStore.writeTopicsNow` calls it.
 - `SegmentTracker` stays. `LiveAudio.swift:634` (`public let playback = SegmentTracker()`) holds it and the player calls `unitBegan`, `unitEnded`, `paused`, `cut` and `documentReplaced` on it; nothing outside the tests registers an observer, so its output reaches no production code, but the player tests read the player's behaviour through its events.
 - Ceiling after this pass: 43 files, 5,339 lines, 30 names.
+
+## Update 2026-11-23 (night, lane exact-rest): the 49 non-voice files, one by one, and the dead ones deleted
+
+The checker's count at the start of the night was 49 files, 5,844 lines, 27 names. The full list (not the ten largest), with who calls each, what shared code already replaces it, and whether it was dead. Lines are the checker's. "Other lane" means a file tonight's lanes own (`exact-flip-player`: run sheet, queue, player; `native-passkey`: sign-in; `onboard-consent`: first run and its prompts) and this lane did not touch.
+
+| Lines | File | Callers | What replaces it, or why it stays | Dead? |
+| --- | --- | --- | --- | --- |
+| 418 | `Choir/ChoirClient.swift` | the voice stages (`AutoradioDesk`, `ChoirDesk`, `ChoirSystem1`), `ChoirSignIn`, `ModelsEntry`, `AccountWipe`, and (until this night) `ChoirApp.loadStories`, `Notebook`, `TextureEditor`, `TextureReaderSource` | `api.ts` for every shared call; the voice turn's three POSTs (a stream the shared layer cannot read as it arrives) keep the native client | live (steps 2, 3) |
+| 381 | `TextureBody.swift` | `TextureEditor` only | to be ported (step 3) | live |
+| 306 | `RunSheet.swift`, 209 `RunSheetEntries.swift`, 288 `Choir/RadioProgramme.swift`, 260 `BarState.swift`, 80 `RadioBridge.swift`, 58 `PlayerControls.swift`, 33 `PlaybackSupport.swift`, 23 `Choir/StretchCandidates.swift`, 19 `QueueVoice.swift`, 22 `+Queue.swift`, 154 `+Bar.swift`, 168 `SegmentTracker.swift`, 280 `Choir/ChoirApp.swift` | the player, the deck's callers, the voice turn | `radio-runtime.ts`, `radio-bridge.ts`, `bar.ts` | other lane (`exact-flip-player`) |
+| 257 | `TextureEditor.swift`, 40 `+TextureEdit.swift` | `members-content.contract` (`textureEdit`, `textureFlush`, `textureEditInfo`), `Notebook`, `+Spine` (flush on leaving a page) | to be ported (step 3) | live |
+| 210 | `Choir/PodcastClips.swift`, 62 `+Podcasts.swift`, 24 `+Joins.swift`, 16 `Choir/DJQueueAdapter.swift` | `clipPlay`, `podcastNow`, `podcastPlayAudio`; the player's clip locator | `podcast.ts`, `clips.ts` (rows, choice, state); only the playhead and the clip's audio are native | live (step 4); `ClipStore.markMismatch`/`isMismatch` were dead: nothing ever set the flag |
+| 197 | `Notebook.swift`, 30 `+Notebook.swift` | `notebookState` and `obNotebookTopics` (the topics write) | `notebook.ts`, `notebook-run.ts` | live: the write only (step 3 and 5) |
+| 187 | `EditionSetup.swift` | `+Onboarding` (other lane), `EditionPicksMirror` for retrieval and the notebook | `edition-writer.ts`, `edition-picks.ts` | other lane for the onboarding half |
+| 181 | `+Platform.swift` | every module file (`Platform.open`, `flushNotes`) | the platform seam; `finishInBackground` and `BackgroundTaskBox` were dead (nothing called them) | live, 2 dead pieces deleted |
+| 148 | `SavedAnswerHolder.swift` | `ChoirApp` registers it as the holder stage | none: it speaks from the on-device model | voice (step 7) |
+| 146 | `Pages.swift` | `+Spine` `pageModel` source, `HeldPages`, `Notebook`, `+Podcasts` | `pages.ts` (open set); the page title and kind of an address | live (step 3) |
+| 143 | `AutoradioLab/modules/apple/ModelsEntry.swift` | Exact (the app's native module) | the one seam shared code calls natively | live |
+| 140 | `TextureReaderSource.swift` | `Notebook` (`TextureText`, `EditionLookup`), `+Reader` (`ReaderFollow`, `ReaderAim`) | `reader.ts` | live (step 3) |
+| 125 | `Choir/ChoirSignIn.swift`, 35 `Choir/CredentialReader.swift`, 35 `ProofKey.swift` | `ChoirApp`, `ModelsEntry`, `AutoradioModule` | `signin-attempt.ts`, `api.ts` | other lane (`native-passkey`) |
+| 124 | `Conversation.swift`, 44 `+Talk.swift` | the voice turn engine writes it | `conversation.ts` draws it | voice (step 7) |
+| 119 | `AccountWipe.swift` | `ChoirApp`, `ModelsEntry`, every native store | `account.ts` leads the wipe; native stores are wiped natively | live |
+| 119 | `+Reader.swift`, 93 `HeldPages.swift`, 23 `SourceLink.swift` | the web view, the voice's page text | `reader.ts` hands the page | the web view is a platform view; `HeldPages` is voice data |
+| 98 | `Choir/ChoirProgramme.swift` | `ChoirText` (what the speech engine speaks): `ChoirDesk`, `RadioProgramme`, `LabRuntime`, `LiveAudio` | the front-page half was this lane's step 2 | `ChoirFront`, `ChoirStory` deleted |
+| 98 | `+Spine.swift` | the page request, `pagesMirror` | `pages.ts` | live |
+| 87 | `+Takes.swift`, 38 `Choir/Takes.swift` | the recorder; `TakeResponds` reads the run sheet | `take-session.ts` | live (step 5) |
+| 72 | `Choir/MailSeal.swift` | `ModelsEntry` (`mailSeal`, `mailOpen`, `mailForget`) | `mail-seal.ts` calls it | step 6: the owner ruled it goes (2026-11-23) |
+| 67 | `HeldRest.swift` | `AccountWipe` only: nothing ever called `put` | none needed | dead, deleted |
+| 61 | `LaunchTimings.swift` | `ChoirApp`, `LabRuntime`, `LiveAudio` (a launch timing line in the log) | none | live: a log line of the voice's start |
+| 55 | `RadioPage.swift` | `Choir/Takes.swift` (`openAddress`, `builtOn`) | `radio-page.ts` | live until `TakeResponds` is handed over; `RadioPage.length` dead, deleted |
+| 34 | `+Mail.swift`, 30 `MailReading.swift` (voice list) | `mailOpenReview`, `mailRead` | `mail.ts` | live |
+| 19 | `+Settings.swift` | `settingsFacts` | `settings.ts` | live (the bundle's version and the clock) |
+| 18 | `EmbeddedPage.swift` | written by four callers; no reader | none | dead, deleted |
+
+Dead, deleted in this commit: `EmbeddedPage` (written by the in-app web view and the bar's URL branch, read by nothing), `HeldRest` (a store nothing wrote to; sign-out still removes the file an earlier build left, `local-entries.json`), `ClipStore.markMismatch`/`isMismatch`, `RadioPage.length`, `EditionCompletion.timedOutLine`, `Platform.finishInBackground` with `BackgroundTaskBox`.
