@@ -108,6 +108,11 @@ func authRoutes(handler *auth.Handler) []authRoute {
 		{"DELETE /auth/api-keys/{id}", act, handler.HandleRevokeAPIKey},
 		{"GET /auth/whoami", read, handler.HandleWhoami},
 
+		// The phone app's passkey ceremony, ending in a key (internal/auth/app_ceremony.go).
+		{"POST /auth/app/login/begin", begin, handler.HandleAppLoginBegin},
+		{"POST /auth/app/register/finish", ceremony, handler.HandleAppRegisterFinish},
+		{"POST /auth/app/login/finish", ceremony, handler.HandleAppLoginFinish},
+
 		// choir login: device authorization (docs/design/cli-agent-onboarding-2026-11-03.md).
 		// Token polls get their own class: slow_down paces each request.
 		{"POST /auth/device/begin", ceremony, handler.HandleDeviceBegin},

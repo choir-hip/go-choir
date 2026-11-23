@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+
+	"github.com/yusefmosiah/go-choir/internal/appids"
 )
 
 // appleAppSiteAssociationPath is where Apple fetches (through its CDN) the
@@ -11,26 +13,9 @@ import (
 // no authentication, must answer 200 with no redirect, and is served as JSON.
 const appleAppSiteAssociationPath = "/.well-known/apple-app-site-association"
 
-// appleWebCredentialsApps are the apps allowed to use choir.news passkeys
-// (webcredentials), each as <team>.<bundle id>, team S47GERGJZ3:
-//   - news.choir.autoradio: the App Store app; its App ID has
-//     Associated Domains enabled in the developer account.
-//   - news.choir.autoradio.lab.one: the development app on the same team. It
-//     matches only in a build signed with an explicit App ID that carries
-//     Associated Domains; a wildcard profile does not.
-//
-// The first development app, news.choir.autoradio.lab, is not listed: it is
-// signed by a free team (mobile/README.md), which cannot carry Associated
-// Domains, so no entry could ever match it. Apple caches this file for about
-// a day; remove an id here when its app is retired.
-var appleWebCredentialsApps = []string{
-	"S47GERGJZ3.news.choir.autoradio",
-	"S47GERGJZ3.news.choir.autoradio.lab.one",
-}
-
 // appleAppSiteAssociationBody is the served file, built once from the list.
 var appleAppSiteAssociationBody = func() []byte {
-	b, err := json.Marshal(map[string]any{"webcredentials": map[string]any{"apps": appleWebCredentialsApps}})
+	b, err := json.Marshal(map[string]any{"webcredentials": map[string]any{"apps": appids.WebCredentialApps()}})
 	if err != nil {
 		panic(err)
 	}

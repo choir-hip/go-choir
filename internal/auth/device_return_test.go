@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/appids"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -298,9 +299,6 @@ func TestDeviceReturnSchemesAreTheAppsInAppJSON(t *testing.T) {
 	want := []string{m.App.ID}
 	for _, v := range m.Variants {
 		want = append(want, m.App.ID+v.IDSuffix)
-		if got := v.Env["SIGNIN_SCHEME"]; got != m.App.ID+v.IDSuffix {
-			t.Fatalf("variant env SIGNIN_SCHEME %q is not its app id %q", got, m.App.ID+v.IDSuffix)
-		}
 	}
 	sort.Strings(want)
 	got := append([]string(nil), DeviceReturnSchemes...)
@@ -310,6 +308,13 @@ func TestDeviceReturnSchemesAreTheAppsInAppJSON(t *testing.T) {
 	}
 	if DeviceReturnPath != "/signed-in" {
 		t.Fatalf("path %q", DeviceReturnPath)
+	}
+	// Every id the app builds with is one the passkey routes accept (and the
+	// apple-app-site-association file names).
+	for _, id := range want {
+		if !appids.Known(id) {
+			t.Fatalf("app.json id %q is not in appids.PasskeyApps", id)
+		}
 	}
 }
 

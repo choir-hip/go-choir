@@ -75,6 +75,9 @@ type Handler struct {
 
 	// Device login (device_login.go): unknown-code misses per user.
 	device deviceState
+
+	// The phone app's sign-in challenges (app_ceremony.go), held in memory.
+	appChallenges appChallenges
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -855,12 +858,34 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
+	user, dbCred, ok := h.verifyRegistration(w, body)
+	if !ok {
+		return
+	}
 
+	// Issue cookie-backed auth state.
+	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
+	if err != nil {
+		log.Printf("[auth] operation=register_finish user_id=%s result=error step=issue_session error=%q", user.ID, err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
+		return
+	}
+
+	log.Printf("[auth] operation=register_finish user_id=%s credential_id=%s result=success step=session_issued", user.ID, dbCred.ID)
+	writeJSON(w, http.StatusOK, finishResponse{OK: true, User: userInfo})
+}
+
+// verifyRegistration checks a WebAuthn registration response against its
+// stored challenge, stores the credential and nudges the numbered address. It
+// answers the request itself and returns false on any refusal; on success it
+// returns the user and the stored credential and the caller issues whatever
+// the client gets (a cookie session on the web, a key for the phone app).
+func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User, *Credential, bool) {
 	// Extract the challenge from the WebAuthn response to look up the session.
 	challengeID, err := extractChallengeFromBody(body)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid webauthn response: " + err.Error()})
-		return
+		return nil, nil, false
 	}
 
 	// Look up the challenge state.
@@ -868,7 +893,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[auth] operation=register_finish result=error step=challenge_lookup error=%q", err)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge not found or already used"})
-		return
+		return nil, nil, false
 	}
 
 	log.Printf("[auth] operation=register_finish user_id=%s challenge_type=registration step=challenge_found", cs.UserID)
@@ -877,7 +902,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	if cs.Type != "registration" {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error reason=challenge_type_mismatch expected=registration got=%s", cs.UserID, cs.Type)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge type mismatch"})
-		return
+		return nil, nil, false
 	}
 
 	// Check challenge not expired.
@@ -885,7 +910,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 		_ = h.store.DeleteChallengeStateByID(cs.ID)
 		log.Printf("[auth] operation=register_finish user_id=%s result=error reason=challenge_expired", cs.UserID)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge expired"})
-		return
+		return nil, nil, false
 	}
 
 	// Delete the challenge immediately to prevent replay, regardless of whether
@@ -901,24 +926,24 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	// Deserialize the WebAuthn session data.
 	if cs.WebAuthnSessionData == "" {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge has no session data"})
-		return
+		return nil, nil, false
 	}
 
 	var sessionData webauthn.SessionData
 	if err := json.Unmarshal([]byte(cs.WebAuthnSessionData), &sessionData); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid session data"})
-		return
+		return nil, nil, false
 	}
 
 	// Look up the user.
 	user, err := h.store.GetUserByID(cs.UserID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "user not found"})
-		return
+		return nil, nil, false
 	}
 	// The cap again: ceremonies begun below it must not all finish above it.
 	if h.refuseIfRegistrationClosed(w, "register_finish", hashEmail(user.Email), user.ID, user.Email) {
-		return
+		return nil, nil, false
 	}
 
 	// Build a WebAuthn user adapter.
@@ -926,14 +951,14 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	waUser, err := newWebAuthnUser(user, creds)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "internal error"})
-		return
+		return nil, nil, false
 	}
 
 	// Parse the WebAuthn response from the buffered body.
 	parsedResponse, err := protocol.ParseCredentialCreationResponseBody(bytes.NewReader(body))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid registration response: " + err.Error()})
-		return
+		return nil, nil, false
 	}
 
 	// Verify the WebAuthn registration.
@@ -941,7 +966,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=verify_credential error=%q", user.ID, err)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "registration verification failed: " + err.Error()})
-		return
+		return nil, nil, false
 	}
 
 	// Store the verified credential in our persistence.
@@ -959,7 +984,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.CreateCredential(dbCred); err != nil {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=store_credential error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to store credential"})
-		return
+		return nil, nil, false
 	}
 
 	if passkeyPRFEnabled(parsedResponse.ClientExtensionResults) {
@@ -979,16 +1004,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	// failure is retried by the reconcile loop and never fails registration.
 	h.nudgeNumberReconcile()
 
-	// Issue cookie-backed auth state.
-	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
-	if err != nil {
-		log.Printf("[auth] operation=register_finish user_id=%s result=error step=issue_session error=%q", user.ID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
-		return
-	}
-
-	log.Printf("[auth] operation=register_finish user_id=%s credential_id=%s result=success step=session_issued", user.ID, dbCred.ID)
-	writeJSON(w, http.StatusOK, finishResponse{OK: true, User: userInfo})
+	return user, dbCred, true
 }
 
 // HandleLoginFinish handles POST /auth/login/finish.
