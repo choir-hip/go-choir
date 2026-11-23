@@ -36,6 +36,12 @@ wins unless this file carries a newer, explicitly promoted update.
   [docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md](docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md).
 - The roadmap is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md); the
   live station is [docs/ACTIVE.md](docs/ACTIVE.md).
+- **Read [docs/system-map.md](docs/system-map.md) first** (owner, 2026-11-22:
+  "each compaction you lose context on the complex system"). One page: the
+  parts, the numbers, what is not true that a reader would assume, where the
+  docs disagree, and what to read next. It is corrected in the same change
+  that makes one of its facts false. What changed lately:
+  [docs/changes.md](docs/changes.md).
 - **What exists today is [docs/current-architecture.md](docs/current-architecture.md)**
   (owner, 2026-11-16). Read it before saying what the system does; a name, a
   comment or a design doc is not evidence that a thing is built. A landing
