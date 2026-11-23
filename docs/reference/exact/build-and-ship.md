@@ -269,7 +269,7 @@ check `mobile/scripts/` on main before relying on one.
 |---|---|
 | `scripts/xe.sh` | runs a command with the Xcode toolchain outside the Nix shell |
 | `scripts/setup-exact.sh` | pinned Exact checkout at `mobile/.exact-src` (gitignored) and Bun 1.4.2 at `~/.bun-1.4.2`; `EXACT_REPO=<local clone>` avoids the network |
-| `scripts/exact.sh` | wraps `exact.mjs` in `env -i` with the pinned Bun: `exact.sh ios` (simulator), `exact.sh ios --device --phone <udid>`, `exact.sh agent ios ...` |
+| `scripts/exact.sh` | wraps `exact.mjs` in `env -i` with the pinned Bun: `exact.sh ios` (simulator), `exact.sh ios`, `AR_VARIANT=lab exact.sh ios --device --phone <udid>` (a phone build names its development app; `exact.sh` refuses `--variant`, `EXACT_VARIANT`, an archive that is not the store kind and an archive of a development app), `exact.sh agent ios ...` |
 | `scripts/sim-device.sh` | creates and boots a simulator of your own; export it as `EXACT_SIM` |
 | `scripts/build-lab.sh` | syncs the kit into the package, builds, installs on `$EXACT_SIM` (or the phone with `--device --phone`) |
 | `scripts/sync-exact-package.sh`, `gen-exact-interface.py` | copy kit sources into the Exact package, write `apple/exact.json` and the interface (per-lane fragments are the plan, design doc section 6) |
@@ -334,7 +334,7 @@ not author it.
   `DevMenuIOS.swift`: `enabled = ExactEnv.devMenu ?? true`) unless `EXACT_DEV_MENU=0` is in the build's environment, which stamps `ExactDevMenu` false in Info.plist.
   `EXACT_DEVELOPMENT` is a Swift condition Exact defines only for package modules of a non-production build (`compose.mjs:195`), not for the app module (`modules/apple`).
   `exact.sh` runs Exact under `env -i`, so it passes `EXACT_IDENTITY`, `EXACT_PROFILE`, `EXACT_VERSION`, `EXACT_BUILD_NUMBER`, `EXACT_NON_EXEMPT_ENCRYPTION` and `EXACT_DEV_MENU` on when set.
-  Exact refuses (`scripts/variants.mjs`) a variant whose installed name is another app's, selected or not: the production app and the lab apps need four different names.
+  Exact refuses (`scripts/variants.mjs`) a variant whose installed name is another app's, selected or not: the production app and the two lab apps need three different names.
 - TestFlight upload is Apple's tooling after the `.ipa`: `mobile/scripts/upload-store.sh` runs `xcrun altool --upload-app -f <ipa> --api-key --api-issuer --p8-file-path`
   (Xcode 27.1's `altool --help` lists these; the flags parse, a missing key file is refused before any network use; **an upload has never been run**; whether `-t ios` is needed: unknown).
 

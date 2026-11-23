@@ -9,6 +9,8 @@
 #     an unknown variant, an AR_APP_ID that is no declared id, an AR_APP_NAME that is not the declared name must each fail at once.
 #  3. the choice does not reach Exact: exact.sh runs Bun under `env -i`, so an exported variable is dropped unless it is passed on.
 #  4. a script keeps its own copy of the id: proof-common.sh (APP), sim-launch.sh (BUNDLE), make-profile.sh (the stub's bundle id).
+#  6. make-profile.sh with no choice would make a development profile for the production id (a store app never has one): it must refuse and make nothing;
+#     with a variant it makes the stub of that variant's id.
 #  5. the build changes the tracked app.json (the build queue refuses a dirty tree): after a build that succeeds, one that fails, one that
 #     is refused early (not the build tree) and one with an unknown variant, the file must be byte-identical.
 set -u
@@ -43,7 +45,7 @@ command -v shasum >/dev/null 2>&1 && ok "shasum is there" || no "shasum is missi
 [ -n "$SUM0" ] && ok "app.json has a checksum to compare against" || no "app.json checksum is empty: the byte checks would pass on two empty strings"
 run_build() { # run_build <command...>: over the stubs, the Bun log cleared first
   : > "$T/bin/bun.log"
-  env HOME="$T/home" BUN="$T/bin/bun" ALLOW_NO_MODELS=1 AUTORADIO_BUILD_TREE_FILE="$T/tree" "$@" > "$T/out.txt" 2>&1; rc=$?; [ -n "${TEST_DEBUG:-}" ] && cat "$T/out.txt" >&2; return $rc
+  env -u EXACT2 HOME="$T/home" BUN="$T/bin/bun" ALLOW_NO_MODELS=1 AUTORADIO_BUILD_TREE_FILE="$T/tree" "$@" > "$T/out.txt" 2>&1; rc=$?; [ -n "${TEST_DEBUG:-}" ] && cat "$T/out.txt" >&2; return $rc
 }
 ID=news.choir.autoradio.lab.one; LAB=news.choir.autoradio.lab; PROD=news.choir.autoradio
 
@@ -96,8 +98,12 @@ for v in "" lab lab-one; do
   printf '#!/bin/sh\ncp project.yml "%s/project.yml.seen"\n' "$T" > "$T/bin/xcodegen"; chmod +x "$T/bin/xcodegen"
   printf '#!/bin/sh\nexit 0\n' > "$M/scripts/xe.sh"
   rm -f "$T/project.yml.seen"
-  env AR_VARIANT="$v" HOME="$T/home" PATH="$T/bin:$PATH" "$M/scripts/make-profile.sh" >/dev/null 2>&1
-  eq "make-profile.sh PRODUCT_BUNDLE_IDENTIFIER (variant '$v')" "$(sed -n 's/.*PRODUCT_BUNDLE_IDENTIFIER: //p' "$T/project.yml.seen" 2>/dev/null)" "$want"
+  env AR_VARIANT="$v" HOME="$T/home" PATH="$T/bin:$PATH" "$M/scripts/make-profile.sh" >"$T/mp.out" 2>&1; mprc=$?
+  if [ -z "$v" ]; then
+    [ "$mprc" -ne 0 ] && [ ! -e "$T/project.yml.seen" ] && grep -q AR_VARIANT "$T/mp.out" && ok "make-profile.sh with no choice refuses and makes nothing" || no "make-profile.sh with no choice (rc $mprc, stub seen: $([ -e "$T/project.yml.seen" ] && echo yes || echo no))"
+  else
+    eq "make-profile.sh PRODUCT_BUNDLE_IDENTIFIER (variant '$v')" "$(sed -n 's/.*PRODUCT_BUNDLE_IDENTIFIER: //p' "$T/project.yml.seen" 2>/dev/null)" "$want"
+  fi
 done
 
 # 5. the tracked app.json is never touched

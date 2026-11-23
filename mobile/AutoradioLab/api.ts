@@ -45,7 +45,7 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
 // What today's sign-in (Swift, Choir/ChoirSignIn.swift and ChoirClient.swift) keeps, and what this reads in place:
 //   Keychain, service "news.choir.autoradio.choir", generic passwords, accounts "api-key" (the bearer key, a secret),
 //   "key-id" (not a secret; revokes the key at sign-out) and "computer-id" (not a secret; the listener's computer).
-// Exact's own `store` keeps items under the app's id ("news.choir.autoradio.lab"), so it cannot see these: the read goes
+// Exact's own `store` keeps items under the app's id ("news.choir.autoradio" in the production build, "news.choir.autoradio.lab" in the first development app), so it cannot see these: the read goes
 // through the one native call in modules/apple/ModelsEntry.swift, and nothing here writes the Keychain. The key is read for
 // each request, held in no state, and is in no log, no error and no page. A key another account signs in with is simply read next time.
 // Where the key goes: only to ORIGIN (a path that is not a plain absolute path on it is refused before the key is read).

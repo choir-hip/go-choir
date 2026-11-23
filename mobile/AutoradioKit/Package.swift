@@ -18,7 +18,7 @@ let package = Package(
         .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.3", traits: ["TTS"]),
     ],
     targets: [
-        .target(name: "AutoradioKit", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "AutoradioKit", swiftSettings: [.swiftLanguageMode(.v5), .define("EXACT_DEVELOPMENT", .when(configuration: .debug))]),
         .testTarget(name: "AutoradioKitTests", dependencies: ["AutoradioKit"], swiftSettings: [.swiftLanguageMode(.v5)]),
         // llama.cpp's official release xcframework (dynamic; macOS and iOS-device slices only). The Mac command links
         // it here; the Exact app links a static build of the same tag instead (scripts/build-llama-xcframework.sh).

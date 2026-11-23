@@ -18,6 +18,20 @@
 //  S6 the upload runs without an ipa, a key, an issuer or a key file, or for an ipa that is not the production app, or echoes the credentials.
 //  K1 the store kind ships the developer launch hooks (ModelProof and EmbedDeviceTrial launch arguments, the embedder fixture); the development kind loses them.
 //  E1 exact.sh drops the signing, version and build-kind variables that `env -i` removes.
+//  Review round 2 (the lane was sent back; each line is a test below):
+//  B1 exact.sh, the entry the README and the Exact reference name for a phone build, lets a development install of the production id through (device with no variant), an archive that
+//     is not the store kind, the store kind that is not an archive, an archive of a development app, and a phone build outside the build tree: the guard lived in build-lab.sh only.
+//  R1 a variant given as `--variant` or EXACT_VARIANT is dropped or half-applied (the sign-in scheme stays the production id).
+//  R2 a relative EXACT_PROFILE or AR_STORE_OUT_DIR is read from one directory by the checks and from another by Exact.
+//  R3 upload-store.sh's readback takes an ipa with the developer menu on, a non-archive kind, no export answer, development keys, or a development profile.
+//  R4 ALLOW_NO_MODELS makes a store archive with no voice models.
+//  R5 the server's list is not asserted to hold the production id here.
+//  R6 the build number does not rise past an override or inside a minute.
+//  R7 the key-file warning misses a group-only or other-only readable key.
+//  R8 make-profile.sh with no choice makes a development profile of the production id (see test-app-identity.sh).
+//  R9 docs still tell a builder to run a phone build with no variant, count four app names, or cite the retired variant `one`.
+//  R10 a store build keeps -AutoradioProofSilent (a developer default) because it is not behind the development condition.
+//  R11 check-store-signing.py refuses a valid App Store profile that omits get-task-allow, or one whose App ID prefix is not its team id (legacy prefix).
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, realpathSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
@@ -77,10 +91,10 @@ describe('the build identity (app-identity.sh over the real app.json)', () => {
       schemes.push(v.env.SIGNIN_SCHEME);
     }
     expect(schemes.sort()).toEqual([LAB, LABONE, PROD].sort());
-    // The Go list (internal/auth/device_login.go) is read, not changed here: this test says what it must hold once the production id is added to it.
+    // The Go list (internal/auth/device_login.go) is read here; the Go test TestDeviceReturnSchemesAreTheAppsInAppJSON checks it from the other side.
     const go = readFileSync(join(MOBILE, '..', 'internal', 'auth', 'device_login.go'), 'utf8');
     const listed = /var DeviceReturnSchemes = \[\]string\{([^}]*)\}/.exec(go)![1].match(/"[^"]+"/g)!.map((s) => s.slice(1, -1));
-    for (const s of [LAB, LABONE]) expect(listed).toContain(s);
+    for (const s of [PROD, LAB, LABONE]) expect(listed).toContain(s);                 // R5: the production id too, or the production app's sign-in sheet is never sent back
   });
   test('I5 no two apps share an installed name (Exact refuses a variant named as another is, selected or not)', () => {
     const files = [APP_JSON.app.name, ...Object.values(APP_JSON.variants).map((v: any) => v.name)].map((n: string) => n.toLowerCase());
@@ -161,15 +175,17 @@ exit 1
 const CERT = Buffer.from('not a real certificate: the test only needs its hash');
 const SHA = createHash('sha1').update(CERT).digest('hex').toUpperCase();
 const OTHER_SHA = createHash('sha1').update('another').digest('hex').toUpperCase();
-function writeSigning(tr: Tree, over: { id?: string; teamPrefix?: string; taskAllow?: boolean; devices?: boolean; all?: boolean; expires?: Date; cert?: Buffer; identityLine?: string } = {}) {
+function writeSigning(tr: Tree, over: { id?: string; teamPrefix?: string; prefix?: string; idPrefix?: string; noPrefixKey?: boolean; noTaskAllow?: boolean; taskAllow?: boolean; devices?: boolean; all?: boolean; expires?: Date; cert?: Buffer; identityLine?: string } = {}) {
   const team = over.teamPrefix ?? 'ABCDE12345';
   const plist = (v: string) => v;
+  const prefix = over.prefix ?? team, idPrefix = over.idPrefix ?? prefix;            // ApplicationIdentifierPrefix is the team id except for a legacy App ID
+  const taskAllow = over.noTaskAllow ? '' : `<key>get-task-allow</key>${over.taskAllow ? '<true/>' : '<false/>'}`;
   const xml = `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>
-<key>Name</key><string>test store profile</string><key>TeamIdentifier</key><array><string>${team}</string></array>
+<key>Name</key><string>test store profile</string><key>TeamIdentifier</key><array><string>${team}</string></array>${over.noPrefixKey ? '' : `<key>ApplicationIdentifierPrefix</key><array><string>${prefix}</string></array>`}
 <key>ExpirationDate</key><date>${(over.expires ?? new Date(Date.now() + 86400e3 * 300)).toISOString().replace(/\.\d+Z$/, 'Z')}</date>
 ${over.devices ? '<key>ProvisionedDevices</key><array><string>0000</string></array>' : ''}${over.all ? '<key>ProvisionsAllDevices</key><true/>' : ''}
 <key>DeveloperCertificates</key><array><data>${(over.cert ?? CERT).toString('base64')}</data></array>
-<key>Entitlements</key><dict><key>application-identifier</key><string>${team}.${over.id ?? PROD}</string><key>get-task-allow</key>${over.taskAllow ? '<true/>' : '<false/>'}
+<key>Entitlements</key><dict><key>application-identifier</key><string>${idPrefix}.${over.id ?? PROD}</string>${taskAllow}
 <key>com.apple.developer.team-identifier</key><string>${team}</string></dict></dict></plist>`;
   writeFileSync(join(tr.bin, 'profile.plist'), plist(xml));
   writeFileSync(join(tr.bin, 'identities'), over.identityLine ?? `  1) ${SHA} "Apple Distribution: Someone (${team})"\n     1 valid identities found\n`);
@@ -177,7 +193,11 @@ ${over.devices ? '<key>ProvisionedDevices</key><array><string>0000</string></arr
   writeFileSync(profile, 'cms bytes the stub ignores');
   return profile;
 }
-const archive = (tr: Tree, extra: Record<string, string> = {}) => run(['/bin/sh', join(tr.m, 'scripts', 'archive-store.sh')], tr.env(extra));
+const archive = (tr: Tree, extra: Record<string, string> = {}, cwd?: string) => {
+  const e = tr.env(extra);
+  if (!('ALLOW_NO_MODELS' in extra)) delete e.ALLOW_NO_MODELS;                       // a store archive never runs without the model libraries (R4); the other scripts' tests do
+  return run(['/bin/sh', join(tr.m, 'scripts', 'archive-store.sh')], e, cwd);
+};
 
 describe('building for a phone and the store kind (build-lab.sh)', () => {
   test('S1 a phone build must name which development app; the store kind is for archives only, and an archive is the store kind', () => {
@@ -252,6 +272,28 @@ describe('archive-store.sh refuses plainly before it builds anything', () => {
   });
 });
 
+describe('check-store-signing.py reads the profile as Apple writes it', () => {
+  test('R11 a valid App Store profile that omits get-task-allow, or carries a legacy App ID prefix, is accepted; a prefix that is not the profile\'s own is refused', () => {
+    const tr = tree();
+    try {
+      const ok = (over: Parameters<typeof writeSigning>[1], what: string) => {
+        const profile = writeSigning(tr, over);
+        const r = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
+        expect(r.code, what + ': ' + r.err).toBe(0);
+      };
+      ok({ noTaskAllow: true }, 'no get-task-allow');
+      ok({ prefix: 'LEGACY9999' }, 'legacy prefix, the profile\'s own');
+      ok({ noPrefixKey: true }, 'no ApplicationIdentifierPrefix key: the team id');
+      const profile = writeSigning(tr, { prefix: 'LEGACY9999', idPrefix: 'ABCDE12345' });   // application-identifier does not start with the profile's own prefix
+      const r = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
+      expect(r.code).not.toBe(0); expect(r.err).toContain(PROD);
+      const t = writeSigning(tr, { taskAllow: true });                                       // true stays refused
+      const rt = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: t });
+      expect(rt.code).not.toBe(0); expect(rt.err).toContain('App Store');
+    } finally { tr.cleanup(); }
+  });
+});
+
 describe('archive-store.sh builds and reads the ipa back', () => {
   test('S3 Exact is given the version, a rising build number, the export answer, the developer menu off, and the signing pair; the ipa is read back', () => {
     const tr = tree();
@@ -268,7 +310,7 @@ describe('archive-store.sh builds and reads the ipa back', () => {
       expect(seen).toContain('EXACT_NON_EXEMPT_ENCRYPTION=[false]');
       expect(seen).toContain('EXACT_DEV_MENU=[0]');
       expect(seen).toContain(`EXACT_IDENTITY=[${SHA}]`);
-      expect(seen).toContain(`EXACT_PROFILE=[${profile}]`);
+      expect(seen).toContain(`EXACT_PROFILE=[${realpathSync(profile)}]`);          // R2: absolute and canonical
       const build = /EXACT_BUILD_NUMBER=\[(\d+)\]/.exec(seen)![1];
       expect(r.out).toContain('Autoradio-1-1.0-' + build + '.ipa');
       expect(r.out).toContain(`bundle id: ${PROD}`);
@@ -280,7 +322,7 @@ describe('archive-store.sh builds and reads the ipa back', () => {
       expect(readdirSync(join(tr.t, 'out')).some((f) => f.endsWith('.ipa'))).toBe(true);
     } finally { tr.cleanup(); }
   });
-  test('S3 the build number rises with time and a number can be given; two archives of one commit are two numbers', () => {
+  test('R6 the build number starts at the minute count and rises with every run, also inside one minute and after an override', () => {
     const tr = tree();
     try {
       const profile = writeSigning(tr);
@@ -290,10 +332,41 @@ describe('archive-store.sh builds and reads the ipa back', () => {
         return Number(/build number: (\d+)/.exec(r.out)![1]);
       };
       const a = num();
-      expect(num({ AR_BUILD_NUMBER: String(a + 5) })).toBe(a + 5);
       const nowMinutes = Math.floor((Date.now() - Date.UTC(2026, 0, 1)) / 60000);
-      expect(a).toBeGreaterThan(nowMinutes - 3); expect(a).toBeLessThan(nowMinutes + 3);   // minutes since 2026-01-01 UTC: a later run is a higher number
+      expect(a).toBeGreaterThan(nowMinutes - 3); expect(a).toBeLessThan(nowMinutes + 3);   // minutes since 2026-01-01 UTC
       expect(String(a).length).toBeLessThanOrEqual(9);
+      const b = num();                                                                      // a second default run, almost certainly in the same minute
+      expect(b).toBeGreaterThan(a);
+      const given = b + 5_000_000;                                                          // an override far above the clock (what App Store Connect might hold)
+      expect(num({ AR_BUILD_NUMBER: String(given) })).toBe(given);
+      expect(num()).toBeGreaterThan(given);                                                 // the next default run does not fall below the uploaded one
+      expect(num({ AR_BUILD_NUMBER: '7' })).toBe(7);                                        // a low override is the caller's own word ...
+      expect(num()).toBeGreaterThan(given + 1);                                             // ... and does not lower the record
+      writeFileSync(join(tr.t, 'out', 'last-build'), 'garbage\n');
+      const bad = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
+      expect(bad.code).not.toBe(0); expect(bad.err).toContain('last-build');
+    } finally { tr.cleanup(); }
+  });
+  test('R2 a relative EXACT_PROFILE and a relative AR_STORE_OUT_DIR mean the directory the script was started in, for the checks and for Exact alike', () => {
+    const tr = tree();
+    try {
+      const profile = writeSigning(tr);
+      const here = realpathSync(tr.t);
+      const r = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: 'store.mobileprovision', AR_STORE_OUT_DIR: 'relout' }, tr.t);
+      expect(r.code, r.err + r.out).toBe(0);
+      expect(readFileSync(join(tr.bin, 'bun.last'), 'utf8')).toContain(`EXACT_PROFILE=[${here}/store.mobileprovision]`);
+      expect(r.out).toContain(`ipa: ${here}/relout/`);
+      expect(readdirSync(join(tr.t, 'relout')).some((f) => f.endsWith('.ipa'))).toBe(true);
+      expect(profile).toContain('store.mobileprovision');
+    } finally { tr.cleanup(); }
+  });
+  test('R4 ALLOW_NO_MODELS makes no store archive', () => {
+    const tr = tree();
+    try {
+      const profile = writeSigning(tr);
+      const r = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile, ALLOW_NO_MODELS: '1' });
+      expect(r.code).not.toBe(0); expect(r.err).toContain('archive-store:'); expect(r.err).toContain('ALLOW_NO_MODELS');
+      expect(existsSync(join(tr.bin, 'bun.last'))).toBe(false);
     } finally { tr.cleanup(); }
   });
   test('S4 an ipa that is not what was asked for fails the script', () => {
@@ -312,9 +385,13 @@ describe('archive-store.sh builds and reads the ipa back', () => {
 });
 
 describe('upload-store.sh', () => {
-  const ipaFor = (tr: Tree, id = PROD) => {
+  // An ipa as archive-store.sh leaves it: archive kind, developer menu off, export answer false, a profile embedded. `info` overrides or (undefined) removes a key.
+  const ipaFor = (tr: Tree, id = PROD, info: Record<string, unknown> = {}) => {
     const p = join(tr.t, 'x.ipa');
-    const r = run(['/usr/bin/python3', '-I', '-c', 'import plistlib,sys,zipfile\nz=zipfile.ZipFile(sys.argv[1],"w")\nz.writestr("Payload/A.app/Info.plist",plistlib.dumps({"CFBundleIdentifier":sys.argv[2],"CFBundleShortVersionString":"1.0","CFBundleVersion":"7"}))\nz.writestr("Payload/A.app/embedded.mobileprovision",b"x")\nz.close()', p, id], BASE);
+    const base: Record<string, unknown> = { CFBundleIdentifier: id, CFBundleShortVersionString: '1.0', CFBundleVersion: '7', ExactBuildKind: 'archive', ExactDevMenu: false, ITSAppUsesNonExemptEncryption: false };
+    const merged = { ...base, ...info };
+    for (const k of Object.keys(merged)) if (merged[k] === null) delete merged[k];
+    const r = run(['/usr/bin/python3', '-I', '-c', 'import json,plistlib,sys,zipfile\nz=zipfile.ZipFile(sys.argv[1],"w")\nz.writestr("Payload/A.app/Info.plist",plistlib.dumps(json.loads(sys.argv[2])))\nz.writestr("Payload/A.app/embedded.mobileprovision",b"x")\nz.close()', p, JSON.stringify(merged)], BASE);
     expect(r.code, r.err).toBe(0);
     return p;
   };
@@ -323,6 +400,7 @@ describe('upload-store.sh', () => {
   test('S6 it needs an ipa that is the production app, a key id, an issuer and a key file, and never echoes them', () => {
     const tr = tree();
     try {
+      writeSigning(tr);                                                                  // the profile the stub `security cms -D` decodes out of the ipa
       const keyfile = join(tr.t, 'AuthKey.p8'); writeFileSync(keyfile, 'private key bytes'); chmodSync(keyfile, 0o600);
       const good = { ASC_KEY_ID: KEY, ASC_ISSUER_ID: ISS, ASC_KEY_FILE: keyfile };
       const ipa = ipaFor(tr);
@@ -347,22 +425,65 @@ describe('upload-store.sh', () => {
       expect(f.code).not.toBe(0); expect(f.err).toContain('altool'); for (const secret of [KEY, ISS]) expect(f.out + f.err).not.toContain(secret);
     } finally { tr.cleanup(); }
   });
+  test('R3 the readback refuses an ipa that is not what archive-store.sh makes, whatever made it', () => {
+    const tr = tree();
+    try {
+      const keyfile = join(tr.t, 'AuthKey.p8'); writeFileSync(keyfile, 'private key bytes'); chmodSync(keyfile, 0o600);
+      const good = { ASC_KEY_ID: KEY, ASC_ISSUER_ID: ISS, ASC_KEY_FILE: keyfile };
+      writeSigning(tr);
+      const refused = (ipa: string, words: string, what: string) => {
+        const r = upload(tr, [ipa], good);
+        expect(r.code, what).not.toBe(0); expect(r.err, what).toContain('upload-store:'); expect(r.err, what).toContain(words);
+        expect(existsSync(join(tr.t, 'xe.log')), what + ': altool must not run').toBe(false);
+      };
+      refused(ipaFor(tr, PROD, { ExactDevMenu: null }), 'developer menu', 'menu not stamped');
+      refused(ipaFor(tr, PROD, { ExactDevMenu: true }), 'developer menu', 'menu on');
+      refused(ipaFor(tr, PROD, { ExactBuildKind: 'debug' }), 'ExactBuildKind', 'debug kind');
+      refused(ipaFor(tr, PROD, { ITSAppUsesNonExemptEncryption: null }), 'ITSAppUsesNonExemptEncryption', 'no export answer');
+      refused(ipaFor(tr, PROD, { ITSAppUsesNonExemptEncryption: true }), 'ITSAppUsesNonExemptEncryption', 'export answer true');
+      refused(ipaFor(tr, PROD, { ExactDevelopmentURLScheme: 'x' }), 'ExactDevelopment', 'development key');
+      refused(ipaFor(tr, PROD, { CFBundleShortVersionString: '' }), 'version', 'no version');
+      refused(ipaFor(tr, PROD, { CFBundleVersion: null }), 'build number', 'no build number');
+      writeSigning(tr, { taskAllow: true });
+      refused(ipaFor(tr), 'App Store', 'a development profile embedded');
+      writeSigning(tr, { devices: true });
+      refused(ipaFor(tr), 'App Store', 'an ad hoc profile embedded');
+      writeSigning(tr, { id: LAB });
+      refused(ipaFor(tr), PROD, 'a profile for another id');
+      writeSigning(tr, { noTaskAllow: true });                                         // Apple's own App Store profiles may omit get-task-allow
+      const r = upload(tr, [ipaFor(tr)], good);
+      expect(r.code, r.err).toBe(0);
+    } finally { tr.cleanup(); }
+  });
+  test('R7 a key file readable by group or others is warned about, whichever of the two it is; mode 600 and 400 are not', () => {
+    const tr = tree();
+    try {
+      writeSigning(tr);
+      const ipa = ipaFor(tr);
+      for (const [mode, warned] of [[0o600, false], [0o400, false], [0o640, true], [0o604, true], [0o644, true], [0o660, true]] as [number, boolean][]) {
+        const keyfile = join(tr.t, 'AuthKey.p8'); rmSync(keyfile, { force: true }); writeFileSync(keyfile, 'private key bytes'); chmodSync(keyfile, mode);
+        const r = upload(tr, [ipa], { ASC_KEY_ID: KEY, ASC_ISSUER_ID: ISS, ASC_KEY_FILE: keyfile });
+        expect(r.code, r.err).toBe(0);
+        expect(r.err.includes('readable by others'), mode.toString(8)).toBe(warned);
+      }
+    } finally { tr.cleanup(); }
+  });
 });
 
 describe('the store kind of the staged Swift (sync-exact-package.sh)', () => {
   // A tree with the real model sources and a stub kit; the xcframework directory exists so the models are staged.
-  function staged(kind: string | null) {
+  function staged(kind: string | null, extra: Record<string, string> = {}, models = true) {
     const t = mkdtempSync(join(tmpdir(), 'store-kind-'));
     const m = join(t, 'mobile');
     mkdirSync(join(m, 'AutoradioKit', 'Sources', 'AutoradioKit'), { recursive: true });
     mkdirSync(join(m, 'AutoradioLab', 'modules', 'apple'), { recursive: true });
     mkdirSync(join(m, 'exact-package', 'apple'), { recursive: true });
-    mkdirSync(join(m, '.deps', 'xcframeworks', 'FluidAudio.xcframework'), { recursive: true });
+    if (models) mkdirSync(join(m, '.deps', 'xcframeworks', 'FluidAudio.xcframework'), { recursive: true });
     cpSync(join(MOBILE, 'scripts'), join(m, 'scripts'), { recursive: true });
     cpSync(join(MOBILE, 'AutoradioKit', 'Sources', 'AutoradioModels'), join(m, 'AutoradioKit', 'Sources', 'AutoradioModels'), { recursive: true });
     writeFileSync(join(m, 'AutoradioKit', 'Sources', 'AutoradioKit', 'Kit.swift'), 'public struct Kit {}\n');
     writeFileSync(join(m, 'scripts', 'gen-build-info.sh'), '#!/bin/sh\nexit 0\n');
-    const r = run(['/bin/sh', join(m, 'scripts', 'sync-exact-package.sh')], { ...BASE, ...(kind ? { AR_BUILD_KIND: kind } : {}) });
+    const r = run(['/bin/sh', join(m, 'scripts', 'sync-exact-package.sh')], { ...BASE, ...(kind ? { AR_BUILD_KIND: kind } : {}), ...extra });
     const files = readdirSync(join(m, 'AutoradioLab', 'modules', 'apple')).filter((f) => f.endsWith('.swift'));
     const text = files.map((f) => readFileSync(join(m, 'AutoradioLab', 'modules', 'apple', f), 'utf8')).join('\n');
     return { r, files, text, done: () => rmSync(t, { recursive: true, force: true }) };
@@ -383,6 +504,10 @@ describe('the store kind of the staged Swift (sync-exact-package.sh)', () => {
       expect(store.text).not.toContain('EmbedTrialFixture');
       expect(store.text).toContain('ModelHub.register(into: r)');
     } finally { store.done(); }
+    for (const withModels of [true, false]) {                                           // R4: the store kind never takes ALLOW_NO_MODELS, with or without the libraries
+      const nm = staged('store', { ALLOW_NO_MODELS: '1' }, withModels);
+      try { expect(nm.r.code).not.toBe(0); expect(nm.r.err).toContain('ALLOW_NO_MODELS'); } finally { nm.done(); }
+    }
     const bad = staged('weird');
     try { expect(bad.r.code).not.toBe(0); expect(bad.r.err).toContain('AR_BUILD_KIND'); } finally { bad.done(); }
   });
@@ -392,7 +517,7 @@ describe('exact.sh hands Exact what env -i would drop', () => {
   test('E1 signing, version, build number, export answer and developer menu reach Exact; nothing else of the caller\'s does', () => {
     const tr = tree();
     try {
-      const r = run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), 'ios', '--device', '--archive', join(tr.t, 'o.ipa')], tr.env({ EXACT_IDENTITY: SHA, EXACT_PROFILE: '/p', EXACT_VERSION: '1.0', EXACT_BUILD_NUMBER: '42',
+      const r = run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), 'ios', '--device', '--archive', join(tr.t, 'o.ipa')], tr.env({ AR_BUILD_KIND: 'store', EXACT_IDENTITY: SHA, EXACT_PROFILE: '/p', EXACT_VERSION: '1.0', EXACT_BUILD_NUMBER: '42',
         EXACT_NON_EXEMPT_ENCRYPTION: 'false', EXACT_DEV_MENU: '0', SOME_OTHER: 'x' }));
       expect(r.code, r.err).toBe(0);
       const seen = readFileSync(join(tr.bin, 'bun.last'), 'utf8');
@@ -402,5 +527,90 @@ describe('exact.sh hands Exact what env -i would drop', () => {
       const s2 = readFileSync(join(tr.bin, 'bun.last'), 'utf8');
       for (const v of ['EXACT_IDENTITY', 'EXACT_PROFILE', 'EXACT_VERSION', 'EXACT_BUILD_NUMBER', 'EXACT_NON_EXEMPT_ENCRYPTION', 'EXACT_DEV_MENU']) expect(s2).toContain(`${v}=[unset]`);   // unset stays unset: a development build is as it was
     } finally { tr.cleanup(); }
+  });
+});
+
+describe('exact.sh is the one guard for a phone build (B1, R1)', () => {
+  const ex = (tr: Tree, args: string[], extra: Record<string, string> = {}) => run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), ...args], tr.env(extra));
+  const ran = (tr: Tree) => existsSync(join(tr.bin, 'bun.last'));
+  const refused = (tr: Tree, args: string[], extra: Record<string, string>, words: string) => {
+    const r = ex(tr, args, extra);
+    expect(r.code, args.join(' ') + ' ' + JSON.stringify(extra)).not.toBe(0);
+    expect(r.err).toContain('exact.sh:'); expect(r.err).toContain(words);
+    expect(ran(tr), 'Exact must not have run').toBe(false);
+  };
+  test('B1 a device build must name its development app; an archive is the store kind, the store kind is an archive, and an archive is the production app', () => {
+    const tr = tree();
+    try {
+      refused(tr, ['ios', '--device', '--phone', 'X'], {}, 'AR_VARIANT');
+      refused(tr, ['agent', 'ios', '--device'], {}, 'AR_VARIANT');
+      refused(tr, ['ios', '--device', '--archive', join(tr.t, 'o.ipa')], {}, 'AR_BUILD_KIND=store');
+      refused(tr, ['ios', '--device', '--archive', join(tr.t, 'o.ipa')], { AR_BUILD_KIND: 'development' }, 'AR_BUILD_KIND=store');
+      refused(tr, ['ios'], { AR_BUILD_KIND: 'store' }, '--archive');
+      refused(tr, ['ios', '--device', '--phone', 'X'], { AR_BUILD_KIND: 'store', AR_VARIANT: 'lab' }, '--archive');
+      refused(tr, ['ios'], { AR_BUILD_KIND: 'weird' }, 'AR_BUILD_KIND');
+      refused(tr, ['ios', '--device', '--archive', join(tr.t, 'o.ipa')], { AR_BUILD_KIND: 'store', AR_VARIANT: 'lab' }, 'production');
+      for (const [args, extra] of [[['ios', '--device', '--phone', 'X'], { AR_VARIANT: 'lab' }], [['agent', 'ios', '--device'], { AR_VARIANT: 'lab-one' }], [['ios'], {}], [['contract', 'build'], {}],
+        [['ios', '--device', '--archive', join(tr.t, 'o.ipa')], { AR_BUILD_KIND: 'store' }]] as [string[], Record<string, string>][]) {
+        rmSync(join(tr.bin, 'bun.last'), { force: true });
+        const r = ex(tr, args, extra);
+        expect(r.code, args.join(' ') + r.err).toBe(0); expect(ran(tr)).toBe(true);
+      }
+    } finally { tr.cleanup(); }
+  });
+  test('B1 a phone build or an archive outside the build tree is refused; a simulator build is not', () => {
+    const tr = tree();
+    try {
+      writeFileSync(join(tr.t, 'elsewhere'), `${tr.t}\n`);
+      const away = { AUTORADIO_BUILD_TREE_FILE: join(tr.t, 'elsewhere') };
+      refused(tr, ['ios', '--device', '--phone', 'X'], { ...away, AR_VARIANT: 'lab' }, 'build tree');
+      refused(tr, ['ios', '--device', '--archive', join(tr.t, 'o.ipa')], { ...away, AR_BUILD_KIND: 'store' }, 'build tree');
+      expect(ex(tr, ['ios'], away).code).toBe(0);
+    } finally { tr.cleanup(); }
+  });
+  test('R1 a variant given as --variant or EXACT_VARIANT is refused, naming AR_VARIANT, instead of being half applied', () => {
+    const tr = tree();
+    try {
+      refused(tr, ['--variant', 'lab-one', 'ios'], {}, 'AR_VARIANT');
+      refused(tr, ['ios', '--variant=lab-one'], {}, 'AR_VARIANT');
+      refused(tr, ['ios'], { EXACT_VARIANT: 'lab-one' }, 'AR_VARIANT');
+      const r = ex(tr, ['ios'], { EXACT_VARIANT: '' });                                    // an empty value names nothing
+      expect(r.code, r.err).toBe(0);
+      const v = ex(tr, ['ios'], { AR_VARIANT: 'lab-one' });
+      expect(v.code).toBe(0);
+      const seen = readFileSync(join(tr.bin, 'bun.last'), 'utf8');
+      expect(seen).toContain('EXACT_VARIANT=[lab-one]'); expect(seen).toContain(`SIGNIN_SCHEME=[${LABONE}]`);   // the variant and its scheme travel together
+    } finally { tr.cleanup(); }
+  });
+});
+
+describe('developer-only surfaces stay out of a store build by build kind (R10)', () => {
+  test('R10 -AutoradioProofSilent is behind EXACT_DEVELOPMENT, which Exact does not define for an archive; the Mac package build keeps it in debug', () => {
+    const src = readFileSync(join(MOBILE, 'AutoradioKit', 'Sources', 'AutoradioKit', 'LiveAudio.swift'), 'utf8');
+    const lines = src.split('\n');
+    const at = lines.findIndex((l) => l.includes('forKey: "AutoradioProofSilent"'));
+    expect(at).toBeGreaterThan(0);
+    let open = -1;
+    for (let i = at; i >= 0; i--) { if (/^\s*#(if|endif)\b/.test(lines[i])) { open = i; break; } }
+    expect(lines[open]?.trim()).toBe('#if EXACT_DEVELOPMENT');                           // the nearest conditional above is the development one ...
+    let close = -1;
+    for (let i = at; i < lines.length; i++) { if (/^\s*#(if|endif)\b/.test(lines[i])) { close = i; break; } }
+    expect(lines[close]?.trim()).toBe('#endif');                                        // ... and it closes right after the line
+    const pkg = readFileSync(join(MOBILE, 'AutoradioKit', 'Package.swift'), 'utf8');
+    expect(pkg).toMatch(/\.define\("EXACT_DEVELOPMENT", \.when\(configuration: \.debug\)\)/);
+  });
+});
+
+describe('the docs say what the scripts do (R9)', () => {
+  const read = (...p: string[]) => readFileSync(join(MOBILE, '..', ...p), 'utf8');
+  test('R9 no doc line runs a phone build through exact.sh or build-lab.sh with no variant, counts four names, or cites the retired variant', () => {
+    for (const f of [['mobile', 'README.md'], ['docs', 'reference', 'exact', 'build-and-ship.md'], ['docs', 'reference', 'exact', 'auth-session.md']]) {
+      for (const [n, line] of read(...f).split('\n').entries()) {
+        const where = `${f.join('/')}:${n + 1}`;
+        if (/(exact|build-lab)\.sh[^|\n]*--device(?![^\n]*--archive)/.test(line)) expect(line, where + ' names no variant').toMatch(/AR_VARIANT|AR_APP_ID/);
+        expect(line, where).not.toContain('four different names');
+        expect(line, where).not.toMatch(/--variant one\b/);
+      }
+    }
   });
 });

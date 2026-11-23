@@ -33,10 +33,13 @@ try:
 except Exception:
     no("EXACT_PROFILE decoded to something that is not a profile.")
 team = (p.get("TeamIdentifier") or [""])[0]
+# The App ID prefix is the profile's own ApplicationIdentifierPrefix (the team id, except for a legacy App ID made before 2020); the team id stands in only where the key is absent.
+prefix = (p.get("ApplicationIdentifierPrefix") or [team])[0]
 ents = p.get("Entitlements", {})
-if team == "" or ents.get("application-identifier") != team + "." + bundle:
+if team == "" or prefix == "" or ents.get("application-identifier") != prefix + "." + bundle:
     no("EXACT_PROFILE is not for exactly " + bundle + " (a wildcard or another id cannot be uploaded; make an App Store profile for that explicit id).")
-if ents.get("get-task-allow") is not False or "ProvisionedDevices" in p or p.get("ProvisionsAllDevices"):
+# An App Store profile may write get-task-allow false or leave the key out; true is a development profile.
+if ents.get("get-task-allow") is True or "ProvisionedDevices" in p or p.get("ProvisionsAllDevices"):
     no("EXACT_PROFILE is not an App Store profile (a development, ad hoc or enterprise profile cannot be uploaded to App Store Connect).")
 exp = p.get("ExpirationDate")
 if not isinstance(exp, datetime.datetime) or exp.replace(tzinfo=datetime.timezone.utc) <= datetime.datetime.now(datetime.timezone.utc):

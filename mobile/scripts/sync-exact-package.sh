@@ -13,6 +13,7 @@
 set -eu
 KIND="${AR_BUILD_KIND:-development}"
 case "$KIND" in development|store) ;; *) echo "sync-exact-package: AR_BUILD_KIND must be development or store, not $KIND" >&2; exit 1 ;; esac
+[ "$KIND" != store ] || [ -z "${ALLOW_NO_MODELS:-}" ] || { echo "sync-exact-package: the store kind never builds without the model libraries: unset ALLOW_NO_MODELS (a build with no voice models is a defect, not a store build)" >&2; exit 1; }
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 KIT="$HERE/AutoradioKit/Sources/AutoradioKit"
 MODELS="$HERE/AutoradioKit/Sources/AutoradioModels"

@@ -10,10 +10,11 @@
 # with EXACT_VERSION (app.json "version"), EXACT_BUILD_NUMBER, EXACT_NON_EXEMPT_ENCRYPTION=false (HTTPS and the system's encryption only; Exact writes ITSAppUsesNonExemptEncryption)
 # and EXACT_DEV_MENU=0 (Exact's iOS developer menu, four fingers, is ON in a release build unless the build says off: DevMenuIOS.swift). Last, it reads the .ipa back and prints its
 # path, bundle id, version and build number, and fails if they are not what was asked for.
-# The BUILD NUMBER (CFBundleVersion) is whole minutes since 2026-01-01 00:00 UTC: it rises with every run, so a re-upload of the same commit is a higher number (App Store
-# Connect takes a build number once per version), and it has at most 9 digits for centuries. AR_BUILD_NUMBER=<n> sets it (a whole number, 1 to 999999999), e.g. when App Store
-# Connect's next number is wanted. Two runs inside one minute would collide: the build lock makes that impossible.
-# The .ipa goes to $AR_STORE_OUT_DIR (default ~/.cache/autoradio-store), outside the repo.
+# The BUILD NUMBER (CFBundleVersion) is whole minutes since 2026-01-01 00:00 UTC, or one more than the last number this script gave if that is higher ($OUTDIR/last-build): it
+# rises with every run, so a re-upload of the same commit is a higher number (App Store Connect takes a build number once per version), and it has at most 9 digits for
+# centuries. AR_BUILD_NUMBER=<n> sets it (a whole number, 1 to 999999999) and raises the record; later default numbers stay above it. The build lock serializes runs.
+# The .ipa goes to $AR_STORE_OUT_DIR (default ~/.cache/autoradio-store), outside the repo. EXACT_PROFILE and AR_STORE_OUT_DIR may be relative to where this is run; they are made absolute.
+# ALLOW_NO_MODELS is refused (a store archive always carries the voice models).
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 PATH="$PATH:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -27,11 +28,24 @@ VERSION="$("$HERE/scripts/app-identity.sh" version)" || exit 1
 printf '%s' "$EXACT_IDENTITY" | grep -Eq '^[0-9A-Fa-f]{40}$' || no "EXACT_IDENTITY must be the identity's SHA-1: 40 hex digits."
 [ -n "${EXACT_PROFILE:-}" ] || no "EXACT_PROFILE is not set: name the App Store provisioning profile for $ID by its path."
 [ -f "$EXACT_PROFILE" ] || no "EXACT_PROFILE is not a file."
+[ -z "${ALLOW_NO_MODELS:-}" ] || no "ALLOW_NO_MODELS is set: a store archive without the on-device voice models is a defect, not a build (run scripts/ensure-deps.sh ios; unset ALLOW_NO_MODELS)"
+# Paths mean the directory this script was started in, for the checks below and for Exact (exact.sh runs it from AutoradioLab/): made absolute once, here.
+EXACT_PROFILE="$(cd "$(dirname "$EXACT_PROFILE")" && pwd -P)/$(basename "$EXACT_PROFILE")"
 /usr/bin/python3 -I "$HERE/scripts/check-store-signing.py" "$ID" "$EXACT_IDENTITY" "$EXACT_PROFILE" || exit 1
-if [ -n "${AR_BUILD_NUMBER:-}" ]; then BUILD="$AR_BUILD_NUMBER"; else BUILD=$(( ($(date -u +%s) - 1767225600) / 60 )); fi
-printf '%s' "$BUILD" | grep -Eq '^[1-9][0-9]{0,8}$' || no "AR_BUILD_NUMBER must be a whole number from 1 to 999999999 (CFBundleVersion rises with every upload)."
 OUTDIR="${AR_STORE_OUT_DIR:-$HOME/.cache/autoradio-store}"
 mkdir -p "$OUTDIR"
+OUTDIR="$(cd "$OUTDIR" && pwd -P)"
+# The build number: the minute count, but never at or below the last number this script gave (kept in $OUTDIR/last-build, written under the build lock), so a second run in
+# one minute and a run after AR_BUILD_NUMBER=<a larger number> still rise. A given AR_BUILD_NUMBER is used as given and raises the record, never lowers it.
+LASTF="$OUTDIR/last-build"; LAST=0
+if [ -e "$LASTF" ]; then
+  LAST="$(cat "$LASTF")"
+  printf '%s' "$LAST" | grep -Eq '^[0-9]{1,9}$' || no "$LASTF holds no whole number (the last build number given): fix or delete it."
+fi
+if [ -n "${AR_BUILD_NUMBER:-}" ]; then BUILD="$AR_BUILD_NUMBER"
+else BUILD=$(( ($(date -u +%s) - 1767225600) / 60 )); [ "$BUILD" -gt "$LAST" ] || BUILD=$((LAST + 1)); fi
+printf '%s' "$BUILD" | grep -Eq '^[1-9][0-9]{0,8}$' || no "the build number must be a whole number from 1 to 999999999 (AR_BUILD_NUMBER, or the record in $LASTF)."
+[ "$BUILD" -gt "$LAST" ] && printf '%s\n' "$BUILD" > "$LASTF"
 IPA="$OUTDIR/$(printf '%s' "$NAME" | tr -c 'A-Za-z0-9.\n' '-')-$VERSION-$BUILD.ipa"
 rm -f "$IPA"
 LOG="$OUTDIR/archive-$BUILD.stdout"
@@ -43,34 +57,13 @@ RC=$?
 set -e
 [ "$RC" -eq 0 ] || { tail -5 "$LOG" >&2; no "Exact's archive failed (exit $RC); its log is above on stderr, its JSON line is in $LOG"; }
 [ -f "$IPA" ] || no "Exact reported success but wrote no .ipa at the path asked for"
-/usr/bin/python3 -I - "$IPA" "$ID" "$VERSION" "$BUILD" "$LOG" <<'PY'
-import json, plistlib, sys, zipfile
-ipa, bid, ver, build, log = sys.argv[1:6]
+/usr/bin/python3 -I "$HERE/scripts/check-store-ipa.py" archive-store "$IPA" "$ID" "$VERSION" "$BUILD" || exit 1
+/usr/bin/python3 -I - "$LOG" <<'PY'
+import json, sys
 def no(m): sys.stderr.write("archive-store: the .ipa is not what was asked for: " + m + "\n"); sys.exit(1)
-z = zipfile.ZipFile(ipa)
-names = z.namelist()
-plists = [n for n in names if n.count("/") == 2 and n.startswith("Payload/") and n.endswith(".app/Info.plist")]
-if len(plists) != 1: no("it has no single Payload/<app>.app/Info.plist")
-info = plistlib.loads(z.read(plists[0]))
-app = plists[0][: -len("Info.plist")]
-if info.get("CFBundleIdentifier") != bid: no("bundle id is %r, wanted %r" % (info.get("CFBundleIdentifier"), bid))
-if info.get("CFBundleShortVersionString") != ver: no("version is %r, wanted %r" % (info.get("CFBundleShortVersionString"), ver))
-if info.get("CFBundleVersion") != build: no("build number is %r, wanted %r" % (info.get("CFBundleVersion"), build))
-if info.get("ITSAppUsesNonExemptEncryption") is not False: no("ITSAppUsesNonExemptEncryption is %r, wanted false" % (info.get("ITSAppUsesNonExemptEncryption"),))
-if info.get("ExactDevMenu") is not False: no("the developer menu is not stamped off (ExactDevMenu is %r)" % (info.get("ExactDevMenu"),))
-if info.get("ExactBuildKind") != "archive": no("ExactBuildKind is %r, wanted 'archive'" % (info.get("ExactBuildKind"),))
-dev = sorted(k for k in info if k.startswith("ExactDevelopment"))
-if dev: no("it carries a development client's keys: " + ", ".join(dev))
-if app + "embedded.mobileprovision" not in names: no("it has no embedded provisioning profile (the .ipa is not signed for the store)")
 try:
-    last = [l for l in open(log).read().splitlines() if l.strip()][-1]
-    j = json.loads(last)
+    j = json.loads([l for l in open(sys.argv[1]).read().splitlines() if l.strip()][-1])
     if j.get("trust") != "production": no("Exact baked %r trust, not production" % (j.get("trust"),))
 except (OSError, IndexError, ValueError): no("Exact printed no JSON result line")
-print("ipa: " + ipa)
-print("bundle id: " + info["CFBundleIdentifier"])
-print("version: " + info["CFBundleShortVersionString"])
-print("build number: " + info["CFBundleVersion"])
-print("ITSAppUsesNonExemptEncryption: false")
 print("ExactBuildKind: archive, developer menu off, trust production")
 PY
