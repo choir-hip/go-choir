@@ -197,7 +197,7 @@ public final class AutoradioModule: ExactPackage {
     func touch(_ names: [String], now: Bool = false, pump: Bool = true) {
         // `dirty` is only touched on the main thread: a background caller (found by a real-data run: readServerBuild called this from a
         // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
-        if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now) }; return }
+        if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now, pump: pump) }; return }
         // The queue and the Autoradio page are shared code's now: what the screens used to ask of the queue, the page and the bar's run sheet facts is `radioNote` (the pump looks again). Old names still work.
         dirty.formUnion(names.map { ["queueView": "radioNote", "radioPage": "radioNote", "radioPageFacts": "radioNote"][$0] ?? $0 })
         if pump, names.contains(where: { $0 == "radioView" || $0 == "barFacts" }) { dirty.insert("radioNote") }
