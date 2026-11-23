@@ -36,6 +36,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -687,15 +688,19 @@ func TestEdgesIndexBuildTimesOutLeavesAnInvalidIndexAndTheNextTryRepairsIt(t *te
 		_ = tx.Rollback()
 		t.Fatalf("after the timeout: exists %v valid %v, want an invalid index left behind", exists, valid)
 	}
-	// Nothing else held: the session lock and lock_timeout went back clean.
-	var lt string
-	if err := f.store.corpus().QueryRow(`SHOW lock_timeout`).Scan(&lt); err != nil || lt != "0" {
-		t.Logf("lock_timeout on a pooled connection: %q %v", lt, err)
-	}
+	// A lock or a session setting the timed-out build leaked is caught by the
+	// retry below, which runs under a short bound and fails clearly. (A
+	// SHOW lock_timeout here would run on a pooled connection other than the
+	// build's and prove nothing.)
 	_ = tx.Rollback()
-	// The next try detects the invalid index, drops it and rebuilds.
-	if err := f.store.ensureEdgesToKindCreatedIndex(ctx); err != nil {
-		t.Fatal(err)
+	// The next try detects the invalid index, drops it and rebuilds. It runs
+	// under a short bound, so a lock the timed-out build leaked is a clear
+	// failure here and not a go test timeout.
+	edgesIndexBuildTimeout = 30 * time.Second
+	err = f.store.ensureEdgesToKindCreatedIndex(ctx)
+	edgesIndexBuildTimeout = old
+	if err != nil {
+		t.Fatalf("the retry: %v", err)
 	}
 	if exists, valid := edgesIndexState(t, f.store); !exists || !valid {
 		t.Fatalf("after the retry: exists %v valid %v", exists, valid)
@@ -728,15 +733,104 @@ func TestEdgesIndexRetryWaitsForALingeringHolderOfTheBuildLock(t *testing.T) {
 	if _, err := holder.ExecContext(ctx, `SELECT pg_advisory_lock(?)`, edgesToKindCreatedLockKey); err != nil {
 		t.Fatal(err)
 	}
+	// The holder lets go only once a waiter shows in pg_locks, so the test
+	// cannot pass without the retry having waited.
+	sawWaiter := make(chan bool, 1)
 	go func() {
-		time.Sleep(300 * time.Millisecond)
+		deadline := time.Now().Add(20 * time.Second)
+		seen := false
+		for time.Now().Before(deadline) {
+			var n int
+			if err := f.store.corpus().QueryRow(`SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database()) AND objsubid = 1 AND ((classid::bigint << 32) | objid::bigint) = ?`, edgesToKindCreatedLockKey).Scan(&n); err == nil && n > 0 {
+				seen = true
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
 		_, _ = holder.ExecContext(context.Background(), `SELECT pg_advisory_unlock(?)`, edgesToKindCreatedLockKey)
+		sawWaiter <- seen
 	}()
-	if err := f.store.ensureEdgesToKindCreatedIndex(ctx); err != nil {
+	old := edgesIndexBuildTimeout
+	edgesIndexBuildTimeout = 30 * time.Second
+	err = f.store.ensureEdgesToKindCreatedIndex(ctx)
+	edgesIndexBuildTimeout = old
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !<-sawWaiter {
+		t.Fatal("the retry never waited on the build lock: the test proved nothing")
 	}
 	if exists, valid := edgesIndexState(t, f.store); !exists || !valid {
 		t.Fatalf("after the retry: exists %v valid %v, want the invalid index rebuilt", exists, valid)
+	}
+}
+
+// A call that waited long behind a live builder must still get a whole
+// deadline for its own build. With one deadline over wait and work, a build
+// that began late in the window was cut off and left an invalid index again.
+// The holder lets go when the waiter is seen in pg_locks (and not before 60%
+// of the bound), the blocking transaction when the build is seen waiting for
+// it (and not before 125% of the bound, past the deadline a single one would
+// have set). The bound is several seconds, so a slow runner only moves the
+// observations, not the margin.
+func TestEdgesIndexBuildGetsItsOwnDeadlineAfterALongWaitForTheLock(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	if _, err := f.store.corpus().Exec(`DROP INDEX IF EXISTS ` + idxEdgesToKindCreated); err != nil {
+		t.Fatal(err)
+	}
+	holder, err := f.store.corpus().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+	if _, err := holder.ExecContext(ctx, `SELECT pg_advisory_lock(?)`, edgesToKindCreatedLockKey); err != nil {
+		t.Fatal(err)
+	}
+	// An open transaction with an xid: the build, once it has the lock, waits for it.
+	tx, err := f.store.corpus().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO og_edges (edge_id, from_id, to_id, kind, metadata, created_at, tombstone) VALUES ('edge:hold2', 'a', 'b', 'k', '{}', now(), FALSE)`); err != nil {
+		t.Fatal(err)
+	}
+	const bound = 6 * time.Second
+	old := edgesIndexBuildTimeout
+	edgesIndexBuildTimeout = bound
+	defer func() { edgesIndexBuildTimeout = old }()
+	done := make(chan error, 1)
+	waitFor := func(what, query string) {
+		t.Helper()
+		for end := time.Now().Add(30 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+			var n int
+			if err := f.store.corpus().QueryRow(query).Scan(&n); err == nil && n > 0 {
+				return
+			}
+		}
+		t.Fatalf("never saw %s", what)
+	}
+	start := time.Now()
+	go func() { done <- f.store.ensureEdgesToKindCreatedIndex(ctx) }()
+	waitFor("the call waiting for the build lock", `SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database()) AND objsubid = 1 AND ((classid::bigint << 32) | objid::bigint) = `+strconv.Itoa(edgesToKindCreatedLockKey))
+	time.Sleep(time.Until(start.Add(bound * 6 / 10)))
+	if _, err := holder.ExecContext(ctx, `SELECT pg_advisory_unlock(?)`, edgesToKindCreatedLockKey); err != nil {
+		t.Fatal(err)
+	}
+	waitFor("the build waiting for the older transaction", `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND query LIKE 'CREATE INDEX CONCURRENTLY%' AND wait_event_type IS NOT NULL AND wait_event_type <> 'Client'`)
+	time.Sleep(time.Until(start.Add(bound * 5 / 4)))
+	_ = tx.Rollback()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("a build that waited %v for the lock: %v", bound*6/10, err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the build did not finish")
+	}
+	if exists, valid := edgesIndexState(t, f.store); !exists || !valid {
+		t.Fatalf("exists %v valid %v, want a valid index", exists, valid)
 	}
 }
 

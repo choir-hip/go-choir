@@ -35,10 +35,24 @@ holder that finished the build leaves nothing to do and a dead holder is
 followed by the drop and rebuild. All callers run in the background
 (`kickEdgesToKindCreatedIndex`), so waiting holds up no request or loop.
 
+## Follow-up (review of the fix)
+
+- The existing timeout test now fails on a leaked `lock_timeout` and runs
+  its retry under a 30 s bound, so a leaked lock is a clear failure.
+- The lingering-holder test releases the holder only after a waiter shows in
+  `pg_locks`, so it cannot pass without the retry having waited.
+- The wait for the lock and the work after it have separate deadlines
+  (`edgesIndexBuildTimeout` each). Before, one deadline covered both, so a
+  call that waited long behind a live builder could time out its own build and
+  leave an invalid index again. `TestEdgesIndexBuildGetsItsOwnDeadlineAfterALongWaitForTheLock`
+  fails on the single deadline and passes on two.
+
 ## Remaining error
 
-- A holder that builds for the full 20-minute deadline makes a waiting call
-  fail at its own deadline; the periodic step retries.
+- A call can now take up to twice the timeout (wait, then work); it runs in
+  the background, so nothing waits on it.
+- A holder that builds past the wait deadline makes the waiting call fail
+  there; the periodic step retries.
 - Not shown on production Postgres; the proof is the test cluster.
 - The held-lock window in production is rarer than in the test (the retry is
-  a whole periodic step later), so the defect was low impact there.
+  a whole periodic step later), so the defect had low impact there.
