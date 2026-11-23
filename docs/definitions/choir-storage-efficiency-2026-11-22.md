@@ -57,6 +57,7 @@ boundaries:
     - '"we will offload the tape soon. for now, lets do the other efficiencies" (2026-11-22). Reading: the tape''s place on the host is not this mission''s to change.'
     - '"Retire it and remove old paper snapshots"; "yes, we should delete the extra computers. we can make more later. only [the owner''s own account] has real data. b@c and d@e can be reset" (2026-11-22). Reading: those two acts were authorised once; neither is a standing permission to delete.'
     - '"we should design for user computers being always accessible. todays storage issues wont remain" (2026-11-22).'
+    - '"Yes, let''s do these wins in the background... The storage stuff can be done before and while we do other stuff I think" (2026-11-23), answering the lead''s list: the one-pass snapshot, snapshots that share more, the store reading run on the paper, story versions, the receipt table rewrite, the small leftovers. Reading (the lead''s): Q1 is settled as its default; Q3 is yes in a quiet hour; Q2 (deleting the removed computers'' tape and chunks) cannot be undone, so the lead names it to the owner again before doing it.'
   must_preserve:
     - 'the paper publishes throughout; nothing changes on the paper or another user''s computer except by deploy; drills run on d@e only'
     - 'snapshotDue, the capture floor, the backoff and the 540,000-event ceiling are not touched (three review rounds failed there on 2026-11-15)'
@@ -74,32 +75,32 @@ stations:
     class: orange
     review: one seat
     depends_on: []
-    lane: lane/store-by-kind
-    status: working
+    lane: lane/store-by-kind (landed 0f4421aae)
+    status: landed
   - id: S1
     name: The layout trigger deleted
     scope: 'a compact copy is due only by free pages or when forced; the staged copy already on the paper is handled as today at a planned restart'
     class: red
     review: two seats
     depends_on: []
-    lane: lane/no-layout-compact
-    status: working
+    lane: lane/no-layout-compact (landed 06c49c1b8)
+    status: landed
   - id: S2
     name: The snapshot reader for a page digest
     scope: 'record version 2 carries a digest of the pages in order and no logical digest; restore verifies it as it assembles, then the head; version 1 is verified as today; anything else is refused in restoreOne'
     class: red
     review: two seats
     depends_on: []
-    lane: lane/snapshot-one-pass
-    status: working
+    lane: lane/snapshot-one-pass (landed 9e3e2060f)
+    status: landed
   - id: S3
     name: The capture in one pass
     scope: 'the state file streamed inside the head''s read transaction with the digest inline; the scratch copy, its cross-check and the capture''s logical digest deleted; a pin deadline; the free-space check becomes the floor plus WAL headroom'
     class: red
     review: two seats
     depends_on: [S2]
-    lane: lane/snapshot-one-pass
-    status: pending
+    lane: lane/snapshot-capture-s3
+    status: working
   - id: S4
     name: Restore and rebuild inside their budgets
     scope: 'design first: the whole-store digest a rebuild from tape computes after replay (a checkpoint-binding claim), and a version 1 restore on a large store; what replaces the corruption check the capture''s digest gave'
@@ -146,8 +147,8 @@ decisions_for_the_owner:
     default: no
 now:
   status: working
-  as_of: 2026-11-22T16:31Z
-  slice: 'S0, S1 and S2 building in three lanes'
+  as_of: 2026-11-23T21:33Z
+  slice: 'S3 building in lane snapshot-capture-s3; a read-only measurement of the disk, the store reading, snapshot sharing, story versions and the receipt table running'
   source_ref: origin/main c8d48a589
   deploy_identity: staging and the paper on c27a50d98; a deploy of main in flight
   candidate: none frozen
@@ -160,11 +161,11 @@ now:
     scope_if_supported: S5 may compute the floor without a second-store term
     ledger_id: C195
     status: untested
-  believed_state: 'the two store-sized copies are understood from code and logs; the design for removing them was checked against the code by the builder before any code; nothing is built'
+  believed_state: 'S0, S1 and S2 are landed. The weekly layout copy is gone. The daily snapshot still writes a scratch copy until S3 lands (free space dipped to 106 GiB during it on 2026-11-23; 155 GiB free at 21:30Z). Whether the store reading has run on the paper is not known.'
   main_uncertainty: 'what the 36 unattributed GiB of the store are'
   next_observation: 'S0''s report on the paper; S1''s and S2''s commits'
   blocker: none
-  next_action: 'review and land S1 (two seats), then S2; land S0 and run it on the paper'
+  next_action: 'review S3 (two seats) and land it; read the measurement and choose the next cut; the receipt table rewrite in a quiet hour, on the owner''s yes of 2026-11-23'
 operating_notes:
   - 'One landing and one deploy at a time, in the metamission''s order; S1 goes early because it stops the next staged copy.'
   - 'A snapshot or restore test never runs against the paper. A restored store''s equivalence is proved on d@e.'

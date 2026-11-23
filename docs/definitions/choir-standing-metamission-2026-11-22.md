@@ -25,13 +25,13 @@ metamission:
       readiness: executable
       status: working
       depends_on: []
-      note: 'storage: no routine operation writes a second copy of a store, restore fits its budget, the store is measured by kind and cut. Stations S0 to S7. Added on the owner''s word after Node B''s disk refused deploys and wakes on 2026-11-22.'
+      note: 'storage: no routine operation writes a second copy of a store, restore fits its budget, the store is measured by kind and cut. Stations S0 to S7. Added on the owner''s word after Node B''s disk refused deploys and wakes on 2026-11-22. Runs in the background before and during the other tracks (owner, 2026-11-23).'
     - id: M4
       path: docs/definitions/choir-autoradio-on-android-2026-11-22.md
       readiness: executable
       status: working
       depends_on: []
-      note: 'Android: Autoradio running on an old Motorola from the shared codebase, and a measured table of which on-device models such a phone can run. Stations A0 to A5. Added on the owner''s word, 2026-11-22.'
+      note: 'Android: Autoradio running on an old Motorola from the shared codebase, and a measured table of which on-device models such a phone can run. Stations A0 to A5. Added on the owner''s word, 2026-11-22. Deferred on the owner''s word, 2026-11-23: no station starts until they say.'
 start:
   captured_at: 2026-11-22T05:02Z
   source:
@@ -69,6 +69,7 @@ boundaries:
     - '"priority: A tool that answers show me this run, step by step, with its reasons"; "yes, we need to improve our systemic learning"; "we need shorter more honest and coherent documentation"; "we need to land our work in flight" (2026-11-22, evening, after the lead listed what is broken). Reading: these four come before anything new. The run viewer is first. Nothing new starts until the lanes in flight are landed or dropped.'
     - '"what we have lost sight of is supervision. we havent been using the self-development feature which has built-in texture supervision... i have put to the side much of my beliefs on supervision to just let models go wild. and it hasnt yielded great results actually. so, we should get more serious" (2026-11-22). Reading: fewer agents at once, each supervised; work on the product moves back toward the product''s own supervised self-development path, and the lead says so when a change goes around it. How and when that path is used again is the owner''s to direct; the lead proposes.'
     - '"we should focus on our core data systems, our core backend infra, our key algorithms and agentic systems, and let the ux stay semi-constant. well, thats something we can do once the ux lands. the exact cutover has been essential for that... i dont want to keep it as merely an ios app" (2026-11-22). Reading: the Exact cutover lands (M1), then the experience holds still while the core is rebuilt (M2, M3). M4 (Android, the model benchmark) and adding sources are written down and wait; adding sources comes after the redesign ("adding the sources comes later. for now we need to redesign").'
+    - '"I guess I see 2 tracks... The first one is to the voice system and pipeline. The second one is to the underlying engine, the root texture, the auto radio desk, and the source capture and corpus ingestion pipeline, and subsequent processing with research into publication and post-publication including personalization"; on records and measurement as a third: "Yes, that matches as a third track"; "for the fourth pile, we can really defer the Android stuff... the operations with podcast transcription as something that we want to do earlier, and synthetic as well. I kind of want to do those things after we get our plan defined. So then the building incorporates them. Same for the exact cutover, app faults"; "let''s do these wins in the background. Basically, we should be including all these tracks in the metamission so you can dispatch work as we are planning and defining other work. The storage stuff can be done before and while we do other stuff"; "let''s go slow here, and work through the design iteratively in the chat. So we can then update our docs" (2026-11-23). Reading (the lead''s): four tracks. T1 voice: what runs on the phone (speech detection, recognition, turn-taking, echo, the local answer, the audio session). T2 the engine: intake, the root Texture, the Autoradio desk, research, publication, personalisation (M2 is its file and is rewritten after the design discussion). T3 records and measurement: durable decision records, turn records, the measure of the paper against the world; it goes first because the other two are settled by it. T4 the app and platform outside voice: the Exact cutover and app faults (M1), podcast transcription on a durable host, routing by Synthetic''s reported headroom, storage (M3), Android (M4, deferred). T1, T2 and T3 get goal files after the design is agreed in conversation; until then only storage builds, and investigation is read-only.'
   must_preserve:
     - 'one landing and one deploy at a time; one Mac native build at a time through the lock; every must_preserve of each station file'
   excluded:
@@ -81,8 +82,8 @@ operating_notes:
   - 'Each hourly tick reads both station files'' now cards and rewrites this one''s.'
 now:
   status: working
-  as_of: 2026-11-23T19:45Z
-  slice: 'nothing in flight; the overnight queue is landed and deployed; waiting on the owner''s reply to the letter of 2026-11-23, their tests of Autoradio 1, and their rulings on story identity and importance before the next goal file'
+  as_of: 2026-11-23T21:33Z
+  slice: 'design discussion with the owner (tracks T1 to T3; nothing builds on them yet); storage in the background: S3 building in lane snapshot-capture-s3, a read-only measurement of Node B''s disk running'
   source_ref: origin/main 7866f4027
   deploy_identity: staging and the paper on a2ba96767 (CI run 45248602790)
   candidate: none
@@ -96,10 +97,10 @@ now:
     ledger_id: C190
     status: untested
   believed_state: 'landed and deployed 11-23: the index lock, device approval return, the phone train (on the owner''s phone as Autoradio 1, untested by the owner), the voice ask''s search with its vector fix (deployed proof passes), the broker number fix, the guest-reach gate. Reverted: the research-frame prompts (C201 false on its first hour). Found: the day''s top story ranked low because importance holds no state (docs/problems/the-days-top-story-ranked-low-2026-11-23.md). M2''s offline slice failed its kill lines (C192) and no panel has read draft 4.'
-  main_uncertainty: 'what the owner heard in Autoradio 1, and which way they rule on feed versus successor and on the definition of importance'
-  next_observation: 'C202 at 22:30Z (research runs an hour after the revert); the owner''s reply'
+  main_uncertainty: 'the measure of the paper against the world and the order of the intake stages; the owner''s rulings on the design draft''s open decisions'
+  next_observation: 'the S3 builder''s report; the storage measurement; the owner''s reading of the ideal-form draft'
   blocker: none
-  next_action: 'settle C202; with the owner, write the next goal file from the letter and their reply; the account boundary''s structural assessment is written (docs/problems/account-boundary-three-approaches-no-convergence-2026-11-23.md) and waits on the owner''s choice among three candidates'
+  next_action: 'work the design through with the owner in conversation, then write the goal files for T1, T2 and T3 and rewrite M2; review S3 (two seats) when its builder reports'
 receipts:
   - 'M1: docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md'
   - 'M2: docs/definitions/choir-first-design-2026-11-22.md'
