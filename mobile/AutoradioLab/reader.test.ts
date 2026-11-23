@@ -96,8 +96,8 @@ describe('a document', () => {
 describe('held documents', () => {
   test('R6 a story once; a head again; a revision once; a failure shows the copy held', async () => {
     const f = fake();
-    await R.readerDocShared('pub:pub/x', 'in', false, f.net); await R.readerDocShared('pub:pub/x', 'in', false, f.net);
-    expect(f.count('/publications/resolve')).toBe(1);
+    await R.readerDocShared('pub:pub/x/v1', 'in', false, f.net); await R.readerDocShared('pub:pub/x/v1', 'in', false, f.net);
+    expect(f.count('/publications/resolve')).toBe(1);                   // a versioned story never changes
     await R.readerDocShared('texture:d1', 'in', false, f.net); await R.readerDocShared('texture:d1', 'in', false, f.net);
     expect(f.count('/api/texture/documents/d1')).toBe(4);               // the document and its list, twice
     await R.readerDocShared('texture:d1@r1', 'in', false, f.net); await R.readerDocShared('texture:d1@r1', 'in', false, f.net);
@@ -134,11 +134,11 @@ describe('held documents', () => {
   });
   test('R9 at most 40 are held, the least recently used goes first', async () => {
     const f = fake();
-    for (let i = 0; i < 41; i++) await R.readerDocShared(`pub:pub/s${i}`, 'in', false, f.net);
+    for (let i = 0; i < 41; i++) await R.readerDocShared(`pub:pub/s${i}/v1`, 'in', false, f.net);
     expect(R.heldCount()).toBe(40);
     const before = f.count('/publications/resolve');
-    await R.readerDocShared('pub:pub/s1', 'in', false, f.net); expect(f.count('/publications/resolve')).toBe(before);
-    await R.readerDocShared('pub:pub/s0', 'in', false, f.net); expect(f.count('/publications/resolve')).toBe(before + 1);
+    await R.readerDocShared('pub:pub/s1/v1', 'in', false, f.net); expect(f.count('/publications/resolve')).toBe(before);
+    await R.readerDocShared('pub:pub/s0/v1', 'in', false, f.net); expect(f.count('/publications/resolve')).toBe(before + 1);
   });
   test('R8 prefetch: stories not held, once each, sharing an ask in flight', async () => {
     const f = fake();
@@ -154,6 +154,47 @@ describe('held documents', () => {
     const h = fake();
     await Promise.all([R.readerPrefetch('pub:pub/q', '', h.net), R.readerDocShared('pub:pub/q', 'in', false, h.net)]);
     expect(h.count('/publications/resolve')).toBe(1);
+  });
+});
+
+describe('A-2 a bare route is the latest version, which changes', () => {
+  const v = (n: number) => ({ publication: { title: `Version ${n}`, kind: 'story' }, route: { bare: 'pub/x', permalink: `pub/x/v${n}` }, artifact: { content: `# T\n\nText ${n}.` }, nav: { revision: n, latest: n } });
+  test('a bare route is asked again for each open, and a new version is seen without a restart', async () => {
+    let latest = 1;
+    const f = fake({ pub: (p) => (p.endsWith('/resolve') ? v(latest) : {}) });
+    expect((await R.readerDocShared('pub:pub/x', 'in', false, f.net)).title).toBe('Version 1');
+    latest = 2;
+    expect((await R.readerDocShared('pub:pub/x', 'in', false, f.net)).title).toBe('Version 2');
+  });
+  test('a failed ask shows the copy held; a prefetched copy is served once, then asked again', async () => {
+    const f = fake();
+    await R.readerPrefetch('pub:pub/p', '', f.net);
+    expect(f.count('/publications/resolve')).toBe(1);
+    await R.readerDocShared('pub:pub/p', 'in', false, f.net);
+    expect(f.count('/publications/resolve')).toBe(1);                   // the prefetched copy is what the swipe shows
+    await R.readerDocShared('pub:pub/p', 'in', false, f.net);
+    expect(f.count('/publications/resolve')).toBe(2);
+    const down = fake({ pub: () => new Error('down') });
+    expect((await R.readerDocShared('pub:pub/p', 'in', false, down.net)).status).toBe('ready');
+  });
+});
+
+describe('A-3 the page is handed to native once, not on every evaluation', () => {
+  test('the same document is not sent again; a reload, another page, or a refusal is', async () => {
+    const sent: unknown[] = []; let ok = true;
+    R.setHandOverForTest(async (r) => { sent.push(r); return { ok }; });
+    const f = fake();
+    await R.readerDocShared('pub:pub/x/v1', 'in', false, f.net);
+    await R.readerDocShared('pub:pub/x/v1', 'out', true, f.net); await R.readerDocShared('pub:pub/x/v1', 'in', true, f.net);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sent.length).toBe(1);
+    await R.readerDocShared('pub:pub/y/v1', 'in', false, f.net);
+    await R.readerDocShared('pub:pub/x/v1', 'in', false, f.net);        // the voice holds the last page: x again is handed again
+    expect(sent.length).toBe(3);
+    ok = false;
+    await R.readerDocShared('pub:pub/z/v1', 'in', false, f.net); await new Promise((r) => setTimeout(r, 0));
+    await R.readerDocShared('pub:pub/z/v1', 'in', false, f.net);        // a refusal is not remembered as handed
+    expect(sent.length).toBe(5);
   });
 });
 

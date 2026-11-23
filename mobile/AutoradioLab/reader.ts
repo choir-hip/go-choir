@@ -33,11 +33,11 @@ const yieldTurn = (label = 'reader'): Promise<void> => lapYield(label);
 let held = new Map<string, ReaderDoc>();
 let inflight = new Map<string, Promise<ReaderDoc>>();
 let heldGen = -1;
-export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); heldGen = -1; }
+export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); unseen = new Set(); lastHanded = null; heldGen = -1; }
 export const heldCount = (): number => held.size;
 function current(): number {
   const g = accountGeneration();
-  if (g !== heldGen) { held = new Map(); inflight = new Map(); heldGen = g; }
+  if (g !== heldGen) { held = new Map(); inflight = new Map(); unseen = new Set(); lastHanded = null; heldGen = g; }
   return g;
 }
 function put(d: ReaderDoc): void {
@@ -96,14 +96,18 @@ export async function loadReader(address: string, net: Net = real): Promise<Read
 }
 
 /** A story and a revision never change: the held copy is the answer. A document's head is asked for again. */
-const cacheable = (address: string): boolean => { const a = parseAddress(address); return a.kind === 'pub' || (a.kind === 'texture' && a.rev !== ''); };
+const cacheable = (address: string): boolean => { const a = parseAddress(address); return (a.kind === 'pub' && splitRoute(a.route).version > 0) || (a.kind === 'texture' && a.rev !== ''); };
+/** A bare story route (`pub:slug`) is the LATEST version, which changes when a new one is published: it is asked for again like a document's head, and its held copy stands in only when the ask
+ *  fails, or once for a swipe that a prefetch has just read (`unseen`: prefetched, not yet shown). */
+const bare = (address: string): boolean => { const a = parseAddress(address); return a.kind === 'pub' && splitRoute(a.route).version === 0; };
+let unseen = new Set<string>();
 
-async function ask(address: string, net: Net): Promise<ReaderDoc> {
+async function ask(address: string, net: Net, prefetch = false): Promise<ReaderDoc> {
   const a = parseAddress(address);
   if (a.kind === 'none') return blankDoc(address, 'loading');
   const gen = current();
   const have = held.get(address);
-  if (have && cacheable(address)) { held.delete(address); held.set(address, have); return have; }
+  if (have && (cacheable(address) || (bare(address) && (prefetch || unseen.has(address))))) { held.delete(address); held.set(address, have); if (!prefetch) unseen.delete(address); return have; }
   const key = address;
   const shared = inflight.get(key);
   if (shared) return shared;
@@ -115,7 +119,7 @@ async function ask(address: string, net: Net): Promise<ReaderDoc> {
       return !(e instanceof SignedOutError) && held.get(address) ? held.get(address)! : failDoc(address, e);
     }
     if (gen !== accountGeneration()) return blankDoc(address, 'loading');           // another account began while this was on its way: neither held nor shown
-    if (d.status === 'ready') put(d);
+    if (d.status === 'ready') { put(d); if (prefetch) unseen.add(address); else unseen.delete(address); }
     return d;
   })().finally(() => { if (inflight.get(key) === p) inflight.delete(key); });
   inflight.set(key, p);
@@ -129,11 +133,15 @@ type HandOver = (request: Record<string, unknown>) => Promise<unknown>;
 let handOver: HandOver | null | undefined;
 /** Test only: the native hand-over (null: no native module; undefined: the real one). */
 export function setHandOverForTest(f: HandOver | null | undefined): void { handOver = f; }
+/** The document last handed over: a re-evaluation of the same page (an account state, a save, the revision tick) hands nothing again; the voice holds what it was last given. */
+let lastHanded: { gen: number; doc: ReaderDoc } | null = null;
 function hand(d: ReaderDoc, gen: number): void {
   const send = handOver === undefined ? (nativeLater() as HandOver | null) : handOver;     // api.ts types the request for the key reads; the module's `later` takes any op
   if (!send || d.status !== 'ready' || gen !== accountGeneration()) return;
+  if (lastHanded !== null && lastHanded.gen === gen && lastHanded.doc === d) return;
+  lastHanded = { gen, doc: d };
   const blocks = d.blocks.filter((b) => b.text !== '').map((b) => ({ id: b.id, kind: b.kind, text: b.text, sentences: sentenceTexts(b) }));
-  void Promise.resolve().then(() => send({ op: 'pageText', address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { console.log(obj(r) && r.ok === true ? `reader: handed to the voice blocks=${blocks.length}` : 'reader: the voice did not take the page'); }, () => undefined);
+  void Promise.resolve().then(() => send({ op: 'pageText', address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { const took = obj(r) && r.ok === true; if (!took && lastHanded?.doc === d) lastHanded = null; console.log(took ? `reader: handed to the voice blocks=${blocks.length}` : 'reader: the voice did not take the page'); }, () => { if (lastHanded?.doc === d) lastHanded = null; });
 }
 
 /** The source behind the reader page. `accState` and `saved` are only there to ask again: a sign-in from the banner, and the editor's save. */
@@ -147,7 +155,7 @@ export async function readerDocShared(address: string, _accState: string, _saved
 const ack = (ok: boolean): Ack => ({ ok });
 
 /** Forget a document: the next ask reads it again (the page menu's Reload). */
-export async function readerReload(address: string): Promise<Ack> { current(); held.delete(address); return ack(true); }
+export async function readerReload(address: string): Promise<Ack> { current(); held.delete(address); unseen.delete(address); return ack(true); }
 
 /** A version as the latest (the web's "Restore"): POST /api/texture/documents/{id}/restore. The head is already the latest. */
 export async function readerRestore(address: string, version: string, net: Net = real): Promise<Ack> {
@@ -179,7 +187,7 @@ export async function readerPrefetch(prev: string, next: string, net: Net = real
   const todo = [prev, next].filter((a) => a !== '' && parseAddress(a).kind === 'pub' && !seen.has(a) && (seen.add(a), true) && held.get(a)?.status !== 'ready');
   // One story at a time, a new turn between: two large stories decoded in one turn went over Exact's 100 ms of CPU per turn (the reply was refused: the proof's read drive, 961 KB for two stories).
   for (const a of todo) {
-    await ask(a, net);
+    await ask(a, net, true);
     await lapYield('prefetch: between two stories');
   }
   return ack(true);
