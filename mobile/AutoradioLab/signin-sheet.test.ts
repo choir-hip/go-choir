@@ -13,10 +13,7 @@
 //  S7 a link that is not the granted origin over https (a lookalike host, http, a script, garbage) is refused before any session opens.
 //  S8 the app's grants: auth.session for the one server origin, auth.callback `<scheme>:/signed-in` where the scheme is the app id and each variant has its own
 //     (app.json env SIGNIN_SCHEME), the callback path is the one the server builds (/signed-in).
-//  S10 (review) the result names the sign-in it belongs to: it carries the link it was opened for (the non-secret verification link the card already shows), in every
-//      outcome, so the contract acts only on the pending sign-in's own result; and a nonce that cannot be made is a "failed", never a throw.
-//  S11 (review) closing the sheet never abandons by itself: the contract sends the cancel as `by="sheet"` (native polls first), only for this sign-in's own "cancelled", never for
-//      "returned" or "failed"; a failed sheet offers the same link in the system browser (Exact's `href`, no Swift); a new sign-in clears the last result.
+//  S10 (review) a nonce that cannot be made is a "failed", never a throw. (Which sign-in a result belongs to is the attempt's id: signin-attempt.test.ts.)
 //  S9 sign-in never moves the key: this module imports nothing that writes a store or the key.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
@@ -77,14 +74,14 @@ describe('signInSheet', () => {
     const secret = 'leaked-code-123';
     const t = env({ answer: async (c) => `${CALLBACK}?state=${c.opts.state}&code=${secret}&api_key=${secret}` });
     const r = await signInSheet(LINK, t.env);
-    expect(r).toEqual({ outcome: 'returned', message: '', link: LINK });
+    expect(r).toEqual({ outcome: 'returned', message: '' });
     expect(JSON.stringify(r) + t.logs.join('\n')).not.toContain(secret);
     expect(t.logs).toEqual(['signin: sheet opened', 'signin: sheet returned']);
   });
   test('S4 cancelled, with no message; the bound is the same', async () => {
     for (const msg of ['cancelled', 'the wait ended at the bound']) {
       const t = env({ answer: async () => { throw refusal(499, msg); } });
-      expect(await signInSheet(LINK, t.env)).toEqual({ outcome: 'cancelled', message: '', link: LINK });
+      expect(await signInSheet(LINK, t.env)).toEqual({ outcome: 'cancelled', message: '' });
       expect(t.logs).toEqual(['signin: sheet opened', 'signin: sheet cancelled']);
     }
   });
@@ -110,42 +107,12 @@ describe('signInSheet', () => {
   });
 });
 
-describe('the result belongs to its sign-in', () => {
-  test('S10 every outcome carries the link it was opened for', async () => {
-    const link2 = `${ORIGIN}/device?code=WXYZ-WXYZ`;
-    expect((await signInSheet(link2, env().env)).link).toBe(link2);
-    expect((await signInSheet(link2, env({ answer: async () => { throw refusal(499); } }).env)).link).toBe(link2);
-    expect((await signInSheet(link2, env({ answer: async () => { throw refusal(501); } }).env)).link).toBe(link2);
-    expect((await signInSheet('https://evil.example/x', env().env)).link).toBe('https://evil.example/x');     // even a refused one: the contract compares, it does not trust
-  });
-  test('S10 a nonce that cannot be made is failed, not thrown', async () => {
+describe('a nonce that cannot be made', () => {
+  test('S10 is failed, not thrown', async () => {
     const real = crypto.getRandomValues.bind(crypto);
     (crypto as { getRandomValues: unknown }).getRandomValues = () => { throw new Error('no entropy'); };
     try { const t = env(); const r = await signInSheet(LINK, t.env); expect(r.outcome).toBe('failed'); expect(t.calls.length).toBe(0); }
     finally { (crypto as { getRandomValues: unknown }).getRandomValues = real; }
-  });
-});
-
-describe('the contract wiring', () => {
-  const account = readFileSync(new URL('./account.contract', import.meta.url), 'utf8');
-  const signedIn = readFileSync(new URL('./onboarding.contract', import.meta.url), 'utf8');
-  test('S11 only this sign-in\'s cancelled result closes it, and by asking native to poll first', () => {
-    // (A contract test on the web host cannot drive `au`: the native source answers its idle default, and a *.test.contract cannot set it. The decision is therefore kept to
-    // three plain lines, and read here.)
-    expect(account).toMatch(/derive sheetOutcome = match signInEnded \{ case some\(r\) => \(r\.link == au\.verificationURL \? r\.outcome : ""\), case none => "" \}/);
-    expect(account).toMatch(/derive sheetNote = match signInEnded \{ case some\(r\) => \(r\.link == au\.verificationURL and r\.outcome == "failed" \? r\.message : ""\), case none => "" \}/);
-    const act = /action sheetEnded\n((?:    .*\n)+)/.exec(account)![1];
-    expect(act).toContain('if sheetOutcome == "cancelled" and au.status == "pending"');
-    expect(act).toContain('send acct = choirCancelSignIn(by="sheet")');
-    expect(act).not.toMatch(/returned|failed/);
-    expect((account.match(/choirCancelSignIn\(/g) ?? []).length).toBe(2);        // the sheet's (by="sheet") and the card's own Cancel
-    expect(account).toMatch(/action cancelSignIn\n    send acct = choirCancelSignIn\(by="card"\)/);
-  });
-  test('S11 a new sign-in clears the last result, so a stale one cannot show or act', () => {
-    expect(account).toMatch(/action signIn\n    signInEnded = none\n    send acct = choirSignIn\(\)/);
-  });
-  test('S11 a sheet that could not open offers the same link in the system browser, from shared code', () => {
-    expect(signedIn).toMatch(/if sheetNote != ""[\s\S]*href=au\.verificationURL/);
   });
 });
 
@@ -179,6 +146,13 @@ describe('the app declares what Exact needs', () => {
     }
     expect(seen.size).toBe(1 + Object.keys(json.variants).length);
     expect(RETURN_PATH).toBe('/signed-in');
+  });
+  test('S8b the build script hands Exact the app id as the scheme, for every identity, and the id comes from app.json', () => {
+    const sh = readFileSync(new URL('../scripts/exact.sh', import.meta.url), 'utf8');
+    expect(sh).toMatch(/SCHEME="\$\("\$HERE\/scripts\/app-identity\.sh" id\)"/);                  // the id, from the one place that reads app.json
+    expect(sh).toMatch(/exec env -i [^\n]*SIGNIN_SCHEME="\$SCHEME"/);                                  // into the cleaned environment Exact runs in (an empty one of the caller's cannot get through)
+    const idScript = readFileSync(new URL('../scripts/app-identity.sh', import.meta.url), 'utf8');
+    expect(idScript).toContain('base + v["idSuffix"]');                                                 // a variant's id is the app id plus its suffix: the same as its env value (S8)
   });
   test('S9 the module writes no store and no key', () => {
     const src = readFileSync(new URL('./signin-sheet.ts', import.meta.url), 'utf8').split('\n').filter((l) => !l.trim().startsWith('//')).map((l) => l.replace(/\s\/\/ .*$/, '').replace(/\/\*\*.*?\*\//g, '')).join('\n');   // code, not comments

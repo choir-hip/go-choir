@@ -6,10 +6,16 @@ shape SignOutResult
   // Counts every completed wipe (monotonic): the sources that keep state in memory are asked again when it changes.
   epoch: number
 
-// How the system sign-in sheet ended (signin-sheet.ts, `signInSheet`): returned (the page closed it: a hint to wait for the poll, not proof), cancelled (the
-// owner closed it: the pending code is abandoned) or failed (it could not open: `message` says so in plain words). Never a key, a code or a URL.
-shape SignInSheet
-  outcome: string
+// What the card shows of the one sign-in attempt (signin-attempt.ts `view`): the phase, whether a code is pending, the code, a link for the system browser (only when the sheet could not open, https on the
+// granted origin), a note and the ending's words. Never a device code or a key.
+shape SignInView
+  phase: string
+  pending: bool
+  userCode: string
+  browserLink: string
+  note: string
   message: string
-  // The verification link this sheet was opened for: a result counts only for the sign-in that is still pending on that link.
-  link: string
+
+// The answer of a press (run, cancel, reopen): the phase the attempt is in.
+shape SignInEnd
+  phase: string

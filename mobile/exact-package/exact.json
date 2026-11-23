@@ -647,17 +647,6 @@
       }
     },
     {
-      "send": "choirSignIn",
-      "answers": "LabState"
-    },
-    {
-      "send": "choirCancelSignIn",
-      "options": {
-        "by": "string"
-      },
-      "answers": "LabState"
-    },
-    {
       "send": "choirRefresh",
       "answers": "LabState"
     },

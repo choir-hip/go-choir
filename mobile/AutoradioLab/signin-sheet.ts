@@ -16,8 +16,8 @@
 
 export const RETURN_PATH = '/signed-in';
 
-/** `link` is the verification link the sheet was opened for (not secret: the card shows its code): the contract acts on a result only when it is the pending sign-in's own. */
-export type SheetResult = { outcome: 'returned' | 'cancelled' | 'failed'; message: string; link: string };
+/** How the sheet ended. Which sign-in it belongs to is the attempt's business (signin-attempt.ts): the attempt that opened it names its id when it hears this. */
+export type SheetResult = { outcome: 'returned' | 'cancelled' | 'failed'; message: string };
 export type SheetEnv = {
   /** The one server origin the grant `auth.session` names. */
   origin: string;
@@ -54,11 +54,12 @@ export function sheetUrl(link: string, callback: string, state: string, origin: 
 
 const nonce = (): string => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');   // 32 hex characters
 
-const FAILED = 'The sign-in window could not open. Open it in your browser instead; this screen finishes the sign-in once you approve.';
+/** What the card says when the sheet could not open. */
+export const sheetOutcomeNote = 'The sign-in window could not open. Open it in your browser instead; this screen finishes the sign-in once you approve.';
 
 /** Open the approval page in the sheet and say how the sheet ended. Never throws; never carries the callback's URL. */
 export async function signInSheet(link: string, env: SheetEnv): Promise<SheetResult> {
-  const failed = (why: string): SheetResult => { env.log(`signin: sheet failed${why}`); return { outcome: 'failed', message: FAILED, link }; };
+  const failed = (why: string): SheetResult => { env.log(`signin: sheet failed${why}`); return { outcome: 'failed', message: sheetOutcomeNote }; };
   let callback: string;
   try { callback = env.authCallback(); } catch { return failed(' (no callback)'); }
   let state: string;
@@ -70,10 +71,10 @@ export async function signInSheet(link: string, env: SheetEnv): Promise<SheetRes
   try {
     await env.openAuthSession(url, { callback, state, ephemeral: false });      // not ephemeral: the sheet must share the browser's passkeys and session
     env.log('signin: sheet returned');
-    return { outcome: 'returned', message: '', link };
+    return { outcome: 'returned', message: '' };
   } catch (e) {
     const status = (e as { status?: unknown } | null)?.status;
-    if (status === 499) { env.log('signin: sheet cancelled'); return { outcome: 'cancelled', message: '', link }; }
+    if (status === 499) { env.log('signin: sheet cancelled'); return { outcome: 'cancelled', message: '' }; }
     return failed(typeof status === 'number' ? ` status=${status}` : '');
   }
 }

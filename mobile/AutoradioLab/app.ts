@@ -3,7 +3,7 @@ import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
-import { adoptNative } from './api.ts';
+import { adoptNative, nativeLater } from './api.ts';
 import { settingsAccount, aboutPage } from './settings.ts';
 import { settingsComputer, computerAct } from './computer.ts';
 import { activityPage } from './activity.ts';
@@ -30,6 +30,7 @@ import * as imported from './imported.ts';
 import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveEnv as takesEnv } from './take-session.ts';
 import * as picks from './edition-picks.ts';
 import { signInSheet, liveSheetEnv } from './signin-sheet.ts';
+import { signInRun, signInCancel, signInReopen, signInView, type AttemptEnv } from './signin-attempt.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -99,6 +100,17 @@ fs.read app:/data/onboarding.json
 fs.write app:/data/onboarding.json
 sqlite.open app:/data/content.db`;
 
+const attemptEnv = (): AttemptEnv => {
+  const later = nativeLater();
+  return {
+    origin: ORIGIN,
+    later: (r) => (later ? later(r) : Promise.reject(new Error('no native module'))),
+    sheet: (link) => signInSheet(link, liveSheetEnv(ORIGIN)),
+    sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
+    newId: () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''),
+    log: (l) => console.log(l),
+  };
+};
 let takesOverlay: ReturnType<typeof newTakes> | undefined;
 const takes = (): ReturnType<typeof newTakes> => (takesOverlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
 const sources: Sources = {
@@ -175,8 +187,11 @@ const sources: Sources = {
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
   pagesPin: ([address], _store, storage) => pages.pagesPin(storage, address),
   pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
-  // Sign-in (signin-sheet.ts): open the approval page in the system sign-in sheet; the answer is only how the sheet ended. Swift still begins the flow, polls and writes the key.
-  signInSheet: ([link]) => signInSheet(link, liveSheetEnv(ORIGIN)),
+  // Sign-in (signin-attempt.ts): one attempt, one state machine with an id, owned here. The sheet (signin-sheet.ts) is how the approval page opens; native keeps the device code, one poll request and the Keychain write.
+  signInRun: () => signInRun(attemptEnv()),
+  signInCancel: () => signInCancel(attemptEnv()),
+  signInReopen: () => signInReopen(attemptEnv()),
+  signInView: ([_tick]) => signInView(ORIGIN),
   accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
