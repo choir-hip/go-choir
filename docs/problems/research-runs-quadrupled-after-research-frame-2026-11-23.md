@@ -100,3 +100,18 @@ twelve passed 25 on their own (32 and 34 runs active). Claim C202 covers 18Z to 
 Two runs in 17Z made 160 and 142 model calls each; runs of 72 and 108 were
 seen before and during the change too, and none has been read step by step.
 
+## Four more hours (read 2026-11-23 21:10Z)
+
+Research runs that made a model call: 29 in 18Z, 24 in 19Z, 34 in 20Z. Claim
+C202 (none of 18Z to 21Z over 25) is false. The line ignored the time of
+day: 20Z on 11-22, before the change, had 32. Against the same daytime hours
+under the changed prompts (39 to 82), the revert about halved runs. Since the
+revert the hours read 44, 12, 29, 24, 34.
+
+Belief now: the change raised runs, at about 0.8, by something like a factor
+of two in daytime hours, not four. The "13 to 62" in this record's title
+compared overnight hours before with daytime hours after, so it overstated
+the effect. What is still not known: the mechanism (no run ledger read), and
+a like-for-like baseline, which needs the same hours of a weekday without the
+change. Tuesday 11-24, 08Z to 14Z, is the first such window.
+
