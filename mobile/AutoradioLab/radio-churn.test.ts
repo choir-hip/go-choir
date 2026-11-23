@@ -6,7 +6,8 @@
 // behind them (radioPulse, queueView, barRun, radioPageFacts, radioPage, barInfo), a native that answers like the module (the clock, the deck, and the 0.4 s touch read from AutoradioModule+Bar.swift),
 // and Exact's rule: a resource is asked again when the arguments it was asked with are not the ones it has now.
 //   C1 the model is the contract: every resource of the graph is declared in the contracts with the arguments the model uses.
-//   C2 while the programme plays in front, for a simulated minute: the pulse is asked at most twice a second, the three screens (and what reads them) at most once a second, and a pulse costs at most 3 native calls.
+//   C2 while the programme plays in front, for a simulated minute: the pulse and the three screens (brun, qv, rpfacts) are asked about once a second (and the beat advances: a dead pulse is not green), the page and the bar's
+//      readers of the bar's facts (rp, bi) follow native's 2.5 a second, and the native calls counted are the pulse's, the screens' AND native's own sources (barFacts, radioView).
 //   C3 paused, and locked (not in front): the pulse is asked at the slow clock's rate or less.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
@@ -20,7 +21,7 @@ const src = (f: string): string => readFileSync(new URL(f, import.meta.url), 'ut
 const contracts = ['spine.contract', 'members-radio.contract', 'members-queue.contract', 'members-bar.contract', 'members-cards.contract'].map(src).join('\n');
 const swiftModule = readFileSync(new URL('../exact-package/apple/AutoradioModule.swift', import.meta.url), 'utf8') + readFileSync(new URL('../exact-package/apple/AutoradioModule+Bar.swift', import.meta.url), 'utf8');
 /** The 0.4 s progress timer of AutoradioModule+Bar.swift touches radioView and barFacts; whether that wakes the pump (radioNote) is read from the Swift. */
-const timerWakesPump = !/touch\(\["radioView", "barFacts"\], pump: false\)/.test(swiftModule);
+const timerWakesPump = !/if s\.running && !s\.paused \{ self\.touch\(\["radioView", "barFacts"\], pump: false\) \}/.test(swiftModule);       // the timer's own line, not any touch with the flag
 
 const BASE = 1_700_000_000_000;
 let nowMs = 0, front = true, calls: Record<string, number> = {};
@@ -42,15 +43,15 @@ const native = {
 };
 
 type Res = { name: string; args: () => string; run: () => Promise<unknown>; value?: unknown; last?: string; asks: number; native?: boolean };
-async function simulate(seconds: number): Promise<{ asks: Record<string, number>; calls: Record<string, number>; pulses: number }> {
+async function simulate(seconds: number): Promise<{ asks: Record<string, number>; calls: Record<string, number>; pulses: number; beat: number }> {
   let radioTick = 0, noteTick = 0, barFactsRev = 0, viewRev = 0, slowNow = false;
   const v = (n: string): any => res.find((r) => r.name === n)!.value ?? {};
   const posKey = (): number => (v('rpulse').live && front ? v('rpulse').beat : 0);
   const res: Res[] = [
     { name: 'ds', native: true, args: () => 'ds', run: async () => ({ seq: dk.seq }), asks: 0 },
     { name: 'rnote', native: true, args: () => `note${noteTick}`, run: async () => ({ tick: noteTick }), asks: 0 },
-    { name: 'bf', native: true, args: () => `bf${barFactsRev}`, run: async () => ({ at: (BASE + nowMs) / 1000, playing: dk.why === 'playing', title: 'Episode', running: true, blockCount: 4, blockIndex: Math.floor(nowMs / 7000) % 4, blockFraction: (nowMs % 7000) / 7000, onAir: true }), asks: 0 },
-    { name: 'ri', native: true, args: () => `ri${viewRev}`, run: async () => ({ rev: viewRev }), asks: 0 },
+    { name: 'bf', native: true, args: () => `bf${barFactsRev}`, run: async () => (calls.barFacts = (calls.barFacts ?? 0) + 1, { at: (BASE + nowMs) / 1000, playing: dk.why === 'playing', title: 'Episode', running: true, blockCount: 4, blockIndex: Math.floor(nowMs / 7000) % 4, blockFraction: (nowMs % 7000) / 7000, onAir: true }), asks: 0 },
+    { name: 'ri', native: true, args: () => `ri${viewRev}`, run: async () => (calls.radioView = (calls.radioView ?? 0) + 1, { rev: viewRev }), asks: 0 },
     { name: 'rpulse', args: () => `${v('ds').seq}|${v('rnote').tick}|${radioTick}`, run: () => radioPulse(undefined, native as never), asks: 0 },
     { name: 'brun', args: () => `${v('rpulse').tick}|${posKey()}`, run: () => barRun(undefined, native as never), asks: 0 },
     { name: 'qv', args: () => `${v('rpulse').tick}|${posKey()}`, run: () => queueView(undefined, native as never), asks: 0 },
@@ -78,7 +79,7 @@ async function simulate(seconds: number): Promise<{ asks: Record<string, number>
     if (dk.why === 'playing' && nowMs >= touchAt) { touchAt = nowMs + 400; barFactsRev += 1; viewRev += 1; if (timerWakesPump) noteTick += 1; fired = true; }
     if (fired) await settle();
   }
-  return { asks: Object.fromEntries(res.map((r) => [r.name, r.asks])), calls: { ...calls }, pulses: res.find((r) => r.name === 'rpulse')!.asks };
+  return { asks: Object.fromEntries(res.map((r) => [r.name, r.asks])), calls: { ...calls }, pulses: res.find((r) => r.name === 'rpulse')!.asks, beat: v('rpulse').beat as number };
 }
 
 beforeEach(async () => { forgetOnboarding(); await wipeRadio(undefined); adoptNative(native as never, 'test'); nowMs = 0; front = true; calls = {}; Object.assign(dk, { why: 'empty', item: '', base: 0, t0: 0, seq: 0 }); });
@@ -101,10 +102,11 @@ describe('C2 while the programme plays in front, for a simulated minute', () => 
     await getRadio(undefined, native as never); await playing();
     const r = await simulate(60);
     console.log(`C2 ${timerWakesPump ? 'the timer wakes the pump' : 'the timer does not wake the pump'}: asks ${JSON.stringify(r.asks)}; native calls ${JSON.stringify(r.calls)}`);
-    expect(r.pulses).toBeLessThanOrEqual(2 * 60 + 5);                               // the clock's one a second, and a little for what really changed
-    for (const n of ['brun', 'qv', 'rpfacts']) expect(r.asks[n], n).toBeLessThanOrEqual(60 + 5);   // the position moves once a second
+    expect(r.pulses).toBeGreaterThanOrEqual(55); expect(r.pulses).toBeLessThanOrEqual(2 * 60 + 5);   // the clock's one a second (not fewer: a dead pulse is red), and a little for what really changed
+    expect(r.beat).toBeGreaterThanOrEqual(55);                                     // the beat moved about once a second: the position labels are not frozen
+    for (const n of ['brun', 'qv', 'rpfacts']) { expect(r.asks[n], n).toBeGreaterThanOrEqual(55); expect(r.asks[n], n).toBeLessThanOrEqual(60 + 5); }   // the position moves once a second
     const nativeCalls = Object.values(r.calls).reduce((a, b) => a + b, 0);
-    expect(nativeCalls / 60).toBeLessThanOrEqual(7);
+    expect(nativeCalls / 60).toBeGreaterThanOrEqual(3); expect(nativeCalls / 60).toBeLessThanOrEqual(9);    // pulse 3 a second + native's own barFacts and radioView 2.5 each
   });
 });
 
