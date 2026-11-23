@@ -77,17 +77,11 @@ const (
 	// reason and the next attempt waits out its backoff. This is a deadline, not
 	// a switch.
 	snapshotDefaultMaxDuration = 90 * time.Minute
-	// The read transaction is bounded on its own: it lasts as long as the
-	// uploader holds the stream back, and it pins the WAL. Past this the stream
-	// stops, the WAL is released and the attempt fails (snapshot.ErrPinDeadline);
-	// the chunks already uploaded are kept and the retry skips them. The mission's
-	// target for the paper's 51 GiB store is well under it (docs/definitions/
-	// choir-storage-efficiency-2026-11-22.md). A deadline, not a switch.
-	snapshotPinDeadline = 30 * time.Minute
 	// snapshotWALBytesPerSecond is the rate a pinned WAL grows at on the paper:
 	// 3.7 GB in 30 minutes, 2026-11-12 (docs/design/
-	// snapshot-without-scratch-copy-2026-11-20.md). It sizes the headroom the
-	// free-space rule asks for.
+	// snapshot-without-scratch-copy-2026-11-20.md), about 2 MiB/s. Over the pin
+	// deadline it is 2 MiB * 1800 s = 3,774,873,600 bytes (3.5 GiB, 3.77 GB).
+	// It sizes the headroom the free-space rule asks for.
 	snapshotWALBytesPerSecond = int64(2) << 20
 	// After a failed attempt the next one waits snapshotBackoffFloor, doubling
 	// per consecutive failure up to snapshotBackoffCeiling; a success resets
@@ -138,6 +132,27 @@ const (
 
 	snapshotAttemptKey   = "snapshot_producer"
 	snapshotAttemptLimit = 3
+)
+
+// The pin and the free-space guard are variables so a test can shorten them;
+// nothing else sets them.
+var (
+	// The read transaction is bounded on its own: it lasts as long as the
+	// uploader holds the stream back, and it pins the WAL. Past this the stream
+	// stops, the WAL is released and the attempt fails (snapshot.ErrPinDeadline);
+	// the chunks already uploaded are kept and the retry skips them. The mission's
+	// target for the paper's 51 GiB store is well under it (docs/definitions/
+	// choir-storage-efficiency-2026-11-22.md). A deadline, not a switch.
+	snapshotPinDeadline = 30 * time.Minute
+	// snapshotFreeCheckEvery is how often the capture's guard reads the free
+	// space on its own, apart from the check every 64 MiB the stream reads. The
+	// stream's check stops while the reader is blocked behind a stalled upload,
+	// and the pinned WAL keeps growing then: the guard is what sees it. It is
+	// compaction's own interval (store compactFreeCheckEvery), so a write burst
+	// cannot fill the volume inside a window longer than compaction allows.
+	snapshotFreeCheckEvery = 10 * time.Second
+	// snapshotFreeBytes reads the free space of the volume holding dir.
+	snapshotFreeBytes = freeBytesOnVolume
 )
 
 type snapshotOutcome string
@@ -869,7 +884,7 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 				// The WAL the pin holds grows on the data volume; the stream checks
 				// this every 64 MiB it reads and the capture every minute.
 				FreeSpace: func() error {
-					free, err := freeBytesOnVolume(dataDir)
+					free, err := snapshotFreeBytes(dataDir)
 					if err != nil {
 						return fmt.Errorf("snapshot: cannot measure free space during the capture (fails closed): %w", err)
 					}
