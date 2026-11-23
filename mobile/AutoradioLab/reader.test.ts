@@ -198,6 +198,31 @@ describe('A-3 the page is handed to native once, not on every evaluation', () =>
   });
 });
 
+describe('A-10 a reload does not share an ask already in flight', () => {
+  test('the document read after a reload is the new one, and the old ask does not overwrite it', async () => {
+    let n = 0; const gate: (() => void)[] = [];
+    const f = fake({ authed: (p) => { if (p === '/api/texture/documents/d1') n++; return defaultAuthed(p); } });
+    const slow: R.Net = { ...f.net, authed: async (p, o) => { if (p === '/api/texture/documents/d1' && n === 0) await new Promise<void>((r) => gate.push(r)); return f.net.authed(p, o); } };
+    const first = R.readerDocShared('texture:d1', 'in', false, slow);
+    await new Promise((r) => setTimeout(r, 0));
+    await R.readerReload('texture:d1');
+    const second = await R.readerDocShared('texture:d1', 'in', false, f.net);
+    gate.forEach((g) => g()); await first;
+    expect(f.count('/api/texture/documents/d1')).toBeGreaterThanOrEqual(2);
+    expect(second.status).toBe('ready');
+  });
+});
+
+describe('A-8 the lap lines carry no title', () => {
+  test('a story whose slug is its title is never in the log', async () => {
+    const lines: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { lines.push(a.join(' ')); };
+    (globalThis as { scheduler?: unknown }).scheduler = { yield: async () => undefined };
+    try { await R.readerDocShared('pub:the-secret-title-of-a-story', 'in', false, fake().net); } finally { console.log = log; delete (globalThis as { scheduler?: unknown }).scheduler; }
+    expect(lines.some((l) => l.startsWith('lap:'))).toBe(true);
+    expect(lines.filter((l) => l.includes('secret-title'))).toEqual([]);
+  });
+});
+
 describe('actions', () => {
   test('R10 reload, restore, stop', async () => {
     const f = fake();

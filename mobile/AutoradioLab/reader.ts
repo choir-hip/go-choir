@@ -65,8 +65,8 @@ async function fetchDoc(address: string, net: Net): Promise<ReaderDoc> {
     const related = net.pub('/api/platform/publications/related', { route: bare, limit: 5 }).then((r) => parseRelated(r.body), () => []);       // a route that is not there: the story still opens
     const body = (await net.pub('/api/platform/publications/resolve', { route: a.route })).body;
     if (!obj(body)) throw new Error('the computer sent a story that is not a story');
-    await yieldTurn(`${address}: reply decoded, before the bundle's decoding`);   // the reply's own text and JSON are done: the decoding of a large story starts in a turn of its own
-    const d = await decodeOne(() => parseBundleAsync(body, address, (label) => yieldTurn(`${address.slice(-24)}: ${label}`)));
+    await yieldTurn(`story: reply decoded, before the bundle's decoding`);   // the reply's own text and JSON are done: the decoding of a large story starts in a turn of its own
+    const d = await decodeOne(() => parseBundleAsync(body, address, (label) => yieldTurn(`story: ${label}`)));
     d.related = await related;                                  // "Hear it" is the page's own source (clips.ts storyClips): a slow clip route does not hold the story
     console.log(`reader: story blocks=${d.blocks.length} cites=${d.cites.length} related=${d.related.length}`);
     return d;
@@ -119,7 +119,7 @@ async function ask(address: string, net: Net, prefetch = false): Promise<ReaderD
       return !(e instanceof SignedOutError) && held.get(address) ? held.get(address)! : failDoc(address, e);
     }
     if (gen !== accountGeneration()) return blankDoc(address, 'loading');           // another account began while this was on its way: neither held nor shown
-    if (d.status === 'ready') { put(d); if (prefetch) unseen.add(address); else unseen.delete(address); }
+    if (d.status === 'ready' && inflight.get(key) === p) { put(d); if (prefetch) unseen.add(address); else unseen.delete(address); }
     return d;
   })().finally(() => { if (inflight.get(key) === p) inflight.delete(key); });
   inflight.set(key, p);
@@ -155,7 +155,9 @@ export async function readerDocShared(address: string, _accState: string, _saved
 const ack = (ok: boolean): Ack => ({ ok });
 
 /** Forget a document: the next ask reads it again (the page menu's Reload). */
-export async function readerReload(address: string): Promise<Ack> { current(); held.delete(address); unseen.delete(address); return ack(true); }
+export async function readerReload(address: string): Promise<Ack> { current(); forgetOne(address); return ack(true); }
+/** Held copy and any ask in flight: the next ask reads again, and an older ask that lands later holds nothing. */
+function forgetOne(address: string): void { held.delete(address); unseen.delete(address); inflight.delete(address); }
 
 /** A version as the latest (the web's "Restore"): POST /api/texture/documents/{id}/restore. The head is already the latest. */
 export async function readerRestore(address: string, version: string, net: Net = real): Promise<Ack> {
@@ -164,8 +166,8 @@ export async function readerRestore(address: string, version: string, net: Net =
   if (a.kind !== 'texture') return ack(false);
   if (r.rev === '') return ack(true);
   try { await net.authed(`/api/texture/documents/${segment(a.doc)}/restore`, { method: 'POST', body: { revision_id: r.rev, mode: 'restore_as_latest' } }); }
-  catch { held.delete(address); return ack(false); }
-  held.delete(address);
+  catch { forgetOne(address); return ack(false); }
+  forgetOne(address);
   return ack(true);
 }
 
@@ -173,7 +175,7 @@ export async function readerRestore(address: string, version: string, net: Net =
 export async function readerStop(address: string, net: Net = real): Promise<Ack> {
   current();
   const traj = held.get(address)?.trajectory ?? '';
-  held.delete(address);
+  forgetOne(address);
   if (traj === '') return ack(true);
   try { await net.authed(`/api/texture/lifecycle/${segment(traj)}/cancel`, { method: 'POST' }); }
   catch (e) { return ack(e instanceof HTTPError && (e.status === 404 || e.status === 409)); }

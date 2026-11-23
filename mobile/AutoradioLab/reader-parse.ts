@@ -9,7 +9,7 @@
 //  "Source unavailable"; ids are made unique.   4. Empty text nodes, whitespace-only paragraphs, a hard_break at either end: no empty runs, no empty blocks.   5. Nested lists, ordered lists with a start.
 //  6. Quotes with several paragraphs or nested quotes.   7. Code keeps its newlines.   8. A very long document: one pass; a paragraph over 20 000 characters is not sentence-split.
 //  9. Sentence indices come from the plain text without marks.   10. Tables with ragged rows; a Markdown table without a separator line is prose.   11. Unmatched `*`, snake_case, `5 * 3` are literal.
-//  12. Versions: a revision above latest is clamped; "newer" only when latest > revision; a corrupt count is capped at 500 rows.   13. A first heading equal to the title is dropped.
+//  12. Versions: a story's revision above latest is clamped (a document's list raises latest instead); "newer" only when latest > revision; a corrupt count is capped at 500 rows.   13. A first heading equal to the title is dropped.
 import type { Result } from './app.contract.d.ts';
 import { shortDate } from './textures.ts';
 
@@ -683,7 +683,7 @@ export function parseRevision(rev: Obj, document: Obj, address: string, revision
   const thisRev = str(rev.revision_id);
   const vn = intOf(rev.version_number);
   const thisNumber = rows.find((r) => r.rid === thisRev)?.n ?? (vn !== null ? vn + 1 : latest);
-  doc.revision = Math.min(thisNumber, Math.max(latest, thisNumber));
+  doc.revision = thisNumber;                                    // the list is the authority: a revision above it raises `latest` (next line), it is not cut
   doc.latest = Math.max(latest, doc.revision);
   doc.newer = doc.latest > doc.revision && doc.revision > 0; doc.historical = doc.newer;
   const docId = ta.doc !== '' ? ta.doc : str(document.doc_id);
