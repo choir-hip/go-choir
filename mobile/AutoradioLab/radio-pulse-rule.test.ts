@@ -82,3 +82,14 @@ describe('an ask of the desk starts only from a mutation\'s own body (the radio 
     expect(pulse).toContain('inFlight=${r.writer.inFlight}'); expect(pulse).toContain('ahead=${');
   });
 });
+
+describe('the desk is not asked again without a reason (review B1-2)', () => {
+  test('every listener verb of the bridge tells the writer the listener acted', () => {
+    const b = src('radio-bridge.ts');
+    for (const n of ['queueAdd', 'queueAct', 'radioPlayAudio', 'radioHandWords', 'radioPlayStory', 'radioListen', 'radioMove', 'radioPageAct', 'radioPlayPause', 'radioStart']) {
+      const at = b.indexOf('export async function ' + n + '(');
+      expect(at, n).toBeGreaterThan(-1);
+      expect(b.slice(at, at + 700).includes('listenerActed()'), `${n} does not say the listener acted`).toBe(true);
+    }
+  });
+});

@@ -308,7 +308,7 @@ async function handle(r: Radio, text: string): Promise<void> {
 }
 
 export async function queueAdd(storage: Store | undefined, native: NativeReader | undefined, mode: string, kind: string, ref: string, title: string, local: string): Promise<QueueAnswer> {
-  const r = await getRadio(storage, native);
+  const r = await getRadio(storage, native); r.writer.listenerActed();
   const e = requestEntry(kind, ref, title);
   if (e) { if (mode === 'now') r.rt.play(e); else if (mode === 'next') r.rt.playNext(e); else r.rt.queue(e); }
   await r.rt.pump();
@@ -316,7 +316,7 @@ export async function queueAdd(storage: Store | undefined, native: NativeReader 
 }
 
 export async function queueAct(storage: Store | undefined, native: NativeReader | undefined, op: string, arg: string): Promise<QueueAnswer> {
-  const r = await getRadio(storage, native);
+  const r = await getRadio(storage, native); r.writer.listenerActed();
   const rt = r.rt;
   switch (op) {
     case 'toggle': await radioPlayPauseOf(r); break;
@@ -364,7 +364,7 @@ async function openRadioOf(r: Radio): Promise<void> {
 /** Play or queue one audio address (an episode, a clip's episode): the podcast page's Play and Add to queue. The audio is the deck's; the entry and the order are the sheet's. */
 export async function radioPlayAudio(storage: Store | undefined, native: NativeReader | undefined, op: string, id: string, url: string, title: string, show: string, start: number): Promise<{ status: string; message: string }> {
   if (url === '') return { status: 'error', message: 'This episode has no audio to play.' };
-  const r = await getRadio(storage, native);
+  const r = await getRadio(storage, native); r.writer.listenerActed();
   const e = audioEntry({ url, title: title === '' ? 'Episode' : title, show, ...(start > 0 ? { start } : {}), ...(id !== '' ? { episode_id: id } : {}) });
   if (op === 'queue') r.rt.queue(e); else r.rt.play(e);
   await r.rt.pump();
@@ -375,7 +375,7 @@ export async function radioPlayAudio(storage: Store | undefined, native: NativeR
 export async function radioHandWords(storage: Store | undefined, native: NativeReader | undefined, op: string, id: string, title: string, at: number, text: string): Promise<{ ok: boolean; message: string }> {
   const paragraphs = text.split('\n').filter((p) => p !== '');
   if (id === '' || paragraphs.length === 0) return { ok: false, message: 'This document has nothing to read.' };
-  const r = await getRadio(storage, native);
+  const r = await getRadio(storage, native); r.writer.listenerActed();
   const e = bookEntry(id, title, at), words = { title, paragraphs };
   if (op === 'queue') { r.rt.queue(e, words); await r.rt.pump(); return { ok: true, message: 'Added to the queue.' }; }
   r.rt.play(e, words);
@@ -383,10 +383,10 @@ export async function radioHandWords(storage: Store | undefined, native: NativeR
   return { ok: true, message: '' };
 }
 
-export async function radioPlayPause(storage: Store | undefined, native: NativeReader | undefined): Promise<Ack> { await radioPlayPauseOf(await getRadio(storage, native)); return ACK; }
-export async function radioStart(storage: Store | undefined, native: NativeReader | undefined): Promise<Ack> { const r = await getRadio(storage, native); await openRadioOf(r); return ACK; }
+export async function radioPlayPause(storage: Store | undefined, native: NativeReader | undefined): Promise<Ack> { const r = await getRadio(storage, native); r.writer.listenerActed(); await radioPlayPauseOf(r); return ACK; }
+export async function radioStart(storage: Store | undefined, native: NativeReader | undefined): Promise<Ack> { const r = await getRadio(storage, native); r.writer.listenerActed(); await openRadioOf(r); return ACK; }
 export async function radioPlayStory(storage: Store | undefined, native: NativeReader | undefined, route: string, title: string): Promise<Ack> {
-  const r = await getRadio(storage, native);
+  const r = await getRadio(storage, native); r.writer.listenerActed();
   if (route !== '') r.rt.play(paperStory(route, title));
   await r.rt.pump();
   const air = r.rt.store.onAir();
@@ -394,20 +394,20 @@ export async function radioPlayStory(storage: Store | undefined, native: NativeR
   return ACK;
 }
 export async function radioListen(storage: Store | undefined, native: NativeReader | undefined, address: string, title: string, text: string): Promise<Ack> {
-  const r = await getRadio(storage, native);
+  const r = await getRadio(storage, native); r.writer.listenerActed();
   const w = listenWords(title, text);
   if (w) { const e = readAloud(address, title); e.est_seconds = estimateSeconds(w.paragraphs.join(' ')); r.rt.play(e, w); }
   await r.rt.pump(); return ACK;
 }
 export async function radioMove(storage: Store | undefined, native: NativeReader | undefined, move: string): Promise<Ack> {
-  const r = await getRadio(storage, native);
+  const r = await getRadio(storage, native); r.writer.listenerActed();
   if (move === 'previous') await r.rt.previous(); else r.rt.skip();
   await r.rt.pump(); return ACK;
 }
 
 /** The gestures on the Autoradio page: reorder (one `move`), remove (a swipe), play (a tap on a row), replay (a tap on Heard). */
 export async function radioPageAct(storage: Store | undefined, native: NativeReader | undefined, op: string, arg: string, to: string): Promise<Ack> {
-  const r = await getRadio(storage, native);
+  const r = await getRadio(storage, native); r.writer.listenerActed();
   const g = op === 'reorder' ? { kind: 'reorder' as const, id: arg, before: to === '' ? undefined : to } : op === 'remove' ? { kind: 'remove' as const, id: arg } : op === 'play' ? { kind: 'playNow' as const, id: arg } : op === 'replay' ? { kind: 'replay' as const, id: arg } : undefined;
   if (g) {
     const a = perform(r.rt.store.sheet, g, r.rt.store.mintOpId());

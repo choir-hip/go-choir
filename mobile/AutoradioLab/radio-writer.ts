@@ -114,6 +114,12 @@ export type WriterDeps = {
  *  that is passed is left to end. */
 export const ASK_DEADLINE_MS = 120_000;
 const GIVE_UP_MS = 2 * ASK_DEADLINE_MS;
+/** After a FAILED ask the next waits BACKOFF_BASE_MS, then twice that, and so on up to BACKOFF_MAX_MS (a provider's refusal or a desk that is down is not asked again every pulse: ten minutes make about six asks).
+ *  Reset by an answer that adds entries and by the listener's own act. */
+export const BACKOFF_BASE_MS = 10_000, BACKOFF_MAX_MS = 300_000;
+/** After a DRY answer (the desk had nothing to add) the next waits until an input to the ask changed (the candidates, the stories' text, the edition: compared when the floor ends, before any model call), the listener acted, or
+ *  this floor: ten minutes, about the time a new story takes to be published on the paper's front page, so new material is looked for without asking every pulse. */
+export const DRY_FLOOR_MS = 600_000;
 
 /** Between two entries of a long answer: lets the next turn start (Exact gives a turn about 100 ms of CPU; Bun has no scheduler). */
 const yieldTurn = (label: string): Promise<void> => lapYield(`writer: ${label}`);
@@ -130,12 +136,26 @@ export class Writer {
   private applied = 0;
   /** The one extra ask of this dry spell has been made. Cleared when an answer is applied or an ask fails, or a new spell begins (an ask starts with none in flight). */
   private reasked = false;
+  /** Backoff after failures (the device clock the next ask may start at; 0: none) and how many failed in a row. With no device time (0) a hold stays until the listener acts or an answer arrives: never a loop. */
+  private failures = 0; private holdUntil = 0;
+  /** The last dry answer: when (device ms; -1 none) and the inputs it was given (the signature a later ask compares before it calls the model). */
+  private dryAt = -1; private dryKey = '';
   constructor(private d: WriterDeps) {}
   get inFlight(): boolean { return this.flights.length > 0; }
   settle(): Promise<void> { return Promise.all(this.flights.map((f) => f.task ?? Promise.resolve())).then(() => undefined); }
   open(): void { this.opened = true; this.ask('open'); }
   /** The radio opened: the desk is asked from now on. `start` false only marks it (the pulse starts the ask inside an answer that waits for it). */
   openAhead(start = true): void { this.opened = true; if (start) this.checkAhead(); }
+  private nowMs(): number { return this.d.now().getTime(); }
+  /** The listener did something (queued, played, skipped, moved, asked): what the desk answered before may differ now. */
+  listenerActed(): void { this.failures = 0; this.holdUntil = 0; this.dryAt = -1; this.dryKey = ''; }
+  /** Backing off after a failure, or waiting out a dry answer's floor. */
+  private held(): boolean {
+    const t = this.nowMs(), known = t > 0;
+    if (this.holdUntil !== 0 && (!known || t < this.holdUntil)) return true;
+    if (this.dryAt >= 0 && (!known || t - this.dryAt < DRY_FLOOR_MS)) return true;
+    return false;
+  }
   private quiet(): boolean { return this.quietOn !== undefined && this.quietOn === this.d.rt.store.onAir()?.id; }
   private age(f: Flight): number { return this.d.now().getTime() - f.startedAt; }
   /** The sheet changed or an entry started: is the time ahead short? */
@@ -150,7 +170,7 @@ export class Writer {
   }
   /** Would an ask start now? (The pulse says so; a mutation then asks, and waits: a long fetch needs an answer that stays.) */
   wouldAsk(): boolean {
-    if (!this.opened || this.quiet() || !shouldAskMore(this.d.rt.store.ahead(), this.latency)) return false;
+    if (!this.opened || this.quiet() || this.held() || !shouldAskMore(this.d.rt.store.ahead(), this.latency)) return false;
     if (this.flights.length === 0) return true;
     return this.flights.length === 1 && !this.reasked && this.age(this.flights[0]) > ASK_DEADLINE_MS;      // overdue: one more, once per spell
   }
@@ -181,6 +201,7 @@ export class Writer {
     this.lastId = fl.id; this.flights.push(fl); this.asks.push(cause); this.publish(true);
     const live = (): boolean => gen === this.d.generation() && stops === this.stops && this.flights.includes(fl);
     fl.task = (async () => {
+      let sig = '', unchanged = false;
       let added = 0, received = 0, dropped = 0, firstAt: number | undefined, failure: { kind: 'cancelled' | 'empty' | 'signedOut' | 'transport' | 'other' } | undefined;
       try {
         const now = this.d.now();
@@ -196,6 +217,8 @@ export class Writer {
         await yieldTurn('before candidates');
         const picked = takeCandidates(all, kept);
         const body = requestBody(cause, candidateBody(items, texts, picked), store.ahead(20).map((e) => e.title || ''), await this.d.edition(), now, this.d.tz(), this.d.requestId());
+        sig = JSON.stringify([body.candidates, body.edition_text ?? '']);
+        if (cause !== 'open' && this.dryKey !== '' && sig === this.dryKey) throw Object.assign(new Error('unchanged'), { kind: 'unchanged' });     // nothing the desk is given has changed since it had nothing to add: no model call
         await yieldTurn('before post');
         const raw = await this.post(body);
         lap(`writer: the desk's reply received (${raw.length} chars)`);
@@ -218,8 +241,9 @@ export class Writer {
         }
       } catch (err) {
         const k = (err as { kind?: string } | undefined)?.kind;
-        console.log(`writer: the desk's stretch failed (${cause}): ${k ?? 'other'}, status ${(err as { status?: number } | undefined)?.status ?? 'none'}, ${err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)}`);
-        if (!failure) failure = { kind: k === 'signedOut' || k === 'transport' ? k : 'other' };
+        if (k === 'unchanged') { unchanged = true; console.log('writer: nothing the desk is given has changed since it had nothing to add; not asked'); }
+        else console.log(`writer: the desk's stretch failed (${cause}): ${k ?? 'other'}, status ${(err as { status?: number } | undefined)?.status ?? 'none'}, ${err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)}`);
+        if (!failure && !unchanged) failure = { kind: k === 'signedOut' || k === 'transport' ? k : 'other' };
       }
       if (!live()) return;                                                                   // stop() already cleared the flags; a later ask owns them now
       if (firstAt !== undefined) this.latency = Math.max(0.5, (firstAt - started) / 1000);
@@ -227,6 +251,10 @@ export class Writer {
       this.drop(fl); this.dry = out.dry;
       if (added > 0) this.flights = [];                                                      // answered: any other ask of the spell is older, its answer would be dropped as such
       if (added > 0 || failure) this.reasked = false;
+      const t = this.nowMs();
+      if (added > 0) { this.failures = 0; this.holdUntil = 0; this.dryAt = -1; this.dryKey = ''; }
+      else if (failure) { this.failures += 1; this.holdUntil = Math.max(1, t) + Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (this.failures - 1)); }
+      else { this.failures = 0; this.holdUntil = 0; this.dryAt = Math.max(0, t); if (sig !== '') this.dryKey = sig; }
       if (out.clearQuiet) this.quietOn = undefined; else if (out.quietOn !== undefined) this.quietOn = out.quietOn;
       if (out.notice === 'clear') this.notice = ''; else if (out.notice === 'say') this.notice = plainWords(failure) ?? '';
       this.publish(false);

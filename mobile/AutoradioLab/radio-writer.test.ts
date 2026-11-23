@@ -7,7 +7,7 @@
 //  W6 an answer that arrives after a sign-out (stop) is dropped whole.
 //  W7 the phone's opening is a greeting by the hour, the first story with its dek once, at most two more headlines; with none it says it has no front page yet.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { Writer, ASK_DEADLINE_MS, fromFront, shapeText, candidateBody, requestBody, phoneOpening, type WriterDeps } from './radio-writer.ts';
+import { Writer, ASK_DEADLINE_MS, DRY_FLOOR_MS, fromFront, shapeText, candidateBody, requestBody, phoneOpening, type WriterDeps } from './radio-writer.ts';
 import { RadioRuntime } from './radio-runtime.ts';
 import type { DeckPort, DeckState } from './deck.ts';
 import type { Entry } from './runsheet-model.ts';
@@ -191,15 +191,44 @@ describe('the writer never hangs the radio dry', () => {
     expect(Date.now() - t0).toBeLessThan(1000);
     expect(w.inFlight).toBe(false); expect(w.wouldAsk()).toBe(true);
   });
-  test('W11 a dry sheet is asked at the next pulse; the cases where it is not are the three named ones', async () => {
+  test('W11 a dry sheet leads to exactly one ask at once; after a dry answer the next waits for a changed input, the listener, or the floor (review B1-2)', async () => {
     reply = async () => answer();                                                     // the desk answers with nothing
-    rt.store.place({ id: 'on', kind: 'story', placed_by: 'desk', state: 'ahead', title: 'On', text: 'W.', est_seconds: 5, revision: 0 }, 'end');
-    rt.director.advanceIfIdle();
     expect(w.wouldAsk()).toBe(false);                                                 // not opened: the desk is asked once the radio is opened (the pulse's start does that, openRadioOf)
+    w.openAhead(false); expect(w.wouldAsk()).toBe(true);                              // nothing on air, nothing ahead, nothing tried: ask at once
+    expect(w.checkAhead()).toBe(true); await settle();
+    expect(bodies.length).toBe(1);
+    expect(w.dry).toBe(true); expect(w.wouldAsk()).toBe(false);                       // the desk had nothing: not asked again for the same inputs
+    skewMs = DRY_FLOOR_MS - 1000; expect(w.wouldAsk()).toBe(false);
+    w.listenerActed(); expect(w.wouldAsk()).toBe(true);                               // the listener acted: the answer may differ
+  });
+  /** One pulse a second for `seconds`: the pulse says write, the mutation asks, and the ask settles. Returns the desk's calls. */
+  const run = async (seconds: number): Promise<number> => {
+    for (let t = 0; t <= seconds; t++) { skewMs = t * 1000; if (w.wouldAsk()) w.checkAhead(); await new Promise((r) => setTimeout(r, 0)); }
+    return bodies.length;
+  };
+  test('W12 ten minutes with the desk down: a handful of asks, backing off (review B1-2)', async () => {
+    reply = async () => { throw Object.assign(new Error('x'), { kind: 'transport' }); };
+    w.openAhead(false);
+    const n = await run(600);
+    expect(n).toBeGreaterThanOrEqual(4); expect(n).toBeLessThanOrEqual(8);
+  });
+  test('W12 ten minutes with a dry desk and nothing changing: one ask, two at the most', async () => {
+    reply = async () => answer();
+    w.openAhead(false);
+    const n = await run(600);
+    expect(n).toBeGreaterThanOrEqual(1); expect(n).toBeLessThanOrEqual(2);
+  });
+  test('W12 a healthy desk is asked as before: the sheet fills in as many asks as it needs, one right after another', async () => {
+    let k = 0;
+    reply = async () => { k += 1; return answer(seg({ segment_id: `h/${k}`, kind: 'story', title: `H${k}`, text: 'Short words.' })); };      // one short entry an answer: the sheet stays short
+    w.openAhead(false);
+    const n = await run(8);
+    expect(n).toBeGreaterThanOrEqual(5);                                              // not throttled while it answers
+  });
+  test('W12 a failure is forgotten on success and on the listener\'s act', async () => {
+    reply = async () => { throw Object.assign(new Error('x'), { kind: 'transport' }); };
     w.openAhead(false); expect(w.checkAhead()).toBe(true); await settle();
-    expect(w.wouldAsk()).toBe(false);                                                 // it found nothing for the entry on air: quiet while that one is on air
-    rt.store.apply({ op_id: 'p-off', by: 'phone', op: 'skip', id: 'on', ended: { outcome: 'skipped', at: '2023-11-14T22:00:00Z', last_block: 0 }, base_version: 0 } as never);
-    expect(rt.store.onAir()).toBeUndefined(); expect(rt.store.ahead().length).toBe(0);
-    expect(w.inFlight).toBe(false); expect(w.wouldAsk()).toBe(true);                  // nothing on air, nothing ahead: the next pulse asks
+    expect(w.wouldAsk()).toBe(false);                                                 // backing off
+    w.listenerActed(); expect(w.wouldAsk()).toBe(true);
   });
 });
