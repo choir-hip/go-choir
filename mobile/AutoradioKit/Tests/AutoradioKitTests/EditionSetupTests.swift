@@ -43,11 +43,11 @@ final class EditionSetupTests: XCTestCase {
     }
 
     func testTheMirrorIsACopyInMemoryThatTheWipeEmptiesAndForgets() {
-        EditionPicksMirror.shared.reset(); defer { EditionPicksMirror.shared.reset() }
+        SharedGeneration.resetForTest(); EditionPicksMirror.shared.reset(); defer { EditionPicksMirror.shared.reset(); SharedGeneration.resetForTest() }
         XCTAssertFalse(EditionPicksMirror.shared.known, "nothing pushed yet: an empty copy is not the listener's choice")
-        _ = EditionNative.op(["op": "editionMirror", "topics": ["Space", "Chess"]])
+        _ = EditionNative.op(["op": "editionMirror", "topics": ["Space", "Chess"], "gen": 1])
         XCTAssertEqual(EditionPicksMirror.shared.topics, ["Space", "Chess"]); XCTAssertTrue(EditionPicksMirror.shared.known)
-        _ = EditionNative.op(["op": "editionMirror", "topics": [String]()])
+        _ = EditionNative.op(["op": "editionMirror", "topics": [String](), "gen": 1])
         XCTAssertEqual(EditionPicksMirror.shared.topics, []); XCTAssertTrue(EditionPicksMirror.shared.known, "pushed empty IS the listener's choice")
         _ = EditionNative.op(["op": "editionMirrorReset"])
         XCTAssertFalse(EditionPicksMirror.shared.known); XCTAssertEqual(EditionPicksMirror.shared.topics, [])

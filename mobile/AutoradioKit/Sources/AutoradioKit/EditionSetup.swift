@@ -91,7 +91,9 @@ public final class EditionPicksMirror: @unchecked Sendable {
     public var topics: [String] { lock.lock(); defer { lock.unlock() }; return list }
     /// True once shared code has pushed a copy since the launch or the last wipe: an empty copy never pushed is "not known", not "the listener chose nothing" (nothing writes it as a choice).
     public var known: Bool { lock.lock(); defer { lock.unlock() }; return pushed }
-    public func set(_ t: [String]) { lock.lock(); list = t; pushed = true; lock.unlock() }
+    /// Dropped (false) when `gen` is older than the newest account generation shared code has announced or pushed: a copy computed for an account that signed out meanwhile would be written into the next account's notebook (`NotebookStore.writePendingTopics`).
+    @discardableResult
+    public func set(gen: Int, _ t: [String]) -> Bool { guard SharedGeneration.accepts(gen) else { return false }; lock.lock(); list = t; pushed = true; lock.unlock(); return true }
     public func reset() { lock.lock(); list = []; pushed = false; lock.unlock() }
 }
 
@@ -134,7 +136,7 @@ public enum EditionNative {
     public static func op(_ r: [String: Any]) -> [String: Any] {
         switch r["op"] as? String ?? "" {
         case "editionMirrorReset": EditionPicksMirror.shared.reset(); return [:]
-        case "editionMirror": EditionPicksMirror.shared.set((r["topics"] as? [String]) ?? []); return [:]
+        case "editionMirror": EditionPicksMirror.shared.set(gen: (r["gen"] as? NSNumber)?.intValue ?? 0, (r["topics"] as? [String]) ?? []); return [:]
         case "editionHeard": return ["items": EditionTalk.shared.take()]
         case "editionSaid": EditionTalk.shared.said(r["id"] as? String ?? "", line: r["line"] as? String ?? "", finish: (r["finish"] as? Bool) ?? false); return [:]
         default: return [:]

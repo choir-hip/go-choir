@@ -220,13 +220,14 @@ export async function queueView(storage: Store | undefined, native: NativeReader
  *  docs/reference/exact/answers-let-go.md; radio-pulse-rule.test.ts fails when this body fetches or pumps. */
 export type Pulse = { tick: number; write: boolean; hold: boolean; live: boolean; beat: number };
 export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
+  const gen = accountGeneration();                                        // the account this pulse is computed for: what it pushes to native carries it, and native drops it if the account has changed since (SharedGeneration)
   const r = await getRadio(storage, native);
   await r.rt.peek();
   if (!r.ready) r.ready = await firstRunOver(storage as never);          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after peek: reading the facts sets it from native)
   if (!r.started && r.ready && !r.rt.store.onAir() && r.readySince === 0) r.readySince = clock.ms;
   // the turn route's queue: pushed to native, which sends it with every turn (one call; the next pulse sets it again if this one is let go)
   const later = nativeLater();
-  if (later) { try { await later({ op: 'radioSet', snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); } catch { /* the next pulse sets it */ } }
+  if (later) { try { await later({ op: 'radioSet', gen, snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); } catch { /* the next pulse sets it */ } }
   const posting = r.rt.store.pending.length > 0 && !r.rt.store.isFlushing;
   // `live`: something is sounding and the app is in front (native's `foreground`: with the screen off or the app away the audio plays on and nothing here asks again), so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:
   // the key is the beat, so the screens are asked after THIS pulse's read of the deck (they never read a position older than the pulse that said so), and a pause or a hidden page leaves the key still.

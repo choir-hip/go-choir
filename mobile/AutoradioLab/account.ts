@@ -37,7 +37,7 @@ import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
 import { wipeSteer, STEER_FILE } from './steer.ts';
 import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
+import { accountGeneration, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
 import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
@@ -101,7 +101,7 @@ export async function wipeAll(storage: Storage | undefined, store: Store | undef
   return failed;
 }
 
-export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe' }): Promise<unknown> };
+export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe'; gen?: number }): Promise<unknown> };
 export type SignOutResult = { done: boolean; failed: string; message: string; epoch: number };
 /** A deadline, not a limit: a native sign-out that never answers leaves the page retryable. */
 export const NATIVE_DEADLINE_MS = 30000;
@@ -145,11 +145,11 @@ export function decide(f: Facts): Action {
 
 export type Native = { signOut(onLate?: () => void): Promise<boolean>; wipe(onLate?: () => void): Promise<boolean> };
 /** The app module's two ops as booleans. A call that outlives `ms` answers false NOW, but keeps its continuation: `onLate` runs if it answers done:true afterwards. */
-export function nativeOf(later: ((r: { op: string }) => Promise<unknown>) | null, ms = NATIVE_DEADLINE_MS): Native {
+export function nativeOf(later: ((r: { op: string; gen?: number }) => Promise<unknown>) | null, ms = NATIVE_DEADLINE_MS): Native {
   const call = (op: 'signOut' | 'wipe', onLate?: () => void): Promise<boolean> => {
     if (!later) return Promise.resolve(false);
     let timedOut = false;
-    const p: Promise<boolean> = later({ op }).then((r) => !!r && (r as { done?: unknown }).done === true, () => false);
+    const p: Promise<boolean> = later({ op, gen: accountGeneration() }).then((r) => !!r && (r as { done?: unknown }).done === true, () => false);
     void p.then((ok) => { if (timedOut && ok) onLate?.(); });
     return Promise.race([p, timeout(ms).then(() => { timedOut = true; return false; })]);
   };
@@ -251,7 +251,7 @@ async function signOutInner(
   step('begun');
   let late = false;
   let nativeDone: Promise<unknown>;
-  try { nativeDone = native.later({ op: 'signOut' }); } catch { nativeDone = Promise.resolve({ done: false }); }
+  try { nativeDone = native.later({ op: 'signOut', gen: accountGeneration() }); } catch { nativeDone = Promise.resolve({ done: false }); }
   const wipes = opts.wipes ?? DATA_WIPES;
   // A native call that outlives the deadline keeps its continuation: if it answers done:true later, the shared stores are wiped then and the marker goes.
   nativeDone.then(async (r) => {

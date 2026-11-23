@@ -277,3 +277,38 @@ describe('P10 the spoken entry\'s own clock: an entry with no estimate still cou
     expect(readFileSync(new URL('../scripts/proof-real.sh', import.meta.url), 'utf8')).toContain('radio-progress');
   });
 });
+
+// D-2 (cross-account write): every push to a native mirror carries the account generation shared code computed it under; native drops a stale one (AutoradioKit SharedGeneration).
+describe('P11 a pulse begun before sign-out and delivered after it changes nothing', () => {
+  test('radioSet carries the generation the pulse began under; a fake native that refuses a stale one ends with nothing of account A', async () => {
+    let floor = 0, seenGen = -2; const sets: { gen: number; snapshot: string }[] = []; let held: (() => void) | undefined;
+    const slow = { available: true, later: async (r: { op: string; gen?: number; snapshot?: string; peek?: boolean }) => {
+      if (r.op === 'radioSet' && r.snapshot !== undefined) {
+        const gen = r.gen ?? -1; seenGen = gen;
+        await new Promise<void>((res) => { held = res; });                 // the call is in flight while the account changes
+        if (gen >= floor) { floor = gen; sets.push({ gen, snapshot: r.snapshot }); }
+        return { ok: gen >= floor };
+      }
+      return native.later(r as never);
+    } };
+    adoptNative(slow as never, 'test');
+    await play();
+    const gen0 = (await import('./api.ts')).accountGeneration();
+    const begun = radioPulse(undefined, slow as never);                    // begun under generation gen0, its radioSet waits
+    for (let i = 0; i < 50 && held === undefined; i++) await new Promise((r) => setTimeout(r, 5));
+    const { nextGeneration } = await import('./api.ts'); const gen1 = nextGeneration();   // sign-out begins: the generation moves
+    floor = gen1;                                                          // native announced it (SharedGeneration.announce at the signOut call)
+    held?.(); await begun;
+    expect(sets).toEqual([]);                                              // nothing of the old account was stored
+    expect(seenGen).toBe(gen0);                                            // and the call said which account it was computed for
+    expect(gen1).toBeGreaterThan(gen0);
+  });
+  test('the stamped calls: radioSet, editionMirror and the sign-out calls carry gen', () => {
+    const c = (f: string): string => readFileSync(new URL(f, import.meta.url), 'utf8');
+    expect(c('radio-bridge.ts')).toMatch(/op: 'radioSet', gen,/);
+    expect(c('edition-picks.ts')).toMatch(/op: 'editionMirror', topics, gen/);
+    expect(c('account.ts')).toMatch(/later\(\{ op, gen: accountGeneration\(\) \}\)/);
+    expect(c('account.ts')).toMatch(/op: 'signOut', gen: accountGeneration\(\)/);
+  });
+});
+

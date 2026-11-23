@@ -105,7 +105,7 @@ final class AccountWipeTests: XCTestCase {
         let kept = KeptTurnStore(root: root.appendingPathComponent("turns")); write("turns/t1/record.json", m)
         write("MikeVoice/speaker.json", m); let voice = SpeakerGate(url: root.appendingPathComponent("MikeVoice/speaker.json"))
         let openPages = OpenPageFacts(); openPages.replace(gen: 1, [FrontPage(address: "mailbox:inbox", title: m, kind: "mailbox")])
-        EditionPicksMirror.shared.set([m])        // the native copy of the picks (the file is shared code's)
+        SharedGeneration.resetForTest(); EditionPicksMirror.shared.set(gen: 1, [m])        // the native copy of the picks (the file is shared code's)
         write("onboarding.json", m); write("books/b1/text.txt", m); write("cache/files/f1.txt", m)
 
         let wipe = AccountWipe()

@@ -39,7 +39,7 @@ export function nativeDevice(): Device | null {
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   const o = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
   return {
-    async mirror(topics) { await later({ op: 'editionMirror', topics }); },
+    async mirror(topics) { const gen = accountGeneration(); await later({ op: 'editionMirror', topics, gen }); },       // stamped: native drops a copy computed for an account that has since signed out (a late copy would be written into the next account's notebook)
     async forget() { await later({ op: 'editionMirrorReset' }); },
     async heard() {
       const items = o(await later({ op: 'editionHeard' })).items;

@@ -60,6 +60,7 @@ final class ModelsModule: ExactModule {
     override func later(_ request: [String: Any], reply: ExactReply) {
         let op = request["op"] as? String
         if op == "signOut" || op == "wipe" {
+            SharedGeneration.announce((request["gen"] as? NSNumber)?.intValue ?? 0)      // shared code's generation moved when the sign-out began: what it pushed under an older one is refused from now on
             Task { @MainActor in
                 guard let m = AutoradioModule.current else { reply.send(["done": false]); return }
                 await m.signOutForShared(keepKey: op == "wipe")
