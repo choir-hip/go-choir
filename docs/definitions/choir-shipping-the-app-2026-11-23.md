@@ -125,7 +125,7 @@ boundaries:
   - decision: minimum age 16
     said: min age 16
     'on': '2026-11-23'
-  - decision: the publisher is Choir Harmonic Intelligence Platform; the owner gave the postal address for the policy (written in docs/ship/privacy-policy.md)
+  - decision: the publisher is Choir Harmonic Intelligence Platform, Inc.; the owner gave the postal address for the policy (written in docs/ship/privacy-policy.md)
     said: and my address is Choir Harmonic Intelligence Platform ...
     'on': '2026-11-23'
   - decision: 'the app''s key and other secrets are kept through Exact''s own Keychain storage; the lead read Exact at the pin: Keychain storage is covered, ciphers are not (digests and ECDSA only)'
