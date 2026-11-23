@@ -20,6 +20,7 @@ start:
   - '2026-11-23 evening: the owner signed in to Xcode with the renewed account. On the Mac: a development identity and a wildcard development profile for the paid team (S47GERGJZ3, to 2027-11-23) that covers the owner''s phone. No Apple Distribution identity yet, and no App Store profile.'
   - '2026-11-23T22:24Z: the development build "Autoradio 1" (news.choir.autoradio.lab.one, the same code as before, dcc56f2cd) is on the owner''s phone signed by the paid team; iOS refused the upgrade across teams, so that app alone was removed and installed again and starts signed out. The first app was not touched.'
   - '2026-11-23T22:50Z: the owner registered the bundle id news.choir.autoradio (Associated Domains enabled, nothing else), created the app record "Autoradio 1" in App Store Connect, an API key (the file is outside the repo) and an Apple Distribution certificate, which is on the Mac. The feedback address and the reviewer''s contact number are kept outside the repo. Still needed from the owner: the API key''s issuer id.'
+  - '2026-11-23 late: the owner gave the API key''s issuer id; the key reads the app record and the bundle id through Apple''s API. The lead created the App Store provisioning profile "Autoradio 1 App Store" for news.choir.autoradio through the API (active, to 2027-11-23, tied to the distribution certificate); the profile file, the key, the ids and the contact details are in a folder outside the repo. Signing material for an upload is complete.'
 finish:
   deliver: Autoradio is on TestFlight for testers and then in the App Store, with a release an agent can run end to end except where Apple requires a person.
   artifact: an app record, a build accepted by Apple's processing, internal then external TestFlight groups, a submitted version with screenshots, previews and review notes, and a release script with its metadata as files in the repo
@@ -106,14 +107,14 @@ boundaries:
 stations:
 - id: P0
   name: The owner's account steps
-  scope: 'done by the owner on 2026-11-23: the bundle id, the app record, the API key, the distribution certificate. Remaining: the key''s issuer id; the free-apps agreement confirmed signed'
+  scope: 'done by the owner on 2026-11-23: the bundle id, the app record, the API key and its issuer id, the distribution certificate; the App Store profile made by the lead through the API'
   class: green
   review: none
   depends_on: []
-  status: working
+  status: proved
 - id: P1
   name: A build Apple accepts
-  scope: the release build with no lab or trace pages, its version and build number set, uploaded; the first proof that Exact's archive passes Apple's processing. The upload is the same for internal and external; no internal group is a goal
+  scope: the release build with no lab or trace pages, its version and build number set, uploaded; the first proof that Exact's archive passes Apple's processing. The upload is the same for internal and external; no internal group is a goal. Lane store-build was sent back by both review seats on 2026-11-23 (a lower-level build script let a development build take the production id); fixes in progress, then re-review
   class: yellow for scripts; orange for the build's contents
   review: one seat
   depends_on:
@@ -224,11 +225,11 @@ now:
   source_ref: origin/main bcea7eefd
   deploy_identity: staging on a2ba96767
   candidate: none
-  believed_state: the owner's account steps are done but for the issuer id; nothing is built
+  believed_state: signing material is complete; the release build is in review (sent back once); nothing is uploaded
   main_uncertainty: whether Exact's archive passes Apple's processing, and what a reviewer makes of AI-written news
   next_observation: the three agents' reports; the first upload's processing result
   blocker: none
-  next_action: review and land the release build; the first archive and upload once the issuer id is known; bring the owner the account design and the drafts
+  next_action: re-review and land the release build; the first archive and upload (no submission) to learn whether Apple accepts Exact's archive; the owner reads the drafts in docs/ship and rules on the account design's decisions
 operating_notes:
 - The before-we-ship list is kept in docs/design/design-session-2026-11-23.md until this file is executable; then it lives here as stations.
 receipts:
