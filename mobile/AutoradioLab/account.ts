@@ -37,7 +37,7 @@ import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
 import { wipeSteer, STEER_FILE } from './steer.ts';
 import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { accountGeneration, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
+import { accountGeneration, announceGeneration, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
 import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
@@ -98,6 +98,9 @@ export async function wipeAll(storage: Storage | undefined, store: Store | undef
   for (const w of wipes_) {
     try { await w.run(storage, store); } catch { failed.push(w.name); console.log(`account: wipe ${w.name} failed`); }
   }
+  // The last act: a generation newer than anything computed before the wipe, told to native. A pulse that began after the sign-out began read the generation the sign-out announced, with the old account's sheet
+  // still in the store; native accepts equality, so only a floor above it keeps that pulse out. What is computed from here on (the public paper, signed out) carries the new one and is accepted.
+  nextGeneration(); await announceGeneration();
   return failed;
 }
 

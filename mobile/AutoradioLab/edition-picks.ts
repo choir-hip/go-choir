@@ -24,7 +24,8 @@ const DUPLICATE = 'That one is already there.';
 
 /** The phone's native half (the app module), or null where there is none. */
 export interface Device {
-  mirror(topics: string[]): Promise<void>;
+  /** `gen` is the generation the caller checked; native answers `ok: false` for a copy computed for an account that has since signed out (the result is false then, undefined or true otherwise). */
+  mirror(topics: string[], gen: number): Promise<boolean | void>;
   /** The wipe: the native copy is emptied AND forgotten (an empty copy that was never pushed is not the listener's choice). */
   forget(): Promise<void>;
   /** The words the voice heard at the setup screen since the last call, in order. */
@@ -39,7 +40,7 @@ export function nativeDevice(): Device | null {
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   const o = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
   return {
-    async mirror(topics) { const gen = accountGeneration(); await later({ op: 'editionMirror', topics, gen }); },       // stamped: native drops a copy computed for an account that has since signed out (a late copy would be written into the next account's notebook)
+    async mirror(topics, gen) { return o(await later({ op: 'editionMirror', topics, gen })).ok !== false; },       // stamped with the generation the caller checked: native drops a copy computed for an account that has since signed out (a late copy would be written into the next account's notebook)
     async forget() { await later({ op: 'editionMirrorReset' }); },
     async heard() {
       const items = o(await later({ op: 'editionHeard' })).items;
@@ -115,19 +116,20 @@ async function mutate<R>(storage: Storage | undefined, env: Env, change: (m: Mem
     return { value, wrote, topics: [...m.sel.topics] };
   });
   if (!out) return undefined;
-  if (out.wrote) await pushMirror(env, gen, out.topics);
+  if (out.wrote && !(await pushMirror(env, gen, out.topics)) && mem?.gen === gen) mem.mirrored = false;       // refused by native: sent again at the next open
   return { value: out.value, wrote: out.wrote };
 }
 
 /** Give the native side its copy, in order, each push bounded by a deadline so a native call that never answers stops nothing. A push for an account that moved on is not sent. */
-function pushMirror(env: Env, gen: number, topics: string[] | null, force = false): Promise<void> {
-  const dev = env.device; if (!dev) return Promise.resolve();
-  const p = mirrorTail.then(async () => {
-    if (!force && gen !== accountGeneration()) return;
-    await Promise.race([(topics === null ? dev.forget() : dev.mirror(topics)).catch(() => undefined), delay(env.mirrorDeadlineMs ?? MIRROR_DEADLINE_MS, undefined)]);
+function pushMirror(env: Env, gen: number, topics: string[] | null, force = false): Promise<boolean> {
+  const dev = env.device; if (!dev) return Promise.resolve(true);
+  const p = mirrorTail.then(async (): Promise<boolean> => {
+    if (!force && gen !== accountGeneration()) return true;                  // an account that moved on: nothing to send, nothing to resend
+    const r = await Promise.race([(topics === null ? dev.forget() : dev.mirror(topics, gen)).catch(() => undefined), delay(env.mirrorDeadlineMs ?? MIRROR_DEADLINE_MS, undefined)]);
+    return r !== false;                                                      // native's refusal is false: the copy is sent again (the next time the picks open or change)
   });
   mirrorTail = p.catch(() => undefined);
-  return p.catch(() => undefined);
+  return p.catch(() => true);
 }
 
 // ---- the page
@@ -147,7 +149,7 @@ function build(m: Mem): PicksPage {
 }
 async function opened(storage: Storage | undefined, env: Env): Promise<Mem> {
   const m = memFor(); await ensure(storage, m);
-  if (!m.mirrored) { m.mirrored = true; await pushMirror(env, m.gen, [...m.sel.topics]); }
+  if (!m.mirrored) { m.mirrored = true; if (!(await pushMirror(env, m.gen, [...m.sel.topics]))) m.mirrored = false; }
   return m;
 }
 

@@ -51,8 +51,7 @@ public final class RadioBridge: @unchecked Sendable {
     /// `gen` is the account generation shared code computed this under (`SharedGeneration`): a push for an account that has since signed out is dropped, not stored where the next account's voice turn would carry it.
     @discardableResult
     public func set(gen: Int, snapshot: Data?, onAir: Data?, sheet: Data? = nil) -> Bool {
-        guard SharedGeneration.accepts(gen) else { return false }
-        lock.lock(); queueJSON = snapshot; onAirJSON = onAir; sheetJSON = sheet; lock.unlock(); return true
+        SharedGeneration.admit(gen) { lock.lock(); queueJSON = snapshot; onAirJSON = onAir; sheetJSON = sheet; lock.unlock() }
     }
     /// The run sheet as shared code last said (what the voice's retrieval and the content sync read of it); nil before the first pump.
     public func sheet() -> RunSheet? { lock.lock(); let d = sheetJSON; lock.unlock(); return d.flatMap { try? JSONDecoder().decode(RunSheet.self, from: $0) } }
@@ -62,14 +61,20 @@ public final class RadioBridge: @unchecked Sendable {
     public func wipe() { lock.lock(); inbox = []; queueJSON = nil; onAirJSON = nil; sheetJSON = nil; lock.unlock() }
 }
 
-/// The account generation shared code stamps on what it pushes to a native mirror (`radioSet`, `editionMirror`): the `OpenPageFacts.replace(gen:)` pattern for the mirrors that had none. Shared code's generation moves at the
-/// start of a sign-out (`beginSignOut`) and the `signOut` and `wipe` calls announce it, so a push already in flight for the account being left (computed under a smaller one) lands after the wipe and is dropped, even when it
-/// is the first push of the launch. A push at or above the newest generation seen is kept and raises it.
+/// The account generation shared code stamps on what it pushes to a native mirror (`radioSet`, `editionMirror`, `pageText`): the `OpenPageFacts.replace(gen:)` pattern for the mirrors that had none. A push is kept when its generation
+/// is at least the newest known, and refused below it. `announce` raises the floor: the `signOut` and `wipe` calls (the generation moved when the sign-out began) and the wipe's last act (a generation newer than anything computed
+/// before it), so a push in flight for the account being left lands nowhere. `boot` is the one place the newest may FALL: a JS context that starts again while this process lives (the module instance lives per session, a reload
+/// of the bundle does not restart it) begins at generation 0, and refusing it for the life of the process would silence every push; a boot is the new context speaking for itself, with nothing of the old one in flight.
+/// The check and the write are ONE step (`admit`): a push that passed the check cannot land after an announcement and the wipe that follows it.
 public enum SharedGeneration {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var newest = 0
     public static func announce(_ gen: Int) { lock.lock(); newest = max(newest, gen); lock.unlock() }
+    public static func boot(_ gen: Int) { lock.lock(); newest = gen; lock.unlock() }
     public static func accepts(_ gen: Int) -> Bool { lock.lock(); defer { lock.unlock() }; guard gen >= newest else { return false }; newest = gen; return true }
+    /// Check `gen` and, if it is taken, run `write`, under the one lock. The write takes its own store's lock inside (never the other way round: no store calls back here).
+    @discardableResult
+    public static func admit(_ gen: Int, _ write: () -> Void) -> Bool { lock.lock(); defer { lock.unlock() }; guard gen >= newest else { return false }; newest = gen; write(); return true }
     /// For a test: forget what was seen.
     public static func resetForTest() { lock.lock(); newest = 0; lock.unlock() }
 }

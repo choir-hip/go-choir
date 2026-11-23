@@ -59,6 +59,11 @@ final class ModelsModule: ExactModule {
     }
     override func later(_ request: [String: Any], reply: ExactReply) {
         let op = request["op"] as? String
+        if op == "generation" {      // shared code says the generation it is at: the first call of a JS context is a boot (it may be below the newest seen: a reload), the wipe's last act a floor
+            let g = (request["gen"] as? NSNumber)?.intValue ?? 0
+            if request["boot"] as? Bool == true { SharedGeneration.boot(g) } else { SharedGeneration.announce(g) }
+            reply.send(["ok": true]); return
+        }
         if op == "signOut" || op == "wipe" {
             SharedGeneration.announce((request["gen"] as? NSNumber)?.intValue ?? 0)      // shared code's generation moved when the sign-out began: what it pushed under an older one is refused from now on
             Task { @MainActor in
