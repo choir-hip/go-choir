@@ -265,7 +265,9 @@ export class RadioRuntime {
   // ---- commands from the director ----
 
   private command(c: Command): void {
-    if (c.kind === 'stop') { this.chain = this.chain.then(() => this.deck.act('stop')).then(() => undefined, () => undefined); return; }       // in the pump's chain: the answer that pumps waits for it (a native call outside an answer is never run)
+    // A stop is for what was on air when it was issued. A start that came after it (the skip's replacement, which the deck's `play` puts in the place of what sounds) makes it stale: run late, behind a pump that was
+    // fetching words, it would stop the very entry that had just been started (review B1-1). It runs only while the director is still at the generation it was issued in.
+    if (c.kind === 'stop') { const gen = c.gen; this.chain = this.chain.then(async () => { if (this.director.generation === gen) await this.deck.act('stop'); }).then(() => undefined, () => undefined); return; }       // in the pump's chain: the answer that pumps waits for it (a native call outside an answer is never run)
     this.pendingStarts.push(c.entry);
     // Outside a pump (a verb from the screen) nothing reads the journal: pump now, which starts it.
     if (!this.inPump) void this.pump();

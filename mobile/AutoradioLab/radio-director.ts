@@ -26,7 +26,7 @@ export const OPENING_WINDOW_SECONDS = 30 * 60;
 export const SESSION_RETRY_DELAYS = [1, 2, 4, 8, 15] as const;
 export const retryDelay = (attempt: number): number => SESSION_RETRY_DELAYS[Math.min(Math.max(attempt, 1) - 1, SESSION_RETRY_DELAYS.length - 1)];
 
-export type Command = { kind: 'start'; entry: Entry; press: boolean } | { kind: 'stop' };
+export type Command = { kind: 'start'; entry: Entry; press: boolean } | { kind: 'stop'; gen: number };
 export type Words = { title: string; paragraphs: string[] };
 
 /** What the deck driver does to start an entry: the decision, as data. */
@@ -222,7 +222,7 @@ export class Director {
     }
     this.store.clearAhead('phone', 'signed out');
     this.playingId = undefined; this.playingDocument = undefined;
-    this.onCommand({ kind: 'stop' });
+    this.onCommand({ kind: 'stop', gen: this.generation });
   }
 
   /** The radio is on and nothing is on air: start what is next. */
@@ -338,7 +338,7 @@ export class Director {
     if (this.playingId !== undefined) {          // what was on air was skipped, cut or taken off: its sound stops
       this.rememberPlace(this.playingId, this.nextToAir()?.kind);
       this.playingId = undefined; this.playingDocument = undefined; this.generation += 1; this.pendingEnd = undefined;
-      this.onCommand({ kind: 'stop' });
+      this.onCommand({ kind: 'stop', gen: this.generation });
     }
     // The answers are over (nothing on air, the next is not an answer): what they cut goes back on air, from the start of its sentence.
     if (this.remembered && this.playingId === undefined && this.nextToAir()?.kind !== 'answer') {

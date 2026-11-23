@@ -231,6 +231,27 @@ describe('what the phone resolves first', () => {
     expect(rt.store.entry(rt.store.sheet.entries[0].id)?.ended?.outcome).toBe('failed'); expect(rt.store.onAir()?.id).toBe('b');
     expect(playedIds().at(-1)).toBe('b');
   });
+  test('T8b a skip while the on-air entry\'s words are being fetched leaves the NEXT entry playing, not stopped behind it (review B1-1)', async () => {
+    let release: (v: { title: string; paragraphs: string[] }) => void = () => undefined;
+    resolvers.story = () => new Promise((r) => { release = r; });
+    rt = make();
+    rt.play(paperStory('/pub/slow', 'Slow')); rt.director.applyFromDesk(placeOp(story('b')), 'extend'); await idle();
+    rt.skip(); await idle();                                  // the stop (for the slow one) and the start of b, while the pump waits for the words
+    release({ title: 'Slow', paragraphs: ['Late words.'] }); await idle(); await rt.pump(); await idle();
+    expect(rt.store.onAir()?.id).toBe('b');
+    expect(deck.item).toBe('b'); expect(deck.why).toBe('playing');       // the deck plays what the sheet has on air
+    expect(playedIds()).toEqual(['b']);
+  });
+  test('T8c twice Next through two slow stories ends with the last one on air and sounding', async () => {
+    const waiting: ((v: { title: string; paragraphs: string[] }) => void)[] = [];
+    resolvers.story = () => new Promise((r) => { waiting.push(r); });
+    rt = make();
+    rt.play(paperStory('/pub/one', 'One')); rt.director.applyFromDesk(placeOp(paperStory('/pub/two', 'Two')), 'extend'); rt.director.applyFromDesk(placeOp(story('c')), 'extend'); await idle();
+    rt.skip(); await idle(); rt.skip(); await idle();
+    for (const w of waiting) w({ title: 'x', paragraphs: ['Words.'] });
+    await idle(); await rt.pump(); await idle();
+    expect(rt.store.onAir()?.id).toBe('c'); expect(deck.item).toBe('c'); expect(deck.why).toBe('playing');
+  });
   test('T8 an entry cut while its words were being fetched is never played late', async () => {
     let release: (v: { title: string; paragraphs: string[] }) => void = () => undefined;
     resolvers.story = () => new Promise((r) => { release = r; });
