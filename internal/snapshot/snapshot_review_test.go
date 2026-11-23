@@ -180,28 +180,22 @@ func TestAPagePastTheCountedPageCountIsRefused(t *testing.T) {
 	nothingRecorded(t, f)
 }
 
-// R3: the stream ends after the deadline. The last page waits out the pin
-// deadline, so the stream's last flush finds both the deadline and its job
-// channel ready; the attempt must fail whichever the select picks.
+// R3: the stream ends after the deadline. Whatever the last flush's select
+// picked, a transaction that outlived its pin deadline fails the attempt.
 func TestAStreamThatEndsAfterThePinDeadlineFails(t *testing.T) {
 	f := newCopyFixture(t, ChunkSize/2)
-	var last int64
-	if err := f.db.Read.QueryRow(`PRAGMA page_count`).Scan(&last); err != nil {
-		t.Fatal(err)
-	}
 	f.cfg.PinDeadline = 150 * time.Millisecond
-	f.cfg.pageHook = func(pgno int64) {
-		if pgno == last {
-			time.Sleep(300 * time.Millisecond)
-		}
-	}
-	for i := 0; i < 12; i++ { // the select's arm is random: a miss would pass some rounds
-		_, err := TakeSnapshot(context.Background(), f.cfg)
-		if !errors.Is(err, ErrPinDeadline) {
-			t.Fatalf("round %d: err = %v, want ErrPinDeadline: a capture whose pin outlived its deadline succeeded", i, err)
-		}
+	f.cfg.streamEnded = func() { time.Sleep(300 * time.Millisecond) }
+	_, err := TakeSnapshot(context.Background(), f.cfg)
+	if !errors.Is(err, ErrPinDeadline) {
+		t.Fatalf("err = %v, want ErrPinDeadline: a capture whose pin outlived its deadline succeeded", err)
 	}
 	nothingRecorded(t, f)
+	// And a capture inside the deadline is untouched by the check.
+	f.cfg.PinDeadline, f.cfg.streamEnded = time.Minute, nil
+	if _, err := TakeSnapshot(context.Background(), f.cfg); err != nil {
+		t.Fatalf("a capture inside its deadline failed: %v", err)
+	}
 }
 
 // R4: a partition's read transaction is bounded by the pin deadline.

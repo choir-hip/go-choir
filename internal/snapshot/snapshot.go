@@ -321,6 +321,9 @@ type Config struct {
 	// pageHook, when set, runs in the reader before each page is taken (tests
 	// commit writes in the middle of the stream).
 	pageHook func(pgno int64)
+	// streamEnded, when set, runs once the state file's last page is flushed, before
+	// the transaction ends (tests let the pin deadline pass there).
+	streamEnded func()
 
 	// ReadReleased runs once, from the transaction's release, on every path
 	// (success, error, cancellation, budget). It runs in its own goroutine with
@@ -907,6 +910,9 @@ func streamFile(readCtx, runCtx context.Context, cfg Config, dek []byte, cancel 
 	fs.cut = chunkIndex
 	if digest != nil {
 		fs.pageDigest = digest.Sum()
+	}
+	if cfg.streamEnded != nil && wantDigest {
+		cfg.streamEnded()
 	}
 	succeeded = true
 	return fs, nil
