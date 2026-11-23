@@ -121,8 +121,7 @@ extension AutoradioModule {
     }
 
     /// What only the audio code knows, for the radio's pump (shared code: radio-bridge.ts `readFacts`), and the inbox of what native callers and the voice turn handed over (RadioBridge). It decides nothing.
-    /// `foreground`: the app is in front. Only native knows it on a locked iPhone (Exact does not establish that the page turns hidden there); shared code stops asking the screens again each second while it is false (spine.contract `posKey`).
-    /// `at` is the device's time in milliseconds (a data source may not read the clock); `ready`: onboarding is complete and no other audio holds the phone, so the radio may start by itself.
+    /// `at` is the device's time in milliseconds (a data source may not read the clock); `ready`: onboarding is complete and no other audio holds the phone, so the radio may start by itself. `foreground`: the app is in front, which only native knows on a locked iPhone (shared code stops re-asking the screens each second while it is false: spine.contract `posKey`).
     @MainActor public func radioFacts(peek: Bool) -> [String: Any] {
         let s = runtime.snapshot(), tracker = BarTracker.shared, deck = Deck.shared
         let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
