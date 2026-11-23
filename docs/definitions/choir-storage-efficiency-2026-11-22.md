@@ -75,7 +75,7 @@ stations:
     class: orange
     review: one seat
     depends_on: []
-    lane: lane/store-by-kind (landed 0f4421aae)
+    lane: lane/store-by-kind (landed 0f4421aae); started on the paper 2026-11-23T21:45Z through the read-only runtime route, up to 8 h, interrupted by any restart of the paper
     status: landed
   - id: S1
     name: The layout trigger deleted
@@ -117,16 +117,30 @@ stations:
     status: pending
   - id: S6
     name: What leaves the store
-    scope: 'from S0''s report: a design for the largest avoidable part (captured text the host also holds, superseded versions, old run memory), then its stations'
+    scope: 'from S0''s report: a design for the largest avoidable part (captured text the host also holds, superseded versions, old run memory), then its stations. Measured 2026-11-23: every Texture revision is a full copy (content, body document, sources, citations) and nothing prunes them; public permalinks read pinned versions in the platform graph, not these rows, so old private bodies can go or become differences without breaking a permalink; what still reads old revisions is the history list, a revision by id, the base of the next turn, and the oped and calibration paths. On the public side superseded versions hold about 315 of 443 MB.'
     class: green for the design; red after
     review: a panel on the design
     depends_on: [S0]
     status: pending
   - id: S7
     name: The host's leftovers
-    scope: 'recorded and, where the owner rules, removed: the tape and chunks of removed computers, the dead space in the event receipt table, blocks a hibernated image holds after its guest freed them'
+    scope: 'recorded and, where the owner rules, removed: the tape and chunks of removed computers (about 12 GiB across 23 non-active directories; the host has no record of which five were removed, so the ids come from the owner before any deletion); the dead space in the event receipt table (28 GiB, about 8 returned; a plain rebuild stalls every computer''s appends, so only a copy-and-swap near 03:00Z, held by the lead while the disk has room). The third item is closed: vmctl already has discard on the data drive, the guest trims hourly, and the one hibernated image has no slack.'
     class: black for a deletion; orange for the trim
     review: two seats and the owner
+    depends_on: []
+    status: pending
+  - id: S8
+    name: Snapshot chunks that are shared between days
+    scope: 'chunks are cut at fixed 4 MiB offsets of the state file; about 0.2% of pages change in a day but scattered, so 82% of chunks were new between the roots of 11-21 and 11-22 and a capture writes about 8 GiB. Cut at 256 KiB: an estimated 0.7 GiB per later capture and about 12 GiB fewer stored chunks, for a manifest of about 13.5 MB a root and 16 times the chunk files. Restore refuses a chunk over twice the chunk size, so records cut at 4 MiB keep their own bound. Measure sharing on a copy of a real store before choosing the size.'
+    class: red
+    review: two seats
+    depends_on: [S3]
+    status: pending
+  - id: S9
+    name: The tape's payload bytes
+    scope: 'recorded, not built here: the paper''s tape is 91 GiB in 2,157 segments, 69% sealed payloads, 20% receipts, 12% events; 13.81 of 13.9 million events are projection batches; nothing retires tape by time. A shared dictionary for payload compression in the guest might save 15 to 30% of new payload (a guess). Design only, after the tape''s move off the host, which is the owner''s.'
+    class: green for the design; red after
+    review: a panel on the design
     depends_on: []
     status: pending
 decisions_for_the_owner:
@@ -161,11 +175,11 @@ now:
     scope_if_supported: S5 may compute the floor without a second-store term
     ledger_id: C195
     status: untested
-  believed_state: 'S0, S1 and S2 are landed. The weekly layout copy is gone. The daily snapshot still writes a scratch copy until S3 lands (free space dipped to 106 GiB during it on 2026-11-23; 155 GiB free at 21:30Z). Whether the store reading has run on the paper is not known.'
+  believed_state: 'S0, S1 and S2 are landed. The weekly layout copy is gone. The daily snapshot still writes a scratch copy until S3 lands (free space dipped to 106 GiB during it on 2026-11-23; 155 GiB free at 21:30Z). The store reading was started on the paper at 21:45Z on 11-23. Disk by kind at 21:40Z: tape 112 GiB (paper 91), the paper''s store 57, capture bodies 42, Postgres 42, snapshot chunks 32.'
   main_uncertainty: 'what the 36 unattributed GiB of the store are'
   next_observation: 'S0''s report on the paper; S1''s and S2''s commits'
   blocker: none
-  next_action: 'review S3 (two seats) and land it; read the measurement and choose the next cut; the receipt table rewrite in a quiet hour, on the owner''s yes of 2026-11-23'
+  next_action: 'review S3 (two seats) and land it; then S8; read S0''s report from the paper when it finishes (about 05:45Z on 11-24 at the latest) and write S6''s design from it; the receipt table swap is held while the disk has room'
 operating_notes:
   - 'One landing and one deploy at a time, in the metamission''s order; S1 goes early because it stops the next staged copy.'
   - 'A snapshot or restore test never runs against the paper. A restored store''s equivalence is proved on d@e.'
