@@ -33,6 +33,9 @@
       "web": "0"
     }
   },
+  "variants": {
+    "one": { "idSuffix": ".one", "name": "Autoradio 1" }
+  },
   "audio_session": "playback",
   "typescript": { "sources": { "fixtures": "../fixtures", "layouts": "../layouts", "themes": "../themes" } }
 }

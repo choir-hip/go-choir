@@ -388,6 +388,29 @@ Pinned Exact: `expo/exact` at `f5334750386192245ee76add13a67ab51fb4e2fd` (moved 
 
 Signing: the free provisioning team is `QSGU6VRJL6` ("Yusef Nathanson (Personal Team)"); `N9HKM55LWY` is only the certificate's person id. Exact needs an installed profile for `news.choir.autoradio.lab`; `scripts/make-profile.sh` obtains one with a stub Xcode project and `-allowProvisioningUpdates`.
 
+## A second app on the phone ("Autoradio 1" beside "Autoradio")
+
+Owner, 2026-11-23: two apps side by side. The second is an Exact **variant** (`variants.one` in `AutoradioLab/app.json`; Exact's reference, "Install a development build beside the release one (variants)", present at the pin): id = `app.id` + `.one`, so **`news.choir.autoradio.lab.one`**, name **"Autoradio 1"** (home screen and Settings), same icon. Exact derives the id as a suffix of `app.id`, so it cannot be `news.choir.autoradio.one`. Nothing in the app branches on it, and the tracked `app.json` is never rewritten by a build. Choose it with `AR_VARIANT=one` (or `AR_APP_ID=news.choir.autoradio.lab.one`; `AR_APP_NAME="Autoradio 1"` is accepted only as a check); `scripts/app-identity.sh` reads and checks the choice, `exact.sh` passes it to Exact as `EXACT_VARIANT`, and `proof-common.sh`, `sim-launch.sh` and `make-profile.sh` take their bundle id from it. Without the variable everything builds as before.
+
+The lead, through the Mac build queue, in the build tree, the phone connected, unlocked, Developer Mode on:
+
+```sh
+# (a) once: a development profile for the new id (the stub installs it; its compile may fail afterwards, that is fine)
+AR_VARIANT=one mobile/scripts/make-profile.sh
+# (b) build, sign and install beside the first app (does not touch it)
+AR_VARIANT=one mobile/scripts/build-lab.sh ios --device --phone 00008120-00114DE80A90C01E
+# optional launch, and the container of the second app only
+AR_VARIANT=one mobile/scripts/build-lab.sh ios --device --run --phone 00008120-00114DE80A90C01E
+```
+
+Every `devicectl` line above that names `--domain-identifier news.choir.autoradio.lab` reaches the first app; use `news.choir.autoradio.lab.one` for the second.
+
+Shares with the first app: nothing, by the entitlements Exact writes (read from `host/apple/build.mjs` at the pin, not yet from a built app). The signed `application-identifier` is `QSGU6VRJL6.<id>`; Exact adds `keychain-access-groups` and an App Group only for an app with widgets or activities, and this app has neither. Our Keychain code sets no access group, so an item goes in the app's default group, `QSGU6VRJL6.<id>`, and the fixed service strings (`news.choir.autoradio.choir`, `.mailseal`, `news.choir.autoradio`) are keys inside each app's own group. The second app starts signed out, and cannot read, change or delete the first app's sign-in. The sandbox containers differ, so preferences, Documents and Application Support differ. The on-device models live in the app container (`Application Support/AutoradioLab/models` and FluidAudio's `Application Support/FluidAudio/Models`), so the second app downloads its own: the small language model is 0.64 GB, the embedder 0.31 GB, the optional LFM3 pair more (see the model list above); Exact's build output for the second id is also a separate copy on the Mac. Backgrounds modes, the audio session and the `AVAudioSession` are per app; two apps playing at once compete for the audio session like any two apps. No URL scheme, universal link, notification category or background task id is declared by the app, and no server code reads a bundle id (`news.choir.autoradio` is not in the Go tree). Check on the first install: `codesign -d --entitlements - <the .app>` shows no `keychain-access-groups` beyond the application identifier.
+
+Free provisioning team (`QSGU6VRJL6`): a profile lasts 7 days (lane experience, `docs/reference/exact/build-and-ship.md`; not checked against Apple's page here), after which the app stops opening until it is built and installed again; the second id needs its own profile, so it is a second app id on the team. Apple's limits on app ids per week and on apps installed per device: not checked.
+
+Remove it: delete "Autoradio 1" from the phone (long press, Remove App), or `xcrun devicectl device uninstall app --device 00008120-00114DE80A90C01E news.choir.autoradio.lab.one`. Removing it deletes only its container and Keychain items; the first app is untouched.
+
 ## Audio states: ways it can fail (written before the code)
 
 The adapter holds one standing capture claim; the kit asks for `listening` or `talking` through `AudioSessionOwner`.
