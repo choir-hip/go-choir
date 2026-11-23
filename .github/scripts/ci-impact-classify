@@ -62,6 +62,7 @@ high_risk_race=false
 ci=false
 receipts_swap=false
 guest_unit=false
+mobile=false
 
 # is_docs_like_path: docs, skill text and developer-side scripts need no CI
 # lane (owner, 2026-11-12); they ship with the next push that does run.
@@ -89,6 +90,7 @@ if [[ "${CI_FORCE_ALL:-false}" == "true" ]]; then
   ci=true
   receipts_swap=true
   guest_unit=true
+  mobile=true
   explanations+=("manual/recovery run -> all CI lanes")
 else
   for path in "${changed[@]}"; do
@@ -115,6 +117,14 @@ else
     case "$path" in
       nix/*|flake.nix|flake.lock|scripts/updater-prune-unit-nix-test.sh|.github/workflows/ci.yml)
         mark guest_unit "$path -> boot prune unit ordering test"
+        ;;
+    esac
+
+    # The phone app's shared code (Exact contracts and TypeScript, mobile/AutoradioLab) has its own `bun test`; it also reads the native interface it is typed against.
+    # Swift under mobile/AutoradioKit and mobile/exact-package/apple is tested on the Mac (CLAUDE.md, One Mac build at a time), not here.
+    case "$path" in
+      mobile/AutoradioLab/*|mobile/fixtures/*|mobile/layouts/*|mobile/themes/*|mobile/exact-package/exact.json|mobile/exact-package/interface/*|mobile/scripts/gen-exact-interface.py|.github/workflows/ci.yml|.github/scripts/ci-impact-classify)
+        mark mobile "$path -> the phone app's shared-code tests"
         ;;
     esac
 
@@ -218,6 +228,7 @@ high_risk_race=${high_risk_race}
 ci=${ci}
 receipts_swap=${receipts_swap}
 guest_unit=${guest_unit}
+mobile=${mobile}
 sampled_race=${sampled_race}
 sample_bucket=${sample_bucket}
 EOF
