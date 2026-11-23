@@ -126,6 +126,14 @@ public enum SameOrigin {
     public static func matches(_ s: String, _ b: URL) -> Bool { URL(string: s).map { matches($0, b) } ?? false }
 }
 
+/// Whether a URL is the configured Choir host (used by the mail review link, which opens only there).
+public enum RemoteHost {
+    public static func allows(_ u: URL, env: ChoirEnvironment = .shared) -> Bool {
+        guard let base = URL(string: env.configuredBaseURL) else { return false }
+        return SameOrigin.matches(u, base)
+    }
+}
+
 // MARK: Errors
 
 public enum ChoirError: Error, CustomStringConvertible, Sendable, Equatable {

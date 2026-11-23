@@ -156,10 +156,12 @@ describe('the on-air card', () => {
   test('9: the sentence is the one at the index; an index past the end shows none', () => {
     const i = input([entry('a', 'story', { state: 'on_air', est_seconds: 100 })], { playing: true, sentences: ['One.', 'Two.', 'Three.'], sentenceIndex: 1, progress: 0.25 });
     let p = make(i);
-    expect(p.sentence).toBe('Two.'); expect(p.sentenceNumber).toBe(2); expect(p.sentenceCount).toBe(3);
+    expect(p.sentence).toBe('Two.');
+    // no "N of M": native knows only the current block's sentences, so a total would change under the listener (the owner read "1 of 1" then "2 of 2" in one story as wrong)
+    expect('sentenceNumber' in p).toBe(false); expect('sentenceCount' in p).toBe(false);
     expect(p.elapsed).toBe('0:25'); expect(p.remaining).toBe('-1:15'); expect(p.fraction).toBeCloseTo(0.25, 3);
     p = make({ ...i, sentenceIndex: 9 });
-    expect(p.sentence).toBe(''); expect(p.sentenceNumber).toBe(0);
+    expect(p.sentence).toBe('');
   });
   test('10: audio has no sentence and uses its own clock', () => {
     const e = entry('p', 'episode', { state: 'on_air', title: 'Episode', source: { ref: 'episode:show', label: 'Harbour Hour', url: 'https://example.com/a.mp3' } });

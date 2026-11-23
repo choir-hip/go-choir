@@ -1,7 +1,7 @@
 // Sign-out, orchestrated from shared code. The Account screen's "Sign out" sends `accountSignOut` (app.ts), which:
 //   1. asks the native side to sign out: ONE native call, `{op: 'signOut'}` on the app module (modules/apple/ModelsEntry.swift). Only native
 //      code can meet it: the sign-in key is a Keychain item the Swift sign-in wrote, and the Swift stores (AccountWipe) still hold the voice's
-//      and the not-yet-moved pages' data. The native side stops playback, lets the Swift run sheet post what it holds with the OLD key,
+//      and the not-yet-moved pages' data. The native side stops playback, tells shared code's run sheet to post what it holds with the OLD key (and waits for its answer, five seconds at most),
 //      deletes the key, runs its own wipe, and answers `{done: true}` when it has finished.
 //   2. only then wipes every store the shared modules keep (WIPES below), each on its own: one that throws is named and does not stop the rest.
 // Why this order and this direction: Exact has no call from native code into `app.ts` (the only ways back are `context.changed`, which asks a
@@ -22,16 +22,25 @@ import type { Storage, Store } from './app.contract.d.ts';
 import * as podcast from './podcast.ts';
 import { wipeMail } from './mail.ts';
 import { wipeFiles } from './files.ts';
+import { wipeImported, PLACES_FILE as IMPORTED_PLACES } from './imported.ts';
 import { wipePaper, CACHE_FILE as PAPER_FRONT } from './paper.ts';
 import { wipeKept, KEPT_FILE } from './takes.ts';
 import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
 import { VECTORS_DIR, wipeLiveVectors } from './search.ts';
 import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
+import { forgetNotebook } from './notebook-run.ts';
+import { resetReaderForTest as forgetReader } from './reader.ts';
 import { wipePages, PAGES_FILE } from './pages.ts';
+import { wipeTold, TOLD_FILE } from './cards.ts';
+import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
+import { wipeSteer, STEER_FILE } from './steer.ts';
+import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
+import { accountGeneration, announceGeneration, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
+import { wipePicks, PICKS_FILE } from './edition-picks.ts';
+import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
 
 /** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
  * launch (`settleAccount`) finishes the wipe before any source answers. (Review 2026-11-19, finding 2.) */
@@ -51,13 +60,22 @@ export const WIPES: Wipe[] = [
   { name: 'podcasts', run: (s) => podcast.wipe(s) },
   { name: 'mail', run: (s) => wipeMail(s) },
   { name: 'files', run: (s) => wipeFiles(s) },
+  { name: 'imported-documents', run: (s) => wipeImported(s) },
   { name: 'paper-front', run: (s) => wipePaper(s) },
   { name: 'takes', run: (s) => wipeKept(s) },
   { name: 'notebook', run: (s) => wipeNotebook(s) },
+  { name: 'notebook-page', run: async () => forgetNotebook() },                                                       // the page's memo and the pushed text, in memory only
+  { name: 'edition-picks', run: (s) => wipePicks(s) },                                                            // the listener's topics (edition-picks.ts): memory, the file, and the native copy
+  { name: 'onboarding', run: (s) => wipeOnboarding(s) },                                                           // the first run's progress (onboarding.ts): memory, the file, and the voice side
   { name: 'vectors', run: async (s) => { await wipeLiveVectors(s); await rmAll(s, [VECTORS_DIR]); } },       // the live in-memory store first, then the files
   { name: 'content', run: async (s) => { await wipeLiveContent(); await rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]); } },  // stops a running sync (generation), empties the open db
+  { name: 'radio', run: (s) => wipeRadio(s as never) },                                                        // the run sheet and the deck (radio-bridge.ts): the sheet's file, its pending ops, what was on air
   { name: 'pages', run: (s) => wipePages(s) },                                                                  // the deck's open set (pages.ts): only the radio stays
+  { name: 'told-paper', run: (s) => wipeTold(s) },                                                                 // what the listener told the paper (cards.ts)
+  { name: 'recent-pages', run: (s) => wipeRecent(s) },                                                           // the launcher's recent pages (recent-pages.ts)
+  { name: 'steer', run: (s) => wipeSteer(s) },                                                                   // the waiting more / less taps (steer.ts)
   { name: 'clips', run: async () => forgetClips() },                                                              // in memory only (public clips, but another account's page asked for them)
+  { name: 'reader', run: async () => forgetReader() },                                                              // the held stories and documents, in memory only (also dropped by the account generation)
   { name: 'demo-leftovers', run: (s) => rmAll(s, [DEMO_MARKER]) },                                                  // a marker, not data: it only lets the one-time pass run again
   { name: 'account-stamp', run: (s) => rmAll(s, [STAMP_FILE]) },
 ];
@@ -65,8 +83,8 @@ export const WIPES: Wipe[] = [
 /** (A function, not a constant: api.ts imports app.ts, which imports this, so a constant read at load can meet a module not yet initialised.)
  * The paths the wipes above cover (account.test.ts S4 compares them with every `app:/` literal in the shared modules). `app:/tmp/picked` is files'. */
 export const wipedPaths = (): string[] => [
-  podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE,
-  VECTORS_DIR, CONTENT_DB, PAGES_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
+  podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', IMPORTED_PLACES, PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE, SHEET_FILE, ONBOARDING_FILE,
+  VECTORS_DIR, CONTENT_DB, PAGES_FILE, TOLD_FILE, RECENT_FILE, STEER_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
 ];
 
 /** Run each wipe; the names of the ones that threw. Logs ids, never content. The signed-in seam is reset first: a new account generation (a reply
@@ -80,10 +98,13 @@ export async function wipeAll(storage: Storage | undefined, store: Store | undef
   for (const w of wipes_) {
     try { await w.run(storage, store); } catch { failed.push(w.name); console.log(`account: wipe ${w.name} failed`); }
   }
+  // The last act: a generation newer than anything computed before the wipe, told to native. A pulse that began after the sign-out began read the generation the sign-out announced, with the old account's sheet
+  // still in the store; native accepts equality, so only a floor above it keeps that pulse out. What is computed from here on (the public paper, signed out) carries the new one and is accepted.
+  nextGeneration(); await announceGeneration();
   return failed;
 }
 
-export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe' }): Promise<unknown> };
+export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe'; gen?: number }): Promise<unknown> };
 export type SignOutResult = { done: boolean; failed: string; message: string; epoch: number };
 /** A deadline, not a limit: a native sign-out that never answers leaves the page retryable. */
 export const NATIVE_DEADLINE_MS = 30000;
@@ -127,11 +148,11 @@ export function decide(f: Facts): Action {
 
 export type Native = { signOut(onLate?: () => void): Promise<boolean>; wipe(onLate?: () => void): Promise<boolean> };
 /** The app module's two ops as booleans. A call that outlives `ms` answers false NOW, but keeps its continuation: `onLate` runs if it answers done:true afterwards. */
-export function nativeOf(later: ((r: { op: string }) => Promise<unknown>) | null, ms = NATIVE_DEADLINE_MS): Native {
+export function nativeOf(later: ((r: { op: string; gen?: number }) => Promise<unknown>) | null, ms = NATIVE_DEADLINE_MS): Native {
   const call = (op: 'signOut' | 'wipe', onLate?: () => void): Promise<boolean> => {
     if (!later) return Promise.resolve(false);
     let timedOut = false;
-    const p: Promise<boolean> = later({ op }).then((r) => !!r && (r as { done?: unknown }).done === true, () => false);
+    const p: Promise<boolean> = later({ op, gen: accountGeneration() }).then((r) => !!r && (r as { done?: unknown }).done === true, () => false);
     void p.then((ok) => { if (timedOut && ok) onLate?.(); });
     return Promise.race([p, timeout(ms).then(() => { timedOut = true; return false; })]);
   };
@@ -150,7 +171,8 @@ async function stampFact(storage: Storage, digest: string): Promise<StampFact> {
 async function leftovers(storage: Storage | undefined): Promise<string[]> {
   if (!storage) return [];
   const out: string[] = [];
-  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
+  // The paper's cache is the PUBLIC front page: a signed-out phone shows the paper and caches it again within seconds, so a copy that is back after the wipe is not the old account's (the drill showed "could not be cleared yet: paper-front.json").
+  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && p !== PAPER_FRONT && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
   return out;
 }
 
@@ -232,7 +254,7 @@ async function signOutInner(
   step('begun');
   let late = false;
   let nativeDone: Promise<unknown>;
-  try { nativeDone = native.later({ op: 'signOut' }); } catch { nativeDone = Promise.resolve({ done: false }); }
+  try { nativeDone = native.later({ op: 'signOut', gen: accountGeneration() }); } catch { nativeDone = Promise.resolve({ done: false }); }
   const wipes = opts.wipes ?? DATA_WIPES;
   // A native call that outlives the deadline keeps its continuation: if it answers done:true later, the shared stores are wiped then and the marker goes.
   nativeDone.then(async (r) => {
@@ -246,7 +268,7 @@ async function signOutInner(
   if (ans.done !== true) {
     // Not signed out (the key may still be there). An explicit "not done" means the key remains: the marker goes. A throw is unknown: the marker stays and the next
     // reconcile decides by the key (present: the marker is cleared and nothing is wiped).
-    abortSignOut();
+    abortSignOut(!ans.threw);                                                    // a throw is unknown: the radio is not handed the new generation (api.ts)
     if (!ans.threw) await removeFile(storage, PENDING_FILE);
     return { done: false, failed: '', message: 'Sign-out did not finish. Try again.' };
   }

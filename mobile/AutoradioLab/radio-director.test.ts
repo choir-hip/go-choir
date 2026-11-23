@@ -353,4 +353,22 @@ describe('what each kind of entry starts with', () => {
     expect(plan(e)).toEqual({ kind: 'file', address: 'file:docs/a.mp3', title: 'F' });
   });
   test('the session retry delays are 1, 2, 4, 8, 15 and then 15 again', () => expect([1, 2, 3, 4, 5, 6, 9].map(retryDelay)).toEqual([1, 2, 4, 8, 15, 15, 15]));
+  test('a clip card carries the episode it was cut from, so it can open the episode', () => {
+    const c = audio({ url: 'https://x.test/a.mp3', title: 'T', show: 'S', start: 5, end: 9, episode_id: 'pod:feed/ep1' }, 'clip-abc');
+    expect(c.source?.ref).toBe('clip:clip-abc#pod:feed/ep1'); expect(c.source?.clip_id).toBe('clip-abc');
+    expect(audioSpec(c)?.episode_id).toBe('pod:feed/ep1');
+    expect(audioSpec(audio({ url: 'https://x.test/a.mp3', title: 'T', show: 'S', start: 5, end: 9 }, 'clip-abc'))?.episode_id).toBeUndefined();
+  });
+});
+
+describe('a message that is not a failure to speak goes by itself (review B2-4)', () => {
+  test('the too-long-address line is gone eight seconds later, the speech failure stays', () => {
+    let t = Date.parse('2023-11-14T22:00:00Z');
+    store = new RunSheetStore({ now: () => new Date(t) }); d = new Director(store); d.onCommand = () => undefined;
+    d.queue({ ...paperStory('x', 'P'), source: { ref: 'url:https://x.test/' + 'b'.repeat(2200), label: 'x' } });
+    expect(d.visibleMessage()).toBe('That address is too long to add.');
+    t += 9_000; expect(d.visibleMessage()).toBe('');
+    d.message = 'Can’t speak: no sound'; d.messageAt = 0; t += 60_000;
+    expect(d.visibleMessage()).toBe('Can’t speak: no sound');
+  });
 });

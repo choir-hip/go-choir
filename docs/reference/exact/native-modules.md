@@ -142,6 +142,13 @@ The class is made once per session, on the main thread.
 - Rate: the spike publishes at most once per second. Coalesce; there is no
   documented rate limit [unrun].
 
+**Native asks shared code (the one pattern, 2026-11-21, `retrievalAsk`).** Exact has no call from native into `app.ts`, and a voice turn needs shared
+code's answer for the words just heard. The pattern: native keeps the ask (an id and its inputs) and `touch`es a package source; a root `resource`
+in `members-retrieval.contract` reads that source and passes the ask to a data-module source; that source does the work and hands the answer back
+through one app-module op (`ModelsEntry.swift`, `retrievalAnswer`); native waits on the id with a deadline and goes on without an answer when it
+does not come (`RetrievalFacts.swift`). The facts only native holds (here: the Swift run sheet's entries, the open pages) ride in the ask as one JSON string.
+[unrun on a device: the source is read only while the app runs its root resources; the proof's ask drive logs `AUTORADIO retrieval ask answered|no-answer`.]
+
 ## Threading and lifecycle
 
 - Every module entry (`init`, `later`, `call`, view create/props/destroy)
@@ -235,7 +242,7 @@ printed; see the open problem in `testing-and-debugging.md`.
   configured playback category alone grants nothing"), and on Android when the
   Activity stops with no promoted foreground-service claim; macOS, Linux and
   Windows never freeze (`docs/contract-for-agents.md:4923-4932`,
-  `recipes/suspending-feed.md:35-41`). Unrun on a phone.
+  `recipes/suspending-feed.md:35-41`). Unrun on a phone. The rule's source and what our app meets: [audio.md](audio.md) "What keeps shared code running in the background".
 
 ## Native views and mutation results
 
@@ -290,8 +297,9 @@ state (`status: "error"`, `message`), so the page shows its existing error and
 retry, never a spinner word. Time is never read: `Date.now()` and `new Date()` are
 refused. The server's `Date` header is "now" for ranking and "2 h ago"; a
 fixed `Date.UTC(...)` of a parsed string is fine. State between answers is a
-module-level `Map` (kept lists), cleared when a `tick` argument changes (a pull to
-refresh).
+module-level `Map` (kept lists); what was asked is forgotten when a `tick` argument changes (a pull to
+refresh) and the next fetch replaces rows by id (clips.ts); a fetch that lands after the account
+changed is dropped (`accountGeneration()` taken before the request).
 
 **4. Grants.** `export const grants` is read by the build without running the
 module: a string or a template of constants **in `app.ts` itself**. An imported

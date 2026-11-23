@@ -55,16 +55,6 @@
    "ok": "bool",
    "message": "string"
   },
-  "SettingsComputer": {
-   "id": "string",
-   "state": "string",
-   "target": "string",
-   "phase": "string",
-   "updateAvailable": "bool",
-   "message": "string",
-   "epoch": "number",
-   "checked": "bool"
-  },
   "LearnedItem": {
    "line": "string",
    "kind": "string",
@@ -75,114 +65,44 @@
    "count": "number",
    "message": "string"
   },
-  "ActivityItem": {
+  "SettingsFacts": {
+   "now": "number",
+   "appVersion": "string",
+   "radio": "RadioFact",
+   "turns": "TurnFact[]"
+  },
+  "RadioFact": {
+   "known": "bool",
+   "running": "bool",
+   "phase": "string"
+  },
+  "TurnFact": {
    "id": "string",
-   "kind": "string",
-   "label": "string",
-   "detail": "string",
-   "group": "string",
-   "ago": "string",
-   "target": "string",
-   "title": "string",
-   "at": "number",
-   "unseen": "bool"
-  },
-  "ActivityInfo": {
-   "status": "string",
-   "message": "string",
-   "live": "ActivityItem[]",
-   "computer": "ActivityItem[]",
-   "desk": "ActivityItem[]",
-   "paper": "ActivityItem[]",
-   "radio": "ActivityItem[]",
-   "unseen": "number",
-   "blank": "bool"
-  },
-  "AboutInfo": {
-   "app": "string",
-   "base": "string",
-   "signedIn": "bool"
+   "outcome": "string",
+   "transcript": "string",
+   "configName": "string"
   }
  },
  "names": [
   {
-   "source": "settingsComputer",
+   "source": "settingsFacts",
    "live": true,
-   "answers": "SettingsComputer",
+   "answers": "SettingsFacts",
    "substitute": {
     "default": {
-     "id": "",
-     "state": "",
-     "target": "",
-     "phase": "idle",
-     "updateAvailable": false,
-     "message": "",
-     "epoch": 0,
-     "checked": false
+     "now": 0,
+     "appVersion": "",
+     "radio": {
+      "known": false,
+      "running": false,
+      "phase": ""
+     },
+     "turns": []
     }
+   },
+   "options": {
+    "tick": "number"
    }
-  },
-  {
-   "source": "learnedInfo",
-   "live": true,
-   "answers": "LearnedInfo",
-   "substitute": {
-    "default": {
-     "rows": [],
-     "count": 0,
-     "message": ""
-    }
-   }
-  },
-  {
-   "source": "activityInfo",
-   "live": true,
-   "answers": "ActivityInfo",
-   "substitute": {
-    "default": {
-     "status": "",
-     "message": "",
-     "live": [],
-     "computer": [],
-     "desk": [],
-     "paper": [],
-     "radio": [],
-     "unseen": 0,
-     "blank": false
-    }
-   }
-  },
-  {
-   "source": "aboutInfo",
-   "live": true,
-   "answers": "AboutInfo",
-   "substitute": {
-    "default": {
-     "app": "",
-     "base": "",
-     "signedIn": false
-    }
-   }
-  },
-  {
-   "send": "computerRefresh",
-   "answers": "SettingsAck"
-  },
-  {
-   "send": "computerWake",
-   "answers": "SettingsAck"
-  },
-  {
-   "send": "computerUpdate",
-   "answers": "SettingsAck"
-  },
-  {
-   "send": "learnedReset",
-   "answers": "SettingsAck"
-  },
-  {
-   "send": "activityRefresh",
-   "answers": "SettingsAck"
   }
  ]
 }

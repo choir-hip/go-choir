@@ -1,7 +1,8 @@
 // The queue's screens (lane autoradio-queue): "Up next" and the audio controls in the expanded player, and the page a URL typed in the bar
 // opens in place. Built from the design components in ui.contract (SectionHeader, PlainList, RowRule, EmptyState).
 // testIds: queue-audio, queue-elapsed, queue-remaining, queue-scrub, player-keep, bar-web, bar-web-close, bar-web-read, bar-web-add, bar-web-host.
-use Theme, QueueInfo from "@choir/autoradio"
+use Theme from "@choir/autoradio"
+use QueueInfo from "./queue-types.contract"
 use Card, Btn from "./ui.contract"
 
 // The scrubber of remote audio, under the player's title: elapsed, the track, remaining. Dragged like the speed slider (the move is relative,

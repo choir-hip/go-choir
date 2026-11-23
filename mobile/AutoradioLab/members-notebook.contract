@@ -1,15 +1,30 @@
-// Lane members file (My notebook, station L6): the notebook page reads `nb` and sends `notebookDo`. Source and send are declared in exact-package/interface/notebook.json.
-use notebookPage, notebookAct from "@choir/autoradio"
-use NotebookPageInfo from "@choir/autoradio"
+// Lane members file (My notebook, station L6): the notebook page reads `nb` and sends `notebookDo`. Both are shared code now (notebook-run.ts); no Swift source or send remains.
+// The one native call (the steer taps waiting and the topics write) is made inside notebook-run.ts, `{op: 'notebookState'}`, not named here.
+// `nbSel` is the selected line (the same again clears it), `nbTick` counts Refresh presses; a select reads nothing, a refresh reads the notebook and the scorecard again.
+// The content store's sync (content-run.ts) is started here: a gated task runs at launch when its gate is already true, and again each time the app returns to the front.
+use NotebookPageInfo, ContentSyncInfo from "./notebook-types.contract"
 
 members Autoradio
-  // The Swift page where there is a native package (iOS); where there is none (`noNative`, Android) the shared twin (notebook.ts: a read of the computer's notebook and scorecard through the
-  // signed-in seam; read only: selecting a line and the steer taps stay native). The flag keeps the twin idle on iOS.
-  resource nbn = notebookPage() as shape NotebookPageInfo else empty()
-  resource nbs = notebookPageShared("", 0, noNative, signedOutTick, au.signedIn) as shape NotebookPageInfo else empty()
-  derive nb = noNative ? nbs : nbn
-  mutation nbm as shape NotebookPageInfo
+  state nbSel = ""
+  state nbTick = 0
+  // Arguments are positional (app.ts answers it). On top of the deck it reads; otherwise it answers the idle page and holds nothing.
+  resource nb = notebookPageShared(nbSel, nbTick, pg.top == "notebook:", signedOutTick, au.signedIn) as shape NotebookPageInfo else empty()
 
   // refresh | select (arg is a line id; the same again clears it)
   action notebookDo(op: string, arg: string)
-    send nbm = notebookAct(op=op, arg=arg)
+    if op == "refresh"
+      nbTick = nbTick + 1
+    if op == "select"
+      nbSel = nbSel == arg ? "" : arg
+
+  // The phone's copy of what the computer holds (stories, documents, files): once per launch and per return to the front, only while signed in.
+  mutation csync as shape ContentSyncInfo
+  // The gate holds only while the app is in front, so the task fires once on each return to the front (the key changes when the gate turns true again), never on the way to the background.
+  derive csKey = `${hpg.visibilityState}|${signedOutTick}`
+  // Each kick gets its own run number, so a return to the front is a new key for the sync (the same visibility value would otherwise answer the last result).
+  state csRun = 0
+  action contentKick
+    csRun = csRun + 1
+    send csync = contentSync(`${csKey}|${csRun + 1}`)
+  task contentSyncKick when acs.state == "signedIn" and hpg.visibilityState == "visible" key=csKey
+    after(1, contentKick)

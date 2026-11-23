@@ -28,6 +28,9 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
 
     func observe(_ h: @escaping @Sendable (String, String) -> Void) { lock.lock(); handler = h; lock.unlock() }
 
+    // THE RULE (docs/reference/exact/audio.md "What keeps shared code running in the background"): while the radio is on this claim is held CONTINUOUSLY, from the first start until the listener stops it
+    // (`release()` below, reached from LabRuntime.stop and a sign-out) and never between entries: on iOS the page is frozen the moment no claim is held (Exact AudioSession.swift:148-157), and shared code
+    // is what writes ahead and hands the deck its next entries. The deck (Deck.swift) never releases it between items; a change of state is release-then-claim in ONE main-actor step, with no await between.
     func claim(_ state: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
         let ok: Bool = await MainActor.run {
             if claim != nil, held == state { return true }
@@ -88,16 +91,17 @@ public final class AutoradioModule: ExactPackage {
     var owner: PlatformSessionOwner!
     var choir: ChoirApp!
     /// The spine's shared kit objects: every lane reads these and none replaces them.
-    var pages: OpenPages!
-    var signals: Signals!
     let pageSources = PageSources()
+    /// The last page a native module asked to open (see `requestPage`).
+    var pageRequestState: (id: Int, address: String, title: String) = (0, "", "")
     /// name -> handler. Looked up first in `later`; the integrator's switch below answers the rest.
     var handlers: [String: AutoradioHandler] = [:]
     private var dirty = Set<String>()
     private var scheduled = false
     private var turnArg: [String: Any] = [:]
     /// The page the bar opened in place (a URL typed in the bar); lane autoradio-queue.
-    var barWebURL = ""
+    /// The page the bar opened (a link in a message, a URL typed in the bar): shared code holds it (radio-bridge.ts); native only says it opened.
+    var barWebURL: String { get { "" } set { RadioBridge.shared.send(newValue.isEmpty ? "closeWeb" : "openWeb", ["url": newValue]) } }
 
     /// The one handle the app module (modules/apple/ModelsEntry.swift) uses to run the native half of sign-out, which shared code leads
     /// (AutoradioLab/account.ts). Weak: the module owns its life; this is set at init and read on the main thread.
@@ -107,6 +111,16 @@ public final class AutoradioModule: ExactPackage {
     /// stores are wiped, the revoke is sent in the background (ChoirApp.signOut). Answers when that has finished.
     /// `keepKey`: the account CHANGED (a different key is stored): only the old account's Swift stores go, the key stays. Otherwise the whole sign-out.
     public func signOutForShared(keepKey: Bool = false) async { if keepKey { await choir?.accountWipe.run() } else { await choir?.signOut() } }
+
+    /// The sign-in's three native calls (shared code's attempt machine, AutoradioLab/signin-attempt.ts, names the attempt in each): the device code, one poll request and the Keychain write are native; nothing else is.
+    public func signInOp(_ r: [String: Any]) async -> [String: Any] {
+        let id = r["attempt"] as? String ?? ""
+        switch r["op"] as? String {
+        case "signInBegin": return await choir.signIn.begin(attempt: id)
+        case "signInPoll": return ["answer": await choir.signIn.pollOnce(attempt: id)]
+        default: choir.signIn.forget(attempt: id); return ["ok": true]
+        }
+    }
 
     public init(context: ExactPackageContext) {
         self.context = context
@@ -120,72 +134,52 @@ public final class AutoradioModule: ExactPackage {
         owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s); ConsoleFile.write("AUTORADIO \(s)") }
         #endif
         runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barFacts"], now: true) } }
         // The listener path: sign-in (Keychain), the front page, the real stages.
         let appKeys: KeyStore = KeychainKeyStore()
-        Demo.clearLeftovers(support: support)   // a phone that was in demo mode (removed 2026-11-20): once
-        Demo.clearMoreLeftovers(support: support)   // the rest of what demo left (its own marker: the first pass's is already set on some phones)
         #if targetEnvironment(simulator)
         // Real-data proof only (compiled out of device builds): a `proof-key` file in Documents becomes the stored key, then is deleted.
         if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             ProofKey.importIfPresent(documents: docs, into: appKeys)
         }
         #endif
-        choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
-        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
+        choir = ChoirApp(runtime: runtime, keys: appKeys)
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
         // The spine's objects.
-        signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
-        pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
-        // The phone's own content store (Kit/ContentStore.swift): one source for the index, the offline pages and "play that".
-        // Nothing here touches the store on the launch path: it opens in a background task, and a store that cannot open leaves the app as it was.
-        ContentSync.enabled = true
-        Task.detached(priority: .utility) {
-            if ContentBoot.start() { ContentSync.shared.audioBusy = { await MainActor.run { RunSheetPlayer.shared.isRemote } } }
-            if ContentStore.shared.usable {                // vectors for the same items: BM25 alone until the model is there and the backlog embedded
-                Task { @MainActor in          // remote audio on air: the player is main-actor state, so its flag is copied across every two seconds
-                    while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
-                }
-                EmbeddingService.shared.attach(corpus: .shared, store: .shared)
-            }
-            try? await Task.sleep(nanoseconds: 30_000_000_000)
-            SavedCorpus.shared.refresh()          // the index warm-up, long after the front page has drawn
+        // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
+        Task { @MainActor in
+            while true { RadioDemand.shared.setRemotePlaying(Deck.shared.current?.kind == "audio" && Deck.shared.why == .playing); try? await Task.sleep(nanoseconds: 2_000_000_000) }
         }
-        ReaderStore.shared.offline = { ContentStore.shared.readerDoc(address: $0) }
-        PublicationTextSource.offline = { ContentStore.shared.readerDoc(address: $0) }
-        // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store, ContentSync.wipeAccount among them); the stores below live in this target.
-        // Kit methods called: Signals.wipe(), OpenPages.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
+        // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store); the stores below live in this target.
+        // Kit methods called: OpenPageFacts.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
         let filesCache = filesCacheDisk
         // The folder the old lookup fell back to: copies no page could read. Removed once; nothing writes there now.
         try? FileManager.default.removeItem(at: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files"))
-        choir.accountWipe.register("signals") { [signals] in signals?.wipe() }
-        choir.accountWipe.register("open-pages") { [pages] in pages?.wipe() }
+        // The Swift build's run sheet, steer queue, opening cache and front titles: shared code keeps its own now, nothing reads these, and they hold the old account's text. Removed once at boot (and at sign-out).
+        AccountWipe.removeOldBuildFiles(support: support, caches: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0])
+        choir.accountWipe.register("open-pages") { OpenPageFacts.shared.wipe() }
         choir.accountWipe.register("app-files") {
             AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })
             AccountWipe.removeContents(of: support.appendingPathComponent("books")); AccountWipe.removeContents(of: filesCache)
+            AccountWipe.removeContents(of: support.appendingPathComponent("content"))      // the pre-release content store's folder (the phone's copy is shared code's app:/data/content.db now): never read, only removed
         }
-        SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
-        pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         pageSources.register(NotYetPageSource())
-        pageSources.register(PublicationTextSource())
         // Registration: the spine, then one line per lane (each defined in that lane's own file).
         registerSpine()
         registerBar()
-        registerPaper()
         registerReader()
-        registerCards()
         registerMail()
         registerSettings()
         registerOnboarding()
-        registerMark()
         registerVoice()
         registerQueue()          // lane autoradio-queue
         registerDeck()           // the deck: shared code commands it and reads its journal (Deck.swift)
-        registerRadioPage()      // the Autoradio page
         registerTakes()          // takes: record, review, publish (station L7)
         registerNotebook()       // my notebook (station L6)
-        registerBooks()   // lane autoradio-reader
+        registerImported()
         registerTalk()
+        registerRetrieval()     // the voice turn's ask for passages (shared code answers) and the embedding model's ops
         registerTextureEdit()   // your own Texture documents in rich text
         registerPodcasts()      // lane autoradio-podcasts
         registerJoins()         // lane autoradio-joins
@@ -198,12 +192,15 @@ public final class AutoradioModule: ExactPackage {
     /// Coalesce change notifications to a few per second. `names` are source names without the "autoradio." prefix.
     /// `now`: the change goes out on the next turn of the main loop instead of after the 0.2 s coalescing wait (the page list: a swipe
     /// must not wait for it; the open-page list changes once per gesture, so there is no storm to coalesce).
-    func touch(_ names: [String], now: Bool = false) {
+    /// `pump`: the change wakes the radio's pump (`radioNote`) when it touches `radioView` or `barFacts`. The engine's 0.4 s progress timer and the microphone's level touch them for the screens' sake only and pass false: the pump
+    /// asks the desk, the deck and four screens each time it runs, and was woken two and a half times a second by them while the programme played.
+    func touch(_ names: [String], now: Bool = false, pump: Bool = true) {
         // `dirty` is only touched on the main thread: a background caller (found by a real-data run: readServerBuild called this from a
         // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
-        if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now) }; return }
-        dirty.formUnion(names.map { $0 == "radioPage" ? "radioPageFacts" : $0 })   // (the takes lane still names the page by its old source)
-        if names.contains(where: { $0 == "radioView" || $0 == "queueView" || $0 == "barFacts" }) { dirty.insert("radioPageFacts") }   // the Autoradio page reads all three
+        if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now, pump: pump) }; return }
+        // The queue and the Autoradio page are shared code's now: what the screens used to ask of the queue, the page and the bar's run sheet facts is `radioNote` (the pump looks again). Old names still work.
+        dirty.formUnion(names.map { ["queueView": "radioNote", "radioPage": "radioNote", "radioPageFacts": "radioNote"][$0] ?? $0 })
+        if pump, names.contains(where: { $0 == "radioView" || $0 == "barFacts" }) { dirty.insert("radioNote") }
         if now {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -238,16 +235,8 @@ public final class AutoradioModule: ExactPackage {
         switch name {
         case "choirAuth": reply(json(choir.authView()))
         case "choirPlayer": reply(json(choir.playerView()))
-        case "choirStories": reply(["rows": choir.storyRows().map { json($0) }])
-        case "choirSignIn": Task { [choir] in _ = await choir?.signIn.begin() }; reply(state())
-        case "choirCancelSignIn": choir.signIn.cancel(); reply(state())
-        case "choirOpenApproval":
-            if let u = URL(string: choir.authView().verificationURL) { Platform.open(u) }
-            reply(state())
         case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
-        case "choirPlayPause": Task { [choir] in await choir?.playPause() }; reply(state())
         case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing
-        case "choirPlay": let r = args["route"] as? String ?? "", t = args["title"] as? String ?? ""; Task { [choir] in await choir?.play(route: r, title: t) }; reply(state())
         default: reply(["error": "NotSupportedError"])
         }
     }

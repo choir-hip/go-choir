@@ -44,7 +44,7 @@
    "options": {
     "op": "string",
     "id": "string",
-    "feed": "string"
+    "record": "string"
    },
    "answers": "PodDone"
   }

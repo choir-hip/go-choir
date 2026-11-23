@@ -54,6 +54,7 @@ jobs:
       sbom: ${{ steps.classify.outputs.sbom }}
       receipts_swap: ${{ steps.classify.outputs.receipts_swap }}
       guest_unit: ${{ steps.classify.outputs.guest_unit }}
+      mobile: ${{ steps.classify.outputs.mobile }}
       flakehub: ${{ steps.classify.outputs.flakehub }}
       high_risk_race: ${{ steps.classify.outputs.high_risk_race }}
       ci: ${{ steps.classify.outputs.ci }}
@@ -772,6 +773,39 @@ jobs:
         shell: bash
         run: bash scripts/updater-prune-unit-nix-test.sh
 
+  # The phone app's shared code: Exact contracts and TypeScript under mobile/AutoradioLab, with their own `bun test` (about 20 s on a runner, plus the Bun download).
+  # No Exact checkout, no Xcode: the suite is pure TypeScript over the committed fixtures. Selected by ci-impact-classify `mobile`.
+  autoradio-shared-tests:
+    name: Autoradio Shared-Code Tests
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.mobile == 'true'
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '22'
+
+      # The version the app pins (mobile/AutoradioLab/exact.mjs ensureBun, mobile/scripts/exact.sh).
+      - name: Install Bun
+        run: npm install --global bun@1.4.2
+
+      - name: Install the app's package
+        run: cd mobile/AutoradioLab && bun install --frozen-lockfile
+
+      - name: Shared-code tests
+        run: cd mobile/AutoradioLab && bun test
+
+      # The app's build identity and the sign-in callback scheme handed to Exact (scripts/app-identity.sh, exact.sh). Stubbed Bun, no Exact build, no Xcode; it needs sh, git, python3 and shasum.
+      # (It fails on the NixOS build VM only because that image has no /usr/bin/python3 or dirname; ubuntu-latest has both.)
+      - name: Build identity and sign-in scheme handoff
+        run: cd mobile && sh scripts/test-app-identity.sh
+
   # scripts/receipts-index-swap runs DDL on the live receipt table (the supervised
   # swap of docs/problems/old-receipts-do-not-compact-2026-11-14.md); its
   # self-test runs it against a throwaway PostgreSQL. Selected whenever the
@@ -794,7 +828,7 @@ jobs:
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, receipts-index-swap, boot-prune-unit, build-frontend, package-modularity, desk-protocol, base-packages-listed]
+    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, receipts-index-swap, boot-prune-unit, autoradio-shared-tests, build-frontend, package-modularity, desk-protocol, base-packages-listed]
     if: always()
     steps:
       - name: Confirm selected CI gates passed
@@ -859,6 +893,7 @@ jobs:
           require_if_run guest-floor-commit-free "${{ needs.guest-floor-commit-free.result }}"
           require_success "${{ needs.plan.outputs.receipts_swap }}" receipts-index-swap "${{ needs.receipts-index-swap.result }}"
           require_success "${{ needs.plan.outputs.guest_unit }}" boot-prune-unit "${{ needs.boot-prune-unit.result }}"
+          require_success "${{ needs.plan.outputs.mobile }}" autoradio-shared-tests "${{ needs.autoradio-shared-tests.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
           require_if_run base-packages-listed "${{ needs.base-packages-listed.result }}"
           require_success "${{ needs.plan.outputs.frontend }}" package-modularity "${{ needs.package-modularity.result }}"
@@ -985,7 +1020,7 @@ jobs:
     name: Build Frontend
     runs-on: ubuntu-latest
     needs: [plan, deploy-impact]
-    if: always() && ((github.event_name == 'pull_request' && needs.plan.outputs.frontend == 'true') || needs.deploy-impact.outputs.deploy_frontend == 'true')
+    if: always() && (needs.plan.outputs.frontend == 'true' || needs.deploy-impact.outputs.deploy_frontend == 'true')
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 

@@ -12,8 +12,6 @@ shapes = {
     "ChoirAuth": {"signedIn": B, "baseURL": S, "status": S, "userCode": S, "verificationURL": S, "message": S},
     "ChoirPlayer": {"signedIn": B, "loading": B, "title": S, "passage": S, "playing": B, "talking": B,
                     "heard": S, "message": S},
-    "StoryRow": {"title": S, "dek": S, "route": S, "section": S, "current": B},
-    "StoryList": {"rows": "StoryRow[]"},
 }
 
 def src(n, ans, opts=None, default=None):
@@ -35,12 +33,9 @@ names = [
     src("choirAuth", "ChoirAuth", default={"signedIn": False, "baseURL": "", "status": "idle", "userCode": "", "verificationURL": "", "message": ""}),
     src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "",
         "playing": False, "talking": False, "heard": "", "message": ""}),
-    src("choirStories", "StoryList", default={"rows": []}),
-    snd("choirSignIn"), snd("choirOpenApproval"), snd("choirCancelSignIn"), snd("choirRefresh"),
-    snd("choirPlayPause"), snd("choirStartRadio"), snd("choirTalkCancel"), snd("choirHandsFreeToggle"),
-    snd("choirPlay", {"route": S, "title": S}),
+    snd("choirRefresh"),
+    snd("choirTalkCancel"), snd("choirHandsFreeToggle"),
     snd("choirAsk", {"text": S, "aim": S}),
-    snd("choirListen", {"address": S, "title": S, "text": S}),
 ]
 # Per-lane fragments: exact-package/interface/<lane>.json = {"shapes": {...}, "names": [...]}. Each lane owns its own
 # file, so no two lanes edit the same one. A shape or a source/send name declared twice is an error.

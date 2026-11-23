@@ -14,8 +14,8 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 
 | What | State | Where |
 | --- | --- | --- |
-| Phone: the rest of the pages moved to shared code ("the train") | built; fails 7 checks of its own real-host proof; never on a phone | `lane/exact-train1` |
-| Phone: dead native code removed | built, reviewed once; waits on the train | `lane/native-dead-code` |
+| Phone: the rest of the pages moved to shared code ("the train") | re-cut with its review fixes, the radio fixes, the dead-code lane and the sign-in sheet's app part as one branch; waits on the simulator proof | `lane/train2` (was `lane/exact-train1`) |
+| Phone: dead native code removed | folded into `lane/train2`; waits on the train's proof | `lane/native-dead-code` |
 | Phone: one data folder per account, sign-out wipes it | 12 review rounds, 5 failed drill runs; stopped for a structural assessment | `lane/account-partition-s1` |
 | Phone: "Autoradio 1", the train as a second app beside the first | **on the owner's phone since 2026-11-23 01:33Z**; seven defects found there | `lane/exact-side-by-side` |
 | Phone: position moves while playing; a closed answer card stays closed; the queue is described to the server as it is; the microphone opens on a first launch | built; one review seat accepted with six fixes, being applied; not on the phone | `lane/exact-ar1-next` |
@@ -43,6 +43,19 @@ superseded, 11 evidence only, 26 are distinct live work (the rows above and
 the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-23
+
+### Phone: the train as one branch (`lane/train2`, orange; the sign-in part red)
+- **What:** the phone's pages and their logic moved from Swift to shared Exact code, as one branch cut from `lane/exact-ar1-next` (the train and the radio fixes) with three lanes merged in: reader, search, imported documents and the computer page (`lane/train-fix-ac`); the native review fixes (old-build files wiped, audio tests restored, dead Swift deleted, the earlier native-dead-code lane, the voice list made true, the native ceiling set to the true 49 files) (`lane/train-fix-d`); and the sign-in sheet's app part (below). Added here: the page the voice holds (`pageText`) carries the account generation it was read under and native drops a stale one, the same rule `radioSet` and `editionMirror` have; the unread `level` verb case and `LiveAudio.preparedSpeech` are deleted. Areas on shared code: reader, search, imported documents, the computer page, mail, files, podcasts, takes, the notebook, the run sheet, the radio and its queue, sign-in, sync.
+- **Why:** the owner's rule: only voice is native ("get everything in exact, as much as possible").
+- **Proof:** bun suite 1408 tests pass on the merged tree with the generation guard's fixes (`lane/train2-gen`, `lane/train2-churn`). Simulator proof run id: filled in by the lead. Not on a phone.
+- **Replaced:** the Swift of those pages and the dead native code (native non-voice code is 49 files, 5844 lines, 27 names; the ceiling rose to 5844 for the account-generation guard: a boot announcement (`SharedGeneration.boot`, native adopts a JS context that starts again below the newest), the one-lock `admit` (check and write are one step) and the wipe's last act, a floor above anything computed before it, announced with a deadline). **Undo:** revert the merge.
+- **The radio's churn, fixed here (`lane/train2-churn`):** while the programme played, native's 0.4 s progress timer woke the radio's pulse (it touched `radioView` and `barFacts`, which also moved the radio note), so the pulse ran about 180 times a minute and each beat asked the three screens and what reads them again. Now the beat moves once per device second and the progress timer and the microphone's level no longer wake the pulse: 60 pulses a minute playing in front (12 paused), native calls 840 to 480 a minute counting native's own `barFacts` and `radioView` (pulse and screens alone 540 to 180). The simulated minute is `radio-churn.test.ts`; the proof's `rpulse` and `asked again` counts should fall by about a third. **The sheet's posts now wait for an in-flight desk ask** (up to the ask's deadline, 240 s): the pulse calls for no second `radioWrite` while one waits, because a mutation sent again replaces the first and the first is the one waiting for the reply. The cleaner remedy, a separate post mutation, is not done.
+
+### Phone: sign-in opens the approval page in the system sign-in sheet (app part of `lane/signin-sheet`, orange)
+- **What:** Sign in opens the device-flow approval page in Exact's system sign-in sheet (`openAuthSession`), from shared code; one sign-in attempt is one state machine in shared code (`signin-attempt.ts`); native keeps the device code, one poll and the key write. The return from the approval page is only a signal: the poll learns the key. `app.json` declares `SIGNIN_SCHEME` per variant. The server half (the approval route and page return, red) lands from `lane/signin-server`, not here.
+- **Why:** sign-in left the app for a full browser.
+- **Proof:** shared-code tests only (`signin-sheet.test.ts`, `signin-attempt.test.ts`); **owed on the owner's phone.** The stricter `TestDeviceReturnSchemesAreTheAppsInAppJSON` (equality, each variant's `SIGNIN_SCHEME`) replaces the relaxed one on this branch.
+- **Replaced:** Swift's browser call and the `choirOpenApproval` op. **Undo:** revert the commits.
 
 ### The edges index retry waits for its build lock (`3b5f6fd34`, `6229cd73a`, orange)
 - **What:** the retry that repairs an invalid edges index waits for the build lock instead of returning as if done when another builder holds it, re-reads the index after the wait, and gives the build its own deadline after a long wait.

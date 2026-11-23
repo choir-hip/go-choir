@@ -1,7 +1,8 @@
 // Lane file: talk (lane autoradio-talk). The conversation (what was asked and what came back), the bar's answer card actions, and the
 // queue-by-voice adapter. Sources and sends are declared in interface/talk.json (the bar's fields are bar.ts: AutoradioLab/bar-types.contract).
 //   conversationEntries       the voice turn engine's entries, oldest first, whole (the page's rows are AutoradioLab/conversation.ts: shared code)
-//   answerAction(action, id)   the card's buttons: "retry" asks the same words again, "dismiss" hides the card, "cancel" stops the turn
+//   answerAction(action, id)   the card's buttons: "retry" asks the same words again, "cancel" stops the turn
+//                              (Close, "dismiss", is shared code: AutoradioLab/bar.ts dismissAnswer; native keeps no dismissal)
 import Foundation
 import ExactPackage
 
@@ -14,10 +15,9 @@ extension AutoradioModule {
         // `applyTurnOps`, which translates the old words onto run sheet ops.
         var hooks = QueueVoice.hooks
         hooks.candidates = { [choir] in (choir?.storyRows() ?? []).prefix(40).map { (route: $0.route, title: $0.title) } }
-        hooks.snapshot = { await MainActor.run { RunSheetPlayer.shared.turnQueueJSON() } }       // the wire's `queue`
-        hooks.applyServerOps = { json in _ = await MainActor.run { RunSheetPlayer.shared.applyTurnOps(json) } }  // dedupe by turn, decoding, rebase: the sheet's
+        hooks.snapshot = { RadioBridge.shared.snapshot }                                                                   // the wire's `queue`, as shared code last made it (voice-queue.ts)
+        hooks.applyServerOps = { json in RadioBridge.shared.send("turnOps", ["json": String(data: json, encoding: .utf8) ?? ""]) }   // the `queue_ops` event, whole, to shared code: it applies it (dedupe by turn, the sheet's rules)
         QueueVoice.hooks = hooks
-        SavedCorpus.shared.installRunSheet()
 
         // The reader's voice (lane autoradio-talk): the Core ML model is fetched quietly (about 8 MB) and, once loaded, the gate listens.
         // Learned from what the reader says to the radio; stored on this phone only (SpeakerStore); never uploaded.
@@ -28,11 +28,10 @@ extension AutoradioModule {
         handle("voiceForget") { _, reply in SpeakerGate.shared.forget(); reply(["ok": true, "message": ""]) }
 
         // Native because the voice turn engine writes the entries; it hands them over as they are (and the id the card was closed on) and decides nothing. The bar's answer card is bar.ts.
-        handle("conversationEntries") { [unowned self] _, reply in reply(["entries": Conversation.shared.entries().map { self.json($0) }, "dismissed": Conversation.shared.dismissedID()]) }
+        handle("conversationEntries") { [unowned self] _, reply in reply(["entries": Conversation.shared.entries().map { self.json($0) }]) }
         handle("answerAction") { [unowned self] args, reply in
             let action = args["action"] as? String ?? "", id = args["id"] as? String ?? ""
             switch action {
-            case "dismiss": Conversation.shared.dismiss(id: id)
             case "cancel": runtime.cancelTalk()
             case "retry":
                 let q = (id.isEmpty ? Conversation.shared.entries().last : Conversation.shared.entry(id))?.question ?? ""

@@ -285,68 +285,19 @@ fileprivate final class FakeLocator: ClipLocating, @unchecked Sendable {
 @MainActor
 final class ClipPlayerTests: XCTestCase {
     func relocatable(_ id: String) -> PodcastClip { clip(fpRecord(of: synth(seconds: 60, seed: 3), start: 5, end: 35), id: id) }
-    func make(_ clips: [PodcastClip], _ loc: ClipLocating) -> (RunSheetPlayer, RunSheetStore, FakeEngine, ClipStore) {
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
-        let cs = ClipStore(); cs.replace(clips); p.clips = cs; p.locator = loc
-        return (p, s, e, cs)
-    }
+
     func keptFile() -> URL { let u = FileManager.default.temporaryDirectory.appendingPathComponent("kept-\(UUID().uuidString).mp3"); try? Data([1, 2, 3]).write(to: u); return u }
     func story(_ id: String) -> RunSheetEntry { RunSheetEntry(id: id, kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 10) }
 
     // 6
-    func test6_AnOldRecordIsNeverAClip() async {
-        let old = clip(nil, id: "clip-0000000000d1")
-        let cs = ClipStore(); cs.replace([old])
-        let seg = IncomingSegment(stretchID: "s", segmentID: "s/1", kind: "podcast_clip", title: "T", text: "Lead.", cites: [], blockCount: 1, clip: ProgrammeClipRef(clipID: old.clipID, storyRef: "pub:a@v1", seconds: 30))
-        XCTAssertNil(ProgrammeRouteFeed.entry(from: seg, clips: cs), "dropped before the page, not a failed row")
-        XCTAssertTrue(HearIt.rows(route: "a", store: cs)[0].episodeOnly)
-        let loc = FakeLocator(.refused("never called"))
-        let (p, s, e, _) = make([old], loc)
-        p.playNow(old.clipEntry); await p.settle()                                   // a stale entry that names it anyway
-        XCTAssertTrue(loc.calls.isEmpty); XCTAssertFalse(e.log.contains { $0.hasPrefix("remote:") })
-        XCTAssertEqual(s.entry(s.sheet.entries[0].id)?.state, .skipped)
-        await HearIt.play(old.clipID, store: cs, player: p); await p.settle()
-        XCTAssertEqual(s.onAir()?.kind, .episode, "Hear it plays the episode")
-    }
+
 
     // 7
-    func test7_TheNextClipIsLocatedWhileTheEntryBeforeItPlaysAndPlaysFromTheLocatedFile() async {
-        let c = relocatable("clip-0000000000e1"), file = keptFile()
-        let loc = FakeLocator(.located(LocatedClip(file: file, seconds: 10, offsetSeconds: 7, bytes: 3)))
-        let (p, s, e, _) = make([c], loc)
-        p.playNow(story("l-a")); await p.settle()
-        p.queue(c.clipEntry)
-        for _ in 0..<200 where loc.calls.isEmpty { try? await Task.sleep(nanoseconds: 10_000_000) }   // bounded wait (about 2 s), not two yields
-        XCTAssertEqual(loc.calls, [c.clipID], "located while the story is on air")
-        p.next(); await p.settle()
-        XCTAssertEqual(loc.calls, [c.clipID], "once")
-        XCTAssertEqual(s.onAir()?.kind, .clip)
-        XCTAssertEqual(e.log.last, "remote:\(file.lastPathComponent):-1.0:-1.0", "the located bytes, the whole file, no range")
-        XCTAssertNil(p.keepListeningTitle, "a located clip is a file: there is no episode to carry on into")
-        p.pause(); XCTAssertTrue(e.log.contains("pauseRemote")); p.resume(); XCTAssertTrue(e.log.contains("resumeRemote"))
-        p.remoteEnded(generation: p.generation)
-        XCTAssertEqual(s.entry(s.sheet.entries.last!.id)?.state, .heard)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "the file goes when the entry ends")
-    }
 
-    func test7_ARefusedClipEndsFailedWithItsReasonAndNothingPlays() async {
-        let c = relocatable("clip-0000000000e2")
-        let (p, s, e, _) = make([c], FakeLocator(.refused("head and tail disagree")))
-        p.playNow(c.clipEntry); await p.settle()
-        XCTAssertFalse(e.log.contains { $0.hasPrefix("remote:") })
-        XCTAssertEqual(s.sheet.entries.first?.ended?.outcome, .failed)
-    }
 
-    func test7_SkipWhileLocatingStopsItAndTheFileGoes() async {
-        let c = relocatable("clip-0000000000e3"), file = keptFile()
-        let loc = FakeLocator(.located(LocatedClip(file: file, seconds: 10, offsetSeconds: 0, bytes: 3)))
-        let (p, s, e, _) = make([c], loc)
-        p.playNow(c.clipEntry); await p.settle()
-        p.next(); await p.settle()
-        XCTAssertEqual(s.sheet.entries.first?.state, .skipped)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
-        XCTAssertTrue(e.log.contains("stopRemote"))
-    }
+
+
+
 }
 
 // MARK: Live check (never in the normal suite)

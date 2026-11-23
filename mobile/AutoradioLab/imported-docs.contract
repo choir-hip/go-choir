@@ -1,0 +1,121 @@
+// Imported documents: the PDFs and e-books the person imports to read and hear. They are files on the person's computer (the Imported documents folder of Files),
+// so any device signed in to the same computer lists them. `imported:` is the place (a list, Add); `doc:<id>` is one document, read on
+// screen (a PDF as its pages or as text, an EPUB as text), read aloud from where the listener is, and searched. States and actions are in
+// members-imported.contract. Built from the shared design components in ui.contract; no one-off styles.
+// An open document has no header, tabs, actions, find field or stepper above it (owner, 2026-11-16): the page fills the screen to the top of the
+// bar, and its controls are the content row in the bar's lens (content.contract: doc-read, doc-queue, doc-toc, doc-find, doc-hit-<n>, doc-mode-*,
+// doc-prev, doc-next, doc-position, doc-close).
+// testIds here: reader-import, reader-list, reader-row-<id>, reader-empty, reader-error, reader-note, doc-block-<n>, doc-frame, doc-pages,
+// doc-prev-end, doc-next-end; page-title on the places and on a document that is opening or missing.
+use Theme, PageList, ImportedFollow from "@choir/autoradio"
+use ImportedList, ImportedDocInfo, ImportedSection, ImportedBlock from "./imported-types.contract"
+use SkeletonBody from "./transitions.contract"
+use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, PlainList, LineRow, ChipFace, Btn, EmptyState, dyn from "./ui.contract"
+
+component ImportedDocsPage
+  inject
+    th: Theme
+    lbList: ImportedList
+    lbNote: string
+    lbImport: action
+    lbPicked: action
+    openPage: action
+  view
+    PageScroll(id="imported")
+      Emerge(delay=0)
+        PageHeader(title="Imported documents", subtitle=(lbList.count == 1 ? "1 document" : `${lbList.count.toFixed(0)} documents`), subId="reader-sub")
+      if lbNote != ""
+        text lbNote testId="reader-note" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
+      if lbList.status == "error"
+        Emerge(delay=th.staggerMs)
+          EmptyState(message=lbList.message, detail="", testId="reader-error")
+      if lbList.status == "empty"
+        Emerge(delay=th.staggerMs)
+          EmptyState(message="Import a PDF or an EPUB to read it here, hear it read aloud and search it. It is kept on your computer.", detail="", testId="reader-empty")
+            button press=lbImport testId="reader-import" appearance="none" aria-label="Import a PDF or an EPUB"
+              Btn(label="Import a PDF or an EPUB", primary=false, wide=false)
+      if lbList.status == "ready"
+        Emerge(delay=th.staggerMs)
+          button press=lbImport testId="reader-import" appearance="none" aria-label="Import a PDF or an EPUB"
+            Btn(label="Import a PDF or an EPUB", primary=false, wide=false)
+        Emerge(delay=(2 * th.staggerMs))
+          PlainList(testId="reader-list")
+            for r, i in lbList.rows key=r.id
+              if i > 0
+                RowRule(indent=0)
+              button press=openPage(r.address, r.title) testId=`reader-row-${r.id}` appearance="none" width="100%" aria-label=`Open ${r.title}`
+                LineRow(label=r.title, detail=r.detail, trailing="", chevron=true)
+      // The system file picker (Add) opens this input; its copy lands under app:/tmp/picked.
+      input type="file" id="lib-pick" change=lbPicked aria-label="Choose a PDF or an EPUB to import" width=1 height=1 opacity=0
+
+// One paragraph, heading, quote or list item. A tap chooses it (read aloud starts here); the block the radio reads is lit too. Choosing
+// changes only the background colour: the padding is the same either way, so nothing moves.
+component DocBlockView
+  inject
+    th: Theme
+    pg: PageList
+    ldBlock: number
+    ldFollow: ImportedFollow
+    ldPlace: action
+  props
+    b: ImportedBlock
+  derive lit = b.n == ldBlock or (ldFollow.address == pg.top and ldFollow.block == b.n)
+  derive isHead = b.kind == "heading"
+  view
+    button press=ldPlace(b.n) testId=`doc-block-${b.n}` appearance="none" width="100%"
+      column id=`doc-block-${b.n}` width="100%" box-sizing="border-box" padding="8px 10px" border-radius=6 background-color=(lit ? th.paper2 : "transparent")
+        transition=`background-color ${th.motionFastMs}ms ease`
+        text (b.kind == "item" ? `${b.marker}${b.text}` : b.text) font-family=(isHead ? th.fontHead : th.fontText) font-size=dyn((isHead ? 22 : 19))
+          font-weight=(isHead ? 700 : 400) line-height=(isHead ? 1.25 : 1.65) color=(b.kind == "quote" ? th.muted : th.fg) text-align="left"
+
+// A document fills the screen from the status bar down to the top of the bar's lens (owner, 2026-11-16). Nothing sits above it: no title block,
+// tabs, actions, find field or stepper. They are the content row in the lens (content.contract); Contents and Find results open there too.
+component DocPage
+  inject
+    th: Theme
+    ldInfo: ImportedDocInfo
+    ldChap: ImportedSection
+    ldSec: number
+    ldShowPages: bool
+    ldGo: action
+    ctlClear: number
+  props
+    address: string
+    title: string
+  derive pdf = ldInfo.kind == "pdf"
+  derive unitWord = pdf ? "Page" : "Chapter"
+  view
+    if ldInfo.address != address or ldInfo.status == "loading"
+      PageScroll(id="doc-loading")
+        Emerge(delay=0)
+          PageHeader(title=title, subtitle="", subId="doc-sub")
+        SkeletonBody(testId="doc-skeleton")
+    else if ldInfo.status != "ready"
+      PageScroll(id="doc-missing")
+        Emerge(delay=0)
+          PageHeader(title=title, subtitle="", subId="doc-sub")
+        EmptyState(message=ldInfo.message, detail="", testId="doc-missing")
+    else if ldShowPages
+      // The PDF as its pages: the Files viewer's frame (PDFKit in an iframe), one page at a time, re-created on a page change. The frame
+      // starts under the status bar and stops at the top of the lens (ctlClear: the lens and the content row).
+      column flex=1 min-height=0 width="100%" testId="doc-pages" padding-top="env(safe-area-inset-top)" box-sizing="border-box"
+        column flex=1 min-height=0 margin-bottom=`calc(env(safe-area-inset-bottom) + ${ctlClear}px)` overflow="hidden"
+          for n in [ldChap.page] key=n
+            iframe src=`${ldInfo.src}#page=${ldChap.page.toFixed(0)}` testId="doc-frame" aria-label=ldInfo.title width="100%" flex=1 min-height=0
+    else
+      PageScroll(id="doc")
+        SectionHeader(label=ldChap.title)
+        if ldInfo.message != ""
+          text ldInfo.message testId="doc-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+        Emerge(delay=0)
+          column width="100%" max-width=620 gap=2
+            for b in ldChap.blocks key=b.n
+              DocBlockView(b=b)
+        row gap=8 align-items="center"
+          button press=ldGo(ldSec - 1) testId="doc-prev-end" appearance="none" aria-label=`Previous ${unitWord}`
+            ChipFace(label="‹ Previous", selected=false)
+          button press=ldGo(ldSec + 1) testId="doc-next-end" appearance="none" aria-label=`Next ${unitWord}`
+            ChipFace(label="Next ›", selected=false)
+        if not pdf
+          text "Pictures in the document are not shown yet." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+        box width="100%" height=44

@@ -7,6 +7,7 @@
 //   a book or a PDF                 kind document  source.ref doc:<id>, source.start the block it is read from
 //   a podcast clip                  kind clip      source.ref clip:<id>, source.url the audio, source.start and end its range
 //   a podcast episode               kind episode   source.ref episode:<podcast key>, source.url the audio, source.start where it begins
+import { clock } from './clock.ts';
 import { Bounds, entryJSONSize, validId, type By, type Ended, type Entry, type Op } from './runsheet-model.ts';
 
 const enc = new TextEncoder();
@@ -22,11 +23,14 @@ export function cutBytes(s: string, n: number): string {
 export const oneLine = (s: string): string => s.split(/\s+/).filter((x) => x !== '').join(' ');
 export const cleanTitle = (s: string): string => cutBytes(oneLine(s), Bounds.maxTitleBytes);
 
-/** `p-` (phone), `l-` (listener) or `d-` plus eight hex characters: placer-minted, never reused. */
+/** `p-` (phone), `l-` (listener) or `d-` plus twenty-four hex characters (96 bits): placer-minted, never reused. */
 export function mintId(prefix: string): string {
-  const b = new Uint8Array(4);
+  const b = new Uint8Array(6);
   crypto.getRandomValues(b);
-  return prefix + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  // Exact's random stream starts the same on every launch of an agent run, and the sheet outlives a launch (it refuses an op id it has applied): the first twelve digits are the device's
+  // clock (milliseconds, from the native facts), so two launches never mint the same id; the last twelve are the random stream, for two ids in one millisecond.
+  const at = Math.max(0, Math.floor(clock.ms)).toString(16).padStart(12, '0').slice(-12);
+  return prefix + at + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 const prefixFor = (by: By): string => (by === 'listener' ? 'l-' : by === 'desk' ? 'd-' : 'p-');
 const base = (id: string, kind: Entry['kind'], by: By, title: string, source: Entry['source']): Entry =>
@@ -34,6 +38,10 @@ const base = (id: string, kind: Entry['kind'], by: By, title: string, source: En
 
 export const paperStory = (route: string, title: string, by: By = 'listener'): Entry =>
   base(mintId(by === 'listener' ? 'l-' : 'p-'), 'page', by, cleanTitle(title), { ref: 'pub:' + route, label: cleanTitle(title) });
+
+/** A story the phone holds the whole text of (the content store): it plays with its own words when the desk cannot be reached. */
+export const heldStory = (id: string, title: string, text: string, address: string): Entry =>
+  ({ ...base(id, 'story', 'phone', cleanTitle(title), { ref: address, label: cleanTitle(title) }), text, est_seconds: estimateSeconds(text) });
 
 export function webPage(url: string, title: string, by: By = 'listener'): Entry {
   let host = '';
@@ -56,6 +64,8 @@ export type Audio = { url: string; title: string; show: string; start?: number; 
 
 /** Addresses too long for the server's bound (2048 bytes), kept on the phone by entry id: the entry names the audio by its ref and leaves its url out. */
 const longURLs = new Map<string, string>();
+/** Sign-out: the long web addresses of the account's entries (keyed by entry id) are forgotten. */
+export function forgetLongURLs(): void { longURLs.clear(); }
 export const longURL = (id: string): string | undefined => longURLs.get(id);
 
 export function audio(a: Audio, clipID?: string, by: By = 'listener'): Entry {
@@ -66,7 +76,8 @@ export function audio(a: Audio, clipID?: string, by: By = 'listener'): Entry {
   const url = long ? undefined : a.url;
   const strip = <T extends Record<string, unknown>>(o: T): T => { for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k]; return o; };
   if (a.end !== undefined || clipID !== undefined) {
-    return base(id, 'clip', by, t, strip({ ref: 'clip:' + (clipID ?? a.episode_id ?? 'x'), label: cleanTitle(a.show), url, start: a.start, end: a.end, clip_id: clipID }));
+    // The clip's ref is its id; the episode it was cut from rides after a '#', so the card can open its episode (the server keeps the ref as a free string).
+    return base(id, 'clip', by, t, strip({ ref: 'clip:' + (clipID ?? a.episode_id ?? 'x') + (clipID !== undefined && a.episode_id !== undefined ? '#' + a.episode_id : ''), label: cleanTitle(a.show), url, start: a.start, end: a.end, clip_id: clipID }));
   }
   return base(id, 'episode', by, t, strip({ ref: 'episode:' + (a.episode_id ?? (long ? 'long' : a.url)), label: cleanTitle(a.show), url, start: a.start }));
 }
@@ -87,7 +98,9 @@ export function audioSpec(e: Entry): AudioSpec | undefined {
   if ((e.kind !== 'clip' && e.kind !== 'episode') || !e.source) return undefined;
   const url = e.source.url ?? longURL(e.id);
   if (!url) return undefined;
-  const ep = e.kind === 'episode' && e.source.ref.startsWith('episode:') ? e.source.ref.slice(8) : undefined;
+  const hash = e.source.ref.indexOf('#');
+  const ep = e.kind === 'episode' && e.source.ref.startsWith('episode:') ? e.source.ref.slice(8)
+    : e.kind === 'clip' && e.source.ref.startsWith('clip:') && hash > 0 ? e.source.ref.slice(hash + 1) : undefined;
   const o: AudioSpec = { url, title: e.title, show: e.source.label, is_clip: e.source.end !== undefined };
   if (e.source.start !== undefined) o.start = e.source.start;
   if (e.source.end !== undefined) o.end = e.source.end;

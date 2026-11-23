@@ -159,6 +159,16 @@ shenanigans of all these different API key scopes currently."
   user can read it, including an agent the user runs. That is the point: the
   agent uses it. The CLI refuses a credentials file with any other mode.
 
+## The Autoradio app's sign-in sheet (2026-11-23, red: auth and session)
+
+The phone app uses this same flow. Its Sign in used to open `/device` in the full browser; it now opens it in the system sign-in sheet
+(`ASWebAuthenticationSession`; [reference](../reference/exact/auth-session.md)) over the app. The link carries `return=<the app's callback scheme>` and
+`state=<the app's nonce>`; `POST /auth/device/approve` accepts them as optional fields and answers `return_to`, built by the server from a fixed
+list of app ids (`DeviceReturnSchemes`), which the page navigates to so the sheet closes. The callback is `<scheme>:/signed-in?state=<nonce>`: no key,
+no code, no account id. Nothing about the flow's security changed: a passkey session still approves, an email session is refused, the key is still
+collected once by the poller that holds the device code. A `return` or `state` that is not ours never refuses the approval: the decision is recorded and `return_to` is left out. Rollback: revert; the app then
+opens nothing, so the revert must take the app change with it.
+
 ## Rollback
 
 `git revert` of the build commit. The `device_authorizations` table is

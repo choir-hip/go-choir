@@ -12,12 +12,12 @@ import { relative } from './paper-model.ts';
 
 export type RadioFacts = {
   at: number; sheet: string; playing: boolean; sentences: string[]; sentenceIndex: number; progress: number;
-  remoteAudio: boolean; remoteElapsed: number; remoteDuration: number; wants: boolean; message: string; notice: string; writing: boolean; dry: boolean;
+  ready: boolean; onAir: boolean; waiting: boolean; remoteAudio: boolean; remoteElapsed: number; spokenElapsed: number; remoteDuration: number; wants: boolean; message: string; notice: string; writing: boolean; dry: boolean;
   /** The title and route of the programme on air (the headline being read and the story it is); "" when none. */
   airTitle: string; airRoute: string; publishedAt: number; versionRoutes: string[]; versionNumbers: number[]; stale: string[]; takeTranscript: string; takeRecord: string;
 };
 export const EMPTY_FACTS: RadioFacts = {
-  at: 0, sheet: '', playing: false, sentences: [], sentenceIndex: 0, progress: 0, remoteAudio: false, remoteElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
+  at: 0, sheet: '', playing: false, sentences: [], sentenceIndex: 0, progress: 0, ready: false, onAir: false, waiting: false, remoteAudio: false, remoteElapsed: 0, spokenElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
   airTitle: '', airRoute: '', publishedAt: 0, versionRoutes: [], versionNumbers: [], stale: [], takeTranscript: '', takeRecord: '',
 };
 
@@ -26,9 +26,14 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
+let readLast: { text: string; sheet: Sheet } | undefined;       // the same text is the same sheet: the page is asked every second while the radio sounds, and the text can be a megabyte
 function readSheet(text: string): Sheet {
   if (text === '') return emptySheet();
-  try { return decodeSheet(JSON.parse(text)); } catch { return emptySheet(); }
+  if (readLast && readLast.text === text) return readLast.sheet;
+  let sheet: Sheet;
+  try { sheet = decodeSheet(JSON.parse(text)); } catch { return emptySheet(); }
+  readLast = { text, sheet };
+  return sheet;
 }
 
 /** An entry placed by a play that carried no title (the native play took only the route) has an empty title and label; the programme on air has the headline. The on-air entry of a story or
@@ -51,7 +56,7 @@ const zoneMinutes = (at: number): number => { try { return -new Date(at * 1000).
 export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknown, offsetMinutes?: number): PageInfo {
   const f = obj(rawFacts);
   const at = num(f.at) > 0 ? num(f.at) : 0;   // a non-positive time is no clock (a host with no native facts): no date, no greeting, no relative time
-  const b = barInfo(rawBar, rawEntries);
+  const b = barInfo({ ...obj(rawBar), ready: f.ready === true, onAir: f.onAir === true, waiting: f.waiting === true }, rawEntries);       // the same run overlay the bar applies (bar.ts), so the page and the bar say the same about playing
   const versions: Record<string, number> = {};
   const routes = strs(f.versionRoutes), numbers = Array.isArray(f.versionNumbers) ? f.versionNumbers.map(num) : [];
   if (routes.length === numbers.length) routes.forEach((r, i) => { versions[r] = numbers[i]; });
@@ -66,7 +71,7 @@ export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknow
     remoteAudio: remote, elapsedLabel: remote ? clockLabel(elapsed) : '', remainingLabel: remote && duration > 0 ? '-' + clockLabel(Math.max(0, duration - elapsed)) : '',
     message: str(f.message), notice: str(f.notice), writing: f.writing === true, dry: f.dry === true, wants: f.wants === true,
     published: at > 0 && published > 0 ? relative(published * 1000, at * 1000) : '',
-    stale: strs(f.stale), versions,
+    spokenElapsed: Math.max(0, num(f.spokenElapsed)), stale: strs(f.stale), versions,
     takeLookup: takeTranscript !== '' || takeRecord !== '' ? () => ({ transcript: takeTranscript, record_words: takeRecord }) : undefined,
     now: at * 1000, utcOffsetMinutes: offsetMinutes ?? (at > 0 ? zoneMinutes(at) : 0),
   });

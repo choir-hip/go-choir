@@ -218,7 +218,8 @@ const TEXT_EXTENSIONS = new Set(['md', 'markdown', 'txt', 'text', 'csv', 'json',
 const extOf = (name: string): string => { const i = name.lastIndexOf('.'); return i < 0 ? '' : name.slice(i + 1).toLowerCase(); };
 export const fileVersion = (e: FileEntry): string => `${e.size}|${e.modified === null ? 0 : e.modified / 1000}`;
 
-export type SyncOptions = { now: number; log?: (line: string) => void };
+/** `files: false` leaves the file walk out (the launch sync does: stories, documents and the small kinds only, as the Swift did); the default keeps every kind. */
+export type SyncOptions = { now: number; log?: (line: string) => void; files?: boolean };
 
 /** One syncer at a time: a second `syncAll` while one runs returns at once with no reports. */
 const running = new WeakSet<ContentStore>();
@@ -234,13 +235,14 @@ export async function syncAll(store: ContentStore, f: Fetchers, o: SyncOptions):
     const out: SyncReport[] = [];
     const sheet = await f.runSheet();
     if (sheet && live()) { await recordRunSheet(store, sheet, o.now); await store.markSynced('runsheet', o.now); }
-    const steps: ((c: Ctx) => Promise<SyncReport>)[] = [syncStories, syncDocuments, syncPodcasts, syncFiles];
-    const c: Ctx = { store, f, now: o.now, live };
+    const steps: ((c: Ctx) => Promise<SyncReport>)[] = o.files === false ? [syncStories, syncDocuments, syncPodcasts] : [syncStories, syncDocuments, syncPodcasts, syncFiles];
+    const c: Ctx = { store, f, now: o.now, live, bytes: { n: 0 } };
     for (const step of steps) {
+      const b0 = c.bytes.n;
       const r = await step(c);
       out.push(r);
       if (live()) await store.markSynced(r.kind, o.now);
-      log(`content sync ${r.kind}: fetched ${r.fetched}, held ${r.skipped}, failed ${r.failed}${r.stoppedBy === '' ? '' : ', stopped: ' + r.stoppedBy}`);
+      log(`content sync ${r.kind}: fetched ${r.fetched}, held ${r.skipped}, failed ${r.failed}, ${c.bytes.n - b0} bytes${r.stoppedBy === '' ? '' : ', stopped: ' + r.stoppedBy}`);
       if (r.stoppedBy === 'radio' || r.stoppedBy === 'cancelled') break;
     }
     if (live()) await store.enforceBudget(o.now);
@@ -248,8 +250,8 @@ export async function syncAll(store: ContentStore, f: Fetchers, o: SyncOptions):
   } finally { running.delete(store); }
 }
 
-type Ctx = { store: ContentStore; f: Fetchers; now: number; live: () => boolean };
-const put = async (c: Ctx, i: StoredItem): Promise<void> => { if (c.live()) await c.store.put(i); };
+type Ctx = { store: ContentStore; f: Fetchers; now: number; live: () => boolean; bytes: { n: number } };
+const put = async (c: Ctx, i: StoredItem): Promise<void> => { if (c.live()) { c.bytes.n += bytesOf(i); await c.store.put(i); } };
 /** False (and the report says why) when the run must stop before the next request. */
 async function gate(c: Ctx, r: SyncReport): Promise<boolean> {
   if (!c.live()) { r.stoppedBy = 'cancelled'; return false; }

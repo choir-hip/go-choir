@@ -54,7 +54,7 @@ describe('typography rules', () => {
       const fs = faces(e.text); const w = attr('font-weight', e.text);
       const caps = isCaps(e); const tracked = e.text.includes('letter-spacing='); const italic = e.text.includes('font-style=');
       if (fs.length > 1) { // a ternary of two roles: the breadcrumb and the status line are the only ones
-        if (!['files.contract', 'books.contract', 'settings.contract'].includes(e.file)) bad.push(`${e.file}:${e.line} a text that is two roles`);
+        if (!['files.contract', 'imported-docs.contract', 'settings.contract'].includes(e.file)) bad.push(`${e.file}:${e.line} a text that is two roles`);
         continue;
       }
       const f = fs[0]; if (f === undefined) continue;
@@ -150,7 +150,7 @@ describe('typography rules', () => {
 
   // T7
   test('T7 figures are tabular', () => {
-    const ids = ['queue-elapsed', 'queue-remaining', 'radio-speed', 'radio-elapsed', 'radio-remaining', 'radio-onair-sentence-number', 'doc-position'];
+    const ids = ['queue-elapsed', 'queue-remaining', 'radio-speed', 'radio-elapsed', 'radio-remaining', 'doc-position'];
     const bad: string[] = []; let found = 0;
     for (const els of allElements()) for (const e of els) {
       if (!isText(e)) continue;

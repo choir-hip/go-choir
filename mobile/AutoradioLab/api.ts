@@ -30,6 +30,8 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
   const response = await fetch(url(path, query), { method: 'GET', headers: { accept: 'application/json' }, exactTimeout: TIMEOUT_MS } as RequestInit);
   if (!response.ok) throw new Error(`${path} answered ${response.status}`);
   const raw = await response.text();
+  // A large reply (a story bundle was 1.6 MB): its text and its JSON are not decoded in one turn (Exact gives a turn about 100 ms of CPU; Bun has no scheduler).
+  if (raw.length > 200_000) { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); }
   let body: unknown;
   try { body = JSON.parse(raw); } catch { throw new Error(`${path} answered a body that is not JSON`); }
   const date = response.headers.get('date');
@@ -71,7 +73,7 @@ export const KEYCHAIN_ACCOUNTS = ['api-key', 'key-id', 'computer-id'] as const;
 type Account = (typeof KEYCHAIN_ACCOUNTS)[number];
 
 /** The data module's one native module, as far as this file uses it. */
-export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string }): Promise<unknown> };
+export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }): Promise<unknown> };
 /** app.ts hands over the module's native handle at every answer (adoptNative). */
 let reader: NativeReader | undefined;
 /** True once ANY app-module op has answered (a key read, a key state): the native module is there, and the host decision (host.ts) can no longer say "no native". */
@@ -89,8 +91,33 @@ export function adoptNative(native: NativeReader | null | undefined, source = ''
 }
 
 /** The app module's `later`, for the native pair that seals mail (mail-seal.ts); null when there is no module. */
-export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string }) => Promise<unknown>) | null {
-  return reader && reader.available !== false ? (r) => reader!.later(r) : null;
+export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }) => Promise<unknown>) | null {
+  if (!reader || reader.available === false) return null;
+  const native = reader;
+  // The first native call of a JS context announces this context's generation, as a BOOT (the native module instance lives per session, a reload of the bundle does not restart it: docs/reference/exact/native-modules.md "Threading and lifecycle"), before anything else
+  // goes over: native adopts a boot even when it is below the newest generation it saw in an earlier context, so a restart at 0 is not refused for the life of the process (AutoradioKit `SharedGeneration.boot`).
+  // Sent first, not waited for: native takes its calls in the order they arrive, and a native that never answers the announcement must not stop every call behind it.
+  return (r) => {
+    if (r.op !== 'generation' && !bootSent) bootSent = Promise.resolve(native.later({ op: 'generation', gen: generation, boot: true })).then(() => undefined, (e: unknown) => { console.log(`api: the boot announcement failed (${e instanceof Error ? e.message : 'threw'}): native keeps the generation it last saw`); });
+    return native.later(r);
+  };
+}
+let bootSent: Promise<void> | null = null;
+/** For tests: a fresh JS context (the boot is announced again). */
+export function resetBootForTest(): void { bootSent = null; }
+/** Tell native the generation shared code is at NOW (a floor: native refuses what is stamped below it from here on). The wipe's last act, so nothing computed before it can land after it. */
+/** A deadline, not a limit: a native that does not answer must not hold the sign-out; the failure is said in the log (the proof reads it) and native keeps refusing by the generation it last knew. */
+let announceDeadlineMs = 5000;
+export function setAnnounceDeadlineForTest(ms: number | undefined): void { announceDeadlineMs = ms ?? 5000; }
+export async function announceGeneration(): Promise<void> {
+  const later = nativeLater();
+  if (!later) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const out = await Promise.race([later({ op: 'generation', gen: generation }).then(() => 'ok', (e: unknown) => `threw: ${e instanceof Error ? e.message : String(e)}`), new Promise<string>((res) => { timer = setTimeout(() => res(`no answer in ${announceDeadlineMs} ms`), announceDeadlineMs); })]);
+    if (out !== 'ok') console.log(`account: the generation floor ${generation} was not announced to native (${out}); native refuses by the generation it last knew`);
+  } catch (e) { console.log(`account: the generation floor ${generation} was not announced to native (${e instanceof Error ? e.message : 'threw'})`); }
+  finally { if (timer !== undefined) clearTimeout(timer); }
 }
 
 async function keptItem(account: Account): Promise<string | null> {
@@ -131,11 +158,15 @@ let blockedDigest: string | null = null;      // null: not signing out. '' or a 
 export const sealingBlocked = (): boolean => blockedDigest !== null;
 export async function beginSignOut(): Promise<void> {
   nextGeneration(); resetSession();
+  blockedDigest = '';                                    // the block first, before the awaits below: while the key is being read a pulse must not see a sign-out that is not blocked
   let d = '';
   try { const s = await keptSession(); if (s) d = await digestOf(s.key); } catch { /* no key to name */ }
   blockedDigest = d;
 }
-export function abortSignOut(): void { blockedDigest = null; }
+/** `certain` false: native threw, so whether the key and its stores went is unknown: the radio is NOT handed the new generation (it keeps the old stamp and native refuses it) until the account is settled. */
+export function abortSignOut(certain = true): void { blockedDigest = null; uncertainAbort = !certain; }
+let uncertainAbort = false;
+export const signOutUncertain = (): boolean => uncertainAbort;
 /** A new session clears the block explicitly: called before sealing is judged, so the first sync of the next session is not answered idle. */
 export async function refreshSealBlock(): Promise<void> {
   if (blockedDigest === null) return;
@@ -268,6 +299,16 @@ export async function authedJSON(path: string, opts: Authed = {}): Promise<Reply
   return { body, serverTime: Number.isFinite(parsed) ? parsed : null, raw };
 }
 
+/** The whole answer as text, whatever its type (the programme route's event stream, read when it has ended: Exact's `exactStream` is not shown to take a POST, docs/reference/exact/gaps.md 36). */
+export async function authedText(path: string, opts: Authed = {}, accept = 'text/event-stream'): Promise<string> {
+  const gen = generation;
+  const { r, key } = await send(path, opts, accept);
+  await check(r, path, key);
+  const raw = await r.text();
+  if (gen !== generation) throw new SignedOutError('signed out while the request was in flight');
+  return raw;
+}
+
 /** The same, for bytes (a file, a PDF, audio). */
 export async function authedBytes(path: string, opts: Authed = {}): Promise<{ bytes: Uint8Array; contentType: string }> {
   const gen = generation;
@@ -313,7 +354,7 @@ export async function keyState(): Promise<{ state: KeyState; digest: string; err
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: the generation and the rest as a fresh process has them. */
-export function resetSeam(): void { resetSession(); generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
+export function resetSeam(): void { resetSession(); bootSent = null; uncertainAbort = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

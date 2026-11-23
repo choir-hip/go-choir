@@ -27,6 +27,61 @@ import Foundation
 //  - two flags that disagree about why it is silent: one state, set only by the methods below.
 //  - a late end from an item that was replaced closes the new one: an end names the item it is for and is ignored when it is not the current one.
 
+/// What plays the sound. Spoken things go through the programme player; remote audio through AVPlayer.
+@MainActor public protocol PlaybackEngine: AnyObject {
+    /// Speak `paragraphs` as the document `documentID` (one segment named by what it is: `kind` is opening, transition, answer, result, mail; "" a story), replacing what is playing. False: nothing started.
+    func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool
+    /// The spoken entry from the block that did not play (the engine was lost mid-entry and is back).
+    func resumeSpoken()
+    /// The spoken entry from its start.
+    func restartSpoken()
+    /// Where the spoken entry is: the server block being spoken, the last server block it has, and the seconds into it.
+    func spokenReport() -> (block: Int, final: Int, seconds: Double)
+    /// The block of the spoken entry and the seconds into it.
+    func spokenPosition() -> (block: Int, seconds: Double)
+    /// Silence the spoken entry (something else is starting, or it was skipped).
+    func stopSpoken()
+    /// Why the last spoken block could not be made (nil: it was).
+    func speakFailure() -> String?
+    /// What of the spoken entry is still to be said, from the start of the sentence it is in; nil when unknown.
+    func spokenRemainder() -> String?
+    /// The spoken entry says no more than the block it is on (the rest is replaced): whole sentences, no word cut.
+    func endSpokenAfterCurrentBlock()
+    /// Play remote audio from `start` (seconds) and stop at `end` when there is one.
+    func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool
+    func pauseRemote()
+    func resumeRemote()
+    /// Silence remote audio.
+    func stopRemote()
+    func seekRemote(by seconds: Double)
+    func seekRemote(to seconds: Double)
+    /// The playing clip no longer ends: the episode carries on from where it is, with no gap or restart.
+    func clearRemoteEnd()
+    func remotePosition() -> (elapsed: Double, duration: Double?)?
+    func setRemoteRate(_ r: Double)
+    func setRemoteLevel(_ l: PlayLevel)
+    /// The length of the audio at `url`, read without playing it; nil when unknown within `deadline` seconds.
+    func remoteDuration(url: URL, deadline: TimeInterval) async -> Double?
+    /// Pause the spoken entry (the listener's pause, or the system's).
+    func pauseSpoken()
+    /// Sound is reaching the output for what is playing now (spoken: rendered seconds past zero; remote: the position is moving). The deck's
+    /// evidence that an item was heard; a deck that cannot tell says false and nothing is ever journalled as rendered by it.
+    func rendering() -> Bool
+}
+extension PlaybackEngine {
+    public func pauseSpoken() {}
+    public func rendering() -> Bool { false }
+    public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { nil }
+    public func restartSpoken() {}
+    public func resumeSpoken() {}
+    public func spokenReport() -> (block: Int, final: Int, seconds: Double) { (0, 0, 0) }
+    public func spokenPosition() -> (block: Int, seconds: Double) { (0, 0) }
+    public func stopSpoken() {}
+    public func endSpokenAfterCurrentBlock() {}
+}
+
+public extension PlaybackEngine { func speakFailure() -> String? { nil }; func spokenRemainder() -> String? { nil } }
+
 public enum DeckWhy: String, Codable, Sendable {
     case playing, pausedListener = "paused_listener", pausedSystem = "paused_system", heldSession = "held_session", heldEngine = "held_engine", stopped, empty
 }
@@ -42,6 +97,8 @@ public struct DeckItem: Equatable, Sendable {
     public var block = 0
     public var seconds = 0.0
     public var requiresPreviousHeard = false
+    /// What a speech item is for the voice's segment naming: opening, transition, answer, result, mail; "" is a story.
+    public var segment = ""
     public init(id: String, kind: String) { self.id = id; self.kind = kind }
     var paragraphList: [String] { paragraphs.components(separatedBy: "\n\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } }
     var documentID: String { document.isEmpty ? "deck:" + id : document }
@@ -256,7 +313,9 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
 
 @MainActor public final class Deck {
     public static let shared = Deck(journal: DeckJournal(storage: DeckJournal.applicationSupportFile()))
-    public static let heldMax = 3
+    /// Every entry the run sheet can have ahead (its own bound, 100): shared code hands over each ready entry whose sound is in the entry, so the deck plays on through all of them with shared code not running. Memory is bounded by that
+    /// bound times an entry's own bounds (a text or an address, the server's entry limits): a few hundred kilobytes at most.
+    public static let heldMax = 100
 
     public let journal: DeckJournal
     public var engine: PlaybackEngine?
@@ -333,7 +392,11 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
     }
 
     /// A transport or system word worth keeping in the journal (the lock screen's pause, an interruption beginning).
-    public func note(remote command: String) { journal.append("remote", item: current?.id ?? "", command: command) }
+    /// A remote line carries where the item was when the command came (block and seconds), so shared code reports the cut where it happened even if the deck has moved on.
+    public func note(remote command: String) {
+        let p = current != nil ? position() : (block: 0, seconds: 0.0)
+        journal.append("remote", item: current?.id ?? "", block: p.block, seconds: p.seconds, command: command)
+    }
     public func note(system command: String) { journal.append("system", item: current?.id ?? "", command: command) }
 
     // MARK: Commands (shared code)
@@ -374,6 +437,22 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
         case "trim": trim(keeping: Int(value))
         default: break
         }
+    }
+
+    /// The lock screen's and the headset's next: acts at once on the held list (the deck skips and plays on), and the journal says so first, so shared code, when it runs, records one skip of the entry that was on
+    /// air (where it was cut) and finds the next already playing. With shared code not running this is all that happens, and the radio goes on.
+    public func remoteNext() async {
+        note(remote: "next")
+        guard current != nil else { return }
+        await act("skip")
+    }
+    /// The lock screen's previous: audio goes back to its start and a spoken entry that has gone on (past its first block, or 3 s) starts again, at once. A spoken entry just begun means the entry before it,
+    /// which only shared code knows (the sheet's heard list): the line is journalled and shared code does it when it runs.
+    public func remotePrevious() {
+        note(remote: "previous")
+        guard let c = current else { return }
+        let p = position()
+        if c.kind == "audio" { engine?.seekRemote(to: c.start) } else if p.block > 0 || p.seconds >= 3 { engine?.restartSpoken() }
     }
 
     public func ack(through n: Int) { journal.ack(through: n); changed() }
@@ -422,6 +501,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
     }
 
     private func finish(anyPlayed: Bool, seconds: Double = 0) {
+        senseSound()
         let rep = engine?.spokenReport() ?? (block: 0, final: 0, seconds: 0)
         ended(anyPlayed ? .finished : .failed, played: anyPlayed, block: rep.final, seconds: seconds > 0 ? seconds : rep.seconds, final: rep.final,
               reason: anyPlayed ? "" : "its document ended with no block heard")
@@ -438,6 +518,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
             _ = await start(next, commanded: true)
             return
         }
+        if why != .stopped { note(system: "held-dry") }                 // nothing held to play on (shared code was not there to refill): journalled, so it is known the radio ran dry
         why = .empty; changed()
     }
 
@@ -463,11 +544,10 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
         if item.kind == "audio", let url = URL(string: item.url) {
             ok = await engine.playRemote(url: url, title: item.title, show: item.show, start: item.seconds > 0 ? item.seconds : (item.start > 0 ? item.start : nil), end: item.end > 0 ? item.end : nil)
         } else if item.kind == "speech" {
-            var e = RunSheetEntry(id: item.id, kind: .story, placedBy: .phone, title: item.title, text: item.paragraphs)
-            e.estSeconds = RunSheetEntry.estimateSeconds(words: item.paragraphs)
-            ok = await engine.speak(documentID: item.documentID, entry: e, paragraphs: item.paragraphList)
+            ok = await engine.speak(documentID: item.documentID, entryID: item.id, title: item.title, kind: item.segment, paragraphs: item.paragraphList)
         }
         guard my == generation, current?.id == item.id else { if ok, current == nil { stopEngine() }; return ok }       // wiped while it started: no sound for the next account
+        if ok, item.kind == "audio" { soundBegan(block: 0, seconds: item.start) }        // the player took the audio and started it: the journal's `sounding` line (speech: `senseSound`, from what the engine renders)
         if !ok {
             ended(.failed, reason: "the engine could not start it")
             await playOn()
@@ -501,10 +581,19 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
     // MARK: What shared code reads
 
     public func snapshot() -> DeckSnapshot {
+        senseSound()
         let p = position()
         let dur = current?.kind == "audio" ? (engine?.remotePosition()?.duration ?? 0) : 0
         return DeckSnapshot(why: why, item: current?.id ?? "", block: p.block, seconds: current == nil ? 0 : p.seconds, duration: dur,
                             held: held.map(\.id), seq: journal.seq, acked: journal.acked, journal: journal.lines)
+    }
+
+    /// Spoken sound reached the output: the engine renders audio for the item on air (it is asked whenever shared code reads the state, about once a second, and before an end is written), so the journal gets its `sounding` line.
+    /// Nothing is written for an item the engine has not rendered, so a silent item is never journalled as heard.
+    private func senseSound() {
+        guard let c = current, c.kind == "speech", !sounded, why == .playing, engine?.rendering() == true else { return }
+        let r = engine?.spokenReport() ?? (block: 0, final: 0, seconds: 0)
+        soundBegan(block: r.block, seconds: r.seconds, final: r.final)
     }
 
     private func changed() { onChange?() }

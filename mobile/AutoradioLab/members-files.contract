@@ -3,7 +3,6 @@
 // exact-package/apple/AutoradioModule+Files.swift (Kit/ChoirFiles.swift, Kit/Epub.swift). Every name a child component
 // injects is in the lane-5 band of the `provide` list in app.contract. Prefixes: fs = the Files place, fv = the viewers.
 use FileListing, FileInfo, FileResolved from "./files-types.contract"
-use choirPlayPause from "@choir/autoradio"
 
 // Pinch-and-pan geometry for the image viewer (Exact's transform handle, as its interaction-gallery photo viewer does):
 // the picture is `contain`-fitted in its frame, so its on-screen size is natural * fit * zoom, and a pan may not leave the frame.
@@ -171,7 +170,7 @@ members Autoradio
   action fvPlayed
     fvPaused = false
     if pl.playing
-      send acct = choirPlayPause()
+      send racct = radioPlayPause()
   action fvPausedEv
     fvPaused = true
   action fvEnded

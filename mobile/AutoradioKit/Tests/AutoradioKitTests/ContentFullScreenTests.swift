@@ -37,12 +37,12 @@ final class ContentFullScreenTests: XCTestCase {
 
     // C1
     func testDocumentHasNothingAboveItsContent() throws {
-        let page = code(try component("DocPage", in: "books.contract"))
+        let page = code(try component("DocPage", in: "imported-docs.contract"))
         // the two ready branches: pages and text
         lacks(page, ["PageHeader(title=ldInfo.title", "SegmentedTrack", "DocActions", "DocFind", "doc-find", "doc-mode", "doc-position", "doc-toc",
                      "testId=\"doc-prev\"", "testId=\"doc-next\"", "pages with text", "ldToc", "ldFind"], "DocPage")
-        let books = code(try read("books.contract"))
-        lacks(books, ["component DocActions", "component DocFind"], "books.contract")
+        let books = code(try read("imported-docs.contract"))
+        lacks(books, ["component DocActions", "component DocFind"], "imported-docs.contract")
         // the text view starts with the chapter label, inside the scroll, and nothing else precedes the blocks
         let text = page.components(separatedBy: "PageScroll(id=\"doc\")").last ?? ""
         let firstLines = text.split(separator: "\n").prefix(2).map { $0.trimmingCharacters(in: .whitespaces) }
@@ -51,7 +51,7 @@ final class ContentFullScreenTests: XCTestCase {
 
     // C2
     func testPdfFrameRunsFromTheStatusBarToTheLens() throws {
-        let page = code(try component("DocPage", in: "books.contract"))
+        let page = code(try component("DocPage", in: "imported-docs.contract"))
         has(page, ["testId=\"doc-pages\"", "padding-top=\"env(safe-area-inset-top)\"", "ctlClear: number", "${ctlClear}px", "testId=\"doc-frame\""], "PDF frame")
         lacks(page, ["padding-left=20", "padding-right=20", "+ 12px", "56px + 8px", "+ 150px"], "PDF frame")
         let frameOuter = page.components(separatedBy: "testId=\"doc-pages\"").last?.split(separator: "\n").first.map(String.init) ?? ""
@@ -80,8 +80,8 @@ final class ContentFullScreenTests: XCTestCase {
                   "press=ctlStep(ldSec - 1)", "press=ctlStep(ldSec + 1)", "press=ctlGo(s.index)", "press=ctlJump(h.section, h.block)", "submit=ldDoFind", "press=ldClearFind",
                   "press=ctlWebRead(ctlKey, ctlTitle)", "press=ctlWebLater(ctlKey, ctlTitle)", "press=ctlSafari(ctlKey)"], "wiring")
         let m = code(try read("members-content.contract"))
-        has(m, ["shelfReadAloud(address=pg.top, section=ldSec, block=ldBlock)", "shelfEnqueue(address=pg.top, section=ldSec, block=ldBlock)", "shelfPlace(",
-                "queueAdd(mode=\"now\", kind=\"page\"", "queueAdd(mode=\"add\", kind=\"page\"", "readerOpenExternal(url=u)"], "actions")
+        has(m, ["importedReadAloud(pg.top, ldSec, ldBlock)", "importedQueue(pg.top, ldSec, ldBlock)", "importedPlace(",
+                "queueAdd(\"now\", \"page\"", "queueAdd(\"add\", \"page\"", "readerOpenExternal(url=u)"], "actions")
         // Pages and Text are shown for a PDF only; the contents list and the find hits are inside the expanded row
         let exp = code(try component("DocExpanded", in: "content.contract"))
         XCTAssertTrue(exp.contains("if pdf"))
@@ -122,9 +122,9 @@ final class ContentFullScreenTests: XCTestCase {
         has(collapsed, ["press=ctlToggle", "ctlTitle", "ctlPos", "ctlBusy"], "collapsed line shows the title, the place and Loading")
         let m = code(try read("members-content.contract"))
         let close = m.components(separatedBy: "action ctlCloseDoc").last?.components(separatedBy: "// ---- a web page").first ?? ""
-        has(close, ["order = order.filter(a => a != gone)", "pageOpen(address=nxt", "pageClose(address=gone)"], "closing a document")
+        has(close, ["order = order.filter(a => a != gone)", "pagesOpen(nxt", "pagesClose(gone)"], "closing a document")
         XCTAssertTrue(m.contains("webUrl = \"\""), "closing a source page empties its address")
-        XCTAssertTrue(m.contains("queueAct(op=\"closeWeb\", arg=\"\")"), "closing a typed page")
+        XCTAssertTrue(m.contains("queueAct(\"closeWeb\", \"\")"), "closing a typed page")
     }
 
     // C7
@@ -145,7 +145,7 @@ final class ContentFullScreenTests: XCTestCase {
         for l in app[(p + 1)...] { if l.hasPrefix("//") || l.isEmpty { continue }; if l.contains(" ") || l.hasPrefix("view") { break }; provided.insert(l) }
         XCTAssertGreaterThan(provided.count, 200)
         var checked = 0
-        for f in ["content.contract", "books.contract", "reader.contract", "queue.contract", "bar.contract"] {
+        for f in ["content.contract", "imported-docs.contract", "reader.contract", "queue.contract", "bar.contract"] {
             let lines = code(try read(f)).split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
             var inInject = false
             for l in lines {
@@ -172,7 +172,7 @@ final class ContentFullScreenTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(idle, 82 + 40, "idle lens plus the row")
         XCTAssertGreaterThanOrEqual(busy, idle + 40, "a line above the controls (now playing: 30 + the progress hairline + gaps)")
         // no other contract still uses the old fixed clearance for a full-content frame of these two views
-        let reader = code(try component("WebLayer", in: "reader.contract")), books = code(try component("DocPage", in: "books.contract"))
+        let reader = code(try component("WebLayer", in: "reader.contract")), books = code(try component("DocPage", in: "imported-docs.contract"))
         lacks(reader + books, ["+ 72px", "56px + 8px"], "old clearance")
     }
 }

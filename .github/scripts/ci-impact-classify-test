@@ -23,7 +23,7 @@ assert_output() {
 }
 
 assert_output docs-only $'docs/README.md\nAGENTS.md\n' \
-  'docs_only=true' 'non_docs=false' 'go=false' 'sbom=false' 'flakehub=false' 'guest_unit=false'
+  'docs_only=true' 'non_docs=false' 'go=false' 'sbom=false' 'flakehub=false' 'guest_unit=false' 'mobile=false'
 
 assert_output auth-change $'internal/auth/service.go\ninternal/auth/service_test.go\n' \
   'docs_only=false' 'go=true' 'sbom=true' 'flakehub=true' 'high_risk_race=false'
@@ -88,6 +88,32 @@ assert_output nix-workflow-wiring $'.github/workflows/ci.yml\n' \
 
 assert_output nix-docs-and-dev-scripts-do-not-select-it $'docs/problems/x.md\nscripts/land\nskills/throughline/SKILL.md\n' \
   'docs_only=true' 'guest_unit=false'
+
+# The phone app's shared code (mobile/AutoradioLab: Exact contracts and TypeScript, with its own `bun test`) has a lane of its own: it must run when that code, the
+# native interface it types against, or the workflow that wires it changes, and not for Swift only, docs or the Go side.
+assert_output mobile-shared-code $'mobile/AutoradioLab/signin-sheet.ts\n' \
+  'mobile=true' 'go=false' 'frontend=false' 'docs_only=false'
+assert_output mobile-contract-file $'mobile/AutoradioLab/account.contract\n' 'mobile=true'
+assert_output mobile-interface $'mobile/exact-package/exact.json\nmobile/scripts/gen-exact-interface.py\n' 'mobile=true'
+# The scheme handoff is shell (mobile/scripts/exact.sh passes SIGNIN_SCHEME=<app-identity.sh id>); the bun lane reads it (signin-sheet.test.ts S8b), so a change to it selects the lane.
+assert_output mobile-exact-sh $'mobile/scripts/exact.sh\n' 'mobile=true'
+assert_output mobile-app-identity $'mobile/scripts/app-identity.sh\n' 'mobile=true'
+assert_output mobile-identity-test $'mobile/scripts/test-app-identity.sh\n' 'mobile=true'
+# The /device page's pure helper is tested under node in the frontend lane; a change to the test alone must run it too.
+assert_output frontend-device-return-test-only $'frontend/tests/device-return.test.mjs\n' 'frontend=true'
+# The server's allowlist of apps (TestDeviceReturnSchemesAreTheAppsInAppJSON) reads app.json: a new variant must run it.
+assert_output app-json-runs-the-go-allowlist-test $'mobile/AutoradioLab/app.json\n' 'go=true' 'mobile=true'
+# test-app-identity.sh copies the whole of mobile/scripts and runs build-lab.sh, proof-common.sh, sim-launch.sh, make-profile.sh, proof-real.sh, gen-build-info.sh and check-exact-pin.sh over stubs: a change to any of them selects the lane.
+for f in build-lab proof-common sim-launch make-profile proof-real gen-build-info check-exact-pin; do
+  assert_output "mobile-script-$f" "mobile/scripts/$f.sh"$'\n' 'mobile=true' 'go=false'
+done
+# Files the suite reads from outside mobile/: a change to any of them selects the lane (and the Go lane where Go reads them too).
+assert_output mobile-reads-the-go-queue-struct $'internal/autoradioqueue/queue.go\n' 'mobile=true' 'go=true'
+assert_output mobile-reads-the-golden-documents $'internal/texturedoc/golden/story.json\n' 'mobile=true'
+assert_output mobile-reads-the-typography-rules $'mobile/docs/typography.md\n' 'mobile=true'
+assert_output mobile-workflow-wiring $'.github/workflows/ci.yml\n' 'mobile=true'
+assert_output mobile-swift-only-does-not-select-it $'mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirSignIn.swift\n' 'mobile=false' 'go=false'
+assert_output mobile-docs-and-go-do-not-select-it $'docs/reference/exact/auth-session.md\ninternal/auth/device_login.go\n' 'mobile=false'
 
 # Docs-like paths (owner, 2026-11-12): skill text and developer-side scripts.
 assert_output skills-text-only $'skills/throughline/SKILL.md\nskills/throughline/references/format.md\nskills/agentic-consensus/agentic-consensus-runner.sh\n' \
@@ -204,7 +230,7 @@ grep -qxF 'sampled_race=true' "$sample_output"
 
 force_output="$tmpdir/force.out"
 printf '' | CI_FORCE_ALL=true "$classifier" --sha 1111111111111111111111111111111111111111 "$force_output" >/dev/null
-for expected in go=true frontend=true sbom=true flakehub=true high_risk_race=true ci=true guest_unit=true; do
+for expected in go=true frontend=true sbom=true flakehub=true high_risk_race=true ci=true guest_unit=true mobile=true; do
   grep -qxF "$expected" "$force_output"
 done
 

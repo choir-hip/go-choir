@@ -100,23 +100,14 @@
   },
   "SignalList": {
    "rows": "SignalRow[]"
+  },
+  "PageRequest": {
+   "id": "number",
+   "address": "string",
+   "title": "string"
   }
  },
  "names": [
-  {
-   "source": "openPages",
-   "live": true,
-   "answers": "PageList",
-   "substitute": {
-    "default": {
-     "rows": [],
-     "top": "",
-     "topKind": "",
-     "topTitle": "",
-     "count": 0
-    }
-   }
-  },
   {
    "source": "pageModel",
    "live": true,
@@ -136,56 +127,16 @@
    }
   },
   {
-   "source": "signalList",
+   "source": "pageRequest",
    "live": true,
-   "answers": "SignalList",
+   "answers": "PageRequest",
    "substitute": {
     "default": {
-     "rows": []
+     "id": 0,
+     "address": "",
+     "title": ""
     }
    }
-  },
-  {
-   "send": "pageOpen",
-   "options": {
-    "address": "string",
-    "title": "string"
-   },
-   "answers": "PageList"
-  },
-  {
-   "send": "pageClose",
-   "options": {
-    "address": "string"
-   },
-   "answers": "PageList"
-  },
-  {
-   "send": "pageFocus",
-   "options": {
-    "address": "string"
-   },
-   "answers": "PageList"
-  },
-  {
-   "send": "pagePin",
-   "options": {
-    "address": "string"
-   },
-   "answers": "PageList"
-  },
-  {
-   "send": "pageReopen",
-   "answers": "PageList"
-  },
-  {
-   "send": "signalRecord",
-   "options": {
-    "kind": "string",
-    "subject": "string",
-    "detail": "string"
-   },
-   "answers": "PageList"
   }
  ]
 }

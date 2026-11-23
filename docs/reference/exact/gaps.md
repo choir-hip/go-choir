@@ -44,6 +44,7 @@ their tracker as files [src].
 | 33 | `simctl spawn defaults write` does not override a value the app wrote itself | [seen] | Delete the app's preferences plist, set state with the app's controls (`testing-and-debugging.md`). |
 | 34 | `text` collapses `\n` | [seen] | `white-space="pre-wrap"`. |
 | 35 | Field or prop names `when` and `from` were risky in a contract | [seen]; whether the compiler refuses them is unchecked | Use other names (`stamp`, `sender`). |
+| 36 | A POSTed server-sent stream cannot be read by shared code as it arrives. `fetch(url, { exactStream: mapper })` is returned as a RESOURCE's answer and lives while that resource is in the view (`docs/reference.md:3146-3150`, "A stream let go (new arguments, `refresh`) lets go the call"); its request is documented as a GET (`:3146-3215`; a stream body is refused, `:2553`), and nothing there shows a POST body with `exactStream`. The programme route (`POST /api/autoradio/programme`) is a POSTed event stream | [src] `docs/reference.md:2553`, `:3146-3215` (read 2026-11-21 at the pinned checkout; not run) | Shared code reads the whole answer with `fetch` and parses it with `StretchDecoder` (`programme-model.ts`): the entries of one write arrive together, at its end, not one by one. If that latency shows, either the server gains a GET with a ticket (the `socket-ticket` recipe) or one narrow native op opens the POST and hands lines to shared code as facts. |
 
 ## What to ask upstream first
 

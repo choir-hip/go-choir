@@ -34,7 +34,7 @@ extension AutoradioModule {
             let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] timer in
                 guard let self else { timer.invalidate(); return }
                 let s = self.runtime.snapshot()
-                if s.running && !s.paused { self.touch(["radioView", "barFacts"]) }
+                if s.running && !s.paused { self.touch(["radioView", "barFacts"], pump: false) }
                 if s.blockIndex != lastBlock { lastBlock = s.blockIndex; self.touch(["queueView"]) }   // lane autoradio-joins: the DJ's coming segments moved on
             }
             RunLoop.main.add(t, forMode: .common)
@@ -48,7 +48,7 @@ extension AutoradioModule {
                 guard let self else { break }
                 if tracker.feedMic(db: f.rmsDb), Date().timeIntervalSince(lastTouch) > 0.09 {
                     lastTouch = Date()
-                    DispatchQueue.main.async { self.touch(["radioView"]) }
+                    DispatchQueue.main.async { self.touch(["radioView"], pump: false) }
                 }
             }
         }
@@ -63,7 +63,7 @@ extension AutoradioModule {
         handle("radioView") { [unowned self] _, reply in
             scheduleExpiry()
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            let info = MainActor.assumeIsolated { RunSheetPlayer.shared.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "")) }   // lane autoradio-queue
+            let info = MainActor.assumeIsolated { (tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: "")) }   // lane autoradio-queue
             ReaderFeed.shared.feed(info, route: route)
             reply(json(info))
         }
@@ -76,20 +76,7 @@ extension AutoradioModule {
             }
             touch(["radioView", "barFacts"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" })))
-        }
-
-        // Next or previous (move "next" or "previous"): the run sheet's `skip(on air)`, and its `previous` (the start of this entry when it has
-        // gone on a little, else the entry before it). The paper's list is never asked.
-        handle("radioStory") { [unowned self] args, reply in
-            let move: ChoirApp.StoryMove = (args["move"] as? String) == "previous" ? .previous : .next
-            Task { [weak self] in
-                guard let self else { return }
-                await self.choir.moveStory(move)
-                self.touch(["radioView", "barFacts"])
-                let route = ChoirEnvironment.shared.playing(self.runtime.player.document.id)?.route ?? ""
-                DispatchQueue.main.async { reply(self.json(tracker.radioInfo(player: self.choir.playerView(), snapshot: self.runtime.snapshot(), document: self.runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" }))) }
-            }
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: "")))
         }
 
         // Reading speed, 0.5 to 3 in steps of 0.05. The tracker clamps and snaps it, hands it to the player (time-pitch in the audio
@@ -99,7 +86,7 @@ extension AutoradioModule {
             if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v); SpeedStore.standard.save(tracker.speed) }
             touch(["radioView"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" })))
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: "")))
         }
     }
 }
@@ -118,15 +105,11 @@ struct BarFacts: Codable {
     var holding = ""
     var revisedAt = 0.0, errorAt = 0.0
     var errorStage = "", errorMessage = ""
-    /// The run sheet player's: something is on air, it is held for the audio session, remote audio is the current item (its play state, title and place).
-    var onAir = false, waiting = false, remote = false, remotePlaying = false
-    var remoteTitle = ""
-    var remoteFraction = 0.0
 }
 
 extension AutoradioModule {
     @MainActor func barFacts() -> BarFacts {
-        let s = runtime.snapshot(), p = choir.playerView(), raw = BarTracker.shared.raw(), player = RunSheetPlayer.shared, q = player.info()
+        let s = runtime.snapshot(), p = choir.playerView(), raw = BarTracker.shared.raw()
         var f = BarFacts()
         f.at = Date().timeIntervalSince1970
         f.phase = s.phase; f.transcript = s.transcript
@@ -134,9 +117,26 @@ extension AutoradioModule {
         f.running = s.running; f.signedIn = p.signedIn; f.playing = p.playing; f.title = p.title; f.message = p.message
         f.handsFree = HandsFreeSwitch.shared.isOn
         f.holding = raw.holding; f.revisedAt = raw.revisedAt; f.errorAt = raw.errorAt; f.errorStage = raw.errorStage; f.errorMessage = raw.errorMessage
-        f.onAir = player.store.onAir() != nil; f.waiting = player.isWaitingForSession
-        f.remote = player.isRemote; f.remotePlaying = q.playing; f.remoteTitle = q.current; f.remoteFraction = q.fraction
         return f
+    }
+
+    /// What only the audio code knows, for the radio's pump (shared code: radio-bridge.ts `readFacts`), and the inbox of what native callers and the voice turn handed over (RadioBridge). It decides nothing.
+    /// `at` is the device's time in milliseconds (a data source may not read the clock); `ready`: onboarding is complete and no other audio holds the phone, so the radio may start by itself.
+    /// `foreground`: the app is in front. Only native knows it on a locked iPhone, because Exact does not establish that the page turns `hidden` there (docs/reference/exact/ui-model.md "Page facts"); shared code stops re-asking the screens
+    /// each second while it is false (spine.contract `posKey`). A host that does not give it is taken as in front.
+    @MainActor public func radioFacts(peek: Bool) -> [String: Any] {
+        let s = runtime.snapshot(), tracker = BarTracker.shared, deck = Deck.shared
+        let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
+        let info = tracker.radioInfo(player: choir.playerView(), snapshot: s, document: runtime.player.document, route: route, nextTitle: "")
+        let pos = runtime.player.storyPosition()
+        var o: [String: Any] = ["at": Date().timeIntervalSince1970 * 1000, "turnOpen": s.phase != "playing", "remainder": runtime.player.remainingText() ?? "",
+                                "position": ["block": pos.block, "seconds": pos.seconds], "wants": !runtime.player.userPaused, "foreground": !runtime.coordinator.isBackgrounded, "ready": OnboardingController.shared?.finished ?? false,
+                                "sentences": info.sentences, "sentenceIndex": info.sentenceIndex, "progress": info.progress, "inbox": peek ? [] : RadioBridge.shared.drain()]
+        if let c = deck.current, c.kind == "audio", let r = deck.engine?.remotePosition() {
+            o["audio"] = ["url": c.url, "title": c.title, "show": c.show, "start": c.start, "elapsed": r.elapsed] as [String: Any]
+            o["remote"] = ["elapsed": r.elapsed, "duration": r.duration ?? 0] as [String: Any]
+        }
+        return o
     }
 }
 

@@ -5,3 +5,20 @@ shape SignOutResult
   message: string
   // Counts every completed wipe (monotonic): the sources that keep state in memory are asked again when it changes.
   epoch: number
+
+// What the card shows of the one sign-in attempt (signin-attempt.ts `view`): the phase, whether a code is pending, the code, a link for the system browser (only when the sheet could not open, https on the
+// granted origin), a note and the ending's words. Never a device code or a key.
+shape SignInView
+  phase: string
+  pending: bool
+  userCode: string
+  browserLink: string
+  note: string
+  message: string
+  // The machine's count of published changes: the resource is keyed on it so the last change is read.
+  rev: number
+
+// The answer of a press (run, cancel, reopen): the phase the attempt is in.
+shape SignInEnd
+  phase: string
+  rev: number

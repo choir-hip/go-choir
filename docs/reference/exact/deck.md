@@ -3,14 +3,34 @@
 Station X4 of the Exact cutover. Read this before changing `mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift`,
 `mobile/AutoradioLab/deck*.ts`, `mobile/exact-package/interface/deck.json` or the Kotlin deck. Design:
 [autoradio-in-exact-2026-11-18.md](../../design/autoradio-in-exact-2026-11-18.md), "The deck applies named rules" and "The journal
-is the evidence". Status of what exists: the Swift deck and its journal run under the Swift run sheet player; nothing in shared code
-commands the deck yet (that is station X5); the Kotlin deck does not exist.
+is the evidence". Status of what exists (2026-11-21): shared code commands the deck. `mobile/AutoradioLab/deck-native.ts` is the real `DeckPort`: the five names over the app module's one `deck` op (`modules/apple/ModelsEntry.swift` -> `AutoradioModule+Deck.swift` `deckCall`), because only a contract can call a package's names and shared code has to; `radio-runtime.ts` hands it items and reads its journal (the Swift run sheet player is deleted). The Kotlin deck does not exist.
 
 ## What it is
 
 Shared code (TypeScript) decides what plays next, what counts as heard and what is posted. The deck plays what it is handed. It
-applies a short list of named rules itself, because shared code can be frozen when the deck needs an answer (an iPhone lets shared
-code run only while audio is sounding). It keeps one state for why it is silent, and a journal of what started and ended.
+applies a short list of named rules itself, because shared code can be frozen when the deck needs an answer. It keeps one state for why it
+is silent, and a journal of what started and ended.
+
+### Does shared code run in the background while the deck plays? What the source says (read 2026-11-21, not run on a phone)
+
+Exact's `page.frozen` is `AppBackground.now && !backgroundExecutionEligible()` on iOS (`host/apple/Sources/ExactKit/PageFacts.swift:318-323` in the
+Exact checkout `mobile/.exact-src`, commit f53347503). `backgroundExecutionEligible()` (`host/apple/Sources/ExactKit/AudioSession.swift:148-157`) is true
+when the app declares the `audio` background mode and the audio session is active in a playback or playAndRecord category and one of these holds: a
+call, an Exact audio or video element that is running, a background capture claim, or **a `speech-playback` claim**. The app module holds exactly
+such a claim while the radio plays (`mobile/exact-package/apple/AutoradioModule.swift:37`, mode `speech-playback`, `background: true`; the claim
+is documented at `host/apple/modules/ExactPackage.swift:1077-1083`). So the condition is **a held, active playback claim, not sound being
+produced at that moment**: shared code is not `frozen` while the claim is held, even in the gaps between entries. It stops being true when the claim
+is released, when the session cannot be taken (`held_session`: a phone call), or when the claim is for a state that is not `.playing` or
+`.listening` (see `AutoradioModule.swift:20-26`). Exact's own contract adds that "False does not promise continued execution"
+(`docs/contract-for-agents.md:5509-5510`): `frozen: false` is not a promise that iOS will not suspend the process. Whether shared code keeps
+running on a locked phone through a whole programme is therefore **unproven**; the owner's locked phone is the only proof.
+
+The deck is built so that it does not depend on it: it holds every ready entry it is given (up to 100, the sheet's own bound) and plays through
+them with shared code not running; the lock screen's next, previous, pause and play act on the deck at once (`Deck.remoteNext`, `remotePrevious`,
+`listenerPaused`, `resumed`); each is journalled first, with where the item was, and shared code makes the sheet agree when it next runs. What the deck
+cannot do alone: an entry whose sound is not in the entry (a paper story, a page, a book, a take or a file, which shared code has to fetch), the
+entry before this one (the sheet's heard list), and anything that needs the desk. When the held list runs dry in the background the deck writes a
+`system` line `held-dry`, so the gap is on the record.
 
 ## Names (all in `interface/deck.json`; shapes in `mobile/AutoradioLab/deck-types.contract`; types in `deck.ts`)
 
@@ -18,7 +38,7 @@ code run only while audio is sounding). It keeps one state for why it is silent,
 |---|---|---|
 | `deckState` | source, live | `DeckState`: `why`, `item`, `block`, `seconds`, `duration`, `held` (ids), `seq`, `acked`, `journal` (the lines not yet acknowledged) |
 | `deckPlay` | send | play this item now; what was playing ends `replaced` |
-| `deckEnqueue` | send | hold this item after the playing one at place `at` (0 is next; -1 or absent is the end); the held items from `at` on are dropped first; an id already held is removed first; at most 3 are held |
+| `deckEnqueue` | send | hold this item after the playing one at place `at` (0 is next; -1 or absent is the end); the held items from `at` on are dropped first; an id already held is removed first; at most 100 are held (the sheet's bound) |
 | `deckAct` | send | `op` is `pause`, `resume`, `stop`, `skip`, `seekTo`, `seekBy` or `trim`; `value` as the op needs |
 | `deckAck` | send | the journal lines up to `through` are posted; the deck forgets them |
 
@@ -35,7 +55,8 @@ An item is scalars only (the gate refuses a name that takes an opaque payload): 
 3. The listener's pause and a route loss are not undone by a timer. Only the system's "interruption ended" resumes, and only a pause
    the system made.
 4. Two items in a row that made no sound stop the deck (state `stopped`).
-5. The deck plays on through the held items with shared code not running.
+5. The deck plays on through the held items with shared code not running. A lock-screen next skips and plays on at once; a previous on audio, or on a spoken
+   entry that has gone on (past its first block, or 3 s), starts it again at once; a previous on an entry just begun is left to shared code. Each is journalled first.
 
 Not the deck's: barge-in and one voice at a time (the engine and `SessionCoordinator`, native to native); what plays next; what is
 posted.
@@ -48,8 +69,8 @@ number stored beside the lines so it never repeats across a relaunch. `type` is 
 `ended` line says how: `finished`, `skipped`, `replaced`, `stopped`, `failed`, with the device's time, the block and seconds
 reached, the last block, and `rendered`. `rendered` is true only when sound reached the output; `finished` with `rendered` false is
 written `failed`. A launch that finds an item open (the app was killed) closes it first, as `failed` "interrupted by a restart",
-before the run sheet is restored. (Today the verdict the run sheet posts is decided by the Swift player's own `played` flag; the journal's
-`rendered` is what shared code will decide by once it posts, and the two are checked against each other by the fixtures.) A journal file that
+before the run sheet is restored. Shared code decides the verdict from the line: `radio-runtime.ts` `read` takes a `finished` line with `rendered` as heard and
+posts it with the line's own `at`; at launch `recover` reads the lines the process outlived before anything closes the entry on air as interrupted. A journal file that
 cannot be read (a launch before the first unlock) is never overwritten: lines made meanwhile are held and numbered after it once it reads;
 `seq` and `acked` live in a small file of their own so numbers never repeat. A failed save is counted and logged, and the whole journal is
 written again at the next event. The journal keeps the newest 2000 lines; past that the oldest go in a tenth at a time and a `system` line
@@ -57,7 +78,9 @@ written again at the next event. The journal keeps the newest 2000 lines; past t
 
 ## What shared code does with it
 
-`deck-ops.ts` builds the `aired` ops from the journal (heard only with sound; the deck's own time in `ended.at`; ids from the line so a
+The run sheet store (`runsheet-store.ts`) posts the `aired` ops, made by the director from the journal lines (`radio-runtime.ts`); `deck-ops.ts` keeps the held list equal to the
+sheet's next entries (`syncHeld`). `deck-ops.ts`'s own op builder and `deck-post.ts` are the first design's and nothing in the app calls them (a residual to delete, with their
+fixtures). The first design, still the reference for the rules: `deck-ops.ts` builds the `aired` ops from the journal (heard only with sound; the deck's own time in `ended.at`; ids from the line so a
 resend counts nothing twice; a start never before the end of the item before it), posts them in batches of at most 64 ops and 256 KB
 through `deck-post.ts` (`authedJSON`), and acknowledges only what the server answered. `heldPlan` and `syncHeld` keep the held items in
 the sheet's order. The server contract is `internal/runsheet/apply.go` and `internal/agentcore/api_autoradio_settle.go`; the fixtures in

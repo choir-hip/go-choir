@@ -16,7 +16,7 @@ server-side embeddings.
 Builder run for station S5 of the overnight goal. Machine: Mac, macOS 27.2 (26B118), Xcode 27.1, SDK 27.0 (`CoreAI.framework`
 present), Apple silicon, the dev Mac (not the porter's M5). Weights in `~/.cache/autoradio-embed-trial/` (outside the repo); every
 downloaded file checked: the GGUF's sha256 `2188ac1d...09135` and size 309,855,456 equal the Hub listing, and each Core AI file
-(text asset, tokenizer, config, Swift sources) equals `CHECKSUMS.sha256`. Code: `mobile/EmbedTrial/` (a Mac command,
+(text asset, tokenizer, config, Swift sources) equals `CHECKSUMS.sha256`. Code: `mobile/EmbedTrial/` (deleted 2026-11-21: it no longer compiled once the Swift retrieval types went; it is in the git history, a Mac command,
 `embed-trial bench|quality|compare|scan`), the corpus generator and files in `mobile/EmbedTrial/corpus/`. Phone rows are **unknown**
 until the lead runs the device trial (section 0.4).
 
@@ -175,6 +175,16 @@ a first setting to re-check on the phone's real content, not as a constant of th
 card's sentence-similarity prompt, so a floor below 0.65 would let anything through).
 
 ### 0.7 What is wired (lane `embed-trial`, class orange)
+
+**Moved 2026-11-21 (lane `exact-retrieval`).** The index, BM25, the vector store, the work list, the job, the fusion and the launcher's paper-wide
+search are shared code: `AutoradioLab/search.ts` (ranking, store, job, fusion: unchanged arithmetic) and `retrieval-run.ts` (the runtime: sources,
+the embedding pass, the answer to the voice turn's ask), tested by `search.test.ts` and `retrieval-run.test.ts` (the Swift `RetrievalTests`,
+`HybridRetrievalTests`, `EmbedderTests`, `CorpusSearchTests` and `EmbeddingServiceTests` were ported and deleted). What stays native is the model and
+what only the platform knows (`AutoradioKit/EmbedDevice.swift`: the ops `embedState`, `embedEnsure`, `embed`). The voice turn asks shared code through one
+source and one op (`AutoradioKit/RetrievalFacts.swift`, `retrievalAsk` and `retrievalAnswer`). The text below describes the Swift that was; read it
+as the history of the choices. Two behaviours did not move and are named residuals: the vectors folder is no longer marked excluded from backup
+(it is under `app:/data/vectors`, written by shared code), and a kill loses up to about forty slices of embedding work (the app going to the background
+no longer flushes). The vector scan was measured in `retrieval-run.test.ts` (R7): 20,000 x 768 in TypeScript, median 240 to 260 ms on a loaded Mac, about 40 ms when idle (the test logs it and asserts no wall-clock bound), so it did not stay native. The index is bounded for the shared runtime's 64 MiB heap: at most 1,200 passages, 4,000 characters each (`search.ts` MAX_INDEX_ITEMS, MAX_ITEM_CHARS).
 
 - `EmbeddingService` (`AutoradioKit/EmbeddingService.swift`): attached at launch where the content store opens (`AutoradioModule.swift`), it sets
   `SavedCorpus.retriever` to a `FusedRetriever` straight away (BM25 alone, nothing said about vectors, until the model is on the phone and 90

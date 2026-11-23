@@ -19,7 +19,7 @@ export const RECENT_LIMIT = 30;
 const SEARCH_FOLDERS = 80, SEARCH_DEPTH = 4, SEARCH_FOUND = 200, TEXTURE_CAP = 1_000_000;
 
 export type Net = { json: typeof authedJSON; bytes: typeof authedBytes; toFile: (path: string, dest: string, opts?: Parameters<typeof authedJSON>[1], storage?: Storage) => Promise<{ bytes: number; contentType: string }> };
-const realNet: Net = { json: authedJSON, bytes: authedBytes, toFile: (path, dest, opts, storage) => authedToFile(path, dest, storage, opts) };
+export const realNet: Net = { json: authedJSON, bytes: authedBytes, toFile: (path, dest, opts, storage) => authedToFile(path, dest, storage, opts) };
 
 /** What the page may say when a file cannot be had. */
 export class FilesError extends Error {
@@ -386,4 +386,19 @@ export async function fileUpload(a: { from: string; name: string; dir: string },
   if (!M.validName(name)) return after(net, storage, d, BAD_NAME);
   try { await makeBackend(net).put(M.join(d, name), bytes); return after(net, storage, d, `Added “${name}”.`); }
   catch (e) { return after(net, storage, d, say(e)); }
+}
+
+// ---------------------------------------------------------------- for another page that lives in a folder of the computer (imported documents, imported.ts)
+
+/** A folder's entries as the computer lists them, raw (size and modified time): another page that keeps its own cache of what a folder holds reads this, not a second client. */
+export async function fileEntries(path: string, net: Net = realNet): Promise<{ entries: Entry[]; now: number | null }> {
+  return makeBackend(net).list(M.normalize(path) ?? '/');
+}
+/** A file of the computer written by the host to the app file `dest` (under app:/cache), the bytes never in JavaScript; the size written. */
+export async function fileDownload(path: string, dest: string, storage: Storage, net: Net = realNet): Promise<number> {
+  return makeBackend(net).download(M.normalize(path) ?? '/', dest, storage);
+}
+/** The `texture:` page the computer made of a PDF or an e-book (it read the text itself, decision D4), or why not. */
+export async function fileTexture(entry: Entry, storage: Storage | undefined, net: Net = realNet): Promise<FileResolved> {
+  return resolveEntry(entry, storage, net);
 }

@@ -18,6 +18,8 @@ use Card, PaperCard, PageScroll, Btn, ListGroup, RowRule, SelectMark, PageHeader
 use Mark from "./mark.contract"
 use VoiceStep from "./voice.contract"
 use AccountView from "./account-state-types.contract"
+use SignInView from "./account-types.contract"
+use EditionPage from "./edition-types.contract"
 
 keyframes obBreathe
   from opacity=1 scale=1
@@ -32,7 +34,7 @@ keyframes obReveal
 component SignInScreen
   inject
     th: Theme
-    au: ChoirAuth
+    siv: SignInView
     acs: AccountView
     signIn: action
     cancelSignIn: action
@@ -44,20 +46,25 @@ component SignInScreen
       column gap=8 align-items="center"
         text "Autoradio" font-size="-exact-large-title" font-weight=700 role="heading" aria-level=2 font-family=th.fontHead color=th.fg
         text "Sign in to hear the paper and talk to your computer." testId="signin-intro" text-align="center" font-size="-exact-body" line-height=1.45 font-family=th.fontText color=th.muted
-      if au.status == "pending"
+      if siv.pending
         Card(level=2, testId="signin-card", minHeight=0)
           column padding=20 gap=12 align-items="center"
             text "Your code" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-            text au.userCode testId="signin-code" font-size="-exact-large-title" font-weight=600 font-family=th.fontMono color=th.fg
-            text "Approve this sign-in in your browser." font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted text-align="center"
+            text siv.userCode testId="signin-code" font-size="-exact-large-title" font-weight=600 font-family=th.fontMono color=th.fg
+            text "Approve this sign-in in the window that opened." font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted text-align="center"
+            if siv.note != ""
+              text siv.note testId="signin-sheet-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
+            // No path is only the sheet: the same link, in the system browser (Exact: an absolute https href leaves the app and opens there), only when the view validated it. The attempt's poll goes on as before.
+            if siv.browserLink != ""
+              text "Open it in your browser" href=siv.browserLink testId="signin-browser" font-family=th.fontLabel font-size="-exact-subheadline" color=th.fg text-align="center"
             button press=openApproval testId="signin-open" appearance="none"
               Btn(label="Open the approval page", primary=true, wide=false)
             button press=cancelSignIn testId="signin-cancel" appearance="none"
               Btn(label="Cancel", primary=false, wide=false)
-      if au.status != "pending" and acs.action == "signIn"
+      if not siv.pending and acs.action == "signIn"
         button press=signIn testId="signin" appearance="none"
           Btn(label="Sign in", primary=true, wide=true)
-      text au.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
+      text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
 
 // ---------------------------------------------------------------- the page
 
@@ -190,17 +197,18 @@ component TopicPicker
   inject
     th: Theme
     ob: Onboarding
+    ep: EditionPage
     obTopicText: string
     editObTopic: action
     obAddTopic: action
     obTalk: action
   derive talkLabel = ob.talking ? "Stop talking" : "Talk to it"
-  derive addLabel = ob.talking ? `Listening. ${ob.voiceHint}` : ob.voiceHint
+  derive addLabel = ob.talking ? `Listening. ${ep.voiceHint}` : ep.voiceHint
   view
     column width="100%" gap=16
       text "Tap a topic to pick it. Open one to see what is inside; a topic that fits under several says “also in”." testId="ob-explainer" font-family=th.fontLabel font-size="-exact-subheadline" line-height=1.4 color=th.muted
       ListGroup(testId="ob-topics")
-        for r, i in ob.tree key=r.key
+        for r, i in ep.tree key=r.key
           TopicRowItem(rowId=r.key, label=r.label, kind=r.kind, selected=r.selected, partial=r.partial, expandable=r.expandable, expanded=r.expanded, note=r.note, first=(i == 0))
       row gap=8 align-items="center" width="100%"
         column flex=1 min-width=0
@@ -211,10 +219,11 @@ component TopicPicker
           RowRule(indent=0)
         button press=obAddTopic testId="ob-topic-add" appearance="none" aria-label="Add this topic"
           Btn(label="Add", primary=false, wide=false)
-      text ob.selectionLine testId="ob-selection" font-family=th.fontLabel font-size="-exact-subheadline" line-height=1.4 color=th.muted
+      text ep.selectionLine testId="ob-selection" font-family=th.fontLabel font-size="-exact-subheadline" line-height=1.4 color=th.muted
       button press=obTalk testId="ob-talk" appearance="none" aria-label=talkLabel
         Btn(label=talkLabel, primary=false, wide=true)
       text addLabel font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+      text ep.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
       text ob.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
 
 // The edit page: the same topic tree, preselected with the saved picks, without the first-run steps. Changes save as they are made;

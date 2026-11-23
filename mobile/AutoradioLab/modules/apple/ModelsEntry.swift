@@ -14,6 +14,8 @@ import Security
 //
 // The mail cipher (Choir/MailSeal.swift): `mailSeal`, `mailOpen`, `mailForget`, a platform cipher shared code has none of; the key never leaves the Keychain.
 //
+// The edition picks' calls (`editionMirror`, `editionMirrorReset`, `editionHeard`, `editionSaid`): the voice's in-memory copy of the picks, and the words the voice heard at the setup screen (docs/reference/AUTORADIO-EDITION-PICKS.md).
+//
 // The second native call, `{op: "signOut"}` (later only), answers `{done: Bool}` once the native half of sign-out has finished. Sign-out is led
 // by shared code (AutoradioLab/account.ts); the reason it is native is that the key is a Keychain item the Swift sign-in wrote and the Swift stores
 // (AccountWipe: the voice's and the pages not yet moved) are wiped by Swift. It goes with them when sign-in itself moves.
@@ -21,8 +23,10 @@ import Security
 // there), absent (the Keychain answered item-not-found) or unreadable (locked before the first unlock, or any other status). Read only: no data is returned, nothing
 // is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
 //
-// The take recorder's ops (`takeState` ... `takeMirror`, AutoradioModule+Takes.swift `takeOp`): shared code (AutoradioLab/take-session.ts) leads the Takes section; the reason they are native is the
-// microphone, the radio's gate, the recogniser and the player (the voice), the steer queue, and the Swift programme's copy of the listener's own ids and muted voices. Nothing is carried from the pre-release build's files: they are never read.
+// The take recorder's ops (`takeState` ... `takeAudio`, AutoradioModule+Takes.swift `takeOp`): shared code (AutoradioLab/take-session.ts) leads the Takes section; the reason they are native is the
+// microphone, the radio's gate, the recogniser and the player (the voice), and the steer queue. Nothing is carried from earlier builds' files: they are never read.
+//
+// The page in front, `{op: "pageText", address, title, dek, kind, blocks}` (later only): the shared reader hands the voice the page it is showing (HeldPages); nothing is read back. It goes when the voice's page text is its own.
 //
 // The themes' one-time carry-over (AutoradioLab/themes.ts `migrate`): `{op: "themeLegacy"}` READS what the Swift app kept for the themes: the choice (UserDefaults) and the user's theme files
 // (Application Support/Autoradio/themes). The reason it is native: those are places shared code cannot see (Exact's `app:/data` is another folder). It only reads and removes nothing, so a reverted
@@ -55,7 +59,13 @@ final class ModelsModule: ExactModule {
     }
     override func later(_ request: [String: Any], reply: ExactReply) {
         let op = request["op"] as? String
+        if op == "generation" {      // shared code says the generation it is at: the first call of a JS context is a boot (it may be below the newest seen: a reload), the wipe's last act a floor
+            let g = (request["gen"] as? NSNumber)?.intValue ?? 0
+            if request["boot"] as? Bool == true { SharedGeneration.boot(g) } else { SharedGeneration.announce(g) }
+            reply.send(["ok": true]); return
+        }
         if op == "signOut" || op == "wipe" {
+            SharedGeneration.announce((request["gen"] as? NSNumber)?.intValue ?? 0)      // shared code's generation moved when the sign-out began: what it pushed under an older one is refused from now on
             Task { @MainActor in
                 guard let m = AutoradioModule.current else { reply.send(["done": false]); return }
                 await m.signOutForShared(keepKey: op == "wipe")
@@ -66,10 +76,67 @@ final class ModelsModule: ExactModule {
             }
             return
         }
+        // The deck (shared code's radio runtime commands it): one op, `{op: "deck", name: deckState|deckPlay|deckEnqueue|deckAct|deckAck, args}`, answering the deck's state. Native because the deck is
+        // the audio: the session, the engine and the journal that survives a kill (AutoradioModule+Deck.swift `deckCall`). It decides nothing.
+        if op == "deck" {
+            Task { @MainActor in reply.send(await AutoradioModule.current?.deckCall(name: request["name"] as? String ?? "", args: request["args"] as? [String: Any] ?? [:]) ?? [:]) }
+            return
+        }
+        // Open a page by its address (the shell's: shared code names the address, only the shell shows a page): the clip's episode page from the queue's "Open episode".
+        if op == "openPage" {
+            Task { @MainActor in AutoradioModule.current?.requestPage(request["address"] as? String ?? "", title: request["title"] as? String ?? ""); reply.send([:]) }
+            return
+        }
+        // The radio's mailbox (AutoradioModule+Queue.swift): `radioFacts` (what only the audio code knows, and the inbox of what native handed over), `radioSet` (the turn route's queue and the entry on air, pushed by shared
+        // code). Native because the voice turn and the audio are; they decide nothing.
+        if op == "radioFacts" || op == "radioSet" {
+            Task { @MainActor in
+                guard let m = AutoradioModule.current else { reply.send([:]); return }
+                switch op { case "radioFacts": reply.send(m.radioFacts(peek: (request["peek"] as? Bool) ?? false)); default: reply.send(m.radioSet(request)) }
+            }
+            return
+        }
+        // First run's voice side (AutoradioModule+Onboarding.swift `onboardingOp`; each op's reason is in that file's header): the models' setup, the microphone check, the hearing sentence, the voice at the topic screen.
+        if let op = op, op.hasPrefix("ob") {
+            Task { @MainActor in reply.send(await AutoradioModule.current?.onboardingOp(request) ?? [:]) }
+            return
+        }
+        // Retrieval (AutoradioKit/RetrievalFacts.swift, EmbedDevice.swift): shared code's answer to the voice turn's ask, and the embedding model. Neither touches the module,
+        // and the model's work stays off the main thread.
+        if op == "retrievalAnswer" {
+            RetrievalBridge.shared.answer(id: request["id"] as? String ?? "", context: request["context"] as? [String: Any] ?? [:])
+            reply.send([:]); return
+        }
+        if let op = op, op.hasPrefix("embed") {
+            Task.detached { reply.send(await EmbedDevice.op(request)) }
+            return
+        }
+        // The notebook's and the content sync's native facts (AutoradioModule+Notebook.swift `notebookOp`, with the reason for each).
+        if let op = op, op.hasPrefix("notebook") || op == "contentBusy" {
+            Task { @MainActor in reply.send(await AutoradioModule.current?.notebookOp(request) ?? [:]) }
+            return
+        }
         if let op = op, op.hasPrefix("take") {
             Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
             return
         }
+        if let op = op, op.hasPrefix("signIn") {      // the sign-in attempt's three native calls (AutoradioModule.signInOp)
+            Task { @MainActor in reply.send(await AutoradioModule.current?.signInOp(request) ?? [:]) }
+            return
+        }
+        if op == "pagesMirror" {
+            // Shared code (AutoradioLab/pages.ts) owns the open pages and hands the voice their facts after every change (AutoradioModule+Spine.swift `holdPages`). Only native code can use them: the
+            // voice engine, the local model's warm-up and the Texture editor's flush on leaving a page are native. Answers {ok}.
+            Task { @MainActor in reply.send(["ok": await AutoradioModule.current?.holdPages(request) ?? false]) }
+            return
+        }
+        if op == "pageText" {
+            // The shared reader hands over the page in front (AutoradioLab/reader.ts `hand`); the voice turn reads it. Only native code can: the voice engine is native. Answers {ok}.
+            reply.send(["ok": AutoradioModule.current?.holdPage(request) ?? false])
+            return
+        }
+        // The edition picks' native calls (EditionSetup.swift `EditionNative`), each with the reason only native code can meet: the voice's copy of the picks and the words the voice heard.
+        if let op = op, op.hasPrefix("edition") { reply.send(EditionNative.op(request)); return }
         reply.send(call(request))
     }
 }

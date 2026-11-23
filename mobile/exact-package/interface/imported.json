@@ -1,0 +1,25 @@
+{
+ "shapes": {
+  "ImportedFollow": {
+   "address": "string",
+   "block": "number"
+  },
+  "ImportedHanded": {
+   "ok": "bool",
+   "message": "string"
+  }
+ },
+ "names": [
+  {
+   "source": "importedFollow",
+   "live": true,
+   "answers": "ImportedFollow",
+   "substitute": {
+    "default": {
+     "address": "",
+     "block": -1
+    }
+   }
+  }
+ ]
+}

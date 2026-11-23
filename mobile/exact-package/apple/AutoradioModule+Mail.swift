@@ -1,6 +1,6 @@
 // Lane file: mail. What is left of Swift mail (2026-11-19: the mailbox, the messages, drafts and the phone's copy are shared code, AutoradioLab/mail.ts).
-// Three sends stay here because only native code can reach what they touch: the app's own web view (the approval page), the radio's voice
-// (read it aloud) and the Swift signal log (the ask the bar records). The phone never talks to a mail provider: that is all in mail.ts.
+// Two sends stay here because only native code can reach what they touch: the app's own web view (the approval page) and the radio's voice
+// (read it aloud). The phone never talks to a mail provider: that is all in mail.ts.
 import Foundation
 
 extension AutoradioModule {
@@ -28,16 +28,7 @@ extension AutoradioModule {
             let address = args["address"] as? String ?? "", text = args["text"] as? String ?? ""
             guard !text.isEmpty else { reply(["status": "error", "message": "There is nothing to read yet."]); return }
             MailReading.shared.request(address: address, text: text)
-            self?.signals.record(SignalEvent(kind: "read-aloud", subject: address, detail: "mail"))
             reply(["status": "requested", "message": "Reading it now."])
-        }
-
-        // "Summarise this thread", "Reply to ...": the prompt aimed at a message. Recorded as an ask signal about the page, the
-        // same kind the bar's Ask records, so whoever answers asks (the desk) takes it from there.
-        handle("mailAsk") { [weak self] args, reply in
-            let address = args["address"] as? String ?? "", q = args["question"] as? String ?? ""
-            self?.signals.record(SignalEvent(kind: "ask", subject: address, detail: q))
-            reply(["status": "asked", "message": "Asked: \(q)"])
         }
     }
 }

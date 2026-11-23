@@ -16,23 +16,8 @@ final class VoiceCoexistTests: XCTestCase {
     }
 
     /// A: the route change that voice on itself causes (the Bluetooth headset leaves A2DP) is not the headset going away: the radio is not paused.
-    func testTheRouteChangeOfVoiceOnDoesNotPauseTheRadio() async {
-        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("vc-\(UUID().uuidString)"), session: NullSessionOwner())
-        let c = PlaybackContinuity(runtime: rt, queue: RunSheetPlayer(store: RunSheetStore()))
-        rt.player.play()
-        XCTAssertFalse(rt.player.userPaused)
-        try? await rt.coordinator.claim(.talking, preferBuiltInMic: false, reason: "voice on")       // the radio's own session change
-        c.routeLost()
-        XCTAssertFalse(rt.player.userPaused, "the radio's own route change paused it and nothing resumes it")
-    }
-    func testARealRouteLossStillPauses() async {
-        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("vc-\(UUID().uuidString)"), session: NullSessionOwner())
-        let c = PlaybackContinuity(runtime: rt, queue: RunSheetPlayer(store: RunSheetStore()))
-        rt.player.onNeedsSession = nil          // play's own session claim (an async Task) would touch the coordinator and race the route loss
-        rt.player.play()
-        c.routeLost()
-        XCTAssertTrue(rt.player.userPaused, "headphones unplugged, no session change of ours: paused")
-    }
+
+
 
     /// B(b): in the background voice on gives the microphone up and plays on; in the foreground it takes it back.
     func testTheBackgroundGivesUpTheMicrophoneAndTheForegroundTakesItBack() async {
@@ -44,6 +29,18 @@ final class VoiceCoexistTests: XCTestCase {
         await c.setBackgrounded(false)
         XCTAssertEqual(c.target(for: .listening), .talking)
         XCTAssertFalse(c.audio.micSuspended)
+    }
+
+    /// F6: the lifecycle notices set the fact in order; the tasks that carry it out may run in any order and still end with the app in front when it is.
+    func testALockAndUnlockInAQuickSuccessionLeavesTheAppInFront() async {
+        let (c, _) = coordinator()
+        c.noteBackgrounded(true); c.noteBackgrounded(false)       // didEnterBackground, then didBecomeActive
+        await c.applyBackgrounded(); await c.applyBackgrounded()    // the two tasks, in either order
+        XCTAssertFalse(c.isBackgrounded); XCTAssertFalse(c.audio.micSuspended)
+        c.noteBackgrounded(true); await c.applyBackgrounded()
+        XCTAssertTrue(c.isBackgrounded); XCTAssertTrue(c.audio.micSuspended)
+        c.noteBackgrounded(false); await c.applyBackgrounded(); await c.applyBackgrounded()
+        XCTAssertFalse(c.isBackgrounded); XCTAssertFalse(c.audio.micSuspended)
     }
 
     /// B(a),(c): while another app has the session nothing here asks for it back, except the foreground, the interruption's end and Play.

@@ -27,9 +27,10 @@ component Autoradio
   members "./members-radio.contract"          // the Autoradio page
   members "./members-takes.contract"          // takes (station L7)
   members "./members-notebook.contract"       // my notebook (station L6)
-  members "./members-books.contract"
+  members "./members-imported.contract"
   members "./members-content.contract"        // the content row above the bar (owner, 2026-11-16)
   members "./members-talk.contract"
+  members "./members-retrieval.contract"     // lane exact-retrieval: the voice turn's ask, the launcher's paper search
   // ---- lane autoradio-podcasts ----
   members "./members-podcasts.contract"
   // ---- lane autoradio-joins ----
@@ -41,6 +42,7 @@ component Autoradio
   provide
     // ---- lane autoradio-joins ----
     shClips
+    hearClips
     clipNote
     clipDo
     // ---- spine ----
@@ -65,16 +67,15 @@ component Autoradio
     heardNow
     setTheme
     setMode
-    record
     editAsk
     sendAsk
     // ---- integrator (Choir sign-in, player) ----
     au
     pl
-    sl
     signIn
     cancelSignIn
     openApproval
+    siv
     signOut
     signOutNote
     acs
@@ -143,6 +144,8 @@ component Autoradio
     // ---- lane 4 (round 3): launcher search, the page deck ----
     lq
     lnc
+    shownHits
+    shownNote
     editLq
     moreFor
     moreOfThis
@@ -169,11 +172,13 @@ component Autoradio
     lbNote
     lbImport
     lbPicked
-    lbRemove
     ldInfo
     ldChap
     ldFound
     ldFollow
+    ldFollowAt
+    ldHanded
+    ldAcked
     ldAck
     ldSec
     ldBlock
@@ -192,7 +197,6 @@ component Autoradio
     ldClearFind
     ldRead
     ldQueue
-    ldRemove
     // ---- the content row (members-content.contract, content.contract) ----
     ctlOpen
     ctlFor
@@ -349,6 +353,7 @@ component Autoradio
     forgetVoice
     // ---- lane 8: onboarding and the edition topics ----
     ob
+    ep
     obBegin
     obBeginMobile
     obRetry
@@ -370,7 +375,6 @@ component Autoradio
     obEditDone
     obEditLeave
     obSkip
-    obReset
     obOpenEdition
     obFinish
     // ---- the voice cards ----
@@ -463,6 +467,6 @@ component Autoradio
       BarShell()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
       // Settings, Account): the code screen then covers the app until it is approved or cancelled.
-      if au.status == "pending"
+      if siv.pending
         column position="absolute" inset=0 background-color=th.paper z-index=50
           SignInScreen()

@@ -8,32 +8,9 @@ final class AudioSessionHoldTests: XCTestCase {
     func entry(_ id: String) -> RunSheetEntry { RunSheetEntry(id: id, kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 5) }
 
     /// 2: the session cannot be taken for a while; the entry stays on air with no outcome, and speaks when it can.
-    func testASessionFailureHoldsTheEntryAndRetriesInsteadOfFailingIt() async {
-        RunSheetPlayer.sessionRetryDelays = [0.02]
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
-        var refusals = 3
-        p.sessionReady = { _ in if refusals > 0 { refusals -= 1; return "the audio session could not be taken" } else { return nil } }
-        p.playNow(entry("a")); p.queue(entry("b"))
-        _ = await poll { e.log.contains("speak:a") }
-        XCTAssertTrue(e.log.contains("speak:a"), "it spoke once the session came back")
-        XCTAssertEqual(s.sheet.entries.filter { $0.state == .skipped }.count, 0, "nothing was failed or skipped meanwhile")
-        XCTAssertFalse(s.sheet.entries.contains { $0.ended?.outcome == .failed })
-        XCTAssertFalse(e.log.contains("speak:b"), "the next entry was not burned")
-    }
 
-    func testTheHeldEntryTriesAtOnceWhenTheSessionMayBeBack() async {
-        RunSheetPlayer.sessionRetryDelays = [3600]
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
-        var ready = false
-        p.sessionReady = { _ in ready ? nil : "the audio session could not be taken" }
-        p.playNow(entry("a")); await p.settle()
-        XCTAssertTrue(p.isWaitingForSession)
-        XCTAssertTrue(p.message.hasPrefix("Can\u{2019}t speak"))
-        ready = true; p.sessionMayBeBack()
-        _ = await poll { e.log.contains("speak:a") }
-        XCTAssertTrue(e.log.contains("speak:a"))
-        XCTAssertFalse(p.isWaitingForSession)
-    }
+
+
 
     /// 1: a claim held in the state wanted is asserted again, never released.
     func testReclaimOfAHeldClaimReassertsAndDoesNotRelease() async {

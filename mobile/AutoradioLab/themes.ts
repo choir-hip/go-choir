@@ -607,7 +607,11 @@ function saveChoice(storage: Storage | undefined, s: ThemeStore): Promise<void> 
 
 // ---- The sources (app.ts). `host` is [prefersColorScheme, prefersReducedMotion] from `exactViewport()`.
 
-const hostOf = (scheme: string, reduce: boolean): Host => ({ scheme, reduceMotion: reduce === true });
+let loggedScheme: string | undefined;
+const hostOf = (scheme: string, reduce: boolean): Host => {
+  if (scheme !== loggedScheme) { loggedScheme = scheme; console.log(`themes: the system scheme the app reports is "${scheme}"`); }
+  return { scheme, reduceMotion: reduce === true };
+};
 export async function themeShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<Theme> { return (await themeStore(storage)).current(hostOf(scheme, reduce)); }
 export async function themeExtrasShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<ThemeExtras> { return (await themeStore(storage)).extras(hostOf(scheme, reduce)); }
 export async function themeListShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<ThemeList> {

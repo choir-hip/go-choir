@@ -1,16 +1,28 @@
 // Lane members file (the Autoradio page): the run sheet made readable, and the gestures on it. Owned by lane autoradio-page.
 // Source and send are declared in exact-package/interface/radio.json. The page (radio.contract) only reads `rp` and sends these.
-use radioPageFacts, radioPageAct from "@choir/autoradio"
-use RadioPageFacts, SettingsAck from "@choir/autoradio"
-use RadioPageInfo from "./radio-types.contract"
+use SettingsAck from "@choir/autoradio"
+use RadioPageInfo, RadioPageFacts, RadioTick from "./radio-types.contract"
 
 members Autoradio
   // The page is shared code (radio-page.ts): the native facts (the run sheet as the store holds it, the player, the desk's flags), the bar's facts (a turn open is the bar's state) and the
   // conversation's entries. The facts carry the clock; while the radio plays they are read again (the native side touches them).
-  resource rpfacts = radioPageFacts() as shape RadioPageFacts else empty()
+  resource rpfacts = radioPageFacts(rpulse.tick, posKey) as shape RadioPageFacts else empty()
   resource rp = radioPage(rpfacts, bf, cvraw) as shape RadioPageInfo else empty()
   // The gestures stay native until the queue and its posted ops move: the native side carries them out and the page is read again.
-  mutation rpm as shape SettingsAck refreshes rpfacts, rp
+  mutation rpm as shape SettingsAck refreshes rpfacts, rp, rpulse
+  // The desk's ask and the sheet's post (radio-bridge.ts radioWrite): long fetches, so a mutation that stays until they are done (a resource answer is let go when the next pulse is asked).
+  mutation rwm as shape RadioTick
+  action writeNow
+    send rwm = radioWrite(rpulse.tick)
+  task writeKick when rpulse.write key=rpulse.tick
+    after(1, writeNow)
+  mutation rhm as shape RadioTick
+  action holdNow
+    send rhm = radioHold(rpulse.tick)
+  // The key moves with the clock tick as well: the start waits for the front page or for 2 s, and nothing else may move `rpulse.tick` meanwhile (a plain launch), so a hold still due is sent again each second.
+  derive holdKey = `${rpulse.tick}|${radioTick}`
+  task holdKick when rpulse.hold key=holdKey
+    after(1, holdNow)
 
   // "All of it" opens Up next to the whole run sheet ahead, in place.
   state radioAll = false
@@ -28,11 +40,11 @@ members Autoradio
 
   // remove | play | replay, arg the entry's id
   action radioDo(op: string, id: string)
-    send rpm = radioPageAct(op=op, arg=id, to="")
+    send rpm = radioPageAct(op, id, "")
   // A row dragged to a new place: the entry, and the entry it now sits above (none: the end). One `move` op.
   action radioDrop(item: string, before: option<string>)
     match before
       case some(b)
-        send rpm = radioPageAct(op="reorder", arg=item, to=b)
+        send rpm = radioPageAct("reorder", item, b)
       case none
-        send rpm = radioPageAct(op="reorder", arg=item, to="")
+        send rpm = radioPageAct("reorder", item, "")

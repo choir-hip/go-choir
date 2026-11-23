@@ -100,7 +100,6 @@
    "plain": "string",
    "textBlocks": "number",
    "markdown": "string",
-   "hearIt": "HearItRow[]",
    "editable": "bool",
    "source": "string",
    "docId": "string"
@@ -120,48 +119,6 @@
   }
  },
  "names": [
-  {
-   "source": "readerDoc",
-   "live": true,
-   "answers": "ReaderDoc",
-   "options": {
-    "address": "string"
-   },
-   "substitute": {
-    "default": {
-     "address": "",
-     "status": "loading",
-     "message": "",
-     "title": "",
-     "kicker": "",
-     "dek": "",
-     "byline": "",
-     "meta": "",
-     "kind": "document",
-     "disclosure": "",
-     "blocks": [],
-     "cites": [],
-     "sources": [],
-     "versions": [],
-     "related": [],
-     "revision": 0,
-     "latest": 0,
-     "newer": false,
-     "historical": false,
-     "revising": false,
-     "revisingNote": "",
-     "trajectory": "",
-     "permalink": "",
-     "plain": "",
-     "textBlocks": 0,
-     "markdown": "",
-     "hearIt": [],
-     "editable": false,
-     "source": "",
-     "docId": ""
-    }
-   }
-  },
   {
    "source": "readerFollow",
    "live": true,
@@ -196,49 +153,11 @@
    "answers": "ReaderAimInfo"
   },
   {
-   "send": "readerStop",
-   "options": {
-    "address": "string"
-   },
-   "answers": "ReaderAck"
-  },
-  {
-   "send": "readerRestore",
-   "options": {
-    "address": "string",
-    "version": "string"
-   },
-   "answers": "ReaderAck"
-  },
-  {
    "send": "readerOpenExternal",
    "options": {
     "url": "string"
    },
    "answers": "ReaderAck"
-  },
-  {
-   "send": "readerReload",
-   "options": {
-    "address": "string"
-   },
-   "answers": "ReaderAck"
-  },
-  {
-   "send": "readerPrefetch",
-   "options": {
-    "prev": "string",
-    "next": "string"
-   },
-   "answers": "ReaderAck"
-  },
-  {
-   "send": "readerFollowSet",
-   "options": {
-    "address": "string",
-    "spoken": "string"
-   },
-   "answers": "ReaderFollowInfo"
   }
  ],
  "views": {

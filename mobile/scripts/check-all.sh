@@ -35,6 +35,8 @@ echo "ok: cancel, aim, no hold wording, lens is theme data"
 # 3. the native boundary only falls
 python3 "$M/../scripts/check-autoradio-native-boundary" >/dev/null 2>&1 || { python3 "$M/../scripts/check-autoradio-native-boundary" 2>&1 | tail -4; fail "native boundary"; }
 echo "ok: native boundary"
+sh "$HERE/test-app-identity.sh" >"${TMPDIR:-/tmp}/check-all-identity.txt" 2>&1 || { grep FAIL "${TMPDIR:-/tmp}/check-all-identity.txt" | head -6; fail "app identity"; }
+echo "ok: app identity (default unchanged, variant reaches every script)"
 
 # 4. the Exact loop: contract build, the web host's tests, the whole bun suite
 if [ -z "${NOBUN:-}" ]; then

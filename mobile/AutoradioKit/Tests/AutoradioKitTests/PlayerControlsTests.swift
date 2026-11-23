@@ -73,47 +73,6 @@ final class StoryCursorTests: XCTestCase {
     }
 }
 
-// MARK: The DJ's candidates
-
-final class StretchCandidatesTests: XCTestCase {
-    func row(_ route: String, title: String = "Title", dek: String = "A dek.", importance: Int = 5, extra: [String: Any] = [:]) -> [String: Any] {
-        var o: [String: Any] = ["title": title, "dek": dek, "route": ["bare": route], "importance": importance, "latest_revision": 3, "version_count": 9]
-        for (k, v) in extra { o[k] = v }
-        return o
-    }
-    func testP19_OrderedByTheWeightAndStableAndTheVersionIsTheLatestRevision() {
-        let c = StretchCandidates.fromFront(["stories": [row("low", importance: 2), row("high", importance: 9), row("mid-a", importance: 5), row("mid-b", importance: 5)]])
-        XCTAssertEqual(c.map(\.route), ["high", "mid-a", "mid-b", "low"])
-        XCTAssertEqual(c.first?.version, 3); XCTAssertEqual(c.first?.ref, "pub:high@v3")
-    }
-    func testP20_AnythingTheServerWouldRefuseIsShapedOrDropped() {
-        let long = String(repeating: "é", count: 400)                                   // 800 bytes
-        let rows = [row("ok", title: long, dek: String(repeating: "d", count: 2000)), row("nodek", dek: "  "), row("a b"), row("a@b"), row("a#b"), row(""),
-                    row("dup"), row("dup"), row("two\nlines", title: "One\nline here"), row("notitle", title: " ")]
-        let c = StretchCandidates.fromFront(["stories": rows])
-        XCTAssertEqual(c.map(\.route), ["ok", "dup"])
-        XCTAssertLessThanOrEqual(c[0].title.utf8.count, 300); XCTAssertLessThanOrEqual(c[0].dek.utf8.count, 1000)
-        XCTAssertTrue(c[0].title.allSatisfy { $0 == "é" }, "cut on a character, not a byte")
-        let many = StretchCandidates.fromFront(["stories": (0..<55).map { row("r\($0)") }])
-        XCTAssertEqual(many.count, 40, "at most 40")
-    }
-    func testP20_TextOnlyOnTheFirstTenAndNeverOver8KB() {
-        let items = StretchCandidates.fromFront(["stories": (0..<14).map { row("r\($0)", importance: 10 - ($0 / 2)) }])
-        var texts: [String: String] = [:]
-        for c in items { texts[c.route] = String(repeating: "word ", count: 5000) + "\n\nSecond paragraph." }
-        let body = StretchCandidates.body(items, texts: texts)
-        XCTAssertEqual(body.count, 14)
-        XCTAssertEqual(body.prefix(10).filter { $0["text"] != nil }.count, 10)
-        XCTAssertEqual(body.suffix(4).filter { $0["text"] != nil }.count, 0)
-        for b in body.prefix(10) { XCTAssertLessThanOrEqual((b["text"] as? String ?? "").utf8.count, 8 * 1024) }
-        // a short story keeps its paragraphs and loses its markup
-        let one = StretchCandidates.body([items[0]], texts: [items[0].route: "# Heading\n\nFirst **bold** [link](http://x).\n\nSecond."])
-        XCTAssertEqual(one[0]["text"] as? String, "Heading\n\nFirst bold link.\n\nSecond.")
-        // a candidate with no text still goes
-        XCTAssertNil(StretchCandidates.body([items[0]], texts: [:])[0]["text"])
-    }
-}
-
 // MARK: The request and the app
 
 final class PlayerAppTests: XCTestCase {
@@ -153,24 +112,7 @@ final class PlayerAppTests: XCTestCase {
         func speak(_ text: AsyncStream<String>) -> AsyncThrowingStream<AudioFrame, Error> { AsyncThrowingStream { $0.finish() } }
     }
 
-    func makeApp(voice: String = "stub-voice") async -> (ChoirApp, LabRuntime) {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pc-\(UUID().uuidString)")
-        let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
-        rt.registry.register(.voice, StubVoice.self) { StubVoice($0) }
-        rt.registry.register(.voice, LongVoice.self) { LongVoice($0) }
-        rt.registry.register(.voice, EmptyVoice.self) { EmptyVoice($0) }
-        rt.setStage(.voice, id: voice)
-        await rt.start(virtual: true)
-        rt.player.pause()
-        let app = ChoirApp(runtime: rt, keys: InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"]), openURL: nil)
-        app.stretchSource = { NoStretch() }          // these tests are about the paper's list: the programme route has nothing to say
-        await app.loadStories()
-        return (app, rt)
-    }
+
     func resolved() -> [String] { StubProtocol.seen.filter { $0.path == "/api/platform/publications/resolve" }.compactMap { $0.query["route"] } }
 }
 
-/// A programme route with no stretch (404): Play falls to the story plain, and asks for nothing else.
-struct NoStretch: StretchSource {
-    func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> { throw ChoirError.empty("no stretch") }
-}

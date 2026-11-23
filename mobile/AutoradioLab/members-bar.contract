@@ -1,13 +1,14 @@
 // Lane members file (bar): the radio view, the focus of the bar's field, the player's pull-down and jumps.
 // Owned by the bar lane. Source and send names live in exact-package/interface/bar.json.
-use radioView, radioJump, radioSpeed, radioStory from "@choir/autoradio"
-use RadioInfo from "@choir/autoradio"
+use radioView, radioJump, radioSpeed from "@choir/autoradio"
+use RadioInfo, SettingsAck from "@choir/autoradio"
 use StackVp from "./ui.contract"
 
 members Autoradio
   // The radio view: what plays, the block's sentences, the programme's items, the yield level, the talk mode.
   resource ri = radioView() as shape RadioInfo else empty()
   mutation rm as shape RadioInfo
+  mutation rm2 as shape SettingsAck refreshes rpulse
 
   // The bar's field has the keyboard: the bar grows, the pages button gives way and Send replaces the voice button.
   state barFocused = false
@@ -16,7 +17,7 @@ members Autoradio
   action barBlur
     barFocused = false
   // Typing is the field focused with words in it (the aim line then shows above, because the placeholder is gone).
-  derive typing = barFocused and ask != "" and bi.state == "idle"
+  derive typing = barFocused and ask != ""
 
   action jumpTo(index: number)
     send rm = radioJump(index=`${index}`)
@@ -26,18 +27,21 @@ members Autoradio
   // Next and previous STORY (the module answers with the new RadioInfo): the next in the list the story came from, the previous within its
   // first 3 seconds and otherwise the start of this one; in a programme the next and previous segment.
   action nextStory
-    send rm = radioStory(move="next")
+    send rm2 = radioMove("next")
   action previousStory
-    send rm = radioStory(move="previous")
+    send rm2 = radioMove("previous")
 
   // The speed slider, 0.5 to 3. `speedLive` is what the finger (or a step) last chose, 0 until it is touched; until then the speed is the
   // radio's own (the saved one). The finger's move is relative: a drag across the track's width is the whole range. Sent when it lifts.
   resource spVp = exactViewport() as shape StackVp
+  // `speedBase` is the radio's speed when the finger chose: if the radio's speed changes after that (a voice command, the saved one reapplied) the control follows the radio again.
   state speedLive = 0
-  derive speedNow = speedLive > 0 ? speedLive : ri.speedValue
+  state speedBase = 0
+  derive speedNow = speedLive > 0 and speedBase == ri.speedValue ? speedLive : ri.speedValue
   derive speedShown = floor(speedNow * 20 + 0.5) / 20
   derive speedPct = floor((speedNow - 0.5) / 2.5 * 100)
   action speedMove(dx: number, dy: number)
+    speedBase = ri.speedValue
     speedLive = min(max(speedNow + dx / max(spVp.width - 250, 1) * 2.5, 0.5), 3)
   action speedEnd(vx: number, vy: number)
     if speedLive > 0
@@ -46,8 +50,10 @@ members Autoradio
       send rm = radioSpeed(speed=`${v}`)
   action speedNudge(d: number)
     let v = min(max(floor((speedNow + d) * 20 + 0.5) / 20, 0.5), 3)
+    speedBase = ri.speedValue
     speedLive = v
     send rm = radioSpeed(speed=`${v}`)
   action speedReset
+    speedBase = ri.speedValue
     speedLive = 1
     send rm = radioSpeed(speed="1")

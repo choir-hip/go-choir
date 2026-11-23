@@ -26,7 +26,9 @@ export const OPENING_WINDOW_SECONDS = 30 * 60;
 export const SESSION_RETRY_DELAYS = [1, 2, 4, 8, 15] as const;
 export const retryDelay = (attempt: number): number => SESSION_RETRY_DELAYS[Math.min(Math.max(attempt, 1) - 1, SESSION_RETRY_DELAYS.length - 1)];
 
-export type Command = { kind: 'start'; entry: Entry; press: boolean } | { kind: 'stop' };
+/** How long a message that is not a failure to speak stays on the page (the bar holds a message for four). */
+export const MESSAGE_SECONDS = 8;
+export type Command = { kind: 'start'; entry: Entry; press: boolean } | { kind: 'stop'; gen: number };
 export type Words = { title: string; paragraphs: string[] };
 
 /** What the deck driver does to start an entry: the decision, as data. */
@@ -100,6 +102,12 @@ export class Director {
   wants = false;
   /** A plain line about the last thing that could not play ("" when nothing is wrong). */
   message = '';
+  /** When a transient message was set (device ms; 0: not transient). A message that is not a failure to speak goes by itself after MESSAGE_SECONDS: `visibleMessage`. */
+  messageAt = 0;
+  visibleMessage(): string {
+    if (this.message !== '' && this.messageAt > 0) { const t = this.store.now().getTime(); if (t > 0 && (t - this.messageAt) / 1000 > MESSAGE_SECONDS) { this.message = ''; this.messageAt = 0; } }
+    return this.message;
+  }
   /** Which start this is; the deck's ends belong to the start they report. */
   generation = 0;
   /** The phone's opening of this listening, and what became of desk entries the sheet did not take. */
@@ -178,7 +186,7 @@ export class Director {
   /** "Queue this": after what the listener placed before it. */
   queue(e: Entry, words?: Words): void { if (words) this.provided.set(e.id, words); this.placed(this.store.place(e, 'queued')); }
   /** An address too long for the server is not placed, and the listener is told so. */
-  private placed(r: { dropped?: string }): void { if (r.dropped === 'ref_too_long') { this.message = 'That address is too long to add.'; this.changed(); } }
+  private placed(r: { dropped?: string }): void { if (r.dropped === 'ref_too_long') { this.message = 'That address is too long to add.'; this.messageAt = this.store.now().getTime(); this.changed(); } }
   remove(index: number): void { const a = this.store.ahead(index + 1); if (index >= 0 && index < a.length) this.store.remove(a[index].id); }
   /** Tap an item in Up next: play it now. The entries before it stay ahead. */
   playUpcoming(index: number): void {
@@ -222,7 +230,7 @@ export class Director {
     }
     this.store.clearAhead('phone', 'signed out');
     this.playingId = undefined; this.playingDocument = undefined;
-    this.onCommand({ kind: 'stop' });
+    this.onCommand({ kind: 'stop', gen: this.generation });
   }
 
   /** The radio is on and nothing is on air: start what is next. */
@@ -314,11 +322,11 @@ export class Director {
         source: { ref: old.source?.ref ?? 'episode:x', label: place.show, url, start: Math.max(place.start, place.elapsed) } };
     } else if (fromPhone && rest) {
       // A message, book or file: the rest of the passage is held here. The continuation names the same address with no words.
-      const id = 'c-' + mintId('').slice(0, 8);
+      const id = 'c-' + mintId('').slice(0, 24);
       this.remembered = { id, kind: old.kind === 'mail' ? 'mail' : 'page', placed_by: 'phone', state: 'ahead', title: old.title, est_seconds: estimateSeconds(rest), revision: 0, source: old.source };
       this.provided.set(id, { title: old.title, paragraphs: [rest] });
     } else if (rest) {
-      this.remembered = { id: 'c-' + mintId('').slice(0, 8), kind: 'story', placed_by: 'phone', state: 'ahead', title: old.title, text: rest, est_seconds: estimateSeconds(rest), revision: 0, source: old.source, cites: old.cites };
+      this.remembered = { id: 'c-' + mintId('').slice(0, 24), kind: 'story', placed_by: 'phone', state: 'ahead', title: old.title, text: rest, est_seconds: estimateSeconds(rest), revision: 0, source: old.source, cites: old.cites };
     }
   }
   /** The listener asked for something else: what was kept is not wanted back. */
@@ -338,7 +346,7 @@ export class Director {
     if (this.playingId !== undefined) {          // what was on air was skipped, cut or taken off: its sound stops
       this.rememberPlace(this.playingId, this.nextToAir()?.kind);
       this.playingId = undefined; this.playingDocument = undefined; this.generation += 1; this.pendingEnd = undefined;
-      this.onCommand({ kind: 'stop' });
+      this.onCommand({ kind: 'stop', gen: this.generation });
     }
     // The answers are over (nothing on air, the next is not an answer): what they cut goes back on air, from the start of its sentence.
     if (this.remembered && this.playingId === undefined && this.nextToAir()?.kind !== 'answer') {
@@ -357,12 +365,12 @@ export class Director {
   // ---- reports from the deck driver ----
 
   /** The start of the playing entry made its document (the deck's id for what it is speaking). */
-  started(entryId: string, document?: string): void { if (entryId === this.playingId) { this.playingDocument = document; this.silent = 0; this.message = ''; this.changed(); } }
+  started(entryId: string, document?: string): void { if (entryId === this.playingId) { this.playingDocument = document; this.silent = 0; this.message = ''; this.messageAt = 0; this.changed(); } }
 
   /** What cannot play is skipped, once, and the radio goes on. Two in a row that made no sound stop it. */
   failedToStart(id: string, why: string): void {
     this.silent += 1;
-    if (this.silent >= 2 && this.wants) { this.wants = false; if (this.message === '') this.message = 'The radio could not play the next entries. Tap play to try again.'; }
+    if (this.silent >= 2 && this.wants) { this.wants = false; if (this.message === '') { this.message = 'The radio could not play the next entries. Tap play to try again.'; this.messageAt = 0; } }
     this.finish(id, false, undefined, 'failed to start: ' + (why || this.message));
   }
 
@@ -386,7 +394,7 @@ export class Director {
     if (anyPlayed) this.silent = 0;
     else {
       this.silent += 1;
-      this.message = `Can’t speak: ${failure || 'the voice made no sound'}`;
+      this.message = `Can’t speak: ${failure || 'the voice made no sound'}`; this.messageAt = 0;
       if (this.silent >= 2) this.wants = false;
     }
     this.finish(eid, anyPlayed, report);

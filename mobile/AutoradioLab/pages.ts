@@ -1,9 +1,10 @@
 // The deck's open pages, in shared code (a port of the Swift OpenPages, Pages.swift): which pages are open, which is current, open / close / focus / pin / reopen, and the file that keeps
-// them between launches. It is what lets the deck mount a page on a host with no native package (Android), and what iOS will read once the Swift set goes. The set is addresses and
+// them between launches. It is the one open-page set on every host (the Swift OpenPages is gone): the deck, the launcher (cards.ts) and the voice, which is handed the pages as facts (`mirror`). The set is addresses and
 // titles only (never resumed work); the Autoradio page (`radio:`) is always open and cannot be closed; the pile keeps the 30 most recent unpinned pages; an address is open once.
 // Sign-out: only the radio stays and the file goes (account.ts wipes it). Logs carry counts only.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, writeCurrent } from './api.ts';
+import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
+import { note as noteRecent } from './recent-pages.ts';
 
 export const PAGES_FILE = 'app:/data/open-pages-shared.json';
 export const RADIO = 'radio:';
@@ -23,7 +24,7 @@ export function kindOf(address: string): string {
   switch (i < 0 ? address : address.slice(0, i)) {
     case 'radio': return 'radio'; case 'notebook': return 'notebook'; case 'paper': return 'paper'; case 'pub': case 'texture': return 'reader';
     case 'textures': return 'textures'; case 'file': return 'file'; case 'mail': return 'mail'; case 'mailbox': return 'mailbox'; case 'activity': return 'activity';
-    case 'settings': return 'settings'; case 'lab': return 'lab'; case 'books': return 'books'; case 'doc': return 'doc'; case 'conversation': return 'conversation';
+    case 'settings': return 'settings'; case 'lab': return 'lab'; case 'imported': return 'imported'; case 'doc': return 'doc'; case 'conversation': return 'conversation';
     case 'podcasts': case 'podcast': return 'podcast'; case 'onboarding': return 'onboarding'; default: return 'unknown';
   }
 }
@@ -33,7 +34,7 @@ export function defaultTitle(address: string): string {
     case 'radio:': return 'Autoradio'; case 'notebook:': return 'My notebook'; case 'paper:front': return 'Paper'; case 'textures:': return 'Textures'; case 'activity:': return 'Activity';
     case 'settings:': case 'settings:root': return 'Settings'; case 'lab:components': return 'Components'; case 'lab:trace': return 'Trace'; case 'conversation:': return 'Conversation';
     case 'onboarding:setup': return 'Make it yours'; case 'onboarding:edit': return 'My edition'; case 'mailbox:inbox': return 'Mail'; case 'podcasts:': return 'Podcasts';
-    case 'file:/': case 'file:': return 'Files'; case 'books:': return 'Reader';
+    case 'file:/': case 'file:': return 'Files'; case 'imported:': return 'Imported documents';
   }
   switch (kindOf(address)) {
     case 'paper': return 'Paper · ' + rest.replace('section/', '');
@@ -129,8 +130,32 @@ function view(): PageList {
   return { rows, top: top?.address ?? '', topKind: top?.kind ?? '', topTitle: top?.title ?? '', count: pages.length };
 }
 
-/** Read the set. */
-export async function pagesView(storage: Storage | undefined): Promise<PageList> { await load(storage); return view(); }
+/** The voice's copy: native keeps no set, only the pages as FACTS (OpenPageFacts, LocalAck.swift): which page is in front (the acknowledgement names it, the local model warms on it, a page left
+ * posts what was typed on it) and the list the retrieval ask carries. Pushed through the one narrow app-module op `pagesMirror` after every change, with the account generation the change began under:
+ * native refuses a push older than one it has seen. Best effort: no module (Android, the web) or a failed call loses nothing, the set is this file's. */
+async function mirror(gen: number): Promise<void> {
+  const raw = nativeLater();
+  if (!raw) return;
+  const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
+  const v = view();
+  try { await later({ op: 'pagesMirror', gen, pages: v.rows.map((r) => ({ address: r.address, title: r.title, kind: r.kind })) }); } catch { /* the voice keeps the last facts */ }
+}
+let mirrored = false;
+
+/** Read the set. The first read of a launch also hands the voice its facts. */
+export async function pagesView(storage: Storage | undefined): Promise<PageList> {
+  const gen = accountGeneration();
+  await load(storage);
+  if (!mirrored && gen === accountGeneration()) { mirrored = true; await mirror(gen); }
+  return view();
+}
+
+/** A page a native module asked to open (`pageRequest`: an episode opened from the playing bar): opened once per request id, then the new view. An id of 0 asks nothing. */
+let lastRequest = 0;
+export async function pageRequested(storage: Storage | undefined, id: number, address: string, title: string): Promise<PageList> {
+  if (id > 0 && id !== lastRequest && address !== '') { lastRequest = id; return pagesOpen(storage, address, title); }
+  return pagesView(storage);
+}
 
 export async function pagesOpen(storage: Storage | undefined, rawAddress: string, title: string): Promise<PageList> {
   const gen = accountGeneration();
@@ -139,13 +164,15 @@ export async function pagesOpen(storage: Storage | undefined, rawAddress: string
   const address = canonical(rawAddress);
   openLocked({ address, kind: kindOf(address), title: title !== '' ? title : defaultTitle(address), opener: recency[0] ?? '', pinned: false });
   await save(storage, gen);
+  await noteRecent(storage, 'open', address);                              // the launcher's Recent rows (recent-pages.ts)
+  await mirror(gen);
   return view();
 }
 export async function pagesFocus(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
   const address = canonical(rawAddress);
   if (pages.some((x) => x.address === address)) focusLocked(address);
-  await save(storage, gen); return view();
+  await save(storage, gen); await mirror(gen); return view();
 }
 /** Close a page. When it was in front, its opener (if still open) comes forward, else the next most recent. */
 export async function pagesClose(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
@@ -156,9 +183,10 @@ export async function pagesClose(storage: Storage | undefined, rawAddress: strin
     const wasFront = recency[0] === address;
     pages = pages.filter((x) => x.address !== address); recency = recency.filter((a) => a !== address);
     lastClosed = p;
+    await noteRecent(storage, 'close', address);
     if (wasFront && p.opener !== '' && pages.some((x) => x.address === p.opener)) focusLocked(p.opener);
   }
-  await save(storage, gen); return view();
+  await save(storage, gen); await mirror(gen); return view();
 }
 export async function pagesReopen(storage: Storage | undefined): Promise<PageList> {
   await load(storage);
@@ -167,15 +195,16 @@ export async function pagesReopen(storage: Storage | undefined): Promise<PageLis
   const gen = accountGeneration();
   openLocked({ ...p });                                                    // the opener it had is kept (the Swift reopen does the same)
   await save(storage, gen);
+  await mirror(gen);
   return view();
 }
 export async function pagesPin(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
   const address = canonical(rawAddress);
   const p = pages.find((x) => x.address === address); if (p) p.pinned = !p.pinned;
-  await save(storage, gen); return view();
+  await save(storage, gen); await mirror(gen); return view();
 }
 
 /** Sign-out and tests: only the radio stays; the file is removed by the account wipe. */
-export function forget(): void { pages = []; recency = []; lastClosed = null; loaded = false; loading = null; epoch += 1; }
+export function forget(): void { pages = []; recency = []; lastClosed = null; loaded = false; loading = null; epoch += 1; mirrored = false; lastRequest = 0; }
 export async function wipePages(storage: Storage | undefined): Promise<void> { forget(); if (!storage) return; try { await storage.fs.rm(PAGES_FILE); } catch { /* absent */ } }

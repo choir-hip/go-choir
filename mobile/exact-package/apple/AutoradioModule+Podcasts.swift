@@ -18,16 +18,6 @@ struct PodcastPageSource: PageSource {
 extension AutoradioModule {
     func registerPodcasts() {
         pageSources.register(PodcastPageSource())
-        // "Open episode" from a clip or the playing bar opens that episode's page at the clip's time (the address carries the audio and the start).
-        Task { @MainActor in
-            PodcastBridge.open = { [weak self] episodeId, feedURL, enclosureURL, at in
-                guard let feedURL else { return }
-                let enclosure = PodcastKey.webURL(enclosureURL.absoluteString)
-                let address = PodcastKey.episodeAddress(feed: feedURL.absoluteString, id: episodeId ?? enclosure, enclosure: enclosure, at: at)   // no guid: the enclosure is the id (the feed's own rule)
-                DispatchQueue.main.async { self?.pages.open(address, title: "Episode") }
-            }
-        }
-
         handle("podcastNow") { [unowned self] _, reply in reply(self.json(self.podcastNowView())) }
         // While a podcast plays its playhead moves: the pages' playhead argument is asked again every second, only then.
         DispatchQueue.main.async { [weak self] in
@@ -44,13 +34,13 @@ extension AutoradioModule {
             let start = (args["start"] as? NSNumber)?.doubleValue ?? 0
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if op == "keep" { RunSheetPlayer.shared.keepListening(); reply(self.json(PodDone())); return }
+                if op == "keep" { Deck.shared.engine?.clearRemoteEnd(); reply(self.json(PodDone())); return }
                 guard let url = URL(string: urlString), PodcastKey.webURL(urlString) != "" else { reply(self.json(PodDone(status: "error", message: "This episode has no audio to play."))); return }
                 let entry = RunSheetEntry.audio(RunSheetAudio(url: url, title: title.isEmpty ? "Episode" : title, show: show, start: start > 0 ? start : nil, end: nil, episodeId: id.isEmpty ? nil : id))
-                if op == "queue" { RunSheetPlayer.shared.queue(entry) }
+                if op == "queue" { RadioBridge.shared.place(entry, mode: "add") }
                 else {
                     if !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
-                    RunSheetPlayer.shared.playNow(entry)
+                    RadioBridge.shared.place(entry, mode: "now")
                 }
                 self.touch(["queueView", "radioView", "barFacts", "podcastNow"], now: true)
                 reply(self.json(PodDone()))
@@ -61,9 +51,9 @@ extension AutoradioModule {
     /// What the queue's engine is playing, when it is a podcast (its episode id is a podcast key); empty otherwise.
     func podcastNowView() -> PodNowView {
         onMainThread {
-            guard let a = RunSheetPlayer.shared.audio, RunSheetPlayer.shared.isRemote, let id = a.episodeId, PodcastKey.parseEpisode(id) != nil else { return PodNowView() }
-            let p = RunSheetPlayer.shared.remotePosition()
-            return PodNowView(episodeId: id, clip: a.end != nil, start: a.start ?? 0, elapsed: p?.elapsed ?? 0, duration: p?.duration ?? 0)
+            guard Deck.shared.current?.kind == "audio", let a = RadioBridge.shared.onAirEntry()?.audioSpec, let id = a.episodeId, PodcastKey.parseEpisode(id) != nil else { return PodNowView() }
+            let p = Deck.shared.snapshot()
+            return PodNowView(episodeId: id, clip: a.end != nil, start: a.start ?? 0, elapsed: p.seconds, duration: p.duration)
         }
     }
 }

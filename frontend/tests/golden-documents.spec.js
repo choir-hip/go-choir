@@ -11,8 +11,8 @@
  * a [n] token for each citation, the styled spans, each citation's number,
  * title and quote, an embed's kind and label, a table's cells.
  *
- * The native side (AutoradioKit GoldenDocumentsTests) writes the same form
- * from TextureDocParser's ReaderDoc. scripts/golden-docs diffs the two.
+ * The phone's side is mobile/AutoradioLab/reader-parse.test.ts (P13), which projects the same
+ * form from reader-parse.ts and requires it to equal expected/. scripts/golden-docs diffs the web with expected/.
  *
  * Ways it can fail, written before the code:
  *   1. the reader draws nothing for a document (a body the renderer refuses

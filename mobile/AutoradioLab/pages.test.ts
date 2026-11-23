@@ -9,7 +9,7 @@
 //  P13 a close then reopen keeps the opener (as the Swift reopen does).
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as P from './pages.ts';
-import { nextGeneration, resetSeam } from './api.ts';
+import { bindNative, nextGeneration, resetSeam } from './api.ts';
 
 const files = new Map<string, Uint8Array>();
 const storage = {
@@ -151,5 +151,33 @@ describe('round 6', () => {
     const slow = { fs: { readFile: async () => { await gate; throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
     const p = P.pagesOpen(slow, 'paper:front', ''); await new Promise((r) => setTimeout(r, 10)); api.nextGeneration(); release(); const v = await p;
     expect(addrs(v)).not.toContain('paper:front'); expect(files.has(P.PAGES_FILE)).toBe(false);
+  });
+});
+
+describe('the voice\'s facts and a native request (P14, P15)', () => {
+  const calls: Record<string, unknown>[] = [];
+  const native = { available: true, later: async (r: Record<string, unknown>) => { calls.push(r); return { ok: true }; } };
+  beforeEach(() => { calls.length = 0; bindNative(native as never); });
+  test('P14 every change hands the voice the pages as facts, with the generation the change began under; the first read does too, once', async () => {
+    await P.pagesView(storage); await P.pagesView(storage);
+    expect(calls.filter((c) => c.op === 'pagesMirror').length).toBe(1);
+    await P.pagesOpen(storage, 'pub:a', 'A');
+    const last = calls[calls.length - 1] as { op: string; gen: number; pages: { address: string; title: string; kind: string }[] };
+    expect(last.op).toBe('pagesMirror'); expect(last.pages.map((x) => x.address)).toEqual(['pub:a', 'radio:']); expect(last.pages[0]).toEqual({ address: 'pub:a', title: 'A', kind: 'reader' });
+    nextGeneration();
+    await P.pagesClose(storage, 'pub:a');
+    expect((calls[calls.length - 1] as { gen: number }).gen).toBe(1);
+  });
+  test('P14 no native module: the set still works and nothing is sent', async () => {
+    bindNative(undefined);
+    expect(addrs(await P.pagesOpen(storage, 'pub:a', 'A'))).toEqual(['pub:a', 'radio:']);
+    expect(calls.length).toBe(0);
+  });
+  test('P15 a native request opens its page once per id; an older or empty request asks nothing', async () => {
+    expect(addrs(await P.pageRequested(storage, 0, '', ''))).toEqual(['radio:']);
+    expect(addrs(await P.pageRequested(storage, 1, 'podcast:episode/x', 'Episode'))).toEqual(['podcast:episode/x', 'radio:']);
+    await P.pagesClose(storage, 'podcast:episode/x');
+    expect(addrs(await P.pageRequested(storage, 1, 'podcast:episode/x', 'Episode'))).toEqual(['radio:']);       // the same id again: not reopened
+    expect(addrs(await P.pageRequested(storage, 2, 'podcast:episode/y', 'Episode'))).toEqual(['podcast:episode/y', 'radio:']);
   });
 });

@@ -1,11 +1,12 @@
 // My notebook (notebook:). Station L6, docs/design/autoradio-learned-document-2026-11-17.md section 7. What Autoradio has been told and has learned about the
 // listener: the notebook's lines (the document is a Texture; Edit opens it in the Texture reader, which edits it), the scorecard from the server's learning
 // route (or "not available yet": never a made-up number), the forecasts behind a line when it is tapped, and the plain list of everything held about the
-// listener and where each is read. The model is the Kit's (Notebook.swift).
+// listener and where each is read. The model is notebook.ts (shared code).
 // testIds: notebook-page, notebook-title, notebook-edit, notebook-refresh, notebook-doc-notice, notebook-section-<key>, notebook-line-<id>, notebook-line-tag-<id>,
 // notebook-score-state, notebook-score-<n>, notebook-bykind-<n>, notebook-noverdict, notebook-behind, notebook-behind-text, notebook-evidence-<n>, notebook-evidence-note,
 // notebook-steer, notebook-held, notebook-held-<n>.
-use Theme, NotebookPageInfo from "@choir/autoradio"
+use Theme from "@choir/autoradio"
+use NotebookPageInfo from "./notebook-types.contract"
 use AccountView from "./account-state-types.contract"
 use ToolScroll, Btn, SectionHeader, RowRule from "./ui.contract"
 

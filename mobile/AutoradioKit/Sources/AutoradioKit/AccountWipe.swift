@@ -2,12 +2,12 @@ import Foundation
 
 // One wipe for everything of the account that sits on the phone. Sign-out calls `run()` once; each store has a `wipe()` (memory and files) and is
 // registered here by name. The order of sign-out (ChoirApp.signOut):
-//  1. playback stops; the player reports the entry on air as `left` (a pending op);
-//  2. the run sheet gets up to three seconds to post its pending ops with the OLD key still held (RunSheetStore.settlePending); whatever is not
-//     answered by then is DROPPED by the wipe, never sent later: pending ops are never posted under a later account;
+//  1. playback stops (shared code's run sheet reports the entry on air as `left`);
+//  2. the run sheet (shared code's store and poster, radio-runtime.ts) posts its pending ops with the OLD key still held, up to three seconds, and tells native when it is done
+//     (`RadioBridge.waitSignedOut`, five seconds at most); whatever is not answered by then is DROPPED by the wipe, never sent later, and an answer that arrives after the wipe
+//     is the old account's and is thrown away: pending ops are never posted, and no sheet is written, under a later account;
 //  3. the local key goes, then this wipe runs (ChoirSignIn.signOut);
 //  4. the revoke is sent in the background with the old key held only for that one call.
-// The run sheet poster is dropped by the wipe and rebuilt at the next sign-in (ChoirApp).
 
 public final class AccountWipe: @unchecked Sendable {
     private let lock = NSLock()
@@ -39,63 +39,68 @@ public final class AccountWipe: @unchecked Sendable {
     @MainActor
     func registerStandard(
         turnHistory: TurnHistory = .shared,
-        notebookCache: NotebookCache = .shared,
-        topicsFile: URL? = EditionText.topicsFile,
+        legacyNotebookCache: URL? = TakeFiles.url("notebook-cache.md"),
+        legacyTopicsFile: URL? = TakeFiles.url("edition-topics.json"),
         topicsMarker: URL? = TakeFiles.url("notebook-topics-written"),
         notebook: NotebookStore = .shared,
-        steer: SteerQueue = SteerQueue.shared,
-        takeOwn: TakeOwn = .shared,
-        takeMutes: TakeMutes = .shared,
-        takeStore: TakeStore = .shared,
         legacyTakeFiles: [URL?] = TakeFiles.legacy,
         tempDirectory: URL = FileManager.default.temporaryDirectory,
-        runSheet: RunSheetStore = .shared,
-        openingCache: OpeningCache? = nil,
         clips: ClipLocator = .shared,
         texture: TextureEditor = .shared,
         environment: ChoirEnvironment = .shared,
-        content: ContentStore = .shared,
-        corpus: SavedCorpus = .shared,
         mailReading: MailReading = .shared,
         conversation: Conversation = .shared,
         acks: AckHistory = .shared,
         bar: BarTracker = .shared,
-        reader: ReaderStore = .shared,
+        reader: HeldPages = .shared,
         keptTurns: KeptTurnStore? = nil,
         voice: SpeakerGate = .shared,
         heldRest: HeldRest = .shared,
-        deck: Deck = .shared
+        deck: Deck = .shared,
+        oldBuildFiles: [URL] = AccountWipe.oldBuildFiles()
     ) {
         register("turn-history") { turnHistory.clear() }
         register("notebook") {
-            notebookCache.wipe()
-            if let f = topicsFile { try? FileManager.default.removeItem(at: f) }
+            if let f = legacyNotebookCache { try? FileManager.default.removeItem(at: f) }      // the cache of the notebook text an earlier build kept: nothing reads it now
+            if let f = legacyTopicsFile { try? FileManager.default.removeItem(at: f) }       // the old build's picks file: nothing writes or reads it now; this wipe is the only thing that removes it
             if let f = topicsMarker { try? FileManager.default.removeItem(at: f) }
             await MainActor.run { notebook.wipe() }
         }
-        register("steer") { steer.wipe() }
         register("takes") {
             await MainActor.run { TakeSession.live?.discard() }      // the account CHANGED path has no signOut() above it
-            TakeMirror.invalidate(); takeOwn.wipe(); takeMutes.wipe(); takeStore.wipe()      // first: a push of the old account landing from here on is refused
-            for u in legacyTakeFiles { if let u { try? FileManager.default.removeItem(at: u) } }      // the pre-release build's files (never read by this build) go with the account that is leaving
+            for u in legacyTakeFiles { if let u { try? FileManager.default.removeItem(at: u) } }      // the files earlier builds left (never read by this build) go with the account that is leaving
             Self.removeTakeScratch(in: tempDirectory)
         }
-        register("run-sheet") { await MainActor.run { runSheet.wipe() } }
+        register("radio-bridge") { RadioBridge.shared.wipe() }       // the run sheet itself is shared code's (radio-bridge.ts wipeRadio, registered in account.ts)
         register("deck") { await MainActor.run { deck.wipe() } }       // the item on air, the held items and the reason too, not only the journal
-        if let openingCache { register("opening") { openingCache.wipe() } }
         register("clips") { clips.wipe() }
         // "podcasts": the library and cached feeds are files of shared code now; podcast.ts `wipe(storage)` is what sign-out must call (left to the lead).
         register("texture") { await MainActor.run { texture.wipe() } }
         register("playing") { environment.wipePlaying() }
         register("mail-reading") { mailReading.wipe() }
-        register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe(); EditionSetupSession.shared?.wipe(); EditionSetupSession.shared = nil }
+        register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe() }
+        // The native copy of the edition picks and the words waiting for shared code (the file itself is shared code's, wiped by account.ts).
+        register("edition-picks") { EditionPicksMirror.shared.reset(); EditionTalk.shared.clear() }
         register("reader") { reader.wipe() }
         // The enrolled voice is app-private (Application Support/MikeVoice, not a system setting) and the listener's own: it goes at sign-out.
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
         register("held-rest") { heldRest.wipe() }
-        register("content") { ContentSync.wipeAccount(store: content, corpus: corpus) }
+        register("old-build-files") { AccountWipe.removeFiles(oldBuildFiles) }      // a phone upgraded from the Swift run sheet may still hold them (removed at boot too)
+        register("retrieval-bridge") { RetrievalBridge.shared.clear() }     // the last turn's record and a pending ask belong to the account that left
     }
+
+    /// The files of the Swift build's run sheet, steer queue, written-ahead opening (audio and text) and front titles. This build never reads or writes them (shared code keeps its own under `app:/data`),
+    /// and the owner's rule is that a page moved to Exact carries nothing over: no migration. They hold the old account's text, so they are removed once at boot and again at sign-out.
+    public static func oldBuildFiles(support: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Autoradio"),
+                                     caches: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first) -> [URL] {
+        var out: [URL] = []
+        if let support { out += ["runsheet.json", "steer-queue.json", "front-titles.json"].map { support.appendingPathComponent($0) } }
+        if let caches { out.append(caches.appendingPathComponent("AutoradioOpening", isDirectory: true)) }
+        return out
+    }
+    /// Boot: remove the dead paths if present.
+    public static func removeOldBuildFiles(support: URL?, caches: URL?) { removeFiles(oldBuildFiles(support: support, caches: caches)) }
 
     /// For the app target's stores that are files (one-line registrations in AutoradioModule): delete these paths.
     public static func removeFiles(_ urls: [URL]) { for u in urls { try? FileManager.default.removeItem(at: u) } }

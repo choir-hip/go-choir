@@ -11,11 +11,13 @@ members Autoradio
   resource cv = conversationInfo(cvraw) as shape ConversationInfo else empty()
   resource voicep = voiceProfile() as shape VoiceProfile else empty()
   mutation tk as shape SettingsAck
-  // The answer card's buttons (bar.contract): ask the same words again, hide the card, stop the turn.
+  // The answer card's buttons (bar.contract): ask the same words again, hide the card (shared code), stop the turn.
   action answerRetry(id: string)
     send tk = answerAction(action="retry", id=id)
-  action answerDismiss
-    send tk = answerAction(action="dismiss", id=bi.answerId)
+  // Close is shared code's (bar.ts `dismissAnswer`): the id of the entry the card shows is remembered there, so no later turn can bring that card back. Native keeps no dismissal.
+  mutation dm as shape SettingsAck refreshes bi
+  action answerDismiss(id: string)
+    send dm = answerDismissShared(id)
   action answerCancel
     send tk = answerAction(action="cancel", id="")
   // Settings, Listening: the learned voice (kept on this phone only).

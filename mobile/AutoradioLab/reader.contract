@@ -13,6 +13,7 @@ use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
 use ReaderFollowInfo, ReaderAimInfo from "@choir/autoradio"
 use PageScroll, Card, Layer, Btn, BarClear, RowRule from "./ui.contract"
 use ClipRow from "./clips.contract"   // lane autoradio-joins
+use ClipRows from "./podcast-types.contract"
 
 // Citations drawn as atom pills in the Markdown experiment (no control reaches it now). Atom styles are literals, not tokens.
 atom citation link="cite:" color="light-dark(#7a0a57, #ff9bd6)" padding-inline="3px"
@@ -359,6 +360,7 @@ component ReaderBody
     toggleCite: action
     listen: action
     clipNote: string
+    hearClips: ClipRows
   props
     address: string
   resource vp = exactViewport() as shape ReaderViewport
@@ -409,10 +411,10 @@ component ReaderBody
               for b in rdoc.blocks key=b.id
                 BlockView(b=b, address=address, size=size, lh=lh, sideOn=sideOn)
             // lane autoradio-joins: podcast clips cut from this story; nothing is drawn when there are none
-            if rdoc.hearIt.length > 0
+            if hearClips.rows.length > 0
               column testId="reader-hear-it" width="100%" margin-top=remv(1.4) gap=0
                 text "Hear it" role="heading" aria-level=2 font-family=th.fontHead font-size=remv(1.1875 * k) font-weight=600 color=th.fg margin-bottom=2
-                for r, i in rdoc.hearIt key=r.clipID
+                for r, i in hearClips.rows key=r.clipID
                   if i > 0
                     RowRule(indent=0)
                   ClipRow(r=r, byStory=false, pad=0)

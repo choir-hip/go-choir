@@ -25,33 +25,5 @@
    "message": "string"
   }
  },
- "names": [
-  {
-   "source": "launcherData",
-   "live": true,
-   "answers": "LauncherData",
-   "options": {
-    "q": "string"
-   },
-   "substitute": {
-    "default": {
-     "query": "",
-     "hasQuery": false,
-     "places": [],
-     "recent": [],
-     "hits": [],
-     "stories": 0,
-     "searchNote": ""
-    }
-   }
-  },
-  {
-   "send": "storyMore",
-   "options": {
-    "address": "string",
-    "surface": "string"
-   },
-   "answers": "CardAck"
-  }
- ]
+ "names": []
 }

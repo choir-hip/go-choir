@@ -1,23 +1,25 @@
 // The spine's members of the root: the layer in front, the theme, the bar's state. Owned by the spine (round 3: SHELL);
 // a lane does not edit this file (its own members go in members-<lane>.contract). The page stack (open, close, jump, the
 // pager) is in members-stack.contract.
-use openPages, pageModel, barFacts from "@choir/autoradio"
-use pageOpen, pageClose, pageFocus, pagePin, pageReopen, signalRecord from "@choir/autoradio"
-use PageList, PageModel, Theme, ThemeList, SettingsAck, BarFacts from "@choir/autoradio"
-use BarInfo from "./bar-types.contract"
+use pageModel, pageRequest, barFacts, deckState, radioNote from "@choir/autoradio"
+use PageList, PageModel, PageRequest, Theme, ThemeList, SettingsAck, BarFacts, DeckState, RadioNote from "@choir/autoradio"
+use RadioTick from "./radio-types.contract"
+use BarInfo, BarRun from "./bar-types.contract"
 use HostCaps from "./host-types.contract"
 use ThemeRev from "./themes-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
 members Autoradio
   // Is there a native package? (host.ts: decided once from the native handle, never from what the native set holds). "none" is Android; "" (not decided) and "native" are iOS.
-  resource hc = hostCaps(pgn.top != "", lockTick) as shape HostCaps else empty()
+  resource hc = hostCaps(false, lockTick) as shape HostCaps else empty()
   derive noNative = hc.mode == "none"
-  // The open pages. The Swift package's set (pgn) where there is a package; the SHARED set (pgs, pages.ts, kept in storage.fs) where there is none, so the deck mounts a page with no native code.
-  // Every open, close, pin and reopen is sent to both; on iOS the shared set is kept but never read. A failed or empty native answer keeps its last value (the slot keeps what it had).
-  resource pgn = openPages() as shape PageList else empty()
-  resource pgs = pagesView(signedOutTick) as shape PageList else empty()
-  derive pg = noNative ? pgs : pgn
+  // The open pages are shared code's on every host (pages.ts, kept in storage.fs): the deck, the launcher and the voice's front page all read this one set. The voice is handed the pages as facts
+  // (pages.ts `mirror`, the native op `pagesMirror`). A native request to open a page (an episode opened from the playing bar: `pageRequest`) is answered by `pageRequested`, which opens it here
+  // once per request id and gives the new view; the set is read again after it.
+  resource preq = pageRequest() as shape PageRequest else empty()
+  resource preqd = pageRequested(preq.id, preq.address, preq.title) as shape PageList else empty()
+  resource pgs = pagesView(signedOutTick, preqd.top) as shape PageList else empty()
+  derive pg = pgs
   resource pmod = pageModel(address=pg.top) as shape PageModel else empty()
   // The themes are shared code (themes.ts, both platforms). The system's scheme and Reduce Motion are Exact's own facts (`vp`, members-stack.contract); the first frame shows the whole bundled light default (every field; themes.test.ts P1 keeps it in step) until the answer lands.
   // The one-time carry-over of the old choice and themes (themes.ts migrate) runs apart from the first paint: a task sends it at launch and again when the host fact is decided (the native handle may bind
@@ -41,10 +43,26 @@ members Autoradio
     barTick = barTick + 1
   task barTimed when bi.until > 0 key=barTick
     after(250, barBump)
-  resource bi = barInfo(bf, cvraw, `${barTick}|${signedOutTick}`) as shape BarInfo else empty()
-  mutation pm as shape PageList
-  // A second handle, for an action that opens one page and closes another in the same step.
-  mutation pc as shape PageList
+  // The radio (radio-bridge.ts): the pump reads the deck's journal and what native handed over, applies them, keeps the desk writing, and answers a number the screens ask again on. It runs when the deck changes
+  // (`ds.seq`), when native says something did (`rnote`), and every second (the position labels, the writer's clock).
+  state radioTick = 0
+  action radioBump
+    radioTick = radioTick + 1
+  resource ds = deckState() as shape DeckState else empty()
+  resource rnote = radioNote() as shape RadioNote else empty()
+  resource rpulse = radioPulse(ds.seq, rnote.tick, radioTick) as shape RadioTick else empty()
+  // One second while something sounds in front or something is due; five when nothing is (the pulse says `slow`): an idle, paused or locked phone is not asked about once a second. What native has to say moves `ds.seq`
+  // or `rnote.tick`, which ask the pulse at once, whatever the clock.
+  task radioClock when rpulse.tick >= 0 and not rpulse.slow key=radioTick
+    after(1000, radioBump)
+  task radioClockSlow when rpulse.tick >= 0 and rpulse.slow key=radioTick
+    after(5000, radioBump)
+  // The position is read again each second WHILE SOMETHING SOUNDS AND THE APP IS IN FRONT (the beat moves once per pulse then), and not otherwise: paused, in the background or the phone locked the key is a constant and nothing is asked.
+  // "In front" is native's own `foreground` (radioFacts; UIApplication's notices, the signal the voice uses to give the microphone up), carried in `rpulse.live`, because Exact does not establish that an iPhone delivers `hidden` when it locks (docs/reference/exact/ui-model.md "Page facts"); the page's visibility is kept as a second gate (a web host, the simulator).
+  // A seek, Next or a new entry moves `rpulse.tick` (the pump), which is the other half of every key. No second timer: this is the radioClock's pulse above.
+  derive posKey = rpulse.live and hpg.visibilityState == "visible" ? rpulse.beat : 0
+  resource brun = barRun(rpulse.tick, posKey) as shape BarRun else empty()
+  resource bi = barInfo(bf, brun, cvraw, `${barTick}|${signedOutTick}`) as shape BarInfo else empty()
   // The shared set's handles (pages.ts); each refreshes the shared view.
   mutation pms as shape PageList refreshes pgs
   mutation pcs as shape PageList refreshes pgs
@@ -64,10 +82,8 @@ members Autoradio
       mkCloseAt = performanceNow()
     layer = layer == "launcher" ? "" : "launcher"
   action pinPage(address: string)
-    send pm = pagePin(address=address)
     send pms = pagesPin(address)
   action reopenPage
-    send pm = pageReopen()
     send pms = pagesReopen()
 
   action setTheme(id: string)
@@ -77,15 +93,11 @@ members Autoradio
     // The system's scheme follows the mode the store ACCEPTED: a theme that has one scheme refuses the other (thl.locked), and then the system's scheme is left alone.
     if thl.locked == "" or thl.locked == mode
       setScheme(mode)
-  action record(kind: string, subject: string, detail: string)
-    send pm = signalRecord(kind=kind, subject=subject, detail=detail)
-
   action editAsk(v: string)
     ask = v
   // A typed ask is aimed at the page in front: its address goes with the turn (`aim`). The engine side reads `args["aim"]` of
   // choirAsk and puts the page's address, title and text in the Autoradio desk request.
   action sendAsk
-    send pm = signalRecord(kind="ask", subject=pg.top, detail=ask)
     send acct = choirAsk(text=ask, aim=pg.top)
     ask = ""
   // The microphone button is the hands-free switch (owner, 2026-11-15): ON, the microphone is open and turns open and close by

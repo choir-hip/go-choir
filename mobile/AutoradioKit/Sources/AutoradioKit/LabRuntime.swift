@@ -107,7 +107,7 @@ public final class LabRuntime: @unchecked Sendable {
         snap.configName = cfg.name
         // Model loads show in the trace; the one store is shared with voice setup.
         Task { await ModelStore.shared.attach(log: log) }
-        // What the vector job waits for (EmbeddingService): speech on air, a voice line, or speech being made. Speech always wins the processor.
+        // What the vector job waits for (EmbedDevice.state, read by shared code): speech on air, a voice line, or speech being made. Speech always wins the processor.
         RadioDemand.shared.add { [audio, player] in audio.voiceIsSpeaking || audio.programmeAudible || player.synthesisBusy }
         player.onChange = { [weak self] in self?.refresh() }
         // Play asks for the session first when the engine is down or the claim is doubted (after the background, an interruption).
@@ -134,7 +134,7 @@ public final class LabRuntime: @unchecked Sendable {
                 let paras = ChoirText.paragraphs(text, maxChars: ChoirText.speechChars)
                 guard !paras.isEmpty else { return }
                 let title = paras[0].split(separator: " ").prefix(6).joined(separator: " ")
-                RunSheetPlayer.shared.playNow(.readAloud(address: address, title: title), words: (title, paras))
+                RadioBridge.shared.place(.readAloud(address: address, title: title), mode: "now", words: (title, paras))
             }
         }
         coord.onChange = { [weak self] in self?.refresh() }
@@ -306,17 +306,24 @@ public final class LabRuntime: @unchecked Sendable {
             await engine.handsFreeConfigure(echoCancelled: audio.voiceProcessing)
             await engine.handsFreeSet(on)
             if on {
-                let tap = audio.micActive ? "ok" : "fail"
-                print("AUTORADIO voice on claim=\(coordinator.describe()) rate=\(Int(audio.micTapRate)) tap=\(tap)")
-                if !audio.micActive, !audio.virtual {
-                    // The route may still be settling: look again before saying so.
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    if !audio.micActive, HandsFreeSwitch.shared.isOn { log.emit(.error(stage: "listen", message: "the microphone could not be opened (input rate \(Int(audio.micTapRate)))")) }
-                    else { print("AUTORADIO voice mic tap=ok after the route settled rate=\(Int(audio.micTapRate))") }
-                }
+                print("AUTORADIO " + MicLog.voiceOnLine(claim: coordinator.describe(), rate: Int(audio.micTapRate), active: audio.micActive, state: audio.micState))
+                if !audio.micActive, !audio.virtual { await reportMicWhenSettled() }
             }
         }
         refresh()
+    }
+    /// Voice was turned on and the microphone is not open: look again after the route settles, and say it is an error only when that is FINAL (failed after its retries, or not allowed); while a retry is pending the microphone may still open.
+    /// The delays and the state read are seams for the test of this decision (HandsFreeToggleTests): the call site is what must not say an error for a pending retry.
+    var micSettleNanos: UInt64 = 3_000_000_000, micPollNanos: UInt64 = 1_000_000_000
+    var micStateNow: (() -> LiveAudio.MicState)?
+    func reportMicWhenSettled() async {
+        let state: () -> LiveAudio.MicState = { self.micStateNow?() ?? self.audio.micState }
+        try? await Task.sleep(nanoseconds: micSettleNanos)
+        let rate = Int(audio.micTapRate)
+        print("AUTORADIO voice mic after the route settled rate=\(rate) tap=\(MicLog.tap(active: audio.micActive, rate: rate)) mic=\(state())")
+        var waited = 0
+        while state() == .pending, handsFreeIsOn, waited < 40 { if waited == 0 { print("AUTORADIO voice mic still trying") }; try? await Task.sleep(nanoseconds: micPollNanos); waited += 1 }
+        if handsFreeIsOn, let say = MicLog.finalError(state(), rate: Int(audio.micTapRate)) { log.emit(.error(stage: "listen", message: say)) }
     }
     /// The stored state again, after a screen's own turn-on.
     public func restoreHandsFree() { setHandsFree(HandsFreeSwitch.shared.isOn) }
@@ -367,7 +374,7 @@ public final class LabRuntime: @unchecked Sendable {
         let snapAudio = recorder.snapshot(from: t0, to: t1)
         lock.lock(); records[rec.id] = rec; lastID = rec.id; lock.unlock()
         let pos = ProgramPosition(programmeID: player.document.id, blockIndex: player.blockIndex, context: "")
-        let ctx = TurnContextFile(position: pos, configuration: rec.configuration, retrieval: RetrievalLog.shared.last)
+        let ctx = TurnContextFile(position: pos, configuration: rec.configuration, retrieval: RetrievalBridge.shared.lastRecord)
         _ = try? store.save(record: rec, mic: snapAudio.mic, reference: snapAudio.reference, context: ctx)
         refresh()
     }

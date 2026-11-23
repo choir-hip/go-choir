@@ -111,7 +111,7 @@ component BarShell
   derive onSetup = pg.top == "onboarding:setup"
   derive setupLine = ob.step == "topics" ? "Choose your topics" : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
   // What the line above the controls shows. On the Autoradio page the now-playing line is redundant (the page is what it opens), so it is not drawn there.
-  derive lineMode = heardNow ? "listen" : (st == "heard" ? "heard" : (st == "holding" ? "holding" : (st == "revised" ? "revised" : (st == "error" ? "error" : (st == "playing" ? (topAddr == "radio:" ? "none" : "playing") : (st == "paused" ? (topAddr == "radio:" ? "none" : "paused") : (onSetup ? "setup" : (typing ? "aim" : "none"))))))))
+  derive lineMode = heardNow ? "listen" : (st == "heard" ? "heard" : (st == "holding" ? "holding" : (st == "revised" ? "revised" : (st == "error" ? "error" : (typing ? "aim" : (st == "playing" ? (topAddr == "radio:" ? "none" : "playing") : (st == "paused" ? (topAddr == "radio:" ? "none" : "paused") : (onSetup ? "setup" : "none"))))))))
   derive loaded = ri.title != "" ? ri.title : bi.text
   derive yielded = ri.level != "play" and heardNow
   derive tint = st == "error" ? th.danger : (st == "revised" ? th.success : (st == "playing" ? th.accent2 : th.accent))
@@ -173,12 +173,12 @@ component BarShell
           column gap=4 animation=enter -exact-exit-animation=leave padding-left=4 padding-right=4 testId="bar-answer"
             row gap=8 align-items="center" width="100%"
               text `You asked: ${bi.question}` testId="bar-asked" font-family=th.fontLabel font-size="-exact-caption2" color=th.muted line-clamp=1 flex=1 min-width=0
-              if bi.answerState == "working" or bi.answerState == "first"
+              if bi.answerState == "working" or bi.answerState == "first" or bi.answering
                 button press=answerCancel testId="bar-answer-cancel" appearance="none" aria-label="Cancel this question"
                   row padding="6px 4px" align-items="center"
                     text "Cancel" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
               else
-                button press=answerDismiss testId="bar-answer-close" appearance="none" aria-label="Close the answer"
+                button press=answerDismiss(bi.answerId) testId="bar-answer-close" appearance="none" aria-label="Close the answer"
                   row padding="6px 4px" align-items="center"
                     text "Close" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
             if bi.answerState == "working"
@@ -192,7 +192,7 @@ component BarShell
             if bi.answerNote != ""
               text bi.answerNote testId="bar-answer-note" font-family=th.fontLabel font-size="-exact-footnote" color=(bi.answerState == "failed" ? th.danger : th.muted) line-clamp=3
             if bi.canRetry
-              button press=answerRetry("") testId="bar-answer-retry" appearance="none" aria-label="Ask again"
+              button press=answerRetry(bi.answerId) testId="bar-answer-retry" appearance="none" aria-label="Ask again"
                 row padding="6px 4px" align-items="center"
                   text "Try again" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
         // ---- the line above the controls

@@ -33,6 +33,10 @@
       "web": "0"
     }
   },
+  "env": ["SIGNIN_SCHEME"],
+  "variants": {
+    "one": { "idSuffix": ".one", "name": "Autoradio 1", "env": { "SIGNIN_SCHEME": "news.choir.autoradio.lab.one" } }
+  },
   "audio_session": "playback",
   "typescript": { "sources": { "fixtures": "../fixtures", "layouts": "../layouts", "themes": "../themes" } }
 }

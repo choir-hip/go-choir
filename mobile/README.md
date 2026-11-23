@@ -76,7 +76,7 @@ Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`).
 
 ### What P1 is, where it lives, and what it leaves to P2
 
-- `Choir/RadioProgramme.swift`: `StretchDecoder` (SSE or one JSON object per line), `SplitBlocks`, `SegmentPrep`, `ProgrammeDocument.append`, `RouteStretchSource` (`POST /api/autoradio/programme`, `cause: open`), and the `RadioProgramme` stage (the listener's default programme; with no stretch it plays `ChoirFrontProgramme`'s article exactly as before). `SegmentTracker.swift`: the playback observer. `DemoStretch.swift`: what demo mode answers on the route.
+- `Choir/RadioProgramme.swift`: `SplitBlocks`, `SegmentPrep`, `ProgrammeDocument.append` and the `RadioProgramme` stage (the listener's default programme; it loads nothing: the run sheet decides what plays). The stretch decoder and the route request (`POST /api/autoradio/programme`) are shared code now (`AutoradioLab/programme-model.ts`, `radio-writer.ts`); the Swift `StretchDecoder` lives only in the tests (`Tests/.../StretchDecoder.swift`). `SegmentTracker.swift`: the playback observer. `DemoStretch.swift`: what demo mode answers on the route.
 - `ProgrammePlayer`: `appendSegment`, `next`/`previous`/`jumpToSegment` by segment, `playback` (the tracker). `RadioInfo` gains `kind` and `sources`; with segments its title, position and list are the segment's; `player.contract` shows the kind and the source chips.
 - For P2: `player.playback.observe { PlaybackEvent }`. `lastBlock` is the server's block index; `blockCount` is the server's count. `finished` means the last playback block played to its end; the server refuses a `finished` whose `last_block` is not `block_count - 1` (a mismatch the segment records as `blockCountMismatch`). P2 owns `seq`, ids, hashes, `started_at`/`ended_at`, the buffer and what to send on each kind.
 - Readings taken where the designs were open: the wire shape of a `segment` event is the segment fields of design 1.3 plus `stretch_id`, `segment_id`, `block_count` (nothing pins it until L1); the request body is `request_id`, `cause`, `local_time`, `tz` only (`after`, `heard` and the edition fields are for later stations); the player waits for the first segment before it starts (no time limit but the transport's idle timeout), then appends the rest; the cold-start ladder (design 2.1) and play-on-open are not P1; the first block of a segment is not subdivided to one sentence (only paragraphs over 600 characters are split).
@@ -365,9 +365,9 @@ registry.register(.transcriber, MyParakeet.self) { params in MyParakeet(params) 
 
 Audio: stages never touch AVAudioSession. The host supplies an `AudioSessionOwner` (`claim(.listening|.talking, ...)`); every claim is logged as an `audioSession` event. The Exact app adapts Exact's claims; the replay command uses `NullSessionOwner`.
 
-### Desk contract (not implemented; the server lane supplies it)
+### Desk contract
 
-`ChoirDesk.submit` should POST the turn (`turnID`, `programmeID`, `blockIndex`, `listenerWords`) as a prompt at a place in the document and stream `Revision` values `{id, fromBlock, blocks, keepRest, isFinal}` back. No endpoint is invented here. `RemoteSystem1` posts `{context, listener_words, questions:[{id,text,options}]}` with `Authorization: Bearer <Keychain service news.choir.autoradio, account system1>` and expects `{answers:[{question_id, option, score}]}`.
+The interface-only `ChoirDesk` ("choir") and the bearer-token `RemoteSystem1` and `RemoteProgramme` stand-ins, with their Keychain helper, are deleted (2026-11-22): the listener's turn goes through the Autoradio desk stage (`Choir/AutoradioDesk.swift`, `POST /api/autoradio/turns`). The lab stand-ins `fixed`, `stub-echo` and `fixture` stay for the Mac replay proof configs (`mobile/fixtures/configs`).
 
 ## Running
 
@@ -387,6 +387,29 @@ All Xcode/Swift commands run outside the Nix shell through `mobile/scripts/xe.sh
 Pinned Exact: `expo/exact` at `f5334750386192245ee76add13a67ab51fb4e2fd` (moved from de212e671 on 2026-11-20, by reading; the first build at it is the lead's: `docs/reference/exact/build-and-ship.md`, "Moving the pin"), checked out at `mobile/.exact-src` (gitignored), Bun 1.4.2 at `~/.bun-1.4.2`. Commands: `mobile/scripts/exact.sh ios` (simulator), `mobile/scripts/exact.sh ios --device --phone 00008120-00114DE80A90C01E`.
 
 Signing: the free provisioning team is `QSGU6VRJL6` ("Yusef Nathanson (Personal Team)"); `N9HKM55LWY` is only the certificate's person id. Exact needs an installed profile for `news.choir.autoradio.lab`; `scripts/make-profile.sh` obtains one with a stub Xcode project and `-allowProvisioningUpdates`.
+
+## A second app on the phone ("Autoradio 1" beside "Autoradio")
+
+Owner, 2026-11-23: two apps side by side. The second is an Exact **variant** (`variants.one` in `AutoradioLab/app.json`; Exact's reference, "Install a development build beside the release one (variants)", present at the pin): id = `app.id` + `.one`, so **`news.choir.autoradio.lab.one`**, name **"Autoradio 1"** (home screen and Settings), same icon. Exact derives the id as a suffix of `app.id`, so it cannot be `news.choir.autoradio.one`. Nothing in the app branches on it, and the tracked `app.json` is never rewritten by a build. Choose it with `AR_VARIANT=one` (or `AR_APP_ID=news.choir.autoradio.lab.one`; `AR_APP_NAME="Autoradio 1"` is accepted only as a check); `scripts/app-identity.sh` reads and checks the choice, `exact.sh` passes it to Exact as `EXACT_VARIANT`, and `proof-common.sh`, `sim-launch.sh` and `make-profile.sh` take their bundle id from it. Without the variable everything builds as before.
+
+The lead, through the Mac build queue, in the build tree, the phone connected, unlocked, Developer Mode on:
+
+```sh
+# (a) once: a development profile for the new id (the stub installs it; its compile may fail afterwards, that is fine)
+AR_VARIANT=one mobile/scripts/make-profile.sh
+# (b) build, sign and install beside the first app (does not touch it)
+AR_VARIANT=one mobile/scripts/build-lab.sh ios --device --phone 00008120-00114DE80A90C01E
+# optional launch, and the container of the second app only
+AR_VARIANT=one mobile/scripts/build-lab.sh ios --device --run --phone 00008120-00114DE80A90C01E
+```
+
+Every `devicectl` line above that names `--domain-identifier news.choir.autoradio.lab` reaches the first app; use `news.choir.autoradio.lab.one` for the second.
+
+Shares with the first app: nothing, by the entitlements Exact writes (read from `host/apple/build.mjs` at the pin, not yet from a built app). The signed `application-identifier` is `QSGU6VRJL6.<id>`; Exact adds `keychain-access-groups` and an App Group only for an app with widgets or activities, and this app has neither. Our Keychain code sets no access group, so an item goes in the app's default group, `QSGU6VRJL6.<id>`, and the fixed service strings (`news.choir.autoradio.choir`, `.mailseal`, `news.choir.autoradio`) are keys inside each app's own group. The second app starts signed out, and cannot read, change or delete the first app's sign-in. The sandbox containers differ, so preferences, Documents and Application Support differ. The on-device models live in the app container (`Application Support/AutoradioLab/models` and FluidAudio's `Application Support/FluidAudio/Models`), so the second app downloads its own: the small language model is 0.64 GB, the embedder 0.31 GB, the optional LFM3 pair more (see the model list above); Exact's build output for the second id is also a separate copy on the Mac. Backgrounds modes, the audio session and the `AVAudioSession` are per app; two apps playing at once compete for the audio session like any two apps. No URL scheme, universal link, notification category or background task id is declared by the app, and no server code reads a bundle id (`news.choir.autoradio` is not in the Go tree). Check on the first install: `codesign -d --entitlements - <the .app>` shows no `keychain-access-groups` beyond the application identifier.
+
+Free provisioning team (`QSGU6VRJL6`): a profile lasts 7 days (lane experience, `docs/reference/exact/build-and-ship.md`; not checked against Apple's page here), after which the app stops opening until it is built and installed again; the second id needs its own profile, so it is a second app id on the team. Apple's limits on app ids per week and on apps installed per device: not checked.
+
+Remove it: delete "Autoradio 1" from the phone (long press, Remove App), or `xcrun devicectl device uninstall app --device 00008120-00114DE80A90C01E news.choir.autoradio.lab.one`. Removing it deletes only its container and Keychain items; the first app is untouched.
 
 ## Audio states: ways it can fail (written before the code)
 
@@ -572,7 +595,7 @@ integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ..
 | Lane | Owns | The shared edit it may make |
 |---|---|---|
 | 1 Bar, radio, talk | `bar.contract`, `player.contract`, `members-bar.contract`, `AutoradioModule+Bar.swift`, `Kit/BarState.swift`, `exact-package/interface/bar.json` | its band in `provide` (app.contract) |
-| 2 Paper layout | `paper.contract`, `members-paper.contract`, `AutoradioModule+Paper.swift`, `Kit/Layout/*.swift`, `mobile/layouts/default.json`, `interface/paper.json` | its band in `provide` |
+| 2 Paper layout | `paper.contract`, `members-paper.contract`, `AutoradioModule+Paper.swift`, `Kit/Layout/*.swift`, `mobile/layouts/default.json` | its band in `provide` |
 | 3 Texture reader | `reader.contract`, `textures.contract`, `members-reader.contract`, `AutoradioModule+Reader.swift`, `Kit/TextureDoc.swift`, `Kit/Citations.swift`, `interface/reader.json` | its band in `provide` |
 | 4 Cards, launcher, signals | `cards.contract`, `launcher.contract`, `members-cards.contract`, `AutoradioModule+Cards.swift`, `Kit/OpenPagesUI.swift`, `Kit/Signals.swift`, `Kit/Preferences.swift`, `interface/cards.json` | its band in `provide` |
 | 5 Files and viewers | `files.contract`, `viewers.contract`, `members-files.contract`, `AutoradioLab/files.ts` and `files-model.ts` (shared code; Swift's Files service is gone), `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift` | its band in `provide` |

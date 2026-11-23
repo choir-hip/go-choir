@@ -19,7 +19,7 @@ const entry = (id: string, o: Partial<Entry> = {}): Entry => ({ id, kind: 'story
 const sheet = (entries: Entry[]) => JSON.stringify({ version: 3, on_air: entries.find((e) => e.state === 'on_air')?.id, position_seconds: 0, entries, master_version: 0, sheet_epoch: 0 });
 const facts = (entries: Entry[], o: Record<string, unknown> = {}) => ({ ...EMPTY_FACTS, at: NOW, sheet: sheet(entries), ...o });
 const bar = (o: Record<string, unknown> = {}) => ({ phase: 'playing', transcript: '', blockCount: 0, running: false, playing: false, title: '', message: '', onAir: true, ...o });
-const none = { entries: [], dismissed: '' };
+const none = { entries: [] };
 const air = entry('a', { state: 'on_air' });
 
 describe('the sheet', () => {
@@ -153,5 +153,35 @@ describe('remote audio and the story on air', () => {
     expect(radioPage(facts([], { writing: true, wants: true }), bar(), none, 0)).toMatchObject({ state: 'writing', canPlay: false });
     expect(radioPage(facts([entry('h', { state: 'heard', ended: { outcome: 'finished', at: '', last_block: 0 } } as Partial<Entry>)], { notice: 'Cannot reach the desk.' }), bar(), none, 0).state).toBe('offline');
     expect(radioPage(facts([], { dry: true }), bar(), none, 0).emptyNote).toContain('Nothing is coming up.');
+  });
+});
+
+
+describe('spoken time with no estimate (the proof showed no elapsed label on a paper story played from its page)', () => {
+  const noEstimate = entry('a', { state: 'on_air', est_seconds: 0 });
+  test('R11 an entry with no estimate shows the elapsed time the voice has counted and omits only the remaining time', () => {
+    const p = radioPage(facts([noEstimate], { playing: true, progress: 0.2, spokenElapsed: 42 }), bar(), none, 0);
+    expect(p.elapsed).toBe('0:42'); expect(p.remaining).toBe('');
+  });
+  test('R11 with an estimate both stay, as before; with nothing counted yet and no estimate both are empty', () => {
+    const p = radioPage(facts([entry('a', { state: 'on_air', est_seconds: 60 })], { playing: true, progress: 0.5, spokenElapsed: 7 }), bar(), none, 0);
+    expect(p.elapsed).toBe('0:30'); expect(p.remaining).toBe('-0:30');
+    const q = radioPage(facts([noEstimate], { playing: true, spokenElapsed: 0 }), bar(), none, 0);
+    expect(q.elapsed).toBe(''); expect(q.remaining).toBe('');
+  });
+});
+
+describe('B2-7 the page and the bar agree on playing (review)', () => {
+  test('a run that says the entry is held for the audio session or not on air is not "On air"', () => {
+    const f = (o: Record<string, unknown>) => facts([air], { playing: false, ready: true, onAir: true, ...o });
+    expect(radioPage(f({ waiting: true }), bar({ phase: 'playing', playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).toBe('paused');
+    expect(radioPage(f({}), bar({ playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).toBe('onair');
+    expect(radioPage(f({ onAir: false }), bar({ playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).not.toBe('onair');
+  });
+  test('B2-4 only a speech failure is labelled Can\'t speak; another message is shown as it is', () => {
+    const p = radioPage(facts([air], { message: 'That address is too long to add.' }), bar({ playing: false }), none, 0);
+    expect(p.statusLine).toBe('That address is too long to add.'); expect(p.cannotSpeak).toBe('');
+    const q = radioPage(facts([air], { message: 'Can’t speak: the voice made no sound' }), bar({ playing: false }), none, 0);
+    expect(q.statusLine).toBe('Can’t speak: the voice made no sound'); expect(q.cannotSpeak).toBe('the voice made no sound');
   });
 });

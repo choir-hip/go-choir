@@ -1,6 +1,49 @@
 // The Autoradio page's shapes. Declared here and answered by `app.ts` (radio-page.ts: `radioPage`); they were the Swift package's (interface/radio.json) before the page moved to shared
 // code. The native side hands over only the facts (`RadioPageFacts`, interface/radio.json, source `radioPageFacts`).
 
+shape RadioPageFacts
+  at: number
+  sheet: string
+  playing: bool
+  sentences: string[]
+  sentenceIndex: number
+  progress: number
+  // The run sheet's own words, as the bar's overlay has them (bar.ts): the page and the bar agree on playing.
+  ready: bool
+  onAir: bool
+  waiting: bool
+  remoteAudio: bool
+  remoteElapsed: number
+  spokenElapsed: number
+  remoteDuration: number
+  wants: bool
+  message: string
+  notice: string
+  writing: bool
+  dry: bool
+  airTitle: string
+  airRoute: string
+  publishedAt: number
+  versionRoutes: string[]
+  versionNumbers: number[]
+  stale: string[]
+  takeTranscript: string
+  takeRecord: string
+
+// What the pump answers: a number the screens ask again on.
+shape RadioTick
+  tick: number
+  // The desk should be asked, or the sheet's ops posted: `radioWrite` (a mutation) does it, and stays until it is done.
+  write: bool
+  // Starts or the held list wait for a pump: `radioHold`.
+  hold: bool
+  // Something is sounding: the position moves, and the screens that show it are asked again each second (spine.contract `posKey`).
+  live: bool
+  // Nothing sounds in front and nothing is due: the clock asks again in five seconds (spine.contract).
+  slow: bool
+  // Moves once per pulse while `live`, and not otherwise.
+  beat: number
+
 shape RadioBuiltOn
   n: number
   title: string
@@ -40,8 +83,6 @@ shape RadioPageInfo
   source: string
   published: string
   sentence: string
-  sentenceNumber: number
-  sentenceCount: number
   elapsed: string
   remaining: string
   fraction: number

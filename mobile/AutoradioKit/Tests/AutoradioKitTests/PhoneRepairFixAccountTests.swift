@@ -3,8 +3,8 @@ import XCTest
 
 // Phone repair, lane fix-account. Failure list (written before the fixes):
 //  A2  the server cannot say (nil) is not "there is no notebook": no document is made; "found == false" makes one; two writes at once make one
-//  A4  a stranger's take title and transcript lose bidi overrides and control characters
-//  A5  a clip with a control character in its show, an unparseable date, or a finite number outside Int range neither crashes nor poisons the request
+//  A5  a finite number outside Int range in a clip's fingerprint neither crashes nor poisons the clip
+//  (A4, a stranger's take text, and A5's candidate-clip sanitising were the programme request's: gone with it)
 @MainActor
 final class NotebookWriteTests: XCTestCase {
     var saved: KeyStore!
@@ -40,25 +40,11 @@ final class NotebookWriteTests: XCTestCase {
 }
 
 final class PhoneRepairSanitiseTests: XCTestCase {
-    func testStrangerTakeTitleAndTranscriptAreStripped() throws {
-        let t = try XCTUnwrap(Take.parse(["take_id": "t1", "publisher": "pub", "state": "live", "transcript": "\u{202E}evil\u{0007}\u{200B} start\nsecond line"]))
-        for s in [t.title, t.transcript] {
-            XCTAssertFalse(s.unicodeScalars.contains { $0.value == 0x202E || $0.value == 0x200B || $0.value == 7 }, s)
-        }
-        XCTAssertEqual(t.title, "evil start")
-    }
-
     func clip(show: String = "Show", published: String = "2026-11-16T09:00:00Z", fp: [String: Any]? = nil) -> PodcastClip? {
         var row: [String: Any] = ["clip_id": "clip-0000000000a1", "story": ["route": "/a", "version": 1, "title": "S"], "show": show, "episode_title": "Ep",
                                   "published": published, "audio_url": "https://example.test/x.mp3", "duration_seconds": 900, "start": 10, "end": 70, "quote": "q\u{0007}uote", "support": 0.9]
         if let fp { row["fingerprint"] = fp }
         return PodcastClip.parse(row)
-    }
-    func testCandidateClipSanitisesAndDropsABadDate() throws {
-        let ok = try XCTUnwrap(CandidateClip.make(try XCTUnwrap(clip(show: "\u{202E}Sh\u{0007}ow"))))
-        XCTAssertEqual(ok.show, "Sh ow"); XCTAssertEqual(ok.quote, "q uote")
-        XCTAssertNil(CandidateClip.make(try XCTUnwrap(clip(published: "last Tuesday"))), "a date that does not parse is not sent")
-        XCTAssertNil(CandidateClip.make(try XCTUnwrap(clip(published: ""))))
     }
     func testOutOfRangeFingerprintNumbersAreNoFingerprint() throws {
         let base = testFingerprintJSON()

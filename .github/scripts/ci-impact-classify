@@ -62,6 +62,7 @@ high_risk_race=false
 ci=false
 receipts_swap=false
 guest_unit=false
+mobile=false
 
 # is_docs_like_path: docs, skill text and developer-side scripts need no CI
 # lane (owner, 2026-11-12); they ship with the next push that does run.
@@ -89,6 +90,7 @@ if [[ "${CI_FORCE_ALL:-false}" == "true" ]]; then
   ci=true
   receipts_swap=true
   guest_unit=true
+  mobile=true
   explanations+=("manual/recovery run -> all CI lanes")
 else
   for path in "${changed[@]}"; do
@@ -118,6 +120,15 @@ else
         ;;
     esac
 
+    # The phone app's shared code (Exact contracts and TypeScript, mobile/AutoradioLab) has its own `bun test`; it also reads the native interface it is typed against.
+    # It also reads files outside mobile/: the Go queue struct (voice-queue.test.ts: the TS fixture must equal its JSON tags), the golden documents (reader-parse.test.ts) and the typography rules (contract-typography-rules.test.ts).
+    # Swift under mobile/AutoradioKit and mobile/exact-package/apple is tested on the Mac (CLAUDE.md, One Mac build at a time), not here.
+    case "$path" in
+      mobile/AutoradioLab/*|mobile/fixtures/*|mobile/layouts/*|mobile/themes/*|mobile/exact-package/exact.json|mobile/exact-package/interface/*|mobile/scripts/gen-exact-interface.py|mobile/scripts/*.sh|mobile/docs/typography.md|internal/autoradioqueue/queue.go|internal/texturedoc/golden/*|.github/workflows/ci.yml|.github/scripts/ci-impact-classify)
+        mark mobile "$path -> the phone app's shared-code tests"
+        ;;
+    esac
+
     case "$path" in
       .github/*|scripts/ci-find-green-pr-run)
         mark ci "$path -> CI tooling verification"
@@ -138,7 +149,7 @@ else
     esac
 
     case "$path" in
-      cmd/*|internal/*|configs/*|scripts/*.go|skills/*.go|skills/*/go.mod|skills/*/go.sum|go.mod|go.sum|scripts/go-test-*)
+      cmd/*|internal/*|configs/*|mobile/AutoradioLab/app.json|scripts/*.go|skills/*.go|skills/*/go.mod|skills/*/go.sum|go.mod|go.sum|scripts/go-test-*)
         mark go "$path -> Go verification"
         ;;
     esac
@@ -159,6 +170,9 @@ else
     case "$path" in
       frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/pnpm-lock.yaml|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
         mark frontend "$path -> frontend build"
+        ;;
+      frontend/tests/device-return.test.mjs|frontend/tests/crash-guard.test.mjs)
+        mark frontend "$path -> frontend node unit tests"
         ;;
     esac
 
@@ -218,6 +232,7 @@ high_risk_race=${high_risk_race}
 ci=${ci}
 receipts_swap=${receipts_swap}
 guest_unit=${guest_unit}
+mobile=${mobile}
 sampled_race=${sampled_race}
 sample_bucket=${sample_bucket}
 EOF

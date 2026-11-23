@@ -41,6 +41,14 @@ export type Item = {
 };
 
 export const BUDGET = { windowTokens: 2048, share: 0.5, charsPerToken: 3.5, candidates: 20, perParent: 2, maxItemChars: 800, minItemChars: 240 };
+/**
+ * THE INDEX'S BOUND. The shared runtime has one Hermes module heap of 64 MiB for all of app.ts (docs/reference/exact/internals.md, "heap"); measured under Bun
+ * (2026-11-21, review of the retrieval lane): 1,900 passages of the R7 fixture hold about 58 MB. So the index holds at most MAX_INDEX_ITEMS passages in all
+ * (at the bound the oldest unpinned documents are evicted for a newer one, and the pinned groups, the page in front, the run sheet, the open pages and the edition topics, always fit and are never evicted; a document that could not be held is not marked indexed, never an error) and cuts one passage's text at MAX_ITEM_CHARS. 1,200 passages is
+ * about 35 MB measured the same way: it leaves room for the app's other state. Raising it needs a heap measurement under the real 64 MiB limit first.
+ */
+export const MAX_INDEX_ITEMS = 1200;
+export const MAX_ITEM_CHARS = 4000;
 export const BUDGET_CHARS = Math.floor(BUDGET.windowTokens * BUDGET.share * BUDGET.charsPerToken); // 3,584
 
 // ---------------------------------------------------------------------------------------------------------------- tokens
@@ -142,6 +150,8 @@ export class Index {
   private postings = new Map<string, { slot: number; tf: number }[]>();
   private children = new Map<string, number[]>();
   private keys = new Map<string, string>();
+  private dates = new Map<string, number>();
+  private pinned = new Set<string>();
   private liveCount = 0;
   private totalLength = 0;
 
@@ -150,15 +160,38 @@ export class Index {
   contains(id: string): boolean { return this.keys.has(id); }
   keyOf(id: string): string | undefined { return this.keys.get(id); }
 
-  /** Index a document, or index it again when its key changed. Returns false when it was unchanged. */
-  upsert(d: Doc): boolean {
+  /**
+   * Index a document, or index it again when its key changed. Returns false when it was unchanged, or when it could not be held (then it is not marked indexed,
+   * `contains` is false and the next upsert tries again). At the bound (MAX_INDEX_ITEMS) the OLDEST unpinned documents go to make room, never the newest: a
+   * document evicts only older ones, and a `pin` document (the page in front, the entry on air, the edition topics: what "this" and "that" point at) evicts any
+   * unpinned one and is never evicted.
+   */
+  upsert(d: Doc, pin = false): boolean {
     const k = docKey(d);
     if (this.keys.get(d.id) === k) return false;
     this.removeLocked(d.id);
-    this.keys.set(d.id, k);
     const titleTokens = tokens(d.title);
+    const plan: { id: string; text: string; address: string; place: string }[] = [];
+    const parts = d.parts ?? [];
+    if (parts.length === 0) plan.push({ id: d.id, text: d.text, address: d.address, place: '' });
+    else {
+      let n = 0;
+      for (const p of parts) {
+        const base = d.address.split('@')[0];
+        const address = p.block !== undefined ? `${base}@${p.block}` : d.address;
+        for (const [j, text] of passages(p.text).entries()) {
+          n++;
+          plan.push({ id: `${d.id}#${n}`, text, address, place: j === 0 ? p.label : p.label === '' ? '' : `${p.label}, passage ${j + 1}` });
+        }
+      }
+    }
+    if (!this.makeRoom(d, plan.length, pin)) return false;
+    this.keys.set(d.id, k);
+    this.dates.set(d.id, d.date ?? -Infinity);
+    if (pin) this.pinned.add(d.id); else this.pinned.delete(d.id);
     const mine: number[] = [];
-    const add = (id: string, text: string, address: string, place: string): void => {
+    for (const { id, text: whole, address, place } of plan) {
+      const text = whole.length > MAX_ITEM_CHARS ? whole.slice(0, MAX_ITEM_CHARS) : whole;
       const tf = new Map<string, number>();
       let n = 0;
       for (const t of tokens(text)) { tf.set(t, (tf.get(t) ?? 0) + 1); n++; }
@@ -170,29 +203,35 @@ export class Index {
       if (f !== undefined) { this.slots[f] = slot; idx = f; } else { this.slots.push(slot); idx = this.slots.length - 1; }
       for (const [t, c] of tf) { const l = this.postings.get(t); const p = { slot: idx, tf: c }; if (l) l.push(p); else this.postings.set(t, [p]); }
       mine.push(idx); this.liveCount++; this.totalLength += slot.length;
-    };
-    const parts = d.parts ?? [];
-    if (parts.length === 0) add(d.id, d.text, d.address, '');
-    else {
-      let n = 0;
-      for (const p of parts) {
-        const base = d.address.split('@')[0];
-        const address = p.block !== undefined ? `${base}@${p.block}` : d.address;
-        passages(p.text).forEach((text, j) => {
-          n++;
-          add(`${d.id}#${n}`, text, address, j === 0 ? p.label : p.label === '' ? '' : `${p.label}, passage ${j + 1}`);
-        });
-      }
     }
     this.children.set(d.id, mine);
     return true;
+  }
+
+  /** Make room for `need` passages of `d`: evict the oldest unpinned documents older than `d` (any unpinned one when `d` is pinned). False: it cannot fit, nothing was evicted. */
+  private makeRoom(d: Doc, need: number, pin: boolean): boolean {
+    const over = this.liveCount + need - MAX_INDEX_ITEMS;
+    if (over <= 0) return true;
+    const mine = d.date ?? -Infinity;
+    const victims: { id: string; date: number; n: number }[] = [];
+    for (const [id, idxs] of this.children) {
+      if (id === d.id || this.pinned.has(id)) continue;
+      const date = this.dates.get(id) ?? -Infinity;
+      if (pin || date < mine) victims.push({ id, date, n: idxs.length });
+    }
+    victims.sort((a, b) => (a.date !== b.date ? a.date - b.date : a.id < b.id ? -1 : 1));
+    let freed = 0, take = 0;
+    while (take < victims.length && freed < over) freed += victims[take++].n;
+    if (freed < over && !pin) return false;                     // not indexed, and nothing is evicted for a document that still would not fit
+    for (let i = 0; i < take; i++) this.removeLocked(victims[i].id);
+    return true;                                                // a pinned document that still does not fit is held over the bound: it is small, and it is what is in front
   }
 
   upsertAll(docs: Doc[]): void { for (const d of docs) this.upsert(d); }
 
   remove(id: string): void { this.removeLocked(id); }
   private removeLocked(id: string): void {
-    this.keys.delete(id);
+    this.keys.delete(id); this.dates.delete(id); this.pinned.delete(id);
     const mine = this.children.get(id);
     if (!mine) return;
     this.children.delete(id);
@@ -457,7 +496,13 @@ export function fromHalf(h: number): number {
 
 /** The vector stores this session holds, so sign-out can empty them (the in-memory copy serves the old account otherwise). */
 const liveVectors = new Set<VectorStore>();
-export async function wipeLiveVectors(storage: Storage | undefined): Promise<void> { for (const v of [...liveVectors]) await wipeVectors(v, storage); }
+/** What else sign-out must reach in memory (the retrieval runtime's corpus and its running embedding pass, retrieval-run.ts). Run before the vectors go. */
+const liveResets = new Set<() => void>();
+export function onSignOut(f: () => void): () => void { liveResets.add(f); return () => { liveResets.delete(f); }; }
+export async function wipeLiveVectors(storage: Storage | undefined): Promise<void> {
+  for (const f of [...liveResets]) f();
+  for (const v of [...liveVectors]) await wipeVectors(v, storage);
+}
 
 export class VectorStore {
   private ids: string[] = [];
@@ -687,7 +732,10 @@ export function todo(items: WorkItem[], store: VectorStore): { todo: WorkItem[];
 
 export type JobBudget = { passagesPerSlice: number; savesEverySlices: number; maxChars: number };
 export const JOB_BUDGET: JobBudget = { passagesPerSlice: 4, savesEverySlices: 40, maxChars: 1800 };
-export type Progress = { embedded: number; skipped: number; removed: number; waitedForSpeech: number; failed: number; finished: boolean };
+export type Progress = { embedded: number; skipped: number; removed: number; waitedForSpeech: number; failed: number; finished: boolean; gaveUp?: boolean };
+/** While the device is busy the wait doubles from the rest delay up to this, and the pass ends after this many busy answers in a row (about 16 minutes): it is started again by the next ask or sync, not polled for. */
+export const BUSY_WAIT_MAX_MS = 30000;
+export const BUSY_GIVE_UP = 40;
 
 /**
  * Bring a store in line with the items. Embeds only what is new or changed, in small slices, calls `save` every `savesEverySlices` slices
@@ -696,15 +744,23 @@ export type Progress = { embedded: number; skipped: number; removed: number; wai
  */
 export async function runJob(store: VectorStore, embed: Embed, items: WorkItem[], o: {
   busy?: () => boolean | Promise<boolean>; save?: () => Promise<void>; rest?: () => Promise<void>; cancelled?: () => boolean; budget?: JobBudget;
+  /** The wait while busy, in ms (it grows); without it `rest` is used. `restMs` is the first wait. */
+  wait?: (ms: number) => Promise<void>; restMs?: number;
 } = {}): Promise<Progress> {
   const budget = o.budget ?? JOB_BUDGET;
-  const p: Progress = { embedded: 0, skipped: 0, removed: 0, waitedForSpeech: 0, failed: 0, finished: false };
+  const p: Progress = { embedded: 0, skipped: 0, removed: 0, waitedForSpeech: 0, failed: 0, finished: false, gaveUp: false };
   const t = todo(items, store);
   for (const id of t.removed) store.remove(id);
   p.removed = t.removed.length; p.skipped = t.skipped;
-  let i = 0, since = 0;
+  let i = 0, since = 0, busyRun = 0;
   while (i < t.todo.length && !(o.cancelled?.() ?? false)) {
-    if (o.busy && (await o.busy())) { p.waitedForSpeech++; await o.rest?.(); continue; }
+    if (o.busy && (await o.busy())) {
+      p.waitedForSpeech++; busyRun++;
+      if (busyRun >= BUSY_GIVE_UP) { p.gaveUp = true; break; }
+      if (o.wait) await o.wait(Math.min(BUSY_WAIT_MAX_MS, (o.restMs ?? 150) * 2 ** (busyRun - 1))); else await o.rest?.();
+      continue;
+    }
+    busyRun = 0;
     const slice = t.todo.slice(i, i + budget.passagesPerSlice);
     try {
       const vs = await embed(slice.map((x) => embedPrompt.document(x.title, x.text.slice(0, budget.maxChars))));
@@ -725,6 +781,9 @@ export function coverage(store: VectorStore, total: number): number { return tot
 
 // ---------------------------------------------------------------------------------------------------------------- the saved corpus
 
+/** The groups of what is in front of the listener: "this" and "that" point at them, so they are always indexed (Index.upsert's `pin`). */
+export const PINNED_GROUPS = new Set(['page', 'runsheet', 'open-pages', 'edition-topics']);
+
 /** The held documents by group (a store's own: "store", "paper-front", "runsheet", ...). A group replaces its earlier documents. */
 export class Corpus {
   readonly index = new Index();
@@ -736,7 +795,20 @@ export class Corpus {
     const ids = new Set(docs.map((d) => d.id));
     for (const old of this.groups.get(group) ?? []) if (!ids.has(old)) this.index.remove(old);
     this.groups.set(group, ids);
-    this.index.upsertAll(docs);
+    const pin = PINNED_GROUPS.has(group);
+    for (const d of docs) this.index.upsert(d, pin);
+  }
+  /** The same as `hold`, in slices that hand the processor back between them (an answer turn has a CPU budget of its own: a cold build of a real store must not run in one go).
+   * `live` says the account is still the one the documents were read for; once it is not, nothing more is indexed. */
+  async holdSliced(group: string, docs: Doc[], live: () => boolean, slice = 40): Promise<void> {
+    const ids = new Set(docs.map((d) => d.id));
+    for (const old of this.groups.get(group) ?? []) if (!ids.has(old)) this.index.remove(old);
+    this.groups.set(group, ids);
+    for (let i = 0; i < docs.length; i += slice) {
+      if (!live()) return;
+      this.index.upsertAll(docs.slice(i, i + slice));
+      if (i + slice < docs.length) await new Promise<void>((r) => setTimeout(r, 0));
+    }
   }
   drop(group: string): void { this.hold(group, []); this.groups.delete(group); }
   /** Sign-out: everything held goes. */

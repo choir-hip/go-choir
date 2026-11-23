@@ -1,0 +1,29 @@
+{
+ "shapes": {
+  "RetrievalAsk": {
+   "id": "string",
+   "words": "string",
+   "pageTitle": "string",
+   "pageAddress": "string",
+   "now": "number",
+   "facts": "string"
+  }
+ },
+ "names": [
+  {
+   "source": "retrievalAsk",
+   "live": true,
+   "answers": "RetrievalAsk",
+   "substitute": {
+    "default": {
+     "id": "",
+     "words": "",
+     "pageTitle": "",
+     "pageAddress": "",
+     "now": 0,
+     "facts": ""
+    }
+   }
+  }
+ ]
+}

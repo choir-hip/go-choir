@@ -17,13 +17,10 @@ server sends it.
 | --- | --- |
 | Every `body_doc` validates against the schema | `../golden_test.go` (`go test ./internal/texturedoc -run Golden`) |
 | Web: the real Texture reader draws the bundle, the DOM is projected | `frontend/tests/golden-documents.spec.js` |
-| Native: `TextureDocParser.parseBundle` builds the phone's `ReaderDoc`, projected | `mobile/AutoradioKit/Tests/AutoradioKitTests/GoldenDocumentsTests.swift` |
+| Phone: `reader-parse.ts` `parseBundle` builds the phone's document, projected and required to equal `expected/` | `mobile/AutoradioLab/reader-parse.test.ts` (P13: `bun test`) |
 | Diff of the two, known differences, exit code | `scripts/golden-docs`, `scripts/golden-docs-compare.mjs`, `known-differences.json` |
 
-Run all of it with `scripts/golden-docs`. The native half needs only
-`swift test` in `mobile/AutoradioKit` (no Exact app build, no simulator); on
-the shared Mac it runs through `shared-proof.sh <branch> proof-golden.sh`, and
-`GOLDEN_NATIVE_DIR=<proof dir> scripts/golden-docs` then compares.
+Run the web half and the comparison with `scripts/golden-docs`; `bun test` in `mobile/AutoradioLab` runs the phone's half.
 
 ### The projection (one definition, two implementations)
 
@@ -119,8 +116,5 @@ Markdown lists and Markdown rules (`---`). Left: the first heading equal to the
 title (native drops it, the page shows the headline) and empty paragraphs
 (the editor needs them; they have no height in the reader).
 
-`expected/` holds the native reader's projections. `scripts/golden-docs` with
-`GOLDEN_WEB_ONLY=1` compares the web reader with them without a native run (that
-is what a web-only change checks); regenerate them with the native proof
-(`mobile/scripts/proof-golden.sh` on the app branch) whenever the native model
-changes.
+`expected/` holds the phone reader's projections; `bun test` (`reader-parse.test.ts`, P13) requires the shared model to reproduce them exactly, and `scripts/golden-docs` compares the web reader with them.
+When the phone's model changes on purpose, regenerate them from the projection in that test and say why.
