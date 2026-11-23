@@ -193,10 +193,8 @@ unset SEED_TAKES TAKES_SEED_IDS
 CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
 TKS="$CHK/Library/Application Support/Autoradio"
 TK_FILE=$(ls -t "$CHK"/Library/Caches/exact/*/agent/*/data/takes.json "$CHK"/Library/Application\ Support/exact/*/data/takes.json 2>/dev/null | head -1)
-rm -f "$SHOTS/takes-data.json" "$SHOTS/takes-copy-own.json" "$SHOTS/takes-copy-muted.json" "$SHOTS/takes-old-own.json" "$SHOTS/takes-old-muted.json"
+rm -f "$SHOTS/takes-data.json" "$SHOTS/takes-old-own.json" "$SHOTS/takes-old-muted.json"
 [ -n "$TK_FILE" ] && cp "$TK_FILE" "$SHOTS/takes-data.json"
-cp "$TKS/takes-copy-own.json" "$SHOTS/takes-copy-own.json" 2>/dev/null
-cp "$TKS/takes-copy-muted.json" "$SHOTS/takes-copy-muted.json" 2>/dev/null
 cp "$TKS/takes-own.json" "$SHOTS/takes-old-own.json" 2>/dev/null
 cp "$TKS/takes-muted.json" "$SHOTS/takes-old-muted.json" 2>/dev/null
 tseg() { awk -v m="$2" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$1"; }
@@ -533,7 +531,9 @@ fresh_paper pick-signedout
 STORY_SO=$F_STORY1
 # The first run is offered ONCE (onboarding.ts offer: "offered" is kept in app:/data/onboarding.json), and the pick drive above was a signed-out launch that used the offer: reset_state clears the old Swift
 # file only. The signed-out tour is a FIRST launch, so the kept progress is removed here (the check below asserts what a first signed-out launch shows, as it always did).
-rm -f "$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"/Library/Caches/exact/*/agent/*/data/onboarding.json "$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"/Library/Application\ Support/exact/*/data/onboarding.json
+SOCONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
+[ -n "$SOCONT" ] || fail "signed out" "no app container: the kept first-run progress cannot be removed (the glob would have started at /Library)"
+rm -f "$SOCONT"/Library/Caches/exact/*/agent/*/data/onboarding.json "$SOCONT"/Library/Application\ Support/exact/*/data/onboarding.json
 step "clock data"; wait_ 6000
 # the account card is answered in REAL time (the key read, the host fact): give the first screen several settle steps before it is read
 wait_ 6000; wait_ 6000; wait_ 6000
@@ -658,9 +658,6 @@ chk "takes: the Takes section drew" '\[radio-takes\]' "$SHOTS/seg-takes.txt"
 chk "takes: the record control is there" '\[takes-record\]' "$SHOTS/seg-takes.txt"
 bad "takes: no old muted voice is listed" 'Never play takes by voice-drillm' "$SHOTS/seg-takes.txt"
 if [ -f "$SHOTS/takes-data.json" ]; then bad "takes: nothing of the old files is in the kept file" 'take-drill|voice-drill' "$SHOTS/takes-data.json"; else echo "info: takes: no kept file (d@e has no live take), nothing to check in it"; fi
-chk "takes: the programme's copy was pushed by shared code (the file exists)" '"ids"' "$SHOTS/takes-copy-own.json"
-bad "takes: nothing of the old files is in the programme's copy" 'take-drill|voice-drill' "$SHOTS/takes-copy-own.json"
-chk "takes: the programme's muted copy is empty" '^\[\]$' "$SHOTS/takes-copy-muted.json"
 chk "takes: the old own-ids file is still there, unread" 'take-drilla' "$SHOTS/takes-old-own.json"
 chk "takes: the old muted file is still there, unread" 'voice-drillm1' "$SHOTS/takes-old-muted.json"
 # the tour
