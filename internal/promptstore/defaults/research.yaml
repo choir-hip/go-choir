@@ -73,9 +73,9 @@ body: |
     corpus brief, or a sentence saying why there is none; if neither is there,
     search the corpus yourself first. The host tries to search this computer's
     corpus for your objective and its threads before your first turn, and the
-    brief lists the held pages (capture ids, each with its date) and the
+    brief lists the stored pages (capture ids, each with its date) and the
     published stories it found. A published story carries no date there: Read
-    its read_url to see how current it is. A held page is not necessarily
+    its read_url to see how current it is. A stored page is not necessarily
     current. A field marked [cut] was shortened: read the page with
     choir.ReadCapture before you quote it. A brief that found nothing on a
     thread, or says the host's search did not answer for it, is not proof that
@@ -84,7 +84,7 @@ body: |
     choir.SearchWireCorpus(query, 10) for what the brief lacks or says it left
     out; a brief that failed says so. A capture is citable by its capture_id:
     read its blocks with choir.ReadCapture and quote them. In your first
-    packet write each thread of the objective as held (with its capture ids),
+    packet write each thread of the objective as stored (with its capture ids),
     stale or missing. Search the web only for the stale and missing threads,
     one question at a time, and read what it returns before you search again;
     an arrival never wakes you, so read the results you need before you end

@@ -5,13 +5,14 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 )
 
@@ -54,6 +55,8 @@ type researchFixture struct {
 	// nearOnly makes the corpus search say no capture matched the words (every capture it
 	// lists is near by meaning only), as the real search does on a question the graph lacks.
 	nearOnly bool
+	// pageText overrides the text of every capture a ReadCapture returns.
+	pageText string
 	// events are the events a corpus search returns (outlets and capture_ids).
 	events []map[string]any
 	// captureErr makes ReadCapture of a capture id fail (a deleted capture, a
@@ -61,6 +64,28 @@ type researchFixture struct {
 	captureErr   map[string]string
 	captureReads atomic.Int32
 	corpusCalls  atomic.Int32
+}
+
+// packetNotes are the notes of the last packet a cell staged.
+func packetNotes(out SessionResult) []string {
+	var notes []string
+	for _, in := range out.Intents {
+		var p struct {
+			Notes []string `json:"notes"`
+		}
+		if json.Unmarshal([]byte(in.Packet), &p) == nil && len(p.Notes) > 0 {
+			notes = p.Notes
+		}
+	}
+	return notes
+}
+
+// pageBody is the text of a page the fixture's ReadCapture returns.
+func (f *researchFixture) pageBody() string {
+	if f.pageText != "" {
+		return f.pageText
+	}
+	return strings.Repeat("The ministry said the cabinet changes took effect today. ", 3)
 }
 
 func newResearchFixture(t *testing.T) *researchFixture {
@@ -135,7 +160,7 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				if msg, bad := f.captureErr[in.CaptureID]; bad {
 					return nil, fmt.Errorf("%s", msg)
 				}
-				return json.RawMessage(fmt.Sprintf(`{"capture_id":%q,"url":%q,"title":"t","blocks":[{"id":"b0","kind":"paragraph","text":"%s"}]}`, in.CaptureID, strings.TrimPrefix(in.CaptureID, "cap:"), strings.Repeat("The ministry said the cabinet changes took effect today. ", 3))), nil
+				return json.RawMessage(fmt.Sprintf(`{"capture_id":%q,"url":%q,"title":"t","blocks":[{"id":"b0","kind":"paragraph","text":"%s"}]}`, in.CaptureID, strings.TrimPrefix(in.CaptureID, "cap:"), f.pageBody())), nil
 			case ActionRead:
 				var in ReadPayload
 				if err := json.Unmarshal(payload, &in); err != nil {
@@ -349,29 +374,39 @@ func TestOverlayWorkedCellIsGraphFirstThenTheWebForWhatIsMissing(t *testing.T) {
 		t.Errorf("graph searches %d, capture reads %d, web reads %d, web searches %d: want 1, 1, 0, 0", g.corpusCalls.Load(), g.captureReads.Load(), g.reads.Load(), g.searchCalls.Load())
 	}
 
-	// The graph answered only by meaning (no page holds the words), as on a question it lacks:
-	// the cell reads what came back, goes to the web for the lack, and says so in "missing:".
-	// (Review of 6980fdb96, B4: the cell sent no web search here and wrote "missing: none".)
+	// Zero word matches, but the pages the graph returned answer the question (the text index
+	// can be partial): the count is a hint, the pages decide. No web search, no gap line.
+	// (Re-review of daf09c519, B5: the cell searched and wrote a gap on every zero count.)
 	m := newResearchFixture(t)
 	m.corpus = []string{"cap:https://www.bbc.co.uk/a", "cap:https://www.itv.co.uk/b"}
 	m.nearOnly = true
 	cell, hooks = m.session(t)
 	hooks.Begin(SessionFrame{RunID: "run-2m"})
 	out = cell(workedCell(t))
-	if !strings.Contains(out.Stdout, "interim packet: 7 sources") || strings.Contains(out.Stdout, "<error") || m.searchCalls.Load() != 1 || m.reads.Load() != 5 {
-		t.Fatalf("a near-by-meaning-only graph answer must send the web search for what it lacks (web searches %d, web reads %d):\n%s", m.searchCalls.Load(), m.reads.Load(), out.Stdout)
+	if !strings.Contains(out.Stdout, "interim packet: 2 sources") || strings.Contains(out.Stdout, "<error") || m.searchCalls.Load() != 0 || m.reads.Load() != 0 {
+		t.Fatalf("pages that answer the question need no web search however few words matched (web searches %d, web reads %d):\n%s", m.searchCalls.Load(), m.reads.Load(), out.Stdout)
 	}
-	var mnotes []string
-	for _, in := range out.Intents {
-		var p struct {
-			Notes []string `json:"notes"`
-		}
-		if json.Unmarshal([]byte(in.Packet), &p) == nil && len(p.Notes) > 0 {
-			mnotes = p.Notes
-		}
+	if notes := packetNotes(out); len(notes) != 1 || strings.Contains(strings.Join(notes, "|"), "missing:") {
+		t.Fatalf("notes = %q: no gap was established, so no missing line", notes)
 	}
-	if len(mnotes) != 2 || mnotes[1] != "missing: cabinet changes" {
-		t.Fatalf("notes = %q, want the adds line and a missing line naming the lack", mnotes)
+
+	// Zero word matches and the pages do not answer: the cell goes to the web for the lack the
+	// pages left open, and the packet names it.
+	w := newResearchFixture(t)
+	w.corpus = []string{"cap:https://www.bbc.co.uk/a", "cap:https://www.itv.co.uk/b"}
+	w.nearOnly = true
+	w.pageText = "The harbour was calm and the weather mild on Sunday morning, residents said."
+	cell, hooks = w.session(t)
+	hooks.Begin(SessionFrame{RunID: "run-2w"})
+	out = cell(workedCell(t))
+	if strings.Contains(out.Stdout, "<error") {
+		t.Fatalf("the worked cell failed:\n%s", out.Stdout)
+	}
+	if w.searchCalls.Load() != 1 || w.reads.Load() != 5 {
+		t.Fatalf("pages that do not answer must send the web search (web searches %d, web reads %d):\n%s", w.searchCalls.Load(), w.reads.Load(), out.Stdout)
+	}
+	if notes := packetNotes(out); len(notes) != 2 || notes[1] != "missing: cabinet changes" {
+		t.Fatalf("notes = %q, want the adds line and a missing line naming the lack", notes)
 	}
 
 	// The graph's event record lists a second outlet's capture: the cell reads it from the
@@ -461,23 +496,18 @@ func TestOverlayWorkedCellCountsOnlyPagesReadWithoutError(t *testing.T) {
 	}
 }
 
-// The overlay is checked against the bound it was rewritten to meet.
+// The research prompts are bounded as the model sees them: the role prompt's content (not the
+// YAML file, whose comments hold the version history) and the overlay's body, each with about
+// 16% headroom over its size on 2026-11-23 (6908 and 10256), and the two together. The bounds
+// are a sanity check against unnoticed growth, not a model limit.
 func TestResearchRoleAndOverlayStayUnderTheirBound(t *testing.T) {
 	overlay := runtimeprompts.RLMResearchOverlay()
-	raw, err := os.ReadFile("../promptstore/defaults/research.yaml")
+	role, err := promptstore.New(t.TempDir()).Load("user-alice", agentprofile.Research)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Before 2026-11-09: overlay 13,100 chars, role 5,586.
-	// Relaxed 2026-11-16 to a sanity check (12k, 9k, 19k together): the research
-	// prompt is to be rewritten as an explanation of the system rather than
-	// rules (owner, 2026-11-16), and a longer explanation must not be refused
-	// by a bound written for the dedupe.
-	// Relaxed 2026-11-22 to 12000, 10500, 22000. The role figure is the whole YAML file, version
-	// notes included (its body is about 1.5k less); the 8-source target went but the stop rule,
-	// the one-count sentence and the held-mark explanation were added.
-	if len(overlay) > 12000 || len(raw) > 10500 || len(overlay)+len(raw) > 22000 {
-		t.Fatalf("research overlay %d + role %d chars: past the sanity bounds (12000, 10500, 22000 together)", len(overlay), len(raw))
+	if len(overlay) > 12000 || len(role.Content) > 8000 || len(overlay)+len(role.Content) > 20000 {
+		t.Fatalf("research overlay %d + role content %d chars: past the sanity bounds (12000, 8000, 20000 together)", len(overlay), len(role.Content))
 	}
 }
 

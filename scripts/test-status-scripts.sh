@@ -1106,7 +1106,7 @@ check "X5 the gap texts are listed" 'python3 -c "import json,sys; d=json.load(op
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_frame.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
 printf '##READS\n[ 1.0] runtime[1]: 2026/11/21 04:59:00 corpus read run=o desk=research conv=c capture=x held=false via=read\n##SUM\n##BRIEF\n##GRAPH\n##REPORT\n##GW\n2026/11/21 05:00:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 ( max_results=40 run=r1 desk=research conv=c)\n' >"$root/sr_one.txt"
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_one.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
-check "X7 one search, no Report: n/a, never None%" '! grep -q "None%" "$root/out" && grep -q "no SUCCESSFUL read since the previous search (console clock): n/a of 0" "$root/out"'
+check "X7 one search, no Report: n/a, never None" '! grep -q "None" "$root/out" && grep -q "no SUCCESSFUL read since the previous search (console clock): n/a of 0" "$root/out"'
 env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_frame.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
 check "X6 the text report keeps the old lines and adds the new ones" 'grep -q "^runs 7  searches 15  mean per run 2.14 (over searching runs only)" "$root/out" && grep -q "Reports naming a gap (what the corpus lacked): 2 of 3" "$root/out" && grep -q "all runs: 9 (7 searched), mean web searches per run 1.67" "$root/out" && grep -q "five heaviest runs sent 13 of 15 searches (86.7%)" "$root/out" && grep -q "real gaps (a missing line that says something): 1 of 2 Reports" "$root/out" && grep -q "the prefecture" "$root/out"'
 

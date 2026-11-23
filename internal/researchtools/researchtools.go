@@ -135,7 +135,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 const publishedFirstNote = "published lists the paper's own earlier stories and opinion pieces matching these words. Read the ones that bear on the subject at their read_url before the web, then cite the capture Read returns."
 
 // wireCorpusResult is the search_wire_corpus answer. A struct, not a map: JSON
-// keys must come out published first (a map sorts them alphabetically, which
+// keys must come out in this order: the two counts, then published first (a map sorts them alphabetically, which
 // put captures ahead of the paper's own stories). Field names and meanings are
 // unchanged; the two counts (opening the result), words_note and published_first_note are new.
 type wireCorpusResult struct {
@@ -177,7 +177,7 @@ func wordsNote(matched, nearOnly int, info corpusSearchInfo, answered bool) stri
 		return ""
 	}
 	if matched == 0 && nearOnly > 0 {
-		return fmt.Sprintf("none of the %d listed captures matched your words (in their text, title, outlet or topic); they are listed for their meaning or the stories that cite them, so the graph likely lacks this", nearOnly)
+		return fmt.Sprintf("none of the %d listed captures matched your words (in their text, title, outlet, topic or language); they are listed for their meaning or the stories that cite them, so the graph likely lacks this", nearOnly)
 	}
 	return ""
 }

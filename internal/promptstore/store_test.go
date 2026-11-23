@@ -132,7 +132,7 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"is not proof that nothing is held",
 		"The host tries to search this computer's corpus",
 		"one corpus search in your own words before the web",
-		"each thread of the objective as held (with its capture ids), stale or missing",
+		"each thread of the objective as stored (with its capture ids), stale or missing",
 		"Search the web only for the stale and missing threads, one question at a time",
 		"read what it returns before you search again",
 		"choir.SearchAll(question, wordings)",
