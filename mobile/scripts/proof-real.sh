@@ -57,6 +57,15 @@ reset_state() {
     mkdir -p "$S/themes"
     printf '%s' '{"schema_version":3,"id":"drill-user","name":"Drill user","schemes":["light","dark"],"colors":{"paper":{"light":"#FFFFFF","dark":"#101418"},"fg":{"light":"#111111","dark":"#F2F2F2"},"muted":{"light":"#444444","dark":"#C8C8C8"},"accent":{"light":"#0B5CAD","dark":"#7FB8F5"},"onAccent":{"light":"#FFFFFF","dark":"#101418"}}}' > "$S/themes/drill-user.json"
   fi
+  # The kept first-run progress (app:/data/onboarding.json; shared code reads it, onboarding.ts parseProgress) is what says whether the radio may start: a launch whose first run is not over does not play
+  # (radio-bridge.ts `ready`, by design). The drives before the first-run drive depended on what the PREVIOUS run left in the simulator (train2p3 began with the first run over and the radio played in every
+  # drive; train2p4 began after a signed-out drive had removed it, `pulse ready=false` in 14 drives, no radio, "radio: playing a real story" missing). SEED_ONB_DONE=1 (set below, until the signed-out tour,
+  # which asserts a first launch) writes "the edition is done" into each data directory that exists, so every drive starts from the same state whatever the run before it left.
+  if [ -n "${SEED_ONB_DONE:-}" ]; then
+    for d in "$CONT"/Library/Caches/exact/*/agent/*/data "$CONT"/Library/Application\ Support/exact/*/data; do
+      [ -d "$d" ] && printf '%s' '{"offered":true,"editionDone":true}' > "$d/onboarding.json"
+    done
+  fi
   # The edition-picks drill (SEED_PICKS=1) seeds the OLD Swift file with one topic. This build never reads or deletes it: the drill asserts it is still there and nothing of it was adopted.
   if [ -n "${SEED_PICKS:-}" ]; then
     mkdir -p "$S"; printf '%s' '{"topics":["Zzdrillseed"]}' > "$S/edition-topics.json"
@@ -116,6 +125,11 @@ if [ -z "${NOBUILD:-}" ]; then
   "$HERE/build-lab.sh" ios > "$SCRATCH/build.txt" 2>&1 || { grep -v '^warning' "$SCRATCH/build.txt" | head -60; tail -15 "$SCRATCH/build.txt"; cp "$SCRATCH/build.txt" "$SHOTS/build.txt"; fail "build"; }
 fi
 SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
+SEED_ONB_DONE=1
+# The app's console for the whole proof (the simulator's log stream: no ring, unlike the journal the drive dumps read). run_drive adds each drive's window of it to that drive's dump (proof-common.sh).
+PROOF_JSLOG="$SHOTS/proof-js-console.txt"
+SIM spawn "$EXACT_SIM" log stream --level debug --style compact --predicate "process == \"Autoradio\" AND subsystem == \"$APP\"" > "$PROOF_JSLOG" 2>&1 &
+PROOF_JSLOG_PID=$!
 
 # ---- 3.0 WARM-UP drive: the first launch after an install showed Settings account, Files and Mail signed out for the whole drive in four of sixteen runs (the later drives of the same run were fine, with the
 # same key). The cause is not proven (a first-launch race around the Keychain); the survey must not be that launch, so it is a throwaway one that only opens the app and waits.
@@ -423,12 +437,12 @@ run_drive spine light "" --touch platform
 # One query the paper answers ("the": a substring of nearly every story) and one nothing answers. Each starts a fresh app and types once, then waits past the pause in typing (350 ms) and the answer.
 step "clock data"; wait_ 4000
 step "tap bar-mark"; wait_ 900
-step "type launcher-search \"the\""; wait_ 4500; step tree; shot real-71-search-hits
-step logs
+step "type launcher-search \"the\""; wait_ 1500; step logs; wait_ 1500; step logs; wait_ 1500; step tree; shot real-71-search-hits
+step logs          # `logs` reads what is new: read in turn, the answer's line is taken before the ring (3000 lines, a busy second or two) drops it
 run_drive search-hit light "" --touch platform
 step "clock data"; wait_ 4000
 step "tap bar-mark"; wait_ 900
-step "type launcher-search \"zzqxjvwk\""; wait_ 4500; step tree; shot real-72-search-none
+step "type launcher-search \"zzqxjvwk\""; wait_ 1500; step logs; wait_ 1500; step logs; wait_ 1500; step tree; shot real-72-search-none
 step logs
 run_drive search-none light "" --touch platform
 
@@ -530,6 +544,7 @@ case "$DRIVES_FAILED" in *drill*) echo "note: the sign-out drill failed, so the 
 # ---- 3h. SIGNED-OUT TOUR (the drill above left the Keychain empty): launch with no key. The first screen (the radio) says what is true and offers the one way in; the paper lists the public stories and a
 # story reads; the radio offers to read the public paper; Settings > Account has a Sign in button. Nothing here needs the owner's computer.
 export NOKEY=1
+unset SEED_ONB_DONE          # the signed-out tour is a first launch: the kept progress is removed below and not put back
 fresh_paper pick-signedout
 STORY_SO=$F_STORY1
 # The first run is offered ONCE (onboarding.ts offer: "offered" is kept in app:/data/onboarding.json), and the pick drive above was a signed-out launch that used the offer: reset_state clears the old Swift
@@ -553,6 +568,7 @@ place files 900; view real-55-so-files 2500
 place textures 900; view real-56-so-textures 2500
 step logs
 run_drive signedout light "" --touch platform
+kill "$PROOF_JSLOG_PID" 2>/dev/null; PROOF_JSLOG=
 unset NOKEY
 SO="$SHOTS/drive-signedout.txt"
 # the FIRST screen's dump only: the text of the drive up to the first screenshot step (real-50), not the whole drive
