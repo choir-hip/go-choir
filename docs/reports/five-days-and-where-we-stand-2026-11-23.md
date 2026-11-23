@@ -184,7 +184,7 @@ Second, the redesign. You already designed stateful importance. What it needs is
 
 Third, the two-day items. Your current app's signing ends Tuesday evening. The developer menu. The silence after the opening.
 
-Fourth, the one ruling that is really open: when a running story's beat changes, does the lean to revise still apply, or does it open a successor.
+Fourth, the rulings the design still waits on: whether the root Texture is the front page, who is custodian of subjects, and whether a panel reads draft four before anything red starts.
 
 The one thing to remember is this. The machinery works and is mostly proven. What it lacks is memory in its judgements, and a way to see for ourselves when it is wrong.
 
