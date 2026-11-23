@@ -116,7 +116,7 @@ func TestRememberedWALGrowthRaisesTheNeedOnceAndDoesNotRatchet(t *testing.T) {
 		t.Fatalf("first tick: %s %q", outcome, detail)
 	}
 	// A later tick, due again, with only the planned headroom free.
-	h.newestAt = now.Add(-48 * time.Hour)
+	h.newestAt, h.head = now.Add(-48*time.Hour), 300
 	later := now.Add(48 * time.Hour)
 	outcome, detail := h.run(p, later)
 	if outcome != snapshotRefused || !strings.Contains(detail, "WAL headroom") {
