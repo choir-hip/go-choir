@@ -12,9 +12,10 @@
 //  B8  the answer card: working, first, full, failed; the retry flag; cancelled and dismissed entries show no card; the latest visible entry decides.
 //  B9  the run sheet's overlay: held for the audio session shows paused; nothing on air shows idle; remote audio shows as the radio with its own play state and progress.
 //  B10 `until` is the seconds to the next change of a timed state, 0 when none, so the contract asks again then and not before.
+//  B12 a card the listener closed stays closed for that answer: a turn that begins, is cancelled, fails or is pending never brings an older closed card back; a new answer shows; a sign-out forgets.
 //  B11 the native answer's real shape: missing fields, wrong types, extra fields and nothing at all give an idle bar, never a throw.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { barInfo, forgetBar, ERROR_WINDOW, REVISED_WINDOW, PICK_A_STORY } from './bar.ts';
+import { barInfo, forgetBar, dismissAnswer, ERROR_WINDOW, REVISED_WINDOW, PICK_A_STORY } from './bar.ts';
 import { nextGeneration } from './api.ts';
 
 const T0 = 1_000_000;
@@ -24,7 +25,7 @@ const facts = (o: Record<string, unknown> = {}) => ({
 });
 const play = (o: Record<string, unknown> = {}) => facts({ playing: true, title: 'Harbor strike ends', running: true, blockCount: 4, ...o });
 const entry = (o: Record<string, unknown> = {}) => ({ id: 'e1', question: 'what changed?', first: '', firstSource: '', answer: '', status: 'asking', note: '', ...o });
-const none = { entries: [], dismissed: '' };
+const none = { entries: [] };
 const at = (s = 0) => T0 + s;
 
 beforeEach(() => forgetBar());
@@ -133,7 +134,7 @@ describe('the bar state', () => {
 });
 
 describe('the answer card', () => {
-  const card = (e: Record<string, unknown>, dismissed = '') => barInfo(play(), { entries: [entry(e)], dismissed }, at());
+  const card = (e: Record<string, unknown>, dismissed = '') => { if (dismissed !== '') dismissAnswer(dismissed); return barInfo(play(), { entries: [entry(e)] }, at()); };
   test('B8 working: asked, nothing yet', () => {
     expect(card({})).toMatchObject({ question: 'what changed?', answerState: 'working', answerText: '', canRetry: false });
   });
@@ -156,19 +157,77 @@ describe('the answer card', () => {
     expect(barInfo(play(), none, at()).question).toBe('');
     expect(card({ status: 'cancelled' }).answerState).toBe('');
     expect(card({ id: 'e1', status: 'answered', answer: 'a' }, 'e1').answerState).toBe('');
+    forgetBar();
     expect(card({ id: 'e1', status: 'answered', answer: 'a' }, 'other').answerState).toBe('full');
   });
   test('B8 the card names the entry it shows, so Close can close that one even when a later entry was cancelled', () => {
     const entries = [entry({ id: 'e1', status: 'answered', answer: 'a' }), entry({ id: 'e2', status: 'cancelled' })];
-    const shown = barInfo(play(), { entries, dismissed: '' }, at());
+    const shown = barInfo(play(), { entries }, at());
     expect(shown.answerId).toBe('e1');
-    expect(barInfo(play(), { entries, dismissed: shown.answerId }, at()).answerState).toBe('');
+    dismissAnswer(shown.answerId);
+    expect(barInfo(play(), { entries }, at()).answerState).toBe('');
     expect(barInfo(play(), none, at()).answerId).toBe('');
   });
   test('B8 the latest entry that is not cancelled decides', () => {
     const entries = [entry({ id: 'e1', status: 'answered', answer: 'old answer' }), entry({ id: 'e2', question: 'later?', status: 'failed', note: 'no' }), entry({ id: 'e3', status: 'cancelled' })];
-    expect(barInfo(play(), { entries, dismissed: '' }, at())).toMatchObject({ question: 'later?', answerState: 'failed' });
-    expect(barInfo(play(), { entries, dismissed: 'e2' }, at()).answerState).toBe('');         // the dismissed one hides the card; the one before it does not come back
+    expect(barInfo(play(), { entries }, at())).toMatchObject({ question: 'later?', answerState: 'failed' });
+    dismissAnswer('e2');
+    expect(barInfo(play(), { entries }, at()).answerState).toBe('');         // the dismissed one hides the card; the one before it does not come back
+  });
+});
+
+describe('a closed card stays closed (B12)', () => {
+  // The listener's Close is remembered here, in shared code, by the id of the entry the card showed. A turn that begins is not a new answer: System 1 may cancel it as "nothing was asked", and
+  // the card of the older answer must not come back then (the owner closed it twice and it kept returning; Conversation.begin used to clear the one native dismissed id).
+  const ans = (id: string, extra: Record<string, unknown> = {}) => entry({ id, question: 'q ' + id, status: 'answered', answer: 'answer ' + id, ...extra });
+  const shows = (entries: unknown[]) => barInfo(play(), { entries }, at());
+  test('B12 dismiss, then a turn that is cancelled: the card stays closed', () => {
+    const shown = shows([ans('e1')]);
+    expect(shown.answerId).toBe('e1');
+    dismissAnswer(shown.answerId);
+    expect(shows([ans('e1')]).answerState).toBe('');
+    expect(shows([ans('e1'), entry({ id: 'e2', status: 'cancelled' })])).toMatchObject({ answerState: '', answerId: '' });
+  });
+  test('B12 dismiss, then a turn that is only pending: its own working card shows, and when it is cancelled the old one stays closed', () => {
+    dismissAnswer('e1');
+    expect(shows([ans('e1'), entry({ id: 'e2' })])).toMatchObject({ answerId: 'e2', answerState: 'working', question: 'what changed?' });
+    expect(shows([ans('e1'), entry({ id: 'e2', status: 'cancelled' })]).answerState).toBe('');
+  });
+  test('B12 dismiss, then a turn that fails before answering shows its own failure, never the older closed answer', () => {
+    dismissAnswer('e1');
+    expect(shows([ans('e1'), entry({ id: 'e2', status: 'failed', note: 'no' })])).toMatchObject({ answerId: 'e2', answerState: 'failed' });
+  });
+  test('B12 dismiss, then a new real answer: the new card shows and the old stays closed', () => {
+    dismissAnswer('e1');
+    const now = shows([ans('e1'), ans('e2')]);
+    expect(now).toMatchObject({ answerId: 'e2', answerState: 'full', answerText: 'answer e2' });
+    dismissAnswer('e2');
+    expect(shows([ans('e1'), ans('e2')]).answerState).toBe('');
+  });
+  test('B12 dismiss twice in a row with phantom turns between: nothing comes back', () => {
+    dismissAnswer('e1');
+    expect(shows([ans('e1'), entry({ id: 'p1', status: 'cancelled' })]).answerState).toBe('');
+    expect(shows([ans('e1'), entry({ id: 'p1', status: 'cancelled' }), ans('e2')]).answerId).toBe('e2');
+    dismissAnswer('e2');
+    expect(shows([ans('e1'), entry({ id: 'p1', status: 'cancelled' }), ans('e2'), entry({ id: 'p2', status: 'cancelled' })]).answerState).toBe('');
+    expect(shows([ans('e1'), entry({ id: 'p1', status: 'cancelled' }), ans('e2'), entry({ id: 'p2', status: 'cancelled' }), entry({ id: 'p3', status: 'cancelled' })]).answerState).toBe('');
+  });
+  test('B12 closing one answer does not close a different one', () => {
+    dismissAnswer('e1');
+    expect(shows([ans('e1'), ans('e2')]).answerId).toBe('e2');
+    expect(shows([ans('e2')]).answerId).toBe('e2');
+    expect(shows([ans('e1'), ans('e2'), entry({ id: 'p', status: 'cancelled' })]).answerId).toBe('e2');     // an answer not closed stays across a phantom turn
+  });
+  test('B12 a sign-out forgets what was closed (it was the old account\'s) and bad ids are ignored', () => {
+    dismissAnswer('e1'); dismissAnswer(''); dismissAnswer(7 as never);
+    expect(shows([ans('e1')]).answerState).toBe('');
+    nextGeneration();
+    expect(shows([ans('e1')]).answerState).toBe('full');
+  });
+  test('B12 the memory is bounded and keeps the newest', () => {
+    for (let i = 0; i < 500; i++) dismissAnswer('x' + i);
+    dismissAnswer('last');
+    expect(shows([ans('last')]).answerState).toBe('');
   });
 });
 

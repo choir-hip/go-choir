@@ -62,12 +62,17 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(c.entries().last?.answer, "Full: talks resume Monday.")
         XCTAssertEqual(c.entries().count, 1)
     }
-    func testDismissHidesTheCardUntilTheNextQuestion() {
+    // This test used to assert that `begin` cleared the dismissed id ("a new question shows its card again"). That was the bug: every voice turn begins before System 1 has judged
+    // whether anything was asked, so a phantom turn reopened the card the listener had closed. Closing is shared code's now (AutoradioLab/bar.ts `dismissAnswer`, bar.test.ts B12);
+    // the conversation keeps no dismissal, and a turn that begins and is cancelled leaves the answered entry exactly as it was, so the card's choice never depends on a turn's start.
+    func testAPhantomTurnLeavesTheAnsweredEntryAsItWas() {
         let c = Conversation()
         c.begin(id: "t1", question: "q"); c.addAnswer(id: "t1", sentence: "a"); c.finishAnswer(id: "t1", status: "completed")
-        c.dismiss(); XCTAssertEqual(c.dismissedID(), "t1")
-        c.begin(id: "t2", question: "q2"); XCTAssertEqual(c.dismissedID(), "", "a new question shows its card again")
-        c.dismiss(id: "t1"); XCTAssertEqual(c.dismissedID(), "t1", "the card names the entry it shows (bar.ts answerId)")
+        let before = c.entries().first
+        c.begin(id: "t2", question: ""); c.cancelOpen()
+        XCTAssertEqual(c.entries().map(\.status), ["answered", "cancelled"])
+        XCTAssertEqual(c.entries().first, before, "the answered entry is untouched by a turn that begins and is cancelled")
+        XCTAssertEqual(c.entries().first?.id, "t1", "its id is what the bar's card names, so shared code can keep it closed")
     }
 }
 

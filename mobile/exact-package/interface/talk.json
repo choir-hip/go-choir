@@ -11,8 +11,7 @@
    "startedAt": "number"
   },
   "ConversationEntries": {
-   "entries": "ConversationEntry[]",
-   "dismissed": "string"
+   "entries": "ConversationEntry[]"
   },
   "VoiceProfile": {
    "learned": "bool",
@@ -30,8 +29,7 @@
    "answers": "ConversationEntries",
    "substitute": {
     "default": {
-     "entries": [],
-     "dismissed": ""
+     "entries": []
     }
    }
   },

@@ -22,7 +22,7 @@ import * as themes from './themes.ts';
 import { notebookShared } from './notebook-run.ts';
 import { syncContent } from './content-run.ts';
 import * as mail from './mail.ts';
-import { barInfo } from './bar.ts';
+import { barInfo, dismissAnswer } from './bar.ts';
 import * as radioBridge from './radio-bridge.ts';
 import { radioPage } from './radio-page.ts';
 import { retrievalServe, paperSearch } from './retrieval-live.ts';
@@ -161,6 +161,8 @@ const sources: Sources = {
   storyMore: ([address, surface, sheet, now], _s, storage) => cards.storyMore({ address, surface, sheet, now }, storage),
   learnedInfo: ([_tick], _s, storage) => cards.learnedInfo(storage),
   learnedReset: (_a, _s, storage) => cards.learnedReset(storage),
+  // The answer card's Close (bar.ts): the entry the card shows stays closed, whatever turns come after.
+  answerDismissShared: ([id]) => { dismissAnswer(id); return { ok: true, message: '' }; },
   pagesView: ([_tick, _requested], _store, storage) => pages.pagesView(storage),
   pageRequested: ([id, address, title], _store, storage) => pages.pageRequested(storage, id, address, title),
   pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),

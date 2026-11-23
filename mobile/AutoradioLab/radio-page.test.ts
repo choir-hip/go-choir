@@ -19,7 +19,7 @@ const entry = (id: string, o: Partial<Entry> = {}): Entry => ({ id, kind: 'story
 const sheet = (entries: Entry[]) => JSON.stringify({ version: 3, on_air: entries.find((e) => e.state === 'on_air')?.id, position_seconds: 0, entries, master_version: 0, sheet_epoch: 0 });
 const facts = (entries: Entry[], o: Record<string, unknown> = {}) => ({ ...EMPTY_FACTS, at: NOW, sheet: sheet(entries), ...o });
 const bar = (o: Record<string, unknown> = {}) => ({ phase: 'playing', transcript: '', blockCount: 0, running: false, playing: false, title: '', message: '', onAir: true, ...o });
-const none = { entries: [], dismissed: '' };
+const none = { entries: [] };
 const air = entry('a', { state: 'on_air' });
 
 describe('the sheet', () => {

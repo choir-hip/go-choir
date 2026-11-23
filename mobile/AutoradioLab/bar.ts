@@ -4,8 +4,12 @@
 // known to the native audio code, so the native source `barFacts` hands them over as they are and decides nothing. Everything the bar says is decided here:
 // the state, the words, the timed windows, the progress, the answer card, the overlay. The conversation's entries come from `conversationEntries` (conversation.ts's input).
 //
-// The only memory here is the player's message: it is new once (it holds the bar for the error window), so the first time it is seen is kept. It is keyed on
-// the account generation (api.ts): a sign-out forgets it, so one account's words never hold the next account's bar. Nothing is stored in a file.
+// The memory here is two things, both keyed on the account generation (api.ts) so a sign-out forgets them and one account's words never reach the next account's bar:
+//  - the player's message: it is new once (it holds the bar for the error window), so the first time it is seen is kept;
+//  - the answers the listener closed: the ids of the conversation entries whose card Close hid (`dismissAnswer`). A card the listener closed stays closed for that answer. A turn that
+//    only begins is not a new answer (System 1 may cancel it as "nothing was asked"), so nothing a turn does reopens a card; only a new entry with an answer of its own is shown.
+//    The entries are native (Conversation.swift) and hold no dismissal; their ids are unique per turn and reach this file whole.
+// Nothing is stored in a file: the entries live in the app's memory too, so after a restart there is no entry and no card to come back.
 //
 // Ways this can fail (each is a test in bar.test.ts, B1 to B11): see the list at the top of that file.
 import { accountGeneration } from './api.ts';
@@ -29,7 +33,20 @@ const bool = (v: unknown): boolean => v === true;
 // The player's message, as first seen: its words, when, and under which account.
 let seen = { gen: -1, message: '', at: 0 };
 /** Forget what the bar was holding (tests; a sign-out does it by moving the account generation). */
-export function forgetBar(): void { seen = { gen: -1, message: '', at: 0 }; }
+export function forgetBar(): void { seen = { gen: -1, message: '', at: 0 }; closed = { gen: -1, ids: new Set() }; }
+
+// The entries the listener closed, under the account that closed them. Insertion order is kept; past CLOSED_KEPT the oldest are forgotten (an entry is only ever shown while it is among
+// the conversation's last 30, so an id that old can no longer be shown).
+const CLOSED_KEPT = 100;
+let closed: { gen: number; ids: Set<string> } = { gen: -1, ids: new Set() };
+const closedIds = (): Set<string> => { const gen = accountGeneration(); if (closed.gen !== gen) closed = { gen, ids: new Set() }; return closed.ids; };
+/** The listener closed the card of this entry (the id the card named, `answerId`). Closing one entry closes no other. */
+export function dismissAnswer(id: unknown): void {
+  if (typeof id !== 'string' || id === '') return;
+  const ids = closedIds();
+  ids.delete(id); ids.add(id);
+  while (ids.size > CLOSED_KEPT) ids.delete(ids.values().next().value as string);
+}
 
 /** A plain line for an engine error, by the stage that failed. */
 function plain(stage: string, message: string): string {
@@ -87,12 +104,11 @@ export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): B
     b.state = p ? 'playing' : 'paused'; b.text = str(f.remoteTitle); b.playing = p; b.progress = Math.min(1, Math.max(0, num(f.remoteFraction)));
   }
 
-  // The answer card: the latest entry that is not cancelled, unless it was dismissed.
+  // The answer card: the latest entry that is not cancelled, unless the listener closed it. A cancelled entry is skipped and the answer before it shows only if it was not closed.
   const list = Array.isArray(obj(rawEntries).entries) ? (obj(rawEntries).entries as unknown[]) : [];
-  const dismissed = str(obj(rawEntries).dismissed);
   let e: Record<string, unknown> | undefined;
   for (let i = list.length - 1; i >= 0; i--) { const c = obj(list[i]); if (Object.keys(c).length && str(c.status) !== 'cancelled') { e = c; break; } }
-  if (e && str(e.id) !== dismissed) {
+  if (e && !closedIds().has(str(e.id))) {
     const first = str(e.first), source = str(e.firstSource), answer = str(e.answer), note = str(e.note), status = str(e.status);
     const saved = source === '' ? first : `${source}: ${first}`;
     b.question = str(e.question); b.answerId = str(e.id);

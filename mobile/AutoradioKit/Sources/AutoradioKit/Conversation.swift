@@ -38,7 +38,6 @@ public final class Conversation: @unchecked Sendable {
     public static let limit = 30
     private let lock = NSLock()
     private var list: [ConversationEntry] = []
-    private var dismissed: String?
     private var current: String?
     public var onChange: (@Sendable () -> Void)?
     public init() {}
@@ -56,7 +55,7 @@ public final class Conversation: @unchecked Sendable {
 
     public func begin(id: String, question: String) {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        lock.lock(); current = id; dismissed = nil; lock.unlock()
+        lock.lock(); current = id; lock.unlock()
         // A question still open when another begins is over: never two cards "working".
         change { l in
             for i in l.indices where l[i].status == "asking" || l[i].status == "answering" { l[i].status = "cancelled" }
@@ -114,13 +113,9 @@ public final class Conversation: @unchecked Sendable {
         }
     }
 
-    public func dismiss(id: String = "") { lock.lock(); dismissed = id.isEmpty ? list.last?.id : id; lock.unlock(); onChange?() }
     public func entries() -> [ConversationEntry] { lock.lock(); defer { lock.unlock() }; return list }
     public func entry(_ id: String) -> ConversationEntry? { entries().last { $0.id == id } }
-    public func clear() { lock.lock(); list = []; current = nil; dismissed = nil; lock.unlock(); onChange?() }
-
-    /// The id the listener closed the bar's card on ("" none). Which entry the card shows is decided in shared code (bar.ts) from the entries and this.
-    public func dismissedID() -> String { lock.lock(); defer { lock.unlock() }; return dismissed ?? "" }
+    public func clear() { lock.lock(); list = []; current = nil; lock.unlock(); onChange?() }
 
     /// Plain words for an error that ended a turn with nothing spoken.
     public static func plain(_ error: Error) -> String {
