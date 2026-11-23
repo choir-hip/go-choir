@@ -203,17 +203,22 @@ export class RunSheetStore {
   }
 
   /** The pending list's bound (`MAX_PENDING`). The rule: whole entries go, never single ops. The ops of one entry (its place, its air reports, its end) are one chain; an end kept without its place, or an `on_air` dropped with its `heard`
-   *  kept, would be refused by the server. Chains of entries that were heard or skipped, or that only report (no place in the list), go first, oldest first, then the oldest of the rest; an op that names no entry (a clear, a previous) is a chain of its own. Said in the log and
+   *  kept, would be refused by the server. Chains of entries that are over (heard or skipped, or a skip) go first, then chains that are only reports, then the oldest of the rest, and the newest chain only if that is not enough; a listener's act (place, remove, move, skip, clear, previous) is not a report; an op that names no entry is a chain of its own. Said in the log and
    *  counted in `lostPending` (the pulse's log line carries it). */
   private bound(): void {
     const over = this.pending.length - MAX_PENDING;
     if (over <= 0) return;
     const key = (o: Op): string => o.entry?.id ?? o.id ?? o.op_id;
-    const order: string[] = [], size = new Map<string, number>(), finished = new Set<string>(), placed = new Set<string>();
-    for (const o of this.pending) { const k = key(o); if (!size.has(k)) order.push(k); size.set(k, (size.get(k) ?? 0) + 1); if (o.op === 'aired' && (o.state === 'heard' || o.state === 'skipped')) finished.add(k); if (o.op === 'place') placed.add(k); }
+    const order: string[] = [], size = new Map<string, number>(), finished = new Set<string>(), acts = new Set<string>();
+    for (const o of this.pending) {
+      const k = key(o); if (!size.has(k)) order.push(k); size.set(k, (size.get(k) ?? 0) + 1);
+      if ((o.op === 'aired' && (o.state === 'heard' || o.state === 'skipped')) || o.op === 'skip') finished.add(k);       // the entry is over (a skip of the one on air ends it)
+      if (o.op !== 'aired') acts.add(k);                                                                                  // a place, remove, move, skip, clear or previous is the listener's act: not a report
+    }
+    // Over entries first, then chains that are only reports, then the oldest of the rest, and last (only if the excess is still not met) the newest chain.
     const newest = key(this.pending[this.pending.length - 1]);
-    const cheap = (k: string): boolean => finished.has(k) || !placed.has(k);      // an entry already heard, or one whose place is not in the list (only reports: the server has the entry)
-    const victims = [...order.filter(cheap), ...order.filter((k) => !cheap(k))].filter((k) => k !== newest);
+    const rank = (k: string): number => (finished.has(k) ? 0 : !acts.has(k) ? 1 : 2);
+    const victims = [...order.filter((k) => k !== newest)].sort((x, y) => rank(x) - rank(y)).concat(order.includes(newest) ? [newest] : []);
     const drop = new Set<string>(); let n = 0;
     for (const k of victims) { if (n >= over) break; drop.add(k); n += size.get(k) ?? 0; }
     if (n === 0) return;
