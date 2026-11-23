@@ -1,6 +1,6 @@
 ---
 definition_version: 7
-readiness: intent
+readiness: drafted
 authority: 'the owner, 2026-11-23: "i just renewed my apple developer account. so, another new mission is doing our app store/testflight application... we need to do this and also make screenshots and video previews... and improve the onboarding (voice onboarding as mentioned above) and explanatory materials for the apple reviewers"; "you should be able to make an account (which also applies to choir.news) first inside autoradio app. so, we may have a list of things to do like this before we can ship".'
 review:
   reviewer: none (an intention recorded from the owner's words; reviewed before it becomes executable)
@@ -19,6 +19,7 @@ start:
   - 'unknown: whether Exact''s archive passes Apple''s processing (never uploaded); how Exact sets the version and build number on iOS.'
   - '2026-11-23 evening: the owner signed in to Xcode with the renewed account. On the Mac: a development identity and a wildcard development profile for the paid team (S47GERGJZ3, to 2027-11-23) that covers the owner''s phone. No Apple Distribution identity yet, and no App Store profile.'
   - '2026-11-23T22:24Z: the development build "Autoradio 1" (news.choir.autoradio.lab.one, the same code as before, dcc56f2cd) is on the owner''s phone signed by the paid team; iOS refused the upgrade across teams, so that app alone was removed and installed again and starts signed out. The first app was not touched.'
+  - '2026-11-23T22:50Z: the owner registered the bundle id news.choir.autoradio (Associated Domains enabled, nothing else), created the app record "Autoradio 1" in App Store Connect, an API key (the file is outside the repo) and an Apple Distribution certificate, which is on the Mac. The feedback address and the reviewer''s contact number are kept outside the repo. Still needed from the owner: the API key''s issuer id.'
 finish:
   deliver: Autoradio is on TestFlight for testers and then in the App Store, with a release an agent can run end to end except where Apple requires a person.
   artifact: an app record, a build accepted by Apple's processing, internal then external TestFlight groups, a submitted version with screenshots, previews and review notes, and a release script with its metadata as files in the repo
@@ -81,6 +82,18 @@ boundaries:
   - decision: the app's name is Autoradio 1
     said: i have chosen the name Autoradio 1 btw (i like "A1" vs "AI" as it has slang connotations of trust and it implies there will be Autoradios 2..n which i expect competition)
     'on': '2026-11-23'
+  - decision: 'Apple''s requirements are met before applying: an account made inside the app and deleted inside the app come first (this settles Q6)'
+    said: we should prioritize making all the apple requirements like in-app account creation and account deletion before we apply. gotta put your best foot forward
+    'on': '2026-11-23'
+  - decision: this mission goes first in the metamission; other work continues while Apple reviews
+    said: metamission wise, we can prioritize this, as we will have a couple days to wait on apples review. we will be busy working during that time
+    'on': '2026-11-23'
+  - decision: a new privacy policy is written; the owner reads it, the screenshots and the descriptions before anything is submitted
+    said: yes, we need to make a new privacy policy. ill need to read that in addition to seeing the screenshots and descriptions you make
+    'on': '2026-11-23'
+  - decision: CarPlay is a priority once the iPhone app is on TestFlight
+    said: i didnt select any capability requests but yes, carplay is a priority once we get ios working on testflight
+    'on': '2026-11-23'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
   - signing keys and API keys never enter the repo or an agent's output; key files are passed by path
@@ -93,11 +106,11 @@ boundaries:
 stations:
 - id: P0
   name: The owner's account steps
-  scope: agreements, tax and banking, the app record, an API key with the smallest role that works, the bundle id and name (Q1)
+  scope: 'done by the owner on 2026-11-23: the bundle id, the app record, the API key, the distribution certificate. Remaining: the key''s issuer id; the free-apps agreement confirmed signed'
   class: green
   review: none
   depends_on: []
-  status: pending
+  status: working
 - id: P1
   name: A build Apple accepts
   scope: the release build with no lab or trace pages, its version and build number set, uploaded; the first proof that Exact's archive passes Apple's processing. The upload is the same for internal and external; no internal group is a goal
@@ -105,7 +118,8 @@ stations:
   review: one seat
   depends_on:
   - P0
-  status: pending
+  status: working
+  lane: lane/store-build
 - id: P2
   name: The first run, signed out
   scope: open the app and hear the public paper at once, never blank and never waiting; asking prompts sign-in or sign-up
@@ -115,11 +129,11 @@ stations:
   status: pending
 - id: P3
   name: An account made and deleted in the app
-  scope: creation with a passkey inside the app, the same account as on choir.news; deletion in the app covering the account, the computer and published objects
+  scope: creation with a passkey inside the app, the same account as on choir.news; deletion in the app covering the account, the computer and published objects. Design first (a read-only proposal is being written 2026-11-23); then its stations
   class: red
   review: two seats
   depends_on: []
-  status: pending
+  status: working
 - id: P4
   name: Consent, permissions and models
   scope: the microphone asked only when a signed-in listener turns voice on; one consent before the first request that reaches a model on a server; model files downloaded with their size stated, hosted by us; the privacy label and policy to match
@@ -137,21 +151,24 @@ stations:
   status: pending
 - id: P6
   name: Screenshots, previews and the reviewer's notes
-  scope: scripted slim-simulator runs with seeded content, captured at Apple's current sizes, previews of captured footage only, the review notes and a short walk-through
+  scope: scripted slim-simulator runs with seeded content, captured at Apple's current sizes, previews of captured footage only, the review notes and a short walk-through; with a new privacy policy, the privacy label answers and the store texts, drafted for the owner to read
   class: yellow
   review: none
   depends_on:
   - P2
-  status: pending
+  status: working
 - id: P7
   name: External testers, as soon as possible
-  scope: 'the first aim of the mission: beta review passed and a testers group with a public link; the beta description, feedback contact, review information and what-to-test notes. What must be true first is the shortest list that passes beta review and serves a stranger: P0, P1, P2, and whichever of P3 and P4 the owner rules are needed before the first outside tester (Q6)'
+  scope: 'beta review passed and a testers group with a public link; the beta description, feedback contact, review information and what-to-test notes. On the owner''s word nothing is submitted until Apple''s requirements are met: the signed-out radio, an account made and deleted in the app, consent and permissions, and a privacy policy, screenshots and descriptions the owner has read'
   class: yellow
   review: none
   depends_on:
   - P0
   - P1
   - P2
+  - P3
+  - P4
+  - P6
   status: pending
 - id: P8
   name: The first version submitted
@@ -171,14 +188,6 @@ stations:
   - P8
   status: pending
 decisions_for_the_owner:
-- id: Q1
-  question: 'What is the production bundle id? (The name is settled: Autoradio 1.)'
-  why: the id cannot change after the first upload
-  options:
-  - news.choir.autoradio
-  - news.choir.autoradio1
-  - another in the news.choir family
-  default: news.choir.autoradio, registered by the owner; nothing is uploaded before the owner has registered it
 - id: Q2
   question: What is in version 1?
   why: each page shown to a reviewer must work; mail, files and takes have had little use on a phone
@@ -208,25 +217,18 @@ decisions_for_the_owner:
   - fastlane
   - the raw API
   default: that CLI, pinned, its telemetry turned off, after its reference page is written
-- id: Q6
-  question: Does the first external build wait for an account made and deleted inside the app?
-  why: beta review can see the app through the signed-out radio; a tester who wants more needs an account. In-app creation and deletion are red work with two review seats; without them a first tester makes an account at choir.news and signs in with the device flow
-  options:
-  - go to beta review with the signed-out radio and sign-in to an existing account; in-app creation and deletion follow in the next build
-  - wait for in-app creation and deletion
-  default: wait for in-app creation, as the owner listed it first among the things before we can ship; the owner may choose the faster path
 now:
   status: working
-  as_of: 2026-11-23T22:02Z
-  slice: not started; the research is in and the owner's account steps come first
+  as_of: 2026-11-23T22:50Z
+  slice: P1 (the release build, lane store-build), P3 (design of in-app creation and deletion), P6 (privacy policy and texts drafted for the owner)
   source_ref: origin/main bcea7eefd
   deploy_identity: staging on a2ba96767
   candidate: none
-  believed_state: the rules and tools were read on 2026-11-23; nothing is built
+  believed_state: the owner's account steps are done but for the issuer id; nothing is built
   main_uncertainty: whether Exact's archive passes Apple's processing, and what a reviewer makes of AI-written news
-  next_observation: the owner's answers on Q1 to Q5
+  next_observation: the three agents' reports; the first upload's processing result
   blocker: none
-  next_action: the owner's account steps (P0) and Q1 can start at once; in parallel the release build and the first upload (P1) once the plan is defined; external beta review as soon as Q6's list is true
+  next_action: review and land the release build; the first archive and upload once the issuer id is known; bring the owner the account design and the drafts
 operating_notes:
 - The before-we-ship list is kept in docs/design/design-session-2026-11-23.md until this file is executable; then it lives here as stations.
 receipts:
