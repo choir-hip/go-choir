@@ -121,6 +121,31 @@ final class MicFirstRunTests: XCTestCase {
         XCTAssertLessThanOrEqual(a.engineBuilds - before, 5 + 6 + 1, "five resumes of their own and one chain of six retries, not one chain for each notice (was \(builds))")
     }
 
+    /// D-7: the retry state is touched from the main thread, the notification queue, the global queue and the engine thread. Driven together here (resets and route notices from four threads while resumes schedule retries),
+    /// with the thread sanitizer on (`swift test --sanitize=thread --filter MicFirstRunTests/testTheRetryStateSurvivesFourThreads`) it reports no race, and without it the state stays one of the two it may be in.
+    func testTheRetryStateSurvivesFourThreads() async throws {
+        let a = try runningForPlayback { true }
+        a.inputRateForTest = { _ in 0 }
+        try a.resume(voiceProcessing: true, mic: true)
+        await withTaskGroup(of: Void.self) { g in
+            for t in 0..<4 {
+                g.addTask {
+                    for i in 0..<60 {
+                        switch t {
+                        case 0: a.micMayRetry()
+                        case 1: a.routeChanged("r\(i % 5)")
+                        case 2: a.micSuspended = (i % 2 == 0); a.micSuspended = false
+                        default: _ = a.micState; try? a.resume(voiceProcessing: true, mic: true, fresh: true)
+                        }
+                        if i % 10 == 0 { try? await Task.sleep(nanoseconds: 2_000_000) }
+                    }
+                }
+            }
+        }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue([.pending, .failed].contains(a.micState))
+    }
+
     func testTheLogNeverSaysOkAtRateZero() {
         XCTAssertEqual(MicLog.tap(active: true, rate: 0), "fail")
         XCTAssertEqual(MicLog.tap(active: false, rate: 48000), "fail")
