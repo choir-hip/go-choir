@@ -17,8 +17,12 @@ Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 | Phone: the rest of the pages moved to shared code ("the train") | built; fails 7 checks of its own real-host proof; never on a phone | `lane/exact-train1` |
 | Phone: dead native code removed | built, reviewed once; waits on the train | `lane/native-dead-code` |
 | Phone: one data folder per account, sign-out wipes it | 12 review rounds, 5 failed drill runs; stopped for a structural assessment | `lane/account-partition-s1` |
-| Research prompts: one source count, a stop rule, a real gap measure | built; under test; not reviewed | `lane/research-frame` |
-| `choir trace run`: one run, step by step, with the reasons its record holds | being built | `lane/trace-run` |
+| Research prompts: one source count, a stop rule, a real gap measure | sent back by its review (four blocking findings); rework pushed, re-review owed | `lane/research-frame` |
+| Phone: "Autoradio 1", the train as a second app beside the first | **on the owner's phone since 2026-11-23 01:33Z**; seven defects found there | `lane/exact-side-by-side` |
+| Phone: position moves while playing; a closed answer card stays closed; the queue is described to the server as it is; the microphone opens on a first launch | built; one review seat accepted with six fixes, being applied; not on the phone | `lane/exact-ar1-next` |
+| Phone: sign-in in a sheet over the app | built (red: the approval route and page change); seat 1 accepted with three fixes, seat 2 running | `lane/signin-sheet` |
+| A voice ask searches the paper | not started. Today the answering model has no tools and sees at most 40 front-page titles | none |
+| `choir trace run`: one run, step by step, with the reasons its record holds | built and run on the drill account; shows 0 model calls for a run that made some; not landed | `lane/trace-run` |
 | Phone model benchmark on the Motorola | first rows; not landed | `lane/model-bench` |
 | Snapshot capture in one pass (no store-sized scratch copy) | not started; the reader half landed 11-22 | `lane/snapshot-one-pass` |
 | Redesign of capture (subjects and mentions), offline slice | **failed all four of its kill lines** (claim C192); design panel not yet run | `lane/offline-slice-r0` |
@@ -45,7 +49,7 @@ the first table's). Seven designs exist only on lanes.
 ### The store can be measured by kind (`0f4421aae`, orange)
 - **What:** a background reading of a computer's store: rows and bytes per table and per object kind, current against superseded, duplicates, run memory by age.
 - **Why:** the paper's store is 50 GiB, grows about 2 GiB a day, and nobody knew what was in it.
-- **Proof:** deployed; started on the paper 2026-11-23 00:08Z. No result yet.
+- **Proof:** deployed; ran on the paper 2026-11-23 00:08Z to 00:18Z, all 30 tables complete. The file is 49.7 GiB and 29.4 GiB of it is stored values: object bodies 15.7, agent run memory 7.3 (2.4 of it older than a week), object headers 5.6. By kind the largest bodies are events 3.6, Texture revisions 1.8, lifecycle commands 1.7, source references 1.6, records between desks 1.3, runs 1.2. Superseded objects: 0. Duplicates: 0.24 GiB. So the store is mostly the machinery's own log, and about 20 GiB is index and page overhead of 8 million small objects.
 - **Replaced:** nothing. **Undo:** revert.
 
 ### Restore can verify a snapshot by its pages (`9e3e2060f`, red)
