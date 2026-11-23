@@ -219,6 +219,29 @@ describe('what the runtime remembers does not grow without end (review B1-7)', (
   });
 });
 
+describe('seat 2 items 3 and 7', () => {
+  test('T14c what was handed to the deck for an entry that left the sheet is forgotten too', async () => {
+    rt.play(story('a', { placed_by: 'listener' }));
+    for (const id of ['b', 'c', 'd']) rt.director.applyFromDesk(placeOp(story(id)), 'extend');
+    await idle(); await rt.pump(); await idle();
+    expect(rt.heldSentCount()).toBeGreaterThanOrEqual(3);
+    rt.clear(); await idle(); await rt.pump(); await idle();
+    expect(rt.heldSentCount()).toBe(0);
+  });
+  test('T8d a pause made while the next entry\'s words are being fetched is not overridden: the entry starts, and is paused', async () => {
+    let release: (v: { title: string; paragraphs: string[] }) => void = () => undefined;
+    rt.play(story('a', { placed_by: 'listener' })); await idle();
+    resolvers.story = () => new Promise((r) => { release = r; });
+    rt = make();
+    rt.play(story('a2', { placed_by: 'listener' })); await idle();
+    rt.play(paperStory('/pub/slow', 'Slow')); await idle();
+    expect(await rt.toggle()).toBe('paused');                                  // the listener presses Pause while the words are on their way
+    release({ title: 'Slow', paragraphs: ['Words.'] }); await idle(); await rt.pump(); await idle();
+    expect(deck.why).toBe('paused_listener');                                  // not 'playing': the start did not override the pause
+    expect(await rt.toggle()).toBe('resumed'); expect(deck.why).toBe('playing');
+  });
+});
+
 describe('stopping and starting', () => {
   test('T7 skip with nothing ahead stops the deck; a later arrival starts again', async () => {
     rt.play(story('a', { placed_by: 'listener' })); await idle();

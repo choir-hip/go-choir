@@ -309,6 +309,7 @@ async function handle(r: Radio, text: string): Promise<void> {
     case 'place': {
       const e = (() => { try { return decodeEntry(m.entry); } catch { return undefined; } })();
       if (!e) break;
+      r.writer.listenerActed();                                               // a podcast or a clip added from the native side is the listener's act like every verb of the screens
       const w = obj(m.words), words = Array.isArray(w.paragraphs) ? { title: str(w.title), paragraphs: w.paragraphs.filter((p): p is string => typeof p === 'string') } : undefined;
       if (m.mode === 'now') r.rt.play(e, words); else if (m.mode === 'next') r.rt.playNext(e, words); else r.rt.queue(e, words);
       break;

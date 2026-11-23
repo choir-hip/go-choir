@@ -16,7 +16,7 @@ import { adoptNative } from './api.ts';
 import { forgetOnboarding } from './onboarding.ts';
 import { radioPage } from './radio-page.ts';
 import type { Entry } from './runsheet-model.ts';
-import { barRun, getRadio, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPulse, wipeRadio } from './radio-bridge.ts';
+import { barRun, getRadio, radioHold, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPulse, wipeRadio } from './radio-bridge.ts';
 
 type Call = { op: string; name?: string; peek?: boolean };
 let calls: Call[] = [];
@@ -375,5 +375,16 @@ describe('P14 a sign-out forgets the lists sent with the turns (review B2 nit)',
     const r2 = await getRadio(undefined, native as never);
     const out = applyTurnOps(r2.rt, JSON.stringify({ turn_id: 'after-wipe', base_version: v, ops: [{ op: 'move', id: 'x', to_index: 0 }] }));
     expect(out.refused[0]).toContain('is not one this phone sent');            // the sent lists went with the account
+  });
+});
+
+describe('P15 the native place verb is a listener act (seat 2, item 4)', () => {
+  test('a podcast added by the native path tells the writer the listener acted', async () => {
+    const r = await getRadio(undefined, native as never);
+    let n = 0; const orig = r.writer.listenerActed.bind(r.writer); r.writer.listenerActed = () => { n += 1; orig(); };
+    r.inbox.push(JSON.stringify({ verb: 'place', mode: 'end', entry: { id: 'l-pod', kind: 'story', placed_by: 'listener', state: 'ahead', title: 'Episode', text: 'Words.', est_seconds: 30, revision: 0 } }));
+    await radioHold(undefined, native as never);
+    expect(r.rt.store.entry('l-pod')).toBeDefined();
+    expect(n).toBeGreaterThanOrEqual(1);
   });
 });
