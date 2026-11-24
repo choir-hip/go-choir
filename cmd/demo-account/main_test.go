@@ -120,8 +120,9 @@ func TestOffRemovesTheCredentialAndRevokesEveryKeyOfTheDemoAccountOnly(t *testin
 	line, _ := auth.FormatDemoCredential("reviewer", "a test password that is only a test")
 	_ = os.WriteFile(credFile, []byte(line), 0o600)
 
+	configured(t, credFile)
 	var so, se bytes.Buffer
-	if code := run([]string{"off", "--id-file", idFile, "--out", credFile, "--auth-db", dbPath}, &so, &se, nil); code != 0 {
+	if code := run([]string{"off", "--id-file", idFile, "--credential", credFile, "--auth-db", dbPath}, &so, &se, nil); code != 0 {
 		t.Fatalf("%d %s", code, se.String())
 	}
 	if _, err := os.Stat(credFile); !os.IsNotExist(err) {
@@ -143,7 +144,7 @@ func TestOffRemovesTheCredentialAndRevokesEveryKeyOfTheDemoAccountOnly(t *testin
 		}
 	}
 	// Idempotent when the operator says it is already off.
-	if code := run([]string{"off", "--id-file", idFile, "--out", credFile, "--auth-db", dbPath, "--already-off"}, &so, &se, nil); code != 0 {
+	if code := run([]string{"off", "--id-file", idFile, "--credential", credFile, "--auth-db", dbPath, "--already-off"}, &so, &se, nil); code != 0 {
 		t.Fatalf("second run %d %s", code, se.String())
 	}
 }
@@ -152,8 +153,9 @@ func TestOffWithoutAnIdFileRefusesAndLeavesTheCredential(t *testing.T) {
 	dir := t.TempDir()
 	credFile := filepath.Join(dir, "cred")
 	_ = os.WriteFile(credFile, []byte("x\n"), 0o600)
+	configured(t, credFile)
 	var so, se bytes.Buffer
-	if code := run([]string{"off", "--id-file", filepath.Join(dir, "missing"), "--out", credFile}, &so, &se, nil); code == 0 {
+	if code := run([]string{"off", "--id-file", filepath.Join(dir, "missing"), "--credential", credFile}, &so, &se, nil); code == 0 {
 		t.Fatal("off ran without an account id")
 	}
 	if _, err := os.Stat(credFile); err != nil {
@@ -210,11 +212,12 @@ func TestOffAndResetRefuseAWrongDatabaseOrAccountAndLeaveTheCredential(t *testin
 	bad := filepath.Join(dir, "badid")
 	_ = os.WriteFile(bad, []byte("no-such-account\n"), 0o600)
 	cred := filepath.Join(dir, "cred")
+	configured(t, cred)
 	missingDB := filepath.Join(dir, "typo", "auth.db")
 	for name, args := range map[string][]string{
-		"off, db typo":   {"off", "--id-file", good, "--out", cred, "--auth-db", missingDB},
-		"off, bad id":    {"off", "--id-file", bad, "--out", cred, "--auth-db", dbPath},
-		"off, swapped":   {"off", "--id-file", cred, "--out", good, "--auth-db", dbPath},
+		"off, db typo":   {"off", "--id-file", good, "--credential", cred, "--auth-db", missingDB},
+		"off, bad id":    {"off", "--id-file", bad, "--credential", cred, "--auth-db", dbPath},
+		"off, swapped":   {"off", "--id-file", cred, "--credential", good, "--auth-db", dbPath},
 		"reset, db typo": {"reset", "--id-file", good, "--auth-db", missingDB, "--vmctl", "http://127.0.0.1:1"},
 		"reset, bad id":  {"reset", "--id-file", bad, "--auth-db", dbPath, "--vmctl", "http://127.0.0.1:1"},
 	} {
@@ -236,6 +239,14 @@ func portOf(u string) string { return u[strings.LastIndex(u, ":")+1:] }
 
 func init() { offSettle = 0 }
 
+// configured points the command's "the credential auth reads" at a temp path for one test.
+func configured(t *testing.T, path string) {
+	t.Helper()
+	old := credentialPath
+	credentialPath = path
+	t.Cleanup(func() { credentialPath = old })
+}
+
 func seed(t *testing.T) (dir, dbPath, idFile string) {
 	dir = t.TempDir()
 	dbPath = filepath.Join(dir, "auth.db")
@@ -250,29 +261,55 @@ func seed(t *testing.T) (dir, dbPath, idFile string) {
 // N0: off must remove the credential file auth reads, or fail. A path that does not exist
 // is not "already off" unless the operator says so, and a file that is not a credential
 // (the id file, the signing key) is never deleted.
-func TestOffRemovesOnlyARealCredentialAndFailsOtherwise(t *testing.T) {
+func TestOffRemovesOnlyTheConfiguredCredentialAndFailsOtherwise(t *testing.T) {
 	dir, dbPath, idFile := seed(t)
 	var so, se bytes.Buffer
-	missing := filepath.Join(dir, "old-path", "demo-credential")
-	if code := run([]string{"off", "--id-file", idFile, "--out", missing, "--auth-db", dbPath}, &so, &se, nil); code == 0 {
-		t.Fatal("off exited 0 for a credential path that does not exist")
-	}
-	if code := run([]string{"off", "--id-file", idFile, "--out", idFile, "--auth-db", dbPath}, &so, &se, nil); code == 0 {
-		t.Fatal("off exited 0 for a file that is not a credential")
-	}
-	if _, err := os.Stat(idFile); err != nil {
-		t.Fatal("off deleted a file that is not a credential")
-	}
-	if code := run([]string{"off", "--id-file", idFile, "--out", missing, "--auth-db", dbPath, "--already-off"}, &so, &se, nil); code != 0 {
-		t.Fatalf("an explicit --already-off must succeed: %s", se.String())
-	}
-	cred := filepath.Join(dir, "cred")
+	cred := filepath.Join(dir, "demo", "demo-credential")
+	_ = os.MkdirAll(filepath.Dir(cred), 0o700)
+	configured(t, cred)
 	run([]string{"credential", "--user", "reviewer", "--out", cred}, &so, &se, nil)
-	if code := run([]string{"off", "--id-file", idFile, "--out", cred, "--auth-db", dbPath}, &so, &se, nil); code != 0 {
-		t.Fatalf("off of a real credential failed: %s", se.String())
+	// A stale credential at an old path validates but is not the configured one: off refuses
+	// it, with or without --already-off, and the configured file is left alone.
+	stale := filepath.Join(dir, "demo-credential")
+	run([]string{"credential", "--user", "reviewer", "--out", stale}, &so, &se, nil)
+	for _, extra := range [][]string{nil, {"--already-off"}} {
+		args := append([]string{"off", "--id-file", idFile, "--credential", stale, "--auth-db", dbPath}, extra...)
+		if code := run(args, &so, &se, nil); code == 0 {
+			t.Fatalf("off accepted a path that is not the configured credential %v", extra)
+		}
+	}
+	if _, err := os.Stat(cred); err != nil {
+		t.Fatal("the configured credential was touched by a refused off")
+	}
+	// The configured one: removed and proved absent; the stale old-path file is removed too, and said.
+	oldStale := filepath.Join(dir, "old-demo-credential")
+	staleCredentialPath = oldStale
+	t.Cleanup(func() { staleCredentialPath = "" })
+	run([]string{"credential", "--user", "reviewer", "--out", oldStale}, &so, &se, nil)
+	so.Reset()
+	if code := run([]string{"off", "--id-file", idFile, "--credential", cred, "--auth-db", dbPath}, &so, &se, nil); code != 0 {
+		t.Fatalf("off of the configured credential failed: %s", se.String())
 	}
 	if _, err := os.Stat(cred); err == nil {
-		t.Fatal("the credential is still there")
+		t.Fatal("the configured credential is still there")
+	}
+	if _, err := os.Stat(oldStale); err == nil || !strings.Contains(so.String(), "stale") {
+		t.Fatalf("the stale old-path file must be removed and said: %q", so.String())
+	}
+	// A second run says so explicitly, and still proves the configured path absent.
+	if code := run([]string{"off", "--id-file", idFile, "--credential", cred, "--auth-db", dbPath}, &so, &se, nil); code == 0 {
+		t.Fatal("a second off without --already-off must fail")
+	}
+	if code := run([]string{"off", "--id-file", idFile, "--credential", cred, "--auth-db", dbPath, "--already-off"}, &so, &se, nil); code != 0 {
+		t.Fatalf("--already-off on the configured path must succeed: %s", se.String())
+	}
+	// A file that is not a credential, at the configured path, is never deleted.
+	_ = os.WriteFile(cred, []byte("not a credential\n"), 0o600)
+	if code := run([]string{"off", "--id-file", idFile, "--credential", cred, "--auth-db", dbPath}, &so, &se, nil); code == 0 {
+		t.Fatal("off removed a file that is not a credential")
+	}
+	if _, err := os.Stat(cred); err != nil {
+		t.Fatal("a non-credential was deleted")
 	}
 }
 

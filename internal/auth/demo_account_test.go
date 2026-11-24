@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -462,5 +463,70 @@ func TestAnAppKeyMintThatRacesOffLeavesNoLiveKey(t *testing.T) {
 		if k.RevokedAt == nil {
 			t.Fatalf("a key minted across off is live: %s", k.ID)
 		}
+	}
+}
+
+func demoDeviceEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *User, string) {
+	t.Helper()
+	h, priv := testHandlerEnv(t)
+	h.config.RPOrigins = []string{"https://choir.news"}
+	u, _ := h.store.CreateUser("device-demo-user", "device-demo@example.invalid")
+	file := filepath.Join(t.TempDir(), "demo-credential")
+	line, _ := FormatDemoCredential(demoTestUser, demoTestPass)
+	if err := os.WriteFile(file, []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := *h.config
+	cfg.DemoAccountID = u.ID
+	cfg.DemoCredentialFile = file
+	h.config = &cfg
+	return h, priv, u, file
+}
+
+func liveKeys(h *Handler, uid string) (n int) {
+	keys, _ := h.store.ListAPIKeys(context.Background(), uid)
+	for _, k := range keys {
+		if k.RevokedAt == nil {
+			n++
+		}
+	}
+	return
+}
+
+// An approval that is in flight when `off` runs (its row had no user yet, so off's delete
+// missed it) must not end in a key.
+func TestADeviceApprovalInFlightDuringOffMintsNoKey(t *testing.T) {
+	h, priv, u, file := demoDeviceEnv(t)
+	b := deviceBegin(t, h, "laptop", "203.0.113.7")
+	h.demoMintHook = func() { _ = os.Remove(file) } // off lands after the session was accepted
+	rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve", map[string]string{"user_code": b.UserCode, "decision": "approve"}, priv, u.ID))
+	if rec.Code == http.StatusOK {
+		t.Fatalf("an approval that raced off was accepted: %s", rec.Body)
+	}
+	rewindPoll(t, h)
+	if _, m := devicePoll(h, b.DeviceCode); m["api_key"] != nil {
+		t.Fatalf("a key came out of an approval that raced off: %v", m)
+	}
+	if liveKeys(h, u.ID) != 0 {
+		t.Fatal("a live key exists for the off account")
+	}
+}
+
+// An approved row that is collected after `off` yields no key either.
+func TestACollectionAfterOffMintsNoKey(t *testing.T) {
+	h, priv, u, file := demoDeviceEnv(t)
+	b := deviceBegin(t, h, "laptop", "203.0.113.8")
+	if rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve", map[string]string{"user_code": b.UserCode, "decision": "approve"}, priv, u.ID)); rec.Code != http.StatusOK {
+		t.Fatalf("approve while on: %d %s", rec.Code, rec.Body)
+	}
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	rewindPoll(t, h)
+	if _, m := devicePoll(h, b.DeviceCode); m["api_key"] != nil {
+		t.Fatalf("a key was collected after off: %v", m)
+	}
+	if liveKeys(h, u.ID) != 0 {
+		t.Fatal("a live key exists for the off account")
 	}
 }

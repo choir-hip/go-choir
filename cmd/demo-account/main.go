@@ -9,7 +9,8 @@
 //	    service reads the file on every attempt, so the old password stops
 //	    working at once. Removing the file turns the reviewer sign-in off.
 //
-//	demo-account off --id-file PATH --out CREDENTIAL_PATH [--auth-db PATH] [--already-off]
+//	demo-account off --id-file PATH [--credential PATH] [--auth-db PATH] [--already-off]
+//	    --credential defaults to the file the auth service reads and refuses any other path.
 //	    The owner's one step to turn the account off: removes the credential
 //	    file (no new sign-in) first, then revokes every key and session the
 //	    account holds (no phone stays in). It keeps the id file, so the
@@ -56,6 +57,12 @@ import (
 var tokenPorts = map[string]bool{"8083": true}
 var offSettle = 2 * time.Second
 
+// credentialPath is the file the auth service reads (nix/node-b.nix AUTH_DEMO_CREDENTIAL_FILE).
+var credentialPath = "/var/lib/go-choir/auth-signing/demo/demo-credential"
+
+// staleCredentialPath is where it lived before the move into demo/.
+var staleCredentialPath = "/var/lib/go-choir/auth-signing/demo-credential"
+
 const defaultTokenFile = "/var/lib/go-choir/secrets/internal-service-token"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, http.DefaultClient)) }
@@ -88,6 +95,7 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 	idFile := fs.String("id-file", "", "the host file holding the demo account id (reset)")
 	authDB := fs.String("auth-db", "/var/lib/go-choir/auth/auth.db", "auth database (reset)")
 	vmctlURL := fs.String("vmctl", "http://127.0.0.1:8083", "vmctl base URL (reset)")
+	credential := fs.String("credential", credentialPath, "off: the credential file the auth service reads")
 	alreadyOff := fs.Bool("already-off", false, "off: the credential file is already gone; do not fail for its absence")
 	tokenFile := fs.String("token-file", defaultTokenFile, "the host-internal service token vmctl enforces (reset); a root shell has none loaded")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -114,8 +122,8 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 		return 0
 	case "off":
 		id, err := readID(*idFile)
-		if err != nil || *out == "" {
-			fmt.Fprintln(stderr, "off needs --id-file (readable) and --out (the credential file)")
+		if err != nil {
+			fmt.Fprintln(stderr, "off needs --id-file (readable)")
 			return 2
 		}
 		// Nothing is touched until the database and the account are found: a typo in
@@ -124,26 +132,38 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 			fmt.Fprintln(stderr, "off:", err, "(nothing was removed)")
 			return 1
 		}
-		// The file named must be the credential auth reads: it exists and parses as one. A path
-		// that is absent is "already off" only when the operator says so; a file that is not a
-		// credential is never removed.
-		raw, rerr := os.ReadFile(*out)
+		// The file is the one the auth service is configured to read (nix sets
+		// AUTH_DEMO_CREDENTIAL_FILE to the same path): any other path, a stale copy
+		// included, would leave the real one live.
+		if filepath.Clean(*credential) != filepath.Clean(credentialPath) {
+			fmt.Fprintf(stderr, "off: --credential must be the file the auth service reads, %s (nothing was removed)\n", credentialPath)
+			return 1
+		}
+		raw, rerr := os.ReadFile(*credential)
 		switch {
 		case rerr == nil && !auth.ValidDemoCredential(raw):
-			fmt.Fprintln(stderr, "off: --out is not a demo credential file (nothing was removed):", *out)
+			fmt.Fprintln(stderr, "off: the file at the credential path is not a demo credential (nothing was removed):", *credential)
 			return 1
 		case rerr != nil && !(*alreadyOff && os.IsNotExist(rerr)):
-			fmt.Fprintln(stderr, "off: cannot read the credential file at --out (wrong path? pass --already-off if it is already removed):", rerr)
+			fmt.Fprintln(stderr, "off: cannot read the credential file (pass --already-off if it is already removed):", rerr)
 			return 1
 		}
 		// Sign-in first: nothing new can come in while the keys are revoked.
-		if err := os.Remove(*out); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(*credential); err != nil && !os.IsNotExist(err) {
 			fmt.Fprintln(stderr, "off: remove credential:", err)
 			return 1
 		}
-		if _, err := os.Stat(*out); err == nil {
+		// Whatever --already-off says, the configured path must be absent now.
+		if _, err := os.Stat(*credential); err == nil {
 			fmt.Fprintln(stderr, "off: the credential file is still there after the remove")
 			return 1
+		}
+		// A copy at the path used before the move is not read by the service, but it must not
+		// sit there to be put back by mistake.
+		if staleCredentialPath != "" && filepath.Clean(staleCredentialPath) != filepath.Clean(credentialPath) {
+			if err := os.Remove(staleCredentialPath); err == nil {
+				fmt.Fprintln(stdout, "removed a stale credential file at the old path", staleCredentialPath)
+			}
 		}
 		fmt.Fprintln(stdout, "credential file removed: the reviewer sign-in answers not available")
 		keys, sessions, err := revokeAll(*authDB, id)

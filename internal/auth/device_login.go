@@ -423,6 +423,9 @@ func (h *Handler) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 	if a == nil {
 		return
 	}
+	if h.demoMintHook != nil {
+		h.demoMintHook()
+	}
 	if err := h.store.DecideDeviceAuthorization(r.Context(), a.ID, user.ID, req.Decision == "approve", time.Now().UTC()); err != nil {
 		if errors.Is(err, ErrDeviceNotFound) {
 			writeJSON(w, http.StatusNotFound, errorResponse{Error: ErrDeviceNotFound.Error()})
@@ -430,6 +433,13 @@ func (h *Handler) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[auth] operation=device_decide user_id=%s result=error error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to record the decision"})
+		return
+	}
+	// The reviewer account turned off while this approval was in flight (the row had no
+	// user until now, so off's delete missed it): take the decision back.
+	if req.Decision == "approve" && h.demoOff(user.ID) {
+		_, _ = h.store.DB().ExecContext(r.Context(), "DELETE FROM device_authorizations WHERE id = ?", a.ID)
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: ErrAccountOff.Error()})
 		return
 	}
 	log.Printf("[auth] operation=device_decide user_id=%s id=%s decision=%s result=success", user.ID, a.ID, req.Decision)
@@ -480,6 +490,12 @@ func (h *Handler) HandleDeviceToken(w http.ResponseWriter, r *http.Request) {
 	}
 	switch res.Status {
 	case DeviceStatusApproved:
+		// Collected after the reviewer account was turned off: the key is taken back.
+		if h.demoOff(res.UserID) {
+			_ = h.store.RevokeAPIKey(r.Context(), res.UserID, res.KeyID)
+			writeJSON(w, http.StatusBadRequest, deviceErrorResponse{Error: "invalid_grant", Description: "unknown or used device code"})
+			return
+		}
 		log.Printf("[auth] operation=device_token key_id=%s result=success", res.KeyID)
 		w.Header().Set("Cache-Control", "no-store") // the answer carries a bearer key
 		writeJSON(w, http.StatusOK, deviceTokenResponse{APIKey: res.Secret, KeyID: res.KeyID, Label: res.Label, Scopes: res.Scopes})
