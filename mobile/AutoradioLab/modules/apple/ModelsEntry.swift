@@ -40,8 +40,11 @@ final class ModelsModule: ExactModule {
         if (request["op"] as? String) == "keystate" { return ["state": Self.keyState()] }
         return MailSeal().reply(request) ?? [:]
     }
-    override func later(_ request: [String: Any], reply: ExactReply) {
+    override func later(_ request: [String: Any], reply plain: ExactReply) {
+        // The ledger (NativeOpLog.swift): op name only (the deck's call name too: a constant, never an argument). A reply never called is named.
         let op = request["op"] as? String
+        let logName = op == "deck" ? "deck." + (request["name"] as? String ?? "") : (op ?? "none")
+        let reply = LoggedReply(NativeOpLog.shared.wrap(op: logName, reply: { plain.send($0) }))
         if op == "generation" {      // shared code says the generation it is at: the first call of a JS context is a boot (it may be below the newest seen: a reload), the wipe's last act a floor
             let g = (request["gen"] as? NSNumber)?.intValue ?? 0
             if request["boot"] as? Bool == true { SharedGeneration.boot(g) } else { SharedGeneration.announce(g) }

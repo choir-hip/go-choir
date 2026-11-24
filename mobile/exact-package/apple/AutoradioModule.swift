@@ -212,7 +212,8 @@ public final class AutoradioModule: ExactPackage {
         if shown { touch(["barFacts"], now: true) }
     }
 
-    public func later(_ name: String, _ args: [String: Any], preferred: Any?, reply: @escaping ([String: Any]) -> Void) {
+    public func later(_ name: String, _ args: [String: Any], preferred: Any?, reply plain: @escaping ([String: Any]) -> Void) {
+        let reply = NativeOpLog.shared.wrap(op: name, reply: plain)      // the ledger: a reply never called is named (NativeOpLog.swift)
         let state = { [unowned self] in self.json(self.runtime.snapshot()) }
         if let h = handlers[name] { h(args, reply); return }
         switch name {
