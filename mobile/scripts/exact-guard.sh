@@ -18,6 +18,7 @@
 #   ios [--run] [--json]              the simulator build; mac [--run] [--json]: this Mac
 # Refused with no choice, by being unlisted: share (an iPhone ipa for AppDrop), deploy and push (publish), update, lock, add, hatch, snapback, backend, pattern, feedback,
 # linux, windows, android, and every `--device` build (a development install of the production id).
+# AR_VARIANT=dev (the production id as a development app, with Associated Domains) runs that list and an iOS phone build, nothing else (see DEV below).
 # With a development app chosen (AR_VARIANT=lab or lab-one) the list is the development app's, and it is a list of REFUSALS: everything is run except an archive and `share`; a
 # phone build needs the build tree. That is deliberate: a verb Exact adds later runs for a development app (its blast radius is a lab build, which is not the store app) and is
 # refused for the production app until it is listed. A development app's variant is only AR_VARIANT / AR_APP_ID: `--variant` and EXACT_VARIANT are refused.
@@ -34,12 +35,19 @@ VARIANT="$("$HERE/scripts/app-identity.sh" variant)" || exit 1
 HAS_DEVICE=""; ea_has --device "$@" && HAS_DEVICE=1; ea_has --phone "$@" && HAS_DEVICE=1       # --phone names a phone as --device does: either is a phone build
 in_tree() { "$HERE/scripts/build-tree.sh" is || no "$1 runs in the build tree ($("$HERE/scripts/build-tree.sh" path 2>/dev/null || echo none named)); push your lane, the lead builds it there"; }
 
+# --phone names a device by UDID: a bare --phone (nothing after it, or another flag) names none and is refused.
+phone_ok() { _pv=""; for _a in "$@"; do if [ "$_pv" = 1 ]; then case "$_a" in ''|-*) no "--phone needs the device's UDID after it" ;; esac; fi; _pv=""; [ "$_a" != --phone ] || _pv=1; case "$_a" in --phone=) no "--phone= needs the device's UDID" ;; esac; done
+  [ "$_pv" != 1 ] || no "--phone needs the device's UDID after it"; }
 # An empty first argument is no verb: `exact.sh "" ios --device` must not ride on "no verb prints help".
 if [ "$#" -ge 1 ] && [ -z "$1" ]; then no "the first argument is empty: name a verb (an empty one is refused, not read as help)"; fi
 VERB="${1:-}"
 if ea_has --archive "$@"; then no "an archive is made only by archive-store.sh (it stages the store kind itself, runs Exact itself and reads the ipa back); exact.sh and build-lab.sh run none, for any app, identity or environment"; fi
 if [ "$VERB" = share ] && [ -n "$VARIANT" ]; then no "share is not run for a development app: it publishes an iPhone build for testers; the production app reaches testers through TestFlight (archive-store.sh)"; fi
-if [ -n "$VARIANT" ]; then
+# AR_VARIANT=dev is the production id built as a development app (app-identity.sh): it shares a phone's container with a TestFlight install, so it gets NO development app's freedom.
+# It runs the production list below and, beyond it, an iOS phone build (ios, agent ios, test ios with --device / --phone <udid>, in the build tree): never deploy, push, --unsigned,
+# --archive, share or a verb not listed.
+DEV=""; [ "$VARIANT" != dev ] || DEV=1
+if [ -n "$VARIANT" ] && [ -z "$DEV" ]; then
   [ -z "$HAS_DEVICE" ] || in_tree "a phone build"
   exit 0
 fi
@@ -52,10 +60,15 @@ case "$VERB" in
   test|agent|verify)
     HOST="${2:-}"
     case "$VERB:$HOST" in test:web|test:ios|test:macos|test:mac|agent:web|agent:ios|agent:macos|agent:mac|verify:web) ;; *) no "$VERB runs with no development app only for a named host (test|agent web, ios, macos, mac; verify web), not '$HOST'" ;; esac
+    if [ -n "$DEV" ] && [ "$HOST" = ios ] && ! ea_has --unsigned "$@"; then phone_ok "$@"; [ -z "$HAS_DEVICE" ] || in_tree "a phone build"; exit 0; fi      # dev: an iOS phone build, signed
     for f in --device --phone --unsigned; do ea_has "$f" "$@" && no "$VERB $f puts a build on a phone: name the development app, AR_VARIANT=lab or AR_VARIANT=lab-one (the production app reaches a phone through TestFlight, archive-store.sh)"; done
     exit 0 ;;
   ios|mac)
     shift
+    if [ -n "$DEV" ] && [ "$VERB" = ios ]; then      # dev: the simulator build, or a signed iOS phone build (--device, --phone <udid>), in the build tree
+      for _a in "$@"; do case "$_a" in --run|--json|--device|--help|-h|--phone|--phone=*) ;; *) [ "${_prev:-}" = --phone ] || no "ios with AR_VARIANT=dev runs the simulator build or a signed phone build only (--run, --json, --device, --phone <udid>), not '$_a'" ;; esac; _prev="$_a"; done
+      phone_ok ios "$@"; [ -z "$HAS_DEVICE" ] || in_tree "a phone build"; exit 0
+    fi
     ea_only --run --json --help -h -- "$@" || no "$VERB with no development app is the simulator or this Mac build only (--run, --json); a phone build, --unsigned and the rest need a development app: AR_VARIANT=lab or AR_VARIANT=lab-one (the production app reaches a phone through TestFlight, archive-store.sh)"
     exit 0 ;;
   *) no "$VERB is not run with no development app chosen (it could put the production app on a phone or publish it); the production app reaches testers through archive-store.sh and TestFlight. For a development app: AR_VARIANT=lab or AR_VARIANT=lab-one" ;;

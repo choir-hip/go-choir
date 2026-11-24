@@ -6,7 +6,9 @@
 #   lab      news.choir.autoradio.lab      "Autoradio"       (the first development app)
 #   lab-one  news.choir.autoradio.lab.one  "Autoradio 1 Dev"  (the second; named "Autoradio 1" until the production app took that name: Exact refuses two apps
 #                                                              of one installed name, scripts/variants.mjs)
-#   dev      news.choir.autoradio          "Autoradio 1"     (the production id as a development install on a phone, with Associated Domains; no variant for Exact)
+#   dev      news.choir.autoradio          "Autoradio 1"     (the production id as a development install on a phone, with Associated Domains; no variant for Exact. It is the production
+#                                                              id, so it shares a phone's container with a TestFlight install: exact-guard.sh lets it run only the production list and a
+#                                                              phone build, make-profile.sh and every store script refuse it)
 # Choose one by environment:
 #   AR_VARIANT=lab-one                        by name, or
 #   AR_APP_ID=news.choir.autoradio.lab.one    by id (AR_APP_NAME, when set, must be that app's name)
@@ -31,6 +33,7 @@ var, aid, anm = (os.environ.get(k, "") for k in ("AR_VARIANT", "AR_APP_ID", "AR_
 if var == "dev":
     if aid and aid != base: die(f"AR_VARIANT=dev is the production id {base}, not AR_APP_ID={aid}")
     if anm and anm != bname: die(f"AR_APP_NAME={anm} is not the name of {base} (\"{bname}\")")
+    if what == "version" and not m.get("version", ""): die("app.json has no version")
     print({"id": base, "name": bname, "variant": "dev", "version": m.get("version", "")}[what]); sys.exit(0)
 if var and var not in ids: die(f"AR_VARIANT={var} is not declared in app.json. Declared: {declared}")
 if aid and aid != base:
