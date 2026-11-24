@@ -69,7 +69,7 @@ final class ModelOfferTests: XCTestCase {
         s.prefer(.responder, pick)
         await s.run(only: [.responder])
         XCTAssertEqual(seen.ids, ["lfm3-1.7b-q5_k_m"], "only the shown stage ran, and a failed pick fell to the floor, not to another model")
-        XCTAssertEqual(s.choices[.holder], "cue-only")
+        XCTAssertEqual(s.record.items.first { $0.stage == "responder" }?.chosen, "cue-only", "the floor, not another model")
         XCTAssertNil(ModelOffer.candidate(job: "responder", id: "not-in-the-table"), "a pick that cannot be built is not run")
     }
     func testM2Ready() {
