@@ -676,6 +676,18 @@ func (s *Service) TakeAudio(ctx context.Context, id string) ([]byte, error) {
 }
 
 func (s *Service) removeTake(ctx context.Context, og *ObjectGraphStore, row *takeRow, state string) error {
+	canonical, err := podcastCanonical(ogKindTakeAudio, row.TakeID)
+	if err != nil {
+		return err
+	}
+	// The bodies the rows had in the artifact store, read before the rows are
+	// rewritten: a body of 1 KiB or more lives there, and would stay until the
+	// GC's seven day grace if it were only left unreferenced.
+	var released []string
+	if takeCanonical, cerr := podcastCanonical(ogKindTake, row.TakeID); cerr == nil {
+		released = append(released, og.bodyRefOf(ctx, takeCanonical))
+	}
+	released = append(released, og.bodyRefOf(ctx, canonical))
 	row.State = state
 	// What is not needed for counts goes with the take: the transcript and
 	// the story it answered. The row keeps its id, handle, times, size, hash
@@ -684,12 +696,12 @@ func (s *Service) removeTake(ctx context.Context, og *ObjectGraphStore, row *tak
 	if err := s.putTakeRow(ctx, og, *row, time.Now().UTC()); err != nil {
 		return err
 	}
-	canonical, err := podcastCanonical(ogKindTakeAudio, row.TakeID)
-	if err != nil {
+	// The bytes are deleted; the outcome rows stay as counts.
+	if err := og.DeleteObject(ctx, canonical); err != nil {
 		return err
 	}
-	// The bytes are deleted; the outcome rows stay as counts.
-	return og.DeleteObject(ctx, canonical)
+	og.releaseBodyRefs(released...)
+	return nil
 }
 
 // DeleteTake lets a publisher delete their own take. A take that is another

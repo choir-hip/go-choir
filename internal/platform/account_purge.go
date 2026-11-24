@@ -69,22 +69,58 @@ const (
 	// author's account is deleted.
 	FormerAuthorLabel = "former-writer"
 
-	accountPurgeScan = 2000
-
 	// accountTapeRetryAfter is how long a failed tape purge job is reported
 	// as it is before a new one is started.
 	accountTapeRetryAfter = 5 * time.Minute
 )
 
+// accountPurgeScan is how many rows one scan of an account's rows reads. A
+// scan that fills is read again with a larger limit until it does not, so no
+// row of the account is left behind because the scan was full (a variable so
+// a test can make a scan small).
+var accountPurgeScan = 2000
+
+// listAllByMetadata is ListObjectsByMetadata without a silent truncation.
+func listAllByMetadata(ctx context.Context, og *ObjectGraphStore, kind, path, value string) ([]objectgraph.Object, error) {
+	for limit := accountPurgeScan; ; limit *= 4 {
+		objs, err := og.ListObjectsByMetadata(ctx, kind, path, value, limit)
+		if err != nil {
+			return nil, err
+		}
+		if len(objs) < limit {
+			return objs, nil
+		}
+	}
+}
+
+// listAllOwned is ListObjects of one kind and owner without a silent
+// truncation.
+func listAllOwned(ctx context.Context, og *ObjectGraphStore, kind objectgraph.ObjectKind, owner string) ([]objectgraph.Object, error) {
+	for limit := accountPurgeScan; ; limit *= 4 {
+		objs, err := og.ListObjects(ctx, objectgraph.ListFilter{Kind: kind, OwnerID: owner, Limit: limit})
+		if err != nil {
+			return nil, err
+		}
+		if len(objs) < limit {
+			return objs, nil
+		}
+	}
+}
+
 // ErrAccountPurgeRefused is a refusal of the rule, not a failure to retry.
 var ErrAccountPurgeRefused = errors.New("platform: account purge refused")
+
+// accountUserIDOK is the shape of an id that may name an account's rows.
+func accountUserIDOK(userID string) bool {
+	userID = strings.TrimSpace(userID)
+	return userID != "" && !strings.ContainsAny(userID, "/\\") && len(userID) <= 200
+}
 
 func accountPurgeGuard(userID string, computerIDs []string, requestedAt, now time.Time) error {
 	if err := purgeguard.CheckClaim(requestedAt, now); err != nil {
 		return fmt.Errorf("%w: %v", ErrAccountPurgeRefused, err)
 	}
-	userID = strings.TrimSpace(userID)
-	if userID == "" || strings.ContainsAny(userID, "/\\") || len(userID) > 200 {
+	if !accountUserIDOK(userID) {
 		return fmt.Errorf("%w: invalid user id", ErrAccountPurgeRefused)
 	}
 	for _, id := range computerIDs {
@@ -102,6 +138,9 @@ func accountPurgeGuard(userID string, computerIDs []string, requestedAt, now tim
 // and returns how many moved. Only suspend (live to suspended) and restore
 // (suspended to live) are exposed to the route.
 func (s *Service) SetAccountTakesState(ctx context.Context, userID, from, to string) (int, error) {
+	if !accountUserIDOK(userID) {
+		return 0, fmt.Errorf("%w: invalid user id", ErrAccountPurgeRefused)
+	}
 	og, err := s.takeStore()
 	if err != nil {
 		return 0, err
@@ -109,7 +148,7 @@ func (s *Service) SetAccountTakesState(ctx context.Context, userID, from, to str
 	key := types.TakePublisherKey(userID)
 	s.takeMu.Lock()
 	defer s.takeMu.Unlock()
-	objs, err := og.ListObjectsByMetadata(ctx, string(ogKindTake), "$.publisher_key", key, takeScan)
+	objs, err := listAllByMetadata(ctx, og, string(ogKindTake), "$.publisher_key", key)
 	if err != nil {
 		return 0, err
 	}
@@ -135,8 +174,38 @@ type AccountPurgeCounts struct {
 	AuthorsDetached   int              `json:"authors_detached"`
 	CapturesDeleted   int              `json:"captures_deleted"`
 	ProjectionRows    map[string]int64 `json:"projection_rows,omitempty"`
+	// TextureDocumentsDeleted and TextureRevisionsDeleted are the person's
+	// synced documents; nothing a published piece reads (a piece carries its
+	// own text), so they go.
+	TextureDocumentsDeleted int `json:"texture_documents_deleted"`
+	TextureRevisionsDeleted int `json:"texture_revisions_deleted"`
+	// RemainingByKind is every row of the account still in the object graph.
+	// KeptByDecision is the part that stays on purpose: the publication layer
+	// (the story, its versions, routes, provenance, the owner's consent
+	// record: published stories stay with the author detached) and the take
+	// rows (id, handle, times, hash, state deleted; no words, no audio).
+	// Undecided is the rest: a kind nobody decided about. It is named in the
+	// receipt and logged so an operator sees it.
 	RemainingByKind   map[string]int64 `json:"remaining_by_kind,omitempty"`
+	KeptByDecision    map[string]int64 `json:"kept_by_decision,omitempty"`
+	Undecided         map[string]int64 `json:"undecided,omitempty"`
 	RemainingTextures map[string]int64 `json:"remaining_texture_rows,omitempty"`
+}
+
+// accountKeptKinds are the kinds of the account's rows that stay after a
+// purge, by decision (owner, 2026-11-23: published stories are kept with the
+// author detached). The publication layer is what a published story is made
+// of; the take rows carry no words and no audio once deleted.
+var accountKeptKinds = map[string]bool{
+	"choir.subject": true, "choir.publication": true, "choir.publication_version": true, "choir.publication_proposal": true,
+	"choir.oped_verdict": true, "choir.public_route": true, "choir.artifact_manifest": true, "choir.artifact_blob": true,
+	"choir.provenance_entity": true, "choir.provenance_activity": true, "choir.provenance_agent": true,
+	"choir.consent_record": true, "choir.review_record": true,
+	"choir.retrieval_source": true, "choir.retrieval_span": true, "choir.retrieval_manifest": true,
+	"choir.publication_source_entity": true, "choir.publication_transclusion": true, "choir.publication_policy": true,
+	"choir.verifier_attestation": true, "choir.publication_resolved_blocks": true, "choir.publication_check": true,
+	"choir.support_judgement": true,
+	"choir.take": true, "choir.take_outcome": true,
 }
 
 // purgeProjectionTables are the tables of the corpus database keyed by
@@ -161,7 +230,7 @@ func (s *Service) PurgeAccountData(ctx context.Context, userID string, computerI
 	// 1. Takes: live and suspended ones are deleted (audio gone, transcript
 	// blanked). Deleted and yanked ones are already removed.
 	takeKey := types.TakePublisherKey(userID)
-	if tobjs, err := og.ListObjectsByMetadata(ctx, string(ogKindTake), "$.publisher_key", takeKey, takeScan); err != nil {
+	if tobjs, err := listAllByMetadata(ctx, og, string(ogKindTake), "$.publisher_key", takeKey); err != nil {
 		errs = append(errs, fmt.Errorf("takes: %w", err))
 	} else {
 		s.takeMu.Lock()
@@ -231,9 +300,26 @@ func (s *Service) PurgeAccountData(ctx context.Context, userID string, computerI
 		c.ProjectionRows[table] = n
 	}
 
-	// 4. What remains of the account's rows, by kind: named in the receipt,
-	// not hidden.
+	// 4. The person's synced documents. A published piece carries its own text
+	// (it reads nothing here), so these are the person's alone and they go.
+	for _, step := range []struct {
+		table string
+		dst   *int
+	}{{"platform_texture_revisions", &c.TextureRevisionsDeleted}, {"platform_texture_documents", &c.TextureDocumentsDeleted}} {
+		res, err := s.store.corpus().ExecContext(ctx, `DELETE FROM `+step.table+` WHERE owner_id = ?`, userID)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", step.table, err))
+			continue
+		}
+		n, _ := res.RowsAffected()
+		*step.dst = int(n)
+	}
+
+	// 5. What remains of the account's rows, by kind: named in the receipt,
+	// split into what stays by decision and what nobody decided.
 	c.RemainingByKind = map[string]int64{}
+	c.KeptByDecision = map[string]int64{}
+	c.Undecided = map[string]int64{}
 	if rows, err := s.store.corpus().QueryContext(ctx, `SELECT object_kind, COUNT(*) FROM og_objects WHERE owner_id = ? GROUP BY object_kind`, userID); err != nil {
 		errs = append(errs, fmt.Errorf("remaining: %w", err))
 	} else {
@@ -242,6 +328,11 @@ func (s *Service) PurgeAccountData(ctx context.Context, userID string, computerI
 			var n int64
 			if err := rows.Scan(&kind, &n); err == nil {
 				c.RemainingByKind[kind] = n
+				if accountKeptKinds[kind] {
+					c.KeptByDecision[kind] = n
+				} else {
+					c.Undecided[kind] = n
+				}
 			}
 		}
 		_ = rows.Close()
@@ -253,6 +344,9 @@ func (s *Service) PurgeAccountData(ctx context.Context, userID string, computerI
 			c.RemainingTextures[table] = n
 		}
 	}
+	if len(c.Undecided) > 0 {
+		log.Printf("corpusd: ALERT account_purge left rows of kinds nobody decided about: %v", c.Undecided)
+	}
 	log.Printf("corpusd: operation=account_purge takes=%d authors_detached=%d captures=%d errors=%d", c.TakesDeleted, c.AuthorsDetached, c.CapturesDeleted, len(errs))
 	return c, errors.Join(errs...)
 }
@@ -260,7 +354,7 @@ func (s *Service) PurgeAccountData(ctx context.Context, userID string, computerI
 // detachPublicationAuthors rewrites the byline of every publication the
 // account owns. A publication already detached is left alone (idempotent).
 func (s *Service) detachPublicationAuthors(ctx context.Context, og *ObjectGraphStore, userID string) (int, error) {
-	objs, err := og.ListObjects(ctx, objectgraph.ListFilter{Kind: "choir.publication", OwnerID: userID, Limit: accountPurgeScan})
+	objs, err := listAllOwned(ctx, og, "choir.publication", userID)
 	if err != nil {
 		return 0, fmt.Errorf("publications: %w", err)
 	}
