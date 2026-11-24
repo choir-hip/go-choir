@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Copy the experiment program and the two small packages it imports from this
+# checkout to ~/offline-experiments-src on the build VM, so it builds without
+# the rest of the repo. Usage: scripts/offline-experiments/sync-runner
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+runner="${RUNNER:-choir-agents}"
+tar c go.mod go.sum internal/outlet scripts/offline-experiments |
+  ssh "$runner" 'rm -rf ~/offline-experiments-src && mkdir -p ~/offline-experiments-src && tar x -C ~/offline-experiments-src && echo synced'

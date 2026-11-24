@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Run one experiment on the build VM over the export.
+# Usage: scripts/offline-experiments/run e1|e2|e3-sample|e3-score [DATA_DIR] [OUT_DIR]
+# (the export is made by scripts/offline-experiments/export; results are text files
+# under OUT_DIR on the VM, nothing is written to Node B or to the repo)
+set -euo pipefail
+what="${1:?e1|e2|e3-sample|e3-score}"
+data="${2:-\$HOME/offline-experiments-data}"
+out="${3:-\$HOME/offline-experiments-out}"
+runner="${RUNNER:-choir-agents}"
+case "$what" in
+  e1) args="e1 $data $out" ;;
+  e2) args="e2 $data $out" ;;
+  e3-sample) args="e3 sample $data $out" ;;
+  e3-score) args="e3 score $out" ;;
+  *) echo "unknown $what" >&2; exit 2 ;;
+esac
+ssh "$runner" "cd ~/offline-experiments-src && GOFLAGS=-mod=mod GOPROXY=off nice -n 10 go run ./scripts/offline-experiments $args"
