@@ -409,3 +409,4 @@ on the pushed commit: first a gate the landing script did not run
 (`docs/problems/podcast-clips-landed-and-was-backed-out-ci-jev-entry-gate-2026-11-16.md`),
 then a wall-clock bound in a test. Three claims on one event are one
 observation, not three.
+| C230 | 2026-11-24T01:33Z | lead | landing | **Player lane lands clean.** `lane/exact-flip-player` (38d86bff7: the radio never waits, with review repairs) passes scripts/land and its CI run on main is green on the first attempt. Test: `gh run list --commit <sha>` conclusion success with no re-run. Settle by 2026-11-24T06:00Z. | 0.75 | open | |
