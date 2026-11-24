@@ -127,4 +127,3 @@ func TestARealDeliveryRecordRefusesTheOwnerAndAUserTarget(t *testing.T) {
 		t.Fatalf("hits = %v: the owner and a user target refuse; a proposal target does not", hits)
 	}
 }
-

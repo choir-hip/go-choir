@@ -49,13 +49,13 @@ purge-unproved ... --apply --digest <hex> --receipt FILE [--receipt-key-file FIL
   accounts do, so a rerun finds both.
 - **The receipt is a journal of intent** (`--receipt`, checked with `--receipt-key-file` and opened **before
   anything is deleted**; a path or key that cannot be used stops the run first). One JSON line, synced, is
-  written **before each irreversible step**: `intent` (after the lock and the recheck), `before-commit:<service>`
-  for each service, `before-mail-dirs`, `before-commit:auth`, then `done` (or `stopped: <why>`). Each line has the
+  written **before and after each irreversible step**: `intent` (after the lock and the recheck; an empty plan writes `intent` and `done`),
+  `before-commit:<service>` and `after-commit:<service>` for each service, `before-mail-dirs`, `after-mail-dirs`, `before-commit:auth`, `after-commit:auth`, then `done` (or `stopped: <why>`). Each line has the
   status of every planned service (pending, committed, failed), the mail directories removed so far (only ones
-  that existed), the rows per table, the full `sha256` of each purged id and, with a key file, a keyed hash of
+  that existed), the rows per table, the id hashes in the form the dry run prints (`purge <hash>`) and, with a key file, a keyed hash of
   each address. A line that cannot be written stops the run before the step it announces, and a failing write of
-  the last line makes the command exit non-zero. A rerun (a dry run too) reads the last line and warns when the
-  last run did not reach `done`.
+  the last line makes the command exit non-zero. A rerun (a dry run too) reads the receipt BEFORE opening it and warns when the
+  last run did not reach `done`; an empty file is no earlier run, and a cut-short last line is reported from the last readable one.
 
 ## Refused, never deleted
 
@@ -99,8 +99,7 @@ target to be a direct child.
 `agent_evidence`, `og_objects`, `platform_texture_documents`, `platform_texture_revisions`,
 `proj_capture_resolution`, `proj_capture_index`, `proj_capture_terms`, `vec_captures`, `search_leads`;
 `owner_act_receipts.owner_user_id`; `publication_version_proposals.source_owner_id` and `.submitter_id`;
-`proposal_delivery_records.target_owner_id` (its `target_id` names the object delivered to, a proposal, and is
-reviewed as not a user); `computer_key_unwrap_requests.requested_by`;
+`proposal_delivery_records.target_owner_id` (and `.target_id` where `target_kind = 'user'`; today it names a proposal); `computer_key_unwrap_requests.requested_by`;
 `computer_key_unwrap_approvals.approver`; and the four route-ledger tables
 (`computer_version_route_slots`, `_transition_receipts`, `_authorization_evidence`, `_authority_modes`),
 whose `route_slot_id` is `"computer:<owner>:<computer>"` (matched by prefix and id).
@@ -124,8 +123,8 @@ whose `route_slot_id` is `"computer:<owner>:<computer>"` (matched by prefix and 
   real auth and maild SQLite schemas and check that no table of them is user-keyed and unregistered. A production
   database may hold tables the code of this commit does not create; the first dry run there is still the check.
 - **Inbound webhook events**: `email_webhook_events` rows (the whole payload) of the account's messages are
-  deleted, found through the provider message index (by message id); events with no indexed message are not
-  matched.
+  deleted, found through the provider message index by provider and message id; events with no indexed message are
+  not matched.
 
 ## Proof
 
@@ -139,6 +138,6 @@ tables stop both runs, by name and by suffix; proposal, unwrap and route-ledger 
 variant of a kept address does not take that account's rows; unsafe ids never reach a path or a pattern and a
 symlinked `users/` is refused; account sets are repaired; vmctl down means no plan and no run; an empty
 database is not a service; 951 accounts are all deleted across chunks. **Not run**: against a Postgres
-production database, or through the command's flags (the journal, the read-only open and the checks are tested as
-library functions). The real schemas, the journal order, the set repair (a proved member with a live session
+production database, or through the command's flags (the command's whole path, dry run, real run on a new receipt and a rerun, is driven
+by `cmd/purge-unproved/main_test.go` against the real schemas). The real schemas, the journal order, the set repair (a proved member with a live session
 first, as auth's `repairSetTx`) and the webhook deletion are tested.

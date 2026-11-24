@@ -322,7 +322,7 @@ func TestAnUnregisteredUserKeyedTableStopsTheRun(t *testing.T) {
 func TestRouteLedgerProposalAndUnwrapRowsRefuseTheAccount(t *testing.T) {
 	w := newWorld(t)
 	exec(t, w.platform, `CREATE TABLE publication_version_proposals (id text primary key, source_owner_id text, submitter_id text)`)
-	exec(t, w.platform, `CREATE TABLE proposal_delivery_records (id text primary key, target_owner_id text)`)
+	exec(t, w.platform, `CREATE TABLE proposal_delivery_records (id text primary key, target_owner_id text, target_kind text, target_id text)`)
 	exec(t, w.platform, `CREATE TABLE computer_key_unwrap_requests (request_id text primary key, requested_by text)`)
 	exec(t, w.platform, `INSERT INTO publication_version_proposals VALUES ('p1', 'someone', 'goes')`)
 	plan, err := BuildPlan(context.Background(), w.auth.DB(), w.owner, w.services())
