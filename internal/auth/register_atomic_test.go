@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -175,3 +176,53 @@ func saveRecoveryChallenge(t *testing.T, h *Handler, user *User, source string) 
 }
 
 func rawJSON(b []byte) json.RawMessage { return json.RawMessage(b) }
+
+// The rightful owner of an address nobody proved can take it back by mail: the
+// claim's passkey, keys and sessions are replaced. A proved address only gains
+// a passkey by recovery.
+func TestMailRecoveryOfAnUnprovedAddressTakesTheAccountBack(t *testing.T) {
+	h := appEnv(t)
+	email := "owner@example.com"
+	// Mallory registers the address first and holds a key.
+	mallory := newSoftPasskey(t)
+	rec := createAccount(t, h, email, mallory, testOrigin)
+	if rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	user, _ := h.store.GetUserByEmail(email)
+	if countKeys(t, h, user.ID) != 1 {
+		t.Fatal("setup: Mallory holds no key")
+	}
+	recoverWith := func(p *softPasskey) {
+		t.Helper()
+		token, err := h.store.CreateRecoveryToken(context.Background(), user.ID, email, hashEmail(email), hashIP("127.0.0.1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		vr := postJSON(h.HandleRecoveryVerify, map[string]string{"token": token})
+		if vr.Code != 200 {
+			t.Fatalf("recovery verify = %d: %s", vr.Code, vr.Body.String())
+		}
+		if fr := postJSON(h.HandleRegisterFinish, p.create(t, decodeMap(t, vr), testOrigin)); fr.Code != 200 {
+			t.Fatalf("recovery finish = %d: %s", fr.Code, fr.Body.String())
+		}
+	}
+	owner := newSoftPasskey(t)
+	recoverWith(owner)
+	creds, _ := h.store.GetCredentialsByUserID(user.ID)
+	if len(creds) != 1 {
+		t.Fatalf("after takeback: %d credentials, want only the owner's", len(creds))
+	}
+	var live int
+	if err := h.store.db.QueryRow("SELECT COUNT(*) FROM api_keys WHERE user_id = ? AND revoked_at IS NULL", user.ID).Scan(&live); err != nil || live != 0 {
+		t.Fatalf("Mallory's key survived the takeback (%d live, %v)", live, err)
+	}
+	if u, _ := h.store.GetUserByEmail(email); u.EmailVerifiedAt == nil {
+		t.Fatal("the address is still unproved after mail recovery")
+	}
+	// A second recovery, the address now proved, adds a passkey and removes none.
+	recoverWith(newSoftPasskey(t))
+	if creds, _ = h.store.GetCredentialsByUserID(user.ID); len(creds) != 2 {
+		t.Fatalf("a proved address's recovery left %d credentials, want 2", len(creds))
+	}
+}
