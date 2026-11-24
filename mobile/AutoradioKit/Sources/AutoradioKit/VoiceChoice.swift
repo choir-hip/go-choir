@@ -164,21 +164,28 @@ public final class MemoryVoiceReadiness: VoiceReadinessRecord, @unchecked Sendab
     public func markNotReady(model: String) { lock.lock(); ids.remove(model); lock.unlock() }
 }
 
+/// Readiness that survives a relaunch, DERIVED from the files: a model is ready only when a check passed for the pin it has NOW (`ModelPins`) and every file of it is on disk. A pin change (an app update) or a missing file makes it not
+/// ready with no writer involved. The record is `id -> pin of the pass`.
 public final class FileVoiceReadiness: VoiceReadinessRecord, @unchecked Sendable {
     private let file: URL
     private let lock = NSLock()
-    public init(file: URL) { self.file = file }
-    private func read() -> Set<String> {
-        guard let d = try? Data(contentsOf: file), let a = try? JSONDecoder().decode([String].self, from: d) else { return [] }
-        return Set(a)
+    private let pins: @Sendable (String) -> ModelPin?
+    public init(file: URL, pins: @escaping @Sendable (String) -> ModelPin? = { ModelPins.current($0) }) { self.file = file; self.pins = pins }
+    private func read() -> [String: String] {
+        guard let d = try? Data(contentsOf: file), let a = try? JSONDecoder().decode([String: String].self, from: d) else { return [:] }     // an older file (a list of ids) is no record: nothing is ready until it passes again
+        return a
     }
-    private func write(_ s: Set<String>) {
+    private func write(_ s: [String: String]) {
         try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let d = try? JSONEncoder().encode(s.sorted()) { try? d.write(to: file, options: .atomic) }
+        if let d = try? JSONEncoder().encode(s) { try? d.write(to: file, options: .atomic) }
     }
-    public func isReady(model: String) -> Bool { lock.lock(); defer { lock.unlock() }; return read().contains(model) }
-    public func markReady(model: String) { lock.lock(); defer { lock.unlock() }; var s = read(); if s.insert(model).inserted { write(s) } }
-    public func markNotReady(model: String) { lock.lock(); defer { lock.unlock() }; var s = read(); if s.remove(model) != nil { write(s) } }
+    public func isReady(model: String) -> Bool {
+        lock.lock(); let passed = read()[model]; lock.unlock()
+        guard let passed, let p = pins(model), p.pin == passed else { return false }
+        return p.present()
+    }
+    public func markReady(model: String) { lock.lock(); defer { lock.unlock() }; guard let p = pins(model) else { return }; var s = read(); if s[model] != p.pin { s[model] = p.pin; write(s) } }
+    public func markNotReady(model: String) { lock.lock(); defer { lock.unlock() }; var s = read(); if s.removeValue(forKey: model) != nil { write(s) } }
 }
 
 public enum Voices {

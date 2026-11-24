@@ -115,12 +115,12 @@ final class VoiceChoiceTests: XCTestCase {
     }
     func testReadinessIsRememberedAndForgotten() {
         let f = tmp().appendingPathComponent("ready.json")
-        let r = FileVoiceReadiness(file: f)
+        let r = FileVoiceReadiness(file: f, pins: { _ in ModelPin(pin: "t", present: { true }) })
         XCTAssertFalse(r.isReady(model: "kokoro-82m-ane"))
         r.markReady(model: "kokoro-82m-ane")
-        XCTAssertTrue(FileVoiceReadiness(file: f).isReady(model: "kokoro-82m-ane"))
+        XCTAssertTrue(FileVoiceReadiness(file: f, pins: { _ in ModelPin(pin: "t", present: { true }) }).isReady(model: "kokoro-82m-ane"))
         r.markNotReady(model: "kokoro-82m-ane")
-        XCTAssertFalse(FileVoiceReadiness(file: f).isReady(model: "kokoro-82m-ane"))
+        XCTAssertFalse(FileVoiceReadiness(file: f, pins: { _ in ModelPin(pin: "t", present: { true }) }).isReady(model: "kokoro-82m-ane"))
     }
 
     // 3: not ready
