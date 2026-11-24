@@ -192,7 +192,11 @@ export function nextGeneration(): number { generation += 1; return generation; }
 // was signed out) or the sign-out is given up (`abortSignOut`). The native side also makes no mail key once the sign-in key is gone (MailSeal.swift).
 let blockedDigest: string | null = null;      // null: not signing out. '' or a digest: a sign-out began; sealing waits for a session whose key is another one.
 export const sealingBlocked = (): boolean => blockedDigest !== null;
+/** Things that must stop the moment a sign-out BEGINS (the Texture editor kills its instance): run synchronously, first, by `beginSignOut`. */
+const signOutHooks: (() => void)[] = [];
+export function onSignOutBegin(fn: () => void): void { signOutHooks.push(fn); }
 export async function beginSignOut(): Promise<void> {
+  for (const f of signOutHooks) { try { f(); } catch { /* a hook must not stop a sign-out */ } }
   nextGeneration(); resetSession();
   blockedDigest = '';                                    // the block first, before the awaits below: while the key is being read a pulse must not see a sign-out that is not blocked
   let d = '';
@@ -207,6 +211,17 @@ export const signOutUncertain = (): boolean => uncertainAbort;
 export async function refreshSealBlock(): Promise<void> {
   if (blockedDigest === null) return;
   try { const sess = await keptSession(); if (sess && (await digestOf(sess.key)) !== blockedDigest) blockedDigest = null; } catch { /* still signed out */ }
+}
+
+/** The ONE stable id of the signed-in account, or null when it is not known now: a digest of its computer id (the key's own computer, or the one already discovered for this key). NO fallback to a digest of the
+ * key: a key is not an account (a rotated key keeps its computer), and a store that must tell accounts apart waits until this is known. Never asks the network. */
+export async function accountId(): Promise<string | null> {
+  try {
+    const s = await keptSession();
+    if (!s) return null;
+    const id = s.computerId !== '' ? s.computerId : (discovered && discovered.digest === (await digestOf(s.key)) ? discovered.id : '');
+    return id === '' ? null : (await digestOf(`computer:${id}`)).slice(0, 24);
+  } catch { return null; }
 }
 
 /** ONE rule for every moved store's file write (review 2026-11-19): `gen` is the account generation the SOURCE started under (`accountGeneration()` before its request). The write is
