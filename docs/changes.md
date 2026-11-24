@@ -215,6 +215,14 @@ Undo: revert the lane's commit; the Swift is in git history.
 - **Replaced:** nothing; the path used to fall to the computer-surface catch-all.
 - **Undo:** revert the commit. Apple's servers cache the file, so a phone may keep honouring a removed app id for about a day after the revert deploys.
 
+## 2026-11-24
+
+### purge-unproved: one operator command that deletes the accounts whose address was never proved (`lane/purge-unproved`, black)
+- **What:** `cmd/purge-unproved` (`internal/unprovedpurge`), run by hand, never by a service. A dry run prints the accounts to purge and the ones it refuses (hashed), the rows per table, and a digest; the real run needs the digest. It refuses an account that is the bootstrap admin, holds an owner key, owns or owned a computer (vmctl's list, required), or has rows in a store that exists for computer users. Every user-keyed table is in the registry (`docs/ship/purge-unproved.md`) and a user-keyed table that is not stops the run.
+- **Why:** owner, 2026-11-24: "delete unproved accounts" (199 of 1,097 accounts, 27 with a passkey, none owning a computer).
+- **Proof:** tests over seeded databases (a proved account and a computer owner survive untouched; an unregistered table stops the run); not run on a real database.
+- **Undo:** a deleted account cannot be undone; the command is removed by reverting the lane. Nothing calls it.
+
 ## 2026-11-23
 
 ### Phone: the radio never waits (lane `exact-flip-player`; orange)
