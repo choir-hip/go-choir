@@ -20,12 +20,21 @@ onKickSearch((storage) => { live.storage = storage ?? live.storage; live.kick();
 let warmed = false;
 // The Test button of the search model (models.ts): the fixed query over the phone's own index, as an ask with no page and no run sheet. It reads what is on the phone and downloads nothing.
 onTestSearch(async (query, storage) => {
+  const gen = accountGeneration();                                                         // a trial whose account left runs nothing further (docs/problems/model-test-cancellation-2026-11-24.md)
+  const alive = (): boolean => gen === accountGeneration();
   live.storage = storage ?? live.storage;                                                  // the same wiring a voice ask gets (retrievalServe): the page's storage and the native embedder
   const later = nativeLater();
   live.native = later ? nativeEmbedder(later as never) : null;
   let size = 0;
-  if (live.native) { try { const v = await live.native.embed([query]); size = v[0]?.length ?? 0; } catch { return 'The embedding model did not answer on this phone.'; } }       // the model itself runs on the query
+  if (live.native) {
+    const st = await live.native.deviceState(); if (!alive()) return '';
+    if (!st.present) return 'The embedding model is not on this phone yet.';
+    if (!st.loaded) { const ok = await live.native.ensure(false); if (!alive()) return ''; if (!ok) return 'The embedding model did not load on this phone.'; }      // loaded, never downloaded (false)
+    try { const v = await live.native.embed([query]); size = v[0]?.length ?? 0; } catch { return alive() ? 'The embedding model did not answer on this phone.' : ''; }       // the model itself runs on the query
+    if (!alive()) return '';
+  }
   const c = await live.serve({ id: 'trial', words: query, pageTitle: '', pageAddress: '', now: clock.ms, facts: { runSheet: [], pages: [], topics: [], pageText: '' } });
+  if (!alive()) return '';
   const n = c.items.length;
   const model = size > 0 ? `The embedding model answered (${size} numbers). ` : '';
   return n === 0 ? `${model}It found nothing yet: the index of your stories is still being built, or there is nothing to find.` : `${model}It found ${n} ${n === 1 ? 'story or document' : 'stories and documents'} on this phone for: ${query}`;

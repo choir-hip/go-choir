@@ -34,7 +34,8 @@ public struct VoiceCardState: Codable, Equatable, Sendable {
 
 public final class VoiceSampler: @unchecked Sendable {
     /// Make the sample line in this voice and play it; returns when it has been heard, throws when the voice could not speak.
-    public typealias Say = @Sendable (_ option: VoiceOption) async throws -> Void
+    /// `gate` is the press's (TrialGate): the account it was pressed under; the sample is an effect that passes it.
+    public typealias Say = @Sendable (_ option: VoiceOption, _ gate: TrialGate) async throws -> Void
 
     public let options: [VoiceOption]
     private let readiness: VoiceReadiness
@@ -93,7 +94,7 @@ public final class VoiceSampler: @unchecked Sendable {
         }
         oldSample?.cancel(); halt()                                                 // failure 1
         choose(o)
-        if o.modelID.isEmpty || readiness.isReady(model: o.modelID) { startSample(o, gen) }
+        if o.modelID.isEmpty || readiness.isReady(model: o.modelID) { startSample(o, gen, TrialGate()) }
         onChange?()
     }
 
@@ -105,7 +106,7 @@ public final class VoiceSampler: @unchecked Sendable {
             return (t, s.generation)
         }
         oldSample?.cancel(); halt()
-        startSample(o, gen)
+        startSample(o, gen, TrialGate())
         onChange?()
     }
 
@@ -116,11 +117,11 @@ public final class VoiceSampler: @unchecked Sendable {
         onChange?()
     }
 
-    private func startSample(_ o: VoiceOption, _ gen: Int) {
+    private func startSample(_ o: VoiceOption, _ gen: Int, _ gate: TrialGate) {
         st.write { s in if s.generation == gen { s.playing = o.id } }
         let task = Task { [weak self] in
             guard let self else { return }
-            do { try await self.say(o) }
+            do { try await self.say(o, gate) }
             catch is CancellationError {}
             catch {
                 self.st.write { s in if s.generation == gen { s.sampleFailed[o.id] = "That voice could not play just now. The radio will use the phone's voice until it can." } }

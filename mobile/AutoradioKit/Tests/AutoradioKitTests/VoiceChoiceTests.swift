@@ -256,7 +256,7 @@ final class VoiceSamplerTests: XCTestCase {
     func make(_ host: Host, ready: Set<String> = [], selected: String = "kokoro:af_heart") -> (VoiceSampler, MemoryReadiness) {
         let r = MemoryReadiness(ready)
         let s = VoiceSampler(selected: selected, readiness: r,
-            say: { o in
+            say: { o, _ in
                 host.record { host.said.append(o.id) }
                 if host.sayDelay > 0 { try await Task.sleep(nanoseconds: host.sayDelay) }
                 if host.read({ host.failSay }) { throw Down() }
@@ -353,6 +353,18 @@ final class VoiceSamplerTests: XCTestCase {
         s.hear("no-such-voice"); await settle(20); XCTAssertEqual(h.said.count, 1)
         s.pick("kokoro:am_adam"); await settle(100)
         XCTAssertEqual(h.chosen, ["kokoro:am_adam"]); XCTAssertEqual(s.selectedID, "kokoro:am_adam")
+    }
+    // Review round 6: the sample is an effect of the press's account. The gate handed to `say` is the one made at the press: it is dead when the account left in between (a nil gate does not exist).
+    func testS6TheSampleCarriesThePressesGate() async {
+        final class Seen: @unchecked Sendable { let l = NSLock(); var live: [Bool] = []; func add(_ b: Bool) { l.lock(); live.append(b); l.unlock() } }
+        let seen = Seen(); let r = MemoryReadiness([VoiceCatalog.kokoroModel])
+        let s = VoiceSampler(selected: "kokoro:af_heart", readiness: r, say: { _, gate in try? await Task.sleep(nanoseconds: 60_000_000); seen.add(gate.live) }, halt: {}, choose: { _ in })
+        s.hear("kokoro:am_adam"); try? await Task.sleep(nanoseconds: 10_000_000)
+        AccountWipe.bumpGeneration()                                                         // the account leaves while the sample is on its way
+        await settle(150)
+        XCTAssertEqual(seen.live, [false], "the sample's gate is dead: playSample will start nothing")
+        s.pick("kokoro:am_adam"); await settle(150)
+        XCTAssertEqual(seen.live, [false, true], "a press under the new account carries a live gate")
     }
     func testASampleThatCannotPlaySaysSoAndTheChoiceStands() async {
         let h = Host(); h.failSay = true

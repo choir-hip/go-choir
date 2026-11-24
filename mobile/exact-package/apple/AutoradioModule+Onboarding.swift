@@ -441,7 +441,7 @@ struct LiveTrialBackend: TrialBackend {
         var o = option; o.sample = sentence
         let rt = controller.module.runtime!
         // A cancelled Test (the account left) stops the sound at once: the audio engine's own cancel only lets go of the waiter, so the voice is stopped here.
-        return try await withTaskCancellationHandler { try await VoiceController.play(o, on: rt, gate: gate) } onCancel: { rt.audio.stopVoice() }
+        return try await withTaskCancellationHandler { try await rt.playSample(o, gate: gate) } onCancel: { rt.audio.stopVoice() }
     }
     func voiceprint(_ audio: [Float], gate trial: TrialGate) async throws -> String {
         guard trial.live else { throw CancellationError() }

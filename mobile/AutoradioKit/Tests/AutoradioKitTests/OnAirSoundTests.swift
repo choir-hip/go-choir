@@ -93,7 +93,7 @@ final class OneVoiceTests: XCTestCase {
         let a = audio()
         a.programmePlay()
         XCTAssertTrue(a.programmeAudible)
-        let v = Task { await a.playVoice(self.line(seconds: 0.4), reason: "test") }
+        let v = Task { await a.playVoice(self.line(seconds: 0.4), reason: "test", gate: .alwaysLive(because: "a test of the radio own voice line: no Test owner")) }
         let held = await poll { a.voiceIsSpeaking }
         XCTAssertTrue(held)
         XCTAssertFalse(a.programmeAudible, "the programme is silent while the voice line speaks")
@@ -108,7 +108,7 @@ final class OneVoiceTests: XCTestCase {
     func testCuttingTheVoiceLineReleasesTheProgramme() async {
         let a = audio()
         a.programmePlay()
-        let v = Task { await a.playVoice(self.line(seconds: 20), reason: "test") }
+        let v = Task { await a.playVoice(self.line(seconds: 20), reason: "test", gate: .alwaysLive(because: "a test of the radio own voice line: no Test owner")) }
         _ = await poll { a.voiceIsSpeaking }
         v.cancel()
         _ = await v.value
@@ -119,7 +119,7 @@ final class OneVoiceTests: XCTestCase {
     func testAPausedProgrammeStaysPausedAfterAVoiceLine() async {
         let a = audio()
         a.programmePlay()
-        let v = Task { await a.playVoice(self.line(seconds: 0.2), reason: "test") }
+        let v = Task { await a.playVoice(self.line(seconds: 0.2), reason: "test", gate: .alwaysLive(because: "a test of the radio own voice line: no Test owner")) }
         _ = await poll { a.voiceIsSpeaking }
         a.programmePause()
         await v.value

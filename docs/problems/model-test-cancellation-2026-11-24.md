@@ -22,6 +22,8 @@ A Test is an **obligation owned by one account generation**: the person pressed 
 
 Tasks are kept by **(generation, row)**, so one account's cleanup can never remove another account's task; sign-out cancels every task, stops the voice and the sample, and clears the run state.
 
+**No nil gate (seat 2 round 6).** The gate is a REQUIRED parameter at every effect entry (`playVoice`, `LabRuntime.playSample`, `SetupMicLease.record`, the sampler's `say`, every `TrialBackend` call), so the compiler finds every caller. A path with no Test owner (the radio speaking its own line) writes `.alwaysLive(because: "...")` at the call site, with its reason. The voice sample (Test on a voice row, Use, the hearing check) is therefore gated like the model Tests: `playSample` reads the gate before the engine starts, after it, after the voice is made, per frame, and `playVoice` before the node and every buffer. The microphone's `micOn(true)` re-reads it at the last step.
+
 ## The proof
 
 A scripted fake backend suspends at every step of every job. For each job and each step k the test signs the account out (bumps the generation) while step k is suspended, releases everything, and asserts that **no backend call and no report happens after the sign-out**; a second run does the same with `Task.cancel`. The same is done for the lease with fake hooks (a sign-out between the permission answer and the engine open opens nothing) and for `playVoice` (a dead gate schedules nothing).

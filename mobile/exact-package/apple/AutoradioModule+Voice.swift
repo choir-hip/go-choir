@@ -4,19 +4,6 @@
 import AVFoundation
 import Foundation
 
-/// A failure the sampler's `say` reports after the audio has played what there was.
-private final class SampleOutcome: @unchecked Sendable {
-    private let lock = NSLock()
-    private var error: Error?
-    private var frames = 0
-    private var first: Double?
-    func firstSound(_ ms: Double) { lock.lock(); if first == nil { first = ms }; lock.unlock() }
-    var firstMs: Double { lock.lock(); defer { lock.unlock() }; return first ?? 0 }
-    func fail(_ e: Error) { lock.lock(); error = e; lock.unlock() }
-    func got(_ n: Int) { lock.lock(); frames += n; lock.unlock() }
-    func result() -> (Error?, Int) { lock.lock(); defer { lock.unlock() }; return (error, frames) }
-}
-
 /// Models marked ready for the simulator driver (the virtual engine), which fetch nothing.
 final class VoiceController: @unchecked Sendable {
     static var shared: VoiceController?
@@ -34,41 +21,14 @@ final class VoiceController: @unchecked Sendable {
         sampler = VoiceSampler(
             options: VoiceCatalog.offered(),            // a voice no download group contains is not shown
             selected: current, readiness: readiness,
-            say: { option in
+            say: { option, gate in
                 if virtual { try await Task.sleep(nanoseconds: 1_200_000_000); return }
-                try await VoiceController.play(option, on: rt)
+                try await rt.playSample(option, gate: gate)                   // the gate is the press's: LabRuntime.playSample reads it at every step
             },
             halt: { rt.audio.stopVoice() },
             choose: { rt.setVoice($0) },
             running: { OnboardingController.shared?.runningProgress(model: $0) })      // Voice and models downloads every model from its own row; a card only shows that row's progress
         sampler.onChange = { [weak module] in module?.touch(["voiceCards"]) }
-    }
-
-    /// Say the option's sample in THAT voice. There is no fall back here: a card for Heart that played the phone's voice would be a lie.
-    @discardableResult
-    static func play(_ option: VoiceOption, on rt: LabRuntime, gate: TrialGate? = nil) async throws -> Double {
-        let t0 = DispatchTime.now()
-        guard gate?.live ?? true else { throw CancellationError() }               // a Test whose account left starts nothing, not even the engine
-        await rt.start(virtual: false)                            // does nothing when the radio is already running
-        guard gate?.live ?? true else { throw CancellationError() }
-        var cfg = rt.configuration
-        cfg.set(.voice, option.setting)
-        let voice = try rt.registry.make(.voice, as: Voice.self, cfg)
-        let outcome = SampleOutcome()
-        let frames = AsyncThrowingStream<AudioFrame, Error> { c in
-            let t = Task {
-                do {
-                    for try await f in voice.speak(AsyncStream<String> { $0.yield(option.sample); $0.finish() }) { outcome.firstSound(Double(DispatchTime.now().uptimeNanoseconds - t0.uptimeNanoseconds) / 1e6); outcome.got(f.samples.count); c.yield(f) }
-                } catch { outcome.fail(error) }
-                c.finish()
-            }
-            c.onTermination = { _ in t.cancel() }
-        }
-        await rt.audio.playVoice(frames, gate: gate)                // the gate is read before the node starts and before every buffer: the model's load (seconds, not cancellable) cannot end in sound for an account that left
-        let (error, n) = outcome.result()
-        if let error { throw error }
-        if n == 0 && !Task.isCancelled { throw LabError.unavailable("the voice \(option.id) made no sound") }
-        return outcome.firstMs                                    // milliseconds from the start to the first sound (the Test button shows it)
     }
 
     /// Speak one line with the voice the listener has chosen (the neural one; the phone's voice if it is not ready). The radio must be running.
@@ -83,7 +43,7 @@ final class VoiceController: @unchecked Sendable {
                 }
                 c.onTermination = { _ in t.cancel() }
             }
-            await rt.audio.playVoice(frames)
+            await rt.audio.playVoice(frames, gate: .alwaysLive(because: "the radio speaks the listener's chosen voice itself (the hearing check): no Test owns this line"))
         } catch { rt.log.emit(.error(stage: "voice", message: "\(error)")) }
     }
 

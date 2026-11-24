@@ -176,4 +176,38 @@ final class SetupMicLeaseTests: XCTestCase {
         XCTAssertNil(got, "what was heard under the signed-out account is not returned")
         XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"])
     }
+
+    // L13 (review round 6): the gate is read at the LAST step before the microphone turns on, and cuts at every hook of the opening are covered: the engine open, the tap set.
+    final class Held: @unchecked Sendable {
+        private let l = NSLock(); var log: [String] = []; private var waiting: CheckedContinuation<Void, Never>?; private var holdAt = ""; private var released = false
+        func add(_ s: String) { l.lock(); log.append(s); l.unlock() }
+        var all: [String] { l.lock(); defer { l.unlock() }; return log }
+        func hold(at: String) { l.lock(); holdAt = at; released = false; l.unlock() }
+        func gate(_ s: String) async { l.lock(); log.append(s); let h = holdAt == s && !released; l.unlock(); if !h { return }; await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in l.lock(); if released { l.unlock(); c.resume() } else { waiting = c; l.unlock() } } }
+        func release() { l.lock(); released = true; let c = waiting; waiting = nil; l.unlock(); c?.resume() }
+    }
+    func lease(_ h: Held) -> SetupMicLease {
+        SetupMicLease(.init(ask: { await h.gate("ask"); return true }, openEngine: { await h.gate("engine") }, setTap: { t in await h.gate(t == nil ? "tap:nil" : "tap:set") }, micOn: { on in await h.gate(on ? "mic:on" : "mic:off") }, restore: { h.add("restore") }))
+    }
+    func testL13ALeaveDuringEachStepOfTheOpeningNeverTurnsTheMicrophoneOn() async {
+        for step in ["ask", "engine", "tap:set"] {
+            let h = Held(); h.hold(at: step); let l = lease(h)
+            let t = Task { await l.record(seconds: 5, gate: TrialGate()) }
+            var seen = false; for _ in 0..<400 { if h.all.contains(step) { seen = true; break }; try? await Task.sleep(nanoseconds: 5_000_000) }
+            XCTAssertTrue(seen, "the cut at \(step) was reached (a cut that is skipped is a failure)")
+            AccountWipe.bumpGeneration(); h.release()
+            let got = await t.value
+            XCTAssertNil(got, step); XCTAssertFalse(h.all.contains("mic:on"), "left during \(step): the microphone never turned on: \(h.all)")
+            XCTAssertEqual(Array(h.all.suffix(2)), ["tap:nil", "restore"], "\(step): everything given back: \(h.all)")
+        }
+    }
+    func testL13bALeaveWhileTheMicrophoneIsTurningOnTurnsItOffAgain() async {
+        let h = Held(); h.hold(at: "mic:on"); let l = lease(h)
+        let t = Task { await l.record(seconds: 5, gate: TrialGate()) }
+        for _ in 0..<400 where !h.all.contains("mic:on") { try? await Task.sleep(nanoseconds: 5_000_000) }
+        XCTAssertTrue(h.all.contains("mic:on"))
+        AccountWipe.bumpGeneration(); h.release()
+        _ = await t.value
+        XCTAssertTrue(h.all.contains("mic:off"), "it was turned off again: \(h.all)"); XCTAssertEqual(Array(h.all.suffix(2)), ["tap:nil", "restore"])
+    }
 }

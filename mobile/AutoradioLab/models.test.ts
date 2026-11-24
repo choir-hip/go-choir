@@ -184,6 +184,21 @@ describe('the microphone line before a recording Test', () => {
   });
 });
 
+describe('the microphone line across a sign-out', () => {
+  test('M17c a press whose permission answer arrives after the account left writes nothing and leaves nothing behind', async () => {
+    let release: () => void = () => {}; let mic = 'unasked';
+    bindNative({ later: async (r) => { if (r.op === 'obFacts') return live ?? {}; if (r.op === 'obMicState') { await new Promise<void>((res) => { release = res; }); return { state: mic }; } calls.push(r); return {}; } });
+    const g: VoiceFacts = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (o.id === 'ear-one' ? { ...o, ready: true } : o)) })) };
+    const a = modelsAct('test', 'transcriber', 'ear-one', g, storage);                    // account A's press: the permission is being read
+    await new Promise((r) => setTimeout(r, 5)); nextGeneration(); forgetModelTests();       // A leaves
+    release(); await a;                                                                    // the answer arrives late
+    expect(row(view(g), 'transcriber', 'ear-one').testLine).toBe('');
+    bindNative({ later: async (r) => { if (r.op === 'obFacts') return live ?? {}; if (r.op === 'obMicState') return { state: 'unasked' }; calls.push(r); return {}; } });
+    await modelsAct('test', 'transcriber', 'ear-one', g, storage);                         // account B's first press
+    expect(calls.filter((c) => c.op === 'obModelTest').length).toBe(0);                    // B sees the plain line first: A's press left no "asked" behind
+  });
+});
+
 describe('a row that failed', () => {
   test('M3c a failed row keeps its reason and can be pressed again, and it does not hold the other rows (the run is over)', () => {
     const g: VoiceFacts = { ...f, setupStarted: true, setupFinished: true, modelRuns: [{ id: 'gate', state: 'failed', progress: 0, line: 'The download failed (offline).' }] };

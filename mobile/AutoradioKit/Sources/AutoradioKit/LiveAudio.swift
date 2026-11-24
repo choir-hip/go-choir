@@ -539,9 +539,9 @@ public final class LiveAudio: @unchecked Sendable {
     // MARK: Playing
 
     /// Play voice frames now (acknowledgement, holding lines). Returns when the last frame has been heard.
-    /// `gate` (a Test's, see TrialGate): read before the node starts and before every buffer; a dead gate starts no sound, stops what was scheduled, and lets go of the frames.
-    public func playVoice(_ frames: AsyncThrowingStream<AudioFrame, Error>, reason: String = "a voice line", gate trial: TrialGate? = nil) async {
-        if let g = trial, !g.live { return }
+    /// `gate` is REQUIRED (see TrialGate): read before the node starts and before every buffer; a dead gate starts no sound, stops what was scheduled, and lets go of the frames. A path with no Test owner passes `.alwaysLive(because:)`.
+    public func playVoice(_ frames: AsyncThrowingStream<AudioFrame, Error>, reason: String = "a voice line", gate trial: TrialGate) async {
+        guard trial.live else { return }
         voiceBegan(reason: reason)
         defer { voiceEnded() }
         if virtual {
@@ -551,7 +551,7 @@ public final class LiveAudio: @unchecked Sendable {
             return
         }
         let rs = Resampler(rate: LiveAudio.playRate)
-        if running, trial?.live ?? true { voiceNode.play() }
+        if running, trial.live { voiceNode.play() }
         let gate = NSLock()
         var pending = 0
         var finished = false
@@ -564,7 +564,7 @@ public final class LiveAudio: @unchecked Sendable {
         func settle() { gate.lock(); let fire = pending == 0 && finished; gate.unlock(); if fire { once.resume(()) } }
         do {
             for try await f in frames {
-                if let g = trial, !g.live { if running { voiceNode.stop() }; break }                // the account left: no further buffer, and what was scheduled stops
+                if !trial.live { if running { voiceNode.stop() }; break }                // the account left: no further buffer, and what was scheduled stops
                 guard running, let inb = monoBuffer(f.samples, rate: f.sampleRate) else { continue }
                 let s = rs.convert(inb)
                 guard let ob = monoBuffer(s, rate: LiveAudio.playRate), ob.frameLength > 0 else { continue }
@@ -1131,7 +1131,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         onChange?()
         onLevel?(l)
     }
-    public func speak(_ frames: AsyncThrowingStream<AudioFrame, Error>) async { await audio.playVoice(frames) }
+    public func speak(_ frames: AsyncThrowingStream<AudioFrame, Error>) async { await audio.playVoice(frames, gate: .alwaysLive(because: "the radio's own voice line (acknowledgement, holding line): owned by the radio, not by a Test")) }
     public func stopVoice() async { audio.stopVoice() }
     public func apply(_ r: Revision) async { st.write { $0.document = $0.document.applying(r); $0.jumpTo = r.fromBlock }; onChange?() }
     public func resume() async {

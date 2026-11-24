@@ -31,7 +31,7 @@ Speech recognition (purpose.speech):
 
 There is no background microphone purpose string: the background microphone grant was removed on main (`b53276cba`), and the app gives the microphone up when it goes to the background.
 
-Where each is asked: the microphone and speech prompts appear only when the listener first turns Voice on or first turns on a take. Never at launch, at Play or at sign-in. Before the system prompt, the app shows one line:
+Where each is asked: the microphone and speech prompts appear only when the listener first turns Voice on, first turns on a take, or first presses Test on a row of Settings > Voice and models that listens (hearing, knowing when you speak, your voice; the row shows the same plain line, and the next press of Test goes on to the system prompt; if the microphone is off the row shows the declined line and starts nothing). Never at launch, at Play or at sign-in. Before the system prompt, the app shows one line:
 
 > To talk to the radio, record a take or learn your voice, Autoradio 1 needs your microphone and speech recognition.
 

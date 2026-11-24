@@ -53,8 +53,10 @@ public actor SetupMicLease {
         guard mine == token, wanted() else { return await settle(mine) }
         await hooks.setTap(onFrame)
         if mine != token { await hooks.setTap(nil); return .stale }                              // released while the tap was being set
+        guard wanted() else { return await settle(mine) }                                          // re-read at the last step before the microphone turns on
         await hooks.micOn(true)
-        if mine != token { return .stale }                                                         // whoever overtook this begin owns the microphone now (L7)
+        if mine != token { return .stale }
+        guard wanted() else { await hooks.micOn(false); return await settle(mine) }                 // it left while the microphone was turning on: off again, everything given back                                                         // whoever overtook this begin owns the microphone now (L7)
         return .open
     }
     /// The sentence is over: the microphone is off, the tap stays (L1).

@@ -82,11 +82,11 @@ final class ModelTrialTests: XCTestCase {
     final class Scripted: TrialBackend, @unchecked Sendable {
         private let lock = NSLock(); private var started: [String] = []; private var latches: [CheckedContinuation<Void, Never>] = []; private var open = false
         var calls: [String] { lock.lock(); defer { lock.unlock() }; return started }
+        /// The name is recorded and the latch is taken under ONE lock hold: a release can never fall between them.
         func step(_ name: String) async {
-            lock.lock(); started.append(name); let released = open; lock.unlock()
-            if released { return }
             await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-                lock.lock(); if open { lock.unlock(); c.resume() } else { latches.append(c); lock.unlock() }
+                lock.lock(); started.append(name)
+                if open { lock.unlock(); c.resume() } else { latches.append(c); lock.unlock() }
             }
         }
         /// After a step was released, the next one suspends again.
@@ -99,7 +99,8 @@ final class ModelTrialTests: XCTestCase {
         func answer(_ id: String, job: String, prompt: String, gate: TrialGate) async throws -> String { await step("answer"); return "a" }
         func voiceprint(_ audio: [Float], gate: TrialGate) async throws -> String { await step("voiceprint"); return "v" }
     }
-    func waitFor(_ s: Scripted, count: Int) async { for _ in 0..<400 { if s.calls.count >= count { return }; try? await Task.sleep(nanoseconds: 5_000_000) } }
+    /// A cut that is not reached is a FAILURE, never a silent pass.
+    func waitFor(_ s: Scripted, count: Int, line: UInt = #line) async { for _ in 0..<1000 { if s.calls.count >= count { return }; try? await Task.sleep(nanoseconds: 5_000_000) }; XCTFail("the cut at call \(count) was never reached: \(s.calls)", line: line) }
     static let steps: [String: Int] = ["transcriber": 2, "live": 2, "bounds": 2, "voice": 1, "responder": 1, "decision": 1, "speaker": 2]
 
     func testT9AfterTheAccountLeavesNothingHappensAtAnyStepOfAnyJob() async {

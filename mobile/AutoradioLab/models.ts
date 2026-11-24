@@ -137,7 +137,9 @@ async function liveFacts(later: ReturnType<typeof nativeLater>, page: VoiceFacts
 
 /** The microphone is asked where it is first needed, after one plain line (micask.ts, docs/ship/consent-and-prompts.md): unasked shows the line and the NEXT press goes on; refused shows the declined line and starts nothing. */
 async function micReady(key: string): Promise<boolean> {
+  const gen = accountGeneration();
   const state = (await micPermission('')).state;
+  if (gen !== accountGeneration()) return false;                                            // the account left while the permission was read: this press writes nothing and leaves nothing behind
   if (state === 'refused') { local.set(key, { key, state: 'ask', line: MIC_OFF_LINE, ms: 0 }); return false; }
   if (state === 'unasked' && !asked.has(key)) { asked.add(key); local.set(key, { key, state: 'ask', line: `${MIC_PRE_LINE} Press Test again to go on.`, ms: 0 }); return false; }
   asked.delete(key); return true;
