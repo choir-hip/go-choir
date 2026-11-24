@@ -441,6 +441,10 @@ func TestRegisterMailAnswersAKnownAndANewAddressAlike(t *testing.T) {
 		}
 		return
 	}
+	// The known address has had one request already (its account was made through the proof).
+	if _, rec := proofFields(t, h, "brand-new@example.com"); rec.Code != http.StatusOK {
+		t.Fatal(rec.Body.String())
+	}
 	kc, ke := run("known@example.com")
 	nc, ne := run("brand-new@example.com")
 	for i := range kc {

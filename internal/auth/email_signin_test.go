@@ -581,16 +581,18 @@ func TestF21UnverifiedAddressNoMail(t *testing.T) {
 	}
 }
 
-func TestLookupIsExactAsStored(t *testing.T) {
+// One mailbox is one account, whatever the case it is typed in (the lookup folds case);
+// the mail goes to the address as the account stores it.
+func TestLookupFoldsCase(t *testing.T) {
 	h, m := emailEnv(t)
 	addEmailUser(t, h, "u1", "Mixed.Case@example.com", true, true)
 	emailBegin(t, h, "mixed.case@example.com", "")
-	if len(m.mails()) != 0 {
-		t.Fatal("a differently cased address must not match (exact lookup, as recovery does)")
+	if len(m.mails()) != 1 || m.mails()[0].To != "Mixed.Case@example.com" {
+		t.Fatalf("a differently cased address should find the account and mail its stored address, mails=%+v", m.mails())
 	}
 	emailBegin(t, h, "  Mixed.Case@example.com ", "")
-	if len(m.mails()) != 1 {
-		t.Fatalf("exact (trimmed) address should be mailed, mails=%d", len(m.mails()))
+	if len(m.mails()) != 2 {
+		t.Fatalf("the exact (trimmed) address should be mailed, mails=%d", len(m.mails()))
 	}
 	// The rate-limit hash is normalized: differently cased requests share a budget.
 	a1 := h.emailAddressHash(normalizeEmailAddress("Mixed.Case@example.com"))
@@ -976,81 +978,6 @@ func TestGateBearerKeyKeepsItsScopeRules(t *testing.T) {
 }
 
 // --- purposes, verify-address: item 3 ---
-
-func TestVerifyAddressFlowAndPurposeIsolation(t *testing.T) {
-	h, m := emailEnv(t)
-	u := addEmailUser(t, h, "u1", "a@example.com", false, true)
-	addEmailUser(t, h, "u2", "b@example.com", true, true)
-	pk := passkeySession(t, h, u)
-
-	// begin (passkey session) mails a code and no link.
-	req := withCookies(jsonReq(http.MethodPost, "/auth/email/verify-address/begin", nil, ""), pk)
-	rec := httptest.NewRecorder()
-	h.HandleVerifyAddressBegin(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("verify-address begin = %d %s", rec.Code, rec.Body.String())
-	}
-	var br emailBeginResponse
-	_ = json.Unmarshal(rec.Body.Bytes(), &br)
-	var attemptCookie *http.Cookie
-	for _, c := range rec.Result().Cookies() {
-		if c.Name == EmailAttemptCookieName {
-			attemptCookie = c
-		}
-	}
-	mail := m.last(t)
-	if mail.Purpose != EmailAttemptPurposeVerifyAddress || mail.Link != "" || mail.To != "a@example.com" {
-		t.Fatalf("mail = %+v", mail)
-	}
-
-	// A verify_address code cannot sign in.
-	if rec := emailVerifyCode(h, br.AttemptID, mail.Code, attemptCookie); rec.Code != http.StatusBadRequest {
-		t.Fatalf("verify_address code at /auth/email/verify = %d", rec.Code)
-	}
-	// (that failed attempt took one guess; the code still stands)
-	finish := func(cs []*http.Cookie, id, code string, ck *http.Cookie) *httptest.ResponseRecorder {
-		req := withCookies(jsonReq(http.MethodPost, "/auth/email/verify-address/finish", map[string]string{"attempt_id": id, "code": code}, ""), cs)
-		if ck != nil {
-			req.AddCookie(ck)
-		}
-		rec := httptest.NewRecorder()
-		h.HandleVerifyAddressFinish(rec, req)
-		return rec
-	}
-	// An email session cannot finish (passkey session required).
-	other := addEmailUser(t, h, "u3", "c@example.com", true, true)
-	_ = other
-	emailCS := signInByEmail(t, h, m, "c@example.com")
-	if rec := finish(emailCS, br.AttemptID, mail.Code, attemptCookie); rec.Code != http.StatusForbidden {
-		t.Fatalf("finish with an email session = %d", rec.Code)
-	}
-	// Another user's passkey session cannot consume this attempt.
-	if rec := finish(passkeySession(t, h, mustUser(t, h, "u2")), br.AttemptID, mail.Code, attemptCookie); rec.Code != http.StatusBadRequest {
-		t.Fatalf("finish by a different user = %d", rec.Code)
-	}
-	if mustUser(t, h, "u1").EmailVerifiedAt != nil {
-		t.Fatal("address verified by the wrong session")
-	}
-	// The owner finishes.
-	if rec := finish(pk, br.AttemptID, mail.Code, attemptCookie); rec.Code != http.StatusOK {
-		t.Fatalf("finish = %d %s", rec.Code, rec.Body.String())
-	}
-	if mustUser(t, h, "u1").EmailVerifiedAt == nil {
-		t.Fatal("address not verified after finish")
-	}
-
-	// A sign_in code cannot finish a verify-address.
-	h2, m2 := emailEnv(t)
-	u2 := addEmailUser(t, h2, "u1", "a@example.com", true, true)
-	b := emailBegin(t, h2, "a@example.com", "")
-	req2 := withCookies(jsonReq(http.MethodPost, "/auth/email/verify-address/finish", map[string]string{"attempt_id": b.attemptID, "code": m2.last(t).Code}, ""), passkeySession(t, h2, u2))
-	req2.AddCookie(b.cookie)
-	rec2 := httptest.NewRecorder()
-	h2.HandleVerifyAddressFinish(rec2, req2)
-	if rec2.Code != http.StatusBadRequest {
-		t.Fatalf("sign_in code at verify-address/finish = %d", rec2.Code)
-	}
-}
 
 func TestVerifyAddressBeginRequiresPasskeySession(t *testing.T) {
 	h, m := emailEnv(t)

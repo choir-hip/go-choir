@@ -1202,29 +1202,11 @@ func (h *Handler) HandleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse and validate the JWT.
-	token, err := jwt.Parse(cookie.Value, func(t *jwt.Token) (interface{}, error) {
-		// Verify signing method is EdDSA (Ed25519).
-		if t.Method != jwt.SigningMethodEdDSA {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return h.signer.Public(), nil
-	})
+	// The access-token validator is the one place a token becomes a session: the
+	// signature, the proof claim and the account's own proof are all checked there.
+	userID, err := h.ValidateAccessToken(cookie.Value)
 	if err != nil {
-		// JWT is invalid or expired — try refresh rotation.
-		h.tryRefreshRotation(w, r)
-		return
-	}
-
-	// Extract user ID from claims.
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		h.tryRefreshRotation(w, r)
-		return
-	}
-
-	userID, ok := claims["sub"].(string)
-	if !ok || userID == "" {
+		// Invalid, expired or refused: try refresh rotation.
 		h.tryRefreshRotation(w, r)
 		return
 	}

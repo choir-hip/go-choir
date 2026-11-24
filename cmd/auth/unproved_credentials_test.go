@@ -126,7 +126,25 @@ func TestAnUnprovedAccountActsThroughNoRoute(t *testing.T) {
 			method, path = rt.pattern[:i], rt.pattern[i+1:]
 		}
 		path = strings.ReplaceAll(path, "{id}", "x")
-		anonCode, anonBody := call(rt.handler, method, path, nil, "")
+		anonCode, _ := call(rt.handler, method, path, nil, "")
+		// What a credential that is simply not valid gets: some routes answer by the shape
+		// of the credential (a bearer header is refused by routes that are cookie-only).
+		garbage := func(kind string) (int, string) {
+			var mut func(*http.Request)
+			switch kind {
+			case "api key":
+				mut = func(r *http.Request) { r.Header.Set("Authorization", "Bearer choir_sk_not-a-key") }
+			case "refresh cookie":
+				mut = func(r *http.Request) {
+					r.AddCookie(&http.Cookie{Name: auth.RefreshTokenCookieName, Value: "not-a-session"})
+				}
+			default:
+				mut = func(r *http.Request) {
+					r.AddCookie(&http.Cookie{Name: auth.AccessTokenCookieName, Value: "not.a.token"})
+				}
+			}
+			return call(rt.handler, method, path, mut, "")
+		}
 		for kind, secret := range e.secrets {
 			secret := secret
 			var mut func(*http.Request)
@@ -159,8 +177,8 @@ func TestAnUnprovedAccountActsThroughNoRoute(t *testing.T) {
 				t.Errorf("%s with an unproved account's %s answered with the account: %d %.120s", rt.pattern, kind, code, got)
 				continue
 			}
-			if code != anonCode {
-				t.Errorf("%s with an unproved account's %s answered %d, an anonymous caller gets %d (%.80s / %.80s)", rt.pattern, kind, code, anonCode, got, anonBody)
+			if wantCode, wantBody := garbage(kind); code != wantCode && code != anonCode {
+				t.Errorf("%s with an unproved account's %s answered %d, a credential that is not valid gets %d (%.80s / %.80s)", rt.pattern, kind, code, wantCode, got, wantBody)
 			}
 		}
 	}
