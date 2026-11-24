@@ -366,6 +366,56 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         #endif
     }
 
+    /// Ten asks over the sample pages (the four sample asks, and six more the repo's LocalAck tests use as listener words), for comparing responders.
+    public static let benchAsks: [(ask: String, page: Int)] = [
+        ("What is the council actually going to build?", 0), ("Tell me more about the battery", 1), ("What's on the front page?", 2), ("Why did the park close?", 3),
+        ("what next", 0), ("who did it", 0), ("what did the council decide", 0), ("what next", 1), ("what did the council decide", 2), ("play the news", 2),
+    ]
+
+    /// Responders compared on the same ten asks, one line each, straight from a GGUF path (`id=path`): load time and the process's resident memory after the load
+    /// and at its peak, then per ask the page read cold (nothing cached): time to the first token, tokens per second writing (greedy, 48 tokens: a measurement, not
+    /// speech), and the first sentence the voice would say. Mac numbers, not a phone's.
+    public static func benchResponders(_ models: [(id: String, path: String)]) async -> [String] {
+        #if canImport(llama)
+        var out: [String] = []
+        for (id, path) in models {
+            let t0 = nowMs()
+            guard let w = try? LlamaWeights.shared(path: path, gpu: true), let e = try? LlamaEngine(weights: w, threads: 4, contextTokens: 2048) else { out.append("\(id) | load FAILED"); continue }
+            let loadMs = nowMs() - t0
+            let layout = ChatLayout.forModel(id)
+            out.append(String(format: "== %@ | load %.0f ms | resident after load %.0f MB", id, loadMs, benchResidentBytes() / 1_048_576))
+            var firsts: [Double] = [], rates: [Double] = [], reads: [Double] = []
+            for (n, a) in benchAsks.enumerated() {
+                let p = samplePages[a.page]
+                var text = "", st = LlamaStats()
+                e.resetCache()
+                do {
+                    try e.generate(system: AckPrompt.system(), userPrefix: AckPrompt.userPrefix(pageTitle: p.title, pageKind: p.kind, pageText: p.text), userSuffix: AckPrompt.userSuffix(listener: a.ask, previous: []),
+                                   layout: layout, temperature: 0, stopAtSentence: false, measureTokens: 48, onPiece: { text += $0 }, onStats: { st = $0 })
+                } catch { out.append("  ask \(n + 1) failed: \(error)"); continue }
+                firsts.append(st.firstTokenMs); rates.append(st.decodeTokensPerSecond); reads.append(st.promptTokensPerSecond)
+                out.append(String(format: "  ask %2d | first token %5.0f ms | reads %5.0f tok/s (%d tokens) | writes %4.1f tok/s | \"%@\"", n + 1, st.firstTokenMs, st.promptTokensPerSecond, st.promptTokens, st.decodeTokensPerSecond,
+                                  AckPrompt.firstSentence(text) ?? text.prefix(90).replacingOccurrences(of: "\n", with: " ")))
+            }
+            func mean(_ x: [Double]) -> Double { x.isEmpty ? 0 : x.reduce(0, +) / Double(x.count) }
+            out.append(String(format: "  MEAN %@ | first token %.0f ms | reads %.0f tok/s | writes %.1f tok/s | resident at the end %.0f MB | peak footprint %.0f MB", id, mean(firsts), mean(reads), mean(rates), benchResidentBytes() / 1_048_576, peakFootprintBytes() / 1_048_576))
+        }
+        return out
+        #else
+        return ["no llama.cpp in this build"]
+        #endif
+    }
+    static func benchResidentBytes() -> Double {
+        var info = mach_task_basic_info(); var n = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<integer_t>.size)
+        let r = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(n)) { task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &n) } }
+        return r == KERN_SUCCESS ? Double(info.resident_size) : 0
+    }
+    static func peakFootprintBytes() -> Double {
+        var info = task_vm_info_data_t(); var n = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let r = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(n)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &n) } }
+        return r == KERN_SUCCESS ? Double(info.ledger_phys_footprint_peak) : 0
+    }
+
     /// An acknowledgement and a decision asked at the same moment on separate contexts: how long each takes together.
     public static func contention(modelID: String) async -> String {
         #if canImport(llama)
