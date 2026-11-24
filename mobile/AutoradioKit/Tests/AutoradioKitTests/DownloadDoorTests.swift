@@ -318,5 +318,18 @@ final class DownloadDoorTests: XCTestCase {
         hang.release(); try? await Task.sleep(nanoseconds: 100_000_000)
         let again: Int = try await d.libraryWindow(model: "fluid-speech-mini") { 1 }; XCTAssertEqual(again, 1, "refused only until the body ends")
     }
+
+    // ---- Round 10 (B3): the stuck check is made again, under the lock, after the wait; and `exclusive` refuses a stuck model.
+    func testH2AFetchThatQueuedBeforeTheCapIsRefusedWhenItsTurnComesWhileTheBodyIsStillRunning() async throws {
+        let r = Registry(); let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.1)); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        let hang = Hang(); defer { hang.release() }
+        let stuck = Task { try await d.exclusive(model: "fluid-speech-mini") { await hang.wait() } as Void }
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        let queued = Task { try await d.libraryWindow(model: "fluid-speech-mini") { } as Void }          // it asked while the slot was busy: the early look saw nothing stuck
+        do { try await queued.value; XCTFail("a window opened beside the body that is still running") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
+        XCTAssertEqual(r.log.filter { $0 == DownloadDoor.openRegistry }.count, 0, "the registry was never opened")
+        do { try await d.exclusive(model: "fluid-speech-mini") { 1 } as Int; XCTFail("a second cold load beside the stuck one") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
+        _ = try? await stuck.value
+    }
 }
 

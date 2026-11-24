@@ -179,12 +179,12 @@ describe('the press', () => {
   // Round 9 (2): Remove, on every downloaded model that is not in use.
   test('D19 a downloaded model that is not in use can be removed from its card; the press goes to native with its id; one that is in use, or not on the phone, cannot', async () => {
     const ro = (id: string, ready: boolean, removable: boolean) => ({ ...opt(id, id, 350_000_000, false, ready), removable });
-    const offs = [job('voice', 'voice', [ro('mine', true, true), ro('inuse', true, false), ro('absent', false, false)])];
+    const offs = [job('voice', 'voice', [ro('mine', true, true), ro('inuse', true, false), ro('absent', false, false), ro('halfway', false, true)])];
     const v = downloadsView({ ...f, offers: offs }, false, 0);
     const o = v.groups[0].jobs[0].options;
-    expect(o.map((x) => [x.id, x.removable])).toEqual([['mine', true], ['inuse', false], ['absent', false]]);
-    for (const id of ['mine', 'inuse', 'absent', 'nonsense']) await downloadsAct('remove', 'voice', { ...f, offers: offs }, storage, id);
-    expect(calls.filter((c) => c.op === 'obRemoveModel')).toEqual([{ op: 'obRemoveModel', id: 'mine' }]);
+    expect(o.map((x) => [x.id, x.removable])).toEqual([['mine', true], ['inuse', false], ['absent', false], ['halfway', true]]);                // a model that is not ready but whose files are on the phone can be removed
+    for (const id of ['mine', 'inuse', 'absent', 'halfway', 'nonsense']) await downloadsAct('remove', 'voice', { ...f, offers: offs }, storage, id);
+    expect(calls.filter((c) => c.op === 'obRemoveModel')).toEqual([{ op: 'obRemoveModel', id: 'mine' }, { op: 'obRemoveModel', id: 'halfway' }]);
   });
 });
 

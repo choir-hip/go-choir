@@ -108,7 +108,7 @@ export async function downloadsAct(op: string, group: string, facts: VoiceFacts 
   const f = await liveFacts(later, { ...noVoice(), ...(facts ?? {}) });                        // D14: the facts as they are at the press, not as the page was drawn
   if (op === 'remove') {                                                                           // D19: the person's Remove, for a model that is on the phone and not in use
     const o = f.offers.find((x) => x.job === group)?.options.find((x) => x.id === arg);
-    if (o && o.removable === true && o.ready) { try { await later?.({ op: 'obRemoveModel', id: arg }); } catch { /* the facts say it is still there */ } }
+    if (o && o.removable === true) { try { await later?.({ op: 'obRemoveModel', id: arg }); } catch { /* the facts say it is still there */ } }
     return downloadsPage(f, storage);
   }
   if (op === 'pick') {                                                                              // D8

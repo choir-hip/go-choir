@@ -18,7 +18,13 @@ public struct ModelPin: Sendable {
     public let retire: (@Sendable () -> Bool)?
     /// The person's Remove: every file of the model and every record of it, of every pin.
     public let erase: (@Sendable () -> Void)?
-    public init(pin: String, present: @escaping @Sendable () -> Bool, seal: (@Sendable () -> Bool)? = nil, unseal: (@Sendable () -> Void)? = nil, proof: (@Sendable () -> ModelManifests.Proof?)? = nil, purge: (@Sendable () -> Void)? = nil, retire: (@Sendable () -> Bool)? = nil, erase: (@Sendable () -> Void)? = nil) { self.pin = pin; self.present = present; self.seal = seal; self.unseal = unseal; self.proof = proof; self.purge = purge; self.retire = retire; self.erase = erase }
+    /// Any file of the model is on the phone (whole or not): what Remove is offered for.
+    public let onDisk: (@Sendable () -> Bool)?
+    /// A fetch has begun and not returned: written when it begins, cleared when its body returns by any road. One that is found at the next begin means the process died mid-download: the set is partial and no library will complete it.
+    public let pendingMark: (@Sendable () -> Void)?
+    public let pendingClear: (@Sendable () -> Void)?
+    public let hasPending: (@Sendable () -> Bool)?
+    public init(pin: String, present: @escaping @Sendable () -> Bool, seal: (@Sendable () -> Bool)? = nil, unseal: (@Sendable () -> Void)? = nil, proof: (@Sendable () -> ModelManifests.Proof?)? = nil, purge: (@Sendable () -> Void)? = nil, retire: (@Sendable () -> Bool)? = nil, erase: (@Sendable () -> Void)? = nil, onDisk: (@Sendable () -> Bool)? = nil, pendingMark: (@Sendable () -> Void)? = nil, pendingClear: (@Sendable () -> Void)? = nil, hasPending: (@Sendable () -> Bool)? = nil) { self.pin = pin; self.present = present; self.seal = seal; self.unseal = unseal; self.proof = proof; self.purge = purge; self.retire = retire; self.erase = erase; self.onDisk = onDisk; self.pendingMark = pendingMark; self.pendingClear = pendingClear; self.hasPending = hasPending }
 }
 
 /// Every file of a library-managed model: its relative path, exact length and SHA-256, written when the check that grants readiness passed.
@@ -38,6 +44,10 @@ public enum ModelManifests {
         guard let d = try? Data(contentsOf: file(id, pin: pin, root: root)), let m = try? JSONDecoder().decode(ModelManifest.self, from: d), m.pin == pin else { return nil }
         return m
     }
+    static func pendingFile(_ id: String, pin: String, root: URL) -> URL { dir(root).appendingPathComponent(id.replacingOccurrences(of: "/", with: "_") + "@" + tag(pin) + ".pending") }
+    public static func markPending(_ id: String, pin: String, root: URL) { let f = pendingFile(id, pin: pin, root: root); try? FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true); try? Data("pending".utf8).write(to: f, options: .atomic) }
+    public static func clearPending(_ id: String, pin: String, root: URL) { try? FileManager.default.removeItem(at: pendingFile(id, pin: pin, root: root)) }
+    public static func hasPending(_ id: String, pin: String, root: URL) -> Bool { FileManager.default.fileExists(atPath: pendingFile(id, pin: pin, root: root).path) }
     public static func delete(_ id: String, pin: String, root: URL = KnownModels.storeRoot) { try? FileManager.default.removeItem(at: file(id, pin: pin, root: root)) }
     /// The last good manifest OF THIS PIN, kept when a fetch demotes the model: what a re-download's files are compared with.
     public static func baseline(_ id: String, pin: String, root: URL = KnownModels.storeRoot) -> ModelManifest? {
@@ -128,12 +138,13 @@ public enum ModelPins {
             return ModelPin(pin: "bundle:" + b.pinIdentity, present: {
                 guard (try? String(contentsOf: dir.appendingPathComponent(ModelStore.pinFile), encoding: .utf8)) == b.pinIdentity else { return false }
                 return b.files.allSatisfy { f in ((try? fm.attributesOfItem(atPath: dir.appendingPathComponent(f.path).path)[.size]) as? NSNumber)?.int64Value == f.bytes }
-            }, erase: { try? FileManager.default.removeItem(at: dir) })
+            }, erase: { try? FileManager.default.removeItem(at: dir) }, onDisk: { ModelStore.directoryBytes(dir) > 0 })
         }
         if let s = KnownModels.pinned.first(where: { $0.id == id }) {
             let file = root.appendingPathComponent(s.fileName)
             return ModelPin(pin: "sha256:" + s.sha256.lowercased(), present: { ((try? fm.attributesOfItem(atPath: file.path)[.size]) as? NSNumber)?.int64Value == s.bytes },
-                            erase: { try? fm.removeItem(at: file); try? fm.removeItem(at: file.appendingPathExtension("part")) })
+                            erase: { try? fm.removeItem(at: file); try? fm.removeItem(at: file.appendingPathExtension("part")) },
+                            onDisk: { fm.fileExists(atPath: file.path) || fm.fileExists(atPath: file.appendingPathExtension("part").path) })
         }
         if let m = KnownModels.managed.first(where: { $0.id == id }) { return managed(id, spec: m, root: root) }
         return nil
@@ -156,7 +167,11 @@ public enum ModelPins {
                 for o in old { try? FileManager.default.removeItem(at: o.url) }
                 return true
             },
-            erase: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; for r in ModelManifests.records(id, root: root) { try? FileManager.default.removeItem(at: r.url) } })
+            erase: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; for r in ModelManifests.records(id, root: root) { try? FileManager.default.removeItem(at: r.url) }; ModelManifests.clearPending(id, pin: pin, root: root) },
+            onDisk: { folders.contains { ModelStore.directoryBytes(base.appendingPathComponent($0, isDirectory: true)) > 0 } },
+            pendingMark: { ModelManifests.markPending(id, pin: pin, root: root) },
+            pendingClear: { ModelManifests.clearPending(id, pin: pin, root: root) },
+            hasPending: { ModelManifests.hasPending(id, pin: pin, root: root) })
     }
 }
 
@@ -199,7 +214,11 @@ public enum ModelFetch {
             l.lock(); let first = !started; started = true; l.unlock()
             guard first else { return }
             verifier.demote(model: model)
-            _ = pins(model)?.retire?()
+            if let p = pins(model) {
+                _ = p.retire?()
+                if p.hasPending?() == true { p.purge?() }                       // the last fetch died mid-download (the process was killed): the set is partial and a library that checks presence would skip it
+                p.pendingMark?()
+            }
         }
         /// The door killed the window: the registry was closed under the transfer.
         public func interrupt() { l.lock(); interrupted = true; l.unlock() }
@@ -216,38 +235,41 @@ public enum ModelFetch {
     }
     public static func guarded<T>(model id: String, verifier: ReadinessVerifier = Voices.verifier, pins: @escaping (String) -> ModelPin? = { ModelPins.current($0) }, _ body: (Run) async throws -> T) async throws -> T {
         let run = Run(model: id, verifier: verifier, pins: pins)
-        do { return try await body(run) }
+        do { let r = try await body(run); pins(id)?.pendingClear?(); return r }
         catch {
             await ModelDeletion.reconcile(model: id, pin: pins(id), fetch: run.state(for: error))
+            pins(id)?.pendingClear?()                                          // the body returned (it did not die): whatever it left is judged by the rule, not by a record
             throw error
         }
     }
 }
 
 extension ModelDeletion {
-    public enum Removal: Sendable, Equatable { case removed, inUse, notRemovable }
-    /// The person's Remove on a downloaded model: everything of it goes (files, manifest, baseline, readiness), except the model in use. The one deletion that is a person's own act, so it is not the rule's.
-    public static func remove(model id: String, pin: ModelPin?, inUse: Set<String>, verifier: ReadinessVerifier = Voices.verifier) async -> Removal {
-        if inUse.contains(id) { return .inUse }
+    public enum Removal: Sendable, Equatable { case removed, inUse, notRemovable, busy }
+    /// The person's Remove on a model whose files are on the phone: everything of it goes (files, manifest, baseline, pending, readiness), except the model in use. It runs under the door's slot (no fetch or check is mid-write) and reads what is in use, and whether a setup is running, AGAIN inside it.
+    public static func remove(model id: String, pin: ModelPin?, inUse: @escaping @Sendable () -> Set<String>, busy: @escaping @Sendable () -> Bool = { false }, verifier: ReadinessVerifier = Voices.verifier) async -> Removal {
+        if inUse().contains(id) { return .inUse }
         guard let erase = pin?.erase else { return .notRemovable }
-        await ModelStore.shared.unload(id)
-        verifier.demote(model: id)
-        erase()
-        return .removed
+        let done: Removal? = try? await DownloadDoor.shared.exclusive(model: id) {
+            if inUse().contains(id) { return Removal.inUse }
+            if busy() { return Removal.busy }
+            await ModelStore.shared.unload(id)
+            verifier.demote(model: id)
+            erase()
+            return Removal.removed
+        }
+        return done ?? .busy
     }
 }
 
-/// What the radio is using right now (the voice, the listener's stages, the answering model): the Remove of these is refused.
+/// What the radio is using right now, DERIVED: the models the registry's descriptors of the configured stages need (the voice whatever its saved parameter, the decision model, the recogniser, the speech detector), the models of a composite transcriber's two halves, and the answering model.
 public enum ModelInUse {
-    public static func ids(config: LabConfiguration, responder: String?) -> Set<String> {
-        var out = Set<String>()
-        if let v = config.setting(.voice), let o = VoiceCatalog.option(matching: v), !o.modelID.isEmpty { out.insert(o.modelID) }
-        func models(forStage s: String) -> [String] { CandidateTable.all.filter { $0.kitStageID == s && !$0.isFloor }.map(\.id) }
-        for k in [StageKind.transcriber, .speechBounds] {
-            guard let st = config.setting(k) else { continue }
-            if st.id == ListenerPipeline.liveThenFinalStageID {
-                for key in ["live", "final"] { if case .string(let sid)? = st.params[key] { out.formUnion(models(forStage: sid)) } }
-            } else { out.formUnion(models(forStage: st.id)) }
+    public static func ids(config: LabConfiguration, registry: StageRegistry, responder: String?) -> Set<String> {
+        var out = ModelStore.needed(by: config, registry: registry)
+        if let st = config.setting(.transcriber), st.id == ListenerPipeline.liveThenFinalStageID {
+            for key in ["live", "final"] {
+                if case .string(let sid)? = st.params[key], let d = registry.stages(.transcriber).first(where: { $0.id == sid })?.descriptor { out.formUnion(d.needsModels) }
+            }
         }
         if let r = responder, !r.isEmpty { out.insert(r) }
         return out

@@ -151,26 +151,27 @@ public final class DownloadDoor: @unchecked Sendable {
     private final class Gate<T: Sendable>: @unchecked Sendable {
         let l = NSLock(); var c: CheckedContinuation<T, Error>?; var done = false; var pending: Result<T, Error>?
         func set(_ k: CheckedContinuation<T, Error>) { l.lock(); if let p = pending { l.unlock(); k.resume(with: p) } else { c = k; l.unlock() } }
-        @discardableResult func finish(_ r: Result<T, Error>) -> Bool { l.lock(); if done { l.unlock(); return false }; done = true; if let k = c { l.unlock(); k.resume(with: r) } else { pending = r; l.unlock() }; return true }
+        /// The first finish wins; `before` runs after it has won and BEFORE the caller is resumed (the window's kill, so the flag it sets is there when the caller looks).
+        @discardableResult func finish(_ r: Result<T, Error>, before: (() -> Void)? = nil) -> Bool { l.lock(); if done { l.unlock(); return false }; done = true; let k = c; if k == nil { pending = r }; l.unlock(); before?(); k?.resume(with: r); return true }
     }
 
     /// Run `body` and answer when it ends, when the caller is cancelled, or when it has been silent past its deadline, WITHOUT waiting for a body that ignores cancellation. `kill` is what to do to it (cancel its task, close the registry).
     private func raced<T: Sendable>(_ body: @escaping @Sendable () async throws -> T, box: CancelBox? = nil, onBodyEnded: (@Sendable () -> Void)? = nil, kill: @escaping @Sendable () -> Void) async throws -> T {
         let result = Task<T, Error> { try await body() }
         let gate = Gate<T>(); let silence = deadlines.body
-        box?.set { if gate.finish(.failure(CancellationError())) { result.cancel() } }              // a path change, a withdrawal or a reset ends the call at once too
+        box?.set { result.cancel(); gate.finish(.failure(CancellationError())) }              // a path change, a withdrawal or a reset ends the call at once too
         noteProgress()
         let watch = Task { [self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(max(0.02, min(1.0, silence / 4)) * 1e9))
                 lock.lock(); let quiet = Date().timeIntervalSince(progressAt); lock.unlock()
-                if quiet > silence { if gate.finish(.failure(Refusal.timedOut)) { result.cancel(); kill() }; return }
+                if quiet > silence { gate.finish(.failure(Refusal.timedOut), before: { kill(); result.cancel() }); return }
             }
         }
         Task { let r = await result.result; watch.cancel(); gate.finish(r); onBodyEnded?() }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (k: CheckedContinuation<T, Error>) in gate.set(k) }
-        } onCancel: { if gate.finish(.failure(CancellationError())) { result.cancel(); kill() } }
+        } onCancel: { gate.finish(.failure(CancellationError()), before: { kill(); result.cancel() }) }
     }
 
     /// Models whose cold-load body outlived the hard cap: its slot was released, so nothing wedges, but its windows are refused (and the registry stays closed) until the body ends.
@@ -184,6 +185,7 @@ public final class DownloadDoor: @unchecked Sendable {
     /// The slot is freed when the body has ended; a body that never ends frees it at the hard cap (twice the deadline) and its `model` stays refused until it does (never released with the registry open).
     public func exclusive<T: Sendable>(model: String = "*", _ body: @escaping @Sendable () async throws -> T) async throws -> T {
         try await acquireSlot(every: 2, whileQueued: nil)
+        if isStuck(model) { releaseSlot(); throw Refusal.timedOut }            // a second cold load beside the one that is still running
         let rel = Release()
         let cap = Task { [self] in
             try? await Task.sleep(nanoseconds: UInt64(deadlines.body * 2 * 1e9))
@@ -211,6 +213,7 @@ public final class DownloadDoor: @unchecked Sendable {
 
     private func enterWindow(_ key: UUID, model id: String, _ box: CancelBox) throws {
         lock.lock()
+        if stuck[id] != nil || stuck["*"] != nil { lock.unlock(); throw Refusal.timedOut }          // checked again under the lock, after the wait: a body that outlived its cap is still running
         let a: Agreement, g: String
         if allowAll { a = .mobile; g = groups[id] ?? "" }
         else {

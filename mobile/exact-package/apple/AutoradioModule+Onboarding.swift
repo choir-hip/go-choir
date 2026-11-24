@@ -42,6 +42,8 @@ final class OnboardingController: @unchecked Sendable {
     }()
     /// The first run is over (done or skipped): the station may start by itself. Told by shared code (obMirror).
     private var over = false
+    /// A voice setup is running (a Remove waits for it).
+    var setupRunning: Bool { lock.lock(); defer { lock.unlock() }; return (setup?.isStarted ?? false) && !(setup?.isFinished ?? true) }
     var finished: Bool { lock.lock(); defer { lock.unlock() }; return over }
     private var mic = "unasked"          // unasked | checking | heard | refused | silent
     private var micActive = false
@@ -290,7 +292,7 @@ final class OnboardingController: @unchecked Sendable {
         let ready = ModelOffer.readyStages(choices: readyChoices0)
         var readyChoices = readyChoices0
         if WeSpeakerEmbedder.standard().onDisk { readyChoices["speaker"] = ModelOffer.speakerID }
-        let inUse = ModelInUse.ids(config: module.runtime.configuration, responder: ResponderChoice.current)
+        let inUse = ModelInUse.ids(config: module.runtime.configuration, registry: module.runtime.registry, responder: ResponderChoice.current)
         let offers = ModelOffer.jobs(profile: profile, ready: readyChoices, inUse: inUse).map { $0.dict }
         var device = ""
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
@@ -333,8 +335,10 @@ extension AutoradioModule {
         // The person's Remove on a downloaded model: everything of it goes, except the model in use (ModelDeletion.remove). Native because the files are.
         case "obRemoveModel":
             let id = r["id"] as? String ?? ""
-            let inUse = ModelInUse.ids(config: c.module.runtime.configuration, responder: ResponderChoice.current)
-            let removal = await ModelDeletion.remove(model: id, pin: ModelPins.current(id), inUse: inUse)
+            let m = c.module
+            let removal = await ModelDeletion.remove(model: id, pin: ModelPins.current(id),
+                                                     inUse: { ModelInUse.ids(config: m.runtime.configuration, registry: m.runtime.registry, responder: ResponderChoice.current) },
+                                                     busy: { OnboardingController.shared?.setupRunning ?? false })
             c.changed()
             return ["result": "\(removal)"]
         case "obMicState": return ["state": MicPermissionWord.current()]

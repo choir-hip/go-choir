@@ -330,31 +330,75 @@ final class ModelManifestTests: XCTestCase {
         XCTAssertNil(other.proof?(), "another pin has no seal: unknown, never damage"); XCTAssertFalse(other.present())
     }
 
-    // ---- Round 9 (2): Remove. Every downloaded model has one, except the model in use.
+    // ---- Round 9 (2) and round 10: Remove. Driven by "its files are on the phone" (not by ready), for every model with files, except the one in use; run under the door with the in-use set read again inside it.
     func testX1RemoveDeletesAModelsFilesAndRecordsAndItsReadiness_ExceptTheOneInUse() async throws {
         let s = try await sealed()
-        var r = await ModelDeletion.remove(model: "pk", pin: s.pins("pk"), inUse: ["pk"], verifier: s.v)
+        var r = await ModelDeletion.remove(model: "pk", pin: s.pins("pk"), inUse: { ["pk"] }, verifier: s.v)
         XCTAssertEqual(r, .inUse); XCTAssertTrue(packExists(s.m)); XCTAssertTrue(s.rec.isReady(model: "pk"))
-        r = await ModelDeletion.remove(model: "pk", pin: s.pins("pk"), inUse: [], verifier: s.v)
+        r = await ModelDeletion.remove(model: "pk", pin: s.pins("pk"), inUse: { [] }, verifier: s.v)
         XCTAssertEqual(r, .removed); XCTAssertFalse(packExists(s.m)); XCTAssertFalse(s.rec.isReady(model: "pk"))
         XCTAssertTrue(ModelManifests.records("pk", root: s.m.store).isEmpty, "no manifest and no baseline is left to judge a later download by")
-        let none = await ModelDeletion.remove(model: "pk", pin: nil, inUse: [], verifier: s.v); XCTAssertEqual(none, .notRemovable)
+        let none = await ModelDeletion.remove(model: "pk", pin: nil, inUse: { [] }, verifier: s.v); XCTAssertEqual(none, .notRemovable)
     }
-    func testX2WhatIsInUse() {
+    func testX1bTheInUseSetIsReadAgainInsideTheDoor() async throws {                    // B2: a setup that finishes between the first look and the delete
+        let s = try await sealed()
+        final class Calls: @unchecked Sendable { let l = NSLock(); var n = 0; func next() -> Int { l.lock(); defer { l.unlock() }; n += 1; return n } }; let c = Calls()
+        let r = await ModelDeletion.remove(model: "pk", pin: s.pins("pk"), inUse: { c.next() >= 2 ? ["pk"] : [] }, verifier: s.v)       // not in use at the first look, in use inside the slot
+        XCTAssertEqual(r, .inUse); XCTAssertTrue(packExists(s.m), "the model that became the voice while the press was on its way is not deleted")
+        let busy = await ModelDeletion.remove(model: "pk", pin: s.pins("pk"), inUse: { [] }, busy: { true }, verifier: s.v)
+        XCTAssertEqual(busy, .busy); XCTAssertTrue(packExists(s.m), "and nothing is removed while a setup is running")
+    }
+    func testX2WhatIsInUseIsDerivedFromTheRegistryNotAHandList() {
+        let reg = StageRegistry()
+        reg.register(.voice, id: "kokoro", descriptor: StageDescriptor(displayName: "k", needsModels: ["kokoro-82m-ane"])) { _ in EnergyVAD(StageParams()) }
+        reg.register(.system1, id: "llama-qwen3-0.6b", descriptor: StageDescriptor(displayName: "d", needsModels: ["qwen3-0.6b-q8_0"])) { _ in EnergyVAD(StageParams()) }
+        reg.register(.transcriber, id: "parakeet-eou", descriptor: StageDescriptor(displayName: "e", needsModels: ["parakeet-eou-120m"])) { _ in EnergyVAD(StageParams()) }
+        reg.register(.transcriber, id: "fluid-speech-mini", descriptor: StageDescriptor(displayName: "f", needsModels: ["fluid-speech-mini"])) { _ in EnergyVAD(StageParams()) }
+        reg.register(.transcriber, id: ListenerPipeline.liveThenFinalStageID, descriptor: StageDescriptor(displayName: "c")) { _ in EnergyVAD(StageParams()) }          // the composite needs none itself
         var c = LabConfiguration(name: "t")
-        c.set(.voice, StageSetting(id: "kokoro", params: ["voice": .string("af_heart")]))
-        XCTAssertTrue(ModelInUse.ids(config: c, responder: "lfm3-1.7b-q5_k_m").isSuperset(of: [VoiceCatalog.kokoroModel, "lfm3-1.7b-q5_k_m"]))
+        c.set(.voice, StageSetting(id: "kokoro", params: ["voice": .string("a-voice-nobody-lists")]))                      // a saved voice that is not one of the catalog's few cards
+        c.set(.system1, StageSetting(id: "llama-qwen3-0.6b"))
         c.set(.transcriber, StageSetting(id: ListenerPipeline.liveThenFinalStageID, params: ["live": .string("parakeet-eou"), "final": .string("fluid-speech-mini")]))
-        XCTAssertTrue(ModelInUse.ids(config: c, responder: nil).isSuperset(of: ["parakeet-eou-120m", "fluid-speech-mini"]))
-        XCTAssertFalse(ModelInUse.ids(config: c, responder: nil).contains("pocket-tts"))
+        let ids = ModelInUse.ids(config: c, registry: reg, responder: "lfm3-1.7b-q5_k_m")
+        XCTAssertTrue(ids.isSuperset(of: ["kokoro-82m-ane", "qwen3-0.6b-q8_0", "parakeet-eou-120m", "fluid-speech-mini", "lfm3-1.7b-q5_k_m"]), "\(ids)")
+        XCTAssertFalse(ids.contains("pocket-tts"))
     }
-    func testX3TheOfferSaysWhichOptionsCanBeRemoved() {
+    func testX3AnOnDiskModelOffersRemoveWhetherOrNotItIsReady() {
         let phone = DeviceProfile(chip: "A", memoryGB: 8, freeDiskGB: 50, onWiFi: true)
-        let jobs = ModelOffer.jobs(profile: phone, ready: ["transcriber": "fluid-speech-mini", "voice": VoiceCatalog.kokoroModel], inUse: ["fluid-speech-mini"])
-        let t = jobs.first { $0.job == "transcriber" }!.options.first { $0.id == "fluid-speech-mini" }!
-        XCTAssertTrue(t.ready); XCTAssertFalse(t.removable, "in use"); XCTAssertEqual(t.dict["removable"] as? Bool, false)
-        let v = jobs.first { $0.job == "voice" }!.options.first { $0.id == VoiceCatalog.kokoroModel }!
-        XCTAssertTrue(v.removable); XCTAssertFalse(jobs.first { $0.job == "transcriber" }!.options.first { !$0.ready }!.removable, "not on the phone: nothing to remove")
+        let onDisk: (String) -> Bool = { ["fluid-speech-mini", VoiceCatalog.pocketModel, KnownModels.embeddingGemma2.id].contains($0) }
+        let jobs = ModelOffer.jobs(profile: phone, ready: ["transcriber": "fluid-speech-mini"], inUse: ["fluid-speech-mini"], onDisk: onDisk)
+        let f = jobs.first { $0.job == "transcriber" }!.options.first { $0.id == "fluid-speech-mini" }!
+        XCTAssertFalse(f.removable, "in use"); XCTAssertEqual(f.dict["removable"] as? Bool, false)
+        let p = jobs.first { $0.job == "voice" }!.options.first { $0.id == VoiceCatalog.pocketModel }!
+        XCTAssertFalse(p.ready); XCTAssertTrue(p.removable, "not ready (a download that never finished), and its files are on the phone: it can be removed")
+        let k = jobs.first { $0.job == "voice" }!.options.first { $0.id == VoiceCatalog.kokoroModel }!; XCTAssertFalse(k.removable, "nothing on disk")
+        let search = jobs.first { $0.job == "search" }!.options[0]; XCTAssertTrue(search.removable, "the search model too")
+        XCTAssertFalse(jobs.first { $0.job == "speaker" }!.options[0].removable)
+    }
+    // ---- Round 10 (B1): a download killed with the app leaves a partial set no library will complete. A durable per-pin PENDING record, written when the fetch begins and cleared when it returns, makes the next fetch start clean.
+    func testY1APartialSetLeftByAKilledDownloadIsCleanedByTheNextFetchAndThenDownloadsInFull() async throws {
+        let m = lib(); let pins: (String) -> ModelPin? = { ModelPins.managed($0, spec: m.spec, root: m.store) }
+        let rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: pins); let v = ReadinessVerifier(record: rec)
+        // the first fetch: it begins (pending is written), writes part of the pack, and the process dies: nothing after the write runs
+        let p = pins("pk")!; p.pendingMark?()
+        try FileManager.default.createDirectory(at: m.base.appendingPathComponent("pack"), withIntermediateDirectories: true); try Data(count: 100).write(to: m.base.appendingPathComponent("pack/a.bin"))
+        XCTAssertTrue(p.hasPending?() == true)
+        XCTAssertThrowsError(try m.lib.load(), "the half pack does not load, and a presence-only library would skip it")
+        try await m.lib.fetch(); XCTAssertEqual(m.lib.fetches, 1); XCTAssertThrowsError(try m.lib.load(), "(the library's own fetch skipped the half pack)")
+        // the relaunch: the next fetch finds the pending record and starts clean
+        try await ModelFetch.guarded(model: "pk", verifier: v, pins: pins) { run in run.begin(); try await m.lib.fetch() }
+        XCTAssertNoThrow(try m.lib.load(), "cleaned, then the library downloaded everything"); XCTAssertFalse(p.hasPending?() == true, "and the record is cleared when the fetch returned")
+        let r = await v.verify(model: "pk", check: { try m.lib.load(); return SetupCheck(loadMs: 1, speed: 1, unit: "x", memoryMB: 0, outputOK: true) }); XCTAssertTrue(r.outputOK); XCTAssertTrue(rec.isReady(model: "pk"))
+    }
+    func testY2PendingIsClearedWhateverTheFetchDoes_AndSurvivesOnlyAProcessDeath() async throws {
+        struct Boom: Error {}
+        let m = lib(); let pins: (String) -> ModelPin? = { ModelPins.managed($0, spec: m.spec, root: m.store) }; let v = ReadinessVerifier(record: FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: pins))
+        for e: Error? in [nil, Boom(), URLError(.notConnectedToInternet), CancellationError()] {
+            do { try await ModelFetch.guarded(model: "pk", verifier: v, pins: pins) { run in run.begin(); XCTAssertTrue(pins("pk")!.hasPending?() == true, "written when it began"); if let e { throw e } } as Void } catch {}
+            XCTAssertFalse(pins("pk")!.hasPending?() == true, "cleared once the body has returned, by any road: only a death mid-body leaves it")
+        }
+        do { try await ModelFetch.guarded(model: "pk", verifier: v, pins: pins) { _ in throw DownloadDoor.Refusal.timedOut } as Void } catch {}
+        XCTAssertFalse(pins("pk")!.hasPending?() == true, "a fetch that never began wrote none")
     }
 }
 

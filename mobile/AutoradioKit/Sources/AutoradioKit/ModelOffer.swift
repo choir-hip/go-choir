@@ -48,7 +48,7 @@ public enum ModelOffer {
     /// The jobs, each with every option the list holds for it (best-ranked first) and the one marked recommended for this phone: the first entry whose device rule fits it (`ModelListEntry.isRecommended`, the machine
     /// identifier and the memory). A row added to the list (a newer model, another recogniser) is an option here with no change to this code. The floors are not in the list. A job whose entries fit no rule lists them and recommends none.
     /// `ready`: job -> the id on the phone and passed its check. Every voice-setup stage that downloads is a job here, the quick-decision model too: what the first-run press fetches is exactly these jobs' chosen options and nothing else.
-    public static func jobs(profile: DeviceProfile, list: ModelList = .builtIn(), ready: [String: String] = [:], inUse: Set<String> = []) -> [OfferJob] {
+    public static func jobs(profile: DeviceProfile, list: ModelList = .builtIn(), ready: [String: String] = [:], inUse: Set<String> = [], onDisk: (String) -> Bool = { ModelPins.current($0)?.onDisk?() ?? false }) -> [OfferJob] {
         var out: [OfferJob] = []
         for j in jobIDs {
             var opts: [(id: String, label: String, bytes: Int64, fits: Bool, note: String, credit: String)] = []
@@ -64,7 +64,7 @@ public enum ModelOffer {
             if opts2.isEmpty { continue }
             let rec = opts2.first { $0.fits && !isWithheld(id: $0.id, ready: ready[j] == $0.id) }?.id
             out.append(OfferJob(job: j, group: group(j), host: host,
-                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note, credit: $0.credit, withheld: isWithheld(id: $0.id, ready: ready[j] == $0.id), removable: ready[j] == $0.id && !inUse.contains($0.id) && j != "speaker") }))
+                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note, credit: $0.credit, withheld: isWithheld(id: $0.id, ready: ready[j] == $0.id), removable: onDisk($0.id) && !inUse.contains($0.id) && j != "speaker") }))
         }
         return out
     }
