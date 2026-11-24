@@ -2,6 +2,10 @@
 
 Owner, 2026-11-24: "yes, we should make a demo account as well." Apple's reviewers for TestFlight and the App Store cannot hold a passkey for choir.news, and sign-up may be closed at the cap. One account can be opened with a user name and a password instead. Code: `internal/auth/demo_account.go`; host command `demo-account` (`cmd/demo-account`); the app page is the "Reviewer sign-in" link on the sign-in screen. No password, hash or account id is in the repo; the three live in two files on Node B, in `/var/lib/go-choir/auth-signing/`.
 
+## How a reviewer signs in (the app as it is, 2026-11-24)
+
+The app's sign-in is passkey only (a mailed code proves a new address). The reviewer does not use it: on the sign-in screen the small "Reviewer sign-in" link opens a page with a user name and a password; the press posts them to `/auth/app/demo/login`, and the key that comes back is kept by the same function as a passkey sign-in's (`keepKey`, the three Exact secrets). No passkey, no email and no code is involved. Sign-out and the revoke of a key that was minted and not kept use `DELETE /auth/api-keys/{own id}`, which a key may do to itself without `manage:keys`.
+
 ## What the account can and cannot do
 
 - **One account, by configuration.** `POST /auth/app/demo/login` takes `{app, username, password}`. The account is the id in the host file `demo-account-id`; the body refuses unknown fields, so a request cannot name another account. It answers 404 "not available" when the id file or the credential file is missing, unreadable or malformed, or the user does not exist. There is no switch in the app.
@@ -13,7 +17,7 @@ Owner, 2026-11-24: "yes, we should make a demo account as well." Apple's reviewe
 
 ## Create the account (once, on staging)
 
-1. Make an account the ordinary way (the app or choir.news) with a throwaway address nobody reads, before sign-up closes. It is the reviewer's account and nothing personal goes in it.
+1. Make an account the ordinary way (the app or choir.news) before sign-up closes, with an address you can read: sign-up mails an 8-digit code to it and the account works only once that code is typed (the address must be proved; an account with an unproved address makes the route answer "not available"). It is the reviewer's account and nothing personal goes in it.
 2. Read its user id (`GET /auth/whoami` with a key it holds, or `sqlite3 /var/lib/go-choir/auth/auth.db "select id from users where email = '<the throwaway address>'"`).
 3. On Node B as root: `umask 077; printf '%s\n' '<the user id>' > /var/lib/go-choir/auth-signing/demo-account-id`.
 
