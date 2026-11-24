@@ -124,7 +124,7 @@ public enum SetupCatalog {
                     SetupCandidate(id: "parakeet-eou-120m", label: "Parakeet, the smaller listener", bytes: 250_000_000, minMemoryGB: 3, kitStageID: "parakeet-eou", needsMB: 250),
                     SetupCandidate(id: "apple-speech", label: "Apple's recogniser", bytes: 0, minMemoryGB: 0, kitStageID: "apple-speech")]
         case .voice:
-            return [SetupCandidate(id: "kokoro-82m-ane", label: "Kokoro voice", bytes: 350_000_000, minMemoryGB: 4, kitStageID: "kokoro", needsMB: 750),
+            return [SetupCandidate(id: "kokoro-82m-ane", label: "Kokoro voice", bytes: KnownModels.kokoroBytes, minMemoryGB: 4, kitStageID: "kokoro", needsMB: 750),
                     SetupCandidate(id: "pocket-tts", label: "Pocket voice, the lighter one", bytes: 300_000_000, minMemoryGB: 3, kitStageID: "pocket-tts", needsMB: 500),
                     SetupCandidate(id: "system-voice", label: "The system voice", bytes: 0, minMemoryGB: 0, kitStageID: "avspeech")]
         case .decision:

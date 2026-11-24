@@ -61,7 +61,7 @@ final class DownloadDoorTests: XCTestCase {
     }
     func testA1TheLibraryPathsAreRefusedWithoutConsent() async {
         let d = door()
-        for id in ["parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "fluid-speech-mini", VoiceCatalog.kokoroModel, VoiceCatalog.pocketModel, "lfm3-audio-2b"] {
+        for id in ["parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "fluid-speech-mini", VoiceCatalog.kokoroModel, VoiceCatalog.pocketModel, VoiceCatalog.phononModel, "lfm3-audio-2b"] {
             do { try await d.libraryWindow(model: id) { } as Void; XCTFail("\(id) opened a window with no consent") } catch {}
         }
     }
@@ -88,9 +88,9 @@ final class DownloadDoorTests: XCTestCase {
     func testA3NoVoiceCardIsOfferedForAModelNoGroupContains() {
         let d = door()
         let offered = VoiceCatalog.offered(by: d)
-        XCTAssertFalse(offered.isEmpty); XCTAssertFalse(offered.contains { $0.modelID == VoiceCatalog.phononModel }, "the Phonon cards are not offered while no group contains Phonon")
+        XCTAssertFalse(offered.isEmpty); XCTAssertTrue(offered.contains { $0.modelID == VoiceCatalog.phononModel }, "the Phonon cards are offered because the voice group contains Phonon (VoiceOffersTests P1): it is fetched from Settings > Downloads after the person agrees to that group, and whether its pack is on the phone is the manifest's question (withheld until sealed), not the door's")
         for o in offered where !o.modelID.isEmpty { XCTAssertNotNil(d.group(ofModel: o.modelID), "\(o.id) is offered with no group to agree to") }
-        XCTAssertTrue(VoiceCatalog.options.contains { $0.modelID == VoiceCatalog.phononModel }, "(it is in the catalog)")
+        XCTAssertEqual(d.group(ofModel: VoiceCatalog.phononModel), "voice")
     }
     func testA3APathRefusalSaysItNeedsWifiNotAgreeInSettings() {
         XCTAssertTrue(DownloadDoor.Refusal.pathNotAgreed(group: "voice").person.contains("Wi-Fi"))

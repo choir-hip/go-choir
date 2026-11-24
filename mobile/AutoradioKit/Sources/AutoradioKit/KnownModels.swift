@@ -163,7 +163,8 @@ public enum KnownModels {
                              approxBytes: fluidSpeechMini.totalBytes, license: fluidSpeechMini.license + " (FluidVoice model); FluidAudio Apache-2.0",
                              cachePath: storeRoot, cacheFolders: [fluidSpeechMini.folder], loadsWithoutFetching: true),
             ManagedModelSpec(id: "kokoro-82m-ane", label: "Kokoro 82M ANE v3 (Core ML)", source: "hf:FluidInference/kokoro-82m-coreml",
-                             approxBytes: 350_000_000, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["kokoro-82m-coreml", "kokoro"]),
+                             approxBytes: kokoroBytes, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["kokoro-82m-coreml", "kokoro"],
+                             credit: VoiceRows.credit(model: "kokoro-82m-ane")),
             ManagedModelSpec(id: "pocket-tts", label: "PocketTTS 100M (Kyutai, Core ML)", source: "hf:FluidInference/pocket-tts-coreml",
                              approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts"],
                              credit: "PocketTTS by Kyutai, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the files are modified Core ML conversions."),
@@ -171,7 +172,8 @@ public enum KnownModels {
             // FluidAudio's `PocketTtsSmallDownloader` keeps 126 of its files: the MLState model, the fp32 Mimi decoder, the constants and all 103
             // voices, 173,136,428 bytes by the Hugging Face API listing of 2026-11-15. It is asked to put the pack in `fluidRoot` (see PhononVoice).
             ManagedModelSpec(id: "phonon-31m", label: "Phonon 31M (Gradium, Core ML)", source: "hf:FluidInference/pocket-tts-coreml/phonon/phonon-31m-en",
-                             approxBytes: 173_000_000, license: "Apache-2.0 (Gradium model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts-coreml/phonon"]),
+                             approxBytes: 173_000_000, license: "Apache-2.0 (Gradium model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts-coreml/phonon"],
+                             credit: VoiceRows.credit(model: "phonon-31m")),
             ManagedModelSpec(id: "lfm3-audio-2b", label: "LFM3-Audio-2B (Core ML, ASR + TTS)", source: "hf:FluidInference/lfm3-audio-2b-coreml",
                              approxBytes: 2_900_000_000, license: "LFM Open License (read it: commercial use limited by revenue)", cachePath: c),
             ManagedModelSpec(id: qwen3.id, label: "Qwen3-0.6B Q8_0 (llama.cpp GGUF)", source: "hf:Qwen/Qwen3-0.6B-GGUF",
@@ -188,6 +190,10 @@ public enum KnownModels {
                              approxBytes: lfm3Text.bytes, license: "LFM Open License v1.0 (commercial use limited by revenue: read it)", cachePath: storeRoot),
         ]
     }
+
+    /// Kokoro's offered size: the model's own files (about 350 MB, the model card's figure) plus the voice files its first load fetches (every Kokoro voice of the catalog, `VoiceStages.KokoroVoice.load`),
+    /// summed from the pack's own listing (`VoiceRow.bytes`), so the size shown is what lands on the phone.
+    public static var kokoroBytes: Int64 { 350_000_000 + VoiceRows.bytes(model: "kokoro-82m-ane") }
 
     /// Every id the app knows, library-managed or pinned.
     public static var ids: [String] { managed.map(\.id) }
@@ -214,6 +220,13 @@ public protocol ModelProvider: Sendable {
 public extension ModelProvider {
     func unload(_ id: String, role: String) async {}
     func measureConfiguration(_ picks: [String: String], rounds: Int) async throws -> ConfigMeasurement { throw LabError.unavailable(ModelProviders.missingNote) }
+}
+
+extension VoiceRows {
+    /// The sum of the voice files of one model, from the pack's listing (0 for a pack that ships its voices inside one fetch).
+    public static func bytes(model: String) -> Int64 { all.filter { $0.modelID == model }.reduce(0) { $0 + $1.bytes } }
+    /// The credit its licence asks for, the same for every voice of the model ("" when it has no voice rows).
+    public static func credit(model: String) -> String? { all.first { $0.modelID == model }?.credit }
 }
 
 /// Which responder model setup chose (read at start, written when setup finishes).
