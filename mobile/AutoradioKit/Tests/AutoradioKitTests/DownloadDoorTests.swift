@@ -247,13 +247,13 @@ final class DownloadDoorTests: XCTestCase {
         XCTAssertFalse(st.ranB); XCTAssertEqual(r.log.filter { $0 == DownloadDoor.openRegistry }.count, 1, "the registry was opened once, for A"); XCTAssertEqual(d.openWindowCount, 0)
     }
     func testQ2ABodyThatOutlivesItsDeadlineIsFailedAndTheSlotIsFreed() async throws {
-        let r = Registry(); let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.1)); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        let r = Registry(); let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.1)); d.sync(agreed: ["voice-rest": "agreed", "voice": "agreed"]); d.installLibraryGuard { r.set($0) }
         let t0 = Date()
         let hang = Hang(); defer { hang.release() }
         do { try await d.libraryWindow(model: "fluid-speech-mini") { await hang.wait() } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }     // a body that ignores cancellation
         XCTAssertLessThan(Date().timeIntervalSince(t0), 2, "it did not wait for a body that never returns")
         XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0)
-        let ok: Int = try await d.libraryWindow(model: "fluid-speech-mini") { 3 }; XCTAssertEqual(ok, 3, "and the next fetch is not stuck behind it")
+        let ok: Int = try await d.libraryWindow(model: VoiceCatalog.kokoroModel) { 3 }; XCTAssertEqual(ok, 3, "and the next fetch of another model is not stuck behind it")
     }
     func testQ3AQueuedFetchTellsTheWatchdogItIsQueued() async throws {
         let d = door(); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { _ in }
@@ -330,6 +330,16 @@ final class DownloadDoorTests: XCTestCase {
         XCTAssertEqual(r.log.filter { $0 == DownloadDoor.openRegistry }.count, 0, "the registry was never opened")
         do { try await d.exclusive(model: "fluid-speech-mini") { 1 } as Int; XCTFail("a second cold load beside the stuck one") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
         _ = try? await stuck.value
+    }
+
+    // ---- Round 11 (D4): a window body that was given up on (deadline, cancel) and still runs keeps ITS model refused until it ends, as a cold load does.
+    func testH3AHungFetchWindowKeepsItsModelRefusedUntilItsBodyEnds() async throws {
+        let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.1)); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { _ in }
+        let hang = Hang(); defer { hang.release() }
+        do { try await d.libraryWindow(model: "fluid-speech-mini") { await hang.wait() } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
+        do { try await d.libraryWindow(model: "fluid-speech-mini") { } as Void; XCTFail("a second window beside a body that is still writing") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
+        hang.release(); try? await Task.sleep(nanoseconds: 100_000_000)
+        let ok: Int = try await d.libraryWindow(model: "fluid-speech-mini") { 4 }; XCTAssertEqual(ok, 4, "allowed again once the body ended")
     }
 }
 

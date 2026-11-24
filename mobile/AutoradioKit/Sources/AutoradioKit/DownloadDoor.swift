@@ -156,22 +156,22 @@ public final class DownloadDoor: @unchecked Sendable {
     }
 
     /// Run `body` and answer when it ends, when the caller is cancelled, or when it has been silent past its deadline, WITHOUT waiting for a body that ignores cancellation. `kill` is what to do to it (cancel its task, close the registry).
-    private func raced<T: Sendable>(_ body: @escaping @Sendable () async throws -> T, box: CancelBox? = nil, onBodyEnded: (@Sendable () -> Void)? = nil, kill: @escaping @Sendable () -> Void) async throws -> T {
+    private func raced<T: Sendable>(_ body: @escaping @Sendable () async throws -> T, box: CancelBox? = nil, onBodyEnded: (@Sendable () -> Void)? = nil, onGiveUp: (@Sendable () -> Void)? = nil, kill: @escaping @Sendable () -> Void) async throws -> T {
         let result = Task<T, Error> { try await body() }
         let gate = Gate<T>(); let silence = deadlines.body
-        box?.set { result.cancel(); gate.finish(.failure(CancellationError())) }              // a path change, a withdrawal or a reset ends the call at once too
+        box?.set { gate.finish(.failure(CancellationError()), before: { onGiveUp?() }); result.cancel() }              // a path change, a withdrawal or a reset ends the call at once too
         noteProgress()
         let watch = Task { [self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(max(0.02, min(1.0, silence / 4)) * 1e9))
                 lock.lock(); let quiet = Date().timeIntervalSince(progressAt); lock.unlock()
-                if quiet > silence { gate.finish(.failure(Refusal.timedOut), before: { kill(); result.cancel() }); return }
+                if quiet > silence { gate.finish(.failure(Refusal.timedOut), before: { onGiveUp?(); kill(); result.cancel() }); return }
             }
         }
         Task { let r = await result.result; watch.cancel(); gate.finish(r); onBodyEnded?() }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (k: CheckedContinuation<T, Error>) in gate.set(k) }
-        } onCancel: { gate.finish(.failure(CancellationError()), before: { kill(); result.cancel() }) }
+        } onCancel: { gate.finish(.failure(CancellationError()), before: { onGiveUp?(); kill(); result.cancel() }) }
     }
 
     /// Models whose cold-load body outlived the hard cap: its slot was released, so nothing wedges, but its windows are refused (and the registry stays closed) until the body ends.
@@ -206,7 +206,12 @@ public final class DownloadDoor: @unchecked Sendable {
         try enterWindow(key, model: id, box)                            // the authoritative check, under the lock that opens the registry
         defer { leaveWindow(key) }
         // A body past its silence deadline, or a cancelled caller, fails the call at once: the window is killed (the registry closed whatever the library does) and the call does not wait for a body that ignores cancellation.
-        return try await raced({ if box.killed { throw CancellationError() }; return try await body() }, box: box, kill: { [self] in box.kill(); closeNow() })
+        // A body given up on (deadline, cancel) that still runs keeps ITS model refused until it ends, as a cold load does.
+        let gaveUp = Release()
+        return try await raced({ if box.killed { throw CancellationError() }; return try await body() }, box: box,
+                               onBodyEnded: { [self] in if !gaveUp.once() { unstick(id) } },
+                               onGiveUp: { [self] in if gaveUp.once() { stickOn(id) } },
+                               kill: { [self] in box.kill(); closeNow() })
     }
 
     private func closeNow() { lock.lock(); let hook = registryHook; lock.unlock(); hook?(Self.closedRegistry) }

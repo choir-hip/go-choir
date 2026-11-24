@@ -359,7 +359,8 @@ final class ModelManifestTests: XCTestCase {
         c.set(.voice, StageSetting(id: "kokoro", params: ["voice": .string("a-voice-nobody-lists")]))                      // a saved voice that is not one of the catalog's few cards
         c.set(.system1, StageSetting(id: "llama-qwen3-0.6b"))
         c.set(.transcriber, StageSetting(id: ListenerPipeline.liveThenFinalStageID, params: ["live": .string("parakeet-eou"), "final": .string("fluid-speech-mini")]))
-        let ids = ModelInUse.ids(config: c, registry: reg, responder: "lfm3-1.7b-q5_k_m")
+        let ready = MemoryVoiceReadiness(); for id in ["kokoro-82m-ane", "parakeet-eou-120m"] { ready.markReady(model: id) }           // library models count once they are ready (round 11)
+        let ids = ModelInUse.ids(config: c, registry: reg, responder: "lfm3-1.7b-q5_k_m", readiness: ready)
         XCTAssertTrue(ids.isSuperset(of: ["kokoro-82m-ane", "qwen3-0.6b-q8_0", "parakeet-eou-120m", "fluid-speech-mini", "lfm3-1.7b-q5_k_m"]), "\(ids)")
         XCTAssertFalse(ids.contains("pocket-tts"))
     }
@@ -399,6 +400,37 @@ final class ModelManifestTests: XCTestCase {
         }
         do { try await ModelFetch.guarded(model: "pk", verifier: v, pins: pins) { _ in throw DownloadDoor.Refusal.timedOut } as Void } catch {}
         XCTAssertFalse(pins("pk")!.hasPending?() == true, "a fetch that never began wrote none")
+    }
+
+    // ---- Round 11
+    func testZ1AConfiguredButUnreadyLibraryVoiceIsNotInUse_ButTheResponderFileStaysProtected() {         // D1
+        let reg = StageRegistry()
+        reg.register(.voice, id: "kokoro", descriptor: StageDescriptor(displayName: "k", needsModels: [VoiceCatalog.kokoroModel])) { _ in EnergyVAD(StageParams()) }
+        reg.register(.system1, id: "llama-qwen3-0.6b", descriptor: StageDescriptor(displayName: "d", needsModels: ["qwen3-0.6b-q8_0"])) { _ in EnergyVAD(StageParams()) }
+        var c = LabConfiguration(name: "t"); c.set(.voice, StageSetting(id: "kokoro")); c.set(.system1, StageSetting(id: "llama-qwen3-0.6b"))
+        let none = MemoryVoiceReadiness()
+        var ids = ModelInUse.ids(config: c, registry: reg, responder: "lfm3-1.7b-q5_k_m", readiness: none)
+        XCTAssertFalse(ids.contains(VoiceCatalog.kokoroModel), "the radio is speaking with the phone's voice: a kept half pack of the voice the person tapped can be removed")
+        XCTAssertTrue(ids.contains("qwen3-0.6b-q8_0") && ids.contains("lfm3-1.7b-q5_k_m"), "the files the answering stages load whether or not they passed a check stay protected")
+        none.markReady(model: VoiceCatalog.kokoroModel)
+        ids = ModelInUse.ids(config: c, registry: reg, responder: nil, readiness: none)
+        XCTAssertTrue(ids.contains(VoiceCatalog.kokoroModel), "once it is ready and configured, it is the voice")
+    }
+    func testZ2APendingRecordSurvivesAPinBump_AKilledDownloadThenAnUpdateIsCleanedByTheRetry() async throws {   // D2
+        let m = lib()
+        let pinA: (String) -> ModelPin? = { ModelPins.managed($0, spec: m.spec, root: m.store, libraryPin: "fluidaudio-1.0.0") }
+        let pinB: (String) -> ModelPin? = { ModelPins.managed($0, spec: m.spec, root: m.store, libraryPin: "fluidaudio-2.0.0") }
+        pinA("pk")!.pendingMark?()                                                           // killed with the app during the first download
+        try FileManager.default.createDirectory(at: m.base.appendingPathComponent("pack"), withIntermediateDirectories: true); try Data(count: 50).write(to: m.base.appendingPathComponent("pack/a.bin"))
+        XCTAssertTrue(pinB("pk")!.hasPending?() == true, "the record is about the model's files, not about a version: an update does not hide it")
+        let v = ReadinessVerifier(record: FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: pinB))
+        try await ModelFetch.guarded(model: "pk", verifier: v, pins: pinB) { run in run.begin(); try await m.lib.fetch() }
+        XCTAssertNoThrow(try m.lib.load(), "cleaned, then downloaded in full")
+    }
+    func testZ3OnDiskIsANonEmptyFolderCheck() throws {                                                       // D6
+        let m = lib(); let p = ModelPins.managed("pk", spec: m.spec, root: m.store)!
+        XCTAssertFalse(p.onDisk!()); try FileManager.default.createDirectory(at: m.base.appendingPathComponent("pack"), withIntermediateDirectories: true); XCTAssertFalse(p.onDisk!(), "an empty folder is nothing")
+        try Data(count: 3).write(to: m.base.appendingPathComponent("pack/x")); XCTAssertTrue(p.onDisk!())
     }
 }
 

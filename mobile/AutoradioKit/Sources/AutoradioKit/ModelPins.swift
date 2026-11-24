@@ -44,10 +44,11 @@ public enum ModelManifests {
         guard let d = try? Data(contentsOf: file(id, pin: pin, root: root)), let m = try? JSONDecoder().decode(ModelManifest.self, from: d), m.pin == pin else { return nil }
         return m
     }
-    static func pendingFile(_ id: String, pin: String, root: URL) -> URL { dir(root).appendingPathComponent(id.replacingOccurrences(of: "/", with: "_") + "@" + tag(pin) + ".pending") }
-    public static func markPending(_ id: String, pin: String, root: URL) { let f = pendingFile(id, pin: pin, root: root); try? FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true); try? Data("pending".utf8).write(to: f, options: .atomic) }
-    public static func clearPending(_ id: String, pin: String, root: URL) { try? FileManager.default.removeItem(at: pendingFile(id, pin: pin, root: root)) }
-    public static func hasPending(_ id: String, pin: String, root: URL) -> Bool { FileManager.default.fileExists(atPath: pendingFile(id, pin: pin, root: root).path) }
+    /// PENDING is about the model's files, not about a version: a download killed under one pin and retried under the next is still a partial set. (No pin in the name.)
+    static func pendingFile(_ id: String, root: URL) -> URL { dir(root).appendingPathComponent(id.replacingOccurrences(of: "/", with: "_") + ".pending") }
+    public static func markPending(_ id: String, root: URL) { let f = pendingFile(id, root: root); try? FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true); try? Data("pending".utf8).write(to: f, options: .atomic) }
+    public static func clearPending(_ id: String, root: URL) { try? FileManager.default.removeItem(at: pendingFile(id, root: root)) }
+    public static func hasPending(_ id: String, root: URL) -> Bool { FileManager.default.fileExists(atPath: pendingFile(id, root: root).path) }
     public static func delete(_ id: String, pin: String, root: URL = KnownModels.storeRoot) { try? FileManager.default.removeItem(at: file(id, pin: pin, root: root)) }
     /// The last good manifest OF THIS PIN, kept when a fetch demotes the model: what a re-download's files are compared with.
     public static func baseline(_ id: String, pin: String, root: URL = KnownModels.storeRoot) -> ModelManifest? {
@@ -127,6 +128,8 @@ public enum ModelManifests {
 }
 
 public enum ModelPins {
+    /// The folder has something in it (one directory listing, not a walk of every byte).
+    static func nonEmpty(_ dir: URL) -> Bool { ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).contains { $0 != ".DS_Store" } }
     /// The library whose own downloader fetches the managed models; a version bump is a pin change (the files may be other files).
     public static let libraryPin = "fluidaudio-0.18.3"
 
@@ -138,7 +141,7 @@ public enum ModelPins {
             return ModelPin(pin: "bundle:" + b.pinIdentity, present: {
                 guard (try? String(contentsOf: dir.appendingPathComponent(ModelStore.pinFile), encoding: .utf8)) == b.pinIdentity else { return false }
                 return b.files.allSatisfy { f in ((try? fm.attributesOfItem(atPath: dir.appendingPathComponent(f.path).path)[.size]) as? NSNumber)?.int64Value == f.bytes }
-            }, erase: { try? FileManager.default.removeItem(at: dir) }, onDisk: { ModelStore.directoryBytes(dir) > 0 })
+            }, erase: { try? FileManager.default.removeItem(at: dir) }, onDisk: { nonEmpty(dir) })
         }
         if let s = KnownModels.pinned.first(where: { $0.id == id }) {
             let file = root.appendingPathComponent(s.fileName)
@@ -167,11 +170,11 @@ public enum ModelPins {
                 for o in old { try? FileManager.default.removeItem(at: o.url) }
                 return true
             },
-            erase: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; for r in ModelManifests.records(id, root: root) { try? FileManager.default.removeItem(at: r.url) }; ModelManifests.clearPending(id, pin: pin, root: root) },
-            onDisk: { folders.contains { ModelStore.directoryBytes(base.appendingPathComponent($0, isDirectory: true)) > 0 } },
-            pendingMark: { ModelManifests.markPending(id, pin: pin, root: root) },
-            pendingClear: { ModelManifests.clearPending(id, pin: pin, root: root) },
-            hasPending: { ModelManifests.hasPending(id, pin: pin, root: root) })
+            erase: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; for r in ModelManifests.records(id, root: root) { try? FileManager.default.removeItem(at: r.url) }; ModelManifests.clearPending(id, root: root) },
+            onDisk: { folders.contains { Self.nonEmpty(base.appendingPathComponent($0, isDirectory: true)) } },
+            pendingMark: { ModelManifests.markPending(id, root: root) },
+            pendingClear: { ModelManifests.clearPending(id, root: root) },
+            hasPending: { ModelManifests.hasPending(id, root: root) })
     }
 }
 
@@ -246,7 +249,7 @@ public enum ModelFetch {
 
 extension ModelDeletion {
     public enum Removal: Sendable, Equatable { case removed, inUse, notRemovable, busy }
-    /// The person's Remove on a model whose files are on the phone: everything of it goes (files, manifest, baseline, pending, readiness), except the model in use. It runs under the door's slot (no fetch or check is mid-write) and reads what is in use, and whether a setup is running, AGAIN inside it.
+    /// The person's Remove on a model whose files are on the phone: everything of it goes (files, manifest, baseline, pending, readiness), except the model in use. It runs under the door's slot (no library fetch or check is mid-write: the store's own GGUF and bundle fetches take the door's session, not its slot, so a Remove can erase under one; that transfer then fails and starts again) and reads what is in use, and whether a setup is running, AGAIN inside it.
     public static func remove(model id: String, pin: ModelPin?, inUse: @escaping @Sendable () -> Set<String>, busy: @escaping @Sendable () -> Bool = { false }, verifier: ReadinessVerifier = Voices.verifier) async -> Removal {
         if inUse().contains(id) { return .inUse }
         guard let erase = pin?.erase else { return .notRemovable }
@@ -264,13 +267,15 @@ extension ModelDeletion {
 
 /// What the radio is using right now, DERIVED: the models the registry's descriptors of the configured stages need (the voice whatever its saved parameter, the decision model, the recogniser, the speech detector), the models of a composite transcriber's two halves, and the answering model.
 public enum ModelInUse {
-    public static func ids(config: LabConfiguration, registry: StageRegistry, responder: String?) -> Set<String> {
+    /// A library-managed model that is configured but has not passed its check is not "in use": the radio is speaking with the phone's voice (`makeSpeaker` refuses an unready neural voice), and the kept half pack of the voice the person tapped must be removable. The files the answering stages load (GGUFs, the bundle) stay protected whether or not they passed a check.
+    public static func ids(config: LabConfiguration, registry: StageRegistry, responder: String?, readiness: VoiceReadiness = Voices.readiness, pins: (String) -> ModelPin? = { ModelPins.current($0) }) -> Set<String> {
         var out = ModelStore.needed(by: config, registry: registry)
         if let st = config.setting(.transcriber), st.id == ListenerPipeline.liveThenFinalStageID {
             for key in ["live", "final"] {
                 if case .string(let sid)? = st.params[key], let d = registry.stages(.transcriber).first(where: { $0.id == sid })?.descriptor { out.formUnion(d.needsModels) }
             }
         }
+        out = out.filter { id in pins(id)?.seal == nil || readiness.isReady(model: id) }
         if let r = responder, !r.isEmpty { out.insert(r) }
         return out
     }

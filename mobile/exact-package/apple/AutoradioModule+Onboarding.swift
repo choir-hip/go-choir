@@ -42,8 +42,9 @@ final class OnboardingController: @unchecked Sendable {
     }()
     /// The first run is over (done or skipped): the station may start by itself. Told by shared code (obMirror).
     private var over = false
-    /// A voice setup is running (a Remove waits for it).
-    var setupRunning: Bool { lock.lock(); defer { lock.unlock() }; return (setup?.isStarted ?? false) && !(setup?.isFinished ?? true) }
+    /// A voice setup is running OR has run and not yet applied its choices (a Remove waits for both: the model about to become the voice must not be erased in the gap).
+    private var applying = false
+    var setupRunning: Bool { lock.lock(); defer { lock.unlock() }; return applying }
     var finished: Bool { lock.lock(); defer { lock.unlock() }; return over }
     private var mic = "unasked"          // unasked | checking | heard | refused | silent
     private var micActive = false
@@ -93,7 +94,7 @@ final class OnboardingController: @unchecked Sendable {
         if only { for (st, c) in planned.chosen { s.prefer(st, c) } }
         else { for (job, id) in picks { if let st = SetupStage(rawValue: job), let c = SetupCatalog.ladder(st).first(where: { $0.id == id }) ?? ModelOffer.candidate(job: job, id: id) { s.prefer(st, c) } } }
         s.onChange = { [weak self] in self?.changed() }
-        set { setup = s; runStages = only ? stages : [] }
+        set { setup = s; runStages = only ? stages : []; applying = true }
         let gen = AccountWipe.generation
         Task { [weak self, s] in
             await s.run(only: only ? run : nil)
@@ -107,6 +108,7 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     private func setupFinished(_ s: VoiceSetup, gen: Int, merging: Bool = false) {
+        defer { lock.lock(); applying = false; lock.unlock() }          // the choices are applied (or the account changed): a Remove may run again
         // (The models are on the phone, not in the account: a sign-out while they download does not undo them, so the record is kept whatever the generation says; the choices below are applied only for the account that began it.)
         var record = s.record
         if merging, let old = ModelOffer.readRecord(recordFile) {          // a voice-only run keeps what an earlier full run recorded for the other stages
