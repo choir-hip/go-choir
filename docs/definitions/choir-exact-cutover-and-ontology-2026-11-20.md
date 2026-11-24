@@ -123,6 +123,9 @@ boundaries:
   - decision: the paper's snapshot budget stays at 90 minutes
     said: 2) yes,delete tape of deleted computer. otherwise i agree with recommendations
     'on': '2026-11-24'
+  - decision: the no-spend and offline experiments run before the semantic layer's design is decided; the lead walks the owner through the semantic layer design once more on the night of 2026-11-24 before the owner sleeps
+    said: 8) yes, we can do the experiments first. but i do want you to walk me through the semantic layer design once more before i go to bed (2-4 hours from now)
+    'on': '2026-11-24'
   must_preserve:
   - no secrets, tokens or the owner's email in the repo or in output; .env, .env.bak-bedrock-20261109124037 and stash devin-provider-wip hold secrets and are left alone
   - the owner's iPhone credential is never changed, moved or re-keyed

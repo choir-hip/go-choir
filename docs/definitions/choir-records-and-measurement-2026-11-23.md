@@ -68,6 +68,12 @@ boundaries:
   - decision: the paper's root knows its own metrics and may call research to report on the paper against the news
     said: It's important that root texture desk for paper computer knows its own metrics. It can / should be able to call research for this metareporting
     'on': '2026-11-23'
+  - decision: the world's attention starts with equal weight per independent origin; the weights are learned over time by the learning engine
+    said: 4) yes, start with equal weight. we can learn weights over time with the learning engine
+    'on': '2026-11-24'
+  - decision: 'groups and origin counts: host code as a named graph custodian, run as a host service'
+    said: 2) yes, can run this as a host service
+    'on': '2026-11-24'
   must_preserve:
   - records hold ids, choices, counts and probabilities, never a user's private content beyond what the tape already holds
   - 'one custodian per data kind: the record''s custodian is named before it is built'
@@ -153,13 +159,6 @@ decisions_for_the_owner:
   - the host holds them as derived folds and the Texture desk holds the subject index
   - a desk holds all of it
   default: the host holds derived folds; nothing canonical is added until the owner rules
-- id: Q2
-  question: How much does a wire report count against an outlet or a social post in the world's attention?
-  why: it is an editorial prior, not something to learn
-  options:
-  - owner-set weights by class
-  - equal weights
-  default: equal weights per independent origin, reported beside a version with class weights, until the owner sets them
 now:
   status: working
   as_of: 2026-11-23T22:02Z
