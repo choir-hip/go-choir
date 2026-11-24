@@ -222,7 +222,8 @@ stations:
   class: orange for the read; red for the tables and verbs
   review: one seat; two for the tables and verbs
   depends_on: []
-  status: pending
+  status: superseded
+  note: superseded 2026-11-24 by docs/design/desks-and-engine-2026-11-24.md and stations G1 to G6
 - id: F2
   name: The hot path for captures
   scope: candidates by rule (labels and aliases, names and rare phrases, neighbours' subjects); one System 1 call a poll selecting per capture, with other; the escalation desk, many captures a session, and a random share of the unescalated checked; mentions written. Then the intake label's same-event question, the event layer and its store are retired, each after a deployed proof.
@@ -230,7 +231,8 @@ stations:
   review: two seats
   depends_on:
   - F1
-  status: pending
+  status: superseded
+  note: superseded 2026-11-24 by docs/design/desks-and-engine-2026-11-24.md and stations G1 to G6
 - id: F3
   name: Predictions that name a subject
   scope: a prediction names a subject and what would answer it; matching at mention write; settlement on arrival (System 1 judges) and on expiry (false); the score shown to the predictor; the surprise flag and rate. Stories only.
@@ -238,7 +240,8 @@ stations:
   review: two seats
   depends_on:
   - F1
-  status: pending
+  status: superseded
+  note: superseded 2026-11-24 by docs/design/desks-and-engine-2026-11-24.md and stations G1 to G6
 - id: F4
   name: Stories woken by mentions
   scope: a story's Texture is woken, debounced, by answers and surprises on its subjects, opens with the retrieval shape, cites and transcludes stories; per-capture management tasks and their dispatcher are removed after the deployed proof
@@ -247,6 +250,56 @@ stations:
   depends_on:
   - F2
   - F3
+  status: superseded
+  note: superseded 2026-11-24 by docs/design/desks-and-engine-2026-11-24.md and stations G1 to G6
+- id: G1
+  name: The spacer and the serial switch are removed
+  scope: delete the fixed 1.5 s sub-call spacer and the management.serial_tasks setting; one shared back-off per provider route driven by real refusals; a problem record listing every remaining limit on our own calls with what replaces it
+  class: red
+  review: two seats
+  depends_on: []
+  lane: lane/spacer-out
+  status: working
+- id: G2
+  name: The corpus in the REPL
+  scope: an iterator over captures, a meaning query from code and traversal as values, for research first, with a grant the capture desk can hold unchanged; deletes the generic fan-out helper
+  class: red
+  review: two seats
+  depends_on: []
+  lane: lane/corpus-repl
+  status: working
+- id: G3
+  name: Creating an RLM is a protocol act with a prediction
+  scope: one creation verb any desk may call; a required forecast, refused when missing; parent and child message each other while running; a child may create a child; a plain model call returning text as a value; sub-call scores shown to the parent before its next delegation; management arranges the scoring
+  class: red
+  review: two seats
+  depends_on:
+  - G1
+  status: pending
+- id: G4
+  name: The capture desk in shadow
+  scope: host grouping of arrivals, grouped calls with a fixed context recipe returning a symbolic compression of each capture, written beside today's path with a decision-record row per group and nothing a reader sees; the recipe is chosen from the offline model arms (E5)
+  class: red
+  review: two seats
+  depends_on:
+  - G2
+  status: pending
+- id: G5
+  name: The capture desk takes over
+  scope: the desk on the G3 substrate, custodian of subjects, mentions, groups and counts with the graph custodian as its host service; learned context; management's scoring; cutover; deletion of the management task role, the intake labels, the event layer and the entity candidate service
+  class: red
+  review: two seats
+  depends_on:
+  - G3
+  - G4
+  status: pending
+- id: G6
+  name: The root as designed
+  scope: 'the root inside the one Texture desk on the same substrate: woken by events, steering the page render, asking the capture desk for index edits, opening stories; stories may open successors'
+  class: red
+  review: two seats
+  depends_on:
+  - G5
   status: pending
 - id: F5
   name: The root
@@ -255,7 +308,8 @@ stations:
   review: two seats
   depends_on:
   - F4
-  status: pending
+  status: superseded
+  note: superseded 2026-11-24 by G6
 - id: F6
   name: The readers
   scope: a person's root and its Texture as their edition, reading the public graph with nothing flowing back; Autoradio as a desk that runs cells and composes by traversal
@@ -267,9 +321,9 @@ stations:
 decisions_for_the_owner: []
 now:
   status: working
-  as_of: 2026-11-22T05:00Z
-  slice: F0 and the read-only half of F1, in parallel; the design panel on draft 2
-  source_ref: origin/main 080d40510
+  as_of: 2026-11-24T02:10Z
+  slice: G1 (lane/spacer-out) and G2 (lane/corpus-repl) building in parallel; the offline model arms (E5) running; the design is docs/design/desks-and-engine-2026-11-24.md
+  source_ref: origin/main at the time of this card
   deploy_identity: staging and the paper on 92f068980
   candidate: none frozen
   conjecture:
@@ -281,11 +335,11 @@ now:
     scope_if_supported: build the tables and verbs on this likeness measure (F1's second half)
     ledger_id: C190
     status: supported
-  believed_state: the design is agreed in outline and nothing of it is built; the paper runs the main-point judgment and read-first; graph-first is in rework
-  main_uncertainty: whether cheap candidate rules propose the right subjects often enough that the escalation desk stays small
-  next_observation: 'F0''s first by-desk count; the same 50 pairs against vector nearness; a score that ranks (it saturates at 1.0 for 35,177 pairs). F1''s read (docs/evidence/subjects-find-duplicate-stories-read-2026-11-22.md): 32 of 50 same or part, 18 same actors and a different happening, none unrelated; one thing sits under several rows and 28% of stories carry no subject.'
+  believed_state: 'the owner and the lead worked the design through on 2026-11-24 (about thirty rulings); offline experiments E1 to E4 settled (C215 to C231): importance from subjects holds, every distance-based novelty fails on a turn, no saturation law, a group is not a kind apart from a subject. The code has no RLM that calls itself, no corpus in the REPL, no scored delegation; a spacer outlived its bucket'
+  main_uncertainty: what measures novelty; whether grouped calls with context see a turn that flat batches miss (E5 arm E against D)
+  next_observation: the E5 report; the builders' reports on G1 and G2; the backlog measurement from a copy of the paper's database
   blocker: none
-  next_action: 'land F0; the next no-spend rung: group the week''s unmatched arrivals by vector and count groups by distinct origin at thresholds 2, 3 and 5, with a hand read of 50 groups. Rungs 0 and 0b (docs/evidence/offline-slice-rung-0-rules-find-names-not-happenings-2026-11-22.md): rules find actors, not happenings; the ten nearest earlier stories by vector hold the story the paper used for 72.6% of 2,282 arrivals (control 19.5%); 46 of 75 news arrivals report something no story covers, so an unmatched capture must not escalate by itself.'
+  next_action: review G1 and G2 with two seats each when reported; start G3; choose G4's context recipe from E5; keep shipping (M7) in the landing slot
 operating_notes:
 - Roles and review seats are in CLAUDE.md; builders work in lanes (lane new <name> --base origin/main) and compile Go on the build VM.
 - A test of anything a desk reads runs with the reader gate in enforce, as production ships (the graph-first digest passed its tests in observe and was empty in production).
