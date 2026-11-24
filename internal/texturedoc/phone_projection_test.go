@@ -24,7 +24,6 @@ type phoneProjectionCase struct {
 	HeadBody *json.RawMessage     `json:"head_body,omitempty"`
 	HeadText string               `json:"head_content,omitempty"`
 	BodyDoc  StructuredTextureDoc `json:"body_doc"`
-	Entities []SourceEntity       `json:"entities,omitempty"`
 	Content  string               `json:"content"`
 }
 
@@ -43,7 +42,7 @@ func TestPhoneProjectionFixture(t *testing.T) {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.Projection) < 20 || len(f.Merge) < 14 {
+	if len(f.Projection) < 16 || len(f.Merge) < 11 {
 		t.Fatalf("the fixture has %d projection and %d merge cases", len(f.Projection), len(f.Merge))
 	}
 	if os.Getenv("UPDATE_PHONE_PROJECTION") == "1" {
@@ -67,14 +66,7 @@ func TestPhoneProjectionFixture(t *testing.T) {
 				if err := json.Unmarshal(body, &doc); err != nil {
 					t.Fatalf("%v: %v", c["name"], err)
 				}
-				var ents []SourceEntity
-				if raw, has := c["entities"]; has {
-					eb, _ := json.Marshal(raw)
-					if err := json.Unmarshal(eb, &ents); err != nil {
-						t.Fatalf("%v: entities: %v", c["name"], err)
-					}
-				}
-				p, err := Project(doc, ents)
+				p, err := Project(doc, nil)
 				if err != nil {
 					t.Fatalf("%v: the server refuses this body_doc: %v", c["name"], err)
 				}
@@ -92,7 +84,7 @@ func TestPhoneProjectionFixture(t *testing.T) {
 	}
 	for _, group := range [][]phoneProjectionCase{f.Projection, f.Merge} {
 		for _, c := range group {
-			p, err := Project(c.BodyDoc, c.Entities)
+			p, err := Project(c.BodyDoc, nil)
 			if err != nil {
 				t.Errorf("%s: the server refuses this body_doc: %v", c.Name, err)
 				continue
@@ -103,7 +95,7 @@ func TestPhoneProjectionFixture(t *testing.T) {
 		}
 	}
 	for _, c := range f.Merge {
-		if want := strings.TrimRight(c.Text, "\n"); !strings.Contains(c.Name, "markup") && !strings.Contains(c.Name, "cited") && c.Content != want {
+		if want := strings.TrimRight(c.Text, "\n"); !strings.Contains(c.Name, "markup") && c.Content != want {
 			t.Errorf("%s: the text %q was sent and the server derives %q", c.Name, c.Text, c.Content)
 		}
 	}

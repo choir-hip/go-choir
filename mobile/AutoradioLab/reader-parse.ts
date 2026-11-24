@@ -41,7 +41,7 @@ export const NOTICE_OPINION = 'Opinion. Written and published by a reader; Autop
 export function blankDoc(address: string, status = 'loading', message = ''): ReaderDoc {
   return {
     address, status, message, title: '', kicker: '', dek: '', byline: '', meta: '', kind: 'document', disclosure: '', blocks: [], cites: [], sources: [], versions: [], related: [],
-    revision: 0, latest: 0, newer: false, historical: false, revising: false, revisingNote: '', trajectory: '', permalink: '', plain: '', textBlocks: 0, markdown: '', editable: false, source: '', docId: '',
+    revision: 0, latest: 0, newer: false, historical: false, revising: false, revisingNote: '', trajectory: '', permalink: '', plain: '', textBlocks: 0, markdown: '', editable: false, editNote: '', source: '', docId: '',
   };
 }
 export const run = (id: string, text: string, o: Partial<Run> = {}): Run => ({ id, text, kind: 't', weight: 400, slant: 'normal', anchor: '', label: '', sent: 0, href: '', ...o });

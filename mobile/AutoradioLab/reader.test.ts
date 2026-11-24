@@ -71,6 +71,18 @@ describe('a story', () => {
 });
 
 describe('a document', () => {
+  test('R4c a head the phone cannot write exactly (an embed, a source_ref, source entities, a table) is read-only with a line saying so; a plain head is editable with none', async () => {
+    const withBody = (body: unknown, extra: Record<string, unknown> = {}) => fake({ authed: (path) => (path.endsWith('/revisions') ? { revisions: [] } : path.startsWith('/api/texture/revisions/') ? { revision_id: 'r2', version_number: 1, content: 'Text', body_doc: body, ...extra } : { doc_id: 'd1', title: 'Plan', current_revision_id: 'r2' }) });
+    const doc = (...c: unknown[]) => ({ schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'd' }, content: c } });
+    const para = { type: 'paragraph', attrs: { id: 'p' }, content: [{ type: 'text', text: 'Text' }] };
+    const plain = await R.loadReader('texture:d1', withBody(doc(para)).net);
+    expect([plain.editable, plain.editNote]).toEqual([true, '']);
+    for (const [what, f] of [['an embed', withBody(doc(para, { type: 'embed', attrs: { id: 'e', kind: 'file', title: 'x' } }))], ['source entities', withBody(doc(para), { source_entities: [{ source_entity_id: 's' }] })]] as const) {
+      R.resetReaderForTest();
+      const d = await R.loadReader('texture:d1', f.net);
+      expect([what, d.status, d.editable, d.editNote === '']).toEqual([what, 'ready', false, false]);
+    }
+  });
   test('R4b a document with no revision yet (a new one) opens ready, empty, and editable', async () => {
     const f = fake({ authed: (path) => (path.endsWith('/revisions') ? { revisions: [] } : { doc_id: 'new1', title: 'Untitled Texture', current_revision_id: '' }) });
     const d = await R.loadReader('texture:new1', f.net);

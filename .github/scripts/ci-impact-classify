@@ -149,7 +149,7 @@ else
     esac
 
     case "$path" in
-      cmd/*|internal/*|configs/*|mobile/AutoradioLab/app.json|scripts/*.go|skills/*.go|skills/*/go.mod|skills/*/go.sum|go.mod|go.sum|scripts/go-test-*)
+      cmd/*|internal/*|configs/*|mobile/AutoradioLab/app.json|mobile/fixtures/texture-body/*|scripts/*.go|skills/*.go|skills/*/go.mod|skills/*/go.sum|go.mod|go.sum|scripts/go-test-*)
         mark go "$path -> Go verification"
         ;;
     esac

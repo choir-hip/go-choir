@@ -545,6 +545,10 @@ component ReaderPage
       if rdoc.editable and edOn and edFor == address
         TextureEditArea()
       else
-        ReaderBody(address=address)
+        column flex=1 min-height=0 width="100%"
+          // A head the phone cannot write exactly (sources, files, a layout): read-only, and this line says so.
+          if rdoc.editNote != ""
+            text rdoc.editNote testId="reader-edit-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted padding="8px 20px" box-sizing="border-box"
+          ReaderBody(address=address)
     else
       ReaderMessage(title=title, message=rdoc.message, busy=false)

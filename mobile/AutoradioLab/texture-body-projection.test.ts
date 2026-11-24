@@ -6,7 +6,7 @@
 // a trailing newline; the owner's own text (2026-11-24): "Hello", a new line, "This is my first time using texture editing on autoradio 1".
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { merge, projectBody, canon, type Body, type Entity } from './texture-body.ts';
+import { merge, projectBody, canon, type Body } from './texture-body.ts';
 
 const FILE = new URL('../fixtures/texture-body/projection.json', import.meta.url).pathname;
 const doc = (...content: unknown[]): Body => ({ schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'doc-1' }, content } });
@@ -14,14 +14,9 @@ const p = (id: string, ...content: unknown[]) => ({ type: 'paragraph', attrs: { 
 const t = (text: string, marks?: string[]) => ({ type: 'text', text, ...(marks ? { marks: marks.map((m) => ({ type: m })) } : {}) });
 const br = { type: 'hard_break' };
 const li = (id: string, ...content: unknown[]) => ({ type: 'list_item', attrs: { id }, content });
-const ref = (id: string, entity: string, mode = 'numbered_ref') => ({ type: 'source_ref', attrs: { id, source_entity_id: entity, display_mode: mode } });
-const ent = (id: string, title: string): Entity => ({ source_entity_id: id, target: { kind: 'web_url', uri: `https://example.net/${id}` }, selectors: [{ kind: 'whole_resource' }], display: { mode: 'numbered_ref', ...(title ? { title } : {}) }, evidence: { state: 'available', open_surface: 'source' }, provenance: { created_by: 'fixture' } });
-const ENTS = [ent('src_a', 'Report A'), ent('src_b', '')];
-const embedFile = { type: 'embed', attrs: { id: 'e1', kind: 'file', title: 'report.pdf', target: { path: 'Files/report.pdf', mime: 'application/pdf' } } };
-const CITED = doc(p('p1', t('Intro.')), p('p2', t('The claim '), ref('r1', 'src_a'), t('.')), embedFile, p('p3', t('Last.')));
 
 // what the server projects, by case (inputs only: the Go test writes `content`)
-const PROJECTION: { name: string; body_doc: Body; entities?: Entity[] }[] = [
+const PROJECTION: { name: string; body_doc: Body }[] = [
   { name: 'one paragraph', body_doc: doc(p('p1', t('Hello world.'))) },
   { name: 'two paragraphs are a blank line apart', body_doc: doc(p('p1', t('One.')), p('p2', t('Two.'))) },
   { name: 'a hard break is one newline', body_doc: doc(p('p1', t('Hello'), br, t('This is my first time using texture editing on autoradio 1'))) },
@@ -34,9 +29,6 @@ const PROJECTION: { name: string; body_doc: Body; entities?: Entity[] }[] = [
   { name: 'a nested list', body_doc: doc({ type: 'bullet_list', attrs: { id: 'l1' }, content: [li('i1', p('p1', t('a')), { type: 'bullet_list', attrs: { id: 'l2' }, content: [li('i2', p('p2', t('b')))] })] }) },
   { name: 'a quote of two paragraphs', body_doc: doc({ type: 'blockquote', attrs: { id: 'q1' }, content: [p('p1', t('one')), p('p2', t('two'))] }) },
   { name: 'a code block with a language', body_doc: doc({ type: 'code_block', attrs: { id: 'c1', language: 'go' }, content: [t('a := 1'), t('b := 2')] }) },
-  { name: 'a numbered source_ref is [1], the same marker twice in a row once', body_doc: doc(p('p1', t('A'), ref('r1', 'src_a'), ref('r2', 'src_a'), t(' and B'), ref('r3', 'src_b'))), entities: ENTS },
-  { name: 'an expanded source_ref is [source N: title], the title falling back to the entity id', body_doc: doc(p('p1', ref('r1', 'src_a', 'expanded_ref'), t(' '), ref('r2', 'src_b', 'expanded_ref'))), entities: ENTS },
-  { name: 'an embed is its own line', body_doc: doc(p('p1', t('Before.')), embedFile, p('p2', t('After.'))) },
   { name: 'a padded code language is trimmed by the server', body_doc: doc({ type: 'code_block', attrs: { id: 'c1', language: ' go ' }, content: [t('x')] }) },
   { name: 'a start that is not an integer counts from 1', body_doc: doc({ type: 'ordered_list', attrs: { id: 'l1', start: 2.5 }, content: [li('i1', p('p1', t('a')))] }) },
   { name: 'a list item of two paragraphs', body_doc: doc({ type: 'bullet_list', attrs: { id: 'l1' }, content: [li('i1', p('p1', t('a')), p('p2', t('b')))] }) },
@@ -45,7 +37,7 @@ const PROJECTION: { name: string; body_doc: Body; entities?: Entity[] }[] = [
   { name: 'a rule between paragraphs', body_doc: doc(p('p1', t('A.')), { type: 'horizontal_rule', attrs: { id: 'r1' } }, p('p2', t('B.'))) },
 ];
 
-type MergeCase = { name: string; text: string; head_content: string; head_body: Body | null; entities?: Entity[] };
+type MergeCase = { name: string; text: string; head_content: string; head_body: Body | null };
 const SECOND = doc(p('p1', t('First.')), p('p2', t('Second.')));
 const MERGE: MergeCase[] = [
   { name: "the owner's text on a new document (no revision)", text: 'Hello\nThis is my first time using texture editing on autoradio 1', head_content: '', head_body: null },
@@ -59,19 +51,16 @@ const MERGE: MergeCase[] = [
   { name: 'an edit of the second paragraph', text: 'First.\n\nSecond, edited.\nA new line.', head_content: 'First.\n\nSecond.', head_body: SECOND },
   { name: 'an unchanged text', text: 'First.\n\nSecond.', head_content: 'First.\n\nSecond.', head_body: SECOND },
   { name: 'markup is not in the text', text: 'some **bold** and *em* and `code`', head_content: '', head_body: null },
-  { name: 'an edit next to an embed leaves ONE embed and one marker line', text: 'Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast, edited.', head_content: 'Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast.', head_body: CITED, entities: [ENTS[0]] },
-  { name: 'an edit of a cited paragraph keeps its source_ref', text: 'Intro.\n\nThe claim, reworded.\n\n[file: report.pdf]\n\nLast.', head_content: 'Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast.', head_body: CITED, entities: [ENTS[0]] },
-  { name: 'an unchanged cited document keeps every node', text: 'Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast.', head_content: 'Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast.', head_body: CITED, entities: [ENTS[0]] },
 ];
 
 const strip = (v: unknown): unknown => (Array.isArray(v) ? v.map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, k === 'id' ? '#' : strip(x)])) : v);
 
-type File = { comment: string; projection: { name: string; body_doc: Body; entities?: Entity[]; content: string }[]; merge: { name: string; text: string; head_content: string; head_body: Body | null; entities?: Entity[]; body_doc: Body; content: string }[] };
+type File = { comment: string; projection: { name: string; body_doc: Body; content: string }[]; merge: { name: string; text: string; head_content: string; head_body: Body | null; body_doc: Body; content: string }[] };
 const read = (): File => JSON.parse(readFileSync(FILE, 'utf8')) as File;
 const built = (): File => ({
   comment: 'Shared by internal/texturedoc/phone_projection_test.go (the server) and mobile/AutoradioLab/texture-body-projection.test.ts (the phone). `content` is written by the Go test from the server\'s Project; the rest by the phone test (UPDATE_PHONE_BODIES=1). Do not edit by hand.',
   projection: PROJECTION.map((c) => ({ ...c, content: '' })),
-  merge: MERGE.map((c) => ({ ...c, body_doc: merge(c.head_body, c.head_content, c.text, c.entities ?? []).body, content: '' })),
+  merge: MERGE.map((c) => ({ ...c, body_doc: merge(c.head_body, c.head_content, c.text).body, content: '' })),
 });
 if (process.env.UPDATE_PHONE_BODIES === '1') {
   let old: File | null = null; try { old = read(); } catch { /* the first write */ }
@@ -86,31 +75,19 @@ describe('the phone projects as the server does', () => {
   test('the fixture holds exactly the cases this test defines (no hand edit)', () => {
     expect(f.projection.map((c) => c.name)).toEqual(PROJECTION.map((c) => c.name));
     expect(f.projection.map((c) => c.body_doc)).toEqual(PROJECTION.map((c) => c.body_doc));
-    expect(f.merge.map((c) => [c.name, c.text, c.head_content, c.head_body, c.entities])).toEqual(MERGE.map((c) => [c.name, c.text, c.head_content, c.head_body, c.entities]));
-    expect(f.projection.map((c) => c.entities)).toEqual(PROJECTION.map((c) => c.entities));
+    expect(f.merge.map((c) => [c.name, c.text, c.head_content, c.head_body])).toEqual(MERGE.map((c) => [c.name, c.text, c.head_content, c.head_body]));
   });
   for (const c of f.projection) {
-    test(`P: ${c.name}`, () => { expect(projectBody(c.body_doc, c.entities ?? [])).toBe(c.content); });
+    test(`P: ${c.name}`, () => { expect(projectBody(c.body_doc)).toBe(c.content); });
   }
   for (const c of f.merge) {
     test(`M: ${c.name}`, () => {
-      const out = merge(c.head_body, c.head_content, c.text, c.entities ?? []).body;
+      const out = merge(c.head_body, c.head_content, c.text).body;
       expect(strip(out)).toEqual(strip(c.body_doc));                          // what the phone writes is what the server was shown
-      expect(projectBody(out, c.entities ?? [])).toBe(c.content);                                // and the text it sends is what the server derives from it
-      if (c.entities === undefined) expect(canon(c.text)).toBe(c.content);      // the text the listener typed is that text, by the one rule that compares them (a cited document's text holds markers, which are refs)
+      expect(projectBody(out)).toBe(c.content);                                // and the text it sends is what the server derives from it
+      expect(canon(c.text)).toBe(c.content);      // the text the listener typed is that text, by the one rule that compares them
     });
   }
-  test('a cited and embedded document: one embed, one marker line, the source_ref kept (not a paragraph of its marker)', () => {
-    for (const name of ['an edit next to an embed leaves ONE embed and one marker line', 'an edit of a cited paragraph keeps its source_ref']) {
-      const c = f.merge.find((x) => x.name === name)!;
-      const top = (c.body_doc.doc as { content: { type: string; content?: { type: string }[] }[] }).content;
-      expect(top.filter((n) => n.type === 'embed').length).toBe(1);
-      expect(c.content.split('[file: report.pdf]').length - 1).toBe(1);
-      expect(top.flatMap((n) => n.content ?? []).filter((n) => n.type === 'source_ref').length).toBe(1);
-    }
-    const unchanged = f.merge.find((x) => x.name === 'an unchanged cited document keeps every node')!;
-    expect(strip(unchanged.body_doc)).toEqual(strip(CITED));
-  });
   test("the owner's text keeps its line break and is two lines of ONE paragraph (a single Enter is a hard break, as the server's plain-text rule and the web's Shift+Enter)", () => {
     const c = f.merge[0];
     expect(c.content).toBe('Hello\nThis is my first time using texture editing on autoradio 1');

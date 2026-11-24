@@ -2,7 +2,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { blocks, kindOf, merge, plainText, topNodes, type Body, type Node } from './texture-body.ts';
+import { blocks, kindOf, merge, plainOnly, plainText, topNodes, type Body, type Node } from './texture-body.ts';
 
 const dir = join(import.meta.dir, '..', 'fixtures', 'texture');
 const read = (f: string): Record<string, unknown> => JSON.parse(readFileSync(join(dir, f), 'utf8'));
@@ -50,11 +50,18 @@ function blockMd(n: Node, indent: string): string | null {
 }
 const markdownFrom = (body: Body): string => topNodes(body).map((n) => blockMd(n, '')).filter((x): x is string => x !== null).join('\n\n');
 
+const P = (id: string, ...c: unknown[]): Node => ({ type: 'paragraph', attrs: { id }, content: c });
+const T = (text: string, marks?: string[]): Node => ({ type: 'text', text, ...(marks ? { marks: marks.map((m) => ({ type: m })) } : {}) });
+const PLAIN_MIXED: Body = { schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'dm' }, content: [
+  { type: 'heading', attrs: { id: 'h1', level: 1 }, content: [T('Plan')] },
+  P('p1', T('A first paragraph with a '), T('bold', ['strong']), T(' word.')),
+  { type: 'bullet_list', attrs: { id: 'l1' }, content: [{ type: 'list_item', attrs: { id: 'i1' }, content: [P('p2', T('East'))] }, { type: 'list_item', attrs: { id: 'i2' }, content: [P('p3', T('West'))] }] },
+  { type: 'blockquote', attrs: { id: 'q1' }, content: [P('p4', T('quoted'))] },
+  P('p5', T('Last line.'))] } };
+/** What the phone can write exactly: the stories and documents of the fixtures that hold only its kinds, and one of its own. */
 function fixtures(): { name: string; body: Body }[] {
-  const out: { name: string; body: Body }[] = [];
-  for (const f of readdirSync(dir).sort()) if (f.startsWith('story-')) { const b = (read(f).artifact as Record<string, unknown> | undefined)?.body_doc; if (b) out.push({ name: f, body: b as Body }); }
-  out.push({ name: 'letter-citations-embed', body: read('letter-citations-embed.json').body_doc as Body });
-  out.push({ name: 'rich-mixed', body: read('rich-mixed.json').body_doc as Body });
+  const out: { name: string; body: Body }[] = [{ name: 'plain-mixed', body: PLAIN_MIXED }];
+  for (const f of readdirSync(dir).sort()) if (f.startsWith('story-')) { const b = (read(f).artifact as Record<string, unknown> | undefined)?.body_doc; if (b && plainOnly(b as Body, [], '')) out.push({ name: f, body: b as Body }); }
   return out;
 }
 const types = (b: Body): unknown[] => topNodes(b).map((n) => n.type);
@@ -63,7 +70,7 @@ const attrId = (n: Node): unknown => (n.attrs as Record<string, unknown> | undef
 describe('texture body merge', () => {
   test('1 load, edit nothing, save is the original', () => {
     const fx = fixtures();
-    expect(fx.length).toBeGreaterThanOrEqual(3);
+    expect(fx.length).toBeGreaterThanOrEqual(1);
     for (const { name, body } of fx) {
       const md = markdownFrom(body);
       const r = merge(body, md, md);
@@ -90,34 +97,24 @@ describe('texture body merge', () => {
       const c = changed[0];
       expect(after[c].type).toBe('paragraph');
       expect(attrId(after[c]), `${name}: it keeps its id`).toBe(attrId(before[c]));
-      const refs = (n: Node): Node[] => ((n.content as Node[] | undefined) ?? []).filter((x) => x.type === 'source_ref');
-      expect(refs(after[c]), `${name}: its citations are kept`).toEqual(refs(before[c]));
       expect(plainText(after[c])).toContain('very');
       expect(after.map((n) => n.type), `${name}: no node changed type or moved`).toEqual(before.map((n) => n.type));
     }
   });
-  test('3 an embed, a table and an unknown node survive edits around them', () => {
-    const body = fixtures().find((f) => f.name === 'rich-mixed')!.body;
-    const md = markdownFrom(body);
-    expect(md.includes('Region'), 'a table has no Markdown block of its own here: it is kept as it is').toBe(false);
-    const edited = md.replace('West', 'West coast').replace('Last line.', 'Last line, edited.');
-    const r = merge(body, md, edited);
-    expect(types(r.body), 'same nodes in the same order').toEqual(types(body));
-    for (const t of ['embed', 'table', 'future_widget']) expect(topNodes(r.body).find((n) => n.type === t), `${t} is untouched`).toEqual(topNodes(body).find((n) => n.type === t));
-    expect(plainText(topNodes(r.body).find((n) => n.type === 'bullet_list')!)).toContain('West coast');
-    const gone = md.replace(blocks(md)[1], '');
-    const r2 = merge(body, md, gone);
-    expect(topNodes(r2.body).find((n) => n.type === 'embed')).toBeDefined();
-  });
-  test('4 an edited table keeps its node and the edit lives in the Markdown', () => {
-    const body: Body = { schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'd' }, content: [
-      { type: 'paragraph', attrs: { id: 'p' }, content: [{ type: 'text', text: 'Intro' }] },
-      { type: 'table', attrs: { id: 't' }, content: [{ type: 'table_row', content: [{ type: 'table_cell', content: [{ type: 'text', text: 'Region' }] }] }] }] } };
-    const md = 'Intro\n\n| Region |\n|---|';
-    const r = merge(body, md, 'Intro\n\n| Region | Units |\n|---|---|');
-    expect(types(r.body)).toEqual(['paragraph', 'table']);
-    expect(r.opaqueEdits).toBe(1);
-    expect(topNodes(r.body)[1]).toEqual(topNodes(body)[1]);
+  test('3 the guard: only what the phone writes exactly is editable (an embed, a source_ref, a table, a link mark, an unknown node, source entities, a Markdown table in the content are not)', () => {
+    expect(plainOnly(PLAIN_MIXED, [], 'Plan\n\nText')).toBe(true);
+    expect(plainOnly(null, [], '')).toBe(true);
+    const wrap = (...n: Node[]): Body => ({ schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'd' }, content: n } });
+    for (const [what, body] of [
+      ['an embed', wrap(P('p'), { type: 'embed', attrs: { id: 'e', kind: 'file', title: 'x' } })],
+      ['a source_ref', wrap(P('p', T('a'), { type: 'source_ref', attrs: { id: 'r', source_entity_id: 's' } }))],
+      ['a table', wrap({ type: 'table', attrs: { id: 't' }, content: [] })],
+      ['a node kind this port does not know', wrap({ type: 'future_widget', attrs: { id: 'w' } })],
+      ['a link mark', wrap(P('p', T('x', ['link'])))],
+      ['an embed inside a list item', wrap({ type: 'bullet_list', attrs: { id: 'l' }, content: [{ type: 'list_item', attrs: { id: 'i' }, content: [{ type: 'embed', attrs: { id: 'e' } }] }] })],
+    ] as [string, Body][]) expect(plainOnly(body, [], ''), what).toBe(false);
+    expect(plainOnly(PLAIN_MIXED, [{ source_entity_id: 's' }], ''), 'source entities').toBe(false);
+    expect(plainOnly(PLAIN_MIXED, [], 'a\n\n| Region | Units |\n|---|---|'), 'a table in the content').toBe(false);
   });
   test('5 a new document gets an editor-compatible body', () => {
     const md = '# Title\n\nA **bold** and *slanted* word with `code` and a [link](https://x.test).\n\n- one\n  - nested\n- two\n\n1. first\n2. second\n\n> quoted\n\n```\nlet x\n```\n\n---';

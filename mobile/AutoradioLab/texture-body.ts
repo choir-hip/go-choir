@@ -11,9 +11,8 @@
 // Ways this can fail (each has a test):
 //  1. Load, edit nothing, save: the Markdown is the original string and the body_doc is the original, equal in every key.
 //  2. A small edit changes other nodes: only the edited node differs; every other node is equal to its original.
-//  3. A citation (source_ref), an embed, a table or an unknown node is dropped or reordered by an edit nearby.
-//  4. An edited block whose original node this phone cannot write (a table, an embed) is flattened into a paragraph: it keeps its node and the edit lives in
-//     `content` (counted in `opaqueEdits`).
+//  3. A document with a node the phone's text cannot carry exactly (an embed, a source_ref, a table, any node kind below) is never merged: it opens read-only on the phone (`plainOnly`), until the server owns the
+//     merge (docs/problems/phone-texture-merge-2026-11-24.md). So `merge` sees only the kinds this phone writes.
 //  5. A new document (no body_doc) gets none, or one the web editor cannot open: it gets schema and doc with fresh ids.
 //  6. The `content` sent with a body_doc is not the text the server derives from it: the server refuses the revision (400 "content must match derived body_doc projection"). `projectBody` is the server's
 //     projection (internal/texturedoc/projection.go), held to it by the shared fixture mobile/fixtures/texture-body/projection.json (written by a Go test; texture-body-projection.test.ts reads it). `canon` is the
@@ -127,8 +126,6 @@ function compatible(k: Kind, type: string): boolean {
     case 'paragraph': return type === 'paragraph';
   }
 }
-/** The node types this phone can write from Markdown. */
-const WRITABLE = new Set(['paragraph', 'heading', 'bullet_list', 'ordered_list', 'blockquote', 'code_block', 'horizontal_rule']);
 
 // ---------------------------------------------------------------------------------------------------------------- Markdown to nodes (what the web editor writes)
 
@@ -259,7 +256,7 @@ export function inline(src: string): Node[] {
 
 // ---------------------------------------------------------------------------------------------------------------- the merge
 
-export type Merged = { body: Body; opaqueEdits: number };
+export type Merged = { body: Body };
 
 const root = (content: Node[], like: Body | null): Body => {
   const out: Body = { ...(like ?? {}) };
@@ -272,19 +269,19 @@ const root = (content: Node[], like: Body | null): Body => {
 export const topNodes = (body: Body | null): Node[] => (isObj(body?.doc) && Array.isArray((body!.doc as Record<string, unknown>).content) ? ((body!.doc as Record<string, unknown>).content as Node[]) : []);
 
 /** The `body_doc` for `newMarkdown`, given the revision it was loaded from (`original`, `originalMarkdown`). */
-export function merge(original: Body | null, originalMarkdown: string, newMarkdown: string, entities: Entity[] = []): Merged {
-  if (original !== null && newMarkdown === originalMarkdown) return { body: original, opaqueEdits: 0 };
+export function merge(original: Body | null, originalMarkdown: string, newMarkdown: string): Merged {
+  if (original !== null && newMarkdown === originalMarkdown) return { body: original };
   const s = topNodes(original);
   const b = blocks(originalMarkdown);
   const n = blocks(newMarkdown);
   const blank = (nodes: Node[]): boolean => nodes.every((x) => x.type === 'paragraph' && plainText(x) === '');            // no text at all: nothing to keep, nothing to match
   if (original === null || (blank(s) && b.length === 0)) {
     const nodes = n.map(nodeFor);
-    return { body: root(nodes.length === 0 ? [paragraph('')] : nodes, original), opaqueEdits: 0 };
+    return { body: root(nodes.length === 0 ? [paragraph('')] : nodes, original) };
   }
   // Which original node each original block is (forward, by what it says and what it is).
   const map: (number | null)[] = b.map(() => null);
-  const texts = projectNodes(s, entities);                                                       // what the server projected for each node: an unchanged block IS its node's text (an embed's line, a cited paragraph's markers)
+  const texts = projectNodes(s);                                                                  // what the server projected for each node: an unchanged block IS its node's text
   let cursor = 0;
   for (let i = 0; i < b.length; i += 1) {
     const k = kindOf(b[i]);
@@ -316,7 +313,6 @@ export function merge(original: Body | null, originalMarkdown: string, newMarkdo
   while (i < m && k < p) { if (b[i] === n[k]) { pairs.push([i, k]); i += 1; k += 1; } else if (lcs[i + 1][k] >= lcs[i][k + 1]) i += 1; else k += 1; }
   pairs.push([m, p]);
   let out: Node[] = [...lead];
-  let opaque = 0;
   let pi = 0;
   let pk = 0;
   for (const [mi, mk] of pairs) {
@@ -327,9 +323,7 @@ export function merge(original: Body | null, originalMarkdown: string, newMarkdo
     inserted.forEach((kk, t) => {
       const di = t < deleted.length ? map[deleted[t]] : null;
       const old: Node | null = di !== null && di !== undefined ? s[di] : null;
-      if (old !== null && !WRITABLE.has(str(old.type))) { out.push(old); opaque += 1; return; }      // a table, an embed, an unknown node: kept; the edit lives in `content`
-      const cited = old !== null && old.type === 'paragraph' && (Array.isArray(old.content) ? (old.content as Node[]) : []).some((x) => x.type === 'source_ref');
-      const fresh = nodeFor(cited ? n[kk].replace(/\[source \d+: [^\]]*\]|\[\d+\]/g, '') : n[kk]);      // the markers are the refs' own: they are not typed text (the server refuses a literal "[1]"); the refs stay with the paragraph
+      const fresh = nodeFor(n[kk]);
       if (old !== null) carry(old, fresh);
       out.push(fresh);
     });
@@ -342,50 +336,28 @@ export function merge(original: Body | null, originalMarkdown: string, newMarkdo
     }
     pi = mi + 1; pk = mk + 1;
   }
-  return { body: root(out.length === 0 ? [paragraph('')] : out, original), opaqueEdits: opaque };
+  return { body: root(out.length === 0 ? [paragraph('')] : out, original) };
 }
 
-/** An edited node keeps the id it had, and a paragraph keeps its citations (they stay at the end, where the web editor puts them). */
+/** An edited node keeps the id it had. */
 function carry(old: Node, fresh: Node): void {
   const id = isObj(old.attrs) ? (old.attrs as Record<string, unknown>).id : undefined;
   if (id !== undefined) fresh.attrs = { ...(isObj(fresh.attrs) ? (fresh.attrs as Record<string, unknown>) : {}), id };
-  if (old.type !== 'paragraph' || fresh.type !== 'paragraph') return;
-  const refs = (Array.isArray(old.content) ? (old.content as Node[]) : []).filter((x) => x.type === 'source_ref');
-  if (refs.length > 0) fresh.content = [...(Array.isArray(fresh.content) ? (fresh.content as Node[]) : []), ...refs];
 }
 
 // ---------------------------------------------------------------------------------------------------------------- the server's projection
 
-export type Entity = Record<string, unknown>;
 /** The server's `stringAttr`: a string attribute, trimmed. */
 const sattr = (n: Node, k: string): string => (isObj(n.attrs) && typeof (n.attrs as Record<string, unknown>)[k] === 'string' ? ((n.attrs as Record<string, unknown>)[k] as string).trim() : '');
 /** The server's `intAttr`: a whole number (a JSON number with no fraction), else none. */
 const iattr = (n: Node, k: string): number | null => { const v = isObj(n.attrs) ? (n.attrs as Record<string, unknown>)[k] : undefined; return typeof v === 'number' && Number.isInteger(v) ? v : null; };
-/** What the server prints for an expanded source (`sourceTitle`): the entity's display title, else label, else its target id, else uri, else its own id. */
-const entityTitle = (e: Entity | undefined, id: string): string => {
-  const d = isObj(e?.display) ? (e!.display as Record<string, unknown>) : {};
-  const g = isObj(e?.target) ? (e!.target as Record<string, unknown>) : {};
-  for (const v of [d.title, d.label, g.id, g.uri]) if (typeof v === 'string' && v !== '') return v;
-  return id;
-};
-
 /** The text of each top-level node as the server's projection writes it (numbers of sources by first appearance across the whole document). */
-export function projectNodes(nodes: Node[], entities: Entity[] = []): string[] {
-  const numbers = new Map<string, number>();
-  const byId = new Map<string, Entity>(entities.map((e) => [str(e.source_entity_id).trim(), e]));
+export function projectNodes(nodes: Node[]): string[] {
   const kids = (n: Node): Node[] => (Array.isArray(n.content) ? (n.content as Node[]) : []);
   const inlineOf = (list: Node[], out: { s: string }): void => {
     for (const n of list) {
       if (n.type === 'text') out.s += str(n.text);
       else if (n.type === 'hard_break') out.s += '\n';
-      else if (n.type === 'source_ref') {
-        const id = sattr(n, 'source_entity_id');
-        let num = numbers.get(id);
-        if (num === undefined) { num = numbers.size + 1; numbers.set(id, num); }
-        if (sattr(n, 'display_mode') === 'expanded_ref') { out.s += `[source ${num}: ${entityTitle(byId.get(id), id)}]`; continue; }
-        const marker = `[${num}]`;
-        if (!out.s.replace(/ +$/, '').endsWith(marker)) out.s += marker;     // adjacent citations of one source read as one marker
-      }
     }
   };
   const item = (n: Node, depth: number, out: { s: string }): void => {
@@ -413,35 +385,33 @@ export function projectNodes(nodes: Node[], entities: Entity[] = []): string[] {
       }
       case 'code_block': out.s += '```' + sattr(n, 'language') + '\n' + kids(n).map((c) => str(c.text)).join('\n') + '\n```'; break;
       case 'horizontal_rule': out.s += '---'; break;
-      case 'embed': out.s += embedText(n); break;
     }
-  };
-  const embedText = (n: Node): string => {
-    const a = (k: string): string => sattr(n, k);
-    switch (a('kind')) {
-      case 'capsule_evidence': return `[evidence: ${a('caption')}]`;
-      case 'file': return `[file: ${a('title')}]`;
-      case 'video': return a('caption') !== '' ? `[video: ${a('caption')}]` : `[video: ${a('alt')}]`;
-      case 'audio': return `[audio: ${a('title')}]`;
-      case 'image': return a('caption') !== '' ? `[image: ${a('caption')}]` : `[image: ${a('alt')}]`;
-    }
-    return '[embed]';
   };
   return nodes.map((n) => { const out = { s: '' }; block(n, 0, out); return out.s; });
 }
 
 /** The text the server derives from a body_doc (internal/texturedoc/projection.go `Project`): blocks a blank line apart, no inline marks, hard breaks as newlines, the end trimmed of newlines. The phone has no
  * source entities of its own; those of the revision it read come in `entities` (an expanded source reads its title there). */
-export function projectBody(body: Body | null, entities: Entity[] = []): string {
-  return projectNodes(topNodes(body), entities).join('\n\n').replace(/\n+$/, '');
+export function projectBody(body: Body | null): string {
+  return projectNodes(topNodes(body)).join('\n\n').replace(/\n+$/, '');
 }
 
-/** The ids of the source entities a body cites. */
-export function citedIds(body: Body | null): Set<string> {
-  const out = new Set<string>();
-  const walk = (n: Node): void => { if (n.type === 'source_ref') out.add(sattr(n, 'source_entity_id')); (Array.isArray(n.content) ? (n.content as Node[]) : []).forEach(walk); };
-  topNodes(body).forEach(walk);
-  return out;
+/** Can the phone write this head exactly? Only the kinds its text carries: paragraph, heading, bullet and ordered lists, list items, quotes, code blocks, rules, text (marks strong, emphasis, code) and hard breaks; no
+ * source entities; no Markdown table in its content (the server rewrites a table-shaped draft: `stabilizeTextureUserMarkdownStructures`). Anything else (an embed, a source_ref, a table, a link mark, a kind this port does
+ * not round-trip) is read-only on the phone until the server owns the merge. A missing body is plain (a new document). */
+export function plainOnly(body: Body | null, entities: unknown, content = ''): boolean {
+  if (Array.isArray(entities) && entities.length > 0) return false;
+  if (/^\s*\|.*\|/m.test(content)) return false;
+  if (body === null) return true;
+  const BLOCK = new Set(['paragraph', 'heading', 'bullet_list', 'ordered_list', 'list_item', 'blockquote', 'code_block', 'horizontal_rule']);
+  const MARK = new Set(['strong', 'emphasis', 'code']);
+  const ok = (n: Node): boolean => {
+    if (n.type === 'text') return (Array.isArray(n.marks) ? (n.marks as Node[]) : []).every((m) => MARK.has(str(m.type)));
+    if (n.type === 'hard_break') return true;
+    if (!BLOCK.has(str(n.type))) return false;
+    return (Array.isArray(n.content) ? (n.content as Node[]) : []).every(ok);
+  };
+  return topNodes(body).every(ok);
 }
 
 /** A Markdown text as the server would hold it: the projection of the document the phone writes for it. Two texts are the same text when their `canon` is equal (a trailing newline, an Enter typed at the end, marks,

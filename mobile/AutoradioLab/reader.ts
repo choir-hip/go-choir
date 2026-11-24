@@ -9,6 +9,8 @@ import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment
 import { lapYield } from './lap.ts';
 import { blankDoc, parseAddress, parseBundleAsync, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
 import { WORDS } from './words.ts';
+import { plainOnly } from './texture-body.ts';
+import { LABELS } from './texture-edit.ts';
 
 export type { ReaderDoc };
 export type Ack = { ok: boolean };
@@ -83,7 +85,9 @@ async function fetchDoc(address: string, net: Net): Promise<ReaderDoc> {
       if (obj(rb)) revObj = obj(rb.revision) ? rb.revision : rb;
     }
     const d = parseRevision(revObj, docObj, address, await list);
-    d.docId = a.doc; d.source = str(revObj.content); d.editable = a.rev === '' && d.status === 'ready';
+    d.docId = a.doc; d.source = str(revObj.content); const plain = plainOnly(obj(revObj.body_doc) ? (revObj.body_doc as Record<string, unknown>) : null, revObj.source_entities, str(revObj.content));
+    d.editable = a.rev === '' && d.status === 'ready' && plain;
+    if (a.rev === '' && d.status === 'ready' && !plain) d.editNote = LABELS.webOnly;               // a head the phone cannot write exactly opens read-only, and says why
     console.log(`reader: document blocks=${d.blocks.length} versions=${d.versions.length}`);
     return d;
   }

@@ -134,7 +134,7 @@ export type Net = { json(path: string, opts?: { method?: 'GET' | 'POST'; body?: 
 export type Info = { status: string; label: string; notice: string; address: string; editable: boolean; writable: boolean; kept: string; hasKept: boolean; waiting: number; stamp: number; head: string; opened: boolean };
 export type Deps = { net: Net; storage: Storage | undefined; account: string; timeoutMs?: number };
 type Entry = { text: string; from: string | null; base: string; key: string };
-type Head = { id: string; content: string; body: Body.Body | null; version: number; entities: Body.Entity[] };
+type Head = { id: string; content: string; body: Body.Body | null; version: number; plain: boolean };
 type Last = { kind: 'none' } | { kind: 'offline'; label: string } | { kind: 'failed'; label: string } | { kind: 'saved'; version: number };
 
 const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -157,6 +157,7 @@ export const LABELS = {
   saving: 'Saving', dirty: 'Editing', offline: 'Offline: kept on this phone, posts when it can', launch: 'Edits kept on this phone',
   readOnly: 'The editor needs your account to be known before it keeps your text. Try again in a moment.',
   bad: 'Unsent text could not be read and was set aside.',
+  webOnly: 'This document has sources, files or a layout the phone cannot write yet. It can be edited on the web for now.',
 } as const;
 
 export class Editor {
@@ -234,6 +235,7 @@ export class Editor {
   // ----------------------------------------------------------------------------------------------------------------- what the page sees: derived, never assigned
   private statusOf(doc: string): { status: string; label: string } {
     const e = this.journal[doc], l = this.last.get(doc) ?? { kind: 'none' as const };
+    if (this.heads.get(doc)?.plain === false) return { status: 'refused', label: LABELS.webOnly };
     if (this.conflictAt.has(doc)) return { status: 'conflict', label: LABELS.conflict };
     if (this.inFlight.has(doc)) return { status: 'saving', label: LABELS.saving };
     if (e) {
@@ -262,18 +264,20 @@ export class Editor {
     return { id: str(d.current_revision_id), trajectory: str(d.trajectory_id) };
   }
   private async revision(rid: string): Promise<Head> {
-    if (rid === '') return { id: '', content: '', body: null, version: 0, entities: [] };
+    if (rid === '') return { id: '', content: '', body: null, version: 0, plain: true };
     const r = await this.json(`/api/texture/revisions/${segment(rid)}`);
     let v = obj(r.body) ? r.body : {};
     if (obj(v.revision)) v = v.revision;
     const n = typeof v.version_number === 'number' ? v.version_number : -1;
-    return { id: rid, content: str(v.content), body: obj(v.body_doc) ? (v.body_doc as Body.Body) : null, version: n + 1, entities: Array.isArray(v.source_entities) ? (v.source_entities.filter(obj) as Body.Entity[]) : [] };
+    return { id: rid, content: str(v.content), body: obj(v.body_doc) ? (v.body_doc as Body.Body) : null, version: n + 1, plain: Body.plainOnly(obj(v.body_doc) ? (v.body_doc as Body.Body) : null, v.source_entities, str(v.content)) };
   }
   /** Reads the head into the facts. False when it could not (last says why, unless the answer was let go). */
   private async readHead(doc: string): Promise<{ row: { id: string; trajectory: string }; head: Head } | null> {
     try { const row = await this.docRow(doc); const head = await this.revision(row.id); this.heads.set(doc, head); return { row, head }; }
     catch (e) { this.fail(doc, e); return null; }
   }
+  /** The head holds what the phone cannot carry exactly: the unsent text of this document goes (it could never be written) and the page says so. */
+  private refuse(doc: string): void { delete this.journal[doc]; this.conflictAt.delete(doc); this.last.delete(doc); this.bump(); }
   private fail(doc: string, e: unknown): void {
     if (this.dead || isLetGo(e)) return;                                                         // a newer answer of the same mutation does the work
     this.last.set(doc, isOffline(e) ? { kind: 'offline', label: LABELS.offline } : { kind: 'failed', label: `Not saved: ${sentence(e)}` }); this.bump();
@@ -298,7 +302,7 @@ export class Editor {
     const doc = editableDoc(address);
     if (doc === null || this.dead) return this.info(address);
     await this.ready();
-    if (this.dead) return this.info(address);
+    if (this.dead || this.heads.get(doc)?.plain === false) return this.info(address);
     const cur = this.journal[doc], head = this.heads.get(doc);
     let base = '', f = from;
     if (cur) { base = cur.base; f = cur.base !== '' ? from : cur.from; }                       // a keystroke over unsent text INHERITS the base of the text it replaces
@@ -317,6 +321,7 @@ export class Editor {
     if (!this.heads.has(doc) && !(await this.readHead(doc))) return;
     const e = this.journal[doc], h = this.heads.get(doc);
     if (!e || !h) return;
+    if (!h.plain) { this.refuse(doc); await this.persist(); return; }
     if (unchanged(e.text, h.content)) { delete this.journal[doc]; this.bump(); await this.persist(); return; }      // the same text as the head: nothing unsent
     if (e.base === '' && h.id !== '' && (e.from === null || same(e.from, h.content))) { e.base = h.id; await this.persist(); }
   }
@@ -391,18 +396,16 @@ export class Editor {
       const { row, head: h } = got;
       const e = this.journal[doc];
       if (!e) return;
+      if (!h.plain) { this.refuse(doc); await this.persist(); return; }                     // the head gained something the phone cannot write exactly since this text began: nothing is written
       if (h.id !== e.base) {
         if (unchanged(h.content, e.text)) { this.acknowledged(doc, e.text, h.version); await this.persist(); return; }
         if ((e.base === '' && e.from === null) || (e.from !== null && same(h.content, e.from))) { e.base = h.id; await this.persist(); }
         else { this.conflictAt.set(doc, h.id); this.bump(); return; }
       }
       const posted = e.text;
-      const merged = Body.merge(h.body, h.content, posted, h.entities);
-      const cited = Body.citedIds(merged.body);
-      const entities = h.entities.filter((x) => cited.has(str(x.source_entity_id).trim()));        // the sources the body cites: the server refuses a ref it cannot resolve and an entity nothing cites
-      const content = Body.projectBody(merged.body, entities);                                         // the text the server derives from body_doc: it refuses any other (400 content must match derived body_doc projection)
+      const merged = Body.merge(h.body, h.content, posted);
+      const content = Body.projectBody(merged.body);                                         // the text the server derives from body_doc: it refuses any other (400 content must match derived body_doc projection)
       const payload: Record<string, unknown> = { content, body_doc: merged.body, idempotency_key: e.key };
-      if (entities.length > 0) payload.source_entities = entities;
       if (h.id !== '') payload.parent_revision_id = h.id;
       if (row.trajectory !== '') {                                                            // as the web does: a document with a trajectory is saved against its lifecycle version
         const life = await this.json(`/api/texture/lifecycle/${segment(row.trajectory)}`);
@@ -431,7 +434,7 @@ export class Editor {
       if (obj(o.revision)) o = o.revision;
       const n = typeof o.version_number === 'number' ? o.version_number : -1;
       const id = str(o.revision_id);
-      this.heads.set(doc, { id, content, body: merged.body, version: n + 1, entities });
+      this.heads.set(doc, { id, content, body: merged.body, version: n + 1, plain: true });
       const cur = this.journal[doc];
       if (cur && cur.text !== posted) { cur.base = id; cur.from = content; }                   // typed while it was posting: its base is the revision just made
       this.acknowledged(doc, posted, n + 1);

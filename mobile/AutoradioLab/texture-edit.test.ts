@@ -2,9 +2,9 @@
 // The fake server answers what the real one does (docs, revisions, lifecycle, a post with a parent check and an idempotency key); the fake disk can delay or fail a write; a "hung" post lands or does not land
 // and never answers, which is how a kill during a post is made. A LAUNCH is a second Editor on the same files. Nothing here reads source text.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { Editor, PENDING_DIR, editableDoc, textureEditInfo, textureEdit, textureEditOpen, textureFlush, wipeTextureEdit, forgetTextureEdit, type Net, type Info } from './texture-edit.ts';
+import { Editor, LABELS, PENDING_DIR, editableDoc, textureEditInfo, textureEdit, textureEditOpen, textureFlush, wipeTextureEdit, forgetTextureEdit, type Net, type Info } from './texture-edit.ts';
 import { HTTPError, SignedOutError, resetSeam, bindNative, beginSignOut, nextGeneration } from './api.ts';
-import { projectBody, citedIds } from './texture-body.ts';
+import { projectBody } from './texture-body.ts';
 
 // ---------------------------------------------------------------------------------------------------------------- the fake server
 type Rev = { id: string; content: string; body: unknown; n: number; entities?: unknown[] };
@@ -38,18 +38,14 @@ const net: Net = { json: async (path, opts) => {
     const done = keys.get(String(b.idempotency_key));
     if (done) return reply({ revision: { revision_id: done, version_number: revs.get(done)!.n } });         // the same key twice is one revision
     // the real server's rule (internal/store/texture_structured_revision.go): content is the projection of body_doc, else 400. projectBody is held to the server's own function by the shared fixture (texture-body-projection.test.ts).
-    // Validate (internal/texturedoc/schema.go): every source_ref names a source entity the revision carries, and every entity it carries is cited
-    if (b.body_doc) {
-      const have = new Set(((b.source_entities as { source_entity_id: string }[] | undefined) ?? []).map((e) => e.source_entity_id));
-      const cited = citedIds(b.body_doc as never);
-      for (const c of cited) if (!have.has(c)) throw new HTTPError(400, `HTTP 400: invalid texture revision: source_ref source_entity_id "${c}" does not resolve`);
-      for (const h of have) if (!cited.has(h)) throw new HTTPError(400, `HTTP 400: invalid texture revision: source_entity_id "${h}" is not referenced by a source_ref node`);
-    }
-    if (b.body_doc && String(b.content ?? '').trim() !== '' && b.content !== projectBody(b.body_doc as never, (b.source_entities as never) ?? [])) throw new HTTPError(400, 'HTTP 400: invalid texture revision: content must match derived body_doc projection');
+    // Validate (internal/texturedoc/schema.go): the phone writes no source_ref, so a body that has one is refused here as the server would (it carries no entity)
+    if (b.body_doc && JSON.stringify(b.body_doc).includes('"source_ref"')) throw new HTTPError(400, 'HTTP 400: invalid texture revision: source_ref does not resolve');
+    if (b.body_doc && JSON.stringify(b.body_doc).includes('"embed"')) throw new HTTPError(400, 'HTTP 400: embeds are written only by Texture');
+    if (b.body_doc && String(b.content ?? '').trim() !== '' && b.content !== projectBody(b.body_doc as never)) throw new HTTPError(400, 'HTTP 400: invalid texture revision: content must match derived body_doc projection');
     if (postMode === 'dropHang') return hang();
     if (String(b.parent_revision_id ?? '') !== head[doc]) throw new HTTPError(409, 'HTTP 409: document head changed');
     seq += 1; const id = `rev-new-${seq}`;
-    revs.set(id, { id, content: String(b.content), body: b.body_doc, n: (revs.get(head[doc])?.n ?? -1) + 1, entities: b.source_entities as unknown[] | undefined }); head[doc] = id; keys.set(String(b.idempotency_key), id);
+    revs.set(id, { id, content: String(b.content), body: b.body_doc, n: (revs.get(head[doc])?.n ?? -1) + 1 }); head[doc] = id; keys.set(String(b.idempotency_key), id);
     if (postMode === 'landHang') return hang();
     return reply({ revision: { revision_id: id, version_number: revs.get(id)!.n } });
   }
@@ -485,24 +481,27 @@ describe('the review of 2026-11-24 (seat 1, exact-editor)', () => {
     const marks = JSON.stringify(posts()[0].body!.body_doc); expect(marks).toContain('"strong"');
   });
   const CITED_DOC = 'texture:d4';
-  test('X2 a cited and embedded document is saved with its sources and keeps ONE embed, however often it is saved (it was 400, then an embed line that grew)', async () => {
-    const e = mk(); await e.open(CITED_DOC);
-    await e.edit(CITED_DOC, 'The claim [1].\n\n[file: report.pdf]\n\nLast, edited.', CITED_TEXT); expect((await e.flush(CITED_DOC)).status).toBe('saved');
-    const first = revs.get(head.d4)!;
-    expect(first.content.split('[file: report.pdf]').length - 1).toBe(1); expect(first.content).toBe('The claim [1].\n\n[file: report.pdf]\n\nLast, edited.');
-    expect((first.entities as unknown[]).length).toBe(1);
-    await e.edit(CITED_DOC, 'The claim [1].\n\n[file: report.pdf]\n\nLast, edited twice.', 'The claim [1].\n\n[file: report.pdf]\n\nLast, edited.');
-    const i = await e.flush(CITED_DOC); expect(i.status).toBe('saved');
-    expect(revs.get(head.d4)!.content).toBe('The claim [1].\n\n[file: report.pdf]\n\nLast, edited twice.');
-    const types = ((revs.get(head.d4)!.body as { doc: { content: { type: string }[] } }).doc.content).map((n) => n.type);
-    expect(types).toEqual(['paragraph', 'embed', 'paragraph']);
+  const LINE = LABELS.webOnly;
+  test('X2 the guard: a document with a source_ref or an embed opens read-only with one plain line, types nothing, writes nothing', async () => {
+    const e = mk(); const opened = await e.open(CITED_DOC);
+    expect(opened.status).toBe('refused'); expect(opened.label).toBe(LINE);
+    const typed = await e.edit(CITED_DOC, 'The claim [1].\n\n[file: report.pdf]\n\nLast, edited.', CITED_TEXT);
+    expect(typed.hasKept).toBe(false); expect(files.size).toBe(0);
+    const done = await e.flush(CITED_DOC);
+    expect(done.status).toBe('refused'); expect(posts().length).toBe(0); expect(revs.size).toBe(2);
   });
-  test('X3 editing the cited paragraph itself keeps its source_ref and the typed words; a deleted cited paragraph drops its entity (no "not referenced" 400)', async () => {
-    const e = mk(); await e.open(CITED_DOC);
-    await e.edit(CITED_DOC, 'The claim, reworded [1].\n\n[file: report.pdf]\n\nLast.', CITED_TEXT); expect((await e.flush(CITED_DOC)).status).toBe('saved');
-    expect(revs.get(head.d4)!.content).toContain('The claim, reworded'); expect(revs.get(head.d4)!.content).toContain('[1]');
-    await e.edit(CITED_DOC, '[file: report.pdf]\n\nLast.', revs.get(head.d4)!.content); expect((await e.flush(CITED_DOC)).status).toBe('saved');
-    expect((revs.get(head.d4)!.entities ?? []).length).toBe(0);
+  test('X3 the guard is checked again at the save, against the head the save is based on: a head that gained an embed since open is not written', async () => {
+    const e = mk(); await e.open(A);
+    await e.edit(A, 'Hello world. typed', 'Hello world.');
+    revs.set('rx', { id: 'rx', content: 'Hello world.\n\n[file: x.pdf]', body: { schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'd' }, content: [{ type: 'paragraph', attrs: { id: 'p' }, content: [{ type: 'text', text: 'Hello world.' }] }, { type: 'embed', attrs: { id: 'e1', kind: 'file', title: 'x.pdf' } }] } }, n: 1 });
+    head.d1 = 'rx';
+    const i = await e.flush(A);
+    expect(posts().length).toBe(0); expect(i.status).toBe('refused'); expect(i.label).toBe(LINE); expect(journal()).toEqual({});
+  });
+  test('X4 a document whose content holds a Markdown table is read-only (the server rewrites such a draft)', async () => {
+    revs.set('rt', { id: 'rt', content: 'Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |', body: body('x'), n: 0 }); head.d2 = 'rt';
+    const e = mk(); const i = await e.open(B);
+    expect(i.status).toBe('refused'); await e.edit(B, 'Intro changed', 'Intro'); await e.flush(B); expect(posts().length).toBe(0);
   });
   test('W2 an Enter at the end, then more typing: saved, and the next keystroke is no conflict with our own save', async () => {
     const e = mk(); await e.open(NEW);

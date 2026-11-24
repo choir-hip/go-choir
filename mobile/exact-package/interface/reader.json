@@ -101,6 +101,7 @@
    "textBlocks": "number",
    "markdown": "string",
    "editable": "bool",
+   "editNote": "string",
    "source": "string",
    "docId": "string"
   },
