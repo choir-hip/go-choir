@@ -58,7 +58,10 @@ func TestScheduledTapeSweepReapsDestroyedAndLeavesProtected(t *testing.T) {
 	routed := f.chain("routed-1", 1, tapeAged)
 	f.insertClosure("code-r", platformTestDigest('9'), "routed-1")
 	recent := f.chain("recent-1", 1, 2*24*time.Hour)
-	paper := f.chain("computer-1355b83bced1613eb048ee28d66688a8", 1, tapeAged) // the hard-protected paper
+	// The hard-protected paper. A registry that lacks it while it has a head is
+	// refused as stale, so the registry lists it, as the real one does.
+	f.reg.listed["computer-1355b83bced1613eb048ee28d66688a8"] = true
+	paper := f.chain("computer-1355b83bced1613eb048ee28d66688a8", 1, tapeAged)
 	res := f.svc.RunScheduledTapeSweep(f.ctx)
 	if res.Outcome != TapeSweepPassDone || res.Deleted != 8 || res.ComputersDeleted != 1 {
 		t.Fatalf("pass = %+v", res)
