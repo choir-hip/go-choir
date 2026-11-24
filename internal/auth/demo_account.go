@@ -234,6 +234,31 @@ func (h *Handler) IsDemoAccount(userID string) bool {
 	return userID != "" && h.demoAccountID() == userID
 }
 
+// ErrAccountOff: the reviewer account is turned off, so nothing mints for it.
+var ErrAccountOff = errors.New("this account is turned off")
+
+// demoOff says whether userID is the reviewer account while it is off: the
+// credential file is missing, unreadable or malformed. Off, no other way into the
+// account works either (passkey, mail, recovery, device approval, a session made
+// before): the host command's "off" must leave nothing usable. Read each time, so it
+// takes effect with the file and needs no restart. A stateless access token made
+// before lives at most AUTH_ACCESS_TOKEN_TTL (5 minutes) at the proxy, which does not
+// ask this service.
+func (h *Handler) demoOff(userID string) bool {
+	if !h.IsDemoAccount(userID) {
+		return false
+	}
+	if h.config == nil || h.config.DemoCredentialFile == "" {
+		return true
+	}
+	data, err := os.ReadFile(h.config.DemoCredentialFile)
+	if err != nil {
+		return true
+	}
+	_, _, err = parseDemoCredential(data)
+	return err != nil
+}
+
 // demoAccountID is the configured account: the host file's first line (read
 // each time, so a change needs no restart), or the test-only field.
 func (h *Handler) demoAccountID() string {
@@ -268,9 +293,10 @@ func (h *Handler) loadDemo() (string, *demoHash, *User) {
 		return "", nil, nil
 	}
 	u, err := h.store.GetUserByID(id)
-	// Main's proof rule: an account whose address is not proved mints no key, so the route
-	// is "not available" and not a server error.
-	if err != nil || !mayMint(u) {
+	// An account whose address is not proved mints no key, so the route is "not available" and
+	// not a server error. The plain rule: mayMint also exempts the operator's synthetic
+	// bootstrap account, which must never be the reviewer's.
+	if err != nil || u == nil || u.EmailVerifiedAt == nil || u.ID == BootstrapAdminAPIKeyUserID {
 		return "", nil, nil
 	}
 	return user, hash, u
@@ -289,6 +315,8 @@ type demoKeyResponse struct {
 
 // HandleAppDemoLogin handles POST /auth/app/demo/login.
 func (h *Handler) HandleAppDemoLogin(w http.ResponseWriter, r *http.Request) {
+	// Every reply of this route may carry a 30-day bearer key: nothing on the way may keep it.
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
@@ -372,5 +400,24 @@ func ResetDemoAccess(ctx context.Context, s *Store, userID string) (keys, sessio
 		return keys, 0, err
 	}
 	sessions = len(rs)
-	return keys, sessions, s.DeleteRefreshSessionsByUserID(userID)
+	if err := s.DeleteRefreshSessionsByUserID(userID); err != nil {
+		return keys, sessions, err
+	}
+	// The grants that would mint a key or a session later: an approved device
+	// authorization, an unredeemed desktop code, a recovery link, an email sign-in
+	// attempt, a passkey challenge, the account-set membership. (RevokeUnprovedAccess
+	// deletes the same rows for the accounts it closes.)
+	for _, q := range []string{
+		"DELETE FROM device_authorizations WHERE user_id = ?",
+		"DELETE FROM desktop_exchange_codes WHERE user_id = ?",
+		"DELETE FROM recovery_tokens WHERE user_id = ?",
+		"DELETE FROM email_signin_attempts WHERE user_id = ?",
+		"DELETE FROM challenge_state WHERE user_id = ?",
+		"DELETE FROM account_set_member WHERE user_id = ?",
+	} {
+		if _, err := s.db.Exec(q, userID); err != nil {
+			return keys, sessions, err
+		}
+	}
+	return keys, sessions, nil
 }

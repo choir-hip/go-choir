@@ -16,7 +16,7 @@
 //	    account stays protected, and leaves the computer alone (reset removes
 //	    it). Idempotent.
 //
-//	demo-account reset --id-file PATH [--auth-db PATH] [--vmctl URL]
+//	demo-account reset --id-file PATH [--auth-db PATH] [--vmctl URL] [--token-file PATH]
 //	    Returns the account to empty before a review: revokes every key and
 //	    every session the account holds (each reviewer phone is signed out),
 //	    then asks vmctl to remove the account's computer (it is stopped, its
@@ -48,6 +48,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
+// defaultTokenFile is Node B's host-internal credential (nix/node-b.nix internalTokenFile),
+// root-only. vmctl enforces it, and this command is run from a root shell that has no
+// credential directory, so it reads the file itself.
+const defaultTokenFile = "/var/lib/go-choir/secrets/internal-service-token"
+
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, http.DefaultClient)) }
 
 const passwordAlphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -78,6 +83,7 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 	idFile := fs.String("id-file", "", "the host file holding the demo account id (reset)")
 	authDB := fs.String("auth-db", "/var/lib/go-choir/auth/auth.db", "auth database (reset)")
 	vmctlURL := fs.String("vmctl", "http://127.0.0.1:8083", "vmctl base URL (reset)")
+	tokenFile := fs.String("token-file", defaultTokenFile, "the host-internal service token vmctl enforces (reset); a root shell has none loaded")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -106,6 +112,12 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 			fmt.Fprintln(stderr, "off needs --id-file (readable) and --out (the credential file)")
 			return 2
 		}
+		// Nothing is touched until the database and the account are found: a typo in
+		// --auth-db or a swapped flag must not look like success.
+		if err := checkAccount(*authDB, id); err != nil {
+			fmt.Fprintln(stderr, "off:", err, "(nothing was removed)")
+			return 1
+		}
 		// Sign-in first: nothing new can come in while the keys are revoked.
 		if err := os.Remove(*out); err != nil && !os.IsNotExist(err) {
 			fmt.Fprintln(stderr, "off: remove credential:", err)
@@ -117,7 +129,7 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 			fmt.Fprintln(stderr, "off:", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "revoked %d keys and %d sessions\n", keys, sessions)
+		fmt.Fprintf(stdout, "revoked %d keys and %d sessions; pending grants deleted and proved gone\n", keys, sessions)
 		return 0
 	case "reset":
 		if *idFile == "" {
@@ -129,13 +141,17 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 			fmt.Fprintln(stderr, "reset: cannot read the account id file")
 			return 1
 		}
+		if err := checkAccount(*authDB, id); err != nil {
+			fmt.Fprintln(stderr, "reset:", err)
+			return 1
+		}
 		keys, sessions, err := revokeAll(*authDB, id)
 		if err != nil {
 			fmt.Fprintln(stderr, "reset:", err)
 			return 1
 		}
 		fmt.Fprintf(stdout, "revoked %d keys and %d sessions\n", keys, sessions)
-		status, err := removeComputer(client, *vmctlURL, id)
+		status, err := removeComputer(client, *vmctlURL, id, *tokenFile)
 		if err != nil {
 			fmt.Fprintln(stderr, "reset: remove computer:", err)
 			return 1
@@ -147,6 +163,10 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 	return 2
 }
 
+func isLoopback(host string) bool {
+	return host == "127.0.0.1" || host == "localhost" || host == "::1" || host == "[::1]"
+}
+
 func readID(path string) (string, error) {
 	raw, err := os.ReadFile(path)
 	id := strings.TrimSpace(strings.SplitN(string(raw), "\n", 2)[0])
@@ -156,13 +176,52 @@ func readID(path string) (string, error) {
 	return id, nil
 }
 
+// checkAccount proves the database exists and holds the account, without creating
+// anything (auth.OpenStore would make and migrate a new database at a typo path).
+func checkAccount(authDB, id string) error {
+	if info, err := os.Stat(authDB); err != nil || info.IsDir() {
+		return fmt.Errorf("no auth database at %s", authDB)
+	}
+	store, err := auth.OpenStore(authDB)
+	if err != nil {
+		return fmt.Errorf("open auth db: %w", err)
+	}
+	defer func() { _ = store.Close() }()
+	if u, err := store.GetUserByID(id); err != nil || u == nil {
+		return errors.New("the auth database has no account with the id in the id file")
+	}
+	return nil
+}
+
+// revokeAll revokes the account's access and then proves it: no key left unrevoked
+// and no session left. It fails otherwise.
 func revokeAll(authDB, id string) (int, int, error) {
+	if err := checkAccount(authDB, id); err != nil {
+		return 0, 0, err
+	}
 	store, err := auth.OpenStore(authDB)
 	if err != nil {
 		return 0, 0, fmt.Errorf("open auth db: %w", err)
 	}
 	defer func() { _ = store.Close() }()
-	return auth.ResetDemoAccess(context.Background(), store, id)
+	keys, sessions, err := auth.ResetDemoAccess(context.Background(), store, id)
+	if err != nil {
+		return keys, sessions, err
+	}
+	list, err := store.ListAPIKeys(context.Background(), id)
+	if err != nil {
+		return keys, sessions, fmt.Errorf("could not prove the keys are revoked: %w", err)
+	}
+	for _, k := range list {
+		if k.RevokedAt == nil {
+			return keys, sessions, errors.New("a key of the account is still live after the revoke")
+		}
+	}
+	rs, err := store.ListRefreshSessionsByUserID(id)
+	if err != nil || len(rs) != 0 {
+		return keys, sessions, errors.New("could not prove the sessions are deleted")
+	}
+	return keys, sessions, nil
 }
 
 func writeAtomic(path string, data []byte) error {
@@ -183,7 +242,7 @@ func writeAtomic(path string, data []byte) error {
 	return os.Rename(tmp.Name(), path)
 }
 
-func removeComputer(client *http.Client, base, userID string) (string, error) {
+func removeComputer(client *http.Client, base, userID, tokenFile string) (string, error) {
 	body, _ := json.Marshal(map[string]any{"user_id": userID, "desktop_id": vmctl.PrimaryDesktopID})
 	req, err := http.NewRequest(http.MethodPost, vmctl.RemoveEndpoint(strings.TrimRight(base, "/")), bytes.NewReader(body))
 	if err != nil {
@@ -192,6 +251,13 @@ func removeComputer(client *http.Client, base, userID string) (string, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(vmctl.LifecycleCallerHeader, "demo-account-reset")
 	hostauth.MarkInternal(req)
+	// vmctl enforces the host credential; MarkInternal sends it only from a process that
+	// loaded it at start, which a root shell did not. Read the file here (loopback only).
+	if raw, err := os.ReadFile(tokenFile); err == nil && req.Header.Get(hostauth.Header) == "" {
+		if t := strings.TrimSpace(string(raw)); t != "" && isLoopback(req.URL.Hostname()) {
+			req.Header.Set(hostauth.Header, t)
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	resp, err := client.Do(req.WithContext(ctx))

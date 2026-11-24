@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/auth"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 func TestCredentialWritesAFileThatVerifiesAndPrintsThePasswordOnce(t *testing.T) {
@@ -156,5 +157,75 @@ func TestOffWithoutAnIdFileRefusesAndLeavesTheCredential(t *testing.T) {
 	}
 	if _, err := os.Stat(credFile); err != nil {
 		t.Fatal("the credential was removed although the keys could not be")
+	}
+}
+
+// Node B's vmctl enforces the host credential, and a root shell has none loaded: reset
+// reads the token file itself and sends it (review, 2026-11-24).
+func TestResetSendsTheInternalTokenFromItsFileToVmctl(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "auth.db")
+	store, _ := auth.OpenStore(dbPath)
+	u, _ := store.CreateUser("demo-uid", "throwaway@example.invalid")
+	_ = store.Close()
+	idFile := filepath.Join(dir, "id")
+	_ = os.WriteFile(idFile, []byte(u.ID+"\n"), 0o600)
+	token := strings.Repeat("t0ken-", 12)
+	tokenFile := filepath.Join(dir, "token")
+	_ = os.WriteFile(tokenFile, []byte(token+"\n"), 0o600)
+	var sent string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sent = r.Header.Get(hostauth.Header)
+		if sent != token {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"removed"}`))
+	}))
+	defer srv.Close()
+	var so, se bytes.Buffer
+	if code := run([]string{"reset", "--id-file", idFile, "--auth-db", dbPath, "--vmctl", srv.URL, "--token-file", tokenFile}, &so, &se, srv.Client()); code != 0 {
+		t.Fatalf("%d %s", code, se.String())
+	}
+	if sent != token {
+		t.Fatal("the token was not sent")
+	}
+	if strings.Contains(so.String()+se.String(), token) {
+		t.Fatal("the token is in the output")
+	}
+}
+
+// off must fail loudly unless it proved the account's access is gone: a wrong database
+// path or a wrong id removes nothing and exits non-zero.
+func TestOffAndResetRefuseAWrongDatabaseOrAccountAndLeaveTheCredential(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "auth.db")
+	store, _ := auth.OpenStore(dbPath)
+	u, _ := store.CreateUser("demo-uid", "throwaway@example.invalid")
+	_ = store.Close()
+	good := filepath.Join(dir, "id")
+	_ = os.WriteFile(good, []byte(u.ID+"\n"), 0o600)
+	bad := filepath.Join(dir, "badid")
+	_ = os.WriteFile(bad, []byte("no-such-account\n"), 0o600)
+	cred := filepath.Join(dir, "cred")
+	missingDB := filepath.Join(dir, "typo", "auth.db")
+	for name, args := range map[string][]string{
+		"off, db typo":   {"off", "--id-file", good, "--out", cred, "--auth-db", missingDB},
+		"off, bad id":    {"off", "--id-file", bad, "--out", cred, "--auth-db", dbPath},
+		"off, swapped":   {"off", "--id-file", cred, "--out", good, "--auth-db", dbPath},
+		"reset, db typo": {"reset", "--id-file", good, "--auth-db", missingDB, "--vmctl", "http://127.0.0.1:1"},
+		"reset, bad id":  {"reset", "--id-file", bad, "--auth-db", dbPath, "--vmctl", "http://127.0.0.1:1"},
+	} {
+		_ = os.WriteFile(cred, []byte("reviewer\nhash\n"), 0o600)
+		var so, se bytes.Buffer
+		if code := run(args, &so, &se, nil); code == 0 {
+			t.Errorf("%s: exited 0 (%s)", name, so.String())
+		}
+		if _, err := os.Stat(cred); err != nil && name != "off, swapped" {
+			t.Errorf("%s: the credential was removed", name)
+		}
+		if _, err := os.Stat(filepath.Dir(missingDB)); err == nil {
+			t.Errorf("%s: a database was created at the typo path", name)
+		}
 	}
 }

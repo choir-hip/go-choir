@@ -346,6 +346,9 @@ func (h *Handler) issueAccessJWT(user *User, method string) (string, error) {
 	if !mayMint(user) {
 		return "", ErrAddressUnproved
 	}
+	if h.demoOff(user.ID) {
+		return "", ErrAccountOff
+	}
 	ev := int64(1)
 	if user.EmailVerifiedAt != nil {
 		ev = user.EmailVerifiedAt.Unix()
@@ -1797,7 +1800,7 @@ func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) (*U
 	// 1. Try cookie-based JWT (browser sessions).
 	if cookie, err := r.Cookie(AccessTokenCookieName); err == nil && cookie.Value != "" {
 		userID, err := h.ValidateAccessToken(cookie.Value)
-		if err == nil {
+		if err == nil && !h.demoOff(userID) {
 			user, err := h.store.GetUserByID(userID)
 			if err == nil {
 				return user, nil

@@ -541,7 +541,10 @@ let
   hostSecretPaths = {
     jwtKey = "-${authSigningDir}/ed25519-key";
     emailCodeKey = "-${authSigningDir}/email-code-key";
-    demoCredential = "-${authSigningDir}/demo-credential";
+    # The whole directory, not one file: a bind mount over a file hides only that inode, so a
+    # credential made or rotated (a new file by rename) after a unit started would be
+    # visible to it. A directory hides what is made inside it later. Only auth keeps it.
+    demoDir = "${authSigningDir}/demo";
     providerEnv = "-/var/lib/go-choir/gateway-provider.env";
     codexAuth = "-/var/lib/go-choir/codex-auth.json";
     maildEnv = "-/var/lib/go-choir/maild.env";
@@ -1018,7 +1021,7 @@ in
       StateDirectory = "go-choir/auth";
       # Read-write paths for auth persistence and signing key.
       ReadWritePaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/auth-signing" ];
-      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" "emailCodeKey" "demoCredential" ];
+      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" "emailCodeKey" "demoDir" ];
       # auth.db holds sessions and API-key records; it was 0644 in a 0755
       # directory, private only because /var/lib/go-choir is 0750.
       StateDirectoryMode = "0750";
@@ -1053,6 +1056,8 @@ in
         # two host files, outside the repo. Absent, the route answers "not available".
         "AUTH_DEMO_ACCOUNT_ID_FILE=${authSigningDir}/demo-account-id"
         "AUTH_DEMO_CREDENTIAL_FILE=${authSigningDir}/demo-credential"
+        "AUTH_DEMO_ACCOUNT_ID_FILE=${authSigningDir}/demo/demo-account-id"
+        "AUTH_DEMO_CREDENTIAL_FILE=${authSigningDir}/demo/demo-credential"
         internalAuthEnv
       ];
     };
@@ -3307,6 +3312,7 @@ in
     "d ${autoputerRuntimeDir} 0750 root root -"
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"
+    "d /var/lib/go-choir/auth-signing/demo 0700 root root -"
     "d ${mailDir} 0700 root root -"
     "d ${mailDir}/raw 0700 root root -"
     "d ${mailDir}/attachments 0700 root root -"

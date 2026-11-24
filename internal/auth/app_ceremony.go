@@ -200,6 +200,9 @@ func writeKeyJSON(w http.ResponseWriter, key *appKeyResponse) {
 // mintAppKey gives the app the grant a device approval gives: a full-access key
 // (every scope), owner-wide, until revoked.
 func (h *Handler) mintAppKey(ctx context.Context, user *User, app string) (*appKeyResponse, error) {
+	if h.demoOff(user.ID) {
+		return nil, ErrAccountOff
+	}
 	scopes := AllScopes()
 	label := appKeyLabel + app
 	id, secret, err := h.store.CreateAPIKey(ctx, user.ID, label, scopes, nil)

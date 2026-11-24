@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -311,5 +312,90 @@ func TestDemoAccountWithAnUnprovedAddressGetsNoKey(t *testing.T) {
 	}
 	if keys, _ := e.h.store.ListAPIKeys(context.Background(), e.uid); len(keys) != 0 {
 		t.Fatalf("no key may be minted for an unproved account, got %d", len(keys))
+	}
+}
+
+// off must leave nothing usable for the account (review, 2026-11-24): the pending
+// grants go with the keys and sessions.
+func TestResetDemoAccessDeletesEveryPendingGrantOfTheAccountOnly(t *testing.T) {
+	e := demoEnv(t)
+	other, _ := e.h.store.CreateUser("other-user-id", "other@example.invalid")
+	db := e.h.store.db
+	now := time.Now().UTC()
+	exp := now.Add(10 * time.Minute)
+	for _, uid := range []string{e.uid, other.ID} {
+		mustExec(t, db, `INSERT INTO device_authorizations (id, device_code_hash, user_code_hash, ip_hash, created_at, expires_at, status, user_id) VALUES (?, ?, ?, 'ip', ?, ?, 'approved', ?)`, "da-"+uid, "dc-"+uid, "uc-"+uid, now, exp, uid)
+		mustExec(t, db, `INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at) VALUES (?, ?, 'a', 'r', ?, ?)`, "code-"+uid, uid, now, exp)
+		mustExec(t, db, `INSERT INTO recovery_tokens (id, user_id, email, email_hash, ip_hash, token_hash, created_at, expires_at) VALUES (?, ?, 'x@example.invalid', 'eh', 'ih', 'th', ?, ?)`, "rt-"+uid, uid, now, exp)
+		mustExec(t, db, `INSERT INTO email_signin_attempts (id, user_id, email_hash, code_hash, link_token_hash, cookie_hash, ip_hash, created_at, expires_at) VALUES (?, ?, 'eh', 'ch', 'lh', 'kh', 'ih', ?, ?)`, "es-"+uid, uid, now, exp)
+		mustExec(t, db, `INSERT INTO challenge_state (id, user_id, challenge, type, created_at, expires_at) VALUES (?, ?, 'c', 'login', ?, ?)`, "cs-"+uid, uid, now, exp)
+	}
+	if _, _, err := ResetDemoAccess(context.Background(), e.h.store, e.uid); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"device_authorizations", "desktop_exchange_codes", "recovery_tokens", "email_signin_attempts", "challenge_state"} {
+		var mine, theirs int
+		_ = db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE user_id = ?`, e.uid).Scan(&mine)
+		_ = db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE user_id = ?`, other.ID).Scan(&theirs)
+		if mine != 0 || theirs != 1 {
+			t.Fatalf("%s: the account kept %d rows (want 0), another account has %d (want 1)", table, mine, theirs)
+		}
+	}
+}
+
+func mustExec(t *testing.T, db interface {
+	Exec(string, ...any) (sql.Result, error)
+}, q string, args ...any) {
+	t.Helper()
+	if _, err := db.Exec(q, args...); err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+}
+
+// While the account is off (the credential file is gone) no sign-in of any other kind
+// reaches it either: no session token, no app key, and a token made before is not read.
+func TestAnOffDemoAccountMintsAndAuthenticatesNothing(t *testing.T) {
+	e := demoEnv(t)
+	user, _ := e.h.store.GetUserByID(e.uid)
+	tok, err := e.h.issueAccessJWT(user, "passkey")
+	if err != nil {
+		t.Fatalf("the account is on: %v", err)
+	}
+	if _, err := e.h.mintAppKey(context.Background(), user, testApp); err != nil {
+		t.Fatalf("the account is on: %v", err)
+	}
+	if err := os.Remove(e.file); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.h.issueAccessJWT(user, "passkey"); err == nil {
+		t.Error("a session token was made for an off account")
+	}
+	if _, err := e.h.mintAppKey(context.Background(), user, testApp); err == nil {
+		t.Error("an app key was made for an off account")
+	}
+	r := httptest.NewRequest(http.MethodGet, "/auth/api-keys", nil)
+	r.AddCookie(&http.Cookie{Name: AccessTokenCookieName, Value: tok})
+	w := httptest.NewRecorder()
+	if u, _ := e.h.requireAuthUserAny(w, r); u != nil {
+		t.Error("a session token made before was accepted for an off account")
+	}
+	// Another account is untouched.
+	other, _ := e.h.store.CreateUser("other-user-id", "other@example.invalid")
+	if _, err := e.h.issueAccessJWT(other, "passkey"); err != nil {
+		t.Errorf("another account: %v", err)
+	}
+}
+
+func TestDemoLoginNeverServesTheBootstrapAccountAndNeverCaches(t *testing.T) {
+	e := demoEnv(t)
+	if w := e.post(t, "198.51.100.8", good()); w.Code != http.StatusOK || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("a key reply must be no-store: %d %q", w.Code, w.Header().Get("Cache-Control"))
+	}
+	e.h.config.DemoAccountID = BootstrapAdminAPIKeyUserID
+	if _, err := e.h.store.db.Exec(`INSERT OR IGNORE INTO users (id, email, created_at) VALUES (?, 'bootstrap@example.invalid', ?)`, BootstrapAdminAPIKeyUserID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if w := e.post(t, "198.51.100.9", good()); w.Code != http.StatusNotFound {
+		t.Fatalf("the bootstrap account must never be the reviewer's: %d %s", w.Code, w.Body)
 	}
 }
