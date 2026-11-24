@@ -4,7 +4,7 @@
 //     so "behind the view" means started, not awaited.
 //  B3 a write that fails is logged, never silent; the open still stands in memory.
 //  B4 the mirror carries the set as it was at the open (the generation the open began under), and the view is the same one.
-//  B5 a sign-out that begins after the open returned: the late write does not bring the old set back (the file is removed again), as before.
+//  B5 (a sign-out after the open returned) is in review-fixes.test.ts R5, against a storage that keeps Exact's issue order.
 import { beforeEach, expect, test } from 'bun:test';
 import * as P from './pages.ts';
 import * as R from './recent-pages.ts';
@@ -54,15 +54,4 @@ test('B4 the mirror carries the set of this open', async () => {
   await P.pagesView(storage); seen.length = 0;
   const v = await P.pagesOpen(storage, 'textures:', '');
   expect(seen.length).toBe(1); expect(seen[0].pages.map((p) => p.address)).toEqual(v.rows.map((r) => r.address));
-});
-
-test('B5 a sign-out after the open returned: the late write does not bring the old set back', async () => {
-  await P.pagesView(storage);
-  let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-  const slow = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { await gate; files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
-  await P.pagesView(slow);
-  await P.pagesOpen(slow, 'paper:front', '');
-  nextGeneration(); await P.wipePages(slow);
-  release(); await P.pagesSettled(); await R.recentSettled();
-  expect(files.has(P.PAGES_FILE)).toBe(false);
 });

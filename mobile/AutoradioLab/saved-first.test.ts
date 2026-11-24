@@ -83,7 +83,7 @@ describe('notebook', () => {
     keep();
     const saved = await notebookSaved({ selected: '', active: true }, storage);
     expect(saved.docState).toBe('ready'); expect(saved.sections.length).toBeGreaterThan(0); expect(saved.scoreState).toBe('loading');
-    expect((await notebookSaved({ selected: '', active: false }, storage)).docState).toBe('loading');
+    expect((await notebookSaved({ selected: '', active: false }, storage)).docState).toBe('');
     files.clear();
     expect((await notebookSaved({ selected: '', active: true }, storage)).docState).toBe('loading');
   });

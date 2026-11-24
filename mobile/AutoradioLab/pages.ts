@@ -121,7 +121,7 @@ let saving: Promise<unknown> = Promise.resolve();
 /** The write is issued NOW, from the answer that called, and carries the set as it is now. Exact runs a module's storage in one queue in the order issued, so the last state wins the file; and a storage or native
  * call made after the answer ended is refused (docs/reference.md "refused in background work"), which a write chained on an earlier one (`.then`) would be when the earlier one is still out. A failed write is logged. */
 function save(storage: Storage | undefined, gen: number): Promise<void> {
-  const run = writeCurrent(gen, storage, PAGES_FILE, new TextEncoder().encode(JSON.stringify({ pages, recency }))).then((ok) => {
+  const run = writeCurrent(gen, storage, PAGES_FILE, new TextEncoder().encode(JSON.stringify({ pages, recency })), false).then((ok) => {
     if (!ok && storage && gen === accountGeneration()) console.log('pages: open set not saved');
   });
   saving = Promise.all([saving, run]);

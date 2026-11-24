@@ -40,7 +40,7 @@ let saving: Promise<unknown> = Promise.resolve();
 /** The write is issued NOW, from the answer that called: Exact's one storage queue runs the writes in the order they were issued, so the last state wins the file, and a call made after the answer ended
  * is refused (reference.md, "refused in background work"), which a write chained on an earlier one would be. A failed write is logged. */
 function save(storage: Storage | undefined, gen: number): Promise<void> {
-  const run = writeCurrent(gen, storage, RECENT_FILE, new TextEncoder().encode(JSON.stringify({ events: ring }))).then((ok) => {
+  const run = writeCurrent(gen, storage, RECENT_FILE, new TextEncoder().encode(JSON.stringify({ events: ring })), false).then((ok) => {
     if (!ok && storage && gen === accountGeneration()) console.log('recent-pages: the recent pages were not saved');
   });
   saving = Promise.all([saving, run]);

@@ -6,7 +6,7 @@
 
 test "no page open: the three podcast sources answer their idle shapes"
   clock data
-  expect state podHome.status == "idle"
+  expect state podHome.status == ""
   expect state podShow.status == ""
   expect state podEp.status == ""
   expect state podHome.shows.length == 0

@@ -58,7 +58,7 @@ describe('R1 to R3 the page state', () => {
     await notebookShared(args(), storage, env());
     const n = calls.length;
     const idle = await notebookShared(args({ active: false }), storage, env());
-    expect(calls.length).toBe(n); expect(idle).toMatchObject({ docState: 'loading', scoreState: 'loading', sections: [] });
+    expect(calls.length).toBe(n); expect(idle).toMatchObject({ docState: '', scoreState: '', sections: [] });          // the EMPTY state: Exact keeps the last answer, and a non-empty one would hide the kept copy (members-notebook.contract)
     await notebookShared(args(), storage, env());
     expect(calls.length).toBeGreaterThan(n);
   });

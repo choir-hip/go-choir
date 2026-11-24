@@ -364,7 +364,7 @@ export type HomeArgs = { q: string; address: string; tick: number };
 
 export async function podcastHome(a: HomeArgs, storage: Storage | undefined, saved = false): Promise<HomeView> {
   const v: HomeView = { status: 'ready', message: '', query: '', searchNote: '', syncNote: '', searching: false, hasQuery: false, shows: [], results: [], suggestions: [] };
-  if (a.address !== HOME) { v.status = saved ? '' : 'idle'; return v; }
+  if (a.address !== HOME) { v.status = ''; return v; }            // not on the page: the EMPTY status, never "idle" (Exact keeps a resource's last answer, and a non-empty one would hide the kept copy when the page opens: podcasts.contract's derive)
   const q = normalize(a.q);
   if (saved && q !== '') { v.status = ''; return v; }                       // a search is the network's: nothing to show from the phone's copy
   const gen = accountGeneration();

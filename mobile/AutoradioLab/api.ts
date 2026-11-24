@@ -178,10 +178,15 @@ export async function refreshSealBlock(): Promise<void> {
 
 /** ONE rule for every moved store's file write (review 2026-11-19): `gen` is the account generation the SOURCE started under (`accountGeneration()` before its request). The write is
  * refused if a sign-out has moved the generation, and a file that lands after the generation moved is removed again. True when the file is there. */
-export async function writeCurrent(gen: number, storage: Storage | undefined, path: string, bytes: Uint8Array): Promise<boolean> {
+export async function writeCurrent(gen: number, storage: Storage | undefined, path: string, bytes: Uint8Array, compensate = true): Promise<boolean> {
   if (!storage || gen !== generation) return false;
   try { await storage.fs.atomicWriteFile(path, bytes); } catch { return false; }
-  if (gen !== generation) { try { await storage.fs.rm(path); } catch { /* the wipe will */ } return false; }
+  if (gen !== generation) {
+    // `compensate` false: a write the caller did not wait for (pages.ts, recent-pages.ts) lands after its answer, and a storage call made then is refused (docs/reference.md "refused in background work"). Such a
+    // store's own wipe (account.ts, queued behind the write in the host's one storage queue) is what removes it.
+    if (compensate) { try { await storage.fs.rm(path); } catch { /* the wipe will */ } }
+    return false;
+  }
   return true;
 }
 

@@ -78,6 +78,6 @@ describe('the notebook page is idle when it is not on top', () => {
     const { answer } = await import('./app.ts');
     const storage = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => undefined } } as never;
     const n = await answer('notebookPageShared' as never, ['', 0, false, ''] as never, undefined as never, storage, undefined as never) as { docState: string };
-    expect(n.docState).toBe('loading'); expect(fetches).toBe(0);
+    expect(n.docState).toBe(''); expect(fetches).toBe(0);
   });
 });

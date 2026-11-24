@@ -34,6 +34,8 @@ type Read = { doc: Awaited<ReturnType<typeof loadDoc>>['load']; learning: Awaite
 let memo: { key: string; read: Promise<Read> } | null = null;
 export function forgetNotebook(): void { memo = null; }
 
+/** The answer while the page is not on top: the EMPTY state. Exact keeps a resource's last answer when its arguments change, so a non-empty one (`loading`) would hide the kept copy when the page opens (members-notebook.contract). */
+const offPage = (): PageInfo => ({ ...page({ doc: null, learning: null, selected: '', steerQueued: 0 }), docState: '', scoreState: '' });
 const idle = (): PageInfo => page({ doc: null, learning: null, selected: '', steerQueued: 0 });
 const within = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
   Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
@@ -49,7 +51,7 @@ async function readAll(storage: Storage | undefined, env: Env, gen: number): Pro
 
 /** The page's source. `tick` is the Refresh press, `signedOutTick` a sign-out; a select changes only `selected` and reads nothing. Never throws. */
 export async function notebookShared(a: { selected: string; tick: number | string; active: boolean; signedOutTick: string }, storage: Storage | undefined, env: Env = liveEnv()): Promise<PageInfo> {
-  if (!a.active) { memo = null; return idle(); }
+  if (!a.active) { memo = null; return offPage(); }
   const gen = accountGeneration();
   const key = `${a.tick}|${a.signedOutTick}|${gen}`;
   if (memo === null || memo.key !== key) memo = { key, read: readAll(storage, env, gen) };
@@ -62,7 +64,7 @@ export async function notebookShared(a: { selected: string; tick: number | strin
 /** The page from the notebook text the phone kept (notebook.ts CACHE_FILE), at once, while `notebookShared` is out (stale, then fresh): the lines, with the scorecard still loading. Reads only that file, never the computer;
  * nothing kept, the page not on top, or an account change during the read: the page's own loading (`idle`), never an invented notebook. */
 export async function notebookSaved(a: { selected: string; active: boolean }, storage: Storage | undefined): Promise<PageInfo> {
-  if (!a.active) return idle();
+  if (!a.active) return offPage();
   const gen = accountGeneration();
   const cached = await loadCache(storage);
   if (cached === null || gen !== accountGeneration()) return idle();

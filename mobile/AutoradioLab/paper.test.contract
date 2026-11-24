@@ -45,3 +45,15 @@ test "a body that is not the front list is an error, not a crash"
   answer fetch "https://choir.news" with 200 {"unexpected":true}
   clock data
   expect state pfront.status == "error"
+
+// Stale, then fresh (members-paper.contract): what the phone kept is read by its own resource, apart from the request. The request is refused after the relaunch, so the page's fresh answer is the offline copy; `psaved` is the
+// kept copy composed on its own, at the viewport's width.
+test "after a relaunch the kept front page is read from the phone, whatever the request does"
+  size 390x844
+  clock data
+  fail fetch "https://choir.news"
+  reload
+  expect state psaved.status == "ready"
+  expect state psaved.message == ""
+  expect state psaved.count == 5
+  expect state pfront.count == 5

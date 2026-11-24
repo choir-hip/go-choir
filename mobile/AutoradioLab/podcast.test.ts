@@ -224,7 +224,7 @@ describe('1 and 8 subscriptions', () => {
   });
   test('a home page for another address is idle, and asks nothing', async () => {
     const h = await P.podcastHome({ q: '', address: 'radio:', tick: 0 }, storage);
-    expect(h.status).toBe('idle'); expect(calls.length).toBe(0);
+    expect(h.status).toBe(''); expect(calls.length).toBe(0);
   });
 });
 

@@ -78,12 +78,7 @@ describe('pages', () => {
     await P.wipePages(storage);
     expect(files.has(P.PAGES_FILE)).toBe(false); expect(addrs(await P.pagesView(undefined))).toEqual(['radio:']);
   });
-  test('P9 a write that lands after a sign-out began is removed', async () => {
-    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-    const slow = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { await gate; files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
-    const p = P.pagesOpen(slow, 'paper:front', ''); await new Promise((r) => setTimeout(r, 5)); nextGeneration(); release(); await p; await P.pagesSettled();
-    expect(files.has(P.PAGES_FILE)).toBe(false);
-  });
+  // P9 (a write that lands after a sign-out began) is review-fixes.test.ts R5: it needs a storage that keeps Exact's issue order, which this file's fake does not.
 });
 
 describe('load', () => {

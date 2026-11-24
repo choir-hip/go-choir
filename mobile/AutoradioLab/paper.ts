@@ -165,14 +165,16 @@ export async function paperFront(a: PaperArgs, storage?: Storage): Promise<Paper
  * say if it fails. */
 export async function paperSaved(a: PaperArgs, storage?: Storage): Promise<PaperFront> {
   const view = a.view === '' ? FRONT : a.view;
-  if (view === MINE || a.width < 200) return blankFront();
+  if (view !== FRONT || a.width < 200) return blankFront();         // only the front page: My edition waits for its picks, and a category from the front list alone could say "empty" for a section that has stories (only fresh data may say empty)
   const gen = accountGeneration();
   const body = await readCache(storage);
   if (body === null || gen !== accountGeneration()) return blankFront();
   try {
     const stories = parseList(body);
     if (stories.length === 0) return blankFront();
-    return composeFront(stories, { view, picks: [], category: null, live: parseLiveSections(body), width: a.width, now: clock.ms > 0 ? clock.ms : null, status: 'ready', message: '' });
+    const out = composeFront(stories, { view, picks: [], category: null, live: parseLiveSections(body), width: a.width, now: clock.ms > 0 ? clock.ms : null, status: 'ready', message: '' });
+    if (clock.ms <= 0) out.updated = '';                                // no device time: the age of the list is not known, and "Updated just now" would be a claim
+    return out;
   } catch { return blankFront(); }
 }
 
