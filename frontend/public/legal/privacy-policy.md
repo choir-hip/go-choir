@@ -102,7 +102,7 @@ These are the categories, and the providers in our code on 2026-11-24.
 
 You agree to this when you create an account: the create-account screen says it above the button, with a link to this policy. Listening to the paper needs no account and sends none of your content to a model. If you no longer agree, ask us to delete your account (section 9).
 
-We do not sell your data. We do not share it for advertising. Apart from YouTube, as follows, we share it only with the providers above, to run the product, and where the law requires it. Some pages on choir.news that show a source show a video player from YouTube; when you open such a page, YouTube receives your IP address and may set its own cookies.
+We do not sell your data. We do not share it for advertising. Apart from YouTube, described next, and the public search engines that SearXNG passes queries to, we share it only with the providers above, to run the product, and where the law requires it. Some pages on choir.news that show a source show a video player from YouTube; when you open such a page, YouTube receives your IP address and may set its own cookies.
 
 ## 6. AI-written content and its sources
 
@@ -128,7 +128,7 @@ The app downloads voice and language model files to your phone. They are data fi
 
 - Email address and passkey public key: until your account is deleted (section 9).
 - Sign-in sessions: until they expire (up to 30 days for the refresh session) or you sign out.
-- Email codes (the code we mail to create an account, and email sign-in on choir.news): codes expire in 10 minutes, and the attempt records are removed after 24 hours. Recovery links expire in 15 minutes. The record of each link, with the email address it was sent to, stays in the sign-in database; we do not yet delete these records on a schedule.
+- Email codes (the code we mail to create an account, and email sign-in on choir.news): codes expire in 10 minutes, and the attempt records are removed after 24 hours. Recovery links expire in 15 minutes. A link's record, with the email address it was sent to, can stay in the sign-in database after that: we do not yet delete these records on a schedule. When we delete an account, we delete the recovery records sent to its address.
 - Your computer's working data (documents, files, mail, notes, play history): until your account is deleted.
 - The event log of your computer, including the text of your requests and answers: for the life of the computer. It is sealed under a key that belongs to the computer. We do not edit it. It is removed when your computer is destroyed, as in section 9.
 - Server logs (our host's request, service and sign-in logs): deleted after 21 days by a daily job. If the disk is nearly full they can be deleted sooner; if the job fails or the server is off for some days, later. A person's own computer and the logs on it follow the computer (above).
