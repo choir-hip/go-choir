@@ -618,6 +618,7 @@ func (s *Store) DB() *sql.DB {
 
 // CreateUser inserts a new user and returns it.
 func (s *Store) CreateUser(id, email string) (*User, error) {
+	email = normalizeEmail(email)
 	now := time.Now().UTC()
 	_, err := s.db.Exec(
 		"INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)",
@@ -637,9 +638,17 @@ func (s *Store) GetUserByID(id string) (*User, error) {
 }
 
 // GetUserByEmail returns the user with the given email, or sql.ErrNoRows.
+//
+// An address is compared by its normalised spelling (trimmed, domain
+// lower-cased; normalizeEmail), so the way a person types the domain never
+// decides whether the account is found, and a row stored by an older build
+// under a mixed-case domain is found too. The local part keeps its case.
 func (s *Store) GetUserByEmail(email string) (*User, error) {
 	return scanUser(s.db.QueryRow(
-		"SELECT id, email, created_at, email_verified_at FROM users WHERE email = ?", email,
+		`SELECT id, email, created_at, email_verified_at FROM users
+		 WHERE substr(email, 1, instr(email, '@')) || lower(substr(email, instr(email, '@') + 1)) = ?
+		    OR email = ?
+		 ORDER BY (email = ?) DESC LIMIT 1`, normalizeEmail(email), email, email,
 	))
 }
 

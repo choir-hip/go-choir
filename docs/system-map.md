@@ -123,13 +123,13 @@ hibernates up to 3 idle computers.
 
 Size: every interactive computer made before 2026-11-23 is 4 CPU and 8 GiB
 (`VM_INTERACTIVE_MEM_MIB=8192` in `nix/node-b.nix`); platform computers
-(the wire) are 2 CPU and 4 GiB. A computer made for a new account is 2 GiB,
-recorded once on its ownership (`mem_size_mib`); the owner's paid computer,
-platform, proof, test and operator-marked computers are never made small.
-Sign-up closes at `registrationCap` (top of `nix/node-b.nix`): accounts that
-hold a passkey, the operator's own (marked by a server-checked secret, never
-by an address) aside. The reading is the capacity block of
-`/api/pulse/summary`.
+(the wire) are 2 CPU and 4 GiB. A computer made for a new account is 4 GiB,
+recorded once on its ownership (`mem_size_mib`); platform, proof and test
+computers and the owner's paid computer are never recorded at it. Sign-up
+closes at `registrationCap` (top of `nix/node-b.nix`, computed from the free
+disk): accounts that hold a passkey, except those the operator's secret marked
+at registration (CI, drills). The owner's own account is counted. The reading
+is the capacity block of `/api/pulse/summary`.
 
 Key paths: `internal/vmctl/`, `internal/vmmanager/`, `internal/proxy/`,
 `internal/auth/`, `nix/node-b.nix`, `.github/scripts/node-b-ci-deploy`.

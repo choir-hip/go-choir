@@ -186,12 +186,12 @@
         <div><dt>Memory free</dt><dd>{formatBytes(capMemory?.available_bytes)} of {formatBytes(capMemory?.total_bytes)}</dd></div>
         <div><dt>Memory floor</dt><dd>{formatBytes(capMemory?.floor_bytes)}</dd></div>
         <div><dt>Disk free</dt><dd>{formatBytes(capDisk?.available_bytes)}</dd></div>
-        <div><dt>Disk floor</dt><dd>{formatBytes(capDisk?.floor_bytes)}</dd></div>
+        <div><dt>Disk reserve (deploy floor and paper)</dt><dd>{formatBytes(capDisk?.floor_bytes)}</dd></div>
         <div><dt>Running</dt><dd>{formatNumber(capComputers?.running)}</dd></div>
         <div><dt>Hibernated</dt><dd>{formatNumber(capComputers?.hibernated)}</dd></div>
-        <div><dt>Accounts counted</dt><dd>{formatNumber(capReg?.counted)} of {capReg?.cap ? formatNumber(capReg.cap) : 'no cap'}</dd></div>
-        <div><dt>Room left</dt><dd>{capReg?.cap ? formatNumber(capReg?.remaining) : 'no cap'}</dd></div>
-        <div><dt>Sign-ups, 24h</dt><dd>{formatNumber(capReg?.sign_ups_last_24h)}</dd></div>
+        <div><dt>Accounts counted</dt><dd>{capReg?.available ? `${formatNumber(capReg.counted)} of ${capReg.cap ? formatNumber(capReg.cap) : 'no cap'}` : 'no reading'}</dd></div>
+        <div><dt>Room left</dt><dd>{capReg?.available ? (capReg.cap ? formatNumber(capReg.remaining) : 'no cap') : 'no reading'}</dd></div>
+        <div><dt>Sign-ups, 24h</dt><dd>{capReg?.available ? formatNumber(capReg.sign_ups_last_24h) : 'no reading'}</dd></div>
       </dl>
     </section>
 

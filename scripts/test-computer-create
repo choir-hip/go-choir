@@ -133,9 +133,7 @@ address="$(ssh -o ConnectTimeout=15 -o BatchMode=yes "$node_b" 'maildctl reserve
 [[ "$address" =~ ^[0-9]{8}@choir\.news$ ]] || { echo "FAIL reserve-test-number answered an unexpected address shape" >&2; exit 1; }
 echo "bootstrap: test number reserved; registering $name (log $log)" >&2
 # The account is the operator's own: the auth service marks it by a secret it
-# checks (never an address), so it is not counted against the sign-up cap and
-# its computer is made at the interactive size, which can run a capsule (a new
-# stranger's 2 GiB computer cannot). The secret is read over ssh into this
+# checks (never an address), so it is not counted against the sign-up cap. The secret is read over ssh into this
 # process only; it is never printed.
 if [[ -z "${CHOIR_OPERATOR_SECRET:-}" ]]; then
   CHOIR_OPERATOR_SECRET="$(ssh -o ConnectTimeout=15 -o BatchMode=yes "$node_b" 'cat /var/lib/go-choir/auth-signing/operator-secret')" \

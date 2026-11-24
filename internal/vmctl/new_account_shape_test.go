@@ -1,13 +1,13 @@
 package vmctl
 
 import (
-	"errors"
 	"path/filepath"
 	"testing"
 )
 
-// A new account's computer has 2 GiB of memory (owner, 2026-11-23: "All new
-// accounts get a computer. but we can do 2gb ram"). The size is recorded on
+// A new account's computer has 4 GiB of memory (owner, 2026-11-24: "we may not
+// need to cut computers from 4gb ram to 2gb since ram isnt the limit, disk
+// is"). The size is recorded on
 // the ownership when the computer is created, so a computer made before that
 // keeps the interactive size it was made with (its snapshot depends on it),
 // and the paper and a platform computer never take the small shape.
@@ -34,13 +34,13 @@ func TestNewAccountComputerGetsTwoGiBAndKeepsItAcrossRestarts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(mgr.boots) != 1 || mgr.boots[0].MachineMemSizeMib != 2048 {
-		t.Fatalf("first boot memory = %+v, want one boot at 2048 MiB", mgr.boots)
+	if len(mgr.boots) != 1 || mgr.boots[0].MachineMemSizeMib != 4096 {
+		t.Fatalf("first boot memory = %+v, want one boot at 4096 MiB", mgr.boots)
 	}
-	if own.MemSizeMib != 2048 {
-		t.Fatalf("recorded size = %d, want 2048", own.MemSizeMib)
+	if own.MemSizeMib != 4096 {
+		t.Fatalf("recorded size = %d, want 4096", own.MemSizeMib)
 	}
-	// Every later boot of this computer is 2048 too, after a vmctl restart.
+	// Every later boot of this computer is 4096 too, after a vmctl restart.
 	again := NewOwnershipRegistry("")
 	if err := again.SetPersistencePath(path); err != nil {
 		t.Fatal(err)
@@ -51,11 +51,11 @@ func TestNewAccountComputerGetsTwoGiBAndKeepsItAcrossRestarts(t *testing.T) {
 	if loaded == nil {
 		t.Fatal("ownership did not persist")
 	}
-	if _, mem := machineShapeForOwnership(loaded); mem != 2048 {
-		t.Fatalf("size after restart = %d, want 2048", mem)
+	if _, mem := machineShapeForOwnership(loaded); mem != 4096 {
+		t.Fatalf("size after restart = %d, want 4096", mem)
 	}
-	if got := vmManagerConfigForOwnership(loaded, "").MachineMemSizeMib; got != 2048 {
-		t.Fatalf("boot config after restart = %d, want 2048", got)
+	if got := vmManagerConfigForOwnership(loaded, "").MachineMemSizeMib; got != 4096 {
+		t.Fatalf("boot config after restart = %d, want 4096", got)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestComputerMadeBeforeTheSmallShapeKeepsItsSize(t *testing.T) {
 
 func TestPaperComputerIsNeverGivenTheSmallShape(t *testing.T) {
 	// If the paper's ownership were ever recreated, it must not come back at
-	// 2 GiB: a computer the tiers name as a platform computer is exempt.
+	// 4 GiB: a computer the tiers name as a platform computer is exempt.
 	paperUser := "paper-owner"
 	paperComputer := stableComputerID(paperUser, PrimaryDesktopID, "")
 	policy := DefaultWarmnessPolicyConfig()
@@ -108,22 +108,18 @@ func TestNewAccountShapeNeverExceedsTheHostSetting(t *testing.T) {
 	}
 }
 
-// The small shape is for strangers. The owner's paid always-on computer, the
-// operator proof computer, a test computer and an operator-marked account's
-// computer (the test-computer script) keep the interactive size when
-// their ownership is created afresh (review of 2026-11-24, S3 and S4): a
-// 2 GiB computer cannot run an engineering capsule.
-func TestOwnerProofAndOperatorComputersAreNotMadeSmall(t *testing.T) {
+// The smaller shape is for strangers. The owner's paid always-on computer, the
+// operator proof computer and a test computer keep the interactive size when
+// their ownership is created afresh (review of 2026-11-24, S3).
+func TestOwnerAndProofComputersKeepTheirSize(t *testing.T) {
 	cases := []struct {
 		name  string
 		user  string
 		setup func(p *WarmnessPolicyConfig, userID, computerID string)
-		op    func(userID string) (bool, error)
 	}{
 		{name: "paid owner", user: "owner-user", setup: func(p *WarmnessPolicyConfig, u, _ string) { p.PaidUserIDs[u] = true }},
 		{name: "operator proof computer", user: "proof-user", setup: func(p *WarmnessPolicyConfig, _, c string) { p.OperatorProofComputerIDs = map[string]bool{c: true} }},
 		{name: "test computer", user: "test-user", setup: func(p *WarmnessPolicyConfig, _, c string) { p.TestComputerIDs = map[string]bool{c: true} }},
-		{name: "operator-marked account", user: "op-user", op: func(u string) (bool, error) { return u == "op-user", nil }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -132,9 +128,6 @@ func TestOwnerProofAndOperatorComputersAreNotMadeSmall(t *testing.T) {
 				tc.setup(&policy, tc.user, stableComputerID(tc.user, PrimaryDesktopID, ""))
 			}
 			reg, mgr, _ := newAccountFixture(t, policy)
-			if tc.op != nil {
-				reg.SetOperatorAccountLookup(tc.op)
-			}
 			own, err := reg.ResolveOrAssign(tc.user)
 			if err != nil {
 				t.Fatal(err)
@@ -143,19 +136,5 @@ func TestOwnerProofAndOperatorComputersAreNotMadeSmall(t *testing.T) {
 				t.Fatalf("recorded %d, boots %+v; want no recorded size and one 8192 boot", own.MemSizeMib, mgr.boots)
 			}
 		})
-	}
-}
-
-// A lookup that cannot answer never grants the big shape: a stranger is made
-// small when the operator mark cannot be read.
-func TestUnreadableOperatorMarkMakesTheComputerSmall(t *testing.T) {
-	reg, mgr, _ := newAccountFixture(t, DefaultWarmnessPolicyConfig())
-	reg.SetOperatorAccountLookup(func(string) (bool, error) { return true, errors.New("auth db unreadable") })
-	own, err := reg.ResolveOrAssign("a-stranger")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if own.MemSizeMib != 2048 || mgr.boots[0].MachineMemSizeMib != 2048 {
-		t.Fatalf("recorded %d, boots %+v; want 2048", own.MemSizeMib, mgr.boots)
 	}
 }

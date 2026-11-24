@@ -1,7 +1,9 @@
 package vmctl
 
 import (
+	"database/sql"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -78,15 +80,29 @@ func TestPulseCapacityReadsWhatTheOwnerDecidesOn(t *testing.T) {
 		t.Fatalf("no cap: %+v, want open", none)
 	}
 
-	// An unreadable auth database or cap is "no reading", not open.
-	if bad := pulseCapacity(now, nil, false, ownerships, sample, cfg, RegistrationCapConfig{Cap: 4}).Registration; bad.Available {
-		t.Fatalf("auth data unavailable: %+v, want no reading", bad)
+	// No reading: no numbers and not open, never a guess from a partial list.
+	for name, bad := range map[string]PulseCapacityRegistration{
+		"auth data unavailable (partial list)": pulseCapacity(now, users, false, ownerships, sample, cfg, RegistrationCapConfig{Cap: 4}).Registration,
+		"malformed cap":                        pulseCapacity(now, users, true, ownerships, sample, cfg, RegistrationCapConfig{Unreadable: true}).Registration,
+		"malformed cap, no cap value":          pulseCapacity(now, users, true, ownerships, sample, cfg, RegistrationCapConfig{Cap: 0, Unreadable: true}).Registration,
+	} {
+		if bad != (PulseCapacityRegistration{}) {
+			t.Fatalf("%s: %+v, want no numbers and not open", name, bad)
+		}
 	}
-	if bad := pulseCapacity(now, users, true, ownerships, sample, cfg, RegistrationCapConfig{Unreadable: true}).Registration; bad.Available {
-		t.Fatalf("malformed cap: %+v, want no reading", bad)
+	// The disk floor shown is the one the cap uses (deploy floor plus the
+	// paper's reserve), not the pressure floor.
+	reserved := pulseCapacity(now, users, true, ownerships, sample, cfg, RegistrationCapConfig{Cap: 4, DiskReserveBytes: 100 << 30})
+	if reserved.Disk.FloorBytes != 100<<30 {
+		t.Fatalf("disk floor = %d, want the 100 GiB the cap keeps back", reserved.Disk.FloorBytes)
 	}
 
 	raw, _ := json.Marshal(got)
+	for _, leak := range []string{"test_cap", "test_counted", "example"} {
+		if strings.Contains(string(raw), leak) {
+			t.Fatalf("capacity output names the test reserve %q: %s", leak, raw)
+		}
+	}
 	for _, leak := range []string{"test_cap", "test_counted", "example"} {
 		if strings.Contains(string(raw), leak) {
 			t.Fatalf("capacity output names the test reserve %q: %s", leak, raw)
@@ -96,5 +112,78 @@ func TestPulseCapacityReadsWhatTheOwnerDecidesOn(t *testing.T) {
 		if strings.Contains(string(raw), leak) {
 			t.Fatalf("capacity output carries %q: %s", leak, raw)
 		}
+	}
+}
+
+// vmctl reads the auth database the auth service writes (real file, read-only):
+// the operator flag and the passkey time come through; a database an older
+// build wrote (no operator column) is "no reading", never every account
+// counted as a person.
+func TestPulseAccountsFromARealAuthDB(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "auth.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	finished := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
+	for _, q := range []string{
+		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, created_at DATETIME NOT NULL, operator INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE credentials (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at DATETIME NOT NULL)`,
+		`INSERT INTO users VALUES ('p', 'p@mosiah.org', '2026-11-23 01:00:00+00:00', 0), ('o', 'o@example.com', '2026-11-23 01:00:00+00:00', 1), ('x', 'x@mosiah.org', '2026-11-23 01:00:00+00:00', 0)`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, u := range []string{"p", "o"} {
+		if _, err := db.Exec(`INSERT INTO credentials VALUES (?, ?, ?)`, "c-"+u, u, finished); err != nil {
+			t.Fatal(err)
+		}
+	}
+	users, warnings := loadPulseAccountsFromAuthDB(path)
+	if len(warnings) != 0 || len(users) != 3 {
+		t.Fatalf("users = %+v warnings = %v", users, warnings)
+	}
+	for _, u := range users {
+		switch u.UserID {
+		case "p":
+			if !u.HasPasskey || u.Operator || !u.FirstPasskeyAt.Equal(finished) {
+				t.Fatalf("p = %+v", u)
+			}
+		case "o":
+			if !u.Operator || !u.HasPasskey {
+				t.Fatalf("o = %+v", u)
+			}
+		case "x":
+			if u.HasPasskey {
+				t.Fatalf("x = %+v", u)
+			}
+		}
+	}
+
+	// The same database before the operator column exists.
+	old := filepath.Join(t.TempDir(), "old.db")
+	odb, err := sql.Open("sqlite", "file:"+old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer odb.Close()
+	for _, q := range []string{
+		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, created_at DATETIME NOT NULL)`,
+		`CREATE TABLE credentials (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at DATETIME NOT NULL)`,
+		`INSERT INTO users VALUES ('p', 'p@mosiah.org', '2026-11-23 01:00:00+00:00')`,
+	} {
+		if _, err := odb.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	oldUsers, oldWarnings := loadPulseAccountsFromAuthDB(old)
+	if len(oldWarnings) == 0 {
+		t.Fatalf("a database without the operator column read as available: %+v", oldUsers)
+	}
+	got := pulseCapacity(time.Now(), oldUsers, len(oldWarnings) == 0, nil, HostPressureSample{}, PressureReclaimConfig{}, RegistrationCapConfig{Cap: 22}).Registration
+	if got != (PulseCapacityRegistration{}) {
+		t.Fatalf("registration = %+v, want no reading", got)
 	}
 }

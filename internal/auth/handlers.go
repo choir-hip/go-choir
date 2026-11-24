@@ -666,6 +666,10 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, user.ID, req.Email, operator) {
 			return
 		}
+		// A resumed ceremony keeps its row from the abandoned-sign-up sweep.
+		if err := h.store.RefreshSignUp(user.ID); err != nil {
+			log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=warning step=refresh_sign_up error=%q", emailHash, user.ID, err)
+		}
 		if operator {
 			if err := h.store.MarkOperatorAccount(user.ID); err != nil {
 				log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=error step=mark_operator error=%q", emailHash, user.ID, err)
@@ -974,6 +978,10 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 			// The cap closed between the check and the store: the same
 			// answer as at the start, and the email is kept on the list.
 			h.writeWaitlisted(w, "register_finish", hashEmail(user.Email), user.Email)
+			return
+		}
+		if errors.Is(err, ErrUserGone) {
+			writeJSON(w, http.StatusConflict, errorResponse{Error: "this sign-up expired; please start again"})
 			return
 		}
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=store_credential error=%q", user.ID, err)

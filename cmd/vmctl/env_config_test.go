@@ -233,6 +233,16 @@ func TestRegistrationCapConfigFromEnv(t *testing.T) {
 			t.Fatalf("%q = %+v, want unreadable", bad, cfg)
 		}
 	}
+	t.Setenv("VMCTL_REGISTRATION_CAP", "22")
+	t.Setenv("VMCTL_REGISTRATION_DISK_RESERVE_GIB", "100")
+	if cfg := registrationCapConfigFromEnv(); cfg.DiskReserveBytes != 100<<30 || cfg.Unreadable {
+		t.Fatalf("with a reserve = %+v", cfg)
+	}
+	t.Setenv("VMCTL_REGISTRATION_DISK_RESERVE_GIB", "lots")
+	if cfg := registrationCapConfigFromEnv(); !cfg.Unreadable {
+		t.Fatalf("a malformed reserve = %+v, want unreadable", cfg)
+	}
+	t.Setenv("VMCTL_REGISTRATION_DISK_RESERVE_GIB", "")
 	t.Setenv("VMCTL_REGISTRATION_CAP", "")
 	if cfg := registrationCapConfigFromEnv(); cfg.Cap != 0 || cfg.Unreadable {
 		t.Fatalf("unset = %+v, want no cap", cfg)

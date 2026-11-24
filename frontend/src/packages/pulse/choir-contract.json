@@ -10,7 +10,7 @@
       "json": {
         "accounts": { "total": 3, "by_class": { "real": 2, "internal": 1 }, "new_real_last_24h": 1 },
         "computers": { "real_primary_total": 2, "real_primary_usable": 2, "real_primary_by_state": { "running": 2 } },
-        "capacity": { "memory": { "total_bytes": 34359738368, "available_bytes": 21474836480, "floor_bytes": 5033164800 }, "disk": { "available_bytes": 164595924992, "floor_bytes": 34359738368 }, "computers": { "running": 2, "hibernated": 1, "other": 0, "running_guest_memory_mib": 4096 }, "registration": { "available": true, "cap": 22, "counted": 17, "remaining": 5, "open": true, "sign_ups_last_24h": 1 } },
+        "capacity": { "memory": { "total_bytes": 34359738368, "available_bytes": 21474836480, "floor_bytes": 5033164800 }, "disk": { "available_bytes": 164595924992, "floor_bytes": 107374182400 }, "computers": { "running": 2, "hibernated": 1, "other": 0, "running_guest_memory_mib": 4096 }, "registration": { "available": true, "cap": 22, "counted": 17, "remaining": 5, "open": true, "sign_ups_last_24h": 1 } },
         "privacy": { "data_mode": "aggregate-only", "surface": "public-readonly" },
         "freshness": { "generated_by": "vmctl" }
       }

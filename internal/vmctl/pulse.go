@@ -2,8 +2,6 @@ package vmctl
 
 import (
 	"database/sql"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -192,6 +190,11 @@ type PulseCapacityRegistration struct {
 type RegistrationCapConfig struct {
 	Cap        int
 	Unreadable bool
+	// DiskReserveBytes is the disk the cap keeps back: the deploy floor and
+	// the paper's growth reserve (nix/node-b.nix, registrationDiskReserveGiB).
+	// The capacity reading shows it as the disk floor, because the cap's
+	// room is the free disk above it. Zero: the pressure floor is shown.
+	DiskReserveBytes uint64
 }
 
 // SetRegistrationCapConfig records the cap for the capacity reading.
@@ -205,6 +208,9 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 	out := PulseCapacitySummary{
 		Memory: PulseCapacityMemory{TotalBytes: sample.MemoryTotalBytes, AvailableBytes: sample.MemoryAvailableBytes, FloorBytes: sample.MemoryFloorBytes},
 		Disk:   PulseCapacityDisk{AvailableBytes: sample.StateDirAvailableBytes, FloorBytes: cfg.MinStateDirAvailableBytes},
+	}
+	if reg.DiskReserveBytes > 0 {
+		out.Disk.FloorBytes = reg.DiskReserveBytes
 	}
 	for _, own := range ownerships {
 		if own == nil {
@@ -221,6 +227,11 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 			out.Computers.Other++
 		}
 	}
+	out.Registration.Available = usersAvailable && !reg.Unreadable
+	if !out.Registration.Available {
+		// No reading: no numbers and not open, never a guess from a partial list.
+		return out
+	}
 	for _, u := range users {
 		if !u.HasPasskey || u.Operator {
 			continue
@@ -234,7 +245,6 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 			out.Registration.SignUpsLast24h++
 		}
 	}
-	out.Registration.Available = usersAvailable && !reg.Unreadable
 	out.Registration.Cap = reg.Cap
 	out.Registration.Open = reg.Cap <= 0 || out.Registration.Counted < reg.Cap
 	if reg.Cap > 0 && out.Registration.Counted < reg.Cap {
@@ -561,31 +571,4 @@ func pulseManualSnapshotUsage(stateDir string) (int64, int) {
 		return nil
 	})
 	return bytes, count
-}
-
-// OperatorAccountFromAuthDB returns a reader of the auth service's operator
-// mark (users.operator) from its database at path, read-only and per call:
-// consulted once when a computer is created. A user the database does not
-// know is not marked; any other failure is an error, and the caller makes
-// the computer at the new-account size.
-func OperatorAccountFromAuthDB(path string) func(userID string) (bool, error) {
-	return func(userID string) (bool, error) {
-		path := strings.TrimSpace(path)
-		if path == "" {
-			return false, fmt.Errorf("auth db path is not configured")
-		}
-		db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
-		if err != nil {
-			return false, err
-		}
-		defer db.Close()
-		var v int
-		switch err := db.QueryRow(`SELECT operator FROM users WHERE id = ?`, strings.TrimSpace(userID)).Scan(&v); {
-		case errors.Is(err, sql.ErrNoRows):
-			return false, nil
-		case err != nil:
-			return false, err
-		}
-		return v != 0, nil
-	}
 }

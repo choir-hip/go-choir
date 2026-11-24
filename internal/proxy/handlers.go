@@ -1475,6 +1475,17 @@ func writeRecoveryRefusalResponse(w http.ResponseWriter, refusal *vmctl.Recovery
 		retryAfter = 60
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+	if refusal.Kind == string(vmctl.RecoveryRefusalHostMemoryPressure) || refusal.Kind == string(vmctl.RecoveryRefusalHostDiskPressure) {
+		// The host is full: say so plainly, promptly, with a retry hint, and
+		// keep the host's figures out of a stranger's answer. The kind stays
+		// for the client.
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{
+			Error:             "Choir is busy right now. Please try again in a minute.",
+			Kind:              refusal.Kind,
+			RetryAfterSeconds: retryAfter,
+		})
+		return
+	}
 	writeJSON(w, http.StatusServiceUnavailable, errorResponse{
 		Error:             "computer recovery blocked",
 		Reason:            refusal.Reason,

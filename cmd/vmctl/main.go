@@ -108,7 +108,6 @@ func main() {
 		log.Printf("vmctl: pressure reclaim mode=%s signal=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.Signal, cfg.MinIdle, cfg.MaxCandidates)
 	}
 	registry.SetRegistrationCapConfig(registrationCapConfigFromEnv())
-	registry.SetOperatorAccountLookup(vmctl.OperatorAccountFromAuthDB(os.Getenv("VMCTL_RETENTION_AUTH_DB_PATH")))
 	admission := hostAdmissionConfigFromEnv()
 	registry.SetHostAdmissionConfig(admission)
 	log.Printf("vmctl: host admission mode=%s default_need_mib=%d min_need_mib=%d headroom_mib=%d settle=%s make_room=%s make_room_max_victims=%d make_room_settle=%s",
@@ -938,7 +937,15 @@ func registrationCapConfigFromEnv() vmctl.RegistrationCapConfig {
 	if err != nil || n < 0 {
 		return vmctl.RegistrationCapConfig{Unreadable: true}
 	}
-	return vmctl.RegistrationCapConfig{Cap: n}
+	cfg := vmctl.RegistrationCapConfig{Cap: n}
+	if gib := strings.TrimSpace(os.Getenv("VMCTL_REGISTRATION_DISK_RESERVE_GIB")); gib != "" {
+		g, err := strconv.Atoi(gib)
+		if err != nil || g < 0 {
+			return vmctl.RegistrationCapConfig{Unreadable: true}
+		}
+		cfg.DiskReserveBytes = uint64(g) << 30
+	}
+	return cfg
 }
 
 func splitEnvList(raw string) []string {

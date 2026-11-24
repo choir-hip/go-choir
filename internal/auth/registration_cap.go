@@ -43,6 +43,10 @@ type WaitlistEntry struct {
 // operator's own tools (CI, drills). See Config.OperatorSecret.
 const OperatorHeader = "X-Choir-Operator"
 
+// ErrUserGone is a finish for an account row that no longer exists (swept or
+// deleted while its ceremony was in flight): the person starts again.
+var ErrUserGone = errors.New("sign-up no longer exists")
+
 // ErrRegistrationClosed is the cap refusing a passkey at the moment it would
 // be stored.
 var ErrRegistrationClosed = errors.New("registration is closed")
@@ -52,7 +56,8 @@ var ErrRegistrationClosed = errors.New("registration is closed")
 // (the local part keeps its case, as sign-in has always matched it).
 func normalizeEmail(email string) string {
 	email = strings.TrimSpace(email)
-	if at := strings.LastIndex(email, "@"); at >= 0 {
+	// The first "@", the one SQLite's instr finds in Store.GetUserByEmail.
+	if at := strings.Index(email, "@"); at >= 0 {
 		return email[:at+1] + strings.ToLower(email[at+1:])
 	}
 	return email
@@ -85,6 +90,13 @@ func countRegistered(q queryRower) (int, error) {
 	return n, err
 }
 
+// RefreshSignUp restarts the day an unfinished sign-up may stay: a person who
+// begins again is in a ceremony, and the sweep must not take the row.
+func (s *Store) RefreshSignUp(userID string) error {
+	_, err := s.db.Exec(`UPDATE users SET created_at = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM credentials WHERE user_id = ?)`, time.Now().UTC(), userID, userID)
+	return err
+}
+
 // MarkOperatorAccount marks an account as the operator's own.
 func (s *Store) MarkOperatorAccount(userID string) error {
 	_, err := s.db.Exec(`UPDATE users SET operator = 1 WHERE id = ?`, userID)
@@ -114,6 +126,9 @@ func (s *Store) CreateCredentialWithinCap(c *Credential, cap int) error {
 	if cap > 0 {
 		var operator, held int
 		if err := tx.QueryRow(`SELECT operator FROM users WHERE id = ?`, c.UserID).Scan(&operator); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrUserGone
+			}
 			return fmt.Errorf("read account: %w", err)
 		}
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM credentials WHERE user_id = ?`, c.UserID).Scan(&held); err != nil {
@@ -127,6 +142,15 @@ func (s *Store) CreateCredentialWithinCap(c *Credential, cap int) error {
 			if n >= cap {
 				return ErrRegistrationClosed
 			}
+		}
+	}
+	if cap <= 0 {
+		var one int
+		if err := tx.QueryRow(`SELECT 1 FROM users WHERE id = ?`, c.UserID).Scan(&one); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrUserGone
+			}
+			return fmt.Errorf("read account: %w", err)
 		}
 	}
 	if _, err := tx.Exec(

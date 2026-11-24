@@ -657,8 +657,6 @@ type OwnershipRegistry struct {
 	pressureSampler hostPressureSampler
 	// registrationCap is the sign-up cap shown on the capacity reading.
 	registrationCap RegistrationCapConfig
-	// operatorAccount reads the operator mark (see SetOperatorAccountLookup).
-	operatorAccount func(userID string) (bool, error)
 	// pressureWin is the pressure monitor's sustained-signal window and
 	// the hibernate in-flight/cool-down bookkeeping (pressure_sustained.go).
 	pressureWin pressureWindow
@@ -1422,21 +1420,22 @@ func machineShapeForOwnership(own *VMOwnership) (int, int) {
 	return cpu, mem
 }
 
-// newAccountVMMemSizeMib is the memory of a computer made for a new account
-// (owner, 2026-11-23: "All new accounts get a computer. but we can do 2gb
-// ram ... unused accounts dont cost ram. they get hibernated"). It is
+// newAccountVMMemSizeMib is the memory of a computer made for a new account:
+// 4 GiB, the size the platform's computers already run (owner, 2026-11-24:
+// "we may not need to cut computers from 4gb ram to 2gb since ram isnt the
+// limit, disk is"). A 4 GiB guest holds an engineering capsule: the capsule
+// budget is 3/4 of guest memory (3 GiB) and a capsule asks 2 GiB. It is
 // recorded on the ownership at creation; computers made before it, the
 // paper and the owner's among them, keep the interactive size they have.
-const newAccountVMMemSizeMib = 2048
+const newAccountVMMemSizeMib = 4096
 
 // newComputerMemSizeMib is the size to record for a computer created now
 // with warmness class class, or 0 to record none (the host's interactive
 // shape, or the platform shape, applies). A protected platform computer is
-// never made small, so the paper cannot come back at 2 GiB if its ownership
+// never made small, so the paper cannot come back at 4 GiB if its ownership
 // is ever recreated; neither is the owner's paid always-on computer, and
-// exempt marks a computer the operator needs at the interactive size (the
-// operator proof computer, a test computer, an operator-marked account: an
-// engineering capsule needs about 1.8 GiB and cannot run in 2 GiB). The
+// exempt marks a computer that keeps the interactive size when its ownership
+// is made afresh (the operator proof computer, a test computer). The
 // size never exceeds the host's interactive setting.
 func newComputerMemSizeMib(class WarmnessClass, exempt bool) int {
 	if exempt {
@@ -1454,28 +1453,12 @@ func newComputerMemSizeMib(class WarmnessClass, exempt bool) int {
 }
 
 // newComputerMemSizeMibLocked is the size to record for the computer being
-// created for userID. A lookup of the operator mark that fails or is not
-// wired never grants the big shape. Callers hold r.mu.
+// created for userID. Callers hold r.mu.
 func (r *OwnershipRegistry) newComputerMemSizeMibLocked(userID, desktopID string) int {
 	computerID := stableComputerID(userID, desktopID, "")
 	class := warmnessClassForOwnership(&VMOwnership{UserID: userID, DesktopID: desktopID, ComputerID: computerID}, r.warmnessPolicy)
 	exempt := r.warmnessPolicy.OperatorProofComputerIDs[computerID] || r.warmnessPolicy.TestComputerIDs[computerID]
-	if !exempt && r.operatorAccount != nil {
-		if marked, err := r.operatorAccount(userID); err != nil {
-			log.Printf("vmctl: operator mark for %s unreadable (%v); the computer is made at the new-account size", userID, err)
-		} else {
-			exempt = marked
-		}
-	}
 	return newComputerMemSizeMib(class, exempt)
-}
-
-// SetOperatorAccountLookup wires the reader of the auth service's operator
-// mark (users.operator), consulted once when a computer is created.
-func (r *OwnershipRegistry) SetOperatorAccountLookup(fn func(userID string) (bool, error)) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.operatorAccount = fn
 }
 
 // interactiveMachineShape returns the interactive guest CPU/memory shape,

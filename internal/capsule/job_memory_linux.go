@@ -3,7 +3,6 @@
 package capsule
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -33,21 +32,10 @@ func (e *Executor) memoryBudgetLocked() int64 {
 	return e.vmMemoryTotal
 }
 
-// ErrComputerTooSmall is the refusal of a capsule that the computer can never
-// hold.
-var ErrComputerTooSmall = errors.New("capsule memory budget exceeded")
-
 // admitCapsuleMemoryLocked checks need against the live budget, with every
 // capsule and job boost already counted. Callers hold e.mu.
 func (e *Executor) admitCapsuleMemoryLocked(need int64) error {
 	total := e.memoryBudgetLocked()
-	if total > 0 && need > total {
-		// A request that cannot fit even in an empty computer is a fact
-		// about the computer, not about what is running: a new account's
-		// 2 GiB computer has about 1.5 GiB for capsules and an engineering
-		// capsule needs about 1.8 GiB. Say so plainly.
-		return fmt.Errorf("%w: this computer has %d MiB of memory for capsules and this work needs %d MiB, so self-development is not available on a computer this size", ErrComputerTooSmall, total>>20, need>>20)
-	}
 	if total <= 0 || e.vmMemoryUsed+need > total {
 		return fmt.Errorf("capsule memory budget exceeded: used=%d requested=%d total=%d", e.vmMemoryUsed, need, total)
 	}
