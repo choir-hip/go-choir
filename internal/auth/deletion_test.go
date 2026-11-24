@@ -488,7 +488,9 @@ func TestCancelWithFailedRestoreKeepsTheRecord(t *testing.T) {
 
 type failingRestoreHost struct{ fakeDeletionHost }
 
-func (f *failingRestoreHost) Restore(context.Context, string) error { return errors.New("corpusd down") }
+func (f *failingRestoreHost) Restore(context.Context, string) error {
+	return errors.New("corpusd down")
+}
 
 func TestCancelTokenExpiresAndPurgingRefuses(t *testing.T) {
 	e := newDelEnv(t, "u8")
@@ -560,7 +562,12 @@ func TestDeletionPrecheckRefusalsStartNothing(t *testing.T) {
 		t.Fatal("a refused deletion revoked the session")
 	}
 	e.host.precheck = errors.New("vmctl down")
-	opts2 := func() []byte { e.host.precheck = nil; o := e.begin(t, cookies, ""); e.host.precheck = errors.New("vmctl down"); return o }()
+	opts2 := func() []byte {
+		e.host.precheck = nil
+		o := e.begin(t, cookies, "")
+		e.host.precheck = errors.New("vmctl down")
+		return o
+	}()
 	if rec := e.call(e.h.HandleDeleteFinish, "/auth/account/delete/finish", e.assertion(t, opts2), cookies, ""); rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("unavailable: %d", rec.Code)
 	}
