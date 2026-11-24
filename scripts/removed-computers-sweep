@@ -19,6 +19,7 @@
 # and needs the same ids, the run id and the manifest hash the dry run printed;
 # its receipt is the report file it prints. A computer that gained an owner in
 # between refuses the whole apply, nothing deleted, and the command exits 1.
+# Do not restore, rematerialize or import a named computer while the apply runs.
 # The apply refuses a manifest over its caps (default 2000000 files, 8 GiB)
 # before it tombstones anything: pass --max-deletes and --max-bytes at least the
 # dry run's files and bytes. If an apply stops after it began deleting (a file

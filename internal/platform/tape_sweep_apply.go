@@ -334,6 +334,17 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 		if derr := s.tapeSweepDelta(ctx, run); derr != nil {
 			return finish(derr)
 		}
+		// vmctl again, under the gate, with a short timeout: an ownership
+		// record created since the first lookup (a restore, rematerialize or
+		// import of a named id) refuses the run; any error refuses it.
+		if run.destroyErr == "" && registry != nil {
+			for _, g := range run.groups {
+				lctx, cancel := context.WithTimeout(ctx, tapeSweepGateLookupTimeout)
+				found, lerr := registry.LookupComputer(lctx, g.proof.ComputerID)
+				cancel()
+				run.owned[g.proof.ComputerID] = ownershipAnswer{found: found, err: lerr}
+			}
+		}
 		var rerr error
 		if run.routed, rerr = s.tapeRoutedComputers(ctx); rerr != nil && run.destroyErr == "" {
 			run.destroyErr = rerr.Error()
@@ -416,6 +427,9 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 	}
 	return finish(nil)
 }
+
+// tapeSweepGateLookupTimeout bounds each ownership lookup made under the gate.
+const tapeSweepGateLookupTimeout = 5 * time.Second
 
 // ownershipAnswer is one vmctl ownership lookup.
 type ownershipAnswer struct {
@@ -564,7 +578,8 @@ func validTapeSweepItem(it tapeSweepItem) bool {
 }
 
 // tapeSweepDelta reads every append landed since the manifest's snapshot
-// heads and the extra records, into run.delta (full digests). A second call
+// heads and the extra records, into run.delta (full digests). The extra
+// records are re-read whole on every call. A second call
 // (the destroyed apply's, under the gate) reads only what landed since the
 // first and adds it, so the locked part stays short.
 func (s *Service) tapeSweepDelta(ctx context.Context, run *tapeSweepApplyRun) error {
@@ -609,9 +624,8 @@ func (s *Service) tapeSweepDelta(ctx context.Context, run *tapeSweepApplyRun) er
 			return fmt.Errorf("tape sweep: delta references: %w", err)
 		}
 	}
-	if !first {
-		return nil
-	}
+	// The extra records are read whole every time: their writers do not take
+	// the tombstone gate, and their created_at is the record's own time.
 	return s.tapeExtraRefs(ctx, func(text string) {
 		for _, d := range tapeHexRefs(text) {
 			run.delta[d] = true
@@ -640,8 +654,8 @@ func (s *Service) reproveDestroyed(ctx context.Context, run *tapeSweepApplyRun, 
 	if run.pending[id] {
 		return "a lifecycle operation is pending"
 	}
-	// vmctl was asked before the gate was taken (a slow vmctl must not hold up
-	// appends); the answer is read here.
+	// vmctl was asked before the gate and again under it (short timeout); the
+	// answer is read here.
 	ans, asked := run.owned[id]
 	if !asked {
 		return "registry lookup was not made"

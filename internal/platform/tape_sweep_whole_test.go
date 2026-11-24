@@ -247,7 +247,7 @@ func TestATombstonedComputerNotBeingDeletedStillCountsItsReferences(t *testing.T
 //
 //	R1  The exclusive gate is held while vmctl is asked about a computer, so
 //	    every append stalls behind a slow vmctl.
-//	    TestTheGateIsNotHeldWhileVmctlIsAsked
+//	    TestTheGateIsNotHeldWhileVmctlIsListedOrFirstAsked
 //	R2  The route accepts a destroyed apply with no computer_ids.
 //	    TestTheRouteRefusesADestroyedApplyWithoutNamedComputers
 //	R3  A named manifest over max_deletes/max_bytes is tombstoned and partly
@@ -257,27 +257,98 @@ func TestATombstonedComputerNotBeingDeletedStillCountsItsReferences(t *testing.T
 //	R4  Computer 2's archive fails after computer 1 is already deleted.
 //	    TestEveryNamedComputerIsArchivedBeforeTheFirstUnlink
 
-func TestTheGateIsNotHeldWhileVmctlIsAsked(t *testing.T) {
+func TestTheGateIsNotHeldWhileVmctlIsListedOrFirstAsked(t *testing.T) {
 	f := newTapeFixture(t)
 	f.fullComputer("dead-1", 1)
 	dry := f.dryRun(namedReq("dead-1"))
-	var asked, heldDuringCall int
-	f.reg.onCall = func() {
-		asked++
-		if !f.store.tombstones.gate.TryRLock() {
-			heldDuringCall++
-			return
+	var lookups, listsUnderGate, lookupsUnderGate int
+	f.reg.onCall = func(kind string) {
+		held := !f.store.tombstones.gate.TryRLock()
+		if !held {
+			f.store.tombstones.gate.RUnlock()
 		}
-		f.store.tombstones.gate.RUnlock()
+		if kind == "list" && held {
+			listsUnderGate++
+		}
+		if kind == "lookup" {
+			lookups++
+			if held {
+				lookupsUnderGate++
+			}
+		}
 	}
 	if _, err := f.apply(dry, namedReq("dead-1")); err != nil {
 		t.Fatal(err)
 	}
-	if asked == 0 {
-		t.Fatal("the registry was never asked")
+	if listsUnderGate != 0 {
+		t.Fatal("the registry list ran under the exclusive gate")
 	}
-	if heldDuringCall != 0 {
-		t.Fatalf("the exclusive tombstone gate was held during %d of %d vmctl calls", heldDuringCall, asked)
+	// One lookup before the gate (slow, unbounded by the gate) and one under
+	// it (bounded by a short timeout) per named computer.
+	if lookups != 2 || lookupsUnderGate != 1 {
+		t.Fatalf("lookups = %d, under the gate = %d; want 2 and 1", lookups, lookupsUnderGate)
+	}
+}
+
+func TestAnOwnerCreatedAfterTheFirstLookupRefusesTheApply(t *testing.T) {
+	f := newTapeFixture(t)
+	f.fullComputer("dead-1", 1)
+	dry := f.dryRun(namedReq("dead-1"))
+	n := 0
+	f.reg.onCall = func(kind string) {
+		if kind != "lookup" {
+			return
+		}
+		n++
+		if n == 2 { // a restore created the ownership record after the first lookup
+			f.reg.owned["dead-1"] = true
+		}
+	}
+	before := f.snapshotOf("dead-1")
+	_, err := f.apply(dry, namedReq("dead-1"))
+	if err == nil || !strings.Contains(err.Error(), "ownership") {
+		t.Fatalf("apply answered %v for a computer that gained an owner after the first lookup", err)
+	}
+	if !before.equal(f.snapshotOf("dead-1")) || f.tombstoneStatus("dead-1") != "" {
+		t.Fatal("files, rows or a tombstone changed")
+	}
+	// A lookup error under the gate refuses too.
+	f2 := newTapeFixture(t)
+	f2.fullComputer("dead-1", 1)
+	dry2 := f2.dryRun(namedReq("dead-1"))
+	m := 0
+	f2.reg.onCall = func(kind string) {
+		if kind == "lookup" {
+			m++
+			if m == 2 {
+				f2.reg.lookupErr = errors.New("vmctl hung")
+			}
+		}
+	}
+	if _, err := f2.apply(dry2, namedReq("dead-1")); err == nil {
+		t.Fatal("a lookup error under the gate did not refuse")
+	}
+	if len(f2.treeFiles("dead-1")) == 0 {
+		t.Fatal("files were deleted")
+	}
+}
+
+func TestAnExtraRecordAddedAfterTheFirstDeltaKeepsItsPayload(t *testing.T) {
+	f := newTapeFixture(t)
+	c := f.fullComputer("dead-1", 1)
+	dry := f.dryRun(namedReq("dead-1"))
+	n := 0
+	f.reg.onCall = func(kind string) {
+		n++
+		if n == 1 { // after the first delta, before the gate
+			f.insertClosure("code-late", c.seqs[0].payload, "")
+		}
+	}
+	if _, err := f.apply(dry, namedReq("dead-1")); err != nil {
+		t.Fatal(err)
+	}
+	if !f.exists(tapeNSPayload, c.seqs[0].payload) {
+		t.Fatal("a payload a closure added after the first delta names was deleted")
 	}
 }
 

@@ -363,14 +363,15 @@ the one gate**:
   again around each batch of unlinks. Ownership creation lives in vmctl, another
   process and not behind this gate; it is covered because a restore reaches the
   host through `PrepareLifecycleControl` first, and because the ownership lookup
-  is repeated inside the locked phase. A path that creates an owner for a
+  is repeated inside the locked phase (5 s timeout, any error refuses). A path that creates an owner for a
   removed id with no lifecycle step is not closed by this and is named below.
-- **Slow reads happen before the gate** (round-2 review, both seats): the first manifest pass, the vmctl list and lookups (60 s client timeout each), the living file-root walk and the first delta. The gate is held exclusive only for the incremental delta, route slots, pending operations, snapshot-root rows, the re-proof (reading the cached vmctl answers) and the tombstones, so a hung vmctl no longer stalls the paper's appends. The cost is a wider ownership-creation window: vmctl is asked a few seconds before the tombstone, not inside it.
+- **Slow reads happen before the gate** (round-2 review, both seats): the first manifest pass, the first delta with the five extra-record queries, the vmctl list and one lookup per named computer (60 s client timeout each), and the living file-root walk. Under the exclusive gate only: the incremental delta, the extra-record queries read whole again (their writers do not take the gate), one more ownership lookup per named computer with a 5 s timeout (any error refuses), route slots, pending operations, snapshot-root rows and in-flight registrations, the re-proof and the tombstones. A hung vmctl therefore stalls appends for at most 5 s per named computer, not 60 s. Restore, rematerialize and cold recover in `internal/proxy` and bundle import do not take the gate: a resurrection after the last lookup under the gate and before the tombstone is not seen, so a named id must not be resurrected while the apply runs.
 - **Phase one, under the lock, deletes nothing.** The delta of events appended
   since the dry run is read; every computer in the manifest is re-proved
   (registry, route, pending operations, head, quiet window, cross-reference);
   the chunk digests of all of them are checked against every computer *outside*
-  the named set; the caps are checked against the manifest's totals; then every
+  the named set; for a named run the caps are checked against the manifest's
+  totals (an unnamed run keeps capped rounds); then every
   tombstone is written and each head re-read. Any failure drops the tombstones
   this run wrote and fails the whole run with nothing deleted. No computer is
   ever skipped while another is deleted, so a shared object is never deleted
