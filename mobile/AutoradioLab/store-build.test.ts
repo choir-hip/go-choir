@@ -693,6 +693,25 @@ describe('exact.sh runs only what is on its list (A1, A3, A4, G1, G2)', () => {
       expect(seen(tr)).toContain('EXACT_VARIANT=[lab-one]'); expect(seen(tr)).toContain(`APP_ID=[${LABONE}]`);
     } finally { tr.cleanup(); }
   });
+  test('A3 AR_VARIANT=dev is the production id as a development app: a phone build is allowed, Exact gets no variant and the explicit profile, share and archive stay refused', () => {
+    const tr = tree();
+    try {
+      const prof = join(tr.t, 'explicit.mobileprovision'); writeFileSync(prof, 'x');
+      allowed(tr, ['ios', '--device', '--phone', 'X'], { AR_VARIANT: 'dev', EXACT_PROFILE: prof });
+      expect(seen(tr)).toContain('EXACT_VARIANT=[unset]'); expect(seen(tr)).toContain(`APP_ID=[${PROD}]`); expect(seen(tr)).toContain(`EXACT_PROFILE=[${prof}]`);
+      refused(tr, ['share'], { AR_VARIANT: 'dev' }, 'share');
+      refused(tr, ['ios', '--device', '--archive', '/tmp/x.ipa'], { AR_VARIANT: 'dev' }, 'archive-store.sh');
+      refused(tr, ['ios', '--device', '--phone', 'X'], { AR_VARIANT: 'dev', AUTORADIO_BUILD_TREE_FILE: join(tr.t, 'nowhere') }, 'build tree');
+      // with no EXACT_PROFILE and no profile installed the build stops before Exact runs, naming what to make
+      rmSync(join(tr.bin, 'bun.last'), { force: true });
+      const r = ex(tr, ['ios', '--device', '--phone', 'X'], { AR_VARIANT: 'dev' });
+      expect(r.code).not.toBe(0); expect(r.err).toContain('dev-profile:'); expect(ran(tr)).toBe(false);
+      const id = (what: string, env: Record<string, string>) => run(['/bin/sh', join(MOBILE, 'scripts', 'app-identity.sh'), what], { ...BASE, ...env });
+      expect(id('id', { AR_VARIANT: 'dev' }).out.trim()).toBe(PROD); expect(id('name', { AR_VARIANT: 'dev' }).out.trim()).toBe('Autoradio 1'); expect(id('variant', { AR_VARIANT: 'dev' }).out.trim()).toBe('dev');
+      expect(id('id', { AR_VARIANT: 'dev', AR_APP_ID: LAB }).code).not.toBe(0);
+      expect(id('id', { AR_VARIANT: 'dev', AR_APP_NAME: 'Other' }).code).not.toBe(0);
+    } finally { tr.cleanup(); }
+  });
   test('A4 EXACT_DEV_MENU=0 reaches Exact for every build; a caller\'s other value is refused; nothing else of the caller\'s environment does', () => {
     const tr = tree();
     try {

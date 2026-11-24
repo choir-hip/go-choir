@@ -6,6 +6,7 @@
 #   lab      news.choir.autoradio.lab      "Autoradio"       (the first development app)
 #   lab-one  news.choir.autoradio.lab.one  "Autoradio 1 Dev"  (the second; named "Autoradio 1" until the production app took that name: Exact refuses two apps
 #                                                              of one installed name, scripts/variants.mjs)
+#   dev      news.choir.autoradio          "Autoradio 1"     (the production id as a development install on a phone, with Associated Domains; no variant for Exact)
 # Choose one by environment:
 #   AR_VARIANT=lab-one                        by name, or
 #   AR_APP_ID=news.choir.autoradio.lab.one    by id (AR_APP_NAME, when set, must be that app's name)
@@ -25,6 +26,12 @@ vs = m.get("variants", {})
 ids = {n: (base + v["idSuffix"], v["name"]) for n, v in vs.items()}
 declared = "; ".join([f"(production, no variant) {base} \"{bname}\""] + [f"{n} {i} \"{nm}\"" for n, (i, nm) in ids.items()])
 var, aid, anm = (os.environ.get(k, "") for k in ("AR_VARIANT", "AR_APP_ID", "AR_APP_NAME"))
+# `dev` is the production id built as a development app (signed with the paid team's explicit development profile, dev-profile.sh): Exact cannot express it as a variant (an
+# idSuffix is never empty), so it is named here, not in app.json, and exact-env.sh gives Exact no variant for it. The id and the name are the production app's.
+if var == "dev":
+    if aid and aid != base: die(f"AR_VARIANT=dev is the production id {base}, not AR_APP_ID={aid}")
+    if anm and anm != bname: die(f"AR_APP_NAME={anm} is not the name of {base} (\"{bname}\")")
+    print({"id": base, "name": bname, "variant": "dev", "version": m.get("version", "")}[what]); sys.exit(0)
 if var and var not in ids: die(f"AR_VARIANT={var} is not declared in app.json. Declared: {declared}")
 if aid and aid != base:
     hit = [n for n, (i, _) in ids.items() if i == aid]

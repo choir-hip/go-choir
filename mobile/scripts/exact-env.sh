@@ -12,6 +12,10 @@ exact_run() {
   EXACT2="$HERE/.exact-src" "$HERE/scripts/check-exact-pin.sh" || return 1      # the wrong Exact must never build quietly (see exact.pin)
   _variant="$("$HERE/scripts/app-identity.sh" variant)" || return 1
   _scheme="$("$HERE/scripts/app-identity.sh" id)" || return 1
+  if [ "$_variant" = dev ]; then      # the production id as a development app: Exact is given no variant, and the explicit development profile, never the team's wildcard (it cannot carry Associated Domains)
+    _variant=""
+    if [ -z "${EXACT_PROFILE:-}" ]; then EXACT_PROFILE="$("$HERE/scripts/dev-profile.sh")" || return 1; export EXACT_PROFILE; fi
+  fi
   _bun="${BUN:-$HOME/.bun-1.4.2/bin/bun}"
   set -- "$_bun" exact.mjs "$@"
   _n=$#
