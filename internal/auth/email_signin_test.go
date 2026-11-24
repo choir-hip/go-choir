@@ -83,9 +83,10 @@ func addEmailUser(t *testing.T, h *Handler, id, email string, verified, withPass
 			t.Fatalf("CreateCredential: %v", err)
 		}
 	}
-	if verified {
-		if err := h.store.SetEmailVerified(id); err != nil {
-			t.Fatalf("SetEmailVerified: %v", err)
+	if !verified {
+		// CreateUser makes a proved account; this is a row from before the proof rule.
+		if _, err := h.store.DB().Exec(`UPDATE users SET email_verified_at = NULL WHERE id = ?`, id); err != nil {
+			t.Fatalf("unverify: %v", err)
 		}
 	}
 	u, _ = h.store.GetUserByID(id)
@@ -1225,6 +1226,9 @@ func TestBackfillMarksOnlyUsersWithACredentialAndRunsOnce(t *testing.T) {
 
 	// A user created later stays unverified across reopen (backfill ran once).
 	if _, err := s.CreateUser("late", "late@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB().Exec(`UPDATE users SET email_verified_at = NULL WHERE id = 'late'`); err != nil {
 		t.Fatal(err)
 	}
 	_ = s.Close()

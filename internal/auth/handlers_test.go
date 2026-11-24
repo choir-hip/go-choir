@@ -229,7 +229,7 @@ func TestRegisterBeginReturnsRPBoundChallenge(t *testing.T) {
 	}
 }
 
-func TestRegisterBeginCreatesUserAndChallengeInStore(t *testing.T) {
+func TestRegisterBeginMakesAPendingRegistrationAndNoUser(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
 	body := `{"email": "bob@example.com"}`
@@ -243,20 +243,19 @@ func TestRegisterBeginCreatesUserAndChallengeInStore(t *testing.T) {
 		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	// Verify the user was created in the store.
-	user, err := h.store.GetUserByEmail("bob@example.com")
-	if err != nil {
-		t.Fatalf("get user: %v", err)
+	// Nothing is bound to the address yet: the account is made at finish.
+	if _, err := h.store.GetUserByEmail("bob@example.com"); err == nil {
+		t.Fatal("register/begin made a user")
 	}
-	if user.Email != "bob@example.com" {
-		t.Errorf("email: got %q, want %q", user.Email, "bob@example.com")
+	var pending int
+	if err := h.store.DB().QueryRow(`SELECT COUNT(*) FROM pending_registrations WHERE email = ?`, "bob@example.com").Scan(&pending); err != nil || pending != 1 {
+		t.Fatalf("pending registrations = %d (%v), want 1", pending, err)
 	}
 }
 
-func TestRegisterBeginIdempotentForExistingUser(t *testing.T) {
+func TestRegisterBeginRefusesAnAddressThatHasAnAccount(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
-	// Create user first.
 	if _, err := h.store.CreateUser("existing-id", "charlie@example.com"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -268,17 +267,12 @@ func TestRegisterBeginIdempotentForExistingUser(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want %d", rec.Code, http.StatusOK)
+	if rec.Code == http.StatusOK {
+		t.Fatalf("status: got %d for an address with an account", rec.Code)
 	}
-
-	// Verify existing user was found, not duplicated.
 	user, err := h.store.GetUserByEmail("charlie@example.com")
-	if err != nil {
-		t.Fatalf("get user: %v", err)
-	}
-	if user.ID != "existing-id" {
-		t.Errorf("user ID: got %q, want %q (should be existing user)", user.ID, "existing-id")
+	if err != nil || user.ID != "existing-id" {
+		t.Fatalf("the existing account changed: %v %v", user, err)
 	}
 }
 func TestLoginBeginRejectsUnknownUser(t *testing.T) {
@@ -753,7 +747,10 @@ func TestRegisterBeginWithDeployedRPID(t *testing.T) {
 		t.Fatalf("create webauthn: %v", err)
 	}
 
+	cfg.EmailCodeKey = []byte(testEmailKey)
 	h := NewHandler(store, wa, cfg, priv)
+	h.signInMailer = &fakeSignInMailer{}
+	h.signInMailDispatch = func(f func()) { f() }
 
 	body := `{"email": "deployed-alice@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",

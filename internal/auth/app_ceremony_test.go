@@ -393,14 +393,19 @@ func TestAppCreateAnswersTheWaitlistWhenSignUpIsClosed(t *testing.T) {
 	}
 }
 
-// F8: an email that already has an account says so (the app tells the person to sign in).
-func TestAppCreateWithAnExistingEmailIsAConflict(t *testing.T) {
+// F8: an email that already has an account is never registered again: the
+// app is told no code works, and the account is as it was.
+func TestAppCreateWithAnExistingEmailIsRefused(t *testing.T) {
 	h := appEnv(t)
 	if rec := createAccount(t, h, "dup@example.com", newSoftPasskey(t), testOrigin); rec.Code != 200 {
 		t.Fatal(rec.Body.String())
 	}
-	if rec := registerBeginFor(t, h, "dup@example.com"); rec.Code != 409 {
+	if rec := registerBeginFor(t, h, "dup@example.com"); rec.Code == 200 {
 		t.Fatalf("duplicate begin = %d", rec.Code)
+	}
+	user, _ := h.store.GetUserByEmail("dup@example.com")
+	if creds, _ := h.store.GetCredentialsByUserID(user.ID); len(creds) != 1 {
+		t.Fatalf("credentials = %d", len(creds))
 	}
 }
 
