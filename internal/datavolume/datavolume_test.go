@@ -429,12 +429,25 @@ func TestMidWalkDeadlineTruncatesOneEntryAndSparesTheNext(t *testing.T) {
 		write(t, filepath.Join(root, "aaa-slow", "d", string(rune('a'+i%26))+string(rune('a'+i/26%26))+string(rune('a'+i/676))), 1)
 	}
 	write(t, filepath.Join(root, "zzz-small", "x"), 1)
+	// A clock the test owns: no wall-clock margin. The slow entry's listing
+	// takes a simulated 350 ms of a 400 ms budget, so it passes its share
+	// (400 ms less the 50 ms promised to the next entry) and is cut, and the
+	// next entry still gets its promised share.
+	var mu sync.Mutex
+	now := time.Unix(1_800_000_000, 0)
+	var s Scanner
+	s.clock = func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
 	var once sync.Once
-	w := scanWith(t, root, Limits{Budget: 400 * time.Millisecond, MaxEntries: 1 << 30}, func(path string) {
+	s.testHook = func(path string) {
 		if strings.HasSuffix(path, "/d") {
-			once.Do(func() { time.Sleep(370 * time.Millisecond) })
+			once.Do(func() { mu.Lock(); now = now.Add(360 * time.Millisecond); mu.Unlock() })
 		}
-	})
+	}
+	rep := s.Read(context.Background(), root, Limits{Budget: 400 * time.Millisecond, MaxEntries: 1 << 30}, true)
+	w := rep.Walk
+	if w == nil {
+		t.Fatal("no walk")
+	}
 	if !topByName(t, w, "aaa-slow").Truncated {
 		t.Fatal("the entry that ran past its share of the deadline is not truncated")
 	}

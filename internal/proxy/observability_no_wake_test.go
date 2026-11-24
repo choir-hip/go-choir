@@ -88,7 +88,7 @@ func TestDataVolumeDetailReadOfAnActiveComputerIsServed(t *testing.T) {
 	}
 }
 
-func TestPlainObservabilityReadStillWakes(t *testing.T) {
+func TestPlainObservabilityReadReachesTheWakePathAndIsNotRefused(t *testing.T) {
 	// Only the diagnostic read is exempt: the plain read is what health and
 	// the shell use, and it keeps its wake.
 	handler, secret, _, otherCalls := noWakeFixture(t, string(vmctl.VMStateHibernated))
@@ -96,8 +96,20 @@ func TestPlainObservabilityReadStillWakes(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+secret)
 	rec := httptest.NewRecorder()
 	handler.HandleAPI(rec, req)
-	if otherCalls.Load() == 0 {
-		t.Fatalf("a plain read no longer reaches the wake path; status=%d body=%s", rec.Code, rec.Body.String())
+	if otherCalls.Load() == 0 || rec.Code == http.StatusConflict || strings.Contains(rec.Body.String(), "not woken") {
+		t.Fatalf("a plain read no longer reaches the wake path or was refused as a diagnostic read; wake calls=%d status=%d body=%s", otherCalls.Load(), rec.Code, rec.Body.String())
+	}
+}
+
+// The no-wake rule is held at the call site: the diagnostic read never calls
+// the waking resolver, whatever the computer's state.
+func TestDataVolumeDetailNeverCallsTheWakingResolver(t *testing.T) {
+	for _, state := range []string{string(vmctl.VMStateHibernated), "active-no-url", "active"} {
+		handler, secret, _, _ := noWakeFixture(t, state)
+		handler.testWakingResolverHook = func() { t.Errorf("state %s: the diagnostic read reached the waking resolver", state) }
+		req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability?data_volume=detail", nil)
+		req.Header.Set("Authorization", "Bearer "+secret)
+		handler.HandleAPI(httptest.NewRecorder(), req)
 	}
 }
 
