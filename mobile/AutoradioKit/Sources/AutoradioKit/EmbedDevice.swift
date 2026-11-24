@@ -23,21 +23,29 @@ public final class RadioDemand: @unchecked Sendable {
     public var busy: Bool { lock.lock(); let s = sources, r = remote; lock.unlock(); return r || s.contains { $0() } }
 }
 
-/// Tells whether the phone is on Wi-Fi (or wired): the model is never fetched over cellular.
-final class WiFiMonitor: @unchecked Sendable {
-    static let shared = WiFiMonitor()
+/// Tells whether the phone is on Wi-Fi (or wired): no model is fetched over cellular without the person's mobile-data press. The ONE source of the path for every download: the device profile reads it (`DeviceProfile.current`), the search pass reads it.
+public final class WiFiMonitor: @unchecked Sendable {
+    public static let shared = WiFiMonitor()
     private let monitor = NWPathMonitor()
     private let lock = NSLock()
     private var wifi = false
+    /// Tests only: a path to pretend.
+    public var testOverride: Bool?
+    /// The path changed (shared code asks the facts again, so a page rendered on Wi-Fi does not press on mobile data).
+    public var onChange: (@Sendable () -> Void)?
     private init() {
         monitor.pathUpdateHandler = { [weak self] p in
-            guard let self else { return }
-            let w = p.status == .satisfied && (p.usesInterfaceType(.wifi) || p.usesInterfaceType(.wiredEthernet)) && !p.isExpensive
-            self.lock.lock(); self.wifi = w; self.lock.unlock()
+            self?.report(wifi: Self.classify(satisfied: p.status == .satisfied, wifi: p.usesInterfaceType(.wifi), wired: p.usesInterfaceType(.wiredEthernet), expensive: p.isExpensive))
         }
         monitor.start(queue: DispatchQueue(label: "embed.wifi", qos: .utility))
     }
-    var onWiFi: Bool { lock.lock(); defer { lock.unlock() }; return wifi }
+    /// Pure: a connection that works, over Wi-Fi or a cable, and not a metered one (a personal hotspot is mobile data).
+    public static func classify(satisfied: Bool, wifi: Bool, wired: Bool, expensive: Bool) -> Bool { satisfied && (wifi || wired) && !expensive }
+    func report(wifi w: Bool) {
+        lock.lock(); let changed = wifi != w; wifi = w; let cb = onChange; lock.unlock()
+        if changed { cb?() }
+    }
+    public var onWiFi: Bool { lock.lock(); defer { lock.unlock() }; return testOverride ?? wifi }
 }
 
 public final class EmbedDevice: @unchecked Sendable {

@@ -27,7 +27,17 @@ final class OnboardingController: @unchecked Sendable {
     private var runStages: [String] = []
     /// Learning the person's voice (voice onboarding; Voice/VoiceEnrolment.swift): the sentences, the profile, the check.
     let capture = EnrolCapture(gate: .shared)
-    private var micOpen = false, captureToken = 0
+    /// The ONE owner of the microphone for enrolment (AutoradioKit Voice/SetupMicLease.swift): every open has its close on every exit, and between sentences the microphone is off and the engine's frames go to the tap alone.
+    private var takeSerial = 0
+    private lazy var lease: SetupMicLease = {
+        let m = module
+        return SetupMicLease(.init(
+            ask: { await LiveAudio.requestMicPermission() },      // the one system prompt: shared code showed its plain line first (the learn page: Continue / Not now)
+            openEngine: { let rt = m.runtime!; await rt.start(virtual: m.virtualEngine); rt.audio.micMayRetry() },
+            setTap: { tap in await m.runtime!.setEnrolmentTap(tap) },
+            micOn: { on in m.runtime!.setHandsFree(on, persist: false) },
+            restore: { m.runtime!.restoreHandsFree() }))
+    }()
     /// The first run is over (done or skipped): the station may start by itself. Told by shared code (obMirror).
     private var over = false
     var finished: Bool { lock.lock(); defer { lock.unlock() }; return over }
@@ -45,6 +55,7 @@ final class OnboardingController: @unchecked Sendable {
     init(module: AutoradioModule, support: URL) {
         self.module = module; self.support = support
         capture.onChange = { [weak self] in self?.changed() }
+        WiFiMonitor.shared.onChange = { [weak self] in self?.changed() }      // the path moved: shared code asks the facts again
         EditionTalk.shared.onFinish = { [weak self] in self?.set { self?.finishAsked += 1 } }
     }
 
@@ -100,8 +111,7 @@ final class OnboardingController: @unchecked Sendable {
             try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
             try? d.write(to: recordFile, options: .atomic)
         }
-        // The listener's configuration: select what passed, where the kit has that stage registered; the hearing stages are kept so that the downloaded models are in use at every launch, not only until the app is closed.
-        module.runtime.picksStore.save(s.choices)
+        // Readiness was written by setup itself, after each check passed (VoiceSetup.runStage); the launch choice and this one both read it.
         guard gen == AccountWipe.generation else { changed(); return }
         // Speech detection and recognition come from the model list as it stands now that the models are ready, with the composite's parameters
         // and applied to the running listener (a bare stage id would drop them, and a configuration set at launch would stay until the next launch).
@@ -121,8 +131,9 @@ final class OnboardingController: @unchecked Sendable {
 
     func askMicrophone() {
         set { mic = "checking"; micActive = true; level = 0; heard = "" }
-        AVAudioApplication.requestRecordPermission { [weak self] granted in
+        Task { [weak self] in
             guard let self else { return }
+            let granted = await LiveAudio.requestMicPermission()              // the one system prompt
             if !granted { self.set { self.mic = "refused"; self.micActive = false }; return }
             // One live check: start the engine, listen on this screen only (hands-free is off by default and the engine drops every frame
             // while it is off), feed the meter from the real input level, and pass on the first transcript or on a sustained level
@@ -138,7 +149,8 @@ final class OnboardingController: @unchecked Sendable {
                 await rt.start(virtual: self.module.virtualEngine)
                 rt.audio.micMayRetry()                           // the listener asks to be heard now: a give-up from an earlier run must not read as this check's "silent" (review N1)
                 if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }
-                defer { feeder.cancel(); rt.restoreHandsFree() }
+                TurnGate.shared.hold()                           // what is said to prove the microphone works is never sent as a turn
+                defer { feeder.cancel(); TurnGate.shared.release(); rt.restoreHandsFree() }
                 while meter.verdict == .listening {
                     self.lock.lock(); let here = self.micActive; self.lock.unlock()
                     if !here { return }                                                  // shared code left the step: end the check (defer restores)
@@ -163,48 +175,36 @@ final class OnboardingController: @unchecked Sendable {
 
     // MARK: Learning the person's voice (native only for the microphone's frames and the embedding model; the page, the sentences and the order of it all are shared code, voicelearn.ts)
 
-    /// One sentence is about to be read. The microphone is opened for it alone and closed again when it ends (`closeCapture`), the first time through the system prompt, asked here at the moment it is first needed. The frames go to the capture
-    /// and the engine looks for no turn in them (`TurnEngine.enrolmentTap`), so nothing read here can become a request. UNPROVEN on a device.
+    /// One sentence is about to be read. The lease opens the microphone for it alone and shuts it when it ends; the frames go to the capture and the engine looks for no turn in them (`TurnEngine.enrolmentTap`), so nothing read here can become a request,
+    /// with hands-free on or off. If the page is left, or the take given up, while the system prompt is still up, the lease opens nothing. UNPROVEN on a device.
     func beginCapture() {
         guard capture.begin() else { changed(); return }
-        lock.lock(); captureToken += 1; let token = captureToken; let opening = micOpen; micOpen = true; lock.unlock()
-        // A take that hears nothing (no sound, the engine did not start) ends by itself as a take that was not heard.
+        lock.lock(); takeSerial += 1; let mine = takeSerial; lock.unlock()
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 9_000_000_000)
             guard let self else { return }
-            self.lock.lock(); let current = self.captureToken == token; self.lock.unlock()
-            if current, self.capture.state == .listening { self.capture.expire(); await self.closeCapture() }
-        }
-        if opening { return }
-        AVAudioApplication.requestRecordPermission { [weak self] granted in
-            guard let self else { return }
-            if !granted { self.set { self.mic = "refused" }; self.capture.fail("The microphone is off for Autoradio 1."); Task { await self.closeCapture() }; return }
-            Task { [weak self] in
+            let out = await self.lease.begin(wanted: { [weak self] in self?.capture.state == .listening }, onFrame: { [weak self] f in
                 guard let self else { return }
-                let rt = self.module.runtime!
-                await rt.start(virtual: self.module.virtualEngine)
-                rt.audio.micMayRetry()
-                if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }       // opens the microphone, as the first-run check does; the engine is told not to look for turns
-                await rt.setEnrolmentTap { [weak self] f in
-                    guard let self else { return }
-                    self.capture.feed(f)
-                    if self.capture.state != .listening { Task { await self.closeCapture() } }
-                }
+                self.capture.feed(f)
+                if self.capture.state != .listening { Task { [weak self] in guard let self else { return }; self.lock.lock(); let current = self.takeSerial == mine; self.lock.unlock(); if current { await self.lease.endTake() } } }
+            })
+            switch out {
+            case .refused: self.set { self.mic = "refused" }; self.capture.fail("The microphone is off for Autoradio 1.")
+            case .stale: break
+            case .open:
+                // A take that hears nothing (no sound, the engine did not start) ends by itself as a take that was not heard.
+                try? await Task.sleep(nanoseconds: 9_000_000_000)
+                self.lock.lock(); let current = self.takeSerial == mine; self.lock.unlock()
+                if current, self.capture.state == .listening { self.capture.expire(); await self.lease.endTake() }
             }
         }
     }
 
-    /// Between sentences, and on leaving: the microphone is closed and the radio's own state is back.
-    func closeCapture() async {
-        lock.lock(); let was = micOpen; micOpen = false; lock.unlock()
-        guard was else { return }
-        let rt = module.runtime!
-        await rt.setEnrolmentTap(nil)
-        rt.restoreHandsFree()
+    /// Leaving the page, "Not now", a stored or failed enrolment and sign-out: nothing in progress is kept (the stored voice is not touched) and the microphone is given back, unconditionally.
+    func discardEnrolment() async {
+        lock.lock(); takeSerial += 1; lock.unlock()
+        capture.discard()
+        await lease.release()
     }
-
-    /// Leaving the page, or "Not now": nothing in progress is kept (the stored voice is not touched).
-    func discardEnrolment() { capture.discard(); Task { await closeCapture() } }
 
     func stopMicrophone() { lock.lock(); micActive = false; lock.unlock() }
 
@@ -260,7 +260,7 @@ final class OnboardingController: @unchecked Sendable {
         changed()
     }
 
-    func stop() { stopVoice(); stopMicrophone(); discardEnrolment() }
+    func stop() { stopVoice(); stopMicrophone(); Task { await discardEnrolment() } }
 
     /// Sign-out: nothing of the voice side's first run reaches the next account.
     func reset() {
@@ -278,11 +278,12 @@ final class OnboardingController: @unchecked Sendable {
             ["stage": r.stage, "name": r.name, "model": r.model, "sizeLabel": r.sizeLabel, "state": r.state, "progress": r.progress, "statusLine": r.statusLine,
              "isFallback": r.isFallback, "canRetry": r.canRetry, "canFallback": r.canFallback, "numbers": r.numbers]
         }
-        let profile = setup?.profile ?? DeviceProfile.current()
+        var profile = setup?.profile ?? DeviceProfile.current()
+        profile.onWiFi = WiFiMonitor.shared.onWiFi                      // always the live path: a profile made when the press began is old
         // What voice needs from the network, read from the model lists (ModelOffer): per file, its name and size, and whether it is on this phone. Shared code states the sizes and the host; no string has a model's name or size in it.
-        let record = ModelOffer.readRecord(recordFile)
-        let ready = ModelOffer.readyStages(record: record)
-        var readyChoices = ModelOffer.readyChoices(record: record)
+        let readyChoices0 = ModelOffer.readyChoices(isReady: { Voices.readiness.isReady(model: $0) })      // the ONE readiness record, the engine's too
+        let ready = ModelOffer.readyStages(choices: readyChoices0)
+        var readyChoices = readyChoices0
         if WeSpeakerEmbedder.standard().onDisk { readyChoices["speaker"] = ModelOffer.speakerID }
         let offers = ModelOffer.jobs(profile: profile, ready: readyChoices).map { $0.dict }
         var device = ""
@@ -312,7 +313,6 @@ extension AutoradioModule {
         pageSources.register(OnboardingPageSource())
         choir.accountWipe.register("onboarding") { [weak c] in c?.reset() }
         handle("voiceSetupFacts") { _, reply in reply(c.facts()) }
-        runtime.applyKeptPicks()      // the hearing models setup passed on an earlier launch are the ones in use (LabRuntime.applyKeptPicks)
     }
 
     /// The narrow calls shared code (onboarding.ts) makes; see the header of this file for each one's reason.
@@ -327,10 +327,10 @@ extension AutoradioModule {
         case "obEnrolKeep": return ["kept": c.capture.keep(), "usable": c.capture.usable]
         case "obEnrolBuild": return ["ok": await c.capture.build()]
         case "obEnrolCheck": return ["call": await c.capture.check()]
-        case "obEnrolStore": return ["ok": c.capture.store()]
+        case "obEnrolStore": let ok = c.capture.store(); await c.discardEnrolment(); return ["ok": ok]
         case "obEnrolDiscardTake": c.capture.dropTake()
-        case "obEnrolDiscard": c.discardEnrolment()
-        case "obVoiceForget": c.discardEnrolment(); SpeakerGate.shared.forget()
+        case "obEnrolDiscard": await c.discardEnrolment()
+        case "obVoiceForget": await c.discardEnrolment(); SpeakerGate.shared.forget()
         case "obSetupRetry": c.retry(r["stage"] as? String ?? "")
         case "obSetupFallback": c.fallback(r["stage"] as? String ?? "")
         case "obMicStart": c.askMicrophone()

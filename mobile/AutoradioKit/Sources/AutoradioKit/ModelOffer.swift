@@ -80,51 +80,21 @@ public enum ModelOffer {
         return (run, chosen)
     }
 
-    /// The stages whose chosen model passed its check on this phone (a stage that fell to its built-in floor is not ready for this purpose), from the record setup keeps (voice-setup.json).
-    public static func readyStages(record: SetupRecord?) -> Set<String> {
-        guard let record else { return [] }
-        var out = Set<String>()
-        for i in record.items {
-            guard let s = SetupStage(rawValue: i.stage) else { continue }
-            // A choice on the stage's own ladder is ready when it is not that ladder's built-in floor; a choice the configurator made under another id is ready unless its stage is one of the built-in ones.
-            if let c = SetupCatalog.ladder(s).first(where: { $0.id == i.chosen }) { if c.bytes > 0 { out.insert(i.stage) } }
-            else if !builtIn.contains(i.kitStageID) { out.insert(i.stage) }
+    /// job -> the model id that is READY on this phone: the best-ranked list entry for that job the one readiness record calls ready (`Voices.readiness`, written only after voice setup's check passed). The page reads what the engine reads;
+    /// a floor is never in the list, so a stage that fell to its built-in floor has no entry here.
+    public static func readyChoices(list: ModelList = .builtIn(), isReady: (String) -> Bool) -> [String: String] {
+        var out: [String: String] = [:]
+        for role in ConfigRole.allCases {
+            if let e = list.models.filter({ $0.job == role.rawValue }).sorted(by: { $0.rank > $1.rank }).first(where: { isReady($0.id) }) { out[role.stage.rawValue] = e.id }
         }
         return out
     }
+    /// The stages that have a ready model.
+    public static func readyStages(choices: [String: String]) -> Set<String> { Set(choices.keys) }
 
-    /// job -> the model id on the phone: the stage's recorded choice when it is not that stage's built-in floor.
-    public static func readyChoices(record: SetupRecord?) -> [String: String] {
-        guard let record else { return [:] }
-        let ok = readyStages(record: record)
-        var out: [String: String] = [:]
-        for i in record.items where ok.contains(i.stage) { out[i.stage] = i.chosen }
-        return out
-    }
-
-    private static let builtIn: Set<String> = ["energy-vad", "apple-speech", "avspeech", "choir-system1"]
-
+    /// The setup's own record of the last run (rows and fallbacks), for merging a later partial run; readiness is NOT read from it.
     public static func readRecord(_ file: URL) -> SetupRecord? {
         guard let d = try? Data(contentsOf: file) else { return nil }
         return try? JSONDecoder().decode(SetupRecord.self, from: d)
-    }
-}
-
-/// The hearing and voice stages setup chose, kept across launches (on this phone, not the account: the models are on the phone). Before 2026-11-23 only the voice was kept (voice-choice.json); the recogniser and the
-/// speech bounds went back to Apple's recogniser and the energy detector at every launch (the listener configuration is a fixed list, ChoirApp.swift). Applied by `LabRuntime.applyKeptPicks()` once the stages are registered.
-public final class StagePicksStore: @unchecked Sendable {
-    private let file: URL
-    public init(file: URL) { self.file = file }
-    /// StageKind raw value -> stage id.
-    public func load() -> [String: String] {
-        guard let d = try? Data(contentsOf: file), let o = try? JSONDecoder().decode([String: String].self, from: d) else { return [:] }
-        return o
-    }
-    /// Only the hearing kinds are kept here (the voice has its own store, VoiceChoiceStore).
-    public static let kinds: [StageKind] = [.transcriber, .speechBounds]
-    public func save(_ choices: [StageKind: String]) {
-        var cur = load()
-        for k in Self.kinds { if let id = choices[k], !id.isEmpty { cur[k.rawValue] = id } }
-        if let d = try? JSONEncoder().encode(cur) { try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true); try? d.write(to: file, options: .atomic) }
     }
 }

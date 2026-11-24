@@ -1,7 +1,7 @@
 import Foundation
 
 // The reader's voice (lane autoradio-talk, Job 3). A learned voice lets the radio tell the reader from a TV: a hands-free candidate turn
-// whose speech does not match the learned voice is not shown as listening and is not sent. Nothing leaves the phone: the profile is a
+// whose speech does not match the learned voice is logged (in this build nothing is hidden or dropped because of it). Nothing leaves the phone: the profile is a
 // few hundred numbers in Application Support (SpeakerStore, excluded from backup), the embeddings are made on the phone, the audio is not
 // kept. With no learned voice, or no embedder, behaviour is exactly as before (every turn passes).
 //
@@ -14,7 +14,7 @@ import Foundation
 //     turns, so one or two turns of another voice do not become the reader's voice.
 //  3. The reader's own voice with a cold, a different microphone: below the threshold by a little: it passes (a mismatch must be clear:
 //     `rejectMargin` below the threshold). Erring toward accepting the reader.
-//  4. A clear second speaker after the voice is learned: a mismatch; in this build it is only logged (HandsFree.hfCommit), nothing is dropped.
+//  4. A clear second speaker after the voice is learned: a mismatch; in this build it is only logged (HandsFree.hfCommit), nothing is dropped or hidden.
 //  5. Short speech (under 1 s), no embedder, a model that failed or returned the wrong size: unknown, which passes.
 //  6. "Forget my voice": the stored profile is deleted and every turn passes again at once.
 //  7. A profile from another model version on disk: ignored (SpeakerStore.load), the voice is learned again.
@@ -76,14 +76,16 @@ public final class SpeakerGate: @unchecked Sendable {
     }
 
     /// Learn from speech the reader was heard saying (a turn that was answered and not cancelled, or an enrolment utterance).
-    public func learn(_ samples: [Float]) async {
+    public func learn(_ samples: [Float], generation: Int = AccountWipe.generation) async {
         guard let e = embedder, e.isReady, samples.count >= SpeakerProfile.minimumLearnMs * 16 else { return }
         guard let v = await e.embed(Array(samples.prefix(Self.maxSamples))), v.count == SpeakerModelKind.wespeaker.dimensions else { return }
+        // The write carries the generation the work began under and is refused when it moved; the memory and the file change together, under one lock (sign-out's `forget` takes the same lock).
         lock.lock()
+        guard generation == AccountWipe.generation else { lock.unlock(); return }
         let changed = profile.learn([.wespeaker: v], audioMs: samples.count / 16, rule: rule)
-        let snapshot = profile
+        if changed, let u = url { SpeakerStore.save(profile, to: u) }
         lock.unlock()
-        if changed { if let u = url { SpeakerStore.save(snapshot, to: u) }; onChange?() }
+        if changed { onChange?() }
     }
 
     // MARK: Enrolment (voice onboarding): a profile is built in memory and stored only after the person's confirming sentence matched.
@@ -104,17 +106,24 @@ public final class SpeakerGate: @unchecked Sendable {
         guard let v = await e.embed(Array(samples.prefix(Self.maxSamples))), v.count == SpeakerModelKind.wespeaker.dimensions else { return .unknown }
         return Self.call(for: p.check([.wespeaker: v], audioMs: samples.count / 16, rule: rule))
     }
-    /// Store a confirmed profile (replacing the old one).
-    func adopt(_ p: SpeakerProfile) {
-        lock.lock(); profile = p; lock.unlock()
-        if let u = url { SpeakerStore.save(p, to: u) }
+    /// Store a confirmed profile (replacing the old one). Refused when the account generation moved since the enrolment began, or when the file could not be written; the memory and the file change together under one lock.
+    @discardableResult
+    func adopt(_ p: SpeakerProfile, generation: Int) -> Bool {
+        lock.lock()
+        guard generation == AccountWipe.generation else { lock.unlock(); return false }
+        if let u = url, !SpeakerStore.save(p, to: u) { lock.unlock(); return false }
+        profile = p
+        lock.unlock()
         onChange?()
+        return true
     }
 
-    /// "Forget my voice" and the start of "Learn my voice": the profile is deleted.
+    /// "Forget my voice", the start of "Learn my voice" and the sign-out wipe: the profile is deleted (memory and file under the lock `adopt` and `learn` write under).
     public func forget() {
-        lock.lock(); profile = SpeakerProfile(); lock.unlock()
+        lock.lock()
+        profile = SpeakerProfile()
         if let u = url { SpeakerStore.remove(at: u) }
+        lock.unlock()
         onChange?()
     }
 }
@@ -133,7 +142,7 @@ extension SpeakerGate {
         i.credit = WeSpeakerEmbedder.attribution
         if !i.ready { i.line = "The voice model is still being fetched (about 8 MB). Until then every voice is accepted." }
         else if i.learned { i.line = "The radio notes whether each turn sounds like you (written to the log only for now; nothing is ignored). Kept on this phone only, never uploaded." }
-        else { i.line = "Say a few things to the radio and it learns your voice. Kept on this phone only, never uploaded." }
+        else { i.line = "Learn your voice in Settings, by reading a few sentences aloud. Kept on this phone only, never uploaded." }
         return i
     }
 }

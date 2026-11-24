@@ -85,9 +85,8 @@ public struct DeviceProfile: Codable, Equatable, Sendable {
         self.chip = chip; self.memoryGB = memoryGB; self.freeDiskGB = freeDiskGB; self.onWiFi = onWiFi; self.availableMemoryMB = availableMemoryMB
     }
 
-    /// This device. `onWiFi` is true unless the host knows better (no Network framework here); the card asks first
-    /// when the host says it is not.
-    public static func current(onWiFi: Bool = true) -> DeviceProfile {
+    /// This device. `onWiFi` is the real network path (`WiFiMonitor`) unless the caller says otherwise; the card asks first when it is not Wi-Fi.
+    public static func current(onWiFi: Bool? = nil) -> DeviceProfile {
         var size = 0
         sysctlbyname("hw.machine", nil, &size, nil, 0)
         var buf = [CChar](repeating: 0, count: max(size, 1))
@@ -96,7 +95,7 @@ public struct DeviceProfile: Codable, Equatable, Sendable {
         let mem = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
         let home = URL(fileURLWithPath: NSHomeDirectory())
         let free = ((try? home.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage).map { Double($0) / 1_073_741_824 } ?? 0
-        return DeviceProfile(chip: chip, memoryGB: mem, freeDiskGB: free, onWiFi: onWiFi, availableMemoryMB: DeviceReading.availableMemoryMB())
+        return DeviceProfile(chip: chip, memoryGB: mem, freeDiskGB: free, onWiFi: onWiFi ?? WiFiMonitor.shared.onWiFi, availableMemoryMB: DeviceReading.availableMemoryMB())
     }
 }
 
@@ -285,12 +284,14 @@ public final class VoiceSetup: @unchecked Sendable {
     private var started = false
     /// The configurator (when set, `run()` plans, measures and chooses a whole configuration instead of walking each stage's ladder).
     private let configBackend: ConfigBackend?
+    /// The ONE record of what the radio may use (the engine's listener choice and the Downloads page both read it). Written here, after the on-device check passed, never at fetch.
+    private let readiness: VoiceReadiness
     private var configFirst: Configuration?
     public private(set) var configurationRecord: ConfigurationRecord?
 
     public init(backend: SetupBackend, profile: DeviceProfile, smaller: Bool = false, stallSeconds: Double = 20, patience: Double = 45, maxTries: Int = 3,
-                configBackend: ConfigBackend? = nil, now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) {
-        self.backend = backend; self.profile = profile; self.stallSeconds = stallSeconds; self.patience = patience; self.maxTries = maxTries; self.now = now
+                configBackend: ConfigBackend? = nil, readiness: VoiceReadiness = Voices.readiness, now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) {
+        self.readiness = readiness; self.backend = backend; self.profile = profile; self.stallSeconds = stallSeconds; self.patience = patience; self.maxTries = maxTries; self.now = now
         self.configBackend = configBackend
         plan = SetupCatalog.plan(for: profile, smaller: smaller)
         for s in SetupStage.allCases { rowsByStage[s] = Self.freshRow(s, plan[s]![0]) }
@@ -497,6 +498,8 @@ public final class VoiceSetup: @unchecked Sendable {
             do { check = try await backend.check(cand) }
             catch { check = SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "\(error)") }
             if check.outputOK {
+                readiness.markReady(model: cand.id)                                   // after the check, never at fetch (review round 2, B2)
+                for companion in ListenerPipeline.companions(of: cand.id) { readiness.markReady(model: companion) }
                 let numbers = Self.numbers(check)
                 update(s) { r in
                     r.state = "ready"; r.progress = 1; r.numbers = numbers
@@ -508,6 +511,7 @@ public final class VoiceSetup: @unchecked Sendable {
                 onChange?()
                 return
             }
+            readiness.markNotReady(model: cand.id)                                    // it was fetched, but it does not work here: the listener must not choose it
             reasons.append(check.note.isEmpty ? "It did not pass its check on this phone" : check.note); fellFrom.append(cand.id)   // failure 4
             if isLast { markFloorOnly(s, ladder, fellFrom, reasons); return }
         }

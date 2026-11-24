@@ -169,3 +169,39 @@ final class ScriptedSetupBackend: SetupBackend, @unchecked Sendable {
         return out
     }
 }
+
+// ONE readiness record, written only after the on-device check passed, read by the page and by the engine (review round 2, B2).
+final class SetupReadinessTests: XCTestCase {
+    func device(_ gb: Double) -> DeviceProfile { DeviceProfile(chip: "test", memoryGB: gb, freeDiskGB: 40, onWiFi: true) }
+    struct Backend: SetupBackend {
+        let rejects: Set<String>
+        func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws {}
+        func check(_ c: SetupCandidate) async throws -> SetupCheck {
+            SetupCheck(loadMs: 5, speed: 0.1, unit: "x real time", memoryMB: 0, outputOK: !rejects.contains(c.id), note: rejects.contains(c.id) ? "Too little memory would be left (200 MB)" : "")
+        }
+    }
+    func testR1AModelTheCheckRejectedIsNotReady_AndTheOneThatPassedIs() async {
+        let ready = MemoryVoiceReadiness(); ready.markReady(model: "fluid-speech-mini")           // a fetch that marked it too early (an older build, or a leftover)
+        let s = VoiceSetup(backend: Backend(rejects: ["fluid-speech-mini"]), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, readiness: ready)
+        await s.run(only: [.transcriber])
+        XCTAssertFalse(ready.isReady(model: "fluid-speech-mini"), "it failed its check on this phone: the listener must not choose it")
+        let chosen = s.record.items.first { $0.stage == "transcriber" }?.chosen
+        XCTAssertNotEqual(chosen, "fluid-speech-mini"); XCTAssertTrue(ready.isReady(model: chosen ?? "?") || chosen == "apple-speech")
+    }
+    func testR2APassingModelAndItsCompanionsAreReadyOnlyAfterTheCheck() async {
+        let ready = MemoryVoiceReadiness()
+        let s = VoiceSetup(backend: Backend(rejects: []), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, readiness: ready)
+        XCTAssertFalse(ready.isReady(model: "fluid-speech-mini"), "nothing is ready before setup ran")
+        await s.run(only: [.transcriber])
+        XCTAssertTrue(ready.isReady(model: "fluid-speech-mini"))
+        for c in ListenerPipeline.companions(of: "fluid-speech-mini") { XCTAssertTrue(ready.isReady(model: c), "the live-words model comes with it") }
+    }
+    func testR3ThePageReadsTheSameRecord() {
+        let ready = MemoryVoiceReadiness(); ready.markReady(model: "fluid-speech-mini")
+        let choices = ModelOffer.readyChoices(isReady: { ready.isReady(model: $0) })
+        XCTAssertEqual(choices["transcriber"], "fluid-speech-mini"); XCTAssertNil(choices["responder"])
+        XCTAssertTrue(ModelOffer.readyStages(choices: choices).contains("transcriber"))
+        ready.markNotReady(model: "fluid-speech-mini")
+        XCTAssertNil(ModelOffer.readyChoices(isReady: { ready.isReady(model: $0) })["transcriber"], "what the engine will not use the page does not call ready")
+    }
+}

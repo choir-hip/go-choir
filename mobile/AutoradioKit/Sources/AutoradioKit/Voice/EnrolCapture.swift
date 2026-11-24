@@ -11,6 +11,8 @@ import Foundation
 //  V4 Three takes of different voices do not make a profile.
 //  V5 Frames after a take ended, or with no take begun, are not kept (no audio of the person outlives its use: `discard` drops every take).
 //  V6 No embedding model on the phone: nothing is captured.
+//  V7 Every write of the profile carries the account generation the enrolment began under; a sign-out between the match and the store (or during the build) writes nothing.
+//  V8 A profile that could not be written to disk is not "stored".
 public final class EnrolCapture: @unchecked Sendable {
     public enum State: String, Sendable { case idle, listening, done, error }
     private let gate: SpeakerGate
@@ -20,6 +22,8 @@ public final class EnrolCapture: @unchecked Sendable {
     private var reason = ""
     private var takes: [[Float]] = []
     private var candidate: SpeakerProfile?
+    /// The account generation this enrolment began under (V7): a write after the generation moved is refused.
+    private var sessionGeneration: Int?
     public var onChange: (@Sendable () -> Void)?
     public init(gate: SpeakerGate = .shared) { self.gate = gate }
 
@@ -29,7 +33,7 @@ public final class EnrolCapture: @unchecked Sendable {
     @discardableResult
     public func begin() -> Bool {
         guard gate.canListen else { set(.error, "The voice model is not on this phone yet."); return false }
-        lock.lock(); collector = TakeCollector(); reason = ""; lock.unlock()
+        lock.lock(); collector = TakeCollector(); reason = ""; if sessionGeneration == nil { sessionGeneration = AccountWipe.generation }; lock.unlock()
         set(.listening)
         return true
     }
@@ -58,14 +62,14 @@ public final class EnrolCapture: @unchecked Sendable {
     @discardableResult
     public func keep() -> Int {
         lock.lock(); defer { lock.unlock() }
-        if stateValue == .done, collector.usable { takes.append(collector.samples) }
+        if stateValue == .done, collector.usable { takes.append(collector.samples); collector = TakeCollector(); stateValue = .idle }      // a take is kept once
         return takes.count
     }
     /// Build the candidate profile from the kept takes, in memory (V3, V4). True when they make one voice.
     public func build() async -> Bool {
-        lock.lock(); let t = takes; lock.unlock()
-        let p = await gate.buildCandidate(t)
-        lock.lock(); candidate = p; lock.unlock()
+        lock.lock(); let t = takes; let gen = sessionGeneration; lock.unlock()
+        var p = await gate.buildCandidate(t)
+        lock.lock(); if gen == nil || gen != AccountWipe.generation { p = nil }; candidate = p; lock.unlock()
         onChange?()
         return p != nil
     }
@@ -78,11 +82,11 @@ public final class EnrolCapture: @unchecked Sendable {
     /// Store the candidate as the person's voice. Only after `check` said "match" (the page decides); false when there is none.
     @discardableResult
     public func store() -> Bool {
-        lock.lock(); let c = candidate; lock.unlock()
-        guard let c else { return false }
-        gate.adopt(c)
+        lock.lock(); let c = candidate, gen = sessionGeneration; lock.unlock()
+        guard let c, let gen else { return false }
+        let ok = gate.adopt(c, generation: gen)
         discard()
-        return true
+        return ok
     }
     /// The take that just ended was not usable (or was used): ready for the next, the kept takes and the candidate stay.
     public func dropTake() {
@@ -91,7 +95,7 @@ public final class EnrolCapture: @unchecked Sendable {
     }
     /// Drop everything in progress: the takes, the candidate, the take being heard. The stored voice is not touched.
     public func discard() {
-        lock.lock(); takes = []; candidate = nil; collector = TakeCollector(); reason = ""; stateValue = .idle; lock.unlock()
+        lock.lock(); takes = []; candidate = nil; sessionGeneration = nil; collector = TakeCollector(); reason = ""; stateValue = .idle; lock.unlock()
         onChange?()
     }
 

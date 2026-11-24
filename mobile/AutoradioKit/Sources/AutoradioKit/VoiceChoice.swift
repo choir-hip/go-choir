@@ -128,6 +128,15 @@ public protocol VoiceReadiness: Sendable {
     func markNotReady(model: String)
 }
 
+/// In memory only (a virtual engine, tests).
+public final class MemoryVoiceReadiness: VoiceReadiness, @unchecked Sendable {
+    private let lock = NSLock(); private var ids = Set<String>()
+    public init() {}
+    public func isReady(model: String) -> Bool { lock.lock(); defer { lock.unlock() }; return ids.contains(model) }
+    public func markReady(model: String) { lock.lock(); ids.insert(model); lock.unlock() }
+    public func markNotReady(model: String) { lock.lock(); ids.remove(model); lock.unlock() }
+}
+
 public final class FileVoiceReadiness: VoiceReadiness, @unchecked Sendable {
     private let file: URL
     private let lock = NSLock()

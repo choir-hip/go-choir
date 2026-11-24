@@ -25,8 +25,8 @@ extension AutoradioModule {
         // The model is fetched only after the person agreed on the download step (OnboardingController.fetchSpeakerModel); a phone that already has it loads it here, which fetches nothing.
         Task { let e = WeSpeakerEmbedder.standard(); if e.onDisk, await e.ensureReady() { SpeakerGate.shared.embedder = e } }
         handle("voiceProfile") { [unowned self] _, reply in reply(self.json(SpeakerGate.shared.info())) }
-        handle("voiceLearn") { _, reply in OnboardingController.shared?.discardEnrolment(); reply(["ok": true, "message": ""]) }       // "Learn again" opens the page (shared code starts it over); the stored voice stays until a new one is confirmed
-        handle("voiceForget") { _, reply in OnboardingController.shared?.discardEnrolment(); SpeakerGate.shared.forget(); reply(["ok": true, "message": ""]) }
+        handle("voiceLearn") { _, reply in Task { await OnboardingController.shared?.discardEnrolment(); reply(["ok": true, "message": ""]) } }       // "Learn again" opens the page (shared code starts it over); the stored voice stays until a new one is confirmed
+        handle("voiceForget") { _, reply in Task { await OnboardingController.shared?.discardEnrolment(); SpeakerGate.shared.forget(); reply(["ok": true, "message": ""]) } }
 
         // Native because the voice turn engine writes the entries; it hands them over as they are (and the id the card was closed on) and decides nothing. The bar's answer card is bar.ts.
         handle("conversationEntries") { [unowned self] _, reply in reply(["entries": Conversation.shared.entries().map { self.json($0) }]) }

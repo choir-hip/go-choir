@@ -32,9 +32,9 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         }
         defer { watcher.cancel() }
         switch id {
-        // A model that was fetched and loaded is ready (Voices.readiness): the default listening pipeline (ListenerPipeline) uses only ready models.
-        case "silero-vad-v6.2.1": _ = try await SileroVAD.probabilities([Float](repeating: 0, count: 4096)); Voices.readiness.markReady(model: id)
-        case "parakeet-eou-120m": let s = try await ParakeetEOUTranscriber(StageParams()).begin(); s.cancel(); Voices.readiness.markReady(model: id)
+        // Fetching never marks a model ready: voice setup does, after its check on this phone passed (VoiceSetup.runStage); the listening pipeline uses only ready models.
+        case "silero-vad-v6.2.1": _ = try await SileroVAD.probabilities([Float](repeating: 0, count: 4096))
+        case "parakeet-eou-120m": let s = try await ParakeetEOUTranscriber(StageParams()).begin(); s.cancel()
         case "parakeet-tdt-0.6b-v2": let s = try await ParakeetTDTTranscriber(StageParams()).begin(); s.cancel()      // ready once its companions are in (below)
         case "fluid-speech-mini":
             // Only here, after voice setup's consent, is the folder fetched; the stage itself never downloads. Its files are checked one by
@@ -43,13 +43,10 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             _ = try await FluidSpeechMiniTranscriber(StageParams()).manager()      // ready once its companions are in (below)
         case "kokoro-82m-ane":
             _ = try await KokoroVoice.synthesizeOnce("Ready.")
-            Voices.readiness.markReady(model: id)          // fetched, compiled and heard to speak: the radio may prefer it now
         case "pocket-tts":
             _ = try await PocketTTSVoice.firstFrameMs("Ready.")
-            Voices.readiness.markReady(model: id)
         case "phonon-31m":
             _ = try await PhononVoice.firstFrameMs("Ready.")
-            Voices.readiness.markReady(model: id)
         default:
             guard KnownModels.isPinned(id) else { throw LabError.unavailable("no loader for \(id) in this build") }
             #if canImport(llama)
@@ -69,7 +66,6 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         for companion in ListenerPipeline.companions(of: id) where !Voices.readiness.isReady(model: companion) {
             try await fetch(companion, role: role, onBytes: { onBytes(own + $0) })
         }
-        if ListenerPipeline.isBatchRecogniser(id) { Voices.readiness.markReady(model: id) }       // the batch recognisers above, now that their companions are in
     }
 
     static func transcriberStage(_ id: String) -> Transcriber {
