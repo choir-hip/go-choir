@@ -100,3 +100,5 @@ the second loss in this record and needs its own change.
 - Whether any of the 1,760 mattered (were about a story the paper then
   missed) is not measured.
 - Research reads and later desks are not counted.
+
+Security effect (review 1, seat 2): peak concurrent runs rise from 12 to up to 20 at eight task slots, and queued tasks never expire, so the queue and its capture leases can grow without bound; both are logged. No authority, credential, desk read or write, route, custody or isolation change.
