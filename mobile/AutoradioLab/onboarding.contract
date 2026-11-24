@@ -107,7 +107,8 @@ component SignInScreen
               Btn(label="Create account", primary=true, wide=true)
           button press=closeAuth testId="signin-close" appearance="none"
             Btn(label="Not now", primary=false, wide=false)
-      if siv.message != "" and not siv.pending and not signRunning
+      // A failure line belongs to the flow that made it: the name's under the name form, the sign-up's under the address form, the passkey's always.
+      if siv.message != "" and not siv.pending and not signRunning and (siv.mode == "signin" or (siv.mode == "reviewer" and nameLogin) or (siv.mode == "create" and not nameLogin))
         text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
 
 // ---------------------------------------------------------------- the page

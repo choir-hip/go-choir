@@ -1,6 +1,6 @@
 # The reviewer account: runbook (2026-11-23)
 
-Owner, 2026-11-24: "yes, we should make a demo account as well." Apple's reviewers for TestFlight and the App Store cannot hold a passkey for choir.news, and sign-up may be closed at the cap. One account can be opened with a user name and a password instead. Code: `internal/auth/demo_account.go`; host command `demo-account` (`cmd/demo-account`); the app page is the "Reviewer sign-in" link on the sign-in screen. No password, hash or account id is in the repo; the three live in two files on Node B, in `/var/lib/go-choir/auth-signing/demo/` (a directory only the auth service can see, so a file made or rotated later is hidden from the other services too).
+Owner, 2026-11-24: "yes, we should make a demo account as well." Apple's reviewers for TestFlight and the App Store cannot hold a passkey for choir.news, and sign-up may be closed at the cap. One account can be opened with a user name and a password instead. Code: `internal/auth/demo_account.go`; host command `demo-account` (`cmd/demo-account`); the app has no link or page for it: the user name (`reviewer`, which has no "@") is typed in the sign-in screen's "Your email address" field, and a second field and a Sign in button then appear. No password, hash or account id is in the repo; the three live in two files on Node B, in `/var/lib/go-choir/auth-signing/demo/` (a directory only the auth service can see, so a file made or rotated later is hidden from the other services too).
 
 ## How a reviewer signs in (the app as it is, 2026-11-24)
 
@@ -24,7 +24,7 @@ The app's sign-in is passkey only (a mailed code proves a new address). The revi
 ## Install the password (and rotate it)
 
 ```
-demo-account credential --user <a user name, for example "reviewer"> --out /var/lib/go-choir/auth-signing/demo/demo-credential
+demo-account credential --user <a user name with no "@", for example "reviewer"> --out /var/lib/go-choir/auth-signing/demo/demo-credential
 ```
 
 It prints the 32-character password once and writes the file (mode 0600: the user name, then an argon2id hash). Copy the password into Apple's form; it is not stored anywhere else. The auth service reads the file on every attempt, so there is nothing to restart. **To rotate**, run the same command again: the old password stops working at once, and keys already issued keep working until they expire or `reset` revokes them.

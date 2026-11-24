@@ -85,6 +85,8 @@ members Autoradio
     sivTick = sivTick + 1
   action editAuthEmail(v: string)
     authEmail = v
+    // The secret typed for a name is not kept across an edit of the field.
+    namePass = ""
   action editAuthCode(v: string)
     authCode = v
   // "Create account": the email typed, the consent line above the button read, the passkey screen. Tapping it is the agreement (owner, 2026-11-23).
@@ -142,6 +144,7 @@ members Autoradio
   task authDone when siv.phase == "done" and authOpen and not pending(siv) and not pending(signedRun) and not pending(revRun) and not pending(signedOpen) key=sivTick
     after(400, finishAuth)
   action signOut
+    namePass = ""
     // The unsent text of a message being written belongs to the account that is leaving (it may quote that account's mail).
     mailFor = ""
     mailTo = ""
