@@ -72,6 +72,14 @@ final class ModelOfferTests: XCTestCase {
         XCTAssertEqual(s.record.items.first { $0.stage == "responder" }?.chosen, "cue-only", "the floor, not another model")
         XCTAssertNil(ModelOffer.candidate(job: "responder", id: "not-in-the-table"), "a pick that cannot be built is not run")
     }
+    // A pick this build cannot fetch is not run, and the stage does not fall back to a model that was never shown (review notes).
+    func testM1fAPickThatCannotBeBuiltRunsNothingForItsStage() {
+        let p = ModelOffer.plan(stages: ["voice", "responder", "transcriber"], picks: ["voice": "kokoro-82m-ane", "responder": "a-row-this-build-has-no-fetch-for"])
+        XCTAssertTrue(p.run.contains(.voice)); XCTAssertFalse(p.run.contains(.responder), "the unfetchable pick's stage is left alone")
+        XCTAssertTrue(p.run.contains(.transcriber), "a stage with no pick runs on its own ladder")
+        XCTAssertEqual(p.chosen[.voice]?.id, "kokoro-82m-ane"); XCTAssertNil(p.chosen[.responder])
+        XCTAssertTrue(ModelOffer.plan(stages: ["nonsense"], picks: [:]).run.isEmpty)
+    }
     func testM2Ready() {
         XCTAssertEqual(ModelOffer.readyStages(record: nil), [])
         func item(_ s: String, _ chosen: String, _ kit: String) -> SetupRecord.Item { .init(stage: s, chosen: chosen, kitStageID: kit, fellBackFrom: [], reasons: [], check: nil) }
