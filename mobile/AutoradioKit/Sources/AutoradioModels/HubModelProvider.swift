@@ -41,6 +41,10 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             // one against the SHA-256 pinned in KnownModels, then the model is loaded and run once (warm).
             _ = try await ModelStore.shared.ensureBundle(KnownModels.fluidSpeechMini) { done, _ in onBytes(done) }
             _ = try await FluidSpeechMiniTranscriber(StageParams()).manager()      // ready once its companions are in (below)
+        case "fluid-speech-pro":
+            // The same as Mini: fetched here only, after consent, every file checked against its pinned SHA-256, then loaded and run once.
+            _ = try await ModelStore.shared.ensureBundle(KnownModels.fluidSpeechPro) { done, _ in onBytes(done) }
+            _ = try await FluidSpeechProTranscriber(StageParams()).manager()      // ready once its companions are in (below)
         case "kokoro-82m-ane":
             _ = try await KokoroVoice.synthesizeOnce("Ready.")
             Voices.readiness.markReady(model: id)          // fetched, compiled and heard to speak: the radio may prefer it now
@@ -76,6 +80,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         switch id {
         case "parakeet-eou-120m": return ParakeetEOUTranscriber(StageParams())
         case "fluid-speech-mini": return FluidSpeechMiniTranscriber(StageParams())
+        case "fluid-speech-pro": return FluidSpeechProTranscriber(StageParams())
         default: return ParakeetTDTTranscriber(StageParams())
         }
     }
@@ -102,7 +107,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             let top = p.probs.max() ?? 0
             return await finish(top > 0.5, speed: p.inferenceMs / (seconds * 1000), unit: "of real time",
                                 note: "The speech detector found no speech in the bundled utterance (highest \(Int(top * 100))%).")
-        case "parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "fluid-speech-mini":
+        case "parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "fluid-speech-mini", "fluid-speech-pro":
             let stage: Transcriber = Self.transcriberStage(id)
             let s = try await stage.begin()
             let t0 = nowMs()
@@ -161,7 +166,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             if picks["vad"] == "silero-vad-v6.2.1" {
                 do { let p = try await SileroVAD.probabilities(audio); vad.append(p.inferenceMs / (seconds * 1000)) } catch { m.failedRoles["vad"] = "\(error)" }
             }
-            if let a = picks["transcriber"], a == "parakeet-eou-120m" || a == "parakeet-tdt-0.6b-v2" || a == "fluid-speech-mini" {
+            if let a = picks["transcriber"], a == "parakeet-eou-120m" || a == "parakeet-tdt-0.6b-v2" || a == "fluid-speech-mini" || a == "fluid-speech-pro" {
                 do {
                     let stage: Transcriber = Self.transcriberStage(a)
                     let s = try await stage.begin()
