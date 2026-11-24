@@ -5,8 +5,11 @@ package accountpurge
 // records every call; nothing real is touched.
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +30,9 @@ type fakeSteps struct {
 	tape       TapeResult
 	userAtTape bool
 	userAtMail bool
+	// onSuspend, when set, runs inside SuspendTakes: a cancel arriving while
+	// a pass is in flight.
+	onSuspend func()
 }
 
 func (f *fakeSteps) rec(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
@@ -58,6 +64,9 @@ func (f *fakeSteps) StopComputers(context.Context, string) error {
 }
 func (f *fakeSteps) SuspendTakes(context.Context, string) error {
 	f.rec("suspend")
+	if f.onSuspend != nil {
+		f.onSuspend()
+	}
 	return f.fail["suspend"]
 }
 func (f *fakeSteps) RestoreTakes(context.Context, string) error { f.rec("restore"); return nil }
@@ -365,5 +374,80 @@ func TestPassesDoNotOverlap(t *testing.T) {
 	wg.Wait()
 	if e.f.count("mail") != 1 || e.f.count("tape") != 1 {
 		t.Fatalf("overlapping passes repeated a step: %v", e.f.calls)
+	}
+}
+
+// Failure 8 (found on review): a cancel that lands while a pass is holding the
+// account's takes back must not leave them suspended for an account that no
+// longer has a record. The pass notices the record is gone and restores.
+func TestCancelDuringAPassDoesNotLeaveTakesSuspended(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	e.f.onSuspend = func() {
+		token, err := e.s.OfferDeletionCancel(e.user.ID, e.clock)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := e.s.CancelAccountDeletion(token, e.clock); err != nil {
+			t.Error(err)
+		}
+	}
+	e.pass()
+	if d, _ := e.s.AccountDeletionFor(e.user.ID); d != nil {
+		t.Fatal("the cancel did not remove the record")
+	}
+	if e.f.count("suspend") == 0 {
+		t.Fatal("the pass never suspended (the test did not run the race)")
+	}
+	if e.f.count("restore") == 0 {
+		t.Fatalf("takes stayed suspended for an account with no deletion record: %v", e.f.calls)
+	}
+}
+
+// Failure 9: the disk purge is its own step, logged where an operator reads
+// it: the job id, the step name, the computer ids, begin and end, with counts.
+// The log never carries the user id or the email address.
+func TestDestructiveStepsAreLoggedByJobAndComputerNotByPerson(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+	e := newEnv(t)
+	e.request(t)
+	_ = e.r.AtOnce(context.Background(), e.user.ID)
+	d, _ := e.s.AccountDeletionFor(e.user.ID)
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.pass()
+	out := buf.String()
+	for _, step := range []string{"mail", "data", "computers", "gateway", "tape"} {
+		for _, phase := range []string{"begin", "done"} {
+			if !strings.Contains(out, "job="+d.JobID+" step="+step+" "+phase) {
+				t.Fatalf("no %s line for step %s:\n%s", phase, step, out)
+			}
+		}
+	}
+	if !strings.Contains(out, "step=computers begin computers=computer-abc") {
+		t.Fatalf("the disk step does not name the computer it will destroy:\n%s", out)
+	}
+	for _, bad := range []string{e.user.ID, "purge-user", "example.com"} {
+		if strings.Contains(out, bad) {
+			t.Fatalf("the log names the person (%q):\n%s", bad, out)
+		}
+	}
+}
+
+// A failed step is logged as failed, with the job and the step.
+func TestAFailedDestructiveStepIsLoggedAsFailed(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+	e := newEnv(t)
+	e.request(t)
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.f.fail["destroy"] = errors.New("disk busy")
+	e.pass()
+	d, _ := e.s.AccountDeletionFor(e.user.ID)
+	if !strings.Contains(buf.String(), "job="+d.JobID+" step=computers failed") {
+		t.Fatalf("no failed line:\n%s", buf.String())
 	}
 }

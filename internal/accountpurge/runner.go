@@ -183,6 +183,14 @@ func (r *Runner) assertPending(ctx context.Context, d *auth.AccountDeletion) err
 	if err := r.steps.SuspendTakes(ctx, d.UserID); err != nil {
 		return fmt.Errorf("suspend takes: %w", err)
 	}
+	// A cancel can land while this pass was working from a list read before
+	// it. The record is the truth: if it is gone, the takes this pass just
+	// held back are served again, so a cancelled account is never left
+	// suspended with nothing that names why.
+	if cur, err := r.store.AccountDeletionFor(d.UserID); err == nil && cur == nil {
+		log.Printf("accountpurge: job=%s cancelled during a pass; takes restored", d.JobID)
+		return r.steps.RestoreTakes(ctx, d.UserID)
+	}
 	if _, done := d.Steps["at_once"]; !done {
 		return r.store.RecordDeletionStep(d.UserID, "at_once", auth.DeletionStep{DoneAt: r.now()})
 	}
@@ -330,7 +338,12 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 	}
 	done := fresh.Steps
 
-	run := func(name string, f func() (Counts, error)) error {
+	// Each destructive step is logged on its own where an operator reads it:
+	// the job id (never the user id or the address), the step, the computers
+	// it acts on, and how it ended. The disk of a computer goes in the
+	// "computers" step and nowhere else.
+	computersDetail := " computers=" + strings.Join(a.computers, ",")
+	run := func(name, detail string, f func() (Counts, error)) error {
 		if _, ok := done[name]; ok {
 			return nil
 		}
@@ -339,26 +352,29 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 		if _, err := r.authorize(d.UserID, r.now()); err != nil {
 			return err
 		}
+		log.Printf("accountpurge: job=%s step=%s begin%s", d.JobID, name, detail)
 		c, err := f()
 		if err != nil {
+			log.Printf("accountpurge: job=%s step=%s failed%s: %v", d.JobID, name, detail, err)
 			return fmt.Errorf("%s: %w", name, err)
 		}
+		log.Printf("accountpurge: job=%s step=%s done%s counts=%v", d.JobID, name, detail, c)
 		return r.store.RecordDeletionStep(d.UserID, name, auth.DeletionStep{DoneAt: r.now(), Counts: c})
 	}
 
 	// The order: what needs the user's id and the computers first, the
 	// computers' removal from the registry before the tape (the tape sweep
 	// proves a computer destroyed by its absence), the user row last.
-	if err := run("mail", func() (Counts, error) { return r.steps.PurgeMail(ctx, a) }); err != nil {
+	if err := run("mail", "", func() (Counts, error) { return r.steps.PurgeMail(ctx, a) }); err != nil {
 		return err
 	}
-	if err := run("data", func() (Counts, error) { return r.steps.PurgeData(ctx, a) }); err != nil {
+	if err := run("data", "", func() (Counts, error) { return r.steps.PurgeData(ctx, a) }); err != nil {
 		return err
 	}
-	if err := run("computers", func() (Counts, error) { return r.steps.DestroyComputers(ctx, a) }); err != nil {
+	if err := run("computers", computersDetail, func() (Counts, error) { return r.steps.DestroyComputers(ctx, a) }); err != nil {
 		return err
 	}
-	if err := run("gateway", func() (Counts, error) {
+	if err := run("gateway", computersDetail, func() (Counts, error) {
 		var n int64
 		for _, id := range a.computers {
 			if err := r.steps.ForgetGateway(ctx, a, id); err != nil {
@@ -374,16 +390,20 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 		if _, err := r.authorize(d.UserID, r.now()); err != nil {
 			return err
 		}
+		log.Printf("accountpurge: job=%s step=tape begin%s", d.JobID, computersDetail)
 		res, err := r.steps.PurgeTape(ctx, a)
 		if err != nil {
+			log.Printf("accountpurge: job=%s step=tape failed%s: %v", d.JobID, computersDetail, err)
 			return fmt.Errorf("tape: %w", err)
 		}
 		switch {
 		case res.Running:
 			return nil // the next tick polls
 		case res.Refusal != "" && !res.Permanent:
+			log.Printf("accountpurge: job=%s step=tape waiting%s: %s", d.JobID, computersDetail, res.Refusal)
 			return fmt.Errorf("tape: not yet: %s", res.Refusal)
 		}
+		log.Printf("accountpurge: job=%s step=tape done%s counts=%v refused=%q", d.JobID, computersDetail, res.Counts, res.Refusal)
 		if err := r.store.RecordDeletionStep(d.UserID, "tape", auth.DeletionStep{DoneAt: r.now(), Counts: res.Counts, Refused: res.Refusal}); err != nil {
 			return err
 		}
