@@ -38,6 +38,16 @@ Counted 2026-11-23: 520 lane branches on the remote; 468 are landed, 13
 superseded, 11 evidence only, 26 are distinct live work (the rows above and
 the first table's). Seven designs exist only on lanes.
 
+## 2026-11-24
+
+### choir.news serves the app association file for passkeys
+
+- **What:** `GET /.well-known/apple-app-site-association` on choir.news answers 200 with JSON naming two app ids of team S47GERGJZ3 (`news.choir.autoradio` and `news.choir.autoradio.lab.one`) under `webcredentials`. It is a public route with no sign-in, served by the proxy (`internal/proxy/apple_app_site_association.go`).
+- **Why:** iOS lets an app create or use a site's passkeys only if the site names the app in this file. It is the first piece of passkey account creation and sign-in inside the phone app (owner, 2026-11-23), landed ahead of the rest because Apple's servers fetch and cache it.
+- **Proof:** the Go tests drive the real route table and handler chain (200, content type, length, the exact JSON shape, no body on HEAD, 405 for other methods, neighbouring and child paths do not serve it) and check that the development variant the app's manifest produces is in the list. After deploy: `curl -sS -D- https://choir.news/.well-known/apple-app-site-association`. Not proved: that a phone accepts it. The app's entitlement is not on main yet, and the development id works only in a build signed with its own App ID carrying Associated Domains (none exists yet; the app on the owner's phone today will not match). The first development app is on a free team, which cannot use passkeys for a site at all, so it is not listed.
+- **Replaced:** nothing; the path used to fall to the computer-surface catch-all.
+- **Undo:** revert the commit. Apple's servers cache the file, so a phone may keep honouring a removed app id for about a day after the revert deploys.
+
 ## 2026-11-23
 
 ### A voice ask searches the paper (`2d44744e0`, `95ce70334`, `42fa0d9f4`, orange)
