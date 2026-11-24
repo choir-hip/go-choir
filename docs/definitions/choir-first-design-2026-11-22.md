@@ -183,6 +183,9 @@ boundaries:
   - decision: a desk has the whole corpus and the new captures at its fingertips in its REPL
     said: and youre right about what a capture desk needs. we should definitely be able to have the whole corpus and new captures at a desks fingertips (repl)
     'on': '2026-11-24'
+  - decision: creating a new RLM is a delegation act done through the protocol, carrying a prediction of what the new RLM will do, so the prediction can be scored and the system learns
+    said: creating a new rlm, a delegation act, should be done via protocol, with a prediction of what that new rlm will do. so the prediction can be scored and we can learn
+    'on': '2026-11-24'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
