@@ -801,6 +801,10 @@ func (h *Handler) HandleForgetCredential(w http.ResponseWriter, r *http.Request)
 		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: err.Error()})
 		return
 	}
+	if what, protected := purgeguard.ProtectedComputer(req.ComputerID); protected {
+		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "refused: " + what})
+		return
+	}
 	existed, err := h.registry.ForgetIdentity(strings.TrimSpace(req.ComputerID))
 	if err != nil {
 		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to remove identity"})

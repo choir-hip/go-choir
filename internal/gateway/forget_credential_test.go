@@ -7,6 +7,8 @@ package gateway
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -73,5 +75,94 @@ func TestForgetCredentialNeedsHostAndAnOldRecord(t *testing.T) {
 	h.HandleForgetCredential(w, forgetRequest("computer-doomed", now.Add(-73*time.Hour), true))
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"existed":false`) {
 		t.Fatalf("second forget: %d %s", w.Code, w.Body)
+	}
+}
+
+// Seat 1 #1: the gateway keys a credential by the VM id the bearer
+// authenticates as; the product computer id (computer-...) is recorded beside
+// it. A forget by either removes the identity, and by neither removes nothing.
+func TestForgetCredentialFindsAnIdentityByItsVMOrItsProductComputer(t *testing.T) {
+	reg := NewIdentityRegistry(time.Hour)
+	byProduct, err := reg.IssueCredentialForComputer("vm-doomed-1", "computer-aaaa1111")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byVM, err := reg.IssueCredentialForComputer("vm-doomed-2", "computer-bbbb2222")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bystander, err := reg.IssueCredentialForComputer("vm-other", "computer-cccc3333")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if existed, err := reg.ForgetIdentity("computer-aaaa1111"); err != nil || !existed {
+		t.Fatalf("by product computer id: %v %v", existed, err)
+	}
+	if existed, err := reg.ForgetIdentity("vm-doomed-2"); err != nil || !existed {
+		t.Fatalf("by vm id: %v %v", existed, err)
+	}
+	if _, err := reg.ValidateCredential(byProduct.RawToken); err == nil {
+		t.Fatal("the identity forgotten by its product computer id still validates")
+	}
+	if _, err := reg.ValidateCredential(byVM.RawToken); err == nil {
+		t.Fatal("the identity forgotten by its vm id still validates")
+	}
+	if _, err := reg.ValidateCredential(bystander.RawToken); err != nil {
+		t.Fatalf("another computer's identity was removed: %v", err)
+	}
+	if existed, _ := reg.ForgetIdentity("computer-nobody"); existed {
+		t.Fatal("an unknown id reported a removal")
+	}
+}
+
+// Seat 2 S9: a forget whose write failed is finished by the retry, not
+// reported as nothing to do while the file still holds the identity.
+func TestForgetIsDurableAfterAFailedWrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sub", "identities.json")
+	reg := NewIdentityRegistry(time.Hour)
+	if err := reg.SetPersistencePath(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.IssueCredentialForComputer("vm-doomed", "computer-dddd4444"); err != nil {
+		t.Fatal(err)
+	}
+	// The write fails: the directory is gone and cannot be made (a file is in its place).
+	if err := os.RemoveAll(filepath.Join(dir, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.ForgetIdentity("computer-dddd4444"); err == nil {
+		t.Fatal("a failed write was reported as done")
+	}
+	// The disk heals; the retry must write the removal even though the memory
+	// no longer holds the identity.
+	if err := os.Remove(filepath.Join(dir, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.ForgetIdentity("computer-dddd4444"); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "vm-doomed") {
+		t.Fatalf("the file still holds the identity after the retry: %s", raw)
+	}
+}
+
+func TestForgetCredentialRefusesTheHardList(t *testing.T) {
+	h, reg := setupHandlerNoProvider(t)
+	paper := "computer-1355b83bced1613eb048ee28d66688a8"
+	if _, err := reg.IssueCredentialForComputer("vm-paper", paper); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	h.HandleForgetCredential(w, forgetRequest(paper, time.Now().Add(-100*time.Hour), true))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("the paper's computer: %d %s", w.Code, w.Body)
 	}
 }

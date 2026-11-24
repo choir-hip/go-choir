@@ -220,6 +220,10 @@ type IdentityRegistry struct {
 	tokenTTL        time.Duration
 	persistencePath string
 	renewals        int64 // host-attested renewals since start
+	// forgetUnsaved is set when a removal could not be written; the next
+	// ForgetIdentity writes the file again even if there is nothing to remove
+	// in memory, so a failed write is finished by the retry.
+	forgetUnsaved bool
 }
 
 // NewIdentityRegistry creates a new identity registry with the given
@@ -662,14 +666,32 @@ func (r *IdentityRegistry) RevokeCredential(computerID string) {
 // ForgetIdentity removes a computer's identity record entirely (an account
 // deletion; the computer is destroyed and never boots again). It reports
 // whether a record existed. Removal is persisted before it returns.
+//
+// The gateway keys an identity by the VM id its bearer authenticates as and
+// records the product computer id (computer-...) beside it; the id given may
+// be either, and every identity that matches is removed.
 func (r *IdentityRegistry) ForgetIdentity(computerID string) (bool, error) {
+	computerID = strings.TrimSpace(computerID)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.identities[computerID]; !ok {
+	removed := false
+	if computerID != "" {
+		for key, identity := range r.identities {
+			if key == computerID || (identity != nil && identity.ProductComputerID == computerID) {
+				delete(r.identities, key)
+				removed = true
+			}
+		}
+	}
+	if !removed && !r.forgetUnsaved {
 		return false, nil
 	}
-	delete(r.identities, computerID)
-	return true, r.persistLocked()
+	if err := r.persistLocked(); err != nil {
+		r.forgetUnsaved = true
+		return removed, err
+	}
+	r.forgetUnsaved = false
+	return removed, nil
 }
 
 // RotateCredential revokes the existing credential and issues a new one.
