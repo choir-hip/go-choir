@@ -104,6 +104,10 @@ public struct DeviceProfile: Codable, Equatable, Sendable {
 /// figures (ModelHub.catalog), not measurements; setup replaces them with measured numbers in the record.
 public enum SetupCatalog {
     /// The size of the models a row downloads beside its own (`ListenerPipeline.companions`), from the catalog.
+    /// The memory of the models a row brings beside its own (they are held in memory together).
+    static func companionMB(_ id: String) -> Double {
+        ListenerPipeline.companions(of: id).reduce(0) { n, c in n + (CandidateTable.all.first { $0.id == c }?.residentMB ?? 0) }
+    }
     static func companionBytes(_ id: String) -> Int64 {
         ListenerPipeline.companions(of: id).reduce(0) { n, c in n + (KnownModels.managed.first { $0.id == c }?.approxBytes ?? 0) }
     }
@@ -116,8 +120,8 @@ public enum SetupCatalog {
             // Fluid Speech Mini first (the owner's choice, 2026-11-24). Its row downloads the live-words model with it (`ListenerPipeline.companions`:
             // the pipeline needs both), so the size and the memory are the two together.
             return [SetupCandidate(id: "fluid-speech-mini", label: "Fluid Speech Mini, the listener, with live words", bytes: KnownModels.fluidSpeechMini.totalBytes + companionBytes("fluid-speech-mini"), minMemoryGB: 4,
-                                   kitStageID: ListenerPipeline.liveThenFinalStageID, needsMB: 550),
-                    SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener, with live words", bytes: 480_000_000 + companionBytes("parakeet-tdt-0.6b-v2"), minMemoryGB: 6, kitStageID: "parakeet-tdt", needsMB: 700),
+                                   kitStageID: ListenerPipeline.liveThenFinalStageID, needsMB: 550 + companionMB("fluid-speech-mini")),
+                    SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener, with live words", bytes: 480_000_000 + companionBytes("parakeet-tdt-0.6b-v2"), minMemoryGB: 6, kitStageID: "parakeet-tdt", needsMB: 700 + companionMB("parakeet-tdt-0.6b-v2")),
                     SetupCandidate(id: "parakeet-eou-120m", label: "Parakeet, the smaller listener", bytes: 250_000_000, minMemoryGB: 3, kitStageID: "parakeet-eou", needsMB: 250),
                     SetupCandidate(id: "apple-speech", label: "Apple's recogniser", bytes: 0, minMemoryGB: 0, kitStageID: "apple-speech")]
         case .voice:
@@ -305,8 +309,14 @@ public final class VoiceSetup: @unchecked Sendable {
     }
 
     static func configRow(_ r: ConfigRole, _ c: ModelCandidate, state: String, line: String, progress: Double = 0) -> SetupRow {
-        SetupRow(stage: r.stage.rawValue, name: r.stage.title, model: c.quant.isEmpty ? c.label : "\(c.label), \(c.quant)", sizeLabel: SetupCatalog.sizeLabel(c.bytes),
+        SetupRow(stage: r.stage.rawValue, name: r.stage.title, model: c.quant.isEmpty ? c.label : "\(c.label), \(c.quant)", sizeLabel: SetupCatalog.sizeLabel(ConfigPlanner.footprintBytes(c)),
                  state: state, progress: progress, statusLine: line, isFallback: c.isFloor, canRetry: false, canFallback: false, numbers: "")
+    }
+
+    /// How far a row's download is: the bytes fetched over everything the row fetches (the model and the one that comes with it).
+    static func downloadProgress(_ bytes: Int64, of c: ModelCandidate) -> Double {
+        let total = ConfigPlanner.footprintBytes(c)
+        return total > 0 ? min(1, Double(bytes) / Double(total)) : 1
     }
 
     static func freshRow(_ s: SetupStage, _ c: SetupCandidate) -> SetupRow {
@@ -376,7 +386,7 @@ public final class VoiceSetup: @unchecked Sendable {
                 }
             }
         case .preparing(let role, let c, let bytes):
-            update(role.stage) { $0.state = "downloading"; $0.progress = c.bytes > 0 ? min(1, Double(bytes) / Double(c.bytes)) : 1; $0.statusLine = "Downloading" }
+            update(role.stage) { $0.state = "downloading"; $0.progress = Self.downloadProgress(bytes, of: c); $0.statusLine = "Downloading" }
         case .measuring:
             for r in ConfigRole.allCases { update(r.stage) { if $0.state != "ready" { $0.state = "preparing"; $0.progress = 1; $0.statusLine = "Checking everything together on this phone" } } }
         case .rejected(_, let reasons):

@@ -157,9 +157,105 @@ final class FluidSpeechMiniTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("jcopy.mlmodelc/w.bin")), v2)
     }
 
+    // MARK: second review (SF5 to SF7 and notes)
+
+    static let commit = String(repeating: "a", count: 40)
+    func tempStore(_ tag: String) -> (ModelStore, URL) {
+        let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubURLProtocol.self]
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("\(tag)-\(UUID().uuidString)")
+        return (ModelStore(root: root, session: URLSession(configuration: cfg)), root)
+    }
+    func spec(_ d: Data, declared: Int64? = nil, commit: String = FluidSpeechMiniTests.commit, repo: String = "x/y", path: String = "a/w.bin", copies: [[String]] = []) -> ModelBundleSpec {
+        ModelBundleSpec(id: "t", repo: repo, commit: commit, files: [.init(path: path, bytes: declared ?? Int64(d.count), sha256: SHA256Probe.hex(d))], folder: "t", license: "x", credit: "x", copies: copies)
+    }
+
+    // SF5: served text never reaches a force-unwrapped URL: a repository or path that cannot be a URL is refused, and the rest is percent-encoded.
+    func testAServedRepositoryOrPathThatIsNotAnAddressIsRefusedNotTrapped() async throws {
+        let (store, root) = tempStore("url"); defer { try? FileManager.default.removeItem(at: root) }
+        for repo in ["a%b/c", "a b/c", "../x", "x", "x/y/z", "x/y?z=1", "x/y#f", ""] {
+            let b = spec(Data("d".utf8), repo: repo)
+            XCTAssertFalse(b.isWellFormed, "repository \(repo.debugDescription) was accepted")
+            do { _ = try await store.ensureBundle(b); XCTFail("fetched from \(repo.debugDescription)") } catch {}
+            let entry = ModelListEntry(id: "t", job: "transcriber", label: "", repository: repo, revision: Self.commit, files: [.init(path: "a.bin", bytes: 1, sha256: String(repeating: "a", count: 64))], license: "", credit: nil, recommendedFor: [], rank: 1)
+            XCTAssertTrue(try ModelList.decode(ModelList(version: 1, models: [entry]).encoded()).models.isEmpty, "the list kept repository \(repo.debugDescription)")
+        }
+        for path in ["50%.bin", "a b.bin", "é.bin", "a?b", "a#b"] {
+            let b = spec(Data("d".utf8), path: path)
+            XCTAssertEqual(b.url(for: b.files[0]).host, "huggingface.co", "\(path.debugDescription)")
+            XCTAssertFalse(b.url(for: b.files[0]).absoluteString.contains(path) && path.contains("%"), "the percent sign is escaped")
+            XCTAssertTrue(b.url(for: b.files[0]).path.hasPrefix("/x/y/resolve/"))
+        }
+        XCTAssertFalse(spec(Data("d".utf8), commit: "main").isWellFormed, "the commit is a 40-digit hash")
+    }
+
+    // SF6: served sizes are bounded and added without overflow; a file is also checked against its size once its digest matches.
+    func testServedSizesAreBoundedAndTheSizeIsCheckedAfterTheDigest() async throws {
+        let big = ModelBundleSpec(id: "t", repo: "x/y", commit: Self.commit, files: [.init(path: "a", bytes: Int64.max / 2 + 1, sha256: String(repeating: "a", count: 64)), .init(path: "b", bytes: Int64.max / 2 + 1, sha256: String(repeating: "b", count: 64))], folder: "t", license: "", credit: "")
+        XCTAssertEqual(big.totalBytes, Int64.max, "an overflowing sum saturates, it does not trap")
+        XCTAssertFalse(big.isWellFormed)
+        let (store, root) = tempStore("size"); defer { try? FileManager.default.removeItem(at: root) }
+        do { _ = try await store.ensureBundle(big); XCTFail("fetched a nine-exabyte model") } catch {}
+        let sha = String(repeating: "a", count: 64)
+        let hugeFile = ModelListEntry(id: "t", job: "transcriber", label: "", repository: "x/y", revision: Self.commit, files: [.init(path: "a", bytes: ModelBundleSpec.maxFileBytes + 1, sha256: sha)], license: "", credit: nil, recommendedFor: [], rank: 1)
+        let manyFiles = ModelListEntry(id: "t", job: "transcriber", label: "", repository: "x/y", revision: Self.commit, files: (0...ModelBundleSpec.maxFiles).map { .init(path: "f\($0)", bytes: 1, sha256: sha) }, license: "", credit: nil, recommendedFor: [], rank: 1)
+        let overflow = ModelListEntry(id: "t", job: "transcriber", label: "", repository: "x/y", revision: Self.commit, files: [.init(path: "a", bytes: Int64.max / 2 + 1, sha256: sha), .init(path: "b", bytes: Int64.max / 2 + 1, sha256: sha)], license: "", credit: nil, recommendedFor: [], rank: 1)
+        for e in [hugeFile, manyFiles, overflow] { XCTAssertTrue(try ModelList.decode(ModelList(version: 1, models: [e]).encoded()).models.isEmpty) }
+        // The digest of what is served matches, but the list said another size: refused, and the folder is not "present".
+        let served = Data("thirteen bytes".utf8)
+        for declared in [Int64(served.count) + 7, Int64(3)] {
+            let b = spec(served, declared: declared)
+            StubURLProtocol.responses = [b.url(for: b.files[0]): served]
+            do { _ = try await store.ensureBundle(b); XCTFail("declared \(declared) bytes, served \(served.count), accepted") } catch {}
+            let present = await store.bundleDirectoryIfPresent(b)
+            XCTAssertNil(present)
+        }
+    }
+
+    // SF7: the folder records which pin it holds; a pin bump with the same sizes, or an interrupted replace, is not "present".
+    func testTheFolderRecordsItsPin() async throws {
+        let (store, root) = tempStore("pin"); defer { try? FileManager.default.removeItem(at: root) }
+        let v1 = Data("aaaa".utf8), v2 = Data("bbbb".utf8)                           // same size, different bytes
+        let b1 = spec(v1, copies: [["a", "acopy"]]), b2 = spec(v2, copies: [["a", "acopy"]])
+        StubURLProtocol.responses = [b1.url(for: b1.files[0]): v1]
+        let dir = try await store.ensureBundle(b1)
+        let present = await store.bundleDirectoryIfPresent(b1)
+        XCTAssertEqual(present, dir)
+        let bumped = await store.bundleDirectoryIfPresent(b2)
+        XCTAssertNil(bumped, "the folder holds the old pin; its file sizes are the same")
+        var newCommit = b1; newCommit.commit = String(repeating: "b", count: 40)
+        let moved = await store.bundleDirectoryIfPresent(newCommit)
+        XCTAssertNil(moved, "a new commit is a new pin even when the digests did not change")
+        // A replace that stops before it finishes leaves no record: not present, and the next ensure completes it.
+        StubURLProtocol.responses = [:]
+        do { _ = try await store.ensureBundle(b2); XCTFail("served nothing") } catch {}
+        let interrupted = await store.bundleDirectoryIfPresent(b2)
+        XCTAssertNil(interrupted)
+        let oldToo = await store.bundleDirectoryIfPresent(b1)
+        XCTAssertNil(oldToo, "the record of the old pin was dropped when the replace began")
+        StubURLProtocol.responses = [b2.url(for: b2.files[0]): v2]
+        _ = try await store.ensureBundle(b2)
+        let done = await store.bundleDirectoryIfPresent(b2)
+        XCTAssertEqual(done, dir)
+        XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("acopy/w.bin")), v2)
+    }
+
+    // Review note: the path rule lives in `ensure` and `register`, not only at the bundle boundary.
+    func testAStoredFileNameThatLeavesTheRootIsRefused() async throws {
+        let (store, root) = tempStore("name"); defer { try? FileManager.default.removeItem(at: root) }
+        let d = Data("x".utf8)
+        for name in ["../escape.bin", "/abs.bin", "a/../../b", "a\\b"] {
+            let m = ModelSpec(id: "m-\(name)", url: URL(string: "https://huggingface.co/x/y/resolve/\(Self.commit)/a")!, sha256: SHA256Probe.hex(d), bytes: 1, fileName: name)
+            StubURLProtocol.responses = [m.url: d]
+            await store.register(m)
+            do { _ = try await store.ensure(m.id); XCTFail("wrote \(name)") } catch {}
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.deletingLastPathComponent().appendingPathComponent("escape.bin").path))
+    }
+
     // S5 (review): the one-slot claim, counted: two callers at once make the model once.
     func testTwoCallersAtOnceMakeTheModelOnce() async throws {
-        let slot = ModelSlot<Int>("slot-count-test")
+        let (store, root) = tempStore("slot"); defer { try? FileManager.default.removeItem(at: root) }
+        let slot = ModelSlot<Int>("slot-count-test", store: store)
         let makes = Locked<Int>(0)
         let make: @Sendable () async throws -> (Int, @Sendable () async -> Void) = {
             makes.write { $0 += 1 }; try await Task.sleep(nanoseconds: 100_000_000); return (7, {})

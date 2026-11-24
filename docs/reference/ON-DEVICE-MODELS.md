@@ -522,7 +522,7 @@ one exists the credit is carried by the model list, and showing it is an open it
 
 **How the app fetches it.** Through the model store (`ModelStore.ensureBundle`), file by file, resumable, each file checked against its
 SHA-256 before it is moved into place, only from voice setup's fetch after the person has agreed (the lane `onboard-consent` owns the
-prompt). The stage itself never downloads: asked to begin without the whole folder it throws `unavailable`.
+prompt). The stage itself never downloads: asked to begin without the whole folder it throws `unavailable`. A served list is bounded (4 GiB a file, 8 GiB and 256 files a model), its repository, commit, paths and digests are validated before any address is made, and each file's size is checked after its digest. The folder holds a `.pin` record (commit, every file's size and digest, the copies), written after the copies and removed before a fetch begins: without it matching, the folder is not "present".
 
 **What was built.** `FluidSpeechMiniTranscriber` (stage `fluid-speech-mini`, `AutoradioModels/FluidSpeechMini.swift`): ported from Mike's
 file, keeping its behaviour: the model is warm (it runs once on a second of silence when it loads, because Core ML specialises for the Neural

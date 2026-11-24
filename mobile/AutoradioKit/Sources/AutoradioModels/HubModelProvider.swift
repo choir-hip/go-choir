@@ -69,7 +69,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         for companion in ListenerPipeline.companions(of: id) where !Voices.readiness.isReady(model: companion) {
             try await fetch(companion, role: role, onBytes: { onBytes(own + $0) })
         }
-        if id == "fluid-speech-mini" || id == "parakeet-tdt-0.6b-v2" { Voices.readiness.markReady(model: id) }
+        if ListenerPipeline.isBatchRecogniser(id) { Voices.readiness.markReady(model: id) }       // the batch recognisers above, now that their companions are in
     }
 
     static func transcriberStage(_ id: String) -> Transcriber {

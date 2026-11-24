@@ -38,7 +38,15 @@ public struct ModelBundleSpec: Codable, Sendable {
         self.id = id; self.repo = repo; self.commit = commit; self.files = files; self.folder = folder; self.license = license
         self.credit = credit; self.copies = copies
     }
-    public var totalBytes: Int64 { files.reduce(0) { $0 + $1.bytes } }
+    /// What a served list may ask a phone to fetch: no file over 4 GiB, no model over 8 GiB, no more than 256 files. The sum saturates instead of trapping.
+    public static let maxFileBytes: Int64 = 4 << 30, maxModelBytes: Int64 = 8 << 30, maxFiles = 256
+    public var totalBytes: Int64 { files.reduce(0) { let (n, o) = $0.addingReportingOverflow($1.bytes); return o ? Int64.max : n } }
+    /// `owner/name` of a Hugging Face repository: letters, digits, dot, dash and underscore, no `.` or `..` part.
+    public static func isValidRepository(_ r: String) -> Bool {
+        let parts = r.split(separator: "/", omittingEmptySubsequences: false)
+        return parts.count == 2 && parts.allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." && $0.unicodeScalars.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0) || "._-".unicodeScalars.contains($0)) } }
+    }
+    static func isHex(_ s: String, _ n: Int) -> Bool { s.count == n && s.allSatisfy { $0.isASCII && $0.isHexDigit && !$0.isUppercase } }
     /// A path from a list a server serves must stay inside the model's own folder: relative, no empty, `.` or `..` component, no backslash or NUL.
     public static func isSafeRelativePath(_ p: String) -> Bool {
         guard !p.isEmpty, !p.hasPrefix("/"), !p.contains("\\"), !p.unicodeScalars.contains("\0") else { return false }
@@ -49,7 +57,21 @@ public struct ModelBundleSpec: Codable, Sendable {
         Self.isSafeRelativePath(folder) && files.allSatisfy { Self.isSafeRelativePath($0.path) }
             && copies.allSatisfy { $0.count == 2 && Self.isSafeRelativePath($0[0]) && Self.isSafeRelativePath($0[1]) }
     }
-    public func url(for f: File) -> URL { URL(string: "https://huggingface.co/\(repo)/resolve/\(commit)/\(f.path)")! }
+    /// Everything the store needs to be able to fetch this model without trapping or leaving its folder: paths, repository, commit, digests and sizes.
+    public var isWellFormed: Bool {
+        pathsStayInside && Self.isValidRepository(repo) && Self.isHex(commit, 40) && files.count <= Self.maxFiles
+            && files.allSatisfy { $0.bytes > 0 && $0.bytes <= Self.maxFileBytes && Self.isHex($0.sha256, 64) } && totalBytes <= Self.maxModelBytes
+    }
+    /// The address of a file. The path is percent-encoded here, so no served text can make the address invalid.
+    public func url(for f: File) -> URL {
+        let path = f.path.split(separator: "/", omittingEmptySubsequences: false).map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)?.replacingOccurrences(of: "%2F", with: "/") ?? "" }.joined(separator: "/")
+        return URL(string: "https://huggingface.co/\(repo)/resolve/\(commit)/\(path)") ?? URL(string: "https://huggingface.co/")!   // refused earlier by `isWellFormed`
+    }
+    /// What the folder on the phone must record to be this model: the commit and every file's path, size and digest, and the copies.
+    var pinIdentity: String {
+        let lines = [commit] + files.map { "\($0.path) \($0.bytes) \($0.sha256)" } + copies.map { $0.joined(separator: ">") }
+        return SHA256.hash(data: Data(lines.joined(separator: "\n").utf8)).map { String(format: "%02x", $0) }.joined()
+    }
     /// The id the store registers a file under.
     func fileID(_ f: File) -> String { id + "/" + f.path }
 }
@@ -122,15 +144,19 @@ public actor ModelStore {
         let size = ((try? FileManager.default.attributesOfItem(atPath: final.path)[.size]) as? NSNumber)?.int64Value ?? -1
         return size == s.bytes ? final : nil
     }
-    public func register(_ s: ModelSpec) { specs[s.id] = s }
+    /// A spec whose file name leaves the store root is never kept.
+    public func register(_ s: ModelSpec) { if ModelBundleSpec.isSafeRelativePath(s.fileName) { specs[s.id] = s } }
 
     // MARK: Folder models (one repository, many files)
 
     /// The folder of a bundle model if every file is on the phone at its size and the copies are made. Never fetches.
+    static let pinFile = ".pin"
     public func bundleDirectoryIfPresent(_ b: ModelBundleSpec) -> URL? {
-        guard b.pathsStayInside else { return nil }
+        guard b.isWellFormed else { return nil }
         let dir = root.appendingPathComponent(b.folder, isDirectory: true)
         let fm = FileManager.default
+        // The folder says which pin it holds (written last, removed first): a folder of another pin, or one left half replaced, is not this model.
+        guard (try? String(contentsOf: dir.appendingPathComponent(Self.pinFile), encoding: .utf8)) == b.pinIdentity else { return nil }
         for f in b.files {
             let size = ((try? fm.attributesOfItem(atPath: dir.appendingPathComponent(f.path).path)[.size]) as? NSNumber)?.int64Value ?? -1
             if size != f.bytes { return nil }
@@ -142,9 +168,11 @@ public actor ModelStore {
     /// Fetch (or resume) every file of the bundle, each checked against its SHA-256, then make the copies. Called only after the person
     /// has agreed to the download (voice setup's consent); nothing else in the app calls it. `progress` receives bytes of the whole folder.
     public func ensureBundle(_ b: ModelBundleSpec, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
-        guard b.pathsStayInside else { throw LabError.badInput("model \(b.id) names a path outside its own folder") }
+        guard b.isWellFormed else { throw LabError.badInput("model \(b.id) names a path, a repository, a size or a digest that this phone will not fetch") }
         let dir = root.appendingPathComponent(b.folder, isDirectory: true)
         let fm = FileManager.default
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? fm.removeItem(at: dir.appendingPathComponent(Self.pinFile))          // from here until the copies are made the folder is not this model
         var before: Int64 = 0
         for f in b.files {
             let spec = ModelSpec(id: b.fileID(f), url: b.url(for: f), sha256: f.sha256, bytes: f.bytes, fileName: b.folder + "/" + f.path)
@@ -161,6 +189,7 @@ public actor ModelStore {
             if fm.fileExists(atPath: to.path) { try fm.removeItem(at: to) }
             try fm.copyItem(at: from, to: to)
         }
+        try Data(b.pinIdentity.utf8).write(to: dir.appendingPathComponent(Self.pinFile), options: .atomic)
         return dir
     }
 
@@ -182,14 +211,15 @@ public actor ModelStore {
             if managed[id] != nil { throw LabError.badInput("model \(id) is fetched by its own library, not by the store") }
             throw LabError.badInput("model \(id) not registered")
         }
+        guard ModelBundleSpec.isSafeRelativePath(s.fileName) else { throw LabError.badInput("model \(id) names a file outside the store") }
         let final = root.appendingPathComponent(s.fileName)
-        if FileManager.default.fileExists(atPath: final.path), try sha(final) == s.sha256.lowercased() { return final }
+        if FileManager.default.fileExists(atPath: final.path), try sha(final) == s.sha256.lowercased(), size(final) == s.bytes { return final }
         let part = final.appendingPathExtension("part")
         var have = ((try? FileManager.default.attributesOfItem(atPath: part.path)[.size]) as? NSNumber)?.int64Value ?? 0
         // WAYS THIS CAN FAIL (round 3): the partial file is already the whole file (a Range request past the end is HTTP 416 on every
         // retry): check it and move it into place, or drop it and start over. The server may also answer 416 for a smaller partial.
         if have > 0, have >= s.bytes {
-            if (try? sha(part)) == s.sha256.lowercased() {
+            if (try? sha(part)) == s.sha256.lowercased(), size(part) == s.bytes {
                 try? FileManager.default.removeItem(at: final)
                 try FileManager.default.moveItem(at: part, to: final)
                 return final
@@ -216,14 +246,19 @@ public actor ModelStore {
         var buf = Data()
         for try await b in bytes {
             buf.append(b)
+            if done + Int64(buf.count) > s.bytes { try? h.close(); try? FileManager.default.removeItem(at: part); throw LabError.badInput("\(id) is larger than the \(s.bytes) bytes its list says") }
             if buf.count >= 1 << 20 { try h.write(contentsOf: buf); done += Int64(buf.count); buf.removeAll(keepingCapacity: true); progress?(done, s.bytes) }
         }
         try h.write(contentsOf: buf); try h.close()
         guard try sha(part) == s.sha256.lowercased() else { try? FileManager.default.removeItem(at: part); throw LabError.badInput("sha256 mismatch for \(id)") }
+        // The digest matched: the size the list gave must be the size of what was served too, or the folder would never look whole.
+        guard size(part) == s.bytes else { try? FileManager.default.removeItem(at: part); throw LabError.badInput("size mismatch for \(id): the list says \(s.bytes) bytes") }
         try? FileManager.default.removeItem(at: final)
         try FileManager.default.moveItem(at: part, to: final)
         return final
     }
+
+    func size(_ url: URL) -> Int64 { ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? NSNumber)?.int64Value ?? -1 }
 
     func sha(_ url: URL) throws -> String {
         let f = try FileHandle(forReadingFrom: url); defer { try? f.close() }

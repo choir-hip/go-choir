@@ -39,7 +39,9 @@ final class ModelSlot<T>: @unchecked Sendable {
     private var value: T?
     private var loading: Task<T, Error>?
     private var cleanup: (@Sendable () async -> Void)?
-    init(_ id: String) { self.id = id }
+    /// The store that records the load; the app's own unless a test gives it a temporary one.
+    private let store: ModelStore?
+    init(_ id: String, store: ModelStore? = nil) { self.id = id; self.store = store }
 
     func get(_ make: @escaping @Sendable () async throws -> (T, @Sendable () async -> Void)) async throws -> T {
         lock.lock()
@@ -54,7 +56,7 @@ final class ModelSlot<T>: @unchecked Sendable {
             print("AUTORADIO model slot load begin id=\(id)")
             let t0 = Date()
             defer { print("AUTORADIO model slot load end id=\(id) ms=\(Int(Date().timeIntervalSince(t0) * 1000))") }
-            _ = try await ModelHub.store.measuredLoad(id) {
+            _ = try await (store ?? ModelHub.store).measuredLoad(id) {
                 let (v, c) = try await make()
                 made = v
                 lock.lock(); self.value = v; self.cleanup = c; lock.unlock()

@@ -265,6 +265,9 @@ public actor TurnEngine {
         if phase == .acknowledging || phase == .holding || phase == .revised {
             env.log.emit(.turnCancelled)
             await interruptPipeline()
+            // The cancelled pipeline never reaches its own tail, so the hands-free answer ends here (it would otherwise stay "being answered",
+            // and a listener change waiting for a quiet moment would never find one).
+            if let id = hf.answerTurnID { await hfAnswerEnded(turnID: id) }
             await restoreProgramme(reason: "turn cancelled")
             return
         }
