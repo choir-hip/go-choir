@@ -38,6 +38,14 @@ Counted 2026-11-23: 520 lane branches on the remote; 468 are landed, 13
 superseded, 11 evidence only, 26 are distinct live work (the rows above and
 the first table's). Seven designs exist only on lanes.
 
+## 2026-11-24
+
+### Phone: the listening models come from the model list; Fluid Speech Mini is the recogniser (`lane/voice-default`, orange)
+- **What:** (1) a recognition stage for Fluid Speech Mini (stage `fluid-speech-mini`, ported from Mike's `FluidSpeechMini.swift`: warm, one pass over the speech-bounded audio), its model-list entry (repository, pinned commit, every file's size and SHA-256, CC BY 4.0 with its credit) and a store that fetches a folder of files, each checked against its digest. (2) a test that runs it on the fixture speech through Core ML on the Mac. (3) the listener configuration is no longer a fixed list: speech detection, live words and the final transcript are chosen from the model list (`Voice/ListenerPipeline`): Silero, Parakeet EOU for live words and Fluid Speech Mini for the transcript when their models are on the phone and ready, the energy detector and Apple's recogniser until then. A better model is a new row in `CandidateTable`.
+- **Why:** owner, 2026-11-24: Apple's recogniser "isnt good enough"; "we are only using that currently because of a coding bug. (we shuold be using fluid speech mini etc)"; "we will keep updating the models as better ones come".
+- **Proof:** Swift package tests on the Mac (numbers in `docs/reference/ON-DEVICE-MODELS.md` section 11, marked Mac, not phone). **Not proved on a phone**: the list the lead must check is in the lane's report.
+- **Replaced:** the first-commit fixed list (energy detector, Apple's recogniser) in `ChoirApp.listenerConfiguration`; voice setup's transcriber ladder now starts at Fluid Speech Mini with its live words (one row, two downloads). **Undo:** revert the commits; nothing is migrated.
+
 ## 2026-11-23
 
 ### A voice ask searches the paper (`2d44744e0`, `95ce70334`, `42fa0d9f4`, orange)
