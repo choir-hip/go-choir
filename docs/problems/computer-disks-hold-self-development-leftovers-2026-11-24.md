@@ -318,3 +318,110 @@ from the proxy's generic route, which wakes a hibernated computer for any
 bearer request; the detail read now answers 409 instead. A cookie session
 still wakes. The report runs inside the guest, so a hibernated computer cannot
 be read without waking it, only left unread.
+
+## Sweep review, round 2, 2026-11-24: the apply is one locked act, not a point-in-time re-proof per computer (lane `sweep-fix`; black)
+
+Class: black. The sweep deletes tape segments, loose tape files, snapshot
+chunks and key escrow of removed computers; none of it can be restored from the
+host once the archive is skipped (`no_archive`) or the escrow row is shredded.
+The owner's ruling ("yes, delete tape of deleted computer", 2026-11-24) names
+five computers; it is not a ruling for any other. The owner sees the dry-run
+list and nothing runs without them.
+
+### Problem
+
+Two review seats (an `agy` Gemini 4 Hydrogen run and DeepSeek v4.1 flash) sent
+the first build back for the same reasons, found independently:
+
+1. **Shared content.** A loose payload is content-addressed across computers.
+   The dry run lists it once, under the first named computer. The apply deletes
+   computer by computer, re-proving each one. If the second computer then fails
+   its re-proof (gained an owner, a pending operation, a cap) the first
+   computer's deletion has already removed a payload the skipped one references.
+2. **A point-in-time proof outside the lock.** `reproveDestroyed` and the chunk
+   proof ran before the tombstone was written under `tombstones.gate`, and
+   `reproveDestroyed` never read the pending lifecycle operations. A restore
+   that prepared an operation, or a snapshot root registered, in that window
+   was not seen; the unlink of the old chunks then removed its base.
+3. **Errors that skip instead of stop.** A chunk-proof error skipped one
+   computer and the loop went on to the next; a file refreshed after the dry run
+   ("kept_refreshed") left the computer counted as deleted, its escrow shredded.
+4. **A tombstoned, unpurged computer's references were not read** (the walk ran
+   without event reads), so a living-but-unreadable reference was missed.
+
+### Structural choice
+
+Patching each finding leaves the shape that produced them: a per-computer loop
+that proves, deletes, and may skip. The frame changes to **all or nothing under
+the one gate**:
+
+- **One lock.** `tombstones.gate` is the lock that every path that adds a
+  reference already takes shared: the head CAS (events and their payload refs),
+  `RecordVerifiedSnapshotRoot`. It now also guards `PrepareLifecycleControl`
+  (restore, resume, replace begin there) and the tombstone check is made under
+  it. The apply takes it exclusive for the whole prove-and-tombstone phase and
+  again around each batch of unlinks. Ownership creation lives in vmctl, another
+  process and not behind this gate; it is covered because a restore reaches the
+  host through `PrepareLifecycleControl` first, and because the ownership lookup
+  is repeated inside the locked phase. A path that creates an owner for a
+  removed id with no lifecycle step is not closed by this and is named below.
+- **Phase one, under the lock, deletes nothing.** The delta of events appended
+  since the dry run is read; every computer in the manifest is re-proved
+  (registry, route, pending operations, head, quiet window, cross-reference);
+  the chunk digests of all of them are checked against every computer *outside*
+  the named set; the caps are checked against the manifest's totals; then every
+  tombstone is written and each head re-read. Any failure drops the tombstones
+  this run wrote and fails the whole run with nothing deleted. No computer is
+  ever skipped while another is deleted, so a shared object is never deleted
+  for one sharer and kept for another. Tombstoning every named computer first
+  also means no named computer can gain a reference afterwards (every
+  reference-adding path refuses a tombstone).
+- **Shared objects.** An object is listed only when no computer outside the
+  named set references it (the dry run's live set: living, skipped, unnamed
+  destroyed, tombstoned, and any computer whose references cannot be read
+  counts as referencing everything, which refuses the sweep). At apply the same
+  set is rebuilt from the delta under the lock. Every named computer is deleted
+  together or none is.
+- **Phase two** deletes in batches, each under the gate. Any outcome other than
+  deleted or already gone (a refreshed file, an unlink error, a directory or
+  rows failure) stops the run before the next delete and fails it. A tombstone
+  is moved to `deleting` before the first unlink, so a crash leaves a tombstone
+  that `removeTapeTombstone` will not drop. The receipt is written on failure
+  too and records exactly what was deleted; the log has one line per file.
+- **Tombstoned, unpurged, not named:** read as a living computer (events read,
+  unreadable events refuse the sweep). A cached reference chunk that was read
+  with events counts; one that was not does not.
+
+### Tests (each seen failing on the head before the change)
+
+`internal/platform/tape_sweep_whole_test.go`: a shared payload with a second
+named computer that fails its re-proof deletes nothing; a pending operation
+added after the dry run refuses the apply; a lifecycle operation prepared after
+the tombstones is refused; a chunk-proof error fails the whole run and a chunkless
+sibling is untouched; a file refreshed after the dry run fails the run and does
+not mark the computer deleted or shred its escrow; a tombstoned, unpurged
+computer's references are read (readable: kept; unreadable: refused).
+
+### Not closed by this
+
+- Ownership creation for a removed id that does not pass through
+  `PrepareLifecycleControl` (vmctl creating a record directly). The apply reads
+  the ownership record inside the locked phase, but vmctl is not behind the
+  gate; the window is the length of the locked phase's lookup to the first
+  unlink.
+- The unnamed destroyed apply still exists (seat 2 asked for it to be refused).
+  It now has the same all-or-nothing behavior; the route still accepts it.
+- Removal has no durable removal record (vmctl deletes the ownership row);
+  "removed" is inferred from absence plus the named list.
+
+### Proposed Security-Effect sentences (for the lead; no trailers written)
+
+- `internal/platform/lifecycle_control.go`: "PrepareLifecycleControl now
+  refuses a computer whose tape is tombstoned (archived or deleted) and takes
+  the tombstone gate shared, so a restore or resume cannot be prepared against
+  a computer the sweep is deleting; no guest-facing surface changes."
+- `internal/platform/tape_sweep_apply.go`, `tape_sweep.go`, `tape_tombstone.go`
+  (host-side operator sweep, if the gate lists them): "The destroyed-computer
+  apply deletes nothing unless every named computer passes one re-proof under
+  the tombstone gate; any later failure stops it; a tombstone in status
+  deleting is never removed; no guest-visible authority is added."
