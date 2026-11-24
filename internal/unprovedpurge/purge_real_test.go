@@ -35,6 +35,9 @@ func realServices(t *testing.T) []Service {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ms.Close() })
+	if err := ms.EnsureSchema(&maild.Config{DBPath: filepath.Join(dir, "mail.db"), StorageRoot: filepath.Join(dir, "mailroot"), PrimaryDomain: "choir.news", RootOwnerID: "root"}); err != nil {
+		t.Fatalf("maild schema: %v", err)
+	}
 	cdsn, gdsn := dbxtest.PostgresDSN(t), dbxtest.PostgresDSN(t)
 	ps, err := platform.OpenStore(ctx, cdsn, gdsn)
 	if err != nil {
