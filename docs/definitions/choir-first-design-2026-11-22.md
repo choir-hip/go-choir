@@ -159,6 +159,10 @@ boundaries:
     said: digest only goes to capture path. should be a different context engineering path for  research and other desks which have a repl. the capture path is just a single model call that outputs text, right? or should we make a whole new desk for it? or just reuse research for it?
     'on': '2026-11-24'
     reading: 'lead''s recommendation, not a ruling: a single model call run by the graph custodian host service, no desk and not research, because no capture reaches a desk (ruled) and research has read-only world-evidence authority'
+  - decision: 'the capture path becomes a desk eventually, on the RLM pattern: preprocessing first, then captures sent to agents (sub-calls fanned out appropriately) with context engineering that is learned over time. Passing all captures flat into one model call is not the design. This overrides the lead''s recommendation of a single host-run call with no desk'
+    said: hmm, i think we will make it a desk eventually. using rlm pattern correctly we should be able to fan out appropriately. just passing in all captures to a model feels wrong to me. we should be able to do some preprocessing and then send them to agents with ongoing learned context engineering
+    'on': '2026-11-24'
+    reading: 'lead''s reading: the captures are data in the desk''s REPL, not text in its prompt; code groups them (by vector neighbourhood and shared subjects); each group goes to a sub-call with the context chosen for it (the slice of the paper about that group, not one global digest); which context to attach to which kind of group is what is learned, by scoring. The parent never reads a capture, so the earlier ruling that no single capture reaches a desk is read as: no desk session is spent per capture'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
