@@ -12,7 +12,7 @@
 // Logs carry ids and counts only: never a sender, a subject, an address or a word of a message.
 
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, accountGeneration, SignedOutError } from './api.ts';
+import { authedJSON, accountGeneration, keyOwner, SignedOutError } from './api.ts';
 import * as M from './mail-model.ts';
 import { sanitized } from './mail-sanitize.ts';
 import * as C from './mail-store.ts';
@@ -56,7 +56,14 @@ let clock = 0;
 let started = false;
 
 /** Forget what this session holds. */
-export function forget(): void { kept.clear(); autoRead.clear(); drafts = []; savedDrafts.clear(); alias = null; clock = 0; started = false; }
+/** Who the memory below belongs to: the key's digest, read fresh at the entry of every source. A key that changed with no sign-out (a re-sign-in after a refusal) is another account: its memory starts empty. */
+let memoryOf: string | null | undefined;
+async function identity(): Promise<void> {
+  const o = await keyOwner();
+  if (memoryOf !== undefined && o !== memoryOf) forget();
+  memoryOf = o;
+}
+export function forget(): void { memoryOf = undefined;  kept.clear(); autoRead.clear(); drafts = []; savedDrafts.clear(); alias = null; clock = 0; started = false; }
 
 /** A source starts under one account generation (api.ts); a sign-out moves it. Everything a source does with a reply after the await (memory, the
  * files) checks it first, so a reply that arrived just before the sign-out cannot write the old account's mail into the wiped stores (review 2026-11-19). */
@@ -122,6 +129,7 @@ async function ensureKept(env: C.Env, folder: string): Promise<Held | null> {
 
 /** The last list this session fetched, or the phone's saved one, answered at once: a return visit shows it and refreshes underneath. */
 export async function mailFrame(address: string, env: C.Env): Promise<BoxView> {
+  await identity();
   const v = frame(address);
   if (!address.startsWith('mailbox:') || v.folder === 'drafts') { v.status = 'frame'; return v; }
   const h = await ensureKept(env, v.folder);
@@ -140,6 +148,7 @@ function savedWords(copyAt: number): string {
 }
 
 export async function mailBox(address: string, env: C.Env): Promise<BoxView> {
+  await identity();
   if (!address.startsWith('mailbox:')) { const i = emptyBox(); i.status = 'idle'; return i; }
   const v = frame(address);
   env = stamped(env);
@@ -285,6 +294,7 @@ async function loadMessage(address: string, wantOriginal: boolean, env: C.Env): 
 }
 
 export async function mailMessage(address: string, wantOriginal: boolean, env: C.Env): Promise<MessageView> {
+  await identity();
   return (await loadMessage(address, wantOriginal, env)).view;
 }
 
@@ -304,6 +314,7 @@ async function aliasAddress(): Promise<string> {
 }
 
 export async function mailCompose(address: string, env: C.Env): Promise<ComposeView> {
+  await identity();
   const v = emptyCompose();
   if (!address.startsWith('mail:')) { v.status = 'idle'; return v; }
   const rest = M.rest(address);
@@ -330,6 +341,7 @@ export async function mailCompose(address: string, env: C.Env): Promise<ComposeV
 }
 
 export async function mailSaveDraft(address: string, to: string, subject: string, body: string): Promise<ComposeView> {
+  await identity();
   const v = emptyCompose();
   v.forAddress = address; v.toLine = to; v.subject = subject; v.body = body;
   const rest = M.rest(address);
@@ -358,6 +370,7 @@ export async function mailSaveDraft(address: string, to: string, subject: string
 /** Sending is an owner act the server does not accept from a key (POST /api/email/drafts/{id}/send answers 403, "owner session required"), so it is never called:
  * the phone's way is the approval email, and the listener sends from the page it links to. */
 export async function mailApprovalEmail(address: string, draft: string): Promise<ComposeView> {
+  await identity();
   const v = emptyCompose();
   v.forAddress = address; v.draftId = draft;
   try {
@@ -378,6 +391,7 @@ export function mailAsk(address: string, question: string): Ack {
 }
 
 export async function mailMarkUnread(address: string): Promise<Ack> {
+  await identity();
   const ok = await setRead(M.rest(address), false);
   return { status: ok ? 'ok' : 'error', message: ok ? '' : 'Could not mark it unread.' };
 }
@@ -388,6 +402,7 @@ export async function mailMarkUnread(address: string): Promise<Ack> {
  * walked, SYNC_BODIES bodies an answer. Counts only; a failure ends the answer and the next open goes on. Drafts live on the computer and are not copied (a draft is
  * one request). */
 export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
+  await identity();
   const out: SyncView = { status: '', held: 0, fetched: 0, note: '' };
   if (!address.startsWith('mailbox:')) { out.status = 'idle'; return out; }
   env = stamped(env);
@@ -395,17 +410,20 @@ export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
   if (!M.FOLDERS.some((f) => f.name === folder) || folder === 'drafts' || !env.storage || !(await C.stores(env))) { out.status = 'idle'; return out; }      // storing blocked to be thrown away
   const h = kept.get(folder) ?? (await ensureKept(env, folder));
   if (!h) { out.status = 'idle'; return out; }
-  const state = await C.loadState(env);
+  const F = await C.Files.open(env);
+  if (!F) { out.status = 'idle'; return out; }
+  await F.purgeForeign();                                 // another key's files, or an earlier format, are not this account's: gone before the walk
+  const state = await F.loadState();
   let budget = SYNC_BODIES;
   let page = h.rows, nextCursor = h.next, first = true, stopped = false;
   try {
     for (;;) {
       for (const r of page) {
-        if (r.id === '' || (await C.holds(env, r.id))) continue;
+        if (r.id === '' || (await F.holds(r.id))) continue;
         if (budget === 0) { stopped = true; break; }
         const d = M.parseDetail(await call('/api/email/messages/' + M.segment(r.id), {}));
         live(env);
-        await C.saveMessage(env, { id: r.id, folder, summary: d.summary, text: d.text, to: d.to, cc: d.cc, replyTo: d.replyTo, attachments: d.attachments, savedAt: clock });
+        await F.saveMessage({ id: r.id, folder, summary: d.summary, text: d.text, to: d.to, cc: d.cc, replyTo: d.replyTo, attachments: d.attachments, savedAt: clock });
         budget -= 1; out.fetched += 1;
         await yieldTurn();
       }
@@ -421,10 +439,10 @@ export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
     }
     out.status = stopped ? 'more' : 'done';
     state.syncedAt[folder] = clock;
-    await C.saveState(env, state);
-    if (out.fetched > 0) await C.trim(env);                 // the copy only grows when a body was saved: the files are not walked on a sync that saved none
+    await F.saveState(state);
+    if (out.fetched > 0) await F.trim();                 // the copy only grows when a body was saved: the files are not walked on a sync that saved none
   } catch (e) { out.status = M.words(e).status === 'offline' ? 'offline' : 'error'; }
-  try { out.held = (await env.storage.fs.readdir(C.DIR)).filter((n) => n.startsWith('msg-')).length; } catch { out.held = 0; }
+  out.held = await F.count();
   out.note = out.held === 0 ? '' : `${out.held} messages saved on this phone`;
   console.log(`mail: sync ${folder} ${out.status} fetched=${out.fetched} held=${out.held}`);
   return out;

@@ -25,8 +25,11 @@ members Autoradio
   mutation edr as shape TextureEditInfo refreshes edInfo
   // The editor opens on the head the server holds NOW: the field first shows the reader's copy (or the kept text), and the answer of `textureEditOpen` replaces it while the listener has typed nothing.
   mutation edo as shape TextureEditInfo then edOpened
-  state edSeed = ""
-  derive edOpenHead = match edo { case some(a) => (a.address == edFor and a.opened and a.kept == "" ? a.head : ""), case none => "" }
+  // The field is replaced by what the open found only while the listener has typed nothing (`edUntouched`). The answer names its document: another page's answer is not used.
+  state edUntouched = true
+  derive edKeptHere = edInfo.address == topAddr ? edInfo.kept : ""
+  derive edOpenGot = match edo { case some(a) => (a.address == edFor and (a.opened or a.kept != "")), case none => false }
+  derive edOpenText = match edo { case some(a) => (a.address == edFor ? (a.kept != "" ? a.kept : a.head) : ""), case none => "" }
   derive edStatus = edInfo.status
   state edOn = false
   state edFor = ""
@@ -109,8 +112,8 @@ members Autoradio
   action edBegin
     edOn = true
     edFor = topAddr
-    edDraft = edInfo.kept != "" ? edInfo.kept : rdoc.source
-    edSeed = edInfo.kept != "" ? "" : rdoc.source
+    edDraft = edKeptHere != "" ? edKeptHere : rdoc.source
+    edUntouched = true
     send edo = textureEditOpen(topAddr)
     edFormats = ""
     ctlOpen = true
@@ -122,12 +125,13 @@ members Autoradio
     ctlPanel = ""
     send edf = textureFlush(edFor)
   action edOpened
-    if edOn and edOpenHead != "" and edDraft == edSeed
-      edDraft = edOpenHead
-      edSeed = edOpenHead
+    if edOn and edUntouched and edOpenGot
+      edDraft = edOpenText
+  // Every keystroke names what the field showed BEFORE it (an action reads the state as it was at its start): the editor posts over the head only when that was the head's text.
   action edInput(value: string)
+    edUntouched = false
     edDraft = value
-    send edm = textureEdit(edFor, value, edSeed)
+    send edm = textureEdit(edFor, value, edDraft)
   // The pause in typing: 2 s after the last keystroke (the key is the draft, so each keystroke restarts the wait) the text is posted. A source cannot sleep between answers, so the wait is here.
   action edSave
     send edf = textureFlush(edFor)

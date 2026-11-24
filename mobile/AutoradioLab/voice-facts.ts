@@ -31,6 +31,6 @@ export function airAddressOf(e: Entry | undefined): string {
   const a = openAddress(e);
   if (a.startsWith('pub:')) return a;
   const r = e.source?.ref ?? '';
-  if (r.startsWith('texture:')) return r;
+  if (r.startsWith('texture:')) return r.split('@')[0];      // a revision of the document is read in the page the document's own address holds
   return '';
 }

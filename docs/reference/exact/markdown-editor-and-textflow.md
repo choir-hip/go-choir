@@ -441,8 +441,7 @@ kept).
 Under the operating contract's rule of 2026-11-20 ("A page moved to Exact carries
 nothing over from the Swift build"), the design reads no old Swift file: the lane's
 `textureOldPending` native calls and the "old build's unsent edit" case of round one
-are not needed, and `AutoradioModule+TextureEdit.swift` shrinks to the
-background-notification touch at most [inferred from CLAUDE.md].
+are not needed, and `AutoradioModule+TextureEdit.swift` is deleted (2026-11-24) [CLAUDE.md]. The old unsent file is never read.
 
 Why this is simpler: no `ref` versus `base` distinction, no "field lags the head"
 case (the merge result is written to the field in the same step), no unsaved text

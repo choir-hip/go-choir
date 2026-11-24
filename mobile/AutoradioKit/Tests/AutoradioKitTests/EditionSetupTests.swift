@@ -2,7 +2,7 @@ import XCTest
 @testable import AutoradioKit
 
 // The topics, the tree, the saved file and the spoken edits are shared code now (AutoradioLab/edition.test.ts, edition-picks.test.ts). What is tested here is what stayed native:
-// the voice desk's mailbox (the words wait for shared code, its answer is the line said back), the pushed copy of the picks, the old file's read and drop, and the edition writer.
+// the voice desk's mailbox (the words wait for shared code, its answer is the line said back), the pushed copy of the picks, the old file's read and drop.
 final class EditionSetupTests: XCTestCase {
     /// Shared code, on its own timer: takes what was heard and answers each once.
     func sharedCode(line: String, finish: Bool) -> Task<Void, Never> {
@@ -63,68 +63,4 @@ final class EditionSetupTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: f, encoding: .utf8), "{\"topics\":[\"Space\"]}", "left where it is, unread")
     }
 
-    func testTheEditionIsWrittenWithoutANetworkFromTheChoices() async throws {
-        let e = try await LocalEditionWriter().write(topics: ["Space", "Chess"]) { _ in }
-        XCTAssertEqual(e.title, "My edition")
-        XCTAssertEqual(e.lines, ["What I follow", "Space", "Chess"])
-    }
-}
-
-// C1..C4: finishing always ends.
-final class EditionCompletionTests: XCTestCase {
-    struct Throws: EditionWriter { func write(topics: [String], progress: @escaping @Sendable (String) -> Void) async throws -> Edition { throw EditionError.failed("no") } }
-    struct Never: EditionWriter {
-        func write(topics: [String], progress: @escaping @Sendable (String) -> Void) async throws -> Edition {
-            try await Task.sleep(nanoseconds: 60_000_000_000); return LocalEditionWriter.edition(topics: [])
-        }
-    }
-
-    func testSuccess() async {
-        let o = await EditionCompletion.run(topics: ["Space"], writer: LocalEditionWriter()) { _ in }
-        guard case .written(let e) = o else { return XCTFail("\(o)") }
-        XCTAssertEqual(e.lines, ["What I follow", "Space"])
-    }
-
-    func testFailureSaysSoPlainly() async {
-        let o = await EditionCompletion.run(topics: ["Space"], writer: Throws()) { _ in }
-        XCTAssertEqual(o, .failed(EditionCompletion.failedLine))
-        XCTAssertTrue(EditionCompletion.failedLine.contains("topics are saved"))
-    }
-
-    func testAWriterThatNeverReturnsTimesOutAtTheDeadlineAndIsCancelled() async {
-        final class Watching: EditionWriter, @unchecked Sendable {
-            let lock = NSLock(); private var cancelledFlag = false
-            var cancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelledFlag }
-            func write(topics: [String], progress: @escaping @Sendable (String) -> Void) async throws -> Edition {
-                do { try await Task.sleep(nanoseconds: 60_000_000_000) } catch { lock.lock(); cancelledFlag = true; lock.unlock(); throw error }
-                return LocalEditionWriter.edition(topics: [])
-            }
-        }
-        let w = Watching(), t0 = Date()
-        let o = await EditionCompletion.run(topics: [], writer: w, deadline: 0.3) { _ in }
-        XCTAssertEqual(o, .timedOut)
-        XCTAssertLessThan(Date().timeIntervalSince(t0), 5, "it did not wait for the writer")
-        XCTAssertTrue(w.cancelled, "the writer's task was cancelled at the deadline")
-    }
-
-    func testAWriterThatFailsOnceThenSucceedsRecoversOnRetry() async {
-        final class FailOnce: EditionWriter, @unchecked Sendable {
-            let lock = NSLock(); var failed = false
-            func write(topics: [String], progress: @escaping @Sendable (String) -> Void) async throws -> Edition {
-                lock.lock(); let first = !failed; failed = true; lock.unlock()
-                if first { throw EditionError.failed("The desk did not answer.") }
-                return LocalEditionWriter.edition(topics: topics)
-            }
-        }
-        let w = FailOnce()
-        let a = await EditionCompletion.run(topics: ["Film"], writer: w) { _ in }
-        XCTAssertEqual(a, .failed(EditionCompletion.failedLine))
-        let b = await EditionCompletion.run(topics: ["Film"], writer: w) { _ in }
-        guard case .written(let ed) = b else { return XCTFail("\(b)") }
-        XCTAssertEqual(ed.lines, ["What I follow", "Film"], "Retry writes from the same choices")
-    }
-
-    func testContinueAnywayIsTheGeneralEdition() {
-        XCTAssertEqual(EditionCompletion.general().lines, ["What I follow", "The whole paper, until I say otherwise."])
-    }
 }

@@ -76,6 +76,9 @@ const storage = {
 const mtimes = new Map<string, number>();
 let fetchGate: Promise<void> | null = null; const dirs = new Set<string>(); let writeStarted = 0; let writeGate: Promise<void> | null = null; let readdirGate: Promise<void> | null = null;
 const env = (): C.Env => ({ storage });
+import { createHash } from 'node:crypto';
+const hex16 = (id: string): string => createHash('sha256').update(id).digest('hex').slice(0, 32);
+const accessor = async (): Promise<C.Files> => (await C.Files.open(env()))!;
 
 let logs: string[] = [];
 const realLog = console.log;
@@ -406,7 +409,7 @@ describe('P1 to P3 the phone\'s copy', () => {
     const names = [...files.keys()];
     expect(names.length).toBeGreaterThanOrEqual(2);
     expect(names.every((n) => n.startsWith('app:/data/mail/') && n.endsWith('.json'))).toBe(true);
-    expect(JSON.parse(new TextDecoder().decode(files.get(C.rowsFile('inbox'))!)).folder).toBe('inbox');
+    expect(JSON.parse(new TextDecoder().decode(files.get((await accessor()).pathOfRows('inbox'))!)).folder).toBe('inbox');
     const c = await C.loadFolder(env(), 'inbox');
     expect(c!.rows.length).toBe(4);
     expect((await C.loadMessage(env(), 'em_01hz0a'))!.text).toContain('Thursday works for me');
@@ -423,10 +426,10 @@ describe('P1 to P3 the phone\'s copy', () => {
   test('P1 a file that does not parse is ignored and removed; past the limit the oldest go', async () => {
     computer();
     await mail.mailBox('mailbox:inbox', env());
-    const k = C.rowsFile('inbox');
+    const k = (await accessor()).pathOfRows('inbox');
     files.set(k, new TextEncoder().encode('{"folder":"inbox","rows":[')); //a half write
     expect(await C.loadFolder(env(), 'inbox')).toBeNull(); expect(files.has(k)).toBe(false);
-    for (let i = 0; i < 5; i++) { const f = await C.fileFor('m' + i); await C.saveMessage(env(), { id: 'm' + i, folder: 'inbox', summary: sm('m' + i, 's', '2026-11-1' + i + 'T00:00:00Z'), text: 't', to: [], cc: [], replyTo: '', attachments: [], savedAt: 0 }); mtimes.set(f, i); }
+    for (let i = 0; i < 5; i++) { const f = await (await accessor()).pathOfMessage('m' + i); await C.saveMessage(env(), { id: 'm' + i, folder: 'inbox', summary: sm('m' + i, 's', '2026-11-1' + i + 'T00:00:00Z'), text: 't', to: [], cc: [], replyTo: '', attachments: [], savedAt: 0 }); mtimes.set(f, i); }
     expect(await C.trim(env(), 3)).toBe(2);
     expect(await C.holds(env(), 'm0')).toBe(false); expect(await C.holds(env(), 'm1')).toBe(false); expect(await C.holds(env(), 'm4')).toBe(true);
   });
@@ -605,16 +608,16 @@ describe('R4 what is removed and what is kept', () => {
   test('a file that does not parse goes; another record\'s file is not used', async () => {
     computer();
     await mail.mailMessage('mail:em_01hz0a', false, env());
-    const file = await C.fileFor('em_01hz0a');
+    const file = await (await accessor()).pathOfMessage('em_01hz0a');
     expect(files.has(file)).toBe(true);
     expect((await C.loadMessage(env(), 'em_01hz0a'))?.id).toBe('em_01hz0a');
-    const other = await C.fileFor('em_other');
+    const other = await (await accessor()).pathOfMessage('em_other');
     files.set(other, files.get(file)!);                                                                          // a file swapped to another message's name
     expect(await C.loadMessage(env(), 'em_other')).toBeNull();
     files.set(file, new TextEncoder().encode('MS3' + 'x'.repeat(60)));                                          // the earlier sealed format
     expect(await C.loadMessage(env(), 'em_01hz0a')).toBeNull(); expect(files.has(file)).toBe(false);
     await mail.mailBox('mailbox:inbox', env());
-    const rows = C.rowsFile('inbox'); const sent = C.rowsFile('sent');
+    const rows = (await accessor()).pathOfRows('inbox'); const sent = (await accessor()).pathOfRows('sent');
     files.set(sent, files.get(rows)!);                                                                           // the inbox's rows under the sent folder's name
     expect(await C.loadFolder(env(), 'sent')).toBeNull();
   });
@@ -647,8 +650,9 @@ describe('R5 R6 R7', () => {
 describe('R8 restore, budget, words', () => {
   test('the copy is held to a byte budget as well as a file count: the oldest go first', async () => {
     const e = env();
-    for (let i = 0; i < 4; i++) { files.set(`${C.DIR}/msg-${i}.json`, new Uint8Array(1000)); mtimes.set(`${C.DIR}/msg-${i}.json`, i); }
-    expect(await C.trim(e, 100, 2500)).toBe(2); expect([...files.keys()].sort()).toEqual([`${C.DIR}/msg-2.json`, `${C.DIR}/msg-3.json`]);
+    const t = `.${(await accessor()).owner}.json`;
+    for (let i = 0; i < 4; i++) { files.set(`${C.DIR}/msg-${i}${t}`, new Uint8Array(1000)); mtimes.set(`${C.DIR}/msg-${i}${t}`, i); }
+    expect(await C.trim(e, 100, 2500)).toBe(2); expect([...files.keys()].sort()).toEqual([`${C.DIR}/msg-2${t}`, `${C.DIR}/msg-3${t}`]);
   });
   test('the words for 401, 403, 404, 413 and 429 are plain and differ', () => {
     const st = (status: number) => M.words(Object.assign(new Error('x'), { status, name: 'HTTPError' })).message;
@@ -727,5 +731,40 @@ describe('R10 one account\'s mail is never the next account\'s', () => {
     const b = await mail.mailSaveDraft('mail:new', 'a@example.com', 's', 'b');
     expect(calls.filter((c) => c.path === '/api/email/drafts' && c.opts.method === 'POST').length).toBe(2);        // not "already saved"
     expect(b.draftId).toBe('d2');
+  });
+});
+
+describe('R11 the identity is the key, read fresh: one account\'s mail is not the next one\'s, however the key changed', () => {
+  const swapKey = (): void => bindNative({ available: true, later: async (r: { op?: string; account?: string }) => (r.op === 'session' ? { found: true, value: 'another-key-0002-not-real', computerId: 'comp-2' } : r.op === 'keystate' ? { state: 'present' } : { found: true, value: 'another-key-0002-not-real' }) } as never);
+  test('R11a a key replaced WITHOUT a sign-out (a re-sign-in after a refusal): no file, no row in memory, no draft id, no sending address of the first key', async () => {
+    computer((r) => (r.path === '/api/email/drafts' && r.opts.method === 'POST' ? { status: 201, body: { id: `d${calls.filter((c) => c.path === '/api/email/drafts').length}`, to_addresses: ['a@example.com'] } } : undefined));
+    await mail.mailBox('mailbox:inbox', env()); await mail.mailMessage('mail:em_01hz0a', false, env());
+    const first = await mail.mailSaveDraft('mail:new', 'a@example.com', 's', 'b'); expect(first.draftId).toBe('d1');
+    swapKey();                                                                       // no nextGeneration, no forget: the generation did not move
+    expect((await C.loadMessage(env(), 'em_01hz0a'))).toBeNull(); expect(await C.loadFolder(env(), 'inbox')).toBeNull();
+    route = () => 'network';
+    const frame = await mail.mailFrame('mailbox:inbox', env());
+    expect(frame.rows.length).toBe(0);                                              // the first account's rows are not in the second one's memory
+    route = (r) => (r.path === '/api/email/aliases' ? { status: 200, body: { aliases: [{ id: 'al2', address: 'second@example.com' }] } } : r.path === '/api/email/drafts' ? { status: 201, body: { id: 'd2', to_addresses: ['a@example.com'] } } : { status: 404, body: {} });
+    const second = await mail.mailSaveDraft('mail:new', 'a@example.com', 's', 'b');
+    expect(second.draftId).toBe('d2'); expect(second.sendAs).toBe('second@example.com');
+  });
+  test('R11b holds and the held count see only this account\'s files: a file of an earlier format or another key is not "held", is fetched again, and is removed', async () => {
+    computer();
+    await mail.mailBox('mailbox:inbox', env());
+    const F = await accessor();
+    const legacy = `${C.DIR}/msg-${hex16('em_01hz0a')}.json`;                    // no owner in the name: an earlier build, or a failed wipe
+    files.set(legacy, new TextEncoder().encode(JSON.stringify({ id: 'em_01hz0a', folder: 'inbox', text: 'old', to: [], cc: [], replyTo: '', attachments: [], savedAt: 0, summary: {} })));
+    files.set(`${C.DIR}/msg-aaaa.0123456789abcdef01234567.json`, new TextEncoder().encode('{}'));
+    expect(await F.holds('em_01hz0a')).toBe(false);
+    const s = await mail.mailSync('mailbox:inbox', env());
+    expect(s.fetched).toBe(5); expect(s.held).toBe(5);                              // not 7: the foreign files are neither held nor counted
+    expect(files.has(legacy)).toBe(false);
+    expect([...files.keys()].every((k) => k.endsWith(`.${F.owner}.json`))).toBe(true);
+  });
+  test('R11c nothing is read or written for a key that cannot be read: no one signed in', async () => {
+    computer(); await mail.mailBox('mailbox:inbox', env());
+    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'keystate' ? { state: 'absent' } : { found: false }) } as never);
+    expect(await C.loadFolder(env(), 'inbox')).toBeNull(); expect(await C.holds(env(), 'x')).toBe(false); expect(await C.Files.open(env())).toBeNull();
   });
 });

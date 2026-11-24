@@ -23,7 +23,7 @@ reset_state() {
   SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1
   sleep 2
   # A fresh install has NO theme chosen: the default pair shows (Chrome Pastel in light, Liquid Metal in dark; themes.test.ts pins that). The simulator's preferences daemon keeps the OLD keys
-  # after the plist removal below, and the one-time carry-over (themes.ts) reads them as the person's choice: both are deleted here (the carry-over drill seeds them again on purpose).
+  # after the plist removal below: both are deleted here (the old-choice drill seeds them again on purpose, to see that nothing reads them).
   for k in AutoradioThemeID AutoradioThemeMode; do SIM spawn "$EXACT_SIM" defaults delete $APP $k >/dev/null 2>&1; done
   for k in talkMode swipeLeft swipeRight; do SIM spawn "$EXACT_SIM" defaults delete $APP "AutoradioSetting.$k" >/dev/null 2>&1; done
   CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
@@ -43,7 +43,7 @@ reset_state() {
     cp "$KEYFILE" "$CONT/Documents/proof-key" || fail "reset" "could not place the key file"
     chmod 600 "$CONT/Documents/proof-key"
   fi
-  # The carry-over drill (SEED_LEGACY=1) seeds what an old build left, in THIS simulator's app container only: two preference keys (AutoradioThemeID=depth, AutoradioThemeMode=dark)
+  # The old-choice drill (SEED_LEGACY=1) seeds what an old build left, in THIS simulator's app container only: two preference keys (AutoradioThemeID=depth, AutoradioThemeMode=dark)
   # and one file, Application Support/Autoradio/themes/drill-user.json (a valid theme with the id drill-user). Nothing else; legacy_clean removes all three.
   # The takes drills (SEED_TAKES=1) seed what the old build kept, in THIS simulator's app container only: Application Support/Autoradio/takes-own.json (a handle and the own ids in TAKES_SEED_IDS, a
   # comma-separated list of quoted ids) and takes-muted.json (two muted voices). Whether shared code adopts them is its decision, made with the server's proof (take-session.ts refresh); the drills check both answers.
@@ -172,13 +172,13 @@ place settings 900; view real-07c-system-dark 900; step logs
 run_drive sysdark light "" --touch platform
 SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1
 
-# ---- 3a3. CARRY-OVER drill: an old build's choice (theme depth, mode dark) and one old user theme file are SEEDED (reset_state, SEED_LEGACY), the app launches, and the themes arrive in the new place:
-# Depth in dark is shown, the user theme is listed, and the kept choice file holds them. The old keys and file are removed again afterwards.
+# ---- 3a3. OLD-CHOICE drill (owner's ruling, 2026-11-20 and 2026-11-24: a moved page carries nothing over from the Swift build): an old build's choice (theme depth, mode dark) and one old user theme file are
+# SEEDED (reset_state, SEED_LEGACY), the app launches, and NOTHING of them arrives: the default shows, the user theme is not listed, the kept choice file (if any) has no `migrated`. The old keys and file are removed again afterwards.
 trap 'SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; legacy_clean; rm -rf "$SCRATCH"' EXIT
 SEED_LEGACY=1; export SEED_LEGACY
 step "clock data"; wait_ 5000
-place settings 900; view real-07d-carried-over 900
-wait_ 8000; view real-07e-carried-over-later 600     # the carry-over runs apart from the first paint: the later view is the one that must show it
+place settings 900; view real-07d-old-choice 900
+wait_ 8000; view real-07e-old-choice-later 600     # nothing runs apart from the first paint now; the later view shows the same default
 step logs
 run_drive migrate light "" --touch platform
 unset SEED_LEGACY
@@ -596,10 +596,11 @@ chk "themes (shared code): a non-default theme is applied by a tap (Lantern, lig
 bad "themes (shared code): no theme problems on the survey" '\[settings-theme-problems\]' "$SV"
 chk "themes (shared code): the system is dark, no choice: the dark default (Liquid Metal) shows" 'Showing Liquid Metal (\(dark\)| in dark)' "$SHOTS/drive-sysdark.txt"
 bad "themes (shared code): the system is dark: the light default does not show" 'Showing Chrome Pastel' "$SHOTS/drive-sysdark.txt"
-chk "themes carry-over: the old choice arrived (Depth, dark)" 'Showing Depth \(dark\)' "$SHOTS/drive-migrate.txt"
-chk "themes carry-over: the old user theme is listed" '\[settings-theme-drill-user\]' "$SHOTS/drive-migrate.txt"
-chk "themes carry-over: the kept choice file says theme depth, mode dark, migrated" '"theme":"depth","mode":"dark","migrated":true' "$SHOTS/migrated-theme-choice.json"
-chk "themes carry-over: the user theme file is in the new place" 'drill-user.json' "$SHOTS/migrated-themes-dir.txt"
+chk "themes (old choice ignored): the default shows, not the old build's choice" 'Showing Chrome Pastel' "$SHOTS/drive-migrate.txt"
+bad "themes (old choice ignored): the old choice (Depth) is not shown" 'Showing Depth' "$SHOTS/drive-migrate.txt"
+bad "themes (old choice ignored): the old user theme is not listed" '\[settings-theme-drill-user\]' "$SHOTS/drive-migrate.txt"
+if [ -s "$SHOTS/migrated-theme-choice.json" ]; then bad "themes (old choice ignored): the kept choice file carries nothing over" 'migrated|depth' "$SHOTS/migrated-theme-choice.json"; fi
+if [ -s "$SHOTS/migrated-themes-dir.txt" ]; then bad "themes (old choice ignored): the old user theme file is not copied to the new place" 'drill-user.json' "$SHOTS/migrated-themes-dir.txt"; fi
 # the edition picks (shared code): every check reads a file or a tree and FAILS when it is missing
 [ -s "$SHOTS/picks-stored.json" ] || { echo "MISSING: edition picks: the stored file app:/data/edition-topics.json was not found in the app container"; FAILS="$FAILS [picks file]"; }
 fixed() { # name needle file : the file contains the fixed text

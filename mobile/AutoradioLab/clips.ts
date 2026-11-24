@@ -151,8 +151,8 @@ async function find(id: string): Promise<Clip | null> {
 const NONE = { op: '', id: '', url: '', title: '', show: '', start: 0, clip: '', feed: '', record: '' };
 const ack = (message: string, extra: Partial<Ack> = {}): Ack => ({ status: 'ok', message, play: NONE, open: '', openTitle: '', ...extra });
 
-/** What a clip row's Play, Queue and Open episode do. Play and Queue answer `play.clip`: the page hands the clip's id to the native `clipPlay`,
- *  which holds the fingerprint and the locator. */
+/** What a clip row's Play, Queue and Open episode do. Play and Queue answer `play.clip`: the page hands the clip's id and row to `radioPlayClip`
+ *  (clip-play.ts then makes the entry; the fingerprint locator is not wired: see the head of this file). */
 export async function clipAct(op: string, id: string): Promise<Ack> {
   const c = await find(id);
   if (!c) return ack(GONE);

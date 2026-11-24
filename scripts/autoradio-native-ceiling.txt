@@ -1,8 +1,6 @@
 # The Autoradio native-boundary ceiling: non-voice native code that may exist. It only falls.
 # Lower it with `scripts/check-autoradio-native-boundary --update` in the change that deletes the code.
-# 2026-11-24 (exact-rest): 34 files, 3532 lines, 19 names. The ceiling above (47 files, 5729 lines) was stale: the checker run on the tree gave 34 / 3544 before the follow-along and theme edits. Down by the non-voice Swift moved to
-# shared code (the Texture editor, the notebook, pages, podcast clips, MailSeal and MailReading, the run sheet's Swift types, the themes' carry-over read), and 8 names (podcastNow, podcastPlayAudio, clipPlay, mailRead, textureEditInfo, textureEdit,
-# textureFlush, pageModel). Set by `--update`; it only falls.
+# 2026-11-24 (exact-rest, round 2 of review): 34 files, 3460 lines, 19 names. Down 72 lines: the dead Edition, EditionWriter, LocalEditionWriter and EditionCompletion of EditionSetup.swift (the shared edition-writer.ts replaces them; no caller).
 files 34
-lines 3532
+lines 3460
 names 19

@@ -16,7 +16,7 @@ import { adoptNative } from './api.ts';
 import { forgetOnboarding } from './onboarding.ts';
 import { radioPage } from './radio-page.ts';
 import type { Entry } from './runsheet-model.ts';
-import { barRun, getRadio, radioHold, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPulse, wipeRadio } from './radio-bridge.ts';
+import { barRun, getRadio, radioHold, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPlayStory, radioPulse, wipeRadio } from './radio-bridge.ts';
 
 type Call = { op: string; name?: string; peek?: boolean };
 let calls: Call[] = [];
@@ -313,8 +313,17 @@ describe('P11 a pulse begun before sign-out and delivered after it changes nothi
     expect(set).toBeDefined();
     const facts = set!.facts as { id: string; state: string }[];
     expect(facts.some((x) => x.state === 'on_air')).toBe(true);
-    expect(typeof set!.airAddress).toBe('string'); expect(typeof set!.respondsRoute).toBe('string'); expect(typeof set!.respondsTitle).toBe('string');
+    expect(set!.airAddress).toMatch(/^(pub:|texture:|)/); expect(typeof set!.airAddress).toBe('string'); expect(typeof set!.respondsRoute).toBe('string'); expect(typeof set!.respondsTitle).toBe('string');
     expect(set!.sheet).toBeUndefined(); expect(set!.onAir).toBeUndefined();
+  });
+  test('V5b a story on air: radioSet names its page (the reader\'s follow-along) and what a take responds to', async () => {
+    const pushed: Record<string, unknown>[] = [];
+    const spy = { available: true, later: async (r: { op: string }) => { if (r.op === 'radioSet') pushed.push(r as never); return native.later(r as never); } };
+    adoptNative(spy as never, 'test');
+    await radioPlayStory(undefined, spy as never, 'harbor-fees', 'Harbor fees rise');
+    await radioPulse(undefined, spy as never);
+    const set = pushed.filter((p) => Array.isArray(p.facts)).pop();
+    expect(set!.airAddress).toBe('pub:harbor-fees'); expect(set!.respondsRoute).toBe('harbor-fees'); expect(set!.respondsTitle).toBe('Harbor fees rise');
   });
   test('the stamped calls: radioSet, editionMirror and the sign-out calls carry gen', () => {
     const c = (f: string): string => readFileSync(new URL(f, import.meta.url), 'utf8');

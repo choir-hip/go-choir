@@ -173,6 +173,12 @@ export async function refreshSignOutBlock(): Promise<void> {
   try { const sess = await keptSession(); if (sess && (await digestOf(sess.key)) !== blockedDigest) blockedDigest = null; } catch { /* still signed out */ }
 }
 
+/** WHO the phone is signed in as, read fresh from the key store each time (never cached: a key replaced with no sign-out, as a re-sign-in after a 401 does, is another account at once): a digest
+ * of the sign-in key (never the key). Null when no key is stored. The one name stores use to keep one account's files from the next account. */
+export async function keyOwner(): Promise<string | null> {
+  try { const s = await keptSession(); return s ? (await digestOf(s.key)).slice(0, 24) : null; } catch { return null; }
+}
+
 /** ONE rule for every moved store's file write (review 2026-11-19): `gen` is the account generation the SOURCE started under (`accountGeneration()` before its request). The write is
  * refused if a sign-out has moved the generation, and a file that lands after the generation moved is removed again. True when the file is there. */
 export async function writeCurrent(gen: number, storage: Storage | undefined, path: string, bytes: Uint8Array): Promise<boolean> {

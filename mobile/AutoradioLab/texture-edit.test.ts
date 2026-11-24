@@ -2,7 +2,7 @@
 //  E1  a burst of edits is one post.                                          E2  a revision, a story or nothing is not editable: no session, no network.
 //  E3  an edit equal to the head posts nothing and clears what was kept.      E4  the post names the revision the text descends from (parent), the Markdown and its body_doc, an idempotency key.
 //  E5  a document with a trajectory is saved against its lifecycle version.   E6  offline keeps the text on the phone; a relaunch posts it once; nothing is posted twice.
-//  E7  typing while a save is in flight is saved right after, on the new head.  E8  the head moved (409, or a head the kept text did not descend from): nothing is posted over it,
+//  E7  typing while a save is in flight waits behind it, then is saved right after, on the new head.  E8  the head moved (409, or a head the kept text did not descend from): nothing is posted over it,
 //      the text stays kept and readable, `conflict`, no retry; the same text as the head is not a conflict (a lost reply).
 //  E9  reopening shows the kept text (`info.kept`), not the head.             E10 a refused save (400, 403) fails with a sentence and keeps the text.
 //  E11 signed out: "Sign in again to save", text kept.                        E12 sign-out removes memory and file, and a save in flight afterwards keeps and posts nothing.
@@ -10,26 +10,33 @@
 //  E16 a first edit made offline is kept with the text the field was seeded from; online later it is posted when the head still is that text, else it is a conflict.
 //  E17 edits fired together, with no head read yet, keep the last one and read the head once.   E18 a sign-out during a head read or a file read leaves nothing, for the next account too.
 //  E19 `waiting` does not count a document in conflict.   E20 an overwrite across a sign-out writes nothing; while a sign-out is under way the editor shows nothing kept.
+//  E21 Done (flush) typed behind a first edit still on its way to the head is posted AFTER it, not lost.   E22 a discard queued behind a save that gets a 409 ends idle, not in conflict.
+//  E23 an EMPTY document is a text, not "no seed": over a head that moved it is a conflict; offline it is posted when the head still is empty.
+//  E24 the contract's way: every keystroke names what the field showed before it, so a second save after a first is not a false conflict.
+//  E25 calls queued or begun across a sign-out leave nothing; a kept file written under another key is not the next account's.
 //  E13 discard drops the kept text; overwrite is the listener's act: it re-bases on the head and posts.   E14 `waiting` counts the documents with kept text.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Editor, editableDoc, PENDING_FILE, CONFLICT_WORDS, type Net } from './texture-edit.ts';
-import { HTTPError, SignedOutError, resetSeam, nextGeneration, beginSignOut, abortSignOut } from './api.ts';
+import { HTTPError, SignedOutError, resetSeam, nextGeneration, beginSignOut, abortSignOut, bindNative } from './api.ts';
 
 type Rev = { id: string; content: string; body: unknown; n: number };
 let revs: Map<string, Rev>; let head: Record<string, string>; let traj: Record<string, string>; let log: { method: string; path: string; body?: Record<string, unknown> }[];
-let failGets = false; let getGate: Promise<void> | null = null; let readGate: Promise<void> | null = null; let getCount = 0; let failNext: (() => Error) | null; let seq = 0; let lifecycleVersion = 7;
+let failGets = false; let getGate: Promise<void> | null = null; let postGate: Promise<void> | null = null; let readGate: Promise<void> | null = null; let getCount = 0; let failNext: (() => Error) | null; let seq = 0; let lifecycleVersion = 7;
 const files = new Map<string, Uint8Array>();
 const storage = { fs: {
   readFile: async (p: string) => { const b = files.get(p); if (readGate) await readGate; if (!b) throw Object.assign(new Error('no'), { code: 'ENOENT' }); return b; },
   atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); },
   rm: async (p: string) => { files.delete(p); },
 } } as never;
-const kept = (): Record<string, { text: string; base: string; key: string }> => (files.has(PENDING_FILE) ? JSON.parse(new TextDecoder().decode(files.get(PENDING_FILE)!)) : {});
+let signedKey = 'key-a-not-real';
+const reader = { available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: true, value: signedKey, computerId: 'c1' } : { state: 'present' }) };
+const kept = (): Record<string, { text: string; base: string; key: string; seed: string | null }> => (files.has(PENDING_FILE) ? JSON.parse(new TextDecoder().decode(files.get(PENDING_FILE)!)).docs : {});
 const body = (t: string): unknown => ({ schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'd' }, content: [{ type: 'paragraph', attrs: { id: 'p' }, content: [{ type: 'text', text: t }] }] } });
 const net: Net = { json: async (path, opts) => {
   const method = opts?.method ?? 'GET';
   log.push({ method, path, body: opts?.body as Record<string, unknown> | undefined });
   if (method === 'GET') { getCount += 1; if (getGate) await getGate; if (failGets) throw new TypeError('network down'); }
+  if (method === 'POST' && postGate) await postGate;
   if (failNext && method === 'POST') { const e = failNext(); failNext = null; throw e; }
   let m = path.match(/^\/api\/texture\/documents\/([^/]+)$/);
   if (m && method === 'GET') return { body: { document: { doc_id: m[1], current_revision_id: head[m[1]], ...(traj[m[1]] ? { trajectory_id: traj[m[1]] } : {}) } }, serverTime: null, raw: '' };
@@ -51,7 +58,7 @@ const posts = (): typeof log => log.filter((l) => l.method === 'POST');
 const mk = (): Editor => new Editor({ net, storage });
 const A = 'texture:d1';
 beforeEach(() => {
-  resetSeam(); files.clear(); log = []; failNext = null; failGets = false; getGate = null; readGate = null; getCount = 0; seq = 0; traj = {};
+  resetSeam(); bindNative(reader as never); signedKey = 'key-a-not-real'; files.clear(); log = []; failNext = null; failGets = false; getGate = null; postGate = null; readGate = null; getCount = 0; seq = 0; traj = {};
   revs = new Map([['r0', { id: 'r0', content: 'Hello world.', body: body('Hello world.'), n: 0 }]]); head = { d1: 'r0', d2: 'r0' };
 });
 
@@ -96,8 +103,8 @@ describe('saving', () => {
     (net as { json: Net['json'] }).json = async (p, o) => { if (o?.method === 'POST') await gate; return slow(p, o); };
     const first = e.flush(A);
     await new Promise((r) => setTimeout(r, 5));
-    await e.edit(A, 'one two');
-    release(); await first; await e.flush(A);
+    const typed = e.edit(A, 'one two');                              // queued behind the save in flight: it is kept when the post is over, on the new head
+    release(); await first; await typed; await e.flush(A);
     (net as { json: Net['json'] }).json = slow;
     expect(posts().map((p) => [p.body!.content, p.body!.parent_revision_id])).toEqual([['one', 'r0'], ['one two', 'rev-new-1']]);
     expect(kept()).toEqual({});
@@ -289,5 +296,69 @@ describe('the account moves under the editor', () => {
     expect((await e.info(A)).kept).toBe(''); expect((await e.info(A)).waiting).toBe(0);
     abortSignOut();
     expect((await e.info(A)).kept).toBe('Hello world. mine');
+  });
+});
+
+describe('one queue per document', () => {
+  test('E21 a Done typed behind a first edit that is still reading the head is posted after it, not lost', async () => {
+    let release: () => void = () => undefined; getGate = new Promise<void>((r) => { release = r; });
+    const e = mk(); const typed = e.edit(A, 'Hello world. typed', 'Hello world.'); const done = e.flush(A);
+    await new Promise((r) => setTimeout(r, 5)); release();
+    await typed; const i = await done;
+    expect(posts().length).toBe(1); expect(posts()[0].body!.content).toBe('Hello world. typed'); expect(i.status).toBe('saved'); expect(kept()).toEqual({});
+  });
+  test('E22 a discard queued behind a save that gets a 409 ends idle: the late conflict is not recorded over it', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. mine');
+    let release: () => void = () => undefined; postGate = new Promise<void>((r) => { release = r; });
+    failNext = () => { revs.set('r1', { id: 'r1', content: 'theirs', body: body('t'), n: 1 }); head.d1 = 'r1'; return new HTTPError(409, 'HTTP 409'); };
+    const saving = e.flush(A); const gone = e.discard(A);
+    await new Promise((r) => setTimeout(r, 5)); release();
+    await saving; const i = await gone;
+    expect(i.status).toBe('idle'); expect(i.kept).toBe(''); expect(kept()).toEqual({});
+  });
+  test('E24 the contract\'s way: each keystroke names what the field showed before it; a second save after a first is not a conflict', async () => {
+    const e = mk();
+    await e.edit(A, 'Hello world. a', 'Hello world.'); await e.flush(A);
+    const i = await e.edit(A, 'Hello world. ab', 'Hello world. a'); expect(i.status).toBe('dirty');
+    const j = await e.flush(A);
+    expect(j.status).toBe('saved'); expect(posts().map((p) => [p.body!.content, p.body!.parent_revision_id])).toEqual([['Hello world. a', 'r0'], ['Hello world. ab', 'rev-new-1']]);
+  });
+});
+
+describe('an empty document is a text, not "no seed"', () => {
+  test('E23 empty, the head moved before the first keystroke: a conflict, nothing posted', async () => {
+    revs.set('r0', { id: 'r0', content: '', body: body(''), n: 0 });
+    revs.set('r1', { id: 'r1', content: 'Their paragraph', body: body('t'), n: 1 }); head.d1 = 'r1';
+    const e = mk(); await e.edit(A, 'My paragraph', '');                  // the field showed the empty text it was drawn from
+    const i = await e.flush(A);
+    expect(i.status).toBe('conflict'); expect(posts().length).toBe(0); expect(kept().d1.text).toBe('My paragraph');
+  });
+  test('E23 empty, offline: posted when the head still is empty (not a false conflict)', async () => {
+    revs.set('r0', { id: 'r0', content: '', body: body(''), n: 0 });
+    failGets = true; await mk().edit(A, 'My note', ''); failGets = false;
+    expect(kept().d1).toMatchObject({ base: '', seed: '' });
+    const i = await mk().flush(A);
+    expect(i.status).toBe('saved'); expect(posts().length).toBe(1); expect(posts()[0].body!.parent_revision_id).toBe('r0');
+  });
+});
+
+describe('the account moves under a queued call', () => {
+  test('E25 two edits queued before a sign-out, and one begun during it: nothing is written, before or after the wipe', async () => {
+    const e = mk(); await e.open(A);
+    let release: () => void = () => undefined; getGate = new Promise<void>((r) => { release = r; });
+    const p1 = e.edit(A, 'x1'); const p2 = e.edit(A, 'x12');
+    await new Promise((r) => setTimeout(r, 5));
+    await beginSignOut();
+    const p3 = e.edit(A, 'x123');                                         // begun while the sign-out is under way
+    await e.wipe();
+    release(); await Promise.all([p1, p2, p3]);
+    const p4 = await e.edit(A, 'x1234');                                  // after the wipe, before a new account: still the old generation's blocked state
+    expect(kept()).toEqual({}); expect(files.has(PENDING_FILE)).toBe(false); void p4;
+  });
+  test('E25 a kept file written under one key is not the next key\'s kept text', async () => {
+    await mk().edit(A, 'Hello world. a'); expect(kept().d1.text).toBe('Hello world. a');
+    signedKey = 'key-b-not-real';
+    const i = await mk().info(A);
+    expect(i.kept).toBe(''); expect(i.waiting).toBe(0); expect(files.has(PENDING_FILE)).toBe(false);
   });
 });

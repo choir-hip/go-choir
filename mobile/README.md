@@ -551,7 +551,7 @@ The phone (iPhone 14 Pro Max, `00008120-00114DE80A90C01E`) refused launches earl
 ## The Autoradio app spine (lane/ar-spine)
 
 The plan is `docs/design/autoradio-app-ui-2026-11-10.md` (section 6). The spine is the shared skeleton the nine lanes build
-on: a page host, OpenPages, the bar and the layers, Card/Layer, the theme loader, `PageSource`/`Signals`, a dispatch
+on: a page host, OpenPages, the bar and the layers, Card/Layer, the theme loader, `Signals`, a dispatch
 table in the module, per-lane interface fragments. Every lane's files exist already as small stubs: **a lane replaces the
 body of its own files and edits no shared file except its own band of the `provide` list in `app.contract`** (and only
 if it adds a name a child component must `inject`).

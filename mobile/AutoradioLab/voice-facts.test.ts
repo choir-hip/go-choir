@@ -41,6 +41,7 @@ describe('what a take responds to', () => {
   test('V6 the address of the page on air', () => {
     expect(airAddressOf(entry('a', { state: 'on_air', source: { ref: 'pub:harbor-fees@v2', label: 'x' } }))).toBe('pub:harbor-fees');
     expect(airAddressOf(entry('a', { state: 'on_air', kind: 'page', source: { ref: 'texture:d1', label: 'x' } }))).toBe('texture:d1');
+    expect(airAddressOf(entry('a', { state: 'on_air', kind: 'page', source: { ref: 'texture:d1@r2', label: 'x' } }))).toBe('texture:d1');
     expect(airAddressOf(entry('a', { kind: 'opening' }))).toBe('');
     expect(airAddressOf(undefined)).toBe('');
   });
