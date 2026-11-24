@@ -298,3 +298,18 @@ func TestWhoamiSaysReviewerOnlyForTheReviewerAccount(t *testing.T) {
 		}
 	}
 }
+
+// Main's proof rule: an account whose address was never proved mints nothing and signs in to
+// nothing. The reviewer route is no way round it: the account must be one whose address is proved.
+func TestDemoAccountWithAnUnprovedAddressGetsNoKey(t *testing.T) {
+	e := demoEnv(t)
+	if _, err := e.h.store.db.Exec(`UPDATE users SET email_verified_at = NULL WHERE id = ?`, e.uid); err != nil {
+		t.Fatal(err)
+	}
+	if w := e.post(t, "198.51.100.7", good()); w.Code != http.StatusNotFound {
+		t.Fatalf("an unproved reviewer account must be 'not available', got %d %s", w.Code, w.Body)
+	}
+	if keys, _ := e.h.store.ListAPIKeys(context.Background(), e.uid); len(keys) != 0 {
+		t.Fatalf("no key may be minted for an unproved account, got %d", len(keys))
+	}
+}

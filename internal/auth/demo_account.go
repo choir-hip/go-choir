@@ -268,7 +268,9 @@ func (h *Handler) loadDemo() (string, *demoHash, *User) {
 		return "", nil, nil
 	}
 	u, err := h.store.GetUserByID(id)
-	if err != nil || u == nil {
+	// Main's proof rule: an account whose address is not proved mints no key, so the route
+	// is "not available" and not a server error.
+	if err != nil || !mayMint(u) {
 		return "", nil, nil
 	}
 	return user, hash, u
