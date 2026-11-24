@@ -252,6 +252,33 @@ const CaptureFateClosedAfterCrashes = "closed_after_two_crashes"
 // a day-old capture is not news, so it is never delegated again.
 const CaptureFateExpiredInQueue = TaskClosureExpired
 
+// CaptureFateLeftAfterAttempts marks a capture that CaptureMaxAttempts tasks
+// in a row left undecided for a cause the host can see (a failed or
+// passivated run, a deadline, a run that completed without closing its
+// task). It is the capture's closing row: FateReason names the last cause,
+// and it is never delegated again.
+const CaptureFateLeftAfterAttempts = "left_after_attempts"
+
+// CaptureMaxAttempts is how many such closures a capture gets before it is
+// closed. The basis is in
+// docs/problems/captures-left-on-closed-tasks-2026-11-24.md.
+const CaptureMaxAttempts = 3
+
+// TaskClosureRequeues reports whether a closure reason is a cause the host
+// can see and so re-queues the captures the task left: its run failed,
+// completed without closing the task or was passivated, or its deadline
+// passed. A finished task (done) made a decision, a cancel is management's,
+// and a crash restart resumes nothing.
+func TaskClosureRequeues(reason string) bool {
+	switch reason {
+	case TaskClosureRunPassivated, TaskClosureDeadline:
+		return true
+	case "run_cancelled":
+		return false
+	}
+	return strings.HasPrefix(reason, "run_")
+}
+
 // CaptureDisposition is the per-capture index object (R2-4, §6.4), keyed
 // by capture id on the computer. It indexes the record that disposed the
 // capture (the record stays the content; both commit in one batch) and the
@@ -273,6 +300,11 @@ type CaptureDisposition struct {
 	Overrides   []CaptureDispositionOverride `json:"overrides,omitempty"`
 	CrashCount  int                          `json:"crash_count,omitempty"`
 	Fate        string                       `json:"fate,omitempty"`
+	// LeftCount counts the closures that left it undecided for a cause the
+	// host can see (TaskClosureRequeues); FateReason is the last such cause
+	// when Fate is CaptureFateLeftAfterAttempts.
+	LeftCount  int    `json:"left_count,omitempty"`
+	FateReason string `json:"fate_reason,omitempty"`
 	FirstLeased *time.Time                   `json:"first_leased,omitempty"`
 }
 

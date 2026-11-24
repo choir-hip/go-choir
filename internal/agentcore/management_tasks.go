@@ -533,6 +533,7 @@ func (rt *Runtime) closeManagementTask(ctx context.Context, task types.Managemen
 		return
 	}
 	log.Printf("runtime: closed management task %s: %s", task.TaskID, reason)
+	rt.requeueLeftCaptures(ctx, current, closing.RecordID, reason)
 	if reason == types.TaskClosureExpired {
 		return // a host-minted expiry Report did no work to score
 	}
@@ -751,7 +752,7 @@ func (rt *Runtime) captureDelegable(ctx context.Context, ownerID, computerID, ca
 	if err != nil || !found {
 		return err == nil, err
 	}
-	if d.Kind != "" || d.Fate == types.CaptureFateClosedAfterCrashes || d.Fate == types.CaptureFateExpiredInQueue {
+	if d.Kind != "" || d.Fate != "" {
 		return false, nil
 	}
 	if d.LeaseTask == "" {
@@ -969,4 +970,118 @@ func (rt *Runtime) taskReportLabels(ctx context.Context, task types.ManagementTa
 // section 12; d@e 847ad2417 counted these as undeclared reads).
 func taskCustodianReads(ctx context.Context) context.Context {
 	return objectgraph.WithCustodianReader(ctx, "choir.management_task")
+}
+
+// requeueLeftCaptures runs after a task's closure has committed. When the
+// cause is one the host can see (types.TaskClosureRequeues), the captures the
+// task left undecided go back to the queue here, in a new task given the
+// records the closed one was given: they are not left to a model choosing to
+// delegate the Report again (the paper left 476 captures that way in seven
+// days; docs/problems/captures-left-on-closed-tasks-2026-11-24.md). The
+// closure counted the attempt on each capture's index and closed those that
+// reached types.CaptureMaxAttempts. A finished task's leftovers, a cancel's
+// and a crash restart's stay with management, as before.
+//
+// It logs one line per closure saying what became of every leased capture;
+// unaccounted is those the host should have re-queued and could not. Summed
+// over a computer's log it is the number that should stay zero.
+//
+// The closure and the re-queue are two commits. If the process dies between
+// them the captures are where they were before this existed: named on a
+// Report that woke management.
+func (rt *Runtime) requeueLeftCaptures(ctx context.Context, task types.ManagementTask, closingRecordID, reason string) {
+	var decided, closed int
+	var left []string
+	for _, c := range task.LeasedCaptures {
+		d, found, err := rt.store.CaptureDispositionOf(objectgraph.WithCustodianReader(ctx, "choir.capture_disposition"), task.OwnerID, task.ComputerID, c)
+		switch {
+		case err != nil:
+			log.Printf("runtime: management task captures: task=%s capture=%s: %v", task.TaskID, c, err)
+			left = append(left, c)
+		case found && d.Kind != "":
+			decided++
+		case found && d.Fate != "":
+			closed++
+			log.Printf("runtime: capture %s closed undecided: fate=%s reason=%s left_count=%d task=%s", c, d.Fate, d.FateReason, d.LeftCount, task.TaskID)
+		default:
+			left = append(left, c)
+		}
+	}
+	requeued, toManagement, unaccounted := 0, 0, 0
+	switch {
+	case len(left) == 0:
+	case !types.TaskClosureRequeues(reason) || task.Kind != types.ManagementTaskIntake:
+		toManagement = len(left)
+	default:
+		if err := rt.commitRequeuedTask(ctx, task, closingRecordID, left); err != nil {
+			log.Printf("runtime: management task captures: task=%s: re-queue failed: %v", task.TaskID, err)
+			unaccounted = len(left)
+		} else {
+			requeued = len(left)
+		}
+	}
+	log.Printf("runtime: management task captures: task=%s reason=%s leased=%d decided=%d requeued=%d closed_after_attempts=%d to_management=%d unaccounted=%d computer=%s",
+		task.TaskID, reason, len(task.LeasedCaptures), decided, requeued, closed, toManagement, unaccounted, task.ComputerID)
+}
+
+// commitRequeuedTask mints the task that takes a closed task's left
+// captures, and its opening Cast, as the host does on arrival
+// (withIntakeTask): a constant objective, the labels of the delegated
+// records and no text a model wrote.
+func (rt *Runtime) commitRequeuedTask(ctx context.Context, closed types.ManagementTask, closingRecordID string, captures []string) error {
+	if !rt.intakeLabelsEnabled(ctx, closed.OwnerID, closed.ComputerID) {
+		return fmt.Errorf("intake tasks are off on this computer")
+	}
+	delegated := closed.DelegatedRecordIDs
+	if len(delegated) == 0 {
+		return fmt.Errorf("task %s was given no records", closed.TaskID)
+	}
+	labels, err := rt.delegatedRecordLabels(ctx, closed.OwnerID, closed.ComputerID, delegated)
+	if err != nil {
+		return err
+	}
+	want := map[string]bool{}
+	for _, c := range captures {
+		want[c] = true
+	}
+	var titles []string
+	for _, id := range delegated {
+		rec, err := rt.store.GetCommitmentRecord(ctx, closed.OwnerID, closed.ComputerID, id)
+		if err != nil || rec == nil || rec.Captures == nil {
+			continue // titles are a convenience; the labels above already required the record
+		}
+		for _, it := range rec.Captures.Items {
+			if title := strings.TrimSpace(it.Title); want[strings.TrimSpace(it.CaptureID)] && title != "" {
+				titles = append(titles, title)
+			}
+		}
+	}
+	parent := closed.ParentInbox
+	taskID := managementTaskID("requeue:"+closingRecordID, "intake", 0)
+	inbox := types.ManagementTaskInbox(taskID)
+	cast := types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: closingRecordID + ":requeue",
+		Kind: types.CommitmentKindDirective, Discrepancy: types.DiscrepancyUnresolved,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: managementIntakeObjective,
+			Body: intakeTaskCastBody(delegated, captures, titles)},
+		Cast:        &types.CommitmentCast{Captures: captures},
+		Provenance:  types.CommitmentProvenance{AgentID: parent, Desk: parent, Origin: types.OriginSystem, Labels: labels.Strings()},
+		EmitterKind: types.CommitmentEmitterAgent, ComputerID: closed.ComputerID,
+		Inbox: inbox, SenderInbox: parent, Addressee: inbox,
+		RelatedIDs: delegated, ParentID: delegated[0],
+	}
+	req := types.CommitInboxRecordsRequest{OwnerID: closed.OwnerID, ComputerID: closed.ComputerID, CommandID: "task-requeue:" + closingRecordID,
+		Records: []types.CommitmentRecord{cast},
+		Tasks: []types.ManagementTask{{
+			TaskID: taskID, OwnerID: closed.OwnerID, ComputerID: closed.ComputerID, Kind: types.ManagementTaskIntake,
+			Objective: managementIntakeObjective, ParentInbox: parent, TaskInbox: inbox,
+			ConversationID: types.InboxConversationID(parent, inbox), OpeningRecordID: cast.RecordID,
+			DelegatedRecordIDs: delegated, LeasedCaptures: captures, DeadlineSeconds: int(managementTaskDeadline / time.Second),
+			State: types.ManagementTaskQueued,
+		}}}
+	if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
+		return err
+	}
+	_, err = rt.store.CommitInboxRecords(ctx, req)
+	return err
 }

@@ -414,6 +414,8 @@ func (p *taskPlan) openTask(row types.ManagementTask, cast types.CommitmentRecor
 			return inboxRefused("capture %s was closed after two crashes interrupted its tasks; it is not delegated again", c)
 		case v.Fate == types.CaptureFateExpiredInQueue:
 			return inboxRefused("capture %s expired in the queue; it is not delegated again", c)
+		case v.Fate == types.CaptureFateLeftAfterAttempts:
+			return inboxRefused("capture %s was closed after %d tasks left it undecided (%s); it is not delegated again", c, v.LeftCount, v.FateReason)
 		case v.Kind != "":
 			return inboxRefused("capture %s is already disposed (%s by record %s); nothing is left to delegate", c, v.Kind, v.RecordID)
 		case v.LeaseTask != "" && v.LeaseTask != row.TaskID:
@@ -524,6 +526,15 @@ func (p *taskPlan) closeTask(taskID string, rec types.CommitmentRecord) (types.C
 		outcome.Residuals = append(outcome.Residuals, types.TaskResidual{CaptureID: c, Reason: reason})
 		if stop == types.TaskClosureExpired {
 			ix.value.Fate = types.CaptureFateExpiredInQueue
+			p.markIndex(c)
+		}
+		if types.TaskClosureRequeues(stop) {
+			// The host re-queues it (agentcore, requeueLeftCaptures) until
+			// this many closures have left it; then this is its closing row.
+			ix.value.LeftCount++
+			if ix.value.LeftCount >= types.CaptureMaxAttempts {
+				ix.value.Fate, ix.value.FateReason = types.CaptureFateLeftAfterAttempts, stop
+			}
 			p.markIndex(c)
 		}
 		if stop == types.ClosureReasonInterruptedByRestart {
