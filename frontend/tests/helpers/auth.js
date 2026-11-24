@@ -11,6 +11,34 @@
  */
 
 /**
+ * Step one of creating an account: ask for the code mailed to `email`. No account exists
+ * afterwards. Answers {attemptId, binding}; the test reads the code from the mailbox of the
+ * address and passes all three to registerPasskey.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} email
+ * @param {string} [baseURL]
+ */
+export async function requestRegisterCode(page, email, baseURL = 'http://localhost:4173') {
+  return page.evaluate(async ({ email, baseURL }) => {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    const binding = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    const res = await fetch(`${baseURL}/auth/register/mail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, binding }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`register/mail failed: ${res.status} ${JSON.stringify(err)}`);
+    }
+    return { attemptId: (await res.json()).attempt_id, binding };
+  }, { email, baseURL });
+}
+
+/**
  * Performs a full passkey registration flow using the browser's
  * navigator.credentials API, driven through page.evaluate.
  *
@@ -22,18 +50,22 @@
  * @param {import('@playwright/test').Page} page
  * @param {string} email - The email address to register.
  * @param {string} [baseURL] - Base URL for auth API (default: http://localhost:4173).
+ * @param {{attemptId: string, code: string, binding: string}} proof - from requestRegisterCode and the mailbox.
  * @returns {Promise<{ok: boolean, user?: {id: string, email: string, created_at: string}}>}
  */
-export async function registerPasskey(page, email, baseURL = 'http://localhost:4173') {
+export async function registerPasskey(page, email, baseURL = 'http://localhost:4173', proof = null) {
+  if (!proof || !proof.code) {
+    throw new Error('registerPasskey needs the mailed code now: call requestRegisterCode, read the code from the address\'s mailbox, and pass {attemptId, code, binding}');
+  }
   return page.evaluate(async (opts) => {
-    const { email, baseURL } = opts;
+    const { email, baseURL, proof } = opts;
 
     // Step 1: Begin registration — get WebAuthn creation options.
     const beginRes = await fetch(`${baseURL}/auth/register/begin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, attempt_id: proof.attemptId, code: proof.code, binding: proof.binding }),
     });
 
     if (!beginRes.ok) {
@@ -135,7 +167,7 @@ export async function registerPasskey(page, email, baseURL = 'http://localhost:4
     }
 
     return finishRes.json();
-  }, { email, baseURL });
+  }, { email, baseURL, proof });
 }
 
 /**

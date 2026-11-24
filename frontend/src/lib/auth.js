@@ -58,7 +58,7 @@ function bufferToBase64url(buffer) {
  * @returns {Promise<{ok: boolean, user?: object}>}
  * @throws {Error} On network failure, server error, or ceremony cancellation
  */
-function isDesktopBridge() {
+export function isDesktopBridge() {
   return typeof window !== 'undefined' && window.__CHOIR_BRIDGE === true;
 }
 

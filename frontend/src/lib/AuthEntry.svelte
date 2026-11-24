@@ -23,7 +23,7 @@
   import RecoveryRequestForm from './RecoveryRequestForm.svelte';
   import EmailSignInForm from './EmailSignInForm.svelte';
   import { isReturning } from './accounts.js';
-  import { sendRegisterCode } from './auth.js';
+  import { sendRegisterCode, isDesktopBridge } from './auth.js';
 
   export let passkeyError = '';
   export let intentMessage = 'Open your private computer and keep working.';
@@ -91,6 +91,11 @@
       error = 'Please enter a valid email address.';
       return;
     }
+    // The desktop app's passkey sheet is Safari's: its bridge page asks for the code, once, there.
+    if (isDesktopBridge()) {
+      dispatch('authbegin', { email: email.trim(), type: 'register' });
+      return;
+    }
     if (!codeSent) {
       sendingCode = true;
       sendRegisterCode(email.trim())
@@ -104,6 +109,25 @@
       return;
     }
     dispatch('authbegin', { email: email.trim(), type: 'register', code: code.trim() });
+  }
+
+  /** A spent, wrong or lost code: ask for a new one (the old attempt is replaced). */
+  function resendCode() {
+    error = '';
+    code = '';
+    sendingCode = true;
+    sendRegisterCode(email.trim())
+      .catch((err) => { error = err instanceof Error ? err.message : 'Could not send the code.'; })
+      .finally(() => { sendingCode = false; });
+  }
+
+  /** A mistyped address: back to the first step. */
+  function changeEmail() {
+    codeSent = false;
+    code = '';
+    error = '';
+    dispatch('clearpasskeyerror');
+    tick().then(() => { emailInputEl?.focus(); emailInputEl?.select(); });
   }
 
   function handleLogin() {
@@ -206,6 +230,10 @@
               disabled={ceremonyInProgress}
               required
             />
+            <p class="fine-print">
+              <button type="button" class="link-action" data-register-resend disabled={ceremonyInProgress || sendingCode} on:click={resendCode}>Email me a new code</button>
+              <button type="button" class="link-action" data-register-change-email disabled={ceremonyInProgress} on:click={changeEmail}>Use a different email</button>
+            </p>
           {/if}
           <button type="submit" class="primary-action" disabled={ceremonyInProgress || sendingCode} data-auth-submit>
             {#if ceremonyInProgress}
@@ -603,6 +631,27 @@
   .fine-print a:hover,
   .fine-print a:focus-visible {
     text-decoration: underline;
+  }
+
+  .link-action {
+    margin: 0 0.9rem 0 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--choir-text-accent);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .link-action:hover:not(:disabled),
+  .link-action:focus-visible {
+    text-decoration: underline;
+  }
+
+  .link-action:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
 
   :global(:root[data-theme-id='london-salmon']) .auth-card,

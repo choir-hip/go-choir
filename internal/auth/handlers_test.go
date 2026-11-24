@@ -541,9 +541,11 @@ func TestSessionReturnsAuthenticatedWithValidJWT(t *testing.T) {
 
 	// Create a valid JWT for this user.
 	claims := jwt.MapClaims{
-		"sub": user.ID,
-		"exp": time.Now().Add(5 * time.Minute).Unix(),
-		"iat": time.Now().Unix(),
+		"sub":   user.ID,
+		"exp":   time.Now().Add(5 * time.Minute).Unix(),
+		"iat":   time.Now().Unix(),
+		"scope": "access",
+		"ev":    time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	tokenStr, err := token.SignedString(priv)

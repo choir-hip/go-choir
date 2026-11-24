@@ -102,7 +102,8 @@
 
   <div id="auth-form">
     <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
-    <button class="btn-primary" id="register-btn">Create Passkey</button>
+    <input type="text" id="code" class="hidden" placeholder="8-digit code from the email" autocomplete="one-time-code" inputmode="numeric">
+    <button class="btn-primary" id="register-btn">Email me a code</button>
     <button class="btn-secondary" id="login-btn">Sign In with Passkey</button>
   </div>
 
@@ -137,14 +138,35 @@ function hideStatus() {
   document.getElementById('status').classList.add('hidden');
 }
 
-async function registerPasskey(email) {
+// Creating an account is three steps (docs/problems/passkey-claims-an-unproved-address-2026-11-24.md):
+// a code is mailed, the code is typed here, then the passkey sheet. No account exists before the passkey.
+const bindingBytes = crypto.getRandomValues(new Uint8Array(16));
+const binding = Array.from(bindingBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+let attemptId = '';
+let codeSent = false;
+
+async function sendCode(email) {
+  const res = await fetch('/auth/register/mail', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email, binding }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Could not send the code');
+  }
+  attemptId = (await res.json()).attempt_id || '';
+}
+
+async function registerPasskey(email, code) {
   showStatus('Starting passkey creation...', 'info');
 
   const beginRes = await fetch('/auth/register/begin', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, attempt_id: attemptId, code, binding }),
   });
   if (!beginRes.ok) {
     const err = await beginRes.json().catch(() => ({}));
@@ -266,8 +288,23 @@ async function handleRegister() {
   const email = document.getElementById('email').value.trim();
   if (!email) { showStatus('Please enter your email', 'error'); return; }
   hideStatus();
+  const codeEl = document.getElementById('code');
   try {
-    await registerPasskey(email);
+    if (!codeSent) {
+      await sendCode(email);
+      codeSent = true;
+      codeEl.classList.remove('hidden');
+      document.getElementById('register-btn').textContent = 'Create Passkey';
+      showStatus('We emailed you a code. If this email already has an account, we emailed a recovery link instead.', 'info');
+      return;
+    }
+    const code = codeEl.value.trim();
+    if (!/^[0-9]{8}$/.test(code)) { showStatus('Enter the 8-digit code from the email', 'error'); return; }
+    codeEl.value = '';
+    codeSent = false; // the code is spent by this try; a new try asks for a new one
+    document.getElementById('register-btn').textContent = 'Email me a code';
+    codeEl.classList.add('hidden');
+    await registerPasskey(email, code);
     showStatus('Passkey created! Returning to Choir...', 'success');
     document.getElementById('auth-form').classList.add('hidden');
     window.location.href = '/auth/desktop/exchange-redirect';
