@@ -104,6 +104,10 @@ func (h *Host) RestoreTakes(ctx context.Context, userID string) error {
 	return h.call(ctx, h.CorpusdURL, platform.AccountSuspendPath, map[string]string{"user_id": userID, "action": "restore"}, nil)
 }
 
+func (h *Host) Preflight(ctx context.Context, a Authz) error {
+	return h.VMCTL.AccountPreflight(ctx, a.UserID())
+}
+
 func (h *Host) PurgeMail(ctx context.Context, a Authz) (Counts, error) {
 	var out maild.AccountPurgeCounts
 	if err := h.call(ctx, h.MaildURL, maild.AuthPurgeAccountPath,
@@ -149,10 +153,12 @@ func (h *Host) PurgeData(ctx context.Context, a Authz) (Counts, error) {
 
 func (h *Host) DestroyComputers(ctx context.Context, a Authz) (Counts, Destroyed, error) {
 	res, err := h.VMCTL.AccountDestroy(ctx, a.UserID())
+	// On a partial failure res still names what was destroyed.
+	gone := Destroyed{ComputerIDs: res.Computers, VMIDs: res.VMIDs}
 	if err != nil {
-		return nil, Destroyed{}, err
+		return nil, gone, err
 	}
-	return Counts{"computers": int64(len(res.Computers)), "vm_states": int64(res.VMStates)}, Destroyed{ComputerIDs: res.Computers, VMIDs: res.VMIDs}, nil
+	return Counts{"computers": int64(len(res.Computers)), "vm_states": int64(res.VMStates)}, gone, nil
 }
 
 func (h *Host) ForgetGateway(ctx context.Context, a Authz, computerID string) error {

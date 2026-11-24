@@ -21,16 +21,20 @@ import (
 )
 
 type fakeSteps struct {
-	mu         sync.Mutex
-	store      *auth.Store
-	calls      []string
-	computers  []vmctl.AccountComputer
-	listErr    error
-	fail       map[string]error
-	tape       TapeResult
-	onTape     func(Authz)
-	userAtTape bool
-	userAtMail bool
+	mu        sync.Mutex
+	store     *auth.Store
+	calls     []string
+	computers []vmctl.AccountComputer
+	listErr   error
+	fail      map[string]error
+	tape      TapeResult
+	onTape    func(Authz)
+	// preflightErr fails Preflight; destroyFailsAfter makes DestroyComputers
+	// report its computers destroyed and then fail.
+	preflightErr     error
+	destroyFailsOnce bool
+	userAtTape       bool
+	userAtMail       bool
 	// onSuspend, when set, runs inside SuspendTakes: a cancel arriving while
 	// a pass is in flight.
 	onSuspend func()
@@ -81,7 +85,14 @@ func (f *fakeSteps) SuspendTakes(context.Context, string) error {
 	}
 	return f.fail["suspend"]
 }
-func (f *fakeSteps) RestoreTakes(context.Context, string) error { f.rec("restore"); return f.restoreErr }
+func (f *fakeSteps) RestoreTakes(context.Context, string) error {
+	f.rec("restore")
+	return f.restoreErr
+}
+func (f *fakeSteps) Preflight(context.Context, Authz) error {
+	f.rec("preflight")
+	return f.preflightErr
+}
 func (f *fakeSteps) PurgeMail(_ context.Context, a Authz) (Counts, error) {
 	f.rec("mail")
 	_, err := f.store.GetUserByID(a.UserID())
@@ -102,7 +113,14 @@ func (f *fakeSteps) DestroyComputers(context.Context, Authz) (Counts, Destroyed,
 	if f.destroyed != nil {
 		d = *f.destroyed
 	}
-	return Counts{"computers": 1}, d, f.fail["destroy"]
+	err := f.fail["destroy"]
+	if f.destroyFailsOnce {
+		f.destroyFailsOnce = false
+		err = errors.New("disk busy on the second computer")
+	}
+	// Like vmctl, what was destroyed is no longer listed as the account's.
+	f.computers = nil
+	return Counts{"computers": 1}, d, err
 }
 func (f *fakeSteps) ForgetGateway(_ context.Context, _ Authz, id string) error {
 	f.rec("gateway:" + id)
@@ -192,7 +210,7 @@ func TestPurgeRunsInOrderAndTheUserRowGoesLast(t *testing.T) {
 	// vmctl forgets the computer once it is destroyed; the record remembers.
 	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
 	e.pass()
-	want := []string{"mail", "data", "destroy", "gateway:computer-abc", "gateway:vm-1", "tape"}
+	want := []string{"preflight", "mail", "data", "destroy", "gateway:computer-abc", "gateway:vm-1", "tape"}
 	var got []string
 	for _, c := range e.f.calls {
 		if c != "stop" && c != "suspend" {
@@ -272,28 +290,41 @@ func TestAFailedStepFinalisesNothingAndIsRetried(t *testing.T) {
 	}
 }
 
-// The tape step: running waits, a transient refusal waits, a permanent one is
-// named in the receipt and the rest finishes.
-func TestTapeStepRunningTransientAndPermanent(t *testing.T) {
+// The tape step: running waits; ANY refusal halts. A refusal at the tape never
+// finalizes the account, whether or not it is called permanent: the user row
+// stays, the record stays purging, nothing after the step runs, and the purge
+// finishes when the refusal clears (seat 1 and 2, round 2, blocking 2).
+func TestATapeRefusalHaltsAndNeverFinalizes(t *testing.T) {
 	e := newEnv(t)
 	e.request(t)
 	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
 	e.f.tape = TapeResult{Running: true}
 	e.pass()
-	e.f.tape = TapeResult{Refusal: "computer-abc: head moved within the quiet window"}
-	e.pass()
-	if _, err := e.s.GetUserByID(e.user.ID); err != nil {
-		t.Fatal("finalised while the tape was running or refused for now")
+	for _, res := range []TapeResult{
+		{Refusal: "computer-abc: head moved within the quiet window"},
+		{Refusal: "computer-abc: in registry list"},
+		{Refusal: "computer-abc: has route slot", Permanent: true},
+		{Refusal: "protected computer: hard refusal list", Permanent: true},
+	} {
+		e.f.tape = res
+		e.pass()
+		e.clock = e.clock.Add(100 * time.Hour) // however long it waits, it does not finalize
+		e.pass()
+		if _, err := e.s.GetUserByID(e.user.ID); err != nil {
+			t.Fatalf("finalised past the refusal %q", res.Refusal)
+		}
+		d, _ := e.s.AccountDeletionFor(e.user.ID)
+		if d == nil || d.State != auth.DeletionPurging || !strings.Contains(d.LastError, res.Refusal) {
+			t.Fatalf("after %q the record is %+v", res.Refusal, d)
+		}
+		if _, done := d.Steps["tape"]; done {
+			t.Fatalf("the tape step was recorded done past the refusal %q", res.Refusal)
+		}
 	}
-	e.f.tape = TapeResult{Refusal: "computer-abc: has route slot", Permanent: true}
-	jobID := func() string { d, _ := e.s.AccountDeletionFor(e.user.ID); return d.JobID }()
+	e.f.tape = TapeResult{Counts: Counts{"files_deleted": 9}}
 	e.pass()
 	if _, err := e.s.GetUserByID(e.user.ID); err == nil {
-		t.Fatal("a permanent refusal blocked the deletion forever")
-	}
-	rec, _ := e.s.DeletionReceiptByJob(jobID)
-	if rec == nil || !strings.Contains(rec.Summary, "has route slot") {
-		t.Fatalf("the refusal is not named in the receipt: %+v", rec)
+		t.Fatal("the purge did not finish when the refusal cleared")
 	}
 }
 
@@ -536,56 +567,6 @@ func TestTheLoopFinishesACancelledDeletion(t *testing.T) {
 	}
 }
 
-// B3 (seat 2): a tape refusal that waiting does not clear is named in the
-// receipt and the rest finishes after the patience, never "stuck purging".
-func TestATapeRefusalIsWaitedOutThenNamedAndTheRestFinishes(t *testing.T) {
-	e := newEnv(t)
-	e.request(t)
-	_ = e.r.AtOnce(context.Background(), e.user.ID)
-	jobBefore, _ := e.s.AccountDeletionFor(e.user.ID)
-	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
-	e.f.tape = TapeResult{Refusal: "computer-abc: in registry list"} // not marked permanent
-	e.pass()
-	if _, err := e.s.GetUserByID(e.user.ID); err != nil {
-		t.Fatal("finalised on the first refusal")
-	}
-	d, _ := e.s.AccountDeletionFor(e.user.ID)
-	if _, ok := d.Steps["tape_wait"]; !ok {
-		t.Fatalf("the first refusal is not recorded with its time: %+v", d.Steps)
-	}
-	e.clock = e.clock.Add(TapeRefusalPatience - time.Hour)
-	e.pass()
-	if _, err := e.s.GetUserByID(e.user.ID); err != nil {
-		t.Fatal("finalised inside the patience")
-	}
-	e.clock = e.clock.Add(2 * time.Hour)
-	e.pass()
-	if _, err := e.s.GetUserByID(e.user.ID); err == nil {
-		t.Fatal("still stuck after the patience: the account is purging forever")
-	}
-	rec, _ := e.s.DeletionReceiptByJob(jobBefore.JobID)
-	if rec == nil || !strings.Contains(rec.Summary, "in registry list") {
-		t.Fatalf("the refusal is not named in the receipt: %+v", rec)
-	}
-}
-
-func TestATapeRefusalThatClearsInsideThePatienceIsPurgedNormally(t *testing.T) {
-	e := newEnv(t)
-	e.request(t)
-	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
-	e.f.tape = TapeResult{Refusal: "computer-abc: head moved within the quiet window"}
-	e.pass()
-	e.f.tape = TapeResult{Counts: Counts{"files_deleted": 9}}
-	e.clock = e.clock.Add(2 * time.Hour)
-	e.pass()
-	if _, err := e.s.GetUserByID(e.user.ID); err == nil {
-		t.Fatal("not finalised after the tape cleared")
-	}
-	if e.f.count("tape") != 2 {
-		t.Fatalf("tape calls: %v", e.f.calls)
-	}
-}
-
 // S5 (seat 2): what vmctl actually destroyed joins the record before the
 // gateway and the tape, so a computer made after the runner's list is not
 // left behind; and the gateway is asked for VM ids too (seat 1 #1).
@@ -618,5 +599,156 @@ func TestAFailedStopStillSuspendsTheTakes(t *testing.T) {
 	}
 	if e.f.count("suspend") != 1 {
 		t.Fatalf("takes not suspended after a failed stop: %v", e.f.calls)
+	}
+}
+
+// Round 2, blocking 1: every precondition is checked before anything
+// irreversible. A preflight that fails leaves the account whole: pending, with
+// no destructive call made, and cancellable.
+func TestAFailingPreflightLeavesTheAccountWholeAndCancellable(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	_ = e.r.AtOnce(context.Background(), e.user.ID)
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.f.preflightErr = errors.New("vmctl cannot read the deletion record")
+	for i := 0; i < 3; i++ {
+		e.pass()
+	}
+	if e.f.destructive() != 0 {
+		t.Fatalf("something irreversible ran after a failed preflight: %v", e.f.calls)
+	}
+	d, _ := e.s.AccountDeletionFor(e.user.ID)
+	if d == nil || d.State != auth.DeletionPending {
+		t.Fatalf("the record left pending: %+v", d)
+	}
+	// Still cancellable inside the same moment: the offer needs the clock before
+	// purge_after, so move the record's purge time to now+1h as a late runner would see it.
+	if _, err := e.s.OfferDeletionCancel(e.user.ID, e.clock.Add(-2*time.Hour)); err != nil {
+		t.Fatalf("a pending account whose preflight fails cannot be cancelled: %v", err)
+	}
+	// When the read works, the purge goes.
+	e.f.preflightErr = nil
+	e.pass()
+	if _, err := e.s.GetUserByID(e.user.ID); err == nil {
+		t.Fatal("the purge did not run once preflight passed")
+	}
+	// And preflight came before every destructive call.
+	first := map[string]int{}
+	for i, c := range e.f.calls {
+		if _, ok := first[c]; !ok {
+			first[c] = i
+		}
+	}
+	for _, c := range []string{"mail", "data", "destroy", "tape"} {
+		if first["preflight"] > first[c] {
+			t.Fatalf("%s ran before preflight: %v", c, e.f.calls)
+		}
+	}
+}
+
+// Round 2, blocking 3: the gateway and the tape are driven from the computers
+// that were the account's when the purge began (and what vmctl destroyed), not
+// from the list taken at the request. A computer that left the account inside
+// the 72 hours keeps its live bearer and its tape.
+func TestAComputerThatLeftTheAccountInsideThe72HoursIsNotForgotten(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	// At the request the account owns computer-abc and computer-moved.
+	e.f.computers = []vmctl.AccountComputer{
+		{ComputerID: "computer-abc", VMID: "vm-1", DesktopID: "primary", State: "stopped", Class: "primary"},
+		{ComputerID: "computer-moved", VMID: "vm-moved", DesktopID: "second", State: "stopped", Class: "primary"},
+	}
+	if err := e.r.AtOnce(context.Background(), e.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Inside the 72 hours computer-moved is transferred away: vmctl lists one.
+	e.f.computers = []vmctl.AccountComputer{{ComputerID: "computer-abc", VMID: "vm-1", DesktopID: "primary", State: "stopped", Class: "primary"}}
+	var tapeIDs []string
+	e.f.onTape = func(a Authz) { tapeIDs = a.Computers() }
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.pass()
+	for _, bad := range []string{"gateway:computer-moved", "gateway:vm-moved"} {
+		if e.f.count(bad) != 0 {
+			t.Fatalf("%s: a computer that left the account was forgotten: %v", bad, e.f.calls)
+		}
+	}
+	if e.f.count("gateway:computer-abc") != 1 || e.f.count("gateway:vm-1") != 1 {
+		t.Fatalf("the account's own computer was not forgotten: %v", e.f.calls)
+	}
+	if strings.Join(tapeIDs, ",") != "computer-abc" {
+		t.Fatalf("the tape was asked for %v", tapeIDs)
+	}
+}
+
+// Round 2 (seat 1 #9): a destroy that fails after the first of two computers
+// records the first, so the gateway and the tape reach it when the retry
+// finishes; and nothing finalizes in between.
+func TestAPartialDestroyIsRecordedAndFinishedByTheRetry(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	e.f.destroyFailsOnce = true
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.pass()
+	if _, err := e.s.GetUserByID(e.user.ID); err != nil {
+		t.Fatal("finalised after a failed destroy")
+	}
+	d, _ := e.s.AccountDeletionFor(e.user.ID)
+	if len(d.DestroyComputers) == 0 || d.DestroyComputers[0] != "computer-abc" {
+		t.Fatalf("what was destroyed is not recorded: %+v", d)
+	}
+	e.pass() // the retry: vmctl lists nothing now; the record still names computer-abc
+	if e.f.count("gateway:computer-abc") != 1 {
+		t.Fatalf("the retry did not reach the gateway for the destroyed computer: %v", e.f.calls)
+	}
+	if _, err := e.s.GetUserByID(e.user.ID); err == nil {
+		t.Fatal("not finalised after the retry")
+	}
+}
+
+// A computer the account owns when the steps are done is not left behind: its
+// steps run again before the user row goes.
+func TestAComputerMadeAfterTheListIsNotLeftBehind(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.f.onTape = func(Authz) { // after destroy, before the end: a new computer appears
+		e.f.computers = []vmctl.AccountComputer{{ComputerID: "computer-late", VMID: "vm-late", DesktopID: "x", State: "stopped", Class: "primary"}}
+	}
+	e.pass()
+	if _, err := e.s.GetUserByID(e.user.ID); err != nil {
+		t.Fatal("finalised with a computer still owned")
+	}
+	e.f.onTape = nil
+	e.pass()
+	if e.f.count("gateway:computer-late") != 1 {
+		t.Fatalf("the late computer was not forgotten: %v", e.f.calls)
+	}
+	if _, err := e.s.GetUserByID(e.user.ID); err == nil {
+		t.Fatal("not finalised after the late computer was handled")
+	}
+}
+
+// The ledger: a finished deletion leaves one line outside auth.db, with the
+// hash of the user id and the job, never the user id or the address.
+func TestAFinishedDeletionIsWrittenToTheLedgerWithoutThePerson(t *testing.T) {
+	e := newEnv(t)
+	path := t.TempDir() + "/ledger.jsonl"
+	e.r.LedgerPath = path
+	e.request(t)
+	jobBefore, _ := e.s.AccountDeletionFor(e.user.ID)
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.pass()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := string(raw)
+	if !strings.Contains(line, auth.DeletionUserHash(e.user.ID)) || !strings.Contains(line, jobBefore.JobID) {
+		t.Fatalf("the ledger line: %s", line)
+	}
+	for _, bad := range []string{e.user.ID, "purge-user", "example.com", "@"} {
+		if strings.Contains(line, bad) {
+			t.Fatalf("the ledger names the person (%q): %s", bad, line)
+		}
 	}
 }

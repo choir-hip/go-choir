@@ -32,6 +32,18 @@ type recorded struct {
 	body map[string]map[string]any
 }
 
+// has reports whether the path was called.
+func (r *recorded) has(path string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.reqs {
+		if p == path {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *recorded) note(path string, req *http.Request) {
 	var body map[string]any
 	_ = json.NewDecoder(req.Body).Decode(&body)
@@ -86,7 +98,12 @@ func TestRunnerOverHTTPWithRealMaildAndGateway(t *testing.T) {
 		vm.note(r.URL.Path, r)
 		switch r.URL.Path {
 		case "/internal/vmctl/account/computers":
-			_ = json.NewEncoder(w).Encode(map[string]any{"computers": []vmctl.AccountComputer{{ComputerID: "computer-abc", VMID: "vm-1", DesktopID: "primary", State: "stopped", Class: "primary"}}})
+			// Like vmctl, a destroyed computer is no longer listed.
+			list := []vmctl.AccountComputer{{ComputerID: "computer-abc", VMID: "vm-1", DesktopID: "primary", State: "stopped", Class: "primary"}}
+			if vm.has("/internal/vmctl/account/destroy") {
+				list = []vmctl.AccountComputer{}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"computers": list})
 		case "/internal/vmctl/account/destroy":
 			_ = json.NewEncoder(w).Encode(vmctl.AccountDestroyResult{Computers: []string{"computer-abc"}, VMIDs: []string{"vm-1"}, VMStates: 1})
 		default:

@@ -53,6 +53,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -86,13 +87,10 @@ type Destroyed struct {
 	VMIDs       []string
 }
 
-// TapeRefusalPatience is how long a tape refusal that is not named permanent
-// is waited out (a quiet window that has not closed, a registry that has not
-// caught up) before it is written into the receipt and the rest of the purge
-// finishes. Without it a refusal that never clears leaves the account in
-// purging with nothing that can cancel or finish it. The tape of a refused
-// computer stays for the scheduled sweep, and the log says so at ALERT level.
-var TapeRefusalPatience = 48 * time.Hour
+// alertAttempts is how many failed attempts of one purge pass before every
+// further failure is logged at ALERT level: a purge that cannot finish stays
+// in purging (it must never finalize past a refusal), so it must be loud.
+const alertAttempts = 5
 
 // Counts are numbers only; they go into the receipt.
 type Counts map[string]int64
@@ -101,8 +99,8 @@ type Counts map[string]int64
 type TapeResult struct {
 	Running   bool
 	Counts    Counts
-	Refusal   string // named, not hidden
-	Permanent bool   // a refusal waiting will not change
+	Refusal   string // named, not hidden: ANY refusal halts the purge
+	Permanent bool   // a refusal waiting will not change (reported; it halts all the same)
 }
 
 // Steps is the host side of the runner, over HTTP in production and faked in
@@ -113,6 +111,12 @@ type Steps interface {
 	StopComputers(ctx context.Context, userID string) error
 	SuspendTakes(ctx context.Context, userID string) error
 	RestoreTakes(ctx context.Context, userID string) error
+
+	// Preflight checks, before anything irreversible, every precondition of
+	// the steps that can refuse (vmctl: the deletion record is readable and
+	// old enough, no computer is protected, held or running a capsule). It
+	// touches nothing.
+	Preflight(ctx context.Context, a Authz) error
 
 	PurgeMail(ctx context.Context, a Authz) (Counts, error)
 	PurgeData(ctx context.Context, a Authz) (Counts, error)
@@ -129,6 +133,13 @@ type Runner struct {
 	// Interval is the tick; zero is one minute.
 	Interval time.Duration
 	mu       sync.Mutex // one pass at a time
+	// LedgerPath, when set, is a file the runner appends one line to for every
+	// finished deletion: the hash of the user id, the job id and the time. It
+	// lives outside auth.db and outside what the backup copies, so that after
+	// a restore from backup the accounts that were deleted since can be found
+	// and deleted again (cmd/deletion-restore-check). It holds no email and no
+	// user id.
+	LedgerPath string
 }
 
 // New makes a runner.
@@ -347,14 +358,26 @@ func (r *Runner) authorize(userID string, now time.Time) (Authz, error) {
 	if err != nil || d == nil {
 		return Authz{}, purgeguard.ErrNoRecord
 	}
-	return Authz{userID: d.UserID, jobID: d.JobID, requestedAt: d.RequestedAt, computers: append([]string(nil), d.Computers...), vmIDs: append([]string(nil), d.VMIDs...)}, nil
+	return Authz{userID: d.UserID, jobID: d.JobID, requestedAt: d.RequestedAt, computers: append([]string(nil), d.DestroyComputers...), vmIDs: append([]string(nil), d.DestroyVMIDs...)}, nil
 }
 
 // purge runs the destructive steps of one record whose grace period ended.
+//
+// The order is the safety argument. First everything that can refuse is
+// checked and nothing is touched (the record is old enough, no computer is
+// protected, vmctl can read the record it will rely on); a refusal here leaves
+// the account whole, pending and cancellable. Only then does the record move to
+// purging and the steps run, each re-checking the rule through a fresh
+// capability. A refusal or failure at any step HALTS: the record stays
+// purging, nothing after it runs, and the user row is never deleted past it.
+//
+// The gateway and the tape are driven from the destroy set, not from the list
+// taken at the request: the computers vmctl listed as the account's own when
+// this purge began, plus those it reported destroying. A computer that left
+// the account inside the 72 hours is in neither.
 func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error) {
 	now := r.now()
-	a, err := r.authorize(d.UserID, now)
-	if err != nil {
+	if _, err := r.authorize(d.UserID, now); err != nil {
 		return err
 	}
 	// Refuse a protected account before anything is destroyed: the whole
@@ -369,19 +392,37 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 			return fmt.Errorf("%w: %s", auth.ErrDeletionRefused, c.Refused)
 		}
 	}
-	ids := mergeIDs(d.Computers, computerIDs(computers))
-	vmIDs := mergeIDs(d.VMIDs, vmIDsOf(computers))
-	if err := r.store.RecordDeletionComputers(d.UserID, ids, vmIDs, now); err != nil {
+	if err := r.store.RecordDeletionComputers(d.UserID, mergeIDs(d.Computers, computerIDs(computers)), mergeIDs(d.VMIDs, vmIDsOf(computers)), now); err != nil {
 		return err
+	}
+	// Written before anything is destroyed: a crash after vmctl destroys a
+	// computer still leaves its id here.
+	if err := r.store.RecordDeletionDestroySet(d.UserID, computerIDs(computers), vmIDsOf(computers), now); err != nil {
+		return err
+	}
+	a, err := r.authorize(d.UserID, now)
+	if err != nil {
+		return err
+	}
+	// Preflight: nothing irreversible has happened and the record is still
+	// pending, so a failure here is a pause, not damage.
+	if err := r.steps.Preflight(ctx, a); err != nil {
+		if d.Attempts >= alertAttempts {
+			log.Printf("accountpurge: ALERT job=%s preflight keeps failing; the account is untouched and still cancellable: %v", d.JobID, err)
+		}
+		_ = r.store.EndAttempt(d.UserID, "preflight: "+err.Error(), now)
+		return fmt.Errorf("preflight: %w", err)
 	}
 	if _, err := r.store.BeginPurge(d.UserID, now); err != nil {
 		return err
 	}
-	a.computers, a.vmIDs = ids, vmIDs
 	defer func() {
 		msg := ""
 		if err != nil {
 			msg = err.Error()
+			if d.Attempts >= alertAttempts {
+				log.Printf("accountpurge: ALERT job=%s purge halted at attempt %d and stays purging until this is fixed: %v", d.JobID, d.Attempts+1, err)
+			}
 		}
 		_ = r.store.EndAttempt(d.UserID, msg, r.now())
 	}()
@@ -390,12 +431,16 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 		return errors.New("record vanished")
 	}
 	done := fresh.Steps
+	a, err = r.authorize(d.UserID, r.now())
+	if err != nil {
+		return err
+	}
 
 	// Each destructive step is logged on its own where an operator reads it:
 	// the job id (never the user id or the address), the step, the computers
 	// it acts on, and how it ended. The disk of a computer goes in the
 	// "computers" step and nowhere else.
-	computersDetail := " computers=" + strings.Join(a.computers, ",")
+	detail := func() string { return " computers=" + strings.Join(a.computers, ",") }
 	run := func(name, detail string, f func() (Counts, error)) error {
 		if _, ok := done[name]; ok {
 			return nil
@@ -424,16 +469,19 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 	if err := run("data", "", func() (Counts, error) { return r.steps.PurgeData(ctx, a) }); err != nil {
 		return err
 	}
-	if err := run("computers", computersDetail, func() (Counts, error) {
+	if err := run("computers", detail(), func() (Counts, error) {
 		counts, gone, err := r.steps.DestroyComputers(ctx, a)
-		if err != nil {
-			return nil, err
+		// What vmctl actually removed joins the destroy set even when the step
+		// failed halfway: the gateway and the tape must reach the computers
+		// that are already gone.
+		if len(gone.ComputerIDs) > 0 || len(gone.VMIDs) > 0 {
+			a.computers = mergeIDs(a.computers, gone.ComputerIDs)
+			a.vmIDs = mergeIDs(a.vmIDs, gone.VMIDs)
+			if rerr := r.store.RecordDeletionDestroySet(d.UserID, gone.ComputerIDs, gone.VMIDs, r.now()); rerr != nil {
+				return nil, errors.Join(err, rerr)
+			}
 		}
-		// What vmctl actually removed joins the record before the gateway and
-		// the tape: a computer made after this pass's list is not left behind.
-		a.computers = mergeIDs(a.computers, gone.ComputerIDs)
-		a.vmIDs = mergeIDs(a.vmIDs, gone.VMIDs)
-		if err := r.store.RecordDeletionComputers(d.UserID, a.computers, a.vmIDs, r.now()); err != nil {
+		if err != nil {
 			return nil, err
 		}
 		return counts, nil
@@ -443,7 +491,7 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 	// The gateway keys a credential by the VM it authenticates; the product
 	// computer id is asked for too (it matches the identity's recorded
 	// product computer).
-	if err := run("gateway", computersDetail, func() (Counts, error) {
+	if err := run("gateway", detail(), func() (Counts, error) {
 		var n int64
 		for _, id := range mergeIDs(a.computers, a.vmIDs) {
 			if err := r.steps.ForgetGateway(ctx, a, id); err != nil {
@@ -459,36 +507,43 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 		if _, err := r.authorize(d.UserID, r.now()); err != nil {
 			return err
 		}
-		log.Printf("accountpurge: job=%s step=tape begin%s", d.JobID, computersDetail)
+		log.Printf("accountpurge: job=%s step=tape begin%s", d.JobID, detail())
 		res, err := r.steps.PurgeTape(ctx, a)
 		if err != nil {
-			log.Printf("accountpurge: job=%s step=tape failed%s: %v", d.JobID, computersDetail, err)
+			log.Printf("accountpurge: job=%s step=tape failed%s: %v", d.JobID, detail(), err)
 			return fmt.Errorf("tape: %w", err)
 		}
 		switch {
 		case res.Running:
 			return nil // the next tick polls
-		case res.Refusal != "" && !res.Permanent:
-			// Wait it out, with the first sight of the refusal recorded so a
-			// restart does not restart the wait; after the patience it is
-			// named in the receipt and the purge finishes (never stuck).
-			first, seen := done["tape_wait"]
-			if !seen {
-				if err := r.store.RecordDeletionStep(d.UserID, "tape_wait", auth.DeletionStep{DoneAt: r.now(), Refused: res.Refusal}); err != nil {
-					return err
-				}
-				first = auth.DeletionStep{DoneAt: r.now()}
-			}
-			if r.now().Sub(first.DoneAt) < TapeRefusalPatience {
-				log.Printf("accountpurge: job=%s step=tape waiting%s: %s", d.JobID, computersDetail, res.Refusal)
-				return fmt.Errorf("tape: not yet: %s", res.Refusal)
-			}
-			log.Printf("accountpurge: ALERT job=%s step=tape refused for %s and finishing without it%s: %s; the tape of these computers stays for the scheduled sweep", d.JobID, TapeRefusalPatience, computersDetail, res.Refusal)
+		case res.Refusal != "":
+			// A refusal HALTS. The tape of a computer the sweep will not
+			// destroy is personal data that is still there; the purge never
+			// finalizes past it (the user row is what lets anyone find the
+			// account to finish it). The record stays purging, the log says
+			// why every minute, and the refusal clears when its cause does
+			// (a quiet window closing, a registry entry going).
+			log.Printf("accountpurge: job=%s step=tape refused%s permanent=%v: %s", d.JobID, detail(), res.Permanent, res.Refusal)
+			return fmt.Errorf("tape refused: %s", res.Refusal)
 		}
-		log.Printf("accountpurge: job=%s step=tape done%s counts=%v refused=%q", d.JobID, computersDetail, res.Counts, res.Refusal)
-		if err := r.store.RecordDeletionStep(d.UserID, "tape", auth.DeletionStep{DoneAt: r.now(), Counts: res.Counts, Refused: res.Refusal}); err != nil {
+		log.Printf("accountpurge: job=%s step=tape done%s counts=%v", d.JobID, detail(), res.Counts)
+		if err := r.store.RecordDeletionStep(d.UserID, "tape", auth.DeletionStep{DoneAt: r.now(), Counts: res.Counts}); err != nil {
 			return err
 		}
+	}
+
+	// Last check before the user row goes: a computer the account owns now
+	// (one made after the list) is not left behind. Its steps run again.
+	if left, err := r.steps.Computers(ctx, d.UserID); err != nil {
+		return fmt.Errorf("list computers before the end: %w", err)
+	} else if len(left) > 0 {
+		if err := r.store.RecordDeletionDestroySet(d.UserID, computerIDs(left), vmIDsOf(left), r.now()); err != nil {
+			return err
+		}
+		if err := r.store.ClearDeletionSteps(d.UserID, "computers", "gateway", "tape"); err != nil {
+			return err
+		}
+		return fmt.Errorf("the account owns %d computer(s) made since the list; their steps run again", len(left))
 	}
 
 	fresh, err = r.store.AccountDeletionFor(d.UserID)
@@ -504,7 +559,34 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 		return err
 	}
 	log.Printf("accountpurge: job=%s receipt=%s purged", rec.JobID, rec.ID)
+	r.appendLedger(rec)
 	return nil
+}
+
+// ledgerLine is one finished deletion.
+type ledgerLine struct {
+	UserHash string `json:"user_hash"`
+	JobID    string `json:"job_id"`
+	PurgedAt string `json:"purged_at"`
+}
+
+// appendLedger writes the finished deletion to the ledger file. A failure
+// cannot undo the purge; it is logged at ALERT level so the gap is seen.
+func (r *Runner) appendLedger(rec *auth.DeletionReceipt) {
+	if r.LedgerPath == "" || rec == nil {
+		return
+	}
+	raw, _ := json.Marshal(ledgerLine{UserHash: rec.UserHash, JobID: rec.JobID, PurgedAt: rec.PurgedAt.UTC().Format(time.RFC3339)})
+	f, err := os.OpenFile(r.LedgerPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err == nil {
+		_, err = f.Write(append(raw, '\n'))
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}
+	if err != nil {
+		log.Printf("accountpurge: ALERT job=%s the deletion ledger could not be written (%s): %v; a restore from backup could bring this account back unnoticed", rec.JobID, r.LedgerPath, err)
+	}
 }
 
 // receiptSummary is counts and times only: the step names, when each was
