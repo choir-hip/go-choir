@@ -101,12 +101,12 @@ type tapeSweepApplyRun struct {
 	// a spent cap), for a named apply to fail on.
 	skipped  []string
 	nowHeads map[string]tapeHead
-	delta      map[string]bool
-	deltaOK    bool
-	log        *tapeSweepLog
-	counts     *TapeSweepApplyCounts
-	deletes    int
-	bytes      int64
+	delta    map[string]bool
+	deltaOK  bool
+	log      *tapeSweepLog
+	counts   *TapeSweepApplyCounts
+	deletes  int
+	bytes    int64
 	// onBatch, when set, runs after each batch of unlinks with that batch's
 	// deleted files and bytes (the destroyed apply persists its tombstone
 	// counts there, so a killed apply leaves a truthful tombstone).

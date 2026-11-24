@@ -277,11 +277,11 @@ type TapeSweepReport struct {
 	DestroyedProofs           []TapeSweepComputerProof            `json:"destroyed_proofs,omitempty"`
 	// ComputerIDs is the exact list a named sweep was made for (dry run and
 	// apply alike): the receipt says which computers it concerned.
-	ComputerIDs []string `json:"computer_ids,omitempty"`
-	Apply                     *TapeSweepApplyCounts               `json:"apply,omitempty"`
-	Warnings                  []string                            `json:"warnings,omitempty"`
-	StartedAt                 time.Time                           `json:"started_at"`
-	DurationMs                int64                               `json:"duration_ms"`
+	ComputerIDs []string              `json:"computer_ids,omitempty"`
+	Apply       *TapeSweepApplyCounts `json:"apply,omitempty"`
+	Warnings    []string              `json:"warnings,omitempty"`
+	StartedAt   time.Time             `json:"started_at"`
+	DurationMs  int64                 `json:"duration_ms"`
 }
 
 // TapeSweepApplyCounts are the apply outcomes, by the GC log's op names.
@@ -1046,14 +1046,14 @@ func tapeSweepRel(ns, digest string) string {
 // --- manifest ------------------------------------------------------------
 
 type tapeSweepManifestHeader struct {
-	Kind                        string              `json:"kind"` // header
-	RunID                       string              `json:"run_id"`
-	CreatedAt                   string              `json:"created_at"`
-	Grace                       string              `json:"grace"`
-	Quiet                       string              `json:"quiet"`
-	Sweeps                      []string            `json:"sweeps"`
-	AcceptUnrecordedForkLineage bool                `json:"accept_unrecorded_fork_lineage"`
-	NoArchive                   bool                `json:"no_archive,omitempty"`
+	Kind                        string   `json:"kind"` // header
+	RunID                       string   `json:"run_id"`
+	CreatedAt                   string   `json:"created_at"`
+	Grace                       string   `json:"grace"`
+	Quiet                       string   `json:"quiet"`
+	Sweeps                      []string `json:"sweeps"`
+	AcceptUnrecordedForkLineage bool     `json:"accept_unrecorded_fork_lineage"`
+	NoArchive                   bool     `json:"no_archive,omitempty"`
 	// Computers is the named list, sorted; absent for an unnamed sweep.
 	Computers []string            `json:"computers,omitempty"`
 	Heads     map[string]tapeHead `json:"heads"`
