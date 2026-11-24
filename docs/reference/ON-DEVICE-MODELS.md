@@ -518,6 +518,12 @@ word error on a 31-minute stream) where upstream gave 2.05%.
 NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra.", a link to the licence, and that LICENSE and NOTICE stay with the files (the
 store fetches both into the model's folder). The credit text is `KnownModels.fluidSpeechMini.credit`. The credit is shown beside the option on Settings > Downloads and the first-run welcome (section 12); the About page still shows only the build and server commits.
 
+**Credits are data on the model row** (2026-11-24). `ModelCandidate.credit` carries the text an attribution licence asks for; a row with
+pinned files takes it from its bundle. Besides the two Fluid Speech models, two CC BY 4.0 rows carry one: Parakeet TDT 0.6B v2 (NVIDIA;
+`license: cc-by-4.0` on `nvidia/parakeet-tdt-0.6b-v2` and on `FluidInference/parakeet-tdt-0.6b-v2-coreml`, read 2026-11-24) and Pocket TTS
+(Kyutai; `license: cc-by-4.0` on `FluidInference/pocket-tts-coreml`). Their wording is ours: neither repository was checked for a NOTICE
+file that asks for a particular sentence. `ModelListTests` L8 fails when a CC BY row has no credit. No page shows credits yet.
+
 **How the app fetches it.** Through the model store (`ModelStore.ensureBundle`), file by file, resumable, each file checked against its
 SHA-256 before it is moved into place, only from voice setup's fetch after the person has agreed (the lane `onboard-consent` owns the
 prompt). The stage itself never downloads: asked to begin without the whole folder it throws `unavailable`. A served list is bounded (4 GiB a file, 8 GiB and 256 files a model), its repository, commit, paths and digests are validated before any address is made, and each file's size is checked after its digest. The folder holds a `.pin` record (commit, every file's size and digest, the copies), written after the copies and removed before a fetch begins: without it matching, the folder is not "present".
