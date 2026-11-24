@@ -495,8 +495,12 @@ public final class VoiceSetup: @unchecked Sendable {
             // Check on this device.
             update(s) { r in r.state = "preparing"; r.progress = 1; r.statusLine = "Preparing for this phone"; r.canRetry = false; r.canFallback = false }
             let be = backend
-            let check = await verifier.verify(model: cand.id, companions: ListenerPipeline.companions(of: cand.id), check: { try await be.check(cand) })      // the ONE writer of readiness
+            let check = await verifier.verify(model: cand.id, check: { try await be.check(cand) })      // the ONE writer of readiness
             if check.outputOK {
+                // A companion (the live-words model that comes with a batch recogniser) is checked itself; it is not marked on the primary's pass.
+                for companion in ListenerPipeline.companions(of: cand.id) {
+                    if let cc = SetupCatalog.ladder(s).first(where: { $0.id == companion }) { _ = await verifier.verify(model: companion, check: { try await be.check(cc) }) }
+                }
                 let numbers = Self.numbers(check)
                 update(s) { r in
                     r.state = "ready"; r.progress = 1; r.numbers = numbers

@@ -231,9 +231,9 @@ final class ListenerPipelineTests: XCTestCase {
         r.register(.speechBounds, id: "silero-vad", descriptor: StageDescriptor(displayName: "silero")) { _ in EnergyVAD(StageParams()) }
         r.register(.transcriber, id: "parakeet-eou", descriptor: StageDescriptor(displayName: "eou")) { _ in StubTranscriber(text: "") }
         r.register(.transcriber, id: "fluid-speech-mini", descriptor: StageDescriptor(displayName: "fluid")) { _ in StubTranscriber(text: "") }
-        let setup = FileVoiceReadiness(file: file)                           // the process that ran setup
+        let setup = FileVoiceReadiness(file: file, pins: { _ in ModelPin(pin: "t", present: { true }) })                           // the process that ran setup
         for m in [silero, eou, fluid] { setup.markReady(model: m) }
-        let launched = FileVoiceReadiness(file: file)                        // a new process reads the same record
+        let launched = FileVoiceReadiness(file: file, pins: { _ in ModelPin(pin: "t", present: { true }) })                        // a new process reads the same record
         let rt = LabRuntime(supportDir: dir.appendingPathComponent("support"), session: NullSessionOwner(), registry: r, readiness: launched)
         XCTAssertEqual(rt.configuration.setting(.speechBounds)?.id, "silero-vad")
         XCTAssertEqual(rt.configuration.setting(.transcriber), StageSetting(id: "live-then-final", params: ["live": .string("parakeet-eou"), "final": .string("fluid-speech-mini")]))
