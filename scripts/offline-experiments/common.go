@@ -446,6 +446,8 @@ func main() {
 		runE1(os.Args[2], os.Args[3])
 	case "e1b":
 		runE1b(os.Args[2], os.Args[3])
+	case "e4":
+		runE4(os.Args[2], os.Args[3])
 	case "e2":
 		if len(os.Args) != 4 {
 			fmt.Fprintln(os.Stderr, "usage: e2 DATA OUT")
