@@ -419,130 +419,38 @@ describe('what is kept (K1)', () => {
   });
 });
 
-describe('the migration from the Swift storage (G1)', () => {
-  const load = async (m: ReturnType<typeof memFs>, host = 'native') => { const s = await T.themeStore(m.storage); await T.themeMigrate(host, m.storage); return s; };
-  const legacy = (over: Record<string, unknown> = {}, log: string[] = []) => ({
-    available: true,
-    later: async (r: { op: string }) => { if (r.op !== 'generation') log.push(r.op); return r.op === 'themeLegacy' ? { found: true, theme: 'mine', mode: 'dark', files: { 'mine.json': JSON.stringify(doc('mine')), 'texture-ember.json': JSON.stringify(T.parseTextureTheme(demo()).theme), 'broken.json': 'nope' }, ...over } : { done: true }; },
-  });
-  test('G1 the old choice and the old themes are carried over once; the old copy is released after; the next launch asks nothing', async () => {
+describe('nothing is carried over from the Swift storage (G1)', () => {
+  test('G1 the old choice and the old themes are never asked for: the store starts fresh and the module has no carry-over', async () => {
     const m = memFs(); const log: string[] = [];
-    bindNative(legacy({}, log) as never);
-    const s = await load(m);
-    expect(s.choice).toEqual({ theme: 'mine', mode: 'dark' }); expect(s.originOf('mine')).toBe('file'); expect(s.originOf('ember')).toBe('texture');
-    expect(s.problems.some((p) => p.startsWith('broken.json'))).toBe(true);                       // honest: the broken one is still reported
-    expect(m.files.has(`${T.THEMES_DIR}/texture-ember.json`)).toBe(true); expect(m.files.has(`${T.THEMES_DIR}/mine.json`)).toBe(true);
-    expect(kept(m)).toEqual({ theme: 'mine', mode: 'dark', migrated: true });
-    expect(log).toEqual(['themeLegacy']);                                                          // the old copy is not removed (a reverted build still reads it)
-    T.resetThemes(); log.length = 0;
-    const again = await load(m);
-    expect(again.choice.theme).toBe('mine'); expect(log).toEqual([]);                            // `migrated` is kept: no second read
+    bindNative({ available: true, later: async (r: { op: string }) => { log.push(r.op); return { found: true, theme: 'mine', mode: 'dark', files: { 'mine.json': '{}' } }; } } as never);
+    const s = await T.themeStore(m.storage);
+    expect(s.choice).toEqual({ theme: null, mode: 'system' });
+    expect(log.filter((o) => o !== 'generation')).toEqual([]);
+    expect('themeMigrate' in T).toBe(false);
+    expect(m.files.size).toBe(0);
   });
-  test('G1 a phone with nothing old is marked and never asked again', async () => {
-    const m = memFs(); const log: string[] = [];
-    bindNative(legacy({ found: false, theme: '', mode: '', files: {} }, log) as never);
-    const s = await load(m);
-    expect(s.choice).toEqual({ theme: null, mode: 'system' }); expect(kept(m).migrated).toBe(true);
+});
+
+describe('what the previous shared build carried over is let go (G2)', () => {
+  const doc = (id: string): string => JSON.stringify({ schema_version: 3, id, name: id, schemes: ['light'], colors: { paper: '#FFFFFF', fg: '#111111' } });
+  test('G2 a choice file the migration wrote (migrated: true) and the files it copied are dropped once: the default shows, the marker goes', async () => {
+    const m = memFs(); m.put(T.CHOICE_FILE, JSON.stringify({ theme: 'depth', mode: 'dark', migrated: true })); m.put(`${T.THEMES_DIR}/drill-user.json`, doc('drill-user'));
+    const s = await T.themeStore(m.storage);
+    expect(s.choice).toEqual({ theme: null, mode: 'system' }); expect(m.files.has(`${T.THEMES_DIR}/drill-user.json`)).toBe(false);
+    expect(kept(m)).toEqual({ theme: null, mode: 'system' });
+    T.resetThemes(); const again = await T.themeStore(m.storage); expect(again.choice).toEqual({ theme: null, mode: 'system' });          // once: the second launch is the same
   });
-  test('G1 a choice already made here wins over the old one; the old themes still come', async () => {
-    const m = memFs(); m.put(T.CHOICE_FILE, JSON.stringify({ theme: 'depth', mode: 'light' }));
-    bindNative(legacy() as never);
-    const s = await load(m);
-    expect(s.choice).toEqual({ theme: 'depth', mode: 'light' }); expect(s.originOf('mine')).toBe('file'); expect(kept(m).migrated).toBe(true);
-  });
-  test('G1 a write that fails leaves no marker, so the next launch tries again', async () => {
-    const m = memFs(true); const log: string[] = [];
-    bindNative(legacy({}, log) as never);
-    await load(m);
-    expect(log).toEqual(['themeLegacy']); expect(m.files.size).toBe(0);
-  });
-  test('G1 a read that never answers, then a theme tap, then a relaunch: the old themes still come (only migrate writes the marker)', async () => {
-    const m = memFs();
-    bindNative({ available: true, later: async () => new Promise(() => undefined) } as never);
-    await load(m);                                                              // waits out LEGACY_WAIT_MS, answers without it
-    await T.themeSet('depth', m.storage); await T.schemeSet('dark', m.storage);
-    expect(kept(m)).toEqual({ theme: 'depth', mode: 'dark' });                                  // no `migrated`
-    T.resetThemes();
-    bindNative(legacy() as never);
-    const s = await load(m);
-    expect(s.originOf('mine')).toBe('file'); expect(s.choice).toEqual({ theme: 'depth', mode: 'dark' });   // the choice made here wins, the old themes arrived
-    expect(kept(m).migrated).toBe(true);
-  }, 10000);
-  test('G1 a file the read could not carry (over the cap, or past the 64th) is a problem under its own name, not dropped', async () => {
-    const m = memFs();
-    const many: Record<string, string> = {};
-    for (let i = 0; i < 66; i++) many[`t${String(i).padStart(2, '0')}.json`] = JSON.stringify(doc(`t${i}`));
-    bindNative(legacy({ files: many, skipped: ['huge.json'] }) as never);
-    const s = await load(m);
-    expect(s.problems.filter((p) => p.includes('could not be carried over')).map((p) => p.split(':')[0]).sort()).toEqual(['huge.json', 't64.json', 't65.json']);
+  test('G2 a choice made in this build (no marker) and its themes are untouched', async () => {
+    const m = memFs(); m.put(T.CHOICE_FILE, JSON.stringify({ theme: 'depth', mode: 'dark' })); m.put(`${T.THEMES_DIR}/mine.json`, doc('mine'));
+    const s = await T.themeStore(m.storage);
+    expect(s.choice).toEqual({ theme: 'depth', mode: 'dark' }); expect(m.files.has(`${T.THEMES_DIR}/mine.json`)).toBe(true);
   });
   test('K1 a failed save is tried again by the next tap on the same theme', async () => {
     const m = memFs(true);
     await T.themeSet('depth', m.storage); expect(m.files.size).toBe(0);
-    const ok = memFs(); ok.put('x', 'y');
-    // same store, a disk that works now
-    const s = await load(m); expect(s.choice.theme).toBe('depth');
+    const s = await T.themeStore(m.storage); expect(s.choice.theme).toBe('depth');
     (m.storage as never as { fs: { atomicWriteFile: (p: string, b: Uint8Array) => Promise<void> } }).fs.atomicWriteFile = async (p, b) => { m.files.set(p, b); };
     await T.themeSet('depth', m.storage); expect(kept(m).theme).toBe('depth');
-  });
-
-  test('G1 an unreadable answer or a bridge that throws changes nothing and marks nothing', async () => {
-    for (const later of [async () => 'garbage', async () => { throw new Error('bridge'); }]) {
-      T.resetThemes(); const m = memFs();
-      bindNative({ available: true, later } as never);
-      const s = await load(m);
-      expect(s.choice).toEqual({ theme: null, mode: 'system' }); expect(m.files.size).toBe(0);
-    }
-  });
-  test('G1 file names are plain: a path, a hidden file or a non-json name in the answer is dropped', async () => {
-    const m = memFs();
-    bindNative(legacy({ files: { '../evil.json': '{}', '.hidden.json': '{}', 'a/b.json': '{}', 'x.txt': '{}', 'ok.json': JSON.stringify(doc('ok')) } }) as never);
-    await load(m);
-    expect([...m.files.keys()].sort()).toEqual([T.CHOICE_FILE, `${T.THEMES_DIR}/ok.json`].sort());
-  });
-  test('G1 a file already in the new place is kept: the carry-over (and a retry of it) never writes over it', async () => {
-    const m = memFs();
-    const mine = JSON.stringify(doc('mine', { name: 'Newer' }));
-    m.put(`${T.THEMES_DIR}/mine.json`, mine);
-    bindNative(legacy() as never);
-    const s = await load(m);
-    expect(m.text(`${T.THEMES_DIR}/mine.json`)).toBe(mine); expect(s.cards(light).find((c) => c.id === 'mine')?.name).toBe('Newer');
-    expect(m.files.has(`${T.THEMES_DIR}/texture-ember.json`)).toBe(true);                       // the others still come
-  });
-  test('G1 the first answer does not wait for the carry-over; the revision moves when it is done, so the sources are asked again', async () => {
-    const m = memFs(); let release: () => void = () => undefined;
-    bindNative({ available: true, later: async (r: { op: string }) => { await new Promise<void>((res) => { release = res; }); return r.op === 'themeLegacy' ? { found: true, theme: 'depth', mode: 'dark', files: {} } : {}; } } as never);
-    const first = await T.themeShared('light', false, m.storage);                              // answers at once: the default
-    expect(first.id).toBe('chrome-pastel');
-    const p = T.themeMigrate('native', m.storage);
-    await new Promise((r) => setTimeout(r, 30)); release();
-    expect((await p).rev).toBe(1);
-    expect((await T.themeShared('light', false, m.storage)).id).toBe('depth');
-  });
-  test('G1 the handle binds late: the carry-over waits for it (bounded) and then runs', async () => {
-    const m = memFs();
-    await T.themeStore(m.storage);
-    setTimeout(() => bindNative(legacy() as never), 300);
-    const r = await T.themeMigrate('', m.storage);
-    expect(r.rev).toBe(1); expect(kept(m).migrated).toBe(true); expect(kept(m).theme).toBe('mine');
-  });
-  test('G1 Android: host "none" and no handle returns at once, writes nothing, asks nothing', async () => {
-    const m = memFs(); await T.themeStore(m.storage);
-    const t0 = Date.now(); const r = await T.themeMigrate('none', m.storage);
-    expect(Date.now() - t0).toBeLessThan(500); expect(r.rev).toBe(0); expect(m.files.size).toBe(0);
-  });
-  test('G1 no handle ever: it gives up after the bounded wait, writes nothing and is asked again when the host fact changes', async () => {
-    const m = memFs(); await T.themeStore(m.storage);
-    expect((await T.themeMigrate('', m.storage)).rev).toBe(0); expect(m.files.size).toBe(0);
-    bindNative(legacy() as never);
-    expect((await T.themeMigrate('native', m.storage)).rev).toBe(1);
-  }, 10000);
-  test('G1 a theme chosen while the carry-over runs is not overridden by the old choice', async () => {
-    const m = memFs(); await T.themeStore(m.storage);
-    bindNative({ available: true, later: async () => { await T.themeSet('signal', m.storage); return { found: true, theme: 'mine', mode: 'dark', files: { 'mine.json': JSON.stringify(doc('mine')) } }; } } as never);
-    await T.themeMigrate('native', m.storage);
-    const s = await T.themeStore(m.storage);
-    expect(s.choice.theme).toBe('signal'); expect(s.originOf('mine')).toBe('file');
   });
 });
 

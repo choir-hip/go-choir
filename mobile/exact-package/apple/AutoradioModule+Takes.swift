@@ -37,7 +37,7 @@ import Foundation
         let make: @Sendable () -> Transcriber = { SFSpeechTranscriber(StageParams([:])) }
         session = TakeSession(recorder: AVTakeRecorder(), transcriber: FileTranscriber(make: make), gate: TakeGate(module), preview: preview,
                               micAllowed: { LiveAudio.micPermissionGranted() ? true : await LiveAudio.requestMicPermission() },
-                              responds: { TakeResponds.from(entry: RadioBridge.shared.onAirEntry()) }, dir: dir)
+                              responds: { RadioBridge.shared.responds() }, dir: dir)
         TakeSession.live = session
         preview.onEnd = { [weak self] in self?.session.previewEnded() }
         session.onChange = { [weak self, weak module] in

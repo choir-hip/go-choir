@@ -1,6 +1,10 @@
 // The shapes of the mail pages' data. They are declared here, in Contract, and `app.ts` answers them (mail.ts); the generated app.contract.d.ts gives
 // mail.ts its types from these lines, so a field is added in this file and nowhere else. Before mail moved to shared logic these came from the Swift
-// package's interface (interface/mail.json). `MailAck` stays with the package: three native sends (read aloud, ask, open the approval page) answer it.
+// package's interface (interface/mail.json). `MailAck` stays with the package: two native sends (ask, open the approval page) answer it.
+
+// The note under a message, chosen in shared code by the LAST action (mail.ts `noteOf`).
+shape MailNote
+  text: string
 
 shape MailRow
   id: string

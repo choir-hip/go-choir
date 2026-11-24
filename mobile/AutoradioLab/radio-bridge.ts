@@ -19,6 +19,7 @@ import { lapYield, lap } from './lap.ts';
 import { firstRunOver } from './onboarding.ts';
 import { deskMode } from './consent.ts';
 import { perform } from './radio-model.ts';
+import { voiceFacts, respondsOf, airAddressOf } from './voice-facts.ts';
 import { htmlToText } from './mail-model.ts';
 import { parseList, weight, FRONT_LIMIT, type Story } from './paper-model.ts';
 import { listing } from './paper.ts';
@@ -251,8 +252,9 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const later = nativeLater();
   // Sent when it changed (the sheet's version, its length, what is on air): the whole sheet crossed the bridge every second, paused, idle or locked, for state that had not moved (review B2-1). A failed or let-go call leaves the key, so the next pulse sends again.
   const candidates = r.front.stories.slice(0, 40);                       // the paper's list the desk may add from (the turn's `candidates`: native sends it with every turn)
-  const setKey = `${gen}|${r.rt.store.sheet.version}|${r.rt.store.sheet.entries.length}|${r.rt.store.onAir()?.id ?? ''}|${candidates.length}:${candidates.map((c) => c.route).join(',')}`;
-  if (later && setKey !== r.setKey) { try { const ans = await later({ op: 'radioSet', gen, snapshot: turnQueueJSON(r.rt, 0), candidates, onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); if ((ans as { ok?: unknown } | null)?.ok !== false) r.setKey = setKey; else console.log(`radio: native refused the radioSet push (stamped ${gen}, the account moved on); it is sent again with the next pulse's stamp`); } catch { /* the next pulse sets it */ } }       // a push native refused (ok: false: stamped for an account that moved on) is not recorded as sent: the next pulse sends it again with that pulse's stamp
+  const setKey = `${gen}|${r.rt.store.sheet.version}|${r.rt.store.sheet.entries.length}|${r.rt.store.onAir()?.id ?? ''}|${airAddressOf(r.rt.store.onAir())}|${candidates.length}:${candidates.map((c) => c.route).join(',')}`;
+  const responds = respondsOf(r.rt.store.onAir());
+  if (later && setKey !== r.setKey) { try { const ans = await later({ op: 'radioSet', gen, snapshot: turnQueueJSON(r.rt, 0), facts: voiceFacts(r.rt.store.sheet.entries), respondsRoute: responds?.route ?? '', respondsTitle: responds?.title ?? '', airAddress: airAddressOf(r.rt.store.onAir()), candidates }); if ((ans as { ok?: unknown } | null)?.ok !== false) r.setKey = setKey; else console.log(`radio: native refused the radioSet push (stamped ${gen}, the account moved on); it is sent again with the next pulse's stamp`); } catch { /* the next pulse sets it */ } }       // a push native refused (ok: false: stamped for an account that moved on) is not recorded as sent: the next pulse sends it again with that pulse's stamp
   const posting = r.rt.store.canPost;                                     // pending ops and not backing off (the route's Retry-After, or 30 s doubling): the pulse does not call for a post it would not make
   // `live`: something is sounding and the app is in front (native's `foreground`: with the screen off or the app away the audio plays on and nothing here asks again), so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:
   // the key is the beat, so the screens are asked after THIS pulse's read of the deck (they never read a position older than the pulse that said so), and a pause or a hidden page leaves the key still.
@@ -408,12 +410,24 @@ async function openRadioOf(r: Radio): Promise<void> {
 
 /** Play or queue one audio address (an episode, a clip's episode): the podcast page's Play and Add to queue. The audio is the deck's; the entry and the order are the sheet's. */
 export async function radioPlayAudio(storage: Store | undefined, native: NativeReader | undefined, op: string, id: string, url: string, title: string, show: string, start: number): Promise<{ status: string; message: string }> {
+  if (op === 'keep') {                                  // "Keep listening" to a clip: the clip no longer ends, the episode goes on from where it is (the deck's act, the player's own rule)
+    const k = await getRadio(storage, native); k.writer.listenerActed();
+    await k.rt.keepEnd(id);
+    return { status: 'ok', message: '' };
+  }
   if (url === '') return { status: 'error', message: 'This episode has no audio to play.' };
   const r = await getRadio(storage, native); r.writer.listenerActed();
   const e = audioEntry({ url, title: title === '' ? 'Episode' : title, show, ...(start > 0 ? { start } : {}), ...(id !== '' ? { episode_id: id } : {}) });
   if (op === 'queue') r.rt.queue(e); else r.rt.play(e);
   await r.rt.pump();
   return { status: 'ok', message: '' };
+}
+
+/** Play or queue one entry that shared code made (a clip row's Play and Queue: clip-play.ts). */
+export async function radioPlayEntry(storage: Store | undefined, native: NativeReader | undefined, op: string, e: Entry): Promise<void> {
+  const r = await getRadio(storage, native); r.writer.listenerActed();
+  if (op === 'queue') r.rt.queue(e); else r.rt.play(e);
+  await r.rt.pump();
 }
 
 /** Read an imported document aloud (or queue it): the words are the document's own, one line per block from block `at`; the entry is the sheet's book entry. */

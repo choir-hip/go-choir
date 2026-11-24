@@ -5,7 +5,7 @@
 // (flat strings and numbers the contracts bind) and `ThemeExtras` (the type scale and the rest of the mark and motion tokens). No component names a colour, a font or a radius.
 //
 // The two facts only the system knows, the colour scheme and Reduce Motion, are Exact's own: `exactViewport().prefersColorScheme` and `.prefersReducedMotion` (the contracts pass them in). Nothing
-// here is native except ONE read of the old Swift storage, once, for a phone that already has a choice and themes (the migration below).
+// here is native: the choice and the themes start fresh (the app has not launched; nothing is carried from the Swift build).
 //
 // Ways it can fail (each has a test in themes.test.ts):
 //  F1 A theme whose text is unreadable on its paper loads (the gate: fg and muted on paper and paper2 at 4.5, onAccent on accent at 3, accent on paper at 3, on every scheme the theme claims; a user
@@ -22,7 +22,7 @@
 //  F10 A chosen theme that has only one scheme meets a mode control that asks for the other: the control shows the one scheme and refuses the other; the "default" id clears the choice.
 //  F11 The lens is a style (A native glass, B no material with a wash, C ultra-thin) and a wash of the page colour: a theme without a "lens" key shows the native glass; an unknown style or a wash outside 0...1 is refused.
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, HTTPError, SignedOutError, nativeLater, type Reply } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, type Reply } from './api.ts';
 import { WORDS } from './words.ts';
 import { BUNDLED } from './themes-bundled.ts';
 
@@ -503,7 +503,7 @@ let status = '';
 let saving: Promise<unknown> = Promise.resolve();
 let dirty = false;      // a save that did not land: the next tap on the same theme tries again
 /** Forget everything held (the tests; an account change does NOT call this: the theme is the phone's, not the account's). */
-export function resetThemes(): void { loading = null; current = null; status = ''; saving = Promise.resolve(); migrated = false; dirty = false; hadChoiceFile = false; choiceTouched = false; migrating = null; migrateTries = 0; rev = 0; }
+export function resetThemes(): void { loading = null; current = null; status = ''; saving = Promise.resolve(); dirty = false; }
 
 async function readJSON(storage: Storage | undefined, path: string): Promise<unknown | undefined> {
   if (!storage) return undefined;
@@ -512,85 +512,28 @@ async function readJSON(storage: Storage | undefined, path: string): Promise<unk
 
 async function ensureDir(storage: Storage): Promise<void> { try { await storage.fs.mkdir(THEMES_DIR); } catch { /* it is there */ } }
 
-const LEGACY_WAIT_MS = 1200;     // a first launch after the update waits at most this long for the old copy; a late answer is read at the next launch
-const LEGACY_FILES = 64;         // the native read sends at most this many files, each at most 64 KiB (ModelsEntry.swift); the rest are named in `skipped`
-/** Whether this phone's old copy has been carried over. ONLY `migrate` sets it (a theme tap in a launch where the read timed out must not mark it done). */
-let migrated = false;
-let hadChoiceFile = false;
-let choiceTouched = false;      // the person chose something in this launch: the old choice must not override it
-let migrating: Promise<void> | null = null;
-let migrateTries = 0;
-let rev = 0;
-const HANDLE_WAIT_MS = 1500;     // as host.ts: a native module may bind after the first sources answer
-/** The ONE native read, once. A phone that has the Swift app's choice (UserDefaults AutoradioThemeID, AutoradioThemeMode) and its user themes (Application Support/Autoradio/themes) keeps them: shared code
- * cannot see those places (Exact's `app:/data` is a different folder), so the app module answers `{op: "themeLegacy"}` with `{found, theme, mode, files: {name: text}, skipped: [name]}`. The old copy is NOT
- * removed (a reverted build still reads it, so "revert" stays a true rollback); a later change removes it when phones have moved. A file the read could not carry (over 64 KiB, or past the 64th)
- * is shown as a problem under its own name, never dropped silently. Android answers nothing (no handle, nothing to carry). It is complete when the choice file says `migrated`, written last by this
- * function alone, so a failure part-way or a read that timed out is tried again at the next launch. Delete this function, the native op (AutoradioLab/modules/apple/ModelsEntry.swift) and the `migrated` field
- * once phones have moved. */
-async function migrate(storage: Storage | undefined, s: ThemeStore, fresh: () => boolean): Promise<boolean> {
-  const later = nativeLater();
-  if (!storage || !later) return false;
-  let r: unknown;
-  try { r = await Promise.race([later({ op: 'themeLegacy' }), new Promise<null>((res) => setTimeout(() => res(null), LEGACY_WAIT_MS))]); } catch { return false; }
-  if (!isObj(r) || typeof r.found !== 'boolean') return false;
-  const plain = (n: string): boolean => /^[^/\\]+\.json$/.test(n) && !n.startsWith('.');
-  const all = isObj(r.files) ? Object.entries(r.files).filter((e): e is [string, string] => typeof e[1] === 'string' && plain(e[0])).sort((a, b) => (a[0] < b[0] ? -1 : 1)) : [];
-  const files = all.slice(0, LEGACY_FILES);
-  const skipped = [...(Array.isArray(r.skipped) ? r.skipped.filter((x): x is string => typeof x === 'string' && plain(x)) : []), ...all.slice(LEGACY_FILES).map((e) => e[0])];
-  try {
-    if (files.length > 0) await ensureDir(storage);
-    for (const [name, body] of files) {
-      // A file already in the new place is the newer one (a theme installed by this build, or an earlier try of this carry-over): it is kept, never written over.
-      let there = true; try { await storage.fs.readFile(`${THEMES_DIR}/${name}`); } catch { there = false; }
-      if (!there) { await storage.fs.atomicWriteFile(`${THEMES_DIR}/${name}`, new TextEncoder().encode(body)); s.add(body, name, name.startsWith('texture-') ? 'texture' : 'file'); }
-    }
-    for (const name of skipped) s.noteProblem(name, 'could not be carried over from the old place (too large, or too many files); it is still there');
-    // The choice is the person's from the old place only when this phone has made none here (a choice file already there wins).
-    if (fresh()) s.restore(r.theme, r.mode);       // asked NOW: a choice made while the read was out wins
-    await storage.fs.atomicWriteFile(CHOICE_FILE, enc({ ...s.choice, migrated: true }));
-  } catch { return false; }
-  migrated = true;
-  return true;
-}
-
-/** The carry-over, apart from the first paint. `host` is hostCaps.mode ("" not decided, "native", "none"): with no handle yet it waits a bounded time for one (the module may bind after the first sources
- * answer), and with "none" (Android) or no handle by then it does nothing and tries again when `host` changes. It answers the revision the theme sources take as an argument, which moves once a carry-over
- * has changed what they show, so they are asked again. At most three tries a launch. */
-export async function themeMigrate(host: string, storage: Storage | undefined): Promise<{ rev: number }> {
-  const s = await themeStore(storage);
-  if (migrated || !storage) return { rev };
-  if (!migrating) {
-    migrating = (async () => {
-      let later = nativeLater();
-      for (let waited = 0; !later && host !== 'none' && waited < HANDLE_WAIT_MS; waited += 50) { await new Promise((r) => setTimeout(r, 50)); later = nativeLater(); }     // (no clock in a data source: counted in steps)
-      if (!later || migrateTries >= 3) { console.log(`themes: carry-over not run (handle=${later ? 'yes' : 'no'} host=${host} tries=${migrateTries})`); return; }
-      migrateTries++;
-      const done = await migrate(storage, s, () => !hadChoiceFile && !choiceTouched);
-      if (done) rev++;
-      console.log(`themes: carry-over ${done ? 'done' : 'did not finish'} (rev=${rev} choice=${s.choice.theme ?? 'default'}/${s.choice.mode} themes=${s.list({ scheme: 'light', reduceMotion: false }).length})`);
-    })().finally(() => { migrating = null; });
-  }
-  await migrating;
-  return { rev };
-}
-
-/** The store, loaded once: bundled themes, the user's files, the kept choice (and the migration on a phone that has the old one). */
+/** The store, loaded once: bundled themes, the user's files, the kept choice. Nothing is read from the Swift build's places: the app has not launched, so there is nothing to carry. */
 export function themeStore(storage: Storage | undefined): Promise<ThemeStore> {
   if (current) return Promise.resolve(current);
   if (!loading) {
     loading = (async () => {
       const s = new ThemeStore();
       const kept = await readJSON(storage, CHOICE_FILE);
-      const choice = isObj(kept) ? kept : null;
+      let choice = isObj(kept) ? kept : null;
       let names: string[] = [];
       try { names = storage ? (await storage.fs.readdir(THEMES_DIR)).filter((n) => n.endsWith('.json')).sort() : []; } catch { /* no folder yet */ }
+      // The previous shared build carried the Swift build's choice and theme files over and marked the choice file `migrated`. The owner's rule is that nothing is carried over: that output is let go, ONCE (the marker
+      // goes with it). A choice made in the shared build after that carry-over lost its meaning with it: the app has not launched, so it is the cheaper loss.
+      if (choice !== null && choice.migrated === true && storage) {
+        for (const n of names) { try { await storage.fs.rm(`${THEMES_DIR}/${n}`); } catch { /* kept */ } }
+        names = []; choice = null;
+        try { await storage.fs.atomicWriteFile(CHOICE_FILE, enc({ theme: null, mode: 'system' })); } catch { /* the next launch does it again */ }
+      }
       for (const n of names) {
         try { s.add(new TextDecoder().decode(await storage!.fs.readFile(`${THEMES_DIR}/${n}`)), n, n.startsWith('texture-') ? 'texture' : 'file'); }
         catch { /* a file that cannot be read is skipped */ }
       }
       s.restore(choice?.theme, choice?.mode);
-      migrated = choice?.migrated === true; hadChoiceFile = choice !== null;      // the carry-over is NOT done here: the first paint does not wait for the native handle (themeMigrate)
       current = s;
       return s;
     })().catch((e) => { loading = null; throw e; });
@@ -600,7 +543,7 @@ export function themeStore(storage: Storage | undefined): Promise<ThemeStore> {
 
 /** Writes run one after another; each writes the choice as it is WHEN IT RUNS, so the last choice wins the file. */
 function saveChoice(storage: Storage | undefined, s: ThemeStore): Promise<void> {
-  const run = saving.then(async () => { if (storage) await storage.fs.atomicWriteFile(CHOICE_FILE, enc({ ...s.choice, ...(migrated ? { migrated: true } : {}) })); dirty = false; }, () => undefined);
+  const run = saving.then(async () => { if (storage) await storage.fs.atomicWriteFile(CHOICE_FILE, enc({ ...s.choice })); dirty = false; }, () => undefined);
   saving = run.catch(() => undefined);
   return run.catch(() => undefined);     // the choice holds in memory for this launch; a failed write is not the person's error
 }
@@ -625,13 +568,13 @@ export async function themeCardsShared(scheme: string, reduce: boolean, storage:
 
 export async function themeSet(id: string, storage: Storage | undefined): Promise<Ack> {
   const s = await themeStore(storage);
-  if (s.setTheme(id)) { dirty = true; choiceTouched = true; }
+  if (s.setTheme(id)) { dirty = true; }
   if (dirty) await saveChoice(storage, s);
   return { ok: true, message: '' };
 }
 export async function schemeSet(mode: string, storage: Storage | undefined): Promise<Ack> {
   const s = await themeStore(storage);
-  if (s.setMode(mode)) { dirty = true; choiceTouched = true; }
+  if (s.setMode(mode)) { dirty = true; }
   if (dirty) await saveChoice(storage, s);
   return { ok: true, message: '' };
 }

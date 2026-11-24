@@ -1,7 +1,7 @@
 // The paper page's data source. `paperFront` answers one view of the front (Front page, My edition or a category) as the
 // placed bands the page draws. It asks the public front list (`GET /api/platform/publications/front`), keeps the last good list
 // on the phone for an offline start, and composes with paper-layout.ts. It replaces the Swift PaperSource, PaperComposer and
-// LayoutEngine; the radio's own reads of the front stay in Swift (RadioProgramme, StretchCandidates).
+// LayoutEngine; the radio's own reads of the front stay in Swift (RadioProgramme).
 //
 // Ways this can fail, and what the page then says (the page already has these states; "Loading" is never one of them):
 //  - no network, a timeout, a status outside 200 to 299, a body that is not the front list: the saved list with status "offline",

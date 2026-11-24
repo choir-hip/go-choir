@@ -1,13 +1,13 @@
 // Lane members file (mail): this lane's states, derives, resources, mutations and actions, as if written in the root.
 // The sources are answered by app.ts (mail.ts), with positional arguments (named ones belong to a package's sources): the shapes are in mail-types.contract.
-// Two names are still the Swift package's (mailOpenReview opens the approval page in the app's own web view, mailRead hands the text to the radio's voice); their shape, MailAck, stays in exact-package/interface/mail.json.
+// One name is still the Swift package's (mailOpenReview opens the approval page in the app's own web view); its shape, MailAck, stays in exact-package/interface/mail.json. "Read this to me" is shared code's radio (radioListen, radio-bridge.ts).
 //
 // One resource per page family, each asked for the top page's address and answering "idle" at once for any other
 // address, so only the page in front does any work: mbx (a mailbox), mmsg (a message), mcmp (a compose page: a reply,
 // a new message, or an existing draft). The compose fields are local state that takes the resource's seed (the
 // reply's recipient, subject and quoted text) the first time the person edits; after that the person's words win.
-use mailOpenReview, mailRead, choirAsk, MailAck from "@choir/autoradio"
-use MailBoxView, MailMessageView, MailComposeView, MailSyncView from "./mail-types.contract"
+use mailOpenReview, choirAsk, MailAck, SettingsAck from "@choir/autoradio"
+use MailNote, MailBoxView, MailMessageView, MailComposeView, MailSyncView from "./mail-types.contract"
 
 members Autoradio
   // The mailbox's tab is page state, not a page: tapping a tab changes `mboxSel` in the same action, so the frame (title, tabs, counts)
@@ -27,6 +27,8 @@ members Autoradio
   resource mcmp = mailCompose(pg.top) as shape MailComposeView else empty()
   mutation mdr as shape MailComposeView refreshes mbx
   mutation mak as shape MailAck
+  mutation mro as shape MailAck
+  mutation mrd as shape SettingsAck refreshes rpulse
   // Marking unread asks the computer, then the mailbox and the message are read again (the message is not marked read a second time: mail.ts).
   mutation mun as shape MailAck refreshes mbx, mfr, mmsg
 
@@ -61,7 +63,13 @@ members Autoradio
 
   derive mailQuoted = mailQuotedFor == pg.top
   derive mailOriginal = mailOriginalFor == pg.top
-  derive mailNoteRaw = match mun { case some(a) => a.message, case none => match mak { case some(a) => a.message, case none => "" } }
+  // ONE notice state: the last action sets `mailNoteSrc`, and the words are chosen from it in shared code (mail.ts `noteOf`), so an earlier answer (Mark unread, Ask) never hides the note of Read it to me.
+  state mailNoteSrc = ""
+  derive mailUnreadMsg = match mun { case some(a) => a.message, case none => "" }
+  derive mailAskMsg = match mak { case some(a) => a.message, case none => "" }
+  derive mailReviewMsg = match mro { case some(a) => a.message, case none => "" }
+  resource mnote = mailNoteSelect(mailNoteSrc, mailUnreadMsg, mailAskMsg, mmsg.spoken, mailReviewMsg) as shape MailNote else empty()
+  derive mailNoteRaw = mnote.text
   derive mailNote = mailNoteFor == pg.top ? mailNoteRaw : ""
 
   action editMailTo(v: string)
@@ -88,7 +96,9 @@ members Autoradio
   action approveMail
     send mdr = mailApprovalEmail(pg.top, mailDraftId)
   action openMailReview(url: string)
-    send mak = mailOpenReview(url=url)
+    mailNoteFor = pg.top
+    mailNoteSrc = "review"
+    send mro = mailOpenReview(url=url)
 
   action toggleMailQuoted
     mailQuotedFor = mailQuotedFor == pg.top ? "" : pg.top
@@ -96,12 +106,15 @@ members Autoradio
     mailOriginalFor = mailOriginalFor == pg.top ? "" : pg.top
   action readMail
     mailNoteFor = pg.top
-    send mak = mailRead(address=pg.top, text=mmsg.spoken)
+    mailNoteSrc = "read"
+    send mrd = radioListen(pg.top, mmsg.subject, mmsg.spoken)
   action unreadMail
     mailNoteFor = pg.top
+    mailNoteSrc = "unread"
     send mun = mailMarkUnread(pg.top)
   action askMail(q: string)
     mailNoteFor = pg.top
+    mailNoteSrc = "ask"
     send mak = mailAsk(pg.top, q)
     if au.signedIn == false
       gate = "signin"

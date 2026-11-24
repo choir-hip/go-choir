@@ -27,14 +27,14 @@ final class LearningLoopTests: XCTestCase {
     }
 
     // F1
-
-
-    func testF1AClaimWithNoProbabilityStillRoundTripsAndShowsNoForecastSentence() throws {
-        var e = RunSheetEntry(id: "d-1", kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 10)
-        e.forecast = RunSheetForecast(claimId: "c9"); e.state = .onAir
-        let back = try JSONDecoder().decode(RunSheetEntry.self, from: JSONEncoder().encode(e))
-        XCTAssertEqual(back.forecast?.claimId, "c9"); XCTAssertNil(back.forecast?.pHeard)
-        // (no number, no sentence: radio.test.ts 8)
+    /// The forecast the server sends on a `segment` event carries the claim id and never its probability or cause (they are written to the tape): it decodes, with nothing invented. A full one decodes too.
+    func testF1ForecastDecodesWhatTheServerSends() throws {
+        let onlyClaim = try JSONDecoder().decode(RunSheetForecast.self, from: Data(#"{"claim_id":"c9"}"#.utf8))
+        XCTAssertEqual(onlyClaim.claimId, "c9"); XCTAssertNil(onlyClaim.pHeard); XCTAssertEqual(onlyClaim.causedBy, "")
+        let full = try JSONDecoder().decode(RunSheetForecast.self, from: Data(#"{"p_heard":0.62,"caused_by":"the listener skipped long pieces","claim_id":"c3"}"#.utf8))
+        XCTAssertEqual(full.pHeard, 0.62); XCTAssertEqual(full.causedBy, "the listener skipped long pieces"); XCTAssertEqual(full.claimId, "c3")
+        let none = try JSONDecoder().decode(RunSheetForecast.self, from: Data("{}".utf8))
+        XCTAssertEqual(none.claimId, ""); XCTAssertNil(none.pHeard)
     }
 
     // F2

@@ -287,7 +287,6 @@ final class ClipPlayerTests: XCTestCase {
     func relocatable(_ id: String) -> PodcastClip { clip(fpRecord(of: synth(seconds: 60, seed: 3), start: 5, end: 35), id: id) }
 
     func keptFile() -> URL { let u = FileManager.default.temporaryDirectory.appendingPathComponent("kept-\(UUID().uuidString).mp3"); try? Data([1, 2, 3]).write(to: u); return u }
-    func story(_ id: String) -> RunSheetEntry { RunSheetEntry(id: id, kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 10) }
 
     // 6
 

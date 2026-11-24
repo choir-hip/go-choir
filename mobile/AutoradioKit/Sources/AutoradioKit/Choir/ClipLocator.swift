@@ -4,6 +4,99 @@ import AVFoundation
 // Finding a podcast clip again in the file the host serves now (docs/reference/PODCAST-CLIP-FINGERPRINT.md section 2).
 // The owner's decision (2026-11-17): fetch one window by byte range, find the clip in it by fingerprint, and play THE BYTES JUST FETCHED AND
 // MEASURED. The host is not asked again (one host serves a different file on every request). One path for every host.
+//
+// NOT CALLED: since the run sheet player was deleted (the deck flip) no production code calls `locate`; a clip entry plays from its start to its end in the served file. The subsystem is kept (decoding
+// the served bytes to PCM and fingerprinting them is native by nature) for the player lane to wire to the deck's remote audio; docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md, 2026-11-23.
+
+// MARK: The clip, as the locator needs it (the server's row, handed whole by shared code; there is no native store of clips any more)
+
+/// One clip the server cut from a podcast episode for a story.
+public struct PodcastClip: Sendable, Equatable {
+    public var clipID: String
+    public var route: String            // the story's bare route, without a leading slash
+    public var version: Int
+    public var storyTitle: String
+    public var show: String
+    public var episodeTitle: String
+    public var episodeGUID: String
+    public var feedURL: URL?
+    public var published: String
+    public var audioURL: URL
+    public var duration: Double
+    public var start: Double
+    public var end: Double
+    public var quote: String
+    public var support: Double
+    /// The audio signature the phone finds the clip by (docs/reference/PODCAST-CLIP-FINGERPRINT.md); nil on an old record.
+    public var fingerprint: ClipFingerprintRecord? = nil
+
+    /// The clip a shared page handed over: the server's row as JSON. nil when it is not one.
+    public static func parse(record: String) -> PodcastClip? {
+        (try? JSONSerialization.jsonObject(with: Data(record.utf8))).flatMap { $0 as? [String: Any] }.flatMap { parse($0) }
+    }
+
+    /// The phone can find this clip in a served file: it has both fingerprints and the file is seekable by bitrate. A clip that is not
+    /// relocatable is never played as a clip (its row offers the episode).
+    public var isRelocatable: Bool { fingerprint?.isUsable ?? false }
+
+    public var seconds: Double { end - start }
+    static func bare(_ route: String) -> String { route.hasPrefix("/") ? String(route.dropFirst()) : route }
+
+    /// nil when the row is unusable (no id, no http(s) audio, an empty or negative range).
+    public static func parse(_ o: [String: Any]) -> PodcastClip? {
+        guard let id = o["clip_id"] as? String, !id.isEmpty,
+              let a = (o["audio_url"] as? String).flatMap(URL.init(string:)), let scheme = a.scheme?.lowercased(), scheme == "http" || scheme == "https", a.host != nil,
+              let start = (o["start"] as? NSNumber)?.doubleValue, let end = (o["end"] as? NSNumber)?.doubleValue,
+              start.isFinite, end.isFinite, start >= 0, end > start else { return nil }
+        let story = (o["story"] as? [String: Any]) ?? [:]
+        func num(_ v: Any?) -> Double { (v as? NSNumber)?.doubleValue ?? 0 }
+        let route = bare((story["route"] as? String) ?? "")
+        return PodcastClip(clipID: id, route: route, version: Int(exactly: num(story["version"]).rounded(.towardZero)) ?? 0, storyTitle: (story["title"] as? String) ?? "",
+                           show: (o["show"] as? String) ?? "", episodeTitle: (o["episode_title"] as? String) ?? "",
+                           episodeGUID: (o["episode_guid"] as? String) ?? "", feedURL: (o["feed_url"] as? String).flatMap(URL.init(string:)),
+                           published: (o["published"] as? String) ?? "", audioURL: a, duration: num(o["duration_seconds"]), start: start, end: end,
+                           quote: (o["quote"] as? String) ?? "", support: num(o["support"]),
+                           fingerprint: (o["fingerprint"] as? [String: Any]).flatMap(ClipFingerprintRecord.parse))
+    }
+}
+
+/// The record's `fingerprint` object (all additive and optional on the wire; the whole object is dropped when it does not decode).
+public struct ClipFingerprintRecord: Sendable, Equatable {
+    public var version: Int
+    public var head: [UInt8], tail: [UInt8]             // packed fingerprints
+    public var headAt: Double, tailAt: Double           // where head and tail begin in the fingerprinted file
+    public var start: Double, end: Double               // the clip's bounds in the fingerprinted file
+    public var fileBytes: Int64, fileSeconds: Double
+    public var firstFrameOffset: Int
+    public var bitrateKbps: Int
+    public var seekableByBitrate: Bool
+
+    /// A head or tail is always 120 frames (12 s).
+    public static let frames = 120
+    public var isUsable: Bool {
+        guard version == ClipFingerprint.version, seekableByBitrate, bitrateKbps > 0, end > start,
+              let h = ClipFingerprint.unpack(head), let t = ClipFingerprint.unpack(tail) else { return false }
+        return h.count == Self.frames * ClipFingerprint.bands && t.count == Self.frames * ClipFingerprint.bands      // 12 s each; a shorter clip has none
+    }
+    /// The byte of a file, by its constant bitrate: first audio frame offset plus seconds at bitrate (spec section 3).
+    public func byte(at seconds: Double) -> Int { firstFrameOffset + Int(min(9e15, (max(0, seconds) * Double(bitrateKbps) * 125).rounded())) }
+
+    static func parse(_ o: [String: Any]) -> ClipFingerprintRecord? {
+        func num(_ k: String) -> Double? { (o[k] as? NSNumber).map(\.doubleValue).flatMap { $0.isFinite ? $0 : nil } }
+        func bytes(_ k: String) -> [UInt8]? { (o[k] as? String).flatMap { Data(base64Encoded: $0) }.map { [UInt8]($0) } }
+        guard let v = num("version"), let head = bytes("head"), let tail = bytes("tail"), let ha = num("head_at"), let ta = num("tail_at"),
+              let s = num("start"), let e = num("end") else { return nil }
+        // A finite number outside the Int range would trap in Int(Double): such a record is no fingerprint.
+        func whole(_ x: Double) -> Int? { x.rounded(.towardZero) == x && x >= -9e15 && x <= 9e15 ? Int(x) : nil }
+        guard let version = whole(v), let ffo = whole(num("first_frame_offset") ?? 0), let kbps = whole(num("bitrate_kbps") ?? 0),
+              let fb = whole(num("file_bytes") ?? 0) else { return nil }
+        return ClipFingerprintRecord(version: version, head: head, tail: tail, headAt: ha, tailAt: ta, start: s, end: e,
+                                     fileBytes: Int64(fb), fileSeconds: num("file_seconds") ?? 0,
+                                     firstFrameOffset: ffo, bitrateKbps: kbps,
+                                     seekableByBitrate: (o["seekable_by_bitrate"] as? Bool) ?? false)
+    }
+}
+
 
 /// What a located clip is: a playable file holding exactly the clip.
 public struct LocatedClip: Sendable, Equatable {

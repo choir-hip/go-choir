@@ -39,7 +39,6 @@ final class WebPageView: NSObject, ExactPackageView, WKNavigationDelegate, WKUID
         guard page != loaded else { return }
         loaded = page
         guard case .inApp(let url) = SourceLink.route(page) else { events.message("failed"); return }
-        EmbeddedPage.shared.opened(page)        // lane autoradio-queue: "Read aloud" reads the page the view is on
         web.load(URLRequest(url: url))
     }
 
@@ -50,7 +49,7 @@ final class WebPageView: NSObject, ExactPackageView, WKNavigationDelegate, WKUID
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { events.message("loading") }
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { EmbeddedPage.shared.loaded(url: webView.url, title: webView.title); events.message("done"); events.load() }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { events.message("done"); events.load() }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { events.message("failed") }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { events.message("failed") }
 
@@ -95,6 +94,7 @@ extension AutoradioModule {
     func registerReader() {
         pageSources.register(HeldPageSource())
         ReaderFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerFollow"]) } }
+        ReaderAim.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerAim"]) } }
 
         handle("readerFollow") { [unowned self] _, reply in reply(json(ReaderFollow.shared.info)) }
         handle("readerAim") { [unowned self] _, reply in reply(json(ReaderAim.shared.info)) }

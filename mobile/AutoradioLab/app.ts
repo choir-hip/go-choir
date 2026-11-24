@@ -36,6 +36,8 @@ import { downloadsPage, downloadsAct } from './downloads.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
 import { signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
+import { radioPlayClip } from './clip-play.ts';
+import { podcastNow } from './podcast-now.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -165,7 +167,6 @@ const sources: Sources = {
   themeList: ([scheme, reduce], _s, storage) => themes.themeListShared(scheme, reduce, storage),
   themeExtras: ([scheme, reduce], _s, storage) => themes.themeExtrasShared(scheme, reduce, storage),
   themeCards: ([scheme, reduce], _s, storage) => themes.themeCardsShared(scheme, reduce, storage),
-  themeMigrate: ([host], _s, storage) => themes.themeMigrate(host, storage),
   themeSet: ([id], _s, storage) => themes.themeSet(id, storage),
   schemeSet: ([mode], _s, storage) => themes.schemeSet(mode, storage),
   themeFromTexture: ([doc], _s, storage) => themes.themeFromTexture(doc, storage),
@@ -225,6 +226,8 @@ const sources: Sources = {
   showClips: ([address, tick]) => showClips(address, tick),
   storyClips: ([address, tick]) => storyClips(address, tick),
   clipAct: ([op, id]) => clipAct(op, id),
+  radioPlayClip: ([op, id, record], _s, storage, native) => radioPlayClip(storage, native as never, op, id, record),
+  podcastNow: ([_tick, _pos], _s, storage, native) => podcastNow(storage, native as never),
   // Files (files.ts): the listener's computer's files. Positional arguments.
   fileList: ([path, mode, sort, desc, query, _acct], _s, storage) => fileList({ path, mode, sort, desc, query }, storage),
   fileOpen: ([address, _acct], _s, storage) => fileOpen({ address }, storage),
@@ -259,6 +262,7 @@ const sources: Sources = {
   mailSaveDraft: ([address, to, subject, body]) => mail.mailSaveDraft(address, to, subject, body),
   mailApprovalEmail: ([address, draft]) => mail.mailApprovalEmail(address, draft),
   mailMarkUnread: ([address]) => mail.mailMarkUnread(address),
+  mailNoteSelect: ([last, unreadMsg, askMsg, spoken, reviewMsg]) => ({ text: mail.noteOf(last, unreadMsg, askMsg, spoken, reviewMsg) }),
   // Retrieval (retrieval-live.ts): the voice turn's ask (native raises it, the answer goes back through one native op) and the launcher's paper-wide search.
   retrievalServe: ([id, words, pageTitle, pageAddress, now, facts], _s, storage) => retrievalServe({ id, words, pageTitle, pageAddress, now, facts }, storage),
   paperSearch: ([q, local]) => paperSearch(q, local),

@@ -131,7 +131,9 @@ export class RadioRuntime {
     return this.store.onAir() ? 'started' : 'nothing';
   }
   /** The listener's pause or the voice's yield: the deck's transport. */
-  async act(op: 'pause' | 'resume' | 'stop'): Promise<void> { await this.deck.act(op); }
+  async act(op: 'pause' | 'resume' | 'stop' | 'clearEnd'): Promise<void> { await this.deck.act(op); }
+  /** The deck's state as it is now (what the page models read: a podcast's place). */
+  deckNow(): Promise<DeckState> { return this.deck.state(); }
   /** Back: the start of this entry when it has gone on a little (or it is audio), else the entry before it. */
   async previous(): Promise<void> {
     const st = await this.deck.state(); this.deckState = st;
@@ -151,6 +153,18 @@ export class RadioRuntime {
     await this.deck.play(it);
     this.onChange?.();
   }
+  /** "Keep listening" with no restart: the deck stops ending the clip (`clearEnd`), the entry is recorded as kept (the run sheet's view and the episode page read it) and the screens are told. Nothing when no clip is on air. */
+  async keepEnd(episodeId = ''): Promise<void> {
+    const air = this.store.onAir(), spec = air ? audioSpec(air) : undefined;
+    if (!air || !spec || !spec.is_clip || this.kept.has(air.id)) return;
+    if (episodeId !== '' && spec.episode_id !== episodeId) return;                          // the page asked about another episode than the one on air
+    const st = await this.deck.state(); this.deckState = st;                               // the deck's own word first: the clip may have ended and the deck gone on to the next (its ended line not pumped yet)
+    if (st.item !== air.id || st.why === 'stopped' || st.why === 'empty' || this.kept.has(air.id)) return;
+    await this.deck.act('clearEnd');
+    this.kept.add(air.id);
+    this.onChange?.();
+  }
+  isKept(id: string): boolean { return this.kept.has(id); }
   /** What the deck is speaking now: the programme's headline and, for a paper story, its route (what the Autoradio page names an untitled entry by). */
   programme(): { title: string; route: string } {
     const air = this.store.onAir(), it = air ? this.known.get(air.id) : undefined;
@@ -401,7 +415,7 @@ export class RadioRuntime {
   async signOut(): Promise<void> {
     this.epoch += 1;
     this.director.stopAll(this.report());
-    this.pendingStarts = []; this.known.clear();
+    this.pendingStarts = []; this.known.clear(); this.kept.clear();
     try { await this.deck.act('stop'); } catch { /* the deck is gone */ }
     if (this.store.poster) await this.store.settlePending(3000);          // the `left` report reaches the computer while the old key is still held; what is not answered by then is dropped, never sent under a later account
     await this.store.wipe();

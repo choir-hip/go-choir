@@ -247,17 +247,6 @@
       "ready": "bool",
       "reason": "string"
     },
-    "PodNow": {
-      "episodeId": "string",
-      "clip": "bool",
-      "start": "number",
-      "elapsed": "number",
-      "duration": "number"
-    },
-    "PodDone": {
-      "status": "string",
-      "message": "string"
-    },
     "ReaderRun": {
       "id": "string",
       "text": "string",
@@ -865,14 +854,6 @@
       "answers": "MailAck"
     },
     {
-      "send": "mailRead",
-      "options": {
-        "address": "string",
-        "text": "string"
-      },
-      "answers": "MailAck"
-    },
-    {
       "source": "voiceSetupFacts",
       "live": true,
       "answers": "VoiceSetupFacts",
@@ -946,41 +927,6 @@
           }
         }
       }
-    },
-    {
-      "source": "podcastNow",
-      "live": true,
-      "answers": "PodNow",
-      "substitute": {
-        "default": {
-          "episodeId": "",
-          "clip": false,
-          "start": 0,
-          "elapsed": 0,
-          "duration": 0
-        }
-      }
-    },
-    {
-      "send": "podcastPlayAudio",
-      "options": {
-        "op": "string",
-        "id": "string",
-        "url": "string",
-        "title": "string",
-        "show": "string",
-        "start": "number"
-      },
-      "answers": "PodDone"
-    },
-    {
-      "send": "clipPlay",
-      "options": {
-        "op": "string",
-        "id": "string",
-        "record": "string"
-      },
-      "answers": "PodDone"
     },
     {
       "source": "readerFollow",

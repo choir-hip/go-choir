@@ -3,6 +3,10 @@
 // the work (pump, starts, the desk's ask, posts) is in mutations that stay until done (`radioHold`, `radioWrite`). A pulse that fetched after an await lost the desk's ask, the deck's held list and the radio's start.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
+import { adoptNative, resetSeam } from './api.ts';
+import { forgetOnboarding } from './onboarding.ts';
+import { audio as audioEntry } from './runsheet-entries.ts';
+import { getRadio, wipeRadio, queueAdd, queueAct, radioPlayAudio, radioPlayEntry, radioHandWords, radioPlayStory, radioListen, radioMove, radioPageAct, radioPlayPause, radioStart } from './radio-bridge.ts';
 
 const src = (f: string): string => readFileSync(new URL(f, import.meta.url), 'utf8');
 const bodyOf = (text: string, head: string): string => {
@@ -84,12 +88,33 @@ describe('an ask of the desk starts only from a mutation\'s own body (the radio 
 });
 
 describe('the desk is not asked again without a reason (review B1-2)', () => {
-  test('every listener verb of the bridge tells the writer the listener acted', () => {
-    const b = src('radio-bridge.ts');
-    for (const n of ['queueAdd', 'queueAct', 'radioPlayAudio', 'radioHandWords', 'radioPlayStory', 'radioListen', 'radioMove', 'radioPageAct', 'radioPlayPause', 'radioStart']) {
-      const at = b.indexOf('export async function ' + n + '(');
-      expect(at, n).toBeGreaterThan(-1);
-      expect(b.slice(at, at + 700).includes('listenerActed()'), `${n} does not say the listener acted`).toBe(true);
-    }
+  // BEHAVIOUR, not source text: each listener verb of the bridge is called on a radio whose writer is a spy, and it must tell the writer that the listener acted.
+  test('every listener verb of the bridge tells the writer the listener acted', async () => {
+    resetSeam(); forgetOnboarding(); await wipeRadio(undefined);
+    let item = '';
+    const native = { available: true, later: async (r: { op: string; name?: string; args?: Record<string, unknown> }) => {
+      if (r.op === 'radioFacts') return { at: 0, ready: true, inbox: [], position: { block: 0, seconds: 0 }, foreground: true, sentences: [], sentenceIndex: 0, progress: 0 };
+      if (r.op === 'deck') { if (r.name === 'deckPlay') item = String(r.args?.id); return { why: item ? 'playing' : 'empty', item, block: 0, seconds: 1, duration: 60, held: [], seq: 1, acked: 0, journal: [] }; }
+      return {};
+    } };
+    adoptNative(native as never, 'test');
+    const r = await getRadio(undefined, native as never);
+    let acted = 0; r.writer.listenerActed = (): void => { acted += 1; };
+    const st = undefined, nat = native as never;
+    const entry = audioEntry({ url: 'https://x.test/a.mp3', title: 'A', show: 'S' });
+    const verbs: [string, () => Promise<unknown>][] = [
+      ['queueAdd', () => queueAdd(st, nat, 'add', 'story', 'a-story', 'A story', '')],
+      ['queueAct', () => queueAct(st, nat, 'skip', '')],
+      ['radioPlayAudio', () => radioPlayAudio(st, nat, 'play', 'pod:a/b', 'https://x.test/b.mp3', 'B', 'S', 0)],
+      ['radioPlayEntry', () => radioPlayEntry(st, nat, 'queue', entry)],
+      ['radioHandWords', () => radioHandWords(st, nat, 'play', 'doc1', 'Doc', 0, 'Some words.')],
+      ['radioPlayStory', () => radioPlayStory(st, nat, 'a-route', 'A route')],
+      ['radioListen', () => radioListen(st, nat, 'texture:d1', 'T', 'Some words to listen to here.')],
+      ['radioMove', () => radioMove(st, nat, 'next')],
+      ['radioPageAct', () => radioPageAct(st, nat, 'remove', 'x', '')],
+      ['radioPlayPause', () => radioPlayPause(st, nat)],
+      ['radioStart', () => radioStart(st, nat)],
+    ];
+    for (const [name, call] of verbs) { const before = acted; await call(); expect(acted, `${name} does not say the listener acted`).toBeGreaterThan(before); }
   });
 });

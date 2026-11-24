@@ -11,8 +11,10 @@ public final class RadioBridge: @unchecked Sendable {
     private let lock = NSLock()
     private var inbox: [String] = []
     private var queueJSON: Data?
-    private var onAirJSON: Data?
-    private var sheetJSON: Data?
+    private var factsJSON: Data?
+    private var respondsValue: TakeResponds?
+    private var hasOnAirEntry = false
+    private var airAddressValue = ""
     private var candidateList: [(route: String, title: String)] = []
     private var signedOutAck = false
     /// Set by the app module: asks shared code to look again (touches `radioNote`).
@@ -24,13 +26,6 @@ public final class RadioBridge: @unchecked Sendable {
         guard let d = try? JSONSerialization.data(withJSONObject: m), let s = String(data: d, encoding: .utf8) else { return }
         lock.lock(); if verb == "stopAll" { signedOutAck = false }; inbox.append(s); lock.unlock()
         changed()
-    }
-    /// Put an entry on the run sheet: `mode` is now, next or add. `words`: what a page's own text said, held for the entry (the entry itself is a pointer).
-    public func place(_ entry: RunSheetEntry, mode: String, words: (title: String, paragraphs: [String])? = nil) {
-        guard let d = try? JSONEncoder().encode(entry), let e = try? JSONSerialization.jsonObject(with: d) else { return }
-        var f: [String: Any] = ["entry": e, "mode": mode]
-        if let words { f["words"] = ["title": words.title, "paragraphs": words.paragraphs] }
-        send("place", f)
     }
     /// Shared code says its sign-out is done: the `left` report went (or the deadline passed), the sheet and its file are gone (`radioSet` with `signedOut`).
     public func markSignedOut() { lock.lock(); signedOutAck = true; lock.unlock() }
@@ -50,18 +45,23 @@ public final class RadioBridge: @unchecked Sendable {
     /// The turn route's `queue` field, as shared code made it (JSON bytes; nil before the first pump).
     public var snapshot: Data? { lock.lock(); defer { lock.unlock() }; return queueJSON }
     /// `gen` is the account generation shared code computed this under (`SharedGeneration`): a push for an account that has since signed out is dropped, not stored where the next account's voice turn would carry it.
+    /// `facts`: the entries on air and ahead as the voice's retrieval reads them (JSON text, AutoradioLab/voice-facts.ts); `responds`: the story on air, for a take's provenance (nil when none).
     @discardableResult
-    public func set(gen: Int, snapshot: Data?, onAir: Data?, sheet: Data? = nil, candidates: [(route: String, title: String)] = []) -> Bool {
-        SharedGeneration.admit(gen) { lock.lock(); queueJSON = snapshot; onAirJSON = onAir; sheetJSON = sheet; candidateList = candidates; lock.unlock() }
+    public func set(gen: Int, snapshot: Data?, facts: Data?, responds: TakeResponds?, onAir: Bool = false, airAddress: String = "", candidates: [(route: String, title: String)] = []) -> Bool {
+        SharedGeneration.admit(gen) { lock.lock(); queueJSON = snapshot; factsJSON = facts; respondsValue = responds; hasOnAirEntry = onAir; airAddressValue = airAddress; candidateList = candidates; lock.unlock() }
     }
     /// The paper's list the desk may add from, as shared code last said (the turn's `candidates`, up to 40; empty before the first pump).
     public func candidates() -> [(route: String, title: String)] { lock.lock(); defer { lock.unlock() }; return candidateList }
-    /// The run sheet as shared code last said (what the voice's retrieval and the content sync read of it); nil before the first pump.
-    public func sheet() -> RunSheet? { lock.lock(); let d = sheetJSON; lock.unlock(); return d.flatMap { try? JSONDecoder().decode(RunSheet.self, from: $0) } }
-    /// The entry on air as shared code last said (nil when none): what a "more like this" tap and a take's "responds to" read.
-    public func onAirEntry() -> RunSheetEntry? { lock.lock(); let d = onAirJSON; lock.unlock(); return d.flatMap { try? JSONDecoder().decode(RunSheetEntry.self, from: $0) } }
+    /// What the voice's retrieval reads of the run sheet, as shared code last said: `[{id, title, text, state, ref}]` (empty before the first push).
+    public func facts() -> [[String: Any]] { lock.lock(); let d = factsJSON; lock.unlock(); return d.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [[String: Any]] } ?? [] }
+    /// The story on air as shared code last said (nil when none): what a take's "responds to" reads.
+    public func responds() -> TakeResponds? { lock.lock(); defer { lock.unlock() }; return respondsValue }
+    /// The page the entry on air is reading (`pub:<route>` or `texture:<id>`), as shared code last said; empty when none. The reader's follow-along matches the spoken sentence against it.
+    public func airAddress() -> String { lock.lock(); defer { lock.unlock() }; return airAddressValue }
+    /// Is an entry on air, as shared code last said?
+    public func hasOnAir() -> Bool { lock.lock(); defer { lock.unlock() }; return hasOnAirEntry }
     /// Sign-out: nothing of the old account is kept.
-    public func wipe() { lock.lock(); inbox = []; queueJSON = nil; onAirJSON = nil; sheetJSON = nil; candidateList = []; lock.unlock() }
+    public func wipe() { lock.lock(); inbox = []; queueJSON = nil; factsJSON = nil; respondsValue = nil; hasOnAirEntry = false; airAddressValue = ""; candidateList = []; lock.unlock() }
 }
 
 /// The account generation shared code stamps on what it pushes to a native mirror (`radioSet`, `editionMirror`, `pageText`): the `OpenPageFacts.replace(gen:)` pattern for the mirrors that had none. A push is kept when its generation
