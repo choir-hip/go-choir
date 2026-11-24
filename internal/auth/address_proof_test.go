@@ -718,3 +718,32 @@ func TestSwitchingToAnUnprovedAccountIsRefusedAsSignedOut(t *testing.T) {
 		}
 	}
 }
+
+// Three requests from a stranger do not lock the owner out: while a link is live a new request makes no new
+// link (the same 200, no mail), so the owner's link in the inbox stays good and the budget is not spent.
+func TestDirectRecoveryRequestsDoNotSupersedeALiveLink(t *testing.T) {
+	h, rm := recoveryMailTestEnv(t)
+	if _, err := h.store.CreateUser("held5", "held5@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if rec := postRecoveryRequest(t, h, "held5@example.com", "203.0.113.60:1"); rec.Code != 200 || len(rm.mails()) != 1 {
+		t.Fatalf("the owner's request: %d, %d mails", rec.Code, len(rm.mails()))
+	}
+	link := rm.mails()[0].link
+	token := strings.TrimPrefix(link[strings.Index(link, "#")+1:], "token=")
+	for i := 0; i < 5; i++ {
+		if rec := postRecoveryRequest(t, h, "held5@example.com", fmt.Sprintf("203.0.113.%d:1", 61+i)); rec.Code != 200 {
+			t.Fatalf("a stranger's request %d answered %d, want the same 200", i, rec.Code)
+		}
+	}
+	if len(rm.mails()) != 1 {
+		t.Fatalf("%d mails: a live link was replaced", len(rm.mails()))
+	}
+	if _, err := h.store.ConsumeRecoveryToken(context.Background(), token); err != nil {
+		t.Fatalf("the owner's link was invalidated by strangers: %v", err)
+	}
+	var rows int
+	if err := h.store.DB().QueryRow(`SELECT COUNT(*) FROM recovery_tokens WHERE user_id = 'held5'`).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("recovery rows = %d (%v), want the one link", rows, err)
+	}
+}

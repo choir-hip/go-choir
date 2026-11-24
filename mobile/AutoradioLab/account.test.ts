@@ -163,15 +163,16 @@ describe('S9 sign out A, sign in B', () => {
 // ---------------------------------------------------------------------------------------------------------------------------------------- the table and the kills
 
 const dig = (k: string): string => createHash('sha256').update(k).digest('hex');
-type World = { key: 'present' | 'absent' | 'unreadable'; value: string; swift: boolean; native: string[]; killInNative: boolean; hang: boolean; lateRelease: (() => void) | null };
+type World = { key: 'present' | 'absent' | 'unreadable'; keyId?: string; value: string; swift: boolean; native: string[]; killInNative: boolean; hang: boolean; lateRelease: (() => void) | null };
 let W: World;
 const newWorld = (key: World['key'] = 'present', value = 'test-key-A-not-real'): World => ({ key, value, swift: true, native: [], killInNative: false, hang: false, lateRelease: null });
 /** The app module as the model of the phone: the Keychain item (3 answers), the Swift stores, and sign-out's two native steps (key delete, then Swift wipe). */
-const phone = () => ({ available: true, later: async (r: { op: string }) => {
+const phone = () => ({ available: true, later: async (r: { op: string; keyId?: string }) => {
   if (r.op === 'keystate') return { state: W.key };
   if (r.op === 'session') return W.key === 'present' ? { found: true, value: W.value, computerId: '' } : { found: false };
   if (r.op === 'signOut') {
     W.native.push('signOut');
+    if (r.keyId && W.keyId && r.keyId !== W.keyId) return { done: false, superseded: true };      // a sign-in kept another key: the Keychain item is not the one being signed out, and is left alone
     if (W.hang) await new Promise<void>((res) => { W.lateRelease = res; });
     W.key = 'absent';                                            // ChoirSignIn.swift:128, the key goes first
     if (W.killInNative) throw new Error('killed between the key delete and the Swift wipe');
@@ -522,6 +523,61 @@ describe('S20 sign-out clears the phone at once and revokes with the key it held
     resetSeam(); bindNative(phone() as never);
     const seen = await withFetch(() => new Response('{}', { status: 200 }), () => retryPendingRevoke(m.storage, { get: () => null } as never));
     expect(seen).toEqual([]); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(true);
+  });
+});
+
+describe('S21 sign-out late, twice, and across a sign-in', () => {
+  const HELD = { key: 'choir_sk_test-held-not-real', id: 'ak_held' };
+  const list = (m: ReturnType<typeof memFs>): { id: string; tries: number }[] => { const b = m.files.get(PENDING_REVOKE_FILE); return b ? JSON.parse(new TextDecoder().decode(b)) : []; };
+  test('a native sign-out that answers after its deadline still revokes the key, and then forgets the id', async () => {
+    W = newWorld('present'); W.hang = true; const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const sent: string[] = [];
+    const out = await accountSignOut(m.storage, undefined, phone() as never, { deadlineMs: 20, held: HELD, revoke: async (h) => { sent.push(h.key + '/' + h.id); return 'revoked'; } });
+    expect(out.done).toBe(false); expect(list(m).map((e) => e.id)).toEqual(['ak_held']); expect(sent).toEqual([]);
+    W.lateRelease!();
+    for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(sent).toEqual([HELD.key + '/ak_held']); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false); expect(dataLeft(m)).toEqual([]);
+  });
+  test('a late answer whose revoke cannot be sent keeps the id', async () => {
+    W = newWorld('present'); W.hang = true; const m = memFs(SEED);
+    await launch(m); resetSettled();
+    await accountSignOut(m.storage, undefined, phone() as never, { deadlineMs: 20, held: HELD, revoke: async () => 'pending' });
+    W.lateRelease!();
+    for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(list(m).map((e) => e.id)).toEqual(['ak_held']);
+  });
+  test('a second sign-out never overwrites an id that is still unresolved', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    await accountSignOut(m.storage, undefined, phone() as never, { held: { key: 'k1', id: 'ak_first' }, revoke: async () => 'pending' });
+    W = newWorld('present'); await launch(m); resetSettled();
+    await accountSignOut(m.storage, undefined, phone() as never, { held: { key: 'k2', id: 'ak_second' }, revoke: async () => 'pending' });
+    expect(list(m).map((e) => e.id).sort()).toEqual(['ak_first', 'ak_second']);
+  });
+  test('the list holds at most 8; a ninth drops the entry that has answered "not yours" most', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    m.files.set(PENDING_REVOKE_FILE, new TextEncoder().encode(JSON.stringify(Array.from({ length: 8 }, (_, i) => ({ id: `ak_${i}`, tries: i === 5 ? 40 : 0 })))));
+    await launch(m); resetSettled();
+    await accountSignOut(m.storage, undefined, phone() as never, { held: { key: 'k', id: 'ak_new' }, revoke: async () => 'pending' });
+    const ids = list(m).map((e) => e.id);
+    expect(ids.length).toBe(8); expect(ids).toContain('ak_new'); expect(ids).not.toContain('ak_5');
+  });
+  test('a sign-in during the sign-out is not undone: native leaves the new key, the page says so, and the old id stays to be revoked', async () => {
+    W = newWorld('present'); W.keyId = 'ak_new'; const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const r = await accountSignOut(m.storage, undefined, phone() as never, { held: HELD, revoke: async () => 'revoked' });
+    expect(r.done).toBe(false); expect(W.key).toBe('present'); expect(dataLeft(m).length).toBe(SEED.length); expect(W.swift).toBe(true);
+    expect(list(m).map((e) => e.id)).toEqual(['ak_held']);
+  });
+  test('the retry of each entry: one revoked, one kept', async () => {
+    W = newWorld('present'); const m = memFs([]);
+    m.files.set(PENDING_REVOKE_FILE, new TextEncoder().encode(JSON.stringify([{ id: 'ak_a', tries: 0 }, { id: 'ak_b', tries: 0 }])));
+    resetSeam(); bindNative(phone() as never);
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init: { method: string }) => new Response(url.endsWith('ak_a') ? '{}' : '{"error":"x"}', { status: url.endsWith('ak_a') ? 200 : 404 })) as never;
+    try { await retryPendingRevoke(m.storage, { get: () => null } as never); } finally { globalThis.fetch = real; }
+    expect(list(m)).toEqual([{ id: 'ak_b', tries: 1 }]);
   });
 });
 
