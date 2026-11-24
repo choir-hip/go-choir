@@ -197,11 +197,11 @@ type AccountPurgeCounts struct {
 // table is nothing to delete.
 func (s *Service) deleteRouteSlotsOf(ctx context.Context, userID string, errs *[]error) int64 {
 	var reg *string
-	if err := s.store.corpus().QueryRowContext(ctx, `SELECT to_regclass($1)::text`, "public.computer_version_route_slots").Scan(&reg); err != nil || reg == nil {
+	if err := s.store.db.QueryRowContext(ctx, `SELECT to_regclass($1)::text`, "public.computer_version_route_slots").Scan(&reg); err != nil || reg == nil {
 		return 0
 	}
 	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.TrimSpace(userID))
-	res, err := s.store.corpus().ExecContext(ctx, `DELETE FROM computer_version_route_slots WHERE route_slot_id LIKE ? ESCAPE '\'`, "computer:"+esc+":%")
+	res, err := s.store.db.ExecContext(ctx, `DELETE FROM computer_version_route_slots WHERE route_slot_id LIKE ? ESCAPE '\'`, "computer:"+esc+":%")
 	if err != nil {
 		*errs = append(*errs, fmt.Errorf("route slots: %w", err))
 		return 0
