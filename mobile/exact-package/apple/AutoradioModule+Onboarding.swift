@@ -25,6 +25,9 @@ final class OnboardingController: @unchecked Sendable {
     private var setup: VoiceSetup?
     /// The stages the running setup was asked to do (empty: all of them).
     private var runStages: [String] = []
+    /// Learning the person's voice (voice onboarding; Voice/VoiceEnrolment.swift): the sentences, the profile, the check.
+    let enrolment = VoiceEnrolment(gate: .shared)
+    private var enrolTask: Task<Void, Never>?
     /// The first run is over (done or skipped): the station may start by itself. Told by shared code (obMirror).
     private var over = false
     var finished: Bool { lock.lock(); defer { lock.unlock() }; return over }
@@ -41,6 +44,7 @@ final class OnboardingController: @unchecked Sendable {
 
     init(module: AutoradioModule, support: URL) {
         self.module = module; self.support = support
+        enrolment.onChange = { [weak self] in self?.changed() }
         EditionTalk.shared.onFinish = { [weak self] in self?.set { self?.finishAsked += 1 } }
     }
 
@@ -49,27 +53,42 @@ final class OnboardingController: @unchecked Sendable {
 
     // MARK: Voice setup
 
-    /// `stages` empty: the whole voice setup (the configurator plans the pipeline together). `["voice"]`: only the radio's speaking voice, asked for first and alone (owner, 2026-11-23); the hearing models come when voice is turned on.
-    func begin(stages: [String] = []) {
+    /// `only` false: the whole voice setup (the configurator plans the pipeline together, unless the person picked models). `only` true: just `stages` (`["voice"]` is the radio's speaking voice, asked for first and alone: owner, 2026-11-23), each on its own ladder.
+    /// `picks` (stage -> model id): the models the person chose in the download step (the list's recommendation when they chose none), tried first on their stage; with picks the configurator, which would choose other models, is not used (the person's choice is what is fetched).
+    /// `speaker`: also fetch the voice-print model (about 8 MB) the person agreed to with the rest, which is what learning their voice needs.
+    func begin(stages: [String] = [], only: Bool = false, picks: [String: String] = [:], speaker: Bool = false) {
+        if speaker { fetchSpeakerModel() }
+        if only && stages.isEmpty { return }
         lock.lock()
         if let s = setup, s.isStarted, !s.isFinished { lock.unlock(); return }
         lock.unlock()
-        let only = Set(stages.compactMap { SetupStage(rawValue: $0) })
+        let run = Set(stages.compactMap { SetupStage(rawValue: $0) })
         // The one shared store, with the whole catalog in it from the start.
         let backend: SetupBackend = LiveSetupBackend(store: .shared)
         let profile = DeviceProfile.current()
         let stall = 20.0, patience = 45.0
-        // The configurator picks one model per role for THIS phone, the whole pipeline resident together, by measuring it.
-        let configurator: ConfigBackend? = only.isEmpty ? LiveConfigBackend() : nil
+        // The configurator picks one model per role for THIS phone, the whole pipeline resident together, by measuring it: only when the person did not choose.
+        let configurator: ConfigBackend? = (only || !picks.isEmpty) ? nil : LiveConfigBackend()
         var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, configBackend: configurator)
         if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
+        for (job, id) in picks {
+            guard let st = SetupStage(rawValue: job) else { continue }
+            if let c = ModelList.active.options(job).first(where: { $0.id == id }) {
+                s.prefer(st, SetupCatalog.ladder(st).first { $0.id == id } ?? SetupCandidate(id: c.id, label: c.label, bytes: c.bytes, minMemoryGB: c.minMemoryGB, kitStageID: SetupCatalog.ladder(st).first?.kitStageID ?? "", needsMB: c.needsMB))
+            }
+        }
         s.onChange = { [weak self] in self?.changed() }
-        set { setup = s; runStages = stages }
+        set { setup = s; runStages = only ? stages : [] }
         let gen = AccountWipe.generation
         Task { [weak self, s] in
-            await s.run(only: only.isEmpty ? nil : only)
-            self?.setupFinished(s, gen: gen, merging: !only.isEmpty)
+            await s.run(only: only ? run : nil)
+            self?.setupFinished(s, gen: gen, merging: only)
         }
+    }
+
+    /// The voice-print model (WeSpeaker, about 8 MB) is fetched only after the person agreed on the download step; once loaded the gate can listen.
+    func fetchSpeakerModel() {
+        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e; self.changed() } }
     }
 
     private func setupFinished(_ s: VoiceSetup, gen: Int, merging: Bool = false) {
@@ -143,6 +162,46 @@ final class OnboardingController: @unchecked Sendable {
         }
     }
 
+    // MARK: Learning the person's voice (native because it takes the microphone's frames and the embedding model; the page and its words are shared code, voicelearn.ts)
+
+    /// The microphone is asked for here, at the moment it is first needed (the page showed its pre-prompt line first), then the frames go to the enrolment until it ends or the page leaves. UNPROVEN on a device.
+    func beginEnrolment() {
+        enrolment.begin()
+        let p = enrolment.phase
+        guard p == .listening || p == .confirming else { changed(); return }
+        lock.lock(); let running = enrolTask != nil; lock.unlock()
+        if running { return }
+        AVAudioApplication.requestRecordPermission { [weak self] granted in
+            guard let self else { return }
+            if !granted { self.set { self.mic = "refused" }; self.stopEnrolment(); self.enrolment.rewind(); return }
+            let task = Task { [weak self] in
+                guard let self else { return }
+                let rt = self.module.runtime!
+                let frames = rt.bus.mic()
+                await rt.start(virtual: self.module.virtualEngine)
+                rt.audio.micMayRetry()
+                if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }      // opens the microphone, as the first-run check does
+                defer { rt.restoreHandsFree() }
+                var listening = true
+                for await f in frames {
+                    if Task.isCancelled { return }
+                    self.enrolment.feed(f)
+                    let ph = self.enrolment.phase
+                    let now = ph == .listening || ph == .confirming
+                    if listening && !now { rt.cancelTalk() }                                    // a sentence read here must not become a turn to the desk
+                    listening = now
+                    if [.stored, .unsure, .failed, .noModel].contains(ph) { return }
+                }
+            }
+            self.lock.lock(); self.enrolTask = task; self.lock.unlock()
+        }
+    }
+
+    func stopEnrolment() {
+        lock.lock(); let t = enrolTask; enrolTask = nil; lock.unlock()
+        t?.cancel()
+    }
+
     func stopMicrophone() { lock.lock(); micActive = false; lock.unlock() }
 
     /// The hearing check: the route it plays on, and the sentence, in the voice that was just set up. The radio's engine is running after the microphone check; if it is not,
@@ -197,7 +256,7 @@ final class OnboardingController: @unchecked Sendable {
         changed()
     }
 
-    func stop() { stopVoice(); stopMicrophone() }
+    func stop() { stopVoice(); stopMicrophone(); stopEnrolment() }
 
     /// Sign-out: nothing of the voice side's first run reaches the next account.
     func reset() {
@@ -217,13 +276,16 @@ final class OnboardingController: @unchecked Sendable {
         }
         let profile = setup?.profile ?? DeviceProfile.current()
         // What voice needs from the network, read from the model lists (ModelOffer): per file, its name and size, and whether it is on this phone. Shared code states the sizes and the host; no string has a model's name or size in it.
-        let ready = ModelOffer.readyStages(record: ModelOffer.readRecord(recordFile))
-        let plan = ModelOffer.rows(profile: profile, smaller: false, ready: ready).map { $0.dict }
+        let record = ModelOffer.readRecord(recordFile)
+        let ready = ModelOffer.readyStages(record: record)
+        var readyChoices = ModelOffer.readyChoices(record: record)
+        if WeSpeakerEmbedder.standard().onDisk { readyChoices["speaker"] = "wespeaker-resnet34" }
+        let offers = ModelOffer.jobs(profile: profile, ready: readyChoices).map { $0.dict }
         var device = ""
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
         return ["rows": rows, "summary": setup?.summary ?? [],
                 "totalLabel": setup?.totalLabel ?? SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(SetupCatalog.plan(for: profile)), onWiFi: profile.onWiFi),
-                "plan": plan, "runStages": runStages, "voiceReady": ready.contains("voice"), "hearingReady": ready.contains("transcriber") && ready.contains("bounds"),
+                "offers": offers, "enrol": enrolment.facts(), "runStages": runStages, "voiceReady": ready.contains("voice"), "hearingReady": ready.contains("transcriber") && ready.contains("bounds"),
                 "device": device, "onWiFi": profile.onWiFi, "setupStarted": setup?.isStarted ?? false, "setupFinished": setup?.isFinished ?? false,
                 "mic": mic, "level": level, "heard": heard, "route": route, "talking": talking, "voicePicked": picked, "finishAsked": finishAsked]
     }
@@ -254,7 +316,11 @@ extension AutoradioModule {
         guard let c = OnboardingController.shared else { return [:] }
         switch r["op"] as? String ?? "" {
         case "obFacts": return c.facts()
-        case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [])
+        case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [], only: (r["only"] as? Bool) ?? false, picks: (r["picks"] as? [String: String]) ?? [:], speaker: (r["speaker"] as? Bool) ?? false)
+        case "obVoiceStart": c.enrolment.start()
+        case "obVoiceBegin": c.beginEnrolment()
+        case "obVoiceStop": c.stopEnrolment()
+        case "obVoiceForget": c.enrolment.forget(); c.stopEnrolment()
         case "obSetupRetry": c.retry(r["stage"] as? String ?? "")
         case "obSetupFallback": c.fallback(r["stage"] as? String ?? "")
         case "obMicStart": c.askMicrophone()

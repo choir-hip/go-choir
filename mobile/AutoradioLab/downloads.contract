@@ -1,8 +1,35 @@
-// The model files voice needs, offered with their sizes before anything is fetched (downloads.ts). One card per group: what it is for, the files with their sizes, the host, and the one press that is the agreement. On mobile data
-// the card says so and the size before it starts, and the press is a different one. testIds: dl-<group>, dl-<group>-lines, dl-<group>-host, dl-<group>-mobile, dl-<group>-start, dl-<group>-mobile-start, dl-<group>-status.
+// The model files voice needs, offered with their sizes before anything is fetched (downloads.ts). One card per group: what it is for, each JOB in it with its options (name and size, the one recommended for this phone tagged, the chosen one
+// marked; a press chooses), the total of what is chosen and not yet on the phone, the host, and the one press that is the agreement. On mobile data the card says so and the size before it starts, and the press is a different one.
+// testIds: dl-<group>, dl-<group>-jobs, dl-<group>-host, dl-<group>-mobile, dl-<group>-start, dl-<group>-mobile-start, dl-<group>-status, dl-<group>-total, dl-job-<job>, dl-opt-<job>-<id>.
 use Theme from "@choir/autoradio"
 use DownloadsView from "./downloads-types.contract"
-use Btn from "./ui.contract"
+use Btn, SelectMark from "./ui.contract"
+
+// A job's options. A press on an option chooses it (it is kept); there is no download in this press.
+component DownloadJobs
+  inject
+    th: Theme
+    dl: DownloadsView
+    dlPick: action
+  props
+    group: string
+  view
+    for g in dl.groups key=g.id
+      if g.id == group
+        column testId=`dl-${g.id}-jobs` width="100%" gap=10
+          for j in g.jobs key=j.job
+            column testId=`dl-job-${j.job}` width="100%" gap=2
+              text j.title font-family=th.fontLabel font-size="-exact-footnote" font-weight=600 color=th.fg
+              for o in j.options key=o.id
+                button press=dlPick(j.job, o.id) testId=`dl-opt-${j.job}-${o.id}` appearance="none"
+                  row width="100%" gap=8 align-items="center" padding="6px 0px"
+                    SelectMark(state=(o.selected ? "on" : "off"))
+                    column gap=1 flex-grow=1
+                      text o.text font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
+                      if o.tag != ""
+                        text o.tag font-family=th.fontLabel font-size="-exact-caption1" color=th.muted
+              if j.none != ""
+                text j.none font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
 
 component DownloadCard
   inject
@@ -18,9 +45,8 @@ component DownloadCard
         column testId=`dl-${g.id}` width="100%" box-sizing="border-box" gap=8 padding="14px 0px"
           text g.title role="heading" aria-level=2 font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
           text g.why font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
-          column testId=`dl-${g.id}-lines` gap=2
-            for l, i in g.lines key=i
-              text l font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
+          DownloadJobs(group=group)
+          text g.total testId=`dl-${g.id}-total` font-family=th.fontLabel font-size="-exact-footnote" font-weight=600 color=th.fg
           text g.hostLine testId=`dl-${g.id}-host` font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
           if g.status != ""
             text g.status testId=`dl-${g.id}-status` font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
@@ -33,7 +59,7 @@ component DownloadCard
               button press=dlStartMobile(g.id) testId=`dl-${g.id}-mobile-start` appearance="none"
                 Btn(label=g.mobileLabel, primary=false, wide=true)
 
-// The files of a group, listed with their sizes and the host, with no button: where another button (voice setup's) is the agreement. testIds: dl-<group>-lines, dl-<group>-host.
+// The options and the sizes of a group, with the host and the total, with no button: where another button (voice setup's) is the agreement. The options can still be chosen.
 component DownloadLines
   inject
     th: Theme
@@ -43,7 +69,6 @@ component DownloadLines
   view
     for g in dl.groups key=g.id
       if g.id == group and g.ready == false
-        column testId=`dl-${g.id}` width="100%" gap=2
-          for l, i in g.lines key=i
-            text l font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
+        column testId=`dl-${g.id}` width="100%" gap=4
+          DownloadJobs(group=group)
           text g.hostLine testId=`dl-${g.id}-host` font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted

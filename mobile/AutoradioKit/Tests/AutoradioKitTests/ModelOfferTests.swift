@@ -2,17 +2,26 @@ import XCTest
 @testable import AutoradioKit
 
 // What voice needs from the network, read from the model lists (ModelOffer), and the picks setup keeps (StagePicksStore). The failure list, written first:
-//  M1 the rows are the lists' own: the voice first, then the hearing and the rest, then search; every row has a size from its list and the host; a built-in floor is never a row.
+//  M1 the jobs are the list's own, each option with a size from the list and the host, one option per job marked recommended, the same one setup would download first; a built-in floor is never an option.
 //  M2 a stage is ready when setup recorded a model that is not its built-in floor; unknown ids from the configurator count unless their stage is a built-in one; no record is nothing ready.
 //  M3 the picks round-trip, only the hearing kinds are kept, and a bad file is empty.
 final class ModelOfferTests: XCTestCase {
     private let phone = DeviceProfile(chip: "A", memoryGB: 8, freeDiskGB: 50, onWiFi: true, availableMemoryMB: 6000)
-    func testM1RowsAreTheListsOwn() {
-        let rows = ModelOffer.rows(profile: phone)
-        XCTAssertEqual(rows.first?.stage, "voice"); XCTAssertEqual(rows.last?.stage, "search"); XCTAssertEqual(rows.last?.bytes, KnownModels.embeddingGemma2.bytes)
-        XCTAssertTrue(rows.allSatisfy { $0.bytes > 0 && $0.host == "Hugging Face" && !$0.sizeLabel.isEmpty })
-        XCTAssertEqual(Set(rows.map(\.id)).count, rows.count)
-        for r in rows where r.stage != "search" { XCTAssertEqual(r.bytes, SetupCatalog.ladder(SetupStage(rawValue: r.stage)!).first { $0.id == r.id }?.bytes) }
+    func testM1JobsAreTheListsOwn() {
+        let jobs = ModelOffer.jobs(profile: phone)
+        XCTAssertEqual(jobs.map(\.job), ModelList.jobs.filter { j in !ModelList.builtIn.options(j).isEmpty })
+        XCTAssertEqual(jobs.last?.job, "search"); XCTAssertEqual(jobs.last?.options.first?.bytes, KnownModels.embeddingGemma2.bytes)
+        for j in jobs {
+            XCTAssertEqual(j.host, "Hugging Face"); XCTAssertFalse(j.options.isEmpty)
+            XCTAssertTrue(j.options.allSatisfy { $0.bytes > 0 && !$0.sizeLabel.isEmpty && !$0.model.isEmpty })
+            XCTAssertLessThanOrEqual(j.options.filter(\.recommended).count, 1)
+            XCTAssertEqual(ModelOffer.group(j.job), j.job == "voice" ? "voice" : j.job == "search" ? "search" : "voice-rest")
+        }
+        XCTAssertFalse(jobs.contains { $0.job == "decision" })
+        let tr = jobs.first { $0.job == "transcriber" }!
+        XCTAssertEqual(tr.options.first { $0.recommended }?.id, SetupCatalog.plan(for: phone)[.transcriber]?.first?.id, "the recommendation is what setup would download first")
+        let ready = ModelOffer.jobs(profile: phone, ready: ["voice": jobs.first { $0.job == "voice" }!.options[0].id])
+        XCTAssertTrue(ready.first { $0.job == "voice" }!.options[0].ready); XCTAssertFalse(ready.first { $0.job == "transcriber" }!.options.contains { $0.ready })
     }
     func testM2Ready() {
         XCTAssertEqual(ModelOffer.readyStages(record: nil), [])

@@ -1,9 +1,23 @@
 // The shapes of the model downloads page (downloads.ts `downloadsPage`).
+shape DownloadOption
+  id: string
+  text: string
+  tag: string
+  selected: bool
+  ready: bool
+
+shape DownloadJob
+  job: string
+  title: string
+  options: DownloadOption[]
+  ready: bool
+  none: string
+
 shape DownloadGroup
   id: string
   title: string
   why: string
-  lines: string[]
+  jobs: DownloadJob[]
   total: string
   host: string
   ready: bool
@@ -14,6 +28,7 @@ shape DownloadGroup
   startLabel: string
   mobileLabel: string
   hostLine: string
+  canStart: bool
 
 shape DownloadsView
   groups: DownloadGroup[]

@@ -1,0 +1,15 @@
+// Lane members file (learn, lane onboard-consent): learning the person's voice (voicelearn.ts). The page reads `lrn`, built from the voice side's facts (`ovoice`, which carry the enrolment's phase); every button is one send.
+// `lrnLeaveFlow` ends the first-run step (onboarding.ts `learnDone`); `lrnLeaveSettings` closes Settings' page. Both tell native to stop listening first.
+use LearnView from "./learn-types.contract"
+
+members Autoradio
+  resource lrn = learnPage(ovoice) as shape LearnView else empty(step="intro", title="", line="", sentence="", count="", notice="", level=0, primary="", primaryOp="", secondary="", busy=false, stored=false)
+  mutation lrnm as shape LearnView refreshes lrn
+  action lrnPress(op: string)
+    send lrnm = learnAct(op, ovoice)
+  action lrnLeaveFlow
+    send lrnm = learnAct("close", ovoice)
+    send obm = onboardingAct("learnDone", "", "", pg.top)
+  action lrnLeaveSettings
+    send lrnm = learnAct("close", ovoice)
+    send pms = pagesClose("settings:voiceprint")

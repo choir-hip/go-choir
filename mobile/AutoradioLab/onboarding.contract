@@ -21,6 +21,7 @@ use AccountView from "./account-state-types.contract"
 use SignInView from "./account-types.contract"
 use EditionPage from "./edition-types.contract"
 use DownloadCard, DownloadLines from "./downloads.contract"
+use LearnCard from "./learn.contract"
 use DownloadsView from "./downloads-types.contract"
 
 keyframes obBreathe
@@ -287,6 +288,7 @@ component OnboardingPage
     obBeginMobile: action
     obMic: action
     obMicNext: action
+    obMicSkip: action
     obHearingYes: action
     obHearingNo: action
     obTopics: action
@@ -299,11 +301,11 @@ component OnboardingPage
   props
     address: string
     title: string
-  derive n = ob.step == "mic" ? 2 : (ob.step == "hearing" or ob.step == "voice") ? 3 : (ob.step == "ready" or ob.step == "topics" or ob.step == "writing" or ob.step == "done") ? 4 : 1
+  derive n = ob.step == "mic" ? 2 : (ob.step == "hearing" or ob.step == "learn" or ob.step == "voice") ? 3 : (ob.step == "ready" or ob.step == "topics" or ob.step == "writing" or ob.step == "done") ? 4 : 1
   derive markState = ob.step == "writing" ? "holding" : (ob.step == "topics" and ob.talking) ? "listening" : "idle"
   derive beginLabel = ob.setupStarted ? "Continue voice setup" : "Set up the voice"
   derive deviceLine = ob.device == "" ? "Choosing the models that fit this phone." : `Chosen for this phone: ${ob.device}.`
-  derive micLabel = ob.mic == "unasked" ? "Allow the microphone" : "Try again"
+  derive micLabel = ob.mic == "unasked" ? "Continue" : "Try again"
   derive eyebrow = ob.step == "done" ? "ALL SET" : ob.step == "skipped" ? "WHEN YOU ARE READY" : `STEP ${n} OF 4`
   view
     PageScroll(id="onboarding")
@@ -365,10 +367,16 @@ component OnboardingPage
         Card(level=1, testId="ob-mic", minHeight=0)
           column padding=18 gap=12
             if ob.mic == "unasked" or ob.mic == "refused" or ob.mic == "silent"
-              text "To check I can hear you I need the microphone." font-size="-exact-title3" font-weight=600 line-height=1.35 font-family=th.fontHead
+              text "To talk to the radio or record a take, Autoradio 1 needs your microphone and speech recognition." testId="ob-mic-why" font-size="-exact-title3" font-weight=600 line-height=1.35 font-family=th.fontHead
               text "What you say stays on this phone as sound; only the words go to your computer." font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
-              button press=obMic testId="ob-mic-ask" appearance="none"
-                Btn(label=micLabel, primary=true, wide=true)
+              if ob.mic != "refused"
+                button press=obMic testId="ob-mic-ask" appearance="none"
+                  Btn(label=micLabel, primary=true, wide=true)
+                button press=obMicSkip testId="ob-mic-skip" appearance="none" padding=10
+                  text "Not now" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
+              if ob.mic == "refused"
+                button press=obMicSkip testId="ob-mic-skip" appearance="none" padding=10
+                  text "Go on without it" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
             if ob.mic == "checking"
               text "Say anything." font-size="-exact-title1" font-weight=700 font-family=th.fontHead
               column testId="ob-mic-level" height=6 background-color=th.rule width="100%"
@@ -401,6 +409,10 @@ component OnboardingPage
               button press=obHearingNo testId="ob-hearing-no" appearance="none"
                 Btn(label="No", primary=false, wide=false)
             text ob.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
+
+      // ---- the person's voice: three sentences read aloud, one more to check (learn.contract, voicelearn.ts)
+      if ob.step == "learn"
+        LearnCard(flow=true)
 
       // ---- the voice: tap a voice to hear it, then go on (voice.contract)
       if ob.step == "voice"

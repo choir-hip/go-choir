@@ -1,6 +1,6 @@
 // The model-download agreement and the sign-in prompt's words under bun test (consent.ts): C1 to C6, against a fake storage and a fake native.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { consentAct, consentView, deskMode, forgetConsent, modelsAgreed, modelsAgreement, parseConsent, wipeConsent, CONSENT_FILE } from './consent.ts';
+import { consentAct, consentView, deskMode, forgetConsent, modelsAgreed, modelsAgreement, parseConsent, wipeConsent, consentPick, consentPicks, CONSENT_FILE } from './consent.ts';
 import { ASK_TEXT } from './consent-text.ts';
 import en from './strings/en.json';
 import { bindNative, nextGeneration, resetSeam } from './api.ts';
@@ -20,15 +20,15 @@ describe('the download agreement', () => {
   test('C1 a fresh account has agreed to nothing; a bad file is fresh', async () => {
     expect(await consentView(storage)).toMatchObject({ models: '', mobileOk: false });
     expect(await modelsAgreed(storage)).toBe(false);
-    for (const t of ['', 'not json', '[]', '{"models":"yes"}', '{"models":5}', 'null']) expect(parseConsent(t)).toEqual({ models: '' });
-    expect(parseConsent('{"models":"agreed-mobile"}')).toEqual({ models: 'agreed-mobile' });
+    for (const t of ['', 'not json', '[]', '{"models":"yes"}', '{"models":5}', 'null']) expect(parseConsent(t)).toEqual({ models: '', picks: {} });
+    expect(parseConsent('{"models":"agreed-mobile"}')).toEqual({ models: 'agreed-mobile', picks: {} });
   });
   test('C2 agree (Wi-Fi), agree on mobile data, decline, agree later: each persists', async () => {
     expect((await consentAct('declineModels', storage)).models).toBe('declined'); expect(await modelsAgreed(storage)).toBe(false);
     forgetConsent(); expect((await consentView(storage)).models).toBe('declined');
     expect(await consentAct('agreeModels', storage)).toMatchObject({ models: 'agreed', mobileOk: false }); expect(await modelsAgreement(storage)).toEqual({ ok: true, mobile: false });
     expect(await consentAct('agreeModelsMobile', storage)).toMatchObject({ models: 'agreed-mobile', mobileOk: true }); expect(await modelsAgreement(storage)).toEqual({ ok: true, mobile: true });
-    expect(kept()).toEqual({ models: 'agreed-mobile' });
+    expect(kept()).toEqual({ models: 'agreed-mobile', picks: {} });
   });
   test('C2 unread is never yes, and nothing is written over what was not read', async () => {
     files.set(CONSENT_FILE, new TextEncoder().encode('{"models":"agreed"}')); readFails = true;
@@ -43,6 +43,22 @@ describe('the download agreement', () => {
   test('C4 an unknown op changes nothing (there is no op for outside AI: that agreement is the create-account screen\'s)', async () => {
     for (const op of ['everything', 'allowAI', 'withdrawAI']) expect((await consentAct(op, storage)).models).toBe('');
     expect(files.size).toBe(0);
+  });
+});
+
+describe('the picks', () => {
+  test('C7 a pick persists across a restart, is read by shape, is idempotent, and goes at sign-out', async () => {
+    expect(parseConsent('{"picks":{"voice":"a","bad":5,"empty":"","x":[]}}').picks).toEqual({ voice: 'a' });
+    expect(parseConsent('{"picks":[1]}').picks).toEqual({}); expect(parseConsent('{"picks":"a"}').picks).toEqual({});
+    await consentPick('voice', 'kokoro-x', storage); await consentPick('transcriber', 'ear', storage);
+    forgetConsent(); expect(await consentPicks(storage)).toEqual({ voice: 'kokoro-x', transcriber: 'ear' });
+    const rev = (await consentView(storage)).rev; await consentPick('voice', 'kokoro-x', storage); expect((await consentView(storage)).rev).toBe(rev);
+    await consentPick('', 'x', storage); await consentPick('voice', '', storage); expect(await consentPicks(storage)).toEqual({ voice: 'kokoro-x', transcriber: 'ear' });
+    await wipeConsent(storage); expect(files.size).toBe(0); expect(await consentPicks(storage)).toEqual({});
+  });
+  test('C7 a pick is not written over a file that could not be read', async () => {
+    files.set(CONSENT_FILE, new TextEncoder().encode('{"picks":{"voice":"a"}}')); readFails = true;
+    await consentPick('voice', 'b', storage); readFails = false; expect(await consentPicks(storage)).toEqual({ voice: 'a' });
   });
 });
 

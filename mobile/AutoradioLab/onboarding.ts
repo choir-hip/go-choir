@@ -1,6 +1,6 @@
 // First run, as shared code: WHICH steps exist, their order, what each asks, and what is kept. It replaces the Swift OnboardingController's step machine
 // (AutoradioModule+Onboarding.swift) and its page model. The steps, in order:
-//   welcome -> setup (the voice models) -> mic (can I hear you) -> hearing (can you hear me) -> voice (pick a voice) -> ready -> topics -> writing -> done
+//   welcome -> setup (the voice models) -> mic (can I hear you) -> hearing (can you hear me) -> learn (read three sentences, the person's voice is learned, one more checks it) -> voice (pick a voice) -> ready -> topics -> writing -> done
 //   and `skipped` (Not now), which comes back to the topics through "begin".
 // What stays native, each as a FACT in `VoiceFacts` (the source `voiceSetupFacts`) or one narrow call (`later({op})`, `obOp` below), with its reason: the voice models
 // and their download (VoiceSetup.swift, ModelStore: the on-device models), the microphone permission and the live check (the microphone), the sentence spoken at the
@@ -15,7 +15,7 @@
 //  O2 A phone off Wi-Fi is asked before anything downloads: "begin" without the yes only asks; "begin" with it starts the setup, once (a second begin while it runs is a no-op).
 //  O3 Setup finishing (a native fact) moves "setup" to "mic" and keeps `setupDone`; it is not lost by a restart.
 //  O4 A refused microphone is kept (`micRefused`) and said; "Talk to it" then says so and starts nothing; a silent one says so, and the topics step still works.
-//  O5 "No" at the hearing check plays it again and says what to try; "Yes" goes on to the voice step and keeps `setupDone`.
+//  O5 "No" at the hearing check plays it again and says what to try; "Yes" goes on to the learn-your-voice step (then the voice step) and keeps `setupDone`.
 //  O6 The voice step ends when the voice cards report a pick (a counter fact), not by a button here.
 //  O7 Skip stops the voice and the microphone and is kept; a skipped first run that finished its setup begins again at "ready", with nothing downloaded again.
 //  O8 Continue writes the edition from the list the page sent (an empty list is the general edition). It always ends: written, failed, or the deadline, and the topics stay.
@@ -26,13 +26,17 @@
 //  O13 The kept file is read by shape: a corrupt, empty or wrong-typed file starts fresh and never throws; sign-out removes it and forgets the memory.
 //  O14 The station may start by itself only when the first run is over (done or skipped): that fact is told to native code on every change.
 //  O15 With no key the first run is over for the station (the paper plays at once); a locked or unreadable key leaves it to the first run as before.
+//  O17 The learn step ends with `learnDone` (stored, or Not now) into the voice step and tells native to stop listening; `micSkip` (Not now at the microphone) goes to the voice step without opening the microphone.
+//  O18 The press that starts the setup hands native the chosen option of every job (the person's pick, else the one recommended for this phone) and the voice-print model when it is not on the phone.
 //  O16 The press that starts the voice setup records the person's agreement to the download (Wi-Fi, or mobile data when the phone is not on Wi-Fi).
 import type { Storage } from './app.contract.d.ts';
 import { complete, generalEdition, localWriter, FAILED_LINE, TIMED_OUT_LINE, type Edition, type Writer, editionLines } from './edition-writer.ts';
 import { lookupEdition, seamGet, type Get } from './notebook.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
 import * as pages from './pages.ts';
-import { consentAct } from './consent.ts';
+import { consentAct, consentPicks } from './consent.ts';
+import { picksFor, type OfferJob } from './offers.ts';
+import { noEnrol, type Enrol } from './voicelearn.ts';
 import { keyState } from './api.ts';
 
 export const PROGRESS_FILE = 'app:/data/onboarding.json';
@@ -41,14 +45,13 @@ export const SETUP = 'onboarding:setup';
 
 export type Row = { stage: string; name: string; model: string; sizeLabel: string; state: string; statusLine: string; numbers: string; progress: number; isFallback: boolean; canRetry: boolean; canFallback: boolean };
 /** What the voice side reports. Only native code holds these. */
-/** One file voice needs from the network, as the model lists give it (native ModelOffer): the name and size are the list's, never typed here. `group`: "voice" (the speaking voice), "voice-rest" (hearing you and the rest), "search". */
-export type PlanRow = { stage: string; name: string; model: string; id: string; group: string; host: string; bytes: number; sizeLabel: string; ready: boolean };
+/** What voice needs from the network, job by job, as the model list gives it (native ModelOffer): see offers.ts. */
 export type VoiceFacts = {
   rows: Row[]; summary: string[]; totalLabel: string; device: string; onWiFi: boolean; setupStarted: boolean; setupFinished: boolean;
   mic: string; level: number; heard: string; route: string; talking: boolean; voicePicked: number; finishAsked: number;
-  plan: PlanRow[]; runStages: string[]; voiceReady: boolean; hearingReady: boolean;
+  offers: OfferJob[]; runStages: string[]; voiceReady: boolean; hearingReady: boolean; enrol: Enrol;
 };
-export const noVoice = (): VoiceFacts => ({ rows: [], summary: [], totalLabel: '', device: '', onWiFi: true, setupStarted: false, setupFinished: false, mic: 'unasked', level: 0, heard: '', route: '', talking: false, voicePicked: 0, finishAsked: 0, plan: [], runStages: [], voiceReady: false, hearingReady: false });
+export const noVoice = (): VoiceFacts => ({ rows: [], summary: [], totalLabel: '', device: '', onWiFi: true, setupStarted: false, setupFinished: false, mic: 'unasked', level: 0, heard: '', route: '', talking: false, voicePicked: 0, finishAsked: 0, offers: [], runStages: [], voiceReady: false, hearingReady: false, enrol: noEnrol() });
 
 export type Onboarding = {
   step: string; title: string; message: string; totalLabel: string; device: string; mic: string; heard: string; route: string; editionStatus: string; writingLine: string; editionError: string;
@@ -81,9 +84,9 @@ export function startStep(p: Progress): string {
   return 'welcome';
 }
 
-const TITLES: Record<string, string> = { welcome: 'Make it yours', setup: 'Set up your voice', mic: 'Can I hear you?', hearing: 'Can you hear me?', voice: 'Pick a voice', ready: 'Voice is ready',
+const TITLES: Record<string, string> = { welcome: 'Make it yours', setup: 'Set up your voice', mic: 'Can I hear you?', hearing: 'Can you hear me?', learn: 'Your voice', voice: 'Pick a voice', ready: 'Voice is ready',
   topics: 'Your edition', writing: 'Writing your edition', done: 'Your edition', skipped: 'Make it yours' };
-export const MIC_REFUSED_LINE = 'Talking to the radio needs the microphone. You can allow it in Settings; you can always tap instead.';
+export const MIC_REFUSED_LINE = 'Microphone is off for Autoradio 1. You can turn it on in Settings.';
 export const TALK_REFUSED_LINE = 'Talking to the radio needs the microphone. You can allow it in Settings, or tap topics instead.';
 export const MIC_SILENT_LINE = 'I could not hear anything. The paper keeps working, and you can tap your topics instead.';
 export const HEARING_AGAIN_LINE = 'Try the volume, or another speaker or headphones, then play it again.';
@@ -233,7 +236,7 @@ async function ready(env: Env, m: Mem, e: Edition, edit: boolean): Promise<void>
 }
 async function closeEdit(env: Env): Promise<void> { await env.closePage?.(EDIT); }
 
-export type Op = 'begin' | 'retry' | 'fallback' | 'mic' | 'micNext' | 'hearing' | 'topics' | 'talk' | 'topicsDone' | 'editionRetry' | 'editDone' | 'editLeave' | 'continueAnyway' | 'skip' | 'offer' | 'finishAsked';
+export type Op = 'begin' | 'retry' | 'fallback' | 'mic' | 'micNext' | 'hearing' | 'topics' | 'talk' | 'topicsDone' | 'editionRetry' | 'editDone' | 'editLeave' | 'continueAnyway' | 'skip' | 'offer' | 'finishAsked' | 'learnDone' | 'micSkip';
 
 /** Mutation: one button. `arg` is the option of the op (mobile, stage, ok) and `topics` the page's list (one per line) on the done sends. The answer is the page after it. */
 export async function onboardingAct(op: string, arg: string, topics: string, top: string, env: Env): Promise<Onboarding> {
@@ -251,7 +254,11 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
       m.askMobile = false; m.step = 'setup'; m.message = ''; m.p.skipped = false;
       await save(env, m);
       try { await env.agree?.(!f.onWiFi); } catch { /* the press is the agreement; recording it is for the search pass */ }
-      await dev(env, 'obSetupBegin');
+      // What was shown is what is fetched: the chosen option of every job of the two voice groups (the person's pick, else the one recommended for this phone), and the voice-print model beside them.
+      const kept = await consentPicks(env.storage);
+      const picks = picksFor(f.offers, ['voice', 'voice-rest'], kept);
+      const speaker = f.offers.some((j) => j.job === 'speaker' && j.options.some((o) => !o.ready));
+      await dev(env, 'obSetupBegin', { picks, speaker });
       break;
     }
     case 'retry': if (m.step === 'setup') await dev(env, 'obSetupRetry', { stage: arg }); break;
@@ -260,9 +267,11 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
     case 'micNext': if (m.step === 'mic') { m.step = 'hearing'; m.hearingOK = false; m.message = ''; await dev(env, 'obHearingPlay'); } break;
     case 'hearing':
       if (m.step !== 'hearing') break;
-      if (arg === 'true') { m.hearingOK = true; m.step = 'voice'; m.p.setupDone = true; m.message = ''; await save(env, m); }                // O5
+      if (arg === 'true') { m.hearingOK = true; m.step = 'learn'; m.p.setupDone = true; m.message = ''; await save(env, m); }                // O5
       else { m.message = HEARING_AGAIN_LINE; await dev(env, 'obHearingPlay'); }
       break;
+    case 'learnDone': if (m.step === 'learn') { await dev(env, 'obVoiceStop'); m.step = 'voice'; m.message = ''; await save(env, m); } break;                      // learned, or not now: either way on
+    case 'micSkip': if (m.step === 'mic') { await dev(env, 'obMicStop'); m.step = 'voice'; m.p.setupDone = true; m.message = ''; await save(env, m); } break;       // Not now at the microphone: nothing is asked, the tap path stays
     case 'topics': m.step = 'topics'; m.p.topicsStarted = true; m.p.skipped = false; m.message = ''; await save(env, m); break;
     case 'talk': {
       const f = await facts(env);

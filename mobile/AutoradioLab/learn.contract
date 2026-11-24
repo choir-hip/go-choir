@@ -1,0 +1,43 @@
+// Learning the person's voice (voicelearn.ts): three short sentences read aloud, then one more to check. The same card is the first-run step ("flow") and Settings' "Learn again" page.
+// testIds: learn-card, learn-title, learn-line, learn-sentence, learn-count, learn-notice, learn-primary, learn-secondary.
+use Theme from "@choir/autoradio"
+use LearnView from "./learn-types.contract"
+use Card, Btn from "./ui.contract"
+
+component LearnCard
+  inject
+    th: Theme
+    lrn: LearnView
+    lrnPress: action
+    lrnLeaveFlow: action
+    lrnLeaveSettings: action
+  props
+    flow: bool
+  view
+    Card(level=1, testId="learn-card", minHeight=0)
+      column padding=18 gap=12
+        text lrn.title testId="learn-title" role="heading" aria-level=2 font-size="-exact-title3" font-weight=600 font-family=th.fontHead
+        if lrn.count != ""
+          text lrn.count testId="learn-count" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+        if lrn.sentence != ""
+          text lrn.sentence testId="learn-sentence" font-size="-exact-title2" line-height=1.3 font-weight=700 font-family=th.fontHead color=th.fg
+        if lrn.line != ""
+          text lrn.line testId="learn-line" font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
+        if lrn.notice != ""
+          text lrn.notice testId="learn-notice" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
+        if lrn.primary != ""
+          if lrn.primaryOp == "close" and flow
+            button press=lrnLeaveFlow testId="learn-primary" appearance="none"
+              Btn(label=lrn.primary, primary=flow, wide=true)
+          if lrn.primaryOp == "close" and flow == false
+            button press=lrnLeaveSettings testId="learn-primary" appearance="none"
+              Btn(label=lrn.primary, primary=false, wide=true)
+          if lrn.primaryOp != "close"
+            button press=lrnPress(lrn.primaryOp) testId="learn-primary" appearance="none"
+              Btn(label=lrn.primary, primary=flow, wide=true)
+        if lrn.secondary != "" and flow
+          button press=lrnLeaveFlow testId="learn-secondary" appearance="none" padding=10
+            text lrn.secondary font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
+        if lrn.secondary != "" and flow == false
+          button press=lrnLeaveSettings testId="learn-secondary" appearance="none" padding=10
+            text lrn.secondary font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600

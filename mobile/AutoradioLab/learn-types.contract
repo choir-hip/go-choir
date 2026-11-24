@@ -1,0 +1,14 @@
+// The shape of the learn-your-voice page (voicelearn.ts `learnPage`).
+shape LearnView
+  step: string
+  title: string
+  line: string
+  sentence: string
+  count: string
+  notice: string
+  level: number
+  primary: string
+  primaryOp: string
+  secondary: string
+  busy: bool
+  stored: bool

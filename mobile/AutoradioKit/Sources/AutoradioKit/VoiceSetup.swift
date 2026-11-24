@@ -274,7 +274,7 @@ public final class VoiceSetup: @unchecked Sendable {
     public var onChange: (@Sendable () -> Void)?
 
     private let lock = NSLock()
-    private let plan: [SetupStage: [SetupCandidate]]
+    private var plan: [SetupStage: [SetupCandidate]]
     private var waitGen: [SetupStage: Int] = [:]
     private var rowsByStage: [SetupStage: SetupRow] = [:]
     private var lastBytesAt: [SetupStage: Double] = [:]
@@ -401,6 +401,17 @@ public final class VoiceSetup: @unchecked Sendable {
             }
             onChange?()
         }
+    }
+
+    /// The person's pick for a stage (the download step: owner, 2026-11-24): that model is tried first and the rest of the stage's ladder stays behind it as the fallbacks, so a failed pick still ends on the floor. Before `run`.
+    /// A pick the ladder does not list is built from the list's entry.
+    public func prefer(_ s: SetupStage, _ c: SetupCandidate) {
+        lock.lock(); defer { lock.unlock() }
+        guard !started, var l = plan[s] else { return }
+        l.removeAll { $0.id == c.id }
+        l.insert(c, at: 0)
+        plan[s] = l
+        rowsByStage[s] = Self.freshRow(s, c)
     }
 
     /// "Try again" beside a stalled or failed row.
