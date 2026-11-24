@@ -427,9 +427,10 @@ export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
 }
 
 /** The note under a message: the LAST action's own words (`last` is set by the action; the others' answers may still be held by their mutations and must not hide it). */
-export function noteOf(last: string, unreadMsg: string, askMsg: string, spoken: string): string {
+export function noteOf(last: string, unreadMsg: string, askMsg: string, spoken: string, reviewMsg = ''): string {
   if (last === 'read') return spoken === '' ? 'There is nothing to read yet.' : 'Reading it now.';
   if (last === 'unread') return unreadMsg;
   if (last === 'ask') return askMsg;
+  if (last === 'review') return reviewMsg;
   return '';
 }
