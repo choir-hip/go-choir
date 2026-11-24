@@ -1,6 +1,6 @@
-// Lane members file (bar): the radio view, the focus of the bar's field, the player's pull-down and jumps.
+// Lane members file (bar): the radio view, the focus of the bar's field, the player's pull-down and speed.
 // Owned by the bar lane. Source and send names live in exact-package/interface/bar.json.
-use radioView, radioJump, radioSpeed from "@choir/autoradio"
+use radioView, radioSpeed from "@choir/autoradio"
 use RadioInfo, SettingsAck from "@choir/autoradio"
 use StackVp from "./ui.contract"
 
@@ -19,8 +19,6 @@ members Autoradio
   // Typing is the field focused with words in it (the aim line then shows above, because the placeholder is gone).
   derive typing = barFocused and ask != ""
 
-  action jumpTo(index: number)
-    send rm = radioJump(index=`${index}`)
   action setSpeed(speed: string)
     send rm = radioSpeed(speed=speed)
 

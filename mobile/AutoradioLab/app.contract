@@ -92,7 +92,6 @@ component Autoradio
     typing
     barFocus
     barBlur
-    jumpTo
     setSpeed
     nextStory
     previousStory

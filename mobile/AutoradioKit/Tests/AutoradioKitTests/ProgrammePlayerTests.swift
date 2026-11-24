@@ -255,7 +255,6 @@ final class SegmentedDocumentTests: XCTestCase {
         XCTAssertEqual(r.title, "Title 0"); XCTAssertEqual(r.kind, "Story")
         XCTAssertEqual(r.sources, ["The harbour story"])
         XCTAssertEqual(r.position, "", "no \"N of M\": the bar shows what is on air and its progress"); XCTAssertEqual(r.count, 1); XCTAssertEqual(r.index, 0)
-        XCTAssertTrue(r.items.isEmpty, "there is no list of segments to jump in: the next is the run sheet's")
         XCTAssertEqual(r.next, "The next entry", "the run sheet's next entry, never the next segment of a stretch")
         XCTAssertEqual(r.sentences, ["Two."], "the passage being read is still the block")
         XCTAssertFalse(String(data: try! JSONEncoder().encode(r), encoding: .utf8)!.contains("pub:"), "no raw ref reaches the screen")

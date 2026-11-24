@@ -89,6 +89,8 @@ export type Hooks = {
   onChange?: () => void;
   /** An entry ended (heard or skipped): the host writes ahead. */
   onEntryEnded?: (e: Entry, played: boolean) => void;
+  /** The radio never waits: asked when the radio is wanted and nothing is ahead, for what plays next from what the phone already holds (the paper's front stories not yet on the sheet). Placed at the end, by the phone. */
+  fill?: () => Entry[];
 };
 
 export class Director {
@@ -153,14 +155,13 @@ export class Director {
     return true;
   }
 
-  /** The opening: placed by the phone, on air at once. The radio is wanted from now on. What the desk and the phone wrote for an earlier
-   *  listening is not played now (it may be a day old): it is taken off. What the listener placed themselves stays. */
+  /** The opening: placed by the phone, on air at once. The radio is wanted from now on. What was ahead (the desk's and the phone's entries of an
+   *  earlier listening, and the listener's own) is the saved queue and is never thrown away: it plays after the opening. A transition whose neighbours
+   *  are gone is dropped by `nextToAir` when its turn comes. */
   open(entry: Entry, asOpening = true): void {
     this.openingIsTransition = !asOpening;
-    this.wants = false;                         // nothing ahead is aired while the sheet is being cleaned: the opening goes first
+    this.wants = false;                         // nothing ahead is aired before the opening
     const allowed = entry.kind !== 'opening' || this.openingAllowed();
-    // When the one-opening rule refuses the opening, the earlier listening was minutes ago: what it left ahead is still good, and it plays at once.
-    if (allowed) for (const e of this.store.ahead()) if (e.placed_by !== 'listener') this.store.remove(e.id, 'phone', 'left from an earlier listening');
     if (allowed) { this.currentOpeningId = asOpening ? entry.id : undefined; this.store.place(entry, 'now', { by: 'phone' }); }
     else this.currentOpeningId = undefined;
     this.wants = true;
@@ -240,9 +241,19 @@ export class Director {
     this.advance();
   }
   private advance(): void {
-    const first = this.nextToAir();
+    const first = this.nextOrFill();
     if (!first) { this.hooks.aheadChanged?.(); return; }
     this.store.airedOnAir(first.id);             // the store's change starts it
+  }
+
+  /** The radio never waits: the first entry ahead, or, with nothing ahead, the stories the phone already holds for it, placed at the end. What is ahead always goes first. */
+  private nextOrFill(): Entry | undefined {
+    const first = this.nextToAir();
+    if (first || !this.hooks.fill) return first;
+    const fill = this.hooks.fill();
+    if (fill.length === 0) return undefined;
+    for (const e of fill) this.store.place(e, 'end', { by: 'phone', reason: 'nothing was ahead: the paper\'s front page' });
+    return this.nextToAir();
   }
 
   /** The first entry ahead that should be aired. A transition is written for the two entries it sits between: it plays only when the entry just
@@ -357,7 +368,7 @@ export class Director {
       return;
     }
     if (this.wants && !this.spokenPaused && !this.turnOpen) {
-      const first = this.nextToAir();
+      const first = this.nextOrFill();
       if (first) { this.store.airedOnAir(first.id); this.again = true; }
     }
   }

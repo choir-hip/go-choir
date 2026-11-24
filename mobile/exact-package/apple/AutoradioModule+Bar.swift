@@ -68,17 +68,6 @@ extension AutoradioModule {
             reply(json(info))
         }
 
-        // Jump to a block of the programme (the player's segments and the up-next rows); in a programme of segments, to a segment.
-        handle("radioJump") { [unowned self] args, reply in
-            if let i = Int(args["index"] as? String ?? "") {
-                if !runtime.player.document.segments.isEmpty { runtime.player.jumpToSegment(i) }
-                else if runtime.player.document.blocks.indices.contains(i) { runtime.player.start(at: i) }
-            }
-            touch(["radioView", "barFacts"])
-            let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: "")))
-        }
-
         // Reading speed, 0.5 to 3 in steps of 0.05. The tracker clamps and snaps it, hands it to the player (time-pitch in the audio
         // engine, pitch kept, for every voice), and it is kept for the next launch. The saved speed is applied now.
         if let saved = SpeedStore.standard.load() { tracker.setSpeed(saved) }

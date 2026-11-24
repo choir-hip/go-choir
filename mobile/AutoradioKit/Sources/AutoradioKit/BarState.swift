@@ -9,19 +9,8 @@ import Foundation
 //  1. Pause/resume must not count paused time: elapsed time accumulates only while running at normal level (not paused, not yielded to "pause").
 //  2. The sentence estimate runs past the block (audio longer than the guess): progress clamps below 1, the last sentence stays lit until the block changes.
 //  3. A block that is a clip (no spoken text) has no sentences: current is its summary, one "sentence".
-//  4. Thousands of blocks: the item list is capped, the current block is always inside the window.
 //  5. A block index past the end (after a revision shortens it) clamps, not traps.
 //  6. The words from a former turn show in a new one: the holding line clears on the phase to "candidate".
-
-public struct RadioItem: Codable, Sendable, Equatable {
-    public var i = 0
-    public var text = ""
-    /// speech | clip | you
-    public var kind = "speech"
-    public var current = false
-    public var done = false
-    public init() {}
-}
 
 /// Everything the expanded player and the bar's extras need, in one source.
 public struct RadioInfo: Codable, Sendable, Equatable {
@@ -49,7 +38,6 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     public var sentenceIndex = 0
     public var sentences: [String] = []
     public var next = ""
-    public var items: [RadioItem] = []
     /// 0...1, the smoothed microphone level while the mic is open (the mark breathes with it); 0 when nothing is heard.
     public var micLevel = 0.0
     /// What the segment now playing is ("Story", "Headlines", "Station break"); empty for a single article.
@@ -234,24 +222,11 @@ public final class BarTracker: @unchecked Sendable {
             r.sentences = Self.sentences(text)
             r.sentenceIndex = Self.sentenceIndex(r.sentences, progress: bp)
             if seg != nil {
-                // The next is the run sheet's next entry, never the paper's neighbour; there is no list of segments to jump in.
+                // The next is the run sheet's next entry, never the paper's neighbour.
                 r.next = nextTitle
                 return r
             }
             r.next = nextTitle
-            // A window of at most 40 items that always holds the current block.
-            let lo = max(0, min(idx - 5, n - 40)), hi = min(n, lo + 40)
-            for i in lo..<hi {
-                var it = RadioItem()
-                it.i = i; it.current = i == idx; it.done = i < idx
-                switch d.blocks[i] {
-                case .speech(let t): it.text = t; it.kind = "speech"
-                case .listenerPassage(let t, _): it.text = t; it.kind = "you"
-                case .clip: it.text = d.blocks[i].summary; it.kind = "clip"
-                case .podcastClip: it.text = "Podcast clip"; it.kind = "clip"
-                }
-                r.items.append(it)
-            }
         }
         return r
     }

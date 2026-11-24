@@ -3,7 +3,7 @@
 // The decisions (when to ask, what a segment becomes, what an ended ask says, which stories are already told) are programme-model.ts; this module is the request and the placing.
 // The route answers an event stream to a POST, which shared code cannot read as it arrives (docs/reference/exact/gaps.md 36): the whole answer is read when it ends, so the entries of one write arrive together.
 import { lapYield, lap } from './lap.ts';
-import { cutBytes, oneLine } from './runsheet-entries.ts';
+import { cutBytes, oneLine, paperStory } from './runsheet-entries.ts';
 import { AHEAD_FLOOR_SECONDS, StretchDecoder, askOutcome, entryFrom, placeOp, plainWords, shouldAskMore, toldRoutes, type Incoming } from './programme-model.ts';
 import { parseStory, weight } from './paper-model.ts';
 import { candidateJSON, candidates as takeCandidates, merged, title as takeTitle, type Kept, type Take } from './takes.ts';
@@ -39,6 +39,20 @@ export function fromFront(front: unknown, now: number, skipping: Set<string> = n
     return out.slice(0, MAX_ITEMS);
   }
   return scored.map((x, i) => ({ ...x, i })).sort((a, b) => (a.w !== b.w ? b.w - a.w : a.i - b.i)).map((x) => x.c).slice(0, MAX_ITEMS);
+}
+
+/** The radio never waits: what plays when nothing is ahead. The paper's front stories (in the order given: the paper's weight first) that the sheet does not already hold, as entries the phone places
+ *  at the end; their words are fetched when each starts. The saved queue goes before these; nothing is made up when every story is told. */
+export const FILL_STORIES = 3;
+export function frontFill(stories: { route: string; title: string }[], entries: Entry[], n = FILL_STORIES): Entry[] {
+  const told = toldRoutes(entries), seen = new Set<string>(), out: Entry[] = [];
+  for (const s of stories) {
+    if (out.length >= n) break;
+    if (!validRoute(s.route) || told.has(s.route) || seen.has(s.route)) continue;
+    seen.add(s.route);
+    out.push(paperStory(s.route, s.title, 'phone'));
+  }
+  return out;
 }
 
 /** Paragraph text for the model: cut at a paragraph that fits in 8 KB (or inside the first one). */

@@ -6,7 +6,7 @@
 import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, sealingBlocked, signOutUncertain, type NativeReader } from './api.ts';
 import { nativeDeck } from './deck-native.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
-import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
+import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH, frontFill } from './radio-writer.ts';
 import { applyTurnOps, resetTurnLog, turnQueueJSON } from './voice-queue.ts';
 import { routePoster, signedInRequester } from './runsheet-store.ts';
 import { authedJSON } from './api.ts';
@@ -19,7 +19,7 @@ import { lapYield, lap } from './lap.ts';
 import { firstRunOver } from './onboarding.ts';
 import { perform } from './radio-model.ts';
 import { htmlToText } from './mail-model.ts';
-import { parseList, FRONT_LIMIT, type Story } from './paper-model.ts';
+import { parseList, weight, FRONT_LIMIT, type Story } from './paper-model.ts';
 import { listing } from './paper.ts';
 import { parseEpisodeKey, episodeAddress } from './podcast-model.ts';
 import { loadKept, takesOf, type Kept, type Take } from './takes.ts';
@@ -38,7 +38,7 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
 
 /** A mutation in flight (or called for): `due` is a pulse that said the work is due and the mutation not started yet, `running` the mutation's body. Each goes stale (WORK_STALE_MS) so a continuation that never ends cannot stop the radio. */
 type Flag = { phase: 'due' | 'running'; at: number };
-type Radio = { writeFlag?: Flag; holdFlag?: Flag; pulses: number; beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
+type Radio = { writeFlag?: Flag; holdFlag?: Flag; pulses: number; beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[]; stories: { route: string; title: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
 let restored: Promise<void> | undefined;
 
@@ -116,10 +116,11 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  const state: Radio = { pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
+  const state: Radio = { pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [], stories: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
     deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
+    fill: () => frontFill(state.front.stories, state.rt.store.sheet.entries),
     onChange: () => { state.tick += 1; },
   });
   state.rt = rt;
@@ -133,7 +134,9 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
       body = undefined;
     }
     const now = clock.ms;
-    state.front = { at: now / 1000, published: {}, versions: {}, lines: stories.slice(0, 10).map((s) => ({ title: s.title, dek: s.dek })) };
+    // `stories`: what plays when nothing is ahead (the director's fill), the paper's weight first, the list's order between equals
+    const byWeight = stories.map((s, i) => ({ s, i, w: weight(s, now) })).sort((a, b) => (a.w !== b.w ? b.w - a.w : a.i - b.i)).map((x) => ({ route: x.s.route, title: x.s.title }));
+    state.front = { at: now / 1000, published: {}, versions: {}, lines: stories.slice(0, 10).map((s) => ({ title: s.title, dek: s.dek })), stories: byWeight };
     for (const s of stories) { if (s.updated !== null) state.front.published[s.route] = s.updated / 1000; state.front.versions[s.route] = s.versions; }
     if (body === undefined) throw new Error('offline: the last front page');
     return body;
@@ -245,8 +248,9 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   // the turn route's queue: pushed to native, which sends it with every turn (one call; the next pulse sets it again if this one is let go)
   const later = nativeLater();
   // Sent when it changed (the sheet's version, its length, what is on air): the whole sheet crossed the bridge every second, paused, idle or locked, for state that had not moved (review B2-1). A failed or let-go call leaves the key, so the next pulse sends again.
-  const setKey = `${gen}|${r.rt.store.sheet.version}|${r.rt.store.sheet.entries.length}|${r.rt.store.onAir()?.id ?? ''}`;
-  if (later && setKey !== r.setKey) { try { const ans = await later({ op: 'radioSet', gen, snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); if ((ans as { ok?: unknown } | null)?.ok !== false) r.setKey = setKey; else console.log(`radio: native refused the radioSet push (stamped ${gen}, the account moved on); it is sent again with the next pulse's stamp`); } catch { /* the next pulse sets it */ } }       // a push native refused (ok: false: stamped for an account that moved on) is not recorded as sent: the next pulse sends it again with that pulse's stamp
+  const candidates = r.front.stories.slice(0, 40);                       // the paper's list the desk may add from (the turn's `candidates`: native sends it with every turn)
+  const setKey = `${gen}|${r.rt.store.sheet.version}|${r.rt.store.sheet.entries.length}|${r.rt.store.onAir()?.id ?? ''}|${candidates.length}:${candidates[0]?.route ?? ''}`;
+  if (later && setKey !== r.setKey) { try { const ans = await later({ op: 'radioSet', gen, snapshot: turnQueueJSON(r.rt, 0), candidates, onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); if ((ans as { ok?: unknown } | null)?.ok !== false) r.setKey = setKey; else console.log(`radio: native refused the radioSet push (stamped ${gen}, the account moved on); it is sent again with the next pulse's stamp`); } catch { /* the next pulse sets it */ } }       // a push native refused (ok: false: stamped for an account that moved on) is not recorded as sent: the next pulse sends it again with that pulse's stamp
   const posting = r.rt.store.canPost;                                     // pending ops and not backing off (the route's Retry-After, or 30 s doubling): the pulse does not call for a post it would not make
   // `live`: something is sounding and the app is in front (native's `foreground`: with the screen off or the app away the audio plays on and nothing here asks again), so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:
   // the key is the beat, so the screens are asked after THIS pulse's read of the deck (they never read a position older than the pulse that said so), and a pause or a hidden page leaves the key still.

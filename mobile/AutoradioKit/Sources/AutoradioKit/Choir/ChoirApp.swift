@@ -37,14 +37,12 @@ public struct ChoirPlayerView: Codable, Sendable {
     public var heard = ""           // what the radio heard, while talking
     public var message = ""         // plain words about anything wrong
 }
-public struct StoryRow: Codable, Sendable { public var title, dek, route, section: String; public var current: Bool }
 
-/// The listener-facing controller: sign-in, the story list, the run sheet's opening, plain-words status.
+/// The listener-facing controller: sign-in, the audio engine for the deck, plain-words status. (The paper's story list and the run sheet are shared code.)
 public final class ChoirApp: @unchecked Sendable {
     public let runtime: LabRuntime
     public let signIn: ChoirSignIn
     private let lock = NSLock()
-    private var stories: [ChoirStory] = []
     private var message = ""
     private var loading = false
     private var eventTask: Task<Void, Never>?
@@ -143,26 +141,10 @@ public final class ChoirApp: @unchecked Sendable {
         }
     }
 
-    /// First run after launch or sign-in: load the story list (the opening is built from it). Nothing plays here.
+    /// After launch or sign-in: the computer's connection is warmed. Nothing plays here, and the paper's story list is shared code's (radio-bridge.ts).
     public func refresh() async {
         guard signIn.current.signedIn else { onChange?(); return }
         await ChoirEnvironment.shared.warm(baseURL: signIn.baseURL)
-        await loadStories()
-    }
-
-    private func frontBaseURL() -> String {
-        runtime.configuration.setting(.programme)?.params["baseURL"].map { "\($0)" } ?? signIn.baseURL
-    }
-
-    public func loadStories() async {
-        let base = frontBaseURL()
-        lock.lock(); loading = true; lock.unlock(); onChange?()
-        defer { lock.lock(); loading = false; lock.unlock(); onChange?() }
-        do {
-            let list = try await ChoirFront.stories(client: ChoirEnvironment.shared.client(baseURL: base), limit: 30)
-            lock.lock(); stories = list; lock.unlock()
-            if list.isEmpty { say("The front page is empty right now.") }
-        } catch { say(Self.plain(stage: "programme", message: "\(error)")) }
     }
 
     /// Load the configured programme stage into the player when it is a document of its own (the setup interview's, a fixture picked in the
@@ -241,7 +223,7 @@ public final class ChoirApp: @unchecked Sendable {
         RadioBridge.shared.send("stopAll")                      // shared code's run sheet leaves the air (`left`) and posts, then the account wipe runs
         await RadioBridge.shared.waitSignedOut(seconds: 5)      // until shared code says it is done (its own wait for the route is 3 s), with the old key still held
         await signIn.signOut()
-        lock.lock(); stories = []; message = ""; lock.unlock()
+        lock.lock(); message = ""; lock.unlock()
         onChange?()
     }
 
@@ -268,13 +250,7 @@ public final class ChoirApp: @unchecked Sendable {
         if !onAir { v.title = ""; v.passage = "" }
         v.talking = snap.phase != "playing"
         v.heard = snap.phase == "playing" ? "" : snap.transcript
-        if v.message.isEmpty, v.signedIn, !v.loading, p.document.blocks.isEmpty { v.message = "Pick a story below." }
         return v
-    }
-    public func storyRows() -> [StoryRow] {
-        lock.lock(); let s = stories; lock.unlock()
-        let r = RadioBridge.shared.onAirEntry()?.paperRoute ?? ""
-        return s.map { StoryRow(title: $0.title, dek: $0.dek, route: $0.route, section: $0.section, current: $0.route == r) }
     }
     public func authView() -> ChoirAuthState { signIn.current }
 }

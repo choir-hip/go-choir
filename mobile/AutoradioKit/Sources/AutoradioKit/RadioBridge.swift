@@ -13,6 +13,7 @@ public final class RadioBridge: @unchecked Sendable {
     private var queueJSON: Data?
     private var onAirJSON: Data?
     private var sheetJSON: Data?
+    private var candidateList: [(route: String, title: String)] = []
     private var signedOutAck = false
     /// Set by the app module: asks shared code to look again (touches `radioNote`).
     public var changed: @Sendable () -> Void = {}
@@ -50,15 +51,17 @@ public final class RadioBridge: @unchecked Sendable {
     public var snapshot: Data? { lock.lock(); defer { lock.unlock() }; return queueJSON }
     /// `gen` is the account generation shared code computed this under (`SharedGeneration`): a push for an account that has since signed out is dropped, not stored where the next account's voice turn would carry it.
     @discardableResult
-    public func set(gen: Int, snapshot: Data?, onAir: Data?, sheet: Data? = nil) -> Bool {
-        SharedGeneration.admit(gen) { lock.lock(); queueJSON = snapshot; onAirJSON = onAir; sheetJSON = sheet; lock.unlock() }
+    public func set(gen: Int, snapshot: Data?, onAir: Data?, sheet: Data? = nil, candidates: [(route: String, title: String)] = []) -> Bool {
+        SharedGeneration.admit(gen) { lock.lock(); queueJSON = snapshot; onAirJSON = onAir; sheetJSON = sheet; candidateList = candidates; lock.unlock() }
     }
+    /// The paper's list the desk may add from, as shared code last said (the turn's `candidates`, up to 40; empty before the first pump).
+    public func candidates() -> [(route: String, title: String)] { lock.lock(); defer { lock.unlock() }; return candidateList }
     /// The run sheet as shared code last said (what the voice's retrieval and the content sync read of it); nil before the first pump.
     public func sheet() -> RunSheet? { lock.lock(); let d = sheetJSON; lock.unlock(); return d.flatMap { try? JSONDecoder().decode(RunSheet.self, from: $0) } }
     /// The entry on air as shared code last said (nil when none): what a "more like this" tap and a take's "responds to" read.
     public func onAirEntry() -> RunSheetEntry? { lock.lock(); let d = onAirJSON; lock.unlock(); return d.flatMap { try? JSONDecoder().decode(RunSheetEntry.self, from: $0) } }
     /// Sign-out: nothing of the old account is kept.
-    public func wipe() { lock.lock(); inbox = []; queueJSON = nil; onAirJSON = nil; sheetJSON = nil; lock.unlock() }
+    public func wipe() { lock.lock(); inbox = []; queueJSON = nil; onAirJSON = nil; sheetJSON = nil; candidateList = []; lock.unlock() }
 }
 
 /// The account generation shared code stamps on what it pushes to a native mirror (`radioSet`, `editionMirror`, `pageText`): the `OpenPageFacts.replace(gen:)` pattern for the mirrors that had none. A push is kept when its generation

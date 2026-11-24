@@ -17,6 +17,10 @@ extension AutoradioModule {
         let snap = (r["snapshot"] as? String)?.data(using: .utf8)
         let onAir = (r["onAir"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         let sheet = (r["sheet"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
-        return ["ok": RadioBridge.shared.set(gen: (r["gen"] as? NSNumber)?.intValue ?? 0, snapshot: snap, onAir: onAir, sheet: sheet)]
+        let candidates = (r["candidates"] as? [[String: Any]] ?? []).compactMap { c -> (route: String, title: String)? in
+            guard let route = c["route"] as? String, !route.isEmpty else { return nil }
+            return (route: route, title: c["title"] as? String ?? "")
+        }
+        return ["ok": RadioBridge.shared.set(gen: (r["gen"] as? NSNumber)?.intValue ?? 0, snapshot: snap, onAir: onAir, sheet: sheet, candidates: candidates)]
     }
 }

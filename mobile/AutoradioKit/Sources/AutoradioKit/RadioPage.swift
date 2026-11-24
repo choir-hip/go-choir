@@ -15,13 +15,6 @@ public struct RadioBuiltOn: Codable, Sendable, Equatable {
 }
 
 public enum RadioPage {
-    public static func length(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds >= 1 else { return "" }
-        if seconds < 90 { return "\(Int(seconds.rounded())) sec" }
-        return "\(Int((seconds / 60).rounded())) min"
-    }
-
-
     /// The page an entry's title opens: a story, a book, a file.
     static func openAddress(_ e: RunSheetEntry) -> String {
         if let r = e.paperRoute { return "pub:" + r }

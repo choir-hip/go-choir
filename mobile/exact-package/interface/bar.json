@@ -1,12 +1,5 @@
 {
  "shapes": {
-  "RadioItem": {
-   "i": "number",
-   "text": "string",
-   "kind": "string",
-   "current": "bool",
-   "done": "bool"
-  },
   "RadioInfo": {
    "title": "string",
    "source": "string",
@@ -29,7 +22,6 @@
    "sentenceIndex": "number",
    "sentences": "string[]",
    "next": "string",
-   "items": "RadioItem[]",
    "micLevel": "number",
    "kind": "string",
    "sources": "string[]"
@@ -119,19 +111,11 @@
      "sentenceIndex": 0,
      "sentences": [],
      "next": "",
-     "items": [],
      "micLevel": 0,
      "kind": "",
      "sources": []
     }
    }
-  },
-  {
-   "send": "radioJump",
-   "options": {
-    "index": "string"
-   },
-   "answers": "RadioInfo"
   },
   {
    "send": "radioSpeed",

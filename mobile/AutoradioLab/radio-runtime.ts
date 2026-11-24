@@ -63,6 +63,8 @@ export type RuntimeDeps = {
   native?: { facts(): Promise<NativeFacts> };
   /** Told after anything the screens read changed. */
   onChange?: () => void;
+  /** What plays when nothing is ahead (the director's `fill`): the paper's front stories the phone holds and the sheet does not. */
+  fill?: () => Entry[];
 };
 
 const SPEAKS = new Set<Entry['kind']>(['opening', 'transition', 'story', 'answer', 'result']);
@@ -101,6 +103,7 @@ export class RadioRuntime {
       audioPlace: () => this.facts.audio,
       aheadChanged: () => { this.chain = this.chain.then(() => this.keepHeld()).then(() => undefined, () => undefined); },       // in the pump's chain: the answer that pumps waits for it (a native call started outside an answer is never run)
       onChange: () => this.onChange?.(),
+      fill: d.fill,
     });
     this.director.onCommand = (c) => this.command(c);
   }

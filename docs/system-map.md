@@ -442,7 +442,7 @@ One line each; source in brackets.
   and the offline-slice evidence note; `internal/agentcore/
   source_schedule.go` (`HandleSourcePollDue`); `story_publish.go` [4][D4].
 - Changing the phone app: CLAUDE.md "Product" bullet; `docs/reference/
-  exact/deck.md`; `mobile/AutoradioLab/radio-runtime.ts` on the train;
+  exact/deck.md`; `mobile/AutoradioLab/radio-runtime.ts`;
   `scripts/check-autoradio-native-boundary` [6].
 - Changing a deploy or the host: `.github/scripts/node-b-ci-deploy` with
   `internal/vmctl/ring_walk.go`; `nix/node-b.nix`; `docs/computer-

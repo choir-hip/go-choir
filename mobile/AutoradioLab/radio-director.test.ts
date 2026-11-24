@@ -56,13 +56,12 @@ describe('the opening and the desk', () => {
     d.playNow(readAloud('mail:m1', 'A message'), { title: 'A message', paragraphs: ['Hello.'] });
     expect(store.onAir()?.kind).toBe('mail'); expect(store.entry(o)?.ended?.outcome).toBe('cut'); expect(store.ahead().map((e) => e.id)).toEqual(['d-1']);
   });
-  test('14: an opening takes off what an earlier listening left ahead but keeps the listener\'s own', () => {
+  test('14: an opening keeps the saved queue: what an earlier listening left ahead and the listener\'s own play after it', () => {
     deskPlace(story('d-old')); store.place(paperStory('mine', 'Mine'), 'end');
     const o = phoneOpening();
     d.open(o);
-    expect(store.entry('d-old')).toBeUndefined(); expect(store.ahead().length).toBe(1); expect(store.onAir()?.id).toBe(o.id);
-    const stale = store.pending.find((p) => p.op === 'remove' && p.id === 'd-old');
-    expect(stale?.by).toBe('phone'); expect(stale?.reason).toBeTruthy();
+    expect(store.entry('d-old')?.state).toBe('ahead'); expect(store.ahead().length).toBe(2); expect(store.onAir()?.id).toBe(o.id);
+    expect(store.pending.some((p) => p.op === 'remove')).toBe(false);
   });
 });
 

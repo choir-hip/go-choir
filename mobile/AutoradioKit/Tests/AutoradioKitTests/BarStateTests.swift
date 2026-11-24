@@ -52,15 +52,15 @@ final class BarStateTests: XCTestCase {
         XCTAssertEqual(BarTracker.sentenceIndex([], progress: 0.5), 0)
     }
 
-    func testRadioItemsWindowKeepsCurrentAndClampsIndex() {
+    func testRadioInfoClampsTheBlockIndex() {
         let tr = BarTracker()
         let blocks = (0..<100).map { ProgrammeBlock.speech(text: "Block \($0). More words.") }
         let d = ProgrammeDocument(id: "d", title: "Doc", blocks: blocks)
         let r = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 99, count: 100), document: d, route: "pub:x", now: t0)
-        XCTAssertEqual(r.items.count, 40); XCTAssertTrue(r.items.contains { $0.current })
+        XCTAssertEqual(r.index, 99); XCTAssertEqual(r.count, 100)
         let over = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 500, count: 100), document: d, route: "", now: t0)
         XCTAssertEqual(over.index, 99)
         let empty = tr.radioInfo(player: player(playing: false, title: ""), snapshot: snap(count: 0), document: ProgrammeDocument(id: "n", title: "", blocks: []), route: "", now: t0)
-        XCTAssertEqual(empty.count, 0); XCTAssertTrue(empty.items.isEmpty); XCTAssertFalse(empty.paused)
+        XCTAssertEqual(empty.count, 0); XCTAssertFalse(empty.paused)
     }
 }
