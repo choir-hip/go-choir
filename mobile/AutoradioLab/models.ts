@@ -22,10 +22,17 @@ export type ModelRow = {
   id: string; job: string; section: string; name: string; size: string; tag: string; source: string; credit: string; note: string; state: string; line: string; progress: number;
   canDownload: boolean; canUse: boolean; canRemove: boolean; canTest: boolean; downloadLabel: string; mobileLine: string; testing: boolean; testLine: string;
 };
-export type ModelSection = { section: string; job: string; title: string; why: string; options: ModelRow[] };
+export type ModelSection = { section: string; tab: string; job: string; title: string; why: string; options: ModelRow[] };
+export type ModelTab = { id: string; title: string };
 export type FirstLine = { id: string; text: string; credit: string };
-export type ModelsView = { jobs: ModelSection[]; rev: number; voiceReady: boolean; hearingReady: boolean; setupTotal: string; voiceNote: string; lines: FirstLine[]; voiceOffer: ModelRow[] };
+export type ModelsView = { tabs: ModelTab[]; jobs: ModelSection[]; rev: number; voiceReady: boolean; hearingReady: boolean; setupTotal: string; voiceNote: string; lines: FirstLine[]; voiceOffer: ModelRow[] };
 
+/** One tab per kind of model, in plain words; each job's sections sit on its tab. */
+const TABS: [string, string, string[]][] = [
+  ['hearing', 'Hearing', ['transcriber', 'live', 'bounds']], ['voice', 'Voice', ['voice']], ['answering', 'Answering', ['responder']], ['deciding', 'Deciding', ['decision']],
+  ['search', 'Search', ['search']], ['voiceprint', 'Your voice', ['speaker']],
+];
+const tabOf = (section: string): string => TABS.find((t) => t[2].includes(section))?.[0] ?? section;
 const ORDER = ['transcriber', 'live', 'bounds', 'voice', 'responder', 'decision', 'speaker', 'search'];
 const TITLES: Record<string, [string, string]> = {
   transcriber: ['Hearing you', 'Turns what you say into words when you stop speaking. Until one is on this phone the radio uses Apple\'s recogniser.'],
@@ -82,13 +89,13 @@ export function modelsView(f: VoiceFacts, searchPresent: boolean | null, rev: nu
     const mine = j.job === 'transcriber' ? j.options.filter((o) => (o.streams === true) === (section === 'live')) : j.options;
     if (mine.length === 0) continue;
     const [title, why] = TITLES[section] ?? [section, ''];
-    jobs.push({ section, job: j.job, title, why, options: mine.map((o) => row(f, j, o, section, blocked)) });
+    jobs.push({ section, tab: tabOf(section), job: j.job, title, why, options: mine.map((o) => row(f, j, o, section, blocked)) });
   }
   const first = firstRunLines(f, picks);
   const voiceJob = offers.find((j) => j.job === 'voice');
   const rec = voiceJob ? forFirstRun([voiceJob])[0]?.options.find((o) => o.recommended) : undefined;
   return {
-    jobs, rev, voiceReady: f.voiceReady, hearingReady: f.hearingReady, setupTotal: first.total, lines: first.lines,
+    tabs: TABS.filter((t) => jobs.some((s) => s.tab === t[0])).map((t) => ({ id: t[0], title: t[1] })), jobs, rev, voiceReady: f.voiceReady, hearingReady: f.hearingReady, setupTotal: first.total, lines: first.lines,
     voiceNote: offers.some((j) => j.job === 'voice') && !forFirstRun(offers).some((j) => j.job === 'voice') ? VOICE_NOTE : '',
     voiceOffer: voiceJob && rec ? [row(f, voiceJob, rec, 'voice', blocked)] : [],
   };

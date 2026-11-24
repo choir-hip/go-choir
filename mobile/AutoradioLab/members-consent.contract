@@ -33,8 +33,12 @@ members Autoradio
     sivTick = sivTick + 1
 
   // Settings > Voice and models (models.ts): asked again when the voice side's facts change (ovoice) or an agreement is recorded. Each press is one row's: Download is the agreement to that model's files and starts it.
-  resource dl = modelsPage(ovoice, cons.rev) as shape ModelsView else empty(jobs=[], rev=0, voiceReady=false, hearingReady=false, setupTotal="", voiceNote="", lines=[], voiceOffer=[])
+  resource dl = modelsPage(ovoice, cons.rev) as shape ModelsView else empty(tabs=[], jobs=[], rev=0, voiceReady=false, hearingReady=false, setupTotal="", voiceNote="", lines=[], voiceOffer=[])
   mutation dlm as shape ModelsView refreshes dl
+  // The tab of Settings > Voice and models: one tab per kind of model (hearing, voice, answering, deciding, search, your voice).
+  state mdTab = "hearing"
+  action mdTabTo(tab: string)
+    mdTab = tab
   action mdDownload(section: string, id: string)
     send dlm = modelsAct("download", section, id, ovoice)
   action mdDownloadMobile(section: string, id: string)

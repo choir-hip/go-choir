@@ -1280,6 +1280,13 @@
       "answers": "VoiceCards"
     },
     {
+      "send": "voiceHear",
+      "options": {
+        "id": "string"
+      },
+      "answers": "VoiceCards"
+    },
+    {
       "send": "voiceStop",
       "answers": "VoiceCards"
     },

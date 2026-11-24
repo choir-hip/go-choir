@@ -52,6 +52,23 @@ beforeEach(() => {
 const view = (g: VoiceFacts = f, search: boolean | null = false, picks: Record<string, string> = {}) => modelsView(g, search, 0, picks);
 const row = (v: ReturnType<typeof view>, section: string, id: string) => v.jobs.find((j) => j.section === section)!.options.find((o) => o.id === id)!;
 
+describe('the tabs', () => {
+  test('M15 one tab per kind of model, in plain words, each section on the tab of its job; a tab with nothing on offer is not drawn', () => {
+    const v = view();
+    expect(v.tabs.map((x) => [x.id, x.title])).toEqual([['hearing', 'Hearing'], ['voice', 'Voice'], ['answering', 'Answering'], ['deciding', 'Deciding'], ['search', 'Search'], ['voiceprint', 'Your voice']]);
+    expect(v.jobs.map((s) => [s.section, s.tab])).toEqual([['transcriber', 'hearing'], ['live', 'hearing'], ['bounds', 'hearing'], ['voice', 'voice'], ['responder', 'answering'], ['decision', 'deciding'], ['speaker', 'voiceprint'], ['search', 'search']]);
+    expect(view({ ...f, offers: offers().filter((j) => j.job !== 'search' && j.job !== 'speaker') }).tabs.map((x) => x.id)).toEqual(['hearing', 'voice', 'answering', 'deciding']);
+    expect(view({ ...f, offers: [] }).tabs).toEqual([]);
+  });
+  test('M16 every row of every tab is the same row: the same fields, so one component draws them all, and a failed download shows its last reason on its own row', () => {
+    const g: VoiceFacts = { ...f, modelRuns: [{ id: 'zeta', state: 'failed', progress: 0, line: 'The download failed (offline).' }] };
+    const keys = (r: object) => Object.keys(r).sort().join(',');
+    const rows = view(g).jobs.flatMap((s) => s.options);
+    expect(new Set(rows.map(keys)).size).toBe(1);
+    expect(rows.find((r) => r.id === 'zeta' && r.section === 'voice')).toMatchObject({ state: 'failed', line: 'The download failed (offline).', canDownload: true });
+  });
+});
+
 describe('what is listed', () => {
   test('M1 building the view calls nothing', () => { view(); expect(calls.length).toBe(0); expect(files.size).toBe(0); });
   test('M2 every job is a section with all its options; streaming recognisers are the live-words section', () => {

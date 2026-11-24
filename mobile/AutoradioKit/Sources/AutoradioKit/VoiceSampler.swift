@@ -97,6 +97,18 @@ public final class VoiceSampler: @unchecked Sendable {
         onChange?()
     }
 
+    /// The listener pressed Test on a voice: its sample plays and nothing is chosen (Use is `pick`). A voice whose model is not on the phone plays nothing: its row says to download the model.
+    public func hear(_ id: String) {
+        guard let o = options.first(where: { $0.id == id }), o.modelID.isEmpty || readiness.isReady(model: o.modelID) else { return }
+        let (oldSample, gen): (Task<Void, Never>?, Int) = st.write { s in
+            let t = s.sample; s.sample = nil; s.generation += 1; s.playing = nil; s.sampleFailed[o.id] = nil
+            return (t, s.generation)
+        }
+        oldSample?.cancel(); halt()
+        startSample(o, gen)
+        onChange?()
+    }
+
     /// The listener left the page.
     public func stop() {
         let t: Task<Void, Never>? = st.write { s in let t = s.sample; s.sample = nil; s.generation += 1; s.playing = nil; return t }

@@ -30,6 +30,8 @@ test "Settings, Voice and models: every option of a job is a row with its size a
   expect tree has "md-transcriber"
   expect tree has "md-transcriber-fluid-speech-mini"
   expect text "md-credit-transcriber-fluid-speech-mini" == "Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."
+  tap "mv-tab-voice"
+  clock settle
   expect tree has "md-voice-sample-voice"
   expect tree missing "md-credit-voice-sample-voice"
   expect text "md-line-voice-sample-voice" == "Not downloaded"

@@ -340,6 +340,20 @@ final class VoiceSamplerTests: XCTestCase {
         s.pick("kokoro:af_bella"); await settle(100)
         XCTAssertEqual(h.said, ["kokoro:af_bella"]); XCTAssertEqual(s.cards().first { $0.id == "kokoro:af_bella" }?.state, "ready")
     }
+    // Voice and models gives every voice a Test and a Use of its own (owner, 2026-11-24: testing and selecting unified): Test hears the voice and chooses nothing.
+    //  S4 `hear` plays that voice's sample and never chooses it; a voice whose model is not on the phone plays nothing and chooses nothing; Use (`pick`) is the choosing.
+    func testS4HearPlaysTheSampleAndChoosesNothing() async {
+        let h = Host()
+        let (s, _) = make(h, ready: [VoiceCatalog.kokoroModel])
+        s.hear("kokoro:am_adam"); await settle(100)
+        XCTAssertEqual(h.said, ["kokoro:am_adam"]); XCTAssertTrue(h.chosen.isEmpty, "Test is not Use")
+        XCTAssertEqual(s.selectedID, "kokoro:af_heart", "the voice in use did not move")
+        s.hear("pocket-tts:alba"); await settle(50)
+        XCTAssertEqual(h.said, ["kokoro:am_adam"], "its model is not on the phone: nothing plays"); XCTAssertTrue(h.chosen.isEmpty)
+        s.hear("no-such-voice"); await settle(20); XCTAssertEqual(h.said.count, 1)
+        s.pick("kokoro:am_adam"); await settle(100)
+        XCTAssertEqual(h.chosen, ["kokoro:am_adam"]); XCTAssertEqual(s.selectedID, "kokoro:am_adam")
+    }
     func testASampleThatCannotPlaySaysSoAndTheChoiceStands() async {
         let h = Host(); h.failSay = true
         let (s, _) = make(h, ready: [VoiceCatalog.kokoroModel])
@@ -382,8 +396,8 @@ final class VoiceSamplerTests: XCTestCase {
         XCTAssertTrue(m.source.contains("FluidInference/pocket-tts-coreml/phonon/phonon-31m-en"), "the pack's repository and folder, not the speech recogniser's repository")
         XCTAssertFalse(m.source.contains("phonon-2"), "FluidInference/phonon-2-coreml is a speech recogniser, not a voice")
         XCTAssertTrue(m.license.contains("Apache-2.0"))
-        XCTAssertEqual(m.cachePath, KnownModels.fluidRoot)
-        XCTAssertEqual(m.cacheFolders, ["pocket-tts-coreml/phonon"])
+        XCTAssertEqual(m.cachePath, KnownModels.ttsRoot, "the library keeps voice models in its own TTS tree (TtsRootTests)")
+        XCTAssertEqual(m.cacheFolders, ["pocket-tts/phonon"])
         XCTAssertGreaterThan(m.approxBytes, 150_000_000); XCTAssertLessThan(m.approxBytes, 200_000_000)
     }
     func testAPhononCardOfAReadyModelPlaysOnlyThatVoiceBackToBack() async {
