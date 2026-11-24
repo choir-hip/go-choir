@@ -1453,18 +1453,32 @@ func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegi
 	return out, nil
 }
 
-// tapeRoutedComputers returns every computer with a route slot. Slot ids are
-// computer:<owner>:<computer>; an unparseable id fails closed.
+// computerIDForRouteSlot is the id of the computer a route slot realizes.
+// A route slot is computer:<owner>:<desktop> (routeledger.RouteSlotID, made at
+// every caller from the owner and the desktop); the computer's id is made from
+// that pair the way vmctl makes it (stableComputerID), not read from the slot.
+// Reading the slot's third segment as the computer id, as this file once did,
+// made the guard test the desktop's name ("primary") and never refuse.
+func computerIDForRouteSlot(owner, desktop string) string {
+	desktop = strings.TrimSpace(desktop)
+	if desktop == "" {
+		desktop = "primary"
+	}
+	return "computer-" + computerevent.DigestBytes([]byte(strings.TrimSpace(owner) + "\x00" + desktop))[:32]
+}
+
+// tapeRoutedComputers returns every computer with a route slot. An unparseable
+// slot id fails closed.
 func (s *Service) tapeRoutedComputers(ctx context.Context) (map[string]bool, error) {
 	routed := map[string]bool{}
 	var bad string
 	err := scanStrings(ctx, s.store.db, `SELECT route_slot_id FROM computer_version_route_slots`, func(slot string) {
 		parts := strings.Split(slot, ":")
-		if len(parts) != 3 || parts[0] != "computer" || parts[2] == "" {
+		if len(parts) != 3 || parts[0] != "computer" || parts[1] == "" || parts[2] == "" {
 			bad = slot
 			return
 		}
-		routed[parts[2]] = true
+		routed[computerIDForRouteSlot(parts[1], parts[2])] = true
 	})
 	if err != nil {
 		return nil, fmt.Errorf("route slots: %w", err)

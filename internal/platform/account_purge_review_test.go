@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -117,6 +118,47 @@ func TestAccountPurgeUnlinksTheTakeBodiesAtOnce(t *testing.T) { // Q2
 	_ = take
 }
 
+// Round 2 (seat 2 F6): a crash between a take row's rewrite and its audio's
+// removal left the audio for good (the purge skipped a take already deleted).
+func TestAPurgeFinishesATakeWhoseRemovalWasInterrupted(t *testing.T) {
+	svc := newTakesService(t)
+	ctx := context.Background()
+	in := takeIn("user-a", takeFixtureAudio(10, 4000), 10)
+	take, err := svc.PublishTake(ctx, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The interrupted removal: the row says deleted and is blanked, the audio stays.
+	og := svc.ogStore()
+	svc.takeMu.Lock()
+	row, err := svc.getTakeRow(ctx, og, take.TakeID)
+	svc.takeMu.Unlock()
+	if err != nil || row == nil {
+		t.Fatal(err)
+	}
+	row.State, row.Transcript, row.RespondsTo = TakeStateDeleted, "", nil
+	if err := svc.putTakeRow(ctx, og, *row, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if audio, _ := svc.TakeAudio(ctx, take.TakeID); audio == nil {
+		// TakeAudio serves only live takes; read the object itself.
+	}
+	canonical, _ := podcastCanonical(ogKindTakeAudio, take.TakeID)
+	if _, err := og.GetObject(ctx, canonical); err != nil {
+		t.Fatalf("setup: the audio row is not there: %v", err)
+	}
+	before := len(casFiles(t, svc.artifactsRoot))
+	if _, err := svc.PurgeAccountData(ctx, "user-a", nil, acctOld, acctNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := og.GetObject(ctx, canonical); err == nil {
+		t.Fatal("the audio of an interrupted removal survives the purge")
+	}
+	if after := len(casFiles(t, svc.artifactsRoot)); after >= before {
+		t.Fatalf("the audio's body stays in the artifact store: %d -> %d", before, after)
+	}
+}
+
 func TestAccountPurgeAndSuspendReachEveryRowNotOnlyTheFirstScan(t *testing.T) { // Q3
 	old := accountPurgeScan
 	accountPurgeScan = 2
@@ -199,5 +241,50 @@ func TestRemainingRowsAreSplitIntoWhatStaysByDecisionAndWhatNobodyDecided(t *tes
 	}
 	if _, bad := c.Undecided["choir.publication"]; bad {
 		t.Fatalf("the publication layer counted as undecided: %+v", c)
+	}
+}
+
+// Round 2 (blocking 2): the route-slot guard names the computer, not the
+// desktop. A slot is computer:<owner>:<desktop>; the computer it realizes is
+// made from the pair. The purge deletes the account's own slots, so a slot of a
+// computer that no longer exists cannot hold its tape back.
+func TestTheRouteSlotGuardNamesTheComputerAndThePurgeClearsTheAccountsSlots(t *testing.T) {
+	f := newTapeFixture(t)
+	id := routedComputerID()
+	if id == "primary" || !strings.HasPrefix(id, "computer-") {
+		t.Fatalf("the routed computer id is %q", id)
+	}
+	f.fullComputer(id, 2)
+	f.insertClosure("code-r", platformTestDigest('9'), true)
+	job := f.svc.runAccountTapePurge(f.ctx, []string{id})
+	if job.State == "done" || !strings.Contains(job.Refusal, "route slot") {
+		t.Fatalf("a computer with a route slot was purged or not explained: %+v", job)
+	}
+	if len(f.treeFiles(id)) == 0 {
+		t.Fatal("files of a routed computer were removed")
+	}
+	if _, err := f.svc.PurgeAccountData(f.ctx, routedOwner, nil, acctOld, acctNow); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	_ = f.store.db.QueryRow(`SELECT COUNT(*) FROM computer_version_route_slots WHERE route_slot_id LIKE 'computer:`+routedOwner+`:%'`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("%d route slots of the account remain", n)
+	}
+	if again := f.svc.runAccountTapePurge(f.ctx, []string{id}); again.State != "done" {
+		t.Fatalf("after the account's slots went: %+v", again)
+	}
+}
+
+func TestRouteSlotsOfAnotherAccountSurviveAPurge(t *testing.T) {
+	f := newTapeFixture(t)
+	f.insertClosure("code-r", platformTestDigest('9'), true)
+	if _, err := f.svc.PurgeAccountData(f.ctx, "someone-else", nil, acctOld, acctNow); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	_ = f.store.db.QueryRow(`SELECT COUNT(*) FROM computer_version_route_slots`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("another account's slot was touched: %d", n)
 	}
 }

@@ -704,6 +704,28 @@ func (s *Service) removeTake(ctx context.Context, og *ObjectGraphStore, row *tak
 	return nil
 }
 
+// finishRemovedTake removes what a take's removal leaves behind when it was
+// interrupted: the audio row and its artifact-store body. A take already fully
+// removed has nothing to do.
+func (s *Service) finishRemovedTake(ctx context.Context, og *ObjectGraphStore, row *takeRow) error {
+	canonical, err := podcastCanonical(ogKindTakeAudio, row.TakeID)
+	if err != nil {
+		return err
+	}
+	ref := og.bodyRefOf(ctx, canonical)
+	if _, err := og.GetObject(ctx, canonical); err != nil {
+		if isNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if err := og.DeleteObject(ctx, canonical); err != nil {
+		return err
+	}
+	og.releaseBodyRefs(ref)
+	return nil
+}
+
 // DeleteTake lets a publisher delete their own take. A take that is another
 // publisher's answers as not found.
 func (s *Service) DeleteTake(ctx context.Context, id, publisherKey string) error {

@@ -55,8 +55,8 @@ func TestScheduledTapeSweepReapsDestroyedAndLeavesProtected(t *testing.T) {
 	listed := f.chain("listed-1", 1, tapeAged)
 	f.reg.owned["owned-1"] = true
 	owned := f.chain("owned-1", 1, tapeAged)
-	routed := f.chain("routed-1", 1, tapeAged)
-	f.insertClosure("code-r", platformTestDigest('9'), "routed-1")
+	routed := f.chain(routedComputerID(), 1, tapeAged)
+	f.insertClosure("code-r", platformTestDigest('9'), true)
 	recent := f.chain("recent-1", 1, 2*24*time.Hour)
 	paper := f.chain("computer-1355b83bced1613eb048ee28d66688a8", 1, tapeAged) // the hard-protected paper
 	res := f.svc.RunScheduledTapeSweep(f.ctx)

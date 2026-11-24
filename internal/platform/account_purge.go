@@ -170,15 +170,16 @@ func (s *Service) SetAccountTakesState(ctx context.Context, userID, from, to str
 // AccountPurgeCounts is what a purge removed or changed, and what it did not
 // reach.
 type AccountPurgeCounts struct {
-	TakesDeleted      int              `json:"takes_deleted"`
-	AuthorsDetached   int              `json:"authors_detached"`
-	CapturesDeleted   int              `json:"captures_deleted"`
-	ProjectionRows    map[string]int64 `json:"projection_rows,omitempty"`
+	TakesDeleted    int              `json:"takes_deleted"`
+	AuthorsDetached int              `json:"authors_detached"`
+	CapturesDeleted int              `json:"captures_deleted"`
+	ProjectionRows  map[string]int64 `json:"projection_rows,omitempty"`
 	// TextureDocumentsDeleted and TextureRevisionsDeleted are the person's
 	// synced documents; nothing a published piece reads (a piece carries its
 	// own text), so they go.
-	TextureDocumentsDeleted int `json:"texture_documents_deleted"`
-	TextureRevisionsDeleted int `json:"texture_revisions_deleted"`
+	RouteSlotsDeleted       int64 `json:"route_slots_deleted"`
+	TextureDocumentsDeleted int   `json:"texture_documents_deleted"`
+	TextureRevisionsDeleted int   `json:"texture_revisions_deleted"`
 	// RemainingByKind is every row of the account still in the object graph.
 	// KeptByDecision is the part that stays on purpose: the publication layer
 	// (the story, its versions, routes, provenance, the owner's consent
@@ -190,6 +191,23 @@ type AccountPurgeCounts struct {
 	KeptByDecision    map[string]int64 `json:"kept_by_decision,omitempty"`
 	Undecided         map[string]int64 `json:"undecided,omitempty"`
 	RemainingTextures map[string]int64 `json:"remaining_texture_rows,omitempty"`
+}
+
+// deleteRouteSlotsOf removes the route slots whose owner is userID. A missing
+// table is nothing to delete.
+func (s *Service) deleteRouteSlotsOf(ctx context.Context, userID string, errs *[]error) int64 {
+	var reg *string
+	if err := s.store.corpus().QueryRowContext(ctx, `SELECT to_regclass($1)::text`, "public.computer_version_route_slots").Scan(&reg); err != nil || reg == nil {
+		return 0
+	}
+	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.TrimSpace(userID))
+	res, err := s.store.corpus().ExecContext(ctx, `DELETE FROM computer_version_route_slots WHERE route_slot_id LIKE ? ESCAPE '\'`, "computer:"+esc+":%")
+	if err != nil {
+		*errs = append(*errs, fmt.Errorf("route slots: %w", err))
+		return 0
+	}
+	n, _ := res.RowsAffected()
+	return n
 }
 
 // accountKeptKinds are the kinds of the account's rows that stay after a
@@ -205,7 +223,7 @@ var accountKeptKinds = map[string]bool{
 	"choir.publication_source_entity": true, "choir.publication_transclusion": true, "choir.publication_policy": true,
 	"choir.verifier_attestation": true, "choir.publication_resolved_blocks": true, "choir.publication_check": true,
 	"choir.support_judgement": true,
-	"choir.take": true, "choir.take_outcome": true,
+	"choir.take":              true, "choir.take_outcome": true,
 }
 
 // purgeProjectionTables are the tables of the corpus database keyed by
@@ -240,6 +258,14 @@ func (s *Service) PurgeAccountData(ctx context.Context, userID string, computerI
 				continue
 			}
 			if row.State != TakeStateLive && row.State != TakeStateSuspended {
+				// Already removed (deleted or yanked). If a crash fell between
+				// the row's rewrite and the audio's removal, the audio row is
+				// still there: finish it, idempotently.
+				if row.State == TakeStateDeleted || row.State == TakeStateYanked {
+					if err := s.finishRemovedTake(ctx, og, &row); err != nil {
+						errs = append(errs, fmt.Errorf("take %s: %w", row.TakeID, err))
+					}
+				}
 				continue
 			}
 			if err := s.removeTake(ctx, og, &row, TakeStateDeleted); err != nil {
@@ -314,6 +340,11 @@ func (s *Service) PurgeAccountData(ctx context.Context, userID string, computerI
 		n, _ := res.RowsAffected()
 		*step.dst = int(n)
 	}
+
+	// 4b. The account's route slots (computer:<owner>:<desktop>): version ids
+	// and a generation, no content. They go with the account so the tape sweep
+	// is not held back by a slot of a computer that no longer exists.
+	c.RouteSlotsDeleted = s.deleteRouteSlotsOf(ctx, userID, &errs)
 
 	// 5. What remains of the account's rows, by kind: named in the receipt,
 	// split into what stays by decision and what nobody decided.
