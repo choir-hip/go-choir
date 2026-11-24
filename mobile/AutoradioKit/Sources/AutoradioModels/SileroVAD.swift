@@ -80,7 +80,7 @@ public final class SileroVAD: SpeechBounds, @unchecked Sendable {
 
     /// Per-hop probabilities for a whole 16 kHz signal (used by the proof; not part of the stage protocol).
     public static func probabilities(_ samples: [Float]) async throws -> (probs: [Float], inferenceMs: Double) {
-        let m = try await slot.get { (try await VadManager(config: .default), {}) }
+        let m = try await slot.get { try LibraryScope.require("silero-vad-v6.2.1"); return (try await VadManager(config: .default), {}) }
         let r = try await m.process(samples)
         return (r.map(\.probability), r.reduce(0) { $0 + $1.processingTime } * 1000)
     }

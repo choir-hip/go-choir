@@ -24,7 +24,7 @@ import { consentAgree, consentPick, consentPicks, consentView } from './consent.
 import { nativeLater } from './api.ts';
 import { kickSearch } from './search-kick.ts';
 import { noVoice, type VoiceFacts } from './onboarding.ts';
-import { chosen, needs, picksFor, setupBytes, sizeLabel, type OfferJob } from './offers.ts';
+import { chosen, forFirstRun, needs, picksFor, setupBytes, sizeLabel, type OfferJob } from './offers.ts';
 
 export { sizeLabel };
 export type OptionView = { id: string; text: string; tag: string; note: string; credit: string; withheld: boolean; selected: boolean; ready: boolean };
@@ -33,7 +33,7 @@ export type Group = {
   id: string; title: string; why: string; jobs: JobView[]; total: string; host: string; ready: boolean; busy: boolean; status: string; onWiFi: boolean; mobileLine: string;
   startLabel: string; mobileLabel: string; hostLine: string; canStart: boolean;
 };
-export type Downloads = { groups: Group[]; rev: number; voiceReady: boolean; hearingReady: boolean; setupTotal: string };
+export type Downloads = { groups: Group[]; rev: number; voiceReady: boolean; hearingReady: boolean; setupTotal: string; voiceNote: string };
 
 const TITLES: Record<string, [string, string]> = {
   voice: ["The radio's voice", "What the radio speaks with. Until it is on this phone the radio uses the iPhone's built-in voice."],
@@ -44,6 +44,8 @@ const JOB_TITLES: Record<string, string> = {
   transcriber: 'Hearing you', decision: 'Quick decisions', bounds: 'Knowing when you speak', voice: 'The voice', responder: 'Answering while the computer works', speaker: 'Knowing your voice', search: 'Search on this phone',
 };
 const ORDER = ['voice', 'voice-rest', 'search'];
+/** The first run's one line when the voice on offer is withheld (a neural voice is fetched from Settings > Downloads only). */
+export const VOICE_NOTE = "The radio uses the iPhone's voice for now. A better voice is in Settings > Downloads.";
 /** Native stage names each group runs through voice setup (search is not a voice stage: its file comes through the search pass; the voice-print model is fetched beside the setup). */
 export const GROUP_STAGES: Record<string, string[]> = { voice: ['voice'], 'voice-rest': ['transcriber', 'bounds', 'decision', 'responder'] };
 
@@ -79,7 +81,7 @@ export function downloadsView(f: VoiceFacts, searchPresent: boolean | null, rev:
     });
   }
   const setup = setupBytes(offers, picks);
-  return { groups, rev, voiceReady: f.voiceReady, hearingReady: f.hearingReady, setupTotal: setup === 0 ? '' : sizeLabel(setup) };
+  return { groups, rev, voiceReady: f.voiceReady, hearingReady: f.hearingReady, setupTotal: setup === 0 ? '' : sizeLabel(setup), voiceNote: offers.some((j) => j.job === 'voice') && !forFirstRun(offers).some((j) => j.job === 'voice') ? VOICE_NOTE : '' };
 }
 
 const present = async (): Promise<boolean | null> => {

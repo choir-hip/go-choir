@@ -78,4 +78,49 @@ final class ModelManifestTests: XCTestCase {
         for id in ["kokoro-82m-ane", "pocket-tts", "phonon-31m", "silero-vad-v6.2.1"] { XCTAssertFalse(KnownModels.managed.first { $0.id == id }!.loadsWithoutFetching, id) }
         for id in ["parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "fluid-speech-mini"] { XCTAssertTrue(KnownModels.managed.first { $0.id == id }!.loadsWithoutFetching, id) }
     }
+
+    // ---- Round 6
+    func testM8TheSealFailsOnAnUnreadableEntry() {
+        let m = make(), r = pins(m)
+        let f = m.base.appendingPathComponent("kokoro/a.mlmodelc/model.mil"); try? FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: f.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: f.path) }
+        r.markReady(model: "kk"); XCTAssertFalse(r.isReady(model: "kk"), "a seal over a subset is not a seal")
+        XCTAssertNil(ModelManifests.read("kk", root: m.store))
+    }
+    func testM9ASymlinkedEntryFailsTheSealInsteadOfPoisoningThePaths() {
+        let m = make(), r = pins(m)
+        let other = tmp(); put(other, "x.bin", 10)
+        try? FileManager.default.createSymbolicLink(at: m.base.appendingPathComponent("kokoro/linked"), withDestinationURL: other)
+        r.markReady(model: "kk"); XCTAssertFalse(r.isReady(model: "kk"))
+    }
+    func testM10AnEmptyManifestIsNeverPresent() {
+        XCTAssertFalse(ModelManifests.present(ModelManifest(pin: "p", files: []), base: tmp()))
+        XCTAssertFalse(ModelManifests.verifyHashes(ModelManifest(pin: "p", files: []), base: tmp()))
+    }
+    func testM11TheLibraryPinIsThePinnedFluidAudioVersion() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Package.resolved")
+        let d = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let pins = d["pins"] as! [[String: Any]]
+        let v = (pins.first { ($0["identity"] as? String)?.lowercased() == "fluidaudio" }!["state"] as! [String: Any])["version"] as! String
+        XCTAssertEqual(ModelPins.libraryPin, "fluidaudio-" + v, "a FluidAudio bump is a pin change: bump the literal with it")
+    }
+    func testM12AFailedCheckAfterAPinChangeDeletesTheOldFilesAndSaysTheLayoutChanged() async {
+        let m = make(), r = pins(m); r.markReady(model: "kk")
+        let moved = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store, libraryPin: "fluidaudio-9.9.9") })
+        let v = ReadinessVerifier(record: moved)
+        let res = await v.verify(model: "kk", check: { SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "did not load") })
+        XCTAssertTrue(res.note.contains("layout"), res.note)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path), "the old folders are gone, so the next fetch starts clean and is not a loop over files that will not load")
+    }
+    func testM13AFailedLoadWithDamagedFilesDeletesThemAndSaysSo_AndWithIntactFilesSaysTheyDidNotLoad() async {
+        // damaged: the hashes no longer match
+        var m = make(); var r = pins(m); r.markReady(model: "kk")
+        var d = try! Data(contentsOf: m.base.appendingPathComponent("kokoro/a.mlmodelc/model.mil")); d[0] ^= 0xFF; try! d.write(to: m.base.appendingPathComponent("kokoro/a.mlmodelc/model.mil"))
+        var res = await ReadinessVerifier(record: r).verify(model: "kk", check: { SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "boom") })
+        XCTAssertTrue(res.note.contains("damaged"), res.note); XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path))
+        // intact: the hashes match, the load still failed: the files are kept and the words say they did not load
+        m = make(); r = pins(m); r.markReady(model: "kk")
+        res = await ReadinessVerifier(record: r).verify(model: "kk", check: { SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "boom") })
+        XCTAssertTrue(res.note.contains("did not load from this phone's files"), res.note); XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path), "intact files are not thrown away")
+    }
 }

@@ -39,3 +39,4 @@ shape DownloadsView
   voiceReady: bool
   hearingReady: bool
   setupTotal: string
+  voiceNote: string

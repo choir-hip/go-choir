@@ -27,7 +27,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         guard KnownModels.contains(id) else { throw LabError.badInput("setup asked for \(id), which is not in the model catalog") }
         Voices.verifier.demote(model: id)
         if Self.libraryModels.contains(id) {
-            try await DownloadDoor.shared.libraryWindow(model: id) { try await LibraryScope.$checking.withValue(id) { try await self.fetchBody(id, role: role, onBytes: onBytes) } }
+            try await DownloadDoor.shared.libraryWindow(model: id, whileQueued: { onBytes(0) }) { try await LibraryScope.$checking.withValue(id) { try await self.fetchBody(id, role: role, onBytes: onBytes) } }
         } else {
             try await fetchBody(id, role: role, onBytes: onBytes)
         }
@@ -88,8 +88,16 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
     }
 
     /// The check loads the model: the one time a library may be initialised for a model that is not yet ready (the scope says whose).
+    /// For a library model the check is a COLD load with the registry closed: it takes the door's exclusive slot (no window open anywhere, so nothing it needs can be fetched through another model's window), drops the manager the fetch left in the model's slot, and loads again from the
+    /// phone's files. Only a pass of THAT seals the manifest and makes the model ready, so "ready" means "loads from this phone's files without the network".
     public func check(_ id: String, role: String) async throws -> SetupCheck {
-        try await LibraryScope.$checking.withValue(id) { try await self.checkBody(id, role: role) }
+        if Self.libraryModels.contains(id) {
+            return try await DownloadDoor.shared.exclusive {
+                await ModelStore.shared.unload(id)
+                return try await LibraryScope.$checking.withValue(id) { try await self.checkBody(id, role: role) }
+            }
+        }
+        return try await LibraryScope.$checking.withValue(id) { try await self.checkBody(id, role: role) }
     }
     private func checkBody(_ id: String, role: String) async throws -> SetupCheck {
         guard KnownModels.contains(id) else { throw LabError.badInput("setup asked for \(id), which is not in the model catalog") }

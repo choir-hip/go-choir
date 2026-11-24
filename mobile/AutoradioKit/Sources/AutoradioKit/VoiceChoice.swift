@@ -131,7 +131,10 @@ public protocol VoiceReadiness: Sendable {
 public protocol VoiceReadinessRecord: VoiceReadiness {
     func markReady(model: String)
     func markNotReady(model: String)
+    /// A check failed: what to tell the person, and clean up what is plainly unusable (files made for another version of the library, files whose digests changed). Called before the demotion.
+    func diagnose(model: String, note: String) -> String
 }
+public extension VoiceReadinessRecord { func diagnose(model: String, note: String) -> String { note } }
 
 /// The ONE writer of readiness. A model is marked ready here, after `check` said it works on this phone, and nowhere else; a failed check demotes it. A fetch, a download card or a leftover from an older build cannot make a model ready.
 ///
@@ -149,9 +152,11 @@ public final class ReadinessVerifier: @unchecked Sendable {
         let result: SetupCheck
         do { result = try await check() }
         catch { result = SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "\(error)") }
-        if result.outputOK { record.markReady(model: id) }
-        else { record.markNotReady(model: id) }
-        return result
+        if result.outputOK { record.markReady(model: id); return result }
+        var failed = result
+        failed.note = record.diagnose(model: id, note: result.note)
+        record.markNotReady(model: id)
+        return failed
     }
     /// The files of a model are going: it is not ready any more.
     public func demote(model id: String) { record.markNotReady(model: id) }
@@ -190,7 +195,21 @@ public final class FileVoiceReadiness: VoiceReadinessRecord, @unchecked Sendable
         lock.lock(); defer { lock.unlock() }
         guard let p = pins(model) else { return }
         if let seal = p.seal, !seal() { return }                       // a library-managed model is sealed in its manifest (every file, exact length and digest) at the pass; nothing to seal, not ready
-        var s = read(); if s[model] != p.pin { s[model] = p.pin; write(s) }
+        var s = read(); s[model] = p.pin; s["~last:" + model] = p.pin; write(s)          // `~last` survives a demotion: it is the pin of the last pass, to tell a layout that changed
+    }
+    public func diagnose(model: String, note: String) -> String {
+        lock.lock(); defer { lock.unlock() }
+        guard let p = pins(model), p.purge != nil else { return note.isEmpty ? "It did not load from this phone's files." : note }
+        var s = read()
+        if let last = s["~last:" + model], last != p.pin {
+            p.purge?(); s["~last:" + model] = nil; s[model] = nil; write(s)
+            return "The files of this model were made for an older version of the app (the layout changed), so they were deleted. Download it again."
+        }
+        if let intact = p.verifyHashes?() {
+            if !intact { p.purge?(); s["~last:" + model] = nil; s[model] = nil; write(s); return "Its files on this phone were damaged, so they were deleted. Download it again." }
+            return "It did not load from this phone's files. They are intact, so downloading it again would not help."
+        }
+        return "It did not load from this phone's files." + (note.isEmpty ? "" : " (\(note))")
     }
     public func markNotReady(model: String) {
         lock.lock(); defer { lock.unlock() }

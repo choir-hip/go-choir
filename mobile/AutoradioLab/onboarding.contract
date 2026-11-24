@@ -334,6 +334,8 @@ component OnboardingPage
           column padding=18 gap=12
             text "Autoradio can arrange your paper around what you care about: you pick topics, or just tell it." font-size="-exact-body" line-height=1.45 font-family=th.fontText
             text "First it sets up the voice on this phone: these files, and a check that each one works here." font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
+            if dl.voiceNote != ""
+              text dl.voiceNote testId="ob-voice-note" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
             DownloadLines(group="voice")
             DownloadLines(group="voice-rest")
             text `Everything above: ${dl.setupTotal}` testId="ob-welcome-total" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted

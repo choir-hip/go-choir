@@ -10,7 +10,11 @@ public struct ModelPin: Sendable {
     /// Library-managed models: write the manifest of the files as they are now (trust on first consented fetch). false: nothing to seal, so the model cannot be ready.
     public let seal: (@Sendable () -> Bool)?
     public let unseal: (@Sendable () -> Void)?
-    public init(pin: String, present: @escaping @Sendable () -> Bool, seal: (@Sendable () -> Bool)? = nil, unseal: (@Sendable () -> Void)? = nil) { self.pin = pin; self.present = present; self.seal = seal; self.unseal = unseal }
+    /// The digests of the files on disk against the manifest of the last pass: true intact, false changed, nil when there is no manifest to compare with.
+    public let verifyHashes: (@Sendable () -> Bool?)?
+    /// Delete the model's files and its manifest (damaged, or made for another version of the library).
+    public let purge: (@Sendable () -> Void)?
+    public init(pin: String, present: @escaping @Sendable () -> Bool, seal: (@Sendable () -> Bool)? = nil, unseal: (@Sendable () -> Void)? = nil, verifyHashes: (@Sendable () -> Bool?)? = nil, purge: (@Sendable () -> Void)? = nil) { self.pin = pin; self.present = present; self.seal = seal; self.unseal = unseal; self.verifyHashes = verifyHashes; self.purge = purge }
 }
 
 /// Every file of a library-managed model: its relative path, exact length and SHA-256, written when the check that grants readiness passed.
@@ -27,16 +31,19 @@ public enum ModelManifests {
         return try? JSONDecoder().decode(ModelManifest.self, from: d)
     }
     public static func delete(_ id: String, root: URL = KnownModels.storeRoot) { try? FileManager.default.removeItem(at: file(id, root: root)) }
-    /// Walk the model's folders (relative to `base`) and record every regular file's path, length and SHA-256. nil when there is no file.
+    /// Walk the model's folders (relative to `base`) and record every regular file's path, length and SHA-256. nil when there is no file, or when ANY entry cannot be read or is not a plain file or folder (a link, an unreadable file): a seal over a subset is not a seal.
     public static func build(pin: String, base: URL, folders: [String]) -> ModelManifest? {
         let fm = FileManager.default; var entries: [ModelManifest.Entry] = []
-        let basePath = base.resolvingSymlinksInPath().path
         for f in folders {
             let dir = base.appendingPathComponent(f, isDirectory: true)
-            guard let e = fm.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey]) else { continue }
-            for case let u as URL in e {
-                guard (try? u.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true, let size = (try? fm.attributesOfItem(atPath: u.path)[.size]) as? NSNumber, let h = sha256(u) else { continue }
-                entries.append(.init(path: String(u.resolvingSymlinksInPath().path.dropFirst(basePath.count + 1)), bytes: size.int64Value, sha256: h))
+            guard fm.fileExists(atPath: dir.path) else { continue }
+            guard let e = fm.enumerator(atPath: dir.path) else { return nil }             // relative paths, never resolved: no symlink arithmetic
+            for case let rel as String in e {
+                let u = dir.appendingPathComponent(rel)
+                guard let attrs = try? fm.attributesOfItem(atPath: u.path), let type = attrs[.type] as? FileAttributeType else { return nil }
+                if type == .typeDirectory { continue }
+                guard type == .typeRegular, let size = attrs[.size] as? NSNumber, let h = sha256(u) else { return nil }
+                entries.append(.init(path: f + "/" + rel, bytes: size.int64Value, sha256: h))
             }
         }
         return entries.isEmpty ? nil : ModelManifest(pin: pin, files: entries.sorted { $0.path < $1.path })
@@ -50,10 +57,10 @@ public enum ModelManifests {
     /// Every file present with its exact length: what every launch checks.
     public static func present(_ m: ModelManifest, base: URL) -> Bool {
         let fm = FileManager.default
-        return m.files.allSatisfy { ((try? fm.attributesOfItem(atPath: base.appendingPathComponent($0.path).path)[.size]) as? NSNumber)?.int64Value == $0.bytes }
+        return !m.files.isEmpty && m.files.allSatisfy { ((try? fm.attributesOfItem(atPath: base.appendingPathComponent($0.path).path)[.size]) as? NSNumber)?.int64Value == $0.bytes }
     }
     /// The digests: at the check that grants readiness, and again after a failed load or a length mismatch; not on every launch.
-    public static func verifyHashes(_ m: ModelManifest, base: URL) -> Bool { m.files.allSatisfy { sha256(base.appendingPathComponent($0.path)) == $0.sha256 } }
+    public static func verifyHashes(_ m: ModelManifest, base: URL) -> Bool { !m.files.isEmpty && m.files.allSatisfy { sha256(base.appendingPathComponent($0.path)) == $0.sha256 } }
     static func sha256(_ u: URL) -> String? {
         guard let h = try? FileHandle(forReadingFrom: u) else { return nil }
         defer { try? h.close() }
@@ -92,7 +99,9 @@ public enum ModelPins {
         return ModelPin(pin: pin,
             present: { guard let man = ModelManifests.read(id, root: root), man.pin == pin else { return false }; return ModelManifests.present(man, base: base) },
             seal: { guard let man = ModelManifests.build(pin: pin, base: base, folders: folders) else { return false }; return ModelManifests.write(man, id: id, root: root) },
-            unseal: { ModelManifests.delete(id, root: root) })
+            unseal: { ModelManifests.delete(id, root: root) },
+            verifyHashes: { guard let man = ModelManifests.read(id, root: root), man.pin == pin else { return nil }; return ModelManifests.verifyHashes(man, base: base) },
+            purge: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; ModelManifests.delete(id, root: root) })
     }
 }
 

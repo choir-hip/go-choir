@@ -16,13 +16,14 @@ import Foundation
 public final class DownloadDoor: @unchecked Sendable {
     public enum Agreement: String, Sendable, Equatable { case wifi, mobile }
     public enum Refusal: Error, Equatable, CustomStringConvertible {
-        case noConsent(group: String), notOffered(model: String), pathNotAgreed(group: String)
+        case noConsent(group: String), notOffered(model: String), pathNotAgreed(group: String), timedOut
         /// What the person is told (the voice cards and the rows say this, not the code's words).
         public var person: String {
             switch self {
             case .noConsent: return "Agree to this download in Settings, Downloads first: that is where you see its size and who it comes from."
             case .notOffered: return "This is not offered for download."
             case .pathNotAgreed: return "This needs Wi-Fi: you agreed to it on Wi-Fi only. It will go on when you are back on Wi-Fi."
+            case .timedOut: return "This took too long and was stopped. Try it again."
             }
         }
         public var description: String {
@@ -30,6 +31,7 @@ public final class DownloadDoor: @unchecked Sendable {
             case .noConsent(let g): return "the person has not agreed to the \(g) downloads"
             case .notOffered(let m): return "\(m) is not offered for download"
             case .pathNotAgreed(let g): return "the \(g) downloads were agreed to on Wi-Fi only and the phone is not on Wi-Fi"
+            case .timedOut: return "the download window ran past its deadline"
             }
         }
     }
@@ -40,12 +42,14 @@ public final class DownloadDoor: @unchecked Sendable {
     private let onWiFi: @Sendable () -> Bool
     private let allowAll: Bool
     private let groups: [String: String]
+    /// How long a fetch may wait for the window, and how long a window's body may run before it is failed (and the slot freed for the next).
+    private let deadlines: (wait: TimeInterval, body: TimeInterval)
 
-    public init(onWiFi: @escaping @Sendable () -> Bool = { WiFiMonitor.shared.onWiFi }, list: ModelList = .builtIn()) {
-        self.onWiFi = onWiFi; self.allowAll = false; self.groups = Self.groups(of: list)
+    public init(onWiFi: @escaping @Sendable () -> Bool = { WiFiMonitor.shared.onWiFi }, list: ModelList = .builtIn(), deadlines: (wait: TimeInterval, body: TimeInterval) = (wait: 3600, body: 3600)) {
+        self.onWiFi = onWiFi; self.allowAll = false; self.groups = Self.groups(of: list); self.deadlines = deadlines
     }
     /// A store used by tests with its own fake transport, which is not a model of the app: everything passes on the transport it was given.
-    init(allowAll: Bool) { self.onWiFi = { true }; self.allowAll = allowAll; self.groups = [:] }
+    init(allowAll: Bool) { self.onWiFi = { true }; self.allowAll = allowAll; self.groups = [:]; self.deadlines = (wait: 3600, body: 3600) }
     /// For tests of a store with a transport of its own.
     public static var open: DownloadDoor { DownloadDoor(allowAll: true) }
 
@@ -102,7 +106,6 @@ public final class DownloadDoor: @unchecked Sendable {
     private struct Window { let group: String; let agreement: Agreement; let cancel: () -> Void }
     private var live: [UUID: Window] = [:]
     private var slotBusy = false
-    private var slotWaiters: [CheckedContinuation<Void, Never>] = []
     public var openWindowCount: Int { lock.lock(); defer { lock.unlock() }; return live.count }
 
     /// The models module installs the way to point the library's registry; it is closed at once (and stays closed while a window is open: installing again must not cut or reopen one).
@@ -115,27 +118,59 @@ public final class DownloadDoor: @unchecked Sendable {
         func kill() { lock.lock(); killed = true; let c = cancel; lock.unlock(); c?() }
         func set(_ c: @escaping @Sendable () -> Void) { lock.lock(); cancel = c; let k = killed; lock.unlock(); if k { c() } } }
 
-    private func acquireSlot() async {
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            lock.lock()
-            if !slotBusy { slotBusy = true; lock.unlock(); c.resume() } else { slotWaiters.append(c); lock.unlock() }
-        }
+    private struct Waiter { let id: UUID; let c: CheckedContinuation<Void, Error> }
+    private var waiters: [Waiter] = []
+    /// Wait for the one slot. A cancelled waiter leaves the queue and throws (it never opens a window); one that waits past the deadline throws `timedOut`. `whileQueued` is told every `every` seconds that it is waiting (a stall watchdog must not read a wait as a stall).
+    private func acquireSlot(every: TimeInterval, whileQueued: (@Sendable () -> Void)?) async throws {
+        let id = UUID()
+        let ticker: Task<Void, Never>? = whileQueued.map { tell in Task { while !Task.isCancelled { try? await Task.sleep(nanoseconds: UInt64(every * 1e9)); if !Task.isCancelled { tell() } } } }
+        let timeout = Task { try? await Task.sleep(nanoseconds: UInt64(deadlines.wait * 1e9)); if !Task.isCancelled { self.dropWaiter(id, throwing: Refusal.timedOut) } }
+        defer { ticker?.cancel(); timeout.cancel() }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
+                lock.lock()
+                if Task.isCancelled { lock.unlock(); c.resume(throwing: CancellationError()); return }
+                if !slotBusy { slotBusy = true; lock.unlock(); c.resume() } else { waiters.append(Waiter(id: id, c: c)); lock.unlock() }
+            }
+        } onCancel: { self.dropWaiter(id, throwing: CancellationError()) }
+        if Task.isCancelled { releaseSlot(); throw CancellationError() }
+    }
+    private func dropWaiter(_ id: UUID, throwing e: Error) {
+        lock.lock(); let w = waiters.firstIndex { $0.id == id }.map { waiters.remove(at: $0) }; lock.unlock()
+        w?.c.resume(throwing: e)
     }
     private func releaseSlot() {
         lock.lock()
-        if slotWaiters.isEmpty { slotBusy = false; lock.unlock() } else { let c = slotWaiters.removeFirst(); lock.unlock(); c.resume() }
+        if waiters.isEmpty { slotBusy = false; lock.unlock() } else { let w = waiters.removeFirst(); lock.unlock(); w.c.resume() }
     }
 
-    public func libraryWindow<T: Sendable>(model id: String, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
-        _ = try authorize(model: id)                                     // an early, cheap refusal
-        await acquireSlot(); defer { releaseSlot() }
+    /// Run `body` holding the slot with NO window open anywhere (the registry stays closed): what a check needs, so that its load is a cold load that cannot fetch and cannot borrow another model's window.
+    public func exclusive<T: Sendable>(_ body: @Sendable () async throws -> T) async throws -> T {
+        try await acquireSlot(every: 2, whileQueued: nil); defer { releaseSlot() }
+        return try await body()
+    }
+
+    public func libraryWindow<T: Sendable>(model id: String, queuedEvery: TimeInterval = 2, whileQueued: (@Sendable () -> Void)? = nil, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
+        let early = try authorize(model: id)                             // an early, cheap refusal (the authoritative look is inside the lock, after the wait)
+        if early == .wifi, !allowAll, !onWiFi() { throw Refusal.pathNotAgreed(group: groups[id] ?? "") }
+        try await acquireSlot(every: queuedEvery, whileQueued: whileQueued); defer { releaseSlot() }
         let key = UUID(), box = CancelBox()
         try enterWindow(key, model: id, box)                            // the authoritative check, under the lock that opens the registry
         defer { leaveWindow(key) }
         let result = Task<T, Error> { if box.killed { throw CancellationError() }; return try await body() }
         box.set { result.cancel() }                                      // killing cancels the transfer's Task
-        return try await withTaskCancellationHandler { try await result.value } onCancel: { result.cancel(); box.kill() }
+        // The body gets its deadline: past it the window is killed and this call FAILS, without waiting for a body that ignores cancellation (it keeps no registry and no slot).
+        let deadline = deadlines.body
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<T, Error>) in
+                let once = Once()
+                let dl = Task { try? await Task.sleep(nanoseconds: UInt64(deadline * 1e9)); if once.first() { box.kill(); self.closeNow(); c.resume(throwing: Refusal.timedOut) } }
+                Task { let r = await result.result; if once.first() { dl.cancel(); c.resume(with: r) } }
+            }
+        } onCancel: { result.cancel(); box.kill() }
     }
+    private final class Once: @unchecked Sendable { let l = NSLock(); var done = false; func first() -> Bool { l.lock(); defer { l.unlock() }; if done { return false }; done = true; return true } }
+    private func closeNow() { lock.lock(); let hook = registryHook; lock.unlock(); hook?(Self.closedRegistry) }
 
     private func enterWindow(_ key: UUID, model id: String, _ box: CancelBox) throws {
         lock.lock()

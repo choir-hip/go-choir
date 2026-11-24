@@ -29,7 +29,7 @@ members Autoradio
     sivTick = sivTick + 1
 
   // The model downloads (downloads.ts): asked again when the voice side's facts change (ovoice) or an agreement is recorded; each press is one group's agreement and start.
-  resource dl = downloadsPage(ovoice, cons.rev) as shape DownloadsView else empty(groups=[], rev=0, voiceReady=false, hearingReady=false, setupTotal="")
+  resource dl = downloadsPage(ovoice, cons.rev) as shape DownloadsView else empty(groups=[], rev=0, voiceReady=false, hearingReady=false, setupTotal="", voiceNote="")
   mutation dlm as shape DownloadsView refreshes dl
   action dlStart(group: string)
     send dlm = downloadsAct("start", group, ovoice, "")
