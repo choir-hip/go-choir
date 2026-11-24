@@ -99,6 +99,12 @@ public enum CandidateTable {
         lfm("lfm3-1.7b-q6_k", "Q6_K", 96, .tier8, measured: false)
         lfm("lfm3-1.7b-q8_0", "Q8_0", 98, .tier8, measured: false)
         lfm("lfm3-1.7b-nvfp4", "NVFP4", 90, .tier8, measured: false, note: "whether llama.cpp b12259 runs NVFP4 on iOS is unknown: the on-device check decides")
+        // LFM3-Omni-2B, text path only: its language backbone is the same 1.7B architecture and the same size on disk as LFM3-1.7B (the audio and vision
+        // parts are in a projector file we do not fetch), so it is "bigger" in what it can do, not in the weights this row loads. Offered to 8 GB phones and up.
+        // Ranked BELOW every LFM3-1.7B quant: LFM3-1.7B is the one our page-grounding sample runs chose, and nothing here shows Omni is better as an answering voice.
+        t.append(gguf("lfm3-omni-2b-q8_0", .responder, family: "LFM3 Omni 2B", quant: "Q8_0", label: "LFM3 Omni 2B", rank: 89,
+                      basis: "NOT RANKED BY A RUN OF OURS AS BETTER: offered for newer phones, not recommended ahead of LFM3 1.7B; see docs/reference/ON-DEVICE-MODELS.md",
+                      tier: .tier8, measured: false, license: KnownModels.lfmLicense, limit: lfmLimit, context: 260))
         t.append(gguf("qwen3-0.6b-q8_0", .responder, family: "Qwen3 0.6B", quant: "Q8_0", label: "Qwen3 0.6B", rank: 62, basis: sampleBasis, tier: .tier6, measured: true, context: 235))
         t.append(gguf("qwen3-0.6b-q4_k_m", .responder, family: "Qwen3 0.6B", quant: "Q4_K_M", label: "Qwen3 0.6B", rank: 52, basis: sampleBasis, tier: .tier6, measured: true, context: 235))
         t.append(gguf("qwen3.5-0.8b-q8_0", .responder, family: "Qwen3.5 0.8B", quant: "Q8_0", label: "Qwen3.5 0.8B", rank: 58, basis: sampleBasis + "; the Q4 was the one run", tier: .tier6, measured: false))

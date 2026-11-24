@@ -4,6 +4,9 @@ import XCTest
 // The model list as data. Failure list (each line a test): L1 the built-in copy does not survive JSON; L2 an unknown job or field from a newer
 // server empties the list; L3 an entry the store could not verify is offered; L4 recommendations ignore the device; L5 the bundle the store
 // fetches differs from the one the build pins; L6 the built-in copy disagrees with CandidateTable; L8 a model under an attribution licence has no credit on its row.
+// LFM3-Omni-2B as a larger responder (owner, 2026-11-24): O1 the row is missing or its pin is not a commit with a verifiable file; O2 it is offered
+// on a phone that cannot hold it, or it displaces LFM3 as the first fit on the owner's class; O3 its licence and the credit the licence asks for are
+// not carried; O4 the pinned download url is the moving `main` and not the commit; O5 the text path lays the chat out differently from LFM3's card.
 final class ModelListTests: XCTestCase {
     /// L8: a model under an attribution licence carries its credit as data on its row (CC BY 4.0 section 3(a)); the page that shows credits reads this field.
     func testEveryAttributionLicenceCarriesItsCredit() {
@@ -132,5 +135,48 @@ final class ModelListTests: XCTestCase {
         XCTAssertTrue(ids.contains("pocket-tts:alba"))
         for r in VoiceRows.all { XCTAssertEqual(VoiceCatalog.option(id: r.id)?.setting, StageSetting(id: r.stageID, params: ["voice": .string(r.voice)]), "\(r.id): the voice id reaches the stage as its \"voice\" parameter") }
         XCTAssertEqual(Set(ids).count, ids.count)
+    // MARK: LFM3-Omni-2B as a larger responder
+
+    private let omniID = "lfm3-omni-2b-q8_0"
+    func testOmniRowIsPinnedToACommitAndAVerifiableFile() throws {                                      // O1
+        let e = try XCTUnwrap(ModelList.builtIn().models.first { $0.id == omniID }, "the Omni row is missing")
+        XCTAssertEqual(e.job, "responder")
+        XCTAssertEqual(e.repository, "LiquidAI/LFM3-Omni-2B-GGUF")
+        XCTAssertEqual(e.revision?.count, 40)
+        let f = try XCTUnwrap(e.files?.first)
+        XCTAssertEqual(e.files?.count, 1, "text in, text out: the mmproj (vision, audio, speech out) is not fetched")
+        XCTAssertEqual(f.path, "LFM3-Omni-2B-Q8_0.gguf")
+        XCTAssertEqual(f.bytes, 1_846_240_768)
+        XCTAssertEqual(f.sha256, "59118f661eaacb93d204723d76355b53347f0940b508c11412f6290fd49158d4")
+        XCTAssertNotNil(e.bundleSpec(folder: "x"))
+    }
+    func testOmniIsOfferedOnlyWhereItFitsAndLFM3StaysTheFirstFit() throws {                            // O2
+        let l = ModelList.builtIn()
+        let six = l.entries(job: .responder, machine: "iPhone15,3", memoryGB: 5.6)                       // the owner's phone class
+        XCTAssertTrue(try XCTUnwrap(six.first).id.hasPrefix("lfm3-1.7b"), "LFM3 is the first row on a 6 GB phone")
+        let omni = try XCTUnwrap(l.models.first { $0.id == omniID })
+        XCTAssertFalse(omni.isRecommended(machine: "iPhone15,3", memoryGB: 5.6), "not offered as a fit on 6 GB")
+        XCTAssertTrue(omni.isRecommended(machine: "iPhone17,3", memoryGB: 7.4), "offered on an 8 GB phone")
+        XCTAssertTrue(omni.isRecommended(machine: "iPhone18,2", memoryGB: 11.4))
+        let eight = l.entries(job: .responder, machine: "iPhone17,3", memoryGB: 7.4)
+        XCTAssertTrue(try XCTUnwrap(eight.first).id.hasPrefix("lfm3-1.7b"), "not measured better, so offered and not first")
+        XCTAssertTrue(eight.contains { $0.id == omniID })
+    }
+    func testOmniCarriesTheLicenceAndTheCredit() throws {                                              // O3
+        let e = try XCTUnwrap(ModelList.builtIn().models.first { $0.id == omniID })
+        XCTAssertTrue(e.license.contains("LFM Open License v1.0"))
+        XCTAssertTrue(e.license.contains("US$10M"))
+        XCTAssertTrue((e.credit ?? "").contains("Liquid AI"))
+    }
+    func testOmniDownloadIsPinnedToTheCommitNotMain() throws {                                         // O4
+        let spec = try XCTUnwrap(KnownModels.pinned.first { $0.id == omniID })
+        let rev = try XCTUnwrap(ModelList.builtIn().models.first { $0.id == omniID }?.revision)
+        XCTAssertEqual(spec.url.absoluteString, "https://huggingface.co/LiquidAI/LFM3-Omni-2B-GGUF/resolve/\(rev)/LFM3-Omni-2B-Q8_0.gguf")
+    }
+    func testOmniIsOnlyForNewerPhonesAndSaysItIsNotYetRun() throws {                                   // O2 (table side)
+        let omni = try XCTUnwrap(CandidateTable.candidate(omniID, .responder))
+        XCTAssertEqual(omni.minTier, .tier8)
+        XCTAssertEqual(omni.family, "LFM3 Omni 2B")
+        XCTAssertFalse(omni.qualityBasis.isEmpty)
     }
 }

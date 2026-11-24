@@ -113,9 +113,12 @@ public struct ModelList: Codable, Equatable, Sendable {
     public static func builtIn(table: [ModelCandidate] = CandidateTable.all, bundles: [ModelBundleSpec] = KnownModels.bundles, voices: [VoiceRow] = VoiceRows.all) -> ModelList {
         let entries: [ModelListEntry] = table.filter { !$0.isFloor }.map { c in
             let b = bundles.first { $0.id == c.id }
+            // A single GGUF pinned to a commit (`ExtraGGUF.revision`) carries it, its one file and its credit, as a bundle does.
+            let g = KnownModels.extraGGUF.first { $0.spec.id == c.id && $0.revision != nil }
             return ModelListEntry(
-                id: c.id, job: c.role.rawValue, label: c.label, repository: b?.repo ?? c.source.replacingOccurrences(of: "hf:", with: ""), revision: b?.commit,
-                files: b?.files.map { .init(path: $0.path, bytes: $0.bytes, sha256: $0.sha256) }, license: b?.license ?? c.license, credit: b?.credit ?? c.credit ?? KnownModels.managed.first { $0.id == c.id }?.credit,
+                id: c.id, job: c.role.rawValue, label: c.label, repository: b?.repo ?? c.source.replacingOccurrences(of: "hf:", with: ""), revision: b?.commit ?? g?.revision,
+                files: b?.files.map { .init(path: $0.path, bytes: $0.bytes, sha256: $0.sha256) } ?? g.map { [.init(path: $0.spec.fileName, bytes: $0.spec.bytes, sha256: $0.spec.sha256)] },
+                license: b?.license ?? c.license, credit: b?.credit ?? g?.credit ?? c.credit ?? KnownModels.managed.first { $0.id == c.id }?.credit,
                 recommendedFor: [.init(minMemoryGB: Double(c.minTier.rawValue) - 1, note: c.minTier.label + " and up")], rank: c.qualityRank)
         }
         return ModelList(version: 1, models: entries.filter(\.isValid), voices: voices.map(ModelListVoice.init).filter(\.isValid))
