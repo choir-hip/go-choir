@@ -42,7 +42,7 @@ describe('the topics write', () => {
     expect(await writeTopics(storage, live(['Space', 'Chess']))).toBe(true);
     expect(calls.find((c) => c.method === 'POST' && c.path === '/api/texture/documents')!.body).toEqual({ title: 'My notebook' });
     expect(posts().length).toBe(1);
-    expect(posts()[0].body!.content).toBe('# My notebook\n\n## What you asked for\n- Space\n- Chess\n');
+    expect(posts()[0].body!.content).toBe('# My notebook\n\n## What you asked for\n- Space\n- Chess');                // the server's own projection of the body: no trailing newline (it refuses another)
     expect(files.has(MARKER)).toBe(true);
   });
   test('T2 a notebook: the missing topics are appended, the rest is untouched', async () => {
@@ -51,7 +51,7 @@ describe('the topics write', () => {
     docs.set('nb-0', { rev: 'r0', content: text }); revs.set('r0', text);
     expect(await writeTopics(storage, live(['Space', 'Chess']))).toBe(true);
     expect(created).toBe(0);
-    expect(posts()[0].body!.content).toBe('# My notebook\n\n## What you asked for\n- Space\n- Chess\n\n## What Autoradio has learned\n- A thing. [L2 · heard 1 of 2]\n');
+    expect(posts()[0].body!.content).toBe('# My notebook\n\n## What you asked for\n- Space\n- Chess\n\n## What Autoradio has learned\n- A thing. [L2 · heard 1 of 2]');
     expect(posts()[0].body!.parent_revision_id).toBe('r0');
   });
   test('T2b every topic already there: nothing is posted, the marker is written', async () => {
