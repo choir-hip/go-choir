@@ -1,6 +1,6 @@
 # The reviewer account: runbook (2026-11-23)
 
-Owner, 2026-11-24: "yes, we should make a demo account as well." Apple's reviewers for TestFlight and the App Store cannot hold a passkey for choir.news, and sign-up may be closed at the cap. One account can be opened with a user name and a password instead. Code: `internal/auth/demo_account.go`; host command `demo-account` (`cmd/demo-account`); the app page is the "Reviewer sign-in" link on the sign-in screen. No password, hash or account id is in the repo; the three live in two files on Node B, in `/var/lib/go-choir/auth-signing/`.
+Owner, 2026-11-24: "yes, we should make a demo account as well." Apple's reviewers for TestFlight and the App Store cannot hold a passkey for choir.news, and sign-up may be closed at the cap. One account can be opened with a user name and a password instead. Code: `internal/auth/demo_account.go`; host command `demo-account` (`cmd/demo-account`); the app page is the "Reviewer sign-in" link on the sign-in screen. No password, hash or account id is in the repo; the three live in two files on Node B, in `/var/lib/go-choir/auth-signing/demo/` (a directory only the auth service can see, so a file made or rotated later is hidden from the other services too).
 
 ## How a reviewer signs in (the app as it is, 2026-11-24)
 
@@ -19,12 +19,12 @@ The app's sign-in is passkey only (a mailed code proves a new address). The revi
 
 1. Make an account the ordinary way (the app or choir.news) before sign-up closes, with an address you can read: sign-up mails an 8-digit code to it and the account works only once that code is typed (the address must be proved; an account with an unproved address makes the route answer "not available"). It is the reviewer's account and nothing personal goes in it.
 2. Read its user id (`GET /auth/whoami` with a key it holds, or `sqlite3 /var/lib/go-choir/auth/auth.db "select id from users where email = '<the throwaway address>'"`).
-3. On Node B as root: `umask 077; printf '%s\n' '<the user id>' > /var/lib/go-choir/auth-signing/demo-account-id`.
+3. On Node B as root: `umask 077; printf '%s\n' '<the user id>' > /var/lib/go-choir/auth-signing/demo/demo-account-id`.
 
 ## Install the password (and rotate it)
 
 ```
-demo-account credential --user <a user name, for example "reviewer"> --out /var/lib/go-choir/auth-signing/demo-credential
+demo-account credential --user <a user name, for example "reviewer"> --out /var/lib/go-choir/auth-signing/demo/demo-credential
 ```
 
 It prints the 32-character password once and writes the file (mode 0600: the user name, then an argon2id hash). Copy the password into Apple's form; it is not stored anywhere else. The auth service reads the file on every attempt, so there is nothing to restart. **To rotate**, run the same command again: the old password stops working at once, and keys already issued keep working until they expire or `reset` revokes them.
@@ -32,18 +32,20 @@ It prints the 32-character password once and writes the file (mode 0600: the use
 ## Turn it off (one step)
 
 ```
-demo-account off --id-file /var/lib/go-choir/auth-signing/demo-account-id --out /var/lib/go-choir/auth-signing/demo-credential
+demo-account off --id-file /var/lib/go-choir/auth-signing/demo/demo-account-id --out /var/lib/go-choir/auth-signing/demo/demo-credential
 ```
 
 Removes the credential file (the route answers "not available" at once), then revokes every key and session the account holds, so a reviewer's phone is out at once and not after the 30 days. The id file stays, so the account stays protected from deletion; remove it too to forget the account. The computer is left as it is (`reset` removes it). Run as root on Node B. `rm` of the credential file alone stops new sign-ins but leaves issued keys working until they expire.
 
-## Before each review: reset
+`off` leaves nothing usable for the account. It first proves the auth database exists and holds the account (a typo in `--auth-db` or a swapped flag exits non-zero and removes nothing), deletes the account's pending device authorizations, desktop exchange codes, recovery links, email sign-in attempts and passkey challenges, and then checks that no key is left live and no session left. While the credential file is absent the auth service also refuses to make a session token or an app key for this account by any route (passkey, mailed link, recovery, device approval), and does not read a session token made before. The account is therefore also closed to its creator on the web until `credential` is run again. What `off` cannot do: an access token made before `off` still works at the proxy for at most `AUTH_ACCESS_TOKEN_TTL` (5 minutes), which the proxy does not check against this service.
+
+## Before each review: reset (state hygiene, not a way to end access)
 
 ```
-demo-account reset --id-file /var/lib/go-choir/auth-signing/demo-account-id
+demo-account reset --id-file /var/lib/go-choir/auth-signing/demo/demo-account-id
 ```
 
-Run it as root on Node B. It revokes every key and deletes every session of the account (each reviewer phone is signed out), then asks vmctl (`/internal/vmctl/remove`, host-internal) to stop and remove the account's computer: its ownership and its snapshot are dropped, and the next sign-in makes a new empty computer on first use. It does not purge the old computer's disk image or tape (the retention prune takes an orphaned state directory after its age, and the account-deletion work purges the rest) and it does not unpublish a take. It is idempotent. Never run against any other account: it reads only the id file.
+Run it as root on Node B. It revokes every key and deletes every session of the account (each reviewer phone is signed out), then asks vmctl (`/internal/vmctl/remove`, host-internal) to stop and remove the account's computer: its ownership and its snapshot are dropped, and the next sign-in makes a new empty computer on first use. It does not purge the old computer's disk image or tape (the retention prune takes an orphaned state directory after its age, and the account-deletion work purges the rest) and it does not unpublish a take. It is idempotent. Never run against any other account: it reads only the id file. `reset` does not change the password: whoever holds it can sign in again the moment it ends. To end someone's access run `off`, or rotate with `credential` (then give Apple the new password); `reset` is for returning the computer to empty. It sends vmctl the host-internal token it reads from `--token-file` (default `/var/lib/go-choir/secrets/internal-service-token`, root-only), because vmctl enforces it and a root shell has none loaded; without it vmctl answers 403 and the command exits non-zero.
 
 ## What goes in Apple's review form
 
