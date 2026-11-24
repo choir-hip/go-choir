@@ -41,6 +41,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/dbx"
@@ -59,6 +60,9 @@ type Key struct {
 	LikePrefix string
 	// Proof: any row here means the account used a computer or the platform, so it is refused, not purged.
 	Proof bool
+	// Sub: the column holds an id found through another table: the rows match when the column is in
+	// "<Sub> IN (the ids)", for example a webhook event whose message id the mail index lists for the account.
+	Sub string
 }
 
 // Service is one database and the keys in it.
@@ -97,6 +101,9 @@ var (
 	AuthSetColumn = Key{Table: "account_set", Column: "active_user_id", By: "id"}
 
 	MaildKeys = []Key{
+		// The inbound webhook log keeps each event's whole payload (recipient, addresses, message): the events of
+		// the account's messages go, found through the provider message index, before that index is deleted.
+		{Table: "email_webhook_events", Column: "provider_message_id", By: "id", Sub: "SELECT provider_message_id FROM email_provider_message_index WHERE owner_id"},
 		{Table: "email_sender_whitelist", Column: "owner_id", By: "id"},
 		{Table: "email_provider_message_index", Column: "owner_id", By: "id"},
 		{Table: "email_approval_token_index", Column: "owner_id", By: "id"},
@@ -143,6 +150,11 @@ var (
 		return out
 	}()
 
+	// ControlCore and GraphCore tell the two PostgreSQL databases apart: each must hold one of its own tables, so the
+	// same database given twice, or the wrong one, is refused (every Proof table of the missing one would be skipped).
+	ControlCore = []string{"owner_act_receipts", "computer_version_route_slots"}
+	GraphCore   = []string{"og_objects", "publication_version_proposals"}
+
 	// userColumnNames and userColumnSuffixes are the columns that name a user (or an owner, or a submitter);
 	// a table with one that is not in a service's keys stops the run.
 	userColumnNames    = map[string]bool{"requested_by": true, "approver": true, "target_id": true, "route_slot_id": true, "mailbox_owner_id": true, "submitter_id": true, "email": true, "user_email": true}
@@ -154,6 +166,9 @@ var (
 		"email_owner_addresses.email": true,
 		"pending_registrations.email": true,
 		"registration_waitlist.email": true,
+		// A delivery record's target_id names the object delivered to (target_kind "publication_version_proposal"
+		// in internal/platform/publication_graph.go), not a user; the owner is target_owner_id, which is keyed.
+		"proposal_delivery_records.target_id": true,
 	}
 )
 
@@ -354,6 +369,9 @@ func (k Key) where(kind dbx.Kind, n int) string {
 		col = "lower(" + k.Column + ")"
 	}
 	w := fmt.Sprintf("%s IN (%s)", col, inList(kind, 1, n))
+	if k.Sub != "" {
+		w = fmt.Sprintf("%s IN (%s IN (%s))", col, k.Sub, inList(kind, 1, n))
+	}
 	if k.Where != "" {
 		w = "(" + k.Where + ") AND " + w
 	}
@@ -621,6 +639,7 @@ func buildPlan(ctx context.Context, authDB *sql.DB, owners Owners, services []Se
 			}
 		}
 	}
+	parts = append(parts, fmt.Sprintf("mail_dirs=%d", p.Mailboxes))
 	p.Digest = Digest(parts)
 	return p, keysBy, nil
 }
@@ -701,12 +720,14 @@ func countSetsToRepair(ctx context.Context, q queryer, ids []string) (int64, err
 
 // mailDirs are the directories maild keeps for an account: its mailbox, and its staged outbound attachments.
 func mailDirs(root, id string) []string {
+	root = filepath.Clean(root)
 	return []string{filepath.Join(root, "users", id), filepath.Join(root, "attachments", "outbound", id)}
 }
 
 // checkMailRoot: the root, its users/ and its attachments/outbound/ are real directories (no symlink), so a
 // removal below them stays below them.
 func checkMailRoot(root string) error {
+	root = filepath.Clean(root)
 	for _, p := range []string{root, filepath.Join(root, "users")} {
 		st, err := os.Lstat(p)
 		if err != nil {
@@ -725,30 +746,32 @@ func checkMailRoot(root string) error {
 	return nil
 }
 
-func removeMailDirs(root, id string) error {
+func removeMailDirs(root, id string) (int, error) {
 	if !SafeID(id) {
-		return fmt.Errorf("refusing to remove a directory for an unsafe id")
+		return 0, fmt.Errorf("refusing to remove a directory for an unsafe id")
 	}
+	removed := 0
 	for _, dir := range mailDirs(root, id) {
 		parent := filepath.Dir(dir)
 		if filepath.Clean(filepath.Join(parent, id)) != filepath.Clean(dir) || filepath.Base(dir) != id {
-			return fmt.Errorf("refusing: %s is not a direct child of its parent", Hash(id))
+			return removed, fmt.Errorf("refusing: %s is not a direct child of its parent", Hash(id))
 		}
 		st, err := os.Lstat(dir)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return err
+			return removed, err
 		}
 		if !st.IsDir() {
-			return fmt.Errorf("refusing: the directory of %s is a symlink or a file", Hash(id))
+			return removed, fmt.Errorf("refusing: the directory of %s is a symlink or a file", Hash(id))
 		}
 		if err := os.RemoveAll(dir); err != nil {
-			return fmt.Errorf("remove the directory of %s: %w", Hash(id), err)
+			return removed, fmt.Errorf("remove the directory of %s: %w", Hash(id), err)
 		}
+		removed++
 	}
-	return nil
+	return removed, nil
 }
 
 // ServiceResult is what happened to one service in a real run.
@@ -756,6 +779,12 @@ type ServiceResult struct {
 	Name      string
 	Committed bool
 	Err       error
+}
+
+// Journal is written before each irreversible step, so a run that dies leaves what it was about to do. A
+// failing Entry stops the run at that point (before the step it announces).
+type Journal interface {
+	Entry(stage string, res *Result) error
 }
 
 // Result is a real run's outcome.
@@ -771,9 +800,25 @@ type Result struct {
 // every listed account is checked to be still unproved and unchanged, then the other services are deleted
 // (one transaction each), then the mail directories, then the accounts, and auth commits last. Nothing is
 // deleted on any error before the other services; after that, the result says which committed.
-func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Service, digest string) (*Result, error) {
-	res := &Result{}
-	plan, keysBy, err := buildPlan(ctx, authDB, owners, services)
+func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Service, digest string, journal Journal) (res *Result, err error) {
+	res = &Result{}
+	note := func(stage string) error {
+		if journal == nil {
+			return nil
+		}
+		if jerr := journal.Entry(stage, res); jerr != nil {
+			return fmt.Errorf("the journal could not be written (%s): %w", stage, jerr)
+		}
+		return nil
+	}
+	started := false
+	defer func() {
+		if started && err != nil && journal != nil {
+			_ = journal.Entry("stopped: "+err.Error(), res)
+		}
+	}()
+	plan, keysBy, perr := buildPlan(ctx, authDB, owners, services)
+	err = perr
 	res.Plan = plan
 	if err != nil {
 		return res, err
@@ -837,7 +882,14 @@ func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Servic
 			return res, fmt.Errorf("%w: %s was proved or changed (recovery or verification finished): nothing was deleted", ErrChanged, Hash(c.ID))
 		}
 	}
+	started = true
+	if err := note("intent"); err != nil {
+		return res, err
+	}
 	for i := range others {
+		if err := note("before-commit:" + others[i].Name); err != nil {
+			return res, err
+		}
 		r := ServiceResult{Name: others[i].Name}
 		err := others[i].deleteIn(ctx, keysBy[others[i].Name], ids, emails)
 		r.Committed, r.Err = err == nil, err
@@ -846,15 +898,19 @@ func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Servic
 			return res, err
 		}
 	}
+	if err := note("before-mail-dirs"); err != nil {
+		return res, err
+	}
 	for _, s := range others {
 		if s.MailboxRoot == "" {
 			continue
 		}
 		for _, id := range ids {
-			if err := removeMailDirs(s.MailboxRoot, id); err != nil {
+			n, err := removeMailDirs(s.MailboxRoot, id)
+			res.MailDirs += n
+			if err != nil {
 				return res, err
 			}
-			res.MailDirs += len(mailDirs(s.MailboxRoot, id))
 		}
 	}
 	if s := authSvc; true {
@@ -868,6 +924,9 @@ func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Servic
 		if err := repairSets(ctx, tx, sets, ids); err != nil {
 			return res, fmt.Errorf("auth: %w", err)
 		}
+	}
+	if err := note("before-commit:auth"); err != nil {
+		return res, err
 	}
 	if err := tx.Commit(); err != nil {
 		res.Services = append(res.Services, ServiceResult{Name: "auth", Err: err})
@@ -887,7 +946,8 @@ func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Servic
 			}
 		}
 	}
-	return res, nil
+	started = false
+	return res, note("done")
 }
 
 // afterPlanHook lets a test change the world between the plan and the lock.
@@ -967,8 +1027,13 @@ func repairSets(ctx context.Context, tx interface {
 		if !gone[active] {
 			continue
 		}
+		// auth's repairSetTx (internal/auth/account_set_store.go): a member with a live session first, newest first;
+		// here a proved member comes before one that is not, as ListAccountSet would not list the other.
 		var next string
-		if err := tx.QueryRowContext(ctx, "SELECT user_id FROM account_set_member WHERE set_id = ? ORDER BY added_at DESC, user_id LIMIT 1", set).Scan(&next); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT m.user_id FROM account_set_member m
+			JOIN users u ON u.id = m.user_id
+			LEFT JOIN refresh_sessions r ON r.id = m.refresh_session_id AND r.expires_at > ?
+			WHERE m.set_id = ? ORDER BY (u.email_verified_at IS NULL), (r.id IS NULL), m.added_at DESC, m.user_id LIMIT 1`, time.Now().UTC(), set).Scan(&next); err != nil {
 			return fmt.Errorf("set %s: next member: %w", set, err)
 		}
 		if _, err := tx.ExecContext(ctx, "UPDATE account_set SET active_user_id = ? WHERE id = ?", next, set); err != nil {

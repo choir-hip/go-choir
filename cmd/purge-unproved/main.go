@@ -9,19 +9,17 @@
 // With no --apply it only reads: it prints, per service and table, the rows that would go, the
 // accounts it refuses (hashed) and why, and the digest of the list. The real run (--apply) needs that
 // digest and a receipt path, recomputes the plan, takes auth's write lock, and if any listed account
-// changed deletes nothing. Stop go-choir-auth and go-choir-maild for the run (see the doc); backups
+// changed deletes nothing. Stop go-choir-auth and go-choir-maild before the first --apply and keep them stopped until a rerun has committed (see the doc); backups
 // (restic snapshots on node-a) keep what they held until they are pruned.
 package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -75,6 +73,29 @@ func main() {
 	if *apply && (*digest == "" || *receiptTo == "") {
 		usage("--apply needs --digest and --receipt")
 	}
+	if *pgControl != "" && *pgControl == *pgGraph {
+		usage("--pg-control-dsn and --pg-graph-dsn are the same: the graph database's tables would be skipped (give each its own)")
+	}
+	if *maildRoot != "" {
+		*maildRoot = filepath.Clean(*maildRoot)
+	}
+	// The receipt and its key are checked, and the receipt file opened, BEFORE anything is deleted.
+	var journal *unprovedpurge.FileJournal
+	if *apply {
+		j, err := unprovedpurge.OpenJournal(*receiptTo, *receiptKey)
+		if err != nil {
+			fatal("%v (nothing was changed)", err)
+		}
+		journal = j
+		defer j.Close()
+	}
+	if *receiptTo != "" {
+		if prev, err := unprovedpurge.LastIncomplete(*receiptTo); err != nil {
+			fatal("%v", err)
+		} else if prev != "" {
+			fmt.Fprintf(os.Stderr, "purge-unproved: WARNING: %s\n", prev)
+		}
+	}
 	if *tokenFile != "" {
 		os.Setenv(hostauth.EnvTokenFile, *tokenFile)
 	}
@@ -85,18 +106,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	open := func(path string, immediate bool) *sql.DB {
-		if st, err := os.Stat(path); err != nil || st.IsDir() {
-			fatal("%s is not an existing database file (a mistyped path would make an empty one)", path)
-		}
-		dsn := path + "?_pragma=busy_timeout(60000)&_pragma=foreign_keys(on)&_pragma=secure_delete(on)"
-		if immediate {
-			dsn += "&_txlock=immediate"
-		}
-		db, err := sql.Open("sqlite", dsn)
+		db, err := unprovedpurge.OpenSQLiteFile(path, *apply, immediate)
 		if err != nil {
-			fatal("open %s: %v", path, err)
+			fatal("%v", err)
 		}
-		db.SetMaxOpenConns(1)
 		return db
 	}
 	auth := open(*authDB, true)
@@ -107,7 +120,10 @@ func main() {
 		defer m.Close()
 		services = append(services, unprovedpurge.Service{Name: "maild", DB: m, Kind: dbx.SQLite, Keys: unprovedpurge.MaildKeys, MailboxRoot: *maildRoot, CoreAny: []string{"email_aliases", "maild_migrations"}})
 	}
-	for _, p := range []struct{ name, dsn string }{{"control", *pgControl}, {"graph", *pgGraph}} {
+	for _, p := range []struct {
+		name, dsn string
+		core      []string
+	}{{"control", *pgControl, unprovedpurge.ControlCore}, {"graph", *pgGraph, unprovedpurge.GraphCore}} {
 		if p.dsn == "" {
 			continue
 		}
@@ -120,7 +136,7 @@ func main() {
 			fatal("open postgres %s: %v", p.name, err)
 		}
 		defer db.Close()
-		services = append(services, unprovedpurge.Service{Name: p.name, DB: db, Kind: dbx.Postgres, Keys: unprovedpurge.PlatformKeys, CoreAny: platformCore()})
+		services = append(services, unprovedpurge.Service{Name: p.name, DB: db, Kind: dbx.Postgres, Keys: unprovedpurge.PlatformKeys, CoreAny: p.core})
 	}
 	client := vmctl.NewClient(*vmctlURL)
 	owners := func(ctx context.Context) (map[string]bool, error) {
@@ -150,7 +166,7 @@ func main() {
 		}
 		return
 	}
-	res, err := unprovedpurge.Apply(ctx, auth, owners, services, *digest)
+	res, err := unprovedpurge.Apply(ctx, auth, owners, services, *digest, journal)
 	if res != nil && res.Plan != nil {
 		print(res.Plan, "APPLY")
 		for _, s := range res.Services {
@@ -162,26 +178,9 @@ func main() {
 		}
 		fmt.Printf("mail directories removed: %d\n", res.MailDirs)
 	}
-	if res != nil && res.Plan != nil {
-		if rerr := writeReceipt(*receiptTo, *receiptKey, res, err); rerr != nil {
-			fmt.Fprintf(os.Stderr, "purge-unproved: the receipt could not be written: %v\n", rerr)
-		}
-	}
 	if err != nil {
 		fatal("%v", err)
 	}
-}
-
-func platformCore() []string {
-	var out []string
-	seen := map[string]bool{}
-	for _, k := range unprovedpurge.PlatformKeys {
-		if !seen[k.Table] {
-			seen[k.Table] = true
-			out = append(out, k.Table)
-		}
-	}
-	return out
 }
 
 func sortedKeys(m map[string]bool) []string {
@@ -191,67 +190,6 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// writeReceipt appends one JSON line: when, the digest, the services and what each did, the row counts, and the
-// full hash of each purged id (and, with a key file, a keyed hash of each address).
-func writeReceipt(path, keyFile string, res *unprovedpurge.Result, runErr error) error {
-	type svc struct {
-		Name      string `json:"name"`
-		Committed bool   `json:"committed"`
-		Error     string `json:"error,omitempty"`
-	}
-	rec := struct {
-		At       string           `json:"at"`
-		Digest   string           `json:"digest"`
-		Error    string           `json:"error,omitempty"`
-		Services []svc            `json:"services"`
-		Counts   map[string]int64 `json:"rows"`
-		IDs      []string         `json:"id_sha256"`
-		Emails   []string         `json:"email_hmac_sha256,omitempty"`
-	}{At: time.Now().UTC().Format(time.RFC3339), Digest: res.Plan.Digest, Counts: map[string]int64{}}
-	if runErr != nil {
-		rec.Error = runErr.Error()
-	}
-	for _, s := range res.Services {
-		e := ""
-		if s.Err != nil {
-			e = s.Err.Error()
-		}
-		rec.Services = append(rec.Services, svc{s.Name, s.Committed, e})
-	}
-	for _, c := range res.Plan.Counts {
-		rec.Counts[c.Service+"."+c.Table+"."+c.Column] = c.Rows
-	}
-	var key []byte
-	if keyFile != "" {
-		k, err := os.ReadFile(keyFile)
-		if err != nil {
-			return err
-		}
-		key = k
-	}
-	for _, c := range res.Plan.Purge {
-		h := sha256.Sum256([]byte(c.ID))
-		rec.IDs = append(rec.IDs, hex.EncodeToString(h[:]))
-		if key != nil {
-			rec.Emails = append(rec.Emails, unprovedpurge.EmailMAC(key, c.Email))
-		}
-	}
-	sort.Strings(rec.IDs)
-	line, err := json.Marshal(rec)
-	if err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		return err
-	}
-	return f.Sync()
 }
 
 func print(p *unprovedpurge.Plan, mode string) {
