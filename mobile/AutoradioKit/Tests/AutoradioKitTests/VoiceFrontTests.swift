@@ -25,9 +25,12 @@ final class VoiceFrontTests: XCTestCase {
         XCTAssertTrue(VoiceFront.shared.set(gen: 5, rows(2)))
         XCTAssertEqual(VoiceFront.shared.candidates.count, 2)
     }
-    func testSignOutEmptiesIt() async {
+    func testTheStandardSignOutEmptiesIt() async {
         VoiceFront.shared.set(gen: 1, rows(3))
-        let wipe = AccountWipe(); wipe.register("voice-front") { VoiceFront.shared.wipe() }
+        let wipe = AccountWipe()
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("voice-front-wipe-\(UUID().uuidString)")
+        await MainActor.run { wipe.registerStandard(legacyTakeFiles: [], tempDirectory: tmp, oldBuildFiles: []) }      // the production registration, not one made here
+        XCTAssertTrue(wipe.names.contains("voice-front"))
         await wipe.run()
         XCTAssertTrue(VoiceFront.shared.candidates.isEmpty)
     }

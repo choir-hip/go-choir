@@ -58,9 +58,9 @@ async function writeNow(storage: Storage | undefined, d: Deps): Promise<boolean>
   if (gen !== accountGeneration()) return false;
   const merged = merging(topics, current);
   if (merged !== current) {
-    await d.editor.edit(address, merged);
+    await d.editor.edit(address, merged, current ?? '');
     const info = await d.editor.flush(address);
-    if (info.status !== 'saved' || gen !== accountGeneration()) return false;
+    if (info.status !== 'saved' || gen !== accountGeneration()) { if (info.status !== 'saved') await d.editor.discard(address); return false; }      // an automated text is never left as the listener's unsent one
   }
   return writeCurrent(gen, storage, MARKER, new TextEncoder().encode(key));
 }

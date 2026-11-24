@@ -6,17 +6,21 @@
 //      the text stays kept and readable, `conflict`, no retry; the same text as the head is not a conflict (a lost reply).
 //  E9  reopening shows the kept text (`info.kept`), not the head.             E10 a refused save (400, 403) fails with a sentence and keeps the text.
 //  E11 signed out: "Sign in again to save", text kept.                        E12 sign-out removes memory and file, and a save in flight afterwards keeps and posts nothing.
+//  E15 the editor opens on the head the server holds NOW (open), and a text typed over it is posted over that head; a head that moved before the first keystroke, seen from an older field, is a conflict.
+//  E16 a first edit made offline is kept with the text the field was seeded from; online later it is posted when the head still is that text, else it is a conflict.
+//  E17 edits fired together, with no head read yet, keep the last one and read the head once.   E18 a sign-out during a head read or a file read leaves nothing, for the next account too.
+//  E19 `waiting` does not count a document in conflict.   E20 an overwrite across a sign-out writes nothing; while a sign-out is under way the editor shows nothing kept.
 //  E13 discard drops the kept text; overwrite is the listener's act: it re-bases on the head and posts.   E14 `waiting` counts the documents with kept text.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Editor, editableDoc, PENDING_FILE, CONFLICT_WORDS, type Net } from './texture-edit.ts';
-import { HTTPError, SignedOutError, resetSeam, nextGeneration } from './api.ts';
+import { HTTPError, SignedOutError, resetSeam, nextGeneration, beginSignOut, abortSignOut } from './api.ts';
 
 type Rev = { id: string; content: string; body: unknown; n: number };
 let revs: Map<string, Rev>; let head: Record<string, string>; let traj: Record<string, string>; let log: { method: string; path: string; body?: Record<string, unknown> }[];
-let failNext: (() => Error) | null; let seq = 0; let lifecycleVersion = 7;
+let failGets = false; let getGate: Promise<void> | null = null; let readGate: Promise<void> | null = null; let getCount = 0; let failNext: (() => Error) | null; let seq = 0; let lifecycleVersion = 7;
 const files = new Map<string, Uint8Array>();
 const storage = { fs: {
-  readFile: async (p: string) => { const b = files.get(p); if (!b) throw Object.assign(new Error('no'), { code: 'ENOENT' }); return b; },
+  readFile: async (p: string) => { const b = files.get(p); if (readGate) await readGate; if (!b) throw Object.assign(new Error('no'), { code: 'ENOENT' }); return b; },
   atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); },
   rm: async (p: string) => { files.delete(p); },
 } } as never;
@@ -25,6 +29,7 @@ const body = (t: string): unknown => ({ schema: 'choir.texture_doc.v1', doc: { t
 const net: Net = { json: async (path, opts) => {
   const method = opts?.method ?? 'GET';
   log.push({ method, path, body: opts?.body as Record<string, unknown> | undefined });
+  if (method === 'GET') { getCount += 1; if (getGate) await getGate; if (failGets) throw new TypeError('network down'); }
   if (failNext && method === 'POST') { const e = failNext(); failNext = null; throw e; }
   let m = path.match(/^\/api\/texture\/documents\/([^/]+)$/);
   if (m && method === 'GET') return { body: { document: { doc_id: m[1], current_revision_id: head[m[1]], ...(traj[m[1]] ? { trajectory_id: traj[m[1]] } : {}) } }, serverTime: null, raw: '' };
@@ -46,7 +51,7 @@ const posts = (): typeof log => log.filter((l) => l.method === 'POST');
 const mk = (): Editor => new Editor({ net, storage });
 const A = 'texture:d1';
 beforeEach(() => {
-  resetSeam(); files.clear(); log = []; failNext = null; seq = 0; traj = {};
+  resetSeam(); files.clear(); log = []; failNext = null; failGets = false; getGate = null; readGate = null; getCount = 0; seq = 0; traj = {};
   revs = new Map([['r0', { id: 'r0', content: 'Hello world.', body: body('Hello world.'), n: 0 }]]); head = { d1: 'r0', d2: 'r0' };
 });
 
@@ -181,5 +186,108 @@ describe('refusals and the account', () => {
     release(); await p;
     (net as { json: Net['json'] }).json = slow;
     expect(kept()).toEqual({}); expect((await e.info(A)).kept).toBe(''); expect((await e.info(A)).waiting).toBe(0);
+  });
+});
+
+describe('opening on the head, and the first keystroke', () => {
+  test('E15 open reads the head now; the text typed over it is posted over that head, with the other writer\'s words in it', async () => {
+    revs.set('r1', { id: 'r1', content: 'Hello world. Their paragraph.', body: body('Hello world. Their paragraph.'), n: 1 }); head.d1 = 'r1';   // moved after the reader drew r0
+    const e = mk();
+    const o = await e.open(A);
+    expect(o.opened).toBe(true); expect(o.head).toBe('Hello world. Their paragraph.'); expect(o.kept).toBe('');
+    await e.edit(A, o.head + ' Mine.', o.head); await e.flush(A);
+    expect(posts().length).toBe(1); expect(posts()[0].body!.parent_revision_id).toBe('r1'); expect(posts()[0].body!.content).toBe('Hello world. Their paragraph. Mine.');
+  });
+  test('E15 a field seeded from an older reading (no open) over a head that moved is a conflict: nothing posted, the text kept', async () => {
+    revs.set('r1', { id: 'r1', content: 'Hello world. Their paragraph.', body: body('t'), n: 1 }); head.d1 = 'r1';
+    const e = mk();
+    await e.edit(A, 'Hello world. typed', 'Hello world.');           // the field showed r0's text
+    const i = await e.flush(A);
+    expect(i.status).toBe('conflict'); expect(posts().length).toBe(0); expect(i.kept).toBe('Hello world. typed'); expect(kept().d1.text).toBe('Hello world. typed');
+  });
+  test('E15 open with a kept text answers it, and the head', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. unsent'); failNext = () => new TypeError('down'); await e.flush(A);
+    const o = await mk().open(A);
+    expect(o.kept).toBe('Hello world. unsent'); expect(o.head).toBe('Hello world.');
+  });
+  test('E15 open offline says it did not open, and the editor still takes text', async () => {
+    failGets = true;
+    const e = mk(); const o = await e.open(A);
+    expect(o.opened).toBe(false); expect(o.editable).toBe(true);
+  });
+  test('E16 a first edit made offline is kept with its seed; online later it is posted over the head when that still is the seed', async () => {
+    failGets = true;
+    const e = mk(); const i = await e.edit(A, 'Hello world. offline', 'Hello world.');
+    expect(i.kept).toBe('Hello world. offline'); expect(kept().d1).toMatchObject({ text: 'Hello world. offline', base: '', seed: 'Hello world.' });
+    failGets = false;
+    const e2 = mk(); await e2.flush('');
+    expect(posts().length).toBe(1); expect(posts()[0].body!.parent_revision_id).toBe('r0'); expect(kept()).toEqual({});
+  });
+  test('E16 ... and is a conflict, with nothing posted, when the head is something else', async () => {
+    failGets = true;
+    await mk().edit(A, 'Hello world. offline', 'Hello world.');
+    revs.set('r1', { id: 'r1', content: 'Something new.', body: body('n'), n: 1 }); head.d1 = 'r1'; failGets = false;
+    const e2 = mk(); const i = await e2.flush(A);
+    expect(i.status).toBe('conflict'); expect(posts().length).toBe(0); expect(kept().d1.text).toBe('Hello world. offline');
+  });
+  test('E17 edits fired together keep the last one and read the head once', async () => {
+    const e = mk();
+    await Promise.all([e.edit(A, 'a'), e.edit(A, 'ab'), e.edit(A, 'abc')]);
+    expect(kept().d1.text).toBe('abc');
+    expect(log.filter((l) => l.method === 'GET' && l.path === '/api/texture/documents/d1').length).toBe(1);
+  });
+});
+
+describe('the account moves under the editor', () => {
+  test('E18 a sign-out during the head read leaves nothing on the disk', async () => {
+    let release: () => void = () => undefined; getGate = new Promise<void>((r) => { release = r; });
+    const e = mk(); const p = e.edit(A, 'Hello world. a');
+    await new Promise((r) => setTimeout(r, 5));
+    nextGeneration(); await e.wipe();
+    release(); await p;
+    expect(kept()).toEqual({}); expect((await e.info(A)).kept).toBe('');
+  });
+  test('E18 a sign-out during the read of the kept file leaves nothing in memory for the next account', async () => {
+    await mk().edit(A, 'Hello world. a'); failNext = null;
+    let release: () => void = () => undefined; readGate = new Promise<void>((r) => { release = r; });
+    const e2 = mk(); const p = e2.info(A);
+    await new Promise((r) => setTimeout(r, 5));
+    nextGeneration(); await e2.wipe();
+    release(); await p;
+    readGate = null;
+    expect((await e2.info(A)).kept).toBe(''); expect((await e2.info(A)).waiting).toBe(0);
+  });
+  test('E18 an edit that passed its checks but persists after the sign-out writes nothing', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. first');
+    let release: () => void = () => undefined; getGate = new Promise<void>((r) => { release = r; });
+    const e3 = mk(); const p = e3.edit('texture:d2', 'x');
+    await new Promise((r) => setTimeout(r, 5));
+    nextGeneration(); await e3.wipe();
+    release(); await p;
+    expect(kept().d2).toBeUndefined();
+  });
+  test('E19 waiting does not count a document in conflict', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. mine');
+    revs.set('r1', { id: 'r1', content: 'theirs', body: body('t'), n: 1 }); head.d1 = 'r1';
+    const i = await e.flush(A);
+    expect(i.status).toBe('conflict'); expect(i.waiting).toBe(0); expect((await e.info(A)).kept).toBe('Hello world. mine');
+  });
+  test('E20 an overwrite across a sign-out writes and posts nothing', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. mine');
+    revs.set('r1', { id: 'r1', content: 'theirs', body: body('t'), n: 1 }); head.d1 = 'r1';
+    await e.flush(A);
+    let release: () => void = () => undefined; getGate = new Promise<void>((r) => { release = r; });
+    const p = e.overwrite(A);
+    await new Promise((r) => setTimeout(r, 5));
+    nextGeneration(); await e.wipe();
+    release(); await p;
+    expect(kept()).toEqual({}); expect(posts().length).toBe(0);
+  });
+  test('E20 while a sign-out is under way the editor shows nothing kept, and shows it again if the sign-out is given up', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. mine');
+    await beginSignOut();
+    expect((await e.info(A)).kept).toBe(''); expect((await e.info(A)).waiting).toBe(0);
+    abortSignOut();
+    expect((await e.info(A)).kept).toBe('Hello world. mine');
   });
 });

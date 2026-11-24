@@ -32,7 +32,7 @@ import * as picks from './edition-picks.ts';
 import { signInSheet, liveSheetEnv } from './signin-sheet.ts';
 import { radioPlayClip } from './clip-play.ts';
 import { podcastNow } from './podcast-now.ts';
-import { textureEditInfo, textureEdit, textureFlush, textureDiscard, textureOverwrite } from './texture-edit.ts';
+import { textureEditInfo, textureEditOpen, textureEdit, textureFlush, textureDiscard, textureOverwrite } from './texture-edit.ts';
 import { signInRun, signInCancel, signInReopen, signInView, type AttemptEnv } from './signin-attempt.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -159,7 +159,8 @@ const sources: Sources = {
   texturesList: ([at]) => texturesListShared(at),
   // Editing your own Texture document (texture-edit.ts): what it says, the typed text, the save, and the listener's choice after the head moved. The waits are the contract's.
   textureEditInfo: ([address], _s, storage) => textureEditInfo(address, storage),
-  textureEdit: ([address, markdown], _s, storage) => textureEdit(address, markdown, storage),
+  textureEditOpen: ([address], _s, storage) => textureEditOpen(address, storage),
+  textureEdit: ([address, markdown, seed], _s, storage) => textureEdit(address, markdown, seed, storage),
   textureFlush: ([address], _s, storage) => textureFlush(address, storage),
   textureDiscard: ([address], _s, storage) => textureDiscard(address, storage),
   textureOverwrite: ([address], _s, storage) => textureOverwrite(address, storage),
@@ -168,7 +169,6 @@ const sources: Sources = {
   themeList: ([scheme, reduce], _s, storage) => themes.themeListShared(scheme, reduce, storage),
   themeExtras: ([scheme, reduce], _s, storage) => themes.themeExtrasShared(scheme, reduce, storage),
   themeCards: ([scheme, reduce], _s, storage) => themes.themeCardsShared(scheme, reduce, storage),
-  themeMigrate: ([host], _s, storage) => themes.themeMigrate(host, storage),
   themeSet: ([id], _s, storage) => themes.themeSet(id, storage),
   schemeSet: ([mode], _s, storage) => themes.schemeSet(mode, storage),
   themeFromTexture: ([doc], _s, storage) => themes.themeFromTexture(doc, storage),

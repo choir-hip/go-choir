@@ -3,7 +3,7 @@
 //   source retrievalAsk   the ask the turn raised (interface/retrieval.json); shared code reads it and answers through the op below.
 //   ops retrievalAnswer (shared code's answer: {id, context}) and embedState, embedEnsure, embed (the on-device model, AutoradioKit/EmbedDevice.swift)
 //   are answered in modules/apple/ModelsEntry.swift: they need nothing of this module.
-// The facts only native holds go with the ask as one JSON string: the run sheet's entries on air and ahead (the Swift run sheet is the player's),
+// The facts only native holds go with the ask as one JSON string: the run sheet's entries on air and ahead (shared code's run sheet, pushed with `radioSet`: voice-facts.ts),
 // the open pages, the edition topics, and the text of the page in front.
 import Foundation
 

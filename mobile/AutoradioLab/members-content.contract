@@ -23,6 +23,10 @@ members Autoradio
   mutation edm as shape TextureEditInfo refreshes edInfo
   mutation edf as shape TextureEditInfo refreshes edInfo
   mutation edr as shape TextureEditInfo refreshes edInfo
+  // The editor opens on the head the server holds NOW: the field first shows the reader's copy (or the kept text), and the answer of `textureEditOpen` replaces it while the listener has typed nothing.
+  mutation edo as shape TextureEditInfo then edOpened
+  state edSeed = ""
+  derive edOpenHead = match edo { case some(a) => (a.address == edFor and a.opened and a.kept == "" ? a.head : ""), case none => "" }
   derive edStatus = edInfo.status
   state edOn = false
   state edFor = ""
@@ -106,6 +110,8 @@ members Autoradio
     edOn = true
     edFor = topAddr
     edDraft = edInfo.kept != "" ? edInfo.kept : rdoc.source
+    edSeed = edInfo.kept != "" ? "" : rdoc.source
+    send edo = textureEditOpen(topAddr)
     edFormats = ""
     ctlOpen = true
     ctlFor = topAddr
@@ -114,10 +120,14 @@ members Autoradio
     edOn = false
     ctlOpen = false
     ctlPanel = ""
-    send edf = textureFlush(pg.top)
+    send edf = textureFlush(edFor)
+  action edOpened
+    if edOn and edOpenHead != "" and edDraft == edSeed
+      edDraft = edOpenHead
+      edSeed = edOpenHead
   action edInput(value: string)
     edDraft = value
-    send edm = textureEdit(pg.top, value)
+    send edm = textureEdit(edFor, value, edSeed)
   // The pause in typing: 2 s after the last keystroke (the key is the draft, so each keystroke restarts the wait) the text is posted. A source cannot sleep between answers, so the wait is here.
   action edSave
     send edf = textureFlush(edFor)

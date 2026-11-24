@@ -16,11 +16,21 @@ export function voiceFacts(entries: Entry[]): VoiceFact[] {
   return out;
 }
 
-/** The story an entry on air is about: its page, else the first story it cites. Nothing for an entry with none (an opening, a transition, a take, an answer). */
+/** The story an entry on air is about: its page, else the first story it cites. Nothing for an entry with none, and nothing for the station's own words (an opening, a transition, an answer, a result) or a take. */
 export function respondsOf(e: Entry | undefined): { route: string; title: string } | undefined {
-  if (!e || e.kind === 'take' || e.kind === 'transition') return undefined;
+  if (!e || e.kind === 'take' || e.kind === 'transition' || e.kind === 'opening' || e.kind === 'answer' || e.kind === 'result') return undefined;
   const addr = openAddress(e);
   if (addr.startsWith('pub:')) return { route: addr.slice(4), title: displayTitle(e) };
   const c = builtOn(e).find((b) => b.address.startsWith('pub:'));
   return c ? { route: c.address.slice(4), title: c.title } : undefined;
+}
+
+/** The page the entry on air is reading (the reader's follow-along matches the spoken sentence against it): a story's or a Texture's address; nothing for the station's own words. */
+export function airAddressOf(e: Entry | undefined): string {
+  if (!e || e.kind === 'opening' || e.kind === 'transition' || e.kind === 'answer' || e.kind === 'result' || e.kind === 'take') return '';
+  const a = openAddress(e);
+  if (a.startsWith('pub:')) return a;
+  const r = e.source?.ref ?? '';
+  if (r.startsWith('texture:')) return r;
+  return '';
 }

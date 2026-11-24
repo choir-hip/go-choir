@@ -185,8 +185,10 @@ const originalName = async (id: string): Promise<string> => `mail-${hex((await s
 function allKept(): M.Summary[] { return [...kept.values()].flatMap((h) => h.rows); }
 
 async function setRead(id: string, read: boolean): Promise<boolean> {
+  const gen = accountGeneration();
   try {
     await call(`/api/email/messages/${M.segment(id)}/${read ? 'read' : 'unread'}`, { method: 'POST' });
+    if (gen !== accountGeneration()) return false;                                   // signed out meanwhile: the next account's lists are not touched
     for (const h of kept.values()) {
       for (const r of h.rows) {
         if (r.id !== id) continue;
@@ -292,7 +294,9 @@ const emptyCompose = (): ComposeView => ({ status: '', forAddress: '', sendAs: '
 
 async function aliasAddress(): Promise<string> {
   if (alias) return alias;
+  const gen = accountGeneration();
   const o = (await call('/api/email/aliases', {})) as { aliases?: { address?: unknown }[] } | null;
+  if (gen !== accountGeneration()) throw new SignedOutError('signed out while the sending address was read');
   const a = o?.aliases?.[0]?.address;
   if (typeof a !== 'string' || a === '') throw new StatusError(409, 'You have no sending address yet.');
   alias = a;
@@ -336,12 +340,14 @@ export async function mailSaveDraft(address: string, to: string, subject: string
   const same = `${to}\u0000${subject}\u0000${body}`;
   const already = savedDrafts.get(same);
   if (already !== undefined) { v.status = 'saved'; v.draftId = already; v.note = 'Saved as a draft. It has not been sent.'; return v; }   // the server has no update route, so the same text is not saved twice
+  const gen = accountGeneration();
   try {
     const from = await aliasAddress();
     v.sendAs = from;
     const req: Record<string, unknown> = { from_address: from, subject, text_body: body, to_addresses: M.recipients(to) };
     if (v.replyTo !== '') { req.reply_to_message_id = v.replyTo; req.source_kind = 'mail'; req.source_ref = v.replyTo; }
     const d = M.parseDraft(await call('/api/email/drafts', { method: 'POST', body: req }));
+    if (gen !== accountGeneration()) throw new SignedOutError('signed out while the draft was saved');      // the draft is the old account's: its id is not kept for the next one
     v.status = 'saved'; v.draftId = d.id; savedDrafts.set(same, d.id);
     v.note = 'Saved as a draft. It has not been sent.';
     console.log('mail: draft saved');

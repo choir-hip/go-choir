@@ -14,7 +14,7 @@
 //  go first (MAX_FILES).   5. Sign-out: `wipeMail` removes every file.   6. Logs: counts only, never an id's content.
 
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, signOutBlocked, refreshSignOutBlock } from './api.ts';
+import { accountGeneration, signOutBlocked, refreshSignOutBlock, keyState } from './api.ts';
 import type { AttachmentMeta, Summary } from './mail-model.ts';
 
 export const DIR = 'app:/data/mail';
@@ -26,9 +26,10 @@ export const MAX_FILES = 6000;
  * is written: a sign-out that began in between (the generation moved) writes nothing, makes no key and leaves no file. */
 export type Env = { storage?: Storage; gen?: number };
 const stale = (env: Env): boolean => env.gen !== undefined && env.gen !== accountGeneration();
-export type FolderCopy = { folder: string; rows: Summary[]; total: number; unread: number; savedAt: number };
-export type MessageCopy = { id: string; folder: string; summary: Summary; text: string; to: string[]; cc: string[]; replyTo: string; attachments: AttachmentMeta[]; savedAt: number };
-export type StateCopy = { done: Record<string, boolean>; syncedAt: Record<string, number>; cursor: Record<string, string> };
+/** `owner` is a digest of the sign-in key the file was written under (never the key): another account's file is not read, and is removed. */
+export type FolderCopy = { owner?: string; folder: string; rows: Summary[]; total: number; unread: number; savedAt: number };
+export type MessageCopy = { owner?: string; id: string; folder: string; summary: Summary; text: string; to: string[]; cc: string[]; replyTo: string; attachments: AttachmentMeta[]; savedAt: number };
+export type StateCopy = { owner?: string; done: Record<string, boolean>; syncedAt: Record<string, number>; cursor: Record<string, string> };
 
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', data as unknown as BufferSource));
@@ -48,14 +49,28 @@ export async function fileFor(id: string): Promise<string> { return `${DIR}/msg-
 export const rowsFile = (folder: string): string => `${DIR}/rows-${folder.replace(/[^a-z0-9_-]/g, '_')}.json`;
 export const STATE_FILE = `${DIR}/state.json`;
 
+/** The digest of the key the phone is signed in with, learned once per account generation; null when no one is signed in (nothing is written or read then). */
+let ownerCache: { gen: number; digest: string } | null = null;
+async function ownerOf(env: Env): Promise<string | null> {
+  const gen = accountGeneration();
+  if (ownerCache && ownerCache.gen === gen && ownerCache.digest !== '') return ownerCache.digest;
+  const k = await keyState();
+  if (gen !== accountGeneration() || stale(env)) return null;
+  if (k.state !== 'present' || k.digest === '') return null;
+  ownerCache = { gen, digest: k.digest };
+  return k.digest;
+}
+
 async function write(env: Env, path: string, value: unknown): Promise<boolean> {
   // Two checks, each with a test that fails without it: before anything is written (no work for a stale source) and after the file is written (a sign-out that began
   // while it was being written removes the file again).
   if (!env.storage || !(await stores(env))) return false;
+  const owner = await ownerOf(env);
+  if (owner === null || stale(env)) return false;
   try {
     await env.storage.fs.mkdir(DIR).catch(() => undefined);
-    await env.storage.fs.atomicWriteFile(path, enc(value));
-    if (stale(env)) { try { await env.storage.fs.rm(path); } catch { /* the wipe will */ } return false; }
+    await env.storage.fs.atomicWriteFile(path, enc({ ...(value as object), owner }));
+    if (stale(env)) { try { await env.storage.fs.rm(path); await env.storage.fs.rm(DIR); } catch { /* the wipe will; the folder goes only when empty */ } return false; }
     return true;
   } catch { return false; }
 }
@@ -64,8 +79,13 @@ async function read<T>(env: Env, path: string): Promise<T | null> {
   if (!env.storage || !(await stores(env))) return null;
   let bytes: Uint8Array;
   try { bytes = new Uint8Array(await env.storage.fs.readFile(path)); } catch { return null; }
-  try { return JSON.parse(new TextDecoder().decode(bytes)) as T; }
-  catch { try { await env.storage.fs.rm(path); } catch { /* already gone */ } return null; }      // not ours or half written: the server's copy replaces it
+  const drop = async (): Promise<null> => { try { await env.storage!.fs.rm(path); } catch { /* already gone */ } return null; };      // not ours or half written: the server's copy replaces it
+  let v: T & { owner?: string };
+  try { v = JSON.parse(new TextDecoder().decode(bytes)) as T & { owner?: string }; } catch { return drop(); }
+  const owner = await ownerOf(env);
+  if (owner === null) return null;                                       // no one is signed in: nothing is served, nothing is judged
+  if (v === null || typeof v !== 'object' || v.owner !== owner) return drop();      // another account's file (or an earlier format)
+  return v;
 }
 
 export const saveFolder = (env: Env, c: FolderCopy): Promise<boolean> => write(env, rowsFile(c.folder), c);

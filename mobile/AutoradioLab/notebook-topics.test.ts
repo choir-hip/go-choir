@@ -88,6 +88,11 @@ describe('the topics write', () => {
     expect(await writeTopics(storage, live(['Space']))).toBe(false);
     expect(files.has(MARKER)).toBe(false);
   });
+  test('T7b a failed write leaves no unsent text of the notebook: the automated merge is not the listener\'s, and is not retried or shown as kept', async () => {
+    refuse = true;
+    expect(await writeTopics(storage, live(['Space']))).toBe(false);
+    expect(files.has('app:/data/texture-pending.json')).toBe(false);
+  });
   test('T8 two asks at once make one document', async () => {
     const d = live(['Space']);
     const [a, b] = await Promise.all([writeTopics(storage, d), writeTopics(storage, d)]);

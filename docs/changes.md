@@ -40,17 +40,21 @@ the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-24
 
-### Phone: the rest of the non-voice Swift moved to Exact (lane `exact-rest`, orange; red where it touches the mail store)
+### Phone: the rest of the non-voice Swift moved to Exact (lane `exact-rest`, orange; red where it touches the mail store and the editor's canonical writes)
 
 What: the Texture editor (`texture-edit.ts`, `texture-body.ts`), the notebook's topics (`notebook-topics.ts`), podcast clips and "now playing" (`clip-play.ts`, `podcast-now.ts`), the pages' open set and
-the other leftovers of the Swift page models are shared code, and about 3,400 lines of non-voice Swift are deleted (the table is in the lane's report). Mail is stored on the phone's disk by shared code:
-`mail-seal.ts` and the native `MailSeal` pair are gone, the files are plain JSON under `app:/data/mail` (owner, 2026-11-23). "Read this to me" in mail is the shared radio's `radioListen`, so
-`MailReading` and the native `mailRead` are gone. The run sheet's Swift copy is gone: shared code pushes the voice's retrieval the entries on air and ahead and the take recorder the story on air
-(`voice-facts.ts`, `radioSet`), and native decodes nothing of the sheet.
-Why: "get everything in exact, as much as possible" (owner, 2026-11-20); "we should get all this converted to exact overnight" (owner, 2026-11-23).
-Proof: `bun test` in `mobile/AutoradioLab` (whole suite), `bun exact.mjs contract build app.contract`, the Swift package suite through the lock. Not proved: a native Exact build, a simulator, a device (the app module's Swift in `exact-package/apple` is not compiled by the package suite).
-Replaced: the Swift editor, notebook, pages, podcast clips, mail seal, run sheet types. A page moved to Exact carries nothing over from the Swift build: sealed mail files and the old editor's files are not read.
-Undo: revert the lane's commits; the previous Swift is in git history. Mail written plain by this build is read by the old one only if reverted with its files removed (sign out).
+the Swift page models are shared code. Mail is stored on the phone's disk by shared code: `mail-seal.ts` and the native `MailSeal` pair are gone, the files are plain JSON under `app:/data/mail`, each stamped with a
+digest of the sign-in key it was written under (another key's file is removed, never served). "Read this to me" in mail is the shared radio's `radioListen` (`MailReading` and the native `mailRead` are gone). The run sheet's
+Swift types are gone: shared code pushes the voice's retrieval the entries on air and ahead, the take recorder the story on air and the reader's follow-along the page on air (`voice-facts.ts`, `radioSet`). The themes' carry-over
+read of the Swift build's UserDefaults and folder (`themeLegacy`, `themeMigrate`) is deleted. The editor opens on the head the server holds now (`textureEditOpen`), keeps a first offline edit with the text its field showed, runs one
+call per document at a time, and treats a head that moved under an unsent text as a conflict in every path. The dead `pageModel` source is gone.
+The native-boundary gate went from 47 files / 5,729 lines / 27 names (a stale ceiling) to 34 / 3,532 / 19.
+Why: "get everything in exact, as much as possible" (owner, 2026-11-20); "we should get all this converted to exact overnight" (owner, 2026-11-23); "get rid of mail seal. i do want mail stored on phone's disk" (owner, 2026-11-23).
+Proof: `bun test` in `mobile/AutoradioLab` (whole suite), `bun exact.mjs contract build app.contract`, the Swift package suite through a build slot, `scripts/check-autoradio-native-boundary`. Not proved: a native Exact build,
+a simulator, a device (the app module's Swift in `exact-package/apple` is not compiled by the package suite); the editor and mail against a real computer; Android. Two reviews (two seats) sent the first head back; their findings are fixed in this change.
+Replaced: the Swift editor, notebook, pages, podcast clips, mail seal, run sheet types. A page moved to Exact carries nothing over from the Swift build: sealed mail files, the old editor's files and the old theme choice are not read.
+Named residuals: the voice turn reads page text only for `pub:` and `texture:` pages the reader hands over (others fall to the on-air brief); clips are not located by fingerprint (owed to the player lane); mail files are plain and in device backups (Android unverified).
+Undo: revert the lane's commits; the previous Swift is in git history. Mail written plain by this build is not read by the old (sealed-format) build: sign out and in again after a revert.
 
 ## 2026-11-23
 

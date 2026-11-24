@@ -48,6 +48,7 @@ function stubFetch(): void {
     url.searchParams.forEach((v, k) => { query[k] = /^\d+$/.test(v) ? Number(v) : v; });
     const req: Req = { path: url.pathname, opts: { method: init.method, query: Object.keys(query).length ? query : undefined, body: init.body ? JSON.parse(String(init.body)) : undefined } };
     calls.push(req);
+    if (fetchGate && req.opts.method === 'POST') await fetchGate;
     const a = route(req);
     if (a === 'network') throw new Error('The Internet connection appears to be offline');
     return new Response(JSON.stringify(a.body), { status: a.status, headers: { date: new Date(NOW).toUTCString(), 'content-type': 'application/json' } });
@@ -61,8 +62,8 @@ const storage = {
   fs: {
     readFile: async (p: string) => { const b = files.get(p); if (!b) throw err('ENOENT'); return b; },
     atomicWriteFile: async (p: string, d: Uint8Array) => { writeStarted += 1; if (writeGate) await writeGate; files.set(p, new Uint8Array(d)); },
-    mkdir: async () => undefined,
-    rm: async (p: string) => { if (!files.delete(p)) { const dir = [...files.keys()].some((k) => k.startsWith(p + '/')); if (dir) throw err('ENOTEMPTY'); throw err('ENOENT'); } },
+    mkdir: async (p: string) => { dirs.add(p); },
+    rm: async (p: string) => { if (dirs.delete(p)) return; if (!files.delete(p)) { const dir = [...files.keys()].some((k) => k.startsWith(p + '/')); if (dir) throw err('ENOTEMPTY'); throw err('ENOENT'); } },
     readdir: async (p: string) => {
       if (readdirGate && p === 'app:/cache') await readdirGate;
       const names = [...files.keys()].filter((k) => k.startsWith(p + '/')).map((k) => k.slice(p.length + 1)).filter((n) => !n.includes('/'));
@@ -73,14 +74,14 @@ const storage = {
   },
 } as never;
 const mtimes = new Map<string, number>();
-let writeStarted = 0; let writeGate: Promise<void> | null = null; let readdirGate: Promise<void> | null = null;
+let fetchGate: Promise<void> | null = null; const dirs = new Set<string>(); let writeStarted = 0; let writeGate: Promise<void> | null = null; let readdirGate: Promise<void> | null = null;
 const env = (): C.Env => ({ storage });
 
 let logs: string[] = [];
 const realLog = console.log;
 beforeEach(() => {
   resetSeam(); bindNative(reader as never); stubFetch();
-  mail.forget(); calls = []; files.clear(); mtimes.clear(); signedOutNative = false; writeStarted = 0; writeGate = null; readdirGate = null; logs = [];
+  mail.forget(); calls = []; files.clear(); mtimes.clear(); signedOutNative = false; fetchGate = null; dirs.clear(); writeStarted = 0; writeGate = null; readdirGate = null; logs = [];
   route = () => ({ status: 404, body: { error: 'not found' } });
   console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
 });
@@ -690,5 +691,41 @@ describe('R9 the last races and words', () => {
     const w = M.words(new Error('timeout: The request timed out'));
     expect(w.message).toContain('too long'); expect(w.message).not.toMatch(/offline/i);
     expect(M.words(new Error('network: The Internet connection appears to be offline')).status).toBe('offline');
+  });
+});
+
+describe('R10 one account\'s mail is never the next account\'s', () => {
+  const otherAccount = (): void => bindNative({ available: true, later: async (r: { op?: string; account?: string }) => (r.op === 'session' ? { found: true, value: 'another-key-0002-not-real', computerId: 'comp-2' } : r.op === 'keystate' ? { state: 'present' } : { found: true, value: 'another-key-0002-not-real' }) } as never);
+  test('a file written for one key is not served for another: it is removed, and the other account sees nothing', async () => {
+    computer();
+    await mail.mailBox('mailbox:inbox', env()); await mail.mailMessage('mail:em_01hz0a', false, env());
+    expect((await C.loadMessage(env(), 'em_01hz0a'))?.id).toBe('em_01hz0a');
+    const api = await import('./api.ts'); api.nextGeneration(); mail.forget();
+    otherAccount();
+    expect(await C.loadMessage(env(), 'em_01hz0a')).toBeNull(); expect(await C.loadFolder(env(), 'inbox')).toBeNull(); expect(await C.loadState(env())).toEqual({ done: {}, syncedAt: {}, cursor: {} });
+    expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);          // removed on the refused read
+  });
+  test('a write refuses while no account is signed in', async () => {
+    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'keystate' ? { state: 'absent' } : { found: false }) } as never);
+    expect(await C.saveState(env(), { done: {}, syncedAt: {}, cursor: {} })).toBe(false); expect(files.size).toBe(0);
+  });
+  test('a write that began before the sign-out leaves no file and no empty folder', async () => {
+    computer();
+    let release: () => void = () => undefined; writeGate = new Promise<void>((r) => { release = r; });
+    const pending = mail.mailMessage('mail:em_01hz0a', false, env());
+    for (let i = 0; i < 100 && writeStarted === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    await beginSignOut(); release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
+    expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]); expect(dirs.has(C.DIR)).toBe(false);
+  });
+  test('a draft saved across a sign-out is not the next account\'s: its id is not reused and its sending address is not kept', async () => {
+    computer((r) => (r.path === '/api/email/drafts' && r.opts.method === 'POST' ? { status: 201, body: { id: `d${calls.filter((c) => c.path === '/api/email/drafts').length}`, to_addresses: ['a@example.com'] } } : undefined));
+    let release: () => void = () => undefined; fetchGate = new Promise<void>((r) => { release = r; });
+    const a = mail.mailSaveDraft('mail:new', 'a@example.com', 's', 'b');
+    await new Promise((r) => setTimeout(r, 20));
+    const api = await import('./api.ts'); await beginSignOut(); api.nextGeneration(); mail.forget(); otherAccount();
+    release(); await a; fetchGate = null;
+    const b = await mail.mailSaveDraft('mail:new', 'a@example.com', 's', 'b');
+    expect(calls.filter((c) => c.path === '/api/email/drafts' && c.opts.method === 'POST').length).toBe(2);        // not "already saved"
+    expect(b.draftId).toBe('d2');
   });
 });

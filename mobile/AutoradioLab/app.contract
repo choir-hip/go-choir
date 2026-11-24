@@ -48,7 +48,6 @@ component Autoradio
     // ---- spine ----
     th
     pg
-    pmod
     bi
     thl
     layer

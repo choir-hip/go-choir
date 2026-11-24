@@ -90,7 +90,7 @@ public final class EditionPicksMirror: @unchecked Sendable {
     public var topics: [String] { lock.lock(); defer { lock.unlock() }; return list }
     /// True once shared code has pushed a copy since the launch or the last wipe: an empty copy never pushed is "not known", not "the listener chose nothing" (nothing writes it as a choice).
     public var known: Bool { lock.lock(); defer { lock.unlock() }; return pushed }
-    /// Dropped (false) when `gen` is older than the newest account generation shared code has announced or pushed: a copy computed for an account that signed out meanwhile would be written into the next account's notebook (`NotebookStore.writePendingTopics`).
+    /// Dropped (false) when `gen` is older than the newest account generation shared code has announced or pushed: a copy computed for an account that signed out meanwhile would be held for the next account's voice turn.
     @discardableResult
     public func set(gen: Int, _ t: [String]) -> Bool { SharedGeneration.admit(gen) { lock.lock(); list = t; pushed = true; lock.unlock() } }
     public func reset() { lock.lock(); list = []; pushed = false; lock.unlock() }

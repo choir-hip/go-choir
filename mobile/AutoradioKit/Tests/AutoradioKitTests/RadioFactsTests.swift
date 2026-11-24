@@ -8,7 +8,8 @@ final class RadioFactsTests: XCTestCase {
 
     func testFactsAndRespondsAreKeptAndHandedBack() throws {
         let facts = try JSONSerialization.data(withJSONObject: [["id": "a", "title": "T", "text": "Words.", "state": "on_air", "ref": "pub:x"]])
-        XCTAssertTrue(RadioBridge.shared.set(gen: 2, snapshot: nil, facts: facts, responds: TakeResponds(route: "harbor-fees", title: "Harbor fees rise"), onAir: true))
+        XCTAssertTrue(RadioBridge.shared.set(gen: 2, snapshot: nil, facts: facts, responds: TakeResponds(route: "harbor-fees", title: "Harbor fees rise"), onAir: true, airAddress: "pub:harbor-fees"))
+        XCTAssertEqual(RadioBridge.shared.airAddress(), "pub:harbor-fees")
         XCTAssertEqual(RadioBridge.shared.facts().first?["id"] as? String, "a")
         XCTAssertEqual(RadioBridge.shared.responds(), TakeResponds(route: "harbor-fees", title: "Harbor fees rise"))
         XCTAssertTrue(RadioBridge.shared.hasOnAir())
@@ -19,6 +20,6 @@ final class RadioFactsTests: XCTestCase {
         XCTAssertFalse(RadioBridge.shared.set(gen: 3, snapshot: nil, facts: nil, responds: TakeResponds(route: "old", title: "O")))
         XCTAssertEqual(RadioBridge.shared.responds()?.route, "new")
         RadioBridge.shared.wipe()
-        XCTAssertNil(RadioBridge.shared.responds()); XCTAssertTrue(RadioBridge.shared.facts().isEmpty); XCTAssertFalse(RadioBridge.shared.hasOnAir())
+        XCTAssertNil(RadioBridge.shared.responds()); XCTAssertTrue(RadioBridge.shared.facts().isEmpty); XCTAssertFalse(RadioBridge.shared.hasOnAir()); XCTAssertEqual(RadioBridge.shared.airAddress(), "")
     }
 }

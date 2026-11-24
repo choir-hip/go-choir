@@ -19,6 +19,6 @@ extension AutoradioModule {
         let route = r["respondsRoute"] as? String ?? ""
         let responds = route.isEmpty ? nil : TakeResponds(route: route, title: r["respondsTitle"] as? String ?? "")
         let onAir = (r["facts"] as? [[String: Any]])?.contains { $0["state"] as? String == "on_air" } ?? false
-        return ["ok": RadioBridge.shared.set(gen: (r["gen"] as? NSNumber)?.intValue ?? 0, snapshot: snap, facts: facts, responds: responds, onAir: onAir)]
+        return ["ok": RadioBridge.shared.set(gen: (r["gen"] as? NSNumber)?.intValue ?? 0, snapshot: snap, facts: facts, responds: responds, onAir: onAir, airAddress: r["airAddress"] as? String ?? "")]
     }
 }

@@ -54,7 +54,7 @@ We do not use advertising, tracking or analytics software in the app or on the w
 
 Speech recognition runs on your phone with Apple's on-device recogniser. The app is set to refuse to recognise speech if on-device recognition is not available, so your audio is not sent to Apple or to us for recognition.
 
-Your sign-in key is in the iPhone Keychain, on this device only. Your mail copy on the phone is encrypted with a key in the Keychain. The paper's cached front page, your edition topics, your taps, your podcast library and your settings are kept in the app's own files.
+Your sign-in key is in the iPhone Keychain, on this device only. Your mail copy on the phone is kept in the app's own files on the phone; the app adds no encryption of its own to it, and it is part of a device backup if you make one. The paper's cached front page, your edition topics, your taps, your podcast library and your settings are kept in the app's own files.
 
 Each voice turn is saved on your phone as an audio file with a record of the turn, in the app's storage. It is not uploaded. It is deleted when you sign out or delete the app. [CHECK: if the build stops writing this file, replace this paragraph with "We do not keep your voice audio."]
 
@@ -160,7 +160,7 @@ Autoradio 1 is not directed to children under 13, and we do not knowingly collec
 - Sign-in uses passkeys. There are no passwords to steal or reset.
 - The app talks to our server over HTTPS.
 - Your sign-in key on the phone is in the iPhone Keychain, on this device only.
-- Mail kept on the phone is encrypted with a key in the Keychain.
+- Mail kept on the phone is stored in the app's own files, protected by the phone's own file protection; the app adds no encryption of its own, and the files are part of a device backup.
 - The event log of your computer is sealed under a key that belongs to the computer. [CHECK]
 - Each account's computer is a separate virtual machine with its own disk. Provider keys are held by our gateway and are not given to computers. We operate the server, so people who run the service can reach the data it holds. [CHECK: owner to state who has operator access.]
 - We do not claim any security certification. No system is perfectly secure. [CHECK]

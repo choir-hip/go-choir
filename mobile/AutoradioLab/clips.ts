@@ -1,10 +1,10 @@
 // The clips pages: a show's "Clips" rows and what a clip row does (Play, Queue, Open episode). Replaces the Swift HearIt.rows(feed:), ClipActions and
 // the Joins module. The clip set is the server's public `GET /api/platform/podcast-clips` (a show's own with `?feed=`).
 //
-// "Clips play from fingerprinted audio" (owner rule). This file decides WHICH clip and whether the row can offer the clip at all (`usable`: the same test
-// as the Swift ClipFingerprintRecord.isUsable); the native side, which holds the fingerprint records and the locator, finds where the clip is in the file
-// the publisher serves and plays it from there (`clipPlay`, see AutoradioModule+Joins.swift). A clip with no usable fingerprint is offered as its episode
-// ("Play episode"); it is never played as a clip.
+// "Clips play from fingerprinted audio" (owner rule): NOT MET TODAY. This file decides WHICH clip and whether the row can offer the clip at all (`usable`: the same test as the Swift
+// ClipFingerprintRecord.isUsable), and clip-play.ts makes the entry (the episode's audio from the clip's start to its end, in the file the publisher serves). Finding the clip again in that file
+// by fingerprint (ClipLocator.swift, native: decoding to PCM) is not wired to the deck: since the run sheet player was deleted nothing calls it, and the native store of clip records is gone.
+// A clip with no usable fingerprint is offered as its episode ("Play episode"); it is never played as a clip. OWED: the player lane wires the locator to the deck, handing it the row.
 //
 // Ways this can fail:
 //  1. A row with no id, no http(s) audio, or an empty or negative range: dropped.        2. A bad body, a 404 or a failure: no rows, silently.

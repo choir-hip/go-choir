@@ -26,20 +26,7 @@ import Security
 //
 // The page in front, `{op: "pageText", address, title, dek, kind, blocks}` (later only): the shared reader hands the voice the page it is showing (HeldPages); nothing is read back. It goes when the voice's page text is its own.
 //
-// The themes' one-time carry-over (AutoradioLab/themes.ts `migrate`): `{op: "themeLegacy"}` READS what the Swift app kept for the themes: the choice (UserDefaults) and the user's theme files
-// (Application Support/Autoradio/themes). The reason it is native: those are places shared code cannot see (Exact's `app:/data` is another folder). It only reads and removes nothing, so a reverted
-// build still finds its old copy; a later change removes the old copy when phones have moved, and this op goes with it. At most 64 files of at most 64 KiB are sent; the rest are named in `skipped`
-// (shared code shows each as a problem under its own name). Nothing else about the themes is native.
 final class ModelsModule: ExactModule {
-    static var legacyThemeDir: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/themes") }
-    static func legacyThemes() -> [String: Any] {
-        var files: [String: String] = [:], skipped: [String] = []
-        for n in ((try? FileManager.default.contentsOfDirectory(atPath: legacyThemeDir.path)) ?? []).sorted() where n.hasSuffix(".json") {
-            if files.count < 64, let d = try? Data(contentsOf: legacyThemeDir.appendingPathComponent(n)), d.count <= 65536, let t = String(data: d, encoding: .utf8) { files[n] = t } else { skipped.append(n) }
-        }
-        let theme = UserDefaults.standard.string(forKey: "AutoradioThemeID") ?? "", mode = UserDefaults.standard.string(forKey: "AutoradioThemeMode") ?? ""
-        return ["found": !theme.isEmpty || !mode.isEmpty || !files.isEmpty || !skipped.isEmpty, "theme": theme, "mode": mode, "files": files, "skipped": skipped]
-    }
     static func keyState() -> String {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "news.choir.autoradio.choir", kSecAttrAccount as String: KeyAccount.apiKey, kSecMatchLimit as String: kSecMatchLimitOne]
         switch SecItemCopyMatching(q as CFDictionary, nil) { case errSecSuccess: return "present"; case errSecItemNotFound: return "absent"; default: return "unreadable" }
@@ -52,7 +39,6 @@ final class ModelsModule: ExactModule {
         if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first { ProofKey.importIfPresent(documents: docs, into: KeychainKeyStore()) }
         #endif
         if (request["op"] as? String) == "keystate" { return ["state": Self.keyState()] }
-        if (request["op"] as? String) == "themeLegacy" { return Self.legacyThemes() }
         return CredentialReader().reply(request)
     }
     override func later(_ request: [String: Any], reply: ExactReply) {

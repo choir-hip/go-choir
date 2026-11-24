@@ -38,7 +38,6 @@ extension AutoradioModule {
 
         // The radio's buttons start the engine on first use; under the simulator's agent that engine must be the virtual one
         // (no microphone: proof runs), as `labStart` already does. Start it virtually, then run the original action.
-        // Mail's "Read it to me" speaks through LabRuntime.speakText; from nothing it must start the engine the same way.
         // The acknowledgement names the page in front: title and kind of the page at an address (nil: the front one).
         runtime.frontPageResolver = { address in OpenPageFacts.shared.front(address) }
         // The text of that page, as far as the phone has it (the page the shared reader handed over): the local stream may say something relevant from it.

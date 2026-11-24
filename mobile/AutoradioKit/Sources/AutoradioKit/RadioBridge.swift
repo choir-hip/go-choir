@@ -14,6 +14,7 @@ public final class RadioBridge: @unchecked Sendable {
     private var factsJSON: Data?
     private var respondsValue: TakeResponds?
     private var hasOnAirEntry = false
+    private var airAddressValue = ""
     private var signedOutAck = false
     /// Set by the app module: asks shared code to look again (touches `radioNote`).
     public var changed: @Sendable () -> Void = {}
@@ -45,17 +46,19 @@ public final class RadioBridge: @unchecked Sendable {
     /// `gen` is the account generation shared code computed this under (`SharedGeneration`): a push for an account that has since signed out is dropped, not stored where the next account's voice turn would carry it.
     /// `facts`: the entries on air and ahead as the voice's retrieval reads them (JSON text, AutoradioLab/voice-facts.ts); `responds`: the story on air, for a take's provenance (nil when none).
     @discardableResult
-    public func set(gen: Int, snapshot: Data?, facts: Data?, responds: TakeResponds?, onAir: Bool = false) -> Bool {
-        SharedGeneration.admit(gen) { lock.lock(); queueJSON = snapshot; factsJSON = facts; respondsValue = responds; hasOnAirEntry = onAir; lock.unlock() }
+    public func set(gen: Int, snapshot: Data?, facts: Data?, responds: TakeResponds?, onAir: Bool = false, airAddress: String = "") -> Bool {
+        SharedGeneration.admit(gen) { lock.lock(); queueJSON = snapshot; factsJSON = facts; respondsValue = responds; hasOnAirEntry = onAir; airAddressValue = airAddress; lock.unlock() }
     }
     /// What the voice's retrieval reads of the run sheet, as shared code last said: `[{id, title, text, state, ref}]` (empty before the first push).
     public func facts() -> [[String: Any]] { lock.lock(); let d = factsJSON; lock.unlock(); return d.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [[String: Any]] } ?? [] }
     /// The story on air as shared code last said (nil when none): what a take's "responds to" reads.
     public func responds() -> TakeResponds? { lock.lock(); defer { lock.unlock() }; return respondsValue }
+    /// The page the entry on air is reading (`pub:<route>` or `texture:<id>`), as shared code last said; empty when none. The reader's follow-along matches the spoken sentence against it.
+    public func airAddress() -> String { lock.lock(); defer { lock.unlock() }; return airAddressValue }
     /// Is an entry on air, as shared code last said?
     public func hasOnAir() -> Bool { lock.lock(); defer { lock.unlock() }; return hasOnAirEntry }
     /// Sign-out: nothing of the old account is kept.
-    public func wipe() { lock.lock(); inbox = []; queueJSON = nil; factsJSON = nil; respondsValue = nil; hasOnAirEntry = false; lock.unlock() }
+    public func wipe() { lock.lock(); inbox = []; queueJSON = nil; factsJSON = nil; respondsValue = nil; hasOnAirEntry = false; airAddressValue = ""; lock.unlock() }
 }
 
 /// The account generation shared code stamps on what it pushes to a native mirror (`radioSet`, `editionMirror`, `pageText`): the `OpenPageFacts.replace(gen:)` pattern for the mirrors that had none. A push is kept when its generation

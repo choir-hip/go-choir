@@ -561,13 +561,12 @@ if it adds a name a child component must `inject`).
 - `AutoradioLab/app.contract` is the root: `members` lines (already wired, one per lane), the `provide` list (a band per
   lane), and the view: sign-in screen, or the page deck (full bleed; `pages.contract` PageDeck, order and drag in `members-stack.contract`), and the glass
   lens bar (`bar.contract`) with the launcher and the player rising from it as sheets. There is no pile view (round 3).
-- A **page** is `{address, kind, title}` (`Pages.swift`). `PageHost` in `pages.contract` maps kind to a component, one
+- A **page** is `{address, kind, title}` (the open set is shared code, `pages.ts`). `PageHost` in `pages.contract` maps kind to a component, one
   `if` line per kind, already pointing at each lane's component (`PaperPage`, `ReaderPage`, ...). The lane owns the
   component; it takes what it needs with `inject` (the root `provide`s names; children cannot hold resources, so a lane's
-  resources and actions live in its `members-<lane>.contract`) and reads its page model with the `pmod` resource (the kit's
-  `PageSource`: address to `PageModel`). Open a page with the `openPage(address, title)` action.
+  resources and actions live in its `members-<lane>.contract`) and reads what it needs from its own shared-code source. Open a page with the `openPage(address, title)` action.
 - **Dispatch table** (module): `handle("sourceOrSend") { args, reply in ... }` in your `AutoradioModule+<Lane>.swift`
-  (`registerX()` is called once by the module). Reach `pages`, `signals`, `pageSources`, `runtime`, `choir`
+  (`registerX()` is called once by the module). Reach `pages`, `signals`, `runtime`, `choir`
   through `self`; `touch(["name"])` refreshes a live source.
 - **Interface**: your source and send names and shapes go in `exact-package/interface/<lane>.json`
   (`{"shapes": {...}, "names": [{"source": ..., "live": true, "answers": "Shape", "options": {...}, "substitute": {"default": {...}}} | {"send": ..., "answers": "Shape"}]}`).
@@ -580,8 +579,7 @@ if it adds a name a child component must `inject`).
   `th.shadow1..3`, `th.material1..3`, `th.motionFastMs`, `th.springStiffness`... No component names a colour, a font or a radius.
   `Card(level, testId, minHeight)`, `Layer(testId)`, `Surface(level, radius, bleed)`, `PageScroll(id)` are in `ui.contract`.
 - **Demo mode is gone** (owner, 2026-11-20: "i never asked for that"). There are no fixtures served to the app, no `AutoradioDemo` flag and no demo session; every proof runs on real data (`scripts/proof-real.sh`) or, for page logic, in bun tests with a canned `fetch`. `Demo.clearLeftovers` (DemoLeftovers.swift) stays once: a phone that was in demo mode loses what demo left on it.
-- `PageSource` (`Pages.swift`): `handles(address)` and `load(address) -> PageModel`; register in your `registerX()` with `pageSources.register(...)`
-  (the most recently registered wins). `Signals` (`Signals.swift`): `signals.record(SignalEvent(kind:, subject:, detail:))`.
+- `Signals` (`Signals.swift`): `signals.record(SignalEvent(kind:, subject:, detail:))`.
 
 ### Test id conventions
 
@@ -606,10 +604,10 @@ integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ..
 | 8 Onboarding and the edition topics | `onboarding.contract`, `members-onboarding.contract`, `AutoradioModule+Onboarding.swift`, `interface/onboarding.json` | its band in `provide` |
 | 9 Motion and the mark | `mark.contract`, `mark.ts` (if a canvas is used), `AutoradioModule+Mark.swift`, `interface/mark.json`, motion tokens in the themes | its band in `provide` |
 | Integrator | engine, `lab.contract`, `components.contract` (Components and Trace pages), audio session, `Kit/*` engine files | none |
-| Spine (done) | `app.contract` view, `spine.contract`, `ui.contract`, `pages.contract`, `AutoradioModule.swift`, `AutoradioModule+Spine.swift`, `Pages.swift`, `scripts/*` | - |
+| Spine (done) | `app.contract` view, `spine.contract`, `ui.contract`, `pages.contract`, `AutoradioModule.swift`, `AutoradioModule+Spine.swift`, `scripts/*` | - |
 
 `Kit/` is `mobile/AutoradioKit/Sources/AutoradioKit/`; file names must be unique there (the sync script flattens them). Changing a
-page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
+page kind's address scheme is a spine change (`pages.ts`, `ui.contract` `kindOf`).
 
 ### The three spikes (answers, on the simulator, 2026-11-10)
 

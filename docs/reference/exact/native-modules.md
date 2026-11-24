@@ -357,12 +357,13 @@ The Mail pages, the signed-in requests to the listener's computer and the phone'
 - **At rest.** The owner, 2026-11-23: "yes, get rid of mail seal. i do want mail stored on phone's disk". There is no cipher and no key: shared code writes plain JSON
   under `app:/data/mail` (`rows-<folder>.json`, `msg-<hash of the id>.json`, `state.json`), and the platform's own file protection is the only seal. The native pair
   `mailSeal`/`mailOpen`/`mailForget`/`mailCan` (`Choir/MailSeal.swift`) and `mail-seal.ts` are deleted; the earlier sealed files (`*.bin`) are never read (the app has not launched).
-  A file that does not parse is removed and fetched again. `app:/data` is `Library/Application Support/exact/<app id>/data` and IS in a device backup
-  (`host/apple/src/picker.rs:46-51`). Mail is not yet in local search (the plain mail sync in `content.ts` and `mailDocs` in `search.ts` were deleted with the seal work;
+  A file that does not parse is removed and fetched again. Every file carries `owner`, a digest of the sign-in key it was written under; a file of another key is removed, never served, and a write needs a signed-in key.
+  `app:/data` is `Library/Application Support/exact/<app id>/data` and IS in a device backup (`host/apple/src/picker.rs:46-51`): the mail is in iCloud and iTunes backups. Shared code sets no file-protection attribute,
+  so the OS default class applies (readable after the first unlock; the sandbox keeps other apps out). Android: no Android host is built in this tree; whatever the Exact host's private data folder and the device's Auto Backup give is what applies, and it is unverified. Mail is not yet in local search (the plain mail sync in `content.ts` and `mailDocs` in `search.ts` were deleted with the seal work;
   a search over the phone's copy is now possible and is owed).
 - **Show original.** `iframe` has no `srcdoc` (gaps.md 30), so the cleaned document is written PLAIN to `app:/cache/mail-<hash>.html` only while it is asked for, and every
   other `mail-*.html` is removed on each message answer, at sign-out and at every launch. `app:/cache` is `$HOME/Library/Caches/exact/<app id>` (`host/apple/src/picker.rs:52`):
   under Apple's rules Library/Caches is not in a device backup; the file is plain on the phone while the page is open (residual). A link in it is inert (no `href`; its
   address is written after it). A body over 120 000 characters shows a statement that it is too large to show in full; the message page shows the text, cut at 200 000 (the HTML is read up to 300 000).
 - **Sign-out.** Shared code leads (`account.ts`): `beginSignOut` moves the account generation and turns mail writes off BEFORE the native sign-out; a store write checks the generation
-  before and after it writes; `wipeMail` removes the files. (The Swift registration `AccountWipe.removeMailCopy` is a second path for the same files.)
+  before and after it writes; `wipeMail` removes the files.

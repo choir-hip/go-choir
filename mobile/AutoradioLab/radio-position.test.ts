@@ -313,7 +313,7 @@ describe('P11 a pulse begun before sign-out and delivered after it changes nothi
     expect(set).toBeDefined();
     const facts = set!.facts as { id: string; state: string }[];
     expect(facts.some((x) => x.state === 'on_air')).toBe(true);
-    expect(typeof set!.respondsRoute).toBe('string'); expect(typeof set!.respondsTitle).toBe('string');
+    expect(typeof set!.airAddress).toBe('string'); expect(typeof set!.respondsRoute).toBe('string'); expect(typeof set!.respondsTitle).toBe('string');
     expect(set!.sheet).toBeUndefined(); expect(set!.onAir).toBeUndefined();
   });
   test('the stamped calls: radioSet, editionMirror and the sign-out calls carry gen', () => {
