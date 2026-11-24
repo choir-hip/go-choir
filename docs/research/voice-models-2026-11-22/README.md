@@ -25,3 +25,11 @@ and first rows on the Motorola for seven recognisers
 the iPhone, and none of the three experiments (cleaning takes, the isolator
 before recognition, sava replayed through the turn logic) was run. The voice
 mission is `docs/definitions/choir-voice-pipeline-2026-11-23.md`.
+
+## Corrections since
+
+- 2026-11-24 (owner): the isolator report says no phone build exists. That was
+  true of the official repository only. Community builds exist: MLX (two, one
+  real-time), ExecuTorch, ONNX and GGUF; see the voice mission for the names.
+  The report's "server only" conclusion for takes is withdrawn: the owner's
+  rule is that every voice model runs on the phone.
