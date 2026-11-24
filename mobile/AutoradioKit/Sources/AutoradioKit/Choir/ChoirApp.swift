@@ -57,7 +57,6 @@ public final class ChoirApp: @unchecked Sendable {
         signIn = ChoirSignIn(baseURL: baseURL)
         registerAccountWipe()
         #if canImport(Security)
-        // The key the old Swift sign-in kept is revoked and deleted, once (LegacyKey); nothing of it is carried over.
         let legacySignIn = signIn
         Task.detached { await LegacyKey.retire(store: KeychainKeyStore(service: LegacyKey.service)) { id, key in await legacySignIn.revokeNow(keyID: id, key: key) } }
         #endif
