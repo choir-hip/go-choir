@@ -239,3 +239,128 @@ func TestATombstonedComputerNotBeingDeletedStillCountsItsReferences(t *testing.T
 		}
 	})
 }
+
+// Round-2 review follow-ups (2026-11-24, both seats accepted; these are the
+// should-fix items): the gate is not held across vmctl, a destroyed apply must
+// name its computers, the caps are checked for the whole named run in phase
+// one, and every named computer is archived before the first unlink.
+//
+//	R1  The exclusive gate is held while vmctl is asked about a computer, so
+//	    every append stalls behind a slow vmctl.
+//	    TestTheGateIsNotHeldWhileVmctlIsAsked
+//	R2  The route accepts a destroyed apply with no computer_ids.
+//	    TestTheRouteRefusesADestroyedApplyWithoutNamedComputers
+//	R3  A named manifest over max_deletes/max_bytes is tombstoned and partly
+//	    deleted instead of refused whole; and the clamp makes a larger run
+//	    impossible.
+//	    TestANamedApplyOverTheCapsIsRefusedWholeInPhaseOne
+//	R4  Computer 2's archive fails after computer 1 is already deleted.
+//	    TestEveryNamedComputerIsArchivedBeforeTheFirstUnlink
+
+func TestTheGateIsNotHeldWhileVmctlIsAsked(t *testing.T) {
+	f := newTapeFixture(t)
+	f.fullComputer("dead-1", 1)
+	dry := f.dryRun(namedReq("dead-1"))
+	var asked, heldDuringCall int
+	f.reg.onCall = func() {
+		asked++
+		if !f.store.tombstones.gate.TryRLock() {
+			heldDuringCall++
+			return
+		}
+		f.store.tombstones.gate.RUnlock()
+	}
+	if _, err := f.apply(dry, namedReq("dead-1")); err != nil {
+		t.Fatal(err)
+	}
+	if asked == 0 {
+		t.Fatal("the registry was never asked")
+	}
+	if heldDuringCall != 0 {
+		t.Fatalf("the exclusive tombstone gate was held during %d of %d vmctl calls", heldDuringCall, asked)
+	}
+}
+
+func TestTheRouteRefusesADestroyedApplyWithoutNamedComputers(t *testing.T) {
+	f := newTapeFixture(t)
+	f.fullComputer("dead-1", 1)
+	req := TapeSweepRequest{Action: TapeSweepActionApply, Sweeps: []string{TapeSweepDestroyed}, AcceptUnrecordedForkLineage: true, RunID: newTapeSweepRunID(time.Now()), ManifestSHA256: platformTestDigest('a')}
+	if _, err := f.svc.StartTapeSweep(req); err == nil || !strings.Contains(err.Error(), "computer_ids") {
+		t.Fatalf("an unnamed destroyed apply through the route answered %v", err)
+	}
+	// A dry run without names is still a dry run.
+	dry := req
+	dry.Action, dry.RunID, dry.ManifestSHA256 = TapeSweepActionDryRun, "", ""
+	if _, err := f.svc.StartTapeSweep(dry); err != nil {
+		t.Fatalf("an unnamed dry run was refused: %v", err)
+	}
+}
+
+func TestANamedApplyOverTheCapsIsRefusedWholeInPhaseOne(t *testing.T) {
+	f := newTapeFixture(t)
+	f.fullComputer("dead-1", 3)
+	f.fullComputer("dead-2", 3)
+	dry := f.dryRun(namedReq("dead-1", "dead-2"))
+	req := namedReq("dead-1", "dead-2")
+	req.MaxDeletes = 20
+	before1, before2 := f.snapshotOf("dead-1"), f.snapshotOf("dead-2")
+	report, err := f.apply(dry, req)
+	if err == nil || !strings.Contains(err.Error(), "max_deletes") {
+		t.Fatalf("a manifest over the cap answered %v", err)
+	}
+	if !before1.equal(f.snapshotOf("dead-1")) || !before2.equal(f.snapshotOf("dead-2")) {
+		t.Fatal("files or rows were deleted")
+	}
+	if st := f.tombstoneStatus("dead-1") + f.tombstoneStatus("dead-2"); st != "" {
+		t.Fatalf("a refused run left tombstones: %q", st)
+	}
+	if report.Apply.Deleted != 0 || report.Apply.DeferredByCap == 0 {
+		t.Fatalf("receipt = %+v", report.Apply)
+	}
+	// The clamp does not make a larger named run impossible: an explicit cap
+	// above the default is honored for a named request, never for an unnamed one.
+	big := namedReq("dead-1")
+	big.MaxBytes = 3 * DefaultTapeSweepMaxBytes
+	big.MaxDeletes = 3 * DefaultTapeSweepMaxDeletes
+	p, err := f.svc.clampTapeSweepRequest(withAction(big, TapeSweepActionDryRun))
+	if err != nil || p.maxBytes != big.MaxBytes || p.maxDeletes != big.MaxDeletes {
+		t.Fatalf("named caps clamped: %+v %v", p, err)
+	}
+	unnamed := destroyedReq(true)
+	unnamed.MaxBytes = 3 * DefaultTapeSweepMaxBytes
+	p, err = f.svc.clampTapeSweepRequest(withAction(unnamed, TapeSweepActionDryRun))
+	if err != nil || p.maxBytes != DefaultTapeSweepMaxBytes {
+		t.Fatalf("unnamed caps not clamped: %+v %v", p, err)
+	}
+	// And the named run applies under a cap that fits.
+	req.MaxDeletes = 100000
+	if _, err := f.apply(dry, req); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEveryNamedComputerIsArchivedBeforeTheFirstUnlink(t *testing.T) {
+	f := newTapeFixture(t)
+	f.fullComputer("dead-1", 1)
+	c2 := f.fullComputer("dead-2", 1)
+	req := namedReq("dead-1", "dead-2")
+	req.NoArchive = false
+	dry := f.dryRun(req)
+	// dead-2 has a listed file nobody can read: its archive cannot be made.
+	if os.Geteuid() == 0 {
+		t.Skip("root reads any file")
+	}
+	unreadable := f.path(tapeSweepRel(tapeNSEvent, c2.seqs[0].event))
+	if err := os.Chmod(unreadable, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(unreadable, 0o640)
+	before1 := f.snapshotOf("dead-1")
+	report, err := f.apply(dry, req)
+	if err == nil {
+		t.Fatalf("apply went on with an archive it could not make: %+v", report.Apply)
+	}
+	if !before1.equal(f.snapshotOf("dead-1")) || report.Apply.Deleted != 0 {
+		t.Fatalf("dead-1 was deleted before dead-2 was archived: %+v", report.Apply)
+	}
+}

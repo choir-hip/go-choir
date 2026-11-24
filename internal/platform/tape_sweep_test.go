@@ -30,9 +30,15 @@ type fakeRegistry struct {
 	listed    map[string]bool // present in the registry list
 	listErr   error
 	lookupErr error
+	// onCall, when set, runs at the start of every list and lookup (a vmctl
+	// call: slow and not behind the tombstone gate).
+	onCall func()
 }
 
 func (r *fakeRegistry) LookupComputer(_ context.Context, id string) (bool, error) {
+	if r.onCall != nil {
+		r.onCall()
+	}
 	if r.lookupErr != nil {
 		return false, r.lookupErr
 	}
@@ -40,6 +46,9 @@ func (r *fakeRegistry) LookupComputer(_ context.Context, id string) (bool, error
 }
 
 func (r *fakeRegistry) ListComputerIDs(context.Context) ([]string, error) {
+	if r.onCall != nil {
+		r.onCall()
+	}
 	if r.listErr != nil {
 		return nil, r.listErr
 	}

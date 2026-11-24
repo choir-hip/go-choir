@@ -365,6 +365,7 @@ the one gate**:
   host through `PrepareLifecycleControl` first, and because the ownership lookup
   is repeated inside the locked phase. A path that creates an owner for a
   removed id with no lifecycle step is not closed by this and is named below.
+- **Slow reads happen before the gate** (round-2 review, both seats): the first manifest pass, the vmctl list and lookups (60 s client timeout each), the living file-root walk and the first delta. The gate is held exclusive only for the incremental delta, route slots, pending operations, snapshot-root rows, the re-proof (reading the cached vmctl answers) and the tombstones, so a hung vmctl no longer stalls the paper's appends. The cost is a wider ownership-creation window: vmctl is asked a few seconds before the tombstone, not inside it.
 - **Phase one, under the lock, deletes nothing.** The delta of events appended
   since the dry run is read; every computer in the manifest is re-proved
   (registry, route, pending operations, head, quiet window, cross-reference);
@@ -380,8 +381,10 @@ the one gate**:
   named set references it (the dry run's live set: living, skipped, unnamed
   destroyed, tombstoned, and any computer whose references cannot be read
   counts as referencing everything, which refuses the sweep). At apply the same
-  set is rebuilt from the delta under the lock. Every named computer is deleted
-  together or none is.
+  set is rebuilt from the delta under the lock. Every named computer is tombstoned
+  together or none is; deletion then goes one computer at a time and stops at
+  the first thing that is not a delete, leaving the later ones tombstoned and
+  resumable by the same apply.
 - **Phase two** deletes in batches, each under the gate. Any outcome other than
   deleted or already gone (a refreshed file, an unlink error, a directory or
   rows failure) stops the run before the next delete and fails it. A tombstone
@@ -409,8 +412,13 @@ computer's references are read (readable: kept; unreadable: refused).
   the ownership record inside the locked phase, but vmctl is not behind the
   gate; the window is the length of the locked phase's lookup to the first
   unlink.
-- The unnamed destroyed apply still exists (seat 2 asked for it to be refused).
-  It now has the same all-or-nothing behavior; the route still accepts it.
+- The route now refuses a destroyed apply without `computer_ids`; the in-process
+  scheduled sweep can still apply unnamed (never acknowledged in production).
+- Restore, rematerialize and cold recover in `internal/proxy` bypass
+  `PrepareLifecycleControl`: a named id must not be resurrected before the apply
+  finishes.
+- The archive reads each entry whole into memory; a very large private payload
+  can strain corpusd, and `--no-archive` avoids it.
 - Removal has no durable removal record (vmctl deletes the ownership row);
   "removed" is inferred from absence plus the named list.
 

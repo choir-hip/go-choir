@@ -7,7 +7,7 @@
 # named id fails, and lists nothing nobody named.
 #
 #   removed-computers-sweep dry-run --ids ID[,ID...] --accept-unrecorded-fork-lineage-for ID[,ID...] [--no-archive]
-#   removed-computers-sweep apply   --ids ID[,ID...] --accept-unrecorded-fork-lineage-for ID[,ID...] --run-id RUN --manifest-sha256 HASH [--no-archive]
+#   removed-computers-sweep apply   --ids ID[,ID...] --accept-unrecorded-fork-lineage-for ID[,ID...] --run-id RUN --manifest-sha256 HASH [--no-archive] [--max-deletes N] [--max-bytes N]
 #
 # No fork-lineage record exists, so each computer's deletion needs the operator
 # to say so by name: --accept-unrecorded-fork-lineage-for must list exactly the
@@ -18,7 +18,13 @@
 # living computer's snapshot also names. apply deletes exactly that manifest
 # and needs the same ids, the run id and the manifest hash the dry run printed;
 # its receipt is the report file it prints. A computer that gained an owner in
-# between is skipped and the command exits 1. Without --no-archive each
+# between refuses the whole apply, nothing deleted, and the command exits 1.
+# The apply refuses a manifest over its caps (default 2000000 files, 8 GiB)
+# before it tombstones anything: pass --max-deletes and --max-bytes at least the
+# dry run's files and bytes. If an apply stops after it began deleting (a file
+# refreshed, an unlink error), its tombstones stay in status "deleting" and the
+# files already gone are gone: fix the cause and run the same apply again, which
+# resumes from the same manifest. Without --no-archive each
 # computer's files are first archived under tape-sweep-archive (decision D1),
 # which keeps a compressed copy on the same disk.
 #
@@ -30,7 +36,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 CORPUSD_URL=${CORPUSD_URL:-http://127.0.0.1:8086}
 
 usage() {
-	sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//' >&2
+	sed -n "2,/^# CORPUSD_URL/p" "$0" | sed 's/^# \{0,1\}//' >&2
 	exit 2
 }
 
@@ -38,7 +44,7 @@ usage() {
 action=$1
 shift
 case $action in dry-run | apply) ;; *) usage ;; esac
-ids= ack= run= sha= noarchive=false
+ids= ack= run= sha= noarchive=false maxdel= maxbytes=
 # value: a flag's value must exist and must not itself look like a flag.
 value() {
 	case ${2:-} in "" | --*) echo "removed-computers-sweep: $1 needs a value" >&2; exit 2 ;; esac
@@ -49,6 +55,8 @@ while [ $# -gt 0 ]; do
 	--accept-unrecorded-fork-lineage-for) value "$1" "${2:-}"; ack=$2; shift 2 ;;
 	--run-id) value "$1" "${2:-}"; run=$2; shift 2 ;;
 	--manifest-sha256) value "$1" "${2:-}"; sha=$2; shift 2 ;;
+	--max-deletes) value "$1" "${2:-}"; maxdel=$2; shift 2 ;;
+	--max-bytes) value "$1" "${2:-}"; maxbytes=$2; shift 2 ;;
 	--no-archive) noarchive=true; shift ;;
 	*) usage ;;
 	esac
@@ -65,13 +73,15 @@ if [ "$action" = dry-run ] && { [ -n "$run" ] || [ -n "$sha" ]; }; then
 	exit 2
 fi
 
-body=$(IDS=$ids ACK=$ack ACTION=$action RUN=$run SHA=$sha NOARCHIVE=$noarchive python3 -I -c '
+body=$(IDS=$ids ACK=$ack ACTION=$action RUN=$run SHA=$sha NOARCHIVE=$noarchive MAXDEL=$maxdel MAXBYTES=$maxbytes python3 -I -c '
 import json, os
 b = {"action": os.environ["ACTION"], "sweeps": ["destroyed"],
      "accept_unrecorded_fork_lineage_for": os.environ["ACK"].split(","),
      "computer_ids": os.environ["IDS"].split(","), "no_archive": os.environ["NOARCHIVE"] == "true"}
 if os.environ["ACTION"] == "apply":
     b["run_id"], b["manifest_sha256"] = os.environ["RUN"], os.environ["SHA"]
+    if os.environ["MAXDEL"]: b["max_deletes"] = int(os.environ["MAXDEL"])
+    if os.environ["MAXBYTES"]: b["max_bytes"] = int(os.environ["MAXBYTES"])
 print(json.dumps(b))
 ')
 start=$(choir_internal_curl "$CORPUSD_URL/internal/platform/artifact-gc/tape" -sS -X POST -H 'Content-Type: application/json' -d "$body")
@@ -92,6 +102,7 @@ rep = job.get("report") or {}
 failed = job.get("state") != "done"
 if failed:
     print("FAILED:", job.get("error", "unknown"))
+    print("If the apply had begun deleting, its tombstones read \"deleting\" and the files already gone are gone; the same apply (same run id, hash and ids) resumes it once the cause is fixed.")
 print("run_id", rep.get("run_id"), "action", rep.get("action"))
 print("manifest_sha256", rep.get("manifest_sha256", ""))
 print("ids", ",".join(rep.get("computer_ids") or []))

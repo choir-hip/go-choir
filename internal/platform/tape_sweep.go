@@ -470,12 +470,16 @@ func (s *Service) clampTapeSweepRequest(req TapeSweepRequest) (tapeSweepParams, 
 	if p.batch <= 0 || p.batch > 4096 {
 		p.batch = DefaultTapeSweepBatch
 	}
+	// The defaults bound an unnamed run. A named run is the owner's exact list,
+	// checked whole against the caps in phase one, so an explicit cap above the
+	// default is honored (a larger list could never be applied otherwise).
+	named := len(req.ComputerIDs) > 0
 	p.maxDeletes = req.MaxDeletes
-	if p.maxDeletes <= 0 || p.maxDeletes > DefaultTapeSweepMaxDeletes {
+	if p.maxDeletes <= 0 || (p.maxDeletes > DefaultTapeSweepMaxDeletes && !named) {
 		p.maxDeletes = DefaultTapeSweepMaxDeletes
 	}
 	p.maxBytes = req.MaxBytes
-	if p.maxBytes <= 0 || p.maxBytes > DefaultTapeSweepMaxBytes {
+	if p.maxBytes <= 0 || (p.maxBytes > DefaultTapeSweepMaxBytes && !named) {
 		p.maxBytes = DefaultTapeSweepMaxBytes
 	}
 	if len(req.Sweeps) == 0 {
@@ -589,6 +593,11 @@ func (s *Service) StartTapeSweep(req TapeSweepRequest) (TapeSweepJob, error) {
 	params, err := s.clampTapeSweepRequest(req)
 	if err != nil {
 		return TapeSweepJob{}, err
+	}
+	// The route deletes only an exact, named list: an unnamed destroyed apply
+	// would delete every computer the proof finds destroyed.
+	if params.action == TapeSweepActionApply && params.destroyed && len(params.named) == 0 {
+		return TapeSweepJob{}, errors.New("tape sweep: a destroyed apply needs computer_ids: it deletes only the computers named, never every destroyed computer")
 	}
 	s.tapeSweep.mu.Lock()
 	if s.tapeSweep.running {
@@ -1554,6 +1563,14 @@ func namedTapeSweepRefusal(named []string, heads map[string]tapeHead, proofs map
 // every computer outside doomed (any 64-hex string in them counts). A failure
 // to read any of these is an error: the sweep does not guess.
 func (s *Service) livingChunkDigests(ctx context.Context, doomed []string) (map[string]bool, error) {
+	return s.livingChunkDigestsWith(ctx, doomed, true)
+}
+
+// livingChunkDigestsWith reads the snapshot-root rows and the registrations in
+// flight always, and the file-root manifests on disk only when withFiles: the
+// disk walk is slow and not behind the tombstone gate, so the apply does it
+// before taking the gate and repeats only the rows under it.
+func (s *Service) livingChunkDigestsWith(ctx context.Context, doomed []string, withFiles bool) (map[string]bool, error) {
 	gone := map[string]bool{}
 	for _, id := range doomed {
 		gone[id] = true
@@ -1587,6 +1604,9 @@ func (s *Service) livingChunkDigests(ctx context.Context, doomed []string) (map[
 		if id, digest, ok := strings.Cut(key, "/"); ok && !gone[id] {
 			out[digest] = true
 		}
+	}
+	if !withFiles {
+		return out, nil
 	}
 	rootsDir := filepath.Join(s.artifactsRoot, "sha256", tapeNSFileCASRoots)
 	computers, err := os.ReadDir(rootsDir)

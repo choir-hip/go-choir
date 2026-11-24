@@ -101,7 +101,9 @@ type tapeSweepApplyRun struct {
 	// a spent cap), for a named apply to fail on.
 	skipped []string
 	pending map[string]bool
-	groups  []*applyGroup
+	// owned is vmctl's answer per named computer, asked before the gate.
+	owned  map[string]ownershipAnswer
+	groups []*applyGroup
 	// strict is set for the destroyed deletes: each batch of unlinks runs
 	// under the tombstone gate and any outcome but deleted or gone stops the
 	// run before the next delete.
@@ -206,12 +208,13 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 	report.Quiet = run.quiet.String()
 
 	// Delta references: rows appended since the snapshot heads, and the
-	// extra records re-read now. A failure here refuses the whole apply.
-	// A destroyed apply holds the tombstone gate (exclusive) from here to the
-	// end of the proof and the tombstones: every path that adds a reference to
-	// a computer (head CAS, snapshot-root registration, a lifecycle prepare)
-	// takes it shared, so what is read here cannot change before the
-	// tombstones refuse them.
+	// extra records re-read now. A failure here refuses the whole apply. This
+	// and everything that talks to vmctl or walks the disk runs before the
+	// tombstone gate; a destroyed apply holds the gate (exclusive) only for the
+	// short re-check and the tombstones. Every path that adds a reference to a
+	// computer (head CAS, snapshot-root registration, a lifecycle prepare)
+	// takes the gate shared, so what is re-read under it cannot change before
+	// the tombstones refuse them.
 	gateHeld := false
 	unlockGate := func() {
 		if gateHeld {
@@ -219,11 +222,7 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 			s.store.tombstones.gate.Unlock()
 		}
 	}
-	if p.destroyed {
-		s.store.tombstones.gate.Lock()
-		gateHeld = true
-		defer unlockGate()
-	}
+	defer unlockGate()
 	s.setTapeSweepPhase(jobID, "delta-references")
 	if err := s.tapeSweepDelta(ctx, run); err != nil {
 		return report, err
@@ -245,17 +244,6 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 			if reason := registryRefusal(ids, run.nowHeads); reason != "" {
 				run.destroyErr = reason
 			}
-			if run.routed, err = s.tapeRoutedComputers(ctx); err != nil {
-				run.destroyErr = err.Error()
-			}
-			if run.pending, err = s.computersWithPendingLifecycleOps(ctx); err != nil {
-				run.destroyErr = err.Error()
-			}
-		}
-		if !run.deltaOK && run.destroyErr == "" {
-			// A living computer's event appended since the dry run cannot be
-			// read, so what it references is unknown: no payload is deleted.
-			run.destroyErr = "an event appended since the dry run is unreadable, so the live references are incomplete"
 		}
 		if run.destroyErr != "" {
 			report.DestroyedRefused = run.destroyErr
@@ -318,9 +306,50 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 		if err != nil {
 			return finish(err)
 		}
-		// Phase one, under the gate: prove every computer, then tombstone
-		// every computer. One failure refuses the whole run.
+		// Before the gate: everything slow. vmctl is asked about every named
+		// computer and the living file roots are read from disk; a stall here
+		// holds up nothing. The locked phase below repeats only what the gate
+		// protects (the delta since, routes, pending operations, snapshot-root
+		// rows, heads) and reads the answers cached here.
 		s.setTapeSweepPhase(jobID, "destroyed-proof")
+		run.owned = map[string]ownershipAnswer{}
+		if run.destroyErr == "" && registry != nil {
+			for _, g := range run.groups {
+				found, lerr := registry.LookupComputer(ctx, g.proof.ComputerID)
+				run.owned[g.proof.ComputerID] = ownershipAnswer{found: found, err: lerr}
+			}
+		}
+		var preDoomed []string
+		for _, g := range run.groups {
+			preDoomed = append(preDoomed, g.proof.ComputerID)
+		}
+		if run.destroyErr == "" {
+			if _, cerr := s.livingChunkDigests(ctx, preDoomed); cerr != nil {
+				return finish(fmt.Errorf("tape sweep: snapshot chunk check failed, nothing deleted: %w", cerr))
+			}
+		}
+		// The gate, held for the re-check and the tombstones only.
+		s.store.tombstones.gate.Lock()
+		gateHeld = true
+		if derr := s.tapeSweepDelta(ctx, run); derr != nil {
+			return finish(derr)
+		}
+		var rerr error
+		if run.routed, rerr = s.tapeRoutedComputers(ctx); rerr != nil && run.destroyErr == "" {
+			run.destroyErr = rerr.Error()
+		}
+		if run.pending, rerr = s.computersWithPendingLifecycleOps(ctx); rerr != nil && run.destroyErr == "" {
+			run.destroyErr = rerr.Error()
+		}
+		if !run.deltaOK && run.destroyErr == "" {
+			// A living computer's event appended since the dry run cannot be
+			// read, so what it references is unknown: no payload is deleted.
+			run.destroyErr = "an event appended since the dry run is unreadable, so the live references are incomplete"
+		}
+		if run.destroyErr != "" && report.DestroyedRefused == "" {
+			report.DestroyedRefused = run.destroyErr
+			report.Warnings = append(report.Warnings, "destroyed apply refused: "+run.destroyErr)
+		}
 		refusal, perr := s.proveDestroyedRun(ctx, run)
 		unlockGate()
 		if perr != nil {
@@ -343,6 +372,16 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 		}
 	}
 	if len(run.groups) > 0 {
+		// A named run archives every computer before the first unlink.
+		if len(p.named) > 0 {
+			s.setTapeSweepPhase(jobID, "destroyed-archive")
+			if _, err := s.walkApplyManifest(run, manifestPath, func(proof TapeSweepComputerProof, items []tapeSweepItem, dirs []string, rows map[string]int64) error {
+				return s.archiveDestroyedComputer(ctx, run, proof, items)
+			}); err != nil {
+				s.dropCreatedTombstones(ctx, run)
+				return finish(err)
+			}
+		}
 		// Phase two: archive and delete one computer at a time, stopping at
 		// the first thing that is not a delete. A cap reached leaves the later
 		// computers tombstoned and untouched; the named apply fails on them.
@@ -378,17 +417,25 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 	return finish(nil)
 }
 
+// ownershipAnswer is one vmctl ownership lookup.
+type ownershipAnswer struct {
+	found bool
+	err   error
+}
+
 // applyGroup is one destroyed computer of the manifest as the apply holds it
 // between its passes: the proof, what it will delete, and its tombstone.
 type applyGroup struct {
-	proof   TapeSweepComputerProof
-	items   int
-	bytes   int64
-	chunks  []string
-	onDisk  bool
-	tomb    TapeTombstone
-	hadTomb bool
-	created bool
+	proof  TapeSweepComputerProof
+	items  int
+	bytes  int64
+	chunks []string
+	onDisk bool
+	// archived is set when the computer was archived in phase one (a named run).
+	archived bool
+	tomb     TapeTombstone
+	hadTomb  bool
+	created  bool
 }
 
 func (run *tapeSweepApplyRun) group(id string) *applyGroup {
@@ -517,18 +564,27 @@ func validTapeSweepItem(it tapeSweepItem) bool {
 }
 
 // tapeSweepDelta reads every append landed since the manifest's snapshot
-// heads and the extra records, into run.delta (full digests).
+// heads and the extra records, into run.delta (full digests). A second call
+// (the destroyed apply's, under the gate) reads only what landed since the
+// first and adds it, so the locked part stays short.
 func (s *Service) tapeSweepDelta(ctx context.Context, run *tapeSweepApplyRun) error {
 	heads, err := s.tapeHeads(ctx)
 	if err != nil {
 		return err
 	}
+	base := run.header.Heads
+	first := run.delta == nil
+	if !first {
+		base = run.nowHeads
+	}
 	run.nowHeads = heads
-	run.delta = map[string]bool{}
-	run.deltaOK = true
+	if first {
+		run.delta = map[string]bool{}
+		run.deltaOK = true
+	}
 	for _, id := range sortedHeadIDs(heads) {
 		now := heads[id]
-		snap := run.header.Heads[id]
+		snap := base[id]
 		if now.Sequence < snap.Sequence {
 			return fmt.Errorf("tape sweep: computer %s head %d is below the manifest's %d", id, now.Sequence, snap.Sequence)
 		}
@@ -552,6 +608,9 @@ func (s *Service) tapeSweepDelta(ctx context.Context, run *tapeSweepApplyRun) er
 		if err != nil {
 			return fmt.Errorf("tape sweep: delta references: %w", err)
 		}
+	}
+	if !first {
+		return nil
 	}
 	return s.tapeExtraRefs(ctx, func(text string) {
 		for _, d := range tapeHexRefs(text) {
@@ -581,11 +640,16 @@ func (s *Service) reproveDestroyed(ctx context.Context, run *tapeSweepApplyRun, 
 	if run.pending[id] {
 		return "a lifecycle operation is pending"
 	}
-	found, err := run.registry.LookupComputer(ctx, id)
-	if err != nil {
-		return "registry lookup failed: " + err.Error()
+	// vmctl was asked before the gate was taken (a slow vmctl must not hold up
+	// appends); the answer is read here.
+	ans, asked := run.owned[id]
+	if !asked {
+		return "registry lookup was not made"
 	}
-	if found {
+	if ans.err != nil {
+		return "registry lookup failed: " + ans.err.Error()
+	}
+	if ans.found {
 		return "ownership record exists"
 	}
 	snap, ok := run.header.Heads[id]
@@ -643,7 +707,9 @@ func (s *Service) proveDestroyedRun(ctx context.Context, run *tapeSweepApplyRun)
 		anyChunks = anyChunks || len(g.chunks) > 0
 	}
 	if anyChunks {
-		living, err := s.livingChunkDigests(ctx, doomed)
+		// The disk walk of file roots ran before the gate; the rows and the
+		// registrations in flight are read again here.
+		living, err := s.livingChunkDigestsWith(ctx, doomed, false)
 		if err != nil {
 			return "", fmt.Errorf("tape sweep: snapshot chunk check failed, nothing deleted: %w", err)
 		}
@@ -657,6 +723,23 @@ func (s *Service) proveDestroyedRun(ctx context.Context, run *tapeSweepApplyRun)
 			if n > 0 {
 				return refuse(fmt.Sprintf("%s: %d snapshot chunk digests are named by a snapshot, an in-flight registration or a file root of a computer this run does not delete", g.proof.ComputerID, n))
 			}
+		}
+	}
+	// A named run is checked whole against the caps: a list that cannot be
+	// finished is refused before anything is tombstoned.
+	if len(run.p.named) > 0 {
+		totalItems, totalBytes := 0, int64(0)
+		var capped []string
+		for _, g := range run.groups {
+			totalItems += g.items
+			totalBytes += g.bytes
+			if g.items > 0 {
+				capped = append(capped, g.proof.ComputerID)
+			}
+		}
+		if totalItems > run.p.maxDeletes || totalBytes > run.p.maxBytes {
+			run.counts.DeferredByCap += totalItems
+			return refuse(fmt.Sprintf("%v: %d files and %d bytes exceed max_deletes=%d or max_bytes=%d; pass larger max_deletes and max_bytes (the dry run's destroyed_files and destroyed_bytes), nothing was deleted", capped, totalItems, totalBytes, run.p.maxDeletes, run.p.maxBytes))
 		}
 	}
 	// Every tombstone, then every head again: no append can land after this.
@@ -744,6 +827,7 @@ func (s *Service) archiveDestroyedComputer(ctx context.Context, run *tapeSweepAp
 		return err
 	}
 	g.tomb = tomb
+	g.archived = true
 	return nil
 }
 
@@ -766,8 +850,10 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 		run.skipped = append(run.skipped, id)
 		return nil
 	}
-	if err := s.archiveDestroyedComputer(ctx, run, proof, items); err != nil {
-		return err
+	if !g.archived {
+		if err := s.archiveDestroyedComputer(ctx, run, proof, items); err != nil {
+			return err
+		}
 	}
 	s.setTapeSweepPhase(jobID, "destroyed "+id)
 	tomb := g.tomb
