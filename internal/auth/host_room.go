@@ -11,12 +11,16 @@ import (
 )
 
 // Sign-up is bounded by what the host can hold (internal/hostroom): free disk,
-// less the reserve, less one footprint for each account that holds a passkey
-// and has no computer yet, must fit one more footprint. The reading has two
-// parts, both read when the decision is made: the free disk (statfs on the
-// directory auth.db lives in, the same filesystem the computers are on) and
-// the file vmctl writes every half minute naming the accounts that have a
-// computer. Either missing or stale, sign-up is closed; so is a plan that is
+// less the reserve, less what the computers that exist will still grow to,
+// must fit one more footprint. An account with no computer holds nothing
+// (owner, 2026-11-24: "dont count any account without a computer. all real
+// accounts have a computer. we just have records of email adddresses where we
+// deleted the computers for testing"). Residual: sign-ups that finish before
+// their computers exist are bounded only by the free reading. The reading has
+// two parts, both read when the decision is made: the free disk (statfs on
+// the directory auth.db lives in, the same filesystem the computers are on)
+// and the file vmctl writes every half minute naming the accounts that have a
+// computer and the disk each holds. Either missing or stale, sign-up is closed; so is a plan that is
 // not configured or did not load whole, in every environment (development and
 // tests give a plan; there is no unbounded mode).
 
@@ -65,10 +69,11 @@ func newHostRoom(cfg *RoomConfig, dbPath string) *hostRoom {
 	}
 }
 
-// admit decides whether one more account may be made. It reads the accounts
-// that hold a passkey through q, so called with the transaction that is about
-// to insert the account, two finishes cannot both take the last place.
-func (r *hostRoom) admit(q queryRower) error {
+// admit decides whether one more account may be made. It reads no account: the
+// room is the free disk and the owners file. q is the transaction that is about
+// to insert the account; it is not used, so two finishes that race for the last
+// place can both take it (the residual named above).
+func (r *hostRoom) admit(_ queryRower) error {
 	if r == nil {
 		return fmt.Errorf("%w: no room plan", ErrRoomUnreadable)
 	}
@@ -86,26 +91,7 @@ func (r *hostRoom) admit(q queryRower) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrRoomUnreadable, err)
 	}
-	// Only accounts whose address was proved: an older account whose address
-	// never was cannot sign in or open a computer (it signs in to nothing
-	// until recovery proves it), so it holds no place.
-	rows, err := q.Query(`SELECT DISTINCT c.user_id FROM credentials c JOIN users u ON u.id = c.user_id WHERE u.email_verified_at IS NOT NULL`)
-	if err != nil {
-		return fmt.Errorf("%w: accounts: %v", ErrRoomUnreadable, err)
-	}
-	defer rows.Close()
-	var holders []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return fmt.Errorf("%w: accounts: %v", ErrRoomUnreadable, err)
-		}
-		holders = append(holders, id)
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("%w: accounts: %v", ErrRoomUnreadable, err)
-	}
-	if r.plan.Places(free, r.plan.Held(holders, owners)) < 1 {
+	if r.plan.Places(free, r.plan.Held(owners)) < 1 {
 		return ErrRegistrationClosed
 	}
 	return nil

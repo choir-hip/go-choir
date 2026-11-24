@@ -1,6 +1,6 @@
 // Package hostroom is the bound on sign-ups: the host can hold one more
 // computer. Sign-up is open when the free disk, less a reserve, less the room
-// the admitted accounts will still take (Plan.Held), is at least one
+// the computers that exist will still take (Plan.Held), is at least one
 // computer's footprint. The auth service decides it inside the transaction
 // that makes the account; the capacity reading on Pulse shows the same number.
 // A missing or stale reading means closed, never open.
@@ -20,14 +20,15 @@ import (
 )
 
 // The least a plan may say. A reserve under the 60 GiB deploy floor, or a
-// footprint under the largest computer measured (drill: 13,297 MB of data
-// image plus a 1.5 GB memory snapshot while hibernated,
-// docs/problems/computer-disks-hold-self-development-leftovers-2026-11-24.md,
-// about 14 GiB, rounded up), would admit past what the host can hold; a typo
-// that went under them is refused where the plan is read.
+// footprint under what a real user's computer takes (owner, 2026-11-24: "real
+// user accounts use like 0.5 to 2GB unless they do heavy usage of self-dev"),
+// would admit past what the host can hold; a typo that went under them is
+// refused where the plan is read. A computer that grows past the footprint is
+// counted at its real size (Plan.Held), so the footprint is the promise made
+// to an account with no computer yet, not a ceiling.
 const (
 	MinReserveGiB   = 60
-	MinFootprintGiB = 15
+	MinFootprintGiB = 2
 )
 
 // MaxOwnersAge is how old the owners file may be before sign-up closes. vmctl
@@ -62,46 +63,23 @@ func (p Plan) Places(freeBytes, heldBytes uint64) int {
 	return int((room - heldBytes) / p.FootprintBytes)
 }
 
-// Held is the disk the accounts already admitted will still take, which the
-// free reading does not show yet. accountIDs are the accounts that hold a
-// proved passkey. An account with no computer will take a whole footprint. An
-// account whose computer exists has taken only what its disk holds now, and
-// will take the rest of a footprint as it grows, so the gap is held back
-// until it has grown: opening a computer must not make room. A computer
-// already past a footprint holds nothing back.
-func (p Plan) Held(accountIDs []string, owners map[string]uint64) uint64 {
-	seen := make(map[string]bool, len(accountIDs))
+// Held is the disk the computers that exist will still take, which the free
+// reading does not show yet: a computer whose disk is under a footprint will
+// grow to one, so the gap is held back until it has, and opening a computer
+// does not make room. A computer already past a footprint holds nothing back.
+// An account with no computer holds nothing (owner, 2026-11-24: "dont count
+// any account without a computer. all real accounts have a computer. we just
+// have records of email adddresses where we deleted the computers for
+// testing"). So sign-ups that finish before their computers exist are bounded
+// only by the free reading.
+func (p Plan) Held(owners map[string]uint64) uint64 {
 	var held uint64
-	for _, id := range accountIDs {
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		disk, has := owners[id]
-		switch {
-		case !has:
-			held += p.FootprintBytes
-		case disk < p.FootprintBytes:
+	for _, disk := range owners {
+		if disk < p.FootprintBytes {
 			held += p.FootprintBytes - disk
 		}
 	}
 	return held
-}
-
-// Unopened counts the distinct accounts in accountIDs that have no computer.
-func Unopened(accountIDs []string, owners map[string]uint64) int {
-	seen := make(map[string]bool, len(accountIDs))
-	n := 0
-	for _, id := range accountIDs {
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		if _, has := owners[id]; !has {
-			n++
-		}
-	}
-	return n
 }
 
 // Owner is an account that has a computer and the disk that computer holds

@@ -243,12 +243,12 @@ type PulseCapacityRoom struct {
 	Available      bool   `json:"available"`
 	ReserveBytes   uint64 `json:"reserve_bytes"`
 	FootprintBytes uint64 `json:"footprint_bytes"`
-	// Accounts hold a proved passkey; Promised of them have no computer yet.
-	// HeldBytes is the disk those accounts will still take (a footprint for
-	// each unopened account, the gap to a footprint for each computer that
-	// has not grown to one), which the free reading does not show yet.
+	// Accounts hold a proved passkey (a count to read, not an input: an
+	// account with no computer holds no room, owner 2026-11-24). HeldBytes is
+	// the disk the computers that exist will still take (the gap to a
+	// footprint for each that has not grown to one), which the free reading
+	// does not show yet.
 	Accounts  int    `json:"accounts"`
-	Promised  int    `json:"promised"`
 	HeldBytes uint64 `json:"held_bytes"`
 	// Places is how many more computers the host can hold; sign-up is open
 	// when it is at least one.
@@ -322,8 +322,7 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 	out.Room.Available = true
 	out.Room.ReserveBytes, out.Room.FootprintBytes = plan.ReserveBytes, plan.FootprintBytes
 	out.Room.Accounts = len(holders)
-	out.Room.Promised = hostroom.Unopened(holders, owners)
-	out.Room.HeldBytes = plan.Held(holders, owners)
+	out.Room.HeldBytes = plan.Held(owners)
 	out.Room.Places = plan.Places(sample.StateDirAvailableBytes, out.Room.HeldBytes)
 	out.Room.Open = out.Room.Places >= 1
 	return out

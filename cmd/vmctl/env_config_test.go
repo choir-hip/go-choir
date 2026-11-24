@@ -237,12 +237,12 @@ func TestRoomConfigFromEnv(t *testing.T) {
 		t.Fatalf("set = %+v %q %v", plan, path, err)
 	}
 	for name, env := range map[string][3]string{
-		"a part missing":                   {"100", "15", ""},
-		"a malformed number":               {"lots", "15", "/x"},
-		"a zero footprint":                 {"100", "0", "/x"},
-		"a footprint under the largest":    {"100", "14", "/x"},
-		"a reserve under the deploy floor": {"59", "15", "/x"},
-		"no reserve":                       {"0", "15", "/x"},
+		"a part missing":                    {"100", "15", ""},
+		"a malformed number":                {"lots", "15", "/x"},
+		"a zero footprint":                  {"100", "0", "/x"},
+		"a footprint under a real computer": {"100", "1", "/x"},
+		"a reserve under the deploy floor":  {"59", "15", "/x"},
+		"no reserve":                        {"0", "15", "/x"},
 	} {
 		t.Setenv("VMCTL_ROOM_RESERVE_GIB", env[0])
 		t.Setenv("VMCTL_ROOM_FOOTPRINT_GIB", env[1])

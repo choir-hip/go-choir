@@ -3,6 +3,7 @@ package vmctl
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,14 +73,24 @@ func TestPulseCapacityReadsWhatTheOwnerDecidesOn(t *testing.T) {
 		t.Fatalf("running guest memory = %d MiB", got.Computers.RunningGuestMemoryMiB)
 	}
 	r := got.Room
-	// u-old and u-new have computers; u-late holds a passkey and none yet.
-	if !r.Available || r.Accounts != 3 || r.Promised != 1 {
-		t.Fatalf("room = %+v, want available, 3 accounts, 1 promised", r)
+	// u-old and u-new have computers; u-late holds a passkey and none yet,
+	// and holds nothing (owner, 2026-11-24).
+	if !r.Available || r.Accounts != 3 {
+		t.Fatalf("room = %+v, want available, 3 accounts", r)
 	}
-	// 154 - 100 = 54 GiB; u-late holds 9, u-new's computer is 8.4 GiB short of
-	// a footprint, u-old's holds none back: 54 - 17.4 = 36.6; 36.6 / 9 = 4.
-	if r.Places != 4 || !r.Open || r.FootprintBytes != 9<<30 || r.ReserveBytes != 100<<30 {
+	// 154 - 100 = 54 GiB; u-new's computer is 8.4 GiB short of a footprint,
+	// u-old's holds none back: 54 - 8.4 = 45.6; 45.6 / 9 = 5.
+	if r.Places != 5 || r.HeldBytes != 9<<30-644245094 || !r.Open || r.FootprintBytes != 9<<30 || r.ReserveBytes != 100<<30 {
 		t.Fatalf("room = %+v, want 5 places, open, 9 GiB footprint, 100 GiB reserve", r)
+	}
+	// Hundreds more accounts with a passkey and no computer change nothing in
+	// what the room holds or the places it offers.
+	many := append([]pulseAccountRecord{}, users...)
+	for i := 0; i < 300; i++ {
+		many = append(many, pulseAccountRecord{UserID: fmt.Sprintf("u-rec-%d", i), Email: fmt.Sprintf("rec%d@mosiah.org", i), CreatedAt: now.Add(-90 * 24 * time.Hour), HasPasskey: true, Proved: true})
+	}
+	if m := pulseCapacity(now, many, true, ownerships, owners, true, sample, cfg, plan).Room; m.Places != r.Places || m.HeldBytes != r.HeldBytes || !m.Open {
+		t.Fatalf("300 accounts with no computer moved the room: %+v, was %+v", m, r)
 	}
 	if r.SignUpsLast24h != 2 {
 		t.Fatalf("sign-ups in the last day = %d, want 2 (u-new, and u-late by its passkey time; no abandoned begin)", r.SignUpsLast24h)

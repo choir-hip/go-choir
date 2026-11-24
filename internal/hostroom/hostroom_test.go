@@ -11,8 +11,11 @@ const gib = uint64(1) << 30
 
 // The bound on sign-ups is what the host can hold, not a number somebody
 // chose. Failure modes guarded:
-//  1. room that ignores accounts already promised a computer (each of them
-//     will take a footprint when it first opens);
+//  1. an account with no computer holding room (owner, 2026-11-24: "dont
+//     count any account without a computer. all real accounts have a
+//     computer. we just have records of email adddresses where we deleted
+//     the computers for testing"): 898 such records, each charged a
+//     footprint, closed sign-up on staging for good;
 //  2. the promise released the moment the computer exists, while its disk is
 //     still a fraction of the footprint it will grow to: the room then grows
 //     as computers open, and the host is admitted past its reserve;
@@ -47,19 +50,27 @@ func TestPlacesCountsTheRoomHeldBack(t *testing.T) {
 	}
 }
 
-func TestHeldChargesAnUnopenedAccountAFootprintAndAnOwnerItsGrowthGap(t *testing.T) {
+func TestHeldChargesAnOwnerItsGrowthGapAndNobodyElseAnything(t *testing.T) {
 	p := Plan{ReserveBytes: 100 * gib, FootprintBytes: 9 * gib}
 	owners := map[string]uint64{"small": gib, "grown": 12 * gib, "exact": 9 * gib, "paper": 80 * gib}
-	// "paper" is a computer of an account that holds no passkey here: not
-	// one of the accounts admitted, so it holds nothing back (its disk is in
-	// the free reading).
-	accounts := []string{"small", "grown", "exact", "unopened-1", "unopened-2", "unopened-2"}
-	want := (9-1)*gib + 0 + 0 + 9*gib + 9*gib
-	if got := p.Held(accounts, owners); got != want {
-		t.Fatalf("held = %d GiB, want %d GiB (8 for the small computer's gap, none for a grown or exact one, 9 for each of two unopened accounts)", got>>30, want>>30)
+	want := (9 - 1) * gib
+	if got := p.Held(owners); got != want {
+		t.Fatalf("held = %d GiB, want %d GiB (8 for the small computer's gap, none for a grown or exact one)", got>>30, want>>30)
 	}
-	if got := Unopened(accounts, owners); got != 2 {
-		t.Fatalf("unopened = %d, want 2 (a repeated id is one account)", got)
+	if got := p.Held(nil); got != 0 {
+		t.Fatalf("no computers hold %d GiB back", got>>30)
+	}
+}
+
+// Many accounts with no computer (nothing names them here) leave the room as
+// the free reading says: they are not an input.
+func TestAccountsWithoutAComputerHoldNothing(t *testing.T) {
+	p := Plan{ReserveBytes: 100 * gib, FootprintBytes: 2 * gib}
+	if got := p.Places(142*gib, p.Held(map[string]uint64{})); got != 21 {
+		t.Fatalf("places = %d, want 21 ((142-100)/2)", got)
+	}
+	if got := p.Places(101*gib, 0); got != 0 {
+		t.Fatalf("less than a footprint over the reserve gave %d places, want 0 (closed)", got)
 	}
 }
 
@@ -70,29 +81,27 @@ func TestHeldChargesAnUnopenedAccountAFootprintAndAnOwnerItsGrowthGap(t *testing
 func TestTenNewComputersOpenAndTheRoomDoesNotGrow(t *testing.T) {
 	p := Plan{ReserveBytes: 100 * gib, FootprintBytes: 9 * gib}
 	free := 190 * gib // ten places
-	var ids []string
-	for i := 0; i < 10; i++ {
-		ids = append(ids, string(rune('a'+i)))
-	}
-	if got := p.Places(free, p.Held(ids, nil)); got != 0 {
-		t.Fatalf("ten unopened accounts leave %d places, want 0", got)
+	if got := p.Places(free, p.Held(nil)); got != 10 {
+		t.Fatalf("ten places expected before any computer, got %d", got)
 	}
 	const fresh = 644245094 // 0.6 GiB, a fresh computer's allocated disk
 	owners := map[string]uint64{}
-	for _, id := range ids {
+	for i := 0; i < 10; i++ {
+		id := string(rune('a' + i))
 		owners[id] = fresh
 		free -= fresh
-	}
-	if got := p.Places(free, p.Held(ids, owners)); got != 0 {
-		t.Fatalf("after ten computers opened the room is %d places, want 0 (it must not grow)", got)
+		// Each opening takes its place and leaves the rest as they were.
+		if got := p.Places(free, p.Held(owners)); got != 10-(i+1) {
+			t.Fatalf("after %d computers opened the room is %d places, want %d", i+1, got, 10-(i+1))
+		}
 	}
 	// Each computer grows to its footprint: the free reading falls, the
 	// held room falls with it, the places stay 0.
-	for _, id := range ids {
+	for id := range owners {
 		free -= 9*gib - owners[id]
 		owners[id] = 9 * gib
 	}
-	if got := p.Places(free, p.Held(ids, owners)); got != 0 {
+	if got := p.Places(free, p.Held(owners)); got != 0 {
 		t.Fatalf("after ten computers grew to a footprint: %d places, want 0", got)
 	}
 }
@@ -156,24 +165,23 @@ func TestFreeBytesReadsARealDirectory(t *testing.T) {
 func TestAWakeAndAHibernateDoNotOpenAPlace(t *testing.T) {
 	p := Plan{ReserveBytes: 100 * gib, FootprintBytes: 15 * gib}
 	const data, snapshot = 3 * gib, 4 * gib
-	ids := []string{"a", "b"}
 	free := 151 * gib
 	hibernated := map[string]uint64{"a": data + snapshot, "b": data + snapshot}
-	atSleep := p.Places(free, p.Held(ids, hibernated))
+	atSleep := p.Places(free, p.Held(hibernated))
 	// Both wake: the snapshots are deleted.
 	free += 2 * snapshot
 	awake := map[string]uint64{"a": data, "b": data}
-	if got := p.Places(free, p.Held(ids, awake)); got != atSleep {
+	if got := p.Places(free, p.Held(awake)); got != atSleep {
 		t.Fatalf("waking changed the places from %d to %d", atSleep, got)
 	}
 	// Both sleep again.
 	free -= 2 * snapshot
-	if got := p.Places(free, p.Held(ids, hibernated)); got != atSleep {
+	if got := p.Places(free, p.Held(hibernated)); got != atSleep {
 		t.Fatalf("hibernating changed the places from %d to %d", atSleep, got)
 	}
 	// Reporting the data image alone is the bug: the same wake opens a place.
 	dataOnly := map[string]uint64{"a": data, "b": data}
-	if p.Places(free+2*snapshot, p.Held(ids, dataOnly)) == p.Places(free, p.Held(ids, dataOnly)) {
+	if p.Places(free+2*snapshot, p.Held(dataOnly)) == p.Places(free, p.Held(dataOnly)) {
 		t.Fatal("the control did not show the bug: a data-image-only reading is meant to open a place on a wake")
 	}
 }
