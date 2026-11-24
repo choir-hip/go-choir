@@ -166,3 +166,41 @@ func TestForgetCredentialRefusesTheHardList(t *testing.T) {
 		t.Fatalf("the paper's computer: %d %s", w.Code, w.Body)
 	}
 }
+
+// Round 2 (seat 1 #3, seat 2 F3): the hard list is applied to the identity the
+// id resolves to, not only to the string named. The paper's VM id removes the
+// paper's identity as surely as its product id does.
+func TestForgetCredentialRefusesTheHardListByVMId(t *testing.T) {
+	h, reg := setupHandlerNoProvider(t)
+	paper := "computer-1355b83bced1613eb048ee28d66688a8"
+	owner := "computer-03335285269bdba4f94377e56879f9e6"
+	pc, err := reg.IssueCredentialForComputer("vm-paper-1", paper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oc, err := reg.IssueCredentialForComputer("vm-owner-1", owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"vm-paper-1", "vm-owner-1"} {
+		w := httptest.NewRecorder()
+		h.HandleForgetCredential(w, forgetRequest(name, time.Now().Add(-100*time.Hour), true))
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("%s: %d %s", name, w.Code, w.Body)
+		}
+	}
+	for _, c := range []*CredentialResult{pc, oc} {
+		if _, err := reg.ValidateCredential(c.RawToken); err != nil {
+			t.Fatalf("a protected identity was removed: %v", err)
+		}
+	}
+	// An ordinary VM id still goes.
+	if _, err := reg.IssueCredentialForComputer("vm-plain", "computer-aaaa5555"); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	h.HandleForgetCredential(w, forgetRequest("vm-plain", time.Now().Add(-100*time.Hour), true))
+	if w.Code != http.StatusOK {
+		t.Fatalf("an ordinary VM id: %d %s", w.Code, w.Body)
+	}
+}

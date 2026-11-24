@@ -663,6 +663,30 @@ func (r *IdentityRegistry) RevokeCredential(computerID string) {
 	}
 }
 
+// IdentitiesNamed returns the key (the VM id) and product computer id of every
+// identity that ForgetIdentity would remove for this id: the ones whose key or
+// recorded product computer id equals it. A caller that must refuse some of
+// them asks first.
+func (r *IdentityRegistry) IdentitiesNamed(id string) [][2]string {
+	id = strings.TrimSpace(id)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out [][2]string
+	if id == "" {
+		return out
+	}
+	for key, identity := range r.identities {
+		if key == id || (identity != nil && identity.ProductComputerID == id) {
+			product := ""
+			if identity != nil {
+				product = identity.ProductComputerID
+			}
+			out = append(out, [2]string{key, product})
+		}
+	}
+	return out
+}
+
 // ForgetIdentity removes a computer's identity record entirely (an account
 // deletion; the computer is destroyed and never boots again). It reports
 // whether a record existed. Removal is persisted before it returns.

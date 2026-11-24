@@ -801,9 +801,21 @@ func (h *Handler) HandleForgetCredential(w http.ResponseWriter, r *http.Request)
 		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: err.Error()})
 		return
 	}
+	// The id may be a VM id or a product computer id, and the registry matches
+	// either: the hard list is applied to the id named AND to every identity it
+	// would remove (its key and its product computer id), so naming the paper's
+	// or the owner's VM id is refused as the product id is.
 	if what, protected := purgeguard.ProtectedComputer(req.ComputerID); protected {
 		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "refused: " + what})
 		return
+	}
+	for _, pair := range h.registry.IdentitiesNamed(req.ComputerID) {
+		for _, id := range pair {
+			if what, protected := purgeguard.ProtectedComputer(id); protected {
+				writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "refused: " + what})
+				return
+			}
+		}
 	}
 	existed, err := h.registry.ForgetIdentity(strings.TrimSpace(req.ComputerID))
 	if err != nil {
