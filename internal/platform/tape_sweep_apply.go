@@ -14,6 +14,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -96,7 +97,10 @@ type tapeSweepApplyRun struct {
 	listed     map[string]bool
 	routed     map[string]bool
 	destroyErr string
-	nowHeads   map[string]tapeHead
+	// skipped is the ids of computers apply left alone (a failed re-proof or
+	// a spent cap), for a named apply to fail on.
+	skipped  []string
+	nowHeads map[string]tapeHead
 	delta      map[string]bool
 	deltaOK    bool
 	log        *tapeSweepLog
@@ -171,6 +175,10 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 		return report, fmt.Errorf("tape sweep: manifest %s header invalid", p.runID)
 	}
 	report.Sweeps = run.header.Sweeps
+	report.ComputerIDs = p.named
+	if !sameStrings(run.header.Computers, p.named) {
+		return report, fmt.Errorf("tape sweep: the manifest was made for computers %v; apply names %v and must name exactly those; nothing deleted", run.header.Computers, p.named)
+	}
 	report.NoArchive = run.header.NoArchive
 	if run.header.NoArchive != p.noArchive {
 		return report, fmt.Errorf("tape sweep: the manifest was made with no_archive=%v; apply must repeat it exactly; nothing deleted", run.header.NoArchive)
@@ -271,6 +279,9 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 			if err := json.Unmarshal(line, &c); err != nil {
 				return report, fmt.Errorf("tape sweep: manifest computer invalid: %w", err)
 			}
+			if len(p.named) > 0 && !slices.Contains(p.named, c.Proof.ComputerID) {
+				return report, fmt.Errorf("tape sweep: manifest lists computer %s, which this named apply does not name; nothing further deleted", c.Proof.ComputerID)
+			}
 			proof = &c.Proof
 			groupRows = map[string]int64{}
 		case "dir":
@@ -328,6 +339,11 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 	}
 	log.Printf("tape sweep: apply run=%s deleted=%d bytes=%d gone=%d kept_refreshed=%d kept_referenced=%d kept_not_destroyed=%d kept_unverified=%d deferred=%d errors=%d computers_deleted=%d computers_skipped=%d archives=%d",
 		p.runID, counts.Deleted, counts.BytesDeleted, counts.Gone, counts.KeptRefreshed, counts.KeptReferenced, counts.KeptNotDestroyed, counts.KeptUnverified, counts.DeferredByCap, counts.Errors, counts.ComputersDeleted, counts.ComputersSkipped, len(counts.Archives))
+	// A named apply that skipped a computer it was told to delete did not do
+	// what was asked: it says so with a failure, after the receipt is written.
+	if len(p.named) > 0 && len(run.skipped) > 0 {
+		return report, fmt.Errorf("tape sweep: named computers not deleted: %v (see the receipt %s)", run.skipped, report.ReportPath)
+	}
 	return report, nil
 }
 
@@ -388,6 +404,7 @@ func (s *Service) tapeSweepDelta(ctx context.Context, run *tapeSweepApplyRun) er
 
 func (s *Service) tapeSweepSkipComputer(run *tapeSweepApplyRun, proof TapeSweepComputerProof, items []tapeSweepItem, reason string) {
 	run.counts.ComputersSkipped++
+	run.skipped = append(run.skipped, proof.ComputerID)
 	run.counts.KeptNotDestroyed += len(items)
 	run.log.record(tapeSweepLogRecord{Op: "kept_not_destroyed", Sweep: TapeSweepDestroyed, Computer: proof.ComputerID, Reason: reason, Count: len(items)})
 	_ = run.log.flush()
@@ -449,6 +466,7 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	if len(items) > 0 && (run.deletes >= run.p.maxDeletes || run.bytes >= run.p.maxBytes) {
 		run.counts.DeferredByCap += len(items)
 		run.counts.ComputersSkipped++
+		run.skipped = append(run.skipped, proof.ComputerID)
 		return nil
 	}
 	id := proof.ComputerID
