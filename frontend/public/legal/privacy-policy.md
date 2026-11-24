@@ -22,7 +22,7 @@ Signed out, the app is listening only. It asks our server for the public front p
 
 ### Creating an account
 
-You make an account inside the app, with the phone's own passkey screen. We collect your email address and a passkey. The passkey gives us a public key and some details about it, such as when it was made. The private key stays on your device. We never see a password and we do not store one. The app asks for no codes. We use the email address to identify your account and for recovery. It is the same account on choir.news.
+You make an account inside the app, with the phone's own passkey screen. We collect your email address and a passkey. The passkey gives us a public key and some details about it, such as when it was made. The private key stays on your device. No person's account has a password, so we never see or store one. The one exception is an account we keep for Apple's App Review, which signs in with a user name and password; we store that password only as a hash. The app asks for no codes. We use the email address to identify your account and for recovery. It is the same account on choir.news.
 
 ### Your computer
 
@@ -162,7 +162,7 @@ Autoradio 1 is for people 16 and older. Do not make an account if you are under 
 
 ## 12. Security
 
-- Sign-in uses passkeys. There are no passwords to steal or reset.
+- Sign-in uses passkeys. No person's account has a password to steal or reset. One account kept for App Review has a password, stored on our server only as a hash.
 - The app talks to our server over HTTPS.
 - Your sign-in key on the phone is in the iPhone Keychain, on this device only.
 - The event log of your computer is sealed under a key that belongs to the computer.
