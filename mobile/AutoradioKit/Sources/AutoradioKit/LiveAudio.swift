@@ -539,7 +539,9 @@ public final class LiveAudio: @unchecked Sendable {
     // MARK: Playing
 
     /// Play voice frames now (acknowledgement, holding lines). Returns when the last frame has been heard.
-    public func playVoice(_ frames: AsyncThrowingStream<AudioFrame, Error>, reason: String = "a voice line") async {
+    /// `gate` (a Test's, see TrialGate): read before the node starts and before every buffer; a dead gate starts no sound, stops what was scheduled, and lets go of the frames.
+    public func playVoice(_ frames: AsyncThrowingStream<AudioFrame, Error>, reason: String = "a voice line", gate trial: TrialGate? = nil) async {
+        if let g = trial, !g.live { return }
         voiceBegan(reason: reason)
         defer { voiceEnded() }
         if virtual {
@@ -549,7 +551,7 @@ public final class LiveAudio: @unchecked Sendable {
             return
         }
         let rs = Resampler(rate: LiveAudio.playRate)
-        if running { voiceNode.play() }
+        if running, trial?.live ?? true { voiceNode.play() }
         let gate = NSLock()
         var pending = 0
         var finished = false
@@ -562,6 +564,7 @@ public final class LiveAudio: @unchecked Sendable {
         func settle() { gate.lock(); let fire = pending == 0 && finished; gate.unlock(); if fire { once.resume(()) } }
         do {
             for try await f in frames {
+                if let g = trial, !g.live { if running { voiceNode.stop() }; break }                // the account left: no further buffer, and what was scheduled stops
                 guard running, let inb = monoBuffer(f.samples, rate: f.sampleRate) else { continue }
                 let s = rs.convert(inb)
                 guard let ob = monoBuffer(s, rate: LiveAudio.playRate), ob.frameLength > 0 else { continue }

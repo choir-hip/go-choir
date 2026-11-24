@@ -67,7 +67,7 @@ public actor SetupMicLease {
     }
     /// The microphone for `seconds`, for a recording the person asked for (the Test button on a model's row): the frames go to this recording alone, and the lease is given back WHOLE on every exit (the tap cleared, the stored hands-free
     /// switch restored), a cancelled one too. nil when the microphone was refused or nothing was heard.
-    public func record(seconds: Double) async -> [Float]? {
+    public func record(seconds: Double, gate: TrialGate) async -> [Float]? {
         final class Take: @unchecked Sendable {
             let l = NSLock(); var samples: [Float] = []; var done = false
             func add(_ s: [Float]) { l.lock(); if !done { samples += s }; l.unlock() }
@@ -75,10 +75,11 @@ public actor SetupMicLease {
             var open: Bool { l.lock(); defer { l.unlock() }; return !done }
         }
         let take = Take()
-        let out = await begin(wanted: { take.open && !Task.isCancelled }, onFrame: { take.add($0.samples) })      // a cancelled recording (the account left) asks for nothing and opens nothing
+        let out = await begin(wanted: { take.open && gate.live }, onFrame: { if gate.live { take.add($0.samples) } })      // read at every step of the opening (the prompt answered, the engine open): an account that left opens nothing
         guard out == .open else { _ = take.finish(); return nil }                      // refused (begin released) or overtaken (whoever overtook it owns the lease)
         let mine = token
-        try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9))                      // a cancelled sleep ends early and falls through to the release
+        let step = UInt64(0.05 * 1e9); var left = UInt64(seconds * 1e9)
+        while left > 0 && gate.live { let n = min(step, left); try? await Task.sleep(nanoseconds: n); left -= n }          // ends the moment the gate dies, not at the end of the seconds
         let samples = take.finish()
         if token == mine { await release() }                                            // only while this recording still holds the lease: a newer take's microphone is not ours to close
         return samples.isEmpty ? nil : samples

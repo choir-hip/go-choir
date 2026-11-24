@@ -15,25 +15,25 @@ final class ModelTrialTests: XCTestCase {
         private let lock = NSLock()
         var calls: [String] = []
         var audio: [Float]? = Array(repeating: 0.1, count: 16_000 * 5)
-        var text = "hello there radio", span: (Double?, Double?) = (0.8, 3.1), answerText = "Paris.", speakMs = 240.0, voiceLine = "That is your voice.", searchLine = "Found 3 of your stories."
+        var text = "hello there radio", span: (Double?, Double?) = (0.8, 3.1), answerText = "Paris.", speakMs = 240.0, voiceLine = "That is your voice."
         var fail: String?
         func log(_ s: String) { lock.lock(); calls.append(s); lock.unlock() }
-        func record(seconds: Double) async -> [Float]? { log("record \(Int(seconds))"); return audio }
-        func transcribe(_ id: String, _ audio: [Float]) async throws -> String { log("transcribe \(id)"); if let f = fail { throw NSError(domain: f, code: 1) }; return text }
-        func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) { log("span \(id)"); return span }
-        func speak(_ id: String, _ sentence: String) async throws -> Double { log("speak \(id)"); if let f = fail { throw NSError(domain: f, code: 1) }; return speakMs }
-        func answer(_ id: String, job: String, prompt: String) async throws -> String { log("answer \(job) \(id) \(prompt)"); if let f = fail { throw NSError(domain: f, code: 1) }; return answerText }
-        func voiceprint(_ audio: [Float]) async throws -> String { log("voiceprint"); return voiceLine }
-        func search(_ query: String) async throws -> String { log("search \(query)"); return searchLine }
+        func record(seconds: Double, gate: TrialGate) async -> [Float]? { log("record \(Int(seconds))"); return audio }
+        func transcribe(_ id: String, _ audio: [Float], gate: TrialGate) async throws -> String { log("transcribe \(id)"); if let f = fail { throw NSError(domain: f, code: 1) }; return text }
+        func speechSpan(_ id: String, _ audio: [Float], gate: TrialGate) async throws -> (start: Double?, end: Double?) { log("span \(id)"); return span }
+        func speak(_ id: String, _ sentence: String, gate: TrialGate) async throws -> Double { log("speak \(id)"); if let f = fail { throw NSError(domain: f, code: 1) }; return speakMs }
+        func answer(_ id: String, job: String, prompt: String, gate: TrialGate) async throws -> String { log("answer \(job) \(id) \(prompt)"); if let f = fail { throw NSError(domain: f, code: 1) }; return answerText }
+        func voiceprint(_ audio: [Float], gate: TrialGate) async throws -> String { log("voiceprint"); return voiceLine }
     }
     final class Sink: @unchecked Sendable {
         private let lock = NSLock(); var seen: [(String, String, Double)] = []
         func put(_ s: String, _ l: String, _ ms: Double) { lock.lock(); seen.append((s, l, ms)); lock.unlock() }
-        var states: [String] { seen.map { $0.0 } }
-        var last: (String, String, Double)? { seen.last }
+        var states: [String] { lock.lock(); defer { lock.unlock() }; return seen.map { $0.0 } }
+        var last: (String, String, Double)? { lock.lock(); defer { lock.unlock() }; return seen.last }
+        var count: Int { lock.lock(); defer { lock.unlock() }; return seen.count }
     }
     func run(_ job: String, _ id: String, _ b: Fake) async -> Sink {
-        let k = Sink(); await ModelTrial.run(job: job, id: id, backend: b, report: { k.put($0, $1, $2) }); return k
+        let k = Sink(); await ModelTrial.run(job: job, id: id, backend: b, gate: TrialGate(), report: { k.put($0, $1, $2) }); return k
     }
 
     func testT1AHearingModelIsTestedOnARecordingMadeOnTheSpot() async {
@@ -66,10 +66,6 @@ final class ModelTrialTests: XCTestCase {
         let b = Fake(); let k = await run("speaker", "wespeaker-resnet34", b)
         XCTAssertEqual(b.calls, ["record 4", "voiceprint"]); XCTAssertEqual(k.last?.1, "That is your voice.")
     }
-    func testT6SearchRunsAFixedQuery() async {
-        let b = Fake(); let k = await run("search", "embeddinggemma", b)
-        XCTAssertEqual(b.calls, ["search \(ModelTrial.searchQuery)"]); XCTAssertEqual(k.last?.1, "Found 3 of your stories.")
-    }
     func testT7EveryFailureIsAPlainLineAndAFinishedState() async {
         let b = Fake(); b.audio = nil
         for j in ["transcriber", "bounds", "speaker"] { let k = await run(j, "m", b); XCTAssertEqual(k.states.last, "failed", j); XCTAssertTrue(k.last!.1.contains("microphone"), k.last!.1) }
@@ -81,33 +77,66 @@ final class ModelTrialTests: XCTestCase {
         let b = Fake(); let a = await run("voice", "kokoro-82m-ane", b); let c = await run("voice", "kokoro-82m-ane", b)
         XCTAssertEqual(a.states, c.states); XCTAssertFalse(["recording", "working", "testing"].contains(a.states.last!))
     }
-    // Review round 4: a cancelled Test (the account left) neither records nor speaks: cancellation is checked before every backend call, and the backend is not called after it.
-    final class Spy: TrialBackend, @unchecked Sendable {
-        let l = NSLock(); var calls: [String] = []; var recordDelay: UInt64 = 0
-        func log(_ s: String) { l.lock(); calls.append(s); l.unlock() }
-        func record(seconds: Double) async -> [Float]? { log("record"); if recordDelay > 0 { try? await Task.sleep(nanoseconds: recordDelay) }; return [0.1] }
-        func transcribe(_ id: String, _ audio: [Float]) async throws -> String { log("transcribe"); return "words" }
-        func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) { log("span"); return (0, 1) }
-        func speak(_ id: String, _ sentence: String) async throws -> Double { log("speak"); return 1 }
-        func answer(_ id: String, job: String, prompt: String) async throws -> String { log("answer"); return "a" }
-        func voiceprint(_ audio: [Float]) async throws -> String { log("voiceprint"); return "v" }
-        func search(_ query: String) async throws -> String { log("search"); return "s" }
+    // THE PROOF (docs/problems/model-test-cancellation-2026-11-24.md): a Test is an obligation owned by one account generation. A scripted backend suspends at every call of every job; the account leaves (the generation moves, or the task is
+    // cancelled) while call k is suspended; everything is then released. Nothing happens after the sign-out: no further backend call (the microphone, a model, the speaker) and no report.
+    final class Scripted: TrialBackend, @unchecked Sendable {
+        private let lock = NSLock(); private var started: [String] = []; private var latches: [CheckedContinuation<Void, Never>] = []; private var open = false
+        var calls: [String] { lock.lock(); defer { lock.unlock() }; return started }
+        func step(_ name: String) async {
+            lock.lock(); started.append(name); let released = open; lock.unlock()
+            if released { return }
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                lock.lock(); if open { lock.unlock(); c.resume() } else { latches.append(c); lock.unlock() }
+            }
+        }
+        /// After a step was released, the next one suspends again.
+        func relatch() { lock.lock(); open = false; lock.unlock() }
+        func releaseAll() { lock.lock(); open = true; let l = latches; latches = []; lock.unlock(); for c in l { c.resume() } }
+        func record(seconds: Double, gate: TrialGate) async -> [Float]? { await step("record"); return [0.1] }
+        func transcribe(_ id: String, _ audio: [Float], gate: TrialGate) async throws -> String { await step("transcribe"); return "words" }
+        func speechSpan(_ id: String, _ audio: [Float], gate: TrialGate) async throws -> (start: Double?, end: Double?) { await step("span"); return (0, 1) }
+        func speak(_ id: String, _ sentence: String, gate: TrialGate) async throws -> Double { await step("speak"); return 1 }
+        func answer(_ id: String, job: String, prompt: String, gate: TrialGate) async throws -> String { await step("answer"); return "a" }
+        func voiceprint(_ audio: [Float], gate: TrialGate) async throws -> String { await step("voiceprint"); return "v" }
     }
-    func testT9ATestCancelledBeforeItStartsCallsNoBackendAndReportsNothing() async {
-        for job in ["transcriber", "live", "bounds", "voice", "responder", "decision", "speaker", "search"] {
-            let spy = Spy(), k = Sink()
-            let t = Task { try? await Task.sleep(nanoseconds: 100_000_000); await ModelTrial.run(job: job, id: "m", backend: spy, report: { k.put($0, $1, $2) }) }
-            t.cancel(); await t.value
-            XCTAssertEqual(spy.calls, [], "\(job): the microphone, the speaker and the model were not touched after the cancel")
-            XCTAssertEqual(k.states, [], job)
+    func waitFor(_ s: Scripted, count: Int) async { for _ in 0..<400 { if s.calls.count >= count { return }; try? await Task.sleep(nanoseconds: 5_000_000) } }
+    static let steps: [String: Int] = ["transcriber": 2, "live": 2, "bounds": 2, "voice": 1, "responder": 1, "decision": 1, "speaker": 2]
+
+    func testT9AfterTheAccountLeavesNothingHappensAtAnyStepOfAnyJob() async {
+        for (job, n) in Self.steps.sorted(by: { $0.key < $1.key }) {
+            for k in 1...n {                                                         // the account leaves while backend call number k is suspended
+                let b = Scripted(), k0 = Sink(); let gate = TrialGate()
+                let t = Task { await ModelTrial.run(job: job, id: "m", backend: b, gate: gate, report: { k0.put($0, $1, $2) }) }
+                for i in 1..<k { await waitFor(b, count: i); b.releaseAll(); b.relatch() }      // calls before k run to completion, one at a time
+                await waitFor(b, count: k)
+                let callsAtLeave = b.calls.count, reportsAtLeave = k0.count
+                AccountWipe.bumpGeneration()                                                // sign-out: the generation moves first
+                b.releaseAll(); await t.value
+                XCTAssertEqual(b.calls.count, callsAtLeave, "\(job) left at call \(k): a backend call began after the sign-out: \(b.calls)")
+                XCTAssertEqual(k0.count, reportsAtLeave, "\(job) left at call \(k): a line was written after the sign-out")
+            }
         }
     }
-    func testT9ATestCancelledDuringTheRecordingGoesNoFurther() async {
-        let spy = Spy(); spy.recordDelay = 300_000_000; let k = Sink()
-        let t = Task { await ModelTrial.run(job: "transcriber", id: "m", backend: spy, report: { k.put($0, $1, $2) }) }
-        while !spy.calls.contains("record") { try? await Task.sleep(nanoseconds: 5_000_000) }       // wait for it to be recording, then the account leaves
-        t.cancel(); await t.value
-        XCTAssertEqual(spy.calls, ["record"], "the recording is not transcribed: \(spy.calls)")
-        XCTAssertEqual(k.states, ["recording"])
+    func testT9bTheSameForACancelledTask() async {
+        for (job, n) in Self.steps.sorted(by: { $0.key < $1.key }) {
+            for k in 1...n {
+                let b = Scripted(), k0 = Sink(); let gate = TrialGate()
+                let t = Task { await ModelTrial.run(job: job, id: "m", backend: b, gate: gate, report: { k0.put($0, $1, $2) }) }
+                for i in 1..<k { await waitFor(b, count: i); b.releaseAll(); b.relatch() }
+                await waitFor(b, count: k)
+                let callsAtLeave = b.calls.count, reportsAtLeave = k0.count
+                t.cancel(); b.releaseAll(); await t.value
+                XCTAssertEqual(b.calls.count, callsAtLeave, "\(job) cancelled at call \(k): \(b.calls)")
+                XCTAssertEqual(k0.count, reportsAtLeave, "\(job) cancelled at call \(k)")
+            }
+        }
+    }
+    func testT9cALeaveBeforeTheFirstStepDoesNothing() async {
+        for job in Self.steps.keys {
+            let b = Scripted(), k0 = Sink(); let gate = TrialGate()
+            AccountWipe.bumpGeneration()                                               // the account left between the press and the run
+            await ModelTrial.run(job: job, id: "m", backend: b, gate: gate, report: { k0.put($0, $1, $2) })
+            XCTAssertEqual(b.calls, [], job); XCTAssertEqual(k0.count, 0, job)
+        }
     }
 }

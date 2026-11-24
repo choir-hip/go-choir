@@ -37,6 +37,7 @@ final class TtsRootTests: XCTestCase {
             XCTAssertTrue(pin.present(), "\(id) is present after the seal")
         }
     }
+    // (The case-sensitivity itself is only observable on iOS: on the Mac's case-insensitive volume this test asserts nothing about it; TtsRootLibraryTests pins the spelling to the library's own on every platform.)
     func testR2bAFolderUnderTheOtherCaseSealsNothing() {
         let base = tmp(), manifests = tmp()
         KnownModels.ttsRootProvider = { base.appendingPathComponent("fluidaudio/Models", isDirectory: true) }

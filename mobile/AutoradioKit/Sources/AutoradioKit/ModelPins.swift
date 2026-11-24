@@ -314,7 +314,11 @@ public enum ModelInUse {
         }
         out = out.filter { id in pins(id)?.seal == nil || readiness.isReady(model: id) }
         if let r = responder, !r.isEmpty { out.insert(r) }
-        if let d = decision, !d.isEmpty { out.insert(d) }          // the decision model the phone uses is protected as the answering one is (its stage lists Qwen3 whatever was chosen)
+        // The decision stage's descriptor always lists Qwen3 (a fixed need); once another decision model is the choice, Qwen3 is in use only as the answering model.
+        if let d = decision, !d.isEmpty {
+            if d != KnownModels.qwen3.id && responder != KnownModels.qwen3.id { out.remove(KnownModels.qwen3.id) }
+            out.insert(d)
+        }          // the decision model the phone uses is protected as the answering one is (its stage lists Qwen3 whatever was chosen)
         return out
     }
 }

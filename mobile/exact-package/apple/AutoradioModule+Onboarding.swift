@@ -32,6 +32,7 @@ final class OnboardingController: @unchecked Sendable {
     /// The Test lines (per account) and the last failure of each model's download (`ModelRunBook`). Native because the runs are.
     private let book = ModelRunBook()
     /// The running Tests, so a sign-out cancels them (a Test must not open the microphone or play audio for the next account).
+    /// Keyed by (account generation, row): one account's cleanup never removes another account's task.
     private var trialTasks: [String: Task<Void, Never>] = [:]
     /// Learning the person's voice (voice onboarding; Voice/VoiceEnrolment.swift): the sentences, the profile, the check.
     let capture = EnrolCapture(gate: .shared)
@@ -115,7 +116,7 @@ final class OnboardingController: @unchecked Sendable {
     func fetchSpeakerModel() {
         set { speakerFetching = true }
         let gen = AccountWipe.generation
-        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e } else if gen == AccountWipe.generation { self.book.speakerFailed("The voice-print model could not be fetched. Press Download to try again.", generation: gen) }; self.set { self.speakerFetching = false } }
+        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e }      /* the model is the phone's, not the account's (the print is forgotten at sign-out): a late success is kept */ else if gen == AccountWipe.generation { self.book.speakerFailed("The voice-print model could not be fetched. Press Download to try again.", generation: gen) }; self.set { self.speakerFetching = false } }
     }
 
     private func setupFinished(_ s: VoiceSetup, gen: Int, merging: Bool = false) {
@@ -283,6 +284,7 @@ final class OnboardingController: @unchecked Sendable {
         stop(); DownloadDoor.shared.reset(); SpeakerGate.shared.forget(); module.runtime.setHandsFree(false)           // sign-out: the microphone is closed and the switch stays off for the next person
         book.reset()
         lock.lock(); let running = trialTasks; trialTasks = [:]; lock.unlock(); for (_, t) in running { t.cancel() }
+        module.runtime.audio.stopVoice(); VoiceController.shared?.sampler.stop()          // a sample or a Test voice still sounding when the account leaves is stopped
         set { setup = nil; runModels = [:]; runStages = []; speakerFetching = false; mic = "unasked"; level = 0; heard = ""; route = ""; talking = false; over = false; picked = 0; finishAsked = 0 }
     }
 
@@ -307,20 +309,20 @@ final class OnboardingController: @unchecked Sendable {
     func test(job: String, id: String) {
         let key = "\(job):\(id)"
         if book.isRunning(key) { return }
-        let gen = AccountWipe.generation
+        let gen = AccountWipe.generation; let gate = TrialGate(generation: gen); let taskKey = "\(gen)|\(key)"
         book.test(key, state: "working", line: "", ms: 0, generation: gen); changed()
         let task = Task { [weak self] in
             guard let self else { return }
-            await ModelTrial.run(job: job, id: id, backend: LiveTrialBackend(controller: self), report: { state, line, ms in self.book.test(key, state: state, line: line, ms: ms, generation: gen); self.changed() })
-            self.lock.lock(); self.trialTasks[key] = nil; self.lock.unlock()
+            await ModelTrial.run(job: job, id: id, backend: LiveTrialBackend(controller: self), gate: gate, report: { state, line, ms in self.book.test(key, state: state, line: line, ms: ms, generation: gen); self.changed() })
+            self.lock.lock(); self.trialTasks[taskKey] = nil; self.lock.unlock()
         }
-        lock.lock(); trialTasks[key] = task; lock.unlock()
-        if gen != AccountWipe.generation { task.cancel() }                  // the account left between the press and here
+        lock.lock(); trialTasks[taskKey] = task; lock.unlock()
+        if !gate.live { task.cancel() }                  // the account left between the press and here
     }
 
     /// The microphone for `seconds`, through the same lease the voice learning uses (`SetupMicLease.record`: the frames go to this recording alone, and the lease is given back whole on every exit). nil when the microphone is refused.
-    func recordAudio(seconds: Double) async -> [Float]? {
-        await lease.record(seconds: seconds)
+    func recordAudio(seconds: Double, gate: TrialGate) async -> [Float]? {
+        await lease.record(seconds: seconds, gate: gate)
     }
 
     // MARK: What shared code sees
@@ -430,18 +432,19 @@ extension AutoradioModule {
 struct LiveTrialBackend: TrialBackend {
     let controller: OnboardingController
     private var provider: ModelProvider { get throws { guard let p = ModelProviders.current else { throw LabError.unavailable(ModelProviders.missingNote) }; return p } }
-    func record(seconds: Double) async -> [Float]? { await controller.recordAudio(seconds: seconds) }
-    func transcribe(_ id: String, _ audio: [Float]) async throws -> String { try await provider.transcribe(id, audio) }
-    func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) { try await provider.speechSpan(id, audio) }
-    func answer(_ id: String, job: String, prompt: String) async throws -> String { try await provider.answer(id, job: job, prompt: prompt) }
-    func speak(_ id: String, _ sentence: String) async throws -> Double {
+    func record(seconds: Double, gate: TrialGate) async -> [Float]? { await controller.recordAudio(seconds: seconds, gate: gate) }
+    func transcribe(_ id: String, _ audio: [Float], gate: TrialGate) async throws -> String { guard gate.live else { throw CancellationError() }; return try await provider.transcribe(id, audio) }
+    func speechSpan(_ id: String, _ audio: [Float], gate: TrialGate) async throws -> (start: Double?, end: Double?) { guard gate.live else { throw CancellationError() }; return try await provider.speechSpan(id, audio) }
+    func answer(_ id: String, job: String, prompt: String, gate: TrialGate) async throws -> String { guard gate.live else { throw CancellationError() }; return try await provider.answer(id, job: job, prompt: prompt) }
+    func speak(_ id: String, _ sentence: String, gate: TrialGate) async throws -> Double {
         guard let option = VoiceCatalog.options.first(where: { $0.modelID == id }) else { throw LabError.badInput("this model has no voice to speak with") }
         var o = option; o.sample = sentence
         let rt = controller.module.runtime!
         // A cancelled Test (the account left) stops the sound at once: the audio engine's own cancel only lets go of the waiter, so the voice is stopped here.
-        return try await withTaskCancellationHandler { try await VoiceController.play(o, on: rt) } onCancel: { rt.audio.stopVoice() }
+        return try await withTaskCancellationHandler { try await VoiceController.play(o, on: rt, gate: gate) } onCancel: { rt.audio.stopVoice() }
     }
-    func voiceprint(_ audio: [Float]) async throws -> String {
+    func voiceprint(_ audio: [Float], gate trial: TrialGate) async throws -> String {
+        guard trial.live else { throw CancellationError() }
         let gate = SpeakerGate.shared
         guard gate.canListen else { return "The voice-print model is not loaded yet. Try again in a moment." }
         switch await gate.judge(audio) {
@@ -450,5 +453,4 @@ struct LiveTrialBackend: TrialBackend {
         case .unknown: return "The voice-print model works, but it has not been taught your voice yet. Use Learn my voice."
         }
     }
-    func search(_ query: String) async throws -> String { throw LabError.unavailable("the search test is run by the shared code") }
 }

@@ -161,6 +161,29 @@ describe('Download', () => {
   });
 });
 
+describe('the microphone line before a recording Test', () => {
+  const ready = (ids: string[]): VoiceFacts => ({ ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (ids.includes(o.id) ? { ...o, ready: true } : o)) })) });
+  let mic = 'granted';
+  beforeEach(() => { mic = 'granted'; bindNative({ later: async (r) => { if (r.op === 'obFacts') return live ?? {}; if (r.op === 'obMicState') return { state: mic }; calls.push(r); if (r.op === 'embedState') return { present: embedPresent }; return {}; } }); });
+  test('M17 unasked: the first press shows the plain line and starts nothing; the second press goes on (the system prompt follows it)', async () => {
+    mic = 'unasked';
+    let v = await modelsAct('test', 'transcriber', 'ear-one', ready(['ear-one']), storage);
+    expect(calls.filter((c) => c.op === 'obModelTest').length).toBe(0);
+    expect(row(v, 'transcriber', 'ear-one').testLine).toContain('needs your microphone');
+    v = await modelsAct('test', 'transcriber', 'ear-one', ready(['ear-one']), storage);
+    expect(calls.filter((c) => c.op === 'obModelTest')).toEqual([{ op: 'obModelTest', job: 'transcriber', id: 'ear-one' }]);
+  });
+  test('M17 refused: the declined line and never a start; granted: starts at once; a job that does not listen never asks', async () => {
+    mic = 'refused';
+    const v = await modelsAct('test', 'bounds', 'gate', ready(['gate']), storage);
+    expect(calls.filter((c) => c.op === 'obModelTest').length).toBe(0); expect(row(v, 'bounds', 'gate').testLine).toContain('Microphone is off');
+    mic = 'granted'; calls = [];
+    await modelsAct('test', 'speaker', 'print', ready(['print']), storage); expect(calls.filter((c) => c.op === 'obModelTest').length).toBe(1);
+    mic = 'unasked'; calls = [];
+    await modelsAct('test', 'responder', 'lm-big', ready(['lm-big']), storage); expect(calls.filter((c) => c.op === 'obModelTest').length).toBe(1);
+  });
+});
+
 describe('a row that failed', () => {
   test('M3c a failed row keeps its reason and can be pressed again, and it does not hold the other rows (the run is over)', () => {
     const g: VoiceFacts = { ...f, setupStarted: true, setupFinished: true, modelRuns: [{ id: 'gate', state: 'failed', progress: 0, line: 'The download failed (offline).' }] };
@@ -169,10 +192,10 @@ describe('a row that failed', () => {
     expect(row(v, 'voice', 'zeta')).toMatchObject({ canDownload: true, line: 'Not downloaded' });
   });
   test('M13b a sign-out forgets the test lines (they belong to the account that ran them)', async () => {
-    embedPresent = true; const was = onTestSearch(async () => 'It found 1 story or document on this phone for: x');
+    embedPresent = true; const was = onTestSearch(async (_q, _s) => 'It found 1 story or document on this phone for: x');
     const g: VoiceFacts = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (o.id === 'embedder' ? { ...o, ready: true } : o)) })) };
     try { await modelsAct('test', 'search', 'embedder', g, storage); expect(row(view(g, true), 'search', 'embedder').testLine).toContain('It found 1 story'); forgetModelTests(); expect(row(view(g, true), 'search', 'embedder').testLine).toBe(''); }
-    finally { if (was) onTestSearch(was); }
+    finally { onTestSearch(was); }
   });
 });
 
@@ -212,9 +235,9 @@ describe('the search test (shared code runs it)', () => {
   test('M10 Test on the search model runs the fixed query in Exact, not native, and shows what it found', async () => {
     embedPresent = true;
     const realNow = Date.now; Date.now = () => { throw new Error('a data source may not read the clock'); };          // the bake refuses Date.now(): the test fails if the page reads it
-    const asked: string[] = []; const was = onTestSearch(async (q) => { asked.push(q); return 'It found 3 stories and documents on this phone for: ' + q; });
+    const asked: string[] = []; const was = onTestSearch(async (q, _s) => { asked.push(q); return 'It found 3 stories and documents on this phone for: ' + q; });
     const g: VoiceFacts = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (o.id === 'embedder' ? { ...o, ready: true } : o)) })) };
-    let v: Awaited<ReturnType<typeof modelsAct>>; try { v = await modelsAct('test', 'search', 'embedder', g, storage); } finally { Date.now = realNow; if (was) onTestSearch(was); }
+    let v: Awaited<ReturnType<typeof modelsAct>>; try { v = await modelsAct('test', 'search', 'embedder', g, storage); } finally { Date.now = realNow; onTestSearch(was); }
     expect(asked.length).toBe(1); expect(calls.filter((c) => c.op === 'obModelTest').length).toBe(0);
     expect(row(v, 'search', 'embedder')).toMatchObject({ testing: false }); expect(row(v, 'search', 'embedder').testLine).toContain('It found 3 stories and documents');
   });
@@ -223,10 +246,10 @@ describe('the search test (shared code runs it)', () => {
 describe('the search test across a sign-out', () => {
   test('M13c a search test that finishes after the account left writes nothing', async () => {
     embedPresent = true;
-    const was = onTestSearch(async () => { nextGeneration(); return 'It found 3 stories and documents on this phone for: x'; });     // the account leaves while the query runs
+    const was = onTestSearch(async (_q, _s) => { nextGeneration(); return 'It found 3 stories and documents on this phone for: x'; });     // the account leaves while the query runs
     const g: VoiceFacts = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (o.id === 'embedder' ? { ...o, ready: true } : o)) })) };
     try { await modelsAct('test', 'search', 'embedder', g, storage); expect(row(view(g, true), 'search', 'embedder').testLine).toBe(''); }
-    finally { if (was) onTestSearch(was); }
+    finally { onTestSearch(was); }
   });
 });
 
@@ -234,7 +257,7 @@ describe('two accounts and the search test', () => {
   test('M13d account A\'s late search result does not erase account B\'s line', async () => {
     embedPresent = true; const gate: { open: () => void } = { open: () => {} };
     let calls = 0;
-    const was = onTestSearch(async () => { calls += 1; if (calls === 1) { await new Promise<void>((r) => { gate.open = r; }); return 'A late'; } return 'B result'; });
+    const was = onTestSearch(async (_q, _s) => { calls += 1; if (calls === 1) { await new Promise<void>((r) => { gate.open = r; }); return 'A late'; } return 'B result'; });
     const g: VoiceFacts = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (o.id === 'embedder' ? { ...o, ready: true } : o)) })) };
     try {
       const a = modelsAct('test', 'search', 'embedder', g, storage);                    // account A starts a search test and waits
@@ -242,7 +265,7 @@ describe('two accounts and the search test', () => {
       await modelsAct('test', 'search', 'embedder', g, storage);                         // B runs and finishes
       gate.open(); await a;                                                              // A's result arrives late
       expect(row(view(g, true), 'search', 'embedder').testLine).toBe('B result');
-    } finally { if (was) onTestSearch(was); }
+    } finally { onTestSearch(was); }
   });
 });
 

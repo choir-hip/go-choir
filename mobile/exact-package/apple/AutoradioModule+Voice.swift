@@ -46,9 +46,11 @@ final class VoiceController: @unchecked Sendable {
 
     /// Say the option's sample in THAT voice. There is no fall back here: a card for Heart that played the phone's voice would be a lie.
     @discardableResult
-    static func play(_ option: VoiceOption, on rt: LabRuntime) async throws -> Double {
+    static func play(_ option: VoiceOption, on rt: LabRuntime, gate: TrialGate? = nil) async throws -> Double {
         let t0 = DispatchTime.now()
+        guard gate?.live ?? true else { throw CancellationError() }               // a Test whose account left starts nothing, not even the engine
         await rt.start(virtual: false)                            // does nothing when the radio is already running
+        guard gate?.live ?? true else { throw CancellationError() }
         var cfg = rt.configuration
         cfg.set(.voice, option.setting)
         let voice = try rt.registry.make(.voice, as: Voice.self, cfg)
@@ -62,7 +64,7 @@ final class VoiceController: @unchecked Sendable {
             }
             c.onTermination = { _ in t.cancel() }
         }
-        await rt.audio.playVoice(frames)
+        await rt.audio.playVoice(frames, gate: gate)                // the gate is read before the node starts and before every buffer: the model's load (seconds, not cancellable) cannot end in sound for an account that left
         let (error, n) = outcome.result()
         if let error { throw error }
         if n == 0 && !Task.isCancelled { throw LabError.unavailable("the voice \(option.id) made no sound") }

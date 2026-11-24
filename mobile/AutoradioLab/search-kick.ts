@@ -6,8 +6,8 @@ export const onKickSearch = (fn: (storage: Storage | undefined) => void): void =
 export const kickSearch = (storage?: Storage): void => { kick?.(storage); };
 
 /** The Test button of the search model (models.ts): runs a fixed query over the phone's own stories and documents (retrieval-live.ts registers it) and says what it found. */
-export type SearchTrial = (query: string) => Promise<string>;
+export type SearchTrial = (query: string, storage: Storage | undefined) => Promise<string>;
 let trial: SearchTrial | undefined;
 /** Registers the trial and returns the one it replaced (a test puts it back). */
-export const onTestSearch = (fn: SearchTrial): SearchTrial | undefined => { const was = trial; trial = fn; return was; };
-export const testSearch = async (query: string): Promise<string | undefined> => (trial ? trial(query) : undefined);
+export const onTestSearch = (fn: SearchTrial | undefined): SearchTrial | undefined => { const was = trial; trial = fn; return was; };
+export const testSearch = async (query: string, storage: Storage | undefined): Promise<string | undefined> => (trial ? trial(query, storage) : undefined);

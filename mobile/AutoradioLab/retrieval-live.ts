@@ -19,10 +19,16 @@ export const live = new Retrieval({ mayDownload: () => modelsAgreement(live.stor
 onKickSearch((storage) => { live.storage = storage ?? live.storage; live.kick(); });
 let warmed = false;
 // The Test button of the search model (models.ts): the fixed query over the phone's own index, as an ask with no page and no run sheet. It reads what is on the phone and downloads nothing.
-onTestSearch(async (query) => {
+onTestSearch(async (query, storage) => {
+  live.storage = storage ?? live.storage;                                                  // the same wiring a voice ask gets (retrievalServe): the page's storage and the native embedder
+  const later = nativeLater();
+  live.native = later ? nativeEmbedder(later as never) : null;
+  let size = 0;
+  if (live.native) { try { const v = await live.native.embed([query]); size = v[0]?.length ?? 0; } catch { return 'The embedding model did not answer on this phone.'; } }       // the model itself runs on the query
   const c = await live.serve({ id: 'trial', words: query, pageTitle: '', pageAddress: '', now: clock.ms, facts: { runSheet: [], pages: [], topics: [], pageText: '' } });
   const n = c.items.length;
-  return n === 0 ? 'It found nothing yet: the index of your stories is still being built, or there is nothing to find.' : `It found ${n} ${n === 1 ? 'story or document' : 'stories and documents'} on this phone for: ${query}`;
+  const model = size > 0 ? `The embedding model answered (${size} numbers). ` : '';
+  return n === 0 ? `${model}It found nothing yet: the index of your stories is still being built, or there is nothing to find.` : `${model}It found ${n} ${n === 1 ? 'story or document' : 'stories and documents'} on this phone for: ${query}`;
 });
 
 // The document sources: the phone's content store (content-run.ts) and the imported documents the phone holds the text of (imported-search.ts). Both read through the runtime's storage.

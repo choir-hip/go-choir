@@ -107,7 +107,7 @@ final class SetupMicLeaseTests: XCTestCase {
         let tap = Tap()
         let l = SetupMicLease(.init(ask: { true }, openEngine: { r.add("engine") },
                                     setTap: { t in r.add(t == nil ? "tap:nil" : "tap:set"); tap.set(t) }, micOn: { on in r.add(on ? "mic:on" : "mic:off") }, restore: { r.add("restore") }))
-        let t = Task { await l.record(seconds: 0.3) }
+        let t = Task { await l.record(seconds: 0.3, gate: TrialGate()) }
         await waitFor(r, "mic:on")
         tap.feed(AudioFrame(samples: [0.5, 0.25], sampleRate: 16000, t: 0))
         let got = await t.value
@@ -117,24 +117,24 @@ final class SetupMicLeaseTests: XCTestCase {
     }
     func testL9ACancelledRecordingStillReleases() async {
         let r = Rec(); let l = make(r)
-        let t = Task { await l.record(seconds: 30) }
+        let t = Task { await l.record(seconds: 30, gate: TrialGate()) }
         await waitFor(r, "mic:on"); t.cancel()
         _ = await t.value
         XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"], "\(r.all)")
     }
     func testL9ARefusedOrSilentRecordingIsNilAndReleased() async {
         let r = Rec(); r.granted = false; let l = make(r)
-        let none = await l.record(seconds: 0.1); XCTAssertNil(none)
+        let none = await l.record(seconds: 0.1, gate: TrialGate()); XCTAssertNil(none)
         XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"])
         let r2 = Rec(); let l2 = make(r2)
-        let silent = await l2.record(seconds: 0.1); XCTAssertNil(silent, "no frames is no recording")
+        let silent = await l2.record(seconds: 0.1, gate: TrialGate()); XCTAssertNil(silent, "no frames is no recording")
         XCTAssertEqual(Array(r2.all.suffix(2)), ["tap:nil", "restore"])
     }
 
     // L10 (review round 2): a recording that was overtaken (another begin took the microphone) must not release the newer take's lease.
     func testL10AnOvertakenRecordingDoesNotReleaseTheNewerTake() async {
         let r = Rec(); let l = make(r)
-        let t = Task { await l.record(seconds: 0.4) }
+        let t = Task { await l.record(seconds: 0.4, gate: TrialGate()) }
         await waitFor(r, "mic:on")
         let newer = await l.begin(wanted: { true }, onFrame: { _ in })                  // another take (voice learning, another Test) overtakes it
         XCTAssertEqual(newer, .open)
@@ -147,10 +147,33 @@ final class SetupMicLeaseTests: XCTestCase {
     // L11 (review round 4): a recording asked for by a Test that is already cancelled (the account left) asks for no permission, opens no engine and no microphone.
     func testL11ACancelledRecordingOpensNothing() async {
         let r = Rec(); let l = make(r)
-        let t = Task { () -> [Float]? in try? await Task.sleep(nanoseconds: 100_000_000); return await l.record(seconds: 5) }
+        let t = Task { () -> [Float]? in try? await Task.sleep(nanoseconds: 100_000_000); return await l.record(seconds: 5, gate: TrialGate()) }
         t.cancel()
         let got = await t.value
         XCTAssertNil(got)
         XCTAssertFalse(r.all.contains("ask") || r.all.contains("engine") || r.all.contains("mic:on") || r.all.contains("tap:set"), "nothing was opened: \(r.all)")
+    }
+
+    // L12 (review round 5): the account leaves while the permission prompt or the engine is still opening: the answer, when it comes, opens nothing (no engine, no tap, no microphone) and everything is given back.
+    func testL12ASignOutDuringThePermissionPromptOpensNothing() async {
+        let r = Rec(); r.hold = true; let l = make(r)
+        let gate = TrialGate()
+        let t = Task { await l.record(seconds: 5, gate: gate) }
+        await waitFor(r, "ask")
+        AccountWipe.bumpGeneration()                                                    // sign-out while the prompt is up
+        answer(r)
+        let got = await t.value
+        XCTAssertNil(got)
+        XCTAssertFalse(r.all.contains("engine") || r.all.contains("tap:set") || r.all.contains("mic:on"), "\(r.all)")
+        XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"])
+    }
+    func testL12bASignOutAfterTheMicrophoneOpenedEndsTheRecordingAndReleases() async {
+        let r = Rec(); let l = make(r)
+        let t = Task { await l.record(seconds: 30, gate: TrialGate()) }
+        await waitFor(r, "mic:on")
+        AccountWipe.bumpGeneration()
+        let got = await t.value
+        XCTAssertNil(got, "what was heard under the signed-out account is not returned")
+        XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"])
     }
 }

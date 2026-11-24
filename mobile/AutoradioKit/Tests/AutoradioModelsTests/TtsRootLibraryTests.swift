@@ -5,6 +5,7 @@ import FluidAudio
 
 // Our idea of where the voice models live is the library's own answer, string-exact (owner bug, 2026-11-24): no hand-written root can drift from FluidAudio's `TtsCacheDirectory` and `Repo.folderName`.
 final class TtsRootLibraryTests: XCTestCase {
+    override func tearDown() { KnownModels.ttsRootProvider = KnownModels.defaultTtsRoot }
     override func setUp() { ModelHub.register(into: StageRegistry()) }                      // what the app does at launch: it hands the library's directory to the catalog
     func testTheCatalogsTtsRootIsTheLibrarysDirectoryString_ExactIncludingCase() throws {
         let lib = try TtsCacheDirectory.ensure().appendingPathComponent("Models", isDirectory: true)

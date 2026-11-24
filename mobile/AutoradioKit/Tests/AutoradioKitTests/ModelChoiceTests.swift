@@ -42,4 +42,20 @@ final class ModelChoiceTests: XCTestCase {
         s.syncSelected("kokoro:am_adam"); changed = k.n
         XCTAssertEqual(changed, 1, "the cards are asked again when the choice moved"); s.syncSelected("kokoro:am_adam"); XCTAssertEqual(k.n, 1, "the same choice says nothing")
     }
+    // Review round 5: the decision stage's descriptor always lists Qwen3 as its need; once another decision model is the choice, Qwen3 is not in use (unless it is the answering model) and can be removed.
+    func testH6TheDecisionStagesFixedNeedDoesNotKeepQwenWhenAnotherDecisionModelIsChosen() {
+        let reg = StageRegistry()
+        reg.register(.system1, id: "llama-qwen3-0.6b", descriptor: StageDescriptor(displayName: "d", needsModels: ["qwen3-0.6b-q8_0"])) { _ in EnergyVAD(StageParams()) }
+        var c = LabConfiguration(name: "t"); c.set(.system1, StageSetting(id: "llama-qwen3-0.6b"))
+        let none = MemoryVoiceReadiness()
+        var ids = ModelInUse.ids(config: c, registry: reg, responder: "lfm3-1.7b-q5_k_m", decision: "lfm2.5-350m-q4_k_m", readiness: none)
+        XCTAssertFalse(ids.contains("qwen3-0.6b-q8_0"), "the choice is lfm2.5 for deciding and lfm3 for answering: Qwen3 is unused \(ids)")
+        XCTAssertTrue(ids.isSuperset(of: ["lfm3-1.7b-q5_k_m", "lfm2.5-350m-q4_k_m"]))
+        ids = ModelInUse.ids(config: c, registry: reg, responder: "qwen3-0.6b-q8_0", decision: "lfm2.5-350m-q4_k_m", readiness: none)
+        XCTAssertTrue(ids.contains("qwen3-0.6b-q8_0"), "it is the answering model")
+        ids = ModelInUse.ids(config: c, registry: reg, responder: "lfm3-1.7b-q5_k_m", decision: "qwen3-0.6b-q8_0", readiness: none)
+        XCTAssertTrue(ids.contains("qwen3-0.6b-q8_0"), "it is the decision model")
+        ids = ModelInUse.ids(config: c, registry: reg, responder: "lfm3-1.7b-q5_k_m", decision: nil, readiness: none)
+        XCTAssertTrue(ids.contains("qwen3-0.6b-q8_0"), "no decision choice known: the stage's own need stands")
+    }
 }

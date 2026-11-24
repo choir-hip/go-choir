@@ -154,7 +154,7 @@ component VoiceRowFace
           if c.state == "ready"
             button press=vcHear(c.id) testId=`mv-voice-test-${c.id}` appearance="none"
               Btn(label="Test", primary=false, wide=false)
-          if c.selected == false
+          if c.selected == false and c.state == "ready"
             button press=vcPick(c.id) testId=`mv-voice-use-${c.id}` appearance="none"
               Btn(label="Use", primary=false, wide=false)
 
