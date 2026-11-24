@@ -383,6 +383,9 @@ public final class LabRuntime: @unchecked Sendable {
     public func applyKeptPicks() {
         for (k, id) in picksStore.load() {
             guard let kind = StageKind(rawValue: k), StagePicksStore.kinds.contains(kind), registry.stages(kind).contains(where: { $0.id == id }) else { continue }
+            // The launch configuration already chose a model that is ready (`ListenerPipeline.choose`, with its parameters): a bare stage id must not replace it. Only a listener still on the built-in floor takes the kept pick.
+            let floor = kind == .speechBounds ? ListenerPipeline.floorBounds : ListenerPipeline.floorTranscriber
+            if let now = configuration.setting(kind)?.id, now != floor { continue }
             setStage(kind, id: id)
         }
     }
