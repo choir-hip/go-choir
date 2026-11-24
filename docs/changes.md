@@ -10,6 +10,14 @@ backfilled from the commit and nobody re-read the evidence for this page.
 Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 169 docs-only and 72 that change behavior.
 
+## 2026-11-24: the privacy policy and terms load again on choir.news
+
+What: the web build's nix source filter now keeps every file under `frontend/public/`. It kept only listed suffixes (.js, .ts, .svelte, .css, .html and a few named files), so `public/legal/privacy-policy.md`, `public/legal/terms-of-service.md` and the reader's sample PDF never reached the deployed site, and `/legal/*.md` answered with the app's HTML shell. The Privacy and Terms pages (and the app's links to them) showed that HTML as text.
+Why: the owner saw raw HTML on the phone's Privacy and Terms pages (2026-11-24); App Review needs both to load.
+Proof: before, `nix eval .#packages.x86_64-linux.frontend.src.outPath` held an empty `public/legal`; after, it holds both files and the PDF. Deployed proof: `curl -s -D- https://choir.news/legal/privacy-policy.md` answers markdown, not the shell (not proved until deployed).
+Replaced: the suffix list's silent drop of public files.
+Undo: revert the commit.
+
 ## 2026-11-23: the phone's first run, downloads and microphone (lane `onboard-consent`)
 
 **What.** (1) Signed out, the radio plays the paper's own stories in the paper's order (listening only): the writer's `mode` (consent.ts `deskMode`) says "listening" with no key, and the desk is not asked. (2) Model downloads are

@@ -272,7 +272,12 @@
               ((pkgs.lib.hasSuffix ".json" path) &&
                 ((pkgs.lib.hasInfix "/frontend/src/" path) || (pkgs.lib.hasInfix "/frontend/scripts/" path))) ||
               base == "svelte.config.js" ||
-              base == "vite.config.js";
+              base == "vite.config.js" ||
+              # Everything under public/ is copied as served: the privacy
+              # policy and terms (.md, fetched by LegalDocument.svelte) and the
+              # reader's sample PDF. A suffix list here served the SPA shell in
+              # their place (2026-11-24).
+              (pkgs.lib.hasInfix "/frontend/public/" path);
         };
         npmDepsHash = "sha256-oA1Qf3x5Ff2kHBLJwhcVvy/d0n5GWlOXrXbue/HJ5UQ=";
         npmBuildScript = "build";
