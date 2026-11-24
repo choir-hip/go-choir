@@ -8,6 +8,9 @@ package vmctl
 //	                                        of it may never be deleted
 //	POST /internal/vmctl/account/stop       stop every computer of the account
 //	                                        (at once, when access is revoked)
+//	POST /internal/vmctl/account/preflight  before the purge begins: every
+//	                                        precondition of destroy, checked
+//	                                        and nothing touched
 //	POST /internal/vmctl/account/destroy    after the grace period: drop the
 //	                                        ownership and delete the VM state
 //
@@ -240,7 +243,15 @@ func (r *OwnershipRegistry) DestroyAccountComputers(userID string, now time.Time
 			if cur := r.ownerships[key]; cur != nil {
 				delete(r.ownerships, key)
 				delete(r.vmByID, cur.VMID)
-				r.saveLocked()
+				// The ownership file must say it is gone: if the write fails
+				// the entry is put back and the step fails, so a restart
+				// cannot bring back an ownership whose state was destroyed
+				// and a retry destroys again (idempotent).
+				if err := r.writePersistenceLocked(); err != nil {
+					r.ownerships[key] = cur
+					r.vmByID[cur.VMID] = cur
+					return fmt.Errorf("persist ownership after destroy of %s: %w", c.ComputerID, err)
+				}
 			}
 			return nil
 		}()
@@ -263,6 +274,49 @@ func accountRowDeletable(rows []AccountComputer, vmID string) bool {
 		}
 	}
 	return false
+}
+
+// PreflightAccountDestroy checks everything DestroyAccountComputers would
+// check, and touches nothing: the deletion record is readable and old enough,
+// and no computer of the account is protected, held or running a capsule. The
+// runner asks it before the purge begins, so a read that cannot work (the
+// auth database unreadable under vmctl's mount) leaves the account whole and
+// cancellable instead of stuck half purged.
+func (r *OwnershipRegistry) PreflightAccountDestroy(userID string, now time.Time) ([]AccountComputer, error) {
+	userID = strings.TrimSpace(userID)
+	if err := r.accountPurgeEligibleFor(userID, now); err != nil {
+		return nil, err
+	}
+	if err := r.AccountPrecheck(userID); err != nil {
+		return nil, err
+	}
+	r.mu.RLock()
+	mgr := r.vmManager
+	r.mu.RUnlock()
+	if mgr == nil {
+		return nil, errors.New("vmctl: no VM manager; nothing could be destroyed")
+	}
+	return r.AccountComputers(userID), nil
+}
+
+// HandleAccountPreflight handles POST /internal/vmctl/account/preflight.
+func (h *Handler) HandleAccountPreflight(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.accountRoute(w, r)
+	if !ok {
+		return
+	}
+	list, err := h.registry.PreflightAccountDestroy(userID, time.Now().UTC())
+	switch {
+	case errors.Is(err, ErrAccountRefused), errors.Is(err, purgeguard.ErrNoRecord), errors.Is(err, purgeguard.ErrTooEarly):
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: err.Error()})
+	case err != nil:
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+	default:
+		if list == nil {
+			list = []AccountComputer{}
+		}
+		writeVMCTLJSON(w, http.StatusOK, map[string]any{"computers": list})
+	}
 }
 
 type accountRequest struct {
@@ -328,7 +382,12 @@ func (h *Handler) HandleAccountDestroy(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, ErrAccountRefused), errors.Is(err, purgeguard.ErrNoRecord), errors.Is(err, purgeguard.ErrTooEarly):
 		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: err.Error()})
 	case err != nil:
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		// A partial failure answers what WAS destroyed with the error, so the
+		// caller records those computers even though the step is not done.
+		writeVMCTLJSON(w, http.StatusConflict, struct {
+			Error string `json:"error"`
+			AccountDestroyResult
+		}{Error: err.Error(), AccountDestroyResult: res})
 	default:
 		writeVMCTLJSON(w, http.StatusOK, res)
 	}
@@ -378,10 +437,38 @@ func (c *Client) AccountStop(ctx context.Context, userID string) error {
 	return c.postAccount(ctx, "/internal/vmctl/account/stop", userID, nil)
 }
 
+// AccountPreflight asks vmctl to check every precondition of a destroy
+// without touching anything. A refusal wraps ErrAccountRefused.
+func (c *Client) AccountPreflight(ctx context.Context, userID string) error {
+	return c.postAccount(ctx, "/internal/vmctl/account/preflight", userID, nil)
+}
+
 // AccountDestroy deletes the account's computers; vmctl checks the deletion
-// record itself.
+// record itself. On a partial failure the result holds what WAS destroyed,
+// beside the error.
 func (c *Client) AccountDestroy(ctx context.Context, userID string) (AccountDestroyResult, error) {
 	var out AccountDestroyResult
-	err := c.postAccount(ctx, "/internal/vmctl/account/destroy", userID, &out)
-	return out, err
+	data, _ := json.Marshal(accountRequest{UserID: userID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/internal/vmctl/account/destroy", bytes.NewReader(data))
+	if err != nil {
+		return out, fmt.Errorf("vmctl client: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	hostauth.MarkInternal(req)
+	setLifecycleCaller(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return out, fmt.Errorf("vmctl client: call failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return out, json.Unmarshal(raw, &out)
+	case http.StatusForbidden:
+		return out, fmt.Errorf("%w: %s", ErrAccountRefused, strings.TrimSpace(string(raw)))
+	default:
+		_ = json.Unmarshal(raw, &out) // what was destroyed before the failure
+		return out, fmt.Errorf("vmctl client: destroy answered %s: %s", resp.Status, strings.TrimSpace(string(raw)))
+	}
 }
