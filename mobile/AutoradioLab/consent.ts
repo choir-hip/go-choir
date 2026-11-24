@@ -10,7 +10,7 @@
 //  C2 Agreeing (Wi-Fi, mobile data) persists per group; agreement for one group is not agreement for another; unread is never yes; a Wi-Fi agreement never lowers a mobile one; an agreement that could not be written is not one.
 //  C3 A sign-out removes the memory and the file; an account generation that moved while the file was read does not take that text.
 //  C5 The radio's mode is the desk only for a present key; signed out, locked is listening only; a key read that threw is the desk (the request itself still refuses with no key).
-//  C6 The words of the sign-in prompt are strings/en.json's.
+//  C6 The words of the sign-in prompt are consent-text.ts's; strings/en.json holds only the purpose strings.
 //  C7 A pick of a model for a job (the download step) is kept across a restart, read by shape (only string ids), changes nothing when it is the same, and goes with the rest at sign-out.
 import type { Storage } from './app.contract.d.ts';
 import { askText, type AskText } from './consent-text.ts';

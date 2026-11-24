@@ -29,9 +29,7 @@ Speech recognition (purpose.speech):
 
 > Autoradio 1 turns what you say into text on this phone so it can understand your request.
 
-Microphone with the screen locked (purpose.recordingInBackground):
-
-> Keeps Voice listening with the screen locked, until you turn Voice off or three minutes pass without you speaking.
+There is no background microphone purpose string: the background microphone grant was removed on main (`b53276cba`), and the app gives the microphone up when it goes to the background.
 
 Where each is asked: the microphone and speech prompts appear only when the listener first turns Voice on or first turns on a take. Never at launch, at Play or at sign-in. Before the system prompt, the app shows one line:
 
