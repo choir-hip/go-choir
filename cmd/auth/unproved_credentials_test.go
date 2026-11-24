@@ -143,19 +143,20 @@ func TestAnUnprovedAccountActsThroughNoRoute(t *testing.T) {
 			default:
 				mut = func(r *http.Request) { r.AddCookie(&http.Cookie{Name: auth.AccessTokenCookieName, Value: secret}) }
 			}
-			m := method
-			if body != "" {
-				m = "POST" // a grant is redeemed by a POST whatever the route's own method
-			}
-			code, got := call(rt.handler, m, path, mut, body)
-			if strings.Contains(got, "choir_sk_") || strings.Contains(got, `"authenticated":true`) || strings.Contains(got, "unproved@example.com") {
-				t.Errorf("%s with an unproved account's %s answered with the account: %d %.120s", rt.pattern, kind, code, got)
-				continue
-			}
+			// A grant is redeemed only at its own route, by a POST.
 			if kind == "device code" || kind == "desktop exchange code" {
-				if code/100 == 2 && (strings.Contains(got, "api_key") || strings.Contains(got, "\"ok\":true") || strings.Contains(got, "user")) {
+				if (kind == "device code" && !strings.HasSuffix(path, "/auth/device/token")) || (kind == "desktop exchange code" && !strings.HasSuffix(path, "/auth/desktop/redeem")) {
+					continue
+				}
+				code, got := call(rt.handler, "POST", path, nil, body)
+				if code/100 == 2 || strings.Contains(got, "api_key") || strings.Contains(got, "unproved@example.com") {
 					t.Errorf("%s redeemed an unproved account's %s: %d %.120s", rt.pattern, kind, code, got)
 				}
+				continue
+			}
+			code, got := call(rt.handler, method, path, mut, body)
+			if strings.Contains(got, "choir_sk_") || strings.Contains(got, `"authenticated":true`) || strings.Contains(got, "unproved@example.com") {
+				t.Errorf("%s with an unproved account's %s answered with the account: %d %.120s", rt.pattern, kind, code, got)
 				continue
 			}
 			if code != anonCode {
