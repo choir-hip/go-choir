@@ -259,6 +259,13 @@ func (h *Handler) demoOff(userID string) bool {
 	return err != nil
 }
 
+// ValidDemoCredential says whether data is a demo credential file (the host command checks
+// the file it is about to remove).
+func ValidDemoCredential(data []byte) bool {
+	_, _, err := parseDemoCredential(data)
+	return err == nil
+}
+
 // demoAccountID is the configured account: the host file's first line (read
 // each time, so a change needs no restart), or the test-only field.
 func (h *Handler) demoAccountID() string {
@@ -368,7 +375,18 @@ func (h *Handler) HandleAppDemoLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	label := "Autoradio reviewer: " + req.App
 	exp := g.now().Add(DemoKeyTTL)
+	if h.demoMintHook != nil {
+		h.demoMintHook()
+	}
 	id, secret, err := h.store.CreateAPIKey(context.Background(), user.ID, label, DemoScopes, &exp)
+	// `off` removes the credential and then proves the keys revoked. A login that passed the
+	// check above before the removal could insert after that proof: look again, and take the
+	// key back, so no key outlives the credential by more than this call.
+	if err == nil && h.demoOff(user.ID) {
+		_ = h.store.RevokeAPIKey(context.Background(), user.ID, id)
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not available"})
+		return
+	}
 	if err != nil {
 		log.Printf("[auth] operation=app_demo_login result=error step=mint_key addr=%s error=%q", addr, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create the key"})

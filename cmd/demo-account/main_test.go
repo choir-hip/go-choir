@@ -117,7 +117,8 @@ func TestOffRemovesTheCredentialAndRevokesEveryKeyOfTheDemoAccountOnly(t *testin
 	idFile := filepath.Join(dir, "id")
 	credFile := filepath.Join(dir, "cred")
 	_ = os.WriteFile(idFile, []byte(u.ID+"\n"), 0o600)
-	_ = os.WriteFile(credFile, []byte("x\n"), 0o600)
+	line, _ := auth.FormatDemoCredential("reviewer", "a test password that is only a test")
+	_ = os.WriteFile(credFile, []byte(line), 0o600)
 
 	var so, se bytes.Buffer
 	if code := run([]string{"off", "--id-file", idFile, "--out", credFile, "--auth-db", dbPath}, &so, &se, nil); code != 0 {
@@ -141,8 +142,8 @@ func TestOffRemovesTheCredentialAndRevokesEveryKeyOfTheDemoAccountOnly(t *testin
 			t.Fatal("another account's key was revoked")
 		}
 	}
-	// Idempotent: a second run, with the file already gone, still succeeds.
-	if code := run([]string{"off", "--id-file", idFile, "--out", credFile, "--auth-db", dbPath}, &so, &se, nil); code != 0 {
+	// Idempotent when the operator says it is already off.
+	if code := run([]string{"off", "--id-file", idFile, "--out", credFile, "--auth-db", dbPath, "--already-off"}, &so, &se, nil); code != 0 {
 		t.Fatalf("second run %d %s", code, se.String())
 	}
 }
@@ -183,6 +184,7 @@ func TestResetSendsTheInternalTokenFromItsFileToVmctl(t *testing.T) {
 		_, _ = w.Write([]byte(`{"status":"removed"}`))
 	}))
 	defer srv.Close()
+	tokenPorts[portOf(srv.URL)] = true
 	var so, se bytes.Buffer
 	if code := run([]string{"reset", "--id-file", idFile, "--auth-db", dbPath, "--vmctl", srv.URL, "--token-file", tokenFile}, &so, &se, srv.Client()); code != 0 {
 		t.Fatalf("%d %s", code, se.String())
@@ -227,5 +229,85 @@ func TestOffAndResetRefuseAWrongDatabaseOrAccountAndLeaveTheCredential(t *testin
 		if _, err := os.Stat(filepath.Dir(missingDB)); err == nil {
 			t.Errorf("%s: a database was created at the typo path", name)
 		}
+	}
+}
+
+func portOf(u string) string { return u[strings.LastIndex(u, ":")+1:] }
+
+func init() { offSettle = 0 }
+
+func seed(t *testing.T) (dir, dbPath, idFile string) {
+	dir = t.TempDir()
+	dbPath = filepath.Join(dir, "auth.db")
+	store, _ := auth.OpenStore(dbPath)
+	u, _ := store.CreateUser("demo-uid", "throwaway@example.invalid")
+	_ = store.Close()
+	idFile = filepath.Join(dir, "id")
+	_ = os.WriteFile(idFile, []byte(u.ID+"\n"), 0o600)
+	return
+}
+
+// N0: off must remove the credential file auth reads, or fail. A path that does not exist
+// is not "already off" unless the operator says so, and a file that is not a credential
+// (the id file, the signing key) is never deleted.
+func TestOffRemovesOnlyARealCredentialAndFailsOtherwise(t *testing.T) {
+	dir, dbPath, idFile := seed(t)
+	var so, se bytes.Buffer
+	missing := filepath.Join(dir, "old-path", "demo-credential")
+	if code := run([]string{"off", "--id-file", idFile, "--out", missing, "--auth-db", dbPath}, &so, &se, nil); code == 0 {
+		t.Fatal("off exited 0 for a credential path that does not exist")
+	}
+	if code := run([]string{"off", "--id-file", idFile, "--out", idFile, "--auth-db", dbPath}, &so, &se, nil); code == 0 {
+		t.Fatal("off exited 0 for a file that is not a credential")
+	}
+	if _, err := os.Stat(idFile); err != nil {
+		t.Fatal("off deleted a file that is not a credential")
+	}
+	if code := run([]string{"off", "--id-file", idFile, "--out", missing, "--auth-db", dbPath, "--already-off"}, &so, &se, nil); code != 0 {
+		t.Fatalf("an explicit --already-off must succeed: %s", se.String())
+	}
+	cred := filepath.Join(dir, "cred")
+	run([]string{"credential", "--user", "reviewer", "--out", cred}, &so, &se, nil)
+	if code := run([]string{"off", "--id-file", idFile, "--out", cred, "--auth-db", dbPath}, &so, &se, nil); code != 0 {
+		t.Fatalf("off of a real credential failed: %s", se.String())
+	}
+	if _, err := os.Stat(cred); err == nil {
+		t.Fatal("the credential is still there")
+	}
+}
+
+// N3: the token goes only to the vmctl port, and a redirect never carries it elsewhere.
+func TestResetNeverSendsTheTokenToAnotherPortOrThroughARedirect(t *testing.T) {
+	dir, dbPath, idFile := seed(t)
+	token := strings.Repeat("t0ken-", 12)
+	tokenFile := filepath.Join(dir, "token")
+	_ = os.WriteFile(tokenFile, []byte(token+"\n"), 0o600)
+	var elsewhere string
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		elsewhere = r.Header.Get(hostauth.Header)
+		_, _ = w.Write([]byte(`{"status":"removed"}`))
+	}))
+	defer other.Close()
+	// 1: a port that is not vmctl's gets no token.
+	var so, se bytes.Buffer
+	run([]string{"reset", "--id-file", idFile, "--auth-db", dbPath, "--vmctl", other.URL, "--token-file", tokenFile}, &so, &se, other.Client())
+	if elsewhere != "" {
+		t.Fatal("the token was sent to a port that is not vmctl's")
+	}
+	// 2: a redirect from vmctl's port is not followed.
+	redirecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+"/steal", http.StatusTemporaryRedirect)
+	}))
+	defer redirecting.Close()
+	tokenPorts[portOf(redirecting.URL)] = true
+	if code := run([]string{"reset", "--id-file", idFile, "--auth-db", dbPath, "--vmctl", redirecting.URL, "--token-file", tokenFile}, &so, &se, redirecting.Client()); code == 0 {
+		t.Fatal("a redirected reset exited 0")
+	}
+	if elsewhere != "" {
+		t.Fatal("the token followed a redirect")
+	}
+	// 3: an unreadable token file for vmctl's port fails before anything is sent.
+	if code := run([]string{"reset", "--id-file", idFile, "--auth-db", dbPath, "--vmctl", redirecting.URL, "--token-file", filepath.Join(dir, "nope")}, &so, &se, redirecting.Client()); code == 0 || !strings.Contains(se.String(), "token") {
+		t.Fatalf("an unreadable token file must be named: %q", se.String())
 	}
 }

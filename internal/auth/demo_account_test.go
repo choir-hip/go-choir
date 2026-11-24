@@ -399,3 +399,68 @@ func TestDemoLoginNeverServesTheBootstrapAccountAndNeverCaches(t *testing.T) {
 		t.Fatalf("the bootstrap account must never be the reviewer's: %d %s", w.Code, w.Body)
 	}
 }
+
+// A session token made before `off` is read by no route of this service while the account is off.
+func TestAnOffDemoAccountIsReadByNoCookieRoute(t *testing.T) {
+	e := demoEnv(t)
+	user, _ := e.h.store.GetUserByID(e.uid)
+	tok, err := e.h.issueAccessJWT(user, "passkey")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookieReq := func() *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/auth/device/approve", nil)
+		r.AddCookie(&http.Cookie{Name: AccessTokenCookieName, Value: tok})
+		return r
+	}
+	if u := e.h.requirePasskeySession(httptest.NewRecorder(), cookieReq()); u == nil {
+		t.Fatal("the account is on: the token must work")
+	}
+	if err := os.Remove(e.file); err != nil {
+		t.Fatal(err)
+	}
+	if u := e.h.requirePasskeySession(httptest.NewRecorder(), cookieReq()); u != nil {
+		t.Error("requirePasskeySession accepted a token made before off")
+	}
+	if u := e.h.requireAuthUser(httptest.NewRecorder(), cookieReq()); u != nil {
+		t.Error("requireAuthUser accepted a token made before off")
+	}
+	if _, err := e.h.ValidateAccessToken(tok); err == nil {
+		t.Error("ValidateAccessToken accepted a token made before off")
+	}
+}
+
+// `off` removes the credential and then proves the keys revoked. A login that passed the
+// credential check just before must not leave a live key after: the mint is checked again.
+func TestADemoLoginThatRacesOffLeavesNoLiveKey(t *testing.T) {
+	e := demoEnv(t)
+	e.h.demoMintHook = func() { _ = os.Remove(e.file) } // off lands between the check and the insert
+	w := e.post(t, "198.51.100.20", good())
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("a login that raced off must answer not available, got %d %s", w.Code, w.Body)
+	}
+	keys, _ := e.h.store.ListAPIKeys(context.Background(), e.uid)
+	for _, k := range keys {
+		if k.RevokedAt == nil {
+			t.Fatalf("a key minted across off is live: %s", k.ID)
+		}
+	}
+	if strings.Contains(w.Body.String(), APIKeyPrefix) {
+		t.Fatal("the key was sent")
+	}
+}
+
+func TestAnAppKeyMintThatRacesOffLeavesNoLiveKey(t *testing.T) {
+	e := demoEnv(t)
+	user, _ := e.h.store.GetUserByID(e.uid)
+	e.h.demoMintHook = func() { _ = os.Remove(e.file) }
+	if _, err := e.h.mintAppKey(context.Background(), user, testApp); err == nil {
+		t.Fatal("a key was handed out across off")
+	}
+	keys, _ := e.h.store.ListAPIKeys(context.Background(), e.uid)
+	for _, k := range keys {
+		if k.RevokedAt == nil {
+			t.Fatalf("a key minted across off is live: %s", k.ID)
+		}
+	}
+}

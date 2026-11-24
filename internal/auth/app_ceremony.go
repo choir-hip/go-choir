@@ -205,9 +205,17 @@ func (h *Handler) mintAppKey(ctx context.Context, user *User, app string) (*appK
 	}
 	scopes := AllScopes()
 	label := appKeyLabel + app
+	if h.demoMintHook != nil {
+		h.demoMintHook()
+	}
 	id, secret, err := h.store.CreateAPIKey(ctx, user.ID, label, scopes, nil)
 	if err != nil {
 		return nil, err
+	}
+	// A mint that raced `off` (demo_account.go) is taken back.
+	if h.demoOff(user.ID) {
+		_ = h.store.RevokeAPIKey(ctx, user.ID, id)
+		return nil, ErrAccountOff
 	}
 	return &appKeyResponse{APIKey: secret, KeyID: id, Label: label, Scopes: scopes}, nil
 }

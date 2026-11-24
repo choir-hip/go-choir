@@ -9,7 +9,7 @@
 //	    service reads the file on every attempt, so the old password stops
 //	    working at once. Removing the file turns the reviewer sign-in off.
 //
-//	demo-account off --id-file PATH --out CREDENTIAL_PATH [--auth-db PATH]
+//	demo-account off --id-file PATH --out CREDENTIAL_PATH [--auth-db PATH] [--already-off]
 //	    The owner's one step to turn the account off: removes the credential
 //	    file (no new sign-in) first, then revokes every key and session the
 //	    account holds (no phone stays in). It keeps the id file, so the
@@ -51,6 +51,11 @@ import (
 // defaultTokenFile is Node B's host-internal credential (nix/node-b.nix internalTokenFile),
 // root-only. vmctl enforces it, and this command is run from a root shell that has no
 // credential directory, so it reads the file itself.
+// tokenPorts are the only ports the host token may be sent to; offSettle is how long off waits
+// before it proves the revocation a second time.
+var tokenPorts = map[string]bool{"8083": true}
+var offSettle = 2 * time.Second
+
 const defaultTokenFile = "/var/lib/go-choir/secrets/internal-service-token"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, http.DefaultClient)) }
@@ -83,6 +88,7 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 	idFile := fs.String("id-file", "", "the host file holding the demo account id (reset)")
 	authDB := fs.String("auth-db", "/var/lib/go-choir/auth/auth.db", "auth database (reset)")
 	vmctlURL := fs.String("vmctl", "http://127.0.0.1:8083", "vmctl base URL (reset)")
+	alreadyOff := fs.Bool("already-off", false, "off: the credential file is already gone; do not fail for its absence")
 	tokenFile := fs.String("token-file", defaultTokenFile, "the host-internal service token vmctl enforces (reset); a root shell has none loaded")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
@@ -118,9 +124,25 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 			fmt.Fprintln(stderr, "off:", err, "(nothing was removed)")
 			return 1
 		}
+		// The file named must be the credential auth reads: it exists and parses as one. A path
+		// that is absent is "already off" only when the operator says so; a file that is not a
+		// credential is never removed.
+		raw, rerr := os.ReadFile(*out)
+		switch {
+		case rerr == nil && !auth.ValidDemoCredential(raw):
+			fmt.Fprintln(stderr, "off: --out is not a demo credential file (nothing was removed):", *out)
+			return 1
+		case rerr != nil && !(*alreadyOff && os.IsNotExist(rerr)):
+			fmt.Fprintln(stderr, "off: cannot read the credential file at --out (wrong path? pass --already-off if it is already removed):", rerr)
+			return 1
+		}
 		// Sign-in first: nothing new can come in while the keys are revoked.
 		if err := os.Remove(*out); err != nil && !os.IsNotExist(err) {
 			fmt.Fprintln(stderr, "off: remove credential:", err)
+			return 1
+		}
+		if _, err := os.Stat(*out); err == nil {
+			fmt.Fprintln(stderr, "off: the credential file is still there after the remove")
 			return 1
 		}
 		fmt.Fprintln(stdout, "credential file removed: the reviewer sign-in answers not available")
@@ -129,7 +151,14 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 			fmt.Fprintln(stderr, "off:", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "revoked %d keys and %d sessions; pending grants deleted and proved gone\n", keys, sessions)
+		// A login that passed the credential check before it was removed may still be
+		// inside its password check; it takes its own key back, and this pass proves it.
+		time.Sleep(offSettle)
+		if _, _, err := revokeAll(*authDB, id); err != nil {
+			fmt.Fprintln(stderr, "off: second pass:", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "revoked %d keys and %d sessions; pending grants deleted; keys and sessions proved gone twice\n", keys, sessions)
 		return 0
 	case "reset":
 		if *idFile == "" {
@@ -252,12 +281,25 @@ func removeComputer(client *http.Client, base, userID, tokenFile string) (string
 	req.Header.Set(vmctl.LifecycleCallerHeader, "demo-account-reset")
 	hostauth.MarkInternal(req)
 	// vmctl enforces the host credential; MarkInternal sends it only from a process that
-	// loaded it at start, which a root shell did not. Read the file here (loopback only).
-	if raw, err := os.ReadFile(tokenFile); err == nil && req.Header.Get(hostauth.Header) == "" {
-		if t := strings.TrimSpace(string(raw)); t != "" && isLoopback(req.URL.Hostname()) {
-			req.Header.Set(hostauth.Header, t)
+	// loaded it at start, which a root shell did not. Read the file here, and send it only
+	// to a loopback host on vmctl's own port (never a guest's DNAT port).
+	if isLoopback(req.URL.Hostname()) && tokenPorts[req.URL.Port()] {
+		raw, err := os.ReadFile(tokenFile)
+		t := strings.TrimSpace(string(raw))
+		if err != nil || t == "" {
+			return "", fmt.Errorf("cannot read the host-internal token at %s (pass --token-file)", tokenFile)
 		}
+		req.Header.Set(hostauth.Header, t)
+	} else {
+		req.Header.Del(hostauth.Header)
 	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	// A redirect is never followed: Go would copy the custom header to the new host.
+	c := *client
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	client = &c
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	resp, err := client.Do(req.WithContext(ctx))

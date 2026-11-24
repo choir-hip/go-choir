@@ -82,6 +82,8 @@ type Handler struct {
 	// The phone app's sign-in challenges (app_ceremony.go), held in memory.
 	appChallenges appChallenges
 	demoGate      *demoGate // the reviewer sign-in's bounds (demo_account.go)
+	// demoMintHook runs between the off check and the key insert; tests only (nil in service).
+	demoMintHook func()
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -1504,6 +1506,10 @@ func (h *Handler) validateAccessTokenMethod(tokenStr string) (string, string, er
 	}
 	if !mayMint(user) {
 		return "", "", ErrAddressUnproved
+	}
+	// The reviewer account while it is off (demo_account.go): no token is read for it.
+	if h.demoOff(userID) {
+		return "", "", ErrAccountOff
 	}
 
 	method, _ := claims["am"].(string)
