@@ -14,6 +14,8 @@
 //  E23 an EMPTY document is a text, not "no seed": over a head that moved it is a conflict; offline it is posted when the head still is empty.
 //  E24 the contract's way: every keystroke names what the field showed before it, so a second save after a first is not a false conflict.
 //  E25 calls queued or begun across a sign-out leave nothing; a kept file written under another key is not the next account's.
+//  E26 a key that cannot be read (no handle yet, a locked Keychain) or is absent keeps the unsent file, loads nothing, and writes nothing over it; it is loaded when the key can be read; a key rotated for the same account (same computer) keeps it.
+//  E27 the latest keystroke is on disk BEFORE it waits: during a save in flight, during a hung link (the editor's own short timeout), and after a kill.   E28 two documents written at once leave both in the file.   E29 a let-go answer is not "offline".
 //  E13 discard drops the kept text; overwrite is the listener's act: it re-bases on the head and posts.   E14 `waiting` counts the documents with kept text.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Editor, editableDoc, PENDING_FILE, CONFLICT_WORDS, type Net } from './texture-edit.ts';
@@ -21,15 +23,15 @@ import { HTTPError, SignedOutError, resetSeam, nextGeneration, beginSignOut, abo
 
 type Rev = { id: string; content: string; body: unknown; n: number };
 let revs: Map<string, Rev>; let head: Record<string, string>; let traj: Record<string, string>; let log: { method: string; path: string; body?: Record<string, unknown> }[];
-let failGets = false; let getGate: Promise<void> | null = null; let postGate: Promise<void> | null = null; let readGate: Promise<void> | null = null; let getCount = 0; let failNext: (() => Error) | null; let seq = 0; let lifecycleVersion = 7;
+let writes = 0; let slowFirstWrite = false; let failGets = false; let getGate: Promise<void> | null = null; let postGate: Promise<void> | null = null; let readGate: Promise<void> | null = null; let getCount = 0; let failNext: (() => Error) | null; let seq = 0; let lifecycleVersion = 7;
 const files = new Map<string, Uint8Array>();
 const storage = { fs: {
   readFile: async (p: string) => { const b = files.get(p); if (readGate) await readGate; if (!b) throw Object.assign(new Error('no'), { code: 'ENOENT' }); return b; },
-  atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); },
+  atomicWriteFile: async (p: string, d: Uint8Array) => { writes += 1; if (slowFirstWrite && writes === 1) await new Promise((r) => setTimeout(r, 40)); files.set(p, d); },
   rm: async (p: string) => { files.delete(p); },
 } } as never;
-let signedKey = 'key-a-not-real';
-const reader = { available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: true, value: signedKey, computerId: 'c1' } : { state: 'present' }) };
+let signedKey = 'key-a-not-real'; let signedComputer = 'c1'; let identityMode: 'normal' | 'unreadable' | 'absent' = 'normal';
+const reader = { available: true, later: async (r: { op?: string }) => (r.op === 'session' ? (identityMode === 'normal' ? { found: true, value: signedKey, computerId: signedComputer } : { found: false }) : { state: identityMode === 'absent' ? 'absent' : identityMode === 'unreadable' ? 'unreadable' : 'present' }) };
 const kept = (): Record<string, { text: string; base: string; key: string; seed: string | null }> => (files.has(PENDING_FILE) ? JSON.parse(new TextDecoder().decode(files.get(PENDING_FILE)!)).docs : {});
 const body = (t: string): unknown => ({ schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'd' }, content: [{ type: 'paragraph', attrs: { id: 'p' }, content: [{ type: 'text', text: t }] }] } });
 const net: Net = { json: async (path, opts) => {
@@ -58,7 +60,7 @@ const posts = (): typeof log => log.filter((l) => l.method === 'POST');
 const mk = (): Editor => new Editor({ net, storage });
 const A = 'texture:d1';
 beforeEach(() => {
-  resetSeam(); bindNative(reader as never); signedKey = 'key-a-not-real'; files.clear(); log = []; failNext = null; failGets = false; getGate = null; postGate = null; readGate = null; getCount = 0; seq = 0; traj = {};
+  resetSeam(); bindNative(reader as never); signedKey = 'key-a-not-real'; signedComputer = 'c1'; identityMode = 'normal'; files.clear(); log = []; failNext = null; writes = 0; slowFirstWrite = false; failGets = false; getGate = null; postGate = null; readGate = null; getCount = 0; seq = 0; traj = {};
   revs = new Map([['r0', { id: 'r0', content: 'Hello world.', body: body('Hello world.'), n: 0 }]]); head = { d1: 'r0', d2: 'r0' };
 });
 
@@ -357,8 +359,64 @@ describe('the account moves under a queued call', () => {
   });
   test('E25 a kept file written under one key is not the next key\'s kept text', async () => {
     await mk().edit(A, 'Hello world. a'); expect(kept().d1.text).toBe('Hello world. a');
-    signedKey = 'key-b-not-real';
+    signedKey = 'key-b-not-real'; signedComputer = 'c2';                       // another account: another computer
     const i = await mk().info(A);
     expect(i.kept).toBe(''); expect(i.waiting).toBe(0); expect(files.has(PENDING_FILE)).toBe(false);
+  });
+});
+
+describe('what a person typed is never lost to a key that cannot be read, or to a slow network', () => {
+  test('E26 an unreadable or absent key keeps the file, loads nothing and writes nothing over it; it is loaded when the key can be read', async () => {
+    await mk().edit(A, 'Hello world. unsent');
+    const before = new TextDecoder().decode(files.get(PENDING_FILE)!);
+    for (const mode of ['unreadable', 'absent'] as const) {
+      identityMode = mode;
+      const e2 = mk(); const i = await e2.info(A);
+      expect(i.kept).toBe(''); expect(files.has(PENDING_FILE)).toBe(true);
+      await e2.edit(A, 'typed while the key cannot be read');
+      expect(new TextDecoder().decode(files.get(PENDING_FILE)!)).toBe(before);               // not written over
+    }
+    identityMode = 'normal';
+    const e3 = mk(); expect((await e3.info(A)).kept).toBe('Hello world. unsent');
+  });
+  test('E26 what is typed while the key cannot be read reaches the disk when it can, on top of what was kept', async () => {
+    await mk().edit(A, 'Hello world. old'); identityMode = 'unreadable';
+    const e = mk(); await e.edit('texture:d2', 'second');
+    identityMode = 'normal';
+    await e.info(A);                                                     // the key reads again: the file is read, then written with both
+    await new Promise((r) => setTimeout(r, 20));
+    expect(Object.keys(kept()).sort()).toEqual(['d1', 'd2']);
+  });
+  test('E26 a key rotated for the same account (same computer) keeps the unsent text', async () => {
+    await mk().edit(A, 'Hello world. a');
+    signedKey = 'key-a-rotated-not-real';
+    expect((await mk().info(A)).kept).toBe('Hello world. a');
+  });
+  test('E27 the latest keystroke is on disk while a save is still in flight, and a relaunch finds it', async () => {
+    const e = mk(); await e.edit(A, 'one');
+    let release: () => void = () => undefined; postGate = new Promise<void>((r) => { release = r; });
+    const saving = e.flush(A); await new Promise((r) => setTimeout(r, 10));
+    const typed = e.edit(A, 'one two three'); await new Promise((r) => setTimeout(r, 20));
+    expect(kept().d1.text).toBe('one two three');                                           // before the post is over: this is the state an app kill would leave
+    expect((await mk().info(A)).kept).toBe('one two three');
+    release(); await saving; await typed;
+  });
+  test('E27 a link that answers nothing ends in the editor\'s own timeout; the text is on disk and the status says offline', async () => {
+    getGate = new Promise<void>(() => undefined);
+    const e = new Editor({ net, storage, timeoutMs: 30 });
+    const i = await e.edit(A, 'typed on a dead link', 'Hello world.');
+    expect(kept().d1.text).toBe('typed on a dead link'); expect(i.status).toBe('offline');
+  });
+  test('E28 two documents written at once leave both in the file, however the writes land', async () => {
+    slowFirstWrite = true;
+    const e = mk();
+    await Promise.all([e.edit(A, 'first'), e.edit('texture:d2', 'second')]);
+    expect(Object.keys(kept()).sort()).toEqual(['d1', 'd2']);
+  });
+  test('E29 a reply let go is not "offline": the text stays, the status stays editing', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. x');
+    failNext = () => new Error('the answer was let go before this fetch');
+    const i = await e.flush(A);
+    expect(i.status).toBe('dirty'); expect(kept().d1.text).toBe('Hello world. x');
   });
 });

@@ -16,7 +16,6 @@ import { authedJSON, accountGeneration, keyOwner, SignedOutError } from './api.t
 import * as M from './mail-model.ts';
 import { sanitized } from './mail-sanitize.ts';
 import * as C from './mail-store.ts';
-import { sha256, hex } from './mail-store.ts';
 
 export type BoxView = {
   status: string; message: string; folder: string; title: string; unread: number; total: number; cached: boolean; rows: M.MailRow[];
@@ -58,17 +57,23 @@ let started = false;
 /** Forget what this session holds. */
 /** Who the memory below belongs to: the key's digest, read fresh at the entry of every source. A key that changed with no sign-out (a re-sign-in after a refusal) is another account: its memory starts empty. */
 let memoryOf: string | null | undefined;
-async function identity(): Promise<void> {
+async function identity(): Promise<string | null> {
   const o = await keyOwner();
   if (memoryOf !== undefined && o !== memoryOf) forget();
   memoryOf = o;
+  return o;
 }
+/** What a source begins as: the generation AND the account (the key's digest) it was asked under. Every write and every memory update after an await checks both (`live`). */
+async function begin(env: C.Env): Promise<C.Env> { const owner = await identity(); return { ...env, gen: accountGeneration(), owner }; }
 export function forget(): void { memoryOf = undefined;  kept.clear(); autoRead.clear(); drafts = []; savedDrafts.clear(); alias = null; clock = 0; started = false; }
 
 /** A source starts under one account generation (api.ts); a sign-out moves it. Everything a source does with a reply after the await (memory, the
  * files) checks it first, so a reply that arrived just before the sign-out cannot write the old account's mail into the wiped stores (review 2026-11-19). */
 const stamped = (env: C.Env): C.Env => ({ ...env, gen: accountGeneration() });
-const live = (env: C.Env): void => { if (env.gen !== undefined && env.gen !== accountGeneration()) throw new SignedOutError('signed out while the mail was being read'); };
+const live = async (env: C.Env): Promise<void> => {
+  if (env.gen !== undefined && env.gen !== accountGeneration()) throw new SignedOutError('signed out while the mail was being read');
+  if (env.owner !== undefined && env.owner !== (await keyOwner())) throw new SignedOutError('the account changed while the mail was being read');
+};
 /** Between two bodies of a long answer: lets the next turn start (Exact gives a turn about 100 ms of CPU; Bun has no scheduler). */
 const yieldTurn = async (): Promise<void> => { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); };
 
@@ -148,14 +153,13 @@ function savedWords(copyAt: number): string {
 }
 
 export async function mailBox(address: string, env: C.Env): Promise<BoxView> {
-  await identity();
+  env = await begin(env);
   if (!address.startsWith('mailbox:')) { const i = emptyBox(); i.status = 'idle'; return i; }
   const v = frame(address);
-  env = stamped(env);
   try {
     if (v.folder === 'drafts') {
       const o = (await call('/api/email/drafts', {})) as { drafts?: unknown[] } | null;
-      live(env);
+      await live(env);
       drafts = (o?.drafts ?? []).map(M.parseDraft);
       v.rows = drafts.map((d) => ({
         id: d.id, address: 'mail:draft/' + d.id, sender: 'To ' + (d.to[0] ?? '(nobody yet)'), subject: d.subject === '' ? '(no subject)' : d.subject, snippet: d.text.slice(0, 120),
@@ -165,7 +169,7 @@ export async function mailBox(address: string, env: C.Env): Promise<BoxView> {
     } else {
       const o = await call('/api/email/messages', { query: { folder: v.folder, limit: LIST_LIMIT } });
       const l = M.parseList(o);
-      live(env);
+      await live(env);
       kept.set(v.folder, { rows: l.rows, total: l.total, unread: l.unread, next: l.next });
       await C.saveFolder(env, { folder: v.folder, rows: l.rows, total: l.total, unread: l.unread, savedAt: clock });
       v.rows = M.threadRows(l.rows, nowOf(l.rows)); v.total = l.total; v.unread = l.unread;
@@ -189,7 +193,6 @@ export async function mailBox(address: string, env: C.Env): Promise<BoxView> {
 
 // ---- a message
 
-const originalName = async (id: string): Promise<string> => `mail-${hex((await sha256(new TextEncoder().encode(id))).subarray(0, 16))}.html`;
 
 function allKept(): M.Summary[] { return [...kept.values()].flatMap((h) => h.rows); }
 
@@ -224,13 +227,13 @@ async function loadMessage(address: string, wantOriginal: boolean, env: C.Env): 
   const id = M.rest(address);
   if (id === '' || id === 'new' || id.startsWith('reply/') || id.startsWith('draft/')) { v.status = 'idle'; return { view: v, detail: null }; }
   v.id = id; v.address = address;
-  env = stamped(env);
+  env = await begin(env);
   if (!started) { started = true; await C.forgetOldCopy(env.storage); }      // documents a past session left in the cache
   try {
     let d: M.Detail;
     try {
       d = M.parseDetail(await call('/api/email/messages/' + M.segment(id), {}));
-      live(env);
+      await live(env);
       const folder = [...kept.entries()].find(([, h]) => h.rows.some((r) => r.id === id))?.[0] ?? (await C.loadMessage(env, id))?.folder ?? 'inbox';
       await C.saveMessage(env, { id, folder, summary: d.summary, text: d.text, to: d.to, cc: d.cc, replyTo: d.replyTo, attachments: d.attachments, savedAt: clock });
     } catch (e) {
@@ -239,7 +242,7 @@ async function loadMessage(address: string, wantOriginal: boolean, env: C.Env): 
       d = { summary: held.summary, text: held.text, html: '', replyTo: held.replyTo, to: held.to, cc: held.cc, attachments: held.attachments };
       v.message = savedWords(held.savedAt);
     }
-    if (!kept.has('inbox')) { try { const l = M.parseList(await call('/api/email/messages', { query: { folder: 'inbox', limit: LIST_LIMIT } })); live(env); kept.set('inbox', { rows: l.rows, total: l.total, unread: l.unread, next: l.next }); } catch { await ensureKept(env, 'inbox'); } }
+    if (!kept.has('inbox')) { try { const l = M.parseList(await call('/api/email/messages', { query: { folder: 'inbox', limit: LIST_LIMIT } })); await live(env); kept.set('inbox', { rows: l.rows, total: l.total, unread: l.unread, next: l.next }); } catch { await ensureKept(env, 'inbox'); } }
     const s = d.summary;
     v.subject = s.subject === '' ? '(no subject)' : s.subject;
     v.sender = M.from(s) === '' ? '(unknown sender)' : M.from(s); v.fromAddress = s.fromAddress;
@@ -250,21 +253,16 @@ async function loadMessage(address: string, wantOriginal: boolean, env: C.Env): 
     const b = M.blocks(d.text, d.html);
     v.blocks = b.blocks; v.htmlOnly = b.htmlOnly; v.cut = b.cut; v.hasQuoted = M.hasQuoted(b.blocks);
     v.hasOriginal = d.html !== '';
-    const name = v.hasOriginal ? await originalName(id) : '';
-    v.originalPath = v.hasOriginal ? `${C.CACHE}/${name}` : '';
-    // The sender's own layout is written only while it is asked for, and every other document is removed: the message's HTML sits on the phone, readable, for as short a time as it can.
-    if (v.hasOriginal && !(await C.stores(env))) { v.hasOriginal = false; v.originalPath = ''; }
-    if (v.hasOriginal && wantOriginal && env.storage) {
-      // The one mail write with a plain file: it carries the account stamp like the others. A sign-out during the awaits blanks the path and removes the file.
-      const stale = (): boolean => env.gen !== accountGeneration();
+    // The sender's own layout is written only while it is asked for, through the account's accessor (its name carries the account), and every other document is removed: the message's HTML sits on the phone,
+    // readable, for as short a time as it can.
+    const F = v.hasOriginal ? await C.Files.open(env) : null;
+    const name = F ? (await F.pathOfOriginal(id)).slice(C.CACHE.length + 1) : '';
+    v.originalPath = F ? `${C.CACHE}/${name}` : '';
+    if (v.hasOriginal && !F) v.hasOriginal = false;
+    if (F && wantOriginal && env.storage) {
       await C.forgetOldCopy(env.storage, name);
-      if (stale()) { v.hasOriginal = false; v.originalPath = ''; }
-      else {
-        try {
-          await env.storage.fs.atomicWriteFile(v.originalPath, new TextEncoder().encode(sanitized(d.html)));
-          if (stale()) { try { await env.storage.fs.rm(v.originalPath); } catch { /* the wipe will */ } v.hasOriginal = false; v.originalPath = ''; }
-        } catch { v.hasOriginal = false; v.originalPath = ''; }
-      }
+      const path = await F.saveOriginal(id, sanitized(d.html));
+      if (path === null) { v.hasOriginal = false; v.originalPath = ''; }
     } else { await C.forgetOldCopy(env.storage); }
     v.attachments = d.attachments.map((a) => {
       const filename = M.safeFilename(a.filename);
@@ -304,9 +302,9 @@ const emptyCompose = (): ComposeView => ({ status: '', forAddress: '', sendAs: '
 
 async function aliasAddress(): Promise<string> {
   if (alias) return alias;
-  const gen = accountGeneration();
+  const gen = accountGeneration(), who = await keyOwner();
   const o = (await call('/api/email/aliases', {})) as { aliases?: { address?: unknown }[] } | null;
-  if (gen !== accountGeneration()) throw new SignedOutError('signed out while the sending address was read');
+  if (gen !== accountGeneration() || (await keyOwner()) !== who) throw new SignedOutError('signed out while the sending address was read');
   const a = o?.aliases?.[0]?.address;
   if (typeof a !== 'string' || a === '') throw new StatusError(409, 'You have no sending address yet.');
   alias = a;
@@ -341,7 +339,7 @@ export async function mailCompose(address: string, env: C.Env): Promise<ComposeV
 }
 
 export async function mailSaveDraft(address: string, to: string, subject: string, body: string): Promise<ComposeView> {
-  await identity();
+  const owner = await identity();
   const v = emptyCompose();
   v.forAddress = address; v.toLine = to; v.subject = subject; v.body = body;
   const rest = M.rest(address);
@@ -359,7 +357,7 @@ export async function mailSaveDraft(address: string, to: string, subject: string
     const req: Record<string, unknown> = { from_address: from, subject, text_body: body, to_addresses: M.recipients(to) };
     if (v.replyTo !== '') { req.reply_to_message_id = v.replyTo; req.source_kind = 'mail'; req.source_ref = v.replyTo; }
     const d = M.parseDraft(await call('/api/email/drafts', { method: 'POST', body: req }));
-    if (gen !== accountGeneration()) throw new SignedOutError('signed out while the draft was saved');      // the draft is the old account's: its id is not kept for the next one
+    if (gen !== accountGeneration() || (await keyOwner()) !== owner) throw new SignedOutError('signed out while the draft was saved');      // the draft is the old account's: its id is not kept for the next one
     v.status = 'saved'; v.draftId = d.id; savedDrafts.set(same, d.id);
     v.note = 'Saved as a draft. It has not been sent.';
     console.log('mail: draft saved');
@@ -402,10 +400,9 @@ export async function mailMarkUnread(address: string): Promise<Ack> {
  * walked, SYNC_BODIES bodies an answer. Counts only; a failure ends the answer and the next open goes on. Drafts live on the computer and are not copied (a draft is
  * one request). */
 export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
-  await identity();
   const out: SyncView = { status: '', held: 0, fetched: 0, note: '' };
   if (!address.startsWith('mailbox:')) { out.status = 'idle'; return out; }
-  env = stamped(env);
+  env = await begin(env);
   const folder = M.rest(address);
   if (!M.FOLDERS.some((f) => f.name === folder) || folder === 'drafts' || !env.storage || !(await C.stores(env))) { out.status = 'idle'; return out; }      // storing blocked to be thrown away
   const h = kept.get(folder) ?? (await ensureKept(env, folder));
@@ -422,7 +419,7 @@ export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
         if (r.id === '' || (await F.holds(r.id))) continue;
         if (budget === 0) { stopped = true; break; }
         const d = M.parseDetail(await call('/api/email/messages/' + M.segment(r.id), {}));
-        live(env);
+        await live(env);
         await F.saveMessage({ id: r.id, folder, summary: d.summary, text: d.text, to: d.to, cc: d.cc, replyTo: d.replyTo, attachments: d.attachments, savedAt: clock });
         budget -= 1; out.fetched += 1;
         await yieldTurn();

@@ -28,7 +28,8 @@ export const CACHE = 'app:/cache';
 export const MAX_FILES = 6000;
 
 /** `gen`: the account generation (api.ts) the source started under. A write checks it again after the file is written: a sign-out that began in between (the generation moved) leaves no file. */
-export type Env = { storage?: Storage; gen?: number };
+/** `owner`: who the request began as (the key's digest, `identity()` in mail.ts): an accessor for any other key is refused, so a reply that comes back after a key changed (a re-sign-in with no sign-out) writes nothing for the new account. */
+export type Env = { storage?: Storage; gen?: number; owner?: string | null };
 const stale = (env: Env): boolean => env.gen !== undefined && env.gen !== accountGeneration();
 export type FolderCopy = { folder: string; rows: Summary[]; total: number; unread: number; savedAt: number };
 export type MessageCopy = { id: string; folder: string; summary: Summary; text: string; to: string[]; cc: string[]; replyTo: string; attachments: AttachmentMeta[]; savedAt: number };
@@ -61,7 +62,7 @@ export class Files {
   static async open(env: Env): Promise<Files | null> {
     if (!env.storage || !(await stores(env))) return null;
     const owner = await keyOwner();
-    if (owner === null || stale(env)) return null;
+    if (owner === null || stale(env) || (env.owner !== undefined && env.owner !== owner)) return null;
     const f = new Files(env, env.storage.fs, owner);
     if (purgedFor !== owner) { await f.purgeForeign(); if (!stale(env)) purgedFor = owner; }
     return f;
@@ -101,6 +102,19 @@ export class Files {
     const s = await this.get<StateCopy>(this.statePath());
     return s && typeof s === 'object' && s.done && s.syncedAt && s.cursor ? s : { done: {}, syncedAt: {}, cursor: {} };
   }
+  /** The "Show original" document: written plain under this account's name in the cache, only while it is asked for. Returns its path, or null when it could not be written for this account. */
+  async saveOriginal(id: string, html: string): Promise<string | null> {
+    if (stale(this.env)) return null;
+    const path = this.originalPath(await this.hashOf(id));
+    try {
+      await this.fs.atomicWriteFile(path, new TextEncoder().encode(html));
+      if (stale(this.env) || (this.env.owner !== undefined && this.env.owner !== (await keyOwner()))) { try { await this.fs.rm(path); } catch { /* the wipe will */ } return null; }
+      return path;
+    } catch { return null; }
+  }
+  private async hashOf(id: string): Promise<string> { return hex((await sha256(new TextEncoder().encode(id))).subarray(0, 16)); }
+  private originalPath(hash: string): string { return `${CACHE}/mail-${hash}.${this.owner}.html`; }
+  async pathOfOriginal(id: string): Promise<string> { return this.originalPath(await this.hashOf(id)); }
   /** Is a message's body held (so a sync does not fetch it again)? The name carries the owner, so this is this account's file or nothing. */
   async holds(id: string): Promise<boolean> { try { await this.fs.stat(await this.msgPath(id)); return true; } catch { return false; } }
   /** How many message bodies this account's copy holds. */
@@ -127,6 +141,9 @@ export class Files {
     let names: string[] = [];
     try { names = await this.fs.readdir(DIR); } catch { return; }
     for (const n of names) if (!n.endsWith(this.tail())) { try { await this.fs.rm(`${DIR}/${n}`); } catch { /* kept */ } }
+    let cached: string[] = [];
+    try { cached = await this.fs.readdir(CACHE); } catch { return; }
+    for (const n of cached) if (n.startsWith('mail-') && n.endsWith('.html') && !n.endsWith(`.${this.owner}.html`)) { try { await this.fs.rm(`${CACHE}/${n}`); } catch { /* kept */ } }      // another key's originals
   }
 }
 

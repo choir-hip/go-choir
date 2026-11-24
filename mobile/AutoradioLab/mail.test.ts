@@ -343,7 +343,7 @@ describe('G1 G2 a message', () => {
     expect([...files.keys()].filter((k) => k.startsWith('app:/cache/mail-'))).toEqual([]);      // nothing written, and the old one removed
     expect(files.has('app:/cache/other.html')).toBe(true);
     v = await mail.mailMessage('mail:em_01hz08', true, env());
-    expect(v.originalPath).toMatch(/^app:\/cache\/mail-[0-9a-f]{32}\.html$/);
+    expect(v.originalPath).toMatch(/^app:\/cache\/mail-[0-9a-f]{32}\.[0-9a-f]{24}\.html$/);
     const doc = new TextDecoder().decode(files.get(v.originalPath)!);
     expect(doc).toContain('Content-Security-Policy'); expect(doc).toContain('Your order');
     for (const bad of ['<script', 'steal(', 'tracker.example.com', 'javascript:', 'onload', 'src=']) expect(doc).not.toContain(bad);
@@ -766,5 +766,34 @@ describe('R11 the identity is the key, read fresh: one account\'s mail is not th
     computer(); await mail.mailBox('mailbox:inbox', env());
     bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'keystate' ? { state: 'absent' } : { found: false }) } as never);
     expect(await C.loadFolder(env(), 'inbox')).toBeNull(); expect(await C.holds(env(), 'x')).toBe(false); expect(await C.Files.open(env())).toBeNull();
+  });
+});
+
+describe('R12 the original and the request are bound to the account that asked', () => {
+  const swapKey = (): void => bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: true, value: 'another-key-0002-not-real', computerId: 'comp-2' } : r.op === 'keystate' ? { state: 'present' } : { found: true, value: 'another-key-0002-not-real' }) } as never);
+  test('R12a "Show original" is written under the account\'s name through the accessor, and another key\'s original is removed, not left in the cache', async () => {
+    computer();
+    const v = await mail.mailMessage('mail:em_01hz08', true, env());
+    expect(v.hasOriginal).toBe(true);
+    const F = await accessor();
+    expect(v.originalPath.endsWith(`.${F.owner}.html`)).toBe(true); expect(files.has(v.originalPath)).toBe(true);
+    swapKey();                                                                      // another key, no sign-out
+    await mail.mailMessage('mail:em_01hz0a', false, env());
+    expect([...files.keys()].filter((k) => k.startsWith('app:/cache/mail-'))).toEqual([]);
+  });
+  test('R12b a reply that arrives after the key changed is not written into the new account\'s files or memory', async () => {
+    computer();
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    route = (r) => (r.path === '/api/email/messages' ? { status: 200, body: inboxList } : { status: 404, body: {} });
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async (u: string, init: RequestInit) => { await gate; return (origFetch as typeof fetch)(u, init); }) as never;
+    const pending = mail.mailBox('mailbox:inbox', env());
+    await new Promise((r) => setTimeout(r, 20));
+    swapKey();                                                                      // a re-sign-in as another account while the list is on its way
+    release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
+    globalThis.fetch = origFetch;
+    expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
+    route = () => 'network';
+    expect((await mail.mailFrame('mailbox:inbox', env())).rows.length).toBe(0);
   });
 });

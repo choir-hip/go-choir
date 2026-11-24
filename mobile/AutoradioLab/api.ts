@@ -173,6 +173,16 @@ export async function refreshSignOutBlock(): Promise<void> {
   try { const sess = await keptSession(); if (sess && (await digestOf(sess.key)) !== blockedDigest) blockedDigest = null; } catch { /* still signed out */ }
 }
 
+/** Who an UNSENT text belongs to, in three answers (never one that can mean two things): `known` (the account's id: a digest of its computer id, or of the key when the key has no computer), `none` (the key store
+ * says no key is stored) and `unknown` (it could not be read: no native handle yet, a locked Keychain, a bridge error). A store deletes another account's data only on `known` with a different id; on
+ * `unknown` and `none` it keeps what it has and writes nothing over it. A key rotated for the SAME account keeps its computer id, so it is the same id. */
+export type Identity = { kind: 'known'; id: string } | { kind: 'none' } | { kind: 'unknown' };
+export async function accountIdentity(): Promise<Identity> {
+  try { const s = await keptSession(); if (s) return { kind: 'known', id: (await digestOf(s.computerId !== '' ? `c:${s.computerId}` : `k:${s.key}`)).slice(0, 24) }; } catch { return { kind: 'unknown' }; }
+  const k = await keyState();
+  return k.state === 'absent' ? { kind: 'none' } : { kind: 'unknown' };
+}
+
 /** WHO the phone is signed in as, read fresh from the key store each time (never cached: a key replaced with no sign-out, as a re-sign-in after a 401 does, is another account at once): a digest
  * of the sign-in key (never the key). Null when no key is stored. The one name stores use to keep one account's files from the next account. */
 export async function keyOwner(): Promise<string | null> {

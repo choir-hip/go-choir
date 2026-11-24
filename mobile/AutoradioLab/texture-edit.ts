@@ -10,7 +10,8 @@
 // only when the head, read later, still is the seed, or no claim was made (then base := head.id); any other head is a CONFLICT (never a guess about who wrote what).
 // The field is seeded from `open` (the head read NOW: `Info.head`), not from the reader's older copy, so the first keystroke descends from what the listener saw.
 // A document has no other state: the field is whatever the page shows, and on reopening it is `info.kept` when there is one, else the head's text (the contract seeds it).
-// Transitions (each has a test in texture-edit.test.ts, E1 to E26):
+// The unsent file belongs to an ACCOUNT (a digest of its computer id; of the key when it has none): another account's file is deleted, an unreadable or absent key keeps it unread and unwritten. Every keystroke is written
+// to it by ONE writer before the call waits for the queue or the network. Transitions (each has a test in texture-edit.test.ts, E1 to E29):
 //   open           reads the head now. Answers `head` (its text), `opened`, and `kept`.
 //   edit(text)     text equals head.content: kept is removed (idle). Otherwise kept = {text, base: kept.base ?? head.id, key: new} and is written to the file at once (dirty). With no head readable (offline)
 //                  kept = {text, base: '', seed}. All calls on one document run one after another, in the order they came.
@@ -25,16 +26,18 @@
 // Never two calls on one document at once (ONE queue per document, `run`: a keystroke typed during a save waits behind it, then is kept on the new head). No timer lives here: a fetch from background work is refused (docs/reference/exact/answers-let-go.md), so the
 // WAIT (2 s after the last keystroke, 30 s between retries) is the contract's `task after(...)`, and every call below is an answer.
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, accountGeneration, keyOwner, segment, writeCurrent, signOutBlocked, SignedOutError, HTTPError, type Reply } from './api.ts';
+import { authedJSON, accountGeneration, accountIdentity, segment, writeCurrent, signOutBlocked, SignedOutError, HTTPError, type Reply } from './api.ts';
 import * as Body from './texture-body.ts';
 
+/** How long one network call of the editor may take before the text is simply kept for a later try. */
+export const NET_TIMEOUT_MS = 20_000;
 export const PENDING_FILE = 'app:/data/texture-pending.json';
 export type Info = { status: string; label: string; address: string; editable: boolean; kept: string; waiting: number; stamp: number; head: string; opened: boolean };
 export type Net = { json(path: string, opts?: { method?: 'GET' | 'POST'; body?: unknown }): Promise<Reply> };
-export type Deps = { net?: Net; storage?: Storage };
+export type Deps = { net?: Net; storage?: Storage; timeoutMs?: number };
 type Head = { id: string; content: string; body: Body.Body | null; version: number };
 type Kept = { text: string; base: string; key: string; seed: string | null };
-type Session = { head: Head | null; status: string; label: string; conflict: boolean };
+type Session = { head: Head | null; status: string; label: string; conflict: boolean; skipReads: number };
 
 const real: Net = { json: (path, opts) => authedJSON(path, opts) };
 const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -59,6 +62,8 @@ export function saveSentence(e: unknown): string {
   return 'Something went wrong saving the document.';
 }
 /** No route to the computer (or it is not answering): the text stays and is posted when it can be. */
+/** A reply this call was let go for: the same mutation was sent again, so this answer may not fetch any more (docs/reference/exact/answers-let-go.md). Not a failure and not offline: the newer answer does the work. */
+export const isLetGo = (e: unknown): boolean => e instanceof Error && /let go/i.test(e.message);
 export const isOffline = (e: unknown): boolean => (e instanceof HTTPError ? e.status >= 500 || e.status === 404 || e.status === 429 : !(e instanceof SignedOutError));
 
 /** What a call began under. Everything a call does after an await is checked against it: a sign-out (the generation moves at its start, the wipe's epoch at its end) makes the call a no-op. */
@@ -78,11 +83,18 @@ export class Editor {
   private epoch = 0;
   private chain = new Map<string, Promise<unknown>>();
   private stamp = 0;
-  constructor(deps: Deps = {}) { this.net = deps.net ?? real; this.storage = deps.storage; }
+  private timeoutMs: number;
+  constructor(deps: Deps = {}) { this.net = deps.net ?? real; this.storage = deps.storage; this.timeoutMs = deps.timeoutMs ?? NET_TIMEOUT_MS; }
+  /** Every network call of the editor ends in NET_TIMEOUT_MS: a link that answers nothing must not hold a document's queue for the signed-in client's 120 s. The unsent text is on disk before any of this. */
+  private json(path: string, opts?: { method?: 'GET' | 'POST'; body?: unknown }): Promise<Reply> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error('timeout: no answer from the computer')), this.timeoutMs); });
+    return Promise.race([this.net.json(path, opts), late]).finally(() => clearTimeout(timer));
+  }
 
   private session(doc: string): Session {
     let s = this.sessions.get(doc);
-    if (!s) { s = { head: null, status: 'idle', label: '', conflict: false }; this.sessions.set(doc, s); }
+    if (!s) { s = { head: null, status: 'idle', label: '', conflict: false, skipReads: 0 }; this.sessions.set(doc, s); }
     return s;
   }
   private bump(): void { this.stamp += 1; }
@@ -99,46 +111,62 @@ export class Editor {
   }
 
   // ------------------------------------------------------------------------------------------------------------ the kept file
-  /** Read once; ONE read however many calls wait for it. Its answer is the old account's if the epoch moved meanwhile, or if the file was written under another key: then it is thrown away. */
+  /** Read once; ONE read however many calls wait for it. The file is the unsent text of the account `owner` names. It is deleted ONLY when the key store says another account is signed in (`known` with
+   * another id); when the key cannot be read yet (no native handle, a locked Keychain) or says there is none, the file is KEPT, not loaded, and nothing is written over it: the next call tries again. */
   private load(): Promise<void> {
     if (this.loaded) return Promise.resolve();
     if (this.loading) return this.loading;
     const ep = this.epoch;
     this.loading = (async () => {
       let found: Record<string, Kept> = {};
+      let settled = true;
       try {
         const o = JSON.parse(new TextDecoder().decode(await this.storage!.fs.readFile(PENDING_FILE)));
-        const owner = await keyOwner();
-        if (obj(o) && owner !== null && o.owner === owner && obj(o.docs)) {
+        const who = await accountIdentity();
+        if (who.kind !== 'known') settled = false;                                       // cannot say whose it is: keep it, load nothing, ask again later
+        else if (obj(o) && o.owner === who.id && obj(o.docs)) {
           for (const [doc, v] of Object.entries(o.docs)) if (obj(v) && typeof v.text === 'string' && typeof v.base === 'string') found[doc] = { text: v.text, base: v.base, key: str(v.key) || uuid(), seed: typeof v.seed === 'string' ? v.seed : null };
-        } else if (this.storage) { try { await this.storage.fs.rm(PENDING_FILE); } catch { /* absent */ } }      // another key's text, or no key: not kept
-      } catch { found = {}; /* none, or not readable: nothing is kept */ }
+        } else if (this.storage && ep === this.epoch) { try { await this.storage.fs.rm(PENDING_FILE); } catch { /* absent */ } }      // another account's text: not kept
+      } catch { found = {}; /* no file, or not readable: nothing is kept */ }
+      this.loading = undefined;
       if (ep !== this.epoch) return;
       for (const [doc, v] of Object.entries(found)) if (!this.keptByDoc[doc]) this.keptByDoc[doc] = v;
-      this.loaded = true; this.loading = undefined;
+      if (settled) this.loaded = true;
     })();
     return this.loading;
   }
-  /** Writes the kept texts under this key's name, only while `t` is live (also checked after the write: a sign-out that began meanwhile removes the file again). */
-  private async persist(t: Tok): Promise<void> {
-    if (!this.storage || !this.live(t)) return;
-    if (Object.keys(this.keptByDoc).length === 0) { try { await this.storage.fs.rm(PENDING_FILE); } catch { /* absent */ } return; }
-    const owner = await keyOwner();
-    if (owner === null || !this.live(t)) return;
-    await writeCurrent(t.gen, this.storage, PENDING_FILE, new TextEncoder().encode(JSON.stringify({ owner, docs: this.keptByDoc })));
-    if (!this.live(t)) { try { await this.storage.fs.rm(PENDING_FILE); } catch { /* the wipe will */ } }
+  /** ONE writer for the one file: every document's queue asks for a write, the writer coalesces them and always writes the map as it is WHEN IT RUNS, so two documents cannot land out of order. */
+  private pDirty = false;
+  private pRun: Promise<void> | undefined;
+  private diskPending = false;
+  private persist(): Promise<void> {
+    this.pDirty = true;
+    if (!this.pRun) this.pRun = (async () => { try { while (this.pDirty) { this.pDirty = false; await this.writeFile(); } } finally { this.pRun = undefined; } })();
+    return this.pRun;
+  }
+  private persistIf(t: Tok): Promise<void> { return this.live(t) ? this.persist() : Promise.resolve(); }
+  private async writeFile(): Promise<void> {
+    if (!this.storage || signOutBlocked()) return;
+    if (!this.loaded) { this.diskPending = true; return; }                                // the file that is there has not been read: not written over
+    const gen = accountGeneration(), ep = this.epoch;
+    if (Object.keys(this.keptByDoc).length === 0) { try { await this.storage.fs.rm(PENDING_FILE); } catch { /* absent */ } this.diskPending = false; return; }
+    const who = await accountIdentity();
+    if (who.kind !== 'known' || gen !== accountGeneration() || ep !== this.epoch) { this.diskPending = true; return; }      // not writable now; written when the key can be read
+    await writeCurrent(gen, this.storage, PENDING_FILE, new TextEncoder().encode(JSON.stringify({ owner: who.id, docs: this.keptByDoc })));
+    if (gen !== accountGeneration() || ep !== this.epoch) { try { await this.storage.fs.rm(PENDING_FILE); } catch { /* the wipe will */ } return; }
+    this.diskPending = false;
   }
 
   // ------------------------------------------------------------------------------------------------------------ reads
   private async docRow(doc: string): Promise<{ id: string; trajectory: string }> {
-    const r = await this.net.json(`/api/texture/documents/${segment(doc)}`);
+    const r = await this.json(`/api/texture/documents/${segment(doc)}`);
     let d = obj(r.body) ? r.body : {};
     if (obj(d.document)) d = d.document;
     return { id: str(d.current_revision_id), trajectory: str(d.trajectory_id) };
   }
   private async revision(rid: string): Promise<Head> {
     if (rid === '') return { id: '', content: '', body: null, version: 0 };
-    const r = await this.net.json(`/api/texture/revisions/${segment(rid)}`);
+    const r = await this.json(`/api/texture/revisions/${segment(rid)}`);
     let v = obj(r.body) ? r.body : {};
     if (obj(v.revision)) v = v.revision;
     const n = typeof v.version_number === 'number' ? v.version_number : -1;
@@ -148,12 +176,13 @@ export class Editor {
   private async readHead(doc: string, t: Tok): Promise<boolean> {
     const s = this.session(doc);
     try { const row = await this.docRow(doc); const h = await this.revision(row.id); if (!this.live(t)) return false; s.head = h; return true; }
-    catch (e) { if (!this.live(t)) return false; s.status = isOffline(e) ? 'offline' : 'failed'; s.label = isOffline(e) ? 'Offline: could not open the document to save' : `Not saved: ${saveSentence(e)}`; this.bump(); return false; }
+    catch (e) { if (!this.live(t) || isLetGo(e)) return false; s.skipReads = this.queuedEdits.get(doc) ?? 0; s.status = isOffline(e) ? 'offline' : 'failed'; s.label = isOffline(e) ? 'Offline: could not open the document to save' : `Not saved: ${saveSentence(e)}`; this.bump(); return false; }
   }
 
   // ------------------------------------------------------------------------------------------------------------ what the page sees
   async info(address: string): Promise<Info> {
     await this.load();
+    if (this.loaded && this.diskPending) await this.persist();                          // text typed while the key could not be read reaches the disk now
     const doc = editableDoc(address);
     // A sign-out under way (the generation moved, the wipe not yet run: it waits for the native half): the old account's text is not shown.
     if (signOutBlocked()) return { status: 'idle', label: '', address, editable: doc !== null, kept: '', waiting: 0, stamp: this.stamp, head: '', opened: false };
@@ -174,36 +203,44 @@ export class Editor {
   }
 
   // ------------------------------------------------------------------------------------------------------------ editing
-  /** The listener typed: the text is now `markdown`, and the field showed `from` before this keystroke (null: the caller makes no claim, an empty string is an empty text). It is kept on the phone at once
-   * and posted when `flush` is called. */
-  edit(address: string, markdown: string, from: string | null = null): Promise<Info> {
+  private queuedEdits = new Map<string, number>();
+  /** The listener typed: the text is now `markdown`, and the field showed `from` before this keystroke (null: the caller makes no claim, an empty string is an empty text).
+   * THE KEYSTROKE IS ON DISK BEFORE IT WAITS FOR ANYTHING: the kept record is made and written first (it needs no network: the head is used if this session already read it, else the base is
+   * learned later), then the call enters the document's queue to settle the base against the head. A save in flight, a hung link or a kill leaves the latest text on the phone. */
+  async edit(address: string, markdown: string, from: string | null = null): Promise<Info> {
     const doc = editableDoc(address);
     if (doc === null) return this.info(address);
-    return this.run(doc, async (t) => {
-      await this.load();
-      if (!this.live(t)) return this.info(address);
-      const s = this.session(doc);
-      if (!s.head) await this.readHead(doc, t);
-      if (!this.live(t)) return this.info(address);
-      const k = this.keptByDoc[doc];
-      if (!s.head) {                                                  // no head readable (offline): the text is kept, over what the field showed
-        this.keptByDoc[doc] = { text: markdown, base: k ? k.base : '', seed: k ? k.seed : from, key: uuid() };
-        this.bump(); await this.persist(t);
-        return this.info(address);
-      }
-      if (markdown === s.head.content) {
-        delete this.keptByDoc[doc];
-        s.status = 'idle'; s.label = ''; s.conflict = false;
-      } else {
-        // The first keystroke of an unsent text descends from the head only when the field showed the head's text (or the caller makes no claim). A field showing anything else is over an UNKNOWN base.
-        const fromHead = from === null || from === s.head.content;
-        this.keptByDoc[doc] = { text: markdown, base: k ? k.base : (fromHead ? s.head.id : ''), seed: k ? k.seed : (fromHead ? null : from), key: uuid() };
-        if (!s.conflict) { s.status = 'dirty'; s.label = 'Editing'; }
-      }
-      this.bump();
-      await this.persist(t);
+    const t = this.tok();
+    await this.load();
+    if (!this.live(t)) return this.info(address);
+    const s = this.session(doc);
+    const k = this.keptByDoc[doc];
+    let base = k ? k.base : '', seed: string | null = k ? k.seed : from;
+    if (!k && s.head) { const fromHead = from === null || from === s.head.content; base = fromHead ? s.head.id : ''; seed = fromHead ? null : from; }      // the head this session read is what the field showed, or it is not
+    this.keptByDoc[doc] = { text: markdown, base, seed, key: uuid() };
+    if (!s.conflict) { s.status = 'dirty'; s.label = this.diskPending ? 'Editing (not yet saved on this phone: the key could not be read)' : 'Editing'; }
+    this.bump();
+    const onDisk = this.persist();
+    this.queuedEdits.set(doc, (this.queuedEdits.get(doc) ?? 0) + 1);
+    const settled = this.run(doc, async (t2) => {
+      this.queuedEdits.set(doc, Math.max(0, (this.queuedEdits.get(doc) ?? 1) - 1));
+      await this.settle(doc, t2);
       return this.info(address);
-    }, () => this.info(address));
+    }, () => { this.queuedEdits.set(doc, Math.max(0, (this.queuedEdits.get(doc) ?? 1) - 1)); return this.info(address); });
+    await onDisk;
+    return settled;
+  }
+  /** Inside the queue: the base of the LATEST kept text is settled against the head (read once while there is none: the calls queued behind a failed read do not read again). */
+  private async settle(doc: string, t: Tok): Promise<void> {
+    await this.load();
+    if (!this.live(t)) return;
+    const s = this.session(doc);
+    if (!s.head) { if (s.skipReads > 0) s.skipReads -= 1; else await this.readHead(doc, t); }
+    if (!this.live(t)) return;
+    const k = this.keptByDoc[doc];
+    if (!k || !s.head) return;
+    if (k.text === s.head.content) { delete this.keptByDoc[doc]; s.status = 'idle'; s.label = ''; s.conflict = false; this.bump(); await this.persistIf(t); return; }
+    if (k.base === '' && (k.seed === null || k.seed === s.head.content)) { k.base = s.head.id; k.seed = null; await this.persistIf(t); }      // typed over the head that was read (or over no claim): it has its base now
   }
 
   /** Post what is waiting for this document now (Done, leaving the page, the idle timer). An empty address is every document that has kept text and no conflict (the retry, on any page, and at launch). */
@@ -226,7 +263,7 @@ export class Editor {
       await this.load();
       delete this.keptByDoc[doc];
       const s = this.session(doc); s.head = null; s.status = 'idle'; s.label = ''; s.conflict = false;
-      this.bump(); await this.persist(t);
+      this.bump(); await this.persistIf(t);
       return this.info(address);
     }, () => this.info(address));
   }
@@ -245,7 +282,7 @@ export class Editor {
         if (!this.live(t)) return this.info(address);
         s.head = h;
         k.base = h.id; k.seed = null; k.key = uuid(); s.conflict = false;
-        this.bump(); await this.persist(t);
+        this.bump(); await this.persistIf(t);
       } catch (e) { if (!this.live(t)) return this.info(address); s.status = isOffline(e) ? 'offline' : 'failed'; s.label = isOffline(e) ? 'Offline: kept on this phone, posts when it can' : `Not saved: ${saveSentence(e)}`; this.bump(); return this.info(address); }
       await this.save(doc, t);
       return this.info(address);
@@ -265,8 +302,8 @@ export class Editor {
         const h = await this.revision(row.id);
         if (!this.live(t)) return;
         s.head = h;
-        if (h.content === k.text) { delete this.keptByDoc[doc]; s.status = 'saved'; s.label = h.version > 0 ? `Saved · version ${h.version}` : 'Saved'; this.bump(); await this.persist(t); return; }
-        if (k.base === '' && (k.seed === null || h.content === k.seed)) { k.base = row.id; await this.persist(t); }      // typed over the text the head still is (or over no claim): now it has a base
+        if (h.content === k.text) { if (this.keptByDoc[doc]?.text === k.text) delete this.keptByDoc[doc]; s.status = 'saved'; s.label = h.version > 0 ? `Saved · version ${h.version}` : 'Saved'; this.bump(); await this.persistIf(t); return; }
+        if (k.base === '' && (k.seed === null || h.content === k.seed)) { k.base = row.id; await this.persistIf(t); }      // typed over the text the head still is (or over no claim): now it has a base
         else { this.conflict(s); return; }
       }
       if (!s.head || s.head.id !== k.base) s.head = await this.revision(k.base);          // a relaunch: the head this text descends from
@@ -275,12 +312,12 @@ export class Editor {
       const payload: Record<string, unknown> = { content: k.text, body_doc: merged.body, idempotency_key: k.key };
       if (k.base !== '') payload.parent_revision_id = k.base;
       if (row.trajectory !== '') {                                  // as the web does: a document with a trajectory is saved against its lifecycle version
-        const life = await this.net.json(`/api/texture/lifecycle/${segment(row.trajectory)}`);
+        const life = await this.json(`/api/texture/lifecycle/${segment(row.trajectory)}`);
         const tr = obj(life.body) && obj(life.body.trajectory) ? life.body.trajectory : {};
         if (tr.lifecycle_version !== undefined) payload.expected_lifecycle_version = tr.lifecycle_version;
       }
       let r: Reply;
-      try { r = await this.net.json(`/api/texture/documents/${segment(doc)}/revisions`, { method: 'POST', body: payload }); }
+      try { r = await this.json(`/api/texture/documents/${segment(doc)}/revisions`, { method: 'POST', body: payload }); }
       catch (e) {
         if (e instanceof HTTPError && e.status === 409) {           // the head moved between the read and the post
           if (!this.live(t)) return;
@@ -288,7 +325,7 @@ export class Editor {
           const h = await this.revision(row2.id);
           if (!this.live(t)) return;
           s.head = h;
-          if (h.content === k.text) { delete this.keptByDoc[doc]; s.status = 'saved'; s.label = h.version > 0 ? `Saved · version ${h.version}` : 'Saved'; this.bump(); await this.persist(t); return; }
+          if (h.content === k.text) { if (this.keptByDoc[doc]?.text === k.text) delete this.keptByDoc[doc]; s.status = 'saved'; s.label = h.version > 0 ? `Saved · version ${h.version}` : 'Saved'; this.bump(); await this.persistIf(t); return; }
           this.conflict(s); return;
         }
         throw e;
@@ -299,11 +336,14 @@ export class Editor {
       const n = typeof o.version_number === 'number' ? o.version_number : -1;
       const id = str(o.revision_id);
       s.head = { id, content: k.text, body: merged.body, version: n + 1 };
-      delete this.keptByDoc[doc];
+      const now = this.keptByDoc[doc];
+      if (now && now.text !== k.text) { now.base = id; now.seed = null; }       // typed while it was posting: the newer text is kept over the new head and saved next
+      else delete this.keptByDoc[doc];
       s.status = 'saved'; s.label = n >= 0 ? `Saved · version ${n + 1}` : 'Saved'; this.bump();
-      await this.persist(t);
+      await this.persistIf(t);
     } catch (e) {
       if (!this.live(t)) return;
+      if (isLetGo(e)) { s.status = 'dirty'; s.label = 'Editing'; this.bump(); return; }      // a newer flush of the same mutation does this work: nothing is wrong
       s.status = isOffline(e) ? 'offline' : 'failed';
       s.label = isOffline(e) ? 'Offline: kept on this phone, posts when it can' : `Not saved: ${saveSentence(e)}`;
       this.bump();
