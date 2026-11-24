@@ -2,6 +2,7 @@ import XCTest
 import AVFoundation
 import FluidAudio
 import CryptoKit
+import Speech
 @testable import AutoradioKit
 @testable import AutoradioModels
 
@@ -232,6 +233,93 @@ final class FluidSpeechMiniTests: XCTestCase {
             secs += Double(audio.count) / 16_000; took += dt
         }
         print("PARAKEET-TDT total: WER \(String(format: "%.3f", err / n)) over \(Int(n)) words; \(String(format: "%.3f", took / secs)) s per second of audio")
+    }
+}
+
+// MARK: Real human speech: word error against a reference, Fluid Speech Mini beside Parakeet and Apple's recogniser
+//
+// The fixtures above are synthesised (macOS `say`), so every model hears them perfectly. This runs the same models over real readers: set
+// AUTORADIO_REAL_SPEECH=<folder> holding `references.json` ([{"id","text"}]) and `<id>.wav` (16 kHz mono). The folder used for the figures in
+// ON-DEVICE-MODELS.md section 11 is the 73 clips of the LibriSpeech "clean" validation subset
+// (hf-internal-testing/librispeech_asr_dummy; LibriSpeech is CC BY 4.0, read by volunteers of LibriVox). Skipped when the variable is not set.
+// Parakeet TDT (the cached v2 folder) runs when AUTORADIO_COMPARE_PARAKEET=1; Apple's recogniser runs only when this process is already
+// authorised for speech (a test process on the Mac cannot ask), otherwise the figure is reported as not measured.
+extension FluidSpeechMiniTests {
+    struct Ref: Decodable { var id: String; var text: String }
+
+    /// Errors and reference length over the whole set (corpus word error), not the mean of per-clip rates.
+    struct Tally { var errors = 0.0, words = 0.0, audio = 0.0, took = 0.0
+        mutating func add(_ hyp: String, _ ref: String, audio a: Double, took t: Double) {
+            let n = Double(FluidSpeechMiniTests.words(ref).count)
+            errors += FluidSpeechMiniTests.wer(hyp, ref) * n; words += n; audio += a; took += t
+        }
+        var rate: Double { errors / max(words, 1) }
+    }
+
+    func testRealSpeechWordError() async throws {
+        guard let folder = ProcessInfo.processInfo.environment["AUTORADIO_REAL_SPEECH"] else { throw XCTSkip("set AUTORADIO_REAL_SPEECH=<folder of wav clips and references.json>") }
+        let dir = URL(fileURLWithPath: folder)
+        let refs = try JSONDecoder().decode([Ref].self, from: Data(contentsOf: dir.appendingPathComponent("references.json")))
+        let (model, why) = await Self.modelDirectory()
+        guard let model else { throw XCTSkip(why) }
+        let clips = try refs.map { ($0, try AudioFiles.readMono(dir.appendingPathComponent("\($0.id).wav"), rate: 16_000)) }
+        let hours = clips.reduce(0.0) { $0 + Double($1.1.count) / 16_000 } / 3600
+        print("REAL-SPEECH \(clips.count) clips, \(String(format: "%.1f", hours * 60)) minutes of audio")
+
+        // Fluid Speech Mini, through the stage the app runs (frames of 512 samples, then `finish`).
+        let stage = FluidSpeechMiniTranscriber(directory: { model })
+        _ = try await stage.begin()
+        var fluid = Tally()
+        for (r, audio) in clips {
+            let s = try await stage.begin()
+            for fr in frames(audio, step: 512) { s.append(fr) }
+            let t0 = Date(); let text = try await s.finish()
+            fluid.add(text, r.text, audio: Double(audio.count) / 16_000, took: Date().timeIntervalSince(t0))
+        }
+        print("REAL-SPEECH fluid-speech-mini: WER \(String(format: "%.4f", fluid.rate)) over \(Int(fluid.words)) words; \(String(format: "%.3f", fluid.took / fluid.audio)) s per second of audio")
+        XCTAssertLessThanOrEqual(fluid.rate, 0.10, "Fluid Speech Mini on real readers")
+
+        if ProcessInfo.processInfo.environment["AUTORADIO_COMPARE_PARAKEET"] == "1" {
+            let models = try await AsrModels.downloadAndLoad(to: Self.cacheRoot.appendingPathComponent("parakeet-tdt-v2"), version: .v2)
+            let mgr = AsrManager(config: .default)
+            try await mgr.loadModels(models)
+            var st = TdtDecoderState.make(decoderLayers: await mgr.decoderLayerCount)
+            _ = try? await mgr.transcribe([Float](repeating: 0, count: 16_000), decoderState: &st)
+            var tdt = Tally()
+            for (r, audio) in clips {
+                var state = TdtDecoderState.make(decoderLayers: await mgr.decoderLayerCount)
+                let t0 = Date(); let text = try await mgr.transcribe(audio, decoderState: &state).text
+                tdt.add(text, r.text, audio: Double(audio.count) / 16_000, took: Date().timeIntervalSince(t0))
+            }
+            print("REAL-SPEECH parakeet-tdt-0.6b-v2: WER \(String(format: "%.4f", tdt.rate)) over \(Int(tdt.words)) words; \(String(format: "%.3f", tdt.took / tdt.audio)) s per second of audio")
+
+            // The streaming model the app uses for live words, through its stage.
+            let eou = ParakeetEOUTranscriber(StageParams())
+            var live = Tally()
+            do {
+                for (r, audio) in clips {
+                    let s = try await eou.begin()
+                    for fr in frames(audio, step: 512) { s.append(fr) }
+                    let t0 = Date(); let text = try await s.finish()
+                    live.add(text, r.text, audio: Double(audio.count) / 16_000, took: Date().timeIntervalSince(t0))
+                }
+                print("REAL-SPEECH parakeet-eou-120m: WER \(String(format: "%.4f", live.rate)) over \(Int(live.words)) words; \(String(format: "%.3f", live.took / live.audio)) s per second of audio")
+            } catch { print("REAL-SPEECH parakeet-eou-120m: not measured (\(error))") }
+        }
+
+        if SFSpeechRecognizer.authorizationStatus() == .authorized {
+            var apple = Tally()
+            let a = SFSpeechTranscriber(StageParams())
+            for (r, audio) in clips {
+                let s = try await a.begin()
+                for fr in frames(audio, step: 512) { s.append(fr) }
+                let t0 = Date(); let text = try await s.finish()
+                apple.add(text, r.text, audio: Double(audio.count) / 16_000, took: Date().timeIntervalSince(t0))
+            }
+            print("REAL-SPEECH apple-speech: WER \(String(format: "%.4f", apple.rate)) over \(Int(apple.words)) words")
+        } else {
+            print("REAL-SPEECH apple-speech: not measured (this test process is not authorised for speech recognition, status \(SFSpeechRecognizer.authorizationStatus().rawValue); a Mac test process cannot ask)")
+        }
     }
 }
 
