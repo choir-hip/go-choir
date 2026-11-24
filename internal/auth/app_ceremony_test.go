@@ -359,40 +359,6 @@ func TestAppLoginRefusesUnknownPasskeysAndCrossedChallenges(t *testing.T) {
 	}
 }
 
-// F7: sign-up closed is the waitlist answer, at begin and again at finish,
-// and mints no key.
-func TestAppCreateAnswersTheWaitlistWhenSignUpIsClosed(t *testing.T) {
-	h := appEnv(t)
-	first := newSoftPasskey(t)
-	if rec := createAccount(t, h, "first@example.com", first, testOrigin); rec.Code != 200 {
-		t.Fatalf("first = %d: %s", rec.Code, rec.Body.String())
-	}
-	h.config.RegistrationCap = 1
-	rec := registerBeginFor(t, h, "second@example.com")
-	if rec.Code != 403 || decodeMap(t, rec)["code"] != "registration_waitlist" {
-		t.Fatalf("begin over the cap = %d: %s", rec.Code, rec.Body.String())
-	}
-	// Begun below the cap, finished above it.
-	h.config.RegistrationCap = 2
-	second := newSoftPasskey(t)
-	begin := decodeMap(t, registerBeginFor(t, h, "third@example.com"))
-	h.config.RegistrationCap = 1
-	fin := postJSON(h.HandleAppRegisterFinish, appFinishBody(testApp, second.create(t, begin, testOrigin)))
-	if fin.Code != 403 || decodeMap(t, fin)["code"] != "registration_waitlist" {
-		t.Fatalf("finish over the cap = %d: %s", fin.Code, fin.Body.String())
-	}
-	var n int
-	_ = h.store.db.QueryRow("SELECT COUNT(*) FROM api_keys").Scan(&n)
-	if n != 1 {
-		t.Fatalf("%d keys, want only the first account's", n)
-	}
-	// An existing account still signs in at the cap.
-	opts := decodeMap(t, postJSON(h.HandleAppLoginBegin, map[string]string{}))
-	if rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, first.assert(t, opts, testOrigin))); rec.Code != 200 {
-		t.Fatalf("sign-in at the cap = %d", rec.Code)
-	}
-}
-
 // F8: an email that already has an account is never registered again: the
 // app is told no code works, and the account is as it was.
 func TestAppCreateWithAnExistingEmailIsRefused(t *testing.T) {

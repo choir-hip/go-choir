@@ -46,7 +46,10 @@ const rotationGraceDuration = 30 * time.Second
 
 // Handler provides HTTP handlers for the /auth/* routes.
 type Handler struct {
-	store           *Store
+	store *Store
+	// room bounds sign-ups by what the host can hold (host_room.go); nil,
+	// like an unset plan, closes sign-up.
+	room            *hostRoom
 	webauthn        *webauthn.WebAuthn
 	config          *Config
 	signer          ed25519.PrivateKey // loaded at startup for JWT signing
@@ -94,6 +97,9 @@ func NewHandler(store *Store, wa *webauthn.WebAuthn, cfg *Config, signer ed25519
 		h.recoveryMailer = NewMaildRecoveryMailer(cfg.MaildURL, nil)
 		h.signInMailer = NewMaildSignInMailer(cfg.MaildURL, nil)
 		h.numberAssigner = NewMaildNumberAssigner(cfg.MaildURL, nil)
+	}
+	if cfg != nil {
+		h.room = newHostRoom(cfg.Room, cfg.DBPath)
 	}
 	h.numberNudge = make(chan struct{}, 1)
 	h.initEmailSignIn()
@@ -754,7 +760,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
-	user, dbCred, ok := h.verifyRegistration(w, body)
+	user, dbCred, ok := h.verifyRegistration(w, r, body)
 	if !ok {
 		return
 	}
@@ -780,7 +786,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 // It answers the request itself and returns false on any refusal; on success it
 // returns the user and the stored credential and the caller issues whatever the
 // client gets (a cookie session on the web, a key for the phone app).
-func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User, *Credential, bool) {
+func (h *Handler) verifyRegistration(w http.ResponseWriter, r *http.Request, body []byte) (*User, *Credential, bool) {
 	challengeID, err := extractChallengeFromBody(body)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid webauthn response: " + err.Error()})
@@ -801,10 +807,6 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 	case perr == nil:
 		user = &User{ID: pending.UserID, Email: pending.Email, CreatedAt: now, EmailVerifiedAt: &now}
 		sessionJSON = pending.SessionData
-		// The cap again: ceremonies begun below it must not all finish above it.
-		if h.refuseIfRegistrationClosed(w, "register_finish", hashEmail(user.Email), "", user.Email) {
-			return nil, nil, false
-		}
 	case errors.Is(perr, sql.ErrNoRows):
 		pending = nil
 		cs, err := h.store.ConsumeChallengeState(challengeID)
@@ -883,7 +885,18 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 	}
 	if pending != nil {
 		// The account, its passkey and the proof of its address, in one transaction.
-		if err := h.store.CreateAccountWithCredential(pending, dbCred); err != nil {
+		// The room is decided in this transaction: ceremonies begun with room
+		// must not all finish without it.
+		if err := h.store.CreateAccountWithCredential(pending, dbCred, h.room.admit); err != nil {
+			if errors.Is(err, ErrRegistrationClosed) || errors.Is(err, ErrRoomUnreadable) {
+				// The ceremony is not spent: keep the pending challenge so the
+				// same passkey answer is accepted when there is room.
+				if rerr := h.store.SavePendingRegistration(pending); rerr != nil {
+					log.Printf("[auth] operation=register_finish user_id=%s result=warning step=restore_pending error=%q", user.ID, rerr)
+				}
+				h.refuseRoomError(w, r, "register_finish", hashEmail(user.Email), user.Email, err)
+				return nil, nil, false
+			}
 			if errors.Is(err, ErrAddressTaken) {
 				log.Printf("[auth] operation=register_finish user_id=%s result=refused reason=address_taken", user.ID)
 				writeJSON(w, http.StatusConflict, errorResponse{Error: "email already registered"})

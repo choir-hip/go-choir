@@ -62,6 +62,7 @@ func testHandlerEnv(t *testing.T) (*Handler, ed25519.PrivateKey) {
 	handler := NewHandler(store, wa, cfg, priv)
 	handler.signInMailer = &fakeSignInMailer{}
 	handler.signInMailDispatch = func(f func()) { f() }
+	openRoomForTests(t, handler)
 	return handler, priv
 }
 
@@ -751,6 +752,7 @@ func TestRegisterBeginWithDeployedRPID(t *testing.T) {
 
 	cfg.EmailCodeKey = []byte(testEmailKey)
 	h := NewHandler(store, wa, cfg, priv)
+	openRoomForTests(t, h)
 	h.signInMailer = &fakeSignInMailer{}
 	h.signInMailDispatch = func(f func()) { f() }
 
@@ -1932,6 +1934,7 @@ func TestAuthCookiesAreSecureWhenConfigured(t *testing.T) {
 	}
 
 	h := NewHandler(store, wa, cfg, priv)
+	openRoomForTests(t, h)
 
 	user, err := store.CreateUser("secure-cookie-user", "securecookie@example.com")
 	if err != nil {
@@ -2207,6 +2210,7 @@ func deployedHandlerEnv(t *testing.T) (*Handler, ed25519.PrivateKey) {
 
 	cfg.EmailCodeKey = []byte(testEmailKey)
 	dh := NewHandler(store, wa, cfg, priv)
+	openRoomForTests(t, dh)
 	dh.signInMailer = &fakeSignInMailer{}
 	dh.signInMailDispatch = func(f func()) { f() }
 	return dh, priv

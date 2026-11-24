@@ -233,7 +233,7 @@ func (h *Handler) HandleAppRegisterFinish(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	user, dbCred, ok := h.verifyRegistration(w, credential)
+	user, dbCred, ok := h.verifyRegistration(w, r, credential)
 	if !ok {
 		return
 	}

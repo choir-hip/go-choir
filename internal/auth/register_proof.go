@@ -131,7 +131,7 @@ func (h *Handler) HandleRegisterMail(w http.ResponseWriter, r *http.Request) {
 	if known {
 		waitlisted = ""
 	}
-	if h.refuseIfRegistrationClosed(w, "register_mail", emailHash, "", waitlisted) {
+	if h.refuseIfRegistrationClosed(w, r, "register_mail", emailHash, waitlisted) {
 		return
 	}
 
@@ -293,6 +293,16 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusTooManyRequests, errorResponse{Error: "too many attempts; try again later"})
 		return
 	}
+	// The room, before the code is spent: a person refused here keeps their
+	// code and tries again when there is room. (An address that has an account
+	// is told the same and is not waitlisted.)
+	waitlisted := email
+	if existing, lerr := h.store.GetUserByEmail(email); lerr == nil && existing != nil {
+		waitlisted = ""
+	}
+	if h.refuseIfRegistrationClosed(w, r, "register_begin", emailHash, waitlisted) {
+		return
+	}
 	want := h.emailCodeHash(req.AttemptID, EmailAttemptPurposeRegister, req.Code)
 	if _, err := h.store.ConsumeEmailCode(r.Context(), req.AttemptID, sha256SumHex(req.Binding), EmailAttemptPurposeRegister, "",
 		h.emailAddressHash(normalizeEmailAddress(email)), func(stored string) bool { return hmac.Equal([]byte(stored), []byte(want)) }); err != nil {
@@ -300,16 +310,14 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The code is spent. The address must still have no account (it may have got
-	// one between the mail and now); the cap is re-checked.
+	// one between the mail and now). The room is decided again, atomically, at
+	// the finish.
 	if _, err := h.store.GetUserByEmail(email); err == nil {
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "email already registered"})
 		return
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		log.Printf("[auth] operation=register_begin email_hash=%s result=error step=lookup error=%q", emailHash, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
-		return
-	}
-	if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, "", email) {
 		return
 	}
 

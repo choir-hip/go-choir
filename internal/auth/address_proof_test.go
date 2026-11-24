@@ -416,7 +416,7 @@ func TestOneMailboxIsOneAccountWhateverTheCase(t *testing.T) {
 		t.Fatal("register/begin worked for a mailbox that has an account")
 	}
 	// Even a pending registration that got past the mail cannot make a second account.
-	err := h.store.CreateAccountWithCredential(&PendingRegistration{UserID: "dup", Email: "CASE@example.com"}, &Credential{ID: "dupc", PublicKey: []byte("k"), AttestationType: "none", Transport: "[]", AAGUID: make([]byte, 16), Flags: "{}", CreatedAt: time.Now().UTC()})
+	err := h.store.CreateAccountWithCredential(&PendingRegistration{UserID: "dup", Email: "CASE@example.com"}, &Credential{ID: "dupc", PublicKey: []byte("k"), AttestationType: "none", Transport: "[]", AAGUID: make([]byte, 16), Flags: "{}", CreatedAt: time.Now().UTC()}, nil)
 	if err != ErrAddressTaken {
 		t.Fatalf("a second account for one mailbox: %v", err)
 	}
@@ -453,9 +453,9 @@ func TestRegisterMailAnswersAKnownAndANewAddressAlike(t *testing.T) {
 			t.Fatalf("request %d: known %d %q, new %d %q", i, kc[i], ke[i], nc[i], ne[i])
 		}
 	}
-	// At the cap both are refused the same way, and only the new one is waitlisted.
+	// With no room both are refused the same way, and only the new one is waitlisted.
 	h2 := appEnv(t)
-	h2.config.RegistrationCap = 1
+	withRoom(t, h2, 100) // the reserve and nothing over it: no place left
 	addPasskey(t, h2, "u1", "held@example.com")
 	a := postJSONFrom(h2.HandleRegisterMail, nextTestIP(), map[string]string{"email": "held@example.com", "binding": newBinding(t)})
 	b := postJSONFrom(h2.HandleRegisterMail, nextTestIP(), map[string]string{"email": "fresh@example.com", "binding": newBinding(t)})

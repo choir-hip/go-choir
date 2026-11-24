@@ -138,7 +138,7 @@ CREATE INDEX IF NOT EXISTS idx_recovery_tokens_expires_at ON recovery_tokens(exp
 CREATE INDEX IF NOT EXISTS idx_recovery_tokens_user_id ON recovery_tokens(user_id);
 
 -- The sign-up waitlist (L4-03, registration_cap.go): emails refused while
--- AUTH_REGISTRATION_CAP was reached. Additive; nothing else reads it.
+-- the host had no room for another computer. Additive; nothing else reads it.
 CREATE TABLE IF NOT EXISTS registration_waitlist (
 	email         TEXT PRIMARY KEY,
 	created_at    DATETIME NOT NULL,
@@ -409,6 +409,12 @@ func (s *Store) bootstrap() error {
 	// so the existing set is known people. Later accounts start unverified.
 	if err := s.migrateEmailVerifiedAt(); err != nil {
 		return fmt.Errorf("migrate email_verified_at: %w", err)
+	}
+
+	// The waitlist keeps a keyed hash of the source that asked, to bound what
+	// one source can add (registration_cap.go).
+	if _, err := s.db.Exec(`ALTER TABLE registration_waitlist ADD COLUMN source_hash TEXT NOT NULL DEFAULT ''`); err != nil && !isDuplicateColumnErr(err) {
+		return fmt.Errorf("migrate registration_waitlist source_hash: %w", err)
 	}
 
 	// The legacy desktop handoff schema carried raw access and refresh bearer
@@ -758,8 +764,9 @@ func (s *Store) CleanExpiredPendingRegistrations() (int64, error) {
 // CreateAccountWithCredential makes the account and its first passkey, with
 // the address marked proved, in one transaction: nothing exists for the address
 // before it commits, and the address's unique index decides a race (the loser
-// gets ErrAddressTaken and leaves nothing).
-func (s *Store) CreateAccountWithCredential(p *PendingRegistration, c *Credential) error {
+// gets ErrAddressTaken and leaves nothing). admit, when set, is the host's room
+// decision (host_room.go) made inside the same transaction.
+func (s *Store) CreateAccountWithCredential(p *PendingRegistration, c *Credential, admit func(queryRower) error) error {
 	now := time.Now().UTC()
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -775,6 +782,13 @@ func (s *Store) CreateAccountWithCredential(p *PendingRegistration, c *Credentia
 	}
 	if taken > 0 {
 		return ErrAddressTaken
+	}
+	// The host's room, read through this transaction: of several finishes
+	// racing for the last place only the first sees it.
+	if admit != nil {
+		if err := admit(tx); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.Exec(
 		"INSERT INTO users (id, email, created_at, email_verified_at) VALUES (?, ?, ?, ?)",

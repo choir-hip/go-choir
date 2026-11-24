@@ -526,6 +526,11 @@ func (h *Handler) StartDeviceSweeper(ctx context.Context, interval time.Duration
 				return
 			case <-t.C:
 				h.sweepAccountSets()
+				if n, err := h.store.SweepRegistrationWaitlist(time.Now().UTC()); err != nil {
+					log.Printf("[auth] operation=waitlist_sweep result=error error=%q", err)
+				} else if n > 0 {
+					log.Printf("[auth] operation=waitlist_sweep deleted=%d", n)
+				}
 				h.sweepChallenges()
 				if n, err := h.store.SweepDeviceAuthorizations(ctx, time.Now().UTC().Add(-DeviceAuthorizationRetention)); err != nil {
 					log.Printf("[auth] operation=device_sweep result=error error=%q", err)

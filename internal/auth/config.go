@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostroom"
 )
 
 // Config holds all runtime configuration for the auth service, resolved from
@@ -57,10 +59,11 @@ type Config struct {
 	// configured.
 	MaildURL string
 
-	// RegistrationCap is the most users with a passkey the service admits
-	// (AUTH_REGISTRATION_CAP; 0, the default, is no cap). At the cap a new
-	// sign-up is refused and its email waitlisted (registration_cap.go).
-	RegistrationCap int
+	// Room bounds sign-ups by what the host can hold (AUTH_ROOM_RESERVE_GIB,
+	// AUTH_ROOM_FOOTPRINT_GIB, AUTH_ROOM_OWNERS_PATH; host_room.go). Nil, or a
+	// plan that did not load whole (Err), closes sign-up: there is no
+	// unbounded mode, development servers and tests give a plan.
+	Room *RoomConfig
 
 	// EmailSignIn is the auth.email_sign_in switch (AUTH_EMAIL_SIGN_IN: on,
 	// true, 1 or yes). Off, begin answers as if every address were unknown,
@@ -135,13 +138,7 @@ func LoadConfig() (*Config, error) {
 		MaildURL:          envOr("AUTH_MAILD_URL", DefaultMaildURL),
 	}
 
-	if v := strings.TrimSpace(os.Getenv("AUTH_REGISTRATION_CAP")); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			return nil, fmt.Errorf("auth config: AUTH_REGISTRATION_CAP must be a whole number >= 0 (0 is no cap), got %q", v)
-		}
-		cfg.RegistrationCap = n
-	}
+	cfg.Room = roomConfigFromEnv()
 
 	cfg.EmailSignIn = envOn("AUTH_EMAIL_SIGN_IN")
 	cfg.EmailSessionTTL = envDuration("AUTH_EMAIL_SESSION_TTL", DefaultEmailSessionTTL)
@@ -272,4 +269,28 @@ func splitComma(s string) []string {
 		}
 	}
 	return result
+}
+
+// roomConfigFromEnv reads the room bound. All three values or none. None, or a
+// part missing or malformed, never admits anyone: the plan is nil, or carries
+// Err, and sign-up is closed (503) while the rest of the service runs.
+func roomConfigFromEnv() *RoomConfig {
+	reserve := strings.TrimSpace(os.Getenv("AUTH_ROOM_RESERVE_GIB"))
+	footprint := strings.TrimSpace(os.Getenv("AUTH_ROOM_FOOTPRINT_GIB"))
+	owners := strings.TrimSpace(os.Getenv("AUTH_ROOM_OWNERS_PATH"))
+	if reserve == "" && footprint == "" && owners == "" {
+		return nil
+	}
+	if reserve == "" || footprint == "" || owners == "" {
+		return &RoomConfig{Err: "AUTH_ROOM_RESERVE_GIB, AUTH_ROOM_FOOTPRINT_GIB and AUTH_ROOM_OWNERS_PATH are set together or not at all"}
+	}
+	r, err := strconv.ParseUint(reserve, 10, 32)
+	if err != nil || r < hostroom.MinReserveGiB {
+		return &RoomConfig{Err: fmt.Sprintf("AUTH_ROOM_RESERVE_GIB must be a whole number of GiB, at least %d (the deploy floor), got %q", hostroom.MinReserveGiB, reserve)}
+	}
+	f, err := strconv.ParseUint(footprint, 10, 32)
+	if err != nil || f < hostroom.MinFootprintGiB {
+		return &RoomConfig{Err: fmt.Sprintf("AUTH_ROOM_FOOTPRINT_GIB must be a whole number of GiB, at least %d (the largest computer measured), got %q", hostroom.MinFootprintGiB, footprint)}
+	}
+	return &RoomConfig{ReserveGiB: r, FootprintGiB: f, OwnersPath: owners}
 }
