@@ -50,12 +50,44 @@ without deciding them, about 2% of the 25,608 that arrived.
   management's answer, and no count of residuals outstanding. The queue line
   `lane/intake-starve` adds counts queued tasks, not these.
 
-**Not measured:** for each non-clean Report, whether management was woken,
-whether its turn ran, and whether it delegated, declined or ignored the
-residuals. That needs the Reports and management's following turns read from
-the ledger (the copy is damaged in places; the rows are readable by rowid
-range). Without it the split between "management never saw them" and
-"management saw them and did nothing" is unknown.
+**What happened next, measured** (same copy, read by rowid range, counts
+only; rowids 11,800,000 to 11,840,000 are unreadable and the 11-21 task rows
+are incomplete, so the counts are close, not exact). Tasks closed by expiry
+are left out.
+
+| How the task closed | Tasks | Captures left | Leased again | Never leased again, undecided | Decided later with no new task |
+| --- | --- | --- | --- | --- | --- |
+| run failed | 168 | 870 | 672 | 198 | 0 |
+| run passivated | 147 | 542 | 377 | 164 | 1 |
+| finished (`done`) | 138 | 246 | 88 | 89 | 69 |
+| deadline | 18 | 105 | 99 | 6 | 0 |
+| run completed, task not closed | 21 | 56 | 37 | 19 | 0 |
+| crash restart | 8 | 27 | 27 | 0 | 0 |
+| cancelled | 8 | 25 | 3 | 0 | 22 |
+| **Total** | **508** | **1,871** | **1,303** | **476** | **92** |
+
+- **The model path works about 70% of the time.** 1,303 of 1,871 left
+  captures were leased again, every one by a management Delegate (the new
+  task carries a management run as its parent; none came from a fresh
+  arrival). 1,120 of those were then decided. Time from closure to the new
+  lease: median 417 s, 90th percentile 1,739 s, longest 6.5 hours.
+- **The 476 are almost all "management ran and did not delegate them".** A
+  management run started within 30 minutes of 494 of the 508 closures. In
+  183 of those tasks (550 captures) nothing was leased again: 461 captures
+  never decided, 89 decided later by management itself. Only 14 tasks (44
+  captures) had no management run within 30 minutes, and 8 of those were
+  delegated again later.
+- Example ids. No run within 30 minutes: tasks `mt-df52823d199b1067776c`,
+  `mt-0e25d7915386e24e4e37`, `mt-60afd170e93585c04013`. A run, nothing
+  leased again: `mt-1e989bdce15da53f9ff2`, `mt-fd8188484eec988c0dd6`,
+  `mt-ba0b935594e4e76e42e9` (all three followed by run `8f9ba8b2-f277-4d6d-9a30-c4335c0a7892`).
+  A run, leased again: `mt-3dbad14f773d9be5f573` (run `7ecde6cd-d7a7-4d15-9f7a-534d45287d81`),
+  `mt-d2503f88edd3a11b835a` (`79505a51-f77f-4e11-9e25-1b054a29a14b`),
+  `mt-e9d2b4651c205469235c` (`eba039c5-11bb-4ac0-85eb-8c811d1af400`).
+
+**Not measured:** management's turns were not read. "A run started within 30
+minutes" is a rough sign the wake arrived, not proof; and whether management
+chose to leave the 461 or never looked at the Report is not known.
 
 ## Belief
 
@@ -111,7 +143,7 @@ changes what a task closure does, so it is at least orange.
 
 - The 476 are from a damaged copy; the split by cause is approximate near
   the gaps the first record names.
-- What management did with the Reports is not measured (above).
+- Why management left the 461 is not read from its turns (above).
 - Whether the 89 "finished and left them" are a model ending early or a
   refusal the task could not express is not known; the reason on the
   residual is the task's closing note and was not read out.
