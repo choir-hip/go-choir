@@ -17,7 +17,7 @@ import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
 import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
-import { texturesListShared } from './textures.ts';
+import { texturesListShared, createTexture } from './textures.ts';
 import * as themes from './themes.ts';
 import { notebookShared } from './notebook-run.ts';
 import { syncContent } from './content-run.ts';
@@ -150,6 +150,7 @@ const sources: Sources = {
   // The Autoradio page (radio-page.ts): the native facts, the bar's facts and the entries in; the page out.
   radioPage: ([facts, bar, entries]) => radioPage(facts, bar, entries),
   texturesList: ([at]) => texturesListShared(at),
+  textureCreate: () => createTexture(),
   // The themes (themes.ts): the system's scheme and Reduce Motion come from `exactViewport()` (the first two arguments); the choice and the user's themes are kept under app:/data.
   theme: ([scheme, reduce], _s, storage) => themes.themeShared(scheme, reduce, storage),
   themeList: ([scheme, reduce], _s, storage) => themes.themeListShared(scheme, reduce, storage),

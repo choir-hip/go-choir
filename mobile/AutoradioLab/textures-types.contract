@@ -13,3 +13,10 @@ shape TextureList
   message: string
   rows: TextureRow[]
   hasEdition: bool
+
+// What "New document" answered: the new document's address to open, or the words for why not (status error, no address).
+shape TextureMade
+  address: string
+  title: string
+  status: string
+  message: string

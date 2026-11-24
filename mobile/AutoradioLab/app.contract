@@ -69,6 +69,8 @@ component Autoradio
     setMode
     editAsk
     sendAsk
+    newDocument
+    tnewMessage
     // ---- integrator (Choir sign-in, player) ----
     au
     pl

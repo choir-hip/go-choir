@@ -4,7 +4,7 @@
 use readerFollow, readerAim from "@choir/autoradio"
 use readerAimSet, readerOpenExternal from "@choir/autoradio"
 use ReaderDoc, ReaderFollowInfo, ReaderAimInfo, ReaderAck from "@choir/autoradio"
-use TextureList from "./textures-types.contract"
+use TextureList, TextureMade from "./textures-types.contract"
 
 members Autoradio
   // The story or document in front, read by shared code on both platforms (reader.ts, reader-parse.ts; any other address answers "loading"). It is asked again when the account state changes (a sign-in from
@@ -17,6 +17,22 @@ members Autoradio
     after(5, rbump)
   // The Textures place reloads each time it is the page in front (textures.ts, shared code: both platforms), and again when a document was stopped, restored or reloaded (`rack` refreshes it) and when the account state changes (sign-in from the banner).
   resource tlist = texturesList(pg.top, acs.state) as shape TextureList else empty()
+  // "New document" on the Textures page (textures.ts createTexture): the computer makes the document, then the deck opens it (the reader, and its editor for your own document); the list is asked again.
+  // A failure opens nothing and the page says why (tnewMessage). Defined here, in the root, so the page reads it as `tnewMessage` and presses `newDocument`.
+  mutation tnew as shape TextureMade refreshes tlist then textureMade
+  derive tnewTarget = match tnew { case some(r) => r.address, case none => "" }
+  derive tnewTitle = match tnew { case some(r) => r.title, case none => "" }
+  derive tnewMessage = match tnew { case some(r) => r.message, case none => "" }
+  action newDocument
+    send tnew = textureCreate()
+  action textureMade
+    if tnewTarget != ""
+      order = [tnewTarget].concat(order.filter(a => a != tnewTarget))
+      px = 0
+      pdrag = false
+      flying = false
+      send pms = pagesOpen(tnewTarget, tnewTitle)
+      layer = ""
   // The block and sentence the radio is reading (set by the radio); what the bar's prompt is aimed at.
   resource rfollow = readerFollow() as shape ReaderFollowInfo else empty()
   resource raim = readerAim() as shape ReaderAimInfo else empty()

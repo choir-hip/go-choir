@@ -8,7 +8,8 @@ import { WORDS } from './words.ts';
 export type TextureRow = { address: string; title: string; updated: string; meta: string; edition: boolean };
 export type TextureList = { status: string; message: string; rows: TextureRow[]; hasEdition: boolean };
 export type EditionAnswer = { found: boolean; docID: string; updatedAt: string };
-export type Net = { json(path: string, opts?: { query?: Record<string, string | number> }): Promise<Reply> };
+export type Net = { json(path: string, opts?: { query?: Record<string, string | number>; method?: 'GET' | 'POST'; body?: unknown }): Promise<Reply> };
+export type TextureMade = { address: string; title: string; status: string; message: string };
 
 const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -67,14 +68,14 @@ export function applyEdition(l: TextureList, ed: EditionAnswer | null): TextureL
   return { ...l, rows, hasEdition: true };
 }
 
-/** The words for a failure. Sign in is said only when signing in is the answer (no key); a locked phone is told to unlock, a refused key to sign in again (the Swift said "Sign in" for all). */
+/** The words for a failure of `what` ("see your documents", "make a document"). Sign in is said only when signing in is the answer (no key); a locked phone is told to unlock, a refused key to sign in again (the Swift said "Sign in" for all). */
+function signedOutWords(e: SignedOutError, what: string): string {
+  return e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : e.reason === 'refused' ? `Sign in again to ${what}.` : `Sign in to ${what}.`;
+}
+function why(e: unknown): string { return e instanceof HTTPError ? e.message : e instanceof Error && e.message !== '' ? e.message : 'the computer did not answer'; }
 function failure(e: unknown): TextureList {
-  if (e instanceof SignedOutError) {
-    const m = e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : e.reason === 'refused' ? 'Sign in again to see your documents.' : 'Sign in to see your documents.';
-    return list('error', m);
-  }
-  const why = e instanceof HTTPError ? e.message : e instanceof Error && e.message !== '' ? e.message : 'the computer did not answer';
-  return list('error', `Could not load your documents. ${why}`);
+  if (e instanceof SignedOutError) return list('error', signedOutWords(e, 'see your documents'));
+  return list('error', `Could not load your documents. ${why(e)}`);
 }
 
 export async function loadTextures(net: Net): Promise<TextureList> {
@@ -85,6 +86,23 @@ export async function loadTextures(net: Net): Promise<TextureList> {
     ]);
     return applyEdition(parseList(docs.body), ed);
   } catch (e) { return failure(e); }
+}
+
+/** "New document": ask the computer to make one (POST /api/texture/documents; the route refuses an empty title, so it is "Untitled" until the listener names it) and answer its address for the page to open
+ * (`texture:<id>`, the reader and its editor). Never throws: a failure is `status: "error"` with the words and no address, and the Textures page shows them. The log line carries no title and no id. */
+export async function createTexture(net: Net = real): Promise<TextureMade> {
+  const title = 'Untitled';
+  try {
+    const r = await net.json('/api/texture/documents', { method: 'POST', body: { title } });
+    const id = obj(r.body) ? str(r.body.doc_id) : '';
+    if (id === '') throw new Error('the computer did not say which document it made');
+    console.log('textures: new document made');
+    return { address: `texture:${id}`, title: str((r.body as Record<string, unknown>).title) || title, status: 'ready', message: '' };
+  } catch (e) {
+    const message = e instanceof SignedOutError ? signedOutWords(e, 'make a document') : `Could not make a document. ${why(e)}`;
+    console.log(`textures: new document failed (${e instanceof HTTPError ? `HTTP ${e.status}` : e instanceof SignedOutError ? `signed out: ${e.reason}` : 'no answer'})`);
+    return { address: '', title: '', status: 'error', message };
+  }
 }
 
 const real: Net = { json: (path, opts) => authedJSON(path, opts) };

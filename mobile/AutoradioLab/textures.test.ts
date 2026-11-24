@@ -6,6 +6,7 @@
 //  L5 the dates are UTC "MMM d, yyyy" and "" when unreadable.
 //  L6 load: two requests (the list, the edition); a missing edition answer does not fail the list.
 //  L7 the words: no key, locked, refused, unknown, any other failure; never "Loading", and "Sign in" only when signing in is the answer.
+//  N1 New document posts one create to the computer and answers the new document's address; N2 every failure answers words and no address, never a throw; N3 a reply with no id is a failure in words.
 //  L8 the source: any page but the Textures place answers the last list; another account (a new account generation) never sees it.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as T from './textures.ts';
@@ -106,5 +107,35 @@ describe('the source', () => {
     nextGeneration();                                                                              // another account: the last list is not served, and is dropped
     expect((await T.texturesListShared('radio:', net)).rows).toEqual([]);
     expect(n).toBe(2);
+  });
+});
+
+describe('New document (create, then open)', () => {
+  type Call = { path: string; opts?: { method?: string; body?: unknown } };
+  test('N1 one POST /api/texture/documents with a title; the answer is the new document\'s address, ready, no message', async () => {
+    const calls: Call[] = [];
+    const m = await T.createTexture({ json: async (path, opts) => { calls.push({ path, opts }); return reply({ doc_id: 'd-new', owner_id: 'o', title: 'Untitled', created_at: '2026-11-24T01:02:03.000Z' }); } });
+    expect(calls.length).toBe(1);
+    expect(calls[0].path).toBe('/api/texture/documents'); expect(calls[0].opts?.method).toBe('POST');
+    expect((calls[0].opts?.body as { title: string }).title.trim()).not.toBe('');                   // the route refuses an empty title (400 "title is required")
+    expect(m).toEqual({ address: 'texture:d-new', title: 'Untitled', status: 'ready', message: '' });
+  });
+  test('N2 a failure is words and no address, never a throw, and never says Sign in unless that is the answer', async () => {
+    const fail = (e: unknown) => T.createTexture({ json: async () => { throw e; } });
+    const none = await fail(new SignedOutError());
+    expect(none).toMatchObject({ address: '', status: 'error', message: 'Sign in to make a document.' });
+    expect((await fail(new SignedOutError('x', 'locked'))).message).toBe(WORDS.locked);
+    expect((await fail(new SignedOutError('x', 'refused'))).message).toBe('Sign in again to make a document.');
+    expect((await fail(new SignedOutError('x', 'unknown'))).message).toBe(WORDS.unknown);
+    const e503 = await fail(new HTTPError(503, 'HTTP 503'));
+    expect(e503.address).toBe(''); expect(e503.status).toBe('error'); expect(e503.message).toMatch(/^Could not make a document\. /); expect(e503.message).not.toMatch(/sign in/i);
+    const down = await fail(new Error(''));
+    expect(down.message).toBe('Could not make a document. the computer did not answer');
+  });
+  test('N3 a reply with no document id (or not an object) cannot be opened: words, no address', async () => {
+    for (const body of [null, {}, { doc_id: '' }, [], 'ok']) {
+      const m = await T.createTexture({ json: async () => reply(body) });
+      expect(m.address).toBe(''); expect(m.status).toBe('error'); expect(m.message).toMatch(/^Could not make a document\./);
+    }
   });
 });
