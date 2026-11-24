@@ -160,7 +160,7 @@ export async function paperFront(a: PaperArgs, storage?: Storage): Promise<Paper
 }
 
 /** The page from the list the phone saved, at once, while the fetch is out (stale, then fresh: the page shows `paperSaved` until `paperFront` answers). It composes only what the saved list can say alone:
- * the front page and a category, not My edition (its picks come a moment later and would show its "choose your topics" line first), and not before the page has a width. It reads only the file, never the network;
+ * the front page only: not My edition (its picks come a moment later and would show its "choose your topics" line first), not a category (a section the front list lacks would read "empty"; only fresh data may say empty), and not before the page has a width. It reads only the file, never the network;
  * an account change during the read drops it. No saved list, or a failed read, is an empty answer: the page's own loading, never an invented page. Status "ready" with no message: the offline line is the fetch's to
  * say if it fails. */
 export async function paperSaved(a: PaperArgs, storage?: Storage): Promise<PaperFront> {

@@ -52,6 +52,7 @@ shape PodHomeView
 shape PodShowView
   status: string
   message: string
+  address: string
   feedURL: string
   title: string
   author: string

@@ -135,7 +135,7 @@ emit them; a development build is only the one the lead has on the phone.
 
 Marks on the way to a page's first draw: `pagesOpen entry`, `loaded`, `saved`, `recent noted`, `mirrored` (pages.ts); for every page source `answer entry`, `answer settled` (the account's settling and the demo
 clean-up are behind it) and `answer done` (composed and returned), named by source and carrying the page's kind (`PAGE_ADDRESS`, app.ts; kinds: reader, mail, files, paper, podcasts, notebook, settings...); `net <what> <route pattern>`
-for each request (api.ts, podcast.ts; the first three path segments, then `/*`: never an id, a file name or a query). **The unified log is on in every build and these lines are public in it, so a lap never carries an address**; for the radio `openRadioOf entry`, `run sheet restored`, `front list received`, `director.open done`, `first audio requested
+for each request (api.ts, podcast.ts; the first two path segments, then `/*`: never an id, a computer's name, a folder or file name, or a query). **The unified log is on in every build and these lines are public in it, so a lap never carries an address**; for the radio `openRadioOf entry`, `run sheet restored`, `front list received`, `director.open done`, `first audio requested
 (deckPlay called)` and `deckPlay returned`. A page's fetch-done is its `net ... done` line and its compose-done is its `answer done`.
 
 One command reads them after a run (it prints each lap with its time of day, the milliseconds since the line before and the milliseconds since the last `pagesOpen entry` of the same kind):

@@ -1,6 +1,6 @@
 import type { Answer, Sources } from './app.contract.d.ts';
 import { paperFront, paperSaved } from './paper.ts';
-import { podcastEpisode, podcastHome, podcastHomeSaved, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastShowSaved, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
+import { podcastEpisode, podcastHome, podcastHomeSaved, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastShowSaved, podcastShowNone, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { adoptNative, nativeLater } from './api.ts';
@@ -199,6 +199,7 @@ const sources: Sources = {
   // Stale, then fresh (podcast.ts, notebook-run.ts): the same page from what the phone kept, at once, while the fresh source is out.
   podcastHomeSaved: ([q, address], _store, storage) => podcastHomeSaved({ q, address, tick: 0 }, storage),
   podcastShowSaved: ([address, nowId], _store, storage) => podcastShowSaved({ address, tick: 0, nowId, rev: 0 }, storage),
+  podcastShowNone: () => podcastShowNone(),
   notebookSaved: ([selected, active], _store, storage) => notebookSaved({ selected, active }, storage),
   podcastEpisode: ([address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev], _store, storage) =>
     podcastEpisode({ address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev }, storage),

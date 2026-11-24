@@ -26,7 +26,9 @@ members Autoradio
   resource podHomeKept = podcastHomeSaved(podQ, pg.top) as shape PodHomeView else empty()
   resource podShowKept = podcastShowSaved(pg.top, podNow.episodeId) as shape PodShowView else empty()
   derive podHome = podHomeNow.status != "" ? podHomeNow : podHomeKept
-  derive podShow = podShowNow.status != "" ? podShowNow : podShowKept
+  // A show page shows an answer only for the address it was asked for: going straight from show A to show B, Exact keeps A's answer until B's lands, and A's title, episodes and Subscribe / Play must never be drawn on B's page.
+  resource podShowNone = podcastShowNone() as shape PodShowView else empty()
+  derive podShow = (podShowNow.status != "" and podShowNow.address == pg.top) ? podShowNow : ((podShowKept.status != "" and podShowKept.address == pg.top) ? podShowKept : podShowNone)
   resource podEp = podcastEpisode(pg.top, podFind, podTick, podNow.episodeId, podNow.clip, podNow.start, podNow.elapsed, podNow.duration, podHead.rev) as shape PodEpisodeView else empty()
   mutation pak as shape PodAck then afterPod
   mutation podHanded as shape PodDone refreshes rpulse

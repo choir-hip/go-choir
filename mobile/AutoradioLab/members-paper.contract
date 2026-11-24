@@ -19,8 +19,8 @@ members Autoradio
   // for My edition, which is built from them (every other view passes them empty, so the deck catching up with the page or the picks arriving a moment later asks nothing),
   // and the width is the viewport's until the page has reported its own (so the first composition is at the width the page will have, and the page's report changes nothing when they agree).
   resource pfresh = paperFront(paperView, paperWidth > 0 ? paperWidth : vp.width, paperTick, paperView == "mine" ? paperFocus : "", paperView == "mine" ? epicks.picks : "") as shape PaperFront else empty()
-  // Stale, then fresh: the list the phone saved, composed at once while the request is out (paper.ts `paperSaved`: the front page and a category, never My edition, never before the width is known).
-  // The page shows the fresh answer as soon as there is one; the two have the same band ids, so an unchanged list swaps nothing and the scroll stays. Asked again when the account changes.
+  // Stale, then fresh: the list the phone saved, composed at once while the request is out (paper.ts `paperSaved`: the front page only; never My edition, never a category, never before the width is known).
+  // The page shows the fresh answer as soon as there is one; the two have the same band ids on the front page, so an unchanged list swaps nothing and the scroll stays. Asked again when the account changes.
   resource psaved = paperSaved(paperView, paperWidth > 0 ? paperWidth : vp.width, signedOutTick) as shape PaperFront else empty()
   derive pfront = pfresh.status != "" ? pfresh : psaved
   derive paperLoading = pending(pfresh)

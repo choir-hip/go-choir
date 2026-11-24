@@ -20,11 +20,11 @@ export function lapKind(address: string): string {
   const scheme = i < 0 ? address : address.slice(0, i);
   return Object.prototype.hasOwnProperty.call(KINDS, scheme) ? KINDS[scheme] : 'other';
 }
-/** A request's route pattern: the first three path segments (`/api/email/messages`), the rest and any query as `/*`. An id or a file name is always past the third segment of the routes the app calls. */
+/** A request's route pattern: the first TWO path segments (`/api/email`), the rest and any query as `/*`. The third segment can be a computer's name or a folder's (`/api/computers/<name>/...`, `/api/files/<folder>/...`), so it is never written. */
 export function lapRoute(path: string): string {
   const parts = path.split('?')[0].split('/').filter((p) => p !== '');
-  const known = parts.slice(0, 3).map((p) => (/^[a-z][a-z0-9_-]{0,31}$/.test(p) ? p : '*'));
-  return '/' + known.join('/') + (parts.length > 3 ? '/*' : '');
+  const known = parts.slice(0, 2).map((p) => (/^[a-z][a-z0-9_-]{0,31}$/.test(p) ? p : '*'));
+  return '/' + known.join('/') + (parts.length > 2 ? '/*' : '');
 }
 /** A mark on the way to a page's first draw (docs/reference/exact/testing-and-debugging.md, "Reading the laps of a first open"): `lap: open <stage> <kind>`. The kind is the page's kind (reader, mail, files, paper...), never
  * its address. Read by `mobile/scripts/laps.sh`. */

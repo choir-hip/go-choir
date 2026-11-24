@@ -422,7 +422,7 @@ function episodeRow(l: Library, e: Episode, feed: string, nowId: string): Episod
 export type ShowArgs = { address: string; tick: number; nowId: string; rev: number };
 
 export async function podcastShow(a: ShowArgs, storage: Storage | undefined, saved = false): Promise<ShowView> {
-  const v: ShowView = { status: 'loading', message: '', feedURL: '', title: '', author: '', artwork: '', summary: '', unplayedLine: '', subscribed: false, refreshing: false, episodes: [] };
+  const v: ShowView = { status: 'loading', message: '', address: a.address, feedURL: '', title: '', author: '', artwork: '', summary: '', unplayedLine: '', subscribed: false, refreshing: false, episodes: [] };
   const feed = parseShow(a.address);
   if (!feed) { if (a.address.startsWith('podcast:show/')) { v.status = saved ? '' : 'error'; v.message = saved ? '' : "This show's address is not one the app can open."; } else v.status = ''; return v; }
   const gen = accountGeneration();
@@ -620,3 +620,6 @@ export async function podcastDocuments(storage: Storage | undefined): Promise<{ 
 /** The position of an episode, for tests and for the pages. */
 export async function positionOf(key: string, storage: Storage | undefined): Promise<Position | null> { return position(await loadLibrary(storage), key); }
 export async function subscriptions(storage: Storage | undefined): Promise<Show[]> { return (await loadLibrary(storage)).subscriptions.map((s) => s.show); }
+
+/** The show page's answer for no page at all: empty, whatever show was asked before. The contract falls back to it when neither the fresh nor the kept answer is for the address in front (members-podcasts.contract). */
+export const podcastShowNone = (): ShowView => ({ status: '', message: '', address: '', feedURL: '', title: '', author: '', artwork: '', summary: '', unplayedLine: '', subscribed: false, refreshing: false, episodes: [] });

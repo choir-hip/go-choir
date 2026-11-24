@@ -28,13 +28,13 @@ test('L2 a page source marks its entry, the settling and its end with the page a
   const got = await lines(() => answer('paperFront' as never, ['front', 400, 0, 'paper', ''] as never, undefined as never, storage, undefined as never));
   const open = got.filter((l) => l.startsWith('lap: open '));
   expect(open).toEqual(['lap: open answer entry paperFront paper', 'lap: open answer settled paperFront paper', 'lap: open answer done paperFront paper']);
-  expect(got.some((l) => l === 'lap: net get done /api/platform/publications/*')).toBe(true);
+  expect(got.some((l) => l === 'lap: net get done /api/platform/*')).toBe(true);
   for (const name of ['radioPulse', 'barInfo', 'theme', 'accountState']) expect(PAGE_ADDRESS[name]).toBeUndefined();
   for (const name of ['paperFront', 'readerDocShared', 'mailBox', 'fileList', 'podcastShow', 'takesPage', 'notebookPageShared', 'texturesList', 'settingsAccount', 'radioPage']) expect(PAGE_ADDRESS[name]).toBeDefined();
 });
 
 test('L3 no lap line carries an address, an id, a file name or a query: the kind and the route pattern only (the log is on in every build)', async () => {
-  const secrets = ['Taxes 2025', 'secret-doc-id', 'msg-4f9a1c', 'my private search', 'tok3n', 'feeds.example.com'];
+  const secrets = ['my-laptop-name', 'Documents', 'Taxes 2025', 'secret-doc-id', 'msg-4f9a1c', 'my private search', 'tok3n', 'feeds.example.com'];
   const got = await lines(async () => {
     await P.pagesOpen(storage, 'file:/Documents/Taxes 2025.pdf', ''); await P.pagesOpen(storage, 'doc:secret-doc-id@12', ''); await P.pagesOpen(storage, 'mail:msg-4f9a1c', '');
     await P.pagesOpen(storage, 'pub:/pub/texture/my private search', ''); await P.pagesSettled();
@@ -46,9 +46,11 @@ test('L3 no lap line carries an address, an id, a file name or a query: the kind
     const { getJSON } = await import('./api.ts');
     try { await getJSON('/api/email/messages/msg-4f9a1c/read', { q: 'my private search' }); } catch { /* */ }
     try { await getJSON('/api/files/Documents/Taxes%202025.pdf'); } catch { /* */ }
+    try { await getJSON('/api/computers/my-laptop-name/status'); } catch { /* */ }
   });
   expect(got.length).toBeGreaterThan(10);
   for (const l of got) for (const s of secrets) expect(l.includes(s), `${l} carries ${s}`).toBe(false);
-  expect(got).toContain('lap: net get done /api/email/messages/*');
+  expect(got).toContain('lap: net get done /api/email/*');
+  expect(got).toContain('lap: net get done /api/computers/*'); expect(got).toContain('lap: net get done /api/files/*');
   expect(got).toContain('lap: open pagesOpen entry files'); expect(got).toContain('lap: open pagesOpen entry mail'); expect(got).toContain('lap: open pagesOpen entry imported');
 });
