@@ -467,15 +467,15 @@ func TestRegisterMailAnswersAKnownAndANewAddressAlike(t *testing.T) {
 	}
 }
 
-func TestRegisterRoutesWantJSON(t *testing.T) {
+func TestMailingRoutesWantJSON(t *testing.T) {
 	h := appEnv(t)
-	for name, f := range map[string]http.HandlerFunc{"mail": h.HandleRegisterMail, "begin": h.HandleRegisterBegin} {
+	for name, f := range map[string]http.HandlerFunc{"register/mail": h.HandleRegisterMail, "register/begin": h.HandleRegisterBegin, "recovery/request": h.HandleRecoveryRequest} {
 		req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(`{"email":"a@example.com"}`))
 		req.Header.Set("Content-Type", "text/plain")
 		rec := httptest.NewRecorder()
 		f(rec, req)
 		if rec.Code != http.StatusUnsupportedMediaType {
-			t.Fatalf("register/%s with text/plain = %d, want 415", name, rec.Code)
+			t.Fatalf("%s with text/plain = %d, want 415", name, rec.Code)
 		}
 	}
 }

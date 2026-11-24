@@ -39,6 +39,23 @@ export async function requestRegisterCode(page, email, baseURL = 'http://localho
 }
 
 /**
+ * The whole account creation in one call, for specs that have a mailbox: ask for the code, read it with
+ * `readCode(email, {attemptId, binding})` (the spec's own way into the address's inbox: see
+ * tests/register-proof-deployed.spec.js for the numbered test address and its read key), then make the passkey.
+ * This is the one helper a spec uses to create an account now; calling registerPasskey without a proof throws.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} email
+ * @param {string} baseURL
+ * @param {(email: string, ask: {attemptId: string, binding: string}) => Promise<string>} readCode
+ */
+export async function registerAccount(page, email, baseURL, readCode) {
+  const ask = await requestRegisterCode(page, email, baseURL);
+  const code = await readCode(email, ask);
+  return registerPasskey(page, email, baseURL, { ...ask, code });
+}
+
+/**
  * Performs a full passkey registration flow using the browser's
  * navigator.credentials API, driven through page.evaluate.
  *

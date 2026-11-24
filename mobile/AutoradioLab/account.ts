@@ -39,6 +39,7 @@ import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
 import { accountGeneration, announceGeneration, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
+import { keepKey } from './app-signin.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
 import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
 import { wipeConsent, CONSENT_FILE } from './consent.ts';
@@ -295,3 +296,9 @@ export function settleAccount(storage: Storage | undefined, store: Store | undef
 }
 /** For tests. */
 export function resetSettled(): void { settled = null; }
+
+/** Keep the key a sign-in made and have the account reconciled again at the next answer: the new key may be another account's (the old one was refused), and `settleAccount` runs once per launch otherwise, so the old account's stored data would be read under the new key. `reconcile` then sees a stamp that is not this key's and wipes. */
+export function adoptKey(store: { set(n: string, v: string): void; forget(n: string): void }, key: string, keyId: string): void {
+  keepKey(store, key, keyId);
+  resetSettled();
+}

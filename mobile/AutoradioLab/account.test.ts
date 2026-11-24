@@ -18,7 +18,7 @@
 //  S10 a different account's key at launch (the stamp) wipes the old data first; the same account, or a phone with no key, keeps it.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
-import { accountSignOut, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
+import { accountSignOut, adoptKey, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
 import { createHash } from 'node:crypto';
 import { authedJSON, bindNative, resetSeam, SignedOutError } from './api.ts';
 import { ContentStore } from './content.ts';
@@ -422,6 +422,35 @@ describe('S17 the grants and the wipes name the same paths, exactly, in both dir
     const granted = new Set([...read, ...write]);
     expect([...granted].filter((p) => !GRANTED_NOT_WIPED.has(p)).filter((p) => !wipedPaths().includes(p))).toEqual([]);
     for (const p of GRANTED_NOT_WIPED) expect(granted.has(p)).toBe(true);
+  });
+});
+
+describe('S19 a key that replaces the key of another account in the same launch', () => {
+  const store = (): { set(n: string, v: string): void; forget(n: string): void } => ({ set: (n, v) => { if (n === 'choir.key') { W.value = v; W.key = 'present'; } }, forget: () => undefined });
+  test('the next answer reconciles again and wipes the data of the old account before it is read under the new key', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m);                                                        // the first account, adopted: its stamp is kept
+    expect(dataLeft(m).length).toBe(SEED.length);
+    adoptKey(store(), 'choir_sk_test-key-B-not-real', 'ak_b');              // the sign-in of another account kept its key
+    W.native = [];
+    const r = await settleAccount(m.storage, undefined);
+    expect(r.action).toBe('account-change');
+    expect(W.native).toEqual(['wipe']); expect(dataLeft(m)).toEqual([]); expect(W.swift).toBe(false);
+  });
+  test('the same account signing in again keeps its data', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m);
+    adoptKey(store(), W.value, 'ak_a');                                     // the same key text: the same stamp
+    W.native = [];
+    const r = await settleAccount(m.storage, undefined);
+    expect(r.action).toBe('nothing'); expect(dataLeft(m).length).toBe(SEED.length); expect(W.native).toEqual([]);
+  });
+  test('without adoptKey the launch\'s answer is reused and nothing is reconciled (the gap adoptKey closes)', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m);
+    W.value = 'choir_sk_test-key-B-not-real'; W.native = [];
+    await settleAccount(m.storage, undefined);
+    expect(W.native).toEqual([]); expect(dataLeft(m).length).toBe(SEED.length);
   });
 });
 

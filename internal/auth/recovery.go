@@ -91,6 +91,10 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if !requireJSONContentType(r) {
+		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "content type must be application/json"})
+		return
+	}
 	var req recoveryRequest
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})

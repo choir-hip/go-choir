@@ -10,7 +10,7 @@ import { activityPage } from './activity.ts';
 import { onboardingPage, onboardingAct, liveEnv as onboardingEnv } from './onboarding.ts';
 import * as cards from './cards.ts';
 import { aboutBuild } from './about.ts';
-import { accountSignOut, resetSettled, settleAccount } from './account.ts';
+import { accountSignOut, adoptKey, settleAccount } from './account.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
@@ -35,7 +35,7 @@ import { micPermission } from './micask.ts';
 import { downloadsPage, downloadsAct } from './downloads.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
-import { keepKey, signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
+import { signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -114,7 +114,7 @@ const signInEnv = (store: Store): SignInEnv => ({
   ceremony: { origin: ORIGIN, passkeys: credentials as never },
   appId: APP_ID,
   // A new key may be another account's (the old one was refused): the next answer reconciles again, so another account's stored data is wiped before any source answers (account.ts decide: 'account-change').
-  keep: (key, keyId) => { keepKey(store, key, keyId); resetSettled(); },
+  keep: (key, keyId) => adoptKey(store, key, keyId),
   revoke: async (key, keyId) => { await fetch(`${ORIGIN}/auth/api-keys/${segment(keyId)}`, { method: 'DELETE', headers: { authorization: `Bearer ${key}` }, redirect: 'manual', exactTimeout: 8000 } as RequestInit); },
   newId: () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''),
   log: (l) => console.log(l),
