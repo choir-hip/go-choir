@@ -98,7 +98,7 @@ final class VoiceController: @unchecked Sendable {
         if let o = VoiceCatalog.option(matching: rt.configuration.setting(.voice) ?? VoiceCatalog.defaultOption.setting) { sampler.syncSelected(o.id) }
         let cards: [[String: Any]] = sampler.cards().map { c in
             ["id": c.id, "name": c.name, "blurb": c.blurb, "sizeLabel": c.sizeLabel, "state": c.state, "note": c.note,
-             "progress": c.progress, "selected": c.selected, "playing": c.playing]
+             "progress": c.progress, "selected": c.selected, "playing": c.playing, "model": c.model, "group": c.group, "credit": c.credit]
         }
         return ["selected": sampler.selectedID, "message": "", "cards": cards]
     }

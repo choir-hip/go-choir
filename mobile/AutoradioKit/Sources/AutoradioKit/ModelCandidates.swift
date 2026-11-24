@@ -112,6 +112,9 @@ public enum CandidateTable {
         // --- decision: quick decisions (System 1). The Qwen3-0.6B Q8_0 file is also a responder candidate; when both pick it the weights are shared.
         t.append(gguf("qwen3-0.6b-q8_0", .decision, family: "Qwen3 0.6B", quant: "Q8_0", label: "A small language model on this phone", rank: 60,
                       basis: "58 ms per decision on the Mac, correct on the clear request (2026-11-11)", tier: .tier6, measured: true, context: 120))
+        // A smaller quick-decision model, offered beside Qwen3-0.6B (owner, 2026-11-24). Never run by us: ranked below Qwen3 so it is never the recommendation; the phone's own check ("a clear request scores yes") decides it.
+        t.append(gguf("lfm2.5-350m-q4_k_m", .decision, family: "LFM2.5 350M", quant: "Q4_K_M", label: "A smaller language model on this phone", rank: 55, basis: "UNMEASURED: never run by us; the file is 229 MB and the check on the phone decides it",
+                      tier: .tier6, measured: false, license: "LFM Open License v1.0", limit: lfmLimit, context: 80))
         t.append(ModelCandidate(id: "system1-computer", role: .decision, family: "computer", quant: "", label: "Your computer", bytes: 0, qualityRank: 40,
                                 qualityBasis: "needs the network; not measured by the configurator", license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0,
                                 measured: true, source: "your computer", kitStageID: "choir-system1"))

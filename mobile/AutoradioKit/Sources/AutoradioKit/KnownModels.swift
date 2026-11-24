@@ -123,8 +123,8 @@ public enum KnownModels {
     /// More GGUF quantisations of the responder families, for the configurator (the candidate table, ModelCandidates.swift). Sizes and
     /// SHA-256 digests are the Hugging Face API file listings' (LFS object ids) fetched 2026-11-11; names are the repos' own, not guessed.
     struct ExtraGGUF { var spec: ModelSpec; var repo: String; var license: String }
-    static func gguf(_ id: String, repo: String, file: String, sha: String, bytes: Int64, license: String) -> ExtraGGUF {
-        ExtraGGUF(spec: ModelSpec(id: id, url: URL(string: "https://huggingface.co/\(repo)/resolve/main/\(file)")!, sha256: sha, bytes: bytes, fileName: file), repo: repo, license: license)
+    static func gguf(_ id: String, repo: String, file: String, sha: String, bytes: Int64, license: String, rev: String = "main") -> ExtraGGUF {
+        ExtraGGUF(spec: ModelSpec(id: id, url: URL(string: "https://huggingface.co/\(repo)/resolve/\(rev)/\(file)")!, sha256: sha, bytes: bytes, fileName: file), repo: repo, license: license)
     }
     static let lfmLicense = "LFM Open License v1.0 (commercial use at or above US$10M annual revenue needs a separate licence from Liquid AI)"
     static let extraGGUF: [ExtraGGUF] = [
@@ -133,6 +133,9 @@ public enum KnownModels {
         gguf("lfm3-1.7b-q6_k", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q6_K.gguf", sha: "54e1bd947c77167823d45bf495f1c3e2d226ca7fb242f83cfa141ee3a6ab55c6", bytes: 1_427_638_304, license: lfmLicense),
         gguf("lfm3-1.7b-q8_0", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q8_0.gguf", sha: "8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6", bytes: 1_846_238_496, license: lfmLicense),
         gguf("lfm3-1.7b-nvfp4", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-NVFP4.gguf", sha: "462c2379586a45b30fe3dbfa30e6ff08cbb440734d6934689e24e4fe59a67bec", bytes: 1_280_019_776, license: lfmLicense),
+        // LFM2.5-350M Q4_K_M, a quick-decision option (owner, 2026-11-24). Size and SHA-256 are the host's own listing (`/api/models/LiquidAI/LFM2.5-350M-GGUF?blobs=true`, the LFS
+        // object id), read 2026-11-24 without downloading the file; the address names the repository commit that listing was read at. LFM Open License v1.0 (the file `LICENSE` of that commit).
+        gguf("lfm2.5-350m-q4_k_m", repo: "LiquidAI/LFM2.5-350M-GGUF", file: "LFM2.5-350M-Q4_K_M.gguf", sha: "7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4", bytes: 229_312_224, license: lfmLicense, rev: "657e078c94084481950a2d555a941481f715536b"),
         gguf("qwen3-1.7b-q6_k", repo: "unsloth/Qwen3-1.7B-GGUF", file: "Qwen3-1.7B-Q6_K.gguf", sha: "6a9cadec4883df6f3efcf337103479dcc6a3efa9f5f8cc64a904dba57808207a", bytes: 1_417_755_200, license: "Apache-2.0"),
         gguf("qwen3-1.7b-q8_0", repo: "unsloth/Qwen3-1.7B-GGUF", file: "Qwen3-1.7B-Q8_0.gguf", sha: "0becaa825564295d82e9af4d008bca5f8b7f5f73bf1c6a0b58f7c53ef26b47fd", bytes: 1_834_426_944, license: "Apache-2.0"),
         gguf("qwen3.5-0.8b-q8_0", repo: "unsloth/Qwen3.5-0.8B-GGUF", file: "Qwen3.5-0.8B-Q8_0.gguf", sha: "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c", bytes: 811_843_840, license: "Apache-2.0"),
@@ -220,6 +223,33 @@ public enum ResponderChoice {
     public static var current: String {
         get { UserDefaults.standard.string(forKey: key).flatMap { KnownModels.isPinned($0) ? $0 : nil } ?? defaultID }
         set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+}
+
+/// Which quick-decision model the phone runs (read at start, written when setup finishes with a decision pick). Only a pinned model counts: a name this build has no file for is the default.
+public enum DecisionChoice {
+    public static let defaultID = "qwen3-0.6b-q8_0"
+    static let key = "AutoradioDecisionModel"
+    /// The decision model a saved name means. The decision role loads weights through llama.cpp, so only a pinned GGUF is one.
+    public static func resolve(saved: String?) -> String { saved.flatMap { KnownModels.isPinned($0) && $0 != KnownModels.lfm3Text.id ? $0 : nil } ?? defaultID }
+    public static var current: String {
+        get { resolve(saved: UserDefaults.standard.string(forKey: key)) }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+}
+
+/// The text the decision model reads, in the model's own chat layout. The scorer reads one step's logits after the assistant turn begins, so the prompt ends where the letter goes.
+/// Qwen3 ends with its empty think block (thinking off); the LFM2 family starts with its start token, has no think block (the model's own template, `chat_template.jinja`
+/// of LFM2.5-350M-GGUF at the pinned commit: bos, `<|im_start|>role\n...<|im_end|>\n`, then `<|im_start|>assistant\n`).
+public enum DecisionPrompt {
+    public static func text(modelID: String, context: String, listenerWords: String, question: String, options: [String], letters: [String]) -> String {
+        let lfm = modelID.hasPrefix("lfm")
+        var s = (lfm ? "<|startoftext|>" : "") + "<|im_start|>system\nYou classify what a radio listener said. Reply with the letter of the best option only.<|im_end|>\n<|im_start|>user\n"
+        if !context.isEmpty { s += "Context: \(context)\n" }
+        s += "Listener said: \"\(listenerWords)\"\nQuestion: \(question)\n"
+        for (l, o) in zip(letters, options) { s += "\(l). \(o)\n" }
+        s += "Answer with the letter only.<|im_end|>\n<|im_start|>assistant\n" + (lfm ? "" : "<think>\n\n</think>\n\n")
+        return s
     }
 }
 

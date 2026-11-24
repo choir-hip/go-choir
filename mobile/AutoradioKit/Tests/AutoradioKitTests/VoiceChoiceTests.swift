@@ -273,6 +273,21 @@ final class VoiceSamplerTests: XCTestCase {
     }
     func settle(_ ms: UInt64 = 150) async { try? await Task.sleep(nanoseconds: ms * 1_000_000) }
 
+    // Every card says which model it is a voice of and carries the credit that model's licence asks for (settings.contract shows both, once per model). A card that needs a credit and has none fails.
+    func testEveryCardNamesItsModelAndCarriesItsCredit() {
+        let (s, _) = make(Host(), ready: [])
+        let cards = s.cards()
+        XCTAssertGreaterThan(cards.count, 50)
+        for c in cards {
+            if c.id == "system" { XCTAssertEqual(c.credit, ""); XCTAssertEqual(c.model, ""); continue }
+            XCTAssertFalse(c.model.isEmpty, "\(c.id) names no model"); XCTAssertFalse(c.group.isEmpty, "\(c.id) has no model name to group under")
+            XCTAssertFalse(c.credit.isEmpty, "\(c.id) is offered with no credit")
+        }
+        XCTAssertEqual(cards.first { $0.id == "kokoro:af_heart" }?.group, "Kokoro 82M")
+        XCTAssertEqual(cards.first { $0.id == "phonon:en_us_Zoey" }?.group, "Phonon 31M")
+        XCTAssertTrue(cards.first { $0.id == "pocket-tts:alba" }?.credit.contains("Kyutai") ?? false, "Pocket's CC BY credit comes from the catalog's own credit")
+    }
+
     func testTappingAReadyVoiceChoosesItAndPlaysItAtOnce() async {
         let h = Host()
         let (s, _) = make(h, ready: [VoiceCatalog.kokoroModel])
@@ -358,7 +373,9 @@ final class VoiceSamplerTests: XCTestCase {
         let ids = VoiceCatalog.options.map(\.id)
         XCTAssertEqual(VoiceCatalog.defaultOption.id, "kokoro:af_heart", "the default does not change")
         let phonon = VoiceCatalog.options.filter { $0.stageID == "phonon" }
-        XCTAssertEqual(phonon.map(\.id), ["phonon:en_us_Easton", "phonon:en_us_Zoey", "phonon:en_gb_Maeve"])
+        XCTAssertEqual(phonon.count, 25, "every English Phonon voice of the pack's catalog")
+        XCTAssertEqual(phonon.first?.id, "phonon:en_us_Easton", "the stage's own default voice first")
+        XCTAssertTrue(["phonon:en_us_Zoey", "phonon:en_gb_Maeve"].allSatisfy { id in phonon.contains { $0.id == id } })
         for o in phonon {
             XCTAssertEqual(o.modelID, VoiceCatalog.phononModel, "all Phonon voices share one download")
             XCTAssertEqual(o.setting.params["voice"], .string(o.voice))

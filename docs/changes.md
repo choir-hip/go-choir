@@ -10,6 +10,25 @@ backfilled from the commit and nobody re-read the evidence for this page.
 Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 169 docs-only and 72 that change behavior.
 
+## 2026-11-24: more voices, and a second quick-decision model (lane `voice-more`, on `onboard-consent`)
+
+**What.** (1) The voice cards list every English Kokoro voice (28: af, am, bf, bm) and every English Phonon voice (25: en-us, en-gb), 53 rows where there were 8. The rows are **generated** from the packs' own metadata
+(`mobile/scripts/gen-voice-rows.ts` over `mobile/scripts/voice-pack/`: Kokoro's `voices/<id>.json` listing at commit `51c07202`, Phonon's `voices_catalog.jsonl` at `c2e998e2`) into `Voice/VoiceRows.swift`; no name or blurb is typed.
+The model list (`ModelList.voices`) carries them, each with the credit its licence asks for (Apache-2.0 notice for Kokoro and Phonon); a row with no credit is not offered (decode drops it; the generator refuses). A voice's id reaches
+the native stage as its `voice` parameter (`VoiceCatalog.options`, the one Swift place). Settings > Voice and models (`voice.contract`) shows the cards under their model's name with that model's credit once. (2) LFM2.5-350M Q4_K_M
+(229 MB; LFM Open License v1.0) is a quick-decision option: pinned by the host's own size and SHA-256 (read from `/api/models/LiquidAI/LFM2.5-350M-GGUF?blobs=true`, not downloaded) at commit `657e078c`, ranked below Qwen3-0.6B so it is
+never the recommendation. The decision stage used to load Qwen3-0.6B whatever was picked; it now loads the model the person picked (`DecisionChoice`, written when setup finishes; the setup check runs on the pick, not the saved
+choice) and reads it in its own chat layout (`DecisionPrompt`: Qwen3 with the empty think block, LFM2 with its start token and none).
+**Why.** Owner, 2026-11-24: "more voice models (all types) in the voice and models page"; defaults: English voices only, Delete and Android later.
+**Proof.** bun: `voice-rows.test.ts` (6, seen failing before the generator existed). Swift: `ModelListTests` (voice rows carry credits; a row without one is dropped, seen failing with Phonon's credit blanked), `DecisionModelTests` (pin,
+offer, refusal, prompts), `VoiceChoiceTests` (every card names its model and carries its credit). Exact web: `voices.test.contract`. **Not proved:** any of it on a phone. Not compiled here: the llama-only code in `LlamaSystem1.swift` and
+`HubModelProvider.swift` (inside `#if canImport(llama)`), LFM2.5-350M loading in llama.cpp b12259 and answering the decision check, Kokoro's first load fetching 28 voice packs (about 75 MB beyond the offered size), and Phonon's
+non-default voices (the library's `availableVoices()` lists them; no run).
+**Withheld, unchanged.** Kokoro and Phonon are library models with no local-only load: onboard-consent withholds them until their manifest exists, so these rows appear only once the pack is on the phone (Phonon is in no download group
+yet: `DownloadDoorTests`, "the Phonon cards are not offered").
+**Replaced.** The five hand-typed Kokoro rows and three Phonon rows, with their hand blurbs (now the pack's: Kokoro's own code spelled out, Phonon's description's first sentence). **Undo.** Revert the commit; no data migrates (a saved
+voice choice names a stage and voice id that are still rows).
+
 ## 2026-11-23: the phone's first run, downloads and microphone (lane `onboard-consent`)
 
 **What.** (1) Signed out, the radio plays the paper's own stories in the paper's order (listening only): the writer's `mode` (consent.ts `deskMode`) says "listening" with no key, and the desk is not asked. (2) Model downloads are
