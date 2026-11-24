@@ -152,3 +152,10 @@ func run2(base []string, extra ...string) (int, string, string) {
 	code := run(append(append([]string{}, base...), extra...), &out, &errb)
 	return code, out.String(), errb.String()
 }
+
+func TestHelpExitsZero(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"--help"}, &out, &errb); code != 0 {
+		t.Fatalf("--help exited %d", code)
+	}
+}

@@ -22,7 +22,7 @@ SQLite file read-only.
 
 ```
 purge-unproved --auth-db FILE --maild-db FILE --maild-root DIR \
-               --pg-control-dsn DSN --pg-graph-dsn DSN --vmctl-url URL [--internal-token-file FILE]
+               --pg-control-dsn DSN --pg-graph-dsn DSN --vmctl-url URL [--internal-token-file FILE] [--receipt FILE]
 purge-unproved ... --apply --digest <hex> --receipt FILE [--receipt-key-file FILE]
 ```
 
@@ -50,7 +50,7 @@ purge-unproved ... --apply --digest <hex> --receipt FILE [--receipt-key-file FIL
 - **The receipt is a journal of intent** (`--receipt`, checked with `--receipt-key-file` and opened **before
   anything is deleted**; a path or key that cannot be used stops the run first). One JSON line, synced, is
   written **before and after each irreversible step**: `intent` (after the lock and the recheck; an empty plan writes `intent` and `done`),
-  `before-commit:<service>` and `after-commit:<service>` for each service, `before-mail-dirs`, `after-mail-dirs`, `before-commit:auth`, `after-commit:auth`, then `done` (or `stopped: <why>`). Each line has the
+  `before-commit:<service>` and `after-commit:<service>` for each service, `before-mail-dirs`, `after-mail-dirs`, `before-commit:auth`, `after-commit:auth`, then `done` (an `after-*` line is written after its step has finished, so a crash inside a step leaves the `before-*` line as the last) (or `stopped: <why>`). Each line has the
   status of every planned service (pending, committed, failed), the mail directories removed so far (only ones
   that existed), the rows per table, the id hashes in the form the dry run prints (`purge <hash>`) and, with a key file, a keyed hash of
   each address. A line that cannot be written stops the run before the step it announces, and a failing write of
@@ -137,7 +137,5 @@ passkey, lose nothing in any service (the hook runs between the plan and the loc
 tables stop both runs, by name and by suffix; proposal, unwrap and route-ledger rows refuse the account; a case
 variant of a kept address does not take that account's rows; unsafe ids never reach a path or a pattern and a
 symlinked `users/` is refused; account sets are repaired; vmctl down means no plan and no run; an empty
-database is not a service; 951 accounts are all deleted across chunks. **Not run**: against a Postgres
-production database, or through the command's flags (the command's whole path, dry run, real run on a new receipt and a rerun, is driven
-by `cmd/purge-unproved/main_test.go` against the real schemas). The real schemas, the journal order, the set repair (a proved member with a live session
+database is not a service; 951 accounts are all deleted across chunks. **Not run**: against a production database. The command's whole path through its flags (dry run, real run on a new receipt, rerun) is driven by `cmd/purge-unproved/main_test.go` against the real schemas. The real schemas, the journal order, the set repair (a proved member with a live session
 first, as auth's `repairSetTx`) and the webhook deletion are tested.

@@ -833,3 +833,23 @@ func TestReadingAReceiptThatIsNewEmptyOrTornDoesNotStopTheRun(t *testing.T) {
 		t.Fatalf("blank: %q %v", prev, err)
 	}
 }
+
+// A receipt whose last line was cut short (no newline) gets one before the next line, which stays readable.
+func TestATornLastLineDoesNotSwallowTheNextRunsIntent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "r.jsonl")
+	if err := os.WriteFile(path, []byte(`{"at":"t","stage":"before-commit:auth","digest":"d"}`+"\n"+`{"at":"t","sta`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	j, err := OpenJournal(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	if err := j.Entry("intent", &Result{}); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(func() string { b, _ := os.ReadFile(path); return string(b) }()), "\n")
+	if len(lines) != 3 || !strings.Contains(lines[2], `"stage":"intent"`) {
+		t.Fatalf("lines = %q: the new line was joined to the torn one", lines)
+	}
+}

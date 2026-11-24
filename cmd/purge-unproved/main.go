@@ -3,7 +3,7 @@
 // for good, and docs/ship/purge-unproved.md lists every table it touches and the key of each.
 //
 //	purge-unproved --auth-db FILE --maild-db FILE --maild-root DIR \
-//	               --pg-control-dsn DSN --pg-graph-dsn DSN --vmctl-url URL [--internal-token-file FILE]
+//	               --pg-control-dsn DSN --pg-graph-dsn DSN --vmctl-url URL [--internal-token-file FILE] [--receipt FILE]
 //	purge-unproved ... --apply --digest HEX --receipt FILE
 //
 // With no --apply it only reads: it prints, per service and table, the rows that would go, the
@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -69,6 +70,9 @@ func run(args []string, out, errw io.Writer) (code int) {
 		receiptKey = fs.String("receipt-key-file", "", "optional: a key file; the receipt then carries a keyed hash of each address so a later \"was my account deleted\" can be answered")
 	)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 	missing := map[string]bool{}

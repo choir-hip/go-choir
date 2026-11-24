@@ -36,9 +36,20 @@ func OpenJournal(path, keyFile string) (*FileJournal, error) {
 		}
 		key = k
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("receipt file: %w", err)
+	}
+	// A file that does not end in a newline (a line cut short by a crash) gets one, so the next line is its own
+	// and the torn one cannot swallow it.
+	if st, err := f.Stat(); err == nil && st.Size() > 0 {
+		last := make([]byte, 1)
+		if _, err := f.ReadAt(last, st.Size()-1); err == nil && last[0] != '\n' {
+			if _, err := f.Write([]byte("\n")); err != nil {
+				_ = f.Close()
+				return nil, fmt.Errorf("receipt file: %w", err)
+			}
+		}
 	}
 	return &FileJournal{f: f, key: key}, nil
 }
@@ -52,7 +63,7 @@ type journalLine struct {
 	Services []journalService `json:"services"`
 	MailDirs int              `json:"mail_dirs"`
 	Counts   map[string]int64 `json:"rows,omitempty"`
-	IDs      []string         `json:"id_sha256,omitempty"`
+	IDs      []string         `json:"id_hash,omitempty"`
 	Emails   []string         `json:"email_hmac_sha256,omitempty"`
 }
 
