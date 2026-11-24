@@ -158,7 +158,7 @@ public enum KnownModels {
                              credit: "Parakeet TDT 0.6B v2 by NVIDIA, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the files are modified Core ML conversions.", loadsWithoutFetching: true),
             ManagedModelSpec(id: fluidSpeechMini.id, label: "Fluid Speech Mini (English, Core ML)", source: "hf:" + fluidSpeechMini.repo,
                              approxBytes: fluidSpeechMini.totalBytes, license: fluidSpeechMini.license + " (FluidVoice model); FluidAudio Apache-2.0",
-                             cachePath: storeRoot, cacheFolders: [fluidSpeechMini.folder]),
+                             cachePath: storeRoot, cacheFolders: [fluidSpeechMini.folder], loadsWithoutFetching: true),
             ManagedModelSpec(id: "kokoro-82m-ane", label: "Kokoro 82M ANE v3 (Core ML)", source: "hf:FluidInference/kokoro-82m-coreml",
                              approxBytes: 350_000_000, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["kokoro-82m-coreml", "kokoro"]),
             ManagedModelSpec(id: "pocket-tts", label: "PocketTTS 100M (Kyutai, Core ML)", source: "hf:FluidInference/pocket-tts-coreml",

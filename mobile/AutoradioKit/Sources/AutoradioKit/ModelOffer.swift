@@ -34,7 +34,7 @@ public enum ModelOffer {
     public static func group(_ job: String) -> String { job == "voice" ? "voice" : job == "search" ? "search" : "voice-rest" }
 
     /// The rule that withholds a model, derived and never a switch: a library model with no local-only load is offered only when its manifest exists (a phone has shown it loads from its folder with the registry closed). Its first fetch is the voice settings page's (the voice cards), not the first run's.
-    public static func isWithheld(_ m: ManagedModelSpec, ready: Bool) -> Bool { !m.loadsWithoutFetching && !ready }
+    public static func isWithheld(_ m: ManagedModelSpec, ready: Bool) -> Bool { !(m.loadsWithoutFetching || KnownModels.isPinned(m.id)) && !ready }          // a store-fetched model (a GGUF) loads from its file
     public static func isWithheld(id: String, ready: Bool) -> Bool { KnownModels.managed.first { $0.id == id }.map { isWithheld($0, ready: ready) } ?? false }
 
     /// What the list's entry weighs: its pinned files when it has them, else the candidate table's size (FluidAudio fetches those itself).

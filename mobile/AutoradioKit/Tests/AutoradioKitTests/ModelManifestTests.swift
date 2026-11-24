@@ -76,6 +76,6 @@ final class ModelManifestTests: XCTestCase {
         XCTAssertFalse(ModelOffer.isWithheld(noLocal, ready: true), "offered once its manifest exists")
         XCTAssertFalse(ModelOffer.isWithheld(local, ready: false), "a library that loads from the folder without fetching is offered")
         for id in ["kokoro-82m-ane", "pocket-tts", "phonon-31m", "silero-vad-v6.2.1"] { XCTAssertFalse(KnownModels.managed.first { $0.id == id }!.loadsWithoutFetching, id) }
-        for id in ["parakeet-eou-120m", "parakeet-tdt-0.6b-v2"] { XCTAssertTrue(KnownModels.managed.first { $0.id == id }!.loadsWithoutFetching, id) }
+        for id in ["parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "fluid-speech-mini"] { XCTAssertTrue(KnownModels.managed.first { $0.id == id }!.loadsWithoutFetching, id) }
     }
 }

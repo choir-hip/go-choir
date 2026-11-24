@@ -19,7 +19,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
     public static let shared = HubModelProvider()
 
     /// The models whose files a LIBRARY downloads (everything else goes through the store, which has the door inside it).
-    static let libraryModels: Set<String> = ["silero-vad-v6.2.1", "parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "kokoro-82m-ane", "pocket-tts", "phonon-31m"]
+    static let libraryModels: Set<String> = ["silero-vad-v6.2.1", "parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "kokoro-82m-ane", "pocket-tts", "phonon-31m", "lfm3-audio-2b"]
 
     /// A fetch DEMOTES the model first (its manifest is deleted: a failed re-fetch is not ready), then runs the body. A library model's body runs inside the door's window, and only the body: consent, a covered path, the registry open only inside it,
     /// the transfer cut when the path stops being covered (DownloadDoor.libraryWindow). The store's models (the GGUFs, the bundle) never open the registry. A companion is fetched after, in its own window, never inside the primary's.
