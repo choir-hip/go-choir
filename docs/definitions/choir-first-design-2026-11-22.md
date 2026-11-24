@@ -163,6 +163,10 @@ boundaries:
     said: hmm, i think we will make it a desk eventually. using rlm pattern correctly we should be able to fan out appropriately. just passing in all captures to a model feels wrong to me. we should be able to do some preprocessing and then send them to agents with ongoing learned context engineering
     'on': '2026-11-24'
     reading: 'lead''s reading: the captures are data in the desk''s REPL, not text in its prompt; code groups them (by vector neighbourhood and shared subjects); each group goes to a sub-call with the context chosen for it (the slice of the paper about that group, not one global digest); which context to attach to which kind of group is what is learned, by scoring. The parent never reads a capture, so the earlier ruling that no single capture reaches a desk is read as: no desk session is spent per capture'
+  - decision: capture is its own desk, not part of Texture and not research; and if it can be made to work well quickly it is built now, not eventually
+    said: well, if we can get it working well quickly, we should make eventually now/sooner. yes, capture would be its own desk. not texture or research
+    'on': '2026-11-24'
+    reading: 'lead''s reading: the desks are then the root (in the one Texture desk, with addressable stories), capture, research, the Autoradio desk, engineering and management. Capture is custodian of the capture path''s output (each capture''s symbols); the graph custodian host service still writes subjects, mentions and counts from it. Shipping (M7) keeps the landing slot; the capture desk is built beside it in its own lane and lands when it has a reviewed candidate'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
