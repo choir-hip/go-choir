@@ -14,6 +14,7 @@
 //  Y7 A refused microphone shows the declined line; a capture that failed says so with a way to try again or leave; a take is never stuck without a Not now.
 //  Y8 One native step at a time: a second look at the facts while a step runs starts none.
 //  Y10 The microphone state the page acts on is the system's right now (a read), not a fact kept from before: a refusal undone in Settings is not a dead end.
+//  Y12 A release (gone, close, rewind, forget) is never gated by a running step and is never dropped; the step in flight is discarded when it returns (an epoch).
 //  Y11 The page owns the microphone lease: when it is no longer in front, by ANY exit, shared code tells native to release (`gone`), keeping a stored voice.
 //  Y9 A sign-out forgets the state (the next account does not see a "stored" it never made).
 import { accountGeneration, nativeLater } from './api.ts';
@@ -34,9 +35,9 @@ export const CONFIRM_SENTENCE = 'Turn the volume down a little, please.';
 export { MIC_PRE_LINE, MIC_OFF_LINE };
 
 type Phase = 'idle' | 'listening' | 'building' | 'confirm' | 'confirming' | 'stored' | 'unsure' | 'failed';
-type Mem = { gen: number; phase: Phase; taken: number; again: boolean; busy: boolean; started: boolean; why: string };
+type Mem = { gen: number; epoch: number; phase: Phase; taken: number; again: boolean; busy: boolean; started: boolean; why: string };
 let mem: Mem | null = null;
-const cur = (): Mem => { if (!mem || mem.gen !== accountGeneration()) mem = { gen: accountGeneration(), phase: 'idle', taken: 0, again: false, busy: false, started: false, why: '' }; return mem; };
+const cur = (): Mem => { if (!mem || mem.gen !== accountGeneration()) mem = { gen: accountGeneration(), epoch: 0, phase: 'idle', taken: 0, again: false, busy: false, started: false, why: '' }; return mem; };
 /** Y9: sign-out (account.ts WIPES), and for tests: a new process. */
 export function forgetLearn(): void { mem = null; }
 export async function wipeLearn(): Promise<void> { const later = nativeLater(); mem = null; try { await later?.({ op: 'obEnrolDiscard' }); } catch { /* native resets at its own wipe */ } }
@@ -74,25 +75,27 @@ export function learnView(m: { phase: string; taken: number; again: boolean; sta
 /** What a take that ended did, once, in order (Y3, Y4, Y8). Native has already closed the microphone. */
 async function advance(m: Mem, f: { enrol: Enrol }, later: Later): Promise<void> {
   if (m.busy || !later) return;
+  const e = m.epoch, gone = (): boolean => m.epoch !== e;                         // a release (gone, close, rewind, forget) while this ran: whatever it was doing is discarded (Y12)
   const s = f.enrol.state;
   if ((m.phase === 'listening' || m.phase === 'confirming') && s === 'error') { m.why = f.enrol.reason || 'The microphone could not be used.'; m.phase = 'failed'; await call(later, 'obEnrolDiscard'); return; }
   if (!((m.phase === 'listening' || m.phase === 'confirming') && s === 'done')) return;
   m.busy = true;
   try {
     const confirming = m.phase === 'confirming';
-    if (!f.enrol.usable) { m.again = true; m.phase = confirming ? 'confirm' : 'idle'; await call(later, 'obEnrolDiscardTake'); return; }                            // Y3
+    if (!f.enrol.usable) { await call(later, 'obEnrolDiscardTake'); if (gone()) return; m.again = true; m.phase = confirming ? 'confirm' : 'idle'; return; }                         // Y3
     m.again = false;
     if (confirming) {
-      const r = await call(later, 'obEnrolCheck');
-      if (r.call === 'match' && (await call(later, 'obEnrolStore')).ok === true) { m.phase = 'stored'; return; }                                                                         // Y4
-      await call(later, 'obEnrolDiscard'); m.phase = 'unsure'; m.taken = 0; return;
+      const r = await call(later, 'obEnrolCheck'); if (gone()) return;
+      if (r.call === 'match' && (await call(later, 'obEnrolStore')).ok === true) { if (!gone()) m.phase = 'stored'; return; }                                                      // Y4
+      await call(later, 'obEnrolDiscard'); if (gone()) return; m.phase = 'unsure'; m.taken = 0; return;
     }
-    const kept = (await call(later, 'obEnrolKeep')).kept;
+    const kept = (await call(later, 'obEnrolKeep')).kept; if (gone()) return;
     m.taken = typeof kept === 'number' ? kept : m.taken + 1;
     if (m.taken < NEEDED) { m.phase = 'idle'; return; }
     m.phase = 'building';
-    if ((await call(later, 'obEnrolBuild')).ok === true) m.phase = 'confirm';
-    else { await call(later, 'obEnrolDiscard'); m.phase = 'failed'; m.why = ''; m.taken = 0; }                                                                                            // Y4
+    const built = (await call(later, 'obEnrolBuild')).ok === true; if (gone()) return;
+    if (built) m.phase = 'confirm';
+    else { await call(later, 'obEnrolDiscard'); if (gone()) return; m.phase = 'failed'; m.why = ''; m.taken = 0; }                                                                    // Y4
   } finally { m.busy = false; }
 }
 
@@ -116,12 +119,15 @@ export const learnIsOpen = (top: string, step: string): boolean => top === 'sett
 export async function learnAct(op: string, f: Facts, later: Later = nativeLater() as Later): Promise<Learn> {
   const m = cur(); const facts = { enrol: { ...noEnrol(), ...(f?.enrol ?? {}) }, mic: await liveMic(later, f?.mic) };
   const v = learnView(m, facts);
+  // A release is unconditional and idempotent (Y12): never gated by what is running, never dropped. What was running is discarded when it comes back (`advance` checks the epoch).
+  if (op === 'rewind' || op === 'forget' || op === 'gone' || op === 'close') {
+    m.epoch += 1;
+    if (op === 'rewind' || op === 'forget' || m.phase !== 'stored') Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' });
+    await call(later, op === 'forget' ? 'obVoiceForget' : 'obEnrolDiscard');
+    return learnView(m, facts);
+  }
   if (later && !m.busy) {
-    if (op === 'rewind') { Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' }); await call(later, 'obEnrolDiscard'); }
-    else if (op === 'forget') { Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' }); await call(later, 'obVoiceForget'); }
-    else if (op === 'gone') { if (m.phase !== 'stored') Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' }); await call(later, 'obEnrolDiscard'); }      // Y11: the page is not in front any more, by any way
-    else if (op === 'close') { if (m.phase !== 'stored') Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' }); await call(later, 'obEnrolDiscard'); }
-    else if ((op === 'start' && v.primaryOp === 'start') || (op === 'again' && v.primaryOp === 'again')) {
+    if ((op === 'start' && v.primaryOp === 'start') || (op === 'again' && v.primaryOp === 'again')) {
       Object.assign(m, { phase: 'listening', taken: 0, again: false, started: true, why: '' }); await call(later, 'obEnrolDiscard'); await call(later, 'obEnrolBegin');
     } else if (op === 'read' && v.primaryOp === 'read') { m.phase = m.phase === 'confirm' ? 'confirming' : 'listening'; await call(later, 'obEnrolBegin'); }
   }
