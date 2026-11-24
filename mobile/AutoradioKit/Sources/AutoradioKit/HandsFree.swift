@@ -168,11 +168,22 @@ extension TurnEngine {
 
     func hfPrepare() async {
         hf.ready = true
-        do {
-            hf.bounds = try env.registry.make(.speechBounds, as: SpeechBounds.self, config)
-            hf.transcriber = try env.registry.make(.transcriber, as: Transcriber.self, config)
-            await hf.bounds?.reset()
-        } catch { env.log.emit(.error(stage: "hands-free", message: "\(error)")) }
+        // A stage the configuration names that this build cannot make (a model stage in a build without the model libraries, or a name that
+        // changed) must never leave the radio deaf: the floor stages, which are always built in, listen instead, and the log says so.
+        do { hf.bounds = try env.registry.make(.speechBounds, as: SpeechBounds.self, config) }
+        catch {
+            env.log.emit(.error(stage: "hands-free", message: "\(error); the level detector listens instead"))
+            var floor = config; floor.set(.speechBounds, StageSetting(id: ListenerPipeline.floorBounds, params: ListenerPipeline.boundsParams[ListenerPipeline.floorBounds] ?? [:]))
+            hf.bounds = try? env.registry.make(.speechBounds, as: SpeechBounds.self, floor)
+        }
+        do { hf.transcriber = try env.registry.make(.transcriber, as: Transcriber.self, config) }
+        catch {
+            env.log.emit(.error(stage: "hands-free", message: "\(error); Apple's recogniser listens instead"))
+            var floor = config; floor.set(.transcriber, StageSetting(id: ListenerPipeline.floorTranscriber))
+            hf.transcriber = try? env.registry.make(.transcriber, as: Transcriber.self, floor)
+        }
+        await hf.bounds?.reset()
+        env.log.emit(.note(ListenerPipeline.summary(of: config)))
         hf.policy = hfNewPolicy()
     }
 

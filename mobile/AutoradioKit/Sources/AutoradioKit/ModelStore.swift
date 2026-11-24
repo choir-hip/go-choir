@@ -12,6 +12,38 @@ public struct ModelSpec: Codable, Sendable {
     }
 }
 
+/// A model that is a folder of files in one Hugging Face repository, every file pinned by the repository's commit and by its own
+/// SHA-256 (Fluid Speech Mini). The store fetches each file the way it fetches a single-file model, and the folder is whole only
+/// when every file is there at its size (a file is moved into place only after its SHA-256 matched).
+public struct ModelBundleSpec: Codable, Sendable {
+    public struct File: Codable, Sendable, Equatable {
+        public var path: String
+        public var bytes: Int64
+        public var sha256: String
+        public init(path: String, bytes: Int64, sha256: String) { self.path = path; self.bytes = bytes; self.sha256 = sha256 }
+    }
+    public var id: String
+    public var repo: String
+    /// The repository's commit the sizes and digests were read at; every URL names it, so a later push to the repository changes nothing here.
+    public var commit: String
+    public var files: [File]
+    /// Folder under the store root.
+    public var folder: String
+    public var license: String
+    /// What the licence asks us to show the person, word for word.
+    public var credit: String
+    /// Files to copy after the download: (from, to), for names a loader expects that the repository does not use.
+    public var copies: [[String]]
+    public init(id: String, repo: String, commit: String, files: [File], folder: String, license: String, credit: String, copies: [[String]] = []) {
+        self.id = id; self.repo = repo; self.commit = commit; self.files = files; self.folder = folder; self.license = license
+        self.credit = credit; self.copies = copies
+    }
+    public var totalBytes: Int64 { files.reduce(0) { $0 + $1.bytes } }
+    public func url(for f: File) -> URL { URL(string: "https://huggingface.co/\(repo)/resolve/\(commit)/\(f.path)")! }
+    /// The id the store registers a file under.
+    func fileID(_ f: File) -> String { id + "/" + f.path }
+}
+
 /// A model a library fetches and caches itself (FluidAudio's Core ML bundles): listed, measured and unloaded here.
 public struct ManagedModelSpec: Codable, Sendable {
     public var id: String
@@ -81,6 +113,48 @@ public actor ModelStore {
         return size == s.bytes ? final : nil
     }
     public func register(_ s: ModelSpec) { specs[s.id] = s }
+
+    // MARK: Folder models (one repository, many files)
+
+    /// The folder of a bundle model if every file is on the phone at its size and the copies are made. Never fetches.
+    public func bundleDirectoryIfPresent(_ b: ModelBundleSpec) -> URL? {
+        let dir = root.appendingPathComponent(b.folder, isDirectory: true)
+        let fm = FileManager.default
+        for f in b.files {
+            let size = ((try? fm.attributesOfItem(atPath: dir.appendingPathComponent(f.path).path)[.size]) as? NSNumber)?.int64Value ?? -1
+            if size != f.bytes { return nil }
+        }
+        for c in b.copies where c.count == 2 { if !fm.fileExists(atPath: dir.appendingPathComponent(c[1]).path) { return nil } }
+        return dir
+    }
+
+    /// Fetch (or resume) every file of the bundle, each checked against its SHA-256, then make the copies. Called only after the person
+    /// has agreed to the download (voice setup's consent); nothing else in the app calls it. `progress` receives bytes of the whole folder.
+    public func ensureBundle(_ b: ModelBundleSpec, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        let dir = root.appendingPathComponent(b.folder, isDirectory: true)
+        let fm = FileManager.default
+        var before: Int64 = 0
+        for f in b.files {
+            let spec = ModelSpec(id: b.fileID(f), url: b.url(for: f), sha256: f.sha256, bytes: f.bytes, fileName: b.folder + "/" + f.path)
+            specs[spec.id] = spec
+            try fm.createDirectory(at: root.appendingPathComponent(spec.fileName).deletingLastPathComponent(), withIntermediateDirectories: true)
+            let base = before, total = b.totalBytes
+            _ = try await ensure(spec.id) { done, _ in progress?(base + done, total) }
+            before += f.bytes
+            progress?(before, b.totalBytes)
+        }
+        for c in b.copies where c.count == 2 {
+            let from = dir.appendingPathComponent(c[0]), to = dir.appendingPathComponent(c[1])
+            if !fm.fileExists(atPath: to.path) { try fm.copyItem(at: from, to: to) }
+        }
+        return dir
+    }
+
+    /// Delete a bundle's folder (a rejected configuration, or the person removing the model).
+    public func deleteBundle(_ b: ModelBundleSpec) {
+        try? FileManager.default.removeItem(at: root.appendingPathComponent(b.folder, isDirectory: true))
+        loaded.remove(b.id)
+    }
     public var registered: [ModelSpec] { Array(specs.values) }
 
     /// Fetch (or resume) and verify; returns the local file. `progress` receives bytes so far.

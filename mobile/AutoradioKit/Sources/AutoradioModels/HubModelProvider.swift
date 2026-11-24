@@ -32,9 +32,20 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         }
         defer { watcher.cancel() }
         switch id {
-        case "silero-vad-v6.2.1": _ = try await SileroVAD.probabilities([Float](repeating: 0, count: 4096))
-        case "parakeet-eou-120m": let s = try await ParakeetEOUTranscriber(StageParams()).begin(); s.cancel()
-        case "parakeet-tdt-0.6b-v2": let s = try await ParakeetTDTTranscriber(StageParams()).begin(); s.cancel()
+        // A model that was fetched and loaded is ready (Voices.readiness): the default listening pipeline (ListenerPipeline) uses only ready models.
+        case "silero-vad-v6.2.1": _ = try await SileroVAD.probabilities([Float](repeating: 0, count: 4096)); Voices.readiness.markReady(model: id)
+        case "parakeet-eou-120m": let s = try await ParakeetEOUTranscriber(StageParams()).begin(); s.cancel(); Voices.readiness.markReady(model: id)
+        case "parakeet-tdt-0.6b-v2": let s = try await ParakeetTDTTranscriber(StageParams()).begin(); s.cancel(); Voices.readiness.markReady(model: id)
+        case "fluid-speech-mini":
+            // Only here, after voice setup's consent, is the folder fetched; the stage itself never downloads. Its files are checked one by
+            // one against the SHA-256 pinned in KnownModels, then the model is loaded and run once (warm).
+            _ = try await ModelStore.shared.ensureBundle(KnownModels.fluidSpeechMini) { done, _ in onBytes(done) }
+            _ = try await FluidSpeechMiniTranscriber(StageParams()).manager()
+            Voices.readiness.markReady(model: id)
+            // The pipeline needs the live words beside it: the model the list names for that job comes with it (one row for the person, two files).
+            for companion in ListenerPipeline.companions(of: id) where !Voices.readiness.isReady(model: companion) {
+                try await fetch(companion, role: role, onBytes: onBytes)
+            }
         case "kokoro-82m-ane":
             _ = try await KokoroVoice.synthesizeOnce("Ready.")
             Voices.readiness.markReady(model: id)          // fetched, compiled and heard to speak: the radio may prefer it now
@@ -55,6 +66,14 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             #endif
         }
         if let root { onBytes(max(0, ModelStore.directoryBytes(root) - baseline)) }
+    }
+
+    static func transcriberStage(_ id: String) -> Transcriber {
+        switch id {
+        case "parakeet-eou-120m": return ParakeetEOUTranscriber(StageParams())
+        case "fluid-speech-mini": return FluidSpeechMiniTranscriber(StageParams())
+        default: return ParakeetTDTTranscriber(StageParams())
+        }
     }
 
     public func check(_ id: String, role: String) async throws -> SetupCheck {
@@ -79,8 +98,8 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             let top = p.probs.max() ?? 0
             return await finish(top > 0.5, speed: p.inferenceMs / (seconds * 1000), unit: "of real time",
                                 note: "The speech detector found no speech in the bundled utterance (highest \(Int(top * 100))%).")
-        case "parakeet-eou-120m", "parakeet-tdt-0.6b-v2":
-            let stage: Transcriber = id == "parakeet-eou-120m" ? ParakeetEOUTranscriber(StageParams()) : ParakeetTDTTranscriber(StageParams())
+        case "parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "fluid-speech-mini":
+            let stage: Transcriber = Self.transcriberStage(id)
             let s = try await stage.begin()
             let t0 = nowMs()
             for f in frames() { s.append(f) }
@@ -138,9 +157,9 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             if picks["vad"] == "silero-vad-v6.2.1" {
                 do { let p = try await SileroVAD.probabilities(audio); vad.append(p.inferenceMs / (seconds * 1000)) } catch { m.failedRoles["vad"] = "\(error)" }
             }
-            if let a = picks["transcriber"], a == "parakeet-eou-120m" || a == "parakeet-tdt-0.6b-v2" {
+            if let a = picks["transcriber"], a == "parakeet-eou-120m" || a == "parakeet-tdt-0.6b-v2" || a == "fluid-speech-mini" {
                 do {
-                    let stage: Transcriber = a == "parakeet-eou-120m" ? ParakeetEOUTranscriber(StageParams()) : ParakeetTDTTranscriber(StageParams())
+                    let stage: Transcriber = Self.transcriberStage(a)
                     let s = try await stage.begin()
                     let t0 = nowMs()
                     for f in ModelProof.frames(audio) { s.append(f) }

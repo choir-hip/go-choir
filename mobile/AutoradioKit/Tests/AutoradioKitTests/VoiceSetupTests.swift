@@ -13,20 +13,21 @@ final class VoiceSetupTests: XCTestCase {
     func testPlanStartsWhereThePhoneFitsAndEndsOnAFloor() {
         // failure 1
         let big = SetupCatalog.plan(for: device(8))
-        XCTAssertEqual(big[.transcriber]!.map(\.id), ["parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "apple-speech"])
+        XCTAssertEqual(big[.transcriber]!.map(\.id), ["fluid-speech-mini", "parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "apple-speech"])
         let mid = SetupCatalog.plan(for: device(4))
-        XCTAssertEqual(mid[.transcriber]!.first?.id, "parakeet-eou-120m")
+        XCTAssertEqual(mid[.transcriber]!.first?.id, "fluid-speech-mini")
+        XCTAssertEqual(SetupCatalog.plan(for: device(3))[.transcriber]!.first?.id, "parakeet-eou-120m", "a 3 GB phone starts at the smaller listener")
         XCTAssertEqual(mid[.voice]!.first?.id, "kokoro-82m-ane")
         let small = SetupCatalog.plan(for: device(2))
         XCTAssertEqual(small[.transcriber]!.map(\.id), ["apple-speech"])
         XCTAssertEqual(small[.voice]!.map(\.id), ["system-voice"])
         for s in SetupStage.allCases { XCTAssertTrue(SetupCatalog.plan(for: device(0.5))[s]!.last!.isFloor, "every ladder ends in something that exists") }
-        XCTAssertEqual(SetupCatalog.plan(for: device(8), smaller: true)[.transcriber]!.first?.id, "parakeet-eou-120m")
+        XCTAssertEqual(SetupCatalog.plan(for: device(8), smaller: true)[.transcriber]!.first?.id, "parakeet-tdt-0.6b-v2")
     }
 
     func testTotalIsSaidPlainly() {
         let big = SetupCatalog.plan(for: device(8))
-        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + 480_000_000 + 350_000_000 + 639_446_688, "the decision and the responder share one file: counted once")
+        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + KnownModels.fluidSpeechMini.totalBytes + 250_000_000 + 350_000_000 + 639_446_688, "the decision and the responder share one file: counted once")
         XCTAssertEqual(SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(big), onWiFi: true), "About 1.5 GB. On Wi-Fi this takes a few minutes.")
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("1.4 GB"))
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("mobile data"), "failure 7")
@@ -39,7 +40,7 @@ final class VoiceSetupTests: XCTestCase {
         await s.run()
         XCTAssertTrue(s.isFinished)
         XCTAssertTrue(s.rows.allSatisfy { $0.state == "ready" && !$0.isFallback }, "\(s.rows)")
-        XCTAssertEqual(s.choices[.transcriber], "parakeet-tdt")
+        XCTAssertEqual(s.choices[.transcriber], "live-then-final", "Fluid Speech Mini with live words comes first")
         XCTAssertEqual(s.choices[.system1], "llama-qwen3-0.6b", "the small language model on the phone comes first")
         let rec = s.record
         XCTAssertEqual(rec.items.count, 5)
@@ -51,7 +52,7 @@ final class VoiceSetupTests: XCTestCase {
     func testStallIsReportedAndFallbackOnRequest() async throws {
         // failure 2
         let m = ScriptedSetupBackend.Model(chunks: 10, stallAt: 3, checkOK: nil, checkNote: nil, checkMs: nil)
-        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["parakeet-tdt-0.6b-v2": m])), profile: device(8), stallSeconds: 0.4, patience: 30)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(8), stallSeconds: 0.4, patience: 30)
         let run = Task { await s.run() }
         var stalled = false
         for _ in 0..<100 {
@@ -65,13 +66,13 @@ final class VoiceSetupTests: XCTestCase {
         await run.value
         let after = s.rows.first { $0.stage == "transcriber" }!
         XCTAssertEqual(after.state, "ready"); XCTAssertTrue(after.isFallback)
-        XCTAssertEqual(s.choices[.transcriber], "parakeet-eou", "the smaller listener took over")
-        XCTAssertEqual(s.record.items.first { $0.stage == "transcriber" }?.fellBackFrom, ["parakeet-tdt-0.6b-v2"])
+        XCTAssertEqual(s.choices[.transcriber], "parakeet-tdt", "the next listener on the ladder took over")
+        XCTAssertEqual(s.record.items.first { $0.stage == "transcriber" }?.fellBackFrom, ["fluid-speech-mini"])
     }
 
     func testRetryAfterAStallResumesAndPasses() async throws {
         let m = ScriptedSetupBackend.Model(chunks: 6, stallAt: 2, checkOK: nil, checkNote: nil, checkMs: nil)   // stalls on the first attempt only
-        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["parakeet-tdt-0.6b-v2": m])), profile: device(8), stallSeconds: 0.3, patience: 30)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(8), stallSeconds: 0.3, patience: 30)
         let run = Task { await s.run() }
         for _ in 0..<100 {
             try await Task.sleep(nanoseconds: 50_000_000)
@@ -80,7 +81,7 @@ final class VoiceSetupTests: XCTestCase {
         await run.value
         let after = s.rows.first { $0.stage == "transcriber" }!
         XCTAssertEqual(after.state, "ready"); XCTAssertFalse(after.isFallback)
-        XCTAssertEqual(s.choices[.transcriber], "parakeet-tdt")
+        XCTAssertEqual(s.choices[.transcriber], "live-then-final")
     }
 
     func testNoAnswerTakesTheFallbackAfterPatience() async {

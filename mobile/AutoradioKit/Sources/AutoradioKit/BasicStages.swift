@@ -266,6 +266,7 @@ extension StageRegistry {
         r.register(.programme, FixtureProgramme.self) { _ in FixtureProgramme() }
         registerAppleStages(r)
         registerChoirStages(r)
+        registerListenerStages(r)
         registerExternalModels(r)
         return r
     }

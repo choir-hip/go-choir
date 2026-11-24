@@ -33,6 +33,9 @@ let package = Package(
                            .target(name: "llama", condition: .when(platforms: [.macOS]))],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        // Runs the on-device models through Core ML on the Mac (the fixture speech in mobile/fixtures). It fetches the models it needs once into
+        // ~/.cache/autoradio-test-models, never into the repository or the real Application Support folder.
+        .testTarget(name: "AutoradioModelsTests", dependencies: ["AutoradioKit", "AutoradioModels"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(
             name: "autoradio-models",
             dependencies: ["AutoradioKit", "AutoradioModels"],
