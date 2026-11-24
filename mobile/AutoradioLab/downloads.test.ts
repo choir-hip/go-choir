@@ -24,9 +24,10 @@ const offers = (): OfferJob[] => [
   job('speaker', 'voice-rest', [opt('print', 'Print', 8_000_000, true)]),
   job('search', 'search', [opt('embedder', 'Embedder', 309_855_456, true)]),
 ];
-let f: VoiceFacts; let calls: Record<string, unknown>[]; let kicks: number;
+let f: VoiceFacts; let calls: Record<string, unknown>[]; let kicks: number; let live: Record<string, unknown> | null = null;
 beforeEach(() => { files.clear(); forgetConsent(); resetSeam(); calls = []; kicks = 0; f = { ...noVoice(), offers: offers() };
-  bindNative({ later: async (r) => { calls.push(r); if (r.op === 'embedState') return { present: false }; return {}; } }); onKickSearch(() => { kicks += 1; }); });
+  live = null;
+  bindNative({ later: async (r) => { if (r.op === 'obFacts') return live ?? {}; calls.push(r); if (r.op === 'embedState') return { present: false }; return {}; } }); onKickSearch(() => { kicks += 1; }); });
 
 describe('what is offered', () => {
   test('D1 building the view calls nothing and fetches nothing', () => {
@@ -130,5 +131,23 @@ describe('the press', () => {
   test('D9 an option appears only when the list offers it: no name is known here', () => {
     const v = downloadsView(f, false, 0); const all = v.groups.flatMap((g) => g.jobs.flatMap((j) => j.options.map((o) => o.text)));
     expect(all.some((t) => /pro|fluid|parakeet|kokoro/i.test(t))).toBe(false);
+  });
+  // B1 (review round 2): the page was drawn on Wi-Fi and the phone moved to mobile data before the press. The press reads the facts as they are NOW.
+  test('D14 a press reads the live facts: on mobile data now, the Wi-Fi press starts nothing and records nothing; the mobile press records the mobile agreement', async () => {
+    live = { ...f, onWiFi: false };
+    await downloadsAct('start', 'voice', f, storage);                                   // f says Wi-Fi: it is stale
+    expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined(); expect(files.size).toBe(0);
+    await downloadsAct('startMobile', 'voice', f, storage);
+    expect(calls.find((c) => c.op === 'obSetupBegin')).toBeDefined(); expect(await modelsAgreement(storage, 'voice')).toEqual({ ok: true, mobile: true });
+  });
+  test('D14 native that answers nothing: the facts the page had are used', async () => {
+    live = null; await downloadsAct('start', 'voice', f, storage); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeDefined();
+  });
+  test('D15 a licence credit (CC BY 4.0) is shown with its option: it comes from the list and this file writes none', () => {
+    const credited = offers().map((j) => j.job === 'transcriber' ? { ...j, options: j.options.map((o) => o.id === 'ear-two' ? { ...o, credit: 'Ear two by Example Labs. CC BY 4.0.' } : o) } : j);
+    const v = downloadsView({ ...f, offers: credited }, false, 0);
+    const opts = v.groups.flatMap((g) => g.jobs).flatMap((j) => j.options);
+    expect(opts.find((o) => o.id === 'ear-two')?.credit).toBe('Ear two by Example Labs. CC BY 4.0.');
+    expect(opts.find((o) => o.id === 'ear-one')?.credit).toBe('');
   });
 });

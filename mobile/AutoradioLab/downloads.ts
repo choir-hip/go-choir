@@ -17,6 +17,7 @@
 //  D6 The sizes are written as the native side writes them: a plan with no files is "nothing to download".
 //  D7 Each job's options are listed with name and size, the recommended one tagged; with no pick the recommended one is chosen; the group's total is the chosen options not yet on the phone, not the sum of the options.
 //  D8 A pick is kept (consent.ts), only for a job and option that are on offer, and the press that starts a group hands native exactly the chosen option of each job (never another); a job with nothing that fits starts nothing.
+//  D14 A press reads the facts as they are NOW (the network path moved since the page was drawn): on mobile data only the mobile press starts anything.
 //  D9 Fluid Speech Pro-like names are not special-cased: an option appears only when the list offers it.
 import type { Storage } from './app.contract.d.ts';
 import { consentAgree, consentPick, consentPicks, consentView } from './consent.ts';
@@ -26,7 +27,7 @@ import { noVoice, type VoiceFacts } from './onboarding.ts';
 import { chosen, needs, picksFor, setupBytes, sizeLabel, type OfferJob } from './offers.ts';
 
 export { sizeLabel };
-export type OptionView = { id: string; text: string; tag: string; note: string; selected: boolean; ready: boolean };
+export type OptionView = { id: string; text: string; tag: string; note: string; credit: string; selected: boolean; ready: boolean };
 export type JobView = { job: string; title: string; options: OptionView[]; ready: boolean; none: string };
 export type Group = {
   id: string; title: string; why: string; jobs: JobView[]; total: string; host: string; ready: boolean; busy: boolean; status: string; onWiFi: boolean; mobileLine: string;
@@ -65,7 +66,7 @@ export function downloadsView(f: VoiceFacts, searchPresent: boolean | null, rev:
       const c = chosen(j, picks);
       return {
         job: j.job, title: JOB_TITLES[j.job] ?? j.job, ready: !needs(j, picks),
-        options: j.options.map((o) => ({ id: o.id, text: `${o.model}, ${o.sizeLabel}`, tag: [o.recommended ? 'Recommended for this phone' : '', o.ready ? 'On this phone' : ''].filter(Boolean).join('. '), note: o.note ?? '', selected: c?.id === o.id, ready: o.ready })),
+        options: j.options.map((o) => ({ id: o.id, text: `${o.model}, ${o.sizeLabel}`, tag: [o.recommended ? 'Recommended for this phone' : '', o.ready ? 'On this phone' : ''].filter(Boolean).join('. '), note: o.note ?? '', credit: o.credit ?? '', selected: c?.id === o.id, ready: o.ready })),
         none: c ? '' : 'Nothing here fits this phone; it keeps what is built in.',
       };
     });
@@ -92,10 +93,16 @@ export async function downloadsPage(facts: VoiceFacts | null | undefined, storag
   return downloadsView({ ...noVoice(), ...(facts ?? {}) }, await present(), c.rev, await consentPicks(storage));
 }
 
+/** The voice side's facts now (the network path, the offers), or the page's own when native answers nothing (a web build). */
+async function liveFacts(later: ReturnType<typeof nativeLater>, page: VoiceFacts): Promise<VoiceFacts> {
+  try { const r = (await later?.({ op: 'obFacts' })) as Partial<VoiceFacts> | null | undefined; if (r && typeof r === 'object' && Array.isArray(r.offers)) return { ...noVoice(), ...(r as VoiceFacts) }; } catch { /* the page's */ }
+  return page;
+}
+
 /** The press. `op` start | startMobile | pick; `group` one of the group ids (for `pick`: the job, and `arg` the option). Returns the view after it. Search is started by the search pass once agreed: `kickSearch` asks it to run now. */
 export async function downloadsAct(op: string, group: string, facts: VoiceFacts | null | undefined, storage: Storage | undefined, arg = ''): Promise<Downloads> {
-  const f = { ...noVoice(), ...(facts ?? {}) };
   const later = nativeLater();
+  const f = await liveFacts(later, { ...noVoice(), ...(facts ?? {}) });                        // D14: the facts as they are at the press, not as the page was drawn
   if (op === 'pick') {                                                                              // D8
     const j = f.offers.find((x) => x.job === group);
     if (j && j.options.some((o) => o.id === arg)) await consentPick(group, arg, storage);

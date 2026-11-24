@@ -8,8 +8,10 @@ public struct OfferOption: Sendable, Equatable {
     public var bytes: Int64, recommended: Bool, ready: Bool
     /// A limit the person should know about before choosing it (a licence limit, from the candidate table); "" when there is none.
     public var note: String = ""
+    /// The credit its licence asks the app to show (CC BY 4.0 and the like), from the list entry; "" when none.
+    public var credit: String = ""
     public var sizeLabel: String { SetupCatalog.sizeLabel(bytes) }
-    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready, "note": note] }
+    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready, "note": note, "credit": credit] }
 }
 public struct OfferJob: Sendable, Equatable {
     public var job: String, group: String, host: String
@@ -41,20 +43,20 @@ public enum ModelOffer {
     public static func jobs(profile: DeviceProfile, list: ModelList = .builtIn(), ready: [String: String] = [:]) -> [OfferJob] {
         var out: [OfferJob] = []
         for j in jobIDs {
-            var opts: [(id: String, label: String, bytes: Int64, fits: Bool, note: String)] = []
+            var opts: [(id: String, label: String, bytes: Int64, fits: Bool, note: String, credit: String)] = []
             if let role = ConfigRole.allCases.first(where: { $0.stage.rawValue == j }) {
                 let all = list.models.filter { $0.job == role.rawValue }.sorted { $0.rank > $1.rank }
-                opts = all.map { ($0.id, $0.label, bytes($0, role: role), $0.isRecommended(machine: profile.chip, memoryGB: profile.memoryGB), CandidateTable.candidate($0.id, role)?.licenseLimit ?? "") }
+                opts = all.map { ($0.id, $0.label, bytes($0, role: role), $0.isRecommended(machine: profile.chip, memoryGB: profile.memoryGB), CandidateTable.candidate($0.id, role)?.licenseLimit ?? "", $0.credit ?? "") }
             } else if j == "speaker" {
-                opts = [(speakerID, "Your voice, kept on this phone", Int64(WeSpeakerEmbedder.files.reduce(0) { $0 + $1.size }), true, "")]
+                opts = [(speakerID, "Your voice, kept on this phone", Int64(WeSpeakerEmbedder.files.reduce(0) { $0 + $1.size }), true, "", WeSpeakerEmbedder.attribution)]
             } else if j == "search" {
-                opts = [(KnownModels.embeddingGemma2.id, "EmbeddingGemma 2", KnownModels.embeddingGemma2.bytes, true, "")]
+                opts = [(KnownModels.embeddingGemma2.id, "EmbeddingGemma 2", KnownModels.embeddingGemma2.bytes, true, "", "")]
             }
             let opts2 = opts.filter { $0.bytes > 0 }
             if opts2.isEmpty { continue }
             let rec = opts2.first { $0.fits }?.id
             out.append(OfferJob(job: j, group: group(j), host: host,
-                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note) }))
+                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note, credit: $0.credit) }))
         }
         return out
     }

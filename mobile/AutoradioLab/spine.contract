@@ -130,7 +130,9 @@ members Autoradio
     gate = ""
     if micFor == "take"
       send tpm = takesAct("record", "")
-    if micFor != "take"
+    if micFor == "talk"
+      send obm = onboardingAct("talk", "", "", pg.top)
+    if micFor == "voice"
       send up = choirHandsFreeToggle()
     micTick = micTick + 1
   // Cancel: drop this turn, nothing is sent, hands-free stays on (choirTalkCancel).

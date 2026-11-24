@@ -1,7 +1,7 @@
 // The model offers, as pure data: what the native side reads from the model list (ModelList.swift, ModelOffer.jobs) for this phone, and what the person has picked. This file writes no model's name or size: an option's name and
 // size are the list's own, and which option is "recommended for this phone" is the list's answer for this phone (the first entry that fits it), so a newer model or a different phone is a different offer with no change here.
 // Each job (hearing you, knowing when you speak, the voice, the answering model, knowing your voice, search) has its options; the person's pick for a job is kept (consent.ts `picks`); no pick is the recommended one.
-export type Option = { id: string; model: string; bytes: number; sizeLabel: string; recommended: boolean; ready: boolean; note?: string };
+export type Option = { id: string; model: string; bytes: number; sizeLabel: string; recommended: boolean; ready: boolean; note?: string; credit?: string };
 export type OfferJob = { job: string; group: string; host: string; options: Option[] };
 
 /** The size words, as the native side writes them (SetupCatalog.sizeLabel). */

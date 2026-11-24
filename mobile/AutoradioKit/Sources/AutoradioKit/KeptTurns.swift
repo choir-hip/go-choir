@@ -61,6 +61,7 @@ public final class KeptTurnStore: @unchecked Sendable {
         try record.encoded().write(to: k.recordURL)
         return k
     }
+    /// NATIVE ON PURPOSE (review 2026-11-24 asked whether Exact should own it): the voice turn engine writes this store and the prune runs at launch before anything reads the folder; the numbers are the data inventory's retention.
     /// The rule for what stays on the phone: the newest `keep` turns, none older than `maxAgeDays`, and never any sound (a turn folder from an earlier build that holds mic.caf or reference.caf loses them). Sign-out removes everything (`wipe`).
     /// Returns how many turn folders were removed. `now` is a parameter so a test does not wait.
     @discardableResult

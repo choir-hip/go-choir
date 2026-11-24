@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { CONFIRM_SENTENCE, MIC_OFF_LINE, MIC_PRE_LINE, SENTENCES, forgetLearn, learnAct, learnPage, noEnrol, wipeLearn, type Enrol } from './voicelearn.ts';
 import { bindNative, resetSeam } from './api.ts';
 
-let calls: string[]; let usable = true; let built = true; let verdict = 'match'; let stored = true; let kept = 0;
+let calls: string[]; let micNow: string | undefined; let usable = true; let built = true; let verdict = 'match'; let stored = true; let kept = 0;
 const later = async (r: { op: string }) => {
+  if (r.op === 'obMicState') return micNow === undefined ? {} : { state: micNow };         // a read of the system's permission: not one of the page's calls
   calls.push(r.op);
   switch (r.op) {
     case 'obEnrolKeep': kept += 1; return { kept, usable };
@@ -17,7 +18,7 @@ const later = async (r: { op: string }) => {
 };
 const en = (o: Partial<Enrol> = {}): Enrol => ({ ...noEnrol(), ready: true, ...o });
 const F = (o: Partial<Enrol> = {}, mic = 'heard') => ({ enrol: en(o), mic });
-beforeEach(() => { forgetLearn(); resetSeam(); calls = []; usable = true; built = true; verdict = 'match'; stored = true; kept = 0; });
+beforeEach(() => { forgetLearn(); resetSeam(); micNow = undefined; calls = []; usable = true; built = true; verdict = 'match'; stored = true; kept = 0; });
 const view = (f = F()) => learnPage(f, later);
 const press = (op: string, f = F()) => learnAct(op, f, later);
 /** One sentence read: the press, then native says the take ended (usable or not). */
@@ -94,5 +95,14 @@ describe('the edges', () => {
     await press('read'); await view(F({ state: 'done', usable: true })); expect((await view()).step).toBe('stored');
     bindNative({ later: async (r) => { calls.push(r.op); return {}; } }); calls.length = 0; await wipeLearn(); expect(calls).toContain('obEnrolDiscard');
     expect((await view()).step).toBe('intro');
+  });
+});
+
+describe('the live permission (review round 2)', () => {
+  test('Y10 a refusal that was later undone in iOS Settings is not a dead end: the page reads the live permission, not a fact kept from before', async () => {
+    micNow = 'granted'; expect(await view(F({}, 'refused'))).toMatchObject({ step: 'intro', primaryOp: 'start' });
+    micNow = 'refused'; expect((await view(F({}, 'heard'))).step).toBe('refused');
+    micNow = 'unasked'; expect(await view(F({}, 'heard'))).toMatchObject({ step: 'intro', primary: 'Continue' });
+    micNow = undefined; expect((await view(F({}, 'refused'))).step).toBe('refused');                  // native says nothing: the kept fact decides
   });
 });

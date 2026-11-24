@@ -53,8 +53,13 @@ members Autoradio
   action obAddTopic
     send epm = editionAdd(obTopicText)
     obTopicText = ""
+  // Talking to it opens the microphone: unasked or refused shows the plain line (or the declined line) first, like the bar's button; Continue (micContinue) goes on.
   action obTalk
-    send obm = onboardingAct("talk", "", "", pg.top)
+    if ob.talking == false and micperm.gate != ""
+      micFor = "talk"
+      gate = micperm.gate
+    if ob.talking or micperm.gate == ""
+      send obm = onboardingAct("talk", "", "", pg.top)
   action obTopicsDone
     if ep.loaded
       send obm = onboardingAct("topicsDone", "", ep.picks, pg.top)

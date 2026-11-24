@@ -337,6 +337,8 @@ component OnboardingPage
             DownloadLines(group="voice")
             DownloadLines(group="voice-rest")
             text `Everything above: ${dl.setupTotal}` testId="ob-welcome-total" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+            if ob.message != ""
+              text ob.message testId="ob-welcome-message" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.danger
             button press=obBegin testId="ob-begin" appearance="none"
               Btn(label=beginLabel, primary=true, wide=true)
             if ob.step == "skipped"
