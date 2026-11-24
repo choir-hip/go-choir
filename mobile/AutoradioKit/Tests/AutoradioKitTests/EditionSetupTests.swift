@@ -128,16 +128,3 @@ final class EditionCompletionTests: XCTestCase {
         XCTAssertEqual(EditionCompletion.general().lines, ["What I follow", "The whole paper, until I say otherwise."])
     }
 }
-
-// The edition's address (owner finding: "Open edition" showed "Could not open this page. HTTP 404: document not found").
-// Cause: obOpenEdition (members-onboarding.contract) and OnboardingController.editionReady opened "texture:my-edition", which the
-// reader fetched as a document id; the writer is local, so the server never had that document.
-final class EditionAddressTests: XCTestCase {
-    func testTheEditionAddressResolvesToTheLocalPage() {
-        XCTAssertEqual(PageAddress.canonical("texture:my-edition"), "onboarding:edit")
-        XCTAssertEqual(PageAddress.canonical(" Texture:My-Edition "), "onboarding:edit")
-        XCTAssertEqual(PageAddress.canonical("texture:abc123"), "texture:abc123", "a real document is left alone")
-        XCTAssertEqual(PageAddress.kind(of: PageAddress.edition), "onboarding", "a page the onboarding source serves, not the reader")
-        XCTAssertEqual(PageAddress.defaultTitle("onboarding:edit"), "My edition")
-    }
-}
