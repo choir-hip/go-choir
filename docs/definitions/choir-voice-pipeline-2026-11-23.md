@@ -19,6 +19,7 @@ start:
   - Each turn makes one System 1 call on the server whose only effect is to cancel the reply when nothing was asked.
   - The thing that answers a turn on the server is one streamed model call with no tools; no Autoradio desk with a REPL exists.
   - 'Faults the owner reported: an answer cut off by a stretch arriving; playback stopping on a switch to another app with voice on; other apps unable to use the microphone during playback (not explained from main).'
+  - '2026-11-24: why the pipeline is not the one the owner chose is traced in docs/problems/autoradio-voice-pipeline-not-the-one-chosen-2026-11-24.md (never scheduled; the 11-15 design never reached main). The owner''s earlier research on the rest of the loop is in the Mike project and was never carried here: docs/reports/voice-turn-taking-2026-10-22.md and its six parts (end of turn, barge-in, speaker separation and other voices, frameworks). Its conclusions: a speaker-aware speech detector in front of the turn manager is the cheapest structural fix for other voices; target-speaker extraction (a separator) is not ready as a front end; no vendor isolator fits on-device iPhone with privacy; Apple''s Voice Isolation cannot be set by an app; Smart Turn v3.2 confirms end of turn; echo is handled by one voice-processing engine plus a speaker check. The owner asked on 2026-11-24 about the separator, isolator, turn detector and echo detector: none is in Autoradio''s default path.'
 finish:
   deliver: With voice on, the phone detects speech, recognises it, ends the turn and rejects its own echo with on-device models the owner specified, sounds the same as with voice off, answers at once from the phone, and hands over to the Autoradio desk's new queue without a cut.
   artifact: 'on main and on the owner''s phone: the listener configuration read from kept choices, the specified models as defaults where the phone can run them, the session that sounds the same, and a rerunnable turn drill'
@@ -78,6 +79,9 @@ boundaries:
   - decision: signed out is listening only; asking prompts sign-in or sign-up
     said: logged out should be listening only. if you ask it should prompt you to log in/ sign up
     'on': '2026-11-23'
+  - decision: the recogniser is FluidVoice-Labs/fluid-speech-mini-coreml; the owner also wants the other voice models (speech separation, voice isolation, turn detection, echo detection) accounted for
+    said: https://huggingface.co/FluidVoice-Labs/fluid-speech-mini-coreml ... what about the other voice models? what we were looking into last night. speech separator. voice isolator. turn detector. echo detector. etc
+    'on': '2026-11-24'
   must_preserve:
   - voice stays on the device; the owner's recordings are never published
   - only voice is native; page logic stays in shared Exact code
@@ -104,12 +108,12 @@ stations:
   status: pending
 - id: V2
   name: The recogniser the owner named
-  scope: read its reference first and write its page; the stage built and measured against Apple's and Parakeet on the phone (accuracy, load, memory)
+  scope: read its reference first and write its page; the stage built and measured against Apple's and Parakeet on the phone (accuracy, load, memory). Lane voice-default, 2026-11-24
   class: orange
   review: one seat
   depends_on:
   - V0
-  status: pending
+  status: working
 - id: V3
   name: End of turn by model
   scope: the turn model and the end-of-utterance stream from the owner's earlier engine brought in behind the policy that already exists
@@ -151,13 +155,6 @@ stations:
   - V3
   status: pending
 decisions_for_the_owner:
-- id: Q1
-  question: Which model is "Fluid Speech Mini" exactly?
-  why: no stage of that name exists; a design note describes it as a distilled Parakeet in Core ML
-  options:
-  - the model the design note names
-  - another the owner names
-  default: the one the design note names, confirmed against its reference before any build
 - id: Q2
   question: May the owner try the full-band side build?
   why: it has waited since 2026-11-17 for a trial
