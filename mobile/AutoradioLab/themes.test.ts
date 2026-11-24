@@ -431,6 +431,29 @@ describe('nothing is carried over from the Swift storage (G1)', () => {
   });
 });
 
+describe('what the previous shared build carried over is let go (G2)', () => {
+  const doc = (id: string): string => JSON.stringify({ schema_version: 3, id, name: id, schemes: ['light'], colors: { paper: '#FFFFFF', fg: '#111111' } });
+  test('G2 a choice file the migration wrote (migrated: true) and the files it copied are dropped once: the default shows, the marker goes', async () => {
+    const m = memFs(); m.put(T.CHOICE_FILE, JSON.stringify({ theme: 'depth', mode: 'dark', migrated: true })); m.put(`${T.THEMES_DIR}/drill-user.json`, doc('drill-user'));
+    const s = await T.themeStore(m.storage);
+    expect(s.choice).toEqual({ theme: null, mode: 'system' }); expect(m.files.has(`${T.THEMES_DIR}/drill-user.json`)).toBe(false);
+    expect(kept(m)).toEqual({ theme: null, mode: 'system' });
+    T.resetThemes(); const again = await T.themeStore(m.storage); expect(again.choice).toEqual({ theme: null, mode: 'system' });          // once: the second launch is the same
+  });
+  test('G2 a choice made in this build (no marker) and its themes are untouched', async () => {
+    const m = memFs(); m.put(T.CHOICE_FILE, JSON.stringify({ theme: 'depth', mode: 'dark' })); m.put(`${T.THEMES_DIR}/mine.json`, doc('mine'));
+    const s = await T.themeStore(m.storage);
+    expect(s.choice).toEqual({ theme: 'depth', mode: 'dark' }); expect(m.files.has(`${T.THEMES_DIR}/mine.json`)).toBe(true);
+  });
+  test('K1 a failed save is tried again by the next tap on the same theme', async () => {
+    const m = memFs(true);
+    await T.themeSet('depth', m.storage); expect(m.files.size).toBe(0);
+    const s = await T.themeStore(m.storage); expect(s.choice.theme).toBe('depth');
+    (m.storage as never as { fs: { atomicWriteFile: (p: string, b: Uint8Array) => Promise<void> } }).fs.atomicWriteFile = async (p, b) => { m.files.set(p, b); };
+    await T.themeSet('depth', m.storage); expect(kept(m).theme).toBe('depth');
+  });
+});
+
 describe('a theme from a Texture (X1)', () => {
   const seam = (f: () => Promise<Reply>) => ({ net: f });
   test('X1 the words for each failure', async () => {

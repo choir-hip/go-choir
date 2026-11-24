@@ -11,7 +11,7 @@ import { parseClips } from './clips.ts';
 import { clipEntryOf, radioPlayClip } from './clip-play.ts';
 import { episodeKey } from './podcast-model.ts';
 import type { Entry } from './runsheet-model.ts';
-import { radioPlayAudio, wipeRadio } from './radio-bridge.ts';
+import { getRadio, radioPlayAudio, wipeRadio } from './radio-bridge.ts';
 import { forgetOnboarding } from './onboarding.ts';
 import { adoptNative, resetSeam } from './api.ts';
 
@@ -54,6 +54,25 @@ describe('the act', () => {
     expect((await radioPlayClip(undefined, undefined, 'play', 'other-id', rec, place)).status).toBe('error');
     expect((await radioPlayClip(undefined, undefined, 'play', withFp.clipID, 'not json', place)).message).toBe('That clip is not available any more.');
     expect(placed.length).toBe(2);
+  });
+});
+
+describe('the act, on the real path', () => {
+  test('P4b with no injected placer a play puts the clip entry on the run sheet and tells the deck (the radio\'s own verb)', async () => {
+    resetSeam(); forgetOnboarding(); await wipeRadio(undefined);
+    const seen: { op: string; name?: string; args?: Record<string, unknown> }[] = [];
+    const native = { available: true, later: async (r: { op: string; name?: string; args?: Record<string, unknown> }) => {
+      seen.push(r);
+      if (r.op === 'radioFacts') return { at: 0, ready: true, inbox: [], position: { block: 0, seconds: 0 }, foreground: true, sentences: [], sentenceIndex: 0, progress: 0 };
+      if (r.op === 'deck') return { why: r.name === 'deckPlay' ? 'playing' : 'empty', item: r.name === 'deckPlay' ? String(r.args?.id) : '', block: 0, seconds: 0, duration: 100, held: [], seq: 1, acked: 0, journal: [] };
+      return { ok: true };
+    } };
+    adoptNative(native as never, 'test');
+    expect(await radioPlayClip(undefined, native as never, 'play', withFp.clipID, JSON.stringify(withFp.raw))).toEqual({ status: 'ok', message: '' });
+    const r = await getRadio(undefined, native as never, false);
+    const on = r.rt.store.onAir();
+    expect(on?.kind).toBe('clip'); expect(on?.source?.start).toBe(withFp.start); expect(on?.source?.end).toBe(withFp.end);
+    expect(seen.some((x) => x.op === 'deck' && x.name === 'deckPlay')).toBe(true);
   });
 });
 

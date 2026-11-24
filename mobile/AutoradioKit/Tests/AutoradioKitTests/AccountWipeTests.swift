@@ -63,6 +63,8 @@ final class AccountWipeTests: XCTestCase {
         func fill() {
             write("Application Support/Autoradio/runsheet.json", Self.marker); write("Application Support/Autoradio/steer-queue.json", Self.marker)
             write("Application Support/Autoradio/front-titles.json", Self.marker); write("Library/Caches/AutoradioOpening/opening-1.pcm", Self.marker)
+            write("Application Support/Autoradio/local-entries.json", Self.marker)      // the deleted HeldRest's file
+            write("Application Support/Autoradio/themes/old-theme.json", Self.marker)      // the old build's user themes (never read)
             write("Application Support/Autoradio/keep.json", "other")
         }
         fill(); XCTAssertFalse(markerInFiles().isEmpty)

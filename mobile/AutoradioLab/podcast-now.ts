@@ -24,7 +24,7 @@ export function podcastNowOf(onAir: Entry | undefined, deck: DeckState): PodNow 
 /** The source: the pulse's arguments only make it asked again (a data source may not read the clock). Never throws. */
 export async function podcastNow(storage: Store | undefined, native: NativeReader | undefined): Promise<PodNow> {
   try {
-    const r = await getRadio(storage as never, native);
+    const r = await getRadio(storage as never, native, false);
     const e = r.rt.store.onAir();
     if (!e) return NONE;
     return podcastNowOf(e, await r.rt.deckNow());

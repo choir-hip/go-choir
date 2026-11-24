@@ -10,11 +10,6 @@ public struct TakeResponds: Codable, Equatable, Sendable {
     public var title: String
     public init(route: String, title: String) { self.route = route; self.title = title }
 
-    var json: [String: Any] { ["route": route, "title": title] }
-    static func parse(_ v: Any?) -> TakeResponds? {
-        guard let o = v as? [String: Any], let r = o["route"] as? String, !r.isEmpty else { return nil }
-        return TakeResponds(route: r.hasPrefix("/") ? String(r.dropFirst()) : r, title: (o["title"] as? String) ?? "")
-    }
 }
 
 /// Where the phone keeps these (its own support folder).

@@ -94,6 +94,7 @@ extension AutoradioModule {
     func registerReader() {
         pageSources.register(HeldPageSource())
         ReaderFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerFollow"]) } }
+        ReaderAim.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerAim"]) } }
 
         handle("readerFollow") { [unowned self] _, reply in reply(json(ReaderFollow.shared.info)) }
         handle("readerAim") { [unowned self] _, reply in reply(json(ReaderAim.shared.info)) }

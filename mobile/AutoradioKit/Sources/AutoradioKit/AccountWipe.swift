@@ -86,12 +86,12 @@ public final class AccountWipe: @unchecked Sendable {
         register("retrieval-bridge") { RetrievalBridge.shared.clear() }     // the last turn's record and a pending ask belong to the account that left
     }
 
-    /// The files of the Swift build's run sheet, steer queue, written-ahead opening (audio and text) and front titles. This build never reads or writes them (shared code keeps its own under `app:/data`),
+    /// The files of the Swift build's run sheet, steer queue, held rest of a cut passage (`local-entries.json`), written-ahead opening (audio and text), front titles and user themes (`themes/`: the old choice and files are never read). This build never reads or writes them (shared code keeps its own under `app:/data`),
     /// and the owner's rule is that a page moved to Exact carries nothing over: no migration. They hold the old account's text, so they are removed once at boot and again at sign-out.
     public static func oldBuildFiles(support: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Autoradio"),
                                      caches: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first) -> [URL] {
         var out: [URL] = []
-        if let support { out += ["runsheet.json", "steer-queue.json", "front-titles.json"].map { support.appendingPathComponent($0) } }
+        if let support { out += ["runsheet.json", "steer-queue.json", "front-titles.json", "local-entries.json"].map { support.appendingPathComponent($0) } + [support.appendingPathComponent("themes", isDirectory: true)] }
         if let caches { out.append(caches.appendingPathComponent("AutoradioOpening", isDirectory: true)) }
         return out
     }

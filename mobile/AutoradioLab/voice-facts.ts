@@ -16,9 +16,9 @@ export function voiceFacts(entries: Entry[]): VoiceFact[] {
   return out;
 }
 
-/** The story an entry on air is about: its page, else the first story it cites. Nothing for an entry with none, and nothing for the station's own words (an opening, a transition, an answer, a result) or a take. */
+/** The story an entry on air is about: its page, else the first story it cites. Nothing for an entry with none, a take or a transition (as the Swift `TakeResponds.from` did: an answer or a result that cites a story still gives it). */
 export function respondsOf(e: Entry | undefined): { route: string; title: string } | undefined {
-  if (!e || e.kind === 'take' || e.kind === 'transition' || e.kind === 'opening' || e.kind === 'answer' || e.kind === 'result') return undefined;
+  if (!e || e.kind === 'take' || e.kind === 'transition') return undefined;
   const addr = openAddress(e);
   if (addr.startsWith('pub:')) return { route: addr.slice(4), title: displayTitle(e) };
   const c = builtOn(e).find((b) => b.address.startsWith('pub:'));
