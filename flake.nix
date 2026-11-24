@@ -341,6 +341,8 @@
         "cmd/escrowkey" "cmd/taperepack"
         # computer bundle export/verify/import (S3/S4); beside corpusd
         "cmd/choir-bundle"
+        # the operator's one-off deletion of unproved accounts (docs/ship/purge-unproved.md); installed beside auth (extraBins), run by hand
+        "cmd/purge-unproved"
       ];
       # Keep source selection structural. Go owns the package dependency graph;
       # repeating it here as per-service internalDirs caused fallback builds to
@@ -411,6 +413,8 @@
         auth = mkGoService {
           pname = "auth";
           subPackage = "cmd/auth";
+          # operator tool: on Node B /var/lib/go-choir/services/auth/bin/purge-unproved; no unit runs it
+          extraBins = [ "purge-unproved" ];
         };
         proxy = mkGoService {
           pname = "proxy";
