@@ -54,4 +54,38 @@ final class TtsRootTests: XCTestCase {
         pin.purge?()
         XCTAssertFalse(FileManager.default.fileExists(atPath: KnownModels.ttsRoot.appendingPathComponent("pocket-tts/phonon").path))
     }
+
+    // Review round 3: Phonon's pack is a subfolder of Pocket's repo folder (`pocket-tts/phonon`). Each model owns ITS files only: neither's seal covers the other's, and neither's Remove, purge or retire deletes the other's.
+    //  R5 with both installed and sealed, removing Pocket leaves Phonon sealed and present (and its files on disk); removing Phonon leaves Pocket sealed and present.
+    //  R6 Pocket's manifest holds none of Phonon's files; a killed fetch's clean-up (`purge`) and a new pin's (`retire`) of Pocket also leave Phonon alone.
+    func bothInstalled() -> (root: URL, manifests: URL, pocket: ModelPin, phonon: ModelPin) {
+        let base = tmp(), manifests = tmp()
+        KnownModels.ttsRootProvider = { base.appendingPathComponent("fluidaudio/Models", isDirectory: true) }
+        write(KnownModels.ttsRoot, "pocket-tts/v2/en/model.bin"); write(KnownModels.ttsRoot, "pocket-tts/constants.bin")
+        write(KnownModels.ttsRoot, "pocket-tts/phonon/phonon-31m-en/constants_bin/en_us_Easton.safetensors"); write(KnownModels.ttsRoot, "pocket-tts/phonon/phonon-31m-en/model.bin")
+        let pocket = try! XCTUnwrap(ModelPins.current("pocket-tts", root: manifests)), phonon = try! XCTUnwrap(ModelPins.current("phonon-31m", root: manifests))
+        XCTAssertTrue(pocket.seal?() ?? false); XCTAssertTrue(phonon.seal?() ?? false)
+        return (KnownModels.ttsRoot, manifests, pocket, phonon)
+    }
+    func testR5RemovingOneOfThePairLeavesTheOtherSealedAndOnDisk() {
+        let a = bothInstalled()
+        a.pocket.erase?()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: a.root.appendingPathComponent("pocket-tts/v2").path), "Pocket's own files went")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: a.root.appendingPathComponent("pocket-tts/phonon/phonon-31m-en/model.bin").path), "Phonon's did not")
+        XCTAssertTrue(a.phonon.present(), "Phonon is still sealed and present")
+        XCTAssertFalse(a.pocket.onDisk?() ?? true)
+        let b = bothInstalled()
+        b.phonon.erase?()
+        XCTAssertTrue(b.pocket.present(), "removing Phonon does not break Pocket's seal")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: b.root.appendingPathComponent("pocket-tts/v2/en/model.bin").path))
+    }
+    func testR6PocketsManifestHoldsNoneOfPhononsFilesAndItsCleanUpsSpareThem() {
+        let a = bothInstalled()
+        let man = try! XCTUnwrap(ModelManifests.build(pin: "p", base: a.root, folders: ["pocket-tts"], excluding: ["pocket-tts/phonon"]))
+        XCTAssertFalse(man.files.contains { $0.path.contains("phonon") }); XCTAssertTrue(man.files.contains { $0.path == "pocket-tts/constants.bin" })
+        a.pocket.purge?()
+        XCTAssertTrue(a.phonon.present(), "a killed Pocket fetch's clean-up leaves Phonon alone")
+        let c = bothInstalled(); _ = c.pocket.retire?()
+        XCTAssertTrue(c.phonon.present())
+    }
 }
