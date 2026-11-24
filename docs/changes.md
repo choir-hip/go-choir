@@ -17,6 +17,15 @@ Why: owner, 2026-11-24: "get rid of the zai connection in the code. havent used 
 Proof: `go test -count=1` on provider, gateway, modelcatalog, types, choir, modelpolicy, vmmanager and toolregistry; the edited agentcore and textureowner tests by name. Deployed: the gateway's start log no longer says `resolved zai` (not yet checked).
 Replaced: Z.AI as a configurable provider. Undo: revert the commit; the key is still in the host's `gateway-provider.env` until it is removed there.
 
+## 2026-11-24: the new privacy policy is published at choir.news/privacy
+
+What: `frontend/public/legal/privacy-policy.md` is replaced by the approved draft (effective 2026-11-24), with every editor's note and tag removed and its tables turned into lists (`LegalDocument.svelte` renders only headings, paragraphs and `- ` items, so a table would show as run-together text). `docs/ship/privacy-policy.md` now only points at the served file.
+Why: App Review reads choir.news/privacy, which served the October policy. The owner approved the new text (2026-11-24).
+Truth fixes made while removing the tags: voice audio is never written on the phone (only the words of the newest 20 turns, none older than 30 days, wiped at sign-out); server logs state no deletion time (lane `log-retention` is not on main); the web access log's full IP address is disclosed; the unbuilt "report a story" and "withdraw AI consent in Settings" are replaced by what exists (write to 000@choir.news; delete the account); the 7-day archive is gone (the account-delete lane keeps none). Section 9 (in-app deletion, 72 hours, backups) is the account-delete lane's wording and is true only when that lane is deployed.
+Proof: the served file has no tag or placeholder (grep); not proved deployed yet (`curl https://choir.news/legal/privacy-policy.md` after deploy).
+Replaced: the October policy (kept in git history).
+Undo: revert the commit.
+
 ## 2026-11-24: the privacy policy and terms load again on choir.news
 
 What: the web build's nix source filter now keeps every file under `frontend/public/`. It kept only listed suffixes (.js, .ts, .svelte, .css, .html and a few named files), so `public/legal/privacy-policy.md`, `public/legal/terms-of-service.md` and the reader's sample PDF never reached the deployed site, and `/legal/*.md` answered with the app's HTML shell. The Privacy and Terms pages (and the app's links to them) showed that HTML as text.
