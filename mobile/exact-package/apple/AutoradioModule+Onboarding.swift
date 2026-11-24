@@ -24,6 +24,12 @@ final class OnboardingController: @unchecked Sendable {
     private var setup: VoiceSetup?
     /// The stages the running setup was asked to do (empty: all of them).
     private var runStages: [String] = []
+    /// stage -> the model id the running (or last) setup was asked to fetch: what a row on Settings > Voice and models is downloading, by its own id.
+    private var runModels: [String: String] = [:]
+    /// The voice-print model's own fetch is running (it is not a setup stage).
+    private var speakerFetching = false
+    /// The Test lines (per account) and the last failure of each model's download (`ModelRunBook`). Native because the runs are.
+    private let book = ModelRunBook()
     /// Learning the person's voice (voice onboarding; Voice/VoiceEnrolment.swift): the sentences, the profile, the check.
     let capture = EnrolCapture(gate: .shared)
     /// The ONE owner of the microphone for enrolment (AutoradioKit Voice/SetupMicLease.swift): every open has its close on every exit, and between sentences the microphone is off and the engine's frames go to the tap alone.
@@ -72,7 +78,8 @@ final class OnboardingController: @unchecked Sendable {
     /// `only` false: the whole voice setup (the configurator plans the pipeline together, unless the person picked models). `only` true: just `stages` (`["voice"]` is the radio's speaking voice, asked for first and alone: owner, 2026-11-23), each on its own ladder.
     /// `picks` (stage -> model id): the models the person chose in the download step (the list's recommendation when they chose none), tried first on their stage; with picks the configurator, which would choose other models, is not used (the person's choice is what is fetched).
     /// `speaker`: also fetch the voice-print model (about 8 MB) the person agreed to with the rest, which is what learning their voice needs.
-    func begin(stages: [String] = [], only: Bool = false, picks: [String: String] = [:], speaker: Bool = false) {
+    /// `row`: the press was ONE model's Download on Settings > Voice and models: it fails as itself, at once (no wait for a choice, no built-in floor marked ready in its place; `VoiceSetup.rowDownload`).
+    func begin(stages: [String] = [], only: Bool = false, picks: [String: String] = [:], speaker: Bool = false, row: Bool = false) {
         if speaker { fetchSpeakerModel() }
         if only && stages.isEmpty { return }
         lock.lock()
@@ -88,12 +95,12 @@ final class OnboardingController: @unchecked Sendable {
         let stall = 20.0, patience = 45.0
         // The configurator picks one model per role for THIS phone, the whole pipeline resident together, by measuring it: only when the person did not choose.
         let configurator: ConfigBackend? = (only || !picks.isEmpty) ? nil : LiveConfigBackend()
-        var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, configBackend: configurator)
-        if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
+        var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, rowDownload: row, configBackend: configurator)
+        if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, rowDownload: row, configBackend: configurator) }
         if only { for (st, c) in planned.chosen { s.prefer(st, c) } }
         else { for (job, id) in picks { if let st = SetupStage(rawValue: job), let c = SetupCatalog.ladder(st).first(where: { $0.id == id }) ?? ModelOffer.candidate(job: job, id: id) { s.prefer(st, c) } } }
         s.onChange = { [weak self] in self?.changed() }
-        set { setup = s; runStages = only ? stages : []; applying = true }
+        set { setup = s; runStages = only ? stages : []; runModels = Dictionary(uniqueKeysWithValues: planned.chosen.map { ($0.key.rawValue, $0.value.id) }); applying = true }
         let gen = AccountWipe.generation
         Task { [weak self, s] in
             await s.run(only: only ? run : nil)
@@ -103,7 +110,8 @@ final class OnboardingController: @unchecked Sendable {
 
     /// The voice-print model (WeSpeaker, about 8 MB) is fetched only after the person agreed on the download step; once loaded the gate can listen.
     func fetchSpeakerModel() {
-        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e; self.changed() } }
+        set { speakerFetching = true }
+        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e } else { self.book.speakerFailed("The voice-print model could not be fetched. Press Download to try again.") }; self.set { self.speakerFetching = false } }
     }
 
     private func setupFinished(_ s: VoiceSetup, gen: Int, merging: Bool = false) {
@@ -119,13 +127,10 @@ final class OnboardingController: @unchecked Sendable {
         }
         // Readiness was written by setup itself, after each check passed (VoiceSetup.runStage); the launch choice and this one both read it.
         guard gen == AccountWipe.generation else { changed(); return }
-        // Speech detection and recognition come from the model list as it stands now that the models are ready, with the composite's parameters
-        // and applied to the running listener (a bare stage id would drop them, and a configuration set at launch would stay until the next launch).
-        for (kind, id) in s.choices where kind != .speechBounds && kind != .transcriber && module.runtime.registry.stages(kind).contains(where: { $0.id == id }) {
-            module.runtime.setStage(kind, id: id)
-        }
-        // The responder model setup chose is the one the phone talks with (read again at every start).
-        if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }), KnownModels.isPinned(r.chosen) { ResponderChoice.current = r.chosen }
+        // The first run's choices become the running ones; a row's Download applies none (Download only fetches and verifies, only Use changes what is in use): `LabRuntime.applySetupChoices`.
+        module.runtime.applySetupChoices(s)
+        // A row that failed keeps its reason on its row until it is pressed again (`ModelRunBook`).
+        for r in s.rows where r.state == "failed" { lock.lock(); let id = runModels[r.stage]; lock.unlock(); if let id { book.failed(id, r.statusLine) } }
         changed()
     }
 
@@ -272,10 +277,43 @@ final class OnboardingController: @unchecked Sendable {
     /// Sign-out: nothing of the voice side's first run reaches the next account.
     func reset() {
         stop(); DownloadDoor.shared.reset(); SpeakerGate.shared.forget(); module.runtime.setHandsFree(false)           // sign-out: the microphone is closed and the switch stays off for the next person
+        book.reset()
         set { setup = nil; mic = "unasked"; level = 0; heard = ""; route = ""; talking = false; over = false; picked = 0; finishAsked = 0 }
     }
 
     func mirror(finished f: Bool) { lock.lock(); over = f; lock.unlock() }
+
+    // MARK: Voice and models: the download's progress, Use and Test (native because the files, the choices the runtime reads, and the models themselves are)
+
+    /// The progress (0...1) of the download the row of this model is running, or nil. The voice cards show it for every voice of the model.
+    func runningProgress(model: String) -> Double? {
+        lock.lock(); defer { lock.unlock() }
+        guard let stage = runModels.first(where: { $0.value == model })?.key, let row = setup?.rows.first(where: { $0.stage == stage }) else { return model == ModelOffer.speakerID && speakerFetching ? 0 : nil }
+        return ["downloading", "waiting", "preparing", "stalled"].contains(row.state) ? row.progress : nil
+    }
+
+    /// Make a model on the phone the one in use for its job (`LabRuntime.useModel`): the choice is kept and the stage that runs it is set. A model that is not on the phone changes nothing.
+    func use(job: String, id: String, live: Bool) {
+        if module.runtime.useModel(job: job, id: id, live: live), job == "voice", let o = VoiceCatalog.options.first(where: { $0.modelID == id }) { VoiceController.shared?.sampler.syncSelected(o.id) }
+        changed()
+    }
+
+    /// The Test button: one run, reported through the facts. A second press while it runs does nothing; a report from before a sign-out is dropped (`ModelRunBook`).
+    func test(job: String, id: String) {
+        let key = "\(job):\(id)"
+        if book.isRunning(key) { return }
+        let gen = AccountWipe.generation
+        book.test(key, state: "working", line: "", ms: 0, generation: gen); changed()
+        Task { [weak self] in
+            guard let self else { return }
+            await ModelTrial.run(job: job, id: id, backend: LiveTrialBackend(controller: self), report: { state, line, ms in self.book.test(key, state: state, line: line, ms: ms, generation: gen); self.changed() })
+        }
+    }
+
+    /// The microphone for `seconds`, through the same lease the voice learning uses (`SetupMicLease.record`: the frames go to this recording alone, and the lease is given back whole on every exit). nil when the microphone is refused.
+    func recordAudio(seconds: Double) async -> [Float]? {
+        await lease.record(seconds: seconds)
+    }
 
     // MARK: What shared code sees
 
@@ -292,13 +330,20 @@ final class OnboardingController: @unchecked Sendable {
         let ready = ModelOffer.readyStages(choices: readyChoices0)
         var readyChoices = readyChoices0
         if WeSpeakerEmbedder.standard().onDisk { readyChoices["speaker"] = ModelOffer.speakerID }
-        let inUse = ModelInUse.ids(config: module.runtime.configuration, registry: module.runtime.registry, responder: ResponderChoice.current)
-        let offers = ModelOffer.jobs(profile: profile, ready: readyChoices, inUse: inUse).map { $0.dict }
+        let inUse = ModelInUse.ids(config: module.runtime.configuration, registry: module.runtime.registry, responder: ResponderChoice.current, decision: DecisionChoice.current)
+        let offers = ModelOffer.jobs(profile: profile, ready: readyChoices, inUse: inUse, chosen: ["responder": ResponderChoice.current, "decision": DecisionChoice.current], isReady: { Voices.readiness.isReady(model: $0) }).map { $0.dict }
+        var runs: [[String: Any]] = (setup?.rows ?? []).compactMap { r in
+            guard let id = runModels[r.stage], r.state != "ready" else { return nil }
+            return ["id": id, "state": r.state == "stalled" ? "downloading" : r.state, "progress": r.progress, "line": r.statusLine]
+        }
+        if speakerFetching { runs.append(["id": ModelOffer.speakerID, "state": "downloading", "progress": 0.0, "line": ""]) }
+        runs = book.runs(current: runs, isReady: { $0 == ModelOffer.speakerID ? WeSpeakerEmbedder.standard().onDisk : Voices.readiness.isReady(model: $0) })
+        let trials: [[String: Any]] = book.tests().map { ["key": $0.key, "state": $0.state, "line": $0.line, "ms": $0.ms] }
         var device = ""
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
         return ["rows": rows, "summary": setup?.summary ?? [],
                 "totalLabel": setup?.totalLabel ?? SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(SetupCatalog.plan(for: profile)), onWiFi: profile.onWiFi),
-                "offers": offers, "enrol": capture.facts(), "runStages": runStages, "voiceReady": ready.contains("voice"), "hearingReady": ready.contains("transcriber") && ready.contains("bounds"),
+                "offers": offers, "modelRuns": runs, "modelTests": trials, "enrol": capture.facts(), "runStages": runStages, "voiceReady": ready.contains("voice"), "hearingReady": ready.contains("transcriber") && ready.contains("bounds"),
                 "device": device, "onWiFi": profile.onWiFi, "setupStarted": setup?.isStarted ?? false, "setupFinished": setup?.isFinished ?? false,
                 "mic": mic, "level": level, "heard": heard, "route": route, "talking": talking, "voicePicked": picked, "finishAsked": finishAsked]
     }
@@ -319,7 +364,7 @@ extension AutoradioModule {
         guard let c = OnboardingController.shared else { return [:] }
         switch r["op"] as? String ?? "" {
         case "obFacts": return c.facts()
-        case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [], only: (r["only"] as? Bool) ?? false, picks: (r["picks"] as? [String: String]) ?? [:], speaker: (r["speaker"] as? Bool) ?? false)
+        case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [], only: (r["only"] as? Bool) ?? false, picks: (r["picks"] as? [String: String]) ?? [:], speaker: (r["speaker"] as? Bool) ?? false, row: (r["row"] as? Bool) ?? false)
         // The system's microphone permission, read and nothing asked (shared code decides whether to show its plain line first: micask.ts). Native because only the platform knows it.
         // Shared code's consent record, as it stands: native's ONE download door refuses every model fetch without it (DownloadDoor). Native because the transport is.
         case "obConsent": DownloadDoor.shared.sync(agreed: (r["agreed"] as? [String: String]) ?? [:])
@@ -328,10 +373,14 @@ extension AutoradioModule {
             let id = r["id"] as? String ?? ""
             let m = c.module
             let removal = await ModelDeletion.remove(model: id, pin: ModelPins.current(id),
-                                                     inUse: { ModelInUse.ids(config: m.runtime.configuration, registry: m.runtime.registry, responder: ResponderChoice.current) },
+                                                     inUse: { ModelInUse.ids(config: m.runtime.configuration, registry: m.runtime.registry, responder: ResponderChoice.current, decision: DecisionChoice.current) },
                                                      busy: { OnboardingController.shared?.setupRunning ?? false })
             c.changed()
             return ["result": "\(removal)"]
+        // Voice and models, Use: the model the person chose for a job is the one the phone uses (native keeps the choice with the runtime that reads it).
+        case "obUseModel": c.use(job: r["job"] as? String ?? "", id: r["id"] as? String ?? "", live: (r["live"] as? Bool) ?? false)
+        // Voice and models, Test: one run of one model, which needs the model itself (it loads it, listens, speaks, answers). The result comes back through the facts (modelTests).
+        case "obModelTest": c.test(job: r["job"] as? String ?? "", id: r["id"] as? String ?? "")
         case "obMicState": return ["state": MicPermissionWord.current()]
         case "obEnrolBegin": c.beginCapture()
         case "obEnrolKeep": return ["kept": c.capture.keep(), "usable": c.capture.usable]
@@ -354,4 +403,30 @@ extension AutoradioModule {
         }
         return [:]
     }
+}
+
+
+/// The live half of ModelTrial (the Test button on a model's row). Native only because each call needs the model itself or the microphone and the speaker.
+struct LiveTrialBackend: TrialBackend {
+    let controller: OnboardingController
+    private var provider: ModelProvider { get throws { guard let p = ModelProviders.current else { throw LabError.unavailable(ModelProviders.missingNote) }; return p } }
+    func record(seconds: Double) async -> [Float]? { await controller.recordAudio(seconds: seconds) }
+    func transcribe(_ id: String, _ audio: [Float]) async throws -> String { try await provider.transcribe(id, audio) }
+    func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) { try await provider.speechSpan(id, audio) }
+    func answer(_ id: String, job: String, prompt: String) async throws -> String { try await provider.answer(id, job: job, prompt: prompt) }
+    func speak(_ id: String, _ sentence: String) async throws -> Double {
+        guard let option = VoiceCatalog.options.first(where: { $0.modelID == id }) else { throw LabError.badInput("this model has no voice to speak with") }
+        var o = option; o.sample = sentence
+        return try await VoiceController.play(o, on: controller.module.runtime)
+    }
+    func voiceprint(_ audio: [Float]) async throws -> String {
+        let gate = SpeakerGate.shared
+        guard gate.canListen else { return "The voice-print model is not loaded yet. Try again in a moment." }
+        switch await gate.judge(audio) {
+        case .match: return "That is the voice you taught it."
+        case .mismatch: return "That does not sound like the voice you taught it."
+        case .unknown: return "The voice-print model works, but it has not been taught your voice yet. Use Learn my voice."
+        }
+    }
+    func search(_ query: String) async throws -> String { throw LabError.unavailable("the search test is run by the shared code") }
 }

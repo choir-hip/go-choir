@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { onboardingAct, onboardingPage, forgetOnboarding, wipeOnboarding, parseProgress, startStep, noVoice, PROGRESS_FILE, EDIT, SETUP,
   MIC_REFUSED_LINE, MIC_SILENT_LINE, TALK_REFUSED_LINE, HEARING_AGAIN_LINE, type Env, type VoiceFacts, type Device } from './onboarding.ts';
 import { resetSeam, nextGeneration, bindNative } from './api.ts';
-import { firstRunOver } from './onboarding.ts';
+import { firstRunOver, liveEnv, NOT_RECORDED_LINE } from './onboarding.ts';
 import type { OfferJob } from './offers.ts';
 import { consentPick, forgetConsent } from './consent.ts';
 import { FAILED_LINE, type Writer } from './edition-writer.ts';
@@ -233,6 +233,7 @@ describe('the progress file is read once, and a failed read is not "no progress"
   });
 });
 
+const liveAgreeSpy = (asked: string[][]) => async (m: boolean, ids?: string[]): Promise<boolean> => { asked.push(ids ?? []); return (await liveEnv(storage).agree!(m, ids ?? [])) === true; };
 describe('first run without an account, and the agreement', () => {
   test('O15 with no key the first run is over for the station; with a locked key it is not', async () => {
     bindNative({ later: async (r) => (r.op === 'keystate' ? { state: 'absent' } : {}) });
@@ -247,6 +248,21 @@ describe('first run without an account, and the agreement', () => {
     forgetOnboarding(); files.clear(); calls = []; agreed.length = 0; v = { ...v, onWiFi: false };
     await act('begin', '', '', SETUP, e); expect(agreed).toEqual([]); expect(ops()).not.toContain('obSetupBegin');
     await act('begin', 'true', '', SETUP, e); expect(agreed).toEqual([true]); expect(ops()).toContain('obSetupBegin');
+  });
+  test('O16b the first run agrees to the files it shows, model by model (the same keys Voice and models uses), never to a model it did not show', async () => {
+    const asked: string[][] = [];
+    const o = (job: string, group: string, ids: string[]): OfferJob => ({ job, group, host: 'Example Hub', options: ids.map((id, i) => ({ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: i === 0, ready: false })) });
+    v = { ...v, offers: [o('voice', 'voice', ['a', 'b']), o('transcriber', 'voice-rest', ['c']), o('speaker', 'voice-rest', ['print']), o('search', 'search', ['e'])] };
+    await act('begin', '', '', SETUP, env({ agree: async (_m, ids) => { asked.push(ids ?? []); } }));
+    expect(asked).toEqual([['a', 'c', 'print']]);
+  });
+  test('O16c every model shown is already on the phone (downloaded from Voice and models): the first run still begins, and agrees to nothing new', async () => {
+    const o = (job: string, group: string, id: string): OfferJob => ({ job, group, host: 'Example Hub', options: [{ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: true, ready: true }] });
+    v = { ...v, offers: [o('voice', 'voice', 'a'), o('transcriber', 'voice-rest', 'c')] };
+    expect(await liveEnv(storage).agree!(false, [])).toBe(true);                                  // nothing to agree to is not a failure to agree
+    const asked: string[][] = [];
+    const r = await act('begin', '', '', SETUP, env({ agree: liveAgreeSpy(asked) }));
+    expect(asked).toEqual([[]]); expect(r.message).not.toBe(NOT_RECORDED_LINE); expect(r.step).toBe('setup');
   });
 });
 

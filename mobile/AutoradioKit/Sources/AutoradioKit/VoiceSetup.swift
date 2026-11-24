@@ -102,29 +102,24 @@ public struct DeviceProfile: Codable, Equatable, Sendable {
 /// The model table for setup: per stage, a ladder from the recommended model to the floor. Sizes are the model cards'
 /// figures (ModelHub.catalog), not measurements; setup replaces them with measured numbers in the record.
 public enum SetupCatalog {
-    /// The size of the models a row downloads beside its own (`ListenerPipeline.companions`), from the catalog.
-    /// The memory of the models a row brings beside its own (they are held in memory together).
-    static func companionMB(_ id: String) -> Double {
-        ListenerPipeline.companions(of: id).reduce(0) { n, c in n + (CandidateTable.all.first { $0.id == c }?.residentMB ?? 0) }
-    }
-    static func companionBytes(_ id: String) -> Int64 {
-        ListenerPipeline.companions(of: id).reduce(0) { n, c in n + (KnownModels.managed.first { $0.id == c }?.approxBytes ?? 0) }
-    }
     public static func ladder(_ s: SetupStage) -> [SetupCandidate] {
         switch s {
         case .bounds:
             return [SetupCandidate(id: "silero-vad-v6.2.1", label: "Silero speech detector", bytes: 2_000_000, minMemoryGB: 1, kitStageID: "silero-vad", needsMB: 110),
                     SetupCandidate(id: "energy", label: "Level detector built in", bytes: 0, minMemoryGB: 0, kitStageID: "energy-vad")]
         case .transcriber:
-            // Fluid Speech Mini first (the owner's choice, 2026-11-24). Its row downloads the live-words model with it (`ListenerPipeline.companions`:
-            // the pipeline needs both), so the size and the memory are the two together.
-            return [SetupCandidate(id: "fluid-speech-mini", label: "Fluid Speech Mini, the listener, with live words", bytes: KnownModels.fluidSpeechMini.totalBytes + companionBytes("fluid-speech-mini"), minMemoryGB: 4,
-                                   kitStageID: ListenerPipeline.liveThenFinalStageID, needsMB: 550 + companionMB("fluid-speech-mini")),
-                    SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener, with live words", bytes: 480_000_000 + companionBytes("parakeet-tdt-0.6b-v2"), minMemoryGB: 6, kitStageID: "parakeet-tdt", needsMB: 700 + companionMB("parakeet-tdt-0.6b-v2")),
+            // Each row is its own model, size and check (2026-11-24: the press on a model's row is the agreement to that model's files only; the live-words model has its own row on Settings > Voice and models).
+            // Fluid Speech Pro first on a phone with 8 GB or more (physical memory reads about 7.4 GB there, so the line is 7; a 6 GB phone reads about 5.6),
+            // Mini on every other phone that can hold it: the recommended recogniser depends on the device's size (owner, 2026-11-24).
+            return [SetupCandidate(id: "fluid-speech-pro", label: "Fluid Speech Pro, the more accurate listener, with live words", bytes: KnownModels.fluidSpeechPro.totalBytes, minMemoryGB: 7,
+                                   kitStageID: ListenerPipeline.liveThenFinalStageID, needsMB: 900),
+                    SetupCandidate(id: "fluid-speech-mini", label: "Fluid Speech Mini, the listener, with live words", bytes: KnownModels.fluidSpeechMini.totalBytes, minMemoryGB: 4,
+                                   kitStageID: ListenerPipeline.liveThenFinalStageID, needsMB: 550),
+                    SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener, with live words", bytes: 480_000_000, minMemoryGB: 6, kitStageID: "parakeet-tdt", needsMB: 700),
                     SetupCandidate(id: "parakeet-eou-120m", label: "Parakeet, the smaller listener", bytes: 250_000_000, minMemoryGB: 3, kitStageID: "parakeet-eou", needsMB: 250),
                     SetupCandidate(id: "apple-speech", label: "Apple's recogniser", bytes: 0, minMemoryGB: 0, kitStageID: "apple-speech")]
         case .voice:
-            return [SetupCandidate(id: "kokoro-82m-ane", label: "Kokoro voice", bytes: 350_000_000, minMemoryGB: 4, kitStageID: "kokoro", needsMB: 750),
+            return [SetupCandidate(id: "kokoro-82m-ane", label: "Kokoro voice", bytes: KnownModels.kokoroBytes, minMemoryGB: 4, kitStageID: "kokoro", needsMB: 750),
                     SetupCandidate(id: "pocket-tts", label: "Pocket voice, the lighter one", bytes: 300_000_000, minMemoryGB: 3, kitStageID: "pocket-tts", needsMB: 500),
                     SetupCandidate(id: "system-voice", label: "The system voice", bytes: 0, minMemoryGB: 0, kitStageID: "avspeech")]
         case .decision:
@@ -161,7 +156,8 @@ public enum SetupCatalog {
             // always stays). Physical memory is only the fallback guess, as a starting point of the ladder.
             var rest: [SetupCandidate]
             if let avail = d.availableMemoryMB {
-                rest = all.filter { $0.isFloor || $0.needsMB == 0 || $0.needsMB <= avail - 600 }
+                // A model that wants more physical memory than the phone has is passed over even when memory happens to be free (Pro on a 6 GB phone).
+                rest = all.filter { $0.isFloor || ($0.minMemoryGB <= d.memoryGB && ($0.needsMB == 0 || $0.needsMB <= avail - 600)) }
             } else {
                 rest = Array(all.drop(while: { $0.minMemoryGB > d.memoryGB }))
             }
@@ -289,9 +285,12 @@ public final class VoiceSetup: @unchecked Sendable {
     private var configFirst: Configuration?
     public private(set) var configurationRecord: ConfigurationRecord?
 
-    public init(backend: SetupBackend, profile: DeviceProfile, smaller: Bool = false, stallSeconds: Double = 20, patience: Double = 45, maxTries: Int = 3,
+    /// A person's press on ONE model's row (Settings > Voice and models): it fails as itself, at once. No wait for a choice, no fallback to the built-in floor marked ready in its place, no record item: the row says it failed and its own Download is the retry.
+    public let rowDownload: Bool
+
+    public init(backend: SetupBackend, profile: DeviceProfile, smaller: Bool = false, stallSeconds: Double = 20, patience: Double = 45, maxTries: Int = 3, rowDownload: Bool = false,
                 configBackend: ConfigBackend? = nil, verifier: ReadinessVerifier = Voices.verifier, now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) {
-        self.verifier = verifier; self.backend = backend; self.profile = profile; self.stallSeconds = stallSeconds; self.patience = patience; self.maxTries = maxTries; self.now = now
+        self.verifier = verifier; self.backend = backend; self.profile = profile; self.stallSeconds = stallSeconds; self.patience = patience; self.maxTries = maxTries; self.rowDownload = rowDownload; self.now = now
         self.configBackend = configBackend
         plan = SetupCatalog.plan(for: profile, smaller: smaller)
         for s in SetupStage.allCases { rowsByStage[s] = Self.freshRow(s, plan[s]![0]) }
@@ -478,7 +477,7 @@ public final class VoiceSetup: @unchecked Sendable {
                     var stalled = true
                     var why = "No progress for \(Int(stallSeconds)) seconds"
                     if case .failed(let m) = outcome { why = "The download failed (\(m))"; stalled = false }
-                    if tries >= maxTries || isLast {
+                    if tries >= maxTries || isLast || rowDownload {
                         reasons.append(why); fellFrom.append(cand.id); giveUp = true
                     } else {
                         update(s) { r in r.state = stalled ? "stalled" : "failed"; r.statusLine = why; r.canRetry = true; r.canFallback = true }
@@ -489,6 +488,7 @@ public final class VoiceSetup: @unchecked Sendable {
                 }
             }
             if !downloaded {
+                if rowDownload { markRowFailed(s, cand, reasons); return }
                 if isLast { markFloorOnly(s, ladder, fellFrom, reasons); return }
                 continue
             }
@@ -497,10 +497,6 @@ public final class VoiceSetup: @unchecked Sendable {
             let be = backend
             let check = await verifier.verify(model: cand.id, check: { try await be.check(cand) })      // the ONE writer of readiness
             if check.outputOK {
-                // A companion (the live-words model that comes with a batch recogniser) is checked itself; it is not marked on the primary's pass.
-                for companion in ListenerPipeline.companions(of: cand.id) {
-                    if let cc = SetupCatalog.ladder(s).first(where: { $0.id == companion }) { _ = await verifier.verify(model: companion, check: { try await be.check(cc) }) }
-                }
                 let numbers = Self.numbers(check)
                 update(s) { r in
                     r.state = "ready"; r.progress = 1; r.numbers = numbers
@@ -513,8 +509,14 @@ public final class VoiceSetup: @unchecked Sendable {
                 return
             }
             reasons.append(check.note.isEmpty ? "It did not pass its check on this phone" : check.note); fellFrom.append(cand.id)   // failure 4
+            if rowDownload { markRowFailed(s, cand, reasons); return }
             if isLast { markFloorOnly(s, ladder, fellFrom, reasons); return }
         }
+    }
+
+    /// A row download that failed: the row says so in the reason's words and is finished (nothing is chosen in its place).
+    private func markRowFailed(_ s: SetupStage, _ cand: SetupCandidate, _ reasons: [String]) {
+        update(s) { r in r.state = "failed"; r.progress = 0; r.statusLine = reasons.last ?? "The download did not finish."; r.canRetry = false; r.canFallback = false; r.isFallback = false }
     }
 
     /// Every candidate failed, the floor included: say so, and keep the floor as the choice (it exists).

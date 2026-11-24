@@ -23,6 +23,19 @@ public enum KnownModels {
             .appendingPathComponent("FluidAudio/Models", isDirectory: true)
     }
 
+    /// Where FluidAudio keeps its TEXT-TO-SPEECH models (Kokoro, Pocket TTS, Phonon): `TtsCacheDirectory` + `Models`, which is `Application Support/fluidaudio/Models` on iOS (lower case: the volume is case-sensitive) and `~/.cache/fluidaudio/Models`
+    /// on the Mac. The app module hands the library's own answer to `ttsRootProvider` when it registers (ModelHub.register); this default spells the same path for code that runs without the library (the tests of the Kit).
+    /// Every voice model's folders are looked up under THIS root (the seal, present, size, progress, Remove): a hand-written other spelling is a folder that does not exist on a phone.
+    public static var ttsRoot: URL { ttsRootProvider() }
+    public static let defaultTtsRoot: @Sendable () -> URL = {
+        #if os(macOS)
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache/fluidaudio/Models", isDirectory: true)
+        #else
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("fluidaudio/Models", isDirectory: true)
+        #endif
+    }
+    nonisolated(unsafe) public static var ttsRootProvider: @Sendable () -> URL = defaultTtsRoot
+
     /// The small language model: quick decisions and the spoken acknowledgement. Qwen3-0.6B Q8_0 from the official GGUF repo.
     public static let qwen3 = ModelSpec(
         id: "qwen3-0.6b-q8_0",
@@ -114,17 +127,57 @@ public enum KnownModels {
         credit: "Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).",
         copies: [["JointDecision.mlmodelc", "JointDecisionv3.mlmodelc"]])
 
+    /// Fluid Speech Pro by FluidVoice: the full-size sibling of Mini (multilingual Parakeet TDT 0.6B v3 fine-tune with one extra encoder block, 8-bit
+    /// encoder), Core ML build `FluidVoice-Labs/fluid-speech-pro-coreml`, 652,324,639 bytes in the files below. Read 2026-11-24 from Hugging Face's API
+    /// at the commit pinned here (the files the loader reads; README, examples, images and the duplicate `parakeet_v3_vocab.json` are not fetched).
+    /// It has the v3 contract exactly, so the pinned FluidAudio 0.18.3 loads it as `.ultra` from a local folder with the joint under the v3 name
+    /// (proved on the Mac, ON-DEVICE-MODELS.md); the vendor's example names `.fluidParakeetPro`, a version only in the altic-dev fork, which we do not need.
+    /// Licence CC BY 4.0; the credit is the one NOTICE asks for.
+    public static let fluidSpeechPro = ModelBundleSpec(
+        id: "fluid-speech-pro", repo: "FluidVoice-Labs/fluid-speech-pro-coreml", commit: "3b9d38a93d606f84011e5a0a669b7ea146375a22",
+        files: [
+            .init(path: "Decoder.mlmodelc/analytics/coremldata.bin", bytes: 243, sha256: "d172cb80cbf3a2cd768952557164db1b50b9c6aef16af3653d2fd7c03d9fe8e5"),
+            .init(path: "Decoder.mlmodelc/coremldata.bin", bytes: 491, sha256: "5059c27aa8cc44eb735247d335e18da599d15e30d67b3d2d5633679fc5806f8a"),
+            .init(path: "Decoder.mlmodelc/metadata.json", bytes: 3_311, sha256: "47ee2ad3514945b6ee3ccd4171ed3b2318e38f3b929e4398ce33b50aca606083"),
+            .init(path: "Decoder.mlmodelc/model.mil", bytes: 11_823, sha256: "9d605291dfdaef07ef88b8d3dbf0702766f1ceea5649d5d6dee4d2322d8fa678"),
+            .init(path: "Decoder.mlmodelc/weights/weight.bin", bytes: 23_604_992, sha256: "7b3e3a4e3fbb580ae990613915f8ea2309226d85999ae37120912b8352d1df9e"),
+            .init(path: "Encoder.mlmodelc/analytics/coremldata.bin", bytes: 243, sha256: "ac53d09c1b1f7f00fd1a07a630d57c4193089b19fe0d3b1571a3ecf91be62aa4"),
+            .init(path: "Encoder.mlmodelc/coremldata.bin", bytes: 427, sha256: "abfbc09cc0b8aba7911e38390390f1c5850e3665862238035052e015659ebb74"),
+            .init(path: "Encoder.mlmodelc/metadata.json", bytes: 2_758, sha256: "cc74be4442be9fe7d6428aa238364d40e91d3c0ca4ce3cfa2f4fef4ad7a42cee"),
+            .init(path: "Encoder.mlmodelc/model.mil", bytes: 621_903, sha256: "f71d68afe10e227c39d43af07c1aa1a88dd0eb2f63109a3e03711066e38a2e9d"),
+            .init(path: "Encoder.mlmodelc/weights/weight.bin", bytes: 613_088_448, sha256: "4abdc3b4af2ff9b2843105f29677f0e674d2b08638b1ce6feac60876c235c659"),
+            .init(path: "JointDecision.mlmodelc/analytics/coremldata.bin", bytes: 243, sha256: "3dd0d66c51f69d683c587d5c88f3256d5e1690105ecf9d8ca4b0c2b8e1c883c7"),
+            .init(path: "JointDecision.mlmodelc/coremldata.bin", bytes: 462, sha256: "febdb37a5ad1a119539c33cf68fac1c51f80f40f82c90b6ef312033191ff4063"),
+            .init(path: "JointDecision.mlmodelc/metadata.json", bytes: 2_728, sha256: "36fa268dd3c132c7305bbe1f17b5891a00f91caf0a883782375c35a97e2f4ada"),
+            .init(path: "JointDecision.mlmodelc/model.mil", bytes: 7_178, sha256: "618bc532db01d5d80da27d0137e4b50cf2f56dde54e0686a4a1e732d74c1a55c"),
+            .init(path: "JointDecision.mlmodelc/weights/weight.bin", bytes: 12_642_764, sha256: "f0939e8807dded497926a7c3634af698557ec8b155d804f8f40e367e97f90849"),
+            .init(path: "LICENSE", bytes: 18_657, sha256: "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"),
+            .init(path: "NOTICE", bytes: 451, sha256: "fb46bca8b337792a755ec6c77e0e33ebd27d181f46540e4b88382d179942625c"),
+            .init(path: "Preprocessor.mlmodelc/analytics/coremldata.bin", bytes: 243, sha256: "886396da81b6b29d60d79d903bd5d1f00077a7a4323f40cd2e9214d4205d8e6b"),
+            .init(path: "Preprocessor.mlmodelc/coremldata.bin", bytes: 429, sha256: "38f130eac9ffde8c684043d76e3eecdd3b6f9564d9efa59f7a87a34a272a4901"),
+            .init(path: "Preprocessor.mlmodelc/metadata.json", bytes: 2_606, sha256: "c25d98c19a181b7fa65ee50c34f5066f67172c22f0bf116a42b59443ee4bc37d"),
+            .init(path: "Preprocessor.mlmodelc/model.mil", bytes: 11_891, sha256: "71d4ad016334b3ad73ea7b69b6813feefe3b81f59e0b5e924f90f088cb02a7c9"),
+            .init(path: "Preprocessor.mlmodelc/weights/weight.bin", bytes: 2_150_580, sha256: "44180071e400951080786feb46452bffc4fb26363a703655ebadb760c8ad4030"),
+            .init(path: "config.json", bytes: 646, sha256: "b688c4d174c4fb043b368dad402ae91d4ae68cf2a53db42ff663340913c907db"),
+            .init(path: "parakeet_vocab.json", bytes: 151_122, sha256: "7ec60e05f1b24480736ec0eed40900f4626bce1fa9a60fd700ec7e2a59198735")
+        ],
+        folder: "fluid-speech-pro", license: "CC BY 4.0",
+        credit: "Fluid Speech Pro by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).",
+        copies: [["JointDecision.mlmodelc", "JointDecisionv3.mlmodelc"]])
+
     /// Models that are a folder of files fetched by the store.
-    public static var bundles: [ModelBundleSpec] { [fluidSpeechMini] }
+    public static var bundles: [ModelBundleSpec] { [fluidSpeechMini, fluidSpeechPro] }
 
     /// Models fetched by us over HTTP, pinned by SHA-256.
     public static var pinned: [ModelSpec] { [qwen3, qwen3Q4, qwen317, qwen35, lfm3Text, embeddingGemma2] + extraGGUF.map(\.spec) }
 
     /// More GGUF quantisations of the responder families, for the configurator (the candidate table, ModelCandidates.swift). Sizes and
     /// SHA-256 digests are the Hugging Face API file listings' (LFS object ids) fetched 2026-11-11; names are the repos' own, not guessed.
-    struct ExtraGGUF { var spec: ModelSpec; var repo: String; var license: String }
-    static func gguf(_ id: String, repo: String, file: String, sha: String, bytes: Int64, license: String) -> ExtraGGUF {
-        ExtraGGUF(spec: ModelSpec(id: id, url: URL(string: "https://huggingface.co/\(repo)/resolve/main/\(file)")!, sha256: sha, bytes: bytes, fileName: file), repo: repo, license: license)
+    /// `rev`: the repository commit the file was read at; when not "main" the download url names it and the model list carries it. The older rows were pinned by digest alone.
+    struct ExtraGGUF { var spec: ModelSpec; var repo: String; var license: String; var revision: String? = nil; var credit: String? = nil }
+    static func gguf(_ id: String, repo: String, file: String, sha: String, bytes: Int64, license: String, rev: String = "main", credit: String? = nil) -> ExtraGGUF {
+        ExtraGGUF(spec: ModelSpec(id: id, url: URL(string: "https://huggingface.co/\(repo)/resolve/\(rev)/\(file)")!, sha256: sha, bytes: bytes, fileName: file),
+                  repo: repo, license: license, revision: rev == "main" ? nil : rev, credit: credit)
     }
     static let lfmLicense = "LFM Open License v1.0 (commercial use at or above US$10M annual revenue needs a separate licence from Liquid AI)"
     static let extraGGUF: [ExtraGGUF] = [
@@ -133,6 +186,14 @@ public enum KnownModels {
         gguf("lfm3-1.7b-q6_k", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q6_K.gguf", sha: "54e1bd947c77167823d45bf495f1c3e2d226ca7fb242f83cfa141ee3a6ab55c6", bytes: 1_427_638_304, license: lfmLicense),
         gguf("lfm3-1.7b-q8_0", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q8_0.gguf", sha: "8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6", bytes: 1_846_238_496, license: lfmLicense),
         gguf("lfm3-1.7b-nvfp4", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-NVFP4.gguf", sha: "462c2379586a45b30fe3dbfa30e6ff08cbb440734d6934689e24e4fe59a67bec", bytes: 1_280_019_776, license: lfmLicense),
+        // LFM2.5-350M Q4_K_M, a quick-decision option (owner, 2026-11-24). Size and SHA-256 are the host's own listing (`/api/models/LiquidAI/LFM2.5-350M-GGUF?blobs=true`, the LFS
+        // object id), read 2026-11-24 without downloading the file; the address names the repository commit that listing was read at. LFM Open License v1.0 (the file `LICENSE` of that commit).
+        gguf("lfm2.5-350m-q4_k_m", repo: "LiquidAI/LFM2.5-350M-GGUF", file: "LFM2.5-350M-Q4_K_M.gguf", sha: "7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4", bytes: 229_312_224, license: lfmLicense, rev: "657e078c94084481950a2d555a941481f715536b"),
+        // LFM3-Omni-2B (owner, 2026-11-24: a bigger model for newer phones), vendor repo at commit d508b88, Q8_0 of the text path only (the mmproj, which holds
+        // the vision and audio encoders and the speech-out path, is NOT fetched: text in, text out). LICENSE read from the hub 2026-11-24 (SHA-256 4d28ca14...).
+        gguf("lfm3-omni-2b-q8_0", repo: "LiquidAI/LFM3-Omni-2B-GGUF", file: "LFM3-Omni-2B-Q8_0.gguf", sha: "59118f661eaacb93d204723d76355b53347f0940b508c11412f6290fd49158d4",
+             bytes: 1_846_240_768, license: lfmLicense, rev: "d508b88f08a5b4286f2d2805a6a8d69a0ff44c72",
+             credit: "LFM3-Omni-2B by Liquid AI, used under the LFM Open License v1.0 (https://huggingface.co/LiquidAI/LFM3-Omni-2B/blob/main/LICENSE)."),
         gguf("qwen3-1.7b-q6_k", repo: "unsloth/Qwen3-1.7B-GGUF", file: "Qwen3-1.7B-Q6_K.gguf", sha: "6a9cadec4883df6f3efcf337103479dcc6a3efa9f5f8cc64a904dba57808207a", bytes: 1_417_755_200, license: "Apache-2.0"),
         gguf("qwen3-1.7b-q8_0", repo: "unsloth/Qwen3-1.7B-GGUF", file: "Qwen3-1.7B-Q8_0.gguf", sha: "0becaa825564295d82e9af4d008bca5f8b7f5f73bf1c6a0b58f7c53ef26b47fd", bytes: 1_834_426_944, license: "Apache-2.0"),
         gguf("qwen3.5-0.8b-q8_0", repo: "unsloth/Qwen3.5-0.8B-GGUF", file: "Qwen3.5-0.8B-Q8_0.gguf", sha: "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c", bytes: 811_843_840, license: "Apache-2.0"),
@@ -147,7 +208,7 @@ public enum KnownModels {
         return base + extraGGUF.map { ManagedModelSpec(id: $0.spec.id, label: $0.spec.fileName, source: "hf:" + $0.repo, approxBytes: $0.spec.bytes, license: $0.license, cachePath: storeRoot) }
     }
     private static var base: [ManagedModelSpec] {
-        let c = fluidRoot
+        let c = fluidRoot, t = ttsRoot
         return [
             ManagedModelSpec(id: "silero-vad-v6.2.1", label: "Silero VAD v6.2.1 (256 ms, Core ML)", source: "hf:FluidInference/silero-vad-coreml",
                              approxBytes: 2_000_000, license: "MIT (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["silero-vad"]),
@@ -156,19 +217,24 @@ public enum KnownModels {
             ManagedModelSpec(id: "parakeet-tdt-0.6b-v2", label: "Parakeet TDT 0.6B v2 (English, Core ML)", source: "hf:FluidInference/parakeet-tdt-0.6b-v2-coreml",
                              approxBytes: 480_000_000, license: "CC-BY-4.0 (NVIDIA model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v2-coreml"],
                              credit: "Parakeet TDT 0.6B v2 by NVIDIA, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the files are modified Core ML conversions.", loadsWithoutFetching: true),
+            ManagedModelSpec(id: fluidSpeechPro.id, label: "Fluid Speech Pro (Core ML)", source: "hf:" + fluidSpeechPro.repo,
+                             approxBytes: fluidSpeechPro.totalBytes, license: fluidSpeechPro.license + " (FluidVoice model); FluidAudio Apache-2.0",
+                             cachePath: storeRoot, cacheFolders: [fluidSpeechPro.folder], loadsWithoutFetching: true),
             ManagedModelSpec(id: fluidSpeechMini.id, label: "Fluid Speech Mini (English, Core ML)", source: "hf:" + fluidSpeechMini.repo,
                              approxBytes: fluidSpeechMini.totalBytes, license: fluidSpeechMini.license + " (FluidVoice model); FluidAudio Apache-2.0",
                              cachePath: storeRoot, cacheFolders: [fluidSpeechMini.folder], loadsWithoutFetching: true),
             ManagedModelSpec(id: "kokoro-82m-ane", label: "Kokoro 82M ANE v3 (Core ML)", source: "hf:FluidInference/kokoro-82m-coreml",
-                             approxBytes: 350_000_000, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["kokoro-82m-coreml", "kokoro"]),
+                             approxBytes: kokoroBytes, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: t, cacheFolders: ["kokoro-82m-coreml", "kokoro"],
+                             credit: VoiceRows.credit(model: "kokoro-82m-ane")),
             ManagedModelSpec(id: "pocket-tts", label: "PocketTTS 100M (Kyutai, Core ML)", source: "hf:FluidInference/pocket-tts-coreml",
-                             approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts"],
+                             approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: t, cacheFolders: ["pocket-tts"],
                              credit: "PocketTTS by Kyutai, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the files are modified Core ML conversions."),
             // Phonon 31M: the pack `pocket-tts-coreml/phonon/phonon-31m-en` (Apache-2.0, its own LICENSE; the repo's other folders are CC-BY-4.0).
             // FluidAudio's `PocketTtsSmallDownloader` keeps 126 of its files: the MLState model, the fp32 Mimi decoder, the constants and all 103
-            // voices, 173,136,428 bytes by the Hugging Face API listing of 2026-11-15. It is asked to put the pack in `fluidRoot` (see PhononVoice).
+            // voices, 173,136,428 bytes by the Hugging Face API listing of 2026-11-15. It lands where the library puts every voice model (`ttsRoot`: `<root>/pocket-tts/phonon/phonon-31m-en`, see PhononVoice).
             ManagedModelSpec(id: "phonon-31m", label: "Phonon 31M (Gradium, Core ML)", source: "hf:FluidInference/pocket-tts-coreml/phonon/phonon-31m-en",
-                             approxBytes: 173_000_000, license: "Apache-2.0 (Gradium model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts-coreml/phonon"]),
+                             approxBytes: 173_000_000, license: "Apache-2.0 (Gradium model); FluidAudio Apache-2.0", cachePath: t, cacheFolders: ["pocket-tts/phonon"],
+                             credit: VoiceRows.credit(model: "phonon-31m")),
             ManagedModelSpec(id: "lfm3-audio-2b", label: "LFM3-Audio-2B (Core ML, ASR + TTS)", source: "hf:FluidInference/lfm3-audio-2b-coreml",
                              approxBytes: 2_900_000_000, license: "LFM Open License (read it: commercial use limited by revenue)", cachePath: c),
             ManagedModelSpec(id: qwen3.id, label: "Qwen3-0.6B Q8_0 (llama.cpp GGUF)", source: "hf:Qwen/Qwen3-0.6B-GGUF",
@@ -185,6 +251,10 @@ public enum KnownModels {
                              approxBytes: lfm3Text.bytes, license: "LFM Open License v1.0 (commercial use limited by revenue: read it)", cachePath: storeRoot),
         ]
     }
+
+    /// Kokoro's offered size: the model's own files (about 350 MB, the model card's figure) plus the voice files its first load fetches (every Kokoro voice of the catalog, `VoiceStages.KokoroVoice.load`),
+    /// summed from the pack's own listing (`VoiceRow.bytes`), so the size shown is what lands on the phone.
+    public static var kokoroBytes: Int64 { 350_000_000 + VoiceRows.bytes(model: "kokoro-82m-ane") }
 
     /// Every id the app knows, library-managed or pinned.
     public static var ids: [String] { managed.map(\.id) }
@@ -209,17 +279,65 @@ public protocol ModelProvider: Sendable {
     func measureConfiguration(_ picks: [String: String], rounds: Int) async throws -> ConfigMeasurement
 }
 public extension ModelProvider {
+    /// The Test button on a model's row (ModelTrial): what only the model itself can do. A build that links no model libraries says so.
+    func transcribe(_ id: String, _ audio: [Float]) async throws -> String { throw LabError.unavailable(ModelProviders.missingNote) }
+    func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) { throw LabError.unavailable(ModelProviders.missingNote) }
+    func answer(_ id: String, job: String, prompt: String) async throws -> String { throw LabError.unavailable(ModelProviders.missingNote) }
     func unload(_ id: String, role: String) async {}
     func measureConfiguration(_ picks: [String: String], rounds: Int) async throws -> ConfigMeasurement { throw LabError.unavailable(ModelProviders.missingNote) }
+}
+
+extension VoiceRows {
+    /// The sum of the voice files of one model, from the pack's listing (0 for a pack that ships its voices inside one fetch).
+    public static func bytes(model: String) -> Int64 { all.filter { $0.modelID == model }.reduce(0) { $0 + $1.bytes } }
+    /// The credit its licence asks for, the same for every voice of the model ("" when it has no voice rows).
+    public static func credit(model: String) -> String? { all.first { $0.modelID == model }?.credit }
 }
 
 /// Which responder model setup chose (read at start, written when setup finishes).
 public enum ResponderChoice {
     public static let defaultID = "qwen3-0.6b-q8_0"
     static let key = "AutoradioResponderModel"
+    /// A download finishing never changes what is in use (only Use does): it may fill a choice that was never made, and only with a model that can be one. True when it wrote.
+    @discardableResult public static func adopt(_ id: String, defaults: UserDefaults = .standard) -> Bool {
+        guard KnownModels.isPinned(id), defaults.string(forKey: key) == nil else { return false }
+        defaults.set(id, forKey: key); return true
+    }
     public static var current: String {
         get { UserDefaults.standard.string(forKey: key).flatMap { KnownModels.isPinned($0) ? $0 : nil } ?? defaultID }
         set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+}
+
+/// Which quick-decision model the phone runs (read at start, written when setup finishes with a decision pick). Only a pinned model counts: a name this build has no file for is the default.
+public enum DecisionChoice {
+    public static let defaultID = "qwen3-0.6b-q8_0"
+    static let key = "AutoradioDecisionModel"
+    /// As `ResponderChoice.adopt`: fills a choice never made, with a model that can be the decision model (a built-in id that setup fell back to is not one).
+    @discardableResult public static func adopt(_ id: String, defaults: UserDefaults = .standard) -> Bool {
+        guard resolve(saved: id) == id, defaults.string(forKey: key) == nil else { return false }
+        defaults.set(id, forKey: key); return true
+    }
+    /// The decision model a saved name means. The decision role loads weights through llama.cpp, so only a pinned GGUF is one.
+    public static func resolve(saved: String?) -> String { saved.flatMap { KnownModels.isPinned($0) && $0 != KnownModels.lfm3Text.id ? $0 : nil } ?? defaultID }
+    public static var current: String {
+        get { resolve(saved: UserDefaults.standard.string(forKey: key)) }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+}
+
+/// The text the decision model reads, in the model's own chat layout. The scorer reads one step's logits after the assistant turn begins, so the prompt ends where the letter goes.
+/// Qwen3 ends with its empty think block (thinking off); the LFM2 family starts with its start token, has no think block (the model's own template, `chat_template.jinja`
+/// of LFM2.5-350M-GGUF at the pinned commit: bos, `<|im_start|>role\n...<|im_end|>\n`, then `<|im_start|>assistant\n`).
+public enum DecisionPrompt {
+    public static func text(modelID: String, context: String, listenerWords: String, question: String, options: [String], letters: [String]) -> String {
+        let lfm = modelID.hasPrefix("lfm")
+        var s = (lfm ? "<|startoftext|>" : "") + "<|im_start|>system\nYou classify what a radio listener said. Reply with the letter of the best option only.<|im_end|>\n<|im_start|>user\n"
+        if !context.isEmpty { s += "Context: \(context)\n" }
+        s += "Listener said: \"\(listenerWords)\"\nQuestion: \(question)\n"
+        for (l, o) in zip(letters, options) { s += "\(l). \(o)\n" }
+        s += "Answer with the letter only.<|im_end|>\n<|im_start|>assistant\n" + (lfm ? "" : "<think>\n\n</think>\n\n")
+        return s
     }
 }
 

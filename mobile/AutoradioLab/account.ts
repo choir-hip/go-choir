@@ -45,6 +45,7 @@ import { keepKey, KEY_ID_NAME, KEY_NAME } from './app-signin.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
 import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
 import { wipeConsent, CONSENT_FILE } from './consent.ts';
+import { forgetModelTests } from './models.ts';
 import { wipeLearn } from './voicelearn.ts';
 
 /** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
@@ -77,6 +78,7 @@ export const WIPES: Wipe[] = [
   { name: 'edition-picks', run: (s) => wipePicks(s) },                                                            // the listener's topics (edition-picks.ts): memory, the file, and the native copy
   { name: 'onboarding', run: (s) => wipeOnboarding(s) },                                                           // the first run's progress (onboarding.ts): memory, the file, and the voice side
   { name: 'learn-voice', run: () => wipeLearn() },                                                                  // the learn-your-voice page's state, and native's takes in memory (voicelearn.ts)
+  { name: 'model-tests', run: async () => { forgetModelTests(); } },                                                   // the test lines on Voice and models (models.ts)
   { name: 'consent', run: (s) => wipeConsent(s) },                                                                 // what the person agreed to (consent.ts): memory, the file, and native's copy
   { name: 'vectors', run: async (s) => { await wipeLiveVectors(s); await rmAll(s, [VECTORS_DIR]); } },       // the live in-memory store first, then the files
   { name: 'content', run: async (s) => { await wipeLiveContent(); await rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]); } },  // stops a running sync (generation), empties the open db
