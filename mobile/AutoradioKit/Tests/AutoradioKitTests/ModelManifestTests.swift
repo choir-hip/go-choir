@@ -112,15 +112,21 @@ final class ModelManifestTests: XCTestCase {
         XCTAssertTrue(res.note.contains("layout"), res.note)
         XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path), "the old folders are gone, so the next fetch starts clean and is not a loop over files that will not load")
     }
+    struct Boom: Error {}
     func testM13AFailedLoadWithDamagedFilesDeletesThemAndSaysSo_AndWithIntactFilesSaysTheyDidNotLoad() async {
         // damaged: the hashes no longer match
         var m = make(); var r = pins(m); r.markReady(model: "kk")
         var d = try! Data(contentsOf: m.base.appendingPathComponent("kokoro/a.mlmodelc/model.mil")); d[0] ^= 0xFF; try! d.write(to: m.base.appendingPathComponent("kokoro/a.mlmodelc/model.mil"))
-        var res = await ReadinessVerifier(record: r).verify(model: "kk", check: { SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "boom") })
+        var res = await ReadinessVerifier(record: r).verify(model: "kk", check: { throw Boom() })
         XCTAssertTrue(res.note.contains("damaged"), res.note); XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path))
         // intact: the hashes match, the load still failed: the files are kept and the words say they did not load
         m = make(); r = pins(m); r.markReady(model: "kk")
-        res = await ReadinessVerifier(record: r).verify(model: "kk", check: { SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "boom") })
+        res = await ReadinessVerifier(record: r).verify(model: "kk", check: { throw Boom() })
         XCTAssertTrue(res.note.contains("did not load from this phone's files"), res.note); XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path), "intact files are not thrown away")
+    }
+    func testM14ACheckThatRanAndJudgedTheOutputKeepsItsOwnWords() async {
+        let m = make(), r = pins(m); r.markReady(model: "kk")
+        let res = await ReadinessVerifier(record: r).verify(model: "kk", check: { SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "The voice made audio of the wrong length.") })
+        XCTAssertEqual(res.note, "The voice made audio of the wrong length.", "it loaded; its output was wrong: that is what the row says")
     }
 }
