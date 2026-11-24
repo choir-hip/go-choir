@@ -91,6 +91,9 @@ boundaries:
     said: we should be downloading the model list from the server, so we can dynamically change which models we download
     'on': '2026-11-24'
     reading: 'lead''s reading, not the owner''s words: each entry names the job, the repository, the pinned revision, every file''s size and SHA-256, the licence credit and which devices it is recommended for; the phone verifies every file against the list; the app carries a built-in copy of the list so first run works offline from the server; the list is one file in the repo with the owner''s ruling beside each default, and a test fails when a default differs from it'
+  - decision: the served list may recommend a different model per device for every job, not only the recogniser; first get the happy path (the owner's iPhone 14 Pro Max and newer) running
+    said: recommendations per device can be variable for every model type, not just recognizer. but we should get the happy path, what works on my iphone and newer, running asap.
+    'on': '2026-11-24'
   must_preserve:
   - voice stays on the device; the owner's recordings are never published
   - only voice is native; page logic stays in shared Exact code
