@@ -528,3 +528,38 @@ prompt). The stage itself never downloads: asked to begin without the whole fold
 file, keeping its behaviour: the model is warm (it runs once on a second of silence when it loads, because Core ML specialises for the Neural
 Engine on the first prediction) and one pass over the speech-bounded audio gives the final transcript. Registered with the other model stages
 in `ModelHub.register`, fetched and checked in `HubModelProvider`, a case in `ModelProof`.
+
+**Measured on the Mac, 2026-11-24 (Mac, not phone; FluidAudio 0.18.3; the files fetched through the store and every size and SHA-256 re-checked).**
+Fluid Speech Mini loads from the pinned folder through `AsrModels.loadLocal(version: .ultra)` (load plus warm-up 0.42 s on the Mac) and
+transcribes. On the three synthesised turns in `mobile/fixtures` it and Parakeet TDT v2 both score 0% word error (a voice made by `say` is not
+a test of recognition). On real readers, the 73 clips of the LibriSpeech "clean" validation subset (hf-internal-testing/librispeech_asr_dummy,
+8.0 minutes, 1,169 words; the reference lower-cased, punctuation dropped, "harbour" and "harbor" treated as one), corpus word error:
+
+| Recogniser | Word error | Time per second of audio (Mac) |
+| --- | --- | --- |
+| Parakeet TDT 0.6B v2 | 2.57% | 0.014 |
+| Fluid Speech Mini | 3.93% | 0.017 to 0.019 |
+| Parakeet EOU 120M (the live-words stage) | 8.13% | 0.068 |
+| Apple's recogniser (on device, this Mac) | 12.66% | not timed |
+
+Read: Fluid Speech Mini is three times better than Apple's here and about 5 points better than the streaming model, **but not better than
+Parakeet TDT v2 on this set (3.93% against 2.57%)**; Mike's 1.51% against Parakeet v3's 1.92% was a different set and a different Parakeet
+(v3). Its table rank (90, above TDT's 80) follows the owner's choice and Mike's numbers, not this measurement; the owner decides whether to
+re-rank. One set of read book speech on a Mac, no noise, no phone microphone: weak evidence either way. The run is
+`AUTORADIO_REAL_SPEECH=<folder> AUTORADIO_COMPARE_PARAKEET=1 swift test --filter testRealSpeechWordError` (the folder is not in the
+repository; it is made from the parquet file named above).
+
+**The model list as data (`Voice/ModelList.swift`).** `ModelList` is one structure (job, repository, pinned revision, files with size and
+SHA-256, licence and credit, per-device recommendation rules, rank) that decodes from JSON, skips an entry it cannot verify or a job it does not
+know, and has a built-in copy derived from `CandidateTable` and `KnownModels.bundles`. Not built: the server route, the fetch, and the choice
+reading it instead of `CandidateTable`.
+
+**What is left of Mike's pipeline (sizes in lines of Swift, plus model files).** Silero is already the speech detector the pipeline picks when
+its model is ready (nothing to port; making it ready by default is voice setup's download). Smart Turn v3.2: Mike's `SmartTurn.swift` is 56 lines
+plus a four-file Core ML bundle of 16.8 MB (aufklarer/Smart-Turn-v3.2-CoreML, pinned in Mike's `VoiceModels.swift`), and the turn policy that asks it
+after a pause (Mike's `TurnPolicy.swift`, 520 lines, of which the Smart Turn rules are a part) must be fitted to `HandsFree`'s end-of-turn rule:
+about 150 lines and a day. EouStream: Mike's `EouStream.swift` is 224 lines over FluidAudio's public `RnntDecoder`, `Tokenizer` and
+`AudioMelSpectrogram` (public in 0.18.3); it replaces the manager-based Parakeet EOU stage and fixes the lost words after a mid-sentence end;
+about 250 lines with tests and a day. The speaker check as a stage: `SpeakerEmbedder` 196, `SpeakerFusion` 108 and `SpeakerProfile` 292 lines, two
+embedding models (WeSpeaker, CAM++) and the fusion file, behind the existing `SpeakerCheck` protocol plus an enrolment step in onboarding; about
+600 lines, two days, and it needs the models' pins read.

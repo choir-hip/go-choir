@@ -127,7 +127,7 @@ public final class LiveThenFinalTranscriber: Transcriber, @unchecked Sendable {
         StageDescriptor(
             displayName: "Live words, then the final transcript",
             summary: "Live words from one recogniser while the listener speaks; the final transcript from a second, in one pass over the turn.",
-            params: [.text("live", "Live words", "parakeet-eou"), .text("final", "Final transcript", "fluid-speech-mini")],
+            params: [.text("live", "Live words (a recogniser stage id)", ""), .text("final", "Final transcript (a recogniser stage id)", "")],
             needsModels: [])
     }
     private let live: String, final: String
@@ -137,7 +137,7 @@ public final class LiveThenFinalTranscriber: Transcriber, @unchecked Sendable {
     /// What the last `begin` ran, in plain words (for the trace).
     public private(set) var notes: [String] = []
     public init(_ p: StageParams, registry: StageRegistry?, readiness: VoiceReadiness = Voices.readiness) {
-        live = p.string("live", "parakeet-eou"); final = p.string("final", "fluid-speech-mini")
+        live = p.string("live", ""); final = p.string("final", "")   // no model is named here: `ListenerPipeline.choose` fills them from the list
         self.registry = registry; self.readiness = readiness
     }
 
