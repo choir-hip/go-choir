@@ -94,6 +94,9 @@ boundaries:
   - decision: the served list may recommend a different model per device for every job, not only the recogniser; first get the happy path (the owner's iPhone 14 Pro Max and newer) running
     said: recommendations per device can be variable for every model type, not just recognizer. but we should get the happy path, what works on my iphone and newer, running asap.
     'on': '2026-11-24'
+  - decision: the user's voice is learned in voice onboarding; sava is decided later, tonight's turn path stays Parakeet end of utterance with Fluid Speech Mini
+    said: ok, that works for tonight, we will figure out sava later ... what about the model that learns user voice? we have that switched off currently? we should learn user voice in voice onboarding
+    'on': '2026-11-24'
   must_preserve:
   - voice stays on the device; the owner's recordings are never published
   - only voice is native; page logic stays in shared Exact code
