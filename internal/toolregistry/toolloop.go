@@ -2191,6 +2191,31 @@ func callToolLoopProviderWithPoolRetries(ctx context.Context, provider provideri
 		if hasFallback && failsOverWithoutRetry(err) {
 			return nil, lastErr
 		}
+		// The gateway's typed upstream refusal carries its own Retry-After:
+		// with no member to fail over to, wait that long, not a fixed
+		// delay picked in advance.
+		if refusal, ok := provideriface.AsUpstreamRefusal(err); ok {
+			if hasFallback {
+				return nil, lastErr
+			}
+			if len(providerRateLimitRetryDelays) == 0 || attempt >= len(providerRateLimitRetryDelays)*rounds {
+				return nil, lastErr
+			}
+			wait := refusal.RetryAfter
+			payload, _ := json.Marshal(map[string]any{
+				"reason":   "provider_rate_limit",
+				"attempt":  attempt + 1,
+				"delay_ms": wait.Milliseconds(),
+				"error":    err.Error(),
+			})
+			if emit != nil {
+				emit(types.EventRunRetry, "provider_rate_limit", payload)
+			}
+			if err := sleepContext(ctx, wait); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		retryable := IsProviderRateLimitError(err) || (!hasFallback && rounds > 1 && isCircuitOpenError(err))
 		if !retryable || len(providerRateLimitRetryDelays) == 0 || attempt >= len(providerRateLimitRetryDelays)*rounds {
 			return nil, lastErr

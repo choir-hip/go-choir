@@ -477,8 +477,8 @@ item below:
     (snapshot mode always has an API socket).
 - [ ] **RES-11 · P1 · red — Model-call scheduling at the gateway**
   - Target: a per-computer fair-share queue at the gateway, replacing the
-    fixed 60/min reject (`internal/gateway/ratelimit.go:9-16`) and the
-    in-guest 1.5 s spacer (`research_children.go:30-37`). Fairness, not
+    fixed 60/min reject (removed 2026-11-10) and the in-guest 1.5 s spacer
+    (deleted 2026-11-24, see sub-call-spacer-outlived-its-bucket-2026-11-24.md). Fairness, not
     spending caps (owner: track spending, don't cap).
   - Plans: none at the gateway; management-delegation design O5;
     [research-fanout-overruns-computer-model-budget-2026-10-11.md](archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).

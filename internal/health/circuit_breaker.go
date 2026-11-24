@@ -52,8 +52,10 @@ type BreakerConfig struct {
 	OpenTimeout time.Duration
 	// Backoff, when set, gives the open duration for the trips-th open in a
 	// row (1 on the first open; a failed half-open probe opens again with
-	// trips+1; a successful probe closes the breaker and resets trips). It
-	// lets a cooldown grow on successive failures and reset on success, the
+	// trips+1; a successful probe closes the breaker but does not reset trips:
+	// the doubling is forgotten by time spent closed, one step per
+	// last-open window, so one passing probe cannot make a burst flap). It
+	// lets a cooldown grow on successive failures and shrink on sustained success, the
 	// search plane's per-provider backoff
 	// (docs/design/model-pool-autoroute-2026-11-02.md). Nil keeps the fixed
 	// OpenTimeout.
@@ -104,7 +106,12 @@ type CircuitBreaker struct {
 	openedAt         time.Time
 	openFor          time.Duration
 	trips            int
-	probesInflight   int
+	opens            int
+	// closedAt and lastOpenFor remember the last close: how long the breaker
+	// has stayed closed since decides how much of its doubling is forgotten.
+	closedAt       time.Time
+	lastOpenFor    time.Duration
+	probesInflight int
 }
 
 // NewCircuitBreaker returns a breaker configured with cfg (zero values
@@ -191,12 +198,22 @@ func (b *CircuitBreaker) recordFailureLocked() {
 			b.openLocked()
 		}
 	case StateOpen:
-		// Already open; reset the open timer to extend the cooldown.
-		b.openedAt = b.cfg.Now()
+		// A call that was already in flight when the breaker opened failed
+		// too. It belongs to this open: the window does not slide.
 	}
 }
 
 func (b *CircuitBreaker) openLocked() {
+	if b.state == StateClosed && b.trips > 0 && b.lastOpenFor > 0 {
+		// A fresh open after a close: forget one doubling step for every
+		// window of the last open that the breaker stayed closed.
+		forgotten := int(b.cfg.Now().Sub(b.closedAt) / b.lastOpenFor)
+		b.trips -= forgotten
+		if b.trips < 0 {
+			b.trips = 0
+		}
+	}
+	b.opens++
 	b.trips++
 	b.state = StateOpen
 	b.openedAt = b.cfg.Now()
@@ -263,12 +280,16 @@ func (b *CircuitBreaker) TripUntil(until time.Time) bool {
 	return true
 }
 
+// closeLocked closes the breaker after a passing probe. It keeps trips (and
+// remembers when and after what window it closed), so the next open continues
+// the doubling unless the breaker stays closed.
 func (b *CircuitBreaker) closeLocked() {
+	b.lastOpenFor = b.openFor
+	b.closedAt = b.cfg.Now()
 	b.state = StateClosed
 	b.consecutiveFails = 0
 	b.consecutiveWins = 0
 	b.probesInflight = 0
-	b.trips = 0
 	b.openFor = 0
 }
 
@@ -367,8 +388,12 @@ type Snapshot struct {
 	OpenedAt         *time.Time `json:"opened_at,omitempty"`
 	// OpenUntil is when an open breaker lets its next probe through.
 	OpenUntil *time.Time `json:"open_until,omitempty"`
-	// Trips counts the opens in a row since the breaker last closed.
+	// Trips counts the doubling steps held: opens in a row, one step forgotten
+	// per last-open window the breaker has stayed closed.
 	Trips int `json:"trips,omitempty"`
+	// Opens counts every open since the breaker was made, a monotonic number
+	// that names one open: a log line keyed on it is one line per open.
+	Opens int `json:"opens,omitempty"`
 }
 
 // Snapshot returns a point-in-time view of the breaker state.
@@ -381,6 +406,7 @@ func (b *CircuitBreaker) Snapshot() Snapshot {
 		ConsecutiveFails: b.consecutiveFails,
 		ConsecutiveWins:  b.consecutiveWins,
 		Trips:            b.trips,
+		Opens:            b.opens,
 	}
 	if b.state == StateOpen && !b.openedAt.IsZero() {
 		t := b.openedAt
@@ -401,4 +427,6 @@ func (b *CircuitBreaker) Reset() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.closeLocked()
+	b.trips = 0
+	b.lastOpenFor = 0
 }

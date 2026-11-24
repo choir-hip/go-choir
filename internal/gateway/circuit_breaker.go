@@ -68,9 +68,9 @@ type CircuitBreakingProvider struct {
 	// concurrencyStreak counts each model's concurrency 429s since its last
 	// success.
 	concurrencyStreak map[string]int
-	// loggedOpenUntil is the open window last logged per model by
+	// loggedOpens is the breaker's open number last logged per model by
 	// logOrdinaryNarrowing, so one open is one line.
-	loggedOpenUntil map[string]time.Time
+	loggedOpens map[string]int
 	// quotaHolds is each model whose breaker an exhausted quota opened, and
 	// when the quota is expected to reset, so a call the open breaker
 	// refuses is answered as the quota it is, not "model unhealthy"
@@ -164,7 +164,7 @@ func NewCircuitBreakingProvider(p provider.Provider, cfg health.BreakerConfig) *
 		hardCooldown:      doublingCooldown(upstreamHardBase, upstreamHardCap),
 		models:            make(map[string]*health.CircuitBreaker),
 		concurrencyStreak: make(map[string]int),
-		loggedOpenUntil:   make(map[string]time.Time),
+		loggedOpens:       make(map[string]int),
 		quotaHolds:        make(map[string]quotaHold),
 		recovering:        make(map[string]bool),
 		quotaCooldownMax:  qMax,
@@ -304,7 +304,7 @@ func (c *CircuitBreakingProvider) execute(ctx context.Context, model, thread str
 			// state read a moment before looked. Every probe of a quota
 			// recovery episode is bounded, until the breaker closes.
 			callCtx, cancel := ctx, context.CancelFunc(func() {})
-			if c.probeDeadline > 0 && modelBreaker.State() == health.StateHalfOpen && c.heldForQuota(model) {
+			if c.probeDeadline > 0 && modelBreaker.State() == health.StateHalfOpen {
 				callCtx, cancel = context.WithTimeout(ctx, c.probeDeadline)
 			}
 			callErr = fn(callCtx)
@@ -337,6 +337,9 @@ func (c *CircuitBreakingProvider) execute(ctx context.Context, model, thread str
 	}
 	if q, ok := provider.AsQuotaExhausted(err); ok {
 		return c.quotaAnswer(model, q)
+	}
+	if isUpstreamRefusal(err) {
+		return &upstreamRefusalError{err: err, retryAfter: c.refusalRetryAfter(model)}
 	}
 	return err
 }
@@ -543,12 +546,8 @@ func (c *CircuitBreakingProvider) logOrdinaryNarrowing(ctx context.Context, mode
 	}
 	key := strings.TrimSpace(model)
 	c.mu.Lock()
-	var until time.Time
-	if snap.OpenUntil != nil {
-		until = *snap.OpenUntil
-	}
-	opened := !until.Equal(c.loggedOpenUntil[key])
-	c.loggedOpenUntil[key] = until
+	opened := snap.Opens != c.loggedOpens[key]
+	c.loggedOpens[key] = snap.Opens
 	c.mu.Unlock()
 	if opened {
 		log.Printf("gateway: model %s/%s narrowed by a provider failure (%s; trip %d, half-opens at %s)",

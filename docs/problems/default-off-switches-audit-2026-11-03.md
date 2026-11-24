@@ -112,7 +112,7 @@ added.
 
 | Setting | Class | Why it stays |
 |---|---|---|
-| management.serial_tasks | (c) rollback lever | On means K = 1, the S2b rollback. Owner ruled delete (not done here) |
+| management.serial_tasks | (c) rollback lever | Deleted 2026-11-24 (sub-call-spacer-outlived-its-bucket-2026-11-24.md) |
 | store.compact_force | (c) proof lever | Off is the normal state on every computer but d@e. Owner ruled delete (not done here) |
 | dispatch.wide_slots | (c) capacity bound | 8 to 12 shared activation slots. Owner: replace with memory and CPU admission |
 

@@ -67,7 +67,7 @@ func main() {
 		// Initialize per-autoputer rate limiting (VAL-GATEWAY-005).
 		rlCfg := gateway.LoadRateLimiterConfig()
 		rl := gateway.NewPerAutoputerRateLimiter(rlCfg.MaxRequests, rlCfg.WindowSize)
-		log.Printf("gateway: rate limiter enabled: %s", rl)
+		log.Printf("gateway: anthropic relay and host fetch rate limiter enabled (no model or search route draws on it): %s", rl)
 
 		handler = gateway.NewMultiHandlerWithRateLimit(registry, wrapped, rl)
 	} else {

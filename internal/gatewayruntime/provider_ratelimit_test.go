@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
 // docs/archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md:
@@ -57,5 +59,30 @@ func TestGatewayCallWaitsOutTheRateLimitWindow(t *testing.T) {
 	defer rejects.Close()
 	if _, err := New(rejects.URL, "token").call(context.Background(), llmRequest{Model: "m"}); err == nil || bad.Load() != 1 {
 		t.Fatalf("a 400 was retried or succeeded: %v (%d calls)", err, bad.Load())
+	}
+}
+
+// A provider's refusal the gateway answers 429, kind upstream_rate_limit, is
+// the caller's to wait on or fail over from: the client returns it typed at
+// once, with the Retry-After, and never sends the same call again on its own
+// (a burst of callers would multiply into blind retries).
+func TestUpstreamRefusalIsReturnedTypedAndNeverRetriedBlind(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Retry-After", "2")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"opencode-go: status 429 Too Many Requests (sanitized)","kind":"upstream_rate_limit","provider":"opencode-go","model":"m"}`))
+	}))
+	defer server.Close()
+
+	start := time.Now()
+	_, err := New(server.URL, "token").call(context.Background(), llmRequest{Model: "m"})
+	refusal, ok := provideriface.AsUpstreamRefusal(err)
+	if !ok || refusal.RetryAfter != 2*time.Second {
+		t.Fatalf("err = %v, want a typed upstream refusal with a 2 s Retry-After", err)
+	}
+	if hits.Load() != 1 || time.Since(start) > time.Second {
+		t.Fatalf("%d calls in %s: the client waited or retried a refusal on its own", hits.Load(), time.Since(start))
 	}
 }

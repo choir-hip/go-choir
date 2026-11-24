@@ -156,7 +156,7 @@ func TestConcurrentTasksOpenOneStoryForOneEvent(t *testing.T) {
 	f := newDelegationFixture(t, "owner-task-race")
 	ctx := context.Background()
 	f.rt.cfg.ManagementTaskSlots = 0 // unset: the default K = 4
-	if got := f.rt.managementTaskSlots(ctx, f.owner, f.computer); got != provideriface.DefaultManagementTaskSlots {
+	if got := f.rt.managementTaskSlots(); got != provideriface.DefaultManagementTaskSlots {
 		t.Fatalf("default slots = %d", got)
 	}
 	barrier := newStepBarrier(2)
@@ -295,9 +295,8 @@ choir.Delegate("intake", ids, []any{ids})`}
 // switch and is gone), and the probe's route does not report one.
 func TestTaskSlotsAreTheConfiguredK(t *testing.T) {
 	f := newDelegationFixture(t, "owner-task-serial")
-	ctx := context.Background()
 	f.rt.cfg.ManagementTaskSlots = 4
-	if got := f.rt.managementTaskSlots(ctx, f.owner, f.computer); got != 4 {
+	if got := f.rt.managementTaskSlots(); got != 4 {
 		t.Fatalf("slots = %d, want the configured 4", got)
 	}
 	if _, known := store.KnownComputerSettings["management.serial_tasks"]; known {

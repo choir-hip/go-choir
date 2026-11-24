@@ -46,7 +46,7 @@ const managementTaskDeadline = 10 * time.Minute
 // are kept coherent by the store, not by K: the lease and the disposition
 // index (one capture, one disposition) and the story-library head (an open
 // from a run that has not seen the stories opened since is refused).
-func (rt *Runtime) managementTaskSlots(ctx context.Context, ownerID, computerID string) int {
+func (rt *Runtime) managementTaskSlots() int {
 	return provideriface.NormalizeManagementTaskSlots(rt.cfg.ManagementTaskSlots)
 }
 
@@ -297,7 +297,7 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 	}
 	rt.managementTaskStartMu.Lock()
 	defer rt.managementTaskStartMu.Unlock()
-	slots := rt.managementTaskSlots(ctx, ownerID, computerID)
+	slots := rt.managementTaskSlots()
 	running, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), ownerID, computerID, types.ManagementTaskRunning)
 	if err != nil {
 		return nil, fmt.Errorf("management tasks: list running: %w", err)
@@ -420,7 +420,7 @@ type managementTaskObservability struct {
 func (rt *Runtime) managementTaskObservability(ctx context.Context, ownerID, computerID string) *managementTaskObservability {
 	ctx = withKindReader(ctx, "choir.management_task")
 	out := &managementTaskObservability{
-		Slots:           rt.managementTaskSlots(ctx, ownerID, computerID),
+		Slots:           rt.managementTaskSlots(),
 		ConfiguredSlots: provideriface.NormalizeManagementTaskSlots(rt.cfg.ManagementTaskSlots),
 	}
 	running, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), ownerID, computerID, types.ManagementTaskRunning)

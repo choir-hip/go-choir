@@ -306,6 +306,37 @@ func (e *ProviderQuotaError) Error() string {
 	return "gateway client: " + e.Message
 }
 
+// UpstreamRefusalError is the gateway's typed answer that a provider refused
+// an ordinary call (HTTP 429, kind upstream_rate_limit): a rate limit or a
+// concurrency ceiling that is not a spent quota and not model ill-health.
+// RetryAfter is the provider's Retry-After when it sent one, else the
+// gateway's computed wait (the model breaker's remaining open window, at
+// least the header's one-second resolution). The guest does not retry it
+// blind: a run with a fallback member fails over at once, a run without one
+// waits RetryAfter.
+type UpstreamRefusalError struct {
+	Provider   string
+	Model      string
+	Message    string
+	RetryAfter time.Duration
+}
+
+func (e *UpstreamRefusalError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return "gateway client: upstream rate limit (429): " + e.Message
+}
+
+// AsUpstreamRefusal returns err's upstream refusal answer, if it is one.
+func AsUpstreamRefusal(err error) (*UpstreamRefusalError, bool) {
+	var r *UpstreamRefusalError
+	if errors.As(err, &r) && r != nil {
+		return r, true
+	}
+	return nil, false
+}
+
 // AsProviderQuota returns err's provider quota answer, if it is one.
 func AsProviderQuota(err error) (*ProviderQuotaError, bool) {
 	var q *ProviderQuotaError

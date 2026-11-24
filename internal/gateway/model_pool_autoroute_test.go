@@ -123,8 +123,8 @@ func TestSyntheticQuota429CoolsTheModelOnTheFirstOne(t *testing.T) {
 	if err := synthCall(cbp); err != nil {
 		t.Fatalf("probe after top-up: %v", err)
 	}
-	if snap := cbp.ModelBreaker(syntheticGateModel).Snapshot(); snap.State != health.StateClosed || snap.Trips != 0 {
-		t.Fatalf("after a good probe: %+v, want closed with no trips", snap)
+	if snap := cbp.ModelBreaker(syntheticGateModel).Snapshot(); snap.State != health.StateClosed || snap.OpenUntil != nil {
+		t.Fatalf("after a good probe: %+v, want closed (its doubling is kept, forgotten by time closed)", snap)
 	}
 }
 
@@ -192,17 +192,19 @@ func TestSuccessiveFailuresGrowTheCooldownAndASuccessRestores(t *testing.T) {
 	if err := callModel(cbp, "m"); err != nil {
 		t.Fatalf("probe after the cooldown: %v", err)
 	}
-	if s := b.Snapshot(); s.State != health.StateClosed || s.Trips != 0 {
-		t.Fatalf("after a good probe: %+v, want closed, trips reset", s)
+	if s := b.Snapshot(); s.State != health.StateClosed || s.OpenUntil != nil {
+		t.Fatalf("after a good probe: %+v, want closed", s)
 	}
-	// Reset means the next demotion starts from the base again.
+	// One passing probe does not reset the doubling: a demotion right
+	// after it continues from the last cooldown, so a burst cannot flap the
+	// model every base window.
 	stub.mu.Lock()
 	stub.errs["m"] = fmt.Errorf("opencode-go: status 503 Service Unavailable (sanitized)")
 	stub.mu.Unlock()
 	_ = callModel(cbp, "m")
 	_ = callModel(cbp, "m")
-	if s := b.Snapshot(); s.Trips != 1 || !s.OpenUntil.Equal(clock.Now().Add(30*time.Second)) {
-		t.Fatalf("a new demotion: %+v, want trip 1 for 30 s", s)
+	if s := b.Snapshot(); s.Trips != 3 || !s.OpenUntil.Equal(clock.Now().Add(120*time.Second)) {
+		t.Fatalf("a new demotion: %+v, want trip 3 for 120 s", s)
 	}
 }
 

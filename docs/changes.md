@@ -52,15 +52,23 @@ Left native on purpose: the kept-turn retention rule (`KeptTurnStore.prune`: 20 
   thats wrong." The switch is a rollback lever, which the rule forbids.
   Record: [sub-call-spacer-outlived-its-bucket-2026-11-24](problems/sub-call-spacer-outlived-its-bucket-2026-11-24.md),
   with a verdict for every other limit on our own model calls.
-- **What a burst does now.** 16 simultaneous child and task calls reach the
-  gateway at once. The gateway has no per-computer count limit on model calls
-  (removed 2026-11-10); it logs them (`gateway: calls hour=`). What can slow
-  them is the provider's own refusal: the per-model circuit breaker, Devin
-  hourly pacing (sheds threads to the next pool member), the paid daily
-  budgets, and on a provider 429 the guest waits out Retry-After (up to 10
-  waits of a minute, never past the caller's deadline). All of those are
-  unchanged. That back-off is shared: a model's breaker is the gateway's, across every caller, and after its failure threshold the rest of a burst is refused at once and fails over rather than retrying alone (no second gate was written). One thing added: a breaker opened by an ordinary provider failure (a plain 429 or 5xx) is now logged, `gateway: model P/M narrowed by a provider failure (<refusal>; trip N, ...)`, as quota, concurrency and hard opens already were. Concurrency is still bounded by the memory caps: 4 children a
-  `choir.Research` call and K management tasks (default 4, at most 8).
+- **What a burst does now.** The calls of the children and tasks of one
+  call reach the gateway at once (the 4 children of a `choir.Research` call
+  and K management tasks; nothing bounds how many research calls run across
+  desks). The gateway has no per-computer count limit on model calls
+  (removed 2026-11-10; it logs them). Only the provider's refusals slow
+  them, and the first version of this entry said that was already working;
+  it was not (review, 2026-11-24). An ordinary upstream 429 left the gateway
+  as a 502 with no Retry-After, so the guest retried it blind (3 + 4 times
+  a call). Fixed in this change: the gateway answers 429 with Retry-After and
+  kind `upstream_rate_limit`; the guest returns it typed, fails over at once
+  or waits that Retry-After, never retries it blind; the model breaker, the
+  one shared back-off per route, keeps its doubling across a passing probe,
+  bounds every probe, does not slide on late failures, and logs one
+  `narrowed by a provider failure` line per open. Devin (one unofficial
+  session, no concurrency cap) is bounded only by its own refusals; the
+  record says so. Peak memory of the children does not move; K and the
+  4-child cap are unchanged.
 - **Proof.** Tests seen failing then passing: the first four child calls
   and the first K task calls start together (no spacing); K is the config's
   with no setting able to hold it at 1; a stored `management.serial_tasks` row is

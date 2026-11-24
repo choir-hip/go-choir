@@ -37,17 +37,18 @@ rule is no switches (the switch audit of 2026-11-03 already ruled it delete).
   rule and wrote "whether it is applied was not checked". It is applied:
   `research_children.go` (children) and `runtime.go` `executeWithToolLoop`
   (every management task run).
-- The guest's wait on a provider 429 `Retry-After`
-  (`internal/gatewayruntime/provider.go`, up to 10 waits of at most a minute,
-  never past the caller's context) and the gateway circuit breakers are
-  back-off after a provider's real refusal. They stay.
+- The gateway circuit breakers and quota holds are back-off after a provider's
+  real refusal. They stay. The first version of this record said the guest
+  waits out a provider's Retry-After on every 429; review (2026-11-24) showed
+  that false for an ordinary upstream 429, which the gateway answered 502. See
+  "What a provider's refusal does" below, which is the corrected account.
 
 ## Belief
 
 The spacer has no premise left. It slows the capture path (management tasks)
 and research for no protection: the gateway no longer refuses our own
-computers' calls, and a provider's own refusal is already waited out and
-broken on. Deleting it, and the serial-tasks switch, is a correct fix. The
+computers' calls, and a provider's own refusal is broken on by the gateway's
+breaker (and, after the review round below, waited out by the guest). Deleting it, and the serial-tasks switch, is a correct fix. The
 caller-side question (too many calls) is answered by the capture desk and
 by the one-context rule, not by spacing.
 
@@ -62,49 +63,90 @@ by the one-context rule, not by spacing.
   breaker opens. That is the provider's refusal, handled as before; if it
   shows, the fix is fewer calls from the caller, not a spacer.
 
-## What a provider's refusal does on the sub-call path (read from code, 2026-11-24)
+## What a provider's refusal does on the sub-call path
 
 Owner, 2026-11-24: "some concurrency limits may be required otherwise we get
 rate limited by providers. and may cause system resource pressure. but thats
-something we should learn." Before deleting the spacer, the question was
-whether a refusal today lowers how many calls start next, or only makes each
-call wait alone.
+something we should learn." So the bound is learned from the provider's own
+refusals, and the substrate has to carry a refusal truthfully.
 
-- **In the guest** (`gatewayruntime/provider.go` `call`): per call only. A 429
-  with Retry-After is waited out by that call (up to 10 waits of a minute,
-  within its context); a 429 without it is retried 3 times at 0.5 s and 1 s;
-  a provider quota 429 (typed) returns at once and the tool loop switches
-  model. Nothing is shared between calls in the guest.
-- **In the gateway** (`gateway/circuit_breaker.go`): shared, per model, across
-  every computer. A provider failure (429, 5xx, timeout) counts against its
-  model; at the threshold the model's breaker opens and every later call is
-  refused at once with "circuit open", which the guest fails over on (research
-  children pass fallback models; task runs use the normal tool loop). An
-  exhausted quota opens it at once until the quota's Retry-After; the breaker
-  half-opens and one probe decides, so it widens again on success. Synthetic
-  has a gate holding excess calls for a slot (`SYNTHETIC_MAX_CONCURRENT`);
-  Devin has hourly pacing; the paid budgets hold by day.
+**Before this change (read from code, and wrong in my first account).**
+- `HandleInference` answered 429 only for a typed quota error. An ordinary
+  upstream 429 and the upstream concurrency refusal left the gateway as HTTP
+  502 with no Retry-After.
+- The guest read 502 as an outage: `gatewayruntime` retried it three times
+  at 0, 0.5 and 1 s, and the tool loop four more times at 5, 20 and 60 s
+  when no fallback existed. A burst of 16 became dozens of blind calls at the
+  provider.
+- The breaker counted an ordinary 429 but not a concurrency refusal, and one
+  passing half-open probe reset its trips and its doubling, so a burst
+  flapped open and closed at the base window. Only a quota-held probe had a
+  deadline. A failure of a call already in flight when the breaker opened
+  slid the open window, and the narrowing log logged once per such failure.
 
-So a shared, evidence-driven back-off per provider route already exists and is
-what a burst meets. A second gate in the guest was not written (owner:
-"if such a shared back-off already exists, use it"). A burst after the
-deletion is not a wall of refused calls retrying alone: after the model's
-threshold of refusals the rest are refused at the gateway without reaching the
-provider and move to the next pool member. Pinned by
-`TestBurstOfSubCallsIsHeldOnlyByTheProvidersRefusals`: no refusal, no
-gating; refusals open the model for all callers; a successful probe opens it
-to the whole burst.
+**Now.**
+1. The gateway answers an ordinary upstream 429 or a concurrency refusal as
+   HTTP 429 with a Retry-After and kind `upstream_rate_limit`
+   (`internal/gateway/upstream_refusal.go`). The providers drop the
+   upstream's own Retry-After on an ordinary 429, so the wait is computed:
+   the time until that model's breaker half-opens when the refusals opened
+   it, else the header's one-second resolution. The breaker counts an
+   ordinary 429 as a refusal as before; a concurrency refusal still counts
+   only at its streak, because it says the account is busy, not that the
+   model is ill (a gate holds Synthetic's excess calls); both are now
+   answered with the 429 and the wait.
+2. The guest (`gatewayruntime`) returns that answer typed
+   (`provideriface.UpstreamRefusalError`) at once and never sends the call
+   again on its own. The tool loop fails over at once when a fallback member
+   exists, else waits the refusal's own Retry-After (not 5, 20, 60 s).
+   `gatewayruntime`'s 5xx retry does not apply to a refusal. An untyped 429
+   with a Retry-After is still waited out as before.
+3. The breaker keeps its doubling across a reopen: a passing probe closes it
+   but does not reset the trips; one step is forgotten for each window of its
+   last open that it then stays closed. Every half-open probe, not only a
+   quota's, has the 90 s deadline. A late failure of the same open no longer
+   slides the window.
+4. The narrowing line is keyed on a monotonic open number, so it is one line
+   per open: `gateway: model P/M narrowed by a provider failure (<refusal>;
+   trip N, half-opens at T)`. The burst test trips the breaker from inside a
+   16-goroutine run with every call in flight.
 
-One gap closed here: an ordinary provider failure (a plain 429, a 5xx) that
-opened a model's breaker was not logged, only quota, concurrency-streak and
-hard opens were. It is now: `gateway: model P/M narrowed by a provider failure
-(<the refusal>; trip N, half-opens at T)`, one line per open. Every narrowing
-of the bound is therefore visible with its cause.
+The one shared, evidence-driven gate per route is therefore the gateway's
+per-model breaker, shared by every caller and computer; no second gate was
+written. Its failure threshold (5) and base windows are still constants
+someone picked; the narrowing lines are the evidence that will say whether
+they are right.
 
-Residual error: the breaker's failure threshold and open window are constants
-somebody picked, not learned (see the table column). A wall of 429s before the
-threshold is possible for a burst larger than the threshold; the claim C244
-counts provider refusals on the sub-call path after deploy.
+**Devin.** `devin/swe-2-flash` leads the pool and carries most calls
+(`docs/system-map.md`), through one person's unofficial CLI session
+(`provider/devin.go`: "the service can revoke the session or the account at
+any time"). Nothing bounds its concurrency: no in-flight cap exists, and the
+hour pacer (`gateway/devin_pacing.go`) counts input tokens per clock hour and
+sheds threads on a thirty-second evaluation, not a burst. With the spacer
+gone, only Devin's own refusals bound a burst there: a short
+`resource_exhausted` is now an upstream refusal (429 and a wait, fail over at
+once), a spent allowance or a refused session is a quota hold (the breaker
+holds the model until reset, doubling when none is given). A burst could
+reach the service faster than before, and whether that risks the session is
+not known and not testable from here. It is the owner's risk to take or
+bound; no constant cap is added by this change. C244 watches for it: a
+`refused as a hard failure` line or a session refusal on Devin in the six
+hours is the signal.
+
+**Security-Effect text for the trailers (the lead adds them after review).**
+Security-Effect: none in the gateway as a security surface; the change
+(1) answers a provider's ordinary 429 and concurrency refusal as HTTP 429 with
+a Retry-After and a typed kind instead of 502, so the guest waits or fails
+over instead of retrying blind, (2) keeps a model breaker's doubling across a
+passing probe, bounds every half-open probe with the existing 90 s deadline
+and stops late failures sliding an open window, and (3) logs one quoted,
+length-bounded provider-refusal line per breaker open. None of this is an
+auth, capability, sandbox or data-access path, and none changes which callers
+are admitted; it changes how long a refused model stays shut and what a
+refused caller is told. The same commit deletes the guest's shared 1.5 s
+sub-call spacer on research children and management task runs: a pacing
+control, not a security surface, which raises provider-facing concurrency from
+those paths.
 
 ## What the 4-at-a-time research children bound protects
 

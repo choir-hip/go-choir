@@ -254,15 +254,25 @@ func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, erro
 			lastErr = fmt.Errorf("gateway client: read response: %w", err)
 			continue
 		}
-		// The gateway's per-computer limiter rejects with 429 and the
-		// seconds until its window resets. Waiting that out queues the call
-		// instead of failing it after 1.5 s
-		// (docs/archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
-		// A provider quota is not the limiter: it goes to the caller at
-		// once, typed, with its reset time; the tool loop switches models on it.
+		// A 429 with a Retry-After and no type is waited out below, as it
+		// was when the gateway had a per-computer limiter (removed
+		// 2026-11-10; no route of the gateway sends one now). A provider
+		// quota goes to the caller at once, typed, with its reset time; the
+		// tool loop switches models on it. A provider's ordinary refusal is
+		// typed too (kind upstream_rate_limit) and also goes to the caller.
 		if httpResp.StatusCode == http.StatusTooManyRequests {
-			if q, ok := provideriface.AsProviderQuota(gatewayStatusError(httpResp.Status, body)); ok {
+			stErr := gatewayStatusError(httpResp.Status, body)
+			if q, ok := provideriface.AsProviderQuota(stErr); ok {
 				return nil, q
+			}
+			// A provider's refusal is the caller's to wait on or fail over
+			// from, with the gateway's Retry-After: never sent again here on
+			// our own, which for a burst of callers is a wall of blind retries.
+			if refusal, ok := provideriface.AsUpstreamRefusal(stErr); ok {
+				if wait, hasWait := retryAfter(httpResp); hasWait {
+					refusal.RetryAfter = wait
+				}
+				return nil, refusal
 			}
 		}
 		if wait, ok := retryAfter(httpResp); ok && httpResp.StatusCode == http.StatusTooManyRequests && rateLimitWaits < maxRateLimitWaits {
@@ -371,6 +381,10 @@ func (p *Provider) do(ctx context.Context, req llmRequest, accept string) (*http
 // (gateway.ErrorKindProviderQuota).
 const gatewayKindProviderQuota = "provider_quota"
 
+// gatewayKindUpstreamRateLimit is the gateway's typed answer to a provider's
+// ordinary refusal (gateway.ErrorKindUpstreamRateLimit).
+const gatewayKindUpstreamRateLimit = "upstream_rate_limit"
+
 func firstNonEmptyString(values ...string) string {
 	for _, v := range values {
 		if v = strings.TrimSpace(v); v != "" {
@@ -445,6 +459,10 @@ func gatewayStatusError(status string, body []byte) error {
 			q.RetryAtEstimated = false
 		}
 		return q
+	}
+	if err := json.Unmarshal(body, &errResp); err == nil && errResp.Kind == gatewayKindUpstreamRateLimit {
+		return &provideriface.UpstreamRefusalError{Provider: errResp.Provider, Model: errResp.Model,
+			Message: firstNonEmptyString(errResp.Error, "provider refused the call")}
 	}
 	if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
 		return &gatewayHTTPStatusError{status: status, message: fmt.Sprintf("gateway client: %s", errResp.Error)}

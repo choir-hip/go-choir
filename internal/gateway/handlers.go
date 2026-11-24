@@ -159,6 +159,11 @@ type ErrorResponse struct {
 	Shed bool `json:"shed,omitempty"`
 }
 
+// ErrorKindUpstreamRateLimit is the kind of an upstream refusal answer: HTTP
+// 429 with Retry-After for a provider's ordinary rate limit or concurrency
+// ceiling, which is neither a spent quota nor a failed model.
+const ErrorKindUpstreamRateLimit = "upstream_rate_limit"
+
 // ErrorKindProviderQuota is the kind of a provider quota answer.
 const ErrorKindProviderQuota = "provider_quota"
 
@@ -534,6 +539,10 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 			writeProviderQuota(w, q, req.Model, time.Now())
 			return
 		}
+		if wait, ok := upstreamRefusalWait(err); ok {
+			writeUpstreamRefusal(w, p.Name(), req.Model, sanitized, wait)
+			return
+		}
 		status := http.StatusBadGateway
 		if provider.IsMediaError(err) {
 			// A refused image is the caller's error: not retried as a
@@ -606,6 +615,13 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 			w.Header().Del("Cache-Control")
 			w.Header().Del("X-Accel-Buffering")
 			writeProviderQuota(w, q, llmReq.Model, time.Now())
+			return
+		}
+
+		if wait, ok := upstreamRefusalWait(err); ok && !wrote {
+			w.Header().Del("Cache-Control")
+			w.Header().Del("X-Accel-Buffering")
+			writeUpstreamRefusal(w, p.Name(), llmReq.Model, sanitized, wait)
 			return
 		}
 

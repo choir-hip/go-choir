@@ -35,8 +35,9 @@ guest compensates with its own retry loops and pacing, which is where the
   per-provider and per-model circuit breakers for every computer
   (`internal/gateway/circuit_breaker.go`; the 2026-10 incidents in
   `docs/learn/03-gateway-and-providers.md` section 4).
-- The guest paces itself because the gateway does not: a 1.5 second spacer
-  between research child calls (`internal/agentcore/research_children.go:30-37`), a wait of
+- The guest used to pace itself because the gateway did not: a 1.5 second
+  spacer between research child calls, deleted 2026-11-24
+  ([record](sub-call-spacer-outlived-its-bucket-2026-11-24.md)). Still: a wait of
   up to ten `Retry-After` windows per call
   (`internal/gatewayruntime/provider.go:218-262`), then tool-loop retries.
   Two clocks (the guest's pacing and the gateway's window) decide when a
