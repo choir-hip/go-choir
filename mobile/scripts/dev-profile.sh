@@ -24,10 +24,14 @@ while a:
     elif x.startswith("--phone="): phone = x[8:]
     elif x == "--check" and a: check = a.pop(0)
     else: die("usage: dev-profile.sh [--phone <udid>] [--check <profile>]")
+_c = {}
 def decode(f):
+    if f not in _c: _c[f] = _decode(f)
+    return _c[f]
+def _decode(f):
     try:
         cmd = [DECODER, f] if DECODER else ["/usr/bin/security", "cms", "-D", "-i", f]
-        return plistlib.loads(subprocess.run(cmd, capture_output=True, check=True, timeout=30).stdout)
+        return plistlib.loads(subprocess.run(cmd, capture_output=True, check=True, timeout=30, stdin=subprocess.DEVNULL).stdout)
     except Exception: return None
 def why_not(f):
     """None when the profile qualifies, else the first test it fails."""
