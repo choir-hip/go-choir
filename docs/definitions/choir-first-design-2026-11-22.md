@@ -127,6 +127,10 @@ boundaries:
     said: 7. yes, and mgmt is responsible for managing scoring. many scores come from objective data, but we can also use system1 models and llms/rlm desks for scoring, and mgmt handles that
     'on': '2026-11-24'
     reading: 'lead''s reading: management does not decide captures or open stories; it is the scoring authority, so no desk scores its own forecast. Objective settlement stays host code; management chooses and runs the scorer where plain code cannot settle'
+  - decision: 'how management scores: with data sources in its own REPL; with System 1 as a tool; in its own thread; by sub-RLM delegation; or by calling other desks'
+    said: mgmt can do scoring with data sources in its repl, with system1 as a tool, both in its own thread, or with subrlm delegation, or by calling other desks
+    'on': '2026-11-24'
+    reading: 'lead''s reading: these are management''s means, chosen per kind of forecast. So that management is not again in the path of every item, scores that plain data settles are settled by host code in bulk and management sees their totals; management spends a thread, a System 1 call, a sub-call or another desk only on what data cannot settle, and on auditing a sample of what it did not look at'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
