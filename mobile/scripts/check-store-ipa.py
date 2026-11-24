@@ -12,6 +12,8 @@ same rules. Exit 0 and a summary on stdout, or exit 1 and the reason on
 stderr; it prints no certificate, hash or key, and not the build machine's host name (Exact stamps it: it says the key is there)."""
 import os, plistlib, posixpath, re, stat, subprocess, sys, tempfile, zipfile
 
+# Names the PRODUCT's own code holds (the voice model hub, the app module): if no Mach-O holds one the search may be blind (stripped, or code somewhere it did not look); printed as a warning, never a refusal.
+PRODUCT = ("ModelProof", "AutoradioModule")
 MACHO = (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf", b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca")
 
 def load_names(here):
@@ -157,7 +159,8 @@ with tempfile.TemporaryDirectory() as d:
         no("its executable " + exe_name + " is not a regular file")
     if os.path.getsize(exe_path) == 0:
         no("its executable is empty")
-    searched = 0
+    searched = []
+    markers = []
     for root, dirs, files in os.walk(appdir, followlinks=False):
         for entry in dirs + files:
             full = os.path.join(root, entry)
@@ -174,7 +177,9 @@ with tempfile.TemporaryDirectory() as d:
                 if not binary:
                     continue
                 data = head + fh.read()
-            searched += 1
+            searched.append(os.path.relpath(full, appdir))
+            if any(m.encode("utf8") in data for m in PRODUCT):
+                markers.append(os.path.relpath(full, appdir))
             found = dev_names_in(data, here)
             if found:
                 no(os.path.relpath(full, appdir) + " holds developer-only names (the launch hooks of a development build): " + ", ".join(found))
@@ -209,7 +214,13 @@ print("bundle id: " + bid)
 print("version: " + ver)
 print("build number: " + build)
 print("ITSAppUsesNonExemptEncryption: false")
-print("Mach-O files searched for developer-only names: %d" % searched)
+print("Mach-O files searched for developer-only names: %d (%s)" % (len(searched), ", ".join(sorted(searched))))
+if len(searched) < 2:
+    print("WARNING: only one Mach-O file was searched; Exact puts the app module in libexact_modules.dylib or Frameworks/ExactModules.framework, so a layout with none is new: read the unpacked app before trusting this")
+if not markers:
+    print("WARNING: no searched file holds a product name (%s): the search may be looking at the wrong files or at stripped code" % ", ".join(PRODUCT))
+else:
+    print("product code found in: " + ", ".join(sorted(markers)))
 if "ExactBuildHost" in info:
     print("ExactBuildHost: present (Exact stamps the build machine's host name into every build, archives included, and offers no way to leave it out; the value is not printed)")
 commit = info.get("ExactAppCommit")

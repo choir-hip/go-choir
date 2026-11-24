@@ -129,6 +129,16 @@ describe('the build identity (app-identity.sh over the real app.json)', () => {
   });
 });
 
+let pin: { dir: string; head: string } | null = null;
+function pinnedExact() {                                                                  // an empty git repository with one commit, made once per test run
+  if (!pin) {
+    const dir = mkdtempSync(join(tmpdir(), 'store-build-pin-'));
+    run(['git', 'init', '-q', dir], BASE);
+    run(['git', '-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'pin'], BASE);
+    pin = { dir, head: run(['git', '-C', dir, 'rev-parse', 'HEAD'], BASE).out };
+  }
+  return pin;
+}
 // ---- a copy of the tree over stubs ----------------------------------------------------------------------------------------------------------------------
 type Tree = { t: string; m: string; bin: string; env: (extra?: Record<string, string>) => Record<string, string>; cleanup: () => void };
 type TreeOpts = { realStage?: boolean; systemTools?: boolean };   // systemTools: the two checkers are the real ones with no tools argument (the system's own tools, not this tree's stubs)
@@ -146,9 +156,8 @@ function tree(opts: TreeOpts = {}): Tree {
     }
   }
   cpSync(join(MOBILE, 'AutoradioLab', 'app.json'), join(m, 'AutoradioLab', 'app.json'));
-  run(['git', 'init', '-q', join(m, '.exact-src')], BASE);
-  run(['git', '-C', join(m, '.exact-src'), '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'pin'], BASE);
-  writeFileSync(join(m, 'exact.pin'), run(['git', '-C', join(m, '.exact-src'), 'rev-parse', 'HEAD'], BASE).out);
+  cpSync(pinnedExact().dir, join(m, '.exact-src'), { recursive: true });                 // one made repository, copied: not two git runs per tree
+  writeFileSync(join(m, 'exact.pin'), pinnedExact().head);
   writeFileSync(join(m, 'scripts', 'sync-exact-package.sh'), `#!/bin/sh\nprintf 'sync kind=%s\\n' "\${AR_BUILD_KIND-unset}" >> "${t}/order.log"\nexit 0\n`);
   if (opts.realStage) {                                                                 // the real staging over the real model sources and a stub kit, as the K1 test does
     cpSync(join(MOBILE, 'scripts', 'sync-exact-package.sh'), join(m, 'scripts', 'sync-real.sh'));          // the real staging, behind the same logging wrapper
@@ -1077,7 +1086,7 @@ describe('F2 what is searched is what is signed', () => {
 });
 
 describe('F3 the tools are the system\'s, not the caller\'s PATH', () => {
-  test('F3 stubs of codesign, ditto and security on PATH are ignored by upload-store.sh and archive-store.sh (the real tools judge the fixture and refuse it)', () => {
+  test('F3 stubs of codesign, ditto and security on PATH are ignored by upload-store.sh and archive-store.sh (the system\'s security refuses the fixture\'s profile and identity)', () => {
     const tr = tree({ systemTools: true });
     try {
       const profile = writeSigning(tr);
@@ -1089,13 +1098,37 @@ describe('F3 the tools are the system\'s, not the caller\'s PATH', () => {
       expect(a.code).not.toBe(0); expect(a.err).toContain('archive-store:'); expect(a.err).toContain('identity'); expect(existsSync(join(tr.bin, 'bun.last'))).toBe(false);
     } finally { tr.cleanup(); }
   });
+  test('F3 with only a valid-profile security given, the REAL ditto and codesign judge the fixture, whatever stubs of them are on PATH', () => {
+    const tr = tree();
+    try {
+      writeSigning(tr);
+      const only = join(tr.t, 'only-security'); mkdirSync(only);
+      cpSync(join(tr.bin, 'security'), join(only, 'security'));
+      for (const t of ['codesign', 'ditto']) { const f = join(tr.bin, t); writeFileSync(f, '#!/bin/sh\ntouch "' + tr.t + '/' + t + '.used"\nexit 0\n'); chmodSync(f, 0o755); }
+      const ipa = makeIpa(tr, 'real-tools.ipa');
+      const r = run(['/usr/bin/python3', '-I', join(MOBILE, 'scripts', 'check-store-ipa.py'), '--tools', only, 'direct', ipa, PROD, '1.0'], tr.env());
+      expect(r.code).not.toBe(0);
+      expect(r.err, 'the real ditto unpacked it and the real codesign found it unsigned').toContain('signature does not verify');
+      expect(existsSync(join(tr.t, 'codesign.used')) || existsSync(join(tr.t, 'ditto.used')), 'a stub on PATH was run').toBe(false);
+    } finally { tr.cleanup(); }
+  });
+  test('F3 the first thing a store script does is not resolved from PATH either: a dirname on PATH changes nothing', () => {
+    const tr = tree();
+    try {
+      const profile = writeSigning(tr);
+      writeFileSync(join(tr.bin, 'dirname'), '#!/bin/sh\ntouch "' + tr.t + '/dirname.used"\necho /nonexistent\n'); chmodSync(join(tr.bin, 'dirname'), 0o755);
+      const u = uploadOf(tr, makeIpa(tr, 'd.ipa')); expect(u.code, u.err).toBe(0);
+      const a = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile }); expect(a.code, a.err).toBe(0);
+      expect(existsSync(join(tr.t, 'dirname.used')), 'the caller\'s dirname ran').toBe(false);
+    } finally { tr.cleanup(); }
+  });
   test('F3 the checker takes a tools directory only as an explicit argument (a test\'s; the two store scripts never pass one): with it the stubs judge, without it the real tools do', () => {
     const tr = tree();
     try {
       writeSigning(tr);
       const ipa = makeIpa(tr, 'direct.ipa');
       const direct = (tools: string[]) => run(['/usr/bin/python3', '-I', join(MOBILE, 'scripts', 'check-store-ipa.py'), ...tools, 'direct', ipa, PROD, '1.0'], BASE);
-      expect(direct([]).code).not.toBe(0);                                                  // the real codesign on a fixture
+      expect(direct([]).code).not.toBe(0);                                                  // no tools directory: the system's tools, which refuse a fixture
       const r = direct(['--tools', tr.bin]); expect(r.code, r.err).toBe(0);
     } finally { tr.cleanup(); }
   });
@@ -1157,21 +1190,54 @@ describe('F5 the list of names is parsed strictly and covers what is staged and 
       const names = NAMES.filter((n) => n.kind === 'staged').map((n) => n.name);
       expect(names.some((n) => dev[f].includes(n) || f.includes(n)), f + ' differs between the kinds but holds no listed name: add the name that gives it away to scripts/store-dev-names.txt').toBe(true);
     }
-    // every use of a compiled name is under #if (EXACT_DEVELOPMENT | targetEnvironment(simulator))
-    const roots = [join(MOBILE, 'AutoradioKit', 'Sources'), join(MOBILE, 'AutoradioLab', 'modules', 'apple')];
+    // every use of a compiled name is in a branch a store archive does not compile (ungatedUses, below)
+    const roots = [join(MOBILE, 'AutoradioKit', 'Sources'), join(MOBILE, 'AutoradioLab', 'modules', 'apple'), join(MOBILE, 'exact-package', 'apple')];
     const swift = roots.flatMap((r) => readdirSync(r, { recursive: true }).map(String).filter((f) => f.endsWith('.swift')).map((f) => join(r, f)));
-    for (const { kind, name } of NAMES.filter((n) => n.kind === 'compiled')) {
+    for (const { name } of NAMES.filter((n) => n.kind === 'compiled')) {
       let seen = 0;
       for (const f of swift) {
-        const stack: boolean[] = [];
-        for (const line of readFileSync(f, 'utf8').split('\n')) {
-          const t = line.trim();
-          if (t.startsWith('#if ')) stack.push(/EXACT_DEVELOPMENT|targetEnvironment\(simulator\)/.test(t)); else if (t.startsWith('#else') || t.startsWith('#elseif')) stack[stack.length - 1] = false; else if (t.startsWith('#endif')) stack.pop();
-          else if (!t.startsWith('//') && line.includes(name)) { seen++; expect(stack.some(Boolean), `${f}: "${name}" is used outside a development-only build condition: ${t}`).toBe(true); }
-        }
+        const text = readFileSync(f, 'utf8');
+        seen += text.split('\n').filter((l) => !l.trim().startsWith('//') && l.includes(name)).length;
+        expect(ungatedUses(text, name), `${f}: "${name}" is used where a store archive compiles it`).toEqual([]);
       }
       expect(seen, name + ' is no longer used anywhere: renamed? update scripts/store-dev-names.txt').toBeGreaterThan(0);
     }
+  });
+});
+
+// The lines of a Swift file that mention `name` in a branch a store archive (an iOS device build with no EXACT_DEVELOPMENT) COMPILES. A branch is development-only when its condition is
+// EXACT_DEVELOPMENT, targetEnvironment(simulator) or os(macOS), joined by || (every operand must be one) or && (one operand is enough); `!cond` makes the #if branch not development-only
+// and its #else branch so; `#else` of a plain development condition is not; a use is safe when ANY enclosing branch is development-only.
+function ungatedUses(text: string, name: string): string[] {
+  const dev = (c: string) => c.split('||').every((op) => op.split('&&').some((a) => /^(EXACT_DEVELOPMENT|targetEnvironment\(simulator\)|os\(macOS\))$/.test(a.trim())));
+  const frames: { now: boolean; elseDev: boolean }[] = [];
+  const out: string[] = [];
+  for (const raw of text.split('\n')) {
+    const t = raw.trim();
+    if (t.startsWith('#if ')) { const c = t.slice(4).replace(/\s*\/\/.*$/, '').trim(); const neg = c.startsWith('!'); const d = dev(neg ? c.slice(1) : c); frames.push({ now: !neg && d, elseDev: neg && d }); }
+    else if (t.startsWith('#elseif ')) { const c = t.slice(8).replace(/\s*\/\/.*$/, '').trim(); if (frames.length) { frames[frames.length - 1].now = !c.startsWith('!') && dev(c); frames[frames.length - 1].elseDev = false; } }
+    else if (t === '#else' || t.startsWith('#else ')) { if (frames.length) frames[frames.length - 1].now = frames[frames.length - 1].elseDev; }
+    else if (t.startsWith('#endif')) frames.pop();
+    else if (!t.startsWith('//') && raw.includes(name) && !frames.some((f) => f.now)) out.push(t);
+  }
+  return out;
+}
+describe('F5 the build-condition scan reads conditions, not just their presence', () => {
+  test('F5 negations, #else and #elseif, nesting and || are read as a store archive compiles them', () => {
+    const u = (src: string) => ungatedUses(src, 'N');
+    expect(u('#if EXACT_DEVELOPMENT\nN\n#endif')).toEqual([]);
+    expect(u('#if !EXACT_DEVELOPMENT\nN\n#endif')).toEqual(['N']);
+    expect(u('#if EXACT_DEVELOPMENT\nx\n#else\nN\n#endif')).toEqual(['N']);
+    expect(u('#if !EXACT_DEVELOPMENT\nx\n#else\nN\n#endif')).toEqual([]);
+    expect(u('#if A\nx\n#elseif EXACT_DEVELOPMENT\nN\n#endif')).toEqual([]);
+    expect(u('#if EXACT_DEVELOPMENT\nx\n#elseif B\nN\n#endif')).toEqual(['N']);
+    expect(u('#if EXACT_DEVELOPMENT\n#if B\nN\n#endif\n#endif')).toEqual([]);
+    expect(u('#if B\n#if EXACT_DEVELOPMENT\nx\n#endif\nN\n#endif')).toEqual(['N']);
+    expect(u('#if targetEnvironment(simulator) || os(macOS)\nN\n#endif')).toEqual([]);
+    expect(u('#if EXACT_DEVELOPMENT || FOO\nN\n#endif')).toEqual(['N']);
+    expect(u('#if EXACT_DEVELOPMENT && FOO\nN\n#endif')).toEqual([]);
+    expect(u('// N in a comment\nlet x = 1')).toEqual([]);
+    expect(u('let y = "N"')).toEqual(['let y = "N"']);
   });
 });
 
@@ -1234,6 +1300,65 @@ describe('F7 the wrapper around Exact', () => {
       r = ex(['ios', '--run']); expect(r.code, r.err).toBe(0);
       writeFileSync(join(tr.t, 'tree'), '/nowhere\n');                                      // not the build tree
       r = ex(['agent', 'ios', '--phone', 'X'], { AR_VARIANT: 'lab' }); expect(r.code).not.toBe(0); expect(r.err).toContain('build tree');
+    } finally { tr.cleanup(); }
+  });
+});
+
+// ---- round 6: the negative control is a script, not a recipe ----------------------------------------------------------------------------------------------
+//  N1 the lead has to reproduce exact-env.sh's environment by hand to build the development app the control needs, and can leave the tree development-staged.
+//  N2 the control passes when the check does NOT refuse the development app (it must fail, saying the check is inert), or when it refuses for another reason.
+//  N3 the control can upload, or keeps the development ipa.
+const control = (tr: Tree, extra: Record<string, string> = {}) => { const e = tr.env(extra); if (!('ALLOW_NO_MODELS' in extra)) delete e.ALLOW_NO_MODELS; return run(['/bin/sh', join(tr.m, 'scripts', 'store-negative-control.sh')], e); };
+describe('N store-negative-control.sh', () => {
+  test('N1 a development app built as the store app is, refused for a hook naming the file, then the store kind staged again; nothing uploaded; the ipa deleted', () => {
+    const tr = tree({ realStage: true });
+    try {
+      const profile = writeSigning(tr);
+      const r = control(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile, ASC_KEY_ID: 'ZZ', ASC_ISSUER_ID: 'ZZ', ASC_KEY_FILE: join(tr.t, 'none.p8') });
+      expect(r.code, r.err + r.out).toBe(0);
+      expect(r.out).toContain('REFUSED'); expect(r.out).toContain('holds developer-only names'); expect(r.out).toContain('Autoradio1 holds developer-only names');                                        // the file, inside the app
+      for (const n of ['EmbedDeviceTrial', 'ModelProofStages']) expect(r.out).toContain(n);
+      const order = readFileSync(join(tr.t, 'order.log'), 'utf8').trim().split('\n');
+      expect(order.filter((l) => l.startsWith('sync') || l === 'exact')).toEqual(['sync kind=development', 'exact', 'sync kind=store']);       // development, Exact, then the store kind again
+      expect(readFileSync(join(tr.bin, 'bun.last'), 'utf8')).toContain('EXACT_BUILD_NUMBER=[1]');
+      expect(existsSync(join(tr.t, 'xe.log')), 'nothing may be uploaded').toBe(false);
+      expect(readdirSync(join(tr.t, 'out', 'negative-control')).filter((f) => f.endsWith('.ipa'))).toEqual([]);
+    } finally { tr.cleanup(); }
+  });
+  test('N2 a check that does not refuse the development app makes the control fail, saying so; so does a refusal for another reason', () => {
+    const tr = tree();                                                                          // the stub staging stages no hook: the "development" app holds none of the names
+    try {
+      const profile = writeSigning(tr);
+      let r = control(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
+      expect(r.code).not.toBe(0); expect(r.err).toContain('NOT REFUSED'); expect(r.err).toContain('Xcode');
+      writeFileSync(join(tr.bin, 'mode'), 'wrong-id');                                          // refused, but not for a hook
+      r = control(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
+      expect(r.code).not.toBe(0); expect(r.err).toContain('ANOTHER reason');
+      expect(existsSync(join(tr.t, 'xe.log'))).toBe(false);
+    } finally { tr.cleanup(); }
+  });
+  test('N3 the control refuses a variant, a missing identity and a missing profile before it stages or builds anything', () => {
+    const tr = tree();
+    try {
+      const profile = writeSigning(tr);
+      for (const extra of [{ AR_VARIANT: 'lab' }, {}, { EXACT_IDENTITY: SHA }, { EXACT_IDENTITY: SHA, EXACT_PROFILE: join(tr.t, 'nope') }, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile, ALLOW_NO_MODELS: '1' }]) {
+        const r = control(tr, extra); expect(r.code, JSON.stringify(extra)).not.toBe(0); expect(r.err).toContain('store-negative-control:');
+      }
+      expect(existsSync(join(tr.t, 'order.log'))).toBe(false);
+    } finally { tr.cleanup(); }
+  });
+});
+
+describe('N4 the check says when it is looking at little', () => {
+  test('N4 a store ipa with only its main executable, or with no product name in any binary, passes with a warning that says so; one with the module framework and a product name does not warn', () => {
+    const tr = tree();
+    try {
+      writeSigning(tr);
+      let r = uploadOf(tr, makeIpa(tr, 'one.ipa', { exe: 'MZ clean' })); expect(r.code, r.err).toBe(0);
+      expect(r.out).toContain('WARNING: only one Mach-O'); expect(r.out).toContain('WARNING: no searched file holds a product name');
+      const ok = addToIpa(makeIpa(tr, 'two.ipa', { exe: 'MZ clean' }), { 'Payload/A.app/Frameworks/ExactModules.framework/ExactModules': Buffer.concat([MACHO, Buffer.from('ModelProof AutoradioModule')]) });
+      r = uploadOf(tr, ok); expect(r.code, r.err).toBe(0);
+      expect(r.out).not.toContain('WARNING'); expect(r.out).toContain('product code found in: Frameworks/ExactModules.framework/ExactModules');
     } finally { tr.cleanup(); }
   });
 });

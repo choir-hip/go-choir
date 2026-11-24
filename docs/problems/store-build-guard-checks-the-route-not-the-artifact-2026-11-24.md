@@ -64,6 +64,8 @@ found on the caller's `PATH`; they are now `/usr/bin`'s, and tests reach the
 checkers' stubs only through a `--tools` argument the store scripts never
 pass. Belief: the shape is now right (judge the whole artifact with the
 system's tools); the remaining error is still the real binaries, which have
-not been seen: the first archive carries a negative control (a release,
-archive-kind, dev-staged build must be refused) and a positive control
-(a known product symbol is found in the module binary).
+not been seen: the first archive carries a negative control, now a script
+(`mobile/scripts/store-negative-control.sh`: a release, archive-kind,
+development-staged build must be refused, naming a listed hook and its
+file) and a positive control (the store archive's summary names the module
+binary and a product name found in it).

@@ -22,8 +22,8 @@
 # The .ipa goes to $AR_STORE_OUT_DIR (default ~/.cache/autoradio-store), outside the repo. EXACT_PROFILE and AR_STORE_OUT_DIR may be relative to where this is run; they are made absolute.
 # ALLOW_NO_MODELS is refused (a store archive always carries the voice models).
 set -eu
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
 PATH="/usr/bin:/bin:/usr/sbin:/sbin"     # the system's tools only: a codesign, ditto or security earlier on the caller's PATH must not judge a store build (the checkers name /usr/bin themselves too)
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
 no() { echo "archive-store: $1" >&2; exit 1; }
 [ -z "${AR_VARIANT:-}${AR_APP_ID:-}${AR_APP_NAME:-}" ] || no "the store build is the production app: unset AR_VARIANT, AR_APP_ID and AR_APP_NAME (a development app is never uploaded)"
 [ -z "${AR_APP_JSON:-}" ] || no "AR_APP_JSON is set: the store build reads the app's own app.json only (another identity file would ship another id, name or version); unset it"
@@ -70,10 +70,11 @@ fi
 # The record only goes up: re-read under a short lock (a directory made and removed), so a run holding a lower number cannot write over a higher one another run just wrote.
 RLOCK="$OUTDIR/last-build.lock"; _w=0
 until mkdir "$RLOCK" 2>/dev/null; do _w=$((_w + 1)); [ "$_w" -lt 100 ] || no "$RLOCK is held (another run is recording a number; if none is running, remove that directory)"; sleep 0.1; done
+trap 'rmdir "$RLOCK" 2>/dev/null' EXIT INT TERM       # an interrupt between the mkdir and the rmdir leaves no stale lock
 CUR=0; [ -e "$LASTF" ] && CUR="$(cat "$LASTF")"
 case "$CUR" in ''|*[!0-9]*) CUR=0 ;; esac
 if [ "$BUILD" -gt "$CUR" ]; then printf '%s\n' "$BUILD" > "$LASTF.$$" && mv -f "$LASTF.$$" "$LASTF"; fi
-rmdir "$RLOCK"
+rmdir "$RLOCK"; trap - EXIT INT TERM
 IPA="$OUTDIR/$(printf '%s' "$NAME" | tr -c 'A-Za-z0-9.\n' '-')-$VERSION-$BUILD.ipa"
 rm -f "$IPA"
 LOG="$OUTDIR/archive-$BUILD.stdout"
