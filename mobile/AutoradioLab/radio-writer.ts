@@ -7,7 +7,6 @@ import { cutBytes, oneLine, paperStory } from './runsheet-entries.ts';
 import { AHEAD_FLOOR_SECONDS, StretchDecoder, askOutcome, entryFrom, placeOp, plainWords, shouldAskMore, toldRoutes, type Incoming } from './programme-model.ts';
 import { parseStory, weight } from './paper-model.ts';
 import { candidateJSON, candidates as takeCandidates, merged, title as takeTitle, type Kept, type Take } from './takes.ts';
-import { paperStory } from './runsheet-entries.ts';
 import type { RadioRuntime } from './radio-runtime.ts';
 import type { Entry } from './runsheet-model.ts';
 
