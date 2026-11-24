@@ -70,10 +70,24 @@ public struct ModelListEntry: Codable, Equatable, Sendable {
     }
 }
 
+/// One voice of a voice model, as a row of the list (owner, 2026-11-24: more voices in Voice and models). The rows are made from the voice pack's own metadata
+/// (`scripts/gen-voice-rows.ts`, `VoiceRows`), not typed. `id` is the card's id, `voice` the name the stage takes as its `voice` parameter: this is where a voice id
+/// reaches the native runtime. A row with no credit is never offered: a licence that asks for a notice does not travel without it.
+public struct ModelListVoice: Codable, Equatable, Sendable {
+    public var id: String, stageID: String, voice: String, modelID: String, group: String, name: String, blurb: String, sample: String, license: String, credit: String
+    public var bytes: Int64
+    var isValid: Bool { ![id, stageID, voice, modelID, group, name, sample, credit].contains { $0.trimmingCharacters(in: .whitespaces).isEmpty } }
+    public init(_ r: VoiceRow) {
+        id = r.id; stageID = r.stageID; voice = r.voice; modelID = r.modelID; group = r.group; name = r.name; blurb = r.blurb; sample = r.sample; license = r.license; credit = r.credit; bytes = r.bytes
+    }
+}
+
 public struct ModelList: Codable, Equatable, Sendable {
     public var version: Int
     public var models: [ModelListEntry]
-    public init(version: Int, models: [ModelListEntry]) { self.version = version; self.models = models }
+    /// The voices of the voice models, English only, best first (the default first). A list from before voices were rows has none.
+    public var voices: [ModelListVoice]
+    public init(version: Int, models: [ModelListEntry], voices: [ModelListVoice] = []) { self.version = version; self.models = models; self.voices = voices }
 
     /// Entries that are valid, for this build's jobs; the rest are skipped (1 and 3 above).
     public init(from decoder: Decoder) throws {
@@ -81,8 +95,10 @@ public struct ModelList: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: Keys.self)
         version = try c.decode(Int.self, forKey: .version)
         models = try c.decode([Lenient].self, forKey: .models).compactMap(\.entry).filter(\.isValid)
+        struct LenientVoice: Decodable { var voice: ModelListVoice?; init(from d: Decoder) throws { voice = try? ModelListVoice(from: d) } }
+        voices = ((try? c.decodeIfPresent([LenientVoice].self, forKey: .voices)) ?? nil)?.compactMap(\.voice).filter(\.isValid) ?? []
     }
-    enum Keys: String, CodingKey { case version, models }
+    enum Keys: String, CodingKey { case version, models, voices }
 
     public static func decode(_ json: Data) throws -> ModelList { try JSONDecoder().decode(ModelList.self, from: json) }
     public func encoded() throws -> Data { let e = JSONEncoder(); e.outputFormatting = [.sortedKeys, .prettyPrinted]; return try e.encode(self) }
@@ -94,7 +110,7 @@ public struct ModelList: Codable, Equatable, Sendable {
     }
 
     /// The copy built into this app, made from the tables the build carries (so it cannot disagree with them).
-    public static func builtIn(table: [ModelCandidate] = CandidateTable.all, bundles: [ModelBundleSpec] = KnownModels.bundles) -> ModelList {
+    public static func builtIn(table: [ModelCandidate] = CandidateTable.all, bundles: [ModelBundleSpec] = KnownModels.bundles, voices: [VoiceRow] = VoiceRows.all) -> ModelList {
         let entries: [ModelListEntry] = table.filter { !$0.isFloor }.map { c in
             let b = bundles.first { $0.id == c.id }
             return ModelListEntry(
@@ -102,6 +118,6 @@ public struct ModelList: Codable, Equatable, Sendable {
                 files: b?.files.map { .init(path: $0.path, bytes: $0.bytes, sha256: $0.sha256) }, license: b?.license ?? c.license, credit: b?.credit ?? c.credit ?? KnownModels.managed.first { $0.id == c.id }?.credit,
                 recommendedFor: [.init(minMemoryGB: Double(c.minTier.rawValue) - 1, note: c.minTier.label + " and up")], rank: c.qualityRank)
         }
-        return ModelList(version: 1, models: entries.filter(\.isValid))
+        return ModelList(version: 1, models: entries.filter(\.isValid), voices: voices.map(ModelListVoice.init).filter(\.isValid))
     }
 }

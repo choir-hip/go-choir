@@ -77,7 +77,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             #if canImport(llama)
             _ = try await ModelStore.shared.ensure(id) { done, _ in onBytes(done) }
             if role == "responder" { _ = try await LlamaLocalModel.engine(id, download: false) }
-            else { _ = try await LlamaSystem1.loadEngine(download: false) }
+            else { _ = try await LlamaSystem1.loadEngine(model: id, download: false) }
             #else
             throw LabError.unavailable("this build has no llama.cpp framework, so the small language model cannot load")
             #endif
@@ -157,7 +157,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             }
             #if canImport(llama)
             if role == "responder" { return try await Self.checkResponder(id, finish: finish) }
-            return try await Self.checkDecision(finish: finish)
+            return try await Self.checkDecision(id, finish: finish)
             #else
             return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "This build has no llama.cpp framework, so the small language model cannot run.")
             #endif
@@ -167,7 +167,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
     public func unload(_ id: String, role: String) async {
         if KnownModels.isPinned(id) {
             #if canImport(llama)
-            if role == "responder" { LlamaLocalModel.slot(for: id).drop() } else { LlamaSystem1.slot.drop() }
+            if role == "responder" { LlamaLocalModel.slot(for: id).drop() } else { LlamaSystem1.slot(for: id).drop() }
             #endif
         } else {
             await ModelStore.shared.unload(id)        // the audio stages' slots drop through the unloader the load registered
@@ -209,7 +209,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             #if canImport(llama)
             if let d = picks["decision"], KnownModels.isPinned(d) {
                 do {
-                    let sys = LlamaSystem1(StageParams())
+                    let sys = LlamaSystem1(StageParams(["model": .string(d)]))
                     let q = Question(id: "asks_for_something", text: "Does the listener ask for something to be done or looked up?", options: ["yes", "no"])
                     let t0 = nowMs()
                     let ans = try await sys.answer(System1Input(context: "A story about a new park.", listenerWords: "Tell me more about the park", questions: [q]))
@@ -280,8 +280,8 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
 
     #if canImport(llama)
     /// The decision model must score a clear request as "yes".
-    static func checkDecision(finish: Finish) async throws -> SetupCheck {
-        let sys = LlamaSystem1(StageParams())
+    static func checkDecision(_ id: String, finish: Finish) async throws -> SetupCheck {
+        let sys = LlamaSystem1(StageParams(["model": .string(id)]))          // the model asked about, not the saved one: a pick is checked before it is the choice
         let q = Question(id: "asks_for_something", text: "Does the listener ask for something to be done or looked up?", options: ["yes", "no"])
         let input = System1Input(context: "A story about a new park.", listenerWords: "Tell me more about the park", questions: [q])
         _ = try await sys.answer(input)                 // the first decode after a load is slower than the rest

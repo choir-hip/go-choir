@@ -26,6 +26,10 @@ public struct VoiceCardState: Codable, Equatable, Sendable {
     public var selected: Bool
     public var playing: Bool
     public var note: String
+    /// The model it is a voice of: its id (for a stable name in the page), its name, and the credit its licence asks for. All empty for the system voice.
+    public var model: String = ""
+    public var group: String = ""
+    public var credit: String = ""
 }
 
 public final class VoiceSampler: @unchecked Sendable {
@@ -85,7 +89,7 @@ public final class VoiceSampler: @unchecked Sendable {
             }
             if let f = s.sampleFailed[o.id], state == "ready" { note = f }
             return VoiceCardState(id: o.id, name: o.name, blurb: o.blurb, sizeLabel: o.sizeLabel, state: state, progress: progress,
-                                  selected: s.selected == o.id, playing: s.playing == o.id, note: note)
+                                  selected: s.selected == o.id, playing: s.playing == o.id, note: note, model: o.modelID, group: o.group, credit: o.credit)
         }
     }
 

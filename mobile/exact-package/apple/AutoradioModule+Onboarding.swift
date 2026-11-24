@@ -128,6 +128,8 @@ final class OnboardingController: @unchecked Sendable {
         module.runtime.applyListenerChoice()
         // The responder model setup chose is the one the phone talks with (read again at every start).
         if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }), KnownModels.isPinned(r.chosen) { ResponderChoice.current = r.chosen }
+        // The quick-decision model setup chose is the one that scores what the listener said (read again at every start; Qwen3-0.6B when the choice is not a file on the phone). Native: it is the voice runtime's choice of weights.
+        if let d = s.record.items.first(where: { $0.stage == SetupStage.decision.rawValue }) { DecisionChoice.current = DecisionChoice.resolve(saved: d.chosen) }
         changed()
     }
 
