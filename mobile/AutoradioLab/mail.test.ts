@@ -799,4 +799,8 @@ describe('N1 the note under a message is the LAST action\'s own', () => {
     expect(noteOf('unread', 'Marked unread.', 'Asked.', 'Words.')).toBe('Marked unread.');
     expect(noteOf('', 'Marked unread.', 'Asked.', 'Words.')).toBe('');
   });
+  test('opening the approval page has its own note: it neither shows nor replaces what Ask answered', () => {
+    expect(noteOf('review', 'Marked unread.', 'Asked.', 'Words.', 'That link is not on your computer\'s address.')).toBe('That link is not on your computer\'s address.');
+    expect(noteOf('ask', 'Marked unread.', 'Asked.', 'Words.', 'That link is not on your computer\'s address.')).toBe('Asked.');
+  });
 });

@@ -9,6 +9,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { parseClips } from './clips.ts';
 import { clipEntryOf, radioPlayClip } from './clip-play.ts';
+import { audioSpec } from './runsheet-entries.ts';
 import { episodeKey } from './podcast-model.ts';
 import type { Entry } from './runsheet-model.ts';
 import { getRadio, radioPlayAudio, wipeRadio } from './radio-bridge.ts';
@@ -77,6 +78,8 @@ describe('the act, on the real path', () => {
   });
 });
 
+const audioEpisode = (e: Entry): string => String(audioSpec(e)?.episode_id ?? '');
+const EP = clipEntryOf(withFp).source?.ref.startsWith('clip:') ? String(audioSpec(clipEntryOf(withFp))?.episode_id ?? '') : '';
 describe('keep listening', () => {
   const setup = async () => {
     resetSeam(); forgetOnboarding(); await wipeRadio(undefined);
@@ -94,7 +97,7 @@ describe('keep listening', () => {
   };
   test('P5 the deck is told to clear the clip\'s end', async () => {
     const { native, seen } = await setup();
-    expect(await radioPlayAudio(undefined, native as never, 'keep', 'pod:a/b', '', '', '', 0)).toEqual({ status: 'ok', message: '' });
+    expect(await radioPlayAudio(undefined, native as never, 'keep', EP, '', '', '', 0)).toEqual({ status: 'ok', message: '' });
     expect(seen.some((r) => r.op === 'deck' && r.name === 'deckAct' && r.args?.op === 'clearEnd')).toBe(true);
   });
   test('P5b after Keep listening the clip is no longer a clip, on the run sheet\'s view and on the episode page, and the screens are told', async () => {
@@ -103,9 +106,34 @@ describe('keep listening', () => {
     await r.rt.peek(true);
     expect(r.rt.view().clip).toBe(true); expect((await podcastNow(undefined, native as never)).clip).toBe(true);
     const tick = r.tick;
-    await radioPlayAudio(undefined, native as never, 'keep', 'pod:a/b', '', '', '', 0);
+    await radioPlayAudio(undefined, native as never, 'keep', EP, '', '', '', 0);
     expect(r.rt.view().clip).toBe(false); expect((await podcastNow(undefined, native as never)).clip).toBe(false); expect(r.tick).toBeGreaterThan(tick);
   });
+  test('P5d a clip that has ended (the deck plays the NEXT clip, the ended line not pumped yet): Keep listening sends no clearEnd and marks nothing kept', async () => {
+    const { native, seen } = await setup();
+    const r = await getRadio(undefined, native as never, false);
+    const air = r.rt.store.onAir()!;
+    const was = seen.length;
+    // the deck has moved on to another item; the run sheet still has the first clip on air
+    const moved = { available: true, later: async (q: { op: string; name?: string; args?: Record<string, unknown> }) => { seen.push(q); if (q.op === 'deck') return { why: 'playing', item: 'the-next-clip', block: 0, seconds: 1, duration: 100, held: [], seq: 2, acked: 0, journal: [] }; return (native as { later: (x: unknown) => Promise<unknown> }).later(q); } };
+    adoptNative(moved as never, 'test');
+    await radioPlayAudio(undefined, moved as never, 'keep', String(audioEpisode(air)), '', '', '', 0);
+    expect(seen.slice(was).some((x) => x.op === 'deck' && x.name === 'deckAct' && x.args?.op === 'clearEnd')).toBe(false);
+    expect(r.rt.isKept(air.id)).toBe(false); expect(r.rt.view().clip).toBe(true);
+  });
+  test('P5e Keep listening for another episode than the one on air does nothing', async () => {
+    const { native, seen } = await setup();
+    const was = seen.length;
+    await radioPlayAudio(undefined, native as never, 'keep', 'pod:another/episode', '', '', '', 0);
+    expect(seen.slice(was).some((x) => x.args?.op === 'clearEnd')).toBe(false);
+  });
+  test('P5f sign-out forgets what was kept', async () => {
+    const { native } = await setup();
+    const r = await getRadio(undefined, native as never, false);
+    await radioPlayAudio(undefined, native as never, 'keep', EP, '', '', '', 0);
+    const id = r.rt.store.onAir()!.id; expect(r.rt.isKept(id)).toBe(true);
+    await r.rt.signOut(); expect(r.rt.isKept(id)).toBe(false);
+  }, 15000);
   test('P5c Keep listening with no clip on air changes nothing', async () => {
     resetSeam(); forgetOnboarding(); await wipeRadio(undefined);
     const seen: string[] = []; const native = { available: true, later: async (r: { op: string; name?: string; args?: Record<string, unknown> }) => { seen.push(`${r.op}:${r.args?.op ?? ''}`); return r.op === 'deck' ? { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [] } : r.op === 'radioFacts' ? { at: 0, ready: true, inbox: [], position: { block: 0, seconds: 0 }, foreground: true, sentences: [], sentenceIndex: 0, progress: 0 } : {}; } };
