@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Export for the digest of E5 arm D (ledger C238): read-only reads on Node B to flat files on the build VM.
+# Usage: scripts/offline-experiments/export-digest [DEST]
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+dest="${1:-offline-experiments-data}"
+dstart="2026-10-01 00:00"; end="2026-11-24 00:00"; vstart="2026-11-21 12:00"
+runner="${RUNNER:-choir-agents}"
+ssh "$runner" "mkdir -p $dest"
+q() { # q FILE OUTNAME
+  { echo "set default_transaction_read_only=on; set statement_timeout='120s';"
+    sed -e "s/@DSTART@/$dstart/g" -e "s/@END@/$end/g" -e "s/@VSTART@/$vstart/g" "$here/$1"; } |
+    ssh node-b 'nice -n 19 sudo -n -u postgres psql -d graph -q -v ON_ERROR_STOP=1 -f -' |
+    ssh "$runner" "cat > $dest/$2"
+}
+q export-digest-versions.sql digest-versions.csv
+q export-digest-manifests.sql digest-manifests.tsv
+q export-digest-entities.sql digest-entities.csv
+q export-digest-story-entities.sql digest-story-entities.csv
+ssh "$runner" "cat $dest/digest-manifests.tsv" |
+  ssh node-b "sudo -n nice -n 19 ionice -c3 python3 -c \"\$(echo $(base64 < "$here/read-story-text.py" | tr -d '\n') | base64 -d)\"" |
+  ssh "$runner" "cat > $dest/digest-story-text.jsonl"
+ssh "$runner" "cd $dest && ls -l digest-* && wc -l digest-*"

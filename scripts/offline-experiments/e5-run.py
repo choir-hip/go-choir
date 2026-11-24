@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """E5 (ledger C232): the batch model pass. Calls are strictly one after another.
-  e5-run.py ARM INPUT OUT [--sample SAMPLE] [--limit N]
+  e5-run.py ARM INPUT OUT [--sample SAMPLE] [--digests FILE] [--limit N]
 ARM: A (25 to a call, no retrieval), B (25 to a call, with neighbours' names and nearest stories),
+     D (B plus a digest of the paper, the same text for every call of a clock hour, first in the prompt),
      A5 (the sample at 5 to a call, arm A's prompt), A2 (the sample at 25 to a call in other batches).
 The key comes from the environment (RIVER_API_KEY) and goes only in the request header; it is never printed or stored.
 Every response's usage is recorded; the run stops when the running cost passes STOP dollars."""
@@ -30,13 +31,13 @@ def key():
         sys.exit("no RIVER_API_KEY in the environment")
     return k
 
-def render(items, arm, names):
+def render(items, arm, names, digest=None):
     parts = []
     for it in items:
         head = "[%s] %s | %s" % (it["id"], it["origin"], it["time"][11:16] + " UTC")
         body = ("Title: " + it["title"] + "\n" if it["title"] else "") + it["text"]
         extra = ""
-        if arm == "B":
+        if arm in ("B", "D"):
             ks = []
             for nid in it["neighbors"]:
                 if nid in names:
@@ -46,7 +47,10 @@ def render(items, arm, names):
             if it["stories"]:
                 extra += "\nNearby stories: " + " || ".join(it["stories"])
         parts.append(head + "\n" + body + extra)
-    return "\n\n".join(parts)
+    body = "\n\n".join(parts)
+    if digest:
+        body = "PAPER DIGEST (what the paper held at the start of this hour; use it to know what has happened since your training and to reuse its names)\n" + digest + "\n\nITEMS TO COMPRESS\n\n" + body
+    return body
 
 def call(k, system, content, effort):
     payload = {"model": MODEL, "temperature": 0, "max_tokens": 16000,
@@ -94,7 +98,10 @@ def main():
         limit = int(sys.argv[sys.argv.index("--limit") + 1])
     items = [json.loads(l) for l in open(inp)]
     byid = {it["id"]: it for it in items}
-    if arm in ("A", "B"):
+    digests = None
+    if "--digests" in sys.argv:
+        digests = json.load(open(sys.argv[sys.argv.index("--digests") + 1]))
+    if arm in ("A", "B", "D"):
         order = [it["id"] for it in items]
         per = 25
     elif arm == "A5":
@@ -108,7 +115,7 @@ def main():
     batches = [order[i:i + per] for i in range(0, len(order), per)]
     if limit:
         batches = batches[:limit]
-    system = SYS_B if arm == "B" else SYS_A
+    system = SYS_B if arm in ("B", "D") else SYS_A
     k = key()
     done = {}
     names = {}
@@ -128,7 +135,10 @@ def main():
         if total > STOP:
             print("STOP: running cost %.2f over %.2f" % (total, STOP)); break
         its = [byid[i] for i in ids]
-        content = render(its, arm, names)
+        dg = None
+        if arm == "D":
+            dg = digests[its[0]["time"][:13]]
+        content = render(its, arm, names, dg)
         eff = "low"
         dt, resp, err = call(k, system, content, eff)
         retried = False

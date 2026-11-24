@@ -446,6 +446,14 @@ func main() {
 		runE1(os.Args[2], os.Args[3])
 	case "e1b":
 		runE1b(os.Args[2], os.Args[3])
+	case "e5report":
+		runE5Report(os.Args[2], os.Args[3])
+	case "e5sheet":
+		runE5Sheet(os.Args[2], os.Args[3])
+	case "e5drift":
+		runE5Drift(os.Args[2], os.Args[3])
+	case "e5digest":
+		runE5Digest(os.Args[2], os.Args[3])
 	case "e5prep":
 		runE5Prep(os.Args[2], os.Args[3])
 	case "e4set":
