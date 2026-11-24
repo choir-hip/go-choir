@@ -1,0 +1,254 @@
+E1 replay: 6268 arrivals after the copy check (477 dropped as copies), 2026-11-22T00:03Z to 2026-11-23T23:58Z (47.9 h); 2548 groups; 856 stories with versions, 3215 versions, 3208 versions with passage vectors.
+group sizes: singletons 1983, 2 to 4 members 418, 5 or more 147, largest 859
+
+== PRIMARY, window 3h0m0s ==
+hour(UTC) | origins in window | happenings | D bits | of which happenings with 2+ origins | Missing | Misranked | h* identified (arrivals) | h* rank by p | h* cover story front rank | h* rank by term
+00:00 | 245 | 190 | 1.669 | 0.803 | 1.917 | -0.248 | no | - | - | -
+01:00 | 240 | 189 | 1.489 | 0.532 | 1.661 | -0.172 | no | - | - | -
+02:00 | 225 | 178 | 1.602 | 0.614 | 1.705 | -0.102 | no | - | - | -
+03:00 | 214 | 175 | 1.492 | 0.414 | 1.751 | -0.259 | no | - | - | -
+04:00 | 206 | 169 | 1.589 | 0.558 | 1.866 | -0.278 | no | - | - | -
+05:00 | 209 | 182 | 1.569 | 0.325 | 1.885 | -0.316 | no | - | - | -
+06:00 | 230 | 201 | 1.398 | 0.372 | 1.767 | -0.369 | no | - | - | -
+07:00 | 249 | 216 | 1.387 | 0.415 | 1.725 | -0.338 | no | - | - | -
+08:00 | 267 | 233 | 1.434 | 0.496 | 1.785 | -0.350 | no | - | - | -
+09:00 | 284 | 247 | 1.245 | 0.335 | 1.579 | -0.334 | no | - | - | -
+10:00 | 310 | 272 | 1.174 | 0.301 | 1.490 | -0.316 | no | - | - | -
+11:00 | 329 | 285 | 1.110 | 0.262 | 1.369 | -0.259 | no | - | - | -
+12:00 | 359 | 311 | 1.172 | 0.473 | 1.539 | -0.367 | no | - | - | -
+13:00 | 352 | 300 | 1.163 | 0.444 | 1.486 | -0.323 | no | - | - | -
+14:00 | 357 | 301 | 1.013 | 0.325 | 1.304 | -0.291 | no | - | - | -
+15:00 | 377 | 294 | 1.135 | 0.491 | 1.233 | -0.099 | yes (24) | 1 | [9] | 1
+16:00 | 379 | 297 | 1.169 | 0.584 | 1.285 | -0.116 | yes (36) | 1 | [18] | 1
+17:00 | 386 | 291 | 1.114 | 0.574 | 1.312 | -0.198 | yes (48) | 1 | [2] | 1
+18:00 | 413 | 329 | 1.096 | 0.481 | 1.287 | -0.191 | yes (57) | 1 | [13] | 1
+19:00 | 421 | 340 | 0.873 | 0.262 | 1.164 | -0.291 | yes (69) | 1 | [4 41] | 8
+20:00 | 412 | 344 | 0.995 | 0.243 | 1.187 | -0.192 | yes (75) | 1 | [11] | 2
+21:00 | 353 | 284 | 1.279 | 0.419 | 1.478 | -0.200 | yes (88) | 1 | [37 39 54] | 5
+22:00 | 335 | 260 | 1.176 | 0.348 | 1.389 | -0.213 | yes (100) | 1 | [12 23 25] | 22
+23:00 | 321 | 238 | 1.380 | 0.640 | 1.592 | -0.212 | yes (109) | 1 | [3 33] | 5
+hour of highest Misranked (covered happenings only, a signed sum) on 11-23: 15:00 (-0.099 bits)
+
+== SENSITIVITY, window 1h0m0s ==
+hour(UTC) | origins in window | happenings | D bits | of which happenings with 2+ origins | Missing | Misranked | h* identified (arrivals) | h* rank by p | h* cover story front rank | h* rank by term
+00:00 | 88 | 71 | 2.868 | 1.127 | 2.903 | -0.035 | no | - | - | -
+01:00 | 82 | 74 | 2.646 | 0.242 | 2.733 | -0.087 | no | - | - | -
+02:00 | 75 | 65 | 2.640 | 0.503 | 2.581 | 0.058 | no | - | - | -
+03:00 | 75 | 71 | 2.665 | 0.122 | 2.817 | -0.152 | no | - | - | -
+04:00 | 75 | 71 | 2.661 | 0.385 | 2.820 | -0.159 | no | - | - | -
+05:00 | 82 | 76 | 2.798 | 0.341 | 2.933 | -0.136 | no | - | - | -
+06:00 | 90 | 84 | 2.593 | 0.274 | 2.738 | -0.146 | no | - | - | -
+07:00 | 95 | 88 | 2.547 | 0.453 | 2.723 | -0.176 | no | - | - | -
+08:00 | 109 | 103 | 2.427 | 0.309 | 2.626 | -0.199 | no | - | - | -
+09:00 | 101 | 94 | 2.490 | 0.073 | 2.554 | -0.064 | no | - | - | -
+10:00 | 122 | 111 | 2.454 | 0.305 | 2.582 | -0.128 | no | - | - | -
+11:00 | 129 | 116 | 2.491 | 0.305 | 2.497 | -0.006 | no | - | - | -
+12:00 | 134 | 122 | 2.284 | 0.529 | 2.507 | -0.223 | no | - | - | -
+13:00 | 122 | 108 | 2.781 | 0.544 | 2.788 | -0.008 | no | - | - | -
+14:00 | 133 | 122 | 2.438 | 0.472 | 2.577 | -0.139 | no | - | - | -
+15:00 | 141 | 107 | 2.511 | 0.994 | 2.015 | 0.497 | yes (24) | 1 | [9] | 1
+16:00 | 133 | 115 | 2.250 | 0.445 | 2.253 | -0.003 | yes (36) | 1 | [18] | 1
+17:00 | 152 | 120 | 2.368 | 0.761 | 2.328 | 0.040 | yes (48) | 1 | [2] | 2
+18:00 | 162 | 148 | 1.944 | 0.184 | 2.112 | -0.168 | yes (57) | 1 | [13] | 1
+19:00 | 141 | 120 | 1.896 | 0.457 | 2.083 | -0.187 | yes (69) | 1 | [4 41] | 8
+20:00 | 135 | 120 | 1.990 | 0.231 | 2.141 | -0.150 | yes (75) | 1 | [11] | 4
+21:00 | 109 | 89 | 2.024 | 0.366 | 2.050 | -0.025 | yes (88) | 1 | [37 39 54] | 1
+22:00 | 121 | 96 | 1.905 | 0.400 | 1.952 | -0.047 | yes (100) | 1 | [12 23 25] | 5
+23:00 | 129 | 105 | 1.961 | 0.464 | 2.063 | -0.102 | yes (109) | 1 | [3 33] | 1
+hour of highest Misranked (covered happenings only, a signed sum) on 11-23: 15:00 (0.497 bits)
+
+== SENSITIVITY, window 6h0m0s ==
+hour(UTC) | origins in window | happenings | D bits | of which happenings with 2+ origins | Missing | Misranked | h* identified (arrivals) | h* rank by p | h* cover story front rank | h* rank by term
+00:00 | 499 | 363 | 1.047 | 0.630 | 1.294 | -0.247 | no | - | - | -
+01:00 | 488 | 359 | 1.006 | 0.554 | 1.200 | -0.195 | no | - | - | -
+02:00 | 460 | 340 | 1.085 | 0.616 | 1.232 | -0.147 | no | - | - | -
+03:00 | 442 | 332 | 0.990 | 0.503 | 1.176 | -0.186 | no | - | - | -
+04:00 | 423 | 320 | 1.065 | 0.575 | 1.256 | -0.191 | no | - | - | -
+05:00 | 413 | 317 | 1.155 | 0.624 | 1.478 | -0.323 | no | - | - | -
+06:00 | 418 | 333 | 0.932 | 0.379 | 1.283 | -0.351 | no | - | - | -
+07:00 | 432 | 345 | 0.996 | 0.450 | 1.304 | -0.307 | no | - | - | -
+08:00 | 458 | 378 | 1.018 | 0.495 | 1.325 | -0.307 | no | - | - | -
+09:00 | 489 | 407 | 0.878 | 0.398 | 1.184 | -0.306 | no | - | - | -
+10:00 | 532 | 442 | 0.780 | 0.376 | 1.086 | -0.306 | no | - | - | -
+11:00 | 567 | 478 | 0.663 | 0.281 | 0.936 | -0.273 | no | - | - | -
+12:00 | 610 | 513 | 0.740 | 0.468 | 1.045 | -0.305 | no | - | - | -
+13:00 | 634 | 529 | 0.608 | 0.347 | 0.900 | -0.292 | no | - | - | -
+14:00 | 651 | 538 | 0.468 | 0.220 | 0.733 | -0.265 | no | - | - | -
+15:00 | 694 | 544 | 0.486 | 0.322 | 0.680 | -0.195 | yes (24) | 1 | [9] | 1
+16:00 | 693 | 539 | 0.610 | 0.446 | 0.814 | -0.204 | yes (36) | 1 | [18] | 3
+17:00 | 703 | 527 | 0.608 | 0.473 | 0.874 | -0.266 | yes (48) | 1 | [2] | 13
+18:00 | 732 | 558 | 0.610 | 0.489 | 0.787 | -0.177 | yes (57) | 1 | [13] | 1
+19:00 | 751 | 573 | 0.432 | 0.306 | 0.677 | -0.245 | yes (69) | 1 | [4 41] | 8
+20:00 | 750 | 568 | 0.422 | 0.289 | 0.614 | -0.193 | yes (75) | 1 | [11] | 1
+21:00 | 720 | 552 | 0.675 | 0.451 | 0.856 | -0.182 | yes (88) | 1 | [37 39 54] | 55
+22:00 | 708 | 538 | 0.491 | 0.303 | 0.749 | -0.258 | yes (100) | 1 | [12 23 25] | 537
+23:00 | 684 | 526 | 0.570 | 0.338 | 0.818 | -0.248 | yes (109) | 1 | [3 33] | 522
+hour of highest Misranked (covered happenings only, a signed sum) on 11-23: 02:00 (-0.147 bits)
+
+== SENSITIVITY, window 24h0m0s ==
+hour(UTC) | origins in window | happenings | D bits | of which happenings with 2+ origins | Missing | Misranked | h* identified (arrivals) | h* rank by p | h* cover story front rank | h* rank by term
+00:00 | 1665 | 1239 | -0.333 | 0.206 | -0.113 | -0.220 | no | - | - | -
+01:00 | 1650 | 1213 | -0.306 | 0.221 | -0.083 | -0.223 | no | - | - | -
+02:00 | 1650 | 1207 | -0.302 | 0.222 | -0.103 | -0.199 | no | - | - | -
+03:00 | 1657 | 1202 | -0.351 | 0.177 | -0.135 | -0.216 | no | - | - | -
+04:00 | 1670 | 1202 | -0.302 | 0.240 | -0.112 | -0.189 | no | - | - | -
+05:00 | 1683 | 1219 | -0.248 | 0.294 | -0.016 | -0.232 | no | - | - | -
+06:00 | 1711 | 1230 | -0.212 | 0.340 | 0.028 | -0.240 | no | - | - | -
+07:00 | 1734 | 1245 | -0.196 | 0.380 | 0.035 | -0.231 | no | - | - | -
+08:00 | 1752 | 1255 | -0.204 | 0.383 | -0.001 | -0.202 | no | - | - | -
+09:00 | 1770 | 1270 | -0.218 | 0.388 | -0.021 | -0.197 | no | - | - | -
+10:00 | 1801 | 1295 | -0.212 | 0.408 | -0.004 | -0.208 | no | - | - | -
+11:00 | 1843 | 1339 | -0.297 | 0.342 | -0.099 | -0.197 | no | - | - | -
+12:00 | 1865 | 1355 | -0.210 | 0.443 | -0.003 | -0.207 | no | - | - | -
+13:00 | 1891 | 1366 | -0.298 | 0.357 | -0.095 | -0.203 | no | - | - | -
+14:00 | 1893 | 1369 | -0.409 | 0.242 | -0.206 | -0.203 | no | - | - | -
+15:00 | 1923 | 1375 | -0.384 | 0.265 | -0.186 | -0.198 | yes (24) | 2 | [9] | 1366
+16:00 | 1945 | 1383 | -0.288 | 0.368 | -0.094 | -0.194 | yes (36) | 2 | [18] | 42
+17:00 | 1996 | 1414 | -0.330 | 0.346 | -0.120 | -0.210 | yes (48) | 2 | [2] | 1414
+18:00 | 2027 | 1461 | -0.382 | 0.323 | -0.192 | -0.190 | yes (57) | 2 | [13] | 69
+19:00 | 2063 | 1494 | -0.478 | 0.232 | -0.245 | -0.233 | yes (69) | 2 | [4 41] | 1494
+20:00 | 2081 | 1511 | -0.519 | 0.201 | -0.321 | -0.198 | yes (75) | 2 | [11] | 172
+21:00 | 2078 | 1510 | -0.455 | 0.264 | -0.241 | -0.214 | yes (88) | 2 | [37 39 54] | 1509
+22:00 | 2099 | 1517 | -0.556 | 0.164 | -0.308 | -0.248 | yes (100) | 2 | [12 23 25] | 1517
+23:00 | 2119 | 1535 | -0.584 | 0.144 | -0.356 | -0.228 | yes (109) | 1 | [3 33] | 1535
+hour of highest Misranked (covered happenings only, a signed sum) on 11-23: 04:00 (-0.189 bits)
+
+== 2026-11-23T19:00Z detail, window 3 h ==
+h* = group 210: 106 members up to 19:00 (69 match the pattern), opened 03:09Z, title of first member: "Nvidia stock bounces as Trump administration pushes for rehiring of Jensen Huang"
+h*: distinct origins in the window 21 of 421 (p = 0.0499), p rank 1 of 340 happenings, q = 0.04215 (covered: true, front ranks [4 41]), term 0.0121 bits, term rank 8
+
+front at 19:00 (rank | published | revisions | assigned to group (origins in window) | title)
+ 1 | 18:59:37Z | 7 | group 1887 (0 origins in window, 1 members) | Spain's Supreme Court applies amnesty to Puigdemont and closes the 'procés' case...
+ 2 | 18:58:22Z | 6 | group 2295 (1 origins in window, 2 members) | High court told Prince Andrew was paid £750,000 to help Turkish woman with passp...
+ 3 | 18:58:08Z | 5 | group 1314 (1 origins in window, 17 members) | India's rice surplus is feeding the world — and straining India's budget
+ 4 | 18:58:05Z | 67 | group 210 (21 origins in window, 106 members) | Jensen Huang reinstated as Nvidia CEO after petition-backed campaign   <== Huang/Nvidia in the title
+ 5 | 18:58:04Z | 3 | group 2172 (2 origins in window, 2 members) | Amazon to acquire AI startup Decart for reported $7.5B ahead of Trainium chip pu...
+ 6 | 18:57:40Z | 4 | group 2283 (1 origins in window, 1 members) | Sinner to have right knee surgery in Finland on Tuesday, Italian media report
+ 7 | 18:57:27Z | 7 | group 2100 (2 origins in window, 3 members) | Iran flogs singer Parastoo Ahmadi and four teammates over hijab-free concert
+ 8 | 18:57:17Z | 40 | group 623 (0 origins in window, 3 members) | Best Buy starts Nov. 6, Walmart Nov. 12 — Black Friday 2026 is weeks of early sa...
+ 9 | 18:55:49Z | 19 | group 349 (10 origins in window, 74 members) | Estonia to close border crossings with Russia after GRU-linked sabotage attacks
+10 | 18:54:54Z | 26 | group 2304 (1 origins in window, 1 members) | Judge probes whether Trump officials misled her in fight over historic D.C. golf...
+11 | 18:54:07Z | 8 | group 8 (1 origins in window, 63 members) | Iran's FM confirms 'major strategic debate' over reversing civil-only nuclear po...
+12 | 18:54:05Z | 21 | group 1194 (2 origins in window, 14 members) | Tarik Skubal agrees to a record 9-year, $450 million deal with the Mets
+13 | 18:53:59Z | 6 | group 631 (4 origins in window, 16 members) | Democrats rally behind 'Medicare for More' plan as they prepare to take Congress
+14 | 18:53:55Z | 6 | group 2015 (4 origins in window, 6 members) | Tajikistan announces withdrawal from the International Criminal Court
+15 | 18:53:44Z | 6 | group 340 (3 origins in window, 33 members) | Brexit debate returns to UK politics as EU membership question resurfaces
+16 | 18:53:23Z | 6 | group 1871 (1 origins in window, 2 members) | Dutch court bars BYD SUV in EU for looking like Land Rover Defender; BYD will ap...
+17 | 18:52:04Z | 7 | group 1868 (1 origins in window, 4 members) | CrowdStrike to acquire Zscaler in $43.9 billion all-stock deal
+18 | 18:50:49Z | 4 | group 2287 (1 origins in window, 1 members) | Guatemalan presidential hopeful vows to make his country 'the Israel of Latin Am...
+19 | 18:50:00Z | 6 | group 2282 (1 origins in window, 1 members) | Thalidomide campaigner Mary Clarken dies aged 96
+20 | 18:49:37Z | 10 | group 1664 (1 origins in window, 4 members) | Haigh signals Natural England could be abolished in quango cull
+21 | 18:47:10Z | 6 | group 2139 (2 origins in window, 3 members) | Pelicot vows legal action after publisher sent her intimate photos to promote an...
+22 | 18:46:13Z | 9 | group 2292 (1 origins in window, 1 members) | Man convicted of arson for starting deadly 2025 Palisades fire
+23 | 18:45:27Z | 3 | group 12 (1 origins in window, 4 members) | Houston jumps to the top of the AP men's basketball poll as Michigan drops out
+24 | 18:44:47Z | 17 | group 172 (1 origins in window, 6 members) | France beat Argentina 45-17 to reach Nations Championship final against South Af...
+25 | 18:44:18Z | 10 | group 1896 (0 origins in window, 1 members) | EU Commission confirms personal data leak from EU Academy training site
+26 | 18:41:42Z | 4 | group 2268 (1 origins in window, 1 members) | Ogun APC lawmakers dispute Abiodun's claim that aspirants agreed on Yayi as gove...
+27 | 18:39:35Z | 7 | group 1354 (1 origins in window, 4 members) | Red Wings trade former captain Dylan Larkin to the Montreal Canadiens
+28 | 18:39:04Z | 5 | elsewhere | Spain to extend bereavement leave to 10 working days, government announces
+29 | 18:38:48Z | 21 | group 26 (2 origins in window, 784 members) | France’s 21 November protests draw smaller crowds; Paris march reaches Place de ...
+30 | 18:37:52Z | 6 | group 1725 (1 origins in window, 2 members) | India announces $1.62 billion package for flood-hit Nepal
+31 | 18:37:46Z | 23 | group 311 (0 origins in window, 29 members) | Max Verstappen Wins Chaotic Las Vegas Grand Prix as George Russell Crashes Late
+32 | 18:36:42Z | 6 | group 982 (1 origins in window, 6 members) | Macron weighs a Versailles Congress vote on a budget "golden rule" in January
+33 | 18:35:46Z | 4 | group 2270 (2 origins in window, 3 members) | Spielberg to direct a western written by Paul Thomas Anderson
+34 | 18:34:46Z | 5 | group 1715 (0 origins in window, 1 members) | US food banks report surging holiday demand as grocery prices strain families
+35 | 18:34:31Z | 4 | elsewhere | Kagi launches Kagi Mail in public beta, an ad-free email service at $99 a year
+36 | 18:33:52Z | 7 | group 243 (2 origins in window, 5 members) | Two coastal storms threaten the Tri-State through Thanksgiving week, with rain l...
+37 | 18:32:26Z | 7 | group 1086 (1 origins in window, 2 members) | College football coaching carousel: four Power 4 jobs open and several coaches o...
+38 | 18:31:10Z | 3 | group 2084 (1 origins in window, 1 members) | Marvel releases final trailer for Avengers: Doomsday cramming in every superhero
+39 | 18:25:37Z | 12 | group 2113 (3 origins in window, 5 members) | Leaked Rosstat death records indicate about 400,000 Russian war dead in Ukraine
+40 | 18:25:14Z | 4 | group 1602 (0 origins in window, 1 members) | CISA warns of attacks on Cisco Expressway and SAP NetWeaver flaws
+41 | 18:19:37Z | 3 | group 210 (21 origins in window, 106 members) | Nvidia's CEO reinstatement wiped out Europe's 3x short chip bets in seconds   <== Huang/Nvidia in the title
+42 | 18:19:17Z | 13 | group 468 (2 origins in window, 19 members) | AI tech rout prompts US investors to rush into value stocks
+43 | 18:19:01Z | 14 | group 1330 (0 origins in window, 1 members) | Four men convicted of raping a woman her husband drugged and sold to strangers
+44 | 18:18:24Z | 5 | group 2212 (1 origins in window, 1 members) | Mamdani announces e-bike fare cap for Citi Bike, promising cheaper rides for New...
+45 | 18:17:20Z | 4 | group 2225 (1 origins in window, 1 members) | Nigeria breaches full-year domestic borrowing target by September
+46 | 18:16:19Z | 8 | group 1726 (1 origins in window, 2 members) | Denmark agrees national school mobile phone ban from 2027
+47 | 18:15:58Z | 30 | group 711 (0 origins in window, 11 members) | Impunity fuels surge in settler violence across occupied West Bank
+48 | 18:15:20Z | 3 | group 2232 (1 origins in window, 1 members) | N-able patches critical SSRF flaw in Mail Assure found during its own breach inv...
+49 | 18:08:08Z | 4 | group 2228 (1 origins in window, 1 members) | Nigeria's Defence Ministry deletes pro-APC rally post after backlash over electo...
+50 | 18:08:00Z | 25 | group 807 (2 origins in window, 17 members) | Army schedules Wednesday detonation of nearly 10,000 pounds of lead azide at Iow...
+51 | 18:03:34Z | 4 | group 2214 (1 origins in window, 1 members) | Stellantis withdraws from all motorsport competitions
+52 | 18:01:13Z | 6 | group 2230 (1 origins in window, 1 members) | Tillis holds up Trump's nominee to lead the GAO over independence concerns
+53 | 17:58:41Z | 5 | group 2164 (1 origins in window, 1 members) | Banque de France wants to bring back scarce €5 banknotes
+54 | 17:58:34Z | 12 | group 107 (1 origins in window, 7 members) | Mexico captures FBI-wanted cartel boss 'El Chapo Isidro' in Sinaloa raid
+55 | 17:57:05Z | 8 | group 2219 (1 origins in window, 1 members) | The Hunger Games returns Nov. 20 with Sunrise on the Reaping and a young Haymitc...
+56 | 17:55:34Z | 7 | group 1668 (1 origins in window, 2 members) | Morocco joins Senegal and five others as AFCON 2027 qualifiers while awaiting TA...
+57 | 17:52:55Z | 32 | group 2182 (1 origins in window, 1 members) | Qatar PM has met Trump for talks on ending the Iran war, after Iran's proposal w...
+58 | 17:49:45Z | 23 | group 156 (1 origins in window, 31 members) | Saudi-led coalition launches major strikes on Yemen as Iran claims tankers hit m...
+59 | 17:46:55Z | 8 | group 18 (0 origins in window, 21 members) | Bus Crash Kills 13 Oil Workers in Iran's Abdanan; Protests Turn to Anti-Regime C...
+60 | 17:46:22Z | 6 | group 31 (0 origins in window, 2 members) | Lebanon says 'the era of weapons outside state authority is over' — and takes ai...
+
+top 15 happenings by world attention at 19:00 (rank | origins | members | q | cover ranks | term | first title)
+ 1 | 21 | 106 | 0.04215 | [4 41] | 0.0121 | Nvidia stock bounces as Trump administration pushes for rehiring of Jensen Huang
+ 2 | 10 | 74 | 0.02059 | [9] | 0.0049 | (post) https://www. europesays.com/3387577/ Russia launches mass missile attack against...
+ 3 | 8 | 63 | 0.00100 | [] | 0.0807 | Together.ai: Prompt Leakage for Requests
+ 4 | 4 | 98 | 0.00100 | [] | 0.0309 | Explosion on Russian ship at Libya port likely caused by drone attack, officials say
+ 5 | 4 | 16 | 0.01797 | [13] | -0.0087 | (post) # CNN # News This split in the Republican coalition could transform the electora...
+ 6 | 4 | 11 | 0.00100 | [] | 0.0309 | US and UK to host Women's World Cups in 2031 and 2035
+ 7 | 4 | 6 | 0.01751 | [14] | -0.0084 | Tajikistan moves to leave ICC amid US push against court
+ 8 | 3 | 90 | 0.00100 | [] | 0.0202 | COP31: UN Climate summit runs into second day of overtime
+ 9 | 3 | 33 | 0.01710 | [15] | -0.0090 | Burnham should ‘move on’ from Brexit, says Theresa May, as critics hit out over closer EU ...
+10 | 3 | 10 | 0.00100 | [] | 0.0202 | Democrats plan 12 presidential debates, with first in June
+11 | 3 | 6 | 0.00100 | [] | 0.0202 | Israeli strikes kill at least three, including UNRWA worker, in Gaza
+12 | 3 | 6 | 0.00100 | [] | 0.0202 | States Sue SpaceX Over Grok Deepfakes
+13 | 3 | 5 | 0.01286 | [39] | -0.0061 | More than 700,000 Russian soldiers have been killed in Ukraine: Analysis
+14 | 2 | 784 | 0.01394 | [29] | -0.0074 | (post) https://www. europesays.com/fr/1319021/ Le Canada et l’UE ne souhaitent pas de r...
+15 | 2 | 85 | 0.00100 | [] | 0.0107 | (post) 🔴 Air Alert | 9/10 🇺🇦 Massive drone strike across Ukraine - multiple trajectorie...
+
+top 10 terms p*log2(p/q) at 19:00 (term | origins | q | cover ranks | first title)
+0.0807 | 8 | 0.00100 | [] | Together.ai: Prompt Leakage for Requests
+0.0309 | 4 | 0.00100 | [] | Explosion on Russian ship at Libya port likely caused by drone attack, officials say
+0.0309 | 4 | 0.00100 | [] | US and UK to host Women's World Cups in 2031 and 2035
+0.0202 | 3 | 0.00100 | [] | Israeli strikes kill at least three, including UNRWA worker, in Gaza
+0.0202 | 3 | 0.00100 | [] | Democrats plan 12 presidential debates, with first in June
+0.0202 | 3 | 0.00100 | [] | States Sue SpaceX Over Grok Deepfakes
+0.0202 | 3 | 0.00100 | [] | COP31: UN Climate summit runs into second day of overtime
+0.0121 | 21 | 0.04215 | [4 41] | Nvidia stock bounces as Trump administration pushes for rehiring of Jensen Huang
+0.0107 | 2 | 0.00100 | [] | (post) Noch ein paar der zuletzt hier besonders häufig geteilten # News: Nvidia setzt J...
+0.0107 | 2 | 0.00100 | [] | DR Congo reimposes cobalt export ban to shore up prices
+
+h* members (first 12 of 106 up to 19:00): time | origin | title
+03:09Z | masto.ai/@unusual_whales | 
+03:22Z | masto.ai/@unusual_whales | 
+11:07Z | marketwatch.com | Nvidia stock bounces as Trump administration pushes for rehiring of Jensen Huang
+12:18Z | bsky.app/reuters.com | 
+12:37Z | marketwatch.com | Trump wants Jensen Huang back at Nvidia. What will it take to stop the tech selloff?
+12:48Z | globaleye24.com | 
+14:11Z | theverge.com | Jensen Huang is back as Nvidia’s CEO
+14:12Z | elpais.com | 
+14:14Z | theguardian.com | 
+14:16Z | tagesschau.de | 
+14:18Z | thehill.com | Jensen Huang reinstated as Nvidia CEO
+14:19Z | nvidia.com | Jensen Huang Reinstated as Nvidia CEO
+
+all Huang-pattern arrivals before 19:00, by group: [group 210: 69] [group 222: 1] 
+first Huang-pattern arrival of the export: 2026-11-22T03:09Z
+
+== trace of h*, every 5 minutes 14:00Z to 23:55Z, window 3 h ==
+time | h* p rank | best front rank of a story covering it | h* term | h* term rank | D
+14:30 | 1 | 1 | -0.0308 | 300 | 0.980
+15:00 | 1 | 9 | 0.1642 | 1 | 1.135
+15:30 | 1 | 8 | 0.1773 | 1 | 1.164
+16:00 | 1 | 18 | 0.2018 | 1 | 1.169
+16:30 | 1 | 6 | 0.1385 | 1 | 1.140
+17:00 | 1 | 2 | 0.0906 | 1 | 1.114
+17:30 | 1 | 3 | 0.0889 | 2 | 1.208
+18:00 | 1 | 13 | 0.0909 | 1 | 1.096
+18:30 | 1 | 1 | -0.0431 | 351 | 0.893
+19:00 | 1 | 4 | 0.0121 | 8 | 0.873
+19:05 | 1 | 8 | 0.0255 | 4 | 0.875
+19:10 | 1 | 11 | 0.0306 | 4 | 0.892
+19:15 | 1 | 8 | 0.0226 | 4 | 0.995
+19:20 | 1 | 14 | 0.0644 | 1 | 1.038
+19:25 | 1 | 17 | 0.0623 | 1 | 0.995
+19:30 | 1 | 4 | 0.0253 | 3 | 0.978
+20:00 | 1 | 11 | 0.0283 | 2 | 0.995
+20:30 | 1 | 3 | -0.0305 | 315 | 1.088
+21:00 | 1 | 37 | 0.0222 | 5 | 1.279
+21:30 | 1 | 40 | 0.0639 | 2 | 1.155
+22:00 | 1 | 12 | 0.0088 | 22 | 1.176
+22:30 | 1 | 16 | 0.0098 | 25 | 1.441
+23:00 | 1 | 3 | 0.0359 | 5 | 1.380
+23:30 | 1 | 21 | 0.0855 | 2 | 1.271
+over 116 five-minute steps from the first with h* identified: mean p 0.0614, mean q 0.0355, mean term 0.0666 bits; h* in the world's top 3 by p at 116 of 116 steps; its best covering story in the front's top 10 at 56 of 116 steps; its term in the top 3 terms at 66 of 116 steps

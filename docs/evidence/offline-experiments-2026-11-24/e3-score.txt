@@ -1,0 +1,25 @@
+groups of two or more arrivals (all sampled): n = 50
+  ONE      34 of 50 =  68.0%  (Wilson 95% 54% to 79%)
+  MOSTLY    2 of 50 =   4.0%  (Wilson 95% 1% to 13%)
+  MERGE     8 of 50 =  16.0%  (Wilson 95% 8% to 29%)
+  NOISE     6 of 50 =  12.0%  (Wilson 95% 6% to 24%)
+of those, two or more independent origins: n = 23
+  ONE      18 of 23 =  78.3%  (Wilson 95% 58% to 90%)
+  MOSTLY    2 of 23 =   8.7%  (Wilson 95% 2% to 27%)
+  MERGE     2 of 23 =   8.7%  (Wilson 95% 2% to 27%)
+  NOISE     1 of 23 =   4.3%  (Wilson 95% 1% to 21%)
+of those, one origin only: n = 27
+  ONE      16 of 27 =  59.3%  (Wilson 95% 41% to 75%)
+  MOSTLY    0 of 27 =   0.0%  (Wilson 95% 0% to 12%)
+  MERGE     6 of 27 =  22.2%  (Wilson 95% 11% to 41%)
+  NOISE     5 of 27 =  18.5%  (Wilson 95% 8% to 37%)
+subjects of the 50 sampled groups (reader): 
+  S1       45 of 50 =  90.0%  (Wilson 95% 79% to 96%)
+  SN        5 of 50 =  10.0%  (Wilson 95% 4% to 21%)
+  S0        0 of 50 =   0.0%  (Wilson 95% 0% to 7%)
+cross-tab happening/subject: MERGE/S1=6 MERGE/SN=2 MOSTLY/S1=2 NOISE/S1=3 NOISE/SN=3 ONE/S1=34
+mechanical: one extractor key in 60% or more of members: 32 of 50; in 30% or more: 46 of 50
+singletons: n = 40
+  SPLIT     6 of 40 =  15.0%  (Wilson 95% 7% to 29%)
+  ALONE    34 of 40 =  85.0%  (Wilson 95% 71% to 93%)
+unlabelled: 0

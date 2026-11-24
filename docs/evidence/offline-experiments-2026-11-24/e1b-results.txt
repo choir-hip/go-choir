@@ -1,0 +1,92 @@
+E1 second form: 6268 arrivals, 5957 with at least one subject kept (9290 subject mentions dropped as furniture); window 3h0m0s, k=10
+
+== PRIMARY, the hour before 19:00Z: 170 arrivals in (18:00, 19:00Z] ==
+Huang-pattern arrivals in the hour: 12
+by score I x N (the claim): best Huang-pattern arrival at rank 14 of 170 (top 8.2%); in the top three: []
+by importance I alone: best Huang-pattern arrival at rank 2 of 170 (top 1.2%); in the top three: [2]
+by novelty N alone: best Huang-pattern arrival at rank 132 of 170 (top 77.6%); in the top three: []
+top 10 by score (rank | score | I | N | Huang | origin | title or lead | subjects)
+1 | 5.99 | 23.14 | 0.259 | false | upi.com | (post) United States confirmed as 2031 Women's World Cup co-host https://www. upi.com/Spor... | united states; world cup; women; fifa
+2 | 4.40 | 14.92 | 0.295 | false | upi.com | (post) Movie review: 'Focker-In-Law' makes comedy unrelatable https://www. upi.com/Enterta... | focker; entertainment; parents; goldmanmill
+3 | 4.11 | 12.00 | 0.343 | false | steampowered.com | (post) Стартовало голосование за номинантов 10-й премии Steam Awards. До 30-го ноября игро... | steam awards; controlresonant; defies description; outstanding story rich game
+4 | 4.01 | 13.75 | 0.291 | false | jacobin.com | (post) Man’s Hope Is a Masterful Tableau of Spain’s Civil War https:// jacobin.com/2026/11... | spanish civil war; hope; left; andre malraux
+5 | 3.73 | 13.75 | 0.271 | false | upi.com | (post) Brazilian court bars cruise ship departure over financial dispute https://www. upi.... | world news; brazilian; buenavista; corazul
+6 | 3.64 | 14.58 | 0.249 | false | www.gov.uk | UK leads global action with major new measures against Myanmar military following landmark... | uk; myanmar military; rohingya; myanmar
+7 | 3.52 | 12.00 | 0.293 | false | naijachoice.net | (post) Kwankwaso Made Me Swear On The Qur’an We Would Return To APC – Abba Kabir Abba Kabi... | quran; swear; kwankwaso made; return
+8 | 3.33 | 13.92 | 0.239 | false | upi.com | (post) Look: Cat rescued from deep inside Virginia underground drain https://www. upi.com/... | virginia; animal; goldmanmill; green
+9 | 3.28 | 12.00 | 0.273 | false | naijachoice.net | (post) Akinlade, GNI Faults Abiodun’s Claim That Ogun APC Aspirants Agreed On Yayi Two Ogu... | yayi; claim; gni faults abiodun; naijachoice
+10 | 3.04 | 12.75 | 0.238 | false | jacobin.com | (post) Effective Altruism Is Increasingly Just Funding Itself https:// jacobin.com/2026/11... | effective altruism; increasingly; jacobin; funding itself
+Huang-pattern arrivals by score rank: 14(I 19.4 N 0.151) 38(I 12.7 N 0.141) 42(I 11.1 N 0.151) 58(I 9.2 N 0.143) 62(I 7.8 N 0.163) 70(I 9.2 N 0.121) 86(I 8.8 N 0.102) 96(I 5.6 N 0.151) 105(I 4.9 N 0.133) 112(I 4.6 N 0.132) 113(I 6.0 N 0.101) 164(I 1.0 N 0.146) 
+
+== sensitivity, the hour 19:00Z to 20:00Z: 163 arrivals in (19:00, 20:00Z] ==
+Huang-pattern arrivals in the hour: 7
+by score I x N (the claim): best Huang-pattern arrival at rank 20 of 163 (top 12.3%); in the top three: []
+by importance I alone: best Huang-pattern arrival at rank 2 of 163 (top 1.2%); in the top three: [2]
+by novelty N alone: best Huang-pattern arrival at rank 134 of 163 (top 82.2%); in the top three: []
+top 10 by score (rank | score | I | N | Huang | origin | title or lead | subjects)
+1 | 4.26 | 16.08 | 0.265 | false | newrepublic.com | (post) "Trump jumped from topic to topic in an exhausting run-on sentence that didn’t end ... | rubio; vance; america; dementia
+2 | 3.81 | 13.00 | 0.293 | false | naijachoice.net | (post) Abeokuta Needs A Ring Road Not Another Inner-City Road Expansion – Yemi Ajala There... | abeokuta needs; inner city road expansion; ring road; yemi ajala
+3 | 3.60 | 12.58 | 0.286 | false | naijachoice.net | (post) South African Golfer, Kenyan Chef Arrested With 50kg Cannabis In Lagos The National... | cannabis; kenyan chef arrested; south african golfer; lagos
+4 | 3.60 | 14.81 | 0.243 | false | bbc.com | (post) Good evening, San Diego! I'm Ron Burgundy, and this is the Evening Edition for Mond... | byd; defender; dutch; kushner
+5 | 3.32 | 11.75 | 0.282 | false | upi.com | (post) Look: Man runs half marathon while carrying a pizza to attempt world record https:/... | oklahoma; texas; green; greennewworld
+6 | 3.30 | 14.17 | 0.233 | false | justice.gov | Federal Jury Convicts Fifth Defendant for Scheme to Assassinate Haitian President Jovenel ... | jovenel moise; assassinate haitian; united states; press release
+7 | 3.25 | 14.17 | 0.230 | false | huggingface.co | NariQ: BF16-level Qwen3.8-27B in a 10 GB file | bf16; nariq; qwen3; aime
+8 | 3.23 | 13.08 | 0.247 | false | threads.com | (post) "I protected # Elon in my first term... you wouldn't have Elon if it wasn't for me.... | elon; business; corruption; dgf13gdhigs
+9 | 3.18 | 11.17 | 0.285 | false | naijachoice.net | (post) Enugu Showcases Model Of Smart Secondary School To Be Built In The State ENUGU, NIG... | built; naijachoice; breaking; enugu state
+10 | 3.12 | 11.00 | 0.284 | false | naijachoice.net | (post) Any Party Saying That Atiku Has Stepped Down Is Working For Tinubu – Dele Momodu Fo... | atiku abubakar; stepped down; dele momodu; working for tinubu
+Huang-pattern arrivals by score rank: 20(I 15.6 N 0.133) 37(I 10.8 N 0.136) 41(I 9.9 N 0.139) 44(I 8.2 N 0.165) 52(I 8.5 N 0.145) 120(I 5.6 N 0.100) 130(I 2.8 N 0.161) 
+
+== sensitivity, the hour 15:00Z to 16:00Z: 164 arrivals in (15:00, 16:00Z] ==
+Huang-pattern arrivals in the hour: 13
+by score I x N (the claim): best Huang-pattern arrival at rank 40 of 164 (top 24.4%); in the top three: []
+by importance I alone: best Huang-pattern arrival at rank 1 of 164 (top 0.6%); in the top three: [1]
+by novelty N alone: best Huang-pattern arrival at rank 86 of 164 (top 52.4%); in the top three: []
+top 10 by score (rank | score | I | N | Huang | origin | title or lead | subjects)
+1 | 4.30 | 14.58 | 0.295 | false | whitehouse.gov | Voting Begins for the 2026 National Thanksgiving Turkey Pardon Ceremony | voting begins; national thanksgiving turkey; american thanksgiving; white house
+2 | 4.12 | 12.00 | 0.344 | false | www.gov.uk | Ethiopia travel advice | ethiopia; warning fcdo; kenya; tigray
+3 | 3.80 | 13.58 | 0.280 | false | justice.gov | Justice Department Announces Recipients of Honor the Honorable: The Attorney General’s Awa... | honor; policing; honorable award; award for distinguished service
+4 | 3.68 | 12.00 | 0.307 | false | heise.de | (post) Superflinker Gaming-Monitor: Samsung verspricht 1100 Hertz Samsungs Gaming-Monitor ... | monitor samsung; hertz; monitor; full hd auflosung
+5 | 3.62 | 12.00 | 0.302 | false | heise.de | (post) In-Memory-Datenbank Valkey 9.2: Weniger RAM-Spitzen beim Sichern Valkey 9.2 kann Sp... | sichern valkey; weniger ram spitzen; datenabgleich; memory datenbank valkey
+6 | 3.46 | 13.17 | 0.263 | false | www.gov.uk | Joint Statement on the International Court of Justice decision on Myanmar | myanmar; international court of justice; joint statement; court
+7 | 3.23 | 12.58 | 0.257 | false | justice.gov | Florida Doctor and Medical Research Employees Convicted of Falsifying Data in Clinical Tri... | clinical trials; drug treatments; florida doctor; pines care research center
+8 | 3.21 | 11.00 | 0.292 | false | peertube.world | (post) Video - Why Are Cuba's Pharmacy Shelves Bare? https:// peertube.world/w/bBGHdAKtSmx... | cuba; peertube; cubans; bellyofthebeast
+9 | 3.14 | 13.00 | 0.242 | false | justice.gov | Peruvian National Sentenced in Transnational Government Imposter Scheme that Defrauded Tho... | transnational government imposter scheme; defrauded thousands of us consumers; peruvian national sentenced; acting us
+10 | 2.77 | 12.66 | 0.219 | false | pubeurope.com/@us | (post) https://www. europesays.com/us/1203172/ States agree to UN talks aiming to regulate... | israel; robot; states; un
+Huang-pattern arrivals by score rank: 40(I 12.1 N 0.127) 42(I 16.6 N 0.091) 43(I 7.0 N 0.215) 49(I 12.4 N 0.114) 50(I 6.9 N 0.203) 57(I 7.3 N 0.183) 66(I 9.0 N 0.136) 72(I 8.8 N 0.130) 75(I 8.7 N 0.128) 76(I 8.0 N 0.135) 85(I 5.5 N 0.171) 99(I 6.2 N 0.132) 108(I 4.6 N 0.145) 
+
+== subjects at 19:00Z: top 15 by distinct origins in (16:00, 19:00] ==
+ 1 | 18 origins | jensen huang
+ 2 | 13 origins | nvidia
+ 3 | 9 origins | article url
+ 4 | 9 origins | comments url
+ 5 | 8 origins | nvidia ceo
+ 6 | 6 origins | ceo
+ 7 | 6 origins | chinese
+ 8 | 6 origins | democrats
+ 9 | 6 origins | donald trump
+10 | 6 origins | united states
+11 | 5 origins | fifa
+12 | 5 origins | huang
+13 | 5 origins | icc
+14 | 5 origins | uk
+15 | 5 origins | world cup
+
+== groups at 19:00Z (C215 rule): top 15 by distinct origins in (16:00, 19:00] ==
+ 1 | 21 origins | 106 members | Nvidia stock bounces as Trump administration pushes for rehiring of Jensen Huang
+ 2 | 10 origins | 74 members | (post) https://www. europesays.com/3387577/ Russia launches mass missile attack against...
+ 3 | 8 origins | 63 members | Together.ai: Prompt Leakage for Requests
+ 4 | 4 origins | 98 members | Explosion on Russian ship at Libya port likely caused by drone attack, officials say
+ 5 | 4 origins | 16 members | (post) # CNN # News This split in the Republican coalition could transform the electora...
+ 6 | 4 origins | 11 members | US and UK to host Women's World Cups in 2031 and 2035
+ 7 | 4 origins | 6 members | Tajikistan moves to leave ICC amid US push against court
+ 8 | 3 origins | 90 members | COP31: UN Climate summit runs into second day of overtime
+ 9 | 3 origins | 33 members | Burnham should ‘move on’ from Brexit, says Theresa May, as critics hit out over closer EU ...
+10 | 3 origins | 10 members | Democrats plan 12 presidential debates, with first in June
+11 | 3 origins | 6 members | States Sue SpaceX Over Grok Deepfakes
+12 | 3 origins | 6 members | Israeli strikes kill at least three, including UNRWA worker, in Gaza
+13 | 3 origins | 5 members | More than 700,000 Russian soldiers have been killed in Ukraine: Analysis
+14 | 2 origins | 784 members | (post) https://www. europesays.com/fr/1319021/ Le Canada et l’UE ne souhaitent pas de r...
+15 | 2 origins | 85 members | (post) 🔴 Air Alert | 9/10 🇺🇦 Massive drone strike across Ukraine - multiple trajectorie...
+
+== do groups with 3 or more origins in the window share a subject? (mechanical) ==
+groups with 3+ origins in the window: 13; with one subject in 60% or more of members: 4; in 30% or more: 13

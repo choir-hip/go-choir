@@ -30,7 +30,7 @@ import (
 
 // The rules fixed in ledger claims C215 to C217 before any run.
 const (
-	groupCos     = 0.84  // centroid cosine to join an open group
+	groupCos     = 0.84 // centroid cosine to join an open group
 	groupQuiet   = 48 * time.Hour
 	groupMaxAge  = 48 * time.Hour
 	coverCos     = 0.795 // a story passage this near a group centroid covers it
@@ -444,6 +444,8 @@ func main() {
 			os.Exit(2)
 		}
 		runE1(os.Args[2], os.Args[3])
+	case "e1b":
+		runE1b(os.Args[2], os.Args[3])
 	case "e2":
 		if len(os.Args) != 4 {
 			fmt.Fprintln(os.Stderr, "usage: e2 DATA OUT")

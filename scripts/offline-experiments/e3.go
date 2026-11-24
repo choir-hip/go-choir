@@ -21,13 +21,15 @@ const (
 )
 
 type e3Key struct {
-	ID      string   `json:"id"`
-	Kind    string   `json:"kind"` // group | single
-	Members int      `json:"members"`
-	Origins int      `json:"origins"`
-	Arrival []string `json:"arrival_ids"`
-	Nearest []string `json:"nearest_ids,omitempty"`
+	ID      string    `json:"id"`
+	Kind    string    `json:"kind"` // group | single
+	Members int       `json:"members"`
+	Origins int       `json:"origins"`
+	Arrival []string  `json:"arrival_ids"`
+	Nearest []string  `json:"nearest_ids,omitempty"`
 	Cos     []float64 `json:"nearest_cos,omitempty"`
+	// SharedSubject is the share of members that carry the group's most common subject key (C218 rule).
+	SharedSubject float64 `json:"shared_subject_share,omitempty"`
 }
 
 func runE3(args []string) {
@@ -69,6 +71,7 @@ func e3Sample(dir, out string) {
 	r.Shuffle(len(single), func(i, j int) { single[i], single[j] = single[j], single[i] })
 	multi2, nSingle := len(multi), len(single)
 	multi, single = multi[:e3Groups], single[:e3Singles]
+	kept := keptSubjects(arr)
 	var md strings.Builder
 	var keys []e3Key
 	w := func(f string, a ...any) { fmt.Fprintf(&md, f, a...) }
@@ -84,9 +87,20 @@ func e3Sample(dir, out string) {
 		}
 		id := fmt.Sprintf("G%02d", n+1)
 		k := e3Key{ID: id, Kind: "group", Members: len(g.Members), Origins: len(origins)}
+		cnt := map[string]int{}
 		for _, m := range g.Members {
 			k.Arrival = append(k.Arrival, arr[m].ID)
+			for _, s := range kept[m] {
+				cnt[s]++
+			}
 		}
+		best := 0
+		for _, c := range cnt {
+			if c > best {
+				best = c
+			}
+		}
+		k.SharedSubject = float64(best) / float64(len(g.Members))
 		keys = append(keys, k)
 		members := append([]int(nil), g.Members...)
 		note := ""
@@ -146,55 +160,94 @@ func maxSize(gs []group) int {
 	return m
 }
 
-// e3Score reads e3-labels.tsv (id TAB label) and e3-key.json from OUT.
+// e3Score reads e3-labels.tsv (id TAB happening label TAB subject label) and e3-key.json from OUT.
 func e3Score(out string) {
 	var keys []e3Key
 	kb, err := os.ReadFile(filepath.Join(out, "e3-key.json"))
 	must(err)
 	must(json.Unmarshal(kb, &keys))
 	lab := map[string]string{}
+	sub := map[string]string{}
 	f, err := os.Open(filepath.Join(out, "e3-labels.tsv"))
 	must(err)
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		if a, b, ok := strings.Cut(sc.Text(), "\t"); ok {
-			lab[strings.TrimSpace(a)] = strings.TrimSpace(strings.Fields(b)[0])
+		fs := strings.Split(sc.Text(), "\t")
+		if len(fs) >= 2 {
+			lab[strings.TrimSpace(fs[0])] = strings.TrimSpace(fs[1])
+		}
+		if len(fs) >= 3 {
+			sub[strings.TrimSpace(fs[0])] = strings.TrimSpace(fs[2])
 		}
 	}
 	var sb strings.Builder
 	p := func(f string, a ...any) { fmt.Fprintf(&sb, f, a...) }
-	count := func(kind string, pred func(k e3Key) bool) map[string]int {
-		m := map[string]int{"_n": 0}
-		for _, k := range keys {
-			if k.Kind == kind && pred(k) {
-				m[lab[k.ID]]++
-				m["_n"]++
-			}
-		}
-		return m
-	}
 	rate := func(name string, k, n int) {
 		lo, hi := wilson(k, n)
 		p("  %-8s %2d of %2d = %5.1f%%  (Wilson 95%% %.0f%% to %.0f%%)\n", name, k, n, 100*float64(k)/float64(max(n, 1)), 100*lo, 100*hi)
 	}
-	for _, sub := range []struct {
+	for _, s := range []struct {
 		name string
 		pred func(k e3Key) bool
 	}{
-		{"groups of two or more arrivals (all sampled)", func(k e3Key) bool { return true }},
-		{"of those, two or more independent origins", func(k e3Key) bool { return k.Origins >= 2 }},
-		{"of those, one origin only", func(k e3Key) bool { return k.Origins < 2 }},
+		{"groups of two or more arrivals (all sampled)", func(k e3Key) bool { return k.Kind == "group" }},
+		{"of those, two or more independent origins", func(k e3Key) bool { return k.Kind == "group" && k.Origins >= 2 }},
+		{"of those, one origin only", func(k e3Key) bool { return k.Kind == "group" && k.Origins < 2 }},
 	} {
-		m := count("group", sub.pred)
-		p("%s: n = %d\n", sub.name, m["_n"])
+		m := map[string]int{}
+		n := 0
+		for _, k := range keys {
+			if s.pred(k) {
+				m[lab[k.ID]]++
+				n++
+			}
+		}
+		p("%s: n = %d\n", s.name, n)
 		for _, l := range []string{"ONE", "MOSTLY", "MERGE", "NOISE"} {
-			rate(l, m[l], m["_n"])
+			rate(l, m[l], n)
 		}
 	}
-	m := count("single", func(k e3Key) bool { return true })
-	p("singletons: n = %d\n", m["_n"])
+	ms := map[string]int{}
+	nm := 0
+	cross := map[string]int{}
+	mech60, mech30 := 0, 0
+	for _, k := range keys {
+		if k.Kind != "group" {
+			continue
+		}
+		nm++
+		ms[sub[k.ID]]++
+		cross[lab[k.ID]+"/"+sub[k.ID]]++
+		if k.SharedSubject >= 0.6 {
+			mech60++
+		}
+		if k.SharedSubject >= 0.3 {
+			mech30++
+		}
+	}
+	p("subjects of the %d sampled groups (reader): \n", nm)
+	for _, l := range []string{"S1", "SN", "S0"} {
+		rate(l, ms[l], nm)
+	}
+	p("cross-tab happening/subject: ")
+	var cs []string
+	for k, v := range cross {
+		cs = append(cs, fmt.Sprintf("%s=%d", k, v))
+	}
+	sort.Strings(cs)
+	p("%s\n", strings.Join(cs, " "))
+	p("mechanical: one extractor key in 60%% or more of members: %d of %d; in 30%% or more: %d of %d\n", mech60, nm, mech30, nm)
+	mm := map[string]int{}
+	ns := 0
+	for _, k := range keys {
+		if k.Kind == "single" {
+			mm[lab[k.ID]]++
+			ns++
+		}
+	}
+	p("singletons: n = %d\n", ns)
 	for _, l := range []string{"SPLIT", "ALONE"} {
-		rate(l, m[l], m["_n"])
+		rate(l, mm[l], ns)
 	}
 	missing := 0
 	for _, k := range keys {

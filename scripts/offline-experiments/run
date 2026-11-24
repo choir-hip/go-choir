@@ -10,6 +10,7 @@ out="${3:-\$HOME/offline-experiments-out}"
 runner="${RUNNER:-choir-agents}"
 case "$what" in
   e1) args="e1 $data $out" ;;
+  e1b) args="e1b $data $out" ;;
   e2) args="e2 $data $out" ;;
   e3-sample) args="e3 sample $data $out" ;;
   e3-score) args="e3 score $out" ;;
