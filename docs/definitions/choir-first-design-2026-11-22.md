@@ -151,6 +151,10 @@ boundaries:
   - decision: the personal root learns from everything on the person's computer; that learning is added gradually, and Autoradio comes first
     said: 12. yes, personal root learns from everything. but we can add more learning gradually. autoradio is most important now
     'on': '2026-11-24'
+  - decision: 'every model call in the capture path is given a digest of the current paper beside the captures, so the model is up to date: current events, and highly compressed information for the months since the model''s training cutoff'
+    said: the model calls need a digest of the current paper in addition to the captures so they are up to date. and not just current events but it should have highly compressed info for the last n months since training data cutoff
+    'on': '2026-11-24'
+    reading: 'lead''s reading: the digest is one text, the same for every call in a period, so it is a cached prefix and costs little per call. The root is its natural author (its Texture already holds the index, the page plan and the paper''s own numbers), and plain code can render the counted parts. It has two layers: now (the front, the subjects bursting) and since the cutoff (the subjects and turns that mattered, by month, most compressed for the oldest)'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
