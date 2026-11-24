@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
