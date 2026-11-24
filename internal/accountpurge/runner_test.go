@@ -28,11 +28,20 @@ type fakeSteps struct {
 	listErr    error
 	fail       map[string]error
 	tape       TapeResult
+	onTape     func(Authz)
 	userAtTape bool
 	userAtMail bool
 	// onSuspend, when set, runs inside SuspendTakes: a cancel arriving while
 	// a pass is in flight.
 	onSuspend func()
+	// onStop runs inside StopComputers (a cancel landing between a pass's
+	// list and its suspend).
+	onStop func()
+	// destroyed is what DestroyComputers reports it removed (default: the
+	// listed computers).
+	destroyed *Destroyed
+	// restoreErr fails RestoreTakes.
+	restoreErr error
 }
 
 func (f *fakeSteps) rec(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
@@ -60,6 +69,9 @@ func (f *fakeSteps) Computers(context.Context, string) ([]vmctl.AccountComputer,
 }
 func (f *fakeSteps) StopComputers(context.Context, string) error {
 	f.rec("stop")
+	if f.onStop != nil {
+		f.onStop()
+	}
 	return f.fail["stop"]
 }
 func (f *fakeSteps) SuspendTakes(context.Context, string) error {
@@ -69,7 +81,7 @@ func (f *fakeSteps) SuspendTakes(context.Context, string) error {
 	}
 	return f.fail["suspend"]
 }
-func (f *fakeSteps) RestoreTakes(context.Context, string) error { f.rec("restore"); return nil }
+func (f *fakeSteps) RestoreTakes(context.Context, string) error { f.rec("restore"); return f.restoreErr }
 func (f *fakeSteps) PurgeMail(_ context.Context, a Authz) (Counts, error) {
 	f.rec("mail")
 	_, err := f.store.GetUserByID(a.UserID())
@@ -80,9 +92,17 @@ func (f *fakeSteps) PurgeData(context.Context, Authz) (Counts, error) {
 	f.rec("data")
 	return Counts{"takes_deleted": 2}, f.fail["data"]
 }
-func (f *fakeSteps) DestroyComputers(context.Context, Authz) (Counts, error) {
+func (f *fakeSteps) DestroyComputers(context.Context, Authz) (Counts, Destroyed, error) {
 	f.rec("destroy")
-	return Counts{"computers": 1}, f.fail["destroy"]
+	d := Destroyed{}
+	for _, c := range f.computers {
+		d.ComputerIDs = append(d.ComputerIDs, c.ComputerID)
+		d.VMIDs = append(d.VMIDs, c.VMID)
+	}
+	if f.destroyed != nil {
+		d = *f.destroyed
+	}
+	return Counts{"computers": 1}, d, f.fail["destroy"]
 }
 func (f *fakeSteps) ForgetGateway(_ context.Context, _ Authz, id string) error {
 	f.rec("gateway:" + id)
@@ -90,6 +110,9 @@ func (f *fakeSteps) ForgetGateway(_ context.Context, _ Authz, id string) error {
 }
 func (f *fakeSteps) PurgeTape(_ context.Context, a Authz) (TapeResult, error) {
 	f.rec("tape")
+	if f.onTape != nil {
+		f.onTape(a)
+	}
 	_, err := f.store.GetUserByID(a.UserID())
 	f.userAtTape = err == nil
 	return f.tape, f.fail["tape"]
@@ -169,7 +192,7 @@ func TestPurgeRunsInOrderAndTheUserRowGoesLast(t *testing.T) {
 	// vmctl forgets the computer once it is destroyed; the record remembers.
 	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
 	e.pass()
-	want := []string{"mail", "data", "destroy", "gateway:computer-abc", "tape"}
+	want := []string{"mail", "data", "destroy", "gateway:computer-abc", "gateway:vm-1", "tape"}
 	var got []string
 	for _, c := range e.f.calls {
 		if c != "stop" && c != "suspend" {
@@ -449,5 +472,151 @@ func TestAFailedDestructiveStepIsLoggedAsFailed(t *testing.T) {
 	d, _ := e.s.AccountDeletionFor(e.user.ID)
 	if !strings.Contains(buf.String(), "job="+d.JobID+" step=computers failed") {
 		t.Fatalf("no failed line:\n%s", buf.String())
+	}
+}
+
+// V5 (seat 2 B2): a cancel that lands between a pass's list and its suspend
+// leaves a tombstone; the pass finds it after its own suspend and serves the
+// takes again, so the last act on the takes is a restore, never a suspend.
+func TestACancelBetweenTheListAndTheSuspendEndsWithTheTakesServed(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	e.f.onStop = func() {
+		tok, err := e.s.OfferDeletionCancel(e.user.ID, e.clock)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := e.s.CancelAccountDeletion(tok, e.clock); err != nil {
+			t.Error(err)
+			return
+		}
+		e.f.rec("restore") // the cancel handler's own restore, before the pass suspends
+	}
+	e.pass()
+	e.f.onStop = nil
+	last := ""
+	e.f.mu.Lock()
+	for _, c := range e.f.calls {
+		if c == "suspend" || c == "restore" {
+			last = c
+		}
+	}
+	e.f.mu.Unlock()
+	if last != "restore" {
+		t.Fatalf("the takes were left suspended after a cancel: %v", e.f.calls)
+	}
+}
+
+// The tombstone a cancel leaves is finished by the loop: takes served, then the
+// row gone. A restore that fails keeps the tombstone for the next pass.
+func TestTheLoopFinishesACancelledDeletion(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	tok, _ := e.s.OfferDeletionCancel(e.user.ID, e.clock)
+	if _, err := e.s.CancelAccountDeletion(tok, e.clock); err != nil {
+		t.Fatal(err)
+	}
+	e.f.restoreErr = errors.New("corpusd down")
+	e.pass()
+	open, _ := e.s.OpenAccountDeletions(0)
+	if len(open) != 1 || e.f.count("restore") != 1 || e.f.destructive() != 0 {
+		t.Fatalf("after a failed restore: %d rows, calls %v", len(open), e.f.calls)
+	}
+	e.f.restoreErr = nil
+	e.pass()
+	if open, _ := e.s.OpenAccountDeletions(0); len(open) != 0 {
+		t.Fatalf("the tombstone survives a successful restore: %+v", open)
+	}
+	// A tombstone never makes anything destructive eligible, however old.
+	e.clock = e.clock.Add(purgeguard.GracePeriod * 2)
+	e.pass()
+	if e.f.destructive() != 0 || e.f.count("stop") != 0 {
+		t.Fatalf("a cancelled account was touched: %v", e.f.calls)
+	}
+}
+
+// B3 (seat 2): a tape refusal that waiting does not clear is named in the
+// receipt and the rest finishes after the patience, never "stuck purging".
+func TestATapeRefusalIsWaitedOutThenNamedAndTheRestFinishes(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	_ = e.r.AtOnce(context.Background(), e.user.ID)
+	jobBefore, _ := e.s.AccountDeletionFor(e.user.ID)
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.f.tape = TapeResult{Refusal: "computer-abc: in registry list"} // not marked permanent
+	e.pass()
+	if _, err := e.s.GetUserByID(e.user.ID); err != nil {
+		t.Fatal("finalised on the first refusal")
+	}
+	d, _ := e.s.AccountDeletionFor(e.user.ID)
+	if _, ok := d.Steps["tape_wait"]; !ok {
+		t.Fatalf("the first refusal is not recorded with its time: %+v", d.Steps)
+	}
+	e.clock = e.clock.Add(TapeRefusalPatience - time.Hour)
+	e.pass()
+	if _, err := e.s.GetUserByID(e.user.ID); err != nil {
+		t.Fatal("finalised inside the patience")
+	}
+	e.clock = e.clock.Add(2 * time.Hour)
+	e.pass()
+	if _, err := e.s.GetUserByID(e.user.ID); err == nil {
+		t.Fatal("still stuck after the patience: the account is purging forever")
+	}
+	rec, _ := e.s.DeletionReceiptByJob(jobBefore.JobID)
+	if rec == nil || !strings.Contains(rec.Summary, "in registry list") {
+		t.Fatalf("the refusal is not named in the receipt: %+v", rec)
+	}
+}
+
+func TestATapeRefusalThatClearsInsideThePatienceIsPurgedNormally(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.f.tape = TapeResult{Refusal: "computer-abc: head moved within the quiet window"}
+	e.pass()
+	e.f.tape = TapeResult{Counts: Counts{"files_deleted": 9}}
+	e.clock = e.clock.Add(2 * time.Hour)
+	e.pass()
+	if _, err := e.s.GetUserByID(e.user.ID); err == nil {
+		t.Fatal("not finalised after the tape cleared")
+	}
+	if e.f.count("tape") != 2 {
+		t.Fatalf("tape calls: %v", e.f.calls)
+	}
+}
+
+// S5 (seat 2): what vmctl actually destroyed joins the record before the
+// gateway and the tape, so a computer made after the runner's list is not
+// left behind; and the gateway is asked for VM ids too (seat 1 #1).
+func TestWhatWasDestroyedIsForgottenAndItsTapePurged(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	_ = e.r.AtOnce(context.Background(), e.user.ID)
+	e.f.destroyed = &Destroyed{ComputerIDs: []string{"computer-abc", "computer-late"}, VMIDs: []string{"vm-1", "vm-late"}}
+	var tapeIDs []string
+	e.f.onTape = func(a Authz) { tapeIDs = a.Computers() }
+	e.clock = e.clock.Add(purgeguard.GracePeriod + time.Minute)
+	e.pass()
+	for _, want := range []string{"gateway:computer-abc", "gateway:computer-late", "gateway:vm-1", "gateway:vm-late"} {
+		if e.f.count(want) != 1 {
+			t.Fatalf("%s not asked: %v", want, e.f.calls)
+		}
+	}
+	if strings.Join(tapeIDs, ",") != "computer-abc,computer-late" {
+		t.Fatalf("tape named %v", tapeIDs)
+	}
+}
+
+// Seat 1 #10: a failed stop does not skip the takes.
+func TestAFailedStopStillSuspendsTheTakes(t *testing.T) {
+	e := newEnv(t)
+	e.request(t)
+	e.f.fail["stop"] = errors.New("vmctl down")
+	if err := e.r.AtOnce(context.Background(), e.user.ID); err == nil {
+		t.Fatal("a failed stop was not reported")
+	}
+	if e.f.count("suspend") != 1 {
+		t.Fatalf("takes not suspended after a failed stop: %v", e.f.calls)
 	}
 }

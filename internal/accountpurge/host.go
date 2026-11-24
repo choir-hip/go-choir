@@ -128,12 +128,18 @@ func (h *Host) PurgeData(ctx context.Context, a Authz) (Counts, error) {
 		map[string]any{"user_id": a.UserID(), "computer_ids": a.Computers(), "deletion_requested_at": stamp(a)}, &out); err != nil {
 		return nil, err
 	}
-	c := Counts{"takes_deleted": int64(out.TakesDeleted), "authors_detached": int64(out.AuthorsDetached), "captures_deleted": int64(out.CapturesDeleted)}
+	c := Counts{"takes_deleted": int64(out.TakesDeleted), "authors_detached": int64(out.AuthorsDetached), "captures_deleted": int64(out.CapturesDeleted),
+		"texture_documents_deleted": int64(out.TextureDocumentsDeleted), "texture_revisions_deleted": int64(out.TextureRevisionsDeleted)}
 	for t, n := range out.ProjectionRows {
 		c["proj:"+t] = n
 	}
-	for k, n := range out.RemainingByKind {
-		c["remaining_kind:"+k] = n
+	// What stays by decision (the publication layer) and what nobody decided
+	// about are separate lines of the receipt: the second must read empty.
+	for k, n := range out.KeptByDecision {
+		c["kept:"+k] = n
+	}
+	for k, n := range out.Undecided {
+		c["undecided:"+k] = n
 	}
 	for t, n := range out.RemainingTextures {
 		c["remaining:"+t] = n
@@ -141,12 +147,12 @@ func (h *Host) PurgeData(ctx context.Context, a Authz) (Counts, error) {
 	return c, nil
 }
 
-func (h *Host) DestroyComputers(ctx context.Context, a Authz) (Counts, error) {
+func (h *Host) DestroyComputers(ctx context.Context, a Authz) (Counts, Destroyed, error) {
 	res, err := h.VMCTL.AccountDestroy(ctx, a.UserID())
 	if err != nil {
-		return nil, err
+		return nil, Destroyed{}, err
 	}
-	return Counts{"computers": int64(len(res.Computers)), "vm_states": int64(res.VMStates)}, nil
+	return Counts{"computers": int64(len(res.Computers)), "vm_states": int64(res.VMStates)}, Destroyed{ComputerIDs: res.Computers, VMIDs: res.VMIDs}, nil
 }
 
 func (h *Host) ForgetGateway(ctx context.Context, a Authz, computerID string) error {

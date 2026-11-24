@@ -69,7 +69,8 @@ func TestRunnerOverHTTPWithRealMaildAndGateway(t *testing.T) {
 
 	// gateway: a real identity registry holding the doomed computer's identity.
 	reg := gateway.NewIdentityRegistry(time.Hour)
-	cred, err := reg.IssueCredential("computer-abc")
+	// The gateway keys an identity by the VM id; the product computer id is beside it.
+	cred, err := reg.IssueCredentialForComputer("vm-1", "computer-abc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +88,7 @@ func TestRunnerOverHTTPWithRealMaildAndGateway(t *testing.T) {
 		case "/internal/vmctl/account/computers":
 			_ = json.NewEncoder(w).Encode(map[string]any{"computers": []vmctl.AccountComputer{{ComputerID: "computer-abc", VMID: "vm-1", DesktopID: "primary", State: "stopped", Class: "primary"}}})
 		case "/internal/vmctl/account/destroy":
-			_ = json.NewEncoder(w).Encode(vmctl.AccountDestroyResult{Computers: []string{"computer-abc"}, VMStates: 1})
+			_ = json.NewEncoder(w).Encode(vmctl.AccountDestroyResult{Computers: []string{"computer-abc"}, VMIDs: []string{"vm-1"}, VMStates: 1})
 		default:
 			_ = json.NewEncoder(w).Encode(map[string]int{"stopped": 0})
 		}
