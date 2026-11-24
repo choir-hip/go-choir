@@ -149,16 +149,6 @@ final class SpeakerGateTests: XCTestCase {
         try await talk(e, speaker: 3, words: "anyone at all")
         XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "anyone at all")
     }
-}
-
-/// Maps a frame's amplitude to a speaker: 0.4 is speaker 1, 0.6 speaker 3 (the engine test's loud frames are 0.3 + 0.1 k).
-final class EngineEmbedder: VoiceEmbedder, @unchecked Sendable {
-    var isReady: Bool { true }
-    func embed(_ samples: [Float]) async -> [Float]? {
-        let k = Int(((samples.max() ?? 0) - 0.3) * 10 + 0.5)       // the loudest sample: quiet pre-roll frames do not matter
-        var v = [Float](repeating: 0, count: 256); v[max(0, k)] = 1; v[100 + samples.count % 50] = 0.05
-        return v
-    }
 
     final class Count: @unchecked Sendable { var n = 0 }
     // Voice enrolment listens through the engine without the engine looking for turns: a sentence read to teach the radio a voice, even a long loud one with pauses, never becomes a request (review 5).
@@ -180,5 +170,15 @@ final class EngineEmbedder: VoiceEmbedder, @unchecked Sendable {
         TurnGate.shared.allowed = true
         try await talk(e, speaker: 1, words: "now with a key")
         XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "now with a key")
+    }
+}
+
+/// Maps a frame's amplitude to a speaker: 0.4 is speaker 1, 0.6 speaker 3 (the engine test's loud frames are 0.3 + 0.1 k).
+final class EngineEmbedder: VoiceEmbedder, @unchecked Sendable {
+    var isReady: Bool { true }
+    func embed(_ samples: [Float]) async -> [Float]? {
+        let k = Int(((samples.max() ?? 0) - 0.3) * 10 + 0.5)       // the loudest sample: quiet pre-roll frames do not matter
+        var v = [Float](repeating: 0, count: 256); v[max(0, k)] = 1; v[100 + samples.count % 50] = 0.05
+        return v
     }
 }

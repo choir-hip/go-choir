@@ -2,7 +2,7 @@ import Foundation
 
 /// Decides when one spoken sentence is over. Pure: no audio, no clock; the frames carry their own length. (Voice enrolment, EnrolCapture.)
 public struct TakeCollector: Sendable {
-    public static let minSpeechSeconds = 1.5, endSilenceSeconds = 0.7, maxSeconds = 8.0
+    public static let minSpeechSeconds = 1.5, minHeardSeconds = 0.3, endSilenceSeconds = 0.7, maxSeconds = 8.0
     /// Frame level (dBFS RMS) above which a frame counts as speech (the first-run microphone check uses the same floor).
     public static let floorDb = MicCheck.floorDb
 
@@ -20,9 +20,9 @@ public struct TakeCollector: Sendable {
         total += s
         if db >= Self.floorDb { speech += s; silence = 0 } else if speech > 0 { silence += s }
         if speech > 0 { samples.append(contentsOf: f.samples) }                      // the lead-in silence is not kept
-        if speech >= Self.minSpeechSeconds && silence >= Self.endSilenceSeconds { ended = .heard }
+        if speech >= Self.minHeardSeconds && silence >= Self.endSilenceSeconds { ended = .heard }
         else if total >= Self.maxSeconds { ended = .timedOut }
     }
     /// A take ended with enough speech to learn from: the profile ignores anything under `SpeakerProfile.minimumLearnMs`, so the page does not accept less.
-    public var usable: Bool { ended != nil && samples.count >= SpeakerProfile.minimumLearnMs * 16 }
+    public var usable: Bool { ended != nil && speech >= Self.minSpeechSeconds && samples.count >= SpeakerProfile.minimumLearnMs * 16 }
 }
