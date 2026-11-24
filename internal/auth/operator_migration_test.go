@@ -1,9 +1,9 @@
 package auth
 
 import (
-	"errors"
 	"bytes"
 	"database/sql"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -134,6 +134,15 @@ func TestResumedSignUpIsNotSweptAndAGoneRowFailsCleanly(t *testing.T) {
 	n, err := h.store.SweepAbandonedUsers(t.Context(), time.Now().UTC().Add(-AbandonedUserRetention))
 	if err != nil || n != 0 || !userExists(h, "resume") {
 		t.Fatalf("swept a row whose ceremony just began: n=%d err=%v", n, err)
+	}
+	// The finish consumes the live challenge before it stores the passkey;
+	// in that window nothing but the refreshed row keeps the sweep off.
+	if _, err := h.store.DB().Exec(`DELETE FROM challenge_state WHERE user_id = ?`, "resume"); err != nil {
+		t.Fatal(err)
+	}
+	n, err = h.store.SweepAbandonedUsers(t.Context(), time.Now().UTC().Add(-AbandonedUserRetention))
+	if err != nil || n != 0 || !userExists(h, "resume") {
+		t.Fatalf("swept a resumed row after its challenge was consumed: n=%d err=%v", n, err)
 	}
 	err = h.store.CreateCredentialWithinCap(&Credential{
 		ID: "c-gone", UserID: "not-a-user", PublicKey: []byte("k"), AttestationType: "none",

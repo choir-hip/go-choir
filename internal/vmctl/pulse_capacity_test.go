@@ -103,11 +103,6 @@ func TestPulseCapacityReadsWhatTheOwnerDecidesOn(t *testing.T) {
 			t.Fatalf("capacity output names the test reserve %q: %s", leak, raw)
 		}
 	}
-	for _, leak := range []string{"test_cap", "test_counted", "example"} {
-		if strings.Contains(string(raw), leak) {
-			t.Fatalf("capacity output names the test reserve %q: %s", leak, raw)
-		}
-	}
 	for _, leak := range []string{"@", "mosiah", "u-old", "u-new", "vm-1"} {
 		if strings.Contains(string(raw), leak) {
 			t.Fatalf("capacity output carries %q: %s", leak, raw)
