@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -98,44 +97,34 @@ func TestTheControlAndGraphDatabasesCannotStandInForEachOther(t *testing.T) {
 	}
 }
 
-// A graph row of an account's delivery refuses it through target_owner_id; the target_id (a proposal) does not.
-func TestARealDeliveryRecordRefusesTheOwnerAndNotTheTargetId(t *testing.T) {
+// A delivery record refuses an account named as its owner, and one named as its target when the target is a user;
+// a target that is a proposal refuses nobody.
+func TestARealDeliveryRecordRefusesTheOwnerAndAUserTarget(t *testing.T) {
 	ctx := context.Background()
 	svcs := realServices(t)
 	graph := svcs[3]
 	now := time.Now().UTC()
-	if _, err := graph.DB.Exec(`INSERT INTO proposal_delivery_records (delivery_id, proposal_id, target_owner_id, target_kind, target_id, delivery_state, created_at, updated_at) VALUES ('d1', 'p1', 'someone', 'publication_version_proposal', 'goes', 'sent', $1, $1)`, now); err != nil {
-		t.Fatal(err)
+	for _, r := range [][]any{{"d1", "someone", "publication_version_proposal", "p1"}, {"d2", "someone", "user", "a-user"}} {
+		if _, err := graph.DB.Exec(`INSERT INTO proposal_delivery_records (delivery_id, proposal_id, target_owner_id, target_kind, target_id, delivery_state, created_at, updated_at) VALUES ($1, 'p', $2, $3, $4, 'sent', $5, $5)`, r[0], r[1], r[2], r[3], now); err != nil {
+			t.Fatal(err)
+		}
 	}
 	keys, err := graph.present(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var found bool
+	hits := map[string]map[string]bool{}
 	for _, k := range keys {
-		if k.Table == "proposal_delivery_records" && k.Column == "target_owner_id" {
-			found = true
-			hits, err := graph.proofHits(ctx, k, []string{"goes", "someone"})
+		if k.Table == "proposal_delivery_records" {
+			h, err := graph.proofHits(ctx, k, []string{"p1", "a-user", "someone"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if hits["goes"] || !hits["someone"] {
-				t.Fatalf("hits = %v: the owner refuses, the target id does not", hits)
-			}
+			hits[k.Column] = h
 		}
 	}
-	if !found {
-		t.Fatal("target_owner_id is not keyed")
-	}
-	if !strings.Contains(strings.Join(sortedNames(notUserKeyed), ","), "proposal_delivery_records.target_id") {
-		t.Fatal("target_id is not reviewed")
+	if !hits["target_owner_id"]["someone"] || hits["target_id"]["p1"] || !hits["target_id"]["a-user"] {
+		t.Fatalf("hits = %v: the owner and a user target refuse; a proposal target does not", hits)
 	}
 }
 
-func sortedNames(m map[string]bool) []string {
-	var out []string
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}

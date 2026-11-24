@@ -1,9 +1,7 @@
 package unprovedpurge
 
 import (
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,8 +89,7 @@ func (j *FileJournal) Entry(stage string, res *Result) error {
 			l.Services = append(l.Services, st)
 		}
 		for _, c := range res.Plan.Purge {
-			h := sha256.Sum256([]byte(c.ID))
-			l.IDs = append(l.IDs, hex.EncodeToString(h[:]))
+			l.IDs = append(l.IDs, Hash(c.ID)) // the same form the dry run prints, so a line can be matched to the list approved
 			if j.key != nil {
 				l.Emails = append(l.Emails, EmailMAC(j.key, c.Email))
 			}
@@ -110,8 +107,9 @@ func (j *FileJournal) Entry(stage string, res *Result) error {
 	return j.f.Sync()
 }
 
-// LastIncomplete reads a receipt file: if its last line is a step short of "done" (or a stop), it says which, so
-// the next run knows the one before it died or stopped half way. A missing file or a finished run says "".
+// LastIncomplete reads a receipt file: if its last line is a step short of "done", it says which, so the next run
+// knows the one before it died or stopped half way. A missing, empty or blank file is no earlier run. A last line
+// that cannot be parsed (a write cut short by a crash) is reported with the last line that can.
 func LastIncomplete(path string) (string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -120,15 +118,28 @@ func LastIncomplete(path string) (string, error) {
 		}
 		return "", err
 	}
-	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
-	var last journalLine
-	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil {
-		return "", fmt.Errorf("the last line of %s is not a receipt line: %w", path, err)
-	}
-	if last.Stage == "done" {
+	text := strings.TrimSpace(string(b))
+	if text == "" {
 		return "", nil
 	}
-	return fmt.Sprintf("the last run (digest %s, %s) ended at %q: some services may have committed (%v); finish it with a fresh dry run, keeping go-choir-auth and go-choir-maild stopped", last.Digest, last.At, last.Stage, last.Services), nil
+	lines := strings.Split(text, "\n")
+	torn := false
+	for i := len(lines) - 1; i >= 0; i-- {
+		var last journalLine
+		if err := json.Unmarshal([]byte(lines[i]), &last); err != nil {
+			torn = true
+			continue
+		}
+		if last.Stage == "done" && !torn {
+			return "", nil
+		}
+		note := ""
+		if torn {
+			note = " (a later line is cut short)"
+		}
+		return fmt.Sprintf("the last run (digest %s, %s) ended at %q%s: some services may have committed (%v); finish it with a fresh dry run, keeping go-choir-auth and go-choir-maild stopped", last.Digest, last.At, last.Stage, note, last.Services), nil
+	}
+	return "an earlier receipt in " + path + " has no line that can be read; check it before going on", nil
 }
 
 // OpenSQLiteFile opens an existing SQLite file for the command: read-only for a dry run, with the write lock taken

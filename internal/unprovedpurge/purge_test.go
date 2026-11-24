@@ -615,7 +615,7 @@ func TestTheJournalOfAWholeRunAndOfAStop(t *testing.T) {
 	if _, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), plan.Digest, j); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"intent", "before-commit:maild", "before-commit:platform", "before-mail-dirs", "before-commit:auth", "done"}
+	want := []string{"intent", "before-commit:maild", "after-commit:maild", "before-commit:platform", "after-commit:platform", "before-mail-dirs", "after-mail-dirs", "before-commit:auth", "after-commit:auth", "done"}
 	if strings.Join(j.stages, "|") != strings.Join(want, "|") {
 		t.Fatalf("stages = %v, want %v", j.stages, want)
 	}
@@ -738,5 +738,98 @@ func TestTheSetRepairPrefersAProvedMemberWithALiveSession(t *testing.T) {
 	}
 	if active != "proved" {
 		t.Fatalf("active = %q: the proved member (dead session) comes before the newer unproved one", active)
+	}
+}
+
+// The webhook log is matched on the provider AND the message id: the same id under another provider is another
+// account's event and stays.
+func TestAWebhookEventOfAnotherProviderWithTheSameMessageIdStays(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	exec(t, w.maild, `INSERT INTO email_webhook_events (id, provider, provider_message_id, raw_payload) VALUES ('w-other-provider', 'other', 'm-goes', '{"x":1}')`)
+	plan, err := BuildPlan(ctx, w.auth.DB(), w.owner, w.services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), plan.Digest, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n := rowsFor(t, w.maild, `SELECT COUNT(*) FROM email_webhook_events WHERE id = 'w-goes'`); n != 0 {
+		t.Fatalf("the account's own event stayed (%d)", n)
+	}
+	if n := rowsFor(t, w.maild, `SELECT COUNT(*) FROM email_webhook_events WHERE id = 'w-other-provider'`); n != 1 {
+		t.Fatalf("an event of another provider went (%d)", n)
+	}
+}
+
+// A plan with nobody in it still opens and closes the receipt, so a run that died after its commit is closed by the rerun.
+func TestAnEmptyPlanWritesIntentAndDone(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	exec(t, w.auth.DB(), `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP WHERE id = 'goes'`)
+	plan, err := BuildPlan(ctx, w.auth.DB(), w.owner, w.services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := &recordingJournal{}
+	if _, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), plan.Digest, j); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(j.stages, "|") != "intent|done" {
+		t.Fatalf("stages = %v", j.stages)
+	}
+}
+
+// The receipt names accounts the way the dry run prints them.
+func TestTheJournalHashesIdsAsTheDryRunPrintsThem(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	path := filepath.Join(t.TempDir(), "r.jsonl")
+	j, err := OpenJournal(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+	plan, err := BuildPlan(ctx, w.auth.DB(), w.owner, w.services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), plan.Digest, j); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	if !strings.Contains(string(b), `"`+Hash("goes")+`"`) {
+		t.Fatalf("the receipt does not carry %s (what the dry run prints):\n%s", Hash("goes"), b)
+	}
+}
+
+func TestReadingAReceiptThatIsNewEmptyOrTornDoesNotStopTheRun(t *testing.T) {
+	dir := t.TempDir()
+	fresh := filepath.Join(dir, "fresh.jsonl")
+	if prev, err := LastIncomplete(fresh); err != nil || prev != "" {
+		t.Fatalf("missing: %q %v", prev, err)
+	}
+	j, err := OpenJournal(fresh, "") // creates the empty file, as the command does
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.Close()
+	if prev, err := LastIncomplete(fresh); err != nil || prev != "" {
+		t.Fatalf("empty: %q %v", prev, err)
+	}
+	torn := filepath.Join(dir, "torn.jsonl")
+	if err := os.WriteFile(torn, []byte(`{"at":"t","stage":"before-commit:auth","digest":"d"}`+"\n"+`{"at":"t","sta`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prev, err := LastIncomplete(torn)
+	if err != nil || !strings.Contains(prev, "before-commit:auth") || !strings.Contains(prev, "cut short") {
+		t.Fatalf("torn: %q %v", prev, err)
+	}
+	blank := filepath.Join(dir, "blank.jsonl")
+	if err := os.WriteFile(blank, []byte("\n  \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if prev, err := LastIncomplete(blank); err != nil || prev != "" {
+		t.Fatalf("blank: %q %v", prev, err)
 	}
 }

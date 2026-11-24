@@ -60,9 +60,9 @@ type Key struct {
 	LikePrefix string
 	// Proof: any row here means the account used a computer or the platform, so it is refused, not purged.
 	Proof bool
-	// Sub: the column holds an id found through another table: the rows match when the column is in
-	// "<Sub> IN (the ids)", for example a webhook event whose message id the mail index lists for the account.
-	Sub string
+	// Exists: the rows match when this condition holds, "{list}" standing for the placeholders of the ids: for a
+	// webhook event, that the mail index lists its provider and message id for one of the accounts.
+	Exists string
 }
 
 // Service is one database and the keys in it.
@@ -103,7 +103,7 @@ var (
 	MaildKeys = []Key{
 		// The inbound webhook log keeps each event's whole payload (recipient, addresses, message): the events of
 		// the account's messages go, found through the provider message index, before that index is deleted.
-		{Table: "email_webhook_events", Column: "provider_message_id", By: "id", Sub: "SELECT provider_message_id FROM email_provider_message_index WHERE owner_id"},
+		{Table: "email_webhook_events", Column: "provider_message_id", By: "id", Exists: "EXISTS (SELECT 1 FROM email_provider_message_index m WHERE m.provider = email_webhook_events.provider AND m.provider_message_id = email_webhook_events.provider_message_id AND m.owner_id IN ({list}))"},
 		{Table: "email_sender_whitelist", Column: "owner_id", By: "id"},
 		{Table: "email_provider_message_index", Column: "owner_id", By: "id"},
 		{Table: "email_approval_token_index", Column: "owner_id", By: "id"},
@@ -140,6 +140,8 @@ var (
 			Key{Table: "publication_version_proposals", Column: "source_owner_id", By: "id", Proof: true},
 			Key{Table: "publication_version_proposals", Column: "submitter_id", By: "id", Proof: true},
 			Key{Table: "proposal_delivery_records", Column: "target_owner_id", By: "id", Proof: true},
+			// target_id names the object delivered to; if a delivery ever targets a user (target_kind 'user') that user is refused.
+			Key{Table: "proposal_delivery_records", Column: "target_id", By: "id", Where: "target_kind = 'user'", Proof: true},
 			Key{Table: "computer_key_unwrap_requests", Column: "requested_by", By: "id", Proof: true},
 			Key{Table: "computer_key_unwrap_approvals", Column: "approver", By: "id", Proof: true},
 		)
@@ -166,9 +168,6 @@ var (
 		"email_owner_addresses.email": true,
 		"pending_registrations.email": true,
 		"registration_waitlist.email": true,
-		// A delivery record's target_id names the object delivered to (target_kind "publication_version_proposal"
-		// in internal/platform/publication_graph.go), not a user; the owner is target_owner_id, which is keyed.
-		"proposal_delivery_records.target_id": true,
 	}
 )
 
@@ -369,8 +368,8 @@ func (k Key) where(kind dbx.Kind, n int) string {
 		col = "lower(" + k.Column + ")"
 	}
 	w := fmt.Sprintf("%s IN (%s)", col, inList(kind, 1, n))
-	if k.Sub != "" {
-		w = fmt.Sprintf("%s IN (%s IN (%s))", col, k.Sub, inList(kind, 1, n))
+	if k.Exists != "" {
+		w = strings.ReplaceAll(k.Exists, "{list}", inList(kind, 1, n))
 	}
 	if k.Where != "" {
 		w = "(" + k.Where + ") AND " + w
@@ -837,7 +836,10 @@ func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Servic
 		}
 	}
 	if len(ids) == 0 {
-		return res, nil
+		if err := note("intent"); err != nil {
+			return res, err
+		}
+		return res, note("done")
 	}
 	for _, s := range services {
 		if s.MailboxRoot != "" {
@@ -897,6 +899,9 @@ func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Servic
 		if err != nil {
 			return res, err
 		}
+		if err := note("after-commit:" + others[i].Name); err != nil {
+			return res, err
+		}
 	}
 	if err := note("before-mail-dirs"); err != nil {
 		return res, err
@@ -912,6 +917,9 @@ func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Servic
 				return res, err
 			}
 		}
+	}
+	if err := note("after-mail-dirs"); err != nil {
+		return res, err
 	}
 	if s := authSvc; true {
 		sets, err := setsOf(ctx, tx, ids)
@@ -933,6 +941,9 @@ func Apply(ctx context.Context, authDB *sql.DB, owners Owners, services []Servic
 		return res, fmt.Errorf("auth: commit: %w", err)
 	}
 	res.Services = append(res.Services, ServiceResult{Name: "auth", Committed: true})
+	if err := note("after-commit:auth"); err != nil {
+		return res, err
+	}
 	// The directories maild may have recreated while the run was going (a late mail): one more look.
 	for _, s := range others {
 		if s.MailboxRoot == "" {
