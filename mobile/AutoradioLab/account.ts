@@ -339,7 +339,7 @@ async function signOutInner(
 let settled: Promise<Reconciled> | null = null;
 /** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops. */
 export function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
-  if (!settled) settled = (async () => { await forgetOldCopy(storage); const r = await reconcile(storage, store, native); void retryPendingRevoke(storage, store).catch(() => undefined); return r; })();
+  if (!settled) settled = (async () => { await forgetOldCopy(storage); const r = await reconcile(storage, store, native); await Promise.race([retryPendingRevoke(storage, store).catch(() => undefined), timeout(3000)]); return r; })();
   return settled;
 }
 /** For tests. */

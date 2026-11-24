@@ -610,7 +610,7 @@ func TestRegisterMailForAKnownAddressLeavesTheRecoveryLinkAndBudgetAlone(t *test
 	if rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": "holder@example.com", "binding": newBinding(t)}); rec.Code != 200 || len(rm.mails()) != 2 {
 		t.Fatalf("no live link: register/mail = %d, %d mails", rec.Code, len(rm.mails()))
 	}
-	for i := 0; i < RecoveryMaxPerEmail; i++ {
+	for i := 0; i < RecoveryMaxPerEmail-1; i++ { // the setup request already spent one
 		if rec := postRecoveryRequest(t, h, "holder@example.com", fmt.Sprintf("203.0.113.%d:1", 20+i)); rec.Code != 200 {
 			t.Fatalf("recovery/request %d was refused (%d) after register/mail calls: its budget was spent", i, rec.Code)
 		}
