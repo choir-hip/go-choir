@@ -113,8 +113,8 @@ describe('the build identity (app-identity.sh over the real app.json)', () => {
     expect(id('bogus').code).not.toBe(0);
   });
   test('I4 the sign-in scheme is the app id for all three apps (the server\'s list is the Go test\'s: TestDeviceReturnSchemesAreTheAppsInAppJSON)', () => {
-    const app = readFileSync(join(MOBILE, 'AutoradioLab', 'app.ts'), 'utf8');
-    expect(/APP_ID \?\? '([^']+)'/.exec(app)![1]).toBe(PROD);
+    const app = readFileSync(join(MOBILE, 'AutoradioLab', 'app-id.ts'), 'utf8');      // the literal lives in app-id.ts (app.ts imports it)
+    expect(/APP_ID[^\n]*\?\? '([^']+)'/.exec(app)![1]).toBe(PROD);
     const schemes = [PROD];
     for (const v of Object.values(APP_JSON.variants) as { idSuffix: string; env: { APP_ID: string } }[]) {
       expect(v.env.APP_ID).toBe(PROD + v.idSuffix);
@@ -1021,9 +1021,9 @@ describe.skipIf(!MAC)('D6 a build number is given once', () => {
 });
 
 describe('D7 what the app grants is data the build reads', () => {
-  test('D7 the purpose strings are the two the app uses, and the background mode is playback only', () => {
+  test('D7 the purpose strings are the two the app uses (the sign-in strings are the app.signin ones), and the background mode is playback only', () => {
     const en = JSON.parse(readFileSync(join(MOBILE, 'AutoradioLab', 'strings', 'en.json'), 'utf8'));
-    expect(Object.keys(en).sort()).toEqual(['purpose.microphone', 'purpose.speech']);
+    expect(Object.keys(en).filter((k) => k.startsWith('purpose.')).sort()).toEqual(['purpose.microphone', 'purpose.speech']);
     expect(APP_JSON.host.ios.backgroundModes).toEqual(['audio']);
   });
 });
