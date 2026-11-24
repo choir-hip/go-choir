@@ -150,4 +150,10 @@ describe('the press', () => {
     expect(opts.find((o) => o.id === 'ear-two')?.credit).toBe('Ear two by Example Labs. CC BY 4.0.');
     expect(opts.find((o) => o.id === 'ear-one')?.credit).toBe('');
   });
+  test('D16 a "Download now" pressed while the phone is on Wi-Fi (the page was drawn before the path was known) records a Wi-Fi agreement only, never a mobile one', async () => {
+    live = { ...f, onWiFi: true };
+    await downloadsAct('startMobile', 'voice', { ...f, onWiFi: false }, storage);
+    expect(await modelsAgreement(storage, 'voice')).toEqual({ ok: true, mobile: false });
+    expect(calls.find((c) => c.op === 'obSetupBegin')).toBeDefined();
+  });
 });

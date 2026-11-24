@@ -135,7 +135,7 @@ final class ModelStoreResumeTests: XCTestCase {
     func store() -> (ModelStore, ModelSpec, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ms-\(UUID().uuidString)", isDirectory: true)
         let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubProtocol.self]
-        let s = ModelStore(root: root, session: URLSession(configuration: cfg))
+        let s = ModelStore(root: root, session: URLSession(configuration: cfg), door: .open)
         let spec = ModelSpec(id: "t", url: URL(string: "https://example.com/m.bin")!, sha256: sha, bytes: Int64(payload.utf8.count), fileName: "m.bin")
         return (s, spec, root)
     }

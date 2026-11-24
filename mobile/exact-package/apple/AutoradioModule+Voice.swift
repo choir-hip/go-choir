@@ -15,14 +15,6 @@ private final class SampleOutcome: @unchecked Sendable {
 }
 
 /// Models marked ready for the simulator driver (the virtual engine), which fetch nothing.
-private final class MemoryVoiceReadiness: VoiceReadiness, @unchecked Sendable {
-    private let lock = NSLock()
-    private var ready = Set<String>()
-    func isReady(model: String) -> Bool { lock.lock(); defer { lock.unlock() }; return ready.contains(model) }
-    func markReady(model: String) { lock.lock(); ready.insert(model); lock.unlock() }
-    func markNotReady(model: String) { lock.lock(); ready.remove(model); lock.unlock() }
-}
-
 final class VoiceController: @unchecked Sendable {
     static var shared: VoiceController?
     unowned let module: AutoradioModule
@@ -32,7 +24,9 @@ final class VoiceController: @unchecked Sendable {
         self.module = module
         let rt = module.runtime!
         let virtual = module.virtualEngine
-        let readiness: VoiceReadiness = virtual ? MemoryVoiceReadiness() : Voices.readiness
+        // The ONE readiness writer (`ReadinessVerifier`): the sampler reads readiness and runs a fetched model through the verifier's check; a virtual engine has its own in-memory record.
+        let verifier = virtual ? ReadinessVerifier(record: MemoryVoiceReadiness()) : Voices.verifier
+        let readiness: VoiceReadiness = verifier.reading
         let current = VoiceCatalog.option(matching: rt.configuration.setting(.voice) ?? VoiceCatalog.defaultOption.setting)?.id ?? VoiceCatalog.defaultOption.id
         sampler = VoiceSampler(
             selected: current, readiness: readiness,
@@ -43,6 +37,13 @@ final class VoiceController: @unchecked Sendable {
                 }
                 guard let p = ModelProviders.current else { throw LabError.unavailable(ModelProviders.missingNote) }
                 try await p.fetch(model, role: "", onBytes: onBytes)
+            },
+            verify: { model in
+                await verifier.verify(model: model, check: {
+                    if virtual { return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: true) }
+                    guard let p = ModelProviders.current else { throw LabError.unavailable(ModelProviders.missingNote) }
+                    return try await p.check(model, role: "")
+                }).outputOK
             },
             say: { option in
                 if virtual { try await Task.sleep(nanoseconds: 1_200_000_000); return }

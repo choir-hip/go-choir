@@ -14,7 +14,7 @@
 //  C7 A pick of a model for a job (the download step) is kept across a restart, read by shape (only string ids), changes nothing when it is the same, and goes with the rest at sign-out.
 import type { Storage } from './app.contract.d.ts';
 import { askText, type AskText } from './consent-text.ts';
-import { accountGeneration, keyState, writeCurrent } from './api.ts';
+import { accountGeneration, keyState, nativeLater, writeCurrent } from './api.ts';
 import { MIC_TEXT } from './micask.ts';
 
 export const CONSENT_FILE = 'app:/data/consent.json';
@@ -49,13 +49,18 @@ async function load(storage: Storage | undefined): Promise<Mem> {
       let text: string | undefined, failed = false;
       try { if (storage) text = new TextDecoder().decode(await storage.fs.readFile(CONSENT_FILE)); }
       catch (e) { if ((e as { code?: string } | null)?.code !== 'ENOENT') failed = true; }       // absent is fresh; any other failure is read again next time
-      if (m.gen === accountGeneration() && !failed) { m.c = parseConsent(text); m.loaded = true; }
+      if (m.gen === accountGeneration() && !failed) { m.c = parseConsent(text); m.loaded = true; await pushAgreement({ ...m.c.agreed }); }
       m.loading = undefined;
     })();
   }
   await m.loading;
   if (m.gen !== accountGeneration()) return load(storage);                                         // C3
   return m;
+}
+
+/** DOOR A: native's download door holds a copy of what was agreed and refuses every fetch without it. Pushed at load, at every change and at sign-out; a failed push leaves the door as it was (closed until the next one). */
+async function pushAgreement(agreed: Record<string, string>): Promise<void> {
+  try { await nativeLater()?.({ op: 'obConsent', agreed }); } catch { /* the door stays as it was */ }
 }
 
 const view = (m: Mem): ConsentView => ({ rev: m.rev, ...askText(), micPre: MIC_TEXT.pre, micOff: MIC_TEXT.off, micContinue: MIC_TEXT.continue, micNotNow: MIC_TEXT.notNow, micOk: MIC_TEXT.ok });
@@ -82,6 +87,7 @@ export async function consentAgree(group: string, mobile: boolean, storage: Stor
   const before = m.c.agreed[group];
   m.c.agreed[group] = next; m.rev += 1;
   if (storage && !(await writeCurrent(m.gen, storage, CONSENT_FILE, new TextEncoder().encode(JSON.stringify(m.c))))) { if (before === undefined) delete m.c.agreed[group]; else m.c.agreed[group] = before; return false; }
+  await pushAgreement({ ...m.c.agreed });
   return true;
 }
 
@@ -97,6 +103,7 @@ export async function consentPick(job: string, id: string, storage: Storage | un
 /** Sign-out (account.ts WIPES): the memory and the file. Throws when the file could not be removed and is still there. */
 export async function wipeConsent(storage: Storage | undefined): Promise<void> {
   mem = null;
+  await pushAgreement({});                                                                         // sign-out closes the door first
   if (!storage) return;
   try { await storage.fs.rm(CONSENT_FILE); } catch (e) { try { await storage.fs.stat(CONSENT_FILE); } catch { return; } throw e; }
 }

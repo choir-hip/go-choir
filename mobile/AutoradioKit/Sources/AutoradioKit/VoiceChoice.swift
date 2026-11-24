@@ -124,12 +124,39 @@ public final class VoiceChoiceStore: @unchecked Sendable {
 /// once through setup or the voice cards: a partly downloaded folder is not evidence.
 public protocol VoiceReadiness: Sendable {
     func isReady(model: String) -> Bool
+}
+/// The same record with its writes. ONLY `ReadinessVerifier` holds one (review round 3: ONE readiness writer): the engine, the Downloads page, the voice cards and every other reader have `VoiceReadiness` and cannot write.
+public protocol VoiceReadinessRecord: VoiceReadiness {
     func markReady(model: String)
     func markNotReady(model: String)
 }
 
+/// The ONE writer of readiness. A model is marked ready here, after `check` said it works on this phone, and nowhere else; a failed check demotes it. A fetch, a download card or a leftover from an older build cannot make a model ready.
+///
+/// WAYS THIS CAN GO WRONG (tests in ReadinessVerifierTests):
+///  W1 A model whose check fails is not ready, and one that was marked before is demoted.
+///  W2 A model whose check throws is not ready.
+///  W3 A pass marks the model and its companions (the live-words model comes with a batch recogniser) and returns the measurement.
+public final class ReadinessVerifier: @unchecked Sendable {
+    private let record: VoiceReadinessRecord
+    public init(record: VoiceReadinessRecord) { self.record = record }
+    /// What everything else reads.
+    public var reading: VoiceReadiness { record }
+    /// Run the check; mark on a pass only. Returns the measurement (a thrown check is a failed one).
+    public func verify(model id: String, companions: [String] = [], check: () async throws -> SetupCheck) async -> SetupCheck {
+        let result: SetupCheck
+        do { result = try await check() }
+        catch { result = SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "\(error)") }
+        if result.outputOK { record.markReady(model: id); for c in companions { record.markReady(model: c) } }
+        else { record.markNotReady(model: id) }
+        return result
+    }
+    /// The files of a model are going: it is not ready any more.
+    public func demote(model id: String) { record.markNotReady(model: id) }
+}
+
 /// In memory only (a virtual engine, tests).
-public final class MemoryVoiceReadiness: VoiceReadiness, @unchecked Sendable {
+public final class MemoryVoiceReadiness: VoiceReadinessRecord, @unchecked Sendable {
     private let lock = NSLock(); private var ids = Set<String>()
     public init() {}
     public func isReady(model: String) -> Bool { lock.lock(); defer { lock.unlock() }; return ids.contains(model) }
@@ -137,7 +164,7 @@ public final class MemoryVoiceReadiness: VoiceReadiness, @unchecked Sendable {
     public func markNotReady(model: String) { lock.lock(); ids.remove(model); lock.unlock() }
 }
 
-public final class FileVoiceReadiness: VoiceReadiness, @unchecked Sendable {
+public final class FileVoiceReadiness: VoiceReadinessRecord, @unchecked Sendable {
     private let file: URL
     private let lock = NSLock()
     public init(file: URL) { self.file = file }
@@ -156,8 +183,9 @@ public final class FileVoiceReadiness: VoiceReadiness, @unchecked Sendable {
 
 public enum Voices {
     /// The record the app uses (next to the model files).
-    nonisolated(unsafe) public static var readiness: VoiceReadiness =
-        FileVoiceReadiness(file: KnownModels.storeRoot.appendingPathComponent("voice-ready.json"))
+    public static let verifier = ReadinessVerifier(record: FileVoiceReadiness(file: KnownModels.storeRoot.appendingPathComponent("voice-ready.json")))
+    /// Read-only: the engine, the pages and the cards read this; only `verifier` writes it.
+    public static var readiness: VoiceReadiness { verifier.reading }
     /// Slower than this to a first sound and the line is spoken by the system voice (the neural model may still be compiling on its first
     /// use; it goes on loading and the next line uses it).
     public static let firstSoundSeconds: Double = 25

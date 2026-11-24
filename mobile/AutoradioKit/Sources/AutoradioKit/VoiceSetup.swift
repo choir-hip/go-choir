@@ -285,13 +285,13 @@ public final class VoiceSetup: @unchecked Sendable {
     /// The configurator (when set, `run()` plans, measures and chooses a whole configuration instead of walking each stage's ladder).
     private let configBackend: ConfigBackend?
     /// The ONE record of what the radio may use (the engine's listener choice and the Downloads page both read it). Written here, after the on-device check passed, never at fetch.
-    private let readiness: VoiceReadiness
+    private let verifier: ReadinessVerifier
     private var configFirst: Configuration?
     public private(set) var configurationRecord: ConfigurationRecord?
 
     public init(backend: SetupBackend, profile: DeviceProfile, smaller: Bool = false, stallSeconds: Double = 20, patience: Double = 45, maxTries: Int = 3,
-                configBackend: ConfigBackend? = nil, readiness: VoiceReadiness = Voices.readiness, now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) {
-        self.readiness = readiness; self.backend = backend; self.profile = profile; self.stallSeconds = stallSeconds; self.patience = patience; self.maxTries = maxTries; self.now = now
+                configBackend: ConfigBackend? = nil, verifier: ReadinessVerifier = Voices.verifier, now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) {
+        self.verifier = verifier; self.backend = backend; self.profile = profile; self.stallSeconds = stallSeconds; self.patience = patience; self.maxTries = maxTries; self.now = now
         self.configBackend = configBackend
         plan = SetupCatalog.plan(for: profile, smaller: smaller)
         for s in SetupStage.allCases { rowsByStage[s] = Self.freshRow(s, plan[s]![0]) }
@@ -494,12 +494,9 @@ public final class VoiceSetup: @unchecked Sendable {
             }
             // Check on this device.
             update(s) { r in r.state = "preparing"; r.progress = 1; r.statusLine = "Preparing for this phone"; r.canRetry = false; r.canFallback = false }
-            let check: SetupCheck
-            do { check = try await backend.check(cand) }
-            catch { check = SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "\(error)") }
+            let be = backend
+            let check = await verifier.verify(model: cand.id, companions: ListenerPipeline.companions(of: cand.id), check: { try await be.check(cand) })      // the ONE writer of readiness
             if check.outputOK {
-                readiness.markReady(model: cand.id)                                   // after the check, never at fetch (review round 2, B2)
-                for companion in ListenerPipeline.companions(of: cand.id) { readiness.markReady(model: companion) }
                 let numbers = Self.numbers(check)
                 update(s) { r in
                     r.state = "ready"; r.progress = 1; r.numbers = numbers
@@ -511,7 +508,6 @@ public final class VoiceSetup: @unchecked Sendable {
                 onChange?()
                 return
             }
-            readiness.markNotReady(model: cand.id)                                    // it was fetched, but it does not work here: the listener must not choose it
             reasons.append(check.note.isEmpty ? "It did not pass its check on this phone" : check.note); fellFrom.append(cand.id)   // failure 4
             if isLast { markFloorOnly(s, ladder, fellFrom, reasons); return }
         }

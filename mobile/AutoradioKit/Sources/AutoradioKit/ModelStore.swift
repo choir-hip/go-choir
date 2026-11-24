@@ -110,12 +110,14 @@ public actor ModelStore {
     private var unloaders: [String: @Sendable () -> Void] = [:]
     private var loaded: Set<String> = []
     private var log: EventLog?
-    let session: URLSession
+    /// A test's own transport; the door still authorises (`DownloadDoor.session(for:injected:)`).
+    let injectedSession: URLSession?
+    let door: DownloadDoor
     /// The one store of the app: voice setup, the engine's stages and the proof all use it. It is created with the whole
     /// catalog (`KnownModels`) registered, so no model setup can ask for is ever "not registered".
     public static let shared = ModelStore(root: KnownModels.storeRoot, registerKnown: true)
-    public init(root: URL, log: EventLog? = nil, registerKnown: Bool = false, session: URLSession = .shared) {
-        self.root = root; self.log = log; self.session = session
+    public init(root: URL, log: EventLog? = nil, registerKnown: Bool = false, session: URLSession? = nil, door: DownloadDoor = .shared) {
+        self.root = root; self.log = log; self.injectedSession = session; self.door = door
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         if registerKnown {
             for s in KnownModels.pinned { specs[s.id] = s }
@@ -169,6 +171,7 @@ public actor ModelStore {
     /// has agreed to the download (voice setup's consent); nothing else in the app calls it. `progress` receives bytes of the whole folder.
     public func ensureBundle(_ b: ModelBundleSpec, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
         guard b.isWellFormed else { throw LabError.badInput("model \(b.id) names a path, a repository, a size or a digest that this phone will not fetch") }
+        let session = try door.session(for: b.id, injected: injectedSession)        // the door: consent for this model's group, and a transport that cannot spend mobile data unless it was agreed
         let dir = root.appendingPathComponent(b.folder, isDirectory: true)
         let fm = FileManager.default
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -179,7 +182,7 @@ public actor ModelStore {
             specs[spec.id] = spec
             try fm.createDirectory(at: root.appendingPathComponent(spec.fileName).deletingLastPathComponent(), withIntermediateDirectories: true)
             let base = before, total = b.totalBytes
-            _ = try await ensure(spec.id) { done, _ in progress?(base + done, total) }
+            _ = try await fetchFile(spec.id, session: session) { done, _ in progress?(base + done, total) }
             before += f.bytes
             progress?(before, b.totalBytes)
         }
@@ -207,6 +210,14 @@ public actor ModelStore {
 
     /// Fetch (or resume) and verify; returns the local file. `progress` receives bytes so far.
     public func ensure(_ id: String, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        guard specs[id] != nil else {
+            if managed[id] != nil { throw LabError.badInput("model \(id) is fetched by its own library, not by the store") }
+            throw LabError.badInput("model \(id) not registered")
+        }
+        let session = try door.session(for: id, injected: injectedSession)          // the door: consent for this model's group, and a transport that cannot spend mobile data unless it was agreed
+        return try await fetchFile(id, session: session, progress: progress)
+    }
+    private func fetchFile(_ id: String, session: URLSession, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
         guard let s = specs[id] else {
             if managed[id] != nil { throw LabError.badInput("model \(id) is fetched by its own library, not by the store") }
             throw LabError.badInput("model \(id) not registered")

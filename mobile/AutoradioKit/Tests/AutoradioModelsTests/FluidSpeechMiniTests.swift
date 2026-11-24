@@ -26,7 +26,7 @@ final class FluidSpeechMiniTests: XCTestCase {
 
     /// The model folder, fetched once; nil with a reason when it cannot be had.
     static func modelDirectory() async -> (URL?, String) {
-        let store = ModelStore(root: cacheRoot)
+        let store = ModelStore(root: cacheRoot, door: .open)
         let spec = KnownModels.fluidSpeechMini
         if let d = await store.bundleDirectoryIfPresent(spec) { return (d, "") }
         do { return (try await store.ensureBundle(spec), "") }
@@ -103,7 +103,7 @@ final class FluidSpeechMiniTests: XCTestCase {
         let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubURLProtocol.self]
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("bundle-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = ModelStore(root: root, session: URLSession(configuration: cfg))
+        let store = ModelStore(root: root, session: URLSession(configuration: cfg), door: .open)
         let none = await store.bundleDirectoryIfPresent(good)
         XCTAssertNil(none, "nothing fetched yet: not present")
         let dir = try await store.ensureBundle(good)
@@ -149,7 +149,7 @@ final class FluidSpeechMiniTests: XCTestCase {
         let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubURLProtocol.self]
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("copy-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = ModelStore(root: root, session: URLSession(configuration: cfg))
+        let store = ModelStore(root: root, session: URLSession(configuration: cfg), door: .open)
         StubURLProtocol.responses = [spec(v1).url(for: spec(v1).files[0]): v1]
         let dir = try await store.ensureBundle(spec(v1))
         StubURLProtocol.responses = [spec(v2).url(for: spec(v2).files[0]): v2]
@@ -163,7 +163,7 @@ final class FluidSpeechMiniTests: XCTestCase {
     func tempStore(_ tag: String) -> (ModelStore, URL) {
         let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubURLProtocol.self]
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("\(tag)-\(UUID().uuidString)")
-        return (ModelStore(root: root, session: URLSession(configuration: cfg)), root)
+        return (ModelStore(root: root, session: URLSession(configuration: cfg), door: .open), root)
     }
     func spec(_ d: Data, declared: Int64? = nil, commit: String = FluidSpeechMiniTests.commit, repo: String = "x/y", path: String = "a/w.bin", copies: [[String]] = []) -> ModelBundleSpec {
         ModelBundleSpec(id: "t", repo: repo, commit: commit, files: [.init(path: path, bytes: declared ?? Int64(d.count), sha256: SHA256Probe.hex(d))], folder: "t", license: "x", credit: "x", copies: copies)
