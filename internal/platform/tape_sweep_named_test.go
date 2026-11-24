@@ -32,9 +32,7 @@ import (
 //	N4  A computer gains an owner between the dry run and the apply and is
 //	    deleted anyway, or the apply reports success while skipping it.
 //	    TestNamedApplySkipsAndFailsOnAComputerThatGainedAnOwner
-//	N5  A snapshot chunk a living computer's snapshot names is deleted because
-//	    the same digest sits in a removed computer's directory.
-//	    TestNamedSweepKeepsALivingComputersSnapshotChunks
+//	N5  (moved to tape_sweep_closed_test.go: a shared digest now refuses.)
 //	N6  The dry run does not say, per computer, what it would delete, when the
 //	    computer last wrote, and what the ownership lookup answered; and the
 //	    receipt does not say which ids it was for.
@@ -43,10 +41,10 @@ import (
 //	    malformed id or a very long list.
 //	    TestNamedRequestShape
 
+// namedReq is a named request: the fork-lineage acknowledgement is given per
+// computer, for exactly the named ones, never as the global flag.
 func namedReq(ids ...string) TapeSweepRequest {
-	r := destroyedReq(true)
-	r.ComputerIDs = ids
-	return r
+	return TapeSweepRequest{Sweeps: []string{TapeSweepDestroyed}, NoArchive: true, ComputerIDs: ids, AcceptUnrecordedForkLineageFor: ids}
 }
 
 func TestNamedSweepTouchesOnlyTheNamedComputers(t *testing.T) {
@@ -185,59 +183,6 @@ func chunkDigest(body string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func TestNamedSweepKeepsALivingComputersSnapshotChunks(t *testing.T) {
-	f := newTapeFixture(t)
-	f.live("live-1")
-	f.fullComputer("live-1", 1)
-	f.fullComputer("dead-1", 1)
-	// A chunk both computers hold: the same digest, a file in each one's own
-	// directory, and a snapshot root of the living computer that names it.
-	body := "sealed chunk dead-1 0" // the first chunk ownTree wrote for dead-1
-	shared := chunkDigest(body)
-	livePath := f.path("sha256/file-cas-chunks/live-1/" + shared)
-	if err := os.MkdirAll(filepath.Dir(livePath), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(livePath, []byte(body), 0o640); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.store.recordSnapshotRoot(f.ctx, "live-1", platformTestDigest('9'), 2, []string{shared}); err != nil {
-		t.Fatal(err)
-	}
-	liveRootsBefore := f.rowCount("computer_snapshot_roots", "live-1")
-
-	dry := f.dryRun(namedReq("dead-1"))
-	pr := dry.DestroyedProofs[0]
-	if pr.SnapshotChunkFiles != 3 || pr.SnapshotChunksSharedWithLiving != 1 {
-		t.Fatalf("proof does not say 3 chunk files of which 1 digest is named by a living snapshot: %+v", pr)
-	}
-	for _, it := range f.manifestItems(dry) {
-		if it.Computer != "dead-1" || strings.Contains(it.Path, "live-1") {
-			t.Fatalf("manifest lists a path outside the removed computer: %+v", it)
-		}
-	}
-	if _, err := f.apply(dry, namedReq("dead-1")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(f.path("sha256/file-cas-chunks/dead-1/" + shared)); !os.IsNotExist(err) {
-		t.Fatalf("the removed computer's copy of the shared chunk survived: %v", err)
-	}
-	got, err := os.ReadFile(livePath)
-	if err != nil || string(got) != body {
-		t.Fatalf("the living computer's chunk changed: %q %v", got, err)
-	}
-	var keys []string
-	if missing, err := f.svc.verifyAndPinSnapshotChunks(f.ctx, "live-1", []string{shared}, &keys); err != nil || missing != "" {
-		t.Fatalf("the living computer's snapshot no longer verifies: missing=%q err=%v", missing, err)
-	}
-	if f.rowCount("computer_snapshot_roots", "live-1") != liveRootsBefore {
-		t.Fatal("the living computer's snapshot roots changed")
-	}
-	if len(f.treeFiles("live-1")) == 0 {
-		t.Fatal("the living computer's tree was emptied")
-	}
-}
-
 func TestNamedSweepReportsEachComputerAndLeavesAReceipt(t *testing.T) {
 	f := newTapeFixture(t)
 	f.fullComputer("dead-1", 3)
@@ -291,13 +236,16 @@ func TestNamedRequestShape(t *testing.T) {
 		long[i] = fmt.Sprintf("dead-%d", i)
 	}
 	cases := map[string]TapeSweepRequest{
-		"with the orphan sweep": {Sweeps: []string{TapeSweepOrphans, TapeSweepDestroyed}, AcceptUnrecordedForkLineage: true, ComputerIDs: []string{"dead-1"}},
-		"with every sweep":      {AcceptUnrecordedForkLineage: true, ComputerIDs: []string{"dead-1"}},
+		"with the orphan sweep": {Sweeps: []string{TapeSweepOrphans, TapeSweepDestroyed}, AcceptUnrecordedForkLineageFor: []string{"dead-1"}, ComputerIDs: []string{"dead-1"}},
+		"with every sweep":      {AcceptUnrecordedForkLineageFor: []string{"dead-1"}, ComputerIDs: []string{"dead-1"}},
 		"a path as an id":       namedReq("../dead-1"),
 		"an empty id":           namedReq("dead-1", " "),
 		"a duplicate":           namedReq("dead-1", "dead-1"),
 		"sixty-five ids":        namedReq(long...),
 		"without the ack":       {Sweeps: []string{TapeSweepDestroyed}, ComputerIDs: []string{"dead-1"}},
+		"the global ack":        {Sweeps: []string{TapeSweepDestroyed}, ComputerIDs: []string{"dead-1"}, AcceptUnrecordedForkLineage: true},
+		"an ack for another":    {Sweeps: []string{TapeSweepDestroyed}, ComputerIDs: []string{"dead-1"}, AcceptUnrecordedForkLineageFor: []string{"dead-2"}},
+		"an ack for more":       {Sweeps: []string{TapeSweepDestroyed}, ComputerIDs: []string{"dead-1"}, AcceptUnrecordedForkLineageFor: []string{"dead-1", "dead-2"}},
 	}
 	for name, req := range cases {
 		if _, err := f.svc.RunTapeSweep(f.ctx, withAction(req, TapeSweepActionDryRun)); err == nil {

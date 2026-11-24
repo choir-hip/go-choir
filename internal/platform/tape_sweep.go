@@ -168,6 +168,10 @@ type TapeSweepRequest struct {
 	// the hash covers it, and apply must repeat it exactly. It needs
 	// sweeps=["destroyed"] and the fork-lineage acknowledgement.
 	ComputerIDs []string `json:"computer_ids,omitempty"`
+	// AcceptUnrecordedForkLineageFor is the fork-lineage acknowledgement of a
+	// named sweep, per computer: exactly the same ids as ComputerIDs. The
+	// global flag is refused for a named sweep, so no tool can hardcode it.
+	AcceptUnrecordedForkLineageFor []string `json:"accept_unrecorded_fork_lineage_for,omitempty"`
 }
 
 // tapeSweepMaxNamed bounds a named list: it is a hand-written list of

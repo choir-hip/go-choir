@@ -74,7 +74,9 @@ func newTapeFixture(t *testing.T) *tapeFixture {
 	ensureGCRouteTables(t, store)
 	artifactsRoot := filepath.Join(root, "artifacts")
 	svc := NewService(store, artifactsRoot, "")
-	reg := &fakeRegistry{owned: map[string]bool{}, listed: map[string]bool{}}
+	// A registry that lists nobody while event heads exist is refused, so the
+	// fixture's registry always knows one living computer.
+	reg := &fakeRegistry{owned: map[string]bool{"registry-sentinel": true}, listed: map[string]bool{"registry-sentinel": true}}
 	svc.SetTapeSweepPolicy(TapeSweepPolicy{Mode: ArtifactGCModeActive})
 	svc.SetComputerRegistry(reg)
 	svc.tapeSweep.beforeDelete = nil
