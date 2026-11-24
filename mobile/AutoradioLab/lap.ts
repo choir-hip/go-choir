@@ -9,3 +9,6 @@ export async function lapYield(label: string): Promise<void> {
 }
 /** A mark with no yield (a stretch's end that is not a turn's end). */
 export const lap = (label: string): void => console.log(`lap: ${label}`);
+/** A mark on the way to a page's first draw (docs/reference/exact/testing-and-debugging.md, "Reading the laps of a first open"): `lap: open <stage> <address>`. The address is the page's own, so one page's marks
+ * can be told from another's when two are in flight. Read by `mobile/scripts/laps.sh`. */
+export const lapOpen = (stage: string, address: string): void => lap(`open ${stage} ${address}`);

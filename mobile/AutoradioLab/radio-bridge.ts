@@ -15,7 +15,7 @@ import { offlineStories } from './content-run.ts';
 import { loadReader } from './reader.ts';
 import { sentenceTexts } from './reader-parse.ts';
 import { fileOpen } from './files.ts';
-import { lapYield, lap } from './lap.ts';
+import { lapYield, lap, lapOpen } from './lap.ts';
 import { firstRunOver } from './onboarding.ts';
 import { perform } from './radio-model.ts';
 import { htmlToText } from './mail-model.ts';
@@ -126,7 +126,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
   state.rt = rt;
   const front = async (): Promise<unknown> => {
     let body: unknown, stories: Story[];
-    try { body = (await getJSON('/api/platform/publications/front', { limit: FRONT_LIMIT })).body; await yieldTurn('front list received'); stories = parseList(body); }
+    try { body = (await getJSON('/api/platform/publications/front', { limit: FRONT_LIMIT })).body; lapOpen('front list received', 'radio:'); await yieldTurn('front list received'); stories = parseList(body); }
     catch (e) {
       // Offline: the radio opens from the paper's last good front list (paper.ts keeps it for an offline start) and the desk is not asked; the error stands for the caller.
       stories = (await listing('', storage as never)).stories;
@@ -187,7 +187,7 @@ export async function getRadio(storage: Store | undefined, native: NativeReader 
   }
   if (!restored) {
     if (sheetFileStuck) { try { await storage?.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch { /* still there: not read either */ } restored = Promise.resolve(); }
-    else restored = r.rt.restore();
+    else restored = r.rt.restore().then(() => lapOpen('run sheet restored', 'radio:'));
   }
   const done = restored;
   await done;
@@ -396,12 +396,15 @@ async function radioPlayPauseOf(r: Radio): Promise<void> {
 
 /** The radio opens: the phone's opening plays at once, from the front titles it holds, and the desk is asked for more. */
 async function openRadioOf(r: Radio): Promise<void> {
+  lapOpen('openRadioOf entry', 'radio:');
   if (r.front.lines.length === 0) { try { await r.fetchFront(); } catch { /* the opening says it has no front page yet */ } }
   const lines = r.front.lines;
   r.rt.director.open(phoneOpening(lines, clockNow(), -clockNow().getTimezoneOffset(), mintId('p-')));
+  lapOpen('director.open done', 'radio:');
   r.writer.openAhead(false);
   r.started = true;
   await r.rt.pump();
+  lapOpen('openRadioOf pump done', 'radio:');
 }
 
 /** Play or queue one audio address (an episode, a clip's episode): the podcast page's Play and Add to queue. The audio is the deck's; the entry and the order are the sheet's. */

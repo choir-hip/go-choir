@@ -13,6 +13,7 @@ import { aboutBuild } from './about.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
+import { lapOpen } from './lap.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
 import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
@@ -244,13 +245,31 @@ const sources: Sources = {
   paperSearch: ([q, local]) => paperSearch(q, local),
   mailAsk: ([address, question]) => mail.mailAsk(address, question),
 };
+// The page sources, for the laps of a first open (lap.ts `lapOpen`, read by mobile/scripts/laps.sh): each answer of one of these writes `answer entry` when it arrives, `answer settled` when the account's
+// settling and the demo clean-up are behind it (the first answer of a launch waits there) and `answer done` when the page's data is composed and returned, all carrying the page's address. The address is the
+// page the source answers for (an argument of the source where it has one). A source not named here (the radio's pulse, the bar, the themes) is not a page's first draw and writes nothing.
+const str0 = (v: unknown): string => (typeof v === 'string' ? v : '');
+export const PAGE_ADDRESS: Record<string, (args: unknown[]) => string> = {
+  paperFront: ([view]) => `paper:${str0(view) || 'front'}`,
+  readerDocShared: ([address]) => str0(address), mailBox: ([address]) => str0(address), mailMessage: ([address]) => str0(address),
+  fileList: ([path]) => `file:${str0(path)}`, fileOpen: ([address]) => str0(address),
+  podcastHome: ([, address]) => str0(address) || 'podcasts:', podcastShow: ([address]) => str0(address), podcastEpisode: ([address]) => str0(address),
+  takesPage: () => 'takes:', notebookPageShared: () => 'notebook:', texturesList: ([at]) => str0(at) || 'textures:',
+  settingsAccount: () => 'settings:account', settingsComputer: () => 'settings:computer', aboutPage: () => 'settings:about', aboutBuild: () => 'settings:about', activityPage: () => 'activity:',
+  importedList: () => 'imported:', importedDoc: ([address]) => str0(address), onboardingPage: () => 'onboarding:', radioPage: () => 'radio:', conversationInfo: () => 'conversation:',
+  editionTopics: () => 'onboarding:edit', launcherData: () => 'launcher:', pagesView: () => 'pages:',
+};
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
 export const answer: Answer = async (source, args, store, storage, native) => {
+  const where = PAGE_ADDRESS[source]?.(args as unknown[]);
+  if (where !== undefined) lapOpen(`answer entry ${source}`, where);
   adoptNative(native as never, source);
   // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
   if (source !== 'accountSignOut') await settleAccount(storage, store);
   // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, finished before the first source runs, so the
   // modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.
   if (source !== 'accountSignOut') await clearDemoLeftovers(storage);
-  return sources[source](args, store, storage, native);
+  if (where === undefined) return sources[source](args, store, storage, native);
+  lapOpen(`answer settled ${source}`, where);
+  try { return await sources[source](args, store, storage, native); } finally { lapOpen(`answer done ${source}`, where); }
 };

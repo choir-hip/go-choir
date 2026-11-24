@@ -5,6 +5,7 @@
 import type { Storage } from './app.contract.d.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
 import { note as noteRecent } from './recent-pages.ts';
+import { lapOpen } from './lap.ts';
 
 export const PAGES_FILE = 'app:/data/open-pages-shared.json';
 export const RADIO = 'radio:';
@@ -159,13 +160,18 @@ export async function pageRequested(storage: Storage | undefined, id: number, ad
 
 export async function pagesOpen(storage: Storage | undefined, rawAddress: string, title: string): Promise<PageList> {
   const gen = accountGeneration();
-  await load(storage);
-  if (gen !== accountGeneration()) return view();                          // a sign-out began while the set loaded: nothing of this open is kept
   const address = canonical(rawAddress);
+  lapOpen('pagesOpen entry', address);
+  await load(storage);
+  lapOpen('pagesOpen loaded', address);
+  if (gen !== accountGeneration()) return view();                          // a sign-out began while the set loaded: nothing of this open is kept
   openLocked({ address, kind: kindOf(address), title: title !== '' ? title : defaultTitle(address), opener: recency[0] ?? '', pinned: false });
   await save(storage, gen);
+  lapOpen('pagesOpen saved', address);
   await noteRecent(storage, 'open', address);                              // the launcher's Recent rows (recent-pages.ts)
+  lapOpen('pagesOpen recent noted', address);
   await mirror(gen);
+  lapOpen('pagesOpen mirrored', address);
   return view();
 }
 export async function pagesFocus(storage: Storage | undefined, rawAddress: string): Promise<PageList> {

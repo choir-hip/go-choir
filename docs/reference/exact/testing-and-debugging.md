@@ -126,6 +126,28 @@ Autoradio on Android and a physical Android phone are not done.
   only host-side audio log (`NativeHatches.swift:221`); our package logs the
   category and route itself (see `audio.md`).
 
+## Reading the laps of a first open (2026-11-24)
+
+Shared code has no clock (Exact refuses `Date.now` and `performance.now`), so a time in shared code is the platform log's own stamp on a `console.log` line. `mobile/AutoradioLab/lap.ts`
+has `lap(label)` (one line, `lap: <label>`), `lapYield(label)` (the same, then ends the turn) and `lapOpen(stage, address)` (`lap: open <stage> <address>`). Exact's host writes each console line to the
+unified log in every build: subsystem the app's bundle id, category `console` (`host/apple/Sources/ExactCore/Bridge.swift:209-218` in the Exact checkout [src]). Nothing needs a development build to
+emit them; a development build is only the one the lead has on the phone.
+
+Marks on the way to a page's first draw: `pagesOpen entry`, `loaded`, `saved`, `recent noted`, `mirrored` (pages.ts); for every page source `answer entry`, `answer settled` (the account's settling and the demo
+clean-up are behind it) and `answer done` (composed and returned), named by source and carrying the page's address (`PAGE_ADDRESS`, app.ts); `net <method> <path> start|done|responded <status>`
+for each request (api.ts, podcast.ts; they carry the path, not an address); for the radio `openRadioOf entry`, `run sheet restored`, `front list received`, `director.open done`, `first audio requested
+(deckPlay called)` and `deckPlay returned`. A page's fetch-done is its `net ... done` line and its compose-done is its `answer done`.
+
+One command reads them after a run (it prints each lap with its time of day, the milliseconds since the line before and the milliseconds since that page's `pagesOpen entry`):
+
+```sh
+mobile/scripts/laps.sh --device <udid> --last 10m     # a phone: `log collect` asks for sudo
+mobile/scripts/laps.sh --sim <name> --last 10m        # a simulator
+mobile/scripts/laps.sh --file <log>                   # a saved `log show --style compact` or `log stream` dump
+```
+
+`proof-real.sh` still prints "laps over 50 ms" for its own simulator log stream. Not run on a phone yet [unrun]: the device path (`log collect --device-udid`) is the documented `log` interface, not seen here.
+
 ## Observed failure messages and what they meant [run]
 
 | Message | Cause | Fix |

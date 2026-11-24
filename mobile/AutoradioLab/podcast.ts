@@ -25,6 +25,7 @@
 //     page's retry (`tick`) changes; a feed already fetched this session is not fetched again until it is stale by the server's own clock.
 // 10. Time is never read (`Date.now()` is refused): "now" is the Date header of the last answer any server gave, kept in the library file.
 
+import { lap } from './lap.ts';
 import type { Result, Storage } from './app.contract.d.ts';
 import { authedJSON, SignedOutError, getJSON, TIMEOUT_MS, writeCurrent, accountGeneration } from './api.ts';
 import { NotAFeed, parseFeed } from './podcast-feed.ts';
@@ -155,7 +156,9 @@ async function cachedFeed(feedURL: string, storage: Storage | undefined): Promis
 // ---- the network
 
 async function fetchBody(url: string, accept: string): Promise<{ text: string; date: number | null }> {
+  lap('net get feed start');
   const response = await fetch(url, { method: 'GET', headers: { accept, 'user-agent': 'Autoradio' }, exactTimeout: TIMEOUT_MS } as RequestInit);
+  lap(`net get feed responded ${response.status}`);                       // no address in the line: a feed's address is the listener's own
   if (!response.ok) throw new Error(`${response.status}`);
   const len = Number(response.headers.get('content-length') ?? '0');
   if (len > MAX_FEED_BYTES) throw new TooBig();

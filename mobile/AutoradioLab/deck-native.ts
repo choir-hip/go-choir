@@ -4,6 +4,7 @@
 // key and the mail cipher. The interface is item-shaped and says nothing of AVPlayer: Exact's own `audio` element could play a remote item behind the same five names (docs/reference/exact/deck.md).
 // An absent module answers the EMPTY state. A `deckPlay`, `deckEnqueue`, `deckAct` or `deckAck` that fails does too (shared code goes on, the next pump asks again), but a failed `deckState` THROWS: an unreadable deck is not an
 // empty one (the pump would hand the sounding entry over again, restart it, and re-enqueue the held list), so its callers keep what they last knew.
+import { lapOpen } from './lap.ts';
 import { nativeLater } from './api.ts';
 import type { DeckEvent, DeckItem, DeckOp, DeckPort, DeckState, DeckWhy } from './deck.ts';
 
@@ -43,7 +44,7 @@ export function nativeDeck(later: () => Later | null = nativeLater as () => Late
   const fields = (i: DeckItem): Record<string, unknown> => ({ ...i });
   return {
     state: () => call('deckState'),
-    play: (i) => call('deckPlay', fields(i)),
+    play: async (i) => { lapOpen('first audio requested (deckPlay called)', 'radio:'); const st = await call('deckPlay', fields(i)); lapOpen('deckPlay returned', 'radio:'); return st; },
     enqueue: (i, at) => call('deckEnqueue', { ...fields(i), at: at ?? -1 }),
     act: (op: DeckOp, value?: number) => call('deckAct', { op, value: value ?? 0 }),
     ack: (seq) => call('deckAck', { through: seq }),
