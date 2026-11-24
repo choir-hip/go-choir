@@ -228,6 +228,7 @@ Key paths: `internal/agentcore/source_schedule.go`,
 `internal/frontimportance/`.
 
 Not true, though a reader would assume it:
+- No durable record joins a capture's id to management's choice for it on main: the choice is a console line (about two hours kept). Lane `decision-record` (not deployed) writes one `choir.decision_record` row per capture and stage, read at `GET /api/decisions`.
 - The redesign (subjects, mentions, predictions that name a subject) is a
   design only; its offline test failed all four kill lines (C192, false).
   Draft 4 says the hot path as drawn is not proved [4][D4].
