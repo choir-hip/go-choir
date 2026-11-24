@@ -237,6 +237,15 @@ func (h *Handler) IsDemoAccount(userID string) bool {
 // ErrAccountOff: the reviewer account is turned off, so nothing mints for it.
 var ErrAccountOff = errors.New("this account is turned off")
 
+// writeAccountOff is the refusal for a sign-in that reaches an account that is turned off: not a
+// server error, and it says why.
+func writeAccountOff(w http.ResponseWriter) {
+	writeJSON(w, http.StatusForbidden, struct {
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}{ErrAccountOff.Error(), "account_off"})
+}
+
 // demoOff says whether userID is the reviewer account while it is off: the
 // credential file is missing, unreadable or malformed. Off, no other way into the
 // account works either (passkey, mail, recovery, device approval, a session made

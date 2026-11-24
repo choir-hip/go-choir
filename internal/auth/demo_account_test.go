@@ -557,3 +557,35 @@ func TestACredentialNameWithAnAtSignIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// C: `off` landing while a passkey sign-in is finishing is a refusal, not a server error.
+func TestAnAppLoginThatFinishesWhileTheAccountIsOffIsRefusedNotA500(t *testing.T) {
+	h := appEnv(t)
+	p := newSoftPasskey(t)
+	rec := createAccount(t, h, "someone@example.com", p, testOrigin)
+	if rec.Code != 200 {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+	user, _ := h.store.GetUserByEmail("someone@example.com")
+	file := filepath.Join(t.TempDir(), "demo-credential")
+	line, _ := FormatDemoCredential(demoTestUser, demoTestPass)
+	_ = os.WriteFile(file, []byte(line), 0o600)
+	cfg := *h.config
+	cfg.DemoAccountID = user.ID
+	cfg.DemoCredentialFile = file
+	h.config = &cfg
+	begin := postJSON(h.HandleAppLoginBegin, map[string]string{})
+	cred := p.assert(t, decodeMap(t, begin), testOrigin)
+	_ = os.Remove(file) // off lands before the finish mints
+	n := countKeys(t, h, user.ID)
+	fin := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, cred))
+	if fin.Code != http.StatusForbidden {
+		t.Fatalf("a finish across off must be refused with 403, got %d %s", fin.Code, fin.Body)
+	}
+	if got := decodeMap(t, fin)["code"]; got != "account_off" {
+		t.Fatalf("the refusal must say why: %v", got)
+	}
+	if countKeys(t, h, user.ID) != n {
+		t.Fatal("a key was minted for an off account")
+	}
+}

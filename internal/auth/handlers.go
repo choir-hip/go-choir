@@ -1063,6 +1063,11 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeUnproved(w)
 		return
 	}
+	if errors.Is(err, ErrAccountOff) {
+		log.Printf("[auth] operation=login_finish user_id=%s result=refused reason=account_off", user.ID)
+		writeAccountOff(w)
+		return
+	}
 	if err != nil {
 		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=error step=issue_session error=%q", user.ID, string(credential.ID), err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})

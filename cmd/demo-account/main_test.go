@@ -58,6 +58,7 @@ func TestResetRevokesKeysAndSessionsAndAsksVmctlToRemoveOnlyTheDemoComputer(t *t
 	_ = store.Close()
 	idFile := filepath.Join(dir, "id")
 	_ = os.WriteFile(idFile, []byte(u.ID+"\n"), 0o600)
+	configuredID(t, idFile)
 
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +119,7 @@ func TestOffRemovesTheCredentialAndRevokesEveryKeyOfTheDemoAccountOnly(t *testin
 	idFile := filepath.Join(dir, "id")
 	credFile := filepath.Join(dir, "cred")
 	_ = os.WriteFile(idFile, []byte(u.ID+"\n"), 0o600)
+	configuredID(t, idFile)
 	line, _ := auth.FormatDemoCredential("reviewer", "a test password that is only a test")
 	_ = os.WriteFile(credFile, []byte(line), 0o600)
 
@@ -156,6 +158,7 @@ func TestOffWithoutAnIdFileRefusesAndLeavesTheCredential(t *testing.T) {
 	_ = os.WriteFile(credFile, []byte("x\n"), 0o600)
 	configured(t, credFile)
 	var so, se bytes.Buffer
+	configuredID(t, filepath.Join(dir, "missing"))
 	if code := run([]string{"off", "--id-file", filepath.Join(dir, "missing"), "--credential", credFile}, &so, &se, nil); code == 0 {
 		t.Fatal("off ran without an account id")
 	}
@@ -174,6 +177,7 @@ func TestResetSendsTheInternalTokenFromItsFileToVmctl(t *testing.T) {
 	_ = store.Close()
 	idFile := filepath.Join(dir, "id")
 	_ = os.WriteFile(idFile, []byte(u.ID+"\n"), 0o600)
+	configuredID(t, idFile)
 	token := strings.Repeat("t0ken-", 12)
 	tokenFile := filepath.Join(dir, "token")
 	_ = os.WriteFile(tokenFile, []byte(token+"\n"), 0o600)
@@ -223,6 +227,11 @@ func TestOffAndResetRefuseAWrongDatabaseOrAccountAndLeaveTheCredential(t *testin
 		"reset, bad id":  {"reset", "--id-file", bad, "--auth-db", dbPath, "--vmctl", "http://127.0.0.1:1"},
 	} {
 		_ = os.WriteFile(cred, []byte("reviewer\nhash\n"), 0o600)
+		for i, a := range args {
+			if a == "--id-file" {
+				configuredID(t, args[i+1])
+			}
+		}
 		var so, se bytes.Buffer
 		if code := run(args, &so, &se, nil); code == 0 {
 			t.Errorf("%s: exited 0 (%s)", name, so.String())
@@ -240,6 +249,14 @@ func portOf(u string) string { return u[strings.LastIndex(u, ":")+1:] }
 
 func init() { offSettle = 0 }
 
+// configuredID points the command's "the account auth is configured for" at a temp id file.
+func configuredID(t *testing.T, path string) {
+	t.Helper()
+	old := idFilePath
+	idFilePath = path
+	t.Cleanup(func() { idFilePath = old })
+}
+
 // configured points the command's "the credential auth reads" at a temp path for one test.
 func configured(t *testing.T, path string) {
 	t.Helper()
@@ -256,6 +273,7 @@ func seed(t *testing.T) (dir, dbPath, idFile string) {
 	_ = store.Close()
 	idFile = filepath.Join(dir, "id")
 	_ = os.WriteFile(idFile, []byte(u.ID+"\n"), 0o600)
+	configuredID(t, idFile)
 	return
 }
 
@@ -408,5 +426,40 @@ func TestOffChecksTheStaleFileAndReportsAFailedUnlink(t *testing.T) {
 	}
 	if !strings.Contains(se.String(), "stale") {
 		t.Fatalf("the failure must name the stale file: %q", se.String())
+	}
+}
+
+// B: the id file is the one auth is configured for. Another account's id file is refused by
+// off and reset, so neither can touch another account's keys or computer.
+func TestOffAndResetRefuseAnotherAccountsIdFile(t *testing.T) {
+	dir, dbPath, idFile := seed(t) // configured: the demo account's id file
+	store, _ := auth.OpenStore(dbPath)
+	o, _ := store.CreateUser("other-uid", "other@example.invalid")
+	otherKey, _, _ := store.CreateAPIKey(context.Background(), o.ID, "c", []string{"read:runtime"}, nil)
+	_ = store.Close()
+	otherID := filepath.Join(dir, "other-id")
+	_ = os.WriteFile(otherID, []byte(o.ID+"\n"), 0o600)
+	cred := filepath.Join(dir, "cred")
+	configured(t, cred)
+	var so, se bytes.Buffer
+	run([]string{"credential", "--user", "reviewer", "--out", cred}, &so, &se, nil)
+	_ = idFile
+	for name, args := range map[string][]string{
+		"off":   {"off", "--id-file", otherID, "--credential", cred, "--auth-db", dbPath},
+		"reset": {"reset", "--id-file", otherID, "--auth-db", dbPath, "--vmctl", "http://127.0.0.1:1"},
+	} {
+		if code := run(args, &so, &se, nil); code == 0 {
+			t.Errorf("%s accepted another account's id file", name)
+		}
+	}
+	if _, err := os.Stat(cred); err != nil {
+		t.Error("the demo credential was removed by a refused off")
+	}
+	store, _ = auth.OpenStore(dbPath)
+	defer func() { _ = store.Close() }()
+	for _, k := range mustKeys(t, store, o.ID) {
+		if k.ID == otherKey && k.RevokedAt != nil {
+			t.Error("another account's key was revoked")
+		}
 	}
 }

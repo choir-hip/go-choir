@@ -62,6 +62,9 @@ const defaultCredentialPath = "/var/lib/go-choir/auth-signing/demo/demo-credenti
 
 var credentialPath = defaultCredentialPath
 
+// idFilePath is the host file naming the reviewer account (nix: AUTH_DEMO_ACCOUNT_ID_FILE).
+var idFilePath = "/var/lib/go-choir/auth-signing/demo/demo-account-id"
+
 // staleCredentialPath is where it lived before the move into demo/.
 var staleCredentialPath = "/var/lib/go-choir/auth-signing/demo-credential"
 
@@ -94,7 +97,7 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 	fs.SetOutput(stderr)
 	user := fs.String("user", "", "the reviewer's user name (credential)")
 	out := fs.String("out", "", "the credential file to write (credential)")
-	idFile := fs.String("id-file", "", "the host file holding the demo account id (reset)")
+	idFile := fs.String("id-file", idFilePath, "the host file holding the demo account id (reset)")
 	authDB := fs.String("auth-db", "/var/lib/go-choir/auth/auth.db", "auth database (reset)")
 	vmctlURL := fs.String("vmctl", "http://127.0.0.1:8083", "vmctl base URL (reset)")
 	credential := fs.String("credential", credentialPath, "off: the credential file the auth service reads")
@@ -102,6 +105,12 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 	tokenFile := fs.String("token-file", defaultTokenFile, "the host-internal service token vmctl enforces (reset); a root shell has none loaded")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
+	}
+	// off and reset act on the one account auth is configured for: the id file is that file and
+	// no other, so neither can be pointed at another account.
+	if (args[0] == "off" || args[0] == "reset") && filepath.Clean(*idFile) != filepath.Clean(idFilePath) {
+		fmt.Fprintf(stderr, "%s: --id-file must be the file the auth service reads, %s (nothing was changed)\n", args[0], idFilePath)
+		return 1
 	}
 	switch args[0] {
 	case "credential":
