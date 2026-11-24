@@ -181,6 +181,8 @@ public actor TurnEngine {
         var front: FrontPage?
         /// The audio of a hands-free turn (when a voice model listens), kept only to learn the reader's voice from a turn that was answered.
         var speakerSamples: [Float] = []
+        /// The account generation when this turn was committed: the later adaptation of the learned voice carries it, so a sign-out in between refuses the write.
+        var generation = AccountWipe.generation
         init(id: String, config: LabConfiguration, transcriber: Transcriber, yield: YieldPolicy, session: TranscriptionSession, firstEventIndex: Int) {
             self.id = id; self.config = config; self.transcriber = transcriber; self.yield = yield; self.session = session; self.firstEventIndex = firstEventIndex
         }
@@ -514,7 +516,8 @@ public actor TurnEngine {
             // Only a voice the person taught in onboarding adapts; nothing is learned from turns before that (owner, 2026-11-24: the voice is learned in voice onboarding).
             if env.speakerGate.learned, !t.speakerSamples.isEmpty, Conversation.shared.entry(t.id)?.status == "answered" {
                 let (gate, samples) = (env.speakerGate, t.speakerSamples)
-                Task { await gate.learn(samples) }
+                let gen = t.generation
+                Task { await gate.learn(samples, generation: gen) }
             }
         }
     }

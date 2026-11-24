@@ -12,7 +12,10 @@ members Autoradio
   // What the microphone was wanted for when the plain line went up: "voice" (the bar's button) or "take"; and a count that asks the system again after a press went on to its prompt.
   state micFor = ""
   state micTick = 0
-  resource micperm = micPermission(`${au.signedIn}|${bi.handsFree}|${micTick}`) as shape MicPerm else empty(state="granted", gate="")
+  // The take press that was held back for the plain line (record, or record again of this take): Continue goes on with exactly it.
+  state micOp = "record"
+  state micArg = ""
+  resource micperm = micPermission(`${au.signedIn}|${bi.handsFree}|${micTick}|${hpg.visibilityState}|${hpg.hasFocus}`) as shape MicPerm else empty(state="granted", gate="")
   action hideGate
     gate = ""
   action gateSignIn

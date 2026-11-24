@@ -80,7 +80,7 @@ public enum KnownModels {
     /// the LFS object ids) and, for the files the API gives no digest for, computed on the downloaded bytes at that commit. Only the files the
     /// loader reads are listed (the model card, its examples and its images are not fetched). FluidAudio loads it as `.ultra` and wants the joint
     /// network under the name `JointDecisionv3.mlmodelc`, so the folder is copied under that name after the download (Mike's fetch script does the same).
-    /// Licence CC BY 4.0: the credit below is the one NOTICE in the repository asks for. NO SCREEN SHOWS IT YET: an About page that does is a release blocker before any build holding this model is distributed (CC BY 4.0 section 3(a)).
+    /// Licence CC BY 4.0: the credit below is the one NOTICE in the repository asks for. Settings > Downloads and the first-run welcome show it beside the option (the list entry carries it: `ModelListEntry.credit`; a test fails for a CC model without one).
     /// docs/reference/ON-DEVICE-MODELS.md, "Fluid Speech Mini".
     public static let fluidSpeechMini = ModelBundleSpec(
         id: "fluid-speech-mini", repo: "FluidVoice-Labs/fluid-speech-mini-coreml", commit: "d81c3160dfe5a5e1f8f7267164a07d30617a3a1a",
@@ -154,14 +154,16 @@ public enum KnownModels {
             ManagedModelSpec(id: "parakeet-eou-120m", label: "Parakeet EOU 120M (streaming, Core ML)", source: "hf:FluidInference/parakeet-realtime-eou-120m-coreml",
                              approxBytes: 250_000_000, license: "NVIDIA Open Model License (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["parakeet-eou-streaming"]),
             ManagedModelSpec(id: "parakeet-tdt-0.6b-v2", label: "Parakeet TDT 0.6B v2 (English, Core ML)", source: "hf:FluidInference/parakeet-tdt-0.6b-v2-coreml",
-                             approxBytes: 480_000_000, license: "CC-BY-4.0 (NVIDIA model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v2-coreml"]),
+                             approxBytes: 480_000_000, license: "CC-BY-4.0 (NVIDIA model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v2-coreml"],
+                             credit: "Parakeet TDT 0.6B v2 by NVIDIA, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the files are modified Core ML conversions."),
             ManagedModelSpec(id: fluidSpeechMini.id, label: "Fluid Speech Mini (English, Core ML)", source: "hf:" + fluidSpeechMini.repo,
                              approxBytes: fluidSpeechMini.totalBytes, license: fluidSpeechMini.license + " (FluidVoice model); FluidAudio Apache-2.0",
                              cachePath: storeRoot, cacheFolders: [fluidSpeechMini.folder]),
             ManagedModelSpec(id: "kokoro-82m-ane", label: "Kokoro 82M ANE v3 (Core ML)", source: "hf:FluidInference/kokoro-82m-coreml",
                              approxBytes: 350_000_000, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["kokoro-82m-coreml", "kokoro"]),
             ManagedModelSpec(id: "pocket-tts", label: "PocketTTS 100M (Kyutai, Core ML)", source: "hf:FluidInference/pocket-tts-coreml",
-                             approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts"]),
+                             approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts"],
+                             credit: "PocketTTS by Kyutai, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the files are modified Core ML conversions."),
             // Phonon 31M: the pack `pocket-tts-coreml/phonon/phonon-31m-en` (Apache-2.0, its own LICENSE; the repo's other folders are CC-BY-4.0).
             // FluidAudio's `PocketTtsSmallDownloader` keeps 126 of its files: the MLState model, the fp32 Mimi decoder, the constants and all 103
             // voices, 173,136,428 bytes by the Hugging Face API listing of 2026-11-15. It is asked to put the pack in `fluidRoot` (see PhononVoice).

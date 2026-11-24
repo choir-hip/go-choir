@@ -64,7 +64,7 @@ public enum ModelOffer {
     /// The setup candidate for a pick the ladder does not carry (a row of the list that is not on a stage's ladder): built from the list's own table row.
     public static func candidate(job: String, id: String) -> SetupCandidate? {
         guard let st = SetupStage(rawValue: job), let role = ConfigRole.allCases.first(where: { $0.stage == st }), let c = CandidateTable.candidate(id, role) else { return nil }
-        return SetupCandidate(id: c.id, label: c.label, bytes: c.bytes, minMemoryGB: Double(c.minTier.rawValue), kitStageID: c.kitStageID, role: role == .responder ? "responder" : "", needsMB: c.residentMB)
+        return SetupCandidate(id: c.id, label: c.label, bytes: c.bytes, minMemoryGB: Double(c.minTier.rawValue), kitStageID: c.kitStageID, role: role == .responder || role == .decision ? role.rawValue : "", needsMB: c.residentMB)
     }
 
     /// What a first-run press runs: the stages shared code asked for, each on the model the person was shown and chose (`picks`: stage -> model id). A pick that cannot be built here (a list row this build has no fetch for) is NOT run: the stage

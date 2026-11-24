@@ -100,4 +100,14 @@ final class EnrolCaptureTests: XCTestCase {
         for _ in 1...3 { say(c, 1); c.keep() }; _ = await c.build(); say(c, 1); _ = await c.check()
         XCTAssertFalse(c.store(), "the page must not say stored when nothing was written"); XCTAssertFalse(g.learned)
     }
+    // Round 3, D: turn adaptation captures the generation when the turn is COMMITTED; a learn that enters after the wipe with the old generation writes nothing.
+    func testV9ALearnCarryingAnOldGenerationWritesNothingEvenWhenItEntersAfterTheWipe() async {
+        let url = tmp(); let g = SpeakerGate(url: url, embedder: Fake())
+        let old = AccountWipe.generation
+        _ = AccountWipe.bumpGeneration(); g.forget()                         // sign-out: bump, then forget
+        for i in 0..<3 { await g.learn([Float](repeating: 0.4, count: 32_000 + i * 160), generation: old) }
+        XCTAssertFalse(g.learned); XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "the old account's speech made no template for the next one")
+        for i in 0..<3 { await g.learn([Float](repeating: 0.4, count: 32_000 + i * 160), generation: AccountWipe.generation) }
+        XCTAssertTrue(g.learned, "the same speech under the current generation is learned")
+    }
 }

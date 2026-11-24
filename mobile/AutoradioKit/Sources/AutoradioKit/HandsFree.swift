@@ -299,6 +299,7 @@ extension TurnEngine {
 
     /// The policy says the turn is over: the session's final text becomes the turn.
     func hfCommit() async {
+        let committedGeneration = AccountWipe.generation          // captured when the commit begins, before any await (the adaptation of the voice carries it)
         guard let session = hf.session else { await hfFeed(.turnDiscarded); return }
         // No key, no turn: signed out the radio only listens. A switch left on at sign-out, or turned on by some other path, still sends nothing (TurnGate).
         if !TurnGate.shared.allowed { hfEndSession(cancel: true); hf.cut = nil; await setLevelTo(.play, reason: .resume); await hfFeed(.turnDiscarded); return }
@@ -325,6 +326,7 @@ extension TurnEngine {
         let id = "turn-" + UUID().uuidString.prefix(8).lowercased()
         let t = Turn(id: id, config: config, transcriber: transcriber, yield: yield, session: session, firstEventIndex: env.log.count)
         t.speakerSamples = samples
+        t.generation = committedGeneration
         t.cut = hf.cut
         hf.cut = nil
         t.addressed = true; t.speechSeen = true

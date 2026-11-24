@@ -14,8 +14,10 @@
 //  Y7 A refused microphone shows the declined line; a capture that failed says so with a way to try again or leave; a take is never stuck without a Not now.
 //  Y8 One native step at a time: a second look at the facts while a step runs starts none.
 //  Y10 The microphone state the page acts on is the system's right now (a read), not a fact kept from before: a refusal undone in Settings is not a dead end.
+//  Y11 The page owns the microphone lease: when it is no longer in front, by ANY exit, shared code tells native to release (`gone`), keeping a stored voice.
 //  Y9 A sign-out forgets the state (the next account does not see a "stored" it never made).
 import { accountGeneration, nativeLater } from './api.ts';
+import { MIC_PRE_LINE, MIC_OFF_LINE } from './micask.ts';
 
 /** What native reports about the capture. `state`: idle | listening | done | error. */
 export type Enrol = { state: string; level: number; usable: boolean; kept: number; built: boolean; ready: boolean; reason: string };
@@ -29,8 +31,7 @@ export const SENTENCES = [
 ] as const;
 export const CONFIRM_SENTENCE = 'Turn the volume down a little, please.';
 
-export const MIC_PRE_LINE = 'To talk to the radio or record a take, Autoradio 1 needs your microphone and speech recognition.';
-export const MIC_OFF_LINE = 'Microphone is off for Autoradio 1. You can turn it on in Settings.';
+export { MIC_PRE_LINE, MIC_OFF_LINE };
 
 type Phase = 'idle' | 'listening' | 'building' | 'confirm' | 'confirming' | 'stored' | 'unsure' | 'failed';
 type Mem = { gen: number; phase: Phase; taken: number; again: boolean; busy: boolean; started: boolean; why: string };
@@ -108,13 +109,17 @@ export async function learnPage(f: Facts, later: Later = nativeLater() as Later)
   return learnView(m, facts);
 }
 
-/** One press. `start` and `again` drop anything in progress and listen to the first sentence; `read` listens to the next; `rewind` opens the page fresh (Settings, Learn again); `forget` deletes the stored voice; `close` leaves. Y2, Y5, Y6, Y7. */
+/** The page is open while it is the page in front: Settings > Your voice, or the first run's step "learn". Shared code's presence rule for the microphone lease (the contract tells native to let go when this turns false, whichever way the page was left). */
+export const learnIsOpen = (top: string, step: string): boolean => top === 'settings:voiceprint' || (top === 'onboarding:setup' && step === 'learn');
+
+/** One press. `start` and `again` drop anything in progress and listen to the first sentence; `read` listens to the next; `rewind` opens the page fresh (Settings, Learn again); `forget` deletes the stored voice; `close` leaves; `gone` is the page no longer in front by any way (the contract's presence rule). Y2, Y5, Y6, Y7. */
 export async function learnAct(op: string, f: Facts, later: Later = nativeLater() as Later): Promise<Learn> {
   const m = cur(); const facts = { enrol: { ...noEnrol(), ...(f?.enrol ?? {}) }, mic: await liveMic(later, f?.mic) };
   const v = learnView(m, facts);
   if (later && !m.busy) {
     if (op === 'rewind') { Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' }); await call(later, 'obEnrolDiscard'); }
     else if (op === 'forget') { Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' }); await call(later, 'obVoiceForget'); }
+    else if (op === 'gone') { if (m.phase !== 'stored') Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' }); await call(later, 'obEnrolDiscard'); }      // Y11: the page is not in front any more, by any way
     else if (op === 'close') { if (m.phase !== 'stored') Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' }); await call(later, 'obEnrolDiscard'); }
     else if ((op === 'start' && v.primaryOp === 'start') || (op === 'again' && v.primaryOp === 'again')) {
       Object.assign(m, { phase: 'listening', taken: 0, again: false, started: true, why: '' }); await call(later, 'obEnrolDiscard'); await call(later, 'obEnrolBegin');
