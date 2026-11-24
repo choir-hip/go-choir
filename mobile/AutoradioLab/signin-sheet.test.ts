@@ -147,13 +147,7 @@ describe('the app declares what Exact needs', () => {
     expect(seen.size).toBe(1 + Object.keys(json.variants).length);
     expect(RETURN_PATH).toBe('/signed-in');
   });
-  test('S8b the build script hands Exact the app id as the scheme, for every identity, and the id comes from app.json', () => {
-    const sh = readFileSync(new URL('../scripts/exact.sh', import.meta.url), 'utf8');
-    expect(sh).toMatch(/SCHEME="\$\("\$HERE\/scripts\/app-identity\.sh" id\)"/);                  // the id, from the one place that reads app.json
-    expect(sh).toMatch(/exec env -i [^\n]*SIGNIN_SCHEME="\$SCHEME"/);                                  // into the cleaned environment Exact runs in (an empty one of the caller's cannot get through)
-    const idScript = readFileSync(new URL('../scripts/app-identity.sh', import.meta.url), 'utf8');
-    expect(idScript).toContain('base + v["idSuffix"]');                                                 // a variant's id is the app id plus its suffix: the same as its env value (S8)
-  });
+  // S8b (the build script hands Exact the app id as the scheme) is behavioural now: store-build.test.ts S3 (the production id) and A3 (lab-one) read what Exact is given.
   test('S9 the module writes no store and no key', () => {
     const src = readFileSync(new URL('./signin-sheet.ts', import.meta.url), 'utf8').split('\n').filter((l) => !l.trim().startsWith('//')).map((l) => l.replace(/\s\/\/ .*$/, '').replace(/\/\*\*.*?\*\//g, '')).join('\n');   // code, not comments
     expect(src).not.toMatch(/from '\.\/(api|account|store|files)[^']*'/); expect(src).not.toMatch(/\bsecret\b|keychain|atomicWriteFile|storage\./i);
