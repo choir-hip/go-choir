@@ -13,6 +13,7 @@ import type { Storage } from './app.contract.d.ts';
 import { consentAgree, consentPick, consentPicks, consentView } from './consent.ts';
 import { nativeLater } from './api.ts';
 import { kickSearch, testSearch } from './search-kick.ts';
+import { clock } from './clock.ts';   // the time a data source may know: the device's own, handed in as a fact
 import { noVoice, type ModelTest, type VoiceFacts } from './onboarding.ts';
 import { forFirstRun, needs, setupBytes, sizeLabel, STAGE_JOBS, type OfferJob, type Option } from './offers.ts';
 
@@ -150,10 +151,10 @@ export async function modelsAct(op: string, section: string, id: string, facts: 
   } else if (op === 'test') {
     // The run needs the model itself (it loads it, listens, speaks, answers): native does it and reports through the facts (modelTests).
     if (r.canTest && job === 'search') {                                                       // search is shared code: Exact runs it (retrieval-live.ts)
-      const key = `${job}:${id}`; const t0 = Date.now();
+      const key = `${job}:${id}`; const t0 = clock.ms;
       local.set(key, { key, state: 'working', line: 'Searching your stories on this phone.', ms: 0 });
       let line: string | undefined; try { line = await testSearch('what is in my stories today'); } catch { line = undefined; }
-      local.set(key, line === undefined ? { key, state: 'failed', line: 'It did not work on this phone: the search index is not available.', ms: 0 } : { key, state: 'done', line, ms: Date.now() - t0 });
+      local.set(key, line === undefined ? { key, state: 'failed', line: 'It did not work on this phone: the search index is not available.', ms: 0 } : { key, state: 'done', line, ms: Math.max(0, clock.ms - t0) });
     } else if (r.canTest) { try { await later?.({ op: 'obModelTest', job, id }); } catch { /* the facts say it did not run */ } }
   }
   return modelsPage(f, storage);

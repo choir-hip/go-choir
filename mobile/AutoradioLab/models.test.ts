@@ -179,9 +179,10 @@ describe('Use, Remove, Test', () => {
 describe('the search test (shared code runs it)', () => {
   test('M10 Test on the search model runs the fixed query in Exact, not native, and shows what it found', async () => {
     embedPresent = true;
-    const asked: string[] = []; onTestSearch(async (q) => { asked.push(q); return 'It found 3 stories and documents on this phone for: ' + q; });
+    const realNow = Date.now; Date.now = () => { throw new Error('a data source may not read the clock'); };          // the bake refuses Date.now(): the test fails if the page reads it
+    const asked: string[] = []; const was = onTestSearch(async (q) => { asked.push(q); return 'It found 3 stories and documents on this phone for: ' + q; });
     const g: VoiceFacts = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (o.id === 'embedder' ? { ...o, ready: true } : o)) })) };
-    const v = await modelsAct('test', 'search', 'embedder', g, storage);
+    let v: Awaited<ReturnType<typeof modelsAct>>; try { v = await modelsAct('test', 'search', 'embedder', g, storage); } finally { Date.now = realNow; if (was) onTestSearch(was); }
     expect(asked.length).toBe(1); expect(calls.filter((c) => c.op === 'obModelTest').length).toBe(0);
     expect(row(v, 'search', 'embedder')).toMatchObject({ testing: false }); expect(row(v, 'search', 'embedder').testLine).toContain('It found 3 stories and documents');
   });
