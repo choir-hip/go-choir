@@ -468,14 +468,6 @@
       "topTitle": "string",
       "count": "number"
     },
-    "PageModel": {
-      "address": "string",
-      "kind": "string",
-      "title": "string",
-      "status": "string",
-      "lines": "string[]",
-      "message": "string"
-    },
     "Theme": {
       "id": "string",
       "name": "string",
@@ -592,12 +584,6 @@
       "ready": "bool",
       "line": "string",
       "credit": "string"
-    },
-    "TextureEditInfo": {
-      "status": "string",
-      "label": "string",
-      "address": "string",
-      "editable": "bool"
     },
     "VoiceCard": {
       "id": "string",
@@ -1004,24 +990,6 @@
       }
     },
     {
-      "source": "pageModel",
-      "live": true,
-      "answers": "PageModel",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "address": "",
-          "kind": "",
-          "title": "",
-          "status": "loading",
-          "lines": [],
-          "message": ""
-        }
-      }
-    },
-    {
       "source": "pageRequest",
       "live": true,
       "answers": "PageRequest",
@@ -1092,37 +1060,6 @@
     {
       "send": "voiceForget",
       "answers": "SettingsAck"
-    },
-    {
-      "source": "textureEditInfo",
-      "live": true,
-      "answers": "TextureEditInfo",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "idle",
-          "label": "",
-          "address": "",
-          "editable": false
-        }
-      }
-    },
-    {
-      "send": "textureEdit",
-      "options": {
-        "address": "string",
-        "markdown": "string"
-      },
-      "answers": "TextureEditInfo"
-    },
-    {
-      "send": "textureFlush",
-      "options": {
-        "address": "string"
-      },
-      "answers": "TextureEditInfo"
     },
     {
       "source": "voiceCards",

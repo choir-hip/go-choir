@@ -91,6 +91,5 @@ name deck* the deck: play, hold, pause, seek, acknowledge, and the state and jou
 #   AutoradioModule+Platform.swift  the platform seam: the audio session owner (voice), the console log file the proof reads, the system's background time. The session owner is voice and could be split out.
 #   ProofKey.swift                  the simulator-only proof key (a test seam, compiled out of device builds).
 #   Conversation.swift              the turn engine's record of the question, the answers and their words (state of the voice turn; a candidate for the voice list when it is shown to be only that).
-#   TextureEditor.swift, TextureBody.swift, Notebook.swift   the Texture edit page and the notebook in Swift. Debt: they are Swift until those pages move to Exact; nothing about them is voice.
 #   RunSheetTypes.swift, RadioBridge.swift, BarState.swift, ChoirApp.swift, ChoirClient.swift, RadioProgramme.swift, the rest of the counted files: see the checker's list (scripts/check-autoradio-native-boundary).
 # AutoradioLab/modules/apple/ModelsEntry.swift (the app's own native module) is counted too since the checker reads that folder.

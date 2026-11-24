@@ -67,9 +67,11 @@ component Autoradio
     // ---- spine ----
     th
     pg
-    pmod
     bi
     thl
+    edStatus
+    edKeepMine
+    edUseTheirs
     layer
     ask
     openPage
