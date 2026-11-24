@@ -80,14 +80,3 @@ public final class HeldPages: @unchecked Sendable {
     /// Sign-out: every page held (the previous account's).
     public func wipe() { lock.lock(); pages = [:]; recency = []; lock.unlock() }
 }
-
-/// `pub:` and `texture:` as pages for the voice: the lines are the plain text of the page the shared reader handed over; before it has, the page is "loading".
-public struct HeldPageSource: PageSource {
-    public let held: HeldPages
-    public init(held: HeldPages = .shared) { self.held = held }
-    public func handles(_ address: String) -> Bool { address.hasPrefix("pub:") || address.hasPrefix("texture:") }
-    public func load(_ address: String) async throws -> PageModel {
-        guard let p = held.page(address) else { return PageModel(address: address, kind: "reader", title: PageAddress.defaultTitle(address), status: "loading") }
-        return PageModel(address: address, kind: "reader", title: p.title.isEmpty ? PageAddress.defaultTitle(address) : p.title, status: "ready", lines: p.lines)
-    }
-}

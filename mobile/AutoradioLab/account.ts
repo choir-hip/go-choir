@@ -25,6 +25,8 @@ import { wipeFiles } from './files.ts';
 import { wipeImported, PLACES_FILE as IMPORTED_PLACES } from './imported.ts';
 import { wipePaper, CACHE_FILE as PAPER_FRONT } from './paper.ts';
 import { wipeKept, KEPT_FILE } from './takes.ts';
+import { wipeTextureEdit, PENDING_FILE as TEXTURE_PENDING } from './texture-edit.ts';
+import { MARKER as TOPICS_MARKER, forgetTopicsWrite } from './notebook-topics.ts';
 import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
 import { VECTORS_DIR, wipeLiveVectors } from './search.ts';
 import { CONTENT_DB, wipeLiveContent } from './content.ts';
@@ -64,6 +66,8 @@ export const WIPES: Wipe[] = [
   { name: 'paper-front', run: (s) => wipePaper(s) },
   { name: 'takes', run: (s) => wipeKept(s) },
   { name: 'notebook', run: (s) => wipeNotebook(s) },
+  { name: 'notebook-topics', run: async (s) => { forgetTopicsWrite(); await rmAll(s, [TOPICS_MARKER]); } },                // the marker that says the topics are in the notebook
+  { name: 'texture-edit', run: (s) => wipeTextureEdit(s) },                                                        // the unsent text of the Texture editor (texture-edit.ts): memory and the kept file
   { name: 'notebook-page', run: async () => forgetNotebook() },                                                       // the page's memo and the pushed text, in memory only
   { name: 'edition-picks', run: (s) => wipePicks(s) },                                                            // the listener's topics (edition-picks.ts): memory, the file, and the native copy
   { name: 'onboarding', run: (s) => wipeOnboarding(s) },                                                           // the first run's progress (onboarding.ts): memory, the file, and the voice side
@@ -84,7 +88,7 @@ export const WIPES: Wipe[] = [
  * The paths the wipes above cover (account.test.ts S4 compares them with every `app:/` literal in the shared modules). `app:/tmp/picked` is files'. */
 export const wipedPaths = (): string[] => [
   podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', IMPORTED_PLACES, PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE, SHEET_FILE, ONBOARDING_FILE,
-  VECTORS_DIR, CONTENT_DB, PAGES_FILE, TOLD_FILE, RECENT_FILE, STEER_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
+  VECTORS_DIR, CONTENT_DB, PAGES_FILE, TOLD_FILE, RECENT_FILE, STEER_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE, TEXTURE_PENDING, TOPICS_MARKER,
 ];
 
 /** Run each wipe; the names of the ones that threw. Logs ids, never content. The signed-in seam is reset first: a new account generation (a reply

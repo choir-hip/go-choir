@@ -14,12 +14,12 @@ const storage = { fs: {
 } } as never;
 const kept = (): Record<string, unknown> => JSON.parse(new TextDecoder().decode(files.get(PROGRESS_FILE)!));
 
-let v: VoiceFacts; let calls: { op: string; args?: Record<string, unknown> }[]; let closed: string[]; let opened: string[]; let edition: unknown;
+let v: VoiceFacts; let wrote: string[][] = []; let calls: { op: string; args?: Record<string, unknown> }[]; let closed: string[]; let opened: string[]; let edition: unknown;
 const device: Device = { facts: async () => ({ ...v }), op: async (op, args) => { calls.push({ op, args }); } };
-const env = (o: Partial<Env> = {}): Env => ({ storage, device, get: async () => edition, closePage: async (a) => { closed.push(a); }, openPage: async (a) => { opened.push(a); }, ...o });
+const env = (o: Partial<Env> = {}): Env => ({ storage, device, get: async () => edition, notebook: async (t) => { wrote.push(t); return true; }, closePage: async (a) => { closed.push(a); }, openPage: async (a) => { opened.push(a); }, ...o });
 const act = (op: string, arg = '', topics = '', top = SETUP, e: Env = env()) => onboardingAct(op, arg, topics, top, e);
 const ops = (): string[] => calls.map((c) => c.op);
-beforeEach(() => { files.clear(); forgetOnboarding(); resetSeam(); v = noVoice(); calls = []; closed = []; opened = []; edition = { found: false }; });
+beforeEach(() => { files.clear(); forgetOnboarding(); resetSeam(); v = noVoice(); wrote = []; calls = []; closed = []; opened = []; edition = { found: false }; });
 
 describe('the steps', () => {
   test('O1 the walk, in order, ends at done with the edition made and the station released', async () => {
@@ -36,7 +36,7 @@ describe('the steps', () => {
     const done = await act('topicsDone', '', 'Space\nChess');
     expect(done).toMatchObject({ step: 'done', editionStatus: 'ready', editionDone: true, editionLines: ['What I follow', 'Space', 'Chess'], card: '', aim: '' });
     expect(calls.filter((c) => c.op === 'obMirror').pop()?.args).toEqual({ finished: true });    // O14
-    expect(calls.find((c) => c.op === 'obNotebookTopics')?.args).toEqual({ topics: ['Space', 'Chess'] });
+    expect(wrote).toEqual([['Space', 'Chess']]);                                                   // the first lines of the notebook (notebook-topics.ts)
     expect(kept()).toMatchObject({ topicsStarted: true, editionDone: true });
   });
   test('O1 a button that does not belong to the step changes nothing', async () => {
@@ -128,10 +128,10 @@ describe('the edition', () => {
   test('O8 an empty list is the general edition; a failure and a deadline say so and keep the topics', async () => {
     await act('topics');
     const general = await act('topicsDone', ''); expect(general.editionLines).toEqual(['What I follow', 'The whole paper, until I say otherwise.']);
-    forgetOnboarding(); files.clear(); calls = []; await act('topics');
+    forgetOnboarding(); files.clear(); calls = []; wrote = []; await act('topics');
     const boom: Writer = async () => { throw new Error('no'); };
     const failed = await act('topicsDone', '', 'Space', SETUP, env({ writer: boom })); expect(failed).toMatchObject({ step: 'writing', editionStatus: 'failed', editionError: FAILED_LINE });
-    expect(ops()).not.toContain('obNotebookTopics');
+    expect(wrote).toEqual([]);
     const never: Writer = (_t, _p, signal) => new Promise((_r, rej) => { signal.addEventListener('abort', () => rej(new Error('aborted'))); });
     const slow = await act('editionRetry', '', 'Space', SETUP, env({ writer: never, deadlineSeconds: 0.05 })); expect(slow.editionStatus).toBe('failed'); expect(slow.editionError).toContain('too long');
     expect((await act('editionRetry', '', 'Space')).step).toBe('done');                              // Retry from the failed state succeeds
@@ -144,7 +144,7 @@ describe('the edition', () => {
     await new Promise((r) => setTimeout(r, 10));
     nextGeneration(); files.clear(); calls = [];
     release(); await pending;
-    expect(ops()).not.toContain('obNotebookTopics'); expect(files.has(PROGRESS_FILE)).toBe(false);
+    expect(wrote).toEqual([]); expect(files.has(PROGRESS_FILE)).toBe(false);
     expect((await onboardingPage(v, 0, SETUP, env())).step).toBe('welcome');
   });
   test('O9 a Continue while one is writing is ignored; Continue anyway is the general edition', async () => {

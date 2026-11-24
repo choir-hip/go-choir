@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { setAnnounceDeadlineForTest, abortSignOut, adoptNative, accountGeneration, beginSignOut, nextGeneration, nativeLater, resetBootForTest, resetSeam } from './api.ts';
 import { wipeAll } from './account.ts';
-import { sealingBlocked } from './api.ts';
+import { signOutBlocked } from './api.ts';
 import { radioPulse, wipeRadio, getRadio, SHEET_FILE } from './radio-bridge.ts';
 import { nativeDevice, forgetPicks, picksPage, type Device } from './edition-picks.ts';
 
@@ -143,7 +143,7 @@ describe('G5 the stamp is the generation the radio was made under (seat 2, item 
 //     was given up after a THROW (unknown whether the key and the native stores went) does not hand the old radio the new generation.
 //  G8 the wipe's announcement has a deadline and says so when it fails; the sign-out still completes.
 describe('G6 the window while the kept session is read', () => {
-  test('sealingBlocked is true and the radio keeps its stamp while beginSignOut is still reading the key', async () => {
+  test('signOutBlocked is true and the radio keeps its stamp while beginSignOut is still reading the key', async () => {
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
     const f = fakeNative(0);
     const held = { available: true, later: async (r: Call) => { if (r.op === 'session') { await gate; return { found: false }; } return f.native.later(r); } };
@@ -151,7 +151,7 @@ describe('G6 the window while the kept session is read', () => {
     const r = await getRadio(undefined, held as never); const made = r.gen;
     const begun = beginSignOut();                                                  // not awaited: it is inside keptSession
     await new Promise((x) => setTimeout(x, 20));
-    expect(sealingBlocked()).toBe(true);
+    expect(signOutBlocked()).toBe(true);
     await radioPulse(undefined, held as never);
     expect(f.s.calls.filter((c) => c.op === 'radioSet').map((c) => c.gen)).toEqual([made]);      // not the new generation
     release(); await begun;

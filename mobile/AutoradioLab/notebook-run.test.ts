@@ -9,7 +9,7 @@
 //  R7 the native call is asked to write the topics on a read (Swift writeTopics: the Texture write stays native), before the notebook is read
 import { enqueue as steerEnqueue, forget as steerForget } from './steer.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { notebookShared, forgetNotebook, selectedAfter, type Device } from './notebook-run.ts';
+import { notebookShared, forgetNotebook, selectedAfter, type Writer } from './notebook-run.ts';
 import type { Get } from './notebook.ts';
 import { HTTPError } from './api.ts';
 import notebookMd from '../fixtures/learning/notebook.md' with { type: 'text' };
@@ -28,8 +28,8 @@ const get: Get = async (p) => {
   throw new HTTPError(404, 'HTTP 404');
 };
 let steer = 0, order: string[] = [];
-const device: Device = { state: async () => { order.push('native'); } };
-const env = (d: Device | null = device) => ({ get, device: d });
+const writer: Writer = { write: async () => { order.push('wrote'); return true; } };
+const env = (w: Writer | null = writer) => ({ get, writer: w });
 const args = (o: Partial<{ selected: string; tick: number; active: boolean; signedOutTick: string }> = {}) => ({ selected: '', tick: 0, active: true, signedOutTick: '', ...o });
 
 beforeEach(() => { steerForget(); files.clear(); calls = []; steer = 0; order = []; forgetNotebook(); });
@@ -65,18 +65,18 @@ describe('R1 to R3 the page state', () => {
 });
 
 describe('R4 to R7 the native fact and call', () => {
-  test('R4 the steer taps waiting (steer.ts, shared) are shown, with or without a module; a failing or silent native does not hide the page', async () => {
+  test('R4 the steer taps waiting (steer.ts, shared) are shown, with or without a module; a failing or silent write does not hide the page', async () => {
     for (let i = 0; i < 3; i++) await steerEnqueue(storage, { id: `t${i}`, entryID: 'e', direction: 'more', stories: [], title: '', at: '' });
     expect((await notebookShared(args(), storage, env())).steerLine).toBe('3 more or less taps waiting to reach your computer.');
     forgetNotebook();
     expect((await notebookShared(args(), storage, env(null))).steerLine).toBe('3 more or less taps waiting to reach your computer.');
     forgetNotebook();
-    const broken: Device = { state: async () => { throw new Error('native'); } };
+    const broken: Writer = { write: async () => { throw new Error('write'); } };
     const p = await notebookShared(args(), storage, env(broken));
     expect(p.steerLine).toBe('3 more or less taps waiting to reach your computer.'); expect(p.docState).toBe('ready');
     forgetNotebook();
-    const silent: Device = { state: () => new Promise(() => undefined) };
-    const q = await notebookShared(args(), storage, { ...env(silent), deviceDeadlineMs: 20 });
+    const silent: Writer = { write: () => new Promise(() => undefined) };
+    const q = await notebookShared(args(), storage, { ...env(silent), writerDeadlineMs: 20 });
     expect(q.docState).toBe('ready'); expect(q.steerLine).toBe('3 more or less taps waiting to reach your computer.');
   });
   test('R6 a sign-out reads again; an old read never answers the new key', async () => {
@@ -87,7 +87,7 @@ describe('R4 to R7 the native fact and call', () => {
     let release: () => void = () => undefined;
     const slow: Get = async (p) => { if (p === '/api/autoradio/learning') await new Promise<void>((r) => { release = r; }); return get(p); };
     forgetNotebook();
-    const first = notebookShared(args({ tick: 5 }), storage, { get: slow, device });
+    const first = notebookShared(args({ tick: 5 }), storage, { get: slow, writer });
     await new Promise((r) => setTimeout(r, 5));
     const second = await notebookShared(args({ tick: 6 }), storage, env());
     release();
@@ -95,10 +95,10 @@ describe('R4 to R7 the native fact and call', () => {
     expect(second.scoreState).toBe('ready');
     expect((await notebookShared(args({ tick: 6 }), storage, env())).scoreState).toBe('ready');
   });
-  test('R7 the topics are written by native before the notebook is read', async () => {
+  test('R7 the topics are written before the notebook is read', async () => {
     const seen: string[] = [];
     const g: Get = async (p, q) => { seen.push(order.join(',')); return get(p, q); };
-    await notebookShared(args(), storage, { get: g, device });
-    expect(order).toEqual(['native']); expect(seen.every((s) => s === 'native')).toBe(true);
+    await notebookShared(args(), storage, { get: g, writer });
+    expect(order).toEqual(['wrote']); expect(seen.every((s) => s === 'wrote')).toBe(true);
   });
 });

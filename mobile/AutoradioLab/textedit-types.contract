@@ -1,0 +1,12 @@
+// The shape of the Texture editor's answer (texture-edit.ts `Info`): what the editor says about the document in front.
+// status: idle | dirty | saving | saved | offline | failed | conflict. `kept` is the listener's newest unsent text ("" when none): the field is seeded from it on reopening.
+// `waiting` counts the documents with unsent text (the retry's gate); a refused or moved head is `conflict` (the text is kept and the listener chooses).
+
+shape TextureEditInfo
+  status: string
+  label: string
+  address: string
+  editable: bool
+  kept: string
+  waiting: number
+  stamp: number

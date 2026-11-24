@@ -40,3 +40,24 @@ public enum DeskContext {
         return "AUTORADIO turn desk=\(desk) retrieved=\(retrieved?.items.count ?? 0) sources=\(kinds.isEmpty ? "-" : kinds) context_chars=\(retrieved?.text.count ?? 0)"
     }
 }
+
+/// The paper's stories the server desk may add to the queue by voice (the turn request's `candidates`). The list is shared code's (AutoradioLab/paper.ts `handVoiceFront`, the app module's
+/// `voiceFront` op): the front route is read there. Native holds a copy only because the voice turn engine is native and cannot ask shared code; this decides nothing. A hand-over made under an
+/// older account generation is refused (`SharedGeneration`), and sign-out empties it (`AccountWipe`).
+public final class VoiceFront: @unchecked Sendable {
+    public static let shared = VoiceFront()
+    private let lock = NSLock()
+    private var rows: [(route: String, title: String)] = []
+    public init() {}
+    /// The first 40 as the turn takes them.
+    public var candidates: [(route: String, title: String)] { lock.lock(); defer { lock.unlock() }; return Array(rows.prefix(40)) }
+    @discardableResult
+    public func set(gen: Int, _ list: [[String: Any]]) -> Bool {
+        let next = list.compactMap { o -> (route: String, title: String)? in
+            guard let r = o["route"] as? String, !r.isEmpty else { return nil }
+            return (r, (o["title"] as? String) ?? "")
+        }
+        return SharedGeneration.admit(gen) { lock.lock(); rows = next; lock.unlock() }
+    }
+    public func wipe() { lock.lock(); rows = []; lock.unlock() }
+}

@@ -87,12 +87,10 @@ extension AutoradioModule {
         guard HeldPages.shared.hold(gen: HeldPage.generation(of: request), p) else { return false }      // read for an account that has since signed out: neither held nor handed to the voice
         let text = p.lines.joined(separator: " ")
         if !text.isEmpty { runtime.pageTextReady(address: p.address, text: text) }   // the text may arrive after the page is in front
-        DispatchQueue.main.async { [weak self] in self?.touch(["pageModel"]) }
         return true
     }
 
     func registerReader() {
-        pageSources.register(HeldPageSource())
         ReaderFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerFollow"]) } }
 
         handle("readerFollow") { [unowned self] _, reply in reply(json(ReaderFollow.shared.info)) }

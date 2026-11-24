@@ -16,7 +16,7 @@ import {
   FRONT, FRONT_LIMIT, LIST_LIMIT, MINE, buildMine, belongs, dateLine, display, isCategory, parseList, parseLiveSections, relative, resolveView, sections,
   type LiveSection, type Section, type Story,
 } from './paper-model.ts';
-import { getJSON, writeCurrent, accountGeneration } from './api.ts';
+import { getJSON, writeCurrent, accountGeneration, nativeLater } from './api.ts';
 
 export const FRONT_PATH = '/api/platform/publications/front';
 /** The last good front list, kept for an offline start. */
@@ -88,6 +88,23 @@ async function load(section: string, storage: Storage | undefined): Promise<List
   }
 }
 
+/** The paper's stories the voice turn may add to the queue by voice (the server desk's `candidates`): the first 40 as route and title. Handed to native through the app module's `voiceFront` op,
+ *  stamped with the account generation (native refuses a stale one). Native because the voice turn engine is native and cannot ask shared code; it decides nothing. */
+export const VOICE_CANDIDATES = 40;
+let handedKey = '';
+function handFront(l: Listing): void {
+  const later = nativeLater();
+  if (!later || l.stories.length === 0 || (l.status !== 'ready' && l.status !== 'offline')) return;
+  const gen = accountGeneration();
+  const stories = l.stories.slice(0, VOICE_CANDIDATES).map((s) => ({ route: s.route, title: s.title }));
+  const key = `${gen}|${stories.map((s) => s.route).join(',')}`;
+  if (key === handedKey) return;
+  handedKey = key;
+  later({ op: 'voiceFront', gen, stories }).then(() => undefined, () => { if (handedKey === key) handedKey = ''; });      // a refused or failed hand-over is tried again with the next answer
+}
+/** Make sure the voice has the list: the paper page may never have been opened this launch (the voice turn's ask calls this). */
+export async function handVoiceFront(storage: Storage | undefined): Promise<void> { handFront(await listing('', storage)); }
+
 export function pickList(joined: string): string[] { return joined.split('\n').map((s) => s.trim()).filter((s) => s !== ''); }
 
 /** The paper's front for one view. `stories` is the front list (newest first, as the server sends it). */
@@ -130,6 +147,7 @@ export async function paperFront(a: PaperArgs, storage?: Storage): Promise<Paper
   if (a.tick !== lastTick) { kept.clear(); lastTick = a.tick; }
   const picks = view === MINE ? pickList(a.picks) : [];
   const r = await listing('', storage);
+  handFront(r);
   let category: Story[] | null = null;
   if (isCategory(view)) {
     const secs = sections(r.sections, r.stories);
@@ -141,11 +159,11 @@ export async function paperFront(a: PaperArgs, storage?: Storage): Promise<Paper
 }
 
 /** Forget the kept lists (tests). */
-export function forget(): void { kept.clear(); lastTick = 0; }
+export function forget(): void { kept.clear(); lastTick = 0; handedKey = ''; }
 
 /** Sign-out (account.ts): the cached front list on disk and what this session holds. Never throws. */
 export async function wipePaper(storage: Storage | undefined): Promise<void> {
-  kept.clear(); lastTick = 0;
+  kept.clear(); lastTick = 0; handedKey = '';
   if (!storage) return;
   try { await storage.fs.rm(CACHE_FILE); } catch { /* absent */ }
 }

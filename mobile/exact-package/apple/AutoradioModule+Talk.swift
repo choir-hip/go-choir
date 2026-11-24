@@ -14,7 +14,7 @@ extension AutoradioModule {
         // (Kit/TurnQueueWire.swift): `turnQueueJSON()` goes out with every turn as the `queue` field, the `queue_ops` event comes back whole to
         // `applyTurnOps`, which translates the old words onto run sheet ops.
         var hooks = QueueVoice.hooks
-        hooks.candidates = { [choir] in (choir?.storyRows() ?? []).prefix(40).map { (route: $0.route, title: $0.title) } }
+        hooks.candidates = { VoiceFront.shared.candidates }                                                                // the paper's stories, handed by shared code (paper.ts handVoiceFront)
         hooks.snapshot = { RadioBridge.shared.snapshot }                                                                   // the wire's `queue`, as shared code last made it (voice-queue.ts)
         hooks.applyServerOps = { json in RadioBridge.shared.send("turnOps", ["json": String(data: json, encoding: .utf8) ?? ""]) }   // the `queue_ops` event, whole, to shared code: it applies it (dedupe by turn, the sheet's rules)
         QueueVoice.hooks = hooks

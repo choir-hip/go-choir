@@ -63,17 +63,6 @@ final class EditionSetupTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: f, encoding: .utf8), "{\"topics\":[\"Space\"]}", "left where it is, unread")
     }
 
-    @MainActor func testTheNotebookWriteRefusesTopicsReadUnderAnEarlierAccount() async {
-        let store = NotebookStore(); var asked = 0
-        store.lookupEdition = { asked += 1; return nil }
-        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("topics-marker-\(UUID().uuidString)")
-        let stale = AccountWipe.generation
-        _ = AccountWipe.bumpGeneration()                      // the account changed after the topics were read
-        let wrote = await store.writeTopics(["Space"], marker: marker, generation: stale)
-        XCTAssertFalse(wrote); XCTAssertEqual(asked, 0, "the server is not even asked")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
-    }
-
     func testTheEditionIsWrittenWithoutANetworkFromTheChoices() async throws {
         let e = try await LocalEditionWriter().write(topics: ["Space", "Chess"]) { _ in }
         XCTAssertEqual(e.title, "My edition")

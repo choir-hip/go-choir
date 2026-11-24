@@ -1,7 +1,7 @@
 // Members file (joins): what a clip row's Play, Queue and Open episode do. One send, `clipAct`, for every place that shows clips (the article page's
 // "Hear it", a show page's "Clips"). Answered by app.ts (clips.ts): it decides which clip, and a play answers the clip's id as data. The clip is found in
-// the file the publisher serves by the native locator, which holds the fingerprints (owner rule: clips play from fingerprinted audio): `clipPlay`.
-use clipPlay, PodDone from "@choir/autoradio"
+// the file the publisher serves (owner rule: clips play from fingerprinted audio; today a clip with a usable fingerprint plays from its start to its end and the locator is not wired, see clip-play.ts).
+use PodDone from "./podcast-types.contract"
 use ClipRows from "./podcast-types.contract"
 use PodAck from "./podcast-types.contract"
 
@@ -28,6 +28,6 @@ members Autoradio
     send clipAck = clipAct(op, id)
   action afterClip
     if clipPlayId != ""
-      send clipHanded = clipPlay(op=clipPlayOp, id=clipPlayId, record=clipPlayRecord)
+      send clipHanded = radioPlayClip(clipPlayOp, clipPlayId, clipPlayRecord)
     if clipOpen != ""
       openPage(clipOpen, clipOpenTitle)

@@ -9,7 +9,6 @@
 //             obHearingPlay                                          the sentence at the hearing check, in the voice that was set up (the speaker route)
 //             obTalk                                                 the voice at the topic screen: the engine's stages (EditionSetupProgramme/Desk) and the open microphone
 //             obMirror                                               whether the first run is over: the station may then start by itself (Station.isReady)
-//             obNotebookTopics                                       the topics become the first lines of the notebook (NotebookStore: Notebook.swift)
 //             obReset, obStop                                        sign-out; leaving the first run
 // Nothing is kept here: no file, no step. What a setup record and the responder choice need stays where the models are (voice-setup.json beside the models).
 import AVFoundation
@@ -212,21 +211,12 @@ final class OnboardingController: @unchecked Sendable {
     }
 }
 
-/// `onboarding:*` pages: the first-run setup and the edition's edit page. The page itself is shared code (onboarding.contract); this only names it for the native page list.
-struct OnboardingPageSource: PageSource {
-    func handles(_ address: String) -> Bool { address.hasPrefix("onboarding:") }
-    func load(_ address: String) async throws -> PageModel {
-        PageModel(address: address, kind: "onboarding", title: address == "onboarding:edit" ? "Edit my edition" : "Make it yours", status: "ready")
-    }
-}
-
 extension AutoradioModule {
     func registerOnboarding() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let c = OnboardingController(module: self, support: support)
         OnboardingController.shared = c
         StageRegistry.registerEditionSetupStages(runtime.registry)
-        pageSources.register(OnboardingPageSource())
         choir.accountWipe.register("onboarding") { [weak c] in c?.reset() }
         handle("voiceSetupFacts") { _, reply in reply(c.facts()) }
     }
@@ -246,9 +236,6 @@ extension AutoradioModule {
         case "obStop": c.stop()
         case "obReset": c.reset()
         case "obMirror": c.mirror(finished: (r["finished"] as? Bool) ?? false)
-        case "obNotebookTopics":
-            let gen = AccountWipe.generation
-            _ = await NotebookStore.shared.writeTopics((r["topics"] as? [String]) ?? [], generation: gen)       // a failure here is quiet: the page retries
         default: break
         }
         return [:]

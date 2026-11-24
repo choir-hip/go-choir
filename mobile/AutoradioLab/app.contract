@@ -205,6 +205,9 @@ component Autoradio
     // ---- a Texture document in rich text (members-content.contract) ----
     edInfo
     edm
+    edStatus
+    edKeepMine
+    edUseTheirs
     edOn
     edFor
     edDraft

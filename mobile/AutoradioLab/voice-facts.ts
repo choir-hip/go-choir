@@ -1,0 +1,26 @@
+// What shared code hands the voice about the radio. The run sheet is shared code's; the voice turn and the take recorder are native and used to decode the sheet
+// themselves (RunSheet.swift, RadioPage.swift: deleted). Now shared code pushes what each of them reads, with `radioSet` (radio-bridge.ts), and native decodes nothing:
+// `facts` for the voice's retrieval (the entry on air and the entries ahead) and `responds` for the take recorder (the story on air when a take begins).
+import { openAddress, builtOn } from './radio-model.ts';
+import { displayTitle } from './runsheet-entries.ts';
+import type { Entry } from './runsheet-model.ts';
+
+export type VoiceFact = { id: string; title: string; text: string; state: 'on_air' | 'ahead'; ref: string };
+
+export function voiceFacts(entries: Entry[]): VoiceFact[] {
+  const out: VoiceFact[] = [];
+  for (const e of entries) {
+    if (e.state !== 'on_air' && e.state !== 'ahead') continue;
+    out.push({ id: e.id, title: e.title, text: e.text ?? '', state: e.state, ref: e.source?.ref ?? '' });
+  }
+  return out;
+}
+
+/** The story an entry on air is about: its page, else the first story it cites. Nothing for an entry with none (an opening, a transition, a take, an answer). */
+export function respondsOf(e: Entry | undefined): { route: string; title: string } | undefined {
+  if (!e || e.kind === 'take' || e.kind === 'transition') return undefined;
+  const addr = openAddress(e);
+  if (addr.startsWith('pub:')) return { route: addr.slice(4), title: displayTitle(e) };
+  const c = builtOn(e).find((b) => b.address.startsWith('pub:'));
+  return c ? { route: c.address.slice(4), title: c.title } : undefined;
+}

@@ -10,6 +10,7 @@ import { onSignOut, type Row } from './search.ts';
 import { contentDocs } from './content-run.ts';
 import { importedDocs } from './imported-search.ts';
 import { ImportedSource } from './imported-source.ts';
+import { handVoiceFront } from './paper.ts';
 
 /** The one runtime of the process. Document sources register here (`live.setDocSource`: the content store and the imported documents, both wired just below). */
 export const live = new Retrieval();
@@ -34,7 +35,9 @@ export async function retrievalServe(a: { id: string; words: string; pageTitle: 
   if (!warmed) { warmed = true; live.kick(true); }
   const ask = parseAsk(a.id, a.words, a.pageTitle, a.pageAddress, a.now, a.facts);
   if (!ask || !later) return { id: a.id, ok: false };
-  return live.answer(ask, later as never);
+  // The paper's stories the desk may add by voice (paper.ts handVoiceFront) are handed with the answer: the paper page may never have been opened this launch. A failure here is the list's, not the ask's.
+  const [answer] = await Promise.all([live.answer(ask, later as never), handVoiceFront(live.storage).catch(() => undefined)]);
+  return answer;
 }
 
 const row = (o: unknown): Row | null => {

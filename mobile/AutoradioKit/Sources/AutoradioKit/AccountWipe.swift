@@ -39,16 +39,10 @@ public final class AccountWipe: @unchecked Sendable {
     @MainActor
     func registerStandard(
         turnHistory: TurnHistory = .shared,
-        legacyNotebookCache: URL? = TakeFiles.url("notebook-cache.md"),
-        legacyTopicsFile: URL? = TakeFiles.url("edition-topics.json"),
-        topicsMarker: URL? = TakeFiles.url("notebook-topics-written"),
-        notebook: NotebookStore = .shared,
         legacyTakeFiles: [URL?] = TakeFiles.legacy,
         tempDirectory: URL = FileManager.default.temporaryDirectory,
         clips: ClipLocator = .shared,
-        texture: TextureEditor = .shared,
         environment: ChoirEnvironment = .shared,
-        mailReading: MailReading = .shared,
         conversation: Conversation = .shared,
         acks: AckHistory = .shared,
         bar: BarTracker = .shared,
@@ -59,12 +53,6 @@ public final class AccountWipe: @unchecked Sendable {
         oldBuildFiles: [URL] = AccountWipe.oldBuildFiles()
     ) {
         register("turn-history") { turnHistory.clear() }
-        register("notebook") {
-            if let f = legacyNotebookCache { try? FileManager.default.removeItem(at: f) }      // the cache of the notebook text an earlier build kept: nothing reads it now
-            if let f = legacyTopicsFile { try? FileManager.default.removeItem(at: f) }       // the old build's picks file: nothing writes or reads it now; this wipe is the only thing that removes it
-            if let f = topicsMarker { try? FileManager.default.removeItem(at: f) }
-            await MainActor.run { notebook.wipe() }
-        }
         register("takes") {
             await MainActor.run { TakeSession.live?.discard() }      // the account CHANGED path has no signOut() above it
             for u in legacyTakeFiles { if let u { try? FileManager.default.removeItem(at: u) } }      // the files earlier builds left (never read by this build) go with the account that is leaving
@@ -74,9 +62,7 @@ public final class AccountWipe: @unchecked Sendable {
         register("deck") { await MainActor.run { deck.wipe() } }       // the item on air, the held items and the reason too, not only the journal
         register("clips") { clips.wipe() }
         // "podcasts": the library and cached feeds are files of shared code now; podcast.ts `wipe(storage)` is what sign-out must call (left to the lead).
-        register("texture") { await MainActor.run { texture.wipe() } }
         register("playing") { environment.wipePlaying() }
-        register("mail-reading") { mailReading.wipe() }
         register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe() }
         // The native copy of the edition picks and the words waiting for shared code (the file itself is shared code's, wiped by account.ts).
         register("edition-picks") { EditionPicksMirror.shared.reset(); EditionTalk.shared.clear() }
@@ -85,6 +71,7 @@ public final class AccountWipe: @unchecked Sendable {
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
         register("old-build-files") { AccountWipe.removeFiles(oldBuildFiles) }      // a phone upgraded from the Swift run sheet may still hold them (removed at boot too)
+        register("voice-front") { VoiceFront.shared.wipe() }      // the paper's stories handed to the voice
         register("retrieval-bridge") { RetrievalBridge.shared.clear() }     // the last turn's record and a pending ask belong to the account that left
     }
 
@@ -93,7 +80,7 @@ public final class AccountWipe: @unchecked Sendable {
     public static func oldBuildFiles(support: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Autoradio"),
                                      caches: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first) -> [URL] {
         var out: [URL] = []
-        if let support { out += ["runsheet.json", "steer-queue.json", "front-titles.json", "local-entries.json"].map { support.appendingPathComponent($0) } }
+        if let support { out += ["runsheet.json", "steer-queue.json", "front-titles.json", "local-entries.json", "texture-pending.json", "notebook-cache.md", "edition-topics.json", "notebook-topics-written"].map { support.appendingPathComponent($0) } }
         if let caches { out.append(caches.appendingPathComponent("AutoradioOpening", isDirectory: true)) }
         return out
     }

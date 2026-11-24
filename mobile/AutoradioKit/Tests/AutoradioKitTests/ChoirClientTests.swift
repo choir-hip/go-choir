@@ -301,12 +301,6 @@ final class ChoirClientTests: XCTestCase {
         XCTAssertTrue(StubProtocol.seen.allSatisfy { $0.headers["authorization"] == nil })
     }
 
-    func testEmptyFrontPage() async {
-        StubProtocol.handler = { _ in .init(json: ["stories": []]) }
-        let list = try? await ChoirFront.stories(client: env.client())
-        XCTAssertEqual(list?.isEmpty, true)
-    }
-
     // MARK: Desk
 
     func testDeskForksThenFollowsStreamAndSpeaksOnlyTheDesksRevision() async throws {

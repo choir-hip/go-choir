@@ -90,7 +90,7 @@ export function adoptNative(native: NativeReader | null | undefined, source = ''
   if (usable) reader = native!; else if (!reader) reader = native ?? undefined;
 }
 
-/** The app module's `later`, for the native pair that seals mail (mail-seal.ts); null when there is no module. */
+/** The app module's `later`, for the native calls shared code makes; null when there is no module. */
 export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }) => Promise<unknown>) | null {
   if (!reader || reader.available === false) return null;
   const native = reader;
@@ -152,10 +152,10 @@ export const accountGeneration = (): number => generation;
 export function nextGeneration(): number { generation += 1; return generation; }
 
 // A SIGN-OUT UNDER WAY (review 2026-11-19, mail seat 1, finding 2). `beginSignOut` runs BEFORE the native sign-out: the generation moves at once (a store write
-// that began under the old one refuses itself, mail-store.ts), and sealing is off until a NEW session is established (a key whose digest is not the one that
-// was signed out) or the sign-out is given up (`abortSignOut`). The native side also makes no mail key once the sign-in key is gone (MailSeal.swift).
-let blockedDigest: string | null = null;      // null: not signing out. '' or a digest: a sign-out began; sealing waits for a session whose key is another one.
-export const sealingBlocked = (): boolean => blockedDigest !== null;
+// that began under the old one refuses itself, mail-store.ts), and mail writes are off until a NEW session is established (a key whose digest is not the one that
+// was signed out) or the sign-out is given up (`abortSignOut`).
+let blockedDigest: string | null = null;      // null: not signing out. '' or a digest: a sign-out began; mail writes wait for a session whose key is another one.
+export const signOutBlocked = (): boolean => blockedDigest !== null;
 export async function beginSignOut(): Promise<void> {
   nextGeneration(); resetSession();
   blockedDigest = '';                                    // the block first, before the awaits below: while the key is being read a pulse must not see a sign-out that is not blocked
@@ -167,8 +167,8 @@ export async function beginSignOut(): Promise<void> {
 export function abortSignOut(certain = true): void { blockedDigest = null; uncertainAbort = !certain; }
 let uncertainAbort = false;
 export const signOutUncertain = (): boolean => uncertainAbort;
-/** A new session clears the block explicitly: called before sealing is judged, so the first sync of the next session is not answered idle. */
-export async function refreshSealBlock(): Promise<void> {
+/** A new session clears the block explicitly: called before a write is judged, so the first sync of the next session is not answered idle. */
+export async function refreshSignOutBlock(): Promise<void> {
   if (blockedDigest === null) return;
   try { const sess = await keptSession(); if (sess && (await digestOf(sess.key)) !== blockedDigest) blockedDigest = null; } catch { /* still signed out */ }
 }

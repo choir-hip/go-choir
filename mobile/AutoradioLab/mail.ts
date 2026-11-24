@@ -16,7 +16,7 @@ import { authedJSON, accountGeneration, SignedOutError } from './api.ts';
 import * as M from './mail-model.ts';
 import { sanitized } from './mail-sanitize.ts';
 import * as C from './mail-store.ts';
-import { sha256, hex } from './mail-seal.ts';
+import { sha256, hex } from './mail-store.ts';
 
 export type BoxView = {
   status: string; message: string; folder: string; title: string; unread: number; total: number; cached: boolean; rows: M.MailRow[];
@@ -58,15 +58,15 @@ let started = false;
 /** Forget what this session holds. */
 export function forget(): void { kept.clear(); autoRead.clear(); drafts = []; savedDrafts.clear(); alias = null; clock = 0; started = false; }
 
-/** A source starts under one account generation (api.ts); a sign-out moves it. Everything a source does with a reply after the await (memory, the sealed
+/** A source starts under one account generation (api.ts); a sign-out moves it. Everything a source does with a reply after the await (memory, the
  * files) checks it first, so a reply that arrived just before the sign-out cannot write the old account's mail into the wiped stores (review 2026-11-19). */
 const stamped = (env: C.Env): C.Env => ({ ...env, gen: accountGeneration() });
 const live = (env: C.Env): void => { if (env.gen !== undefined && env.gen !== accountGeneration()) throw new SignedOutError('signed out while the mail was being read'); };
 /** Between two bodies of a long answer: lets the next turn start (Exact gives a turn about 100 ms of CPU; Bun has no scheduler). */
 const yieldTurn = async (): Promise<void> => { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); };
 
-/** SIGN-OUT. Removes the phone's copy of the account's mail (every sealed file, every "Show original" document, the key) and what this session holds.
- * The sign-in code calls this once, with the app's `storage` (and `store` when it has it, so the key is forgotten too); it never throws and logs counts only. */
+/** SIGN-OUT. Removes the phone's copy of the account's mail (every file, every "Show original" document) and what this session holds.
+ * The sign-in code calls this once, with the app's `storage` ; it never throws and logs counts only. */
 export async function wipeMail(storage?: Storage): Promise<{ files: number; originals: number }> {
   forget();
   const r = await C.wipeFiles({ storage });
@@ -242,9 +242,9 @@ async function loadMessage(address: string, wantOriginal: boolean, env: C.Env): 
     const name = v.hasOriginal ? await originalName(id) : '';
     v.originalPath = v.hasOriginal ? `${C.CACHE}/${name}` : '';
     // The sender's own layout is written only while it is asked for, and every other document is removed: the message's HTML sits on the phone, readable, for as short a time as it can.
-    if (v.hasOriginal && !(await C.sealed(env))) { v.hasOriginal = false; v.originalPath = ''; }      // no cipher on this platform: no plain copy of a message is made
+    if (v.hasOriginal && !(await C.stores(env))) { v.hasOriginal = false; v.originalPath = ''; }
     if (v.hasOriginal && wantOriginal && env.storage) {
-      // The one mail write with a plain file: it carries the account stamp like the sealed ones. A sign-out during the awaits blanks the path and removes the file.
+      // The one mail write with a plain file: it carries the account stamp like the others. A sign-out during the awaits blanks the path and removes the file.
       const stale = (): boolean => env.gen !== accountGeneration();
       await C.forgetOldCopy(env.storage, name);
       if (stale()) { v.hasOriginal = false; v.originalPath = ''; }
@@ -386,12 +386,10 @@ export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
   if (!address.startsWith('mailbox:')) { out.status = 'idle'; return out; }
   env = stamped(env);
   const folder = M.rest(address);
-  if (!M.FOLDERS.some((f) => f.name === folder) || folder === 'drafts' || !env.storage || !(await C.sealed(env))) { out.status = 'idle'; return out; }      // no cipher: no body is fetched to be thrown away
+  if (!M.FOLDERS.some((f) => f.name === folder) || folder === 'drafts' || !env.storage || !(await C.stores(env))) { out.status = 'idle'; return out; }      // storing blocked to be thrown away
   const h = kept.get(folder) ?? (await ensureKept(env, folder));
   if (!h) { out.status = 'idle'; return out; }
-  const verdict = await C.validate(env);
-  if (verdict === 'cannot') { out.status = 'idle'; return out; }        // the key cannot be read now (a locked Keychain): nothing is judged, nothing is marked held
-  const state = verdict === 'purged' ? { done: {}, syncedAt: {}, cursor: {} } : await C.loadState(env);
+  const state = await C.loadState(env);
   let budget = SYNC_BODIES;
   let page = h.rows, nextCursor = h.next, first = true, stopped = false;
   try {

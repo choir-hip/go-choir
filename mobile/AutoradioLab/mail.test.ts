@@ -1,26 +1,23 @@
 process.env.TZ = 'UTC';   // dates are the listener's wall clock; the tests fix it
-// Mail under bun test: the model, the sanitiser, the seal, and the sources with a canned computer (the signed-in seam `./api.ts` is replaced, its real
+// Mail under bun test: the model, the sanitiser, and the sources with a canned computer (the signed-in seam `./api.ts` is replaced, its real
 // request is api.test.ts's) and a fake storage and secret store. Fixtures are invented people at example.com (mobile/fixtures/mail).
 //
 // Failure list, written before the code (each line has a test below; the numbers are the Swift list in mail-model.ts and MailTests/RepairTests that this replaced):
 //  M1  threading: prefixes, repeats, an empty subject never groups (8).   M2  readable text: html only, script and style dropped, "(no text)", capped and said so (5, 6).
 //  M3  blocks: re-flow, quotes, signature (the MailTests testBlocks).      M4  dates, with and without fractions, unparseable raw (12).   M5  attachments (9), addresses, reply quote (10, 11).
 //  M6  a sparse JSON message never throws (13).   M7  the 62-row hostile HTML table, what is kept, an unclosed head, escaped attributes, entity decoding (RepairTests MailSanitizerTests).
-//  S1  the cipher against the FIPS-197 vector and against Node's AES-CTR and HMAC; a changed byte, another key, a short file all open to null; the file holds no plain word.
 //  B1  the mailbox: ready, empty, a server error with its words, 401 words, offline keeps the last good rows, a cold offline start shows the phone's copy (1, 2, 3, 4).
 //  B2  one request per answer; the request is exact (folder, limit); the real list shape (nanosecond times, next_cursor).
 //  G1  a message: the view, the thread, mark-read once and a later "unread" is not undone, 404 words, "idle" for new/reply/draft addresses (4, 9).
 //  G2  "Show original": the cleaned document is written only when asked, nothing remote survives, other documents are removed, no HTML is kept in the phone's copy.
 //  C1  reply addressing (Reply-To, outbound, "Re: " once), a refused draft makes no request, the request body, no alias, the approval link, 403 words, send is never called (10, 11).
-//  P1  the phone's copy: sealed files only, no plain word on disk, no key means no file, a bad file is ignored and removed, the oldest go past the limit.
+//  P1  the phone's copy: plain JSON files written by shared code (no cipher, no native call), no storage means no file, a file that does not parse is ignored and removed, the oldest go past the limit.
 //  P2  the catch-up: fetches missing bodies, skips held ones, resumes from its cursor, stops at the budget, counts only.   P3  search over the copy.
-//  W1  the old copy: leftover `app:/cache/mail-*.html` are removed at first use; `wipeMail` removes every file and the key; the old Swift store's folder is removed by the native sign-out wipe (AutoradioModule.swift "app-files").
+//  W1  the old copy: leftover `app:/cache/mail-*.html` are removed at first use; `wipeMail` removes every file; the old Swift store's folder is removed by the native sign-out wipe (AutoradioModule.swift "app-files").
 //  L1  logs carry counts and ids only (14).   A1  the grants match the paths the modules use.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import * as M from './mail-model.ts';
 import { sanitized, clean, decodeAttr } from './mail-sanitize.ts';
-import { hex, open, seal, forgetProbe } from './mail-seal.ts';
 import * as C from './mail-store.ts';
 import hostile from '../fixtures/mail/hostile-html.json';
 import inboxList from '../fixtures/mail/inbox-list.json';
@@ -38,30 +35,10 @@ let calls: Req[] = [];
 let route: (r: Req) => { status: number; body: unknown } | 'network' = () => ({ status: 404, body: { error: 'not found' } });
 const mail = await import('./mail.ts');
 const app = await import('./app.ts');
-// The fake platform cipher: what CryptoKit's AES.GCM does natively (combined = 12-byte nonce, ciphertext, 16-byte tag), with a key kept in the
-// fake and never handed out. `refuses` is a native module that can make no key; `forgets` counts mailForget calls.
-let nativeKey: Buffer | null = null; let refuses = false; let forgets = 0; let sealCalls = 0;
-let locked = false; let noPair = false; let signedOutNative = false; let sealGate: Promise<void> | null = null; let sealStarted: (() => void) | null = null;
-const b64of = (b: Uint8Array): string => Buffer.from(b).toString('base64');
-const reader = { available: true, later: async (r: { op?: string; account?: string; b64?: string; aad?: string }) => {
+let signedOutNative = false;
+const reader = { available: true, later: async (r: { op?: string; account?: string }) => {
   if (r.op === 'session') return { found: true, value: 'test-key-0001-not-real', computerId: 'comp-1' };
-  if (r.op === 'mailCan') return noPair ? { found: false } : { ok: true };
-  if (r.op === 'mailForget') { nativeKey = null; forgets += 1; return { ok: true }; }
-  if (r.op === 'signOut') { signedOutNative = true; nativeKey = null; forgets += 1; return { done: true }; }
-  if (r.op === 'mailSeal') {
-    sealCalls += 1; sealStarted?.();
-    if (sealGate) await sealGate;
-    if (refuses || signedOutNative) return { ok: false };               // like MailSeal.swift: no key is made once the sign-in key is gone
-    nativeKey ??= randomBytes(32);
-    const iv = randomBytes(12); const c = createCipheriv('aes-256-gcm', nativeKey, iv); c.setAAD(Buffer.from(r.aad ?? ''));
-    const ct = Buffer.concat([c.update(Buffer.from(r.b64!, 'base64')), c.final()]);
-    return { ok: true, b64: Buffer.concat([iv, ct, c.getAuthTag()]).toString('base64') };
-  }
-  if (r.op === 'mailOpen') {
-    if (!nativeKey || locked) return { ok: false, why: 'cannot' };
-    const all = Buffer.from(r.b64!, 'base64');
-    try { const d = createDecipheriv('aes-256-gcm', nativeKey, all.subarray(0, 12)); d.setAAD(Buffer.from(r.aad ?? '')); d.setAuthTag(all.subarray(all.length - 16)); return { ok: true, b64: Buffer.concat([d.update(all.subarray(12, all.length - 16)), d.final()]).toString('base64') }; } catch { return { ok: false, why: 'bad' }; }
-  }
+  if (r.op === 'signOut') { signedOutNative = true; return { done: true }; }
   return { found: r.account !== 'key-id', value: r.account === 'api-key' ? 'test-key-0001-not-real' : 'comp-1' };
 } };
 function stubFetch(): void {
@@ -83,7 +60,7 @@ const err = (code: string): Error => Object.assign(new Error(code), { code });
 const storage = {
   fs: {
     readFile: async (p: string) => { const b = files.get(p); if (!b) throw err('ENOENT'); return b; },
-    atomicWriteFile: async (p: string, d: Uint8Array) => { if (writeGate) await writeGate; files.set(p, new Uint8Array(d)); },
+    atomicWriteFile: async (p: string, d: Uint8Array) => { writeStarted += 1; if (writeGate) await writeGate; files.set(p, new Uint8Array(d)); },
     mkdir: async () => undefined,
     rm: async (p: string) => { if (!files.delete(p)) { const dir = [...files.keys()].some((k) => k.startsWith(p + '/')); if (dir) throw err('ENOTEMPTY'); throw err('ENOENT'); } },
     readdir: async (p: string) => {
@@ -96,14 +73,14 @@ const storage = {
   },
 } as never;
 const mtimes = new Map<string, number>();
-let writeGate: Promise<void> | null = null; let readdirGate: Promise<void> | null = null;
+let writeStarted = 0; let writeGate: Promise<void> | null = null; let readdirGate: Promise<void> | null = null;
 const env = (): C.Env => ({ storage });
 
 let logs: string[] = [];
 const realLog = console.log;
 beforeEach(() => {
   resetSeam(); bindNative(reader as never); stubFetch();
-  mail.forget(); calls = []; files.clear(); mtimes.clear(); nativeKey = null; refuses = false; forgets = 0; sealCalls = 0; locked = false; noPair = false; signedOutNative = false; sealGate = null; sealStarted = null; writeGate = null; readdirGate = null; logs = []; forgetProbe();
+  mail.forget(); calls = []; files.clear(); mtimes.clear(); signedOutNative = false; writeStarted = 0; writeGate = null; readdirGate = null; logs = [];
   route = () => ({ status: 404, body: { error: 'not found' } });
   console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
 });
@@ -243,36 +220,6 @@ describe('M7 the sanitiser', () => {
     expect(decodeAttr('&#0;&#x110000;')).toBe('��');
     expect(clean('<a href="https://example.com/">x</a>')).toBe('<a rel="noopener noreferrer nofollow">x</a> <small>(https://example.com/)</small>');   // inert, with its target written after it
     expect(clean('<a href="javascript:steal()">x</a>')).toBe('<a rel="noopener noreferrer nofollow">x</a>');
-  });
-});
-
-// ---------------------------------------------------------------------------------------------------------------------------------------------- the seal
-
-describe('S1 the seal (the platform cipher, through one native pair)', () => {
-  const plainOf = async (b: Uint8Array, aad: string): Promise<Uint8Array | null> => { const o = await open(b, aad); return 'plain' in o ? o.plain : null; };
-  test('seal then open; a changed byte, another key, another record, a short or foreign file open to nothing; the bytes hold no plain word', async () => {
-    const plain = new TextEncoder().encode(JSON.stringify({ subject: 'Thursday dinner', from: 'maya.ortiz@example.com' }));
-    const sealed = (await seal(plain, 'msg|a'))!;
-    expect(hex(sealed)).not.toContain(hex(new TextEncoder().encode('Thursday')));
-    expect(new TextDecoder().decode(sealed)).not.toContain('maya');
-    expect(hex((await plainOf(sealed, 'msg|a'))!)).toBe(hex(plain));
-    expect(hex((await seal(plain, 'msg|a'))!)).not.toBe(hex(sealed));          // a fresh nonce every time
-    const bent = Uint8Array.from(sealed); bent[30] ^= 1;
-    expect(await open(bent, 'msg|a')).toEqual({ why: 'bad' });
-    const tagBent = Uint8Array.from(sealed); tagBent[tagBent.length - 1] ^= 1;
-    expect(await open(tagBent, 'msg|a')).toEqual({ why: 'bad' });
-    expect(await open(sealed.subarray(0, 20), 'msg|a')).toEqual({ why: 'bad' });
-    expect(await open(new TextEncoder().encode('{"plain":"json"}'.repeat(8)), 'msg|a')).toEqual({ why: 'bad' });
-    expect(await open(sealed, 'msg|b')).toEqual({ why: 'bad' });                // the record's identity is authenticated: another message's file does not open
-    locked = true; expect(await open(sealed, 'msg|a')).toEqual({ why: 'cannot' }); locked = false;      // a locked Keychain is not a verdict on the file
-    nativeKey = randomBytes(32);                                       // another key (the native key was forgotten and remade)
-    expect(await open(sealed, 'msg|a')).toEqual({ why: 'bad' });
-  });
-  test('a native module that refuses, or none, seals nothing and nothing is written', async () => {
-    refuses = true;
-    expect(await seal(new Uint8Array([1, 2, 3]), 'x')).toBeNull();
-    bindNative(undefined);
-    expect(await seal(new Uint8Array([1]), 'x')).toBeNull(); expect(await open(new Uint8Array(40), 'x')).toEqual({ why: 'cannot' });
   });
 });
 
@@ -451,33 +398,32 @@ describe('C1 compose', () => {
 // ---------------------------------------------------------------------------------------------------------------------------------------------- the phone's copy
 
 describe('P1 to P3 the phone\'s copy', () => {
-  test('P1 only sealed files, no plain word on disk, and the files open with the key', async () => {
+  test('P1 plain JSON files under app:/data/mail, written by shared code with no native call, and they read back', async () => {
     computer();
     await mail.mailBox('mailbox:inbox', env());
     await mail.mailMessage('mail:em_01hz0a', false, env());
     const names = [...files.keys()];
     expect(names.length).toBeGreaterThanOrEqual(2);
-    expect(names.every((n) => n.startsWith('app:/data/mail/'))).toBe(true);
-    for (const [, b] of files) { const s = new TextDecoder('latin1').decode(b); for (const w of SECRETS) expect(s.includes(w)).toBe(false); }
-    expect(nativeKey).not.toBeNull();                       // a native key was made; shared code never saw it
+    expect(names.every((n) => n.startsWith('app:/data/mail/') && n.endsWith('.json'))).toBe(true);
+    expect(JSON.parse(new TextDecoder().decode(files.get(C.rowsFile('inbox'))!)).folder).toBe('inbox');
     const c = await C.loadFolder(env(), 'inbox');
     expect(c!.rows.length).toBe(4);
     expect((await C.loadMessage(env(), 'em_01hz0a'))!.text).toContain('Thursday works for me');
   });
 
-  test('P1 a native module that refuses means no file at all, and the mailbox still works', async () => {
-    refuses = true; computer();
-    const v = await mail.mailBox('mailbox:inbox', env());
-    await mail.mailMessage('mail:em_01hz0a', false, env());
+  test('P1 no storage means no file, and the mailbox still works', async () => {
+    computer();
+    const v = await mail.mailBox('mailbox:inbox', {});
+    await mail.mailMessage('mail:em_01hz0a', false, {});
     expect(v.status).toBe('ready'); expect(files.size).toBe(0);
-    expect(await C.loadFolder(env(), 'inbox')).toBeNull();
+    expect(await C.loadFolder({}, 'inbox')).toBeNull();
   });
 
-  test('P1 a file that does not open is ignored and removed; past the limit the oldest go', async () => {
+  test('P1 a file that does not parse is ignored and removed; past the limit the oldest go', async () => {
     computer();
     await mail.mailBox('mailbox:inbox', env());
     const k = C.rowsFile('inbox');
-    const b = Uint8Array.from(files.get(k)!); b[40] ^= 1; files.set(k, b);
+    files.set(k, new TextEncoder().encode('{"folder":"inbox","rows":[')); //a half write
     expect(await C.loadFolder(env(), 'inbox')).toBeNull(); expect(files.has(k)).toBe(false);
     for (let i = 0; i < 5; i++) { const f = await C.fileFor('m' + i); await C.saveMessage(env(), { id: 'm' + i, folder: 'inbox', summary: sm('m' + i, 's', '2026-11-1' + i + 'T00:00:00Z'), text: 't', to: [], cc: [], replyTo: '', attachments: [], savedAt: 0 }); mtimes.set(f, i); }
     expect(await C.trim(env(), 3)).toBe(2);
@@ -540,15 +486,14 @@ describe('W1 L1 D1 A1', () => {
     expect(await C.forgetOldCopy(storage)).toBe(0);
   });
 
-  test('W1 wipeMail removes every sealed file, every original, the key and the memory; it never throws, even with nothing', async () => {
+  test('W1 wipeMail removes every file, every original and the memory; it never throws, even with nothing', async () => {
     computer();
     await mail.mailBox('mailbox:inbox', env()); await mail.mailMessage('mail:em_01hz08', true, env()); await mail.mailSync('mailbox:inbox', env());
-    expect([...files.keys()].some((k) => k.startsWith('app:/data/mail/'))).toBe(true); expect(nativeKey).not.toBeNull();
+    expect([...files.keys()].some((k) => k.startsWith('app:/data/mail/'))).toBe(true);
     files.set('app:/data/paper-front.json', new TextEncoder().encode('{}'));
     const r = await mail.wipeMail(storage);
     expect(r.files).toBeGreaterThan(0); expect(r.originals).toBe(1);
     expect([...files.keys()]).toEqual(['app:/data/paper-front.json']);
-    expect(nativeKey).toBeNull(); expect(forgets).toBe(1);
     route = () => 'network';
     expect((await mail.mailFrame('mailbox:inbox', env())).status).toBe('frame');                // memory is gone too
     expect(await mail.wipeMail(storage)).toEqual({ files: 0, originals: 0 });
@@ -570,7 +515,7 @@ describe('W1 L1 D1 A1', () => {
     const g = app.grants.split('\n');
     expect(g).toContain(`fs.read ${C.DIR}`); expect(g).toContain(`fs.write ${C.DIR}`);
     expect(g).toContain(`fs.read ${C.CACHE}`); expect(g).toContain(`fs.write ${C.CACHE}`);
-    expect(g.some((l) => l.startsWith('secret.'))).toBe(false);          // no secret in Exact's store: the key is the platform's
+    expect(g.some((l) => l.startsWith('secret.'))).toBe(false);          // mail needs no secret: the files are plain
     expect(g.some((l) => l.startsWith('net.fetch'))).toBe(true);
   });
 });
@@ -579,9 +524,8 @@ describe('W1 L1 D1 A1', () => {
 // Failure list, written before the code:
 //  R1 a hostile body (many unclosed `<`, `<!--`, `<script `, one long run of spaces) costs the same at 4 MB as at 1 MB: the work is capped before any scan and every scan is linear.
 //  R2 "Show original" of a body over the cap says the message is too large to show in full (never a blank page); the readable text is still on the page, cut and said so.
-//  R3 a mail write suspended across a sign-out writes no file and makes no key; the sealing stays off until a new session is established.
-//  R4 a file the cipher cannot read NOW (a locked Keychain) is kept; a file whose tag fails is removed; a file swapped to another record, or an earlier format, is removed.
-//  R5 a module without the pair is learned from one probe: no body is fetched to be thrown away.
+//  R3 a mail write suspended across a sign-out leaves no file; writes stay off until a new session is established.
+//  R4 a file that does not parse is removed; a file swapped to another record is not used.
 //  R6 a draft too long is refused with no request; the same text saved twice is one draft.
 //  R7 no link in "Show original" can be followed (its target is written after it); the unsent compose text is cleared by the sign-out action.
 describe('R1 R2 hostile bodies', () => {
@@ -627,52 +571,46 @@ describe('R1 R2 hostile bodies', () => {
 });
 
 describe('R3 a sign-out while mail is being written', () => {
-  test('a write suspended in the cipher across the sign-out writes nothing and makes no key', async () => {
+  test('a write suspended in the disk across the sign-out leaves no file', async () => {
     computer();
-    let release: () => void = () => undefined; sealGate = new Promise<void>((r) => { release = r; });
-    const started = new Promise<void>((r) => { sealStarted = r; });
+    let release: () => void = () => undefined; writeGate = new Promise<void>((r) => { release = r; });
     const pending = mail.mailMessage('mail:em_01hz0a', false, env());
-    await started;                                                         // the message was fetched and its first seal is in the native module
-    const { accountSignOut } = await import('./account.ts');
-    const out = await accountSignOut(storage, undefined, reader as never);
-    expect(out.done).toBe(true);
+    for (let i = 0; i < 100 && writeStarted === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(writeStarted).toBeGreaterThan(0);                               // the message was fetched and its file is being written
+    await beginSignOut();
     release();
     await pending.catch(() => undefined);
     await new Promise((r) => setTimeout(r, 20));
     expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
-    expect(nativeKey).toBeNull();
   });
-  test('sealing is off from the start of a sign-out until another account signs in, and on again when the sign-out is given up', async () => {
+  test('writing is off from the start of a sign-out until another account signs in, and on again when the sign-out is given up', async () => {
     const api = await import('./api.ts');
-    expect(await seal(new Uint8Array([1]), 'x')).not.toBeNull();
+    expect(await C.stores(env())).toBe(true);
     await beginSignOut();
-    expect(api.sealingBlocked()).toBe(true); expect(await seal(new Uint8Array([1]), 'x')).toBeNull(); expect(await C.sealed(env())).toBe(false);
+    expect(api.signOutBlocked()).toBe(true); expect(await C.stores(env())).toBe(false);
     api.abortSignOut();
-    expect(api.sealingBlocked()).toBe(false); expect(await seal(new Uint8Array([1]), 'x')).not.toBeNull();
+    expect(api.signOutBlocked()).toBe(false); expect(await C.stores(env())).toBe(true);
   });
-  test('a store write that began under an older generation refuses, makes no key and leaves no file', async () => {
+  test('a store write that began under an older generation refuses and leaves no file', async () => {
     const api = await import('./api.ts');
     const old: C.Env = { storage, gen: api.accountGeneration() };
     api.nextGeneration();
     expect(await C.saveState(old, { done: {}, syncedAt: {}, cursor: {} })).toBe(false);
-    expect(files.size).toBe(0); expect(nativeKey).toBeNull(); expect(sealCalls).toBe(0);
+    expect(files.size).toBe(0);
   });
 });
 
 describe('R4 what is removed and what is kept', () => {
-  test('a locked Keychain keeps every file; a bent file, another record\'s file and an old-format file go', async () => {
+  test('a file that does not parse goes; another record\'s file is not used', async () => {
     computer();
     await mail.mailMessage('mail:em_01hz0a', false, env());
     const file = await C.fileFor('em_01hz0a');
     expect(files.has(file)).toBe(true);
-    locked = true;
-    expect(await C.loadMessage(env(), 'em_01hz0a')).toBeNull(); expect(files.has(file)).toBe(true);          // cannot read now: kept
-    locked = false;
     expect((await C.loadMessage(env(), 'em_01hz0a'))?.id).toBe('em_01hz0a');
     const other = await C.fileFor('em_other');
     files.set(other, files.get(file)!);                                                                          // a file swapped to another message's name
-    expect(await C.loadMessage(env(), 'em_other')).toBeNull(); expect(files.has(other)).toBe(false);
-    files.set(file, new TextEncoder().encode('MS2' + 'x'.repeat(60)));                                          // the earlier format
+    expect(await C.loadMessage(env(), 'em_other')).toBeNull();
+    files.set(file, new TextEncoder().encode('MS3' + 'x'.repeat(60)));                                          // the earlier sealed format
     expect(await C.loadMessage(env(), 'em_01hz0a')).toBeNull(); expect(files.has(file)).toBe(false);
     await mail.mailBox('mailbox:inbox', env());
     const rows = C.rowsFile('inbox'); const sent = C.rowsFile('sent');
@@ -682,12 +620,6 @@ describe('R4 what is removed and what is kept', () => {
 });
 
 describe('R5 R6 R7', () => {
-  test('R5 a module without the pair is learned from one probe: no mailbox body is fetched to be discarded', async () => {
-    noPair = true; computer();
-    await mail.mailBox('mailbox:inbox', env()); calls = [];
-    const s = await mail.mailSync('mailbox:inbox', env());
-    expect(s.status).toBe('idle'); expect(calls.length).toBe(0); expect(files.size).toBe(0); expect(sealCalls).toBe(0);
-  });
   test('R5 a stored text is cut at the page\'s own cap', async () => {
     computer();
     const env1 = env();
@@ -712,28 +644,10 @@ describe('R5 R6 R7', () => {
 });
 
 describe('R8 restore, budget, words', () => {
-  test('a restore (the files are back, the key is not) purges them so the bodies are fetched again; a locked Keychain judges nothing and syncs nothing', async () => {
-    computer();
-    await mail.mailBox('mailbox:inbox', env()); await mail.mailSync('mailbox:inbox', env());
-    const held = [...files.keys()].filter((k) => k.includes('/msg-')).length; expect(held).toBeGreaterThan(0);
-    locked = true; calls = [];
-    expect((await mail.mailSync('mailbox:inbox', env())).status).toBe('idle'); expect(calls.length).toBe(0);
-    expect([...files.keys()].filter((k) => k.includes('/msg-')).length).toBe(held);          // kept
-    locked = false; nativeKey = randomBytes(32);                                              // another phone: the files came back, the key is a new one
-    mail.forget(); await mail.mailBox('mailbox:inbox', env()); calls = [];
-    expect(await C.validate(env())).toBe('purged');
-    const again = await mail.mailSync('mailbox:inbox', env());
-    expect(again.fetched).toBe(5);                                                            // fetched again, none "held" by a file nobody can open
-  });
-  test('no cipher, no plain copy: "Show original" offers nothing and writes no file', async () => {
-    noPair = true; computer();
-    const v = await mail.mailMessage('mail:em_01hz08', true, env());
-    expect(v.hasOriginal).toBe(false); expect([...files.keys()].filter((k) => k.startsWith('app:/cache/mail-'))).toEqual([]);
-  });
   test('the copy is held to a byte budget as well as a file count: the oldest go first', async () => {
     const e = env();
-    for (let i = 0; i < 4; i++) { files.set(`${C.DIR}/msg-${i}.bin`, new Uint8Array(1000)); mtimes.set(`${C.DIR}/msg-${i}.bin`, i); }
-    expect(await C.trim(e, 100, 2500)).toBe(2); expect([...files.keys()].sort()).toEqual([`${C.DIR}/msg-2.bin`, `${C.DIR}/msg-3.bin`]);
+    for (let i = 0; i < 4; i++) { files.set(`${C.DIR}/msg-${i}.json`, new Uint8Array(1000)); mtimes.set(`${C.DIR}/msg-${i}.json`, i); }
+    expect(await C.trim(e, 100, 2500)).toBe(2); expect([...files.keys()].sort()).toEqual([`${C.DIR}/msg-2.json`, `${C.DIR}/msg-3.json`]);
   });
   test('the words for 401, 403, 404, 413 and 429 are plain and differ', () => {
     const st = (status: number) => M.words(Object.assign(new Error('x'), { status, name: 'HTTPError' })).message;
@@ -743,21 +657,11 @@ describe('R8 restore, budget, words', () => {
 });
 
 describe('R9 the last races and words', () => {
-  test('a seal that SUCCEEDS while the sign-out begins writes no file (the check after the seal)', async () => {
-    computer();
-    let release: () => void = () => undefined; sealGate = new Promise<void>((r) => { release = r; });
-    const started = new Promise<void>((r) => { sealStarted = r; });
-    const pending = mail.mailMessage('mail:em_01hz0a', false, env());
-    await started;
-    await beginSignOut();                                                  // the generation moves; the native module does not know (it will seal)
-    release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
-    expect(sealCalls).toBeGreaterThan(0); expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
-  });
   test('a file write in flight when the sign-out begins is removed (the check after the write)', async () => {
     computer();
     let release: () => void = () => undefined; writeGate = new Promise<void>((r) => { release = r; });
     const pending = mail.mailMessage('mail:em_01hz0a', false, env());
-    for (let i = 0; i < 40 && sealCalls === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    for (let i = 0; i < 40 && writeStarted === 0; i++) await new Promise((r) => setTimeout(r, 5));
     await new Promise((r) => setTimeout(r, 20));
     await beginSignOut();
     release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
@@ -776,11 +680,11 @@ describe('R9 the last races and words', () => {
     computer();
     await mail.mailBox('mailbox:inbox', env());
     await beginSignOut();
-    expect(await C.sealed(env())).toBe(false);
+    expect(await C.stores(env())).toBe(false);
     const api = await import('./api.ts');
     api.nextGeneration();
-    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: true, value: 'another-key-0002-not-real', computerId: 'comp-2' } : r.op === 'mailCan' ? { ok: true } : { ok: true }) } as never);
-    expect(await C.sealed({ storage })).toBe(true);
+    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: true, value: 'another-key-0002-not-real', computerId: 'comp-2' } : { ok: true }) } as never);
+    expect(await C.stores({ storage })).toBe(true);
   });
   test('a timeout has its own words, not "offline"', () => {
     const w = M.words(new Error('timeout: The request timed out'));

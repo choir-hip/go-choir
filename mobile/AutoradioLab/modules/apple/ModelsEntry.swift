@@ -12,8 +12,6 @@ import Security
 // accounts CredentialReader allows, answering `{found, value}`. It logs nothing. It goes when sign-in itself is moved and the key is
 // kept by Exact's store.
 //
-// The mail cipher (Choir/MailSeal.swift): `mailSeal`, `mailOpen`, `mailForget`, a platform cipher shared code has none of; the key never leaves the Keychain.
-//
 // The edition picks' calls (`editionMirror`, `editionMirrorReset`, `editionHeard`, `editionSaid`): the voice's in-memory copy of the picks, and the words the voice heard at the setup screen (docs/reference/AUTORADIO-EDITION-PICKS.md).
 //
 // The second native call, `{op: "signOut"}` (later only), answers `{done: Bool}` once the native half of sign-out has finished. Sign-out is led
@@ -21,7 +19,7 @@ import Security
 // (AccountWipe: the voice's and the pages not yet moved) are wiped by Swift. It goes with them when sign-in itself moves.
 // The sign-out reconcile (AutoradioLab/account.ts) needs the stored key as THREE answers, which the reader's `nil` cannot give: `keystate` -> present (the item is
 // there), absent (the Keychain answered item-not-found) or unreadable (locked before the first unlock, or any other status). Read only: no data is returned, nothing
-// is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
+// is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores go, the stored key stays.
 //
 // The take recorder's ops (`takeState` ... `takeAudio`, AutoradioModule+Takes.swift `takeOp`): shared code (AutoradioLab/take-session.ts) leads the Takes section; the reason they are native is the
 // microphone, the radio's gate, the recogniser and the player (the voice), and the steer queue. Nothing is carried from earlier builds' files: they are never read.
@@ -55,7 +53,7 @@ final class ModelsModule: ExactModule {
         #endif
         if (request["op"] as? String) == "keystate" { return ["state": Self.keyState()] }
         if (request["op"] as? String) == "themeLegacy" { return Self.legacyThemes() }
-        return MailSeal().reply(request) ?? CredentialReader().reply(request)
+        return CredentialReader().reply(request)
     }
     override func later(_ request: [String: Any], reply: ExactReply) {
         let op = request["op"] as? String
@@ -69,7 +67,6 @@ final class ModelsModule: ExactModule {
             Task { @MainActor in
                 guard let m = AutoradioModule.current else { reply.send(["done": false]); return }
                 await m.signOutForShared(keepKey: op == "wipe")
-                MailSeal().forget()      // the mail copy's key goes with the account, whatever shared code does next
                 // Truthful: the Keychain delete ignores its status (ChoirClient.swift), so read the item again. Still there: not done. The Account screen's sign-out then wipes
                 // nothing shared (the key remains: the marker goes); at a launch (account.ts reconcile) the shared stores of the account being left are wiped regardless of this answer and the marker stays. Idempotent: with the key already gone it only runs the Swift wipe again.
                 reply.send(["done": op == "wipe" || !CredentialReader().keyRemains()])
@@ -111,8 +108,8 @@ final class ModelsModule: ExactModule {
             Task.detached { reply.send(await EmbedDevice.op(request)) }
             return
         }
-        // The notebook's and the content sync's native facts (AutoradioModule+Notebook.swift `notebookOp`, with the reason for each).
-        if let op = op, op.hasPrefix("notebook") || op == "contentBusy" {
+        // The content sync's one native fact (AutoradioModule+Notebook.swift `notebookOp`, with its reason).
+        if op == "contentBusy" {
             Task { @MainActor in reply.send(await AutoradioModule.current?.notebookOp(request) ?? [:]) }
             return
         }
@@ -128,6 +125,11 @@ final class ModelsModule: ExactModule {
             // Shared code (AutoradioLab/pages.ts) owns the open pages and hands the voice their facts after every change (AutoradioModule+Spine.swift `holdPages`). Only native code can use them: the
             // voice engine, the local model's warm-up and the Texture editor's flush on leaving a page are native. Answers {ok}.
             Task { @MainActor in reply.send(["ok": await AutoradioModule.current?.holdPages(request) ?? false]) }
+            return
+        }
+        // The paper's stories the voice turn may add by voice (AutoradioLab/paper.ts `handVoiceFront`): shared code reads the front route, the voice turn engine is native and holds the list (DeskContext.swift `VoiceFront`). Answers {ok}.
+        if op == "voiceFront" {
+            reply.send(["ok": VoiceFront.shared.set(gen: (request["gen"] as? NSNumber)?.intValue ?? 0, request["stories"] as? [[String: Any]] ?? [])])
             return
         }
         if op == "pageText" {

@@ -20,15 +20,6 @@ final class AccountWipeTests: XCTestCase {
     override func tearDown() { try? FileManager.default.removeItem(at: root) }
 
     
-    final class FakeAPI: TextureAPI {
-        var posts: [String] = []
-        var failure: Error? = URLError(.notConnectedToInternet)
-        func head(docId: String) async throws -> TextureHead { TextureHead(content: "base", body: nil, revisionId: "r1", version: 1) }
-        func post(docId: String, content: String, body: [String: Any], parent: String) async throws -> (revisionId: String, version: Int) {
-            if let failure { throw failure }
-            posts.append(content); return ("r2", 2)
-        }
-    }
     final class Recorder: @unchecked Sendable {
         let lock = NSLock(); private var _v: [String] = []
         func add(_ s: String) { lock.lock(); _v.append(s); lock.unlock() }
@@ -73,7 +64,7 @@ final class AccountWipeTests: XCTestCase {
         AccountWipe.removeOldBuildFiles(support: support, caches: caches)      // nothing there: no error
         fill()
         let wipe = AccountWipe()
-        wipe.registerStandard(legacyTopicsFile: nil, topicsMarker: nil, notebook: NotebookStore(), legacyTakeFiles: [],
+        wipe.registerStandard(legacyTakeFiles: [],
                               tempDirectory: root.appendingPathComponent("tmp3"),
                               deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal3.json"))), oldBuildFiles: AccountWipe.oldBuildFiles(support: support, caches: caches))
         XCTAssertTrue(wipe.names.contains("old-build-files"))
@@ -106,22 +97,16 @@ final class AccountWipeTests: XCTestCase {
         let m = Self.marker
         // The stores, each in its own place under the temporary root.
         let turns = TurnHistory(); turns.add(listener: m, radio: [m])
-        let legacyCache = root.appendingPathComponent("notebook-cache.md"); write("notebook-cache.md", m)
-        let legacyTopics = root.appendingPathComponent("edition-topics.json"), topicsMarker = root.appendingPathComponent("notebook-topics-written")
+        write("notebook-cache.md", m)      // old Swift files: removed with the account (AccountWipe.oldBuildFiles)
         write("edition-topics.json", "{\"topics\":[\"\(m)\"]}"); write("notebook-topics-written", m)
-        let notebook = NotebookStore()
         let oldTakeFiles = ["takes-own.json", "takes-muted.json", "takes-copy-own.json", "takes-copy-muted.json"].map { root.appendingPathComponent($0) }
         for f in oldTakeFiles { write(f.lastPathComponent, m) }
         let tmp = root.appendingPathComponent("tmp"); write("tmp/takes/rec.m4a", m); write("tmp/take-play-\(m).m4a", m)
         let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
-        let api = FakeAPI()
-        let texture = TextureEditor(api: api, storage: root.appendingPathComponent("texture-pending.json")); texture.retryAfter = 3600
-        await texture.edit(address: "texture:d1", markdown: m); await texture.flush(address: "texture:d1")
-        XCTAssertEqual(texture.pending["d1"], m)
+        write("texture-pending.json", "{\"d1\":{\"text\":\"\(m)\"}}")      // the unsent text the Swift editor kept: shared code keeps its own now (app:/data/texture-pending.json), and this file is only removed
         let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
 
         // What the second review found: the spoken words and the files of the app target.
-        let mailReading = MailReading(); mailReading.request(address: m, text: m)
         let conversation = Conversation(); conversation.begin(id: "q1", question: m)
         let acks = AckHistory(); acks.add(m, page: m)
         SharedGeneration.resetForTest(); let reader = HeldPages(limit: 4); reader.hold(gen: 0, HeldPage(address: "pub:x", title: m, blocks: [HeldBlock(id: "b1", kind: "p", text: m)]))
@@ -138,11 +123,12 @@ final class AccountWipeTests: XCTestCase {
             AccountWipe.removeFiles([rootRef.appendingPathComponent("onboarding.json")])
             AccountWipe.removeContents(of: rootRef.appendingPathComponent("books")); AccountWipe.removeContents(of: rootRef.appendingPathComponent("cache/files"))
         }
-        wipe.registerStandard(turnHistory: turns, legacyNotebookCache: legacyCache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook,
+        wipe.registerStandard(turnHistory: turns, 
                               legacyTakeFiles: oldTakeFiles, tempDirectory: tmp, clips: clips,
-                              texture: texture, environment: env,
-                              mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
-                              deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
+                              environment: env,
+                              conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
+                              deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))),
+                              oldBuildFiles: AccountWipe.oldBuildFiles(support: root, caches: nil))
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
 
         await wipe.run()
@@ -151,15 +137,14 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertEqual(markerInFiles(), [], "files still holding the account's words")
         // (b) every in-memory store answers empty
         XCTAssertTrue(turns.snapshot().isEmpty)
-        XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1"))
-        XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
+        XCTAssertNil(env.playing("p1"))
+        XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned)
         XCTAssertTrue(openPages.list().isEmpty); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertFalse(EditionPicksMirror.shared.known, "and it is forgotten"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
 
         // (c) the next sign-in: the first request of each kind carries nothing of the old account.
         let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""
         XCTAssertFalse(body.contains(m), "turn")
-        await texture.retryPending(); XCTAssertTrue(api.posts.isEmpty, "texture retry")
     }
 }
 
@@ -195,23 +180,4 @@ final class AccountWipeInFlightTests: XCTestCase {
 
 
     // testFeedLoadAfterTheWipeIsNotKept moved to AutoradioLab/podcast.test.ts ("a feed that finishes loading after the wipe is not kept").
-
-
-
-    func testNotebookWriteAfterTheWipeKeepsNothing() async {
-        let m = Self.marker
-        let saved = ChoirEnvironment.shared.keys; ChoirEnvironment.shared.keys = InMemoryKeyStore([KeyAccount.apiKey: "k"]); defer { ChoirEnvironment.shared.keys = saved }
-        let entered = Latch(), release = Latch()
-        let s = NotebookStore()
-        s.lookupEdition = { await entered.release(); await release.wait(); return EditionInfo(found: false) }
-        s.createNotebook = { "d1" }
-        let marker = root.appendingPathComponent("notebook-topics-written")
-        let run = Task { @MainActor in await s.writeTopics([m], marker: marker) }
-        await waitFor(entered)
-        let wipe = AccountWipe(); wipe.register("notebook") { await MainActor.run { s.wipe() } }
-        await wipe.run()
-        await release.release()
-        let ok = await run.value
-        XCTAssertFalse(ok); XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path)); XCTAssertEqual(filesHoldingMarker(), [])
-    }
 }

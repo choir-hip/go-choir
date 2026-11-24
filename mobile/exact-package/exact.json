@@ -223,17 +223,6 @@
       "voicePicked": "number",
       "finishAsked": "number"
     },
-    "PodNow": {
-      "episodeId": "string",
-      "clip": "bool",
-      "start": "number",
-      "elapsed": "number",
-      "duration": "number"
-    },
-    "PodDone": {
-      "status": "string",
-      "message": "string"
-    },
     "ReaderRun": {
       "id": "string",
       "text": "string",
@@ -580,12 +569,6 @@
       "line": "string",
       "credit": "string"
     },
-    "TextureEditInfo": {
-      "status": "string",
-      "label": "string",
-      "address": "string",
-      "editable": "bool"
-    },
     "VoiceCard": {
       "id": "string",
       "name": "string",
@@ -849,14 +832,6 @@
       "answers": "MailAck"
     },
     {
-      "send": "mailRead",
-      "options": {
-        "address": "string",
-        "text": "string"
-      },
-      "answers": "MailAck"
-    },
-    {
       "source": "voiceSetupFacts",
       "live": true,
       "answers": "VoiceSetupFacts",
@@ -878,41 +853,6 @@
           "finishAsked": 0
         }
       }
-    },
-    {
-      "source": "podcastNow",
-      "live": true,
-      "answers": "PodNow",
-      "substitute": {
-        "default": {
-          "episodeId": "",
-          "clip": false,
-          "start": 0,
-          "elapsed": 0,
-          "duration": 0
-        }
-      }
-    },
-    {
-      "send": "podcastPlayAudio",
-      "options": {
-        "op": "string",
-        "id": "string",
-        "url": "string",
-        "title": "string",
-        "show": "string",
-        "start": "number"
-      },
-      "answers": "PodDone"
-    },
-    {
-      "send": "clipPlay",
-      "options": {
-        "op": "string",
-        "id": "string",
-        "record": "string"
-      },
-      "answers": "PodDone"
     },
     {
       "source": "readerFollow",
@@ -1078,37 +1018,6 @@
     {
       "send": "voiceForget",
       "answers": "SettingsAck"
-    },
-    {
-      "source": "textureEditInfo",
-      "live": true,
-      "answers": "TextureEditInfo",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "idle",
-          "label": "",
-          "address": "",
-          "editable": false
-        }
-      }
-    },
-    {
-      "send": "textureEdit",
-      "options": {
-        "address": "string",
-        "markdown": "string"
-      },
-      "answers": "TextureEditInfo"
-    },
-    {
-      "send": "textureFlush",
-      "options": {
-        "address": "string"
-      },
-      "answers": "TextureEditInfo"
     },
     {
       "source": "voiceCards",

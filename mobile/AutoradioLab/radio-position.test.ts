@@ -303,6 +303,19 @@ describe('P11 a pulse begun before sign-out and delivered after it changes nothi
     expect(seenGen).toBe(gen0);                                            // and the call said which account it was computed for
     expect(gen1).toBeGreaterThan(gen0);
   });
+  test('V5 radioSet hands the voice and the take recorder what they read: the facts of the entries on air and ahead, and what a take responds to; no run sheet', async () => {
+    const pushed: Record<string, unknown>[] = [];
+    const spy = { available: true, later: async (r: { op: string }) => { if (r.op === 'radioSet') pushed.push(r as never); return native.later(r as never); } };
+    adoptNative(spy as never, 'test');
+    await play();
+    await radioPulse(undefined, spy as never);
+    const set = pushed.find((p) => Array.isArray(p.facts));
+    expect(set).toBeDefined();
+    const facts = set!.facts as { id: string; state: string }[];
+    expect(facts.some((x) => x.state === 'on_air')).toBe(true);
+    expect(typeof set!.respondsRoute).toBe('string'); expect(typeof set!.respondsTitle).toBe('string');
+    expect(set!.sheet).toBeUndefined(); expect(set!.onAir).toBeUndefined();
+  });
   test('the stamped calls: radioSet, editionMirror and the sign-out calls carry gen', () => {
     const c = (f: string): string => readFileSync(new URL(f, import.meta.url), 'utf8');
     expect(c('radio-bridge.ts')).toMatch(/op: 'radioSet', gen,/);

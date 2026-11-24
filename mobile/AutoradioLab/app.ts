@@ -30,6 +30,9 @@ import * as imported from './imported.ts';
 import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveEnv as takesEnv } from './take-session.ts';
 import * as picks from './edition-picks.ts';
 import { signInSheet, liveSheetEnv } from './signin-sheet.ts';
+import { radioPlayClip } from './clip-play.ts';
+import { podcastNow } from './podcast-now.ts';
+import { textureEditInfo, textureEdit, textureFlush, textureDiscard, textureOverwrite } from './texture-edit.ts';
 import { signInRun, signInCancel, signInReopen, signInView, type AttemptEnv } from './signin-attempt.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -98,6 +101,10 @@ fs.read app:/data/edition-topics.json
 fs.write app:/data/edition-topics.json
 fs.read app:/data/onboarding.json
 fs.write app:/data/onboarding.json
+fs.read app:/data/texture-pending.json
+fs.write app:/data/texture-pending.json
+fs.read app:/data/notebook-topics-written
+fs.write app:/data/notebook-topics-written
 sqlite.open app:/data/content.db`;
 
 const attemptEnv = (): AttemptEnv => {
@@ -150,6 +157,12 @@ const sources: Sources = {
   // The Autoradio page (radio-page.ts): the native facts, the bar's facts and the entries in; the page out.
   radioPage: ([facts, bar, entries]) => radioPage(facts, bar, entries),
   texturesList: ([at]) => texturesListShared(at),
+  // Editing your own Texture document (texture-edit.ts): what it says, the typed text, the save, and the listener's choice after the head moved. The waits are the contract's.
+  textureEditInfo: ([address], _s, storage) => textureEditInfo(address, storage),
+  textureEdit: ([address, markdown], _s, storage) => textureEdit(address, markdown, storage),
+  textureFlush: ([address], _s, storage) => textureFlush(address, storage),
+  textureDiscard: ([address], _s, storage) => textureDiscard(address, storage),
+  textureOverwrite: ([address], _s, storage) => textureOverwrite(address, storage),
   // The themes (themes.ts): the system's scheme and Reduce Motion come from `exactViewport()` (the first two arguments); the choice and the user's themes are kept under app:/data.
   theme: ([scheme, reduce], _s, storage) => themes.themeShared(scheme, reduce, storage),
   themeList: ([scheme, reduce], _s, storage) => themes.themeListShared(scheme, reduce, storage),
@@ -205,6 +218,8 @@ const sources: Sources = {
   showClips: ([address, tick]) => showClips(address, tick),
   storyClips: ([address, tick]) => storyClips(address, tick),
   clipAct: ([op, id]) => clipAct(op, id),
+  radioPlayClip: ([op, id, record], _s, storage, native) => radioPlayClip(storage, native as never, op, id, record),
+  podcastNow: ([_tick, _pos], _s, storage, native) => podcastNow(storage, native as never),
   // Files (files.ts): the listener's computer's files. Positional arguments.
   fileList: ([path, mode, sort, desc, query, _acct], _s, storage) => fileList({ path, mode, sort, desc, query }, storage),
   fileOpen: ([address, _acct], _s, storage) => fileOpen({ address }, storage),
@@ -230,7 +245,7 @@ const sources: Sources = {
   importedQueue: ([address, section, block], _s, storage) => imported.importedQueue({ address, section, block }, storage),
   importedAdd: ([from, name], _s, storage) => imported.importedAdd({ from, name }, storage),
   paperFront: ([view, width, tick, focus, picks], _store, storage) => paperFront({ view, width, tick, focus, picks }, storage),
-  // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
+  // Mail (mail.ts): the phone's copy is plain JSON under app:/data/mail, written by shared code; "Show original" is written under app:/cache/mail-*.html.
   mailBox: ([address, _acct], _store, storage) => mail.mailBox(address, { storage }),
   mailFrame: ([address], _store, storage) => mail.mailFrame(address, { storage }),
   mailSync: ([address], _store, storage) => mail.mailSync(address, { storage }),
