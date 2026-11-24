@@ -29,6 +29,15 @@ const (
 	// capture: feed an existing story, open a story, or decline. It is the
 	// baseline the redesign's stages are compared with.
 	DecisionStageManagementRoute = "management_route"
+	// DecisionStagePageRender is one render of the front list: the stories
+	// in the order the page ranks them, each with its score and the inputs to
+	// it. The "capture" is the page ("front"); the decider is the rank rule
+	// (internal/frontrank), which the pages and the daily digest also run.
+	DecisionStagePageRender = "page_render"
+	// DecisionRenderedPage is the decision word of a page render and
+	// DecisionPageID the id of the page rendered.
+	DecisionRenderedPage = "render"
+	DecisionPageID       = "front"
 )
 
 // Decisions of the management route stage.
@@ -66,6 +75,29 @@ type DecisionRecord struct {
 	// where it gave none.
 	Probability *float64  `json:"probability,omitempty"`
 	At          time.Time `json:"at"`
+	// Shown is a page render's ranked list, first story first; empty for the
+	// stages that decide one capture.
+	Shown []DecisionShown `json:"shown,omitempty"`
+	// Rule names the rule that ordered Shown and what it leaves out.
+	Rule string `json:"rule,omitempty"`
+}
+
+// DecisionShown is one story of a page render with the inputs its score was
+// made from, so the order can be rebuilt later from the row alone. A count
+// that was unknown to the page is nil.
+type DecisionShown struct {
+	Rank          int      `json:"rank"`
+	PublicationID string   `json:"publication_id"`
+	Score         *float64 `json:"score,omitempty"`
+	Demoted       bool     `json:"demoted,omitempty"`
+	Importance    *float64 `json:"importance,omitempty"`
+	Promo         bool     `json:"promo,omitempty"`
+	SourceCount   *float64 `json:"source_count,omitempty"`
+	Words         *float64 `json:"words,omitempty"`
+	VersionCount  float64  `json:"version_count"`
+	UpdatedAt     string   `json:"updated_at"`
+	Section       string   `json:"section,omitempty"`
+	Title         string   `json:"title"`
 }
 
 // DecisionFilter selects rows to read.

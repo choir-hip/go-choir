@@ -205,6 +205,10 @@ func DefaultRegistry() *Registry {
 		// a recipient owner (contract 2 section 3.4, contract 3 section 5.2).
 		{Kind: "choir.oped_verdict", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.opedVerdictObject"},
 		{Kind: "choir.changelog_notice", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.changelogNoticeObject"},
+		// The decision record's page-render stage (R0): one append-only row per
+		// change of the front list's ranked order and inputs, written by corpusd,
+		// where the render has no computer.
+		{Kind: "choir.page_render_record", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "types.DecisionRecord"},
 		{Kind: "choir.public_route", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
 		{Kind: "choir.artifact_manifest", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
 		{Kind: "choir.artifact_blob", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},

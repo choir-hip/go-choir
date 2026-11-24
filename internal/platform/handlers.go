@@ -287,6 +287,12 @@ func (h *Handler) HandleInternalFrontStories(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list stories"})
 		return
 	}
+	// The render record is observation: hashed inline, written by a bounded
+	// background writer. A failure is logged and never fails or delays the
+	// page.
+	if _, err := h.service.RecordFrontRender(r.Context(), limit, r.URL.Query().Get("cursor"), r.URL.Query().Get("section"), page); err != nil {
+		log.Printf("corpusd: front render record not written: %v", err)
+	}
 	writeJSON(w, http.StatusOK, page)
 }
 

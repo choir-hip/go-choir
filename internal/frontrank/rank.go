@@ -1,4 +1,4 @@
-package maild
+package frontrank
 
 import (
 	"math"
@@ -8,11 +8,11 @@ import (
 	"unicode"
 )
 
-// FrontRow is one row of corpusd's internal front list
+// Row is one row of corpusd's internal front list
 // (/internal/platform/publications/front), as much of it as the daily digest
-// reads. The counts are float64 pointers because the page reads them as
+// and the front render record read. The counts are float64 pointers because the page reads them as
 // JavaScript numbers; a nil pointer is "unknown", as undefined is there.
-type FrontRow struct {
+type Row struct {
 	PublicationID  string   `json:"publication_id"`
 	Title          string   `json:"title"`
 	Dek            string   `json:"dek"`
@@ -51,9 +51,9 @@ const (
 	digestUnparsableUpdateMs = int64(math.MinInt64)
 )
 
-// updatedMs mirrors updatedMs in autopaper.ts: the update time in
+// UpdatedMs mirrors updatedMs in autopaper.ts: the update time in
 // milliseconds, or ok=false when it does not parse (the page's -Infinity).
-func (r FrontRow) updatedMs() (int64, bool) {
+func (r Row) UpdatedMs() (int64, bool) {
 	raw := strings.TrimSpace(r.UpdatedAt)
 	if raw == "" {
 		return digestUnparsableUpdateMs, false
@@ -68,7 +68,7 @@ func (r FrontRow) updatedMs() (int64, bool) {
 	return digestUnparsableUpdateMs, false
 }
 
-func (r FrontRow) importance() (float64, bool) {
+func (r Row) importance() (float64, bool) {
 	if r.Importance == nil {
 		return 0, false
 	}
@@ -79,7 +79,7 @@ func (r FrontRow) importance() (float64, bool) {
 	return n, true
 }
 
-func finiteCount(p *float64) (float64, bool) {
+func FiniteCount(p *float64) (float64, bool) {
 	if p == nil {
 		return 0, false
 	}
@@ -92,9 +92,9 @@ func finiteCount(p *float64) (float64, bool) {
 
 // depthFactor mirrors depthFactor: how much of the story's importance our
 // article earns, from its sources and length. 1 when unknown.
-func (r FrontRow) depthFactor() float64 {
+func (r Row) depthFactor() float64 {
 	factor := 1.0
-	if sources, ok := finiteCount(r.SourceCount); ok {
+	if sources, ok := FiniteCount(r.SourceCount); ok {
 		switch {
 		case sources <= 1:
 			factor *= 0.5
@@ -102,15 +102,15 @@ func (r FrontRow) depthFactor() float64 {
 			factor *= 0.75
 		}
 	}
-	if words, ok := finiteCount(r.Words); ok && words < digestThinWords {
+	if words, ok := FiniteCount(r.Words); ok && words < digestThinWords {
 		factor *= 0.8
 	}
 	return factor
 }
 
-// isDemoted mirrors isDemotedStory: promotional, or a leaked instruction
+// IsDemoted mirrors isDemotedStory: promotional, or a leaked instruction
 // ("Open a story on ...") used as a title.
-func (r FrontRow) isDemoted() bool {
+func (r Row) IsDemoted() bool {
 	if r.Promo {
 		return true
 	}
@@ -118,19 +118,19 @@ func (r FrontRow) isDemoted() bool {
 	return strings.HasPrefix(strings.ToLower(title), "open a story")
 }
 
-// canLead mirrors canLead: not demoted, and at least two sources (or depth
+// CanLead mirrors canLead: not demoted, and at least two sources (or depth
 // unknown).
-func (r FrontRow) canLead() bool {
-	if r.isDemoted() {
+func (r Row) CanLead() bool {
+	if r.IsDemoted() {
 		return false
 	}
-	sources, ok := finiteCount(r.SourceCount)
+	sources, ok := FiniteCount(r.SourceCount)
 	return !ok || sources >= digestLeadMinSources
 }
 
-// frontRowsUseImportance mirrors usesImportanceRank: at least half the rows
+// FrontRowsUseImportance mirrors usesImportanceRank: at least half the rows
 // carry a usable importance.
-func frontRowsUseImportance(rows []FrontRow) bool {
+func FrontRowsUseImportance(rows []Row) bool {
 	if len(rows) == 0 {
 		return false
 	}
@@ -143,11 +143,11 @@ func frontRowsUseImportance(rows []FrontRow) bool {
 	return scored*2 >= len(rows)
 }
 
-func frontEditionMs(rows []FrontRow) (int64, bool) {
+func frontEditionMs(rows []Row) (int64, bool) {
 	var newest int64
 	found := false
 	for _, r := range rows {
-		if ms, ok := r.updatedMs(); ok && (!found || ms > newest) {
+		if ms, ok := r.UpdatedMs(); ok && (!found || ms > newest) {
 			newest, found = ms, true
 		}
 	}
@@ -157,8 +157,8 @@ func frontEditionMs(rows []FrontRow) (int64, bool) {
 // recencyProminence mirrors frontProminence: recency plus a lift for versions
 // when the update is inside the fresh window of the edition. ok=false stands
 // for the page's -Infinity.
-func (r FrontRow) recencyProminence(edition int64, haveEdition bool) (float64, bool) {
-	updated, ok := r.updatedMs()
+func (r Row) recencyProminence(edition int64, haveEdition bool) (float64, bool) {
+	updated, ok := r.UpdatedMs()
 	if !ok {
 		return 0, false
 	}
@@ -174,8 +174,8 @@ func (r FrontRow) recencyProminence(edition int64, haveEdition bool) (float64, b
 }
 
 // importanceProminence mirrors importanceProminence without the section lift.
-func (r FrontRow) importanceProminence(edition int64, haveEdition bool) (float64, bool) {
-	updated, ok := r.updatedMs()
+func (r Row) importanceProminence(edition int64, haveEdition bool) (float64, bool) {
+	updated, ok := r.UpdatedMs()
 	if !ok {
 		return 0, false
 	}
@@ -191,42 +191,70 @@ func (r FrontRow) importanceProminence(edition int64, haveEdition bool) (float64
 }
 
 type rankedRow struct {
-	row     FrontRow
+	row     Row
 	demoted int
 	score   float64 // -Inf when the date does not parse
 	updated float64 // -Inf when the date does not parse
 }
 
-func sortKey(r FrontRow, score func(FrontRow) (float64, bool)) (float64, float64) {
+func sortKey(r Row, score func(Row) (float64, bool)) (float64, float64) {
 	s, ok := score(r)
 	if !ok {
 		s = math.Inf(-1)
 	}
 	u := math.Inf(-1)
-	if ms, ok := r.updatedMs(); ok {
+	if ms, ok := r.UpdatedMs(); ok {
 		u = float64(ms)
 	}
 	return s, u
 }
 
-// rankFrontRows is rankFrontStories: the rows in front-page order, most
-// prominent first. Pure and stable; the input is not modified.
-func rankFrontRows(rows []FrontRow) []FrontRow {
+// Scored is one row in front-page order with what put it there.
+type Scored struct {
+	Row Row
+	// Score is the prominence the order sorted by: the importance rank's
+	// (importance x depth x half-life decay) or, when fewer than half the
+	// rows carry an importance, the recency rank's. Known is false when the
+	// update time does not parse (the page's -Infinity).
+	Score float64
+	Known bool
+	// Demoted rows (promotional, a leaked instruction) sort behind the rest
+	// under the importance rank.
+	Demoted bool
+	// ByImportance says which of the two ranks ordered the list.
+	ByImportance bool
+}
+
+// Rank is rankFrontStories: the rows in front-page order, most prominent
+// first. Pure and stable; the input is not modified.
+func Rank(rows []Row) []Row {
+	scored := RankScored(rows)
+	out := make([]Row, len(scored))
+	for i, s := range scored {
+		out[i] = s.Row
+	}
+	return out
+}
+
+// RankScored is Rank with each row's score. The rule has no section lift:
+// the reader's section habit is per-device state, so the order a page shows
+// a given reader can differ from this one by that lift.
+func RankScored(rows []Row) []Scored {
 	if len(rows) == 0 {
-		return []FrontRow{}
+		return []Scored{}
 	}
 	edition, haveEdition := frontEditionMs(rows)
-	byImportance := frontRowsUseImportance(rows)
+	byImportance := FrontRowsUseImportance(rows)
 	ranked := make([]rankedRow, len(rows))
 	for i, r := range rows {
-		score, updated := sortKey(r, func(r FrontRow) (float64, bool) {
+		score, updated := sortKey(r, func(r Row) (float64, bool) {
 			if byImportance {
 				return r.importanceProminence(edition, haveEdition)
 			}
 			return r.recencyProminence(edition, haveEdition)
 		})
 		demoted := 0
-		if byImportance && r.isDemoted() {
+		if byImportance && r.IsDemoted() {
 			demoted = 1
 		}
 		ranked[i] = rankedRow{row: r, demoted: demoted, score: score, updated: updated}
@@ -244,15 +272,15 @@ func rankFrontRows(rows []FrontRow) []FrontRow {
 		}
 		return a.row.PublicationID < b.row.PublicationID
 	})
-	out := make([]FrontRow, len(ranked))
+	out := make([]Scored, len(ranked))
 	for i, r := range ranked {
-		out[i] = r.row
+		out[i] = Scored{Row: r.row, Score: r.score, Known: !math.IsInf(r.score, -1), Demoted: r.demoted == 1, ByImportance: byImportance}
 	}
 	if byImportance {
 		// The lead is the first story that may lead; the stories it passes
 		// keep their order behind it. With none eligible the order stands.
 		for i, r := range out {
-			if r.canLead() {
+			if r.Row.CanLead() {
 				if i > 0 {
 					lead := out[i]
 					copy(out[1:i+1], out[0:i])

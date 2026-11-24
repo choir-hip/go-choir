@@ -16,7 +16,7 @@ Nothing on the server computes it; corpusd returns rows newest first. A mail
 built on the server must pick "the stories that matter" and today has no rule
 to call.
 
-Phase 1 mirrors the rule in Go (`internal/maild/digest_rank.go`) and holds the
+Phase 1 mirrors the rule in Go (`internal/frontrank/rank.go`) and holds the
 two copies together with a parity test that ranks one JSON fixture with the
 TypeScript function (node) and the Go function and requires the same order.
 This is a heresy I introduce knowingly: two copies of one rule. The substrate

@@ -2,7 +2,7 @@
 // (frontend/src/lib/autopaper.ts) and prints { caseName: [publication_id...] }
 // as JSON. The Go parity test for the Autopaper daily digest
 // (internal/maild/digest_rank_test.go) runs this under node and compares the
-// order with the Go mirror (internal/maild/digest_rank.go), so the two copies
+// order with the Go mirror (internal/frontrank/rank.go), so the two copies
 // of the rank cannot drift apart unnoticed.
 //
 // Usage: node frontend/scripts/rank-front-fixture.mjs <fixture.json>

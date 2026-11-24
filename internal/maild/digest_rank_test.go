@@ -2,7 +2,7 @@ package maild
 
 // Failure modes this file guards (docs/reports/autopaper-daily-digest-design-
 // 2026-10-20.md section 8; docs/problems/autopaper-daily-digest-phase1-2026-
-// 10-20.md). Written before digest_rank.go.
+// 10-20.md). Written before the rank (now internal/frontrank/rank.go).
 //
 //	M13 The Go copy of the front-page rank drifts from the TypeScript the page
 //	    runs (frontend/src/lib/autopaper.ts rankFrontStories). The digest would

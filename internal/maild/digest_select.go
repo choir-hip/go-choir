@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/frontrank"
 )
 
 // The digest's story selection (design section 4.3): a pure function over the
@@ -71,7 +73,7 @@ func digestSlug(bare string) string {
 //  5. Fewer than 3 selected: nothing is sent.
 func selectDigest(rows []FrontRow, now time.Time, sent map[string]int) digestSelection {
 	sel := digestSelection{RankedBy: "recency"}
-	if frontRowsUseImportance(rows) {
+	if frontrank.FrontRowsUseImportance(rows) {
 		sel.RankedBy = "importance"
 	}
 	cutoff := now.Add(-digestCandidateWindow)
@@ -80,7 +82,7 @@ func selectDigest(rows []FrontRow, now time.Time, sent map[string]int) digestSel
 		if len(sel.Stories) >= digestMaxStories {
 			break
 		}
-		updatedMs, ok := row.updatedMs()
+		updatedMs, ok := row.UpdatedMs()
 		if !ok {
 			continue
 		}
@@ -88,7 +90,7 @@ func selectDigest(rows []FrontRow, now time.Time, sent map[string]int) digestSel
 		if updated.Before(cutoff) {
 			continue
 		}
-		if !row.canLead() {
+		if !row.CanLead() {
 			continue
 		}
 		slug := digestSlug(row.Route.Bare)
@@ -110,7 +112,7 @@ func selectDigest(rows []FrontRow, now time.Time, sent map[string]int) digestSel
 		}
 		perSection[section]++
 		var sources *int
-		if n, ok := finiteCount(row.SourceCount); ok {
+		if n, ok := frontrank.FiniteCount(row.SourceCount); ok {
 			v := int(n)
 			sources = &v
 		}

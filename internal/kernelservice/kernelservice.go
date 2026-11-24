@@ -109,7 +109,7 @@ var builtin = []Manifest{
 		"choir.package_force_request",
 		// The courier copy of the paper's op-ed verdict and the changelog
 		// notices corpusd derives at publish (autopaper contracts 2 and 3).
-		"choir.oped_verdict", "choir.changelog_notice",
+		"choir.oped_verdict", "choir.changelog_notice", "choir.page_render_record",
 	}},
 	{Name: Store, OwnedKinds: []string{"choir.stream_seq_lease"}},
 	{Name: OwnerFiles, OwnedKinds: []string{"choir.file", "choir.file_path"}},
