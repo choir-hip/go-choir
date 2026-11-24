@@ -91,9 +91,13 @@ async function load(section: string, storage: Storage | undefined): Promise<List
 export function pickList(joined: string): string[] { return joined.split('\n').map((s) => s.trim()).filter((s) => s !== ''); }
 
 /** The paper's front for one view. `stories` is the front list (newest first, as the server sends it). */
+let composes = 0;
+/** How many times a page has been composed (tests count them: a first open composes once). */
+export const composeCount = (): number => composes;
 export function composeFront(stories: Story[], o: {
   view: string; picks: string[]; category: Story[] | null; live: LiveSection[]; width: number; now: number | null; status: string; message: string;
 }): PaperFront {
+  composes += 1;
   const newest = (xs: Story[]): number | null => xs.reduce<number | null>((m, s) => (s.updated !== null && (m === null || s.updated > m) ? s.updated : m), null);
   const at = o.now ?? newest(stories) ?? 0;
   const secs = sections(o.live, stories);
@@ -124,28 +128,36 @@ export function composeFront(stories: Story[], o: {
   };
 }
 
+// The page asks again as each of its arguments settles (the width the page reports, the focus when the deck catches up, the picks a moment after): what the answer is built from is the list, the view, the width and,
+// for My edition only, the picks and the focus. The last composition is kept with the key it was built from, so an ask that changes nothing the page is built from answers the same page without composing it again.
+let composed: { key: string; r: Listing; c: Listing | null; out: PaperFront } | null = null;
+
 export async function paperFront(a: PaperArgs, storage?: Storage): Promise<PaperFront> {
   const view = a.view === '' ? FRONT : a.view;
-  const width = a.width >= 200 ? a.width : 393;
-  if (a.tick !== lastTick) { kept.clear(); lastTick = a.tick; }
+  if (a.tick !== lastTick) { kept.clear(); lastTick = a.tick; composed = null; }
+  const width = a.width >= 200 ? a.width : 393;                              // no width reported yet: the reading order the article stack and the radio's public list need does not wait for the page to be laid out
   const picks = view === MINE ? pickList(a.picks) : [];
   const r = await listing('', storage);
-  let category: Story[] | null = null;
+  let category: Story[] | null = null; let c: Listing | null = null;
   if (isCategory(view)) {
     const secs = sections(r.sections, r.stories);
     const id = resolveView(view, secs)?.id ?? view;
-    const c = await listing(id, storage);
+    c = await listing(id, storage);
     if (c.status === 'ready') category = c.stories;
   }
-  return composeFront(r.stories, { view, picks, category, live: r.sections, width, now: r.serverTime, status: r.status, message: r.message });
+  const key = [view, width, view === MINE ? picks.join('\n') + '|' + a.focus : ''].join('|');
+  if (composed && composed.key === key && composed.r === r && composed.c === c) return composed.out;
+  const out = composeFront(r.stories, { view, picks, category, live: r.sections, width, now: r.serverTime, status: r.status, message: r.message });
+  composed = { key, r, c, out };
+  return out;
 }
 
 /** Forget the kept lists (tests). */
-export function forget(): void { kept.clear(); lastTick = 0; }
+export function forget(): void { kept.clear(); lastTick = 0; composed = null; }
 
 /** Sign-out (account.ts): the cached front list on disk and what this session holds. Never throws. */
 export async function wipePaper(storage: Storage | undefined): Promise<void> {
-  kept.clear(); lastTick = 0;
+  kept.clear(); lastTick = 0; composed = null;
   if (!storage) return;
   try { await storage.fs.rm(CACHE_FILE); } catch { /* absent */ }
 }

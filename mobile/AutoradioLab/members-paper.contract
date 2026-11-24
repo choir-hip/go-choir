@@ -15,8 +15,10 @@ members Autoradio
   resource epicks = editionPicks(paperFocus, signedOutTick) as shape EditionPicks else empty()
   // Arguments are positional (named ones belong to a package's sources): view, width, tick, focus, picks.
   // `paperFront` is not a package name: it is answered by app.ts (paper.ts). The page reads the list from the server, keeps the last good one for an offline start,
-  // and composes the bands for the width the page reports.
-  resource pfront = paperFront(paperView, paperWidth, paperTick, paperFocus, epicks.picks) as shape PaperFront else empty()
+  // and composes the bands for the width the page reports. It is asked once its arguments have settled (first-open lane): the focus and the picks are arguments only
+  // for My edition, which is built from them (every other view passes them empty, so the deck catching up with the page or the picks arriving a moment later asks nothing),
+  // and the width is the viewport's until the page has reported its own (so the first composition is at the width the page will have, and the page's report changes nothing when they agree).
+  resource pfront = paperFront(paperView, paperWidth > 0 ? paperWidth : vp.width, paperTick, paperView == "mine" ? paperFocus : "", paperView == "mine" ? epicks.picks : "") as shape PaperFront else empty()
   derive paperLoading = pending(pfront)
   action paperReload
     paperTick = paperTick + 1
