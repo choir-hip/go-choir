@@ -46,6 +46,9 @@ path mobile/AutoradioKit/Sources/autoradio-replay/ the Mac command that replays 
 path mobile/AutoradioKit/Sources/AutoradioKit/Configurator.swift picks one on-device model per voice role for this device
 path mobile/AutoradioKit/Sources/AutoradioKit/ModelCandidates.swift the on-device model candidate table
 path mobile/AutoradioKit/Sources/AutoradioKit/ModelStore.swift on-device model weights, listed and unloaded
+path mobile/AutoradioKit/Sources/AutoradioKit/DownloadDoor.swift the one door every model download goes through: model loading's transport (URLSession configuration, the library paths), consent read from shared code's record
+path mobile/AutoradioKit/Sources/AutoradioKit/ModelOffer.swift what the model list offers this phone, from the on-device list and the device's memory (model loading); shared code shows and chooses
+path mobile/AutoradioKit/Sources/AutoradioKit/TurnGate.swift whether the voice turn engine may commit a turn: no key, or a screen listening for its own check
 path mobile/AutoradioKit/Sources/AutoradioKit/KnownModels.swift the catalog of on-device models
 path mobile/AutoradioKit/Sources/AutoradioKit/ExternalModels.swift the registrar through which the app module supplies model stages
 path mobile/AutoradioKit/Sources/AutoradioKit/LiveConfigBackend.swift the configurator's backend on a real device

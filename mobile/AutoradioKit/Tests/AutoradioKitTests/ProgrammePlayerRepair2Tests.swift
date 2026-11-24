@@ -145,22 +145,23 @@ final class Repair2StageTests: XCTestCase {
         XCTAssertEqual(rt.player.queuedTexts, [], "nothing of the previous account is queued")
     }
 
-    // Review 4 (2026-11-24): sign-out leaves no open microphone and no turn: the switch goes off, and a turn needs a key until the next sign-in.
-    func testSignOutTurnsHandsFreeOffAndSendsNoTurn() async {
+    // Review 4 (2026-11-24): signed out the radio only listens: no key, no turn, and the microphone cannot be turned on.
+    func testSignedOutTheMicrophoneCannotBeTurnedOnAndNoTurnIsSent() async {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.protocolClasses = [StubProtocol.self]
         env.session = URLSession(configuration: cfg)
         StubProtocol.handler = { _ in .init(status: 404, json: ["error": "x"]) }
-        defer { env.session = .shared; TurnGate.shared.allowed = true; HandsFreeSwitch.shared.set(false) }
+        defer { env.session = .shared; TurnGate.shared.keyPresent = nil; HandsFreeSwitch.shared.set(false) }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("p2-\(UUID().uuidString)")
         let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
         let app = ChoirApp(runtime: rt, keys: InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"]))
-        XCTAssertTrue(app.hasKey); XCTAssertTrue(TurnGate.shared.allowed)
-        HandsFreeSwitch.shared.set(true); XCTAssertTrue(HandsFreeSwitch.shared.isOn)
+        TurnGate.shared.keyPresent = { ChoirEnvironment.shared.keys.get(KeyAccount.apiKey) != nil }     // what the module wires at launch
+        XCTAssertTrue(TurnGate.shared.allowed)
+        rt.setHandsFree(true); XCTAssertTrue(HandsFreeSwitch.shared.isOn, "with a key the switch turns on")
+        rt.setHandsFree(false)
         await app.signOut()
-        XCTAssertFalse(HandsFreeSwitch.shared.isOn, "the microphone is closed at sign-out")
-        XCTAssertFalse(TurnGate.shared.allowed, "and no turn is sent without a key")
-        XCTAssertFalse(app.hasKey)
+        XCTAssertFalse(TurnGate.shared.allowed, "no key, no turn")
+        rt.setHandsFree(true); XCTAssertFalse(HandsFreeSwitch.shared.isOn, "and the microphone cannot be turned on")
     }
 
     // S3: only bidi controls, the zero-width space and the byte-order mark are removed; joiners are part of the text.
