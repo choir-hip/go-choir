@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -346,5 +347,66 @@ func TestResetNeverSendsTheTokenToAnotherPortOrThroughARedirect(t *testing.T) {
 	// 3: an unreadable token file for vmctl's port fails before anything is sent.
 	if code := run([]string{"reset", "--id-file", idFile, "--auth-db", dbPath, "--vmctl", redirecting.URL, "--token-file", filepath.Join(dir, "nope")}, &so, &se, redirecting.Client()); code == 0 || !strings.Contains(se.String(), "token") {
 		t.Fatalf("an unreadable token file must be named: %q", se.String())
+	}
+}
+
+// D1: the constant the command removes must be the path nix gives the auth service.
+func TestTheCredentialPathIsTheOneNixConfiguresForAuth(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "nix", "node-b.nix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(raw)
+	dir := regexp.MustCompile(`(?m)^\s*authSigningDir\s*=\s*"([^"]+)";`).FindStringSubmatch(src)
+	set := regexp.MustCompile(`"AUTH_DEMO_CREDENTIAL_FILE=([^"]+)"`).FindStringSubmatch(src)
+	if dir == nil || set == nil {
+		t.Fatal("nix/node-b.nix no longer sets AUTH_DEMO_CREDENTIAL_FILE from authSigningDir; update this test with it")
+	}
+	got := strings.ReplaceAll(set[1], "${authSigningDir}", dir[1])
+	if strings.Contains(got, "${") {
+		t.Fatalf("the nix value %q uses a variable this test does not resolve", set[1])
+	}
+	if defaultCredentialPath != got {
+		t.Fatalf("demo-account off removes %s but nix configures auth to read %s", defaultCredentialPath, got)
+	}
+}
+
+// D2: the stale old-path file is checked before it is removed, and a failed unlink is not success.
+func TestOffChecksTheStaleFileAndReportsAFailedUnlink(t *testing.T) {
+	dir, dbPath, idFile := seed(t)
+	var so, se bytes.Buffer
+	cred := filepath.Join(dir, "demo", "demo-credential")
+	_ = os.MkdirAll(filepath.Dir(cred), 0o700)
+	configured(t, cred)
+	// Not a credential at the stale path: kept, loud, non-zero (the real one is already off).
+	stale := filepath.Join(dir, "stale-credential")
+	staleCredentialPath = stale
+	t.Cleanup(func() { staleCredentialPath = "" })
+	run([]string{"credential", "--user", "reviewer", "--out", cred}, &so, &se, nil)
+	_ = os.WriteFile(stale, []byte("something else\n"), 0o600)
+	if code := run([]string{"off", "--id-file", idFile, "--credential", cred, "--auth-db", dbPath}, &so, &se, nil); code == 0 {
+		t.Fatal("off exited 0 with a non-credential at the stale path")
+	}
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatal("a file that is not a credential was removed")
+	}
+	// A real stale credential that cannot be unlinked: non-zero.
+	if os.Geteuid() == 0 {
+		t.Skip("root can unlink anything")
+	}
+	locked := filepath.Join(dir, "locked")
+	_ = os.MkdirAll(locked, 0o700)
+	stale2 := filepath.Join(locked, "old")
+	staleCredentialPath = stale2
+	run([]string{"credential", "--user", "reviewer", "--out", cred}, &so, &se, nil)
+	run([]string{"credential", "--user", "reviewer", "--out", stale2}, &so, &se, nil)
+	_ = os.Chmod(locked, 0o500)
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+	se.Reset()
+	if code := run([]string{"off", "--id-file", idFile, "--credential", cred, "--auth-db", dbPath}, &so, &se, nil); code == 0 {
+		t.Fatal("off exited 0 although the stale credential could not be removed")
+	}
+	if !strings.Contains(se.String(), "stale") {
+		t.Fatalf("the failure must name the stale file: %q", se.String())
 	}
 }

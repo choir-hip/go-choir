@@ -530,3 +530,19 @@ func TestACollectionAfterOffMintsNoKey(t *testing.T) {
 		t.Fatal("a live key exists for the off account")
 	}
 }
+
+// D3: the compensating delete of an approval that raced off must not fail quietly.
+func TestADeviceApprovalThatCannotBeTakenBackFailsLoudly(t *testing.T) {
+	h, priv, u, file := demoDeviceEnv(t)
+	b := deviceBegin(t, h, "laptop", "203.0.113.9")
+	h.demoMintHook = func() {
+		_ = os.Remove(file)
+		if _, err := h.store.DB().Exec(`CREATE TRIGGER no_device_delete BEFORE DELETE ON device_authorizations BEGIN SELECT RAISE(ABORT, 'locked'); END`); err != nil {
+			t.Error(err)
+		}
+	}
+	rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve", map[string]string{"user_code": b.UserCode, "decision": "approve"}, priv, u.ID))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("an approval that could not be taken back must answer 500, got %d %s", rec.Code, rec.Body)
+	}
+}

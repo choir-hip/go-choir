@@ -438,7 +438,13 @@ func (h *Handler) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 	// The reviewer account turned off while this approval was in flight (the row had no
 	// user until now, so off's delete missed it): take the decision back.
 	if req.Decision == "approve" && h.demoOff(user.ID) {
-		_, _ = h.store.DB().ExecContext(r.Context(), "DELETE FROM device_authorizations WHERE id = ?", a.ID)
+		if _, err := h.store.DB().ExecContext(r.Context(), "DELETE FROM device_authorizations WHERE id = ?", a.ID); err != nil {
+			// The row stays approved; collection refuses it while the account is off, but this
+			// must not look like a clean refusal.
+			log.Printf("[auth] operation=device_decide user_id=%s id=%s result=error step=take_back_after_off error=%q", user.ID, a.ID, err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to take the decision back"})
+			return
+		}
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: ErrAccountOff.Error()})
 		return
 	}

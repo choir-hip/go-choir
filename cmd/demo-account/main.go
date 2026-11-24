@@ -58,7 +58,9 @@ var tokenPorts = map[string]bool{"8083": true}
 var offSettle = 2 * time.Second
 
 // credentialPath is the file the auth service reads (nix/node-b.nix AUTH_DEMO_CREDENTIAL_FILE).
-var credentialPath = "/var/lib/go-choir/auth-signing/demo/demo-credential"
+const defaultCredentialPath = "/var/lib/go-choir/auth-signing/demo/demo-credential"
+
+var credentialPath = defaultCredentialPath
 
 // staleCredentialPath is where it lived before the move into demo/.
 var staleCredentialPath = "/var/lib/go-choir/auth-signing/demo-credential"
@@ -158,13 +160,6 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 			fmt.Fprintln(stderr, "off: the credential file is still there after the remove")
 			return 1
 		}
-		// A copy at the path used before the move is not read by the service, but it must not
-		// sit there to be put back by mistake.
-		if staleCredentialPath != "" && filepath.Clean(staleCredentialPath) != filepath.Clean(credentialPath) {
-			if err := os.Remove(staleCredentialPath); err == nil {
-				fmt.Fprintln(stdout, "removed a stale credential file at the old path", staleCredentialPath)
-			}
-		}
 		fmt.Fprintln(stdout, "credential file removed: the reviewer sign-in answers not available")
 		keys, sessions, err := revokeAll(*authDB, id)
 		if err != nil {
@@ -179,6 +174,26 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 			return 1
 		}
 		fmt.Fprintf(stdout, "revoked %d keys and %d sessions; pending grants deleted; keys and sessions proved gone twice\n", keys, sessions)
+		// A copy at the path used before the move is not read by the service, but it must not
+		// sit there to be put back by mistake. It is removed only if it is a credential, and a
+		// failure is not success: the account is off by now, the exit says the rest is not.
+		if staleCredentialPath != "" && filepath.Clean(staleCredentialPath) != filepath.Clean(credentialPath) {
+			switch data, err := os.ReadFile(staleCredentialPath); {
+			case os.IsNotExist(err):
+			case err != nil:
+				fmt.Fprintln(stderr, "off: the account is off, but the stale credential path cannot be read:", staleCredentialPath, err)
+				return 1
+			case !auth.ValidDemoCredential(data):
+				fmt.Fprintln(stderr, "off: the account is off, but the file at the stale credential path is not a credential and was left:", staleCredentialPath)
+				return 1
+			default:
+				if err := os.Remove(staleCredentialPath); err != nil {
+					fmt.Fprintln(stderr, "off: the account is off, but the stale credential file could not be removed:", staleCredentialPath, err)
+					return 1
+				}
+				fmt.Fprintln(stdout, "removed a stale credential file at the old path", staleCredentialPath)
+			}
+		}
 		return 0
 	case "reset":
 		if *idFile == "" {
