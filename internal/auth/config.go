@@ -63,7 +63,7 @@ type Config struct {
 	RegistrationCap int
 
 	// OperatorSecret (the contents of AUTH_OPERATOR_SECRET_FILE) is what
-	// the operator's own tools (CI, drills, scripts/test-computer-create) send
+	// the operator's own tools (CI, drills, the test-computer script) send
 	// in OperatorHeader so that the account they register is marked an
 	// operator account: it is not counted against RegistrationCap and gets
 	// the operator's computer size. Nothing a stranger can type stands in for

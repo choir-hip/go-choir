@@ -110,7 +110,7 @@ func TestNewAccountShapeNeverExceedsTheHostSetting(t *testing.T) {
 
 // The small shape is for strangers. The owner's paid always-on computer, the
 // operator proof computer, a test computer and an operator-marked account's
-// computer (scripts/test-computer-create) keep the interactive size when
+// computer (the test-computer script) keep the interactive size when
 // their ownership is created afresh (review of 2026-11-24, S3 and S4): a
 // 2 GiB computer cannot run an engineering capsule.
 func TestOwnerProofAndOperatorComputersAreNotMadeSmall(t *testing.T) {
