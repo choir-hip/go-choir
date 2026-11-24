@@ -20,12 +20,13 @@ members Autoradio
     gate = ""
   action gateSignIn
     gate = ""
-    send signedRun = signInRun()
+    send signedRun = signInRun("signin", "", "")
     sivTick = sivTick + 1
-  // Until the native passkey lane's create-account screen exists this is the same press as Sign in; that lane replaces this action's body.
+  // Make an account: the create-account screen (account.contract: the email, the consent line, the mailed code, then the passkey screen) opens, as it does from the card and Settings.
   action gateMakeAccount
     gate = ""
-    send signedRun = signInRun()
+    authOpen = true
+    send signedOpen = signInOpen()
     sivTick = sivTick + 1
 
   // The model downloads (downloads.ts): asked again when the voice side's facts change (ovoice) or an agreement is recorded; each press is one group's agreement and start.
