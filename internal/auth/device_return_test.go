@@ -297,8 +297,11 @@ func TestDeviceReturnSchemesAreTheAppsInAppJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{m.App.ID}
-	for _, v := range m.Variants {
+	for name, v := range m.Variants {
 		want = append(want, m.App.ID+v.IDSuffix)
+		if got := v.Env["APP_ID"]; got != m.App.ID+v.IDSuffix {
+			t.Fatalf("variant %s: env APP_ID %q, want %q", name, got, m.App.ID+v.IDSuffix)
+		}
 	}
 	sort.Strings(want)
 	got := append([]string(nil), DeviceReturnSchemes...)
