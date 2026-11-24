@@ -111,7 +111,7 @@ After Not now, nothing is asked again until the listener tries the same thing.
 
 ## 5. Account deletion confirmation
 
-Reached from Settings, Account, Delete account (or from choir.news).
+**Built 2026-11-24 (not deployed), with the owner's rulings of 2026-11-23 settling the decisions below:** the words in the app (`mobile/AutoradioLab/settings.contract`, `DeleteScreen`) and on the web (`frontend/src/lib/DeleteAccountRoute.svelte`) are what the build says, and they differ from this draft: published stories stay with the author detached; access ends at once and the removal takes 72 hours, which signing in cancels; a receipt and server logs stay. The sentence about the final screen is `SCHEDULED` in `account-delete.ts`, which says "scheduled for deletion", not "deleted". Edit this section to match the built words before the store texts quote it.
 
 Screen title:
 

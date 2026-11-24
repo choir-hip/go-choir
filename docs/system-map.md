@@ -127,6 +127,12 @@ hibernates up to 3 idle computers.
 Key paths: `internal/vmctl/`, `internal/vmmanager/`, `internal/proxy/`,
 `internal/auth/`, `nix/node-b.nix`, `.github/scripts/node-b-ci-deploy`.
 
+Account deletion (built on `lane/account-delete`, not deployed, 2026-11-24): the
+auth service holds a `account_deletions` record per account that asked, and a
+loop in the auth process (`internal/accountpurge`) holds its computer stopped
+and, after 72 hours, purges through vmctl, corpusd, maild and the gateway. Read
+`docs/changes.md` (2026-11-24) before saying what a deleted account leaves.
+
 Numbers: ring-walk history has 380 walks started, 292 complete, 2 rolled
 back; 294 `expedited` events (77%) [1]. 267 files in `deploy-failures/`,
 unclassified [1]. Node B disk: 160 G free of 476 G (66% used) on 11-23 [1].

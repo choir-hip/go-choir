@@ -110,6 +110,10 @@ commits' `Security-Effect` text says the length is 3 to 60 s; publish already
 stored the header's 2.5 to 62.0 s, and the third commit's wording is the
 statement that counts.
 
+## While the publisher's account deletion is pending
+
+A take of an account that asked to be deleted moves from `live` to `suspended` (`SetAccountTakesState`, corpusd `POST /internal/platform/account/suspend`), re-asserted by the purge runner every minute, so no read serves it (every read lists or serves only `live` takes). A cancelled deletion puts the state back; the transcript and audio are untouched in between. After 72 hours the purge deletes it as the publisher's own delete does (`deleted`, audio object gone, transcript blanked) and the row stays. See `docs/design/account-create-delete-2026-11-23.md` and `docs/changes.md` 2026-11-24.
+
 ## After a delete or a yank
 
 The take row stays, with its id, handle, times, size, hash and state

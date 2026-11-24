@@ -31,6 +31,10 @@ Part of [EXACT.md](../EXACT.md). Read against the pinned checkout `f53347503` (`
 - Android (`packages/passkeys/android/Passkeys.kt`) exists and takes `assetlinks.json` and the app's certificate fingerprints. **Not wired for Autoradio**: the server accepts no `android:apk-key-hash:`
   origin yet, so the app offers no sign-in on `exactPage().platform == 'android'` (`passkeySupport`) and says so; the shared sign-in code needs no other change once the origin is accepted [unrun].
 
+## A fresh assertion for account deletion
+
+Deletion uses the same `credentials.get` with options from `POST /auth/account/delete/begin` (sent with the app's key; the options name this account's credentials and require user verification, unlike sign-in's discoverable request). The answer goes unchanged to `/auth/account/delete/finish`. `account-delete.ts` owns the run; it never keeps the assertion and logs no body. A cancelled sheet leaves everything as it was; only a 200 from finish signs the phone out and wipes it. [unrun on a device]
+
 ## The secret store (where the app's key lives)
 
 - A data module grants `secret.keep <name>` and uses `store.set(name, value)`, `store.get(name)` (a string or `null`) and `store.forget(name)` inside an answer (`docs/contract-for-agents.md:1533-1545`) [doc].
