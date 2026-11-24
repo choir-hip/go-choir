@@ -118,9 +118,9 @@ members Autoradio
       send up = choirHandsFreeToggle()
     if micOn == false and askGate != ""
       gate = askGate
-    // Signed in but the hearing models are not on the phone: voice is offered as ready only once they are (owner, 2026-11-23), so the Downloads page opens with the files, their sizes and the one press; the microphone is not asked.
+    // Signed in but the hearing models are not on the phone: voice is offered as ready only once they are (owner, 2026-11-23), so Voice and models opens with every model, its size and its Download; the microphone is not asked.
     if micOn == false and askGate == "" and dl.hearingReady == false
-      send pms = pagesOpen("settings:downloads", "Downloads")
+      send pms = pagesOpen("settings:voice", "Voice and models")
       layer = ""
     if micOn == false and askGate == "" and dl.hearingReady and micperm.gate != ""
       micFor = "voice"

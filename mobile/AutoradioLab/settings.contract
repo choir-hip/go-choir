@@ -2,8 +2,7 @@
 //   settings:root (or settings:)  the list, with the theme picker and light/dark/system inline
 //   settings:appearance           themes as preview cards, light/dark/system, a theme from a Texture, the type and depth specimens
 //   settings:account              who am I, the device's key label, sign out
-//   settings:voice                voice and models: Components, and the voice setup card (lane 8)
-//   settings:downloads            the model files voice needs, with sizes, the host and one press each (downloads.ts)
+//   settings:voice                voice and models: every model of every job, each downloaded, used, tested and removed from its own row (models.ts), and the voice cards
 //   settings:computer             status, Wake, Restart to update
 //   settings:learned              what the paper has learned, with Reset
 //   settings:about                app and server builds (commit rows: about.ts)
@@ -18,7 +17,7 @@ use SettingsAccount, AboutBuild, SettingsComputer, AboutInfo from "./settings-ty
 use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
-use DownloadCard from "./downloads.contract"
+use ModelsSection from "./models.contract"
 use LearnCard from "./learn.contract"
 use SkeletonLine from "./transitions.contract"
 
@@ -34,8 +33,6 @@ component SettingsPage
       AccountScreen()
     if screen == "voice"
       VoiceScreen()
-    if screen == "downloads"
-      DownloadsScreen()
     if screen == "voiceprint"
       VoiceprintScreen()
     if screen == "computer"
@@ -44,7 +41,7 @@ component SettingsPage
       LearnedScreen()
     if screen == "about"
       AboutScreen()
-    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "downloads" and screen != "voiceprint" and screen != "computer" and screen != "learned" and screen != "about"
+    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "voiceprint" and screen != "computer" and screen != "learned" and screen != "about"
       RootScreen()
 
 // ---------------------------------------------------------------- shared pieces
@@ -234,9 +231,7 @@ component RootScreen
       PlainList(testId="settings-card-listening")
         NavRow(address="onboarding:setup", title="Voice setup", subtitle="Download the voice models and check the microphone", testId="settings-setup-voice")
         Hairline()
-        NavRow(address="settings:downloads", title="Downloads", subtitle="The voice and search files, with their sizes", testId="settings-nav-downloads")
-        Hairline()
-        NavRow(address="settings:voice", title="Voice and models", subtitle="The voice, and the models that hear you", testId="settings-nav-voice")
+        NavRow(address="settings:voice", title="Voice and models", subtitle="Every model: its size, download, test and removal", testId="settings-nav-voice")
         Hairline()
         // Lane autoradio-talk: the reader's voice, learned on this phone so the radio can tell you from a TV.
         column width="100%" box-sizing="border-box" padding="14px 16px" gap=8 align-items="flex-start" testId="settings-my-voice"
@@ -376,25 +371,24 @@ component VoiceScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Voice and models", back=true)
-      text "The voice that reads the paper, and the models that hear you, run on this phone." font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      text "Every model the radio can use, on this phone. Each row says what it is, its size and who made it. A model is fetched only when you press Download on its row; then you can try it with Test, make it the one in use, or remove it." testId="settings-voice-note" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      ModelsSection(section="transcriber")
+      Hairline()
+      ModelsSection(section="live")
+      Hairline()
+      ModelsSection(section="bounds")
+      Hairline()
+      ModelsSection(section="voice")
+      SectionLabel(label="The voices")
       VoiceCardsList()
-      text "Voice setup, with the model downloads and the checks for this device, opens from here once first run has it." testId="settings-voice-note" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-
-// ---------------------------------------------------------------- downloads
-
-component DownloadsScreen
-  inject
-    th: Theme
-    tx: ThemeExtras
-  view
-    ToolScroll(id="settings")
-      ScreenTitle(label="Downloads", back=true)
-      text "Voice needs these files on the phone. Choose a model for each job, or keep the one recommended for this phone. Each group is fetched only when you press its button, and the sizes are the real files." testId="settings-downloads-note" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
-      DownloadCard(group="voice")
       Hairline()
-      DownloadCard(group="voice-rest")
+      ModelsSection(section="responder")
       Hairline()
-      DownloadCard(group="search")
+      ModelsSection(section="decision")
+      Hairline()
+      ModelsSection(section="speaker")
+      Hairline()
+      ModelsSection(section="search")
 
 // ---------------------------------------------------------------- your voice
 

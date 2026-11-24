@@ -266,6 +266,10 @@ public protocol ModelProvider: Sendable {
     func measureConfiguration(_ picks: [String: String], rounds: Int) async throws -> ConfigMeasurement
 }
 public extension ModelProvider {
+    /// The Test button on a model's row (ModelTrial): what only the model itself can do. A build that links no model libraries says so.
+    func transcribe(_ id: String, _ audio: [Float]) async throws -> String { throw LabError.unavailable(ModelProviders.missingNote) }
+    func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) { throw LabError.unavailable(ModelProviders.missingNote) }
+    func answer(_ id: String, job: String, prompt: String) async throws -> String { throw LabError.unavailable(ModelProviders.missingNote) }
     func unload(_ id: String, role: String) async {}
     func measureConfiguration(_ picks: [String: String], rounds: Int) async throws -> ConfigMeasurement { throw LabError.unavailable(ModelProviders.missingNote) }
 }

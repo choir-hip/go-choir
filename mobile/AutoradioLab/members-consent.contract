@@ -1,7 +1,7 @@
 // Lane members file (consent, lane onboard-consent): the model-download agreement (consent.ts) and the sheet in front of an ask. Signed out, an ask opens "Sign in to ask the radio"; signed in, it is sent.
 // Turning the voice ON is an ask (the microphone is requested only then, and only signed in); turning it off, and every transport word, never are. There is no consent screen before the radio answers (owner, 2026-11-23).
 use ConsentView from "./consent-types.contract"
-use DownloadsView from "./downloads-types.contract"
+use ModelsView from "./models-types.contract"
 use MicPerm from "./consent-types.contract"
 
 members Autoradio
@@ -32,16 +32,16 @@ members Autoradio
     send signedOpen = signInOpen()
     sivTick = sivTick + 1
 
-  // The model downloads (downloads.ts): asked again when the voice side's facts change (ovoice) or an agreement is recorded; each press is one group's agreement and start.
-  resource dl = downloadsPage(ovoice, cons.rev) as shape DownloadsView else empty(groups=[], rev=0, voiceReady=false, hearingReady=false, setupTotal="", voiceNote="")
-  mutation dlm as shape DownloadsView refreshes dl
-  action dlStart(group: string)
-    send dlm = downloadsAct("start", group, ovoice, "")
-  action dlStartMobile(group: string)
-    send dlm = downloadsAct("startMobile", group, ovoice, "")
-  // The person chooses one option for one job (kept); nothing is fetched by it.
-  // Remove a downloaded model that is not in use (downloads.ts D19).
-  action dlRemove(job: string, id: string)
-    send dlm = downloadsAct("remove", job, ovoice, id)
-  action dlPick(job: string, id: string)
-    send dlm = downloadsAct("pick", job, ovoice, id)
+  // Settings > Voice and models (models.ts): asked again when the voice side's facts change (ovoice) or an agreement is recorded. Each press is one row's: Download is the agreement to that model's files and starts it.
+  resource dl = modelsPage(ovoice, cons.rev) as shape ModelsView else empty(jobs=[], rev=0, voiceReady=false, hearingReady=false, setupTotal="", voiceNote="", lines=[], voiceOffer=[])
+  mutation dlm as shape ModelsView refreshes dl
+  action mdDownload(section: string, id: string)
+    send dlm = modelsAct("download", section, id, ovoice)
+  action mdDownloadMobile(section: string, id: string)
+    send dlm = modelsAct("downloadMobile", section, id, ovoice)
+  action mdUse(section: string, id: string)
+    send dlm = modelsAct("use", section, id, ovoice)
+  action mdRemove(section: string, id: string)
+    send dlm = modelsAct("remove", section, id, ovoice)
+  action mdTest(section: string, id: string)
+    send dlm = modelsAct("test", section, id, ovoice)

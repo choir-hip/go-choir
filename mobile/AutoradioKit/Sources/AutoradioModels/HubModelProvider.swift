@@ -449,3 +449,36 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         #endif
     }
 }
+
+// The Test button on a model's row (ModelTrial, Settings > Voice and models): each run needs the model itself, so it is here. Each is a model that is ON the phone: a test never downloads
+// (a library is initialised only for a model that is ready or being checked: `LibraryScope`, the same scope the check uses), and none writes readiness.
+extension HubModelProvider {
+    public func transcribe(_ id: String, _ audio: [Float]) async throws -> String {
+        try await LibraryScope.$checking.withValue(id) {
+            let s = try await Self.transcriberStage(id).begin()
+            for f in ModelProof.frames(audio) { s.append(f) }
+            return try await s.finish()
+        }
+    }
+
+    /// Where Silero finds speech in this audio: the first and the last chunk it calls speech (probability over one half), in seconds.
+    public func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) {
+        try await LibraryScope.$checking.withValue(id) {
+            let p = try await SileroVAD.probabilities(audio)
+            guard !p.probs.isEmpty else { return (nil, nil) }
+            let chunk = Double(audio.count) / 16_000 / Double(p.probs.count)
+            guard let first = p.probs.firstIndex(where: { $0 > 0.5 }), let last = p.probs.lastIndex(where: { $0 > 0.5 }) else { return (nil, nil) }
+            return (Double(first) * chunk, last == p.probs.count - 1 ? nil : Double(last + 1) * chunk)
+        }
+    }
+
+    /// The model's answer to a fixed prompt, in one sentence (the answering and the quick-decision models are both GGUFs run through llama.cpp).
+    public func answer(_ id: String, job: String, prompt: String) async throws -> String {
+        #if canImport(llama)
+        guard KnownModels.isPinned(id) else { throw LabError.unavailable("\(id) is not a model this phone runs as a language model") }
+        return try await LlamaLocalModel(modelID: id).generate(system: "You are a radio host. Answer in one short sentence.", user: prompt, temperature: 0)
+        #else
+        throw LabError.unavailable("This build has no llama.cpp framework, so the language model cannot run.")
+        #endif
+    }
+}

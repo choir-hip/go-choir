@@ -32,7 +32,7 @@ import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveE
 import * as picks from './edition-picks.ts';
 import { consentView } from './consent.ts';
 import { micPermission } from './micask.ts';
-import { downloadsPage, downloadsAct } from './downloads.ts';
+import { modelsPage, modelsAct } from './models.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
 import { signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
@@ -197,13 +197,13 @@ const sources: Sources = {
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
   pagesPin: ([address], _store, storage) => pages.pagesPin(storage, address),
   pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
-  // What the person agreed to (consent.ts): the sign-in prompt's words and the revision of the per-group download agreements (a group's press is `downloadsAct`).
+  // What the person agreed to (consent.ts): the sign-in prompt's words and the revision of the per-model download agreements (a row's press is `modelsAct`).
   consentView: ([_tick], _s, storage) => consentView(storage),
   // The system's microphone permission (micask.ts): the plain line before the prompt for the bar's voice and for a take.
   micPermission: ([tick]) => micPermission(String(tick)),
-  // The model files voice needs, with their sizes (downloads.ts): the view, and one group's press.
-  downloadsPage: ([facts, _rev], _s, storage) => downloadsPage(facts as never, storage),
-  downloadsAct: ([op, group, facts, arg], _s, storage) => downloadsAct(op, group, facts as never, storage, arg ?? ''),
+  // Settings > Voice and models (models.ts): the view of every model of every job, and one row's press.
+  modelsPage: ([facts, _rev], _s, storage) => modelsPage(facts as never, storage),
+  modelsAct: ([op, section, id, facts], _s, storage) => modelsAct(op, section, id, facts as never, storage),
   // Learning the person's voice (voicelearn.ts): the page from the voice side's facts, and one press.
   learnPage: ([facts]) => learnPage(facts as never),
   learnAct: ([op, facts]) => learnAct(op, facts as never, nativeLater() as never),

@@ -63,7 +63,9 @@
    "voiceReady": "bool",
    "hearingReady": "bool",
    "runStages": "string[]",
-   "enrol": "EnrolView"
+   "enrol": "EnrolView",
+   "modelRuns": "ModelRunView[]",
+   "modelTests": "ModelTestView[]"
   },
   "OfferJobView": {
    "job": "string",
@@ -81,7 +83,9 @@
    "credit": "string",
    "withheld": "bool",
    "removable": "bool",
-   "ready": "bool"
+   "ready": "bool",
+   "inUse": "bool",
+   "streams": "bool"
   },
   "EnrolView": {
    "state": "string",
@@ -91,6 +95,18 @@
    "built": "bool",
    "ready": "bool",
    "reason": "string"
+  },
+  "ModelRunView": {
+   "id": "string",
+   "state": "string",
+   "progress": "number",
+   "line": "string"
+  },
+  "ModelTestView": {
+   "key": "string",
+   "state": "string",
+   "line": "string",
+   "ms": "number"
   }
  },
  "names": [
@@ -130,7 +146,9 @@
          "credit": "",
          "ready": false,
          "withheld": false,
-         "removable": false
+         "removable": false,
+         "inUse": false,
+         "streams": false
         }
        ]
       },
@@ -149,7 +167,9 @@
          "credit": "Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).",
          "ready": false,
          "withheld": false,
-         "removable": false
+         "removable": false,
+         "inUse": false,
+         "streams": false
         }
        ]
       }
@@ -165,7 +185,9 @@
       "built": false,
       "ready": true,
       "reason": ""
-     }
+     },
+     "modelRuns": [],
+     "modelTests": []
     }
    }
   }

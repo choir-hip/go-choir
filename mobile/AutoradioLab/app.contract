@@ -48,10 +48,11 @@ component Autoradio
     cons
     hideGate
     dl
-    dlStart
-    dlStartMobile
-    dlPick
-    dlRemove
+    mdDownload
+    mdDownloadMobile
+    mdUse
+    mdRemove
+    mdTest
     lrn
     lrnPress
     lrnLeaveFlow
