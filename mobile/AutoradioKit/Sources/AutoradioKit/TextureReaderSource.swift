@@ -134,7 +134,24 @@ public final class ReaderAim: @unchecked Sendable {
     private let lock = NSLock()
     private var _info = ReaderAimInfo()
     public init() {}
+    public var onChange: (@Sendable () -> Void)?
     public var info: ReaderAimInfo { lock.lock(); defer { lock.unlock() }; return _info }
-    public func set(_ i: ReaderAimInfo) { lock.lock(); _info = i; lock.unlock() }
+    public func set(_ i: ReaderAimInfo) { lock.lock(); _info = i; lock.unlock(); onChange?() }
     public func clear() { set(ReaderAimInfo()) }
+}
+
+/// The sentence the radio is saying, by address, so the reader lights it (the app module's `radioView` feeds it). Only a CHANGE is passed on; when nothing plays the follow is cleared. A follow that was
+/// cleared (the sign-out wipe) is set again by the very next feed even when the address and the sentence are the same as before.
+public final class ReaderFeed: @unchecked Sendable {
+    public static let shared = ReaderFeed()
+    private let lock = NSLock()
+    private var last = ""
+    public init() {}
+    public func feed(_ r: RadioInfo, address: String, follow: ReaderFollow = .shared) {
+        let spoken = r.playing && !address.isEmpty && r.sentences.indices.contains(r.sentenceIndex) ? r.sentences[r.sentenceIndex] : ""
+        let key = spoken.isEmpty ? "" : "\(address)|\(spoken)"
+        lock.lock(); let changed = key != last || (!key.isEmpty && follow.info.address.isEmpty); last = key; lock.unlock()
+        guard changed else { return }
+        if key.isEmpty { follow.clear() } else { follow.set(address: address, spoken: spoken) }
+    }
 }

@@ -14,7 +14,7 @@ extension AutoradioModule {
 
     /// The shared open-page set's hand-over (AutoradioLab/pages.ts `mirror`, the app module's `pagesMirror` op, ModelsEntry.swift): the pages as facts, most recent first. Only native code
     /// can use them: the voice names the page in front, warms the local model on it, and a leaving page posts what was typed on it (TextureEditor, a canonical write that stays native).
-    /// A native module asks for a page to be opened (an episode from the playing bar, AutoradioModule+Podcasts.swift). Native holds no set: the request is a source (`pageRequest`) that shared code
+    /// A native module asks for a page to be opened (an episode from the playing bar). Native holds no set: the request is a source (`pageRequest`) that shared code
     /// answers by opening the page (pages.ts `pageRequested`), once per id.
     public func requestPage(_ address: String, title: String) {
         pageRequestState = (pageRequestState.id + 1, address, title)

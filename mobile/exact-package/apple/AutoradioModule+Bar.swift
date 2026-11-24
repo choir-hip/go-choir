@@ -128,16 +128,3 @@ extension AutoradioModule {
         return o
     }
 }
-
-final class ReaderFeed: @unchecked Sendable {
-    static let shared = ReaderFeed()
-    private let lock = NSLock()
-    private var last = ""
-    func feed(_ r: RadioInfo, address: String) {
-        let spoken = r.playing && !address.isEmpty && r.sentences.indices.contains(r.sentenceIndex) ? r.sentences[r.sentenceIndex] : ""
-        let key = spoken.isEmpty ? "" : "\(address)|\(spoken)"
-        lock.lock(); let changed = key != last; last = key; lock.unlock()
-        guard changed else { return }
-        if key.isEmpty { ReaderFollow.shared.clear() } else { ReaderFollow.shared.set(address: address, spoken: spoken) }
-    }
-}

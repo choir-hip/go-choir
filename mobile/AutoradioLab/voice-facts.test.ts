@@ -3,7 +3,7 @@
 //  V1  the voice sees only the entry on air and the entries ahead, each as {id, title, text, state on_air|ahead, ref}; heard, skipped and left entries are not shown.
 //  V2  an entry with no text and no source gives "" for each (never undefined); the text is not cut here.
 //  V3  the take's "responds to" is the page the entry on air tells: the paper route of a story, else its first cited story.
-//  V4  an opening, a transition, a take, an answer, a result and no entry on air respond to nothing, whatever they cite.
+//  V4  a take, a transition and no entry on air respond to nothing, whatever they cite; an answer or a result that cites a story gives it (as the Swift TakeResponds did).
 //  V6  the page on air (the reader's follow-along) is the story's or the Texture's address, else nothing.
 import { describe, expect, test } from 'bun:test';
 import { voiceFacts, respondsOf, airAddressOf } from './voice-facts.ts';
@@ -36,7 +36,8 @@ describe('what a take responds to', () => {
     expect(respondsOf(entry('k', { kind: 'take' }))).toBeUndefined();
     expect(respondsOf(undefined)).toBeUndefined();
     const cites = [{ ref: 'pub:harbor-fees@v2', role: 'subject' as const, label: 'Harbor fees rise' }];
-    for (const kind of ['opening', 'answer', 'result', 'transition', 'take'] as const) expect(respondsOf(entry('x', { kind, cites }))).toBeUndefined();
+    for (const kind of ['transition', 'take'] as const) expect(respondsOf(entry('x', { kind, cites }))).toBeUndefined();
+    for (const kind of ['answer', 'result'] as const) expect(respondsOf(entry('x', { kind, cites }))).toEqual({ route: 'harbor-fees', title: 'Harbor fees rise' });      // as the Swift one did: a take over an answer that cites a story keeps its provenance
   });
   test('V6 the address of the page on air', () => {
     expect(airAddressOf(entry('a', { state: 'on_air', source: { ref: 'pub:harbor-fees@v2', label: 'x' } }))).toBe('pub:harbor-fees');

@@ -519,9 +519,16 @@ export function themeStore(storage: Storage | undefined): Promise<ThemeStore> {
     loading = (async () => {
       const s = new ThemeStore();
       const kept = await readJSON(storage, CHOICE_FILE);
-      const choice = isObj(kept) ? kept : null;
+      let choice = isObj(kept) ? kept : null;
       let names: string[] = [];
       try { names = storage ? (await storage.fs.readdir(THEMES_DIR)).filter((n) => n.endsWith('.json')).sort() : []; } catch { /* no folder yet */ }
+      // The previous shared build carried the Swift build's choice and theme files over and marked the choice file `migrated`. The owner's rule is that nothing is carried over: that output is let go, ONCE (the marker
+      // goes with it). A choice made in the shared build after that carry-over lost its meaning with it: the app has not launched, so it is the cheaper loss.
+      if (choice !== null && choice.migrated === true && storage) {
+        for (const n of names) { try { await storage.fs.rm(`${THEMES_DIR}/${n}`); } catch { /* kept */ } }
+        names = []; choice = null;
+        try { await storage.fs.atomicWriteFile(CHOICE_FILE, enc({ theme: null, mode: 'system' })); } catch { /* the next launch does it again */ }
+      }
       for (const n of names) {
         try { s.add(new TextDecoder().decode(await storage!.fs.readFile(`${THEMES_DIR}/${n}`)), n, n.startsWith('texture-') ? 'texture' : 'file'); }
         catch { /* a file that cannot be read is skipped */ }

@@ -39,7 +39,7 @@ entry before this one (the sheet's heard list), and anything that needs the desk
 | `deckState` | source, live | `DeckState`: `why`, `item`, `block`, `seconds`, `duration`, `held` (ids), `seq`, `acked`, `journal` (the lines not yet acknowledged) |
 | `deckPlay` | send | play this item now; what was playing ends `replaced` |
 | `deckEnqueue` | send | hold this item after the playing one at place `at` (0 is next; -1 or absent is the end); the held items from `at` on are dropped first; an id already held is removed first; at most 100 are held (the sheet's bound) |
-| `deckAct` | send | `op` is `pause`, `resume`, `stop`, `skip`, `seekTo`, `seekBy` or `trim`; `value` as the op needs |
+| `deckAct` | send | `op` is `pause`, `resume`, `stop`, `skip`, `seekTo`, `seekBy`, `trim` or `clearEnd` (a clip no longer ends: the episode goes on from where it is); `value` as the op needs |
 | `deckAck` | send | the journal lines up to `through` are posted; the deck forgets them |
 
 An item is scalars only (the gate refuses a name that takes an opaque payload): `id`, `kind` (`speech` or `audio`), `title`, `show`,

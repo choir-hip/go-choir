@@ -146,7 +146,7 @@ The class is made once per session, on the main thread.
 code's answer for the words just heard. The pattern: native keeps the ask (an id and its inputs) and `touch`es a package source; a root `resource`
 in `members-retrieval.contract` reads that source and passes the ask to a data-module source; that source does the work and hands the answer back
 through one app-module op (`ModelsEntry.swift`, `retrievalAnswer`); native waits on the id with a deadline and goes on without an answer when it
-does not come (`RetrievalFacts.swift`). The facts only native holds (here: the Swift run sheet's entries, the open pages) ride in the ask as one JSON string.
+does not come (`RetrievalFacts.swift`). The facts only native holds (here: the open pages, and the run sheet's entries on air and ahead that shared code pushes with `radioSet`: `voice-facts.ts`) ride in the ask as one JSON string.
 [unrun on a device: the source is read only while the app runs its root resources; the proof's ask drive logs `AUTORADIO retrieval ask answered|no-answer`.]
 
 ## Threading and lifecycle
