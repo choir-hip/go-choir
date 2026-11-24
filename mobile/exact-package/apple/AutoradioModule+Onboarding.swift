@@ -320,6 +320,8 @@ extension AutoradioModule {
         switch r["op"] as? String ?? "" {
         case "obFacts": return c.facts()
         case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [], only: (r["only"] as? Bool) ?? false, picks: (r["picks"] as? [String: String]) ?? [:], speaker: (r["speaker"] as? Bool) ?? false)
+        // The system's microphone permission, read and nothing asked (shared code decides whether to show its plain line first: micask.ts). Native because only the platform knows it.
+        case "obMicState": return ["state": MicPermissionWord.current()]
         case "obEnrolBegin": c.beginCapture()
         case "obEnrolKeep": return ["kept": c.capture.keep(), "usable": c.capture.usable]
         case "obEnrolBuild": return ["ok": await c.capture.build()]

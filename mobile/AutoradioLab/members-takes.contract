@@ -16,7 +16,11 @@ members Autoradio
     // A take needs the microphone, and the microphone is asked only of a signed-in person (owner, 2026-11-23): signed out, recording opens the sign-in sheet and starts nothing.
     if op == "record" and au.signedIn == false
       gate = "signin"
-    if op != "record" or au.signedIn
+    // The plain line comes before the system's prompt (micask.ts): Continue (spine.contract micContinue) records.
+    if op == "record" and au.signedIn and micperm.gate != ""
+      micFor = "take"
+      gate = micperm.gate
+    if op != "record" or (au.signedIn and micperm.gate == "")
       send tpm = takesAct(op, arg)
   // The listener's takes and record are read when the phone is signed in (take-session.ts refresh: the programme copy is pushed first; nothing is carried from the pre-release build's files).
   action takesLoad

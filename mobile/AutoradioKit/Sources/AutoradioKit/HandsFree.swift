@@ -120,8 +120,7 @@ extension TurnEngine {
     /// meant for the radio: sustained speech with words (`ListeningVisibility`). Voice activity alone shows nothing.
     func hfUpdateVisibility() {
         let words = max(0, hf.lastWords.count - hf.wordBase)
-        // The reader's learned voice: after about a second of speech the turn is judged (off this actor). Another voice never shows the
-        // listening state; the reader's own voice is the missing "addressed" evidence once there is a word.
+        // The reader's learned voice: after about a second of speech the turn is judged (off this actor), and the verdict is only written to the log.
         let gate = env.speakerGate
         if hf.session != nil, hf.speakerCall == .unknown, !hf.speakerPending, hf.speechMs >= 1200, hf.samples.count >= 16_000, gate.learned, gate.canListen {
             hf.speakerPending = true
@@ -130,7 +129,7 @@ extension TurnEngine {
         }
         // Log only in this build (owner, 2026-11-24): the learned voice's verdict is written per turn and nothing is shown or dropped because of it.
         let show = hf.session != nil
-            && ListeningVisibility.visible(handsFree: hf.enabled, speechMs: hf.speechMs, words: words, addressed: hf.speakerCall == .match && words >= 1, notATurn: false)
+            && ListeningVisibility.visible(handsFree: hf.enabled, speechMs: hf.speechMs, words: words, addressed: false, notATurn: false)
         if show { if pipeline == nil, turn == nil { setPhase(.capturing) } }
         else if phase == .capturing, pipeline == nil, turn == nil { setPhase(.playing) }
     }

@@ -2,12 +2,17 @@
 // Turning the voice ON is an ask (the microphone is requested only then, and only signed in); turning it off, and every transport word, never are. There is no consent screen before the radio answers (owner, 2026-11-23).
 use ConsentView from "./consent-types.contract"
 use DownloadsView from "./downloads-types.contract"
+use MicPerm from "./consent-types.contract"
 
 members Autoradio
   // Asked again when the account changes (sign-in, sign-out) and after each press (the mutation's answer is the new view).
-  resource cons = consentView(`${au.signedIn}|${signedOutTick}`) as shape ConsentView else empty(rev=0, signTitle="", signWhy="", signIn="", make="", later="")
-  // "" (none) or "signin": which sheet is up.
+  resource cons = consentView(`${au.signedIn}|${signedOutTick}`) as shape ConsentView else empty(rev=0, signTitle="", signWhy="", signIn="", make="", later="", micPre="", micOff="", micContinue="", micNotNow="", micOk="")
+  // "" (none), "signin", "micpre" (the plain line before the microphone is asked) or "micoff" (the declined line): which sheet is up.
   state gate = ""
+  // What the microphone was wanted for when the plain line went up: "voice" (the bar's button) or "take"; and a count that asks the system again after a press went on to its prompt.
+  state micFor = ""
+  state micTick = 0
+  resource micperm = micPermission(`${au.signedIn}|${bi.handsFree}|${micTick}`) as shape MicPerm else empty(state="granted", gate="")
   action hideGate
     gate = ""
   action gateSignIn

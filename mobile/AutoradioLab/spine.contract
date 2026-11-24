@@ -112,8 +112,9 @@ members Autoradio
   // (sustained speech with words, ListeningVisibility). It is an addition to the bar, never a replacement.
   derive heardNow = bi.handsFree and bi.state == "talking"
   // Turning voice OFF is always allowed; turning it ON is an ask (the microphone, then requests): signed out it opens the sign-in sheet, and the microphone is never requested.
+  // The microphone is asked where it is first needed, after one plain line with Not now (micask.ts): unasked shows it, refused shows the declined line; the system prompt follows Continue.
   action micTap
-    if micOn or (askGate == "" and dl.hearingReady)
+    if micOn or (askGate == "" and dl.hearingReady and micperm.gate == "")
       send up = choirHandsFreeToggle()
     if micOn == false and askGate != ""
       gate = askGate
@@ -121,6 +122,17 @@ members Autoradio
     if micOn == false and askGate == "" and dl.hearingReady == false
       send pms = pagesOpen("settings:downloads", "Downloads")
       layer = ""
+    if micOn == false and askGate == "" and dl.hearingReady and micperm.gate != ""
+      micFor = "voice"
+      gate = micperm.gate
+  // Continue on the plain line: the system's prompt comes with the press it was held back from.
+  action micContinue
+    gate = ""
+    if micFor == "take"
+      send tpm = takesAct("record", "")
+    if micFor != "take"
+      send up = choirHandsFreeToggle()
+    micTick = micTick + 1
   // Cancel: drop this turn, nothing is sent, hands-free stays on (choirTalkCancel).
   action micCancel
     send up = choirTalkCancel()

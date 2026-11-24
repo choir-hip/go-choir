@@ -1213,3 +1213,11 @@ public enum MicLog {
 public enum MicAsk {
     public static func shouldRequest(voiceOn: Bool, granted: Bool) -> Bool { voiceOn && !granted }
 }
+
+/// The system's microphone permission in the three words shared code uses (micask.ts): "unasked" (the system has not asked), "refused" (the person said no, or it is restricted) or "granted". Read only; nothing is asked.
+public enum MicPermissionWord {
+    public static func word(_ p: AVAudioApplication.recordPermission) -> String {
+        switch p { case .undetermined: return "unasked"; case .granted: return "granted"; default: return "refused" }
+    }
+    public static func current() -> String { word(AVAudioApplication.shared.recordPermission) }
+}

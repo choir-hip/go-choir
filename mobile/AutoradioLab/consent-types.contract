@@ -6,3 +6,13 @@ shape ConsentView
   signIn: string
   make: string
   later: string
+  micPre: string
+  micOff: string
+  micContinue: string
+  micNotNow: string
+  micOk: string
+
+// The system's microphone permission as the page sees it (micask.ts): `gate` is "" (nothing to show), "micpre" (the plain line before the prompt) or "micoff" (the declined line).
+shape MicPerm
+  state: string
+  gate: string

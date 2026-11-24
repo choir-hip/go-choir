@@ -11,4 +11,10 @@ final class MicAskTests: XCTestCase {
         XCTAssertTrue(MicAsk.shouldRequest(voiceOn: true, granted: false))
         XCTAssertFalse(MicAsk.shouldRequest(voiceOn: true, granted: true))
     }
+    // Shared code shows its plain line from this word (micask.ts); reading it asks nothing.
+    func testThePermissionIsReportedInThreeWords() {
+        XCTAssertEqual(MicPermissionWord.word(.undetermined), "unasked")
+        XCTAssertEqual(MicPermissionWord.word(.granted), "granted")
+        XCTAssertEqual(MicPermissionWord.word(.denied), "refused")
+    }
 }

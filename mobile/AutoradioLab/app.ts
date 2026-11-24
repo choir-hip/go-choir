@@ -31,6 +31,7 @@ import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveE
 import * as picks from './edition-picks.ts';
 import { signInSheet, liveSheetEnv } from './signin-sheet.ts';
 import { consentView } from './consent.ts';
+import { micPermission } from './micask.ts';
 import { downloadsPage, downloadsAct } from './downloads.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { signInRun, signInCancel, signInReopen, signInView, type AttemptEnv } from './signin-attempt.ts';
@@ -193,6 +194,8 @@ const sources: Sources = {
   pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
   // What the person agreed to (consent.ts): the sign-in prompt's words and the revision of the per-group download agreements (a group's press is `downloadsAct`).
   consentView: ([_tick], _s, storage) => consentView(storage),
+  // The system's microphone permission (micask.ts): the plain line before the prompt for the bar's voice and for a take.
+  micPermission: ([tick]) => micPermission(String(tick)),
   // The model files voice needs, with their sizes (downloads.ts): the view, and one group's press.
   downloadsPage: ([facts, _rev], _s, storage) => downloadsPage(facts as never, storage),
   downloadsAct: ([op, group, facts, arg], _s, storage) => downloadsAct(op, group, facts as never, storage, arg ?? ''),

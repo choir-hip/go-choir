@@ -15,10 +15,11 @@
 import type { Storage } from './app.contract.d.ts';
 import { askText, type AskText } from './consent-text.ts';
 import { accountGeneration, keyState, writeCurrent } from './api.ts';
+import { MIC_TEXT } from './micask.ts';
 
 export const CONSENT_FILE = 'app:/data/consent.json';
 export type Consent = { agreed: Record<string, string>; picks: Record<string, string> };
-export type ConsentView = { rev: number } & AskText;
+export type ConsentView = { rev: number } & AskText & { micPre: string; micOff: string; micContinue: string; micNotNow: string; micOk: string };
 const fresh = (): Consent => ({ agreed: {}, picks: {} });
 
 /** C1: the kept text, by shape. */
@@ -57,7 +58,7 @@ async function load(storage: Storage | undefined): Promise<Mem> {
   return m;
 }
 
-const view = (m: Mem): ConsentView => ({ rev: m.rev, ...askText() });
+const view = (m: Mem): ConsentView => ({ rev: m.rev, ...askText(), micPre: MIC_TEXT.pre, micOff: MIC_TEXT.off, micContinue: MIC_TEXT.continue, micNotNow: MIC_TEXT.notNow, micOk: MIC_TEXT.ok });
 
 /** Source: what has been agreed, and the words of the sign-in prompt. */
 export async function consentView(storage: Storage | undefined): Promise<ConsentView> { return view(await load(storage)); }
