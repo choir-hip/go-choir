@@ -67,7 +67,9 @@ the path.
 - **The expiry: removed, not kept with a record.** The two options were to
   remove the 24-hour expiry, or to keep a bound whose expiry writes a counted
   record per capture and returns the captures to intake. Removing it is the
-  conservative one, as nothing is dropped, and it is also the smaller: a
+  conservative one, as nothing is dropped while the computer runs (a crash
+  boot closes what is queued as interrupted by a restart, by the restart
+  rule; a planned restart resumes it), and it is also the smaller: a
   returned capture would be delegated again into the same queue, which is
   the same wait with more records. The cost is that a queue which outruns
   its slots grows without bound; that is now visible within a minute (the
@@ -75,6 +77,16 @@ the path.
   declined by a decision is management's to judge, with a record, in the
   capture desk design.
 - **The queue line**, once a minute: depth, oldest wait, running, slots.
+- **The first hours after the deploy.** Tasks already queued, however old,
+  now run, oldest first. A backlog the size of 2026-11-23's (163 tasks) at
+  four slots and a median run of 105 seconds drains in about 1.2 hours
+  (163 x 105 / 4 seconds), with new arrivals behind it; the queue line shows
+  it falling.
+- **A known inefficiency, left.** Every closure names the oldest queued task
+  for a start, so several closures in a row send several start wakes to one
+  task's inbox. The task starts once (the claim is the guard) and the
+  starter fills every free slot on any wake, so no slot idles; the extra
+  wakes are waste, not a fault.
 
 Not changed: the 476 captures in seven days left on a task that closed
 without deciding them (a failed run, a passivated run, a deadline). That is
