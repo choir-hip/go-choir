@@ -6,8 +6,10 @@ import Foundation
 public struct OfferOption: Sendable, Equatable {
     public var id: String, model: String
     public var bytes: Int64, recommended: Bool, ready: Bool
+    /// A limit the person should know about before choosing it (a licence limit, from the candidate table); "" when there is none.
+    public var note: String = ""
     public var sizeLabel: String { SetupCatalog.sizeLabel(bytes) }
-    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready] }
+    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready, "note": note] }
 }
 public struct OfferJob: Sendable, Equatable {
     public var job: String, group: String, host: String
@@ -20,7 +22,7 @@ public enum ModelOffer {
     public static let host = "Hugging Face"
 
     /// The jobs the download step lists, in order, by the name shared code uses: the voice setup stages ("bounds" is the list's "vad") and the two files that are not voice-setup stages. (No turn-detector job: the list has none yet.)
-    public static let jobIDs = ["transcriber", "bounds", "voice", "responder", "speaker", "search"]
+    public static let jobIDs = ["transcriber", "bounds", "voice", "decision", "responder", "speaker", "search"]
     /// The voice-print model's id (WeSpeaker, about 8 MB: the files' own sizes summed).
     public static let speakerID = "wespeaker-resnet34"
 
@@ -35,24 +37,24 @@ public enum ModelOffer {
 
     /// The jobs, each with every option the list holds for it (best-ranked first) and the one marked recommended for this phone: the first entry whose device rule fits it (`ModelListEntry.isRecommended`, the machine
     /// identifier and the memory). A row added to the list (a newer model, another recogniser) is an option here with no change to this code. The floors are not in the list. A job whose entries fit no rule lists them and recommends none.
-    /// `ready`: job -> the id on the phone and passed its check. The decision job shares the responder's file and is not listed.
+    /// `ready`: job -> the id on the phone and passed its check. Every voice-setup stage that downloads is a job here, the quick-decision model too: what the first-run press fetches is exactly these jobs' chosen options and nothing else.
     public static func jobs(profile: DeviceProfile, list: ModelList = .builtIn(), ready: [String: String] = [:]) -> [OfferJob] {
         var out: [OfferJob] = []
         for j in jobIDs {
-            var opts: [(id: String, label: String, bytes: Int64, fits: Bool)] = []
-            if let role = ConfigRole.allCases.first(where: { $0.stage.rawValue == j }), j != "decision" {
+            var opts: [(id: String, label: String, bytes: Int64, fits: Bool, note: String)] = []
+            if let role = ConfigRole.allCases.first(where: { $0.stage.rawValue == j }) {
                 let all = list.models.filter { $0.job == role.rawValue }.sorted { $0.rank > $1.rank }
-                opts = all.map { ($0.id, $0.label, bytes($0, role: role), $0.isRecommended(machine: profile.chip, memoryGB: profile.memoryGB)) }
+                opts = all.map { ($0.id, $0.label, bytes($0, role: role), $0.isRecommended(machine: profile.chip, memoryGB: profile.memoryGB), CandidateTable.candidate($0.id, role)?.licenseLimit ?? "") }
             } else if j == "speaker" {
-                opts = [(speakerID, "Your voice, kept on this phone", Int64(WeSpeakerEmbedder.files.reduce(0) { $0 + $1.size }), true)]
+                opts = [(speakerID, "Your voice, kept on this phone", Int64(WeSpeakerEmbedder.files.reduce(0) { $0 + $1.size }), true, "")]
             } else if j == "search" {
-                opts = [(KnownModels.embeddingGemma2.id, "EmbeddingGemma 2", KnownModels.embeddingGemma2.bytes, true)]
+                opts = [(KnownModels.embeddingGemma2.id, "EmbeddingGemma 2", KnownModels.embeddingGemma2.bytes, true, "")]
             }
             let opts2 = opts.filter { $0.bytes > 0 }
             if opts2.isEmpty { continue }
             let rec = opts2.first { $0.fits }?.id
             out.append(OfferJob(job: j, group: group(j), host: host,
-                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id) }))
+                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note) }))
         }
         return out
     }

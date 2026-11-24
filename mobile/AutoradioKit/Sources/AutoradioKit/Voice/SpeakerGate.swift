@@ -86,6 +86,31 @@ public final class SpeakerGate: @unchecked Sendable {
         if changed { if let u = url { SpeakerStore.save(snapshot, to: u) }; onChange?() }
     }
 
+    // MARK: Enrolment (voice onboarding): a profile is built in memory and stored only after the person's confirming sentence matched.
+
+    /// A profile built from these takes (three alike takes make one), held by the caller. Nothing is stored and the gate's own profile is untouched; nil when the takes do not make one voice (too little speech, another voice among them, no model).
+    func buildCandidate(_ takes: [[Float]]) async -> SpeakerProfile? {
+        guard let e = embedder, e.isReady else { return nil }
+        var p = SpeakerProfile()
+        for t in takes where t.count >= SpeakerProfile.minimumLearnMs * 16 {
+            guard let v = await e.embed(Array(t.prefix(Self.maxSamples))), v.count == SpeakerModelKind.wespeaker.dimensions else { continue }
+            _ = p.learn([.wespeaker: v], audioMs: t.count / 16, rule: rule)
+        }
+        return p.learned ? p : nil
+    }
+    /// The confirming sentence against a candidate profile: the same call `judge` makes against the stored one. Only `.match` confirms (unknown does not).
+    func judge(_ samples: [Float], against p: SpeakerProfile) async -> SpeakerCall {
+        guard let e = embedder, e.isReady, samples.count >= 16_000 else { return .unknown }
+        guard let v = await e.embed(Array(samples.prefix(Self.maxSamples))), v.count == SpeakerModelKind.wespeaker.dimensions else { return .unknown }
+        return Self.call(for: p.check([.wespeaker: v], audioMs: samples.count / 16, rule: rule))
+    }
+    /// Store a confirmed profile (replacing the old one).
+    func adopt(_ p: SpeakerProfile) {
+        lock.lock(); profile = p; lock.unlock()
+        if let u = url { SpeakerStore.save(p, to: u) }
+        onChange?()
+    }
+
     /// "Forget my voice" and the start of "Learn my voice": the profile is deleted.
     public func forget() {
         lock.lock(); profile = SpeakerProfile(); lock.unlock()

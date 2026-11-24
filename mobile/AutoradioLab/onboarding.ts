@@ -34,8 +34,8 @@ import { complete, generalEdition, localWriter, FAILED_LINE, TIMED_OUT_LINE, typ
 import { lookupEdition, seamGet, type Get } from './notebook.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
 import * as pages from './pages.ts';
-import { consentAct, consentPicks } from './consent.ts';
-import { picksFor, type OfferJob } from './offers.ts';
+import { consentAgree, consentPicks } from './consent.ts';
+import { picksFor, STAGE_JOBS, type OfferJob } from './offers.ts';
 import { noEnrol, type Enrol } from './voicelearn.ts';
 import { keyState } from './api.ts';
 
@@ -86,6 +86,8 @@ export function startStep(p: Progress): string {
 
 const TITLES: Record<string, string> = { welcome: 'Make it yours', setup: 'Set up your voice', mic: 'Can I hear you?', hearing: 'Can you hear me?', learn: 'Your voice', voice: 'Pick a voice', ready: 'Voice is ready',
   topics: 'Your edition', writing: 'Writing your edition', done: 'Your edition', skipped: 'Make it yours' };
+export const NO_OFFERS_LINE = 'The voice files are not available just now. Try again in a moment.';
+export const NOT_RECORDED_LINE = 'Your choice could not be saved just now, so nothing was downloaded. Try again.';
 export const MIC_REFUSED_LINE = 'Microphone is off for Autoradio 1. You can turn it on in Settings.';
 export const TALK_REFUSED_LINE = 'Talking to the radio needs the microphone. You can allow it in Settings, or tap topics instead.';
 export const MIC_SILENT_LINE = 'I could not hear anything. The paper keeps working, and you can tap your topics instead.';
@@ -114,9 +116,9 @@ const blank = (): Mem => ({ gen: launchGen === undefined ? (launchGen = accountG
 /** For tests: a new process. */
 export function forgetOnboarding(): void { mem = null; }
 
-export type Env = { storage: Storage | undefined; device: Device | null; get: Get; agree?: (mobile: boolean) => Promise<void>; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void> };
+export type Env = { storage: Storage | undefined; device: Device | null; get: Get; agree?: (mobile: boolean) => Promise<boolean | void>; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void> };
 export const liveEnv = (storage: Storage | undefined): Env => ({ storage, device: nativeDevice(), get: seamGet,
-  agree: async (mobile) => { await consentAct(mobile ? 'agreeModelsMobile' : 'agreeModels', storage); },
+  agree: async (mobile) => (await consentAgree('voice', mobile, storage)) && (await consentAgree('voice-rest', mobile, storage)),
   closePage: async (a) => { await pages.pagesClose(storage, a); }, openPage: async (a, t) => { await pages.pagesOpen(storage, a, t); } });
 
 /** The progress, read once per account generation. THE CAUSE of the flip (found by reading, 2026-11-22): `loaded` used to be set BEFORE the file was read and a failed read counted as "no file", so a second
@@ -250,15 +252,18 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
       if (m.p.setupDone && m.step === 'skipped') { m.step = 'ready'; m.p.skipped = false; await save(env, m); break; }          // O7
       const f = await facts(env);
       if (m.step === 'setup' && f.setupStarted && !f.setupFinished) break;                                                    // O2: running
+      if (f.offers.length === 0) { m.message = NO_OFFERS_LINE; break; }                                                       // O19: nothing was shown, so nothing is fetched
       if (!f.onWiFi && arg !== 'true') { m.step = 'setup'; m.askMobile = true; m.message = ''; break; }                      // O2
+      // What was shown is what is fetched (O18, O19): the chosen option of every job of the two voice groups (the person's pick, else the one recommended for this phone), each as the one stage it runs in, and the voice-print model beside them. Never the configurator, never a stage that was not shown.
+      let agreed = true;
+      try { agreed = (await env.agree?.(!f.onWiFi)) !== false; } catch { agreed = false; }
+      if (!agreed) { m.message = NOT_RECORDED_LINE; break; }                                                                   // the agreement is on disk before anything is fetched
       m.askMobile = false; m.step = 'setup'; m.message = ''; m.p.skipped = false;
       await save(env, m);
-      try { await env.agree?.(!f.onWiFi); } catch { /* the press is the agreement; recording it is for the search pass */ }
-      // What was shown is what is fetched: the chosen option of every job of the two voice groups (the person's pick, else the one recommended for this phone), and the voice-print model beside them.
-      const kept = await consentPicks(env.storage);
-      const picks = picksFor(f.offers, ['voice', 'voice-rest'], kept);
+      const picks = picksFor(f.offers, ['voice', 'voice-rest'], await consentPicks(env.storage));
+      const stages = STAGE_JOBS.filter((j) => j in picks);
       const speaker = f.offers.some((j) => j.job === 'speaker' && j.options.some((o) => !o.ready));
-      await dev(env, 'obSetupBegin', { picks, speaker });
+      await dev(env, 'obSetupBegin', { only: true, stages, picks, speaker });
       break;
     }
     case 'retry': if (m.step === 'setup') await dev(env, 'obSetupRetry', { stage: arg }); break;

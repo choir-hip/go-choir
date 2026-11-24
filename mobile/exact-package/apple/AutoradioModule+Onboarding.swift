@@ -26,8 +26,8 @@ final class OnboardingController: @unchecked Sendable {
     /// The stages the running setup was asked to do (empty: all of them).
     private var runStages: [String] = []
     /// Learning the person's voice (voice onboarding; Voice/VoiceEnrolment.swift): the sentences, the profile, the check.
-    let enrolment = VoiceEnrolment(gate: .shared)
-    private var enrolTask: Task<Void, Never>?
+    let capture = EnrolCapture(gate: .shared)
+    private var micOpen = false, captureToken = 0
     /// The first run is over (done or skipped): the station may start by itself. Told by shared code (obMirror).
     private var over = false
     var finished: Bool { lock.lock(); defer { lock.unlock() }; return over }
@@ -44,7 +44,7 @@ final class OnboardingController: @unchecked Sendable {
 
     init(module: AutoradioModule, support: URL) {
         self.module = module; self.support = support
-        enrolment.onChange = { [weak self] in self?.changed() }
+        capture.onChange = { [weak self] in self?.changed() }
         EditionTalk.shared.onFinish = { [weak self] in self?.set { self?.finishAsked += 1 } }
     }
 
@@ -160,45 +160,50 @@ final class OnboardingController: @unchecked Sendable {
         }
     }
 
-    // MARK: Learning the person's voice (native because it takes the microphone's frames and the embedding model; the page and its words are shared code, voicelearn.ts)
+    // MARK: Learning the person's voice (native only for the microphone's frames and the embedding model; the page, the sentences and the order of it all are shared code, voicelearn.ts)
 
-    /// The microphone is asked for here, at the moment it is first needed (the page showed its pre-prompt line first), then the frames go to the enrolment until it ends or the page leaves. UNPROVEN on a device.
-    func beginEnrolment() {
-        enrolment.begin()
-        let p = enrolment.phase
-        guard p == .listening || p == .confirming else { changed(); return }
-        lock.lock(); let running = enrolTask != nil; lock.unlock()
-        if running { return }
+    /// One sentence is about to be read. The microphone is opened for it alone and closed again when it ends (`closeCapture`), the first time through the system prompt, asked here at the moment it is first needed. The frames go to the capture
+    /// and the engine looks for no turn in them (`TurnEngine.enrolmentTap`), so nothing read here can become a request. UNPROVEN on a device.
+    func beginCapture() {
+        guard capture.begin() else { changed(); return }
+        lock.lock(); captureToken += 1; let token = captureToken; let opening = micOpen; micOpen = true; lock.unlock()
+        // A take that hears nothing (no sound, the engine did not start) ends by itself as a take that was not heard.
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 9_000_000_000)
+            guard let self else { return }
+            self.lock.lock(); let current = self.captureToken == token; self.lock.unlock()
+            if current, self.capture.state == .listening { self.capture.expire(); await self.closeCapture() }
+        }
+        if opening { return }
         AVAudioApplication.requestRecordPermission { [weak self] granted in
             guard let self else { return }
-            if !granted { self.set { self.mic = "refused" }; self.stopEnrolment(); self.enrolment.rewind(); return }
-            let task = Task { [weak self] in
+            if !granted { self.set { self.mic = "refused" }; self.capture.fail("The microphone is off for Autoradio 1."); Task { await self.closeCapture() }; return }
+            Task { [weak self] in
                 guard let self else { return }
                 let rt = self.module.runtime!
-                let frames = rt.bus.mic()
                 await rt.start(virtual: self.module.virtualEngine)
                 rt.audio.micMayRetry()
-                if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }      // opens the microphone, as the first-run check does
-                defer { rt.restoreHandsFree() }
-                var listening = true
-                for await f in frames {
-                    if Task.isCancelled { return }
-                    self.enrolment.feed(f)
-                    let ph = self.enrolment.phase
-                    let now = ph == .listening || ph == .confirming
-                    if listening && !now { rt.cancelTalk() }                                    // a sentence read here must not become a turn to the desk
-                    listening = now
-                    if [.stored, .unsure, .failed, .noModel].contains(ph) { return }
+                if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }       // opens the microphone, as the first-run check does; the engine is told not to look for turns
+                await rt.setEnrolmentTap { [weak self] f in
+                    guard let self else { return }
+                    self.capture.feed(f)
+                    if self.capture.state != .listening { Task { await self.closeCapture() } }
                 }
             }
-            self.lock.lock(); self.enrolTask = task; self.lock.unlock()
         }
     }
 
-    func stopEnrolment() {
-        lock.lock(); let t = enrolTask; enrolTask = nil; lock.unlock()
-        t?.cancel()
+    /// Between sentences, and on leaving: the microphone is closed and the radio's own state is back.
+    func closeCapture() async {
+        lock.lock(); let was = micOpen; micOpen = false; lock.unlock()
+        guard was else { return }
+        let rt = module.runtime!
+        await rt.setEnrolmentTap(nil)
+        rt.restoreHandsFree()
     }
+
+    /// Leaving the page, or "Not now": nothing in progress is kept (the stored voice is not touched).
+    func discardEnrolment() { capture.discard(); Task { await closeCapture() } }
 
     func stopMicrophone() { lock.lock(); micActive = false; lock.unlock() }
 
@@ -254,7 +259,7 @@ final class OnboardingController: @unchecked Sendable {
         changed()
     }
 
-    func stop() { stopVoice(); stopMicrophone(); stopEnrolment() }
+    func stop() { stopVoice(); stopMicrophone(); discardEnrolment() }
 
     /// Sign-out: nothing of the voice side's first run reaches the next account.
     func reset() {
@@ -283,7 +288,7 @@ final class OnboardingController: @unchecked Sendable {
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
         return ["rows": rows, "summary": setup?.summary ?? [],
                 "totalLabel": setup?.totalLabel ?? SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(SetupCatalog.plan(for: profile)), onWiFi: profile.onWiFi),
-                "offers": offers, "enrol": enrolment.facts(), "runStages": runStages, "voiceReady": ready.contains("voice"), "hearingReady": ready.contains("transcriber") && ready.contains("bounds"),
+                "offers": offers, "enrol": capture.facts(), "runStages": runStages, "voiceReady": ready.contains("voice"), "hearingReady": ready.contains("transcriber") && ready.contains("bounds"),
                 "device": device, "onWiFi": profile.onWiFi, "setupStarted": setup?.isStarted ?? false, "setupFinished": setup?.isFinished ?? false,
                 "mic": mic, "level": level, "heard": heard, "route": route, "talking": talking, "voicePicked": picked, "finishAsked": finishAsked]
     }
@@ -315,10 +320,14 @@ extension AutoradioModule {
         switch r["op"] as? String ?? "" {
         case "obFacts": return c.facts()
         case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [], only: (r["only"] as? Bool) ?? false, picks: (r["picks"] as? [String: String]) ?? [:], speaker: (r["speaker"] as? Bool) ?? false)
-        case "obVoiceStart": c.enrolment.start()
-        case "obVoiceBegin": c.beginEnrolment()
-        case "obVoiceStop": c.stopEnrolment()
-        case "obVoiceForget": c.enrolment.forget(); c.stopEnrolment()
+        case "obEnrolBegin": c.beginCapture()
+        case "obEnrolKeep": return ["kept": c.capture.keep(), "usable": c.capture.usable]
+        case "obEnrolBuild": return ["ok": await c.capture.build()]
+        case "obEnrolCheck": return ["call": await c.capture.check()]
+        case "obEnrolStore": return ["ok": c.capture.store()]
+        case "obEnrolDiscardTake": c.capture.dropTake()
+        case "obEnrolDiscard": c.discardEnrolment()
+        case "obVoiceForget": c.discardEnrolment(); SpeakerGate.shared.forget()
         case "obSetupRetry": c.retry(r["stage"] as? String ?? "")
         case "obSetupFallback": c.fallback(r["stage"] as? String ?? "")
         case "obMicStart": c.askMicrophone()

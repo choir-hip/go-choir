@@ -47,8 +47,6 @@ component Autoradio
     gate
     cons
     hideGate
-    agreeModels
-    agreeModelsMobile
     dl
     dlStart
     dlStartMobile
@@ -57,7 +55,6 @@ component Autoradio
     lrnPress
     lrnLeaveFlow
     lrnLeaveSettings
-    declineModels
     gateSignIn
     gateMakeAccount
     // ---- lane autoradio-joins ----

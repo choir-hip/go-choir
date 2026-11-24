@@ -1,6 +1,6 @@
 // The model-download agreement and the sign-in prompt's words under bun test (consent.ts): C1 to C6, against a fake storage and a fake native.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { consentAct, consentView, deskMode, forgetConsent, modelsAgreed, modelsAgreement, parseConsent, wipeConsent, consentPick, consentPicks, CONSENT_FILE } from './consent.ts';
+import { consentAgree, consentView, deskMode, forgetConsent, modelsAgreement, parseConsent, wipeConsent, consentPick, consentPicks, CONSENT_FILE } from './consent.ts';
 import { ASK_TEXT } from './consent-text.ts';
 import en from './strings/en.json';
 import { bindNative, nextGeneration, resetSeam } from './api.ts';
@@ -18,31 +18,31 @@ beforeEach(() => { files.clear(); forgetConsent(); resetSeam(); readFails = fals
 
 describe('the download agreement', () => {
   test('C1 a fresh account has agreed to nothing; a bad file is fresh', async () => {
-    expect(await consentView(storage)).toMatchObject({ models: '', mobileOk: false });
-    expect(await modelsAgreed(storage)).toBe(false);
-    for (const t of ['', 'not json', '[]', '{"models":"yes"}', '{"models":5}', 'null']) expect(parseConsent(t)).toEqual({ models: '', picks: {} });
-    expect(parseConsent('{"models":"agreed-mobile"}')).toEqual({ models: 'agreed-mobile', picks: {} });
+    expect(await modelsAgreement(storage, 'search')).toEqual({ ok: false, mobile: false });
+    for (const t of ['', 'not json', '[]', '{"agreed":"yes"}', '{"agreed":{"voice":5,"search":"maybe"}}', 'null']) expect(parseConsent(t)).toEqual({ agreed: {}, picks: {} });
+    expect(parseConsent('{"agreed":{"voice":"agreed-mobile","x":"agreed","y":"no"}}')).toEqual({ agreed: { voice: 'agreed-mobile', x: 'agreed' }, picks: {} });
   });
-  test('C2 agree (Wi-Fi), agree on mobile data, decline, agree later: each persists', async () => {
-    expect((await consentAct('declineModels', storage)).models).toBe('declined'); expect(await modelsAgreed(storage)).toBe(false);
-    forgetConsent(); expect((await consentView(storage)).models).toBe('declined');
-    expect(await consentAct('agreeModels', storage)).toMatchObject({ models: 'agreed', mobileOk: false }); expect(await modelsAgreement(storage)).toEqual({ ok: true, mobile: false });
-    expect(await consentAct('agreeModelsMobile', storage)).toMatchObject({ models: 'agreed-mobile', mobileOk: true }); expect(await modelsAgreement(storage)).toEqual({ ok: true, mobile: true });
-    expect(kept()).toEqual({ models: 'agreed-mobile', picks: {} });
+  test('C2 agreement is per group; Wi-Fi never lowers a mobile agreement; each persists', async () => {
+    expect(await consentAgree('voice', false, storage)).toBe(true);
+    expect(await modelsAgreement(storage, 'voice')).toEqual({ ok: true, mobile: false }); expect(await modelsAgreement(storage, 'search')).toEqual({ ok: false, mobile: false });
+    expect(await modelsAgreement(storage, 'voice-rest')).toEqual({ ok: false, mobile: false });
+    await consentAgree('voice', true, storage); await consentAgree('voice', false, storage);
+    forgetConsent(); expect(await modelsAgreement(storage, 'voice')).toEqual({ ok: true, mobile: true });
+    expect(kept()).toEqual({ agreed: { voice: 'agreed-mobile' }, picks: {} });
   });
   test('C2 unread is never yes, and nothing is written over what was not read', async () => {
-    files.set(CONSENT_FILE, new TextEncoder().encode('{"models":"agreed"}')); readFails = true;
-    expect(await modelsAgreed(storage)).toBe(false);
-    expect((await consentAct('declineModels', storage)).models).toBe('');
-    readFails = false; expect(await modelsAgreed(storage)).toBe(true);
+    files.set(CONSENT_FILE, new TextEncoder().encode('{"agreed":{"search":"agreed"}}')); readFails = true;
+    expect((await modelsAgreement(storage, 'search')).ok).toBe(false);
+    expect(await consentAgree('voice', false, storage)).toBe(false);
+    readFails = false; expect((await modelsAgreement(storage, 'search')).ok).toBe(true); expect((await modelsAgreement(storage, 'voice')).ok).toBe(false);
+  });
+  test('C2 an agreement that could not be written is not an agreement', async () => {
+    const bad = { fs: { ...(storage as { fs: Record<string, unknown> }).fs, atomicWriteFile: async () => { throw new Error('ENOSPC'); } } } as never;
+    expect(await consentAgree('voice', false, bad)).toBe(false); expect((await modelsAgreement(bad, 'voice')).ok).toBe(false);
   });
   test('C3 a sign-out forgets it; the account moving drops what was read', async () => {
-    await consentAct('agreeModels', storage); await wipeConsent(storage); expect(files.size).toBe(0); expect(await modelsAgreed(storage)).toBe(false);
-    await consentAct('agreeModels', storage); nextGeneration(); files.clear(); expect(await modelsAgreed(storage)).toBe(false);
-  });
-  test('C4 an unknown op changes nothing (there is no op for outside AI: that agreement is the create-account screen\'s)', async () => {
-    for (const op of ['everything', 'allowAI', 'withdrawAI']) expect((await consentAct(op, storage)).models).toBe('');
-    expect(files.size).toBe(0);
+    await consentAgree('search', false, storage); await wipeConsent(storage); expect(files.size).toBe(0); expect((await modelsAgreement(storage, 'search')).ok).toBe(false);
+    await consentAgree('search', false, storage); nextGeneration(); files.clear(); expect((await modelsAgreement(storage, 'search')).ok).toBe(false);
   });
 });
 

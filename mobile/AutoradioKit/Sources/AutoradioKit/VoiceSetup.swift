@@ -403,13 +403,12 @@ public final class VoiceSetup: @unchecked Sendable {
         }
     }
 
-    /// The person's pick for a stage (the download step: owner, 2026-11-24): that model is tried first and the rest of the stage's ladder stays behind it as the fallbacks, so a failed pick still ends on the floor. Before `run`.
-    /// A pick the ladder does not list is built from the list's entry.
+    /// The person's pick for a stage (the download step: owner, 2026-11-24): the stage's ladder becomes that model and then the built-in floor, so a failed pick ends on what is built in and never on a model the person was not shown
+    /// (review, 2026-11-24: what is shown is what is fetched). Before `run`.
     public func prefer(_ s: SetupStage, _ c: SetupCandidate) {
         lock.lock(); defer { lock.unlock() }
         guard !started, var l = plan[s] else { return }
-        l.removeAll { $0.id == c.id }
-        l.insert(c, at: 0)
+        l = [c] + l.filter { $0.isFloor && $0.id != c.id }
         plan[s] = l
         rowsByStage[s] = Self.freshRow(s, c)
     }

@@ -5,18 +5,11 @@ use DownloadsView from "./downloads-types.contract"
 
 members Autoradio
   // Asked again when the account changes (sign-in, sign-out) and after each press (the mutation's answer is the new view).
-  resource cons = consentView(`${au.signedIn}|${signedOutTick}`) as shape ConsentView else empty(models="", mobileOk=false, rev=0, signTitle="", signWhy="", signIn="", make="", later="")
-  mutation consm as shape ConsentView refreshes cons
+  resource cons = consentView(`${au.signedIn}|${signedOutTick}`) as shape ConsentView else empty(rev=0, signTitle="", signWhy="", signIn="", make="", later="")
   // "" (none) or "signin": which sheet is up.
   state gate = ""
   action hideGate
     gate = ""
-  action agreeModels
-    send consm = consentAct("agreeModels")
-  action agreeModelsMobile
-    send consm = consentAct("agreeModelsMobile")
-  action declineModels
-    send consm = consentAct("declineModels")
   action gateSignIn
     gate = ""
     send signedRun = signInRun()
@@ -28,7 +21,7 @@ members Autoradio
     sivTick = sivTick + 1
 
   // The model downloads (downloads.ts): asked again when the voice side's facts change (ovoice) or an agreement is recorded; each press is one group's agreement and start.
-  resource dl = downloadsPage(ovoice, cons.rev) as shape DownloadsView else empty(groups=[], rev=0, voiceReady=false, hearingReady=false)
+  resource dl = downloadsPage(ovoice, cons.rev) as shape DownloadsView else empty(groups=[], rev=0, voiceReady=false, hearingReady=false, setupTotal="")
   mutation dlm as shape DownloadsView refreshes dl
   action dlStart(group: string)
     send dlm = downloadsAct("start", group, ovoice, "")

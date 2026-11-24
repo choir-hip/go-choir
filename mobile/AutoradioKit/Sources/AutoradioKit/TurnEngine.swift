@@ -142,6 +142,8 @@ public struct EngineLimits: Sendable {
 
 public actor TurnEngine {
     let env: EngineEnvironment
+    /// Set while voice enrolment listens: the microphone's frames go there and are not looked at for turns (HandsFree.swift `ingestHandsFree`).
+    var enrolmentTap: (@Sendable (AudioFrame) -> Void)?
     let limits: EngineLimits
     var config: LabConfiguration
     var configVersion = 0, idleVersion = -1
@@ -509,7 +511,8 @@ public actor TurnEngine {
         if !Task.isCancelled {
             await hfAnswerEnded(turnID: t.id)
             // A turn that led to an answer the reader did not cancel is the reader's voice: it keeps improving the learned voice.
-            if !t.speakerSamples.isEmpty, Conversation.shared.entry(t.id)?.status == "answered" {
+            // Only a voice the person taught in onboarding adapts; nothing is learned from turns before that (owner, 2026-11-24: the voice is learned in voice onboarding).
+            if env.speakerGate.learned, !t.speakerSamples.isEmpty, Conversation.shared.entry(t.id)?.status == "answered" {
                 let (gate, samples) = (env.speakerGate, t.speakerSamples)
                 Task { await gate.learn(samples) }
             }
