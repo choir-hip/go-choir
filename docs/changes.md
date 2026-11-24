@@ -17,6 +17,8 @@ Why: the owner saw raw HTML on the phone's Privacy and Terms pages (2026-11-24);
 Proof: before, `nix eval .#packages.x86_64-linux.frontend.src.outPath` held an empty `public/legal`; after, it holds both files and the PDF. Deployed proof: `curl -s -D- https://choir.news/legal/privacy-policy.md` answers markdown, not the shell (not proved until deployed).
 Replaced: the suffix list's silent drop of public files.
 Undo: revert the commit.
+## 2026-11-24: the development build installs again, under the production id (orange; lane `dev-profile`)
+**What.** `AR_VARIANT=dev mobile/scripts/build-lab.sh ios --device --phone <udid>` builds the production id `news.choir.autoradio` as a development app, signed with the explicit profile "Autoradio 1 Development" (found by `mobile/scripts/dev-profile.sh`, passed to Exact as `EXACT_PROFILE`), not the team's wildcard. **Why.** Passkey sign-up added the Associated Domains entitlement, a wildcard App ID cannot carry it, so the lab-one build stopped installing (0xe8008015); `news.choir.autoradio.lab.one` belongs to the free team and cannot be registered under S47GERGJZ3. **Proof.** The profile decodes with app id `S47GERGJZ3.news.choir.autoradio`, associated-domains, the phone and a year's expiry; store-build tests; install on the phone: not yet proved. **Replaced.** Nothing: `lab` and `lab-one` and the store build are unchanged. **Undo.** Revert the commit; the profile is deletable in the developer account.
 
 ## 2026-11-23: the phone's first run, downloads and microphone (lane `onboard-consent`)
 
