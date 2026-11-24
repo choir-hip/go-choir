@@ -167,6 +167,22 @@ boundaries:
     said: well, if we can get it working well quickly, we should make eventually now/sooner. yes, capture would be its own desk. not texture or research
     'on': '2026-11-24'
     reading: 'lead''s reading: the desks are then the root (in the one Texture desk, with addressable stories), capture, research, the Autoradio desk, engineering and management. Capture is custodian of the capture path''s output (each capture''s symbols); the graph custodian host service still writes subjects, mentions and counts from it. Shipping (M7) keeps the landing slot; the capture desk is built beside it in its own lane and lands when it has a reviewed candidate'
+  - decision: 'the capture desk owns the graph custodian: it is custodian of subjects, mentions, groups and counts, and the graph custodian is its host service'
+    said: '>the capture desk own the graph custodian. yes, record that as a ruling'
+    'on': '2026-11-24'
+    reading: 'lead''s reading: the root asks for index edits through a record to the capture desk; the root''s own editorial weight on a subject stays the root''s forecast, layered on the counted rate'
+  - decision: the shared spacer of 40 sub-call model calls a minute is wrong and is investigated and removed. Any desk can write code that creates another RLM, and the two can send messages to each other over our protocol
+    said: 'on rlm: we need to investigate. how did the 40 calls a minute thing get there? thats wrong. and what is the subcall logic? any desk should be able to write code that creates another rlm and both should be able to send messages to each other over our protocol'
+    'on': '2026-11-24'
+  - decision: batches of twelve captures with a ten-minute deadline are a bad constraint; the capture desk, using the graph custodian, groups and processes, and processes more
+    said: 2) groups of 12 captures per 10 minutes is a bad constraint. we need the capture desk using the graph custodian to group and process. we should be processing more. i think we are getting a backlog, no?
+    'on': '2026-11-24'
+  - decision: the entity candidate service is deprecated with entities and events, and the generic parallel fan-out helper is deprecated in favour of RLM working properly; neither is wired into the capture desk
+    said: 3) the entity candidate service... wont that be deprecated as we are moving away from entities and events? and the generic parallel fanout is also to be deprecated in favor of rlm working properly
+    'on': '2026-11-24'
+  - decision: a desk has the whole corpus and the new captures at its fingertips in its REPL
+    said: and youre right about what a capture desk needs. we should definitely be able to have the whole corpus and new captures at a desks fingertips (repl)
+    'on': '2026-11-24'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
