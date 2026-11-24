@@ -36,7 +36,7 @@ import { downloadsPage, downloadsAct } from './downloads.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
 import { deleteReset, deleteRun, deleteView, type DeleteEnv } from './account-delete.ts';
-import { signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
+import { signInCancel, signInCancelDeletion, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -227,6 +227,7 @@ const sources: Sources = {
   // Sign-in and account creation (app-signin.ts): one attempt, one state machine with an id, owned there. The passkey screen is the platform's; the key is kept as Exact secrets. No native code is involved.
   signInRun: ([mode, email, code], store) => signInRun(signInEnv(store), (mode === 'create' ? 'create' : 'signin') as Mode, String(email ?? ''), String(code ?? '')),
   signInCancel: (_a, store) => signInCancel(signInEnv(store)),
+  signInCancelDeletion: (_a, store) => signInCancelDeletion(signInEnv(store)),
   signInOpen: (_a, store) => signInReset(signInEnv(store)),
   signInView: ([_tick]) => signInView(),
   accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),

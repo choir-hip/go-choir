@@ -46,6 +46,7 @@ component SignInScreen
     createAccount: action
     signInPasskey: action
     cancelSignIn: action
+    cancelDeletion: action
     closeAuth: action
   view
     column position="absolute" inset=0 padding=24 gap=20 align-items="center" justify-content="center" overflow-y="auto"
@@ -90,6 +91,9 @@ component SignInScreen
             Btn(label="Not now", primary=false, wide=false)
       if siv.message != "" and not siv.pending and not signRunning
         text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
+      if siv.offer
+        button press=cancelDeletion testId="signin-cancel-deletion" appearance="none"
+          Btn(label="Cancel deletion", primary=true, wide=false)
 
 // ---------------------------------------------------------------- the page
 

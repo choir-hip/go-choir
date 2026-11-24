@@ -63,6 +63,7 @@ members Autoradio
   mutation signedRun as shape SignInEnd then bumpSiv
   mutation signedCancel as shape SignInEnd then bumpSiv
   mutation signedOpen as shape SignInEnd then bumpSiv
+  mutation signedCancelDeletion as shape SignInEnd then bumpSiv
   // The sign-in screen is up (the card, Settings and the first-run page open it through `signIn`) and the email typed for a new account.
   state authOpen = false
   state authEmail = ""
@@ -71,7 +72,7 @@ members Autoradio
   state sivTick = 0
   action bumpSiv
     sivTick = sivTick + 1
-  derive sivKey = `${sivTick}|${match signedRun { case some(r) => r.rev, case none => 0 }}|${match signedCancel { case some(r) => r.rev, case none => 0 }}|${match signedOpen { case some(r) => r.rev, case none => 0 }}`
+  derive sivKey = `${sivTick}|${match signedRun { case some(r) => r.rev, case none => 0 }}|${match signedCancel { case some(r) => r.rev, case none => 0 }}|${match signedOpen { case some(r) => r.rev, case none => 0 }}|${match signedCancelDeletion { case some(r) => r.rev, case none => 0 }}`
   resource siv = signInView(sivKey) as shape SignInView else empty()
   // A sign-in call is still answering (the screen is in its waiting state then, and shows no message from an earlier attempt).
   derive signRunning = pending(signedRun)
@@ -95,6 +96,10 @@ members Autoradio
   // "Sign in": the passkey screen with no email typed (a discoverable credential).
   action signInPasskey
     send signedRun = signInRun("signin", "", "")
+    sivTick = sivTick + 1
+  // "Cancel deletion": a sign-in found the account pending deletion and offered this; the server's one-use token goes once and the answer is the app's key (app-signin.ts).
+  action cancelDeletion
+    send signedCancelDeletion = signInCancelDeletion()
     sivTick = sivTick + 1
   // The screen's Cancel while the passkey screen is up: the machine moves first (every later answer is ignored), so no key is kept after it.
   action cancelSignIn

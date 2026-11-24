@@ -93,6 +93,7 @@ component Autoradio
     pl
     signIn
     cancelSignIn
+    cancelDeletion
     closeAuth
     createAccount
     signInPasskey

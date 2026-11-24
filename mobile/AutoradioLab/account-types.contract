@@ -13,6 +13,8 @@ shape SignInView
   pending: bool
   mode: string
   message: string
+  // The account was found pending deletion by a sign-in: "Cancel deletion" is on offer (never the token).
+  offer: bool
   // The machine's count of published changes: the resource is keyed on it so the last change is read.
   rev: number
 
