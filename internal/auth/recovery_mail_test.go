@@ -291,6 +291,7 @@ func TestRecoveryLinkOriginComesFromConfigNotRequest(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/auth/recovery/request", bytes.NewBufferString(`{"email":"origin@example.com"}`))
+	req.Header.Set("Content-Type", "application/json")
 	req.Host = "evil.example"
 	req.Header.Set("Origin", "https://evil.example")
 	req.Header.Set("X-Forwarded-Host", "evil.example")
