@@ -1330,7 +1330,10 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			// must not terminalize on a recoverable call. Bounded in-loop
 			// retry with a short sleep; the durable run record is untouched
 			// so a retry costs one iteration of wall time, not a state.
-			if isTransientProviderError(err) && transientAttempts < 3 {
+			// A typed upstream refusal was already waited out (or failed
+			// over from) by the pool retry; retrying it again here is the
+			// blind retry one level up.
+			if _, refused := provideriface.AsUpstreamRefusal(err); !refused && isTransientProviderError(err) && transientAttempts < 3 {
 				transientAttempts++
 				if emit != nil {
 					payload, _ := json.Marshal(map[string]any{

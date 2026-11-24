@@ -182,3 +182,64 @@ func TestEveryHalfOpenProbeHasADeadline(t *testing.T) {
 		t.Fatal("a stalled half-open probe of an ordinary failure ran with no deadline")
 	}
 }
+
+// The gateway never promises a wait the guest would clamp: the computed
+// Retry-After is capped at the guest's one-minute clamp, however long the
+// model's breaker stays open.
+func TestComputedRetryAfterIsCappedAtTheGuestsClamp(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(1000, 0)}
+	stub := &quotaStub{name: "synthetic"}
+	stub.set(errors.New("synthetic: status 429 Too Many Requests (sanitized)"))
+	cbp := NewCircuitBreakingProvider(stub, health.BreakerConfig{FailureThreshold: 1, OpenTimeout: 10 * time.Minute, Now: clock.Now})
+	_ = callModel(cbp, "m") // opens for ten minutes
+	wait := cbp.refusalRetryAfter("m")
+	if wait > time.Minute || wait < time.Second {
+		t.Fatalf("computed Retry-After = %s, want between 1s and the guest's 1m clamp", wait)
+	}
+}
+
+// A quota open and an ordinary 429 from a call that was already in flight are
+// one open and one log line: the quota's.
+func TestOneOpenIsOneLineAcrossQuotaAndOrdinaryFailures(t *testing.T) {
+	var logs bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(prev)
+
+	stub := &twoFacedStub{release: make(chan struct{}), inFlight: make(chan struct{}, 1)}
+	cbp := NewCircuitBreakingProvider(stub, health.BreakerConfig{FailureThreshold: 5, OpenTimeout: time.Hour})
+	done := make(chan struct{})
+	go func() { _ = callModel(cbp, "m"); close(done) }() // call 1: held in flight, will fail 429
+	<-stub.inFlight
+	_ = callModel(cbp, "m") // call 2: a quota, opens the breaker and logs its line
+	close(stub.release)
+	<-done
+	if n := strings.Count(logs.String(), "provider quota exhausted"); n != 1 {
+		t.Fatalf("quota lines = %d, want 1:\n%s", n, logs.String())
+	}
+	if n := strings.Count(logs.String(), "narrowed by a provider failure"); n != 0 {
+		t.Fatalf("a late ordinary 429 of the same open logged %d narrowing lines, want 0:\n%s", n, logs.String())
+	}
+}
+
+// twoFacedStub's first call waits and then fails 429; its later calls are a
+// spent quota.
+type twoFacedStub struct {
+	release  chan struct{}
+	inFlight chan struct{}
+	calls    atomic.Int32
+}
+
+func (s *twoFacedStub) Name() string { return "synthetic" }
+func (s *twoFacedStub) IsReal() bool { return true }
+func (s *twoFacedStub) Call(ctx context.Context, req provider.LLMRequest) (*provider.LLMResponse, error) {
+	if s.calls.Add(1) == 1 {
+		s.inFlight <- struct{}{}
+		<-s.release
+		return nil, errors.New("synthetic: status 429 Too Many Requests (sanitized)")
+	}
+	return nil, &provider.QuotaExhaustedError{Provider: "synthetic", Status: "429 Too Many Requests"}
+}
+func (s *twoFacedStub) Stream(ctx context.Context, req provider.LLMRequest, _ func(provider.StreamChunk)) (*provider.LLMResponse, error) {
+	return s.Call(ctx, req)
+}

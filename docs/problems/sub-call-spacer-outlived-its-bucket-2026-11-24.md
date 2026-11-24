@@ -90,7 +90,10 @@ refusals, and the substrate has to carry a refusal truthfully.
    (`internal/gateway/upstream_refusal.go`). The providers drop the
    upstream's own Retry-After on an ordinary 429, so the wait is computed:
    the time until that model's breaker half-opens when the refusals opened
-   it, else the header's one-second resolution. The breaker counts an
+   it, else the header's one-second resolution. The wait is capped at one minute, the one number the gateway's
+   promise and the guest's clamp (`gatewayruntime` `maxRateLimitWait`) share;
+   a model open for longer answers the next call "circuit open" and the guest
+   fails over. The breaker counts an
    ordinary 429 as a refusal as before; a concurrency refusal still counts
    only at its streak, because it says the account is busy, not that the
    model is ill (a gate holds Synthetic's excess calls); both are now

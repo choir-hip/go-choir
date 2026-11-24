@@ -36,3 +36,24 @@ func TestUpstreamRefusalFailsOverAtOnceOrWaitsItsRetryAfter(t *testing.T) {
 		t.Fatalf("without a fallback: %d calls in %s; want a wait of its 40 ms Retry-After, not the fixed delays", p.count("chatgpt"), elapsed)
 	}
 }
+
+// The outer loop's own transient retry (three times, 15 s apart) must not pick
+// up a typed upstream refusal that the pool retry already waited out: that is
+// the blind retry again, one level up.
+func TestUpstreamRefusalIsNotRetriedBlindByTheOuterLoop(t *testing.T) {
+	original, transient := providerRateLimitRetryDelays, transientProviderRetryDelay
+	providerRateLimitRetryDelays = []time.Duration{0}
+	transientProviderRetryDelay = time.Millisecond
+	t.Cleanup(func() { providerRateLimitRetryDelays, transientProviderRetryDelay = original, transient })
+	refusal := &provideriface.UpstreamRefusalError{Provider: "chatgpt", Model: "gpt-6-luna", Message: "status 429", RetryAfter: time.Millisecond}
+	p := &poolProvider{errs: map[string][]error{"chatgpt": {refusal}}}
+	_, err, _ := runPool(context.Background(), p, lunaMember)
+	if err == nil {
+		t.Fatal("a run whose only member keeps refusing succeeded")
+	}
+	// One call, then one wait of its Retry-After and one more call: no
+	// three further blind retries.
+	if got := p.count("chatgpt"); got != 2 {
+		t.Fatalf("calls = %d, want 2 (the call and the one Retry-After retry)", got)
+	}
+}

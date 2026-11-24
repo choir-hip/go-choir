@@ -72,7 +72,7 @@ Left native on purpose: the kept-turn retention rule (`KeptTurnStore.prune`: 20 
 - **Proof.** Tests seen failing then passing: the first four child calls
   and the first K task calls start together (no spacing); K is the config's
   with no setting able to hold it at 1; a stored `management.serial_tasks` row is
-  invisible and harmless; a burst of 16 is ungated with no refusals, opened for every caller by refusals, and opened again by a successful probe (`TestBurstOfSubCallsIsHeldOnlyByTheProvidersRefusals`); the guest's 429 Retry-After wait test is unchanged
+  invisible and harmless; a burst of 16 is ungated with no refusals and opens again after a recovered probe (`TestBurstOfSubCallsIsUngatedWithoutRefusalsAndOpensAgainOnARecoveredProbe`), and the breaker opens once, from inside a concurrent burst, with one line (`TestBurstOpensTheBreakerOnceFromInsideTheBurst`, `TestOneOpenIsOneLineAcrossQuotaAndOrdinaryFailures`); the guest's 429 Retry-After wait test is unchanged
   and passes. Not proved until deploy: ledger claim C244 (task call gaps no
   longer floored at 1.5 s on the paper; no rise in provider 429s in 6 hours).
 - **Replaced.** The 40-a-minute spacer and the K = 1 rollback.

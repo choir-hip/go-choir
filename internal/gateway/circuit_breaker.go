@@ -39,7 +39,8 @@ import (
 //
 // The model breaker is each pool member's health, mirroring the search
 // plane's per-provider cooldowns (docs/design/model-pool-autoroute-2026-11-02.md):
-// the open duration doubles on each failed probe and resets on a success; an
+// the open duration doubles on each failed probe and a passing probe keeps the
+// doubling (forgotten by time spent closed, internal/health); an
 // exhausted quota (provider.ErrUpstreamQuotaExhausted) opens it on the first
 // one, until the quota's reset time when the provider gives one (Retry-After,
 // Synthetic's nextRegenAt), else for a longer doubling cooldown, and the
@@ -487,6 +488,7 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 		}
 		c.mu.Unlock()
 		if opened {
+			c.markOpenLogged(key, snap.Opens)
 			log.Printf("gateway: model %s/%s provider quota exhausted (trip %d, half-opens at %s, reset expected %s%s)",
 				c.inner.Name(), modelLabel(model), snap.Trips, formatUntil(snap.OpenUntil), formatUntil(&hold.retryAt), estimatedLabel(hold.estimated))
 		}
@@ -500,6 +502,7 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 		c.mu.Unlock()
 		if streak >= ConcurrencyStreakBeforeCooldown && b.Trip(nil) {
 			snap := b.Snapshot()
+			c.markOpenLogged(key, snap.Opens)
 			log.Printf("gateway: model %s/%s cooling down (%d concurrency 429s in a row, trip %d, until %s)",
 				c.inner.Name(), modelLabel(model), streak, snap.Trips, formatUntil(snap.OpenUntil))
 		}
@@ -510,6 +513,7 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 		// that succeeds closes the breaker and ends the doubling.
 		if b.Trip(c.hardCooldown) {
 			snap := b.Snapshot()
+			c.markOpenLogged(key, snap.Opens)
 			log.Printf("gateway: model %s/%s refused as a hard failure (%s; trip %d, half-opens at %s)",
 				c.inner.Name(), modelLabel(model), logText(err.Error()), snap.Trips, formatUntil(snap.OpenUntil))
 		}
@@ -553,6 +557,15 @@ func (c *CircuitBreakingProvider) logOrdinaryNarrowing(ctx context.Context, mode
 		log.Printf("gateway: model %s/%s narrowed by a provider failure (%s; trip %d, half-opens at %s)",
 			c.inner.Name(), modelLabel(model), logText(err.Error()), snap.Trips, formatUntil(snap.OpenUntil))
 	}
+}
+
+// markOpenLogged records that the breaker's open number opens has its log
+// line, whichever arm wrote it, so a late ordinary failure of the same open
+// does not log a second one.
+func (c *CircuitBreakingProvider) markOpenLogged(key string, opens int) {
+	c.mu.Lock()
+	c.loggedOpens[key] = opens
+	c.mu.Unlock()
 }
 
 // clearQuotaHold forgets model's quota hold ("" model is the default; all

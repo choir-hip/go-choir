@@ -26,6 +26,13 @@ import (
 // refusalRetryFloor is the Retry-After header's own resolution: whole seconds.
 const refusalRetryFloor = time.Second
 
+// refusalRetryCap is the longest wait the gateway tells a guest to wait: the
+// guest clamps any Retry-After to one minute (gatewayruntime maxRateLimitWait),
+// so a longer promise would be one the guest cannot keep. The one number is a
+// minute; a model open for longer is reached by the guest's next call, which
+// the open breaker answers "circuit open" and fails over on.
+const refusalRetryCap = time.Minute
+
 // isUpstreamRefusal reports whether err is an ordinary upstream 429 or a
 // concurrency refusal: not a quota (typed separately), not a breaker's own
 // refusal, and not a call that ended waiting for a slot.
@@ -61,6 +68,9 @@ func (c *CircuitBreakingProvider) refusalRetryAfter(model string) time.Duration 
 				wait = left
 			}
 		}
+	}
+	if wait > refusalRetryCap {
+		wait = refusalRetryCap
 	}
 	return wait
 }
