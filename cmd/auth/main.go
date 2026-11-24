@@ -97,20 +97,20 @@ func authRoutes(handler *auth.Handler) []authRoute {
 		sensitive = auth.RateClassSensitive
 	)
 	return []authRoute{
-		{"/auth/register/mail", begin, handler.HandleRegisterMail},
-		{"/auth/register/begin", begin, handler.HandleRegisterBegin},
-		{"/auth/register/finish", ceremony, handler.HandleRegisterFinish},
-		{"/auth/login/begin", begin, handler.HandleLoginBegin},
-		{"/auth/login/finish", ceremony, handler.HandleLoginFinish},
-		{"/auth/session", read, handler.HandleSession},
-		{"/auth/logout", act, handler.HandleLogout},
+		{"POST /auth/register/mail", begin, handler.HandleRegisterMail},
+		{"POST /auth/register/begin", begin, handler.HandleRegisterBegin},
+		{"POST /auth/register/finish", ceremony, handler.HandleRegisterFinish},
+		{"POST /auth/login/begin", begin, handler.HandleLoginBegin},
+		{"POST /auth/login/finish", ceremony, handler.HandleLoginFinish},
+		{"GET /auth/session", read, handler.HandleSession},
+		{"POST /auth/logout", act, handler.HandleLogout},
 		// Account switcher (docs/design/account-switcher-2026-11-09.md).
-		{"/auth/accounts", read, handler.HandleAccountsList},
-		{"/auth/accounts/switch", act, handler.HandleAccountSwitch},
-		{"/auth/accounts/signout", act, handler.HandleAccountSignout},
-		{"/auth/accounts/logout-all", act, handler.HandleAccountsLogoutAll},
-		{"/auth/desktop/exchange-redirect", ceremony, handler.HandleDesktopExchangeRedirect},
-		{"/auth/desktop/redeem", ceremony, handler.HandleDesktopRedeem},
+		{"GET /auth/accounts", read, handler.HandleAccountsList},
+		{"POST /auth/accounts/switch", act, handler.HandleAccountSwitch},
+		{"POST /auth/accounts/signout", act, handler.HandleAccountSignout},
+		{"POST /auth/accounts/logout-all", act, handler.HandleAccountsLogoutAll},
+		{"GET /auth/desktop/exchange-redirect", ceremony, handler.HandleDesktopExchangeRedirect},
+		{"POST /auth/desktop/redeem", ceremony, handler.HandleDesktopRedeem},
 		{"GET /api/auth/root/status", read, handler.HandleRootStatus},
 
 		// M1: API key management (headless auth).

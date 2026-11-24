@@ -121,10 +121,12 @@ func call(h http.HandlerFunc, method, path string, mut func(*http.Request), body
 func TestAnUnprovedAccountActsThroughNoRoute(t *testing.T) {
 	e := newUnprovedEnv(t)
 	for _, rt := range authRoutes(e.h) {
-		method, path := "GET", rt.pattern
-		if i := strings.IndexByte(rt.pattern, ' '); i > 0 {
-			method, path = rt.pattern[:i], rt.pattern[i+1:]
+		// Every pattern carries its method: nothing is inferred, so a POST route is driven as a POST.
+		i := strings.IndexByte(rt.pattern, ' ')
+		if i <= 0 {
+			t.Fatalf("route %q has no method; put it on the pattern", rt.pattern)
 		}
+		method, path := rt.pattern[:i], rt.pattern[i+1:]
 		path = strings.ReplaceAll(path, "{id}", "x")
 		anonCode, _ := call(rt.handler, method, path, nil, "")
 		// What a credential that is simply not valid gets: some routes answer by the shape
@@ -191,7 +193,7 @@ func TestTheRouteTableHasTheRedemptionRoutes(t *testing.T) {
 	for _, rt := range authRoutes(e.h) {
 		have[rt.pattern] = true
 	}
-	for _, want := range []string{"POST /auth/device/token", "/auth/desktop/redeem", "GET /auth/whoami", "POST /auth/api-keys"} {
+	for _, want := range []string{"POST /auth/device/token", "POST /auth/desktop/redeem", "POST /auth/logout", "POST /auth/accounts/switch", "GET /auth/whoami", "POST /auth/api-keys"} {
 		if !have[want] {
 			t.Errorf("route table lacks %q", want)
 		}
