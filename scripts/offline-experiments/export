@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Export for the offline experiments E1 to E3: read-only reads on Node B streamed to flat
+# files on the build VM (never into the repo, never to the Mac). Each statement runs
+# under nice -n 19, default_transaction_read_only and a statement timeout; the body
+# read runs under nice and ionice -c3.
+# Usage: scripts/offline-experiments/export [DEST_DIR_ON_BUILD_VM] [START] [END] [VSTART]
+#   defaults: offline-experiments-data, 2026-11-22 00:00, 2026-11-24 00:00, 2026-11-21 12:00
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+dest="${1:-offline-experiments-data}"
+start="${2:-2026-11-22 00:00}"
+end="${3:-2026-11-24 00:00}"
+vstart="${4:-2026-11-21 12:00}"
+runner="${RUNNER:-choir-agents}"
+ssh "$runner" "mkdir -p $dest"
+q() { # q FILE OUTNAME
+  { echo "set default_transaction_read_only=on; set statement_timeout='120s';"
+    sed -e "s/@START@/$start/g" -e "s/@END@/$end/g" -e "s/@VSTART@/$vstart/g" "$here/$1"; } |
+    ssh node-b 'nice -n 19 sudo -n -u postgres psql -d graph -q -v ON_ERROR_STOP=1 -f -' |
+    ssh "$runner" "cat > $dest/$2"
+}
+q export-day.sql captures.csv
+q export-vectors.sql vectors.csv
+q export-urls.sql urls.csv
+q export-versions.sql versions.csv
+q export-cites.sql cites.csv
+q export-story-vectors.sql story-vectors.csv
+# bodies: the hash list comes from captures.csv (last column), streamed through here.
+ssh "$runner" "python3 -c 'import csv
+seen=set()
+for r in csv.reader(open(\"$dest/captures.csv\",newline=\"\")):
+    h=r[-1]
+    if h and h not in seen:
+        seen.add(h); print(h)'" |
+  ssh node-b "sudo -n nice -n 19 ionice -c3 python3 -c \"\$(echo $(base64 < "$here/read-bodies.py" | tr -d '\n') | base64 -d)\" 8192" |
+  ssh "$runner" "cat > $dest/bodies.bin"
+ssh "$runner" "cd $dest && ls -l && wc -l captures.csv vectors.csv urls.csv versions.csv cites.csv story-vectors.csv"
