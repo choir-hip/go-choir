@@ -40,9 +40,13 @@ func noWakeFixture(t *testing.T, state string) (h *Handler, secret string, guest
 			if state != "active" {
 				url = ""
 			}
+			reported := state
+			if state == "active-no-url" {
+				reported = "active"
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"computer_id": computerID, "user_id": user.ID, "desktop_id": "primary", "vm_id": "vm-nw",
-				"computer_url": url, "state": state, "epoch": 3,
+				"computer_url": url, "state": reported, "epoch": 3,
 			})
 		case "/internal/vmctl/touch":
 			_, _ = w.Write([]byte(`{"touched":true}`))
@@ -94,5 +98,23 @@ func TestPlainObservabilityReadStillWakes(t *testing.T) {
 	handler.HandleAPI(rec, req)
 	if otherCalls.Load() == 0 {
 		t.Fatalf("a plain read no longer reaches the wake path; status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDataVolumeDetailHeadAndAnActiveComputerWithNoURLDoNotWakeEither(t *testing.T) {
+	for name, c := range map[string]struct{ state, method string }{
+		"HEAD of a hibernated computer":         {string(vmctl.VMStateHibernated), http.MethodHead},
+		"GET of an active computer with no URL": {"active-no-url", http.MethodGet},
+	} {
+		t.Run(name, func(t *testing.T) {
+			handler, secret, guestCalls, otherCalls := noWakeFixture(t, c.state)
+			req := httptest.NewRequest(c.method, "/api/runtime/observability?data_volume=detail", nil)
+			req.Header.Set("Authorization", "Bearer "+secret)
+			rec := httptest.NewRecorder()
+			handler.HandleAPI(rec, req)
+			if rec.Code != http.StatusConflict || otherCalls.Load() != 0 || guestCalls.Load() != 0 {
+				t.Fatalf("status=%d vmctl wake/resolve calls=%d guest calls=%d body=%s", rec.Code, otherCalls.Load(), guestCalls.Load(), rec.Body.String())
+			}
+		})
 	}
 }
