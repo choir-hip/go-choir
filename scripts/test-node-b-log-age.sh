@@ -56,6 +56,8 @@
 #     is (it must be emptied, never deleted); or the dry run empties it.
 #  A30 run by hand with no settings and no dry-run flag, the job deletes.
 #  A31 a last-login file a process holds open is unlinked.
+#  A32 run without root, the job goes ahead (it cannot see which files other
+#     processes hold open, so its open-file check would pass blind).
 #  A14 any failure is not printed at error priority (the "<3>" prefix the
 #     journal reads), so `journalctl -p err` does not show it.
 set -u
@@ -69,6 +71,8 @@ mkdir -p "$root/bin" "$root/caddy" "$root/var" "$root/dead" "$root/journal/01234
 jdir="$root/journal/0123456789abcdef0123456789abcdef"
 jname() { printf 'system@%s-%016x-%016x.journal' 4b6e7d5a52a146ff8e6bc012dcebf5e1 "$2" "$(( $1 * 1000000 ))"; } # first-entry time, sequence
 printf '#!/usr/bin/env bash\necho "$*" >>"%s/journalctl.calls"\n' "$root" >"$root/bin/journalctl"; chmod +x "$root/bin/journalctl"
+# The job refuses to run without root: the test stands in for `id`.
+printf '#!/usr/bin/env bash\ncat "%s/uid" 2>/dev/null || echo 0\n' "$root" >"$root/bin/id"; chmod +x "$root/bin/id"
 now=$(date +%s)
 line() { printf '{"level":"info","ts":%s.123,"logger":"http.log.access","msg":"handled request"}\n' "$1"; }
 run() { env -u INVOCATION_ID ${INV:+INVOCATION_ID=$INV} PATH="$root/bin:$PATH" LOG_MAX_DAYS="${DAYS-21}" CADDY_LOG_DIR="$root/caddy" JOURNAL_DIR="$root/journal" \
@@ -232,5 +236,10 @@ echo '{"ts":1.0}' >"$root/caddy/access-old.log"; REAL= DRY=1 run; [ "$(cat "$roo
 echo l >"$root/var/lastlog2.db"; mkdir -p "$root/proc/77/fd"; ln -s "$root/var/lastlog2.db" "$root/proc/77/fd/5"; run
 [ -e "$root/var/lastlog2.db" ] && [ "$(cat "$root/rc")" != 0 ] && grep -q "^<3>log age: .*lastlog2.db is still open in process 77" "$root/out" && ok || bad "A31 a last-login file a process holds open was deleted or passed: $(cat "$root/out")"
 rm -rf "$root/proc"; run; [ ! -e "$root/var/lastlog2.db" ] && [ "$(cat "$root/rc")" = 0 ] && ok || bad "A31 the file was not removed once released: $(cat "$root/out")"
+# A32
+echo 501 >"$root/uid"; echo '{"ts":1.0}' >"$root/caddy/access-old.log"
+run; [ "$(cat "$root/rc")" = 2 ] && [ -e "$root/caddy/access-old.log" ] && grep -q "^<3>log age: refused: not root" "$root/out" && ok || bad "A32 a real run without root went ahead: $(cat "$root/out")"
+DRY=1 run; [ "$(cat "$root/rc")" = 2 ] && ! grep -q "would delete" "$root/out" && ok || bad "A32 a dry run without root went ahead: $(cat "$root/out")"
+rm -f "$root/uid"; run; [ "$(cat "$root/rc")" = 0 ] && [ ! -e "$root/caddy/access-old.log" ] && ok || bad "A32 a run as root was refused: $(cat "$root/out")"
 echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]

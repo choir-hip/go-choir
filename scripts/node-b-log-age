@@ -20,7 +20,8 @@
 #  2 Access-log files left under CADDY_LOG_DIR from when Caddy wrote files
 #    (access-*.log, access-*.log.gz): one is deleted when its FIRST entry
 #    (the oldest) is past the limit, dated in the future, or unreadable.
-#    Caddy no longer writes there, so no open file is unlinked. Anything
+#    Caddy writes there until this change's deploy reloads it; the job
+#    refuses to unlink a file a process still holds open. Anything
 #    else in that folder (another file, a folder, a link, a hidden file) is
 #    left alone and fails the job: nothing ages it.
 #  3 Login records (LOGIN_RECORD_FILES: btmp, wtmp). logrotate, another
@@ -82,6 +83,11 @@ days="$LOG_MAX_DAYS"
 case "$days" in ''|*[!0-9]*) echo "<3>log age: LOG_MAX_DAYS is not a number of days" >&2; exit 2 ;; esac
 if [ "$days" -lt 7 ] || [ "$days" -gt 28 ]; then echo "<3>log age: LOG_MAX_DAYS=$days is outside 7 to 28" >&2; exit 2; fi
 dry="${LOG_AGE_DRY_RUN:-}"
+if [ "$(id -u)" != 0 ]; then
+  # Without root the job cannot read these logs or see which files other
+  # processes hold open, so both a real run and a dry list would be wrong.
+  echo "<3>log age: refused: not root. Run it with sudo (the dry run too)" >&2; exit 2
+fi
 if [ -z "$dry" ] && [ -z "${INVOCATION_ID:-}" ] && [ "${LOG_AGE_REAL:-}" != 1 ]; then
   # The defaults are the production paths: a run by hand must say it means it.
   echo "<3>log age: refused: a real run deletes files. systemd starts it (INVOCATION_ID); by hand set LOG_AGE_REAL=1, or LOG_AGE_DRY_RUN=1 to list and delete nothing" >&2; exit 2

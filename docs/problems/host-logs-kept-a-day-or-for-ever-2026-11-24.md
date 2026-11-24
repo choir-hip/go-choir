@@ -52,7 +52,7 @@ gate reading option lists could not see (below).
 | Log | How it is bounded | Worst case |
 | --- | --- | --- |
 | journal: every service, and the web access log | `MaxRetentionSec=21day`. journald names a closed file by its first entry's time and deletes by that (systemd `journal-vacuum.c`, read). The job `go-choir-log-age` runs `journalctl --rotate` (returns when the rotation is complete, journalctl(1); closes the open file whether or not anything was written), then `--vacuum-time=21d`, then CHECKS that no closed file with a first entry past the limit is left | 1 (a file's span, added though deletion is by first entry) + 21 + 1 (wait for the job) + 1 (a missed run) = **24 days** |
-| access-log files left under `/var/log/caddy` | the job deletes `access-*.log` and `access-*.log.gz` whose first line (the oldest entry) is past 21 days, dated in the future, or unreadable. Caddy no longer writes there. Any other file in the folder fails the job | 23 days |
+| access-log files left under `/var/log/caddy` | the job deletes `access-*.log` and `access-*.log.gz` whose first line (the oldest entry) is past 21 days, dated in the future, or unreadable. Caddy writes there until this deploy's reload; the job refuses any file a process still holds open, fails, and takes it at the next run. Any other file in the folder fails the job | 23 days |
 | `btmp`, `wtmp` (login attempts, with addresses) | logrotate: daily files, 21 kept, `maxage 21`, rotated when small and when empty. The age job runs logrotate first, then deletes any rotated file whose **oldest record** is past 21 days (the first record's time, read from the file; by last write only when no record can be read), empties in place a live file whose oldest record is past 21 days, and fails if logrotate's record shows a live file not rotated for over two days: so the job's success covers these too | 1 + 21 + 1 + 1 = **24 days** |
 | `lastlog`, `lastlog.migrated`, `lastlog2.db` and its side files | removed at every run of the job; sshd no longer prints it. One record per account, so there is no age to go by | 1 day (2 with a missed run) |
 
@@ -72,6 +72,9 @@ else set, run from a copy of the script on Node B. Never start the unit for
 this: the unit runs logrotate first, which rotates and deletes.
 
     sudo LOG_AGE_DRY_RUN=1 bash node-b-log-age
+
+It refuses to run without root, in both modes: without root it cannot see
+which files other processes hold open.
 
 The script's own defaults are the production paths and the 21-day limit (the
 gate fails if they differ from the unit's), so the list is the deploy's. It
