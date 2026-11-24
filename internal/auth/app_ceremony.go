@@ -23,7 +23,8 @@ import (
 // bearer key for the app, with the grant the device approval gives, and the
 // sign-in ceremony needs no email (a discoverable credential).
 //
-//	POST /auth/register/begin     {email}            the web's route, unchanged: creation options
+//	POST /auth/register/mail      {email, binding}  the web's routes, shared: mail an 8-digit code to the address
+//	POST /auth/register/begin     {email, attempt_id, code, binding}  spend the code, get creation options (no account yet)
 //	POST /auth/app/login/begin                       no body: assertion options with no allow list
 //	POST /auth/app/register/finish {app, credential} verifies, stores the passkey, mints the key
 //	POST /auth/app/login/finish    {app, credential} verifies, mints the key

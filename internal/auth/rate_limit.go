@@ -34,9 +34,10 @@ const (
 	AuthActRateLimit = 60
 
 	// AuthBeginRateLimit covers /auth/login/begin and /auth/register/begin
-	// only. They answer differently for a known and an unknown email (an
-	// account-existence oracle) and register/begin for a new email writes
-	// permanent rows, so they keep the original 10 a minute. A sign-in costs
+	// only. login/begin answers differently for a known and an unknown email (an
+	// account-existence oracle); register/begin writes a short-lived pending
+	// row and mails nothing but costs a code check, so they keep the original
+	// 10 a minute (register/mail has its own per-address and per-IP hourly limits). A sign-in costs
 	// 2 ceremony requests (begin, finish; session reads are in the read
 	// class), so 10 a minute still allows about 5 sign-ins.
 	AuthBeginRateLimit = 10

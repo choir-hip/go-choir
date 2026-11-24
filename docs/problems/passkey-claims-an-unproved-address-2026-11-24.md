@@ -95,14 +95,44 @@ source decision, the early `register/begin` account creation and its
 | `POST /auth/app/register/finish` | the same, then a key | the same; the key is minted only for the account that transaction made |
 | `POST /auth/recovery/request`, `verify` | nothing until finish | token mailed to the stored address, single use |
 | `POST /auth/register/finish` with a recovery challenge | a passkey on an existing account | the recovery token consumed at verify; in one transaction: verify the address, replace the old holder if it was unproved |
-| `POST /auth/login/finish`, `POST /auth/app/login/finish` | a session or a key for an account that has a passkey | refused for an account whose address is unproved |
+| `POST /auth/login/finish`, `POST /auth/app/login/finish` | a session or a key for an account that has a passkey | the session and the key are made by `issueAccessJWT` and `CreateAPIKey`, which refuse an unproved account (`address_unproved`) |
 | `POST /auth/email/verify`, `.../verify-address/*` | a session | already required a verified address; verify-address needs a session an unproved account cannot have |
-| `POST /auth/api-keys`, `/auth/device/*`, `/auth/desktop/redeem`, `/auth/session` | keys and sessions from a session | an unproved account has none, and the auth handlers refuse its access token |
+| everything that acts as an account (`/auth/*` with a cookie or a bearer key, the proxy's `/api/*`) | what the credential allows | the credential validators (below), not the handlers |
+
+## Where the rule is enforced (round 4: not handler by handler)
+
+Handler checks escaped by other handlers twice, so the rule lives at the few
+functions every request's authority passes through:
+
+- **access token:** `issueAccessJWT` makes none for an unproved account and
+  puts the proof's time in an `ev` claim; `validateAccessTokenMethod` (the only
+  token validator in the auth service, used by `requireAuthUser*`,
+  `requirePasskeySession`, `/auth/session`, the desktop exchange and the access
+  log) requires `ev` and re-reads the account; the **proxy's `validateAccessJWT`
+  requires the `ev` claim too** (it cannot read the user row; every token the
+  auth service now makes carries it and none is made for an unproved account,
+  and a token **without** `ev` is rejected from the deploy on, so tokens made
+  before it stop working at once; a signed-in browser reads `/auth/session`,
+  which rotates its refresh session and issues a token with the claim);
+- **API key:** `GetAPIKeyByHash` joins the account's proof (auth's bearer path
+  and the proxy's `validateAPIKey` both go through it), and
+  `CreateComputerScopedAPIKey` inserts only for a proved account;
+- **refresh rotation:** `GetRefreshSessionByTokenHash` joins the account's proof
+  (session reads, rotation, account switch, the passkey gate);
+- **grants:** `PollDeviceAuthorization` and `ConsumeDesktopExchangeCode` do not
+  see a grant of an unproved account.
+
+`cmd/auth/unproved_credentials_test.go` takes **every route in the route table**
+and, for each kind of credential an unproved account can hold (a token without
+`ev`, a token with `ev`, an API key, a refresh cookie, an approved device code, a
+desktop code), asserts the route answers as it does to a credential that is not
+valid; a new route is covered by being in the table.
 
 ## What happens to accounts that already exist with `email_verified_at` empty
 
-The app is not launched and the web has few accounts; the production count was
-not read (no read access from this lane): **unknown**. The rule, without
+**Production, read-only (the lead, 2026-11-24): 199 of 1,097 accounts are
+unproved; 27 of them hold a passkey; none owns a computer.** Whether to delete
+those rows outright is the owner's decision and is not built here. The rule, without
 migration cleverness: such an account cannot sign in or mint anything until
 its address is proved by mail. At boot every key, session, device
 authorization and desktop code of such an account is revoked or deleted once
@@ -115,10 +145,15 @@ unproved account can reach mints.
 
 ## Remaining error
 
-- The count of affected accounts is unknown; an owner or operator whose own
-  account is unproved needs the recovery mail to work.
+- The 27 unproved accounts that hold a passkey cannot sign in until they
+  receive a recovery mail, and **if mail is down there is no fallback**.
+- The one-time backfill (`migrateEmailVerifiedAt`) marked every account that
+  held a passkey when the column was added as proved without proof, so a
+  pre-2026-11 account squatted before then is outside the invariant.
+- Recovery strength: mail access alone is enough to take over a **proved**
+  account: recovery adds a passkey, and a holder of that passkey may delete the
+  others. The mailbox is the account's root of trust, as before this change.
 - The proof is a code; the phone app does not open a mailed link, so an address
   that already has an account can only be recovered through the web link.
-- Access tokens already issued live up to five minutes; the handlers refuse
-  those of an unproved account, but a service that checks the signature alone
-  would still accept one until it expires.
+- Access tokens carry `ev`; those without it are rejected by the auth service
+  and the proxy from the deploy on, so every signed-in browser refreshes once.
