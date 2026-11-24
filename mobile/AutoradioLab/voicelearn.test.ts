@@ -127,3 +127,33 @@ describe('the page owns the lease', () => {
   });
 });
 
+// Round 4: a release is unconditional and idempotent: never gated by busy, never dropped; busy work in flight is discarded by it.
+describe('a release while a step is running', () => {
+  /** Reach "Learning your voice": three usable takes, the build call held open. */
+  async function intoTheBuild(): Promise<() => void> {
+    let release: () => void = () => {}; const held = new Promise<void>((r) => { release = r; });
+    const inner = later; const gated = async (r: { op: string }) => { if (r.op === 'obEnrolBuild') { calls.push(r.op); await held; return { ok: true }; } return inner(r); };
+    bindNative({ later: gated as never });
+    await learnAct('start', F(), gated as never);
+    for (let i = 0; i < 2; i++) { await learnPage(F({ state: 'done', usable: true }), gated as never); await learnAct('read', F(), gated as never); }
+    void learnPage(F({ state: 'done', usable: true }), gated as never);          // the third take ends: the build starts and is held
+    await new Promise((r) => setTimeout(r, 5));
+    return release;
+  }
+  for (const exit of ['gone', 'close', 'rewind']) {
+    test(`Y12 leaving by ${exit} DURING "Learning your voice" sends the release at once, and the build's late answer changes nothing`, async () => {
+      const release = await intoTheBuild();
+      expect((await learnPage(F({ state: 'done', usable: true }))).step).toBe('building');
+      calls.length = 0; await learnAct(exit, F());
+      expect(calls).toContain('obEnrolDiscard');
+      release(); await new Promise((r) => setTimeout(r, 10));
+      const v = await learnPage(F());
+      expect(v.step).not.toBe('confirm'); expect(v.step).not.toBe('stored'); expect(calls).not.toContain('obEnrolStore');
+    });
+  }
+  test('Y12 a release is idempotent: twice sends twice and breaks nothing', async () => {
+    await press('gone'); calls.length = 0; await press('gone'); await press('gone');
+    expect(calls).toEqual(['obEnrolDiscard', 'obEnrolDiscard']);
+  });
+});
+
