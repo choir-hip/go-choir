@@ -87,6 +87,10 @@ boundaries:
   - decision: every voice model runs on the phone, the isolator included; the recognisers are offered in onboarding and the recommended one depends on the device (for example Fluid Speech Mini on a smaller phone, Pro on a larger one)
     said: the voice isolator does have a phone build. all this is supposed to run locally. we have another echo canceller too besides apples i think. the recognizers should be part of the onboarding, with the recommended one (eg fluid speech mini vs pro) depending on device size
     'on': '2026-11-24'
+  - decision: the phone downloads the model list from the server, so which models are offered, recommended and downloaded can change without an app release
+    said: we should be downloading the model list from the server, so we can dynamically change which models we download
+    'on': '2026-11-24'
+    reading: 'lead''s reading, not the owner''s words: each entry names the job, the repository, the pinned revision, every file''s size and SHA-256, the licence credit and which devices it is recommended for; the phone verifies every file against the list; the app carries a built-in copy of the list so first run works offline from the server; the list is one file in the repo with the owner''s ruling beside each default, and a test fails when a default differs from it'
   must_preserve:
   - voice stays on the device; the owner's recordings are never published
   - only voice is native; page logic stays in shared Exact code
