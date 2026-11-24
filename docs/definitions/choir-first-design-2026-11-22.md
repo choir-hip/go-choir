@@ -131,6 +131,10 @@ boundaries:
     said: mgmt can do scoring with data sources in its repl, with system1 as a tool, both in its own thread, or with subrlm delegation, or by calling other desks
     'on': '2026-11-24'
     reading: 'lead''s reading: these are management''s means, chosen per kind of forecast. So that management is not again in the path of every item, scores that plain data settles are settled by host code in bulk and management sees their totals; management spends a thread, a System 1 call, a sub-call or another desk only on what data cannot settle, and on auditing a sample of what it did not look at'
+  - decision: 'a capture has many subjects: the aim is a symbolic compression of each capture, not putting captures in buckets. Whether every capture goes through a language model first, in batches, is to be tested as possibly the efficient path'
+    said: jensen huang shouldnt be the only subject. captures should have many subjects. basically, we want a symbolic compression of each capture. not bucketing captures. hmm, have to think about this. what about the hybrid path? do we need to pass every story (in batches) through an llm first? maybe thats actually efficient
+    'on': '2026-11-24'
+    reading: 'lead''s reading: the owner is still thinking, so this is a direction and not a settled design. Experiment E1''s second form used one top subject per arrival, which this corrects. Novelty can then be read symbolically: a symbol, or a pairing of symbols, not seen before among the capture''s subjects'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
