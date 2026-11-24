@@ -169,6 +169,11 @@ except ValueError: limit = None
 if limit is None: bad.append("L5 the age job has no LOG_MAX_DAYS")
 if env.get("JOURNAL_DIR") != "/var/log/journal": bad.append("L5 the age job is not told where the journal is: %r" % env.get("JOURNAL_DIR"))
 if env.get("CADDY_LOG_DIR") != "/var/log/caddy": bad.append("L5 the age job does not name /var/log/caddy (the files left from before): %r" % env.get("CADDY_LOG_DIR"))
+if env.get("LOGIN_RECORD_FILES", "").split() != ["/var/log/btmp", "/var/log/wtmp"]: bad.append("L5 the age job, as systemd reads it, does not check /var/log/btmp and /var/log/wtmp: %r" % env.get("LOGIN_RECORD_FILES"))
+if env.get("LOGROTATE_STATUS") != "/var/lib/logrotate.status": bad.append("L5 the age job is not told where logrotate records its rotations: %r" % env.get("LOGROTATE_STATUS"))
+u = ini(c["ageUnit"], "Unit")
+for k in ("After", "Wants"):
+    if "logrotate.service" not in " ".join(u.get(k, [])).split(): bad.append("L5 the age job does not run logrotate first (%s=logrotate.service): it would judge a stale rotation record" % k)
 last = env.get("LOGIN_LAST_FILES", "").split()
 for f in ("/var/log/lastlog", "/var/log/lastlog.migrated", "/var/lib/lastlog/lastlog2.db", "/var/lib/lastlog/lastlog2.db-wal", "/var/lib/lastlog/lastlog2.db-shm"):
     if f not in last: bad.append("L5 the age job, as systemd reads it, does not remove %s" % f)
@@ -191,9 +196,11 @@ cap = size(j.get("SystemMaxUse", ""))
 if cap is None or (keep and cap < (keep / DAY) * 380 * (1 << 20)): bad.append("L3 the journal ceiling %r is under the limit at 380 MB a day (280 of services, 100 of access log)" % j.get("SystemMaxUse"))
 # L4
 for host, text in sorted(c["logs"].items()):
-    if re.search(r"output\s+file", text): bad.append("L4 %s: an access log is written to a file" % host)
+    for out in re.findall(r"^\s*output\s+(\S+)", text, re.M):
+        if out != "stderr": bad.append("L4 %s: a log goes to %r (a file, a network address): only the journal has a bound" % (host, out))
     if not re.search(r"^\s*output\s+stderr\s*$", text, re.M): bad.append("L4 %s: the access log does not go to the journal (output stderr)" % host)
-if re.search(r"output\s+file", c["caddyGlobal"]): bad.append("L4 Caddy global or extra configuration writes a log to a file")
+for out in re.findall(r"^\s*output\s+(\S+)", c["caddyGlobal"], re.M):
+    if out not in ("stderr", "discard"): bad.append("L4 Caddy global or extra configuration sends a log to %r: only the journal has a bound" % out)
 if ini(c["caddyUnit"], "Service").get("LogRateLimitIntervalSec", [""])[-1] not in ("0", "0s"): bad.append("L4 journald may drop access lines under load: caddy.service has no LogRateLimitIntervalSec=0")
 # L6: logrotate.conf as written.
 if not c["logrotateEnabled"]: bad.append("L6 logrotate is disabled")
@@ -207,6 +214,7 @@ for ln in c["logrotate"].splitlines():
     if w[0] == "}": cur = None; continue
     if w[0] not in KNOWN: bad.append("L6 logrotate.conf has a word logrotate does not know: %r (it stops every rotation)" % ln.strip())
     if cur is not None: blocks[cur][w[0]] = " ".join(w[1:])
+    elif w[0] in ("dateext", "olddir", "compress"): bad.append("L6 logrotate.conf has a global %r: rotated login files would be named or placed where the age job was not tested" % w[0])
 for f in ("/var/log/btmp", "/var/log/wtmp"):
     r = blocks.get(f)
     if r is None: bad.append("L6 logrotate.conf has no block for %s" % f); continue

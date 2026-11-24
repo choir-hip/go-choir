@@ -1,70 +1,98 @@
 #!/usr/bin/env bash
-# node-b-log-age: the job that keeps every host log on Node B under the
-# promised age (docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md).
-# It runs daily and a few minutes after every boot. The promise is an UPPER
-# bound only: deleting early never breaks it.
+# node-b-log-age: the ONE job whose success means every host log on Node B is
+# under the promised age
+# (docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md). It runs
+# daily and two minutes after every boot. The promise is an UPPER bound
+# only: deleting early never breaks it. It deletes what is known to be safe
+# to delete, checks the rest, and fails at the end if any check failed.
 #
 #  1 The journal (every service's log, and the web access log) is closed
 #    (`journalctl --rotate`, which returns when the rotation is complete:
 #    journalctl(1)) and then trimmed. journald deletes a closed file by the
 #    time of its OLDEST entry, which is in the file's name (systemd
-#    journal-vacuum.c). The job then CHECKS: a closed file whose first entry
-#    is still past the limit is a failure, and so is a second journal folder
-#    (another machine id, a namespace), which the trim does not reach.
+#    journal-vacuum.c). The job then CHECKS every journal folder: a closed
+#    file whose first entry is past the limit by more than a day (one file's
+#    span) is a failure; a file set aside as damaged (.journal~) past the
+#    limit is deleted; an open per-user journal is a failure (none exists
+#    today, and nothing here was tested against one); and so is a second
+#    journal folder (another machine id, a namespace), which the trim does
+#    not reach.
 #  2 Access-log files left under CADDY_LOG_DIR from when Caddy wrote files
 #    (access-*.log, access-*.log.gz): one is deleted when its FIRST entry
 #    (the oldest) is past the limit, dated in the future, or unreadable.
-#    Caddy no longer writes there, so no open file is unlinked. Any other
-#    file in that folder is left alone and fails the job: nothing ages it.
-#  3 The last-login records (who logged in last, from which address): removed
+#    Caddy no longer writes there, so no open file is unlinked. Anything
+#    else in that folder (another file, a folder, a link, a hidden file) is
+#    left alone and fails the job: nothing ages it.
+#  3 Login records (LOGIN_RECORD_FILES: btmp, wtmp). logrotate, another
+#    unit, puts them in daily files. This job deletes a rotated file last
+#    written past the limit, and fails when logrotate's own record
+#    (LOGROTATE_STATUS) shows a live file not rotated for over two days.
+#  4 The last-login records (who logged in last, from which address): removed
 #    every run. They have one record per account and no age to go by.
-#  4 Named dead files (DEAD_LOG_FILES): removed.
+#  5 Named dead files (DEAD_LOG_FILES): removed.
 #
 # Any failure exits non-zero (the unit shows in `systemctl --failed`) and is
 # printed at error priority ("<3>": `journalctl -u go-choir-log-age -p err`).
 #
+# LOG_AGE_DRY_RUN=1 deletes nothing and does not call journalctl: it prints
+# "would delete <path>" for each file a real run would delete now, runs the
+# checks, and exits as a real run would.
+#
 # Environment: LOG_MAX_DAYS (7 to 28), JOURNAL_DIR, CADDY_LOG_DIR,
-# LOGIN_LAST_FILES, DEAD_LOG_FILES (the last two: paths separated by spaces).
-# Tested by scripts/test-node-b-log-age.sh.
+# LOGIN_RECORD_FILES, LOGROTATE_STATUS, LOGIN_LAST_FILES, DEAD_LOG_FILES
+# (lists: paths separated by spaces). Tested by scripts/test-node-b-log-age.sh.
 set -u
 days="${LOG_MAX_DAYS:-}"
 case "$days" in ''|*[!0-9]*) echo "<3>log age: LOG_MAX_DAYS is not a number of days" >&2; exit 2 ;; esac
 if [ "$days" -lt 7 ] || [ "$days" -gt 28 ]; then echo "<3>log age: LOG_MAX_DAYS=$days is outside 7 to 28" >&2; exit 2; fi
+dry="${LOG_AGE_DRY_RUN:-}"
 failed=0
 err() { failed=$((failed + 1)); echo "<3>log age: $*"; }
 now=$(date +%s)
 cutoff=$(( now - days * 86400 ))
+went=0
+remove() { # one regular file; counts it in $went or as a failure
+  [ -f "$1" ] && [ ! -L "$1" ] || return 0
+  if [ -n "$dry" ]; then echo "would delete $1"; went=$((went + 1)); return 0; fi
+  if rm -f -- "$1" 2>/dev/null && [ ! -e "$1" ]; then went=$((went + 1)); else err "could not delete $1"; fi
+}
+ymd() { date -u -d "@$1" +%Y-%-m-%-d 2>/dev/null || date -u -r "$1" +%Y-%-m-%-d; }
 
-journalctl --rotate || err "journalctl --rotate failed"
-journalctl --vacuum-time="${days}d" || err "journalctl --vacuum-time failed"
+if [ -n "$dry" ]; then
+  echo "DRY RUN: nothing is deleted and the journal is not touched"
+  echo "would run: journalctl --rotate; journalctl --vacuum-time=${days}d"
+else
+  journalctl --rotate || err "journalctl --rotate failed"
+  journalctl --vacuum-time="${days}d" || err "journalctl --vacuum-time failed"
+fi
 
-# The check. A closed file is <who>@<id>-<sequence>-<first entry, microseconds, hex>.journal;
-# one set aside as damaged is <who>@<first entry hex>-<random>.journal~.
+# The journal check, in every folder there is. A closed file is
+# <who>@<id>-<sequence>-<first entry, microseconds, hex>.journal; one set
+# aside as damaged is <who>@<when set aside, hex>-<random>.journal~ (the
+# last two fields before the suffix, as journal-vacuum.c reads them).
 jroot="${JOURNAL_DIR:-}"
-folders=0
+folders=0; damaged=0
 if [ -n "$jroot" ] && [ -d "$jroot" ]; then
   for d in "$jroot"/*/; do [ -d "$d" ] && folders=$((folders + 1)); done
-fi
-if [ "$folders" != 1 ]; then
-  err "$folders journal folders under '${jroot}', expected 1: the trim reaches only this machine's own"
-else
-  for f in "$jroot"/*/*@*.journal "$jroot"/*/*@*.journal~; do
+  for f in "$jroot"/*/*.journal "$jroot"/*/*.journal~; do
     [ -f "$f" ] || continue
     b="${f##*/}"
     case "$b" in
-      *.journal~) hex="${b#*@}"; hex="${hex%%-*}" ;;
-      *) hex="${b%.journal}"; hex="${hex##*-}" ;;
+      *@*.journal~) hex="${b%.journal~}"; hex="${hex%-*}"; hex="${hex##*[@-]}"; kind=damaged ;;
+      *@*.journal) hex="${b%.journal}"; hex="${hex##*-}"; kind=closed ;;
+      user-*.journal) err "$b is an open per-user journal: not expected on this host, and its age is not checked"; continue ;;
+      *) continue ;; # system.journal, the open file: closed by the rotation above
     esac
-    case "$hex" in ''|*[!0-9a-f]*) err "journal file $b has no first-entry time in its name"; continue ;; esac
-    # An hour of slack: the trim's own clock read was a moment before ours.
-    if [ $(( 16#$hex / 1000000 )) -lt $(( cutoff - 3600 )) ]; then err "journal file $b is still there and its first entry is past $days days"; fi
+    case "$hex" in ''|*[!0-9a-f]*) err "journal file $b has no time in its name"; continue ;; esac
+    at=$(( 16#$hex / 1000000 ))
+    if [ "$kind" = damaged ]; then
+      if [ "$at" -lt "$cutoff" ]; then went=0; remove "$f"; damaged=$((damaged + went)); fi
+    elif [ "$at" -lt $(( cutoff - 86400 )) ]; then
+      err "journal file $b is still there and its first entry is past $days days"
+    fi
   done
 fi
-
-remove() { # one regular file; counts it in $went or as a failure
-  [ -f "$1" ] && [ ! -L "$1" ] || return 0
-  if rm -f -- "$1" 2>/dev/null && [ ! -e "$1" ]; then went=$((went + 1)); else err "could not delete $1"; fi
-}
+if [ "$folders" != 1 ]; then err "$folders journal folders under '${jroot}', expected 1: the trim reaches only this machine's own"; fi
 
 went=0; kept=0; other=0
 dir="${CADDY_LOG_DIR:-}"
@@ -72,12 +100,12 @@ if [ -n "$dir" ] && [ -d "$dir" ]; then
   if [ ! -r "$dir" ] || [ ! -x "$dir" ]; then
     err "the access-log folder $dir cannot be read"
   else
-    for f in "$dir"/*; do
-      [ -f "$f" ] && [ ! -L "$f" ] || continue
-      case "${f##*/}" in
-        access-*.log|access-*.log.gz) ;;
-        *) other=$((other + 1)); err "$f is not an access log and nothing ages it"; continue ;;
-      esac
+    for f in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do
+      [ -e "$f" ] || [ -L "$f" ] || continue
+      case "${f##*/}" in access-*.log|access-*.log.gz) named=1 ;; *) named= ;; esac
+      if [ -z "$named" ] || [ -L "$f" ] || [ ! -f "$f" ]; then
+        other=$((other + 1)); err "$f is not one of our access-log files and nothing ages it"; continue
+      fi
       # The first "ts": in the first line is the entry's own (a header that
       # held those characters is written with escaped quotes).
       first="$(gzip -cdf -- "$f" 2>/dev/null | head -n 1 | grep -o '"ts":[0-9][0-9]*' | head -n 1 | cut -d: -f2)"
@@ -88,6 +116,24 @@ if [ -n "$dir" ] && [ -d "$dir" ]; then
 fi
 deleted=$went
 
+# Login records. A rotated file is <live>.<n>, <live>-<date>, with or
+# without a compression suffix; its last write is its newest record.
+went=0
+status="${LOGROTATE_STATUS:-}"
+for live in ${LOGIN_RECORD_FILES:-}; do
+  for f in "$live".* "$live"-*; do
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    if [ -n "$(find "$f" -maxdepth 0 -mmin +$(( days * 1440 )) 2>/dev/null)" ]; then remove "$f"; fi
+  done
+  [ -s "$live" ] || continue # absent or empty: nothing to age
+  last="$(grep -F "\"$live\" " "$status" 2>/dev/null | head -n 1 | awk '{print $2}' | cut -d- -f1-3)"
+  if [ -z "$last" ]; then err "$live has never been rotated, by logrotate's record ($status)"; continue; fi
+  recent=
+  for back in -1 0 1 2; do [ "$last" = "$(ymd $(( now - back * 86400 )))" ] && recent=1; done
+  [ -n "$recent" ] || err "$live was last rotated on $last, over two days ago: logrotate is not putting it in daily files"
+done
+rotated=$went
+
 went=0
 for f in ${LOGIN_LAST_FILES:-}; do remove "$f"; done
 login=$went
@@ -95,5 +141,5 @@ went=0
 for f in ${DEAD_LOG_FILES:-}; do remove "$f"; done
 dead=$went
 
-echo "log age: max_days=$days journal_folders=$folders access_deleted=$deleted access_kept=$kept access_other=$other login_last_removed=$login dead_removed=$dead failed=$failed"
+echo "log age: max_days=$days journal_folders=$folders access_deleted=$deleted access_kept=$kept access_other=$other login_rotated_deleted=$rotated login_last_removed=$login dead_removed=$dead journal_damaged_deleted=$damaged failed=$failed"
 [ "$failed" = 0 ]

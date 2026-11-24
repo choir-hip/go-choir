@@ -53,8 +53,15 @@ gate reading option lists could not see (below).
 | --- | --- | --- |
 | journal: every service, and the web access log | `MaxRetentionSec=21day`. journald names a closed file by its first entry's time and deletes by that (systemd `journal-vacuum.c`, read). The job `go-choir-log-age` runs `journalctl --rotate` (returns when the rotation is complete, journalctl(1); closes the open file whether or not anything was written), then `--vacuum-time=21d`, then CHECKS that no closed file with a first entry past the limit is left | 1 (a file's span, added though deletion is by first entry) + 21 + 1 (wait for the job) + 1 (a missed run) = **24 days** |
 | access-log files left under `/var/log/caddy` | the job deletes `access-*.log` and `access-*.log.gz` whose first line (the oldest entry) is past 21 days, dated in the future, or unreadable. Caddy no longer writes there. Any other file in the folder fails the job | 23 days |
-| `btmp`, `wtmp` (login attempts, with addresses) | logrotate: daily files, 21 kept, `maxage 21`, rotated when small and when empty | 1 + 21 + 1 hour + 1 = **about 23 days** |
+| `btmp`, `wtmp` (login attempts, with addresses) | logrotate: daily files, 21 kept, `maxage 21`, rotated when small and when empty. The age job runs logrotate first, then deletes any rotated file last written past 21 days itself and fails if logrotate's record shows a live file not rotated for over two days: so the job's success covers these too | 1 + 21 + 1 + 1 = **24 days** |
 | `lastlog`, `lastlog.migrated`, `lastlog2.db` and its side files | removed at every run of the job; sshd no longer prints it. One record per account, so there is no age to go by | 1 day (2 with a missed run) |
+
+**One job's success means the whole bound.** `go-choir-log-age` deletes or
+checks every log in the table, including the login records logrotate
+rotates. It deletes what is known to be safe, checks the rest, and fails at
+the end if any check failed. `LOG_AGE_DRY_RUN=1` deletes nothing, does not
+touch the journal, and prints `would delete <path>` for each file a real run
+would delete now: its output on Node B is the list the owner approves.
 
 **Running and failing.** Both the job and logrotate run on their mark (daily,
 hourly), make up a missed mark (Persistent), and run two minutes after every
@@ -105,7 +112,8 @@ call.**
 - core dumps (4 files today; not logs; their ageing was not verified);
 - login-failure counters (`pam_faillock` is in a PAM stack; no record folder
   exists) and `wtmpdb`, `faillog`, `tallylog` (absent);
-- journals of another machine id or a namespace (none today).
+- journals of another machine id or a namespace, and per-user journals
+  (none of either today; the job fails when one appears).
 
 **What the first run deletes on Node B** (dry listing, read-only,
 2026-11-24; nothing was deleted to produce it):
@@ -153,20 +161,32 @@ build's own `logrotate --debug` check stays on.
   The journal grows from about 0.25 GB to about 8 GB (ceiling 12 GB); a
   flood of requests can push service logs out early.
 - `last` no longer shows the previous login at ssh sign-in (a small tamper
-  hint, lost). `pam_lastlog2` behaviour when its database is missing was not
-  tested: it is expected to create a new one at the next console login.
+  hint, lost).
+- **Named risk: `pam_lastlog2` with its database deleted.** It is in the
+  `login` and `su` PAM stacks as `session required`. It could not be tested
+  (no Linux host to try it on but Node B). If it fails when
+  `/var/lib/lastlog/lastlog2.db` is missing, console login and `su` fail;
+  ssh sign-in does not use that stack. The database is empty today (0
+  bytes), which is the state a deletion leaves it one step from. Check in
+  the deployed proof, from an ssh session that stays open:
+  `sudo su -s /bin/sh -c true nobody; echo $?` prints 0 after the job's
+  first run. Rollback if it does not: revert, or at once on the host
+  `sudo touch /var/lib/lastlog/lastlog2.db`, and remove the three
+  `lastlog2.db` paths from the job's list in the next change.
 - The 2 GiB last resort can trim the journal and still refuse the deploy.
 - Caddy's configuration is not parsed in the gate (no Caddy on the Mac); the
   log block was parsed by the host's Caddy by hand.
-- Not yet proved on Node B. The deployed proof, read-only, after the deploy
-  (make one request to the site first):
-  `ssh node-b 'sudo systemd-analyze cat-config systemd/journald.conf | grep -E "MaxRetentionSec|MaxFileSec|SystemMaxUse"; sudo grep -c "output file" /etc/caddy/caddy_config; systemctl is-active caddy; systemctl show go-choir-log-age -p Environment | tr " " "\n" | grep -c lastlog2; sudo journalctl -u caddy -o cat -n 200 | grep -c http.log.access; sudo logrotate -d /etc/logrotate.conf 2>&1 | grep -c -i "error"'`
-  expects the three journal lines (21day, 1day, 12G), 0, active, at least 1,
-  a count above 0, and 0. After the job's first run:
-  `sudo journalctl -u go-choir-log-age -o cat -n 3` shows the count line with
-  `journal_folders=1 access_deleted=5 access_other=0 login_last_removed=3 dead_removed=3 failed=0`;
-  `sudo ls /var/log/lastlog /var/lib/lastlog/lastlog2.db /var/lib/go-choir/rebuild-0333528.log 2>&1 | grep -c "No such"`
-  is 3; `systemctl --failed | grep -c log-age` is 0. After a console `su` the
-  next run removes the new `lastlog2.db` again. After 2026-12-18 the oldest
-  journal entry (`sudo journalctl -o short-iso | head -1`) is under 25 days
-  old.
+- Not yet proved on Node B. Before the landing, the lead runs the dry run
+  there (read-only) and the owner approves its list. The deployed proof,
+  read-only, after the deploy (make one request to the site first):
+  `ssh node-b 'sudo systemd-analyze cat-config systemd/journald.conf | grep -E "MaxRetentionSec|MaxFileSec|SystemMaxUse"; sudo grep -c "output file" /etc/caddy/caddy_config; systemctl is-active caddy; sudo journalctl -u caddy -o cat -n 200 | grep -c http.log.access; sudo logrotate -d /etc/logrotate.conf 2>&1 | grep -c -i "error"'`
+  expects the three journal lines (21day, 1day, 12G), 0, active, a count
+  above 0, and 0. After the job's first run,
+  `sudo journalctl -u go-choir-log-age -o cat -n 20` shows the count line.
+  **Asserted:** `failed=0`, `journal_folders=1`, `access_other=0`;
+  `sudo ls /var/log/lastlog /var/lib/lastlog/lastlog2.db /var/lib/go-choir/rebuild-0333528.log /var/lib/go-choir/rebuild-near-head-20260909.log /var/lib/go-choir/paper-repair-20261029T223916Z.log 2>&1 | grep -c "No such"`
+  is 5; `systemctl --failed | grep -c log-age` is 0; the `su` check above
+  prints 0. **Recorded as data, not asserted:** the other counts on the line
+  (the dry listing of 2026-11-24 gave 5 access-log files, 3 last-login
+  files, 3 dead files). After 2026-12-18 the oldest journal entry
+  (`sudo journalctl -o short-iso | head -1`) is under 25 days old.

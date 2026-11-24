@@ -754,10 +754,14 @@ in
   # first word (the gate reads the rendered unit for this reason).
   systemd.services.go-choir-log-age = {
     description = "go-choir: host logs older than 21 days are deleted";
-    after = [ "caddy.service" "systemd-journald.service" ];
-    path = [ pkgs.coreutils pkgs.gzip pkgs.gnugrep config.systemd.package ];
+    # logrotate runs first, so the job judges today's rotation record.
+    wants = [ "logrotate.service" ];
+    after = [ "caddy.service" "systemd-journald.service" "logrotate.service" ];
+    path = [ pkgs.coreutils pkgs.gzip pkgs.gnugrep pkgs.gawk pkgs.findutils config.systemd.package ];
     environment = {
       LOG_MAX_DAYS = "21";
+      LOGIN_RECORD_FILES = "/var/log/btmp /var/log/wtmp";
+      LOGROTATE_STATUS = "/var/lib/logrotate.status";
       JOURNAL_DIR = "/var/log/journal";
       CADDY_LOG_DIR = "/var/log/caddy";
       LOGIN_LAST_FILES = "/var/log/lastlog /var/log/lastlog.migrated /var/lib/lastlog/lastlog2.db /var/lib/lastlog/lastlog2.db-wal /var/lib/lastlog/lastlog2.db-shm /var/lib/lastlog/lastlog2.db-journal";
