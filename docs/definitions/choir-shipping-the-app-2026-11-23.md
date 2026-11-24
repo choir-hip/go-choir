@@ -152,6 +152,21 @@ boundaries:
   - decision: a demo account is made for Apple's reviewers
     said: yes, we should make a demo account as well
     'on': '2026-11-24'
+  - decision: 'territories and price: United States only, free'
+    said: we dont need per-account bounds yet, just good monitoring of usage. we will invite friendly users. otherwise i agree with your recommendations 1-7
+    'on': '2026-11-24'
+  - decision: the upload tool is our own script against the App Store Connect API; no third-party CLI
+    said: we dont need per-account bounds yet, just good monitoring of usage. we will invite friendly users. otherwise i agree with your recommendations 1-7
+    'on': '2026-11-24'
+  - decision: no per-account bound on paid model and search spend yet; usage per account is monitored, and the first testers are friendly invitees
+    said: we dont need per-account bounds yet, just good monitoring of usage. we will invite friendly users. otherwise i agree with your recommendations 1-7
+    'on': '2026-11-24'
+  - decision: server log retention of 30 days is enforced on the host before the privacy policy is published
+    said: we dont need per-account bounds yet, just good monitoring of usage. we will invite friendly users. otherwise i agree with your recommendations 1-7
+    'on': '2026-11-24'
+  - decision: 'the automated-test accounts and the six hand-test accounts are deleted; kept: the owner''s, the one gmail account, b@c.com and d@e.com. Lead''s constraint, not the owner''s words: no account that owns a computer is deleted (one example.com address owns the 58 GiB computer), and the deletion runs through a reviewed operator command, never by hand on Node B'
+    said: we dont need per-account bounds yet, just good monitoring of usage. we will invite friendly users. otherwise i agree with your recommendations 1-7
+    'on': '2026-11-24'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
   - signing keys and API keys never enter the repo or an agent's output; key files are passed by path
@@ -267,22 +282,7 @@ stations:
   depends_on:
   - P3
   status: working
-decisions_for_the_owner:
-- id: Q4
-  question: Which territories first, and is the app free?
-  why: the EU needs trader status; a price brings purchase rules
-  options:
-  - United States, free
-  - wider
-  default: United States, free
-- id: Q5
-  question: Which tool?
-  why: the research recommends the App Store Connect CLI, pinned, with Apple's own uploader as fallback, and no private-session automation
-  options:
-  - that CLI
-  - fastlane
-  - the raw API
-  default: that CLI, pinned, its telemetry turned off, after its reference page is written
+decisions_for_the_owner: []
 now:
   status: working
   as_of: 2026-11-23T23:59Z

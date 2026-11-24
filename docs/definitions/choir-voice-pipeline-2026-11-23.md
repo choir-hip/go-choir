@@ -97,6 +97,12 @@ boundaries:
   - decision: the user's voice is learned in voice onboarding; sava is decided later, tonight's turn path stays Parakeet end of utterance with Fluid Speech Mini
     said: ok, that works for tonight, we will figure out sava later ... what about the model that learns user voice? we have that switched off currently? we should learn user voice in voice onboarding
     'on': '2026-11-24'
+  - decision: the owner tries the full-band side build when echo work starts; nothing merges without the owner's ears
+    said: we dont need per-account bounds yet, just good monitoring of usage. we will invite friendly users. otherwise i agree with your recommendations 1-7
+    'on': '2026-11-24'
+  - decision: 'the speaker check in the first build: enrol in onboarding, log verdicts only, reject nothing'
+    said: we dont need per-account bounds yet, just good monitoring of usage. we will invite friendly users. otherwise i agree with your recommendations 1-7
+    'on': '2026-11-24'
   must_preserve:
   - voice stays on the device; the owner's recordings are never published
   - only voice is native; page logic stays in shared Exact code
@@ -169,14 +175,7 @@ stations:
   - V2
   - V3
   status: pending
-decisions_for_the_owner:
-- id: Q2
-  question: May the owner try the full-band side build?
-  why: it has waited since 2026-11-17 for a trial
-  options:
-  - 'yes'
-  - 'no'
-  default: offered as soon as V4 starts; nothing merges without the owner's ears
+decisions_for_the_owner: []
 now:
   status: working
   as_of: 2026-11-23T22:02Z
