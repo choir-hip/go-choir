@@ -221,6 +221,12 @@ func (h *Handler) sendRecoveryForRegister(ctx context.Context, r *http.Request, 
 	if h.recoveryMailer == nil {
 		return errors.New("recovery mailer is not configured")
 	}
+	// An account that asked to be deleted is recovered by nothing (its recovery
+	// links are refused at redemption, as /auth/recovery/request sends none): the
+	// answer is the same, no link goes out, and the address stays held.
+	if h.store.AccountAccessRevoked(user.ID) {
+		return nil
+	}
 	live, err := h.store.HasLiveRecoveryToken(user.ID, recoverySourceRegister, time.Now().UTC())
 	if err != nil {
 		return err
