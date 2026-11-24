@@ -52,13 +52,13 @@ describe('F1 a launch with a desk that never answers', () => {
     await r.rt.pump();
     for (let i = 0; i < 10; i++) await new Promise((res) => setTimeout(res, 0));
     const air = r.rt.store.onAir();
-    expect(air?.kind).toBe('page'); expect(air?.placed_by).toBe('phone'); expect(air?.source?.ref).toMatch(/^pub:\/p\/s\d$/);
+    expect(air?.kind).toBe('page'); expect(air?.placed_by).toBe('phone'); expect(air?.source?.ref).toBe('pub:/p/s1');
     const played = calls.filter((c) => c.op === 'deck' && c.name === 'deckPlay').map((c) => String((c.args as { id: string }).id));
     expect(played).toEqual([opening!.id, air!.id]);
     // the paper's list goes to native with the queue snapshot
     await radioPulse(undefined, native as never);
     const set = calls.filter((c) => c.op === 'radioSet' && c.snapshot !== undefined).at(-1) as { candidates?: { route: string; title: string }[] } | undefined;
-    expect(set?.candidates?.map((c) => c.route).sort()).toEqual(['/p/s1', '/p/s2', '/p/s3', '/p/s4']);
-    expect(set?.candidates?.[0].title).toMatch(/^Story \d$/);
+    expect(set?.candidates?.map((c) => c.route)).toEqual(['/p/s1', '/p/s2', '/p/s3', '/p/s4']);
+    expect(set?.candidates?.map((c) => c.title)).toEqual(['Story 1', 'Story 2', 'Story 3', 'Story 4']);
   });
 });

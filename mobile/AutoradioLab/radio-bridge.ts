@@ -120,7 +120,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
   const rt = new RadioRuntime({
     deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
-    fill: () => frontFill(state.front.stories, state.rt.store.sheet.entries),
+    fill: (removed) => frontFill(state.front.stories, state.rt.store.sheet.entries, undefined, removed),
     onChange: () => { state.tick += 1; },
   });
   state.rt = rt;
@@ -249,7 +249,7 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const later = nativeLater();
   // Sent when it changed (the sheet's version, its length, what is on air): the whole sheet crossed the bridge every second, paused, idle or locked, for state that had not moved (review B2-1). A failed or let-go call leaves the key, so the next pulse sends again.
   const candidates = r.front.stories.slice(0, 40);                       // the paper's list the desk may add from (the turn's `candidates`: native sends it with every turn)
-  const setKey = `${gen}|${r.rt.store.sheet.version}|${r.rt.store.sheet.entries.length}|${r.rt.store.onAir()?.id ?? ''}|${candidates.length}:${candidates[0]?.route ?? ''}`;
+  const setKey = `${gen}|${r.rt.store.sheet.version}|${r.rt.store.sheet.entries.length}|${r.rt.store.onAir()?.id ?? ''}|${candidates.length}:${candidates.map((c) => c.route).join(',')}`;
   if (later && setKey !== r.setKey) { try { const ans = await later({ op: 'radioSet', gen, snapshot: turnQueueJSON(r.rt, 0), candidates, onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); if ((ans as { ok?: unknown } | null)?.ok !== false) r.setKey = setKey; else console.log(`radio: native refused the radioSet push (stamped ${gen}, the account moved on); it is sent again with the next pulse's stamp`); } catch { /* the next pulse sets it */ } }       // a push native refused (ok: false: stamped for an account that moved on) is not recorded as sent: the next pulse sends it again with that pulse's stamp
   const posting = r.rt.store.canPost;                                     // pending ops and not backing off (the route's Retry-After, or 30 s doubling): the pulse does not call for a post it would not make
   // `live`: something is sounding and the app is in front (native's `foreground`: with the screen off or the app away the audio plays on and nothing here asks again), so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:

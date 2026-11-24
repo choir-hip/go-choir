@@ -24,7 +24,7 @@ const started = () => log.filter((c) => c.kind === 'start').map((c) => (c as { e
 beforeEach(() => {
   store = new RunSheetStore({ now: () => new Date('2023-11-14T22:00:00Z') });
   stories = front;
-  d = new Director(store, { fill: () => frontFill(stories, store.sheet.entries) });
+  d = new Director(store, { fill: (removed) => frontFill(stories, store.sheet.entries, undefined, removed) });
   log = [];
   d.onCommand = (c) => { log.push(c); if (c.kind === 'start') d.started(c.entry.id, 'rs:' + c.entry.id); };
 });
@@ -32,15 +32,67 @@ beforeEach(() => {
 describe('what is ahead is kept', () => {
   test('N1 an opening after a quiet half hour keeps the saved queue and plays it after the opening', () => {
     d.applyFromDesk({ op_id: 'o1', by: 'desk', op: 'place', at: 'end', entry: story('d-old'), reason: 'extend', base_version: 0 }, 'extend');
-    store.place(paperStory('mine', 'Mine'), 'end');
+    store.place({ ...paperStory('mine', 'Mine'), id: 'p-mine' }, 'end');
     store.place({ ...story('p-saved'), placed_by: 'phone' }, 'end');
     d.open(opening());
     expect(store.onAir()?.id).toBe('p-open');
-    expect(store.ahead().map((e) => e.id).slice(0, 2)).toEqual(['d-old', store.ahead()[1].id]);
-    expect(store.ahead().length).toBe(3);
+    expect(store.ahead().map((e) => e.id)).toEqual(['d-old', 'p-mine', 'p-saved']);
     expect(store.pending.some((p) => p.op === 'remove')).toBe(false);
     d.finish('p-open', true);
     expect(store.onAir()?.id).toBe('d-old');
+  });
+});
+
+/** A listening whose opening was heard a minute ago: a new opening is refused, and with an empty queue the front stories fill. */
+const recentOpening = (s: RunSheetStore, dir: Director, clock: { t: string }): void => {
+  clock.t = '2023-11-14T21:59:00Z';
+  s.place(opening('p-old'), 'now', { by: 'phone' });          // placed and heard on the sheet only: the radio is not wanted, so nothing fills
+  s.airedEnded('p-old', 'heard', 'finished', { block: 0, seconds: 5 } as never);
+  clock.t = '2023-11-14T22:00:00Z';
+};
+describe('a refused opening with nothing ahead', () => {
+  test('N8 the first front story is the one on air, the others wait behind it, and none is heard unplayed', () => {
+    const clock = { t: '2023-11-14T22:00:00Z' };
+    const s2 = new RunSheetStore({ now: () => new Date(clock.t) });
+    const d2 = new Director(s2, { fill: (removed) => frontFill(stories, s2.sheet.entries, undefined, removed) });
+    const cmds: Command[] = [];
+    d2.onCommand = (c) => { cmds.push(c); if (c.kind === 'start') d2.started(c.entry.id, 'rs:' + c.entry.id); };
+    recentOpening(s2, d2, clock);
+    cmds.length = 0;
+    d2.open(opening('p-new'));
+    expect(cmds.filter((c) => c.kind === 'start').length).toBe(1);
+    expect(s2.onAir()?.source?.ref).toBe('pub:r1');
+    expect(s2.ahead().map((e) => e.source?.ref)).toEqual(['pub:r2', 'pub:r3']);
+    expect(s2.sheet.entries.filter((e) => e.state === 'heard').map((e) => e.id)).toEqual(['p-old']);
+    expect(s2.entry('p-new')).toBeUndefined();
+  });
+  test('N8b the same through a restored runtime: the deck is handed exactly one story, the first', async () => {
+    const files = new Map<string, string>();
+    const storage = { read: async () => files.get('s'), write: async (t: string) => { files.set('s', t); }, remove: async () => { files.delete('s'); } };
+    const idle = async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0)); };
+    const clock = { t: '2023-11-14T21:59:00Z' };
+    const a = new RadioRuntime({ deck: new Deck(), storage, now: () => new Date(clock.t) });
+    recentOpening(a.store, a.director, clock); clock.t = '2023-11-14T21:59:00Z'; await idle();
+    const deck = new Deck();
+    clock.t = '2023-11-14T22:00:00Z';
+    const b = new RadioRuntime({ deck, storage, now: () => new Date(clock.t), fill: (removed) => frontFill(front, b.store.sheet.entries, undefined, removed),
+      resolvers: { story: async (route) => ({ title: 'Full ' + route, paragraphs: ['Words of ' + route + '.'] }) } });
+    await b.restore();
+    b.director.open(opening('p-new')); await idle();
+    expect(deck.played.map((p) => p.title)).toEqual(['Full r1']);
+    expect(b.store.sheet.entries.filter((e) => e.state === 'heard').map((e) => e.id)).toEqual(['p-old']);
+    expect(b.store.ahead().map((e) => e.source?.ref)).toEqual(['pub:r2', 'pub:r3']);
+  });
+  test('N9 a story the listener removed or cleared does not come back', () => {
+    d.open(opening()); d.finish('p-open', true);
+    expect(store.ahead().map((e) => e.source?.ref)).toEqual(['pub:r2', 'pub:r3']);
+    d.remove(0);                                                  // r2 is removed
+    d.clearUpcoming();                                            // and r3 with the rest of Up next
+    d.finish(store.onAir()!.id, true);                            // r1 ends: only r4 is neither told nor removed
+    expect(store.onAir()?.source?.ref).toBe('pub:r4');
+    d.finish(store.onAir()!.id, true);
+    expect(store.onAir()).toBeUndefined();                        // r2 and r3 never came back
+    expect(store.sheet.entries.some((e) => ['pub:r2', 'pub:r3'].includes(e.source?.ref ?? ''))).toBe(false);
   });
 });
 
@@ -103,7 +155,7 @@ describe('through the runtime and a deck', () => {
   test('N6 the opening ends, the first front story is fetched and handed to the deck, and the radio goes on to the next', async () => {
     const deck = new Deck(), fetched: string[] = [];
     const rt = new RadioRuntime({
-      deck, now: () => new Date('2023-11-14T22:00:00Z'), fill: () => frontFill(front, rt.store.sheet.entries),
+      deck, now: () => new Date('2023-11-14T22:00:00Z'), fill: (removed) => frontFill(front, rt.store.sheet.entries, undefined, removed),
       resolvers: { story: async (route) => { fetched.push(route); return { title: 'Full ' + route, paragraphs: ['Words of ' + route + '.'] }; } },
     });
     const idle = async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0)); };

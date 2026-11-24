@@ -42,10 +42,10 @@ export function fromFront(front: unknown, now: number, skipping: Set<string> = n
 }
 
 /** The radio never waits: what plays when nothing is ahead. The paper's front stories (in the order given: the paper's weight first) that the sheet does not already hold, as entries the phone places
- *  at the end; their words are fetched when each starts. The saved queue goes before these; nothing is made up when every story is told. */
+ *  at the end; their words are fetched when each starts. `removed` are the routes of fill stories the listener took off the sheet: a removal sticks. The saved queue goes before these; nothing is made up when every story is told. */
 export const FILL_STORIES = 3;
-export function frontFill(stories: { route: string; title: string }[], entries: Entry[], n = FILL_STORIES): Entry[] {
-  const told = toldRoutes(entries), seen = new Set<string>(), out: Entry[] = [];
+export function frontFill(stories: { route: string; title: string }[], entries: Entry[], n = FILL_STORIES, removed: ReadonlySet<string> = new Set()): Entry[] {
+  const told = new Set([...toldRoutes(entries), ...removed]), seen = new Set<string>(), out: Entry[] = [];
   for (const s of stories) {
     if (out.length >= n) break;
     if (!validRoute(s.route) || told.has(s.route) || seen.has(s.route)) continue;

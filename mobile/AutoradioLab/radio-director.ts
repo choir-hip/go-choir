@@ -90,7 +90,7 @@ export type Hooks = {
   /** An entry ended (heard or skipped): the host writes ahead. */
   onEntryEnded?: (e: Entry, played: boolean) => void;
   /** The radio never waits: asked when the radio is wanted and nothing is ahead, for what plays next from what the phone already holds (the paper's front stories not yet on the sheet). Placed at the end, by the phone. */
-  fill?: () => Entry[];
+  fill?: (removed: ReadonlySet<string>) => Entry[];
 };
 
 export class Director {
@@ -125,6 +125,11 @@ export class Director {
   turnLog: string[] = [];
   private silent = 0;
   private reconciling = false;
+  /** The fill is placing its stories: the store's own changes for them are not a moment to reconcile (the one that airs the first is `advance`'s or `reconcile`'s). */
+  private filling = false;
+  /** The fill's entries (id -> route) the sheet still holds, and the routes of those the listener took off it (a removal or a clear sticks for this listening). */
+  private filled = new Map<string, string>();
+  private removedRoutes = new Set<string>();
   private again = false;
   private pressPending = false;
   private pendingEnd?: { id: string; played: boolean };
@@ -230,6 +235,7 @@ export class Director {
       else this.store.airedEnded(e.id, 'heard', 'left', report);
     }
     this.store.clearAhead('phone', 'signed out');
+    this.filled.clear(); this.removedRoutes.clear();   // a new listening starts clean
     this.playingId = undefined; this.playingDocument = undefined;
     this.onCommand({ kind: 'stop', gen: this.generation });
   }
@@ -243,6 +249,7 @@ export class Director {
   private advance(): void {
     const first = this.nextOrFill();
     if (!first) { this.hooks.aheadChanged?.(); return; }
+    if (this.store.onAir()) return;              // already on air: never taken over
     this.store.airedOnAir(first.id);             // the store's change starts it
   }
 
@@ -250,9 +257,15 @@ export class Director {
   private nextOrFill(): Entry | undefined {
     const first = this.nextToAir();
     if (first || !this.hooks.fill) return first;
-    const fill = this.hooks.fill();
+    const fill = this.hooks.fill(this.removedRoutes);
     if (fill.length === 0) return undefined;
-    for (const e of fill) this.store.place(e, 'end', { by: 'phone', reason: 'nothing was ahead: the paper\'s front page' });
+    this.filling = true;
+    try {
+      for (const e of fill) {
+        this.store.place(e, 'end', { by: 'phone', reason: 'nothing was ahead: the paper\'s front page' });
+        if (e.source?.ref) this.filled.set(e.id, e.source.ref.slice(4).split('@')[0]);
+      }
+    } finally { this.filling = false; }
     return this.nextToAir();
   }
 
@@ -312,6 +325,8 @@ export class Director {
   // ---- reacting to the store ----
 
   private storeChanged(): void {
+    if (this.filling) return;
+    for (const [id, route] of this.filled) if (!this.store.entry(id)) { this.removedRoutes.add(route); this.filled.delete(id); }
     if (this.reconciling) { this.again = true; return; }
     this.reconciling = true;
     try { do { this.again = false; this.reconcile(); } while (this.again); } finally { this.reconciling = false; }

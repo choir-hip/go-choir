@@ -64,7 +64,7 @@ export type RuntimeDeps = {
   /** Told after anything the screens read changed. */
   onChange?: () => void;
   /** What plays when nothing is ahead (the director's `fill`): the paper's front stories the phone holds and the sheet does not. */
-  fill?: () => Entry[];
+  fill?: (removed: ReadonlySet<string>) => Entry[];
 };
 
 const SPEAKS = new Set<Entry['kind']>(['opening', 'transition', 'story', 'answer', 'result']);
