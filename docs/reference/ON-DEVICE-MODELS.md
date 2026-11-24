@@ -563,3 +563,47 @@ about 150 lines and a day. EouStream: Mike's `EouStream.swift` is 224 lines over
 about 250 lines with tests and a day. The speaker check as a stage: `SpeakerEmbedder` 196, `SpeakerFusion` 108 and `SpeakerProfile` 292 lines, two
 embedding models (WeSpeaker, CAM++) and the fusion file, behind the existing `SpeakerCheck` protocol plus an enrolment step in onboarding; about
 600 lines, two days, and it needs the models' pins read.
+
+
+## 13. LFM3-Omni-2B as a larger responder for newer phones (2026-11-24)
+
+Owner, 2026-11-24: "lfm3 is actually running on device in both apps now. and we should also have a bigger model available for newer phones. can use lfm3 omni".
+Fetched from the hub on 2026-11-24 (`GET /api/models/<repo>` and `/tree/<commit>`, no credentials) and marked: **verified** = read there.
+
+**What it is (verified, model card).** `LiquidAI/LFM3-Omni-2B`: 2.17B parameters in all, "LFM3 backbone, LFM3 vision encoder, LFM3 causal audio encoder, LiquidCodec
+audio tokenizer"; in its architecture figure the language model is the LFM3-1.7B; inputs text, image, video, 16 kHz audio, outputs text or 24 kHz speech; 32K context;
+**non-reasoning** (`enable_thinking=True` unsupported; the chat template ends `<|im_start|>assistant\n<think></think>`, the same layout as LFM3-1.7B with thinking off);
+licence LFM Open License v1.0. So the "bigger" is in what the whole model can do (the vision, audio and speech-out parts live in the `mmproj` file); the text path this row
+loads is the same size on disk as LFM3-1.7B (Q8_0 1,846,240,768 bytes against 1,846,238,496).
+
+**Builds (verified).** `LiquidAI/LFM3-Omni-2B-GGUF` (commit `d508b88f08a5b4286f2d2805a6a8d69a0ff44c72`, 558,694 downloads, not gated): Q4_0 1,049,617,920, Q4_K_M 1,099,630,080, Q8_0 1,846,240,768,
+F16 and BF16 3,466,628,608 bytes, and an `mmproj` for each (270 to 950 MB). `ggml-org/LFM3-Omni-2B-GGUF` is the community copy (BF16, Q4_K_M, Q8_0, mmproj Q8_0 and BF16); the vendor's
+repository has more quantisations, so the vendor's is pinned. The card needs llama.cpp b11960 (v0.8.0) or newer: the pinned runtime is b12259, which loaded and ran it (below).
+LiquidAI also publishes MLX and ONNX builds; `litert-community` a LiteRT build for the Android phone later; none is used here.
+
+**Built.** One row, `lfm3-omni-2b-q8_0`, job responder, from the vendor GGUF at that commit (file size and SHA-256 `59118f66...` in `KnownModels`; the download url names the
+commit, not `main`), **the `mmproj` is not fetched: text in, text out only**. Offered from the 8 GB class up (`minTier` 8 GB, the same line as the LFM3 Q8_0 and Q6_K rows), rank 89,
+below every LFM3-1.7B quant (90 to 98), so LFM3 QAD-Q4_0 stays the first fitting row on a 6 GB iPhone and LFM3 stays first on an 8 GB one: nothing we ran shows Omni answers better
+as the voice that talks while the desk works, and the on-device check decides it on a phone. The model list carries the repository, commit, file, licence and the credit the licence
+asks for. A 1.05 GB Q4_0 of Omni exists; it is not listed (the 6 GB row is LFM3's own).
+
+**Measured on this Mac (2026-11-24; M-series, not a phone).** `autoradio-models --bench-responder id=path`, one model per process under `/usr/bin/time -l`, the app's own
+llama.cpp path (b12259 release xcframework; Swift wrapper in a debug build), 4 threads, 2,048-token context, GPU on, greedy, 48 tokens, the page read cold for each of the ten asks
+(the four sample asks and the six the repository's LocalAck tests use as listener words, `HubModelProvider.benchAsks`). Another builder's Swift jobs shared the Mac, so
+speeds are noisy; compare the rows with each other.
+
+| Model | File | Load | Memory after load / process maximum | First token (mean of 10) | Reads | Writes |
+| --- | --- | --- | --- | --- | --- | --- |
+| LFM3-1.7B QAD-Q4_0 (the current responder) | 1,050 MB | 1.0 s | 1,112 MB / 1,182 MB | 701 ms | 933 tok/s | 36.0 tok/s |
+| LFM3-1.7B Q8_0 (same size as Omni) | 1,846 MB | 1.8 s | 1,854 MB / 1,962 MB | 712 ms | 920 tok/s | 23.7 tok/s |
+| LFM3-Omni-2B Q8_0 | 1,846 MB | 1.4 s | 1,845 MB / 1,952 MB | 697 ms | 950 tok/s | 19.4 tok/s (14 to 24) |
+
+Loads are from a warm file cache (the weights are mapped), so a first load on a phone will be longer. The kernel's physical-footprint ledger read 156 to 166 MB for all three and is
+not used: it does not count mapped weights. What the three said (first sentence, greedy): on the page, all three are grounded ("The council is going to build a tide barrier across the east
+channel" from Omni against "The harbor council voted to approve a tide barrier..." from LFM3); on the empty-page ask, LFM3 says "I don't have any information about a 'Mail' page"
+and Omni "The listener asked why the park closed." (it restates the ask and does not say the page has nothing); on bare asks ("what next") Omni answers "I understood you asked 'what next'"
+and stops. A ten-ask read by eye is not a score: it is the reason for rank 89 and not above LFM3.
+
+**Not proved until a phone.** That the static iOS build of llama.cpp loads it (the Mac used the dynamic release framework of the same tag); the peak memory beside the recogniser, the voice
+and the app on an 8 GB phone (about 2 GB on the Mac for this one model, plus its context); speed and heat on an A18; whether 8 GB is the right line (a starting guess from file size, to be set
+from the phone's measured peak).
