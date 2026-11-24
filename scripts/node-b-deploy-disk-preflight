@@ -104,7 +104,7 @@ fi
 # the journal (docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md).
 # The journal can hold up to 12 GiB (nix/node-b.nix); the size lever is the
 # last resort below, used only when this reclaim has not freed enough.
-journalctl --vacuum-time=28d || true
+journalctl --vacuum-time=21d || true
 # Which generations and builder-release roots stay is node-b-nix-retention's
 # (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
 GO_CHOIR_NIX_RETENTION_MODE="${GO_CHOIR_NIX_RETENTION_MODE:-enforce}" \
@@ -120,7 +120,8 @@ if ! is_count "$avail_kib"; then
 fi
 if ! at_least "$avail_kib" "$min_free_kib"; then
   # A nearly full disk may shorten the logs: better a deploy that can fix the
-  # host than a month of journal. 2 GiB is about a week at today's volume.
+  # host than three weeks of journal. The promise is an upper bound, so
+  # deleting sooner never breaks it.
   echo "    LAST RESORT: still below the floor after the reclaim; trimming the journal to 2 GiB (this shortens the host logs kept)"
   journalctl --vacuum-size=2G || true
   avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"

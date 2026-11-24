@@ -23,79 +23,102 @@ So two defects with one cause (no log has a time bound):
    rolled and its entries never expire; a retired host name's files stay;
    login records reach about 60 days.
 
-## The change
+## The change (third frame, 2026-11-24)
 
-Every host log gets a time bound, and no size trim cuts it shorter in normal
-running (`nix/node-b.nix`, `scripts/node-b-deploy-disk-preflight`,
-`scripts/node-b-caddy-log-age`).
+Two reviews sent back versions that bounded each log's files by when they
+were last written. That is the wrong quantity: a file written yesterday can
+hold an entry from months ago, and Caddy rolls a file only after it has
+written to it since it started (timberjack 1.4.8 starts its roll timer inside
+`Write`), so a quiet host's file has no bound at all. The frame changed:
 
-**The arithmetic, the same for every log.** A file is deleted whole, when its
-newest entry is past the limit, by a deleter that runs once a day. So the
-oldest entry is at most 1 day (the span of one file) + 28 days (the limit) +
-1 day (the wait for the deleter) = **30 days**, and nothing is deleted before
-it is 28 days old. The first version of this change used 29 days and so
-reached 31 (and 32 for the sweep); the review caught it.
+1. **The promise is an upper bound only.** No host log entry is kept longer
+   than 30 days. Nothing promises a minimum: a nearly full disk may delete
+   sooner (the deploy preflight trims the journal to 2 GiB as an announced
+   last resort; journald's keep-free default also trims).
+2. **Limits of 21 days, so the worst case has margin.**
+3. **Deletion goes by a file's oldest entry**, and files are closed on a
+   schedule that does not depend on traffic.
+4. **One mechanism for request and service logs.** Caddy's access log goes to
+   the journal, not to files, so there is nothing for Caddy to roll or
+   forget.
 
-| Log | File span | Limit | Deleter | Worst case |
-| --- | --- | --- | --- | --- |
-| journal | `MaxFileSec=1day` | `MaxRetentionSec=28day` | journald, at each rotation (daily); also `--vacuum-time=28d` in the disk sweep | 30 days |
-| access log, rolled files | a roll at 00:00 UTC (`roll_at`, a timer in Caddy) and at 100 MB | `roll_keep_for 672h` from the roll time in the name | Caddy, at each roll; and the age job daily by last write | 30 days |
-| access log nobody rolls (quiet or retired host name) | set aside by the age job once unwritten for a day | 28 days from its last write | `go-choir-caddy-log-age`, daily | 30 days |
-| btmp, wtmp | weekly | three old files, `maxage 28` | logrotate | 28 days |
+| Log | How it is bounded | Worst case |
+| --- | --- | --- |
+| journal: every service, and the web access log | `MaxRetentionSec=21day`. journald names a closed file by its first entry's time and deletes by that (systemd `journal-vacuum.c`). The daily job `go-choir-log-age` runs `journalctl --rotate` (closes the open file whether or not anything was written) and `--vacuum-time=21d` | 21 + 1 (wait for the job) + 1 (a missed run) = **23 days** |
+| access-log files left under `/var/log/caddy` from before | the daily job deletes a file when its first line (the oldest entry) is past 21 days or cannot be read. Caddy no longer writes there, so no open file is unlinked | 23 days |
+| `btmp`, `wtmp` (login attempts, with addresses) | logrotate: daily files, 21 kept, `maxage 21`, rotated when small and when empty | 1 (a file) + 21 + 1 + 1 = **24 days** |
+| `lastlog`, `lastlog.migrated`, `lastlog2.db` (last login per account, with an address) | removed every day by the job; sshd no longer prints it (`PrintLastLog no`). One record per account, so there is no age to go by | 1 day (2 with a missed run) |
 
-- Journal ceiling `SystemMaxUse=12G` (30 days at today's volume is about
-  7.5 GB).
-- `roll_keep 64` is a count limit that must not bite before the time limit:
-  two files a day for 28 days. Caddy's default of 10 would keep ten days.
-- **Checked against the host's own Caddy 2.11.7** (2026-11-24, `caddy adapt`
-  on the log block, nothing written): `roll_at ["00:00"]`, `roll_keep 64`,
-  `roll_keep_days 28`. Read from Caddy 2.11.7 `modules/logging/filewriter.go`
-  and timberjack 1.4.8: `roll_keep_for` is whole days rounded up; cleanup
-  goes by the time in a rolled file's name and runs only at a roll or at the
-  first write after a start; `roll_interval` rolls only when a request
-  arrives, counted from the start of the process, which is why `roll_at` is
-  used; a rolled name is `<name>-<UTC time>-<reason>.log`.
-- **The tmpfiles sweep of the first version is gone.** It could unlink a file
-  Caddy held open. The age job instead deletes by last write, and renames a
-  live file not written for over a day to a rolled name: a file Caddy is
-  rolling is never that old, and if Caddy does hold it, its writes follow
-  the rename and its next roll starts a new file, so no line is lost.
-- **A nearly full disk may shorten the journal.** The deploy preflight trims
-  by time in its reclaim path, and only if that reclaim has not freed enough
-  does it trim the journal to 2 GiB, announced as a last resort. journald's
-  own keep-free default also trims under disk pressure. So the promise is
-  "up to 30 days", not "30 days".
+A host that is off keeps what is on its disk: the margin is 6 to 7 days, and
+the timers are Persistent, so the job runs when the host comes back.
+`scripts/test-node-b-log-retention.sh` computes these worst cases from the
+evaluated settings and fails over 30 days or with under 5 days of margin. Its
+7-day lower limit is our operating floor against a typo, not policy.
 
-Tests: `scripts/test-node-b-log-retention.sh` (L1 to L7; both ends of every
-bound; fails without nix or python3; runs a copy of the preflight beside a
-stub, never the real store cleanup) and `scripts/test-node-b-caddy-log-age.sh`
-(A1 to A8), both in `scripts/gates`.
+**Login records found on Node B (read-only, 2026-11-24):** `btmp` 4 MB written
+that day, `btmp.1` 19 MB from 2026-10-31, `wtmp` 23 kB last written
+2026-10-22, `lastlog` 292 bytes last written 2026-10-20, `lastlog.migrated`
+and `/var/lib/lastlog/lastlog2.db` empty. No faillog, tallylog or wtmpdb.
+PAM: `pam_lastlog2` in the `login` and `su` stacks, `pam_faillock` in one;
+there is no `/run/faillock` folder.
+
+**Checked against primary sources.** The host's own Caddy 2.11.7 parsed
+`output stderr` with `format json` (`caddy adapt`, nothing written): one
+access logger, writer `stderr`, encoder `json`. timberjack 1.4.8
+`timberjack.go`: the scheduled-roll loop starts in `Write`. systemd
+`journal-vacuum.c`: an archived file's time is read from its name (the head
+entry) and compared with the retention limit.
+
+**The exact sentence the policy may use:** "Our servers' request, service and
+login logs are deleted within 30 days." It does not cover:
+
+- a person's own computer (its logs are that computer's data, gone when the
+  computer is destroyed);
+- the gateway's usage and receipt files (their own retention row);
+- GitHub's CI logs (GitHub's retention);
+- build job records under `/var/lib/go-choir/host-build/jobs` (80 small JSON
+  files, 2026-11-17 onward; build inputs and results, not requests);
+- one-off operator outputs that documents cite as evidence and that stay:
+  `/var/lib/go-choir/migration-reports/` (the 2026-10-30 data cutover: table
+  names and row counts) and `/var/lib/go-choir/taperepack-work/`.
+
+**Seven dead files are deleted by the job**, by exact path: three one-off
+operator outputs directly under `/var/lib/go-choir` (two rebuild logs from
+August and September, one repair log from October) and the four files of
+`dump-20260826/` (three are empty). No program or document names them. Their
+contents were not read.
+
+Tests: `scripts/test-node-b-log-retention.sh` (L1 to L8; fails without nix or
+python3; runs a copy of the preflight beside a stub, never the real store
+cleanup) and `scripts/test-node-b-log-age.sh` (A1 to A8), both in
+`scripts/gates`. Each setting was broken in turn and the gate seen to fail.
 
 ## Remaining error
 
-- **Access logs go from 90 days to 30.** That is a loss for abuse
-  investigation and follows from the policy draft's number, not from an
-  owner ruling on access logs: it is the owner's to confirm.
-- The journal grows from about 0.25 GB to about 7.5 GB on a disk with 147 GB
-  free.
-- An entry can outlive the bound in one case: Caddy restarts every day
-  before midnight for weeks and a quiet host gets a request less than a day
-  apart each time, so neither Caddy nor the age job ever rolls the live
-  file. A busy host rolls by size; a deploy does not restart Caddy daily.
-- The journal's active file is only aged once rotated; Node B writes
-  constantly, so it rotates daily.
-- `last` and `lastb` show the current week by default; older weeks are in
-  `wtmp.1` to `wtmp.3`.
-- Not covered: logs inside a person's computer (that computer's data, gone
-  when it is destroyed), the gateway's usage and receipt files (their own
-  retention row), GitHub's CI logs, and nine files named `*.log` under
-  `/var/lib/go-choir` from August and September (names say build and import
-  output; their contents were not read). The policy sentence should say
-  "request, service and login logs".
+- **Access logs go from 90 days to at most 23**, and the first run deletes
+  the files older than 21 days at once. That follows from the policy's
+  number, not from an owner ruling on access logs: the owner's to confirm.
+- **Deleting files on Node B by deploy** (old access logs, the last-login
+  records, the seven dead files) is deletion in production. It is what the
+  policy asks for; the lead and the owner should see this list before it
+  lands.
+- The access log's lines are read with `journalctl -u caddy -o cat`, mixed
+  with Caddy's own messages, and no longer from a file per host name. The
+  journal grows from about 0.25 GB to about 8 GB on a disk with 147 GB free;
+  if volume outgrows the 12 GB ceiling it keeps fewer days.
+- `last` no longer shows the previous login at ssh sign-in. That line is a
+  small tamper hint for an operator; it is lost.
+- `pam_faillock` is in a PAM stack; no record folder exists today. If one
+  appears it is not aged by this change.
+- The wording of journald's own rotation (`MaxFileSec`) is not relied on:
+  the job's `--rotate` is. If the job fails for three weeks the open file is
+  not bounded; the job exits non-zero on any failure, so the unit shows
+  failed.
 - Not yet proved on Node B. The deployed proof, read-only, after the deploy:
-  `ssh node-b 'systemd-analyze cat-config systemd/journald.conf | grep -E "MaxRetentionSec|MaxFileSec|SystemMaxUse"; sudo grep -c "roll_keep_for 672h" /etc/caddy/caddy_config; systemctl is-active caddy; systemctl list-timers go-choir-caddy-log-age --no-pager | grep -c caddy-log-age; journalctl --disk-usage'`
-  expects the three journal lines (28day, 1day, 12G), 2, active, 1. After the
-  first midnight UTC: `sudo ls /var/log/caddy | grep -c -- "-time.log"` is at
-  least 1 (a roll happened) and `journalctl -u go-choir-caddy-log-age -n 3`
-  shows the job's count line. A week later the oldest journal entry is a
-  week old; after 2026-12-24 `sudo find /var/log -type f -mtime +30` is empty.
+  `ssh node-b 'systemd-analyze cat-config systemd/journald.conf | grep -E "MaxRetentionSec|MaxFileSec|SystemMaxUse"; sudo grep -c "output file" /etc/caddy/caddy_config; systemctl is-active caddy; systemctl list-timers go-choir-log-age --no-pager | grep -c go-choir-log-age; journalctl -u caddy -o cat -n 50 | grep -c http.log.access'`
+  expects the three journal lines (21day, 1day, 12G), 0, active, 1, and a
+  count above 0. After the job's first run:
+  `journalctl -u go-choir-log-age -o cat -n 3` shows its count line with
+  `failed=0`, and `sudo ls /var/log/lastlog 2>&1` says no such file. After
+  2026-12-17 the oldest journal entry (`journalctl -o short-iso | head -1`)
+  is under 24 days old.

@@ -259,7 +259,7 @@ let
     curl -fsS -X POST -H 'X-Internal-Caller: true' "''${internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/reclaim || true
     # By time, never by size: a size trim at this volume keeps under a day
     # (docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md).
-    journalctl --vacuum-time=28d || true
+    journalctl --vacuum-time=21d || true
     ${nixRetention} || true
     ${guestReleaseRetention} || true
 
@@ -623,6 +623,9 @@ in
       PermitRootLogin = "prohibit-password";
       PasswordAuthentication = false;
       KbdInteractiveAuthentication = false;
+      # The last-login record (an address per account) is deleted daily
+      # (go-choir-log-age), so there is nothing to print.
+      PrintLastLog = false;
     };
   };
 
@@ -696,53 +699,61 @@ in
     };
   };
 
-  # Host logs are kept up to 30 days and are not cut short by a size trim
-  # (docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md;
-  # scripts/test-node-b-log-retention.sh asserts both ends).
+  # No host log entry is kept longer than 30 days
+  # (docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md). That is
+  # an UPPER bound only: a nearly full disk may delete sooner. The limits are
+  # 21 days, so the worst case leaves margin; scripts/test-node-b-log-retention.sh
+  # computes it from these settings and fails over 30.
   #
-  # The arithmetic, the same for every log: a file is deleted whole, when its
-  # NEWEST entry is past the limit, by a deleter that runs once a day. So the
-  # oldest entry in it is at most
-  #   1 day (the span of one file) + 28 days (the limit) + 1 day (the wait
-  #   for the deleter) = 30 days,
-  # and no entry is deleted before it is 28 days old.
+  # Every deletion goes by a file's OLDEST entry, so the worst age of an
+  # entry is: the limit (21 days) + the wait for the daily job (1 day) + one
+  # missed run (1 day) = 23 days, which leaves a week for a host that is off
+  # (the timers are Persistent: the job runs when the host comes back).
   #
-  # Journal: files of at most a day (MaxFileSec), deleted at a rotation once
-  # all of the file is past MaxRetentionSec. The ceiling is sized from the
-  # measured volume (about 250 MB a day on 2026-11-24, so 30 days is about
-  # 7.5 GB); if volume outgrows it, or free space falls under journald's
-  # keep-free default, the journal keeps fewer days, never more.
+  # Journal: every service's log, and the web access log (Caddy writes to the
+  # journal, below). journald names a closed file by its first entry's time
+  # and deletes by that. The daily job closes the open file whether or not
+  # anything was written, then trims. The ceiling is sized from the measured
+  # volume (about 280 MB a day on 2026-11-24 plus about 100 MB of access
+  # log: about 8 GB for 21 days); past it, the journal keeps fewer days.
   services.journald.settings.Journal = {
-    MaxRetentionSec = "28day";
+    MaxRetentionSec = "21day";
     MaxFileSec = "1day";
     SystemMaxUse = "12G";
   };
-  # Login records hold remote addresses. NixOS rotates them monthly, keeps
-  # one old file and skips files under 1M, which reaches about 60 days or for
-  # ever. Weekly with three old files: a record lives at most 4 weeks = 28
-  # days (`last` reads the current week; `last -f /var/log/wtmp.1` the rest).
+  # Failed and successful login records hold remote addresses. Daily files,
+  # 21 of them, and none older than 21 days; rotated when empty too, so an
+  # idle file's old records do not wait for a new one. Worst case: a day in
+  # one file + 21 days + a day to the next run + a missed run = 24 days.
   services.logrotate.settings = lib.genAttrs [ "/var/log/btmp" "/var/log/wtmp" ] (_: {
-    frequency = lib.mkForce "weekly";
-    rotate = lib.mkForce 3;
+    frequency = lib.mkForce "daily";
+    rotate = lib.mkForce 21;
     minsize = lib.mkForce null;
-    maxage = 28;
+    maxage = 21;
+    notifempty = lib.mkForce false;
+    ifempty = true;
   });
-  # Access logs: Caddy rolls each at midnight and deletes rolled files 28
-  # days after their roll, but only when it next rolls, and it rolls only a
-  # file it has written to since it started. This daily job ages what Caddy
-  # does not (scripts/node-b-caddy-log-age says how and why).
-  systemd.services.go-choir-caddy-log-age = {
-    description = "go-choir: access logs older than 28 days are deleted";
-    path = [ pkgs.coreutils pkgs.findutils ];
+  # The daily age job (scripts/node-b-log-age says what it does and why).
+  # It removes the last-login records every run: sshd is told not to show
+  # them (PrintLastLog, above) and nothing else reads them. The dead files
+  # are one-off operator outputs from August to October 2026 that no program
+  # or document names.
+  systemd.services.go-choir-log-age = {
+    description = "go-choir: host logs older than 21 days are deleted";
+    after = [ "caddy.service" ];
+    path = [ pkgs.coreutils pkgs.gzip pkgs.gnused config.systemd.package ];
     serviceConfig = {
       Type = "oneshot";
-      User = "caddy";
-      Group = "caddy";
-      Environment = [ "CADDY_LOG_DIR=/var/log/caddy" "CADDY_LOG_MAX_DAYS=28" ];
-      ExecStart = pkgs.writeShellScript "go-choir-caddy-log-age" (builtins.readFile ../scripts/node-b-caddy-log-age);
+      Environment = [
+        "LOG_MAX_DAYS=21"
+        "CADDY_LOG_DIR=/var/log/caddy"
+        "LOGIN_LAST_FILES=/var/log/lastlog /var/log/lastlog.migrated /var/lib/lastlog/lastlog2.db"
+        "DEAD_LOG_FILES=/var/lib/go-choir/rebuild-0333528.log /var/lib/go-choir/rebuild-near-head-20260909.log /var/lib/go-choir/paper-repair-20261029T223916Z.log /var/lib/go-choir/dump-20260826/bak-delete.log /var/lib/go-choir/dump-20260826/gc.log /var/lib/go-choir/dump-20260826/import.log /var/lib/go-choir/dump-20260826/dump.log"
+      ];
+      ExecStart = pkgs.writeShellScript "go-choir-log-age" (builtins.readFile ../scripts/node-b-log-age);
     };
   };
-  systemd.timers.go-choir-caddy-log-age = {
+  systemd.timers.go-choir-log-age = {
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "daily";
@@ -750,25 +761,22 @@ in
       RandomizedDelaySec = "10min";
     };
   };
+  # The access log is many lines a second under load; journald's default
+  # rate limit would drop them.
+  systemd.services.caddy.serviceConfig.LogRateLimitIntervalSec = 0;
 
   # Caddy reverse proxy (TLS termination → Go services + frontend)
   # Primary public/staging host is choir.news; old domains redirect here.
   services.caddy = {
     enable = true;
     virtualHosts."choir.news" = {
-      # The access log holds visitors' addresses. It rolls at midnight UTC
-      # (a timer in Caddy, so a file with no new request still rolls) and at
-      # 100 MB; a rolled file is deleted 28 days after its roll. roll_keep is
-      # a count limit that must never bite before the time limit: 64 files is
-      # two a day for 28 days (Caddy's default of 10 would keep ten days).
-      # Parsed by the host's own Caddy 2.11.7 with `caddy adapt` on
-      # 2026-11-24: roll_at ["00:00"], roll_keep 64, roll_keep_days 28.
+      # The access log holds visitors' addresses. It goes to the journal,
+      # not to a file: one mechanism bounds its age (the journal settings
+      # above), and no file is left for Caddy to roll or forget. Read it with
+      # `journalctl -u caddy -o cat`.
       logFormat = ''
-        output file /var/log/caddy/access-choir.news.log {
-          roll_at 00:00
-          roll_keep 64
-          roll_keep_for 672h
-        }
+        output stderr
+        format json
       '';
       extraConfig = ''
         # Compress what benefits: a story bundle is up to ~460 KB of JSON
@@ -830,19 +838,13 @@ in
       '';
     };
     virtualHosts."choir-ip.com" = {
-      # The access log holds visitors' addresses. It rolls at midnight UTC
-      # (a timer in Caddy, so a file with no new request still rolls) and at
-      # 100 MB; a rolled file is deleted 28 days after its roll. roll_keep is
-      # a count limit that must never bite before the time limit: 64 files is
-      # two a day for 28 days (Caddy's default of 10 would keep ten days).
-      # Parsed by the host's own Caddy 2.11.7 with `caddy adapt` on
-      # 2026-11-24: roll_at ["00:00"], roll_keep 64, roll_keep_days 28.
+      # The access log holds visitors' addresses. It goes to the journal,
+      # not to a file: one mechanism bounds its age (the journal settings
+      # above), and no file is left for Caddy to roll or forget. Read it with
+      # `journalctl -u caddy -o cat`.
       logFormat = ''
-        output file /var/log/caddy/access-choir-ip.com.log {
-          roll_at 00:00
-          roll_keep 64
-          roll_keep_for 672h
-        }
+        output stderr
+        format json
       '';
       extraConfig = ''
         redir https://choir.news{uri} permanent

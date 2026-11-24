@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# node-b-log-age: the daily job that keeps every host log on Node B under the
+# promised age (docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md).
+# The promise is an UPPER bound only: deleting early never breaks it.
+#
+#  1 The journal (every service's log, and the web access log) is closed
+#    (rotated) and then trimmed. journald deletes a closed file by the time
+#    of its OLDEST entry, which is in the file's name
+#    (systemd journal-vacuum.c), so no entry outlives the limit by more than
+#    the wait for this job. The rotation here does not depend on traffic.
+#  2 Access-log files left under CADDY_LOG_DIR from when Caddy wrote files:
+#    one is deleted when its FIRST entry (the oldest) is past the limit, or
+#    cannot be read. Caddy no longer writes there, so no open file is
+#    unlinked.
+#  3 The last-login records (who logged in last, from which address): removed
+#    every run. They have one record per account and no age to go by.
+#  4 Named dead files (DEAD_LOG_FILES): removed.
+#
+# Environment: LOG_MAX_DAYS (7 to 28), CADDY_LOG_DIR, LOGIN_LAST_FILES,
+# DEAD_LOG_FILES (the last two: paths separated by spaces).
+# Tested by scripts/test-node-b-log-age.sh.
+set -u
+days="${LOG_MAX_DAYS:-}"
+case "$days" in ''|*[!0-9]*) echo "log age: LOG_MAX_DAYS is not a number of days" >&2; exit 2 ;; esac
+if [ "$days" -lt 7 ] || [ "$days" -gt 28 ]; then echo "log age: LOG_MAX_DAYS=$days is outside 7 to 28" >&2; exit 2; fi
+failed=0
+
+journalctl --rotate || failed=$((failed + 1))
+journalctl --vacuum-time="${days}d" || failed=$((failed + 1))
+
+remove() { # one regular file; counts it in $went or in $failed
+  [ -f "$1" ] && [ ! -L "$1" ] || return 0
+  if rm -f -- "$1" 2>/dev/null && [ ! -e "$1" ]; then went=$((went + 1)); else failed=$((failed + 1)); fi
+}
+
+cutoff=$(( $(date +%s) - days * 86400 ))
+went=0; kept=0
+dir="${CADDY_LOG_DIR:-}"
+if [ -n "$dir" ] && [ -d "$dir" ]; then
+  for f in "$dir"/*; do
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    first="$(gzip -cdf -- "$f" 2>/dev/null | head -n 1 | sed -n 's/.*"ts":\([0-9][0-9]*\).*/\1/p')"
+    if [ -n "$first" ] && [ "$first" -ge "$cutoff" ]; then kept=$((kept + 1)); continue; fi
+    remove "$f"
+  done
+fi
+deleted=$went
+
+went=0
+for f in ${LOGIN_LAST_FILES:-}; do remove "$f"; done
+login=$went
+went=0
+for f in ${DEAD_LOG_FILES:-}; do remove "$f"; done
+dead=$went
+
+echo "log age: max_days=$days access_deleted=$deleted access_kept=$kept login_last_removed=$login dead_removed=$dead failed=$failed"
+[ "$failed" = 0 ]
