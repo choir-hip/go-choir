@@ -3387,26 +3387,11 @@ func TestWebAuthnUserUsesEmailForDisplayName(t *testing.T) {
 func TestDuplicateEmailRegistrationRejected(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
-	// Step 1: Register a user successfully (first registration).
-	firstBody := `{"email": "duplicate@example.com"}`
-	req1 := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(withProof(t, h, firstBody)))
-	req1.Header.Set("Content-Type", "application/json")
-	rec1 := httptest.NewRecorder()
-	h.HandleRegisterBegin(rec1, req1)
-
-	if rec1.Code != http.StatusOK {
-		t.Fatalf("first registration: got status %d, want %d", rec1.Code, http.StatusOK)
-	}
-
-	// Get the user ID created during first registration.
-	user, err := h.store.GetUserByEmail("duplicate@example.com")
+	// An account with a passkey exists for the address.
+	user, err := h.store.CreateUser("dup-user", "duplicate@example.com")
 	if err != nil {
-		t.Fatalf("get user after first registration: %v", err)
+		t.Fatalf("create user: %v", err)
 	}
-
-	// Simulate that the user completed registration by adding a credential.
-	// This is what happens after register/finish succeeds.
 	cred := &Credential{
 		ID:              "test-cred-id-001",
 		UserID:          user.ID,
@@ -3430,9 +3415,9 @@ func TestDuplicateEmailRegistrationRejected(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec2, req2)
 
-	// Should be rejected with 409 Conflict.
-	if rec2.Code != http.StatusConflict {
-		t.Errorf("duplicate registration: got status %d, want %d", rec2.Code, http.StatusConflict)
+	// No code was mailed for it (its holder gets the recovery link), so no code works.
+	if rec2.Code == http.StatusOK {
+		t.Errorf("duplicate registration: got status %d, want a refusal", rec2.Code)
 	}
 
 	var resp errorResponse
@@ -3469,20 +3454,17 @@ func TestDuplicateEmailRegistrationRejected(t *testing.T) {
 }
 
 
-// TestRegisterBeginAllowsUserWithoutCredentials verifies that registration
-// begin still works for a user record that exists but has no credentials
-// (i.e., started but never completed registration). This supports the
-// idempotent registration begin scenario (VAL-AUTH-011).
-func TestRegisterBeginAllowsUserWithoutCredentials(t *testing.T) {
+// TestRegisterBeginRefusesAnAccountWithoutCredentials: an account that exists
+// but has no passkey (an interrupted recovery) is not a registration target. A
+// stranger who asks for a code gets nothing that works: the address's holder
+// proves it by the recovery mail, which is the only way a passkey is added.
+func TestRegisterBeginRefusesAnAccountWithoutCredentials(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 
-	// Create a user without any credentials (partial registration).
-	_, err := h.store.CreateUser("partial-user", "partial@example.com")
-	if err != nil {
+	if _, err := h.store.CreateUser("partial-user", "partial@example.com"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
 
-	// Attempt to register should succeed since user has no passkeys.
 	body := `{"email": "partial@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
 		bytes.NewBufferString(withProof(t, h, body)))
@@ -3490,18 +3472,13 @@ func TestRegisterBeginAllowsUserWithoutCredentials(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
 
-	// Should succeed with 200 (user has no credentials yet).
-	if rec.Code != http.StatusOK {
-		t.Errorf("partial user registration: got status %d, want %d", rec.Code, http.StatusOK)
+	if rec.Code == http.StatusOK {
+		t.Errorf("an account with no passkey began a registration: %s", rec.Body.String())
 	}
-
-	// Should return valid WebAuthn creation options.
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if _, ok := resp["publicKey"]; !ok {
-		t.Error("expected publicKey in response")
+	var pending int
+	_ = h.store.DB().QueryRow(`SELECT COUNT(*) FROM pending_registrations`).Scan(&pending)
+	if pending != 0 {
+		t.Errorf("%d pending registrations for an address that has an account", pending)
 	}
 }
 

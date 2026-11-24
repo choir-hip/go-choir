@@ -271,13 +271,13 @@
   }
 
   async function handleAuthBegin(event) {
-    const { email, type } = event.detail;
+    const { email, type, code } = event.detail;
     passkeyError = '';
     ceremonyInProgress = true;
 
     try {
       if (type === 'register') {
-        await registerPasskey(email);
+        await registerPasskey(email, code);
       } else {
         await loginPasskey(email);
       }

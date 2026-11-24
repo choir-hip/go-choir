@@ -49,7 +49,8 @@ function bufferToBase64url(buffer) {
 
 /**
  * Performs a full passkey registration flow:
- *   1. POST /auth/register/begin  — get WebAuthn creation options
+ *   0. POST /auth/register/mail   — (sendRegisterCode) mail the code; no account yet
+ *   1. POST /auth/register/begin  — spend the code, get WebAuthn creation options
  *   2. navigator.credentials.create() — browser handles ceremony
  *   3. POST /auth/register/finish — complete registration
  *
@@ -78,7 +79,49 @@ async function startDesktopAuthSession(email) {
   }
 }
 
-export async function registerPasskey(email) {
+// A client-made secret that ties the mailed code to this browser tab: the code
+// works only for the client that asked for it.
+const REGISTER_BINDING_KEY = 'choir_register_binding';
+const REGISTER_ATTEMPT_KEY = 'choir_register_attempt';
+
+function registrationBinding() {
+  try {
+    const kept = sessionStorage.getItem(REGISTER_BINDING_KEY);
+    if (kept && kept.length >= 32) return kept;
+  } catch { /* storage refused: a fresh one below */ }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const fresh = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  try { sessionStorage.setItem(REGISTER_BINDING_KEY, fresh); } catch { /* kept in memory only for this call */ }
+  return fresh;
+}
+
+/**
+ * Step one of creating an account: ask for the code mailed to the address.
+ * No account exists until the passkey is made, after the code is spent. For an
+ * address that already has an account the server mails the recovery link
+ * instead and answers the same.
+ *
+ * @param {string} email
+ * @returns {Promise<void>}
+ */
+export async function sendRegisterCode(email) {
+  const res = await fetch('/auth/register/mail', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email, binding: registrationBinding() }),
+  });
+  if (res.status === 429) throw new RateLimitError(await retryAfterSeconds(res));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Could not send the code (${res.status})`);
+  }
+  const body = await res.json().catch(() => ({}));
+  try { sessionStorage.setItem(REGISTER_ATTEMPT_KEY, String(body.attempt_id || '')); } catch { /* the code field still works within this page */ }
+}
+
+export async function registerPasskey(email, code) {
   // Desktop bridge: Safari performs the WebAuthn ceremony (Touch ID).
   // WKWebView doesn't support platform authenticators, so we delegate.
   if (isDesktopBridge()) {
@@ -91,7 +134,12 @@ export async function registerPasskey(email) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({
+      email,
+      code: String(code || '').trim(),
+      attempt_id: (() => { try { return sessionStorage.getItem(REGISTER_ATTEMPT_KEY) || ''; } catch { return ''; } })(),
+      binding: registrationBinding(),
+    }),
   });
 
   if (beginRes.status === 429) throw new RateLimitError(await retryAfterSeconds(beginRes));

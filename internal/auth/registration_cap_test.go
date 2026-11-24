@@ -23,13 +23,11 @@ import (
 //  7. the refusal losing the person (the waitlist keeps the email; a
 //     repeat attempt counts, it does not duplicate).
 
+// registerBegin asks for the code and begins; a sign-up the cap refuses is
+// refused at the mail, before anything is sent.
 func registerBegin(t *testing.T, h *Handler, email string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin", bytes.NewBufferString(withProof(t, h, `{"email":"`+email+`"}`)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleRegisterBegin(rec, req)
-	return rec
+	return registerBeginFor(t, h, email)
 }
 
 func addPasskey(t *testing.T, h *Handler, userID, email string) {
@@ -63,10 +61,6 @@ func TestRegistrationCapRefusesAndWaitlists(t *testing.T) {
 	h.config.RegistrationCap = 2
 	addPasskey(t, h, "u1", "one@mosiah.org")
 
-	// Abandoned ceremonies do not count.
-	if _, err := h.store.CreateUser("abandoned", "abandoned@mosiah.org"); err != nil {
-		t.Fatal(err)
-	}
 	if rec := registerBegin(t, h, "two@mosiah.org"); rec.Code != http.StatusOK {
 		t.Fatalf("below the cap: %d %s", rec.Code, rec.Body.String())
 	}
@@ -94,17 +88,9 @@ func TestRegistrationCapRefusesAndWaitlists(t *testing.T) {
 		t.Fatalf("waitlist = %+v, want one entry with two attempts", entries)
 	}
 
-	// An incomplete registration cannot resume past a full cap.
-	if rec := registerBegin(t, h, "abandoned@mosiah.org"); rec.Code != http.StatusForbidden {
-		t.Fatalf("incomplete registration resumed past the cap: %d", rec.Code)
-	}
-	// An existing user with a passkey still gets the usual answer.
-	if rec := registerBegin(t, h, "one@mosiah.org"); rec.Code != http.StatusConflict {
-		t.Fatalf("existing user: %d, want 409", rec.Code)
-	}
-	// The finish re-checks: a ceremony begun below the cap cannot finish above it.
-	if closed, err := h.registrationClosed("abandoned"); err != nil || !closed {
-		t.Fatalf("registrationClosed = %v, %v; want closed", closed, err)
+	// An existing user with a passkey is not registered again, cap or not.
+	if rec := registerBegin(t, h, "one@mosiah.org"); rec.Code == http.StatusOK {
+		t.Fatalf("existing user begun again: %d", rec.Code)
 	}
 	if closed, err := h.registrationClosed("u1"); err != nil || closed {
 		t.Fatalf("a user who already has a passkey is never closed out: %v, %v", closed, err)

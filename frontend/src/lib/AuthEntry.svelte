@@ -23,6 +23,7 @@
   import RecoveryRequestForm from './RecoveryRequestForm.svelte';
   import EmailSignInForm from './EmailSignInForm.svelte';
   import { isReturning } from './accounts.js';
+  import { sendRegisterCode } from './auth.js';
 
   export let passkeyError = '';
   export let intentMessage = 'Open your private computer and keep working.';
@@ -43,6 +44,11 @@
 
   /** Validation error message (empty email etc). */
   let error = '';
+
+  /** Creating an account proves the address first: a code is mailed, then typed here, then the passkey is made. */
+  let codeSent = false;
+  let code = '';
+  let sendingCode = false;
 
   /** Combined error to display: validation error takes precedence, then passkeyError. */
   $: displayError = error || passkeyError;
@@ -85,7 +91,19 @@
       error = 'Please enter a valid email address.';
       return;
     }
-    dispatch('authbegin', { email: email.trim(), type: 'register' });
+    if (!codeSent) {
+      sendingCode = true;
+      sendRegisterCode(email.trim())
+        .then(() => { codeSent = true; })
+        .catch((err) => { error = err instanceof Error ? err.message : 'Could not send the code.'; })
+        .finally(() => { sendingCode = false; });
+      return;
+    }
+    if (!/^[0-9]{8}$/.test(code.trim())) {
+      error = 'Enter the 8-digit code we mailed you.';
+      return;
+    }
+    dispatch('authbegin', { email: email.trim(), type: 'register', code: code.trim() });
   }
 
   function handleLogin() {
@@ -168,15 +186,33 @@
             inputmode="email"
             autocapitalize="none"
             spellcheck="false"
-            disabled={ceremonyInProgress}
+            disabled={ceremonyInProgress || codeSent}
             aria-invalid={error ? 'true' : 'false'}
             aria-errormessage={error ? 'auth-error' : undefined}
             required
           />
-          <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
+          {#if codeSent}
+            <p class="fine-print" data-register-code-sent>We mailed a code to this address. If you already have an account, we mailed a recovery link instead.</p>
+            <label for="register-code">Code from the email</label>
+            <input
+              id="register-code"
+              name="code"
+              type="text"
+              bind:value={code}
+              placeholder="8 digits"
+              autocomplete="one-time-code"
+              inputmode="numeric"
+              spellcheck="false"
+              disabled={ceremonyInProgress}
+              required
+            />
+          {/if}
+          <button type="submit" class="primary-action" disabled={ceremonyInProgress || sendingCode} data-auth-submit>
             {#if ceremonyInProgress}
               <span class="spinner" aria-hidden="true"></span>
               Waiting for your device…
+            {:else if !codeSent}
+              {sendingCode ? 'Sending the code…' : 'Email me a code'}
             {:else}
               <svg class="passkey-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.4" />
