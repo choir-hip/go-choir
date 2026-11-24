@@ -65,6 +65,21 @@ public enum ModelOffer {
         return SetupCandidate(id: c.id, label: c.label, bytes: c.bytes, minMemoryGB: Double(c.minTier.rawValue), kitStageID: c.kitStageID, role: role == .responder ? "responder" : "", needsMB: c.residentMB)
     }
 
+    /// What a first-run press runs: the stages shared code asked for, each on the model the person was shown and chose (`picks`: stage -> model id). A pick that cannot be built here (a list row this build has no fetch for) is NOT run: the stage
+    /// would otherwise fetch its own ladder's model, one the person was never shown. A stage with no pick runs on its own ladder.
+    public static func plan(stages: [String], picks: [String: String]) -> (run: Set<SetupStage>, chosen: [SetupStage: SetupCandidate]) {
+        var run = Set<SetupStage>(), chosen: [SetupStage: SetupCandidate] = [:]
+        for name in stages {
+            guard let st = SetupStage(rawValue: name) else { continue }
+            if let id = picks[name] {
+                guard let c = SetupCatalog.ladder(st).first(where: { $0.id == id }) ?? candidate(job: name, id: id) else { continue }
+                chosen[st] = c
+            }
+            run.insert(st)
+        }
+        return (run, chosen)
+    }
+
     /// The stages whose chosen model passed its check on this phone (a stage that fell to its built-in floor is not ready for this purpose), from the record setup keeps (voice-setup.json).
     public static func readyStages(record: SetupRecord?) -> Set<String> {
         guard let record else { return [] }

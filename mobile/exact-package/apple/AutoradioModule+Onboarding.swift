@@ -62,7 +62,10 @@ final class OnboardingController: @unchecked Sendable {
         lock.lock()
         if let s = setup, s.isStarted, !s.isFinished { lock.unlock(); return }
         lock.unlock()
-        let run = Set(stages.compactMap { SetupStage(rawValue: $0) })
+        // What was shown is what is fetched: a pick this build cannot fetch is not run, and its stage does not fall back to a model nobody was shown (ModelOffer.plan).
+        let planned = ModelOffer.plan(stages: stages, picks: picks)
+        let run = planned.run
+        if only && run.isEmpty { return }
         // The one shared store, with the whole catalog in it from the start.
         let backend: SetupBackend = LiveSetupBackend(store: .shared)
         let profile = DeviceProfile.current()
@@ -71,10 +74,8 @@ final class OnboardingController: @unchecked Sendable {
         let configurator: ConfigBackend? = (only || !picks.isEmpty) ? nil : LiveConfigBackend()
         var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, configBackend: configurator)
         if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
-        for (job, id) in picks {
-            guard let st = SetupStage(rawValue: job) else { continue }
-            if let c = SetupCatalog.ladder(st).first(where: { $0.id == id }) ?? ModelOffer.candidate(job: job, id: id) { s.prefer(st, c) }
-        }
+        if only { for (st, c) in planned.chosen { s.prefer(st, c) } }
+        else { for (job, id) in picks { if let st = SetupStage(rawValue: job), let c = SetupCatalog.ladder(st).first(where: { $0.id == id }) ?? ModelOffer.candidate(job: job, id: id) { s.prefer(st, c) } } }
         s.onChange = { [weak self] in self?.changed() }
         set { setup = s; runStages = only ? stages : [] }
         let gen = AccountWipe.generation
