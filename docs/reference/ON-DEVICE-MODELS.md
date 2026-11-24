@@ -516,9 +516,7 @@ word error on a 31-minute stream) where upstream gave 2.05%.
 
 **Licence and credit (verified, `LICENSE` and `NOTICE`).** CC BY 4.0. It asks for the credit "Fluid Speech Mini by FluidVoice. Built on
 NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra.", a link to the licence, and that LICENSE and NOTICE stay with the files (the
-store fetches both into the model's folder). The credit text is `KnownModels.fluidSpeechMini.credit`. **The app has no About or licences
-page that lists the models it uses yet** (the About page shows the build and server commits only, `mobile/AutoradioLab/about.ts`); until
-one exists the credit is carried by the model list, and showing it is an open item for the lane that owns Settings.
+store fetches both into the model's folder). The credit text is `KnownModels.fluidSpeechMini.credit`. The credit is shown beside the option on Settings > Downloads and the first-run welcome (section 12); the About page still shows only the build and server commits.
 
 **How the app fetches it.** Through the model store (`ModelStore.ensureBundle`), file by file, resumable, each file checked against its
 SHA-256 before it is moved into place, only from voice setup's fetch after the person has agreed (the lane `onboard-consent` owns the
