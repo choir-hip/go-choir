@@ -7,6 +7,7 @@ import { cutBytes, oneLine, paperStory } from './runsheet-entries.ts';
 import { AHEAD_FLOOR_SECONDS, StretchDecoder, askOutcome, entryFrom, placeOp, plainWords, shouldAskMore, toldRoutes, type Incoming } from './programme-model.ts';
 import { parseStory, weight } from './paper-model.ts';
 import { candidateJSON, candidates as takeCandidates, merged, title as takeTitle, type Kept, type Take } from './takes.ts';
+import { paperStory } from './runsheet-entries.ts';
 import type { RadioRuntime } from './radio-runtime.ts';
 import type { Entry } from './runsheet-model.ts';
 
@@ -119,7 +120,12 @@ export type WriterDeps = {
   now(): Date; tz(): string; requestId(): string; generation(): number;
   /** Stories held on the phone, to play when the desk cannot be reached and fewer than two playable entries are ahead. */
   offlineFill?(): Entry[] | Promise<Entry[]>;
+  /** 'listening': there is no account, or the person has not agreed to outside AI answers (consent.ts): the radio plays the paper's own stories in the paper's order and the desk is not asked (nothing goes to a model).
+   *  'desk' (the default): the desk is asked. A mode that cannot be read is 'desk': a signed-in listener is never downgraded by a failed read (the post itself still refuses with no key or no consent). */
+  mode?(): Promise<'desk' | 'listening'>;
 };
+/** Listening only: how many of the paper's stories one ask places, and the length each is reckoned at (a story's real length is not known before it is read; the writer asks again when about one is left). */
+export const LISTEN_BATCH = 4, LISTEN_STORY_SECONDS = 180;
 
 /** An ask that has not answered in this long is OVERDUE. The Writer itself would then allow ONE more ask for the dry spell (the first answer to arrive is applied, the other dropped as older), but the bridge never reaches that:
  *  its `radioWrite` waits for its ask and the pulse calls for no second `radioWrite` while one waits (radio-bridge.ts: the flag, stale after 260 s), because a mutation sent again replaces the first and the first is the one waiting
@@ -223,10 +229,21 @@ export class Writer {
         const now = this.d.now();
         const skipping = cause === 'open' ? new Set<string>() : toldRoutes(store.sheet.entries);
         const front = await this.d.front();
-        await yieldTurn('after the front list');                          // the front list's decoding and the candidates below are not one turn (the proof's radioWrite took 146 ms and was refused: no desk entries followed)
+        await yieldTurn('after the front list');
+        const listening = (await this.d.mode?.().catch(() => 'desk' as const)) === 'listening';                          // the front list's decoding and the candidates below are not one turn (the proof's radioWrite took 146 ms and was refused: no desk entries followed)
         let items = fromFront(front, now.getTime(), skipping);
         if (items.length === 0 && skipping.size > 0) items = fromFront(front, now.getTime());   // everything told: the desk is still asked, with the whole list
         if (items.length === 0) { failure = { kind: 'empty' }; throw new Error('no story to tell'); }
+        if (listening) {
+          // Listening only: the paper's own stories, front list first, none sent anywhere. Placed by the phone, so the sheet says whose they are.
+          for (const c of items.slice(0, LISTEN_BATCH)) {
+            if (!live()) return;
+            const e = { ...paperStory(c.route, c.title, 'phone'), est_seconds: LISTEN_STORY_SECONDS };
+            const r = store.place(e, 'end', { by: 'phone', reason: 'listening only: the paper, in its own order' });
+            if (r?.applied) { added += 1; received += 1; this.applied += 1; } else dropped += 1;
+          }
+          throw Object.assign(new Error('listening only'), { kind: 'listening' });          // what is placed stands; the rest of the ask is the desk's and is not made
+        }
         // The takes and the edition are read before the precheck (a local read each): a dry answer's inputs are the front list, the takes the desk may play and the edition; any of them changing is a reason to ask.
         const { takes: all, kept } = await this.d.takes();
         const editionText = await this.d.edition();
@@ -262,7 +279,8 @@ export class Writer {
         }
       } catch (err) {
         const k = (err as { kind?: string } | undefined)?.kind;
-        if (k === 'unchanged') { unchanged = true; console.log('writer: nothing the desk is given has changed since it had nothing to add; not asked'); }
+        if (k === 'listening') { console.log(`writer: listening only: ${added} of the paper's stories placed, no desk request`); }
+        else if (k === 'unchanged') { unchanged = true; console.log('writer: nothing the desk is given has changed since it had nothing to add; not asked'); }
         else console.log(`writer: the desk's stretch failed (${cause}): ${k ?? 'other'}, status ${(err as { status?: number } | undefined)?.status ?? 'none'}, ${err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)}`);
         if (!failure && !unchanged) failure = { kind: k === 'signedOut' || k === 'transport' ? k : 'other' };
       }

@@ -55,6 +55,8 @@ public final class LabRuntime: @unchecked Sendable {
     public let configs: ConfigStore
     /// The voice choice that survives a relaunch.
     public let voiceStore: VoiceChoiceStore
+    /// The recogniser and speech-bounds stages setup chose, kept across launches (StagePicksStore).
+    public let picksStore: StagePicksStore
     public let session: AudioSessionOwner
     public let coordinator: SessionCoordinator
     public var onChange: (@Sendable () -> Void)?
@@ -77,6 +79,7 @@ public final class LabRuntime: @unchecked Sendable {
         self.log = log
         let voiceStore = VoiceChoiceStore(file: supportDir.appendingPathComponent("voice-choice.json"))
         self.voiceStore = voiceStore
+        self.picksStore = StagePicksStore(file: supportDir.appendingPathComponent("stage-picks.json"))
         // The saved voice, or on a fresh install the neural default. The model stages register after this runs, so the stage is not checked
         // here: `makeSpeaker` falls back to the system voice for a stage that is not registered.
         let cfg = StageRegistry.listenerConfiguration(voice: voiceStore.current(), registry: registry, readiness: readiness)
@@ -92,6 +95,7 @@ public final class LabRuntime: @unchecked Sendable {
         self.session = coord
         store = KeptTurnStore(root: supportDir.appendingPathComponent("turns"))
         configs = ConfigStore(dir: supportDir.appendingPathComponent("configs"))
+        store.prune()                                  // the rule for what stays: the newest 20 turns, none older than 30 days, no sound (KeptTurnStore.prune)
         // The bundled kept turn is a development replay fixture (no product page reads it; the voice setup check reads FixtureTurn.micSamples16k() from the binary, not this folder):
         // it is written only where EXACT_DEVELOPMENT is defined (package Swift of a non-production build; the store archive has none).
         #if EXACT_DEVELOPMENT
@@ -372,6 +376,14 @@ public final class LabRuntime: @unchecked Sendable {
         setConfiguration(c)
         log.emit(.note(heard.summary))
     }
+    /// The downloaded hearing models are the ones in use once setup has passed them (owner, 2026-11-23: Apple's recogniser is not good enough): the picks setup kept are applied where their stage is registered in this build.
+    /// Called once, after the stages register (the configuration is built before they do). A pick whose stage is not in this build is left alone and Apple's recogniser stays.
+    public func applyKeptPicks() {
+        for (k, id) in picksStore.load() {
+            guard let kind = StageKind(rawValue: k), StagePicksStore.kinds.contains(kind), registry.stages(kind).contains(where: { $0.id == id }) else { continue }
+            setStage(kind, id: id)
+        }
+    }
     public func setStage(_ kind: StageKind, id: String) {
         var c = configuration
         c.set(kind, StageSetting(id: id))
@@ -394,7 +406,8 @@ public final class LabRuntime: @unchecked Sendable {
         lock.lock(); records[rec.id] = rec; lastID = rec.id; lock.unlock()
         let pos = ProgramPosition(programmeID: player.document.id, blockIndex: player.blockIndex, context: "")
         let ctx = TurnContextFile(position: pos, configuration: rec.configuration, retrieval: RetrievalBridge.shared.lastRecord)
-        _ = try? store.save(record: rec, mic: snapAudio.mic, reference: snapAudio.reference, context: ctx)
+        _ = try? store.save(record: rec, mic: snapAudio.mic, reference: snapAudio.reference, context: ctx, keepAudio: false)       // the words, not the sound (KeptTurnStore.prune states the rule)
+        store.prune()
         refresh()
     }
     func setOutcome(_ id: String, _ o: Outcome) { lock.lock(); records[id]?.outcome = o; lock.unlock(); refresh() }

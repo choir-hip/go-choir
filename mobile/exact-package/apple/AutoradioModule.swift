@@ -160,7 +160,7 @@ public final class AutoradioModule: ExactPackage {
         AccountWipe.removeOldBuildFiles(support: support, caches: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0])
         choir.accountWipe.register("open-pages") { OpenPageFacts.shared.wipe() }
         choir.accountWipe.register("app-files") {
-            AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })
+            AccountWipe.removeFiles(["onboarding.json", "recent-files.json"].map { support.appendingPathComponent($0) })
             AccountWipe.removeContents(of: support.appendingPathComponent("books")); AccountWipe.removeContents(of: filesCache)
             AccountWipe.removeContents(of: support.appendingPathComponent("content"))      // the pre-release content store's folder (the phone's copy is shared code's app:/data/content.db now): never read, only removed
         }

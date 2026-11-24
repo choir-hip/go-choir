@@ -42,20 +42,38 @@ public final class KeptTurnStore: @unchecked Sendable {
     }
     public func list() -> [KeptTurn] {
         let items = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-        return items.filter { FileManager.default.fileExists(atPath: $0.appendingPathComponent("mic.caf").path) }
+        return items.filter { FileManager.default.fileExists(atPath: $0.appendingPathComponent("record.json").path) }
             .sorted { $0.lastPathComponent > $1.lastPathComponent }.map(KeptTurn.init)
     }
     /// Keep a live turn: audio from the recorder, the context the stages saw, the record.
-    public func save(record: TurnRecord, mic: [Float], reference: [Float]?, context: TurnContextFile) throws -> KeptTurn {
+    /// `keepAudio` false (what a listener's phone does): the words and the record are kept, the sound is not. The only visible feature that reads a kept turn is Activity's list of the radio's turns (outcome and what was heard), which
+    /// needs the record alone; the audio was only for replay in the lab. The fixture turn and the lab's proofs keep it.
+    public func save(record: TurnRecord, mic: [Float], reference: [Float]?, context: TurnContextFile, keepAudio: Bool = true) throws -> KeptTurn {
         let f = root.appendingPathComponent(record.id)
         try FileManager.default.createDirectory(at: f, withIntermediateDirectories: true)
         let k = KeptTurn(folder: f)
-        try AudioFiles.writeMono(mic, to: k.micURL)
-        if let r = reference, !r.isEmpty { try AudioFiles.writeMono(r, to: k.referenceURL) }
+        if keepAudio {
+            try AudioFiles.writeMono(mic, to: k.micURL)
+            if let r = reference, !r.isEmpty { try AudioFiles.writeMono(r, to: k.referenceURL) }
+        }
         let e = JSONEncoder(); e.outputFormatting = [.prettyPrinted, .sortedKeys]
         try e.encode(context).write(to: k.contextURL)
         try record.encoded().write(to: k.recordURL)
         return k
+    }
+    /// The rule for what stays on the phone: the newest `keep` turns, none older than `maxAgeDays`, and never any sound (a turn folder from an earlier build that holds mic.caf or reference.caf loses them). Sign-out removes everything (`wipe`).
+    /// Returns how many turn folders were removed. `now` is a parameter so a test does not wait.
+    @discardableResult
+    public func prune(keep: Int = 20, maxAgeDays: Double = 30, now: Date = Date()) -> Int {
+        let fm = FileManager.default
+        let items = ((try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []).filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+        let dated = items.map { ($0, (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) }.sorted { $0.1 > $1.1 }
+        var removed = 0
+        for (i, (url, at)) in dated.enumerated() {
+            if i >= keep || now.timeIntervalSince(at) > maxAgeDays * 86_400 { try? fm.removeItem(at: url); removed += 1; continue }
+            for audio in ["mic.caf", "reference.caf"] { try? fm.removeItem(at: url.appendingPathComponent(audio)) }
+        }
+        return removed
     }
     public func updateOutcome(id: String, _ o: Outcome) {
         let k = KeptTurn(folder: root.appendingPathComponent(id))

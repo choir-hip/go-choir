@@ -157,4 +157,4 @@ component Launcher
             SectionHeader(label="More")
             PlaceRow(slug="activity", name="Activity", address="activity:", line="What your computer has been doing")
             PlaceRow(slug="edit-edition", name="Edit my edition", address="onboarding:edit", line="Topics you follow")
-            PlaceRow(slug="told", name="What I've told the paper", address="texture:what-i-told-the-paper", line="")
+            PlaceRow(slug="told", name="What I've told the paper", address="settings:learned", line="")

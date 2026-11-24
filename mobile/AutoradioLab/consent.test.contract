@@ -1,0 +1,25 @@
+// Signed out (the web build has no account), asking opens the sign-in sheet with its one sentence of why; nothing is sent and no microphone is touched; Not now puts it away and the field keeps the text.
+test "a typed ask while signed out opens the sign-in sheet"
+  clock data
+  type "bar-field" "what happened at the harbour"
+  clock settle
+  tap "bar-send"
+  clock settle
+  expect tree has "gate-sheet"
+  expect tree has "gate-signin-title"
+  expect tree has "gate-signin-why"
+  expect tree has "gate-signin"
+  expect tree has "gate-make"
+  expect tree missing "consent-title"
+  tap "gate-later"
+  clock settle
+  expect tree missing "gate-sheet"
+
+test "the voice button while signed out opens the sign-in sheet"
+  clock data
+  tap "bar-mic"
+  clock settle
+  expect tree has "gate-signin-why"
+  tap "gate-scrim"
+  clock settle
+  expect tree missing "gate-sheet"

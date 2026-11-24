@@ -354,12 +354,13 @@ public final class VoiceSetup: @unchecked Sendable {
 
     // MARK: Running
 
-    /// Run every stage at once and return when each has a model that passed its check (or its floor).
-    public func run() async {
+    /// Run every stage at once and return when each has a model that passed its check (or its floor). `only`: just those stages, on each stage's own ladder (the radio's speaking voice is asked for first, before the
+    /// rest of voice: owner, 2026-11-23); it never uses the configurator, which plans the whole pipeline together.
+    public func run(only: Set<SetupStage>? = nil) async {
         lock.lock(); if started && !finished { lock.unlock(); return }; started = true; finished = false; lock.unlock()
-        if configBackend != nil { await runConfigured(); lock.lock(); finished = true; lock.unlock(); onChange?(); return }
+        if configBackend != nil, only == nil { await runConfigured(); lock.lock(); finished = true; lock.unlock(); onChange?(); return }
         await withTaskGroup(of: Void.self) { g in
-            for s in SetupStage.allCases { g.addTask { [self] in await runStage(s) } }
+            for s in SetupStage.allCases where only?.contains(s) ?? true { g.addTask { [self] in await runStage(s) } }
         }
         lock.lock(); finished = true; lock.unlock(); onChange?()
     }

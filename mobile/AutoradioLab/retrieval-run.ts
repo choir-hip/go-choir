@@ -101,7 +101,9 @@ export function nativeEmbedder(later: Later): NativeEmbed {
 
 export type Delays = { first: number; settle: number; rest: number; poll?: number };
 export const DELAYS: Delays = { first: 15000, settle: 3000, rest: 150 };
-export type Options = { storage?: Storage; native?: NativeEmbed | null; now?: () => number; delays?: Delays; engine?: string; dimension?: number; cosineFloor?: number };
+/** `mayDownload`: whether the person agreed to the model download (consent.ts), and over mobile data too. Without it nothing is fetched (owner, 2026-11-23: each download starts only after consent, with its size). */
+export type MayDownload = () => Promise<{ ok: boolean; mobile: boolean }>;
+export type Options = { storage?: Storage; native?: NativeEmbed | null; mayDownload?: MayDownload; now?: () => number; delays?: Delays; engine?: string; dimension?: number; cosineFloor?: number };
 export type Served = Context & { brief: string };
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -123,11 +125,14 @@ export class Retrieval {
   private restN = 0;
   private stalled = false;
   private answered = new Map<string, Promise<{ id: string; ok: boolean }>>();
-  modelState: 'ok' | 'downloading' | 'absent' = 'absent';
+  /** 'needs': the model is not on the phone and the person has not agreed to fetch it (the Downloads page offers it with its size). */
+  modelState: 'ok' | 'downloading' | 'absent' | 'needs' = 'absent';
+  mayDownload: MayDownload;
   private prog = { done: 0, total: 0, rate: 0 };
   private off: () => void;
 
   constructor(o: Options = {}) {
+    this.mayDownload = o.mayDownload ?? (async () => ({ ok: false, mobile: false }));
     this.storage = o.storage; this.native = o.native ?? null; this.now = o.now ?? (() => 0);   // data sources read no clock (Exact refuses Date.now): the rate is 0 until a caller passes one
     ; this.delays = o.delays ?? DELAYS;
     this.engine = o.engine ?? ENGINE; this.dimension = o.dimension ?? DIMENSION; this.cosineFloor = o.cosineFloor ?? COSINE_FLOOR;
@@ -234,7 +239,9 @@ export class Retrieval {
       const st = await n.deviceState();
       if (!st.loaded) {
         if (!st.present) {
-          if (!st.onWiFi) { this.modelState = 'absent'; return; }
+          const may = await this.mayDownload();
+          if (!may.ok) { this.modelState = 'needs'; return; }                       // nothing is fetched before the person agrees
+          if (!st.onWiFi && !may.mobile) { this.modelState = 'absent'; return; }    // agreed on Wi-Fi: not over mobile data
           this.modelState = 'downloading';
         }
         if (!(await n.ensure(!st.present))) { this.modelState = 'absent'; return; }

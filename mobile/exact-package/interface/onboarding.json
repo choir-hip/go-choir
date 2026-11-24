@@ -58,7 +58,22 @@
    "route": "string",
    "talking": "bool",
    "voicePicked": "number",
-   "finishAsked": "number"
+   "finishAsked": "number",
+   "plan": "PlanRowView[]",
+   "voiceReady": "bool",
+   "hearingReady": "bool",
+   "runStages": "string[]"
+  },
+  "PlanRowView": {
+   "stage": "string",
+   "name": "string",
+   "model": "string",
+   "id": "string",
+   "group": "string",
+   "host": "string",
+   "bytes": "number",
+   "sizeLabel": "string",
+   "ready": "bool"
   }
  },
  "names": [
@@ -81,7 +96,11 @@
      "route": "",
      "talking": false,
      "voicePicked": 0,
-     "finishAsked": 0
+     "finishAsked": 0,
+     "plan": [],
+     "voiceReady": false,
+     "hearingReady": false,
+     "runStages": []
     }
    }
   }

@@ -20,6 +20,8 @@ use VoiceStep from "./voice.contract"
 use AccountView from "./account-state-types.contract"
 use SignInView from "./account-types.contract"
 use EditionPage from "./edition-types.contract"
+use DownloadCard, DownloadLines from "./downloads.contract"
+use DownloadsView from "./downloads-types.contract"
 
 keyframes obBreathe
   from opacity=1 scale=1
@@ -278,6 +280,8 @@ component EditEditionLink
 component OnboardingPage
   inject
     th: Theme
+    au: ChoirAuth
+    dl: DownloadsView
     ob: Onboarding
     obBegin: action
     obBeginMobile: action
@@ -312,11 +316,24 @@ component OnboardingPage
       StepDots(n=n)
 
       // ---- welcome (and skipped): what is about to happen, plainly
-      if ob.step == "welcome" or ob.step == "skipped"
+      // Signed out the first run is only the radio's voice: the one download a listener needs, with its size, its host and one press (downloads.ts); the radio plays the paper meanwhile, in the iPhone's voice.
+      if (ob.step == "welcome" or ob.step == "skipped") and au.signedIn == false
+        Card(level=1, testId="ob-welcome-voice", minHeight=0)
+          column padding=18 gap=12
+            text "The radio reads the paper to you. Until its own voice is on this phone it uses the iPhone's built-in voice." font-size="-exact-body" line-height=1.45 font-family=th.fontText
+            DownloadCard(group="voice")
+            if dl.voiceReady
+              text "The radio's voice is on this phone." testId="ob-voice-ready" font-family=th.fontLabel font-size="-exact-footnote" color=th.success
+            text "To ask the radio, or to make your edition, sign in or make an account." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+        button press=obSkip testId="ob-skip" appearance="none" padding=10
+          text "Not now" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
+      if (ob.step == "welcome" or ob.step == "skipped") and au.signedIn
         Card(level=1, testId="ob-welcome", minHeight=0)
           column padding=18 gap=12
             text "Autoradio can arrange your paper around what you care about: you pick topics, or just tell it." font-size="-exact-body" line-height=1.45 font-family=th.fontText
-            text "First it sets up the voice on this phone: a few audio models to download, and a check that each one works here." font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
+            text "First it sets up the voice on this phone: these files, and a check that each one works here." font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
+            DownloadLines(group="voice")
+            DownloadLines(group="voice-rest")
             text ob.totalLabel font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="ob-total"
             button press=obBegin testId="ob-begin" appearance="none"
               Btn(label=beginLabel, primary=true, wide=true)

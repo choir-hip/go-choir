@@ -1,0 +1,10 @@
+// The shape of what has been agreed (consent.ts `consentView`): the model-download agreement, and the words of the sign-in prompt (consent-text.ts, also strings/en.json).
+shape ConsentView
+  models: string
+  mobileOk: bool
+  rev: number
+  signTitle: string
+  signWhy: string
+  signIn: string
+  make: string
+  later: string

@@ -10,6 +10,23 @@ backfilled from the commit and nobody re-read the evidence for this page.
 Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 169 docs-only and 72 that change behavior.
 
+## 2026-11-23: the phone's first run, downloads and microphone (lane `onboard-consent`)
+
+**What.** (1) Signed out, the radio plays the paper's own stories in the paper's order (listening only): the writer's `mode` (consent.ts `deskMode`) says "listening" with no key, and the desk is not asked. (2) Model downloads are
+offered with their sizes before any byte: `downloads.ts` builds one card per group (the radio's voice; hearing you and the rest; search on this phone) from a plan the native side reads from the model lists
+(`ModelOffer.swift`: names, sizes, host), a Settings page "Downloads", the first-run welcome (signed out: the voice alone; signed in: the files listed before the setup button), and the voice button (signed in without the hearing
+models: opens Downloads, asks for no microphone). The embedding model no longer downloads by itself: `retrieval-run.ts` fetches only after the person's press, and not over mobile data unless that press was the mobile one.
+(3) A signed-out ask or voice press opens "Sign in to ask the radio" with one sentence of why (the create-account screen is lane native-passkey's; the sheet's buttons call the existing sign-in until it lands). (4) The microphone
+purpose strings now name voice, takes and a published take; the radio's microphone is given up when the app goes to the background (read in `SessionCoordinator.applyBackgrounded`; not measured on a phone). (5) Kept turns:
+the words stay (newest 20, none older than 30 days), the sound is never written (`KeptTurnStore.prune`, `keepAudio: false`). (6) The recogniser and speech-bounds stages setup passed are kept (`stage-picks.json`) and applied at launch
+(`LabRuntime.applyKeptPicks`); the voice already persisted. (7) "What I've told the paper" in More opens the learned page. **No consent screen before the radio answers** (owner, 2026-11-23): the agreement to outside AI
+companies is the create-account screen's line.
+**Why.** Apple 4.2.3(ii) and 5.1.2, the data inventory F6 to F9, the owner's rulings of 2026-11-23.
+**Proof.** bun tests (consent, downloads, radio-listening, onboarding, retrieval-run) and `test web` (consent.test.contract); Swift tests written (KeptTurnsPruneTests, ModelOfferTests); see the lane report for what ran. Not proved on a phone:
+the downloads, the recogniser in use after a download, the microphone at screen lock.
+**Replaced.** The unprompted 310 MB search-model download; the first run's welcome text without sizes; Apple's recogniser and the energy detector at every launch; kept turn audio; the not-built "told" row.
+**Undo.** Revert the lane's commits; `stage-picks.json` and `consent.json` are inert files.
+
 ## Not landed (in flight or dropped)
 
 | What | State | Where |

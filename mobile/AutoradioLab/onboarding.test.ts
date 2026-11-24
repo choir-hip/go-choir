@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { onboardingAct, onboardingPage, forgetOnboarding, wipeOnboarding, parseProgress, startStep, noVoice, PROGRESS_FILE, EDIT, SETUP,
   MIC_REFUSED_LINE, MIC_SILENT_LINE, TALK_REFUSED_LINE, HEARING_AGAIN_LINE, type Env, type VoiceFacts, type Device } from './onboarding.ts';
-import { resetSeam, nextGeneration } from './api.ts';
+import { resetSeam, nextGeneration, bindNative } from './api.ts';
+import { firstRunOver } from './onboarding.ts';
 import { FAILED_LINE, type Writer } from './edition-writer.ts';
 
 const files = new Map<string, Uint8Array>();
@@ -226,5 +227,22 @@ describe('the progress file is read once, and a failed read is not "no progress"
     expect(refused.message).toContain('could not be read'); expect(writes).toEqual([]);
     fail = false;
     expect((await act('skip', '', '', SETUP, env({ storage: flaky }))).step).toBe('skipped'); expect(writes).toContain(PROGRESS_FILE);
+  });
+});
+
+describe('first run without an account, and the agreement', () => {
+  test('O15 with no key the first run is over for the station; with a locked key it is not', async () => {
+    bindNative({ later: async (r) => (r.op === 'keystate' ? { state: 'absent' } : {}) });
+    expect(await firstRunOver(storage)).toBe(true);
+    forgetOnboarding(); bindNative({ later: async (r) => (r.op === 'keystate' ? { state: 'unreadable' } : {}) });
+    expect(await firstRunOver(storage)).toBe(false);
+  });
+  test('O16 begin records the agreement: Wi-Fi on Wi-Fi, mobile data on mobile data after the yes; asking first records nothing', async () => {
+    const agreed: boolean[] = [];
+    const e = env({ agree: async (m) => { agreed.push(m); } });
+    await act('begin', '', '', SETUP, e); expect(agreed).toEqual([false]); expect(ops()).toContain('obSetupBegin');
+    forgetOnboarding(); files.clear(); calls = []; agreed.length = 0; v = { ...v, onWiFi: false };
+    await act('begin', '', '', SETUP, e); expect(agreed).toEqual([]); expect(ops()).not.toContain('obSetupBegin');
+    await act('begin', 'true', '', SETUP, e); expect(agreed).toEqual([true]); expect(ops()).toContain('obSetupBegin');
   });
 });

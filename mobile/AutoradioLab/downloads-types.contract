@@ -1,0 +1,22 @@
+// The shapes of the model downloads page (downloads.ts `downloadsPage`).
+shape DownloadGroup
+  id: string
+  title: string
+  why: string
+  lines: string[]
+  total: string
+  host: string
+  ready: bool
+  busy: bool
+  status: string
+  onWiFi: bool
+  mobileLine: string
+  startLabel: string
+  mobileLabel: string
+  hostLine: string
+
+shape DownloadsView
+  groups: DownloadGroup[]
+  rev: number
+  voiceReady: bool
+  hearingReady: bool

@@ -25,11 +25,15 @@
 //  O12 The prompt card is gone once the edition is made or the first run skipped, and says where the listener left off otherwise.
 //  O13 The kept file is read by shape: a corrupt, empty or wrong-typed file starts fresh and never throws; sign-out removes it and forgets the memory.
 //  O14 The station may start by itself only when the first run is over (done or skipped): that fact is told to native code on every change.
+//  O15 With no key the first run is over for the station (the paper plays at once); a locked or unreadable key leaves it to the first run as before.
+//  O16 The press that starts the voice setup records the person's agreement to the download (Wi-Fi, or mobile data when the phone is not on Wi-Fi).
 import type { Storage } from './app.contract.d.ts';
 import { complete, generalEdition, localWriter, FAILED_LINE, TIMED_OUT_LINE, type Edition, type Writer, editionLines } from './edition-writer.ts';
 import { lookupEdition, seamGet, type Get } from './notebook.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
 import * as pages from './pages.ts';
+import { consentAct } from './consent.ts';
+import { keyState } from './api.ts';
 
 export const PROGRESS_FILE = 'app:/data/onboarding.json';
 export const EDIT = 'onboarding:edit';
@@ -37,11 +41,14 @@ export const SETUP = 'onboarding:setup';
 
 export type Row = { stage: string; name: string; model: string; sizeLabel: string; state: string; statusLine: string; numbers: string; progress: number; isFallback: boolean; canRetry: boolean; canFallback: boolean };
 /** What the voice side reports. Only native code holds these. */
+/** One file voice needs from the network, as the model lists give it (native ModelOffer): the name and size are the list's, never typed here. `group`: "voice" (the speaking voice), "voice-rest" (hearing you and the rest), "search". */
+export type PlanRow = { stage: string; name: string; model: string; id: string; group: string; host: string; bytes: number; sizeLabel: string; ready: boolean };
 export type VoiceFacts = {
   rows: Row[]; summary: string[]; totalLabel: string; device: string; onWiFi: boolean; setupStarted: boolean; setupFinished: boolean;
   mic: string; level: number; heard: string; route: string; talking: boolean; voicePicked: number; finishAsked: number;
+  plan: PlanRow[]; runStages: string[]; voiceReady: boolean; hearingReady: boolean;
 };
-export const noVoice = (): VoiceFacts => ({ rows: [], summary: [], totalLabel: '', device: '', onWiFi: true, setupStarted: false, setupFinished: false, mic: 'unasked', level: 0, heard: '', route: '', talking: false, voicePicked: 0, finishAsked: 0 });
+export const noVoice = (): VoiceFacts => ({ rows: [], summary: [], totalLabel: '', device: '', onWiFi: true, setupStarted: false, setupFinished: false, mic: 'unasked', level: 0, heard: '', route: '', talking: false, voicePicked: 0, finishAsked: 0, plan: [], runStages: [], voiceReady: false, hearingReady: false });
 
 export type Onboarding = {
   step: string; title: string; message: string; totalLabel: string; device: string; mic: string; heard: string; route: string; editionStatus: string; writingLine: string; editionError: string;
@@ -104,8 +111,9 @@ const blank = (): Mem => ({ gen: launchGen === undefined ? (launchGen = accountG
 /** For tests: a new process. */
 export function forgetOnboarding(): void { mem = null; }
 
-export type Env = { storage: Storage | undefined; device: Device | null; get: Get; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void> };
+export type Env = { storage: Storage | undefined; device: Device | null; get: Get; agree?: (mobile: boolean) => Promise<void>; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void> };
 export const liveEnv = (storage: Storage | undefined): Env => ({ storage, device: nativeDevice(), get: seamGet,
+  agree: async (mobile) => { await consentAct(mobile ? 'agreeModelsMobile' : 'agreeModels', storage); },
   closePage: async (a) => { await pages.pagesClose(storage, a); }, openPage: async (a, t) => { await pages.pagesOpen(storage, a, t); } });
 
 /** The progress, read once per account generation. THE CAUSE of the flip (found by reading, 2026-11-22): `loaded` used to be set BEFORE the file was read and a failed read counted as "no file", so a second
@@ -138,6 +146,8 @@ async function save(env: Env, m: Mem): Promise<void> {
 }
 /** Is the first run over (done or skipped)? The radio's start asks this itself: it must not wait for a page to ask `ob` (a plain launch has no driver whose dumps pull every resource in, and nothing else asked it). Also tells native. */
 export async function firstRunOver(storage: Storage | undefined): Promise<boolean> {
+  // Nobody signed in: there is no first run to finish before the radio plays the paper (listening needs no account; the voice download is a card, not a gate).
+  try { if ((await keyState()).state === 'absent') return true; } catch { /* the first run decides */ }
   const env = liveEnv(storage);
   const m = await load(env);
   await mirror(env, m);
@@ -239,7 +249,9 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
       if (m.step === 'setup' && f.setupStarted && !f.setupFinished) break;                                                    // O2: running
       if (!f.onWiFi && arg !== 'true') { m.step = 'setup'; m.askMobile = true; m.message = ''; break; }                      // O2
       m.askMobile = false; m.step = 'setup'; m.message = ''; m.p.skipped = false;
-      await save(env, m); await dev(env, 'obSetupBegin');
+      await save(env, m);
+      try { await env.agree?.(!f.onWiFi); } catch { /* the press is the agreement; recording it is for the search pass */ }
+      await dev(env, 'obSetupBegin');
       break;
     }
     case 'retry': if (m.step === 'setup') await dev(env, 'obSetupRetry', { stage: arg }); break;

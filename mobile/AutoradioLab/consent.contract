@@ -1,0 +1,29 @@
+// The sheet that stands between a signed-out listener and an ask: "Sign in to ask the radio". It rises over the app and is put away with Not now: listening never needs an account. The words are consent-text.ts (strings/en.json).
+// (No consent sheet before the radio answers: owner, 2026-11-23. The agreement to outside AI companies is the create-account screen's line.) The create-account and sign-in screens are the native passkey lane's (members-passkey / signin): the
+// buttons here only call the actions they provide (`signIn` today; `makeAccount` is the same press until that lane's screen lands).
+// testIds: gate-sheet, gate-scrim, gate-signin-title, gate-signin-why, gate-signin, gate-make, gate-later.
+use Theme from "@choir/autoradio"
+use ConsentView from "./consent-types.contract"
+use Btn from "./ui.contract"
+
+component GateSheet
+  inject
+    th: Theme
+    gate: string
+    cons: ConsentView
+    hideGate: action
+    gateSignIn: action
+    gateMakeAccount: action
+  view
+    if gate != ""
+      box testId="gate-scrim" position="absolute" inset=0 z-index=40 background-color=th.fg opacity=0.4 press=hideGate aria-label="Close"
+      column position="absolute" left=0 right=0 bottom=0 z-index=41 padding="20px 20px 28px 20px" gap=12 box-sizing="border-box" background-color=th.paper2 box-shadow=th.shadow3 testId="gate-sheet" role="dialog" aria-modal=true
+        if gate == "signin"
+          text cons.signTitle testId="gate-signin-title" role="heading" aria-level=2 font-family=th.fontHead font-size="-exact-title3" font-weight=700 color=th.fg
+          text cons.signWhy testId="gate-signin-why" font-family=th.fontText font-size="-exact-body" line-height=1.4 color=th.fg
+          button press=gateSignIn testId="gate-signin" appearance="none"
+            Btn(label=cons.signIn, primary=true, wide=true)
+          button press=gateMakeAccount testId="gate-make" appearance="none"
+            Btn(label=cons.make, primary=false, wide=true)
+          button press=hideGate testId="gate-later" appearance="none"
+            Btn(label=cons.later, primary=false, wide=true)

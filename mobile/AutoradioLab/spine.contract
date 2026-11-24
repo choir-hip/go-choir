@@ -97,17 +97,30 @@ members Autoradio
     ask = v
   // A typed ask is aimed at the page in front: its address goes with the turn (`aim`). The engine side reads `args["aim"]` of
   // choirAsk and puts the page's address, title and text in the Autoradio desk request.
+  // An ask goes out only for a signed-in person (asking needs an account, and the account's creation carried the agreement to outside AI companies); otherwise the sign-in sheet opens and the text stays in the field.
+  derive askGate = au.signedIn ? "" : "signin"
   action sendAsk
-    send acct = choirAsk(text=ask, aim=pg.top)
-    ask = ""
+    if au.signedIn == false
+      gate = "signin"
+    if au.signedIn
+      send acct = choirAsk(text=ask, aim=pg.top)
+      ask = ""
   // The microphone button is the hands-free switch (owner, 2026-11-15): ON, the microphone is open and turns open and close by
   // themselves; OFF, nothing is heard. One state, OFF at every launch and on until the listener has been quiet for three minutes or taps it off (bi.handsFree, owner 2026-11-16); no tap to talk, no push to talk.
   derive micOn = bi.handsFree
   // The listening state shows only when the engine has good reason to think the reader began saying something meant for the radio
   // (sustained speech with words, ListeningVisibility). It is an addition to the bar, never a replacement.
   derive heardNow = bi.handsFree and bi.state == "talking"
+  // Turning voice OFF is always allowed; turning it ON is an ask (the microphone, then requests): signed out it opens the sign-in sheet, and the microphone is never requested.
   action micTap
-    send up = choirHandsFreeToggle()
+    if micOn or (askGate == "" and dl.hearingReady)
+      send up = choirHandsFreeToggle()
+    if micOn == false and askGate != ""
+      gate = askGate
+    // Signed in but the hearing models are not on the phone: voice is offered as ready only once they are (owner, 2026-11-23), so the Downloads page opens with the files, their sizes and the one press; the microphone is not asked.
+    if micOn == false and askGate == "" and dl.hearingReady == false
+      send pms = pagesOpen("settings:downloads", "Downloads")
+      layer = ""
   // Cancel: drop this turn, nothing is sent, hands-free stays on (choirTalkCancel).
   action micCancel
     send up = choirTalkCancel()

@@ -17,6 +17,7 @@ import { sentenceTexts } from './reader-parse.ts';
 import { fileOpen } from './files.ts';
 import { lapYield, lap } from './lap.ts';
 import { firstRunOver } from './onboarding.ts';
+import { deskMode } from './consent.ts';
 import { perform } from './radio-model.ts';
 import { htmlToText } from './mail-model.ts';
 import { parseList, weight, FRONT_LIMIT, type Story } from './paper-model.ts';
@@ -157,6 +158,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
       return { takes, kept };
     },
     edition: async () => '',
+    mode: () => deskMode(),                                          // no account: the paper plays in its own order and nothing goes to a model (consent.ts)
     // The offline story fill: the stories the phone holds whole (content-run.ts), as the Swift LocalStories gave them; the entry builder is runsheet-entries.ts.
     offlineFill: async () => {
       const entries = rt.store.sheet.entries;
