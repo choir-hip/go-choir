@@ -189,6 +189,20 @@ func TestPurgingAccountIsToldPurgingAndOfferedNothing(t *testing.T) { // V3
 	}
 }
 
+func TestAPendingRecordPastItsPurgeTimeOffersNoCancel(t *testing.T) { // V3, V4
+	e := newDelEnv(t, "v3b")
+	deleteAccount(t, e)
+	if _, err := e.h.store.db.Exec(`UPDATE account_deletions SET requested_at = ?, purge_after = ?`, time.Now().UTC().Add(-73*time.Hour), time.Now().UTC().Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	rec := e.passkeySignIn(t)
+	var m map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	if rec.Code != http.StatusForbidden || m["error"] != "account_deletion_purging" || m["cancel_token"] != nil {
+		t.Fatalf("a due record's sign-in: %d %s", rec.Code, rec.Body)
+	}
+}
+
 func TestCancelNeedsTheClockBeforePurgeAfter(t *testing.T) { // V4, S7
 	e := newDelEnv(t, "v4")
 	deleteAccount(t, e)

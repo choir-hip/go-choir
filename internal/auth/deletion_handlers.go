@@ -133,6 +133,12 @@ func (h *Handler) offerDeletionCancel(w http.ResponseWriter, userID string) bool
 		return true
 	}
 	token, err := h.store.OfferDeletionCancel(userID, time.Now().UTC())
+	if errors.Is(err, ErrDeletionNotCancellable) {
+		// The 72 hours are over and the runner has not yet picked the record
+		// up: the removal is due, there is nothing to offer.
+		writeDeletionPurging(w)
+		return true
+	}
 	if err != nil {
 		writeDeletionPending(w)
 		return true
