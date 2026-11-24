@@ -118,7 +118,11 @@ public enum SetupCatalog {
         case .transcriber:
             // Fluid Speech Mini first (the owner's choice, 2026-11-24). Its row downloads the live-words model with it (`ListenerPipeline.companions`:
             // the pipeline needs both), so the size and the memory are the two together.
-            return [SetupCandidate(id: "fluid-speech-mini", label: "Fluid Speech Mini, the listener, with live words", bytes: KnownModels.fluidSpeechMini.totalBytes + companionBytes("fluid-speech-mini"), minMemoryGB: 4,
+            // Fluid Speech Pro first on a phone with 8 GB or more (physical memory reads about 7.4 GB there, so the line is 7; a 6 GB phone reads about 5.6),
+            // Mini on every other phone that can hold it: the recommended recogniser depends on the device's size (owner, 2026-11-24).
+            return [SetupCandidate(id: "fluid-speech-pro", label: "Fluid Speech Pro, the more accurate listener, with live words", bytes: KnownModels.fluidSpeechPro.totalBytes + companionBytes("fluid-speech-pro"), minMemoryGB: 7,
+                                   kitStageID: ListenerPipeline.liveThenFinalStageID, needsMB: 900 + companionMB("fluid-speech-pro")),
+                    SetupCandidate(id: "fluid-speech-mini", label: "Fluid Speech Mini, the listener, with live words", bytes: KnownModels.fluidSpeechMini.totalBytes + companionBytes("fluid-speech-mini"), minMemoryGB: 4,
                                    kitStageID: ListenerPipeline.liveThenFinalStageID, needsMB: 550 + companionMB("fluid-speech-mini")),
                     SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener, with live words", bytes: 480_000_000 + companionBytes("parakeet-tdt-0.6b-v2"), minMemoryGB: 6, kitStageID: "parakeet-tdt", needsMB: 700 + companionMB("parakeet-tdt-0.6b-v2")),
                     SetupCandidate(id: "parakeet-eou-120m", label: "Parakeet, the smaller listener", bytes: 250_000_000, minMemoryGB: 3, kitStageID: "parakeet-eou", needsMB: 250),
@@ -161,7 +165,8 @@ public enum SetupCatalog {
             // always stays). Physical memory is only the fallback guess, as a starting point of the ladder.
             var rest: [SetupCandidate]
             if let avail = d.availableMemoryMB {
-                rest = all.filter { $0.isFloor || $0.needsMB == 0 || $0.needsMB <= avail - 600 }
+                // A model that wants more physical memory than the phone has is passed over even when memory happens to be free (Pro on a 6 GB phone).
+                rest = all.filter { $0.isFloor || ($0.minMemoryGB <= d.memoryGB && ($0.needsMB == 0 || $0.needsMB <= avail - 600)) }
             } else {
                 rest = Array(all.drop(while: { $0.minMemoryGB > d.memoryGB }))
             }

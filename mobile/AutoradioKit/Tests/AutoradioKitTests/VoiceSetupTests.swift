@@ -13,7 +13,13 @@ final class VoiceSetupTests: XCTestCase {
     func testPlanStartsWhereThePhoneFitsAndEndsOnAFloor() {
         // failure 1
         let big = SetupCatalog.plan(for: device(8))
-        XCTAssertEqual(big[.transcriber]!.map(\.id), ["fluid-speech-mini", "parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "apple-speech"])
+        XCTAssertEqual(big[.transcriber]!.map(\.id), ["fluid-speech-pro", "fluid-speech-mini", "parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "apple-speech"])
+        let six = SetupCatalog.plan(for: device(5.6))       // an iPhone 14 Pro Max or 15 reads about 5.6 GB: Mini, not Pro
+        XCTAssertEqual(six[.transcriber]!.first?.id, "fluid-speech-mini", "Pro is recommended from the 8 GB class (about 7.4 GB read) up")
+        XCTAssertEqual(SetupCatalog.plan(for: device(7.4))[.transcriber]!.first?.id, "fluid-speech-pro")
+        XCTAssertEqual(SetupCatalog.plan(for: device(11.4))[.transcriber]!.first?.id, "fluid-speech-pro")
+        var sixFree = device(5.6); sixFree.availableMemoryMB = 4000      // plenty free, still not Pro: the phone is too small for it
+        XCTAssertEqual(SetupCatalog.plan(for: sixFree)[.transcriber]!.first?.id, "fluid-speech-mini")
         let mid = SetupCatalog.plan(for: device(4))
         XCTAssertEqual(mid[.transcriber]!.first?.id, "fluid-speech-mini")
         XCTAssertEqual(SetupCatalog.plan(for: device(3))[.transcriber]!.first?.id, "parakeet-eou-120m", "a 3 GB phone starts at the smaller listener")
@@ -22,13 +28,13 @@ final class VoiceSetupTests: XCTestCase {
         XCTAssertEqual(small[.transcriber]!.map(\.id), ["apple-speech"])
         XCTAssertEqual(small[.voice]!.map(\.id), ["system-voice"])
         for s in SetupStage.allCases { XCTAssertTrue(SetupCatalog.plan(for: device(0.5))[s]!.last!.isFloor, "every ladder ends in something that exists") }
-        XCTAssertEqual(SetupCatalog.plan(for: device(8), smaller: true)[.transcriber]!.first?.id, "parakeet-tdt-0.6b-v2")
+        XCTAssertEqual(SetupCatalog.plan(for: device(8), smaller: true)[.transcriber]!.first?.id, "fluid-speech-mini")
     }
 
     func testTotalIsSaidPlainly() {
         let big = SetupCatalog.plan(for: device(8))
-        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + KnownModels.fluidSpeechMini.totalBytes + 250_000_000 + 350_000_000 + 639_446_688, "the decision and the responder share one file: counted once")
-        XCTAssertEqual(SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(big), onWiFi: true), "About 1.5 GB. On Wi-Fi this takes a few minutes.")
+        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + KnownModels.fluidSpeechPro.totalBytes + 250_000_000 + 350_000_000 + 639_446_688, "the decision and the responder share one file: counted once")
+        XCTAssertEqual(SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(big), onWiFi: true), "About 1.9 GB. On Wi-Fi this takes a few minutes.")
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("1.4 GB"))
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("mobile data"), "failure 7")
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 0, onWiFi: true).hasPrefix("Nothing to download"))
@@ -52,7 +58,7 @@ final class VoiceSetupTests: XCTestCase {
     func testStallIsReportedAndFallbackOnRequest() async throws {
         // failure 2
         let m = ScriptedSetupBackend.Model(chunks: 10, stallAt: 3, checkOK: nil, checkNote: nil, checkMs: nil)
-        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(8), stallSeconds: 0.4, patience: 30, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(5.6), stallSeconds: 0.4, patience: 30, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))   // a 6 GB phone: Mini is first
         let run = Task { await s.run() }
         var stalled = false
         for _ in 0..<100 {
