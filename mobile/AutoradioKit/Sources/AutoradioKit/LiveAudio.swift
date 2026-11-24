@@ -422,7 +422,7 @@ public final class LiveAudio: @unchecked Sendable {
         }
         // A test affordance for the Mac proof, not a feature: with -AutoradioProofSilent YES (or that default set) the output is muted, and
         // the samples are still rendered and counted, so the proof does not play through the owner's speakers. Development builds only: Exact defines
-        // EXACT_DEVELOPMENT for package Swift of a build that is not production or distribution (so not the store archive), Package.swift for debug.
+        // EXACT_DEVELOPMENT for package Swift of a build that is not production or distribution (so not the store archive), Package.swift for every configuration of the Mac package (its proofs build release).
         #if EXACT_DEVELOPMENT
         if UserDefaults.standard.bool(forKey: "AutoradioProofSilent") { engine.mainMixerNode.outputVolume = 0 }
         #endif

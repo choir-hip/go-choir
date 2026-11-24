@@ -132,7 +132,7 @@ Notices in the log, harmless: "no Metal toolchain, so no ExactSvgFilter.metallib
 `xcodebuild -downloadComponent MetalToolchain` to remove them).
 
 The generated `Info.plist` carried [run]: `ExactAudioSession = playback`,
-`ExactCapturesInBackground = true`, `UIBackgroundModes = [audio]`,
+`ExactCapturesInBackground = true` (the spike's grant; our app has none since 2026-11-23), `UIBackgroundModes = [audio]`,
 `NSMicrophoneUsageDescription` (from `strings/en.json`), `UIDeviceFamily`.
 
 ## Our own loop is slow, and the mark is most of it [run, 2026-11-18]
@@ -249,7 +249,7 @@ $BUN exact.mjs ios --device --phone <udid>     # build, sign, devicectl install
 $BUN exact.mjs ios --device --run --phone <udid>
 ```
 
-[doc: reference.md:859-870; unrun here.] The phone must be connected,
+[doc: reference.md:859-870; unrun here.] These are Exact's own commands: for this app never run `bun exact.mjs ios --device` bare (it would install the production id as a development build); use `AR_VARIANT=lab mobile/scripts/exact.sh ios --device --phone <udid>`. The phone must be connected,
 unlocked, paired, Developer Mode on. Free profiles last 7 days and cap the
 number of bundle ids per week; use one bundle id for the spike and one for the
 app [unrun; Apple policy, not Exact's].
@@ -269,9 +269,9 @@ check `mobile/scripts/` on main before relying on one.
 |---|---|
 | `scripts/xe.sh` | runs a command with the Xcode toolchain outside the Nix shell |
 | `scripts/setup-exact.sh` | pinned Exact checkout at `mobile/.exact-src` (gitignored) and Bun 1.4.2 at `~/.bun-1.4.2`; `EXACT_REPO=<local clone>` avoids the network |
-| `scripts/exact.sh` | wraps `exact.mjs` in `env -i` with the pinned Bun: `exact.sh ios` (simulator), `exact.sh ios`, `AR_VARIANT=lab exact.sh ios --device --phone <udid>` (a phone build names its development app; `exact.sh` refuses `--variant`, `EXACT_VARIANT`, an archive that is not the store kind and an archive of a development app), `exact.sh agent ios ...` |
+| `scripts/exact.sh` | wraps `exact.mjs` in `env -i` with the pinned Bun: `exact.sh ios` (simulator), `AR_VARIANT=lab exact.sh ios --device --phone <udid>` (a phone build names its development app). `exact.sh` runs only what `exact-guard.sh` lists: with no development app the simulator, web, Mac and check verbs; never `share`, `deploy`, `push` or a `--device` build; an archive only from `archive-store.sh`; `--variant` and `EXACT_VARIANT` are refused, `exact.sh agent ios ...` |
 | `scripts/sim-device.sh` | creates and boots a simulator of your own; export it as `EXACT_SIM` |
-| `scripts/build-lab.sh` | syncs the kit into the package, builds, installs on `$EXACT_SIM` (or the phone with `--device --phone`) |
+| `scripts/build-lab.sh` | syncs the kit into the package, builds, installs on `$EXACT_SIM` (or the phone with `AR_VARIANT=lab` or `lab-one`, `--device --phone`) |
 | `scripts/sync-exact-package.sh`, `gen-exact-interface.py` | copy kit sources into the Exact package, write `apple/exact.json` and the interface (per-lane fragments are the plan, design doc section 6) |
 | `scripts/build-xcframeworks.sh` | static xcframeworks for third-party Swift/C++ (FluidAudio, llama.cpp) from pinned tags in `mobile/.deps` |
 | `scripts/make-profile.sh` | obtains a provisioning profile with a stub Xcode project and `-allowProvisioningUpdates` |
@@ -331,9 +331,10 @@ not author it.
   `build.mjs:408`; no validation on iOS). `app.json`'s `version` is read by `exact share` only, so `archive-store.sh` reads it and passes it as `EXACT_VERSION`.
   **Export compliance**: `ITSAppUsesNonExemptEncryption` cannot be set in `host.ios.infoPlist` (Exact refuses it as a key it writes itself, `plist.mjs:390`); it is written
   by a production build only when `EXACT_NON_EXEMPT_ENCRYPTION` is `true` or `false`. **The iOS developer menu is on in a release build** (four-finger tap or hold;
-  `DevMenuIOS.swift`: `enabled = ExactEnv.devMenu ?? true`) unless `EXACT_DEV_MENU=0` is in the build's environment, which stamps `ExactDevMenu` false in Info.plist.
+  `DevMenuIOS.swift`: `enabled = ExactEnv.devMenu ?? true`) unless `EXACT_DEV_MENU=0` is in the build's environment, which stamps `ExactDevMenu` false in Info.plist; `exact.sh` sets it for every build of our app and refuses another value.
+  Every build, archives included, also stamps `ExactBuildHost` (`os.hostname()`), `ExactBuildTime`, `ExactBuildXcode`, `ExactCommit`/`ExactBranch` and, for an app in its own repository, `ExactAppCommit`/`ExactAppBranch` and dirty flags (`host/apple/buildinfo.mjs`, `plist.mjs:391`) [src]; there is no setting to omit or override the host name.
   `EXACT_DEVELOPMENT` is a Swift condition Exact defines only for package modules of a non-production build (`compose.mjs:195`), not for the app module (`modules/apple`).
-  `exact.sh` runs Exact under `env -i`, so it passes `EXACT_IDENTITY`, `EXACT_PROFILE`, `EXACT_VERSION`, `EXACT_BUILD_NUMBER`, `EXACT_NON_EXEMPT_ENCRYPTION` and `EXACT_DEV_MENU` on when set.
+  `exact.sh` runs Exact under `env -i`, so it passes `EXACT_IDENTITY`, `EXACT_PROFILE`, `EXACT_VERSION`, `EXACT_BUILD_NUMBER`, `EXACT_NON_EXEMPT_ENCRYPTION` on when set, and always `EXACT_DEV_MENU=0`.
   Exact refuses (`scripts/variants.mjs`) a variant whose installed name is another app's, selected or not: the production app and the two lab apps need three different names.
 - TestFlight upload is Apple's tooling after the `.ipa`: `mobile/scripts/upload-store.sh` runs `xcrun altool --upload-app -f <ipa> --api-key --api-issuer --p8-file-path`
   (Xcode 27.1's `altool --help` lists these; the flags parse, a missing key file is refused before any network use; **an upload has never been run**; whether `-t ios` is needed: unknown).

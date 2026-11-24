@@ -92,7 +92,11 @@ public final class LabRuntime: @unchecked Sendable {
         self.session = coord
         store = KeptTurnStore(root: supportDir.appendingPathComponent("turns"))
         configs = ConfigStore(dir: supportDir.appendingPathComponent("configs"))
+        // The bundled kept turn is a development replay fixture (no product page reads it; the voice setup check reads FixtureTurn.micSamples16k() from the binary, not this folder):
+        // it is written only where EXACT_DEVELOPMENT is defined (package Swift of a non-production build; the store archive has none).
+        #if EXACT_DEVELOPMENT
         FixtureTurn.install(into: store)
+        #endif
         let doc = emptyProgramme ? ProgrammeDocument(id: "none", title: "", blocks: []) : FixtureProgramme.document
         player = ProgrammePlayer(audio: audio, registry: registry, log: log, configuration: cfg, document: doc)
         recorder = TurnRecorder(bus: bus)

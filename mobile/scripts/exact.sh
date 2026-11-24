@@ -14,33 +14,16 @@ VARIANT="$("$HERE/scripts/app-identity.sh" variant)" || exit 1
 # literal fallback and an empty value in the caller's environment cannot make a dead grant (app.ts reads it with `??`; the build refuses `||`).
 SCHEME="$("$HERE/scripts/app-identity.sh" id)" || exit 1
 BUN="${BUN:-$HOME/.bun-1.4.2/bin/bun}"
-# The one guard (build-lab.sh calls this script, and the README and the Exact reference name this script for a phone build). Refused, nothing run:
-#  - the variant given any way but AR_VARIANT / AR_APP_ID: `--variant` or EXACT_VARIANT would reach Exact without the sign-in scheme that goes with it (app.ts SIGNIN_SCHEME);
-#  - a build for a phone (--device) that names no development app: the production id reaches a phone through the store (archive-store.sh), never as a development install;
-#  - an archive that is not the store kind (AR_BUILD_KIND=store), the store kind that is not an archive, an archive of a development app;
-#  - a phone build or an archive outside the build tree (scripts/build-tree.sh).
-no() { echo "exact.sh: $1" >&2; exit 1; }
-HAS_DEVICE=""; HAS_ARCHIVE=""
-for a in "$@"; do case "$a" in
-  --device) HAS_DEVICE=1 ;; --archive) HAS_ARCHIVE=1 ;;
-  --variant|--variant=*) no "name the app with AR_VARIANT=lab or AR_VARIANT=lab-one (or AR_APP_ID), not $a: only that choice also gives the build its sign-in scheme" ;;
-esac; done
-[ -z "${EXACT_VARIANT:-}" ] || no "EXACT_VARIANT is not read: name the app with AR_VARIANT=lab or AR_VARIANT=lab-one (or AR_APP_ID); only that choice also gives the build its sign-in scheme"
-case "${AR_BUILD_KIND:-development}" in development|store) ;; *) no "AR_BUILD_KIND must be development or store" ;; esac
-if [ -n "$HAS_DEVICE" ] && [ -z "$HAS_ARCHIVE" ] && [ -z "$VARIANT" ]; then
-  no "a device build must name its development app: AR_VARIANT=lab or AR_VARIANT=lab-one (the production id reaches a phone through TestFlight, archive-store.sh)"
-fi
-[ -z "$HAS_ARCHIVE" ] || [ "${AR_BUILD_KIND:-}" = store ] || no "an archive is the store kind: AR_BUILD_KIND=store (archive-store.sh sets it)"
-[ "${AR_BUILD_KIND:-}" != store ] || [ -n "$HAS_ARCHIVE" ] || no "AR_BUILD_KIND=store is for --archive only"
-[ -z "$HAS_ARCHIVE" ] || [ -z "$VARIANT" ] || no "the store archive is the production app: unset AR_VARIANT and AR_APP_ID (a development app is never archived)"
-if [ -n "$HAS_DEVICE$HAS_ARCHIVE" ]; then
-  "$HERE/scripts/build-tree.sh" is || no "a phone build or an archive runs in the build tree ($("$HERE/scripts/build-tree.sh" path 2>/dev/null || echo none named)); push your lane, the lead builds it there"
-fi
+# The one guard (exact-guard.sh, also run by build-lab.sh before it stages anything): what Exact may be asked to do for this app is a LIST. With no development app chosen only
+# the verbs and targets that cannot put a signed production-id app on a phone or publish it run, and the store archive only with archive-store.sh's marker and the store's own
+# settings and signing; with a development app chosen an archive and `share` are refused. Anything not listed is refused, a verb Exact adds later included.
+"$HERE/scripts/exact-guard.sh" exact.sh "$@" || exit 1
 # What `env -i` below would drop and Exact reads from its environment (build-and-ship.md, "Archive, TestFlight, CI"): the signing pair, the version and build number,
-# the export-compliance answer and the developer menu's build-time off. Passed only when set, so a development build is exactly as it was.
+# and the export-compliance answer. Passed only when set, so a development build is exactly as it was. EXACT_DEV_MENU=0 is given to every build (below): Exact's developer menu
+# is off in every build of this app, so nothing in a build reads a caller's value.
 set -- "$BUN" exact.mjs "$@"
 N=$#
-for v in EXACT_IDENTITY EXACT_PROFILE EXACT_VERSION EXACT_BUILD_NUMBER EXACT_NON_EXEMPT_ENCRYPTION EXACT_DEV_MENU; do
+for v in EXACT_IDENTITY EXACT_PROFILE EXACT_VERSION EXACT_BUILD_NUMBER EXACT_NON_EXEMPT_ENCRYPTION; do
   eval "isset=\${$v+set}"
   if [ -n "$isset" ]; then eval "val=\$$v"; set -- "$@" "$v=$val"; fi       # a value may hold spaces (a profile's path): one argument each
 done
@@ -49,5 +32,5 @@ while [ "$N" -gt 0 ]; do a="$1"; shift; set -- "$@" "$a"; N=$((N - 1)); done   #
 cd "$HERE/AutoradioLab" || exit 1
 exec env -i HOME="$HOME" USER="$USER" TMPDIR="${TMPDIR:-/tmp}" BUN="$BUN" ${EXACT_SIM:+EXACT_SIM="$EXACT_SIM"} ${VARIANT:+EXACT_VARIANT="$VARIANT"} SIGNIN_SCHEME="$SCHEME" \
   PATH="$(dirname "$BUN"):$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin" \
-  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer EXACT2="$HERE/.exact-src" EXACT_FEEDBACK=0 \
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer EXACT2="$HERE/.exact-src" EXACT_FEEDBACK=0 EXACT_DEV_MENU=0 \
   "$@"

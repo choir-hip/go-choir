@@ -45,7 +45,6 @@ const SIGNIN_SCHEME = import.meta.env.SIGNIN_SCHEME ?? 'news.choir.autoradio';
 export const grants = `auth.session ${ORIGIN}
 auth.callback ${SIGNIN_SCHEME}:/signed-in
 device.microphone purpose.microphone
-device.microphone-background purpose.recordingInBackground
 device.speech-recognition purpose.speech
 fs.read app:/data/exports
 fs.write app:/data/exports

@@ -8,11 +8,13 @@
 # Then: the build number (below), the store kind of the build (AR_BUILD_KIND=store: build-lab.sh, sync-exact-package.sh), and Exact's own archive command
 #   bun exact.mjs ios --device --archive <ipa> --json      (reference.md "Build an iOS app on a CI machine"; --archive bakes production trust and Swift's release build)
 # with EXACT_VERSION (app.json "version"), EXACT_BUILD_NUMBER, EXACT_NON_EXEMPT_ENCRYPTION=false (HTTPS and the system's encryption only; Exact writes ITSAppUsesNonExemptEncryption)
-# and EXACT_DEV_MENU=0 (Exact's iOS developer menu, four fingers, is ON in a release build unless the build says off: DevMenuIOS.swift). Last, it reads the .ipa back and prints its
+# and the marker AR_STORE_ARCHIVE=1, without which exact-guard.sh refuses every archive (with it, exact.sh itself requires these settings and runs check-store-signing.py again,
+# so setting the marker by hand gains nothing). exact.sh gives every build EXACT_DEV_MENU=0 (Exact's developer menu, four fingers, is off in every build of this app). Last, it reads the .ipa back and prints its
 # path, bundle id, version and build number, and fails if they are not what was asked for.
-# The BUILD NUMBER (CFBundleVersion) is whole minutes since 2026-01-01 00:00 UTC, or one more than the last number this script gave if that is higher ($OUTDIR/last-build): it
-# rises with every run, so a re-upload of the same commit is a higher number (App Store Connect takes a build number once per version), and it has at most 9 digits for
-# centuries. AR_BUILD_NUMBER=<n> sets it (a whole number, 1 to 999999999) and raises the record; later default numbers stay above it. The caller holds the build lock (the command above), which serializes runs; this script takes none, so the record is what keeps two runs apart.
+# The BUILD NUMBER (CFBundleVersion): by default whole minutes since 2026-01-01 00:00 UTC, or one more than the last number this script gave if that is higher ($OUTDIR/last-build),
+# so a default number is never at or below the record, a re-upload of the same commit is a higher number (App Store Connect takes a build number once per version), and it has at
+# most 9 digits for centuries. AR_BUILD_NUMBER=<n> (a whole number, 1 to 999999999) is used as given, even if it is at or below the record (App Store Connect refuses a number it
+# already holds; the script cannot know one it was not given), and raises the record only when it is higher; later default numbers stay above the record. The caller holds the build lock (the command above), which serializes runs; this script takes none, so the record is what keeps two runs apart.
 # The .ipa goes to $AR_STORE_OUT_DIR (default ~/.cache/autoradio-store), outside the repo. EXACT_PROFILE and AR_STORE_OUT_DIR may be relative to where this is run; they are made absolute.
 # ALLOW_NO_MODELS is refused (a store archive always carries the voice models).
 set -eu
@@ -41,7 +43,7 @@ OUTDIR="$(cd "$OUTDIR" && pwd -P)"
 LASTF="$OUTDIR/last-build"; LAST=0
 if [ -e "$LASTF" ]; then
   LAST="$(cat "$LASTF")"
-  case "$LAST" in ''|*[!0-9]*) no "$LASTF holds no whole number (the last build number given): fix or delete it." ;; esac
+  case "$LAST" in ''|0?*|*[!0-9]*) no "$LASTF holds no whole number (the last build number given): fix or delete it." ;; esac
   [ "${#LAST}" -le 9 ] || no "$LASTF holds no whole number (the last build number given): fix or delete it."
 fi
 if [ -n "${AR_BUILD_NUMBER:-}" ]; then BUILD="$AR_BUILD_NUMBER"
@@ -54,7 +56,7 @@ rm -f "$IPA"
 LOG="$OUTDIR/archive-$BUILD.stdout"
 echo "archive-store: $NAME $ID version $VERSION build $BUILD"
 set +e
-AR_BUILD_KIND=store EXACT_VERSION="$VERSION" EXACT_BUILD_NUMBER="$BUILD" EXACT_NON_EXEMPT_ENCRYPTION=false EXACT_DEV_MENU=0 \
+AR_BUILD_KIND=store AR_STORE_ARCHIVE=1 EXACT_VERSION="$VERSION" EXACT_BUILD_NUMBER="$BUILD" EXACT_NON_EXEMPT_ENCRYPTION=false \
   "$HERE/scripts/build-lab.sh" ios --device --archive "$IPA" --json > "$LOG"
 RC=$?
 set -e
@@ -66,6 +68,7 @@ import json, sys
 def no(m): sys.stderr.write("archive-store: the .ipa is not what was asked for: " + m + "\n"); sys.exit(1)
 try:
     j = json.loads([l for l in open(sys.argv[1]).read().splitlines() if l.strip()][-1])
+    if not isinstance(j, dict): raise ValueError
     if j.get("trust") != "production": no("Exact baked %r trust, not production" % (j.get("trust"),))
 except (OSError, IndexError, ValueError): no("Exact printed no JSON result line")
 print("ExactBuildKind: archive, developer menu off, trust production")

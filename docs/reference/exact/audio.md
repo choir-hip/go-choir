@@ -134,7 +134,7 @@ Checked against the Exact checkout at `f53347503`. On iOS and tvOS the page is `
 (`host/apple/Sources/ExactKit/PageFacts.swift:318-325`; `docs/contract-for-agents.md:5504`). That function (`host/apple/Sources/ExactKit/AudioSession.swift:148-157`) is true when
 `UIBackgroundModes` contains `audio` **and** the session is active in category `playback` or `playAndRecord` **and** one of: a running sound or audible AVPlayer owner, a capture claim made
 with `background:true`, or a speech claim of type `playback`; or a call is active. It does not need audio to be sounding at that instant: a held claim is enough. Our app meets it: the built
-`Info.plist` has `UIBackgroundModes = [audio]`, `ExactAudioSession = playback` and `ExactCapturesInBackground = true`, and the package's session owner claims `speech-playback` while the radio plays
+`Info.plist` has `UIBackgroundModes = [audio]`, `ExactAudioSession = playback` (and, until 2026-11-23, `ExactCapturesInBackground = true`), and the package's session owner claims `speech-playback` while the radio plays
 (`mobile/exact-package/apple/AutoradioModule.swift:23`, `:37`), which is the `playback` speech claim above. So the runtime is eligible to keep running, and the pulse and `radioHold` can keep the deck fed,
 while that claim is held. On Android the page freezes when the activity stops unless a foreground service holds a live claim or plays media (same table). Still **[unrun]** on a phone: the simulator
 never suspends an app, so only a locked iPhone shows it. The `audio` element has one `src` and no playlist: Exact has no native queue, and none is needed while the runtime stays eligible. **The rule for this app: the `speech-playback` claim is held continuously while the radio is on, from the first start until the listener stops it, never between entries** (the deck releases it nowhere between items: `mobile/exact-package/apple/AutoradioModule.swift` `claim`/`release`, `Kit/Deck.swift`). If the claim is
@@ -196,8 +196,7 @@ Source: `origin/lane/ar-integrate` `mobile/README.md`, with `host/apple/Sources/
 - Reported but unmeasured by us: 20 to 41 s route-switch stalls with AirPods on
   iOS 27.0.1; our adapter emits an `error` at 5 s [unrun on a phone].
 - `Info.plist` for our lab carries `UIBackgroundModes: [audio]`,
-  `ExactCapturesInBackground: true` (from the `device.microphone-background`
-  grant), `ExactAudioSession: playback`, and the microphone and speech usage
+  `ExactAudioSession: playback` (the lab's grant `device.microphone-background` and its `ExactCapturesInBackground: true` were removed 2026-11-23: the microphone closes when the screen locks), and the microphone and speech usage
   strings (from `strings/en.json`) [run]. That the programme keeps playing with
   the screen locked is not proven.
 

@@ -1,5 +1,4 @@
 {
   "purpose.microphone": "Autoradio hears you when Voice is on, so you can talk to the radio, and records your voice when you tap Take. Speech becomes text on this phone. A take is uploaded only if you publish it.",
-  "purpose.recordingInBackground": "Autoradio keeps listening for your voice while the screen is locked, only when you have turned Voice on. Turn Voice off to stop.",
   "purpose.speech": "Autoradio turns what you say into text on this phone, to understand your request."
 }

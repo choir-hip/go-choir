@@ -128,7 +128,7 @@ SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 SEED_ONB_DONE=1
 # The app's console for the whole proof (the simulator's log stream: no ring, unlike the journal the drive dumps read). run_drive adds each drive's window of it to that drive's dump (proof-common.sh).
 PROOF_JSLOG="$SHOTS/proof-js-console.txt"
-SIM spawn "$EXACT_SIM" log stream --level debug --style compact --predicate "process == \"Autoradio\" AND subsystem == \"$APP\"" > "$PROOF_JSLOG" 2>&1 &
+SIM spawn "$EXACT_SIM" log stream --level debug --style compact --predicate "process == \"$APP_NAME\" AND subsystem == \"$APP\"" > "$PROOF_JSLOG" 2>&1 &
 PROOF_JSLOG_PID=$!
 
 # ---- 3.0 WARM-UP drive: the first launch after an install showed Settings account, Files and Mail signed out for the whole drive in four of sixteen runs (the later drives of the same run were fine, with the
@@ -493,7 +493,7 @@ BGCONSOLE="$SHOTS/bg-app-console.txt"
 # Shared code's `console.log` lines go to the platform log of a native app (Exact js/src/console.js: a line with a method is written by the host); a plain launch has no driver, so they are read from
 # the simulator's log stream (harness only: read-only, no app change).
 BGJSLOG="$SHOTS/bg-js-console.txt"
-SIM spawn "$EXACT_SIM" log stream --level debug --style compact --predicate 'process == "Autoradio"' > "$BGJSLOG" 2>&1 &
+SIM spawn "$EXACT_SIM" log stream --level debug --style compact --predicate "process == \"$APP_NAME\"" > "$BGJSLOG" 2>&1 &
 BGSTREAM=$!
 SIM launch --console "$EXACT_SIM" $APP > "$BGCONSOLE" 2>&1 &
 BGLAUNCH=$!
