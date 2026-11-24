@@ -1,7 +1,9 @@
 # Privacy Policy for Autoradio 1 and choir.news
 
 Effective date: 2026-11-24
+
 Published by: Choir Harmonic Intelligence Platform, Inc. ("we", "us")
+
 Contact: 000@choir.news
 
 ## 1. What this covers
@@ -22,7 +24,7 @@ Signed out, the app is listening only. It asks our server for the public front p
 
 ### Creating an account
 
-You make an account inside the app, with the phone's own passkey screen. We collect your email address and a passkey. The passkey gives us a public key and some details about it, such as when it was made. The private key stays on your device. No person's account has a password, so we never see or store one. The one exception is an account we keep for Apple's App Review, which signs in with a user name and password; we store that password only as a hash. The app asks for no codes. We use the email address to identify your account and for recovery. It is the same account on choir.news.
+You make an account inside the app. We email you an 8-digit code and you type it in, to prove the address is yours; then the phone's own passkey screen makes a passkey. We collect your email address and the passkey. The passkey gives us a public key and some details about it, such as when it was made. The private key stays on your device. No person's account has a password, so we never see or store one. The one exception is an account we keep for Apple's App Review, which signs in with a user name and password; we store that password only as a hash. We use the email address to identify your account and for recovery. It is the same account on choir.news.
 
 ### Your computer
 
@@ -54,7 +56,9 @@ We do not use advertising, tracking or analytics software in the app or on the w
 
 ## 3. What stays on your phone
 
-Speech recognition runs on your phone, with speech models the app downloads. Your audio is not sent to us, to Apple or to anyone else to be recognised.
+Speech recognition runs on your phone. Your audio is not sent to us, to Apple or to anyone else to be recognised.
+
+The app can learn your voice from what you say to it, so the radio can tell you from a television. It keeps a voice profile on this phone: numbers taken from your speech, not the sound. It is never uploaded. Settings, Your voice, Forget my voice deletes it, and so does signing out.
 
 Your sign-in key is in the iPhone Keychain, on this device only. If the app keeps a copy of your mail on the phone, it is encrypted with a key in the Keychain. The paper's cached front page, your edition topics, your taps, your podcast library and your settings are kept in the app's own files.
 
@@ -84,21 +88,21 @@ Deleting your account does not delete what these companies already hold, and we 
 
 ### The list
 
-We use outside services to run the product. They process data on our behalf. The list changes as we change providers. We update this table before a new provider receives data.
+We use outside services to run the product. They process data on our behalf. The list changes as we change providers. We update this list before a new provider receives data.
 
 These are the categories, and the providers in our code on 2026-11-24.
 
 - AI models that write answers and stretches of radio. They get your spoken request text and the context above, your edition topics, time zone, local time and a list of stories you recently heard. For work on your computer, such as documents, your edition and research, they get the instructions and content of that work. Providers today: River (DeepSeek models); Amazon Web Services Bedrock (Anthropic Claude models); OpenRouter; OpenAI (ChatGPT models); Devin; OpenCode; Synthetic.
 - AI model for quick decisions. It gets the text of your request and a line saying what is playing. Provider today: OpenRouter.
-- Web search. It gets search queries written by agents on your computer, which can include your topics. Providers today: Keenable, SearXNG, Brave, Serper, Parallel, Tavily, SerpAPI, ChatGPT search.
+- Web search. It gets search queries written by agents on your computer, which can include your topics. Providers today: Keenable, Brave, Serper, Parallel, Tavily, SerpAPI, ChatGPT search, and SearXNG, our own search server, which passes the query on to public search engines such as Google, Bing and DuckDuckGo.
 - Email delivery. It gets your email address and the body of messages we send for recovery, web sign-in and the Mail feature. Provider today: Resend.
 - Model file hosting. It gets your phone's IP address and which model file you asked for. Provider today: Hugging Face.
 - Podcast search and charts. They get the search text you type. Provider today: Apple.
 - Hosting. It holds everything stored on our server. Provider today: OVH (bare-metal server, in the United States).
 
-You agree to this when you create an account: the create-account screen says it above the button, with a link to this policy. Listening to the paper needs no account and sends none of your content to a model. If you no longer agree, delete your account (section 9).
+You agree to this when you create an account: the create-account screen says it above the button, with a link to this policy. Listening to the paper needs no account and sends none of your content to a model. If you no longer agree, ask us to delete your account (section 9).
 
-We do not sell your data. We do not share it for advertising. We share it only with the providers above, to run the product, and where the law requires it.
+We do not sell your data. We do not share it for advertising. We share it only with the providers above, to run the product, and where the law requires it. Some story pages on choir.news show a video player from YouTube; when you open such a page, YouTube receives your IP address.
 
 ## 6. AI-written content and its sources
 
@@ -124,35 +128,32 @@ The app downloads voice and language model files to your phone. They are data fi
 
 - Email address and passkey public key: until your account is deleted (section 9).
 - Sign-in sessions: until they expire (up to 30 days for the refresh session) or you sign out.
-- Email sign-in and recovery attempts on choir.news: codes expire in 10 minutes for sign-in and 15 minutes for recovery. Attempt records are removed after 24 hours.
+- Email sign-in attempts on choir.news: codes expire in 10 minutes, and the attempt records are removed after 24 hours. Recovery links expire in 15 minutes; a link that is used is removed then, and one that is never used stays in the sign-in database until your account is deleted.
 - Your computer's working data (documents, files, mail, notes, play history): until your account is deleted.
 - The event log of your computer, including the text of your requests and answers: for the life of the computer. It is sealed under a key that belongs to the computer. We do not edit it. It is removed when your computer is destroyed, as in section 9.
-- Server logs: we do not yet delete them on a fixed schedule, so we make no promise of a deletion time for them. We are building a limit of at most 30 days for our host's request, service and login logs, and we will change this line to say so when it is in force. A person's own computer and the logs on it follow the computer (above).
-- Abuse logs after you delete your account: see section 9.
-- Deletion receipt: kept. It holds a job number, counts and times, and no content.
+- Server logs (our host's request, service and sign-in logs): deleted after 21 days by a daily job. If the disk is nearly full they can be deleted sooner; if the job fails or the server is off for some days, later. A person's own computer and the logs on it follow the computer (above).
 - The record of your recent voice turns on your phone: the newest 20 turns, none older than 30 days, and all of it removed when you sign out or delete the app.
 - Data held by outside providers: set by each provider. We cannot promise they delete it.
 
 ## 9. Deleting your account
 
-You can delete your account in the app (Settings, Account, Delete account) or at choir.news/account/delete. You confirm with your passkey.
+To delete your account, write to 000@choir.news from the email address of the account. We confirm by email before we delete anything.
 
-What happens:
+When we delete an account:
 
-- Access is revoked at once. Every sign-in and key for your account stops working, and you are signed out on every device.
-- Nothing is erased for 72 hours. If you sign in during those 72 hours, the deletion is cancelled.
-- After 72 hours everything below is permanently removed from our servers: your account, your email address and your passkeys; your computer with its disk, its stored history (including the log of your requests and answers) and the key that seals it, and everything on it (documents, files, mail, notes and play history); your mail and its address; your synced documents; and your takes, their words and their audio.
-- Stories that Autopaper already published stay public. Your name is detached from them.
-- We keep a deletion receipt (a job number, counts and times, no content) and our server logs for as long as section 8 says. No archive of your computer is kept. Mail you sent or received stays with the people on the other end and with our mail provider.
-- Our encrypted off-site backups still hold a copy of your account for up to three weeks, and it is deleted with them. If a backup is ever restored, the deletion is carried out again.
-- After the 72 hours, deletion cannot be undone.
+- Every sign-in and key for the account stops working, and it is signed out on every device.
+- We remove from our servers your account, your email address and your passkeys; your computer with its disk, its stored history (including the log of your requests and answers) and the key that seals it, and everything on it (documents, files, mail, notes and play history); your mail and its address; and your takes, their words and their audio.
+- Stories that Autopaper already published stay public.
+- We keep our server logs for as long as section 8 says. Mail you sent or received stays with the people on the other end and with our mail provider.
+- Our encrypted off-site backups can hold a copy of your account for up to about ten days, and it is deleted with them.
+- Deletion cannot be undone.
 - Deletion does not remove data already sent to outside AI model providers. Section 5 says why.
 
 You can also sign out at any time. Signing out removes the key and your local data from the phone.
 
 ## 10. Your choices and rights
 
-You can see, change and delete much of your data in the app. You can ask us for a copy of the data we hold about you, to correct it, or to delete it, by writing to 000@choir.news. You can withdraw your agreement to AI processing by deleting your account (section 9), and you can turn the microphone off in iPhone Settings.
+You can see, change and delete much of your data in the app. You can ask us for a copy of the data we hold about you, to correct it, or to delete it, by writing to 000@choir.news. You can withdraw your agreement to AI processing by having your account deleted (section 9), and you can turn the microphone off in iPhone Settings.
 
 If you live in the European Economic Area, the United Kingdom, California or another place whose law gives you rights over your personal data, you have the rights that law gives you. These usually include access, correction, deletion, a portable copy, objection to some processing, and a complaint to your data protection authority. We do not use your data for advertising and we do not sell it. We reply within the time the law sets. We make no claim of certification.
 
@@ -169,7 +170,7 @@ Autoradio 1 is for people 16 and older. Do not make an account if you are under 
 - Each account's computer is a separate virtual machine with its own disk. Provider keys are held by our gateway and are not given to computers. We operate the server, so the operator can reach the data it holds. Today one person operates it: the founder of Choir Harmonic Intelligence Platform, Inc.
 - We do not claim any security certification. No system is perfectly secure.
 
-Cookies at choir.news: the sign-in service sets cookies for sign-in only. They are choir_access (5 minutes), choir_refresh (up to 30 days), choir_accounts (up to 30 days, for switching accounts) and choir_signin_attempt (10 minutes, for email sign-in). They are secure, HttpOnly and SameSite=Lax. We set no advertising or tracking cookies.
+Cookies at choir.news: the sign-in service sets cookies for sign-in only. They are choir_access (5 minutes), choir_refresh (up to 30 days), choir_accounts (up to 30 days, for switching accounts) and choir_signin_attempt (10 minutes, for email sign-in). All are secure and HttpOnly; the session cookies are SameSite=Lax and the sign-in attempt cookie is SameSite=Strict. We set no advertising or tracking cookies.
 
 ## 13. Changes to this policy
 
