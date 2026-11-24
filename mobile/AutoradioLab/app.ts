@@ -1,9 +1,9 @@
-import type { Answer, Sources, Store } from './app.contract.d.ts';
+import type { Answer, Sources, Storage, Store } from './app.contract.d.ts';
 import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
-import { adoptNative, bindStore, nativeLater, segment } from './api.ts';
+import { adoptNative, authedJSON, bindStore, HTTPError, keyState, nativeLater, segment, SignedOutError } from './api.ts';
 import { settingsAccount, aboutPage } from './settings.ts';
 import { settingsComputer, computerAct } from './computer.ts';
 import { activityPage } from './activity.ts';
@@ -35,6 +35,7 @@ import { micPermission } from './micask.ts';
 import { downloadsPage, downloadsAct } from './downloads.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
+import { deleteReset, deleteRun, deleteView, type DeleteEnv } from './account-delete.ts';
 import { signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -119,6 +120,22 @@ const signInEnv = (store: Store): SignInEnv => ({
   keep: (key, keyId) => adoptKey(store, key, keyId),
   revoke: async (key, keyId) => { await fetch(`${ORIGIN}/auth/api-keys/${segment(keyId)}`, { method: 'DELETE', headers: { authorization: `Bearer ${key}` }, redirect: 'manual', exactTimeout: 8000 } as RequestInit); },
   newId: () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''),
+  log: (l) => console.log(l),
+});
+// Delete account (account-delete.ts): the same passkey screen, a POST with the app's key (api.ts), and the Account page's own sign-out once the server has accepted. A request that fails answers its
+// status (0 for no answer), never a body or a key.
+const deleteEnv = (store: Store, storage: Storage | undefined, native: unknown): DeleteEnv => ({
+  passkeys: credentials as never,
+  post: async (path, body) => {
+    try { const r = await authedJSON(path, { method: 'POST', ...(body === undefined ? {} : { body }) }); return { status: 200, body: r.body }; }
+    catch (e) {
+      if (e instanceof SignedOutError) return { status: 401, body: null };
+      if (e instanceof HTTPError) return { status: e.status, body: null };
+      return { status: 0, body: null };
+    }
+  },
+  hasKey: async () => (await keyState()).state === 'present',
+  signOut: () => accountSignOut(storage, store as never, native as never),
   log: (l) => console.log(l),
 });
 let takesOverlay: ReturnType<typeof newTakes> | undefined;
@@ -213,6 +230,10 @@ const sources: Sources = {
   signInOpen: (_a, store) => signInReset(signInEnv(store)),
   signInView: ([_tick]) => signInView(),
   accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
+  // Delete account (account-delete.ts): one run; the view is read again while it is working.
+  accountDeleteRun: async (_a, store, storage, native) => { const v = await deleteRun(deleteEnv(store, storage, native)); return { phase: v.phase, rev: v.rev }; },
+  accountDeleteOpen: () => { const v = deleteReset(); return { phase: v.phase, rev: v.rev }; },
+  accountDeleteView: ([_key]) => deleteView(),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
   podcastEpisode: ([address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev], _store, storage) =>

@@ -5,6 +5,7 @@ use settingsFacts from "@choir/autoradio"
 use ThemeCards, ThemeExtras, SettingsAck, LearnedInfo, SettingsFacts from "@choir/autoradio"
 
 use SettingsAccount, AboutBuild, SettingsComputer, ActivityInfo, AboutInfo from "./settings-types.contract"
+use DeleteView, DeleteEnd from "./account-types.contract"
 
 members Autoradio
   // Themes: themes.ts (shared code); the same two host facts as the theme itself (spine.contract).
@@ -58,3 +59,27 @@ members Autoradio
   action refreshActivity
     actTick = actTick + 1
     send cmm = computerAct("refresh", au.signedIn)
+
+  // DELETE ACCOUNT (account-delete.ts, owner 2026-11-23): one run with a state machine owned in shared code; this file renders its view and sends the person's presses. The confirmation step
+  // (`delAsk`) is only this page's: nothing is asked of the server until "Delete with passkey". A press answers with the run's `rev`; settling bumps the tick so the last change is read.
+  mutation delRun as shape DeleteEnd then bumpDel
+  mutation delOpen as shape DeleteEnd then bumpDel
+  state delAsk = false
+  state delTick = 0
+  action bumpDel
+    delTick = delTick + 1
+  derive delKey = `${delTick}|${match delRun { case some(r) => r.rev, case none => 0 }}|${match delOpen { case some(r) => r.rev, case none => 0 }}`
+  resource delv = accountDeleteView(delKey) as shape DeleteView else empty()
+  // Asked again twice a second while the passkey screen or the server is awaited (the run changes under a running answer, with no event to carry it), and not at all otherwise.
+  task delWatch when pending(delRun) key=delTick
+    after(500, bumpDel)
+  action askDelete
+    delAsk = true
+  // "Keep my account" and "Back": the confirmation goes away and an old failure is forgotten.
+  action keepAccount
+    delAsk = false
+    send delOpen = accountDeleteOpen()
+    delTick = delTick + 1
+  action confirmDelete
+    send delRun = accountDeleteRun()
+    delTick = delTick + 1

@@ -20,3 +20,18 @@ shape SignInView
 shape SignInEnd
   phase: string
   rev: number
+
+// What the Delete account screen shows of the one deletion run (account-delete.ts `deleteView`): the phase (idle, working, done, failed, cancelled), whether the passkey screen or the server is being waited on, the plain words of how it
+// ended, the date the purge happens once the server accepted, and whether this phone has been signed out. Never a key or an assertion.
+shape DeleteView
+  phase: string
+  pending: bool
+  message: string
+  purgeOn: string
+  signedOut: bool
+  rev: number
+
+// The answer of a press (run, open): the phase the run is in.
+shape DeleteEnd
+  phase: string
+  rev: number
