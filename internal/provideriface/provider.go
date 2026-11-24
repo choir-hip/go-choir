@@ -34,7 +34,7 @@ type ProviderPolicy struct {
 }
 
 // Provider is the interface for executing a runtime task. The stub provider
-// simulates execution; the real Bedrock/Z.AI bridge (via the provider package's
+// simulates execution; the real provider bridge (via the provider package's
 // BridgeProvider) implements this interface for real upstream calls.
 type Provider interface {
 	// Execute runs the task to completion, emitting incremental events via
@@ -44,7 +44,7 @@ type Provider interface {
 	Execute(ctx context.Context, task *types.RunRecord, emit EventEmitFunc) error
 
 	// ProviderName returns the name of the provider for observability
-	// (e.g., "stub", "bedrock", "zai"). This is used in health responses
+	// (e.g., "stub", "bedrock"). This is used in health responses
 	// and event payloads to distinguish real providers from stubs.
 	ProviderName() string
 }

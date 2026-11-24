@@ -63,7 +63,7 @@ type gatewayCacheHealth struct {
 // the gateway, which injects host-side credentials before forwarding
 // to the upstream provider (VAL-GATEWAY-004).
 type ProviderRequest struct {
-	// Provider is the requested provider ("chatgpt", "bedrock", "zai",
+	// Provider is the requested provider ("chatgpt", "bedrock",
 	// "fireworks", "opencode-go", "opencode-zen", "synthetic",
 	// "openrouter" or "devin"). If empty, the gateway requires model-based
 	// routing.
@@ -694,11 +694,6 @@ func (h *Handler) resolveFromMultiProvider(req ProviderRequest) (provider.Provid
 
 		// Uncatalogued GPT models fail routing loudly: the catalog is the
 		// only authority for which ChatGPT models exist.
-		if strings.HasPrefix(req.Model, "glm-") {
-			if p := h.providers.Get("zai"); p != nil {
-				return p, nil
-			}
-		}
 		if strings.Contains(req.Model, "anthropic") || strings.Contains(req.Model, "claude") {
 			if p := h.providers.Get("bedrock"); p != nil {
 				return p, nil

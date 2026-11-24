@@ -1,6 +1,6 @@
 // Package provider implements real LLM provider bridges for the go-choir
 // autoputer runtime. It supports Bedrock (Anthropic Messages API over AWS
-// Bedrock invoke endpoint), Z.AI (Anthropic-compatible API), Fireworks AI
+// Bedrock invoke endpoint), Fireworks AI
 // (OpenAI-compatible Chat Completions API), ChatGPT, and OpenCode.
 //
 // Provider credentials are read from environment variables only; they are
@@ -37,7 +37,7 @@ import (
 
 // LLMRequest is the unified request shape for all provider backends.
 type LLMRequest struct {
-	// Provider is the provider identifier (e.g. "chatgpt", "zai",
+	// Provider is the provider identifier (e.g. "chatgpt",
 	// "fireworks", "bedrock") for gateway-routed requests.
 	Provider string `json:"provider,omitempty"`
 	// ConversationID is the durable calling-run identity used by providers
@@ -340,12 +340,6 @@ type ProviderConfig struct {
 	// the provider instance; request.Model still controls per-call selection.
 	// If empty, Bedrock is not initialized even if credentials are available.
 	BedrockModels []string
-
-	// ZAIModels lists Z.AI model IDs (e.g., "glm-5.1", "glm-5-turbo").
-	// The first entry seeds the provider instance; request.Model still
-	// controls per-call selection. If empty, Z.AI is not initialized even if
-	// ZAI_API_KEY is set.
-	ZAIModels []string
 
 	// FireworksModels lists Fireworks model IDs (e.g.,
 	// "accounts/fireworks/models/deepseek-v4-flash"). The first entry seeds
@@ -733,165 +727,6 @@ func bedrockPairToolResults(msgs []anthropicMessage) []anthropicMessage {
 		out = append(out, anthropicMessage{Role: "user", Content: placeholders(nil)})
 	}
 	return out
-}
-
-// ZAIProvider implements the Provider interface for Z.AI using the
-// Anthropic-compatible API at https://api.z.ai/api/anthropic.
-type ZAIProvider struct {
-	apiKey     string // loaded at init time, never logged
-	modelID    string
-	httpClient *http.Client
-	baseURL    string
-}
-
-// ZAIConfig holds configuration for creating a ZAIProvider.
-type ZAIConfig struct {
-	APIKey  string
-	ModelID string
-	BaseURL string // defaults to https://api.z.ai/api/anthropic
-}
-
-// NewZAIProvider creates a Z.AI provider from the given config.
-func NewZAIProvider(cfg ZAIConfig) (*ZAIProvider, error) {
-	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("zai provider requires api key")
-	}
-	if cfg.ModelID == "" {
-		return nil, fmt.Errorf("zai provider requires model_id")
-	}
-
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = "https://api.z.ai/api/anthropic"
-	}
-
-	return &ZAIProvider{
-		apiKey:     cfg.APIKey,
-		modelID:    cfg.ModelID,
-		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
-		baseURL:    strings.TrimRight(baseURL, "/"),
-	}, nil
-}
-
-// NewZAIProviderFromEnv creates a Z.AI provider using credentials from
-// environment variables (ZAI_API_KEY) and the given model ID. The model
-// is a runtime concern, not an env var. The base URL defaults to the GLM
-// Coding Plan Anthropic-compatible endpoint https://api.z.ai/api/anthropic
-// unless ZAI_BASE_URL is set.
-func NewZAIProviderFromEnv(modelID string) (*ZAIProvider, error) {
-	apiKey := os.Getenv("ZAI_API_KEY")
-	baseURL := os.Getenv("ZAI_BASE_URL")
-
-	p, err := NewZAIProvider(ZAIConfig{
-		APIKey:  apiKey,
-		ModelID: modelID,
-		BaseURL: baseURL,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("zai from env: %w", err)
-	}
-	return p, nil
-}
-
-func (p *ZAIProvider) Name() string { return "zai" }
-func (p *ZAIProvider) IsReal() bool { return true }
-
-// Call sends the request to Z.AI's Anthropic-compatible endpoint.
-func (p *ZAIProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
-	endpoint := p.baseURL + "/v1/messages"
-	modelID := effectiveModel(req.Model, p.modelID)
-	req, releaseMedia, mediaErr := prepareMediaRequest(ctx, "zai", modelID, req)
-	defer releaseMedia() // the downscaled images live for the whole upstream call (F7)
-	if mediaErr != nil {
-		return nil, fmt.Errorf("zai: %w", mediaErr)
-	}
-
-	body := p.buildRequestBody(req, modelID)
-
-	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
-	if err != nil {
-		return nil, fmt.Errorf("zai: build request: %w", err)
-	}
-
-	httpReq.Header.Set("x-api-key", p.apiKey)
-	httpReq.Header.Set("anthropic-version", "2023-06-01")
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "application/json")
-
-	log.Printf("provider: zai call model=%s", logModel(modelID))
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("zai: http call: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	return parseAnthropicResponse(resp, modelID, "zai")
-}
-
-// Stream sends the request to Z.AI with stream=true and processes the
-// SSE response. It parses each event and calls onChunk for incremental
-// text deltas, tool use, and lifecycle events. Returns the accumulated
-// LLMResponse on completion.
-func (p *ZAIProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
-	endpoint := p.baseURL + "/v1/messages"
-	modelID := effectiveModel(req.Model, p.modelID)
-	req, releaseMedia, mediaErr := prepareMediaRequest(ctx, "zai", modelID, req)
-	defer releaseMedia() // the downscaled images live for the whole upstream call (F7)
-	if mediaErr != nil {
-		return nil, fmt.Errorf("zai: %w", mediaErr)
-	}
-
-	// Build streaming request.
-	req.Stream = true
-	body := p.buildRequestBody(req, modelID)
-	body.Stream = true
-
-	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
-	if err != nil {
-		return nil, fmt.Errorf("zai: build stream request: %w", err)
-	}
-
-	httpReq.Header.Set("x-api-key", p.apiKey)
-	httpReq.Header.Set("anthropic-version", "2023-06-01")
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "text/event-stream")
-
-	log.Printf("provider: zai stream model=%s", logModel(modelID))
-
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("zai: stream http call: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("zai: status %s (sanitized)", resp.Status)
-	}
-
-	return parseSSEStream(resp.Body, modelID, "zai", onChunk)
-}
-
-func (p *ZAIProvider) buildRequestBody(req LLMRequest, modelID string) anthropicRequest {
-	ar := anthropicRequest{
-		Model:            modelID,
-		MaxTokens:        defaultMaxTokens(req.MaxTokens, modelID),
-		AnthropicVersion: "2023-06-01",
-		Stream:           false,
-	}
-
-	if req.System != "" {
-		ar.System = []anthropicSystemBlock{{
-			Type: "text",
-			Text: req.System,
-		}}
-	}
-
-	ar.Messages = convertMessages(req.Messages)
-	ar.Tools = convertToolDefs(req.Tools)
-	fitOutputBudget(&ar, modelID)
-	return ar
 }
 
 // FireworksProvider implements the Provider interface for Fireworks AI using
@@ -3073,7 +2908,7 @@ func canonicalJSON(raw json.RawMessage) json.RawMessage {
 // parseSSEStream reads an Anthropic-compatible SSE stream from the response
 // body, calling onChunk for each relevant event, and returns the accumulated
 // LLMResponse. This handles the standard Anthropic Messages API streaming
-// format used by both Z.AI and Fireworks AI.
+// format, used by OpenCode's Anthropic Messages route.
 //
 // Event flow:
 //  1. message_start — contains response ID, model, initial usage
@@ -3905,14 +3740,6 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 		if p, err := NewBedrockProviderFromEnv(cfg.BedrockModels[0]); err == nil {
 			mp.Register("bedrock", p)
 			log.Printf("provider: resolved bedrock (region=%s seed_model=%s)", p.region, redactModel(p.modelID))
-		}
-	}
-
-	// Try Z.AI. Register one provider; req.Model selects the model.
-	if os.Getenv("ZAI_API_KEY") != "" && len(cfg.ZAIModels) > 0 {
-		if p, err := NewZAIProviderFromEnv(cfg.ZAIModels[0]); err == nil {
-			mp.Register("zai", p)
-			log.Printf("provider: resolved zai (seed_model=%s)", p.modelID)
 		}
 	}
 

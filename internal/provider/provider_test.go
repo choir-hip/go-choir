@@ -18,8 +18,8 @@ import (
 )
 
 func TestMaxOutputTokensForModelUsesSupportedModelCatalog(t *testing.T) {
-	if got := maxOutputTokensForModel("glm-5.2"); got != 131072 {
-		t.Fatalf("glm-5.2 max tokens = %d, want 131072", got)
+	if got := maxOutputTokensForModel("swe-2-flash"); got != 131072 {
+		t.Fatalf("swe-2-flash max tokens = %d, want 131072", got)
 	}
 	if got := maxOutputTokensForModel("gpt-5.5"); got != 65536 {
 		t.Fatalf("gpt-5.5 max tokens = %d, want 65536", got)
@@ -75,55 +75,17 @@ func TestBedrockProviderCallError(t *testing.T) {
 	}
 }
 
-// --- Z.AI Provider Tests ---
-
-func TestZAIProviderRequiresAPIKey(t *testing.T) {
-	_, err := NewZAIProvider(ZAIConfig{
-		APIKey:  "",
-		ModelID: "glm-4.7",
-	})
-	if err == nil || !strings.Contains(err.Error(), "api key") {
-		t.Fatalf("expected api key error, got: %v", err)
-	}
-}
-func TestZAIProviderCallError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"error":"invalid api key"}`))
-	}))
-	defer server.Close()
-
-	p := &ZAIProvider{
-		apiKey:     "bad-key",
-		modelID:    "glm-4.7",
-		httpClient: server.Client(),
-		baseURL:    server.URL,
-	}
-
-	_, err := p.Call(context.Background(), LLMRequest{
-		Messages:  []Message{{Role: "user", Content: []Block{{Type: "text", Text: "test"}}}},
-		MaxTokens: 1024,
-	})
-	if err == nil {
-		t.Fatal("expected error for 401 response")
-	}
-	// Error should be sanitized.
-	if strings.Contains(err.Error(), "invalid api key") {
-		t.Errorf("error message should be sanitized, got: %v", err)
-	}
-}
-
 // --- Resolve Provider Tests ---
 
 func TestResolveProviderUsesSelectedProvider(t *testing.T) {
 	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "test-bedrock-token")
 	t.Setenv("AWS_REGION", "us-east-1")
-	t.Setenv("ZAI_API_KEY", "test-zai-key")
+	t.Setenv("FIREWORKS_API_KEY", "test-fireworks-key")
 
 	p, err := ResolveProvider(ProviderConfig{
 		BedrockModels:    []string{"us.anthropic.claude-sonnet-4-6"},
-		ZAIModels:        []string{"glm-5.1"},
-		SelectedProvider: "zai",
+		FireworksModels:  []string{"accounts/fireworks/models/deepseek-v4-flash"},
+		SelectedProvider: "fireworks",
 	})
 	if err != nil {
 		t.Fatalf("resolve provider: %v", err)
@@ -131,18 +93,16 @@ func TestResolveProviderUsesSelectedProvider(t *testing.T) {
 	if p == nil {
 		t.Fatal("expected non-nil provider")
 	}
-	if p.Name() != "zai" {
-		t.Errorf("expected zai, got: %s", p.Name())
+	if p.Name() != "fireworks" {
+		t.Errorf("expected fireworks, got: %s", p.Name())
 	}
 }
 func TestResolveProviderReturnsNilWhenNoCredentials(t *testing.T) {
 	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "")
-	t.Setenv("ZAI_API_KEY", "")
 	t.Setenv("FIREWORKS_API_KEY", "")
 
 	p, err := ResolveProvider(ProviderConfig{
 		BedrockModels:   []string{"us.anthropic.claude-sonnet-4-6"},
-		ZAIModels:       []string{"glm-5.1"},
 		FireworksModels: []string{"accounts/fireworks/models/deepseek-v4-flash"},
 	})
 	if err != nil {
@@ -390,43 +350,6 @@ func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	return http.DefaultClient.Do(newReq)
 }
 
-func TestZAIProvider_GLM52_Integration(t *testing.T) {
-	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
-		t.Skip("skipping live provider integration (set RUN_INTEGRATION_TESTS=1)")
-	}
-	if os.Getenv("ZAI_API_KEY") == "" {
-		t.Skip("ZAI_API_KEY not set, skipping integration test")
-	}
-
-	provider, err := NewZAIProviderFromEnv("glm-5.2")
-	if err != nil {
-		t.Fatalf("NewZAIProviderFromEnv: %v", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	resp, err := provider.Call(ctx, LLMRequest{
-		Messages: []Message{{
-			Role: "user",
-			Content: []Block{{
-				Type: "text",
-				Text: "Reply with exactly: glm-5.2-ok",
-			}},
-		}},
-		MaxTokens: 32,
-		Model:     "glm-5.2",
-	})
-	if err != nil {
-		t.Fatalf("glm-5.2 call failed: %v", err)
-	}
-	if strings.TrimSpace(resp.Text) == "" {
-		t.Fatal("expected non-empty glm-5.2 response text")
-	}
-	if resp.Model != "glm-5.2" {
-		t.Fatalf("model = %q, want glm-5.2", resp.Model)
-	}
-}
-
 // --- Redaction Tests ---
 
 func TestRedactModel(t *testing.T) {
@@ -551,36 +474,25 @@ func TestBedrockProviderCallWithToolUse(t *testing.T) {
 	}
 }
 
-func TestZAIProviderCallWithToolUse(t *testing.T) {
-	// Same test for Z.AI provider.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := anthropicResponse{
-			ID:    "msg_zai_tool",
-			Model: "glm-4.7",
-			Content: []anthropicResponseBlock{
-				{Type: "tool_use", ID: "toolu_02", Name: "search", Input: json.RawMessage(`{"query":"golang testing"}`)},
-			},
-			StopReason: "tool_use",
-			Usage:      anthropicUsage{InputTokens: 40, OutputTokens: 20},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	p := &ZAIProvider{
-		apiKey:     "test-zai-key",
-		modelID:    "glm-4.7",
-		httpClient: server.Client(),
-		baseURL:    server.URL,
-	}
-
-	resp, err := p.Call(context.Background(), LLMRequest{
-		Messages:  []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Search for golang testing"}}}},
-		MaxTokens: 4096,
+func TestParseAnthropicResponseWithToolUse(t *testing.T) {
+	// The Anthropic Messages response parser shared by the Anthropic-wire
+	// routes extracts tool_use blocks as ToolCalls.
+	body, err := json.Marshal(anthropicResponse{
+		ID:    "msg_anthropic_tool",
+		Model: "glm-5.3-flash",
+		Content: []anthropicResponseBlock{
+			{Type: "tool_use", ID: "toolu_02", Name: "search", Input: json.RawMessage(`{"query":"golang testing"}`)},
+		},
+		StopReason: "tool_use",
+		Usage:      anthropicUsage{InputTokens: 40, OutputTokens: 20},
 	})
 	if err != nil {
-		t.Fatalf("zai call: %v", err)
+		t.Fatal(err)
+	}
+
+	resp, err := parseAnthropicResponse(jsonHTTPResponse(string(body)), "glm-5.3-flash", "opencode-go")
+	if err != nil {
+		t.Fatalf("parse anthropic response: %v", err)
 	}
 
 	if resp.StopReason != "tool_use" {
@@ -646,81 +558,33 @@ func TestBedrockProviderCallWithMultipleToolUse(t *testing.T) {
 		}
 	}
 }
-func TestZAIProviderStreamError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"overloaded"}`))
-	}))
-	defer server.Close()
-
-	p := &ZAIProvider{
-		apiKey:     "test-zai-key",
-		modelID:    "glm-5-turbo",
-		httpClient: server.Client(),
-		baseURL:    server.URL,
+func TestParseSSEStreamWithToolUse(t *testing.T) {
+	// Verify the Anthropic SSE stream parser handles tool_use content blocks.
+	events := []string{
+		`event: message_start` + "\n" + `data: {"type":"message_start","message":{"id":"msg_tool_001","model":"glm-5.3-flash","usage":{"input_tokens":50}}}`,
+		`event: content_block_start` + "\n" + `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Checking weather..."}}`,
+		`event: content_block_stop` + "\n" + `data: {"type":"content_block_stop","index":0}`,
+		`event: content_block_start` + "\n" + `data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_001","name":"get_weather","input":{}}}`,
+		`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"location\":"}}`,
+		`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" \"SF\"}"}}`,
+		`event: content_block_stop` + "\n" + `data: {"type":"content_block_stop","index":1}`,
+		`event: message_delta` + "\n" + `data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":20}}`,
+		`event: message_stop` + "\n" + `data: {"type":"message_stop"}`,
 	}
 
-	_, err := p.Stream(context.Background(), LLMRequest{
-		Messages:  []Message{{Role: "user", Content: []Block{{Type: "text", Text: "test"}}}},
-		MaxTokens: 1024,
-	}, func(chunk StreamChunk) {})
-	if err == nil {
-		t.Fatal("expected error for 503 response")
-	}
-	if strings.Contains(err.Error(), "overloaded") {
-		t.Errorf("error should be sanitized, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "sanitized") {
-		t.Errorf("error should mention sanitized, got: %v", err)
-	}
-}
-
-func TestZAIProviderStreamWithToolUse(t *testing.T) {
-	// Verify streaming handles tool_use content blocks correctly.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-
-		events := []string{
-			`event: message_start` + "\n" + `data: {"type":"message_start","message":{"id":"msg_tool_001","model":"glm-5-turbo","usage":{"input_tokens":50}}}`,
-			`event: content_block_start` + "\n" + `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
-			`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Checking weather..."}}`,
-			`event: content_block_stop` + "\n" + `data: {"type":"content_block_stop","index":0}`,
-			`event: content_block_start` + "\n" + `data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_001","name":"get_weather","input":{}}}`,
-			`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"location\":"}}`,
-			`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" \"SF\"}"}}`,
-			`event: content_block_stop` + "\n" + `data: {"type":"content_block_stop","index":1}`,
-			`event: message_delta` + "\n" + `data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":20}}`,
-			`event: message_stop` + "\n" + `data: {"type":"message_stop"}`,
-		}
-
-		for _, event := range events {
-			fmt.Fprintln(w, event)
-			fmt.Fprintln(w)
-		}
-	}))
-	defer server.Close()
-
-	p := &ZAIProvider{
-		apiKey:     "test-zai-key",
-		modelID:    "glm-5-turbo",
-		httpClient: server.Client(),
-		baseURL:    server.URL,
+	var stream strings.Builder
+	for _, event := range events {
+		stream.WriteString(event + "\n\n")
 	}
 
 	var chunks []StreamChunk
-	resp, err := p.Stream(context.Background(), LLMRequest{
-		Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "Weather in SF?"}}}},
-		Tools: []ToolDef{
-			{Name: "get_weather", Description: "Get weather", InputSchema: map[string]any{"type": "object"}},
-		},
-		MaxTokens: 200,
-	}, func(chunk StreamChunk) {
+	resp, err := parseSSEStream(strings.NewReader(stream.String()), "glm-5.3-flash", "opencode-go", func(chunk StreamChunk) {
 		chunks = append(chunks, chunk)
 	})
 
 	if err != nil {
-		t.Fatalf("zai stream tool use: %v", err)
+		t.Fatalf("parse sse stream tool use: %v", err)
 	}
 
 	// Verify text content.
@@ -1206,8 +1070,8 @@ func TestRequiredOutputBudgetIsTheModelsMaximum(t *testing.T) {
 	if got := p.buildRequestBody(LLMRequest{Model: "us.anthropic.claude-haiku-4-5-20251001-v1:0"}).MaxTokens; got != 64000 {
 		t.Errorf("no budget on Haiku 4.5: max_tokens = %d, want 64000", got)
 	}
-	if got := defaultMaxTokens(0, "glm-5.2"); got != 131072 {
-		t.Errorf("no budget on glm-5.2: %d, want 131072", got)
+	if got := defaultMaxTokens(0, "swe-2-flash"); got != 131072 {
+		t.Errorf("no budget on swe-2-flash: %d, want 131072", got)
 	}
 	// A model the catalog does not list: its maximum is unknown, so the call's
 	// budget stands, or the old 4,096.
