@@ -87,6 +87,24 @@ export async function loadTextures(net: Net): Promise<TextureList> {
   } catch (e) { return failure(e); }
 }
 
+export type CreateNet = { post(path: string, body: unknown): Promise<Reply> };
+export type Made = { status: 'ok' | 'failed'; address: string; title: string; message: string };
+export const NEW_TITLE = 'Untitled Texture';                                                   // the web editor's own name for a document made without one (App.svelte)
+const madeFailed = (message: string): Made => ({ status: 'failed', address: '', title: '', message });
+/** "New document": the server's one create route (POST /api/texture/documents, internal/textureowner/texture.go HandleTextureCreateDocument, as the web editor does with a title). The document has no revision
+ * yet; the first revision is the editor's first save. Answers the address to open, or why not in the app's words. */
+export async function createTexture(net: CreateNet = { post: (path, body) => authedJSON(path, { method: 'POST', body }) }): Promise<Made> {
+  try {
+    const r = await net.post('/api/texture/documents', { title: NEW_TITLE });
+    const id = obj(r.body) ? str(r.body.doc_id) : '';
+    if (id === '') return madeFailed('The computer did not make the document. Try again.');
+    return { status: 'ok', address: `texture:${id}`, title: NEW_TITLE, message: '' };
+  } catch (e) {
+    if (e instanceof SignedOutError) return madeFailed(e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : 'Sign in to make a document.');
+    return madeFailed(`Could not make the document. ${e instanceof Error && e.message !== '' ? e.message : 'the computer did not answer'}`);
+  }
+}
+
 const real: Net = { json: (path, opts) => authedJSON(path, opts) };
 // The last list, kept in memory for the pages that are not the Textures place (the list stays while the place is behind another page); another account never sees it, and it is dropped
 // (not just hidden) the first time anything asks under a new account generation.
