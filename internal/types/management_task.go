@@ -300,12 +300,12 @@ type CaptureDisposition struct {
 	Overrides   []CaptureDispositionOverride `json:"overrides,omitempty"`
 	CrashCount  int                          `json:"crash_count,omitempty"`
 	Fate        string                       `json:"fate,omitempty"`
+	FirstLeased *time.Time                   `json:"first_leased,omitempty"`
 	// LeftCount counts the closures that left it undecided for a cause the
 	// host can see (TaskClosureRequeues); FateReason is the last such cause
 	// when Fate is CaptureFateLeftAfterAttempts.
 	LeftCount  int    `json:"left_count,omitempty"`
 	FateReason string `json:"fate_reason,omitempty"`
-	FirstLeased *time.Time                   `json:"first_leased,omitempty"`
 }
 
 // CaptureDispositionOverride is a disposition the parent replaced.
