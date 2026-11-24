@@ -1068,7 +1068,10 @@ func TestVerifyAddressBeginRequiresPasskeySession(t *testing.T) {
 	}
 }
 
-func TestRecoveryVerifySetsEmailVerified(t *testing.T) {
+// The address is proved when the recovery's passkey is made, in the same
+// transaction (AddRecoveryCredential), never at the link: an interrupted
+// recovery must not leave a proved account with nothing on it.
+func TestRecoveryVerifyDoesNotProveTheAddressBeforeThePasskeyExists(t *testing.T) {
 	h, _ := recoveryMailTestEnv(t)
 	addEmailUser(t, h, "u1", "owner@example.com", false, true)
 	token, err := h.store.CreateRecoveryToken(context.Background(), "u1", "owner@example.com", hashEmail("owner@example.com"), hashIP("203.0.113.5"))
@@ -1076,8 +1079,8 @@ func TestRecoveryVerifySetsEmailVerified(t *testing.T) {
 		t.Fatal(err)
 	}
 	postRecoveryVerify(t, h, token)
-	if mustUser(t, h, "u1").EmailVerifiedAt == nil {
-		t.Fatal("consumed recovery link must mark the address verified")
+	if mustUser(t, h, "u1").EmailVerifiedAt != nil {
+		t.Fatal("a consumed recovery link must not mark the address proved before the passkey is made")
 	}
 }
 

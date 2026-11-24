@@ -2203,7 +2203,11 @@ func deployedHandlerEnv(t *testing.T) (*Handler, ed25519.PrivateKey) {
 		t.Fatalf("create webauthn: %v", err)
 	}
 
-	return NewHandler(store, wa, cfg, priv), priv
+	cfg.EmailCodeKey = []byte(testEmailKey)
+	dh := NewHandler(store, wa, cfg, priv)
+	dh.signInMailer = &fakeSignInMailer{}
+	dh.signInMailDispatch = func(f func()) { f() }
+	return dh, priv
 }
 
 // assertDeployedCookieAttributes checks that a cookie has the expected
