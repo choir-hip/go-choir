@@ -1,0 +1,124 @@
+# A passkey can claim an address nobody has proved (2026-11-24)
+
+Structural assessment after three review rounds of `lane/native-passkey`
+(contract rule 7: three rounds without convergence, stop patching, change the
+frame).
+
+## Problem
+
+`POST /auth/register/begin` creates a `users` row for any address typed into
+it, and `register/finish` (the web's and the phone app's) gives whoever holds
+the first passkey a session or a full-scope bearer key on that row. The
+address is bound to an account before anyone has shown they hold the inbox.
+Whoever types a stranger's address first owns the account, and every later
+mail-proved act of the rightful owner (recovery, email sign-in) lands on an
+account a stranger already holds.
+
+## Evidence: three rounds, each about the last round's fix
+
+- **Round 1** (seats 1 and 2): two live challenges for one address could both
+  finish, so the second passkey and key landed on an account it did not
+  create. Fix: refuse a second finish when the account has a passkey, except
+  for recovery.
+- **Round 2**: that check was check-then-act and failed open on a read error;
+  and an unproved address could be squatted, recovery did not take it back.
+  Fix: atomic finish, and a "takeback" (`ChallengeSourceRecoveryTakeback`):
+  recovery of an address with `email_verified_at` empty replaces the account's
+  passkeys, keys and sessions.
+- **Round 3**: the takeback (a) is decided at `recovery/verify`, which also
+  sets `email_verified_at` before the passkey exists, so an interrupted
+  recovery turns the takeback off for good and leaves a verified account with
+  no passkey that a stranger can claim (seat 2 #1, #2); (b) fails open when the
+  user read errors (seat 2 #4); (c) cannot revoke everything it must: a login
+  finish in flight, live 5-minute access JWTs, approved device
+  authorizations, desktop exchange codes, email sign-in attempts, the
+  in-memory rotation grace, the data ROOT's PRF wraps and `owner_root_keys`
+  (seat 1 #2, seat 2 #3).
+
+## Belief: the frame is the defect
+
+Revocation after the fact has to enumerate every credential an account can
+mint and every one it has minted, and that set grows with each feature (every
+new grant is another row the takeback must remember). It cannot be closed by
+more patches, only by never creating the thing to undo. The invariant that
+closes it:
+
+**No account is ever bound to an address that its holder has not proved, in
+the same ceremony.** The account row, its first passkey and its
+`email_verified_at` come into being in one transaction at `register/finish`,
+and `register/begin` for a new address needs a proof of the inbox that is
+single-use, short-lived, bound to the address and to the client that asked.
+Nothing exists for an address before that. An address that already has an
+account is never registered again: a mailed proof for it goes to recovery,
+whose mail is itself the proof, and recovery adds a passkey. No unproved
+holder can exist, so nothing needs taking back.
+
+## The change
+
+- `POST /auth/register/mail {email, binding}` mails an 8-digit code through the
+  existing email-attempt machinery (`email_signin_attempts`, purpose
+  `register`, no user row, the code stored as a keyed hash, the client's
+  `binding` stored as a hash exactly as the attempt cookie is). For an address
+  that already has an account it mails the recovery link instead (the existing
+  `recovery/request`) and answers the same.
+- `POST /auth/register/begin {email, attempt_id, code, binding}` consumes the
+  code (one conditional update, 5 wrong tries, 10 minutes) and returns creation
+  options for a user id minted now; it writes one `pending_registrations` row
+  (challenge, address, new user id, session data, 5 minutes) and no user.
+- `register/finish` and `app/register/finish` consume the pending row with one
+  `DELETE ... RETURNING`, verify the passkey, and then in one transaction insert
+  the user (`email_verified_at` = now), the credential and nothing else. The
+  address's unique index decides a race: of any number of finishes for one proof
+  exactly one account exists.
+- Recovery finish is the only way a passkey is added to an existing account. In
+  one transaction it sets `email_verified_at`, and if that statement changed a
+  row (the address had never been proved) it first deletes the account's old
+  passkeys, keys, sessions and grants, then adds the new passkey.
+- An account whose address is not proved mints nothing: web and app login
+  finish refuse it (`address_unproved`), no session or key is issued for it,
+  and a signed-in-looking access token of one is refused by the auth handlers.
+
+Deleted: `ChallengeSourceRecoveryTakeback`, the takeback transaction and its
+test, `ErrAccountHasCredential` and the one-passkey-per-account check (an
+existing account is no longer a registration target, so there is no second
+finish to refuse), `HandleRecoveryVerify`'s premature `SetEmailVerified` and
+source decision, the early `register/begin` account creation and its
+"resume incomplete registration" branch.
+
+## Routes that create or bind an account, a passkey or a key, and what holds each
+
+| Route | What it can bind | What holds it |
+| --- | --- | --- |
+| `POST /auth/register/mail` | nothing (an attempt row, no user) | rate limits of the email-attempt table; cap check; existing address goes to recovery mail |
+| `POST /auth/register/begin` | nothing (a pending row, no user) | needs a valid, unused, expired-checked code bound to this address and binding |
+| `POST /auth/register/finish` | new user + passkey, atomically | pending row consumed once; address unique; `email_verified_at` set in the same transaction |
+| `POST /auth/app/register/finish` | the same, then a key | the same; the key is minted only for the account that transaction made |
+| `POST /auth/recovery/request`, `verify` | nothing until finish | token mailed to the stored address, single use |
+| `POST /auth/register/finish` with a recovery challenge | a passkey on an existing account | the recovery token consumed at verify; in one transaction: verify the address, replace the old holder if it was unproved |
+| `POST /auth/login/finish`, `POST /auth/app/login/finish` | a session or a key for an account that has a passkey | refused for an account whose address is unproved |
+| `POST /auth/email/verify`, `.../verify-address/*` | a session | already required a verified address; verify-address needs a session an unproved account cannot have |
+| `POST /auth/api-keys`, `/auth/device/*`, `/auth/desktop/redeem`, `/auth/session` | keys and sessions from a session | an unproved account has none, and the auth handlers refuse its access token |
+
+## What happens to accounts that already exist with `email_verified_at` empty
+
+The app is not launched and the web has few accounts; the production count was
+not read (no read access from this lane): **unknown**. The rule, without
+migration cleverness: such an account cannot sign in or mint anything until
+its address is proved by mail. At boot every key, session, device
+authorization and desktop code of such an account is revoked or deleted once
+(the account that seeds the operator's bootstrap key is exempt), the login and
+mint paths refuse it, and the mail recovery that proves the address replaces
+its passkeys with the recovering one in the same transaction. A legitimate old
+account therefore costs its owner one recovery by mail; a squatter's holdings
+are gone before the owner arrives, and cannot come back, because nothing an
+unproved account can reach mints.
+
+## Remaining error
+
+- The count of affected accounts is unknown; an owner or operator whose own
+  account is unproved needs the recovery mail to work.
+- The proof is a code; the phone app does not open a mailed link, so an address
+  that already has an account can only be recovered through the web link.
+- Access tokens already issued live up to five minutes; the handlers refuse
+  those of an unproved account, but a service that checks the signature alone
+  would still accept one until it expires.
