@@ -245,7 +245,7 @@ export type HeldKey = { key: string; id: string };
 export type RevokeResult = 'revoked' | 'pending' | 'noid';
 export type RevokeHeld = (held: HeldKey) => Promise<RevokeResult>;
 const REVOKE_DEADLINE_MS = 8000;
-const PENDING_REVOKE_KEEP_MS = 30 * 24 * 3600 * 1000;
+const PENDING_REVOKE_KEEP_TRIES = 60;      // launches or sign-ins that answered "not yours" before the file is dropped (data sources have no clock)
 export const REVOKE_PENDING_NOTE = 'Signed out on this phone. The server could not be reached, so the key is not yet revoked: it is revoked the next time you open the app signed in. To revoke it now, use Settings on the web.';
 export const REVOKE_NOID_NOTE = 'Signed out on this phone. This key has no id on the phone and the server could not be reached, so it is not revoked: revoke it from Settings on the web.';
 
@@ -273,12 +273,12 @@ export const revokeDirect: RevokeHeld = async (held) => {
 };
 const idOf = (body: unknown): string => (body && typeof body === 'object' && typeof (body as Record<string, unknown>).key_id === 'string' ? (body as { key_id: string }).key_id : '');
 
-/** The pending-revoke file: the id of a key the phone has let go of and the server has not yet revoked, with the time it was written. It is written (atomically) BEFORE the key is deleted, so a kill or a timeout at any later step leaves it. */
-const pendingBody = (id: string): string => JSON.stringify({ id, at: Date.now() });
-const parsePending = (text: string | null): { id: string; at: number } | null => { try { const o = JSON.parse(text ?? ''); return typeof o.id === 'string' && o.id ? { id: o.id, at: Number(o.at) || 0 } : null; } catch { return null; } };
+/** The pending-revoke file: the id of a key the phone has let go of and the server has not yet revoked, with how many retries answered "not this key's". It is written (atomically) BEFORE the key is deleted, so a kill or a timeout at any later step leaves it. */
+const pendingBody = (id: string, tries = 0): string => JSON.stringify({ id, tries });
+const parsePending = (text: string | null): { id: string; tries: number } | null => { try { const o = JSON.parse(text ?? ''); return typeof o.id === 'string' && o.id ? { id: o.id, tries: Number(o.tries) || 0 } : null; } catch { return null; } };
 
 /** Retry the revoke of the file, signed in (at launch, and after a sign-in): with the key held now. 2xx: done, the file goes. 404 or 403: this key cannot revoke it (another account's key, or a narrower one): the file stays,
- * since the account it belongs to may sign in later, and goes after 30 days. A phone that is offline keeps it. */
+ * since the account it belongs to may sign in later, and goes after 60 such answers. A phone that is offline keeps it. */
 export async function retryPendingRevoke(storage: Storage | undefined, store: Store | undefined): Promise<void> {
   if (!storage || !store) return;
   const p = parsePending(await readText(storage, PENDING_REVOKE_FILE));
@@ -286,7 +286,7 @@ export async function retryPendingRevoke(storage: Storage | undefined, store: St
   if ((store.get(KEY_ID_NAME) ?? '') === p.id) { await removeFile(storage, PENDING_REVOKE_FILE); return; }      // the key is still this phone's: the sign-out did not happen, and this must not end it
   try { await authedJSON(`/auth/api-keys/${encodeURIComponent(p.id)}`, { method: 'DELETE' }); }
   catch (e) {
-    if (e instanceof HTTPError && (e.status === 404 || e.status === 403)) { if (Date.now() - p.at > PENDING_REVOKE_KEEP_MS) await removeFile(storage, PENDING_REVOKE_FILE); }
+    if (e instanceof HTTPError && (e.status === 404 || e.status === 403)) { if (p.tries + 1 >= PENDING_REVOKE_KEEP_TRIES) await removeFile(storage, PENDING_REVOKE_FILE); else await mark(storage, PENDING_REVOKE_FILE, pendingBody(p.id, p.tries + 1)); }
     return;
   }
   await removeFile(storage, PENDING_REVOKE_FILE);

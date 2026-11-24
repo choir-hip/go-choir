@@ -493,21 +493,21 @@ describe('S20 sign-out clears the phone at once and revokes with the key it held
     try { await f(); } finally { globalThis.fetch = real; }
     return seen;
   };
-  const file = (id: string, at = Date.now()) => enc(JSON.stringify({ id, at }));
+  const file = (id: string, tries = 0) => enc(JSON.stringify({ id, tries }));
   test('the retry, signed in, revokes the id of the file and removes it', async () => {
     W = newWorld('present'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, file('ak_old'));
     resetSeam(); bindNative(phone() as never);
     const seen = await withFetch(() => new Response('{}', { status: 200 }), () => retryPendingRevoke(m.storage, { get: () => null } as never));
     expect(seen.length).toBe(1); expect(seen[0]).toMatch(/^DELETE .*\/auth\/api-keys\/ak_old$/); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
   });
-  test('the retry keeps the file while offline, and keeps it for a key that cannot revoke it (another account may sign in later) until 30 days', async () => {
+  test('the retry keeps the file while offline, and keeps it for a key that cannot revoke it (another account may sign in later) after 60 tries', async () => {
     W = newWorld('present'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, file('ak_old'));
     resetSeam(); bindNative(phone() as never);
     await withFetch(() => { throw new TypeError('network'); }, () => retryPendingRevoke(m.storage, { get: () => null } as never));
     expect(m.files.has(PENDING_REVOKE_FILE)).toBe(true);
     await withFetch(() => new Response('{"error":"api key not found"}', { status: 404 }), () => retryPendingRevoke(m.storage, { get: () => null } as never));
     expect(m.files.has(PENDING_REVOKE_FILE)).toBe(true);
-    m.files.set(PENDING_REVOKE_FILE, file('ak_old', Date.now() - 31 * 24 * 3600 * 1000));
+    m.files.set(PENDING_REVOKE_FILE, file('ak_old', 59));
     await withFetch(() => new Response('{"error":"api key not found"}', { status: 404 }), () => retryPendingRevoke(m.storage, { get: () => null } as never));
     expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
   });
