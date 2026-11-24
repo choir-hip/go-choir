@@ -26,7 +26,7 @@ SEE IT WORK, NO ACCOUNT
 Asking the radio a question while signed out opens a sheet asking you to sign in or make an account.
 
 WHERE EVERYTHING IS (signed in)
-Radio and Paper: the first page. Voice: the microphone control on the radio. Edition topics: Settings or the topics page. Reader, Podcasts, Mail, Files, Takes and Notebook: the launcher (the grid button). Settings: Account (sign out, Delete account), Voice and models (every model file, its size, Download, Test, Remove), Appearance, Computer, About.
+Radio and Paper: the first page. Voice: the microphone control on the radio. Edition topics: Settings or the topics page. Reader, Podcasts, Mail, Files, Takes and Notebook: the launcher (the grid button). Settings: Account (sign out, Delete account), Voice and models (try, switch or remove models), Appearance, Computer, About.
 
 CREATE AN ACCOUNT AND DELETE IT
 Tap Make an account. Enter any email address; we mail an 8-digit code, type it, then the phone's passkey screen makes the passkey. There is no password. The line above the Create account button says the person is 16 or older, agrees to the Privacy Policy and Terms, and that what is asked of the radio is sent to outside AI companies that may use it to train their models during the beta. To delete: Settings, Account, Delete account, confirm with the passkey. Access ends at once and everything is removed after 72 hours; signing in within 72 hours and choosing Cancel deletion stops it. The review account cannot be deleted; its delete page says so. To see deletion, make a new account.
@@ -41,7 +41,7 @@ BACKGROUND AUDIO
 UIBackgroundModes audio keeps spoken news playing with the screen locked, with lock-screen controls. Nothing else runs in the background.
 
 MODEL FILES
-After install the app can download speech and language model data files (Settings, Voice and models) from huggingface.co, only after the listener presses Download on that model, with its size shown. They are data read by code already in the app; no executable code and no feature arrives with them. The app plays with the system voice without them.
+After install the app can download speech and language model data files from huggingface.co. Voice setup recommends the models that fit the phone, shows their total size, and downloads only after the listener agrees. Settings, Voice and models, lets the listener try, switch or remove models. They are data read by code already in the app; no executable code and no feature arrives with them. The app plays with the system voice without them.
 
 OTHER
 Built with a native cross-platform framework; the interface is native, not a web page. No purchases, no advertising, no tracking. Podcast search uses Apple's podcast search; episodes stream from publishers. A take is a voice clip of 3 to 60 seconds that is published only when the listener presses Publish and can be deleted by the listener. Publisher: Choir Harmonic Intelligence Platform, Inc. Contact 000@choir.news.
@@ -59,7 +59,7 @@ Built with a native cross-platform framework; the interface is native, not a web
 | Sign-up has a capacity limit | `docs/changes.md` "Sign-up is bounded by the host's room" (main) | built |
 | 8-digit code then passkey, no password | `app-signin.ts`, `onboarding.contract` (main) | built; seen on a simulator drive only |
 | Settings: Account, Delete account; 72 hours; Cancel deletion | lane account-delete `settings.contract` ("sign in with your passkey in that time and choose Cancel deletion") | built on the lane |
-| Voice and models page, per-model Download with size | lane voice-models `settings.contract` (nav row "Voice and models"), `consent.ts` per-model agreement | built on the lane |
+| First-run voice setup (recommended models for the phone, one agreement with the total size; `offers.ts`) and the Voice and models page | lane voice-models `settings.contract` (nav row "Voice and models"), `consent.ts` per-model agreement | built on the lane |
 | Mic closes when the screen locks; audio background mode only | `b53276cba`; `mobile/AutoradioLab/app.json` backgroundModes audio | built; not proven on a phone |
 | Voice off at launch, off after three minutes without speech | `HandsFreeSwitch.swift:25` (180 s) | built |
 | Podcast search is Apple's | `podcast-model.ts:222` | built |
