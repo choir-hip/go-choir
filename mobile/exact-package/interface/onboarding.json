@@ -78,6 +78,7 @@
    "sizeLabel": "string",
    "recommended": "bool",
    "note": "string",
+   "credit": "string",
    "ready": "bool"
   },
   "EnrolView": {

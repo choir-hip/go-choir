@@ -80,4 +80,13 @@ final class ModelOfferTests: XCTestCase {
         XCTAssertEqual(p.chosen[.voice]?.id, "kokoro-82m-ane"); XCTAssertNil(p.chosen[.responder])
         XCTAssertTrue(ModelOffer.plan(stages: ["nonsense"], picks: [:]).run.isEmpty)
     }
+    // A licence that asks for a credit (CC BY 4.0) has it shown with the option, from the list (release blocker, round 2).
+    func testM1gTheCreditTravelsWithTheOption() {
+        let r = ModelOffer.jobs(profile: phone, list: .builtIn()).first { $0.job == "transcriber" }!
+        let fluid = r.options.first { $0.id == "fluid-speech-mini" }!
+        XCTAssertTrue(fluid.credit.contains("Fluid Speech Mini by FluidVoice"), fluid.credit); XCTAssertTrue(fluid.credit.contains("CC BY 4.0"))
+        XCTAssertEqual(fluid.dict["credit"] as? String, fluid.credit)
+        let speaker = ModelOffer.jobs(profile: phone, list: .builtIn()).first { $0.job == "speaker" }!
+        XCTAssertFalse(speaker.options[0].credit.isEmpty, "the voice-print model's attribution is shown too")
+    }
 }

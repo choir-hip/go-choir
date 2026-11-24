@@ -4,6 +4,7 @@ shape DownloadOption
   text: string
   tag: string
   note: string
+  credit: string
   selected: bool
   ready: bool
 

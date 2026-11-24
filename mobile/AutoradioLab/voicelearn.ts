@@ -13,6 +13,7 @@
 //  Y6 Learn again, Not now, leaving and sign-out drop everything in progress (native `obEnrolDiscard`); Forget my voice deletes the stored one.
 //  Y7 A refused microphone shows the declined line; a capture that failed says so with a way to try again or leave; a take is never stuck without a Not now.
 //  Y8 One native step at a time: a second look at the facts while a step runs starts none.
+//  Y10 The microphone state the page acts on is the system's right now (a read), not a fact kept from before: a refusal undone in Settings is not a dead end.
 //  Y9 A sign-out forgets the state (the next account does not see a "stored" it never made).
 import { accountGeneration, nativeLater } from './api.ts';
 
@@ -94,16 +95,22 @@ async function advance(m: Mem, f: { enrol: Enrol }, later: Later): Promise<void>
   } finally { m.busy = false; }
 }
 
+/** The system's permission right now (a read; nothing is asked), or what the facts last said when native answers nothing: a refusal the person has since undone in Settings is not a dead end (review round 2). */
+async function liveMic(later: Later, kept: string | undefined): Promise<string> {
+  try { const r = (await later?.({ op: 'obMicState' })) as { state?: unknown } | null | undefined; const s = r && typeof r === 'object' ? r.state : undefined; if (s === 'unasked' || s === 'refused' || s === 'granted') return s; } catch { /* the kept fact */ }
+  return kept ?? 'unasked';
+}
+
 /** Source: the page from the native facts. Looking at the facts is also what moves the machine on when a take has ended. */
 export async function learnPage(f: Facts, later: Later = nativeLater() as Later): Promise<Learn> {
-  const m = cur(); const facts = { enrol: { ...noEnrol(), ...(f?.enrol ?? {}) }, mic: f?.mic ?? 'unasked' };
+  const m = cur(); const facts = { enrol: { ...noEnrol(), ...(f?.enrol ?? {}) }, mic: await liveMic(later, f?.mic) };
   await advance(m, facts, later);
   return learnView(m, facts);
 }
 
 /** One press. `start` and `again` drop anything in progress and listen to the first sentence; `read` listens to the next; `rewind` opens the page fresh (Settings, Learn again); `forget` deletes the stored voice; `close` leaves. Y2, Y5, Y6, Y7. */
 export async function learnAct(op: string, f: Facts, later: Later = nativeLater() as Later): Promise<Learn> {
-  const m = cur(); const facts = { enrol: { ...noEnrol(), ...(f?.enrol ?? {}) }, mic: f?.mic ?? 'unasked' };
+  const m = cur(); const facts = { enrol: { ...noEnrol(), ...(f?.enrol ?? {}) }, mic: await liveMic(later, f?.mic) };
   const v = learnView(m, facts);
   if (later && !m.busy) {
     if (op === 'rewind') { Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' }); await call(later, 'obEnrolDiscard'); }
