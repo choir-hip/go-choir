@@ -36,7 +36,7 @@ final class VoiceSetupTests: XCTestCase {
     }
 
     func testEverythingPassesAndTheRecordHoldsTheNumbers() async {
-        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script()), profile: device(8), stallSeconds: 5, patience: 5)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script()), profile: device(8), stallSeconds: 5, patience: 5, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         await s.run()
         XCTAssertTrue(s.isFinished)
         XCTAssertTrue(s.rows.allSatisfy { $0.state == "ready" && !$0.isFallback }, "\(s.rows)")
@@ -52,7 +52,7 @@ final class VoiceSetupTests: XCTestCase {
     func testStallIsReportedAndFallbackOnRequest() async throws {
         // failure 2
         let m = ScriptedSetupBackend.Model(chunks: 10, stallAt: 3, checkOK: nil, checkNote: nil, checkMs: nil)
-        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(8), stallSeconds: 0.4, patience: 30)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(8), stallSeconds: 0.4, patience: 30, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         let run = Task { await s.run() }
         var stalled = false
         for _ in 0..<100 {
@@ -72,7 +72,7 @@ final class VoiceSetupTests: XCTestCase {
 
     func testRetryAfterAStallResumesAndPasses() async throws {
         let m = ScriptedSetupBackend.Model(chunks: 6, stallAt: 2, checkOK: nil, checkNote: nil, checkMs: nil)   // stalls on the first attempt only
-        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(8), stallSeconds: 0.3, patience: 30)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(8), stallSeconds: 0.3, patience: 30, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         let run = Task { await s.run() }
         for _ in 0..<100 {
             try await Task.sleep(nanoseconds: 50_000_000)
@@ -87,7 +87,7 @@ final class VoiceSetupTests: XCTestCase {
     func testNoAnswerTakesTheFallbackAfterPatience() async {
         // failure 2, 3
         let m = ScriptedSetupBackend.Model(chunks: 10, stallAt: 2, checkOK: nil, checkNote: nil, checkMs: nil)
-        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["kokoro-82m-ane": m])), profile: device(8), stallSeconds: 0.3, patience: 0.4)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["kokoro-82m-ane": m])), profile: device(8), stallSeconds: 0.3, patience: 0.4, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         await s.run()
         XCTAssertEqual(s.choices[.voice], "pocket-tts")
         XCTAssertTrue(s.rows.first { $0.stage == "voice" }!.isFallback)
@@ -96,7 +96,7 @@ final class VoiceSetupTests: XCTestCase {
     func testAModelThatFailsItsCheckIsReplacedWithoutAsking() async {
         // failure 4
         let m = ScriptedSetupBackend.Model(chunks: 3, stallAt: nil, checkOK: false, checkNote: "The voice made audio of the wrong length.", checkMs: nil)
-        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["kokoro-82m-ane": m])), profile: device(8), stallSeconds: 5, patience: 5)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["kokoro-82m-ane": m])), profile: device(8), stallSeconds: 5, patience: 5, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         await s.run()
         let row = s.rows.first { $0.stage == "voice" }!
         XCTAssertEqual(row.state, "ready"); XCTAssertTrue(row.isFallback)
@@ -112,7 +112,7 @@ final class VoiceSetupTests: XCTestCase {
 
     func testOfflineEndsOnTheFloorsWhichExist() async {
         // failure 9
-        let s = VoiceSetup(backend: Offline(), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1)
+        let s = VoiceSetup(backend: Offline(), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         await s.run()
         XCTAssertEqual(s.choices[.transcriber], "apple-speech")
         XCTAssertEqual(s.choices[.voice], "avspeech")
@@ -205,3 +205,20 @@ final class SetupReadinessTests: XCTestCase {
         XCTAssertNil(ModelOffer.readyChoices(isReady: { ready.isReady(model: $0) })["transcriber"], "what the engine will not use the page does not call ready")
     }
 }
+
+final class QueuedRowTests: XCTestCase {
+    struct Queued: SetupBackend {
+        func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws { onBytes(-1); try await Task.sleep(nanoseconds: 80_000_000); onBytes(-1); onBytes(5_000_000) }
+        func check(_ c: SetupCandidate) async throws -> SetupCheck { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: true) }
+    }
+    // Round 7: a fetch queued behind another says so; it is not "Downloading 0 MB", and the wait is not a stall.
+    func testAQueuedFetchSaysItIsWaitingAndIsNotAStall() async {
+        let s = VoiceSetup(backend: Queued(), profile: DeviceProfile(chip: "t", memoryGB: 8, freeDiskGB: 40, onWiFi: true), stallSeconds: 0.05, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
+        let t = Task { await s.run(only: [.bounds]) }
+        try? await Task.sleep(nanoseconds: 40_000_000)
+        XCTAssertTrue(s.rows.first { $0.stage == "bounds" }?.statusLine.contains("Waiting for the other download") == true, "\(s.rows.first { $0.stage == "bounds" }?.statusLine ?? "")")
+        await t.value
+        XCTAssertEqual(s.rows.first { $0.stage == "bounds" }?.state, "ready", "queued heartbeats kept the stall watchdog quiet")
+    }
+}
+

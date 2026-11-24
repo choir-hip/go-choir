@@ -40,7 +40,7 @@ final class MemoryReadiness: VoiceReadinessRecord, @unchecked Sendable {
     var ready: Set<String>
     init(_ ready: Set<String> = []) { self.ready = ready }
     func isReady(model: String) -> Bool { lock.lock(); defer { lock.unlock() }; return ready.contains(model) }
-    func markReady(model: String) { lock.lock(); ready.insert(model); lock.unlock() }
+    @discardableResult func markReady(model: String) -> Bool { lock.lock(); ready.insert(model); lock.unlock(); return true }
     func markNotReady(model: String) { lock.lock(); ready.remove(model); lock.unlock() }
 }
 
@@ -261,7 +261,7 @@ final class VoiceSamplerTests: XCTestCase {
                 onBytes(1_000_000)
                 if host.read({ host.failFetch }) { throw Down() }
             },
-            verify: { m in await verifier.verify(model: m, check: { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: !host.read({ host.failVerify })) }).outputOK },
+            verify: { m in let r = await verifier.verify(model: m, check: { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: !host.read({ host.failVerify }), note: host.read({ host.failVerify }) ? "It did not load from this phone's files." : "") }); return r.outputOK ? nil : r.note },
             say: { o in
                 host.record { host.said.append(o.id) }
                 if host.sayDelay > 0 { try await Task.sleep(nanoseconds: host.sayDelay) }

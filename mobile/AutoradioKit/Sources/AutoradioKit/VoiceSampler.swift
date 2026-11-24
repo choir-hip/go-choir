@@ -33,7 +33,7 @@ public final class VoiceSampler: @unchecked Sendable {
     public typealias Fetch = @Sendable (_ modelID: String, _ onBytes: @escaping @Sendable (Int64) -> Void) async throws -> Void
     /// Make the sample line in this voice and play it; returns when it has been heard, throws when the voice could not speak.
     /// Run the check on the fetched model and say whether it works on this phone. The host's one verifier (`ReadinessVerifier`) writes readiness inside it; the sampler can only read it.
-    public typealias Verify = @Sendable (_ modelID: String) async -> Bool
+    public typealias Verify = @Sendable (_ modelID: String) async -> String?
     public typealias Say = @Sendable (_ option: VoiceOption) async throws -> Void
 
     public let options: [VoiceOption]
@@ -141,7 +141,7 @@ public final class VoiceSampler: @unchecked Sendable {
                 var failure: String?
                 do {
                     try await self.fetch(model) { n in self.st.write { $0.bytes[model] = n }; self.onChange?() }
-                    if !(await self.verify(model)) { failure = "That voice did not work on this phone. The radio will use the phone's voice." }
+                    if let why = await self.verify(model) { failure = why }                      // the verifier's own words: why it did not load, and what was done about the files
                 } catch let r as DownloadDoor.Refusal {
                     failure = r.person
                 } catch is CancellationError { failure = "The download was stopped. Tap to try again." }

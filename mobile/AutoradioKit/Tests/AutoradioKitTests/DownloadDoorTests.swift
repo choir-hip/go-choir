@@ -142,6 +142,7 @@ final class DownloadDoorTests: XCTestCase {
         for _ in 0..<100 { f.lock.lock(); let s = f.started; f.lock.unlock(); if s { break }; try? await Task.sleep(nanoseconds: 5_000_000) }
         d.pathChanged(onWiFi: false)
         do { try await t.value; XCTFail("not cut") } catch {}
+        for _ in 0..<100 { f.lock.lock(); let c = f.cut; f.lock.unlock(); if c { break }; try? await Task.sleep(nanoseconds: 10_000_000) }          // the call returned at once; the body sees its cancellation a moment later
         f.lock.lock(); XCTAssertTrue(f.cut, "the transfer was cancelled when the path left Wi-Fi"); f.lock.unlock()
         XCTAssertEqual(r.now, DownloadDoor.closedRegistry)
     }
@@ -184,6 +185,7 @@ final class DownloadDoorTests: XCTestCase {
         d.reset()                                                                         // sign-out
         XCTAssertEqual(r.now, DownloadDoor.closedRegistry, "closed the instant the account changed, not when the transfer happens to end")
         do { try await t.value; XCTFail("ran on") } catch {}
+        for _ in 0..<100 where !st.cancelled { try? await Task.sleep(nanoseconds: 10_000_000) }
         XCTAssertTrue(st.cancelled); XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0, "and the count did not underflow")
     }
     func testW3AWithdrawnAgreementKillsTheWindow() async throws {
@@ -262,5 +264,26 @@ final class DownloadDoorTests: XCTestCase {
         let w = Task { try await d.libraryWindow(model: "fluid-speech-mini") { l.add("W+") } as Void }
         _ = try await e.value; _ = try await w.value
         XCTAssertEqual(l.log, ["E+:" + DownloadDoor.closedRegistry, "E-", "W+"], "the check ran with the registry closed and no window open; the window waited")
+    }
+
+    // ---- Round 7: the deadline is about PROGRESS (a 480 MB model on a slow line is not a hang); `exclusive` has one too; a cancelled caller does not wait for it.
+    func testQ5AnActiveBodyIsNotKilledByTheDeadlineButASilentOneIs() async throws {
+        let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.15)); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { _ in }
+        let ok: Int = try await d.libraryWindow(model: "fluid-speech-mini") { for _ in 0..<12 { try await Task.sleep(nanoseconds: 40_000_000); d.noteProgress() }; return 1 }
+        XCTAssertEqual(ok, 1, "0.48 s of work against a 0.15 s no-progress deadline: it kept reporting, so it lives")
+        do { try await d.libraryWindow(model: "fluid-speech-mini") { try await Task.sleep(nanoseconds: 2_000_000_000) } as Void; XCTFail("silent body survived") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
+    }
+    func testQ6ExclusiveHasADeadlineToo() async throws {
+        let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.1))
+        do { try await d.exclusive { while true { try? await Task.sleep(nanoseconds: 20_000_000) } } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
+        let ok: Int = try await d.exclusive { 5 }; XCTAssertEqual(ok, 5, "and the slot is free")
+    }
+    func testQ7ACancelledCallerClosesTheRegistryAndReturnsAtOnce() async throws {
+        let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        final class S: @unchecked Sendable { var started = false }; let st = S()
+        let t = Task { try await d.libraryWindow(model: "fluid-speech-mini") { st.started = true; while true { try? await Task.sleep(nanoseconds: 20_000_000) } } as Void }     // a body that ignores cancellation
+        for _ in 0..<200 where !st.started { try? await Task.sleep(nanoseconds: 5_000_000) }
+        let t0 = Date(); t.cancel(); _ = try? await t.value
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 1); XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0)
     }
 }

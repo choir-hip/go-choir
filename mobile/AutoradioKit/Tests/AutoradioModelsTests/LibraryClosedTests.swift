@@ -28,7 +28,11 @@ final class LibraryClosedTests: XCTestCase {
         // The TDT stage loads with `loadLocal` and only for a model that is ready by manifest (or being fetched or checked). On a Mac that has the files, they are not touched; on one that does not, nothing appears. Either way: not ready here, so it refuses.
         let tdt = AsrModels.defaultCacheDirectory(for: .v2).deletingLastPathComponent()
         let before = ModelStore.directoryBytes(tdt)
-        do { _ = try await ParakeetTDTTranscriber(StageParams()).begin(); XCTFail("began for a model that is not ready") } catch { XCTAssertTrue("\(error)".contains("not ready"), "\(error)") }
+        if Voices.readiness.isReady(model: "parakeet-tdt-0.6b-v2") {
+            _ = try? await ParakeetTDTTranscriber(StageParams()).begin()               // a Mac that really holds a sealed TDT loads it
+        } else {
+            do { _ = try await ParakeetTDTTranscriber(StageParams()).begin(); XCTFail("began for a model that is not ready") } catch { XCTAssertTrue("\(error)".contains("not ready"), "\(error)") }
+        }
         XCTAssertEqual(ModelStore.directoryBytes(tdt), before, "no file was added, changed or removed")
         await ModelStore.shared.unload("silero-vad-v6.2.1")                 // a manager another test left in the slot would answer without asking
         if !Voices.readiness.isReady(model: "silero-vad-v6.2.1") {           // a Mac that really holds a sealed Silero is allowed to load it
@@ -39,5 +43,17 @@ final class LibraryClosedTests: XCTestCase {
         do { try await HubModelProvider.shared.fetch("parakeet-tdt-0.6b-v2", role: "", onBytes: { _ in }); XCTFail("fetched") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .noConsent(group: "voice-rest")) }
         do { try await HubModelProvider.shared.fetch("lfm3-audio-2b", role: "", onBytes: { _ in }); XCTFail("fetched") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .notOffered(model: "lfm3-audio-2b")) }
         XCTAssertEqual(ModelRegistry.baseURL, DownloadDoor.closedRegistry)
+    }
+    // Round 7: the check for a library model is a COLD load under the door's exclusive slot; it is not the cached manager. If a regression made it the cached check these fail.
+    func testS9TheCheckTakesTheExclusiveSlotAndDropsTheLoadedManager() async throws {
+        final class Flag: @unchecked Sendable { var dropped = false; var checkDone = false }; let f = Flag()
+        _ = try await ModelStore.shared.measuredLoad("silero-vad-v6.2.1") { { f.dropped = true } }        // a manager the fetch left in the slot
+        let held = Task { try await DownloadDoor.shared.exclusive { try await Task.sleep(nanoseconds: 300_000_000) } as Void }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        let check = Task { _ = try? await HubModelProvider.shared.check("silero-vad-v6.2.1", role: ""); f.checkDone = true }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(f.checkDone, "the check waits for the door's slot while another holds it"); XCTAssertFalse(f.dropped, "and has not dropped the manager yet")
+        _ = try await held.value; await check.value
+        XCTAssertTrue(f.dropped, "the manager the fetch loaded was dropped before the check loaded")
     }
 }

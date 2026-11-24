@@ -29,7 +29,9 @@ final class ReadinessVerifierTests: XCTestCase {
         s.pick("pocket-tts:alba"); await t.settle(300)
         XCTAssertEqual(h.fetched, [VoiceCatalog.pocketModel], "it was fetched")
         XCTAssertFalse(r.isReady(model: VoiceCatalog.pocketModel), "but it never passed a check, so it is not ready")
-        XCTAssertEqual(s.cards().first { $0.id == "pocket-tts:alba" }?.state, "failed"); XCTAssertTrue(h.said.isEmpty, "and no sample is played from it")
+        let card = s.cards().first { $0.id == "pocket-tts:alba" }
+        XCTAssertEqual(card?.state, "failed"); XCTAssertTrue(h.said.isEmpty, "and no sample is played from it")
+        XCTAssertTrue(card?.note.contains("did not load from this phone's files") == true, "the card carries the verifier's own words: \(card?.note ?? "")")
     }
 
     // Round 4: readiness is DERIVED. Ready iff the model's files are present AND a check passed for that exact pin; a changed pin or a missing file makes it not ready with no writer involved.

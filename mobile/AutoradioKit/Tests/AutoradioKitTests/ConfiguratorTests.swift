@@ -358,7 +358,7 @@ final class ConfiguratorTests: XCTestCase {
     func testSetupRowsShowWhatWasChosenForEachRoleInOneLine() async {
         let d = DeviceProbe.simulated(.tier6)
         let b = FakeConfigBackend(d)
-        let s = VoiceSetup(backend: NoSetup(), profile: DeviceProfile(chip: "t", memoryGB: 6, freeDiskGB: 40, onWiFi: true), configBackend: b)
+        let s = VoiceSetup(backend: NoSetup(), profile: DeviceProfile(chip: "t", memoryGB: 6, freeDiskGB: 40, onWiFi: true), configBackend: b, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         XCTAssertGreaterThan(s.totalBytes, 0, "the page can say what the best plan would download before it starts")
         await s.run()
         XCTAssertTrue(s.isFinished)

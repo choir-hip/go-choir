@@ -25,11 +25,13 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
     /// the transfer cut when the path stops being covered (DownloadDoor.libraryWindow). The store's models (the GGUFs, the bundle) never open the registry. A companion is fetched after, in its own window, never inside the primary's.
     public func fetch(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         guard KnownModels.contains(id) else { throw LabError.badInput("setup asked for \(id), which is not in the model catalog") }
-        Voices.verifier.demote(model: id)
-        if Self.libraryModels.contains(id) {
-            try await DownloadDoor.shared.libraryWindow(model: id, whileQueued: { onBytes(0) }) { try await LibraryScope.$checking.withValue(id) { try await self.fetchBody(id, role: role, onBytes: onBytes) } }
-        } else {
-            try await fetchBody(id, role: role, onBytes: onBytes)
+        // Demote first; a fetch that fails or is cancelled deletes the model's folders (ModelFetch): a half pack must not look whole to a library that checks only presence.
+        try await ModelFetch.guarded(model: id) {
+            if Self.libraryModels.contains(id) {
+                try await DownloadDoor.shared.libraryWindow(model: id, whileQueued: { onBytes(-1) }) { try await LibraryScope.$checking.withValue(id) { try await self.fetchBody(id, role: role, onBytes: onBytes) } }
+            } else {
+                try await self.fetchBody(id, role: role, onBytes: onBytes)
+            }
         }
         // The pipeline needs the live words beside a batch recogniser: the model the list names for that job comes with it (one row for the person, two fetches), progress continuing from where this model ended.
         let own: Int64 = KnownModels.managed.first { $0.id == id }?.approxBytes ?? 0
@@ -43,8 +45,9 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         let root = spec?.cachePath
         let baseline = root.map(ModelStore.directoryBytes) ?? 0
         let watcher = Task {
+            var last: Int64 = -1
             while !Task.isCancelled {
-                if let root { onBytes(max(0, ModelStore.directoryBytes(root) - baseline)) }
+                if let root { let n = max(0, ModelStore.directoryBytes(root) - baseline); if n != last { last = n; DownloadDoor.shared.noteProgress() }; onBytes(n) }
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
         }

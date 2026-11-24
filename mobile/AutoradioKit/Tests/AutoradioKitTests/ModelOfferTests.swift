@@ -64,7 +64,7 @@ final class ModelOfferTests: XCTestCase {
     }
     func testM1ePreferLeavesOnlyThePickAndTheFloorAndOnlyShownStagesRun() async {
         let seen = Fetched()
-        let s = VoiceSetup(backend: Recording(seen: seen, failing: ["lfm3-1.7b-q5_k_m"]), profile: phone, stallSeconds: 5, patience: 0.05, maxTries: 1)
+        let s = VoiceSetup(backend: Recording(seen: seen, failing: ["lfm3-1.7b-q5_k_m"]), profile: phone, stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         let pick = ModelOffer.candidate(job: "responder", id: "lfm3-1.7b-q5_k_m")!
         s.prefer(.responder, pick)
         await s.run(only: [.responder])

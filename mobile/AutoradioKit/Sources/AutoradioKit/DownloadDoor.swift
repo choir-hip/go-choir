@@ -42,14 +42,14 @@ public final class DownloadDoor: @unchecked Sendable {
     private let onWiFi: @Sendable () -> Bool
     private let allowAll: Bool
     private let groups: [String: String]
-    /// How long a fetch may wait for the window, and how long a window's body may run before it is failed (and the slot freed for the next).
+    /// How long a fetch may wait for the window (five minutes, then it fails and can be retried), and how long a window's body may be SILENT (no progress reported) before it is failed and the slot freed.
     private let deadlines: (wait: TimeInterval, body: TimeInterval)
 
-    public init(onWiFi: @escaping @Sendable () -> Bool = { WiFiMonitor.shared.onWiFi }, list: ModelList = .builtIn(), deadlines: (wait: TimeInterval, body: TimeInterval) = (wait: 3600, body: 3600)) {
+    public init(onWiFi: @escaping @Sendable () -> Bool = { WiFiMonitor.shared.onWiFi }, list: ModelList = .builtIn(), deadlines: (wait: TimeInterval, body: TimeInterval) = (wait: 300, body: 600)) {
         self.onWiFi = onWiFi; self.allowAll = false; self.groups = Self.groups(of: list); self.deadlines = deadlines
     }
     /// A store used by tests with its own fake transport, which is not a model of the app: everything passes on the transport it was given.
-    init(allowAll: Bool) { self.onWiFi = { true }; self.allowAll = allowAll; self.groups = [:]; self.deadlines = (wait: 3600, body: 3600) }
+    init(allowAll: Bool) { self.onWiFi = { true }; self.allowAll = allowAll; self.groups = [:]; self.deadlines = (wait: 300, body: 600) }
     /// For tests of a store with a transport of its own.
     public static var open: DownloadDoor { DownloadDoor(allowAll: true) }
 
@@ -144,10 +144,39 @@ public final class DownloadDoor: @unchecked Sendable {
         if waiters.isEmpty { slotBusy = false; lock.unlock() } else { let w = waiters.removeFirst(); lock.unlock(); w.c.resume() }
     }
 
-    /// Run `body` holding the slot with NO window open anywhere (the registry stays closed): what a check needs, so that its load is a cold load that cannot fetch and cannot borrow another model's window.
-    public func exclusive<T: Sendable>(_ body: @Sendable () async throws -> T) async throws -> T {
+    /// Report progress (bytes arrived, a step finished): the body's deadline is about SILENCE, not wall time (a 480 MB model on a slow line is not a hang).
+    public func noteProgress() { lock.lock(); progressAt = Date(); lock.unlock() }
+    private var progressAt = Date()
+
+    private final class Gate<T: Sendable>: @unchecked Sendable {
+        let l = NSLock(); var c: CheckedContinuation<T, Error>?; var done = false; var pending: Result<T, Error>?
+        func set(_ k: CheckedContinuation<T, Error>) { l.lock(); if let p = pending { l.unlock(); k.resume(with: p) } else { c = k; l.unlock() } }
+        @discardableResult func finish(_ r: Result<T, Error>) -> Bool { l.lock(); if done { l.unlock(); return false }; done = true; if let k = c { l.unlock(); k.resume(with: r) } else { pending = r; l.unlock() }; return true }
+    }
+
+    /// Run `body` and answer when it ends, when the caller is cancelled, or when it has been silent past its deadline, WITHOUT waiting for a body that ignores cancellation. `kill` is what to do to it (cancel its task, close the registry).
+    private func raced<T: Sendable>(_ body: @escaping @Sendable () async throws -> T, box: CancelBox? = nil, kill: @escaping @Sendable () -> Void) async throws -> T {
+        let result = Task<T, Error> { try await body() }
+        let gate = Gate<T>(); let silence = deadlines.body
+        box?.set { if gate.finish(.failure(CancellationError())) { result.cancel() } }              // a path change, a withdrawal or a reset ends the call at once too
+        noteProgress()
+        let watch = Task { [self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(max(0.02, min(1.0, silence / 4)) * 1e9))
+                lock.lock(); let quiet = Date().timeIntervalSince(progressAt); lock.unlock()
+                if quiet > silence { if gate.finish(.failure(Refusal.timedOut)) { result.cancel(); kill() }; return }
+            }
+        }
+        Task { let r = await result.result; watch.cancel(); gate.finish(r) }
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (k: CheckedContinuation<T, Error>) in gate.set(k) }
+        } onCancel: { if gate.finish(.failure(CancellationError())) { result.cancel(); kill() } }
+    }
+
+    /// Run `body` holding the slot with NO window open anywhere (the registry stays closed): what a check needs, so that its load is a cold load that cannot fetch and cannot borrow another model's window. It has the same silence deadline.
+    public func exclusive<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) async throws -> T {
         try await acquireSlot(every: 2, whileQueued: nil); defer { releaseSlot() }
-        return try await body()
+        return try await raced(body, kill: { })
     }
 
     public func libraryWindow<T: Sendable>(model id: String, queuedEvery: TimeInterval = 2, whileQueued: (@Sendable () -> Void)? = nil, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
@@ -157,19 +186,10 @@ public final class DownloadDoor: @unchecked Sendable {
         let key = UUID(), box = CancelBox()
         try enterWindow(key, model: id, box)                            // the authoritative check, under the lock that opens the registry
         defer { leaveWindow(key) }
-        let result = Task<T, Error> { if box.killed { throw CancellationError() }; return try await body() }
-        box.set { result.cancel() }                                      // killing cancels the transfer's Task
-        // The body gets its deadline: past it the window is killed and this call FAILS, without waiting for a body that ignores cancellation (it keeps no registry and no slot).
-        let deadline = deadlines.body
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (c: CheckedContinuation<T, Error>) in
-                let once = Once()
-                let dl = Task { try? await Task.sleep(nanoseconds: UInt64(deadline * 1e9)); if once.first() { box.kill(); self.closeNow(); c.resume(throwing: Refusal.timedOut) } }
-                Task { let r = await result.result; if once.first() { dl.cancel(); c.resume(with: r) } }
-            }
-        } onCancel: { result.cancel(); box.kill() }
+        // A body past its silence deadline, or a cancelled caller, fails the call at once: the window is killed (the registry closed whatever the library does) and the call does not wait for a body that ignores cancellation.
+        return try await raced({ if box.killed { throw CancellationError() }; return try await body() }, box: box, kill: { [self] in box.kill(); closeNow() })
     }
-    private final class Once: @unchecked Sendable { let l = NSLock(); var done = false; func first() -> Bool { l.lock(); defer { l.unlock() }; if done { return false }; done = true; return true } }
+
     private func closeNow() { lock.lock(); let hook = registryHook; lock.unlock(); hook?(Self.closedRegistry) }
 
     private func enterWindow(_ key: UUID, model id: String, _ box: CancelBox) throws {

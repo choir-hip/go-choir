@@ -40,11 +40,12 @@ final class VoiceController: @unchecked Sendable {
                 try await p.fetch(model, role: "", onBytes: onBytes)
             },
             verify: { model in
-                await verifier.verify(model: model, check: {
+                let r = await verifier.verify(model: model, check: {
                     if virtual { return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: true) }
                     guard let p = ModelProviders.current else { throw LabError.unavailable(ModelProviders.missingNote) }
                     return try await p.check(model, role: "")
-                }).outputOK
+                })
+                return r.outputOK ? nil : (r.note.isEmpty ? "That voice did not work on this phone. The radio will use the phone's voice." : r.note)
             },
             say: { option in
                 if virtual { try await Task.sleep(nanoseconds: 1_200_000_000); return }

@@ -140,7 +140,7 @@ final class VoiceModelsTests: XCTestCase {
             if KnownModels.isPinned(c.id) { onBytes(c.bytes); return }
             try await p.fetch(c.id, role: c.role, onBytes: onBytes)
         })
-        let s = VoiceSetup(backend: backend, profile: device(8), stallSeconds: 5, patience: 5)
+        let s = VoiceSetup(backend: backend, profile: device(8), stallSeconds: 5, patience: 5, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         await s.run()
         XCTAssertEqual(s.choices[.speechBounds], "silero-vad")
         XCTAssertEqual(s.choices[.transcriber], "live-then-final")

@@ -108,7 +108,8 @@ final class ModelManifestTests: XCTestCase {
         let m = make(), r = pins(m); r.markReady(model: "kk")
         let moved = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store, libraryPin: "fluidaudio-9.9.9") })
         let v = ReadinessVerifier(record: moved)
-        let res = await v.verify(model: "kk", check: { SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "did not load") })
+        struct Boom: Error {}
+        let res = await v.verify(model: "kk", check: { throw Boom() })
         XCTAssertTrue(res.note.contains("layout"), res.note)
         XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path), "the old folders are gone, so the next fetch starts clean and is not a loop over files that will not load")
     }
@@ -128,5 +129,88 @@ final class ModelManifestTests: XCTestCase {
         let m = make(), r = pins(m); r.markReady(model: "kk")
         let res = await ReadinessVerifier(record: r).verify(model: "kk", check: { SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "The voice made audio of the wrong length.") })
         XCTAssertEqual(res.note, "The voice made audio of the wrong length.", "it loaded; its output was wrong: that is what the row says")
+    }
+
+    // ---- Round 7. A registry close mid-download leaves a pack the library's presence checks call complete. The repair decision: unproven files are deleted; only proven-intact files are kept.
+    /// A fake library that looks only at whether the folder is there (FluidAudio's Pocket and Phonon do): present => it downloads nothing.
+    final class PresenceOnlyLibrary: @unchecked Sendable {
+        let base: URL; var fetches = 0; var failAfterFiles: Int?
+        init(_ base: URL) { self.base = base }
+        func fetch() async throws {
+            fetches += 1
+            let dir = base.appendingPathComponent("pack")
+            if FileManager.default.fileExists(atPath: dir.path) { return }                                   // presence only: a half pack is "complete"
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            for (i, name) in ["a.bin", "b.bin", "weights.bin"].enumerated() {
+                if let n = failAfterFiles, i >= n { throw URLError(.cannotConnectToHost) }        // the registry closed mid-download
+                try Data(repeating: UInt8(i + 1), count: 100 + i).write(to: dir.appendingPathComponent(name))
+            }
+        }
+        func load() throws { for n in ["a.bin", "b.bin", "weights.bin"] where !FileManager.default.fileExists(atPath: base.appendingPathComponent("pack/" + n).path) { throw URLError(.cannotLoadFromNetwork) } }
+    }
+    func lib() -> (base: URL, store: URL, spec: ManagedModelSpec, lib: PresenceOnlyLibrary) {
+        let base = tmp(), store = tmp()
+        return (base, store, ManagedModelSpec(id: "pk", label: "p", source: "x", approxBytes: 1, license: "x", cachePath: base, cacheFolders: ["pack"]), PresenceOnlyLibrary(base))
+    }
+    func testR1AFetchThatFailsMidwayLeavesNoHalfPackAndTheSecondFetchRepairs() async throws {
+        let m = lib(); let rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }); let v = ReadinessVerifier(record: rec)
+        m.lib.failAfterFiles = 1
+        do { try await ModelFetch.guarded(model: "pk", verifier: v, pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { try await m.lib.fetch() }; XCTFail("fetched") } catch {}
+        XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "the half pack is gone: it must not look complete to a library that only checks presence")
+        m.lib.failAfterFiles = nil
+        try await ModelFetch.guarded(model: "pk", verifier: v, pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { try await m.lib.fetch() }
+        XCTAssertNoThrow(try m.lib.load(), "the second fetch downloaded everything again")
+        let r = await v.verify(model: "pk", check: { try m.lib.load(); return SetupCheck(loadMs: 1, speed: 1, unit: "x", memoryMB: 0, outputOK: true) })
+        XCTAssertTrue(r.outputOK); XCTAssertTrue(rec.isReady(model: "pk"))
+    }
+    func testR2ACancelledFetchPurgesToo() async {
+        let m = lib(); let v = ReadinessVerifier(record: FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }))
+        let t = Task { try await ModelFetch.guarded(model: "pk", verifier: v, pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { try FileManager.default.createDirectory(at: m.base.appendingPathComponent("pack"), withIntermediateDirectories: true); try await Task.sleep(nanoseconds: 2_000_000_000) } }
+        try? await Task.sleep(nanoseconds: 50_000_000); t.cancel(); _ = try? await t.value
+        XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path))
+    }
+    func testR3AFailedLoadWithNothingThatProvesIntegrityDeletesTheFiles_AndProvenIntactFilesAreKept() async throws {
+        struct Boom: Error {}
+        // no manifest, no baseline: unproven -> deleted
+        var m = lib(); var rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
+        try await m.lib.fetch()
+        var r = await ReadinessVerifier(record: rec).verify(model: "pk", check: { throw Boom() })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "unproven files are not kept"); XCTAssertTrue(r.note.contains("deleted"), r.note)
+        // a baseline (the last good manifest, kept across the demotion) that matches: intact -> kept
+        m = lib(); rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
+        try await m.lib.fetch(); rec.markReady(model: "pk"); rec.markNotReady(model: "pk")                     // sealed once, then demoted by a fetch
+        XCTAssertNotNil(ModelManifests.baseline("pk", root: m.store), "the last good manifest stays as the baseline")
+        r = await ReadinessVerifier(record: rec).verify(model: "pk", check: { throw Boom() })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "proven intact: kept"); XCTAssertTrue(r.note.contains("intact"), r.note)
+        // a baseline that no longer matches: changed -> deleted
+        m = lib(); rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
+        try await m.lib.fetch(); rec.markReady(model: "pk"); rec.markNotReady(model: "pk")
+        var d = try Data(contentsOf: m.base.appendingPathComponent("pack/a.bin")); d[0] ^= 0xFF; try d.write(to: m.base.appendingPathComponent("pack/a.bin"))
+        r = await ReadinessVerifier(record: rec).verify(model: "pk", check: { throw Boom() })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path)); XCTAssertTrue(r.note.contains("damaged"), r.note)
+    }
+    func testR4ACheckThatNeverRanDeletesNothing() async throws {
+        let m = lib(); let rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
+        try await m.lib.fetch(); rec.markReady(model: "pk")
+        for e: Error in [CancellationError(), DownloadDoor.Refusal.timedOut] {
+            let r = await ReadinessVerifier(record: rec).verify(model: "pk", check: { throw e })
+            XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "a check that did not run proves nothing against the files")
+            XCTAssertTrue(r.note.contains("did not run"), r.note)
+        }
+    }
+    func testR5AnUnreadableFileIsNotProofOfDamage() async throws {
+        struct Boom: Error {}
+        let m = lib(); let rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
+        try await m.lib.fetch(); rec.markReady(model: "pk")
+        let f = m.base.appendingPathComponent("pack/b.bin"); try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: f.path); defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: f.path) }
+        let r = await ReadinessVerifier(record: rec).verify(model: "pk", check: { throw Boom() })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "unreadable is not changed: nothing is deleted on a transient read error"); XCTAssertTrue(r.note.contains("could not be read"), r.note)
+    }
+    func testR6AFailedSealIsAFailedCheckWithItsReason() async throws {
+        let m = lib(); try await m.lib.fetch()
+        let rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
+        let f = m.base.appendingPathComponent("pack/a.bin"); try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: f.path); defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: f.path) }
+        let r = await ReadinessVerifier(record: rec).verify(model: "pk", check: { SetupCheck(loadMs: 1, speed: 1, unit: "x", memoryMB: 0, outputOK: true) })
+        XCTAssertFalse(r.outputOK, "the row must not say Ready for a model that could not be sealed"); XCTAssertTrue(r.note.contains("could not be sealed"), r.note); XCTAssertFalse(rec.isReady(model: "pk"))
     }
 }

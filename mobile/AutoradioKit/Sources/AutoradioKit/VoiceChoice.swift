@@ -129,12 +129,15 @@ public protocol VoiceReadiness: Sendable {
 }
 /// The same record with its writes. ONLY `ReadinessVerifier` holds one (review round 3: ONE readiness writer): the engine, the Downloads page, the voice cards and every other reader have `VoiceReadiness` and cannot write.
 public protocol VoiceReadinessRecord: VoiceReadiness {
-    func markReady(model: String)
+    /// Mark ready (sealing a library model's files first). false: it could not be sealed, so it is not ready.
+    @discardableResult func markReady(model: String) -> Bool
     func markNotReady(model: String)
-    /// A check failed: what to tell the person, and clean up what is plainly unusable (files made for another version of the library, files whose digests changed). Called before the demotion.
-    func diagnose(model: String, note: String, loadFailed: Bool) -> String
+    /// A check failed: what to tell the person, and what to do with files that cannot be trusted. Called under the door's exclusive slot, before the demotion.
+    func diagnose(model: String, note: String, outcome: CheckOutcome) async -> String
 }
-public extension VoiceReadinessRecord { func diagnose(model: String, note: String, loadFailed: Bool) -> String { note } }
+/// How a check ended: it did not run (cancelled, timed out), it ran and the model failed to load, or it ran and judged the output.
+public enum CheckOutcome: Sendable { case neverRan, loadFailed, judged }
+public extension VoiceReadinessRecord { func diagnose(model: String, note: String, outcome: CheckOutcome) async -> String { note } }
 
 /// The ONE writer of readiness. A model is marked ready here, after `check` said it works on this phone, and nowhere else; a failed check demotes it. A fetch, a download card or a leftover from an older build cannot make a model ready.
 ///
@@ -150,12 +153,21 @@ public final class ReadinessVerifier: @unchecked Sendable {
     /// Run the check; mark on a pass only. Returns the measurement (a thrown check is a failed one).
     public func verify(model id: String, check: () async throws -> SetupCheck) async -> SetupCheck {
         let result: SetupCheck
-        var threw = false
+        var outcome = CheckOutcome.judged
         do { result = try await check() }
-        catch { threw = true; result = SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "\(error)") }
-        if result.outputOK { record.markReady(model: id); return result }
+        catch {
+            outcome = (error is CancellationError || (error as? DownloadDoor.Refusal) == .timedOut) ? .neverRan : .loadFailed
+            result = SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "\(error)")
+        }
+        if result.outputOK {
+            if record.markReady(model: id) { return result }
+            var failed = result; failed.outputOK = false; failed.note = "Its files could not be sealed (a file could not be read, or is not a plain file), so it is not marked ready."
+            return failed
+        }
         var failed = result
-        failed.note = record.diagnose(model: id, note: result.note, loadFailed: threw)
+        let rec = record
+        // The words and any clean-up happen holding the door's slot: no window can be open and no fetch can start in between.
+        failed.note = (try? await DownloadDoor.shared.exclusive { await rec.diagnose(model: id, note: result.note, outcome: outcome) }) ?? result.note
         record.markNotReady(model: id)
         return failed
     }
@@ -168,7 +180,7 @@ public final class MemoryVoiceReadiness: VoiceReadinessRecord, @unchecked Sendab
     private let lock = NSLock(); private var ids = Set<String>()
     public init() {}
     public func isReady(model: String) -> Bool { lock.lock(); defer { lock.unlock() }; return ids.contains(model) }
-    public func markReady(model: String) { lock.lock(); ids.insert(model); lock.unlock() }
+    @discardableResult public func markReady(model: String) -> Bool { lock.lock(); ids.insert(model); lock.unlock(); return true }
     public func markNotReady(model: String) { lock.lock(); ids.remove(model); lock.unlock() }
 }
 
@@ -192,26 +204,35 @@ public final class FileVoiceReadiness: VoiceReadinessRecord, @unchecked Sendable
         guard let passed, let p = pins(model), p.pin == passed else { return false }
         return p.present()
     }
-    public func markReady(model: String) {
+    @discardableResult public func markReady(model: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        guard let p = pins(model) else { return }
-        if let seal = p.seal, !seal() { return }                       // a library-managed model is sealed in its manifest (every file, exact length and digest) at the pass; nothing to seal, not ready
+        guard let p = pins(model) else { return false }
+        if let seal = p.seal, !seal() { return false }                 // a library-managed model is sealed in its manifest (every file, exact length and digest) at the pass; nothing to seal, not ready
         var s = read(); s[model] = p.pin; s["~last:" + model] = p.pin; write(s)          // `~last` survives a demotion: it is the pin of the last pass, to tell a layout that changed
+        return true
     }
-    public func diagnose(model: String, note: String, loadFailed: Bool) -> String {
-        lock.lock(); defer { lock.unlock() }
+    public func diagnose(model: String, note: String, outcome: CheckOutcome) async -> String {
+        if outcome == .neverRan { return "The check did not run (it was cancelled or timed out), so nothing was changed. Try again." }
         guard let p = pins(model), p.purge != nil else { return note.isEmpty ? "It did not load from this phone's files." : note }
-        let kept = loadFailed || note.isEmpty ? nil : note                // a check that RAN and judged the output (wrong length, no speech) keeps its own words
-        var s = read()
-        if let last = s["~last:" + model], last != p.pin {
-            p.purge?(); s["~last:" + model] = nil; s[model] = nil; write(s)
-            return "The files of this model were made for an older version of the app (the layout changed), so they were deleted. Download it again."
+        if outcome == .judged { return note }                                                     // it loaded: its files are whole; the check judged the output and says what it found
+        // It did not load. Files are kept ONLY when they are proven intact; anything the record cannot vouch for is deleted so the next fetch starts clean (a library that checks only presence would skip it and fail again).
+        lock.lock(); let last = read()["~last:" + model]; lock.unlock()
+        var words: String; var purge = true
+        if let last, last != p.pin { words = "The files of this model were made for an older version of the app (the layout changed), so they were deleted. Download it again." }
+        else {
+            switch p.proof?() {
+            case .intact?: words = "It did not load from this phone's files. They are intact, so downloading it again would not help."; purge = false
+            case .unreadable?: words = "Its files could not be read just now, so nothing was deleted. Try again."; purge = false
+            case .changed?: words = "Its files on this phone were damaged, so they were deleted. Download it again."
+            case nil: words = "It did not load from this phone's files, and nothing proves they were complete, so they were deleted. Download it again."
+            }
         }
-        if let intact = p.verifyHashes?() {
-            if !intact { p.purge?(); s["~last:" + model] = nil; s[model] = nil; write(s); return "Its files on this phone were damaged, so they were deleted. Download it again." }
-            return kept ?? "It did not load from this phone's files. They are intact, so downloading it again would not help."
+        if purge {
+            await ModelStore.shared.unload(model)                                                  // the manager that loaded over them goes first
+            p.purge?()
+            lock.lock(); var s = read(); s["~last:" + model] = nil; s[model] = nil; write(s); lock.unlock()
         }
-        return kept ?? ("It did not load from this phone's files." + (note.isEmpty ? "" : " (\(note))"))
+        return words
     }
     public func markNotReady(model: String) {
         lock.lock(); defer { lock.unlock() }

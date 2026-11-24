@@ -548,6 +548,7 @@ public final class VoiceSetup: @unchecked Sendable {
                 do {
                     try await backend.download(cand) { [self] bytes in
                         lock.lock(); lastBytesAt[s] = now(); lock.unlock()
+                        if bytes < 0 { update(s) { r in r.statusLine = "Waiting for the other download to finish"; if r.state == "stalled" { r.state = "downloading" } }; return }       // queued behind another download: not a stall, and not 0 %
                         let p = min(1, Double(bytes) / Double(max(cand.bytes, 1)))
                         update(s) { r in
                             r.progress = p

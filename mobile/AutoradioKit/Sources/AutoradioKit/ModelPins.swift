@@ -10,11 +10,11 @@ public struct ModelPin: Sendable {
     /// Library-managed models: write the manifest of the files as they are now (trust on first consented fetch). false: nothing to seal, so the model cannot be ready.
     public let seal: (@Sendable () -> Bool)?
     public let unseal: (@Sendable () -> Void)?
-    /// The digests of the files on disk against the manifest of the last pass: true intact, false changed, nil when there is no manifest to compare with.
-    public let verifyHashes: (@Sendable () -> Bool?)?
+    /// The files on disk against the last manifest or, after a demotion, the BASELINE (the last good manifest): intact, changed, or unreadable (a file that cannot be read now: not proof of anything); nil when there is nothing to compare with.
+    public let proof: (@Sendable () -> ModelManifests.Proof?)?
     /// Delete the model's files and its manifest (damaged, or made for another version of the library).
     public let purge: (@Sendable () -> Void)?
-    public init(pin: String, present: @escaping @Sendable () -> Bool, seal: (@Sendable () -> Bool)? = nil, unseal: (@Sendable () -> Void)? = nil, verifyHashes: (@Sendable () -> Bool?)? = nil, purge: (@Sendable () -> Void)? = nil) { self.pin = pin; self.present = present; self.seal = seal; self.unseal = unseal; self.verifyHashes = verifyHashes; self.purge = purge }
+    public init(pin: String, present: @escaping @Sendable () -> Bool, seal: (@Sendable () -> Bool)? = nil, unseal: (@Sendable () -> Void)? = nil, proof: (@Sendable () -> ModelManifests.Proof?)? = nil, purge: (@Sendable () -> Void)? = nil) { self.pin = pin; self.present = present; self.seal = seal; self.unseal = unseal; self.proof = proof; self.purge = purge }
 }
 
 /// Every file of a library-managed model: its relative path, exact length and SHA-256, written when the check that grants readiness passed.
@@ -31,6 +31,31 @@ public enum ModelManifests {
         return try? JSONDecoder().decode(ModelManifest.self, from: d)
     }
     public static func delete(_ id: String, root: URL = KnownModels.storeRoot) { try? FileManager.default.removeItem(at: file(id, root: root)) }
+    /// The last good manifest, kept when a fetch demotes the model: the baseline a re-download's files are compared with.
+    static func baselineFile(_ id: String, root: URL) -> URL { file(id, root: root).deletingPathExtension().appendingPathExtension("baseline.json") }
+    public static func baseline(_ id: String, root: URL = KnownModels.storeRoot) -> ModelManifest? {
+        guard let d = try? Data(contentsOf: baselineFile(id, root: root)) else { return nil }
+        return try? JSONDecoder().decode(ModelManifest.self, from: d)
+    }
+    /// A demotion keeps the manifest as the baseline (it is no longer a claim that the files are there).
+    public static func demote(_ id: String, root: URL = KnownModels.storeRoot) {
+        let fm = FileManager.default, f = file(id, root: root), b = baselineFile(id, root: root)
+        guard fm.fileExists(atPath: f.path) else { return }
+        try? fm.removeItem(at: b); try? fm.moveItem(at: f, to: b)
+    }
+    public enum Proof: Sendable, Equatable { case intact, changed, unreadable }
+    /// Digests against a manifest. A missing or resized file is `changed`; a file that exists and cannot be read now is `unreadable` (not proof of damage).
+    public static func check(_ m: ModelManifest, base: URL) -> Proof {
+        guard !m.files.isEmpty else { return .changed }
+        let fm = FileManager.default; var unreadable = false
+        for e in m.files {
+            let u = base.appendingPathComponent(e.path)
+            guard let size = (try? fm.attributesOfItem(atPath: u.path)[.size]) as? NSNumber, size.int64Value == e.bytes else { return .changed }
+            guard let h = sha256(u) else { unreadable = true; continue }
+            if h != e.sha256 { return .changed }
+        }
+        return unreadable ? .unreadable : .intact
+    }
     /// Walk the model's folders (relative to `base`) and record every regular file's path, length and SHA-256. nil when there is no file, or when ANY entry cannot be read or is not a plain file or folder (a link, an unreadable file): a seal over a subset is not a seal.
     public static func build(pin: String, base: URL, folders: [String]) -> ModelManifest? {
         let fm = FileManager.default; var entries: [ModelManifest.Entry] = []
@@ -60,7 +85,7 @@ public enum ModelManifests {
         return !m.files.isEmpty && m.files.allSatisfy { ((try? fm.attributesOfItem(atPath: base.appendingPathComponent($0.path).path)[.size]) as? NSNumber)?.int64Value == $0.bytes }
     }
     /// The digests: at the check that grants readiness, and again after a failed load or a length mismatch; not on every launch.
-    public static func verifyHashes(_ m: ModelManifest, base: URL) -> Bool { !m.files.isEmpty && m.files.allSatisfy { sha256(base.appendingPathComponent($0.path)) == $0.sha256 } }
+    public static func verifyHashes(_ m: ModelManifest, base: URL) -> Bool { check(m, base: base) == .intact }
     static func sha256(_ u: URL) -> String? {
         guard let h = try? FileHandle(forReadingFrom: u) else { return nil }
         defer { try? h.close() }
@@ -99,8 +124,8 @@ public enum ModelPins {
         return ModelPin(pin: pin,
             present: { guard let man = ModelManifests.read(id, root: root), man.pin == pin else { return false }; return ModelManifests.present(man, base: base) },
             seal: { guard let man = ModelManifests.build(pin: pin, base: base, folders: folders) else { return false }; return ModelManifests.write(man, id: id, root: root) },
-            unseal: { ModelManifests.delete(id, root: root) },
-            verifyHashes: { guard let man = ModelManifests.read(id, root: root), man.pin == pin else { return nil }; return ModelManifests.verifyHashes(man, base: base) },
+            unseal: { ModelManifests.demote(id, root: root) },
+            proof: { guard let man = ModelManifests.read(id, root: root) ?? ModelManifests.baseline(id, root: root), man.pin == pin else { return nil }; return ModelManifests.check(man, base: base) },
             purge: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; ModelManifests.delete(id, root: root) })
     }
 }
@@ -111,5 +136,19 @@ public enum LibraryScope {
     public static func require(_ id: String, readiness: VoiceReadiness = Voices.readiness) throws {
         if checking == id || readiness.isReady(model: id) { return }
         throw LabError.unavailable("\(id) is not on this phone (not ready): starting it would be a download, and downloads are the door's")
+    }
+}
+
+/// Every fetch of a library model: DEMOTE first (the manifest becomes the baseline), run the body, and when it fails or is cancelled DELETE the model's folders. A library's own presence check calls a directory "complete" even when the download stopped inside it, and a closed
+/// registry (Wi-Fi lost, a withdrawal, a sign-out, a deadline) is exactly what stops one inside: a half pack must not look whole, or every retry skips the download and fails to load.
+public enum ModelFetch {
+    public static func guarded<T>(model id: String, verifier: ReadinessVerifier = Voices.verifier, pins: (String) -> ModelPin? = { ModelPins.current($0) }, _ body: () async throws -> T) async throws -> T {
+        verifier.demote(model: id)
+        do { return try await body() }
+        catch {
+            await ModelStore.shared.unload(id)                          // the manager that was loading over the half pack goes first
+            pins(id)?.purge?()
+            throw error
+        }
     }
 }
