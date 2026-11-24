@@ -251,8 +251,8 @@ const sources: Sources = {
   mailAsk: ([address, question]) => mail.mailAsk(address, question),
 };
 // The page sources, for the laps of a first open (lap.ts `lapOpen`, read by mobile/scripts/laps.sh): each answer of one of these writes `answer entry` when it arrives, `answer settled` when the account's
-// settling and the demo clean-up are behind it (the first answer of a launch waits there) and `answer done` when the page's data is composed and returned, all carrying the page's address. The address is the
-// page the source answers for (an argument of the source where it has one). A source not named here (the radio's pulse, the bar, the themes) is not a page's first draw and writes nothing.
+// settling and the demo clean-up are behind it (the first answer of a launch waits there) and `answer done` when the page's data is composed and returned, all carrying the page's KIND (lap.ts `lapKind`: an address can hold a document id, a mail id, a file name or a search query, and the log is on in every build). The address is the
+// page the source answers for (an argument of the source where it has one); only its kind is written. A source not named here (the radio's pulse, the bar, the themes) is not a page's first draw and writes nothing.
 const str0 = (v: unknown): string => (typeof v === 'string' ? v : '');
 export const PAGE_ADDRESS: Record<string, (args: unknown[]) => string> = {
   paperFront: ([view]) => `paper:${str0(view) || 'front'}`, paperSaved: ([view]) => `paper:${str0(view) || 'front'}`,
@@ -276,5 +276,5 @@ export const answer: Answer = async (source, args, store, storage, native) => {
   if (source !== 'accountSignOut') await clearDemoLeftovers(storage);
   if (where === undefined) return sources[source](args, store, storage, native);
   lapOpen(`answer settled ${source}`, where);
-  try { return await sources[source](args, store, storage, native); } finally { lapOpen(`answer done ${source}`, where); }
+  try { const out = await sources[source](args, store, storage, native); lapOpen(`answer done ${source}`, where); return out; } catch (e) { lapOpen(`answer failed ${source}`, where); throw e; }
 };

@@ -8,7 +8,7 @@
 
 import { ORIGIN } from './app.ts';
 import type { Storage } from './app.contract.d.ts';
-import { lap } from './lap.ts';
+import { lap, lapNet } from './lap.ts';
 
 export { ORIGIN };
 
@@ -28,11 +28,11 @@ export type Reply = { body: unknown; serverTime: number | null; raw: string };
 
 /** GET a public route. Throws on a transport error, a status outside 200 to 299 or a body that is not JSON. */
 export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
-  lap(`net get ${path} start`);
+  lapNet('get start', path);
   const response = await fetch(url(path, query), { method: 'GET', headers: { accept: 'application/json' }, exactTimeout: TIMEOUT_MS } as RequestInit);
   if (!response.ok) throw new Error(`${path} answered ${response.status}`);
   const raw = await response.text();
-  lap(`net get ${path} done`);
+  lapNet('get done', path);
   // A large reply (a story bundle was 1.6 MB): its text and its JSON are not decoded in one turn (Exact gives a turn about 100 ms of CPU; Bun has no scheduler).
   if (raw.length > 200_000) { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); }
   let body: unknown;
@@ -236,9 +236,9 @@ async function send(path: string, opts: Authed, accept: string, extra: Record<st
     try { headers['X-Choir-Computer'] = await computerId(key, sess.computerId); } catch (e) { console.log(`api: computer id failed: ${e instanceof Error ? e.name : 'error'}`); throw e; }
   }
   try {
-    lap(`net ${method.toLowerCase()} ${path} start`);
+    lapNet(`${method.toLowerCase()} start`, path);
     const r = await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS, redirect: 'manual', ...extra } as RequestInit);
-    lap(`net ${method.toLowerCase()} ${path} responded ${r.status}`);
+    lapNet(`${method.toLowerCase()} responded ${r.status}`, path);
     return { r, key };
   } catch (e) {
     const timed = (e as { kind?: string } | null)?.kind === 'Timeout' || (e as { name?: string } | null)?.name === 'TimeoutError';

@@ -6,7 +6,7 @@
 #   mobile/scripts/laps.sh --file <log>                     a `log show --style compact` dump, or a `log stream` capture
 #
 # Shared code cannot read a clock, so a lap line carries none: the platform stamps it. Every line the script prints is one lap with its time of day, the milliseconds since the line before,
-# and (for a line that carries a page address) the milliseconds since that page's `pagesOpen entry` or `openRadioOf entry`. The bundle id is the app's (app-identity.sh, AR_VARIANT).
+# and (for a line that carries a page kind) the milliseconds since the last `pagesOpen entry` or `openRadioOf entry` of that kind. The bundle id is the app's (app-identity.sh, AR_VARIANT).
 set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
 LAST=10m; MODE=""; ARG=""
