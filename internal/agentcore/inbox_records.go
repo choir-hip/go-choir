@@ -1079,8 +1079,8 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 	}
 	if _, task := types.ManagementTaskIDOfInbox(deskAgentID); task {
 		// A task inbox's wake is the durable start of a queued task (R2-6):
-		// the slot starter takes queued tasks newest delegation first
-		// (store.NewestQueuedFirst) while a slot is free. A task already running reads its records in its next cell.
+		// the slot starter takes queued tasks oldest first while a slot is
+		// free. A task already running reads its records in its next cell.
 		return rt.startQueuedManagementTasks(ctx, ownerID, computerID)
 	}
 	profile, _, _ := strings.Cut(strings.TrimSpace(deskAgentID), ":")

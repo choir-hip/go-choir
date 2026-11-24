@@ -406,21 +406,21 @@ func TestManagementDelegatesIntakeToTasks(t *testing.T) {
 	if kept || !parentKept {
 		t.Fatalf("sessions after task A: task kept %v, parent kept %v; want the task's released and the parent's kept", kept, parentKept)
 	}
-	// Its closure minted the start of the newest delegation's task, C,
-	// queued by the second parent turn (store.NewestQueuedFirst); B waits.
+	// Its closure minted the start of the oldest queued task, B; C, queued
+	// by the second parent turn, waits.
 	var taskC types.ManagementTask
 	for _, q := range f.tasks(types.ManagementTaskQueued) {
 		if q.TaskID != taskB.TaskID {
 			taskC = q
 		}
 	}
-	if f.outboxWakes(taskC.TaskInbox, "start_after") != 1 || f.outboxWakes(taskB.TaskInbox, "start_after") != 0 {
-		t.Fatal("task A's closure did not start the newest delegation's task C ahead of B")
+	if f.outboxWakes(taskB.TaskInbox, "start_after") != 1 || f.outboxWakes(taskC.TaskInbox, "start_after") != 0 {
+		t.Fatal("task A's closure did not start the oldest queued task B ahead of C")
 	}
-	// Management cancels C; its closure starts B, the one left.
+	// Management cancels C, still queued; B's start stands.
 	f.rt.closeManagementTask(ctx, taskC, types.TaskClosureCancelled, "", "cancelled by the test", "")
 	if f.outboxWakes(taskB.TaskInbox, "start_after") != 1 {
-		t.Fatal("task C's closure minted no start for task B")
+		t.Fatal("task B's start did not stand after C was cancelled")
 	}
 
 	// Task B leaves one capture: its Report wakes the parent once.

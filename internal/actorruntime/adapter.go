@@ -166,7 +166,18 @@ func kernelDispatcherOptions(sinkMailbox string) actor.DispatcherOptions {
 		// (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
 		// Engineering admission has its own lane too, so a nudge never
 		// waits for a desk's slot (docs/problems/fp4-nudge-waits-behind-management-activation-2026-10-22.md).
-		Lanes: []actor.Lane{{Prefix: "source:", MaxConcurrent: sourcePollLane}, {Prefix: agentcore.EngineeringAdmissionMailbox, MaxConcurrent: 1}},
+		// A management task's run has its own lane as well, as wide as the
+		// most task slots a computer may have: a task holds a task slot from
+		// its claim, so its run must never wait behind other desks for a
+		// shared slot (the paper, 2026-11-19: tasks waited two to six
+		// minutes each, turnover fell below arrivals and 1,352 captures
+		// expired; docs/problems/captures-dropped-and-stalled-2026-11-24.md).
+		// The task slots stay the only bound on how many tasks run.
+		Lanes: []actor.Lane{
+			{Prefix: "source:", MaxConcurrent: sourcePollLane},
+			{Prefix: agentcore.EngineeringAdmissionMailbox, MaxConcurrent: 1},
+			{Prefix: types.TaskInboxDesk + ":", MaxConcurrent: provideriface.MaxManagementTaskSlots},
+		},
 	}
 }
 
