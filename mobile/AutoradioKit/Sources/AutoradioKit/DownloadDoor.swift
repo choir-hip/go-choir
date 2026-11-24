@@ -155,7 +155,7 @@ public final class DownloadDoor: @unchecked Sendable {
     }
 
     /// Run `body` and answer when it ends, when the caller is cancelled, or when it has been silent past its deadline, WITHOUT waiting for a body that ignores cancellation. `kill` is what to do to it (cancel its task, close the registry).
-    private func raced<T: Sendable>(_ body: @escaping @Sendable () async throws -> T, box: CancelBox? = nil, kill: @escaping @Sendable () -> Void) async throws -> T {
+    private func raced<T: Sendable>(_ body: @escaping @Sendable () async throws -> T, box: CancelBox? = nil, onBodyEnded: (@Sendable () -> Void)? = nil, kill: @escaping @Sendable () -> Void) async throws -> T {
         let result = Task<T, Error> { try await body() }
         let gate = Gate<T>(); let silence = deadlines.body
         box?.set { if gate.finish(.failure(CancellationError())) { result.cancel() } }              // a path change, a withdrawal or a reset ends the call at once too
@@ -167,7 +167,7 @@ public final class DownloadDoor: @unchecked Sendable {
                 if quiet > silence { if gate.finish(.failure(Refusal.timedOut)) { result.cancel(); kill() }; return }
             }
         }
-        Task { let r = await result.result; watch.cancel(); gate.finish(r) }
+        Task { let r = await result.result; watch.cancel(); gate.finish(r); onBodyEnded?() }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (k: CheckedContinuation<T, Error>) in gate.set(k) }
         } onCancel: { if gate.finish(.failure(CancellationError())) { result.cancel(); kill() } }
@@ -175,8 +175,9 @@ public final class DownloadDoor: @unchecked Sendable {
 
     /// Run `body` holding the slot with NO window open anywhere (the registry stays closed): what a check needs, so that its load is a cold load that cannot fetch and cannot borrow another model's window. It has the same silence deadline.
     public func exclusive<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) async throws -> T {
-        try await acquireSlot(every: 2, whileQueued: nil); defer { releaseSlot() }
-        return try await raced(body, kill: { })
+        try await acquireSlot(every: 2, whileQueued: nil)
+        // The caller is answered at once on a timeout or a cancel, but the SLOT is freed only when the body has returned (or been cancelled and has acknowledged it): a cold load that outlives its slot would run beside the next fetch's window.
+        return try await raced(body, onBodyEnded: { [self] in releaseSlot() }, kill: { })
     }
 
     public func libraryWindow<T: Sendable>(model id: String, queuedEvery: TimeInterval = 2, whileQueued: (@Sendable () -> Void)? = nil, _ body: @escaping @Sendable () async throws -> T) async throws -> T {

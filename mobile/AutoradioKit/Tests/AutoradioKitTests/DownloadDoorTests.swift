@@ -3,6 +3,13 @@ import XCTest
 
 // DOOR A: every model fetch goes through DownloadDoor. One test per FORMER PATH proves the escape is closed: with no consent, each path makes zero requests; a Wi-Fi agreement cannot spend mobile data in the transport;
 // sign-out closes the door. The fetcher is a counting URL protocol on the transport the door hands out.
+/// A body that ignores cancellation WITHOUT spinning: it waits on a continuation (which cancellation cannot interrupt) until the test lets it go. A `while true { try? await sleep }` would spin hot forever once cancelled (the sleep throws at once and `try?` swallows it) and starve the rest of the suite.
+final class Hang: @unchecked Sendable {
+    private let l = NSLock(); private var cont: CheckedContinuation<Void, Never>?; private var released = false
+    func wait() async { await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in l.lock(); if released { l.unlock(); c.resume() } else { cont = c; l.unlock() } } }
+    func release() { l.lock(); released = true; let c = cont; cont = nil; l.unlock(); c?.resume() }
+}
+
 final class CountingProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var count = 0
     static let lock = NSLock()
@@ -242,7 +249,8 @@ final class DownloadDoorTests: XCTestCase {
     func testQ2ABodyThatOutlivesItsDeadlineIsFailedAndTheSlotIsFreed() async throws {
         let r = Registry(); let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.1)); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
         let t0 = Date()
-        do { try await d.libraryWindow(model: "fluid-speech-mini") { while true { try? await Task.sleep(nanoseconds: 20_000_000) } } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }     // a body that ignores cancellation
+        let hang = Hang(); defer { hang.release() }
+        do { try await d.libraryWindow(model: "fluid-speech-mini") { await hang.wait() } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }     // a body that ignores cancellation
         XCTAssertLessThan(Date().timeIntervalSince(t0), 2, "it did not wait for a body that never returns")
         XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0)
         let ok: Int = try await d.libraryWindow(model: "fluid-speech-mini") { 3 }; XCTAssertEqual(ok, 3, "and the next fetch is not stuck behind it")
@@ -273,15 +281,24 @@ final class DownloadDoorTests: XCTestCase {
         XCTAssertEqual(ok, 1, "0.48 s of work against a 0.15 s no-progress deadline: it kept reporting, so it lives")
         do { try await d.libraryWindow(model: "fluid-speech-mini") { try await Task.sleep(nanoseconds: 2_000_000_000) } as Void; XCTFail("silent body survived") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
     }
-    func testQ6ExclusiveHasADeadlineToo() async throws {
-        let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.1))
-        do { try await d.exclusive { while true { try? await Task.sleep(nanoseconds: 20_000_000) } } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
-        let ok: Int = try await d.exclusive { 5 }; XCTAssertEqual(ok, 5, "and the slot is free")
+    func testQ6ExclusiveHasADeadline_AndItsSlotIsFreedOnlyWhenTheBodyHasEnded() async throws {
+        let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 0.3, body: 0.1))
+        final class F: @unchecked Sendable { let l = NSLock(); var stop = false; var ended = false
+            func set() { l.lock(); stop = true; l.unlock() }; var s: Bool { l.lock(); defer { l.unlock() }; return stop }
+            func end() { l.lock(); ended = true; l.unlock() } }
+        let f = F()
+        let hang = Hang(); defer { hang.release() }
+        do { try await d.exclusive { await hang.wait(); f.end() } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }   // a body that ignores cancellation
+        // the caller was told at once, but the body is still running: the slot is NOT free, so nothing else runs beside it
+        do { let _: Int = try await d.exclusive { 5 }; XCTFail("a second body ran beside the one that outlived its deadline") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut, "it waited, and its patience ran out") }
+        hang.release(); try? await Task.sleep(nanoseconds: 100_000_000)                                     // the body returns: the slot is freed
+        let ok: Int = try await d.exclusive { 5 }; XCTAssertEqual(ok, 5)
     }
     func testQ7ACancelledCallerClosesTheRegistryAndReturnsAtOnce() async throws {
         let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
         final class S: @unchecked Sendable { var started = false }; let st = S()
-        let t = Task { try await d.libraryWindow(model: "fluid-speech-mini") { st.started = true; while true { try? await Task.sleep(nanoseconds: 20_000_000) } } as Void }     // a body that ignores cancellation
+        let hang = Hang(); defer { hang.release() }
+        let t = Task { try await d.libraryWindow(model: "fluid-speech-mini") { st.started = true; await hang.wait() } as Void }     // a body that ignores cancellation
         for _ in 0..<200 where !st.started { try? await Task.sleep(nanoseconds: 5_000_000) }
         let t0 = Date(); t.cancel(); _ = try? await t.value
         XCTAssertLessThan(Date().timeIntervalSince(t0), 1); XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0)

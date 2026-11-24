@@ -45,13 +45,14 @@ public enum ModelManifests {
     }
     public enum Proof: Sendable, Equatable { case intact, changed, unreadable }
     /// Digests against a manifest. A missing or resized file is `changed`; a file that exists and cannot be read now is `unreadable` (not proof of damage).
-    public static func check(_ m: ModelManifest, base: URL) -> Proof {
+    public static func check(_ m: ModelManifest, base: URL) -> Proof { check(m, base: base, read: { try $0.read(upToCount: 1 << 20) }) }
+    static func check(_ m: ModelManifest, base: URL, read: (FileHandle) throws -> Data?) -> Proof {
         guard !m.files.isEmpty else { return .changed }
         let fm = FileManager.default; var unreadable = false
         for e in m.files {
             let u = base.appendingPathComponent(e.path)
             guard let size = (try? fm.attributesOfItem(atPath: u.path)[.size]) as? NSNumber, size.int64Value == e.bytes else { return .changed }
-            guard let h = sha256(u) else { unreadable = true; continue }
+            guard let h = sha256(u, read: read) else { unreadable = true; continue }
             if h != e.sha256 { return .changed }
         }
         return unreadable ? .unreadable : .intact
@@ -86,13 +87,17 @@ public enum ModelManifests {
     }
     /// The digests: at the check that grants readiness, and again after a failed load or a length mismatch; not on every launch.
     public static func verifyHashes(_ m: ModelManifest, base: URL) -> Bool { check(m, base: base) == .intact }
-    static func sha256(_ u: URL) -> String? {
+    /// The digest of the whole file, or nil when it cannot be read to the END (it cannot be opened, or a read failed part-way): a partial digest is never returned, so an I/O error can never look like a changed file.
+    static func sha256(_ u: URL, read: (FileHandle) throws -> Data? = { try $0.read(upToCount: 1 << 20) }) -> String? {
         guard let h = try? FileHandle(forReadingFrom: u) else { return nil }
         defer { try? h.close() }
         var hasher = SHA256()
-        while let chunk = try? h.read(upToCount: 1 << 20), !chunk.isEmpty { hasher.update(data: chunk) }
+        while true {
+            do { guard let chunk = try read(h), !chunk.isEmpty else { break }; hasher.update(data: chunk) }
+            catch { return nil }
+        }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    }
+}
 }
 
 public enum ModelPins {
@@ -125,7 +130,7 @@ public enum ModelPins {
             present: { guard let man = ModelManifests.read(id, root: root), man.pin == pin else { return false }; return ModelManifests.present(man, base: base) },
             seal: { guard let man = ModelManifests.build(pin: pin, base: base, folders: folders) else { return false }; return ModelManifests.write(man, id: id, root: root) },
             unseal: { ModelManifests.demote(id, root: root) },
-            proof: { guard let man = ModelManifests.read(id, root: root) ?? ModelManifests.baseline(id, root: root), man.pin == pin else { return nil }; return ModelManifests.check(man, base: base) },
+            proof: { guard let man = ModelManifests.read(id, root: root) ?? ModelManifests.baseline(id, root: root) else { return nil }; return ModelManifests.check(man, base: base) },      // digests of the files against what was sealed, whichever version sealed it
             purge: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; ModelManifests.delete(id, root: root) })
     }
 }
@@ -139,15 +144,39 @@ public enum LibraryScope {
     }
 }
 
-/// Every fetch of a library model: DEMOTE first (the manifest becomes the baseline), run the body, and when it fails or is cancelled DELETE the model's folders. A library's own presence check calls a directory "complete" even when the download stopped inside it, and a closed
-/// registry (Wi-Fi lost, a withdrawal, a sign-out, a deadline) is exactly what stops one inside: a half pack must not look whole, or every retry skips the download and fails to load.
+/// THE deletion rule. Files are deleted only when (a) a digest read to the end proves them different from what was sealed (the manifest, or the baseline a fetch demoted it to), or (b) nothing has ever sealed them and the fetch that wrote them did not finish (a half pack: a library
+/// that checks only presence would call it whole). Nothing else deletes: not an error, a timeout, a refusal, a cancelled wait, a failed load, an app update, a read error. Every caller goes through this one function.
+public enum ModelDeletion {
+    /// What the fetch that wrote the files did: it never began (refused, queued out, cancelled before it started: it wrote nothing), it began and did not finish, or it finished.
+    public enum Fetch: Sendable { case notStarted, unfinished, finished }
+    /// Apply the rule to this model; true when its files were deleted. The loaded manager goes first.
+    @discardableResult
+    public static func reconcile(model id: String, pin: ModelPin?, fetch: Fetch) async -> Bool {
+        guard let pin, let purge = pin.purge else { return false }
+        let proof = pin.proof?()
+        let differs = proof == .changed
+        let halfPack = proof == nil && fetch == .unfinished
+        guard differs || halfPack else { return false }
+        await ModelStore.shared.unload(id)
+        purge()
+        return true
+    }
+}
+
+/// Every fetch of a library model: DEMOTE first (the manifest becomes the baseline), run the body, and let `ModelDeletion` decide what a failure leaves. The body calls `run.begin()` when it starts to write.
 public enum ModelFetch {
-    public static func guarded<T>(model id: String, verifier: ReadinessVerifier = Voices.verifier, pins: (String) -> ModelPin? = { ModelPins.current($0) }, _ body: () async throws -> T) async throws -> T {
+    public final class Run: @unchecked Sendable {
+        private let l = NSLock(); private var started = false
+        public init() {}
+        public func begin() { l.lock(); started = true; l.unlock() }
+        var state: ModelDeletion.Fetch { l.lock(); defer { l.unlock() }; return started ? .unfinished : .notStarted }
+    }
+    public static func guarded<T>(model id: String, verifier: ReadinessVerifier = Voices.verifier, pins: (String) -> ModelPin? = { ModelPins.current($0) }, _ body: (Run) async throws -> T) async throws -> T {
         verifier.demote(model: id)
-        do { return try await body() }
+        let run = Run()
+        do { return try await body(run) }
         catch {
-            await ModelStore.shared.unload(id)                          // the manager that was loading over the half pack goes first
-            pins(id)?.purge?()
+            await ModelDeletion.reconcile(model: id, pin: pins(id), fetch: run.state)
             throw error
         }
     }

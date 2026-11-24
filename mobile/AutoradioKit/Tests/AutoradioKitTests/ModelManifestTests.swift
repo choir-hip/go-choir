@@ -104,14 +104,14 @@ final class ModelManifestTests: XCTestCase {
         let v = (pins.first { ($0["identity"] as? String)?.lowercased() == "fluidaudio" }!["state"] as! [String: Any])["version"] as! String
         XCTAssertEqual(ModelPins.libraryPin, "fluidaudio-" + v, "a FluidAudio bump is a pin change: bump the literal with it")
     }
-    func testM12AFailedCheckAfterAPinChangeDeletesTheOldFilesAndSaysTheLayoutChanged() async {
+    func testM12AFailedCheckAfterAPinChangeKeepsTheFilesAndSaysTheAppWasUpdated() async {
         let m = make(), r = pins(m); r.markReady(model: "kk")
         let moved = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store, libraryPin: "fluidaudio-9.9.9") })
         let v = ReadinessVerifier(record: moved)
         struct Boom: Error {}
         let res = await v.verify(model: "kk", check: { throw Boom() })
-        XCTAssertTrue(res.note.contains("layout"), res.note)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path), "the old folders are gone, so the next fetch starts clean and is not a loop over files that will not load")
+        XCTAssertTrue(res.note.contains("updated"), res.note)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path), "round 8: an app update is not a reason to delete: only digests that differ, or a half pack, delete")
     }
     struct Boom: Error {}
     func testM13AFailedLoadWithDamagedFilesDeletesThemAndSaysSo_AndWithIntactFilesSaysTheyDidNotLoad() async {
@@ -123,7 +123,7 @@ final class ModelManifestTests: XCTestCase {
         // intact: the hashes match, the load still failed: the files are kept and the words say they did not load
         m = make(); r = pins(m); r.markReady(model: "kk")
         res = await ReadinessVerifier(record: r).verify(model: "kk", check: { throw Boom() })
-        XCTAssertTrue(res.note.contains("did not load from this phone's files"), res.note); XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path), "intact files are not thrown away")
+        XCTAssertTrue(res.note.contains("intact") && res.note.contains("could not load it now"), res.note); XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("kokoro").path), "intact files are not thrown away")
     }
     func testM14ACheckThatRanAndJudgedTheOutputKeepsItsOwnWords() async {
         let m = make(), r = pins(m); r.markReady(model: "kk")
@@ -155,27 +155,27 @@ final class ModelManifestTests: XCTestCase {
     func testR1AFetchThatFailsMidwayLeavesNoHalfPackAndTheSecondFetchRepairs() async throws {
         let m = lib(); let rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }); let v = ReadinessVerifier(record: rec)
         m.lib.failAfterFiles = 1
-        do { try await ModelFetch.guarded(model: "pk", verifier: v, pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { try await m.lib.fetch() }; XCTFail("fetched") } catch {}
+        do { try await ModelFetch.guarded(model: "pk", verifier: v, pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { run in run.begin(); try await m.lib.fetch() }; XCTFail("fetched") } catch {}
         XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "the half pack is gone: it must not look complete to a library that only checks presence")
         m.lib.failAfterFiles = nil
-        try await ModelFetch.guarded(model: "pk", verifier: v, pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { try await m.lib.fetch() }
+        try await ModelFetch.guarded(model: "pk", verifier: v, pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { run in run.begin(); try await m.lib.fetch() }
         XCTAssertNoThrow(try m.lib.load(), "the second fetch downloaded everything again")
         let r = await v.verify(model: "pk", check: { try m.lib.load(); return SetupCheck(loadMs: 1, speed: 1, unit: "x", memoryMB: 0, outputOK: true) })
         XCTAssertTrue(r.outputOK); XCTAssertTrue(rec.isReady(model: "pk"))
     }
     func testR2ACancelledFetchPurgesToo() async {
         let m = lib(); let v = ReadinessVerifier(record: FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }))
-        let t = Task { try await ModelFetch.guarded(model: "pk", verifier: v, pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { try FileManager.default.createDirectory(at: m.base.appendingPathComponent("pack"), withIntermediateDirectories: true); try await Task.sleep(nanoseconds: 2_000_000_000) } }
+        let t = Task { try await ModelFetch.guarded(model: "pk", verifier: v, pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { run in run.begin(); try FileManager.default.createDirectory(at: m.base.appendingPathComponent("pack"), withIntermediateDirectories: true); try await Task.sleep(nanoseconds: 2_000_000_000) } }
         try? await Task.sleep(nanoseconds: 50_000_000); t.cancel(); _ = try? await t.value
         XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path))
     }
-    func testR3AFailedLoadWithNothingThatProvesIntegrityDeletesTheFiles_AndProvenIntactFilesAreKept() async throws {
+    func testR3AFailedLoadDeletesOnlyWhatADigestProvesDifferent() async throws {
         struct Boom: Error {}
         // no manifest, no baseline: unproven -> deleted
         var m = lib(); var rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
         try await m.lib.fetch()
         var r = await ReadinessVerifier(record: rec).verify(model: "pk", check: { throw Boom() })
-        XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "unproven files are not kept"); XCTAssertTrue(r.note.contains("deleted"), r.note)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "round 8: a fetch that finished and a load that failed once is not a half pack: nothing proves it bad, so it is kept"); XCTAssertTrue(r.note.contains("kept"), r.note)
         // a baseline (the last good manifest, kept across the demotion) that matches: intact -> kept
         m = lib(); rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
         try await m.lib.fetch(); rec.markReady(model: "pk"); rec.markNotReady(model: "pk")                     // sealed once, then demoted by a fetch
@@ -212,5 +212,67 @@ final class ModelManifestTests: XCTestCase {
         let f = m.base.appendingPathComponent("pack/a.bin"); try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: f.path); defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: f.path) }
         let r = await ReadinessVerifier(record: rec).verify(model: "pk", check: { SetupCheck(loadMs: 1, speed: 1, unit: "x", memoryMB: 0, outputOK: true) })
         XCTAssertFalse(r.outputOK, "the row must not say Ready for a model that could not be sealed"); XCTAssertTrue(r.note.contains("could not be sealed"), r.note); XCTAssertFalse(rec.isReady(model: "pk"))
+    }
+
+    // ---- Round 8: ONE deletion rule. Files are deleted only when (a) a digest read to the end proves them different from the sealed manifest or baseline, or (b) nothing ever sealed them and the fetch that wrote them did not finish.
+    /// A model sealed once (so a baseline exists after a fetch demotes it), with its record.
+    func sealed() async throws -> (m: (base: URL, store: URL, spec: ManagedModelSpec, lib: PresenceOnlyLibrary), rec: FileVoiceReadiness, v: ReadinessVerifier, pins: (String) -> ModelPin?) {
+        let m = lib(); try await m.lib.fetch()
+        let pins: (String) -> ModelPin? = { ModelPins.managed($0, spec: m.spec, root: m.store) }
+        let rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: pins); rec.markReady(model: "pk")
+        XCTAssertTrue(rec.isReady(model: "pk")); return (m, rec, ReadinessVerifier(record: rec), pins)
+    }
+    func packExists(_ m: (base: URL, store: URL, spec: ManagedModelSpec, lib: PresenceOnlyLibrary)) -> Bool { FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack/a.bin").path) }
+    func testD1ARefusalBeforeTheSlotOrAQueueTimeoutDeletesNothing() async throws {            // B1
+        let s = try await sealed()
+        for e: Error in [DownloadDoor.Refusal.noConsent(group: "voice"), DownloadDoor.Refusal.notOffered(model: "pk"), DownloadDoor.Refusal.pathNotAgreed(group: "voice"), DownloadDoor.Refusal.timedOut, CancellationError()] {
+            do { try await ModelFetch.guarded(model: "pk", verifier: s.v, pins: s.pins) { _ in throw e } as Void; XCTFail("ran") } catch {}      // the body never began: nothing was written
+            XCTAssertTrue(packExists(s.m), "a ready model survived \(e)")
+        }
+    }
+    func testD2ATransientLoadFailureInTheFetchBodyKeepsAReadyModelWhoseFilesAreProvenIntact() async throws {         // B2
+        let s = try await sealed()
+        do { try await ModelFetch.guarded(model: "pk", verifier: s.v, pins: s.pins) { run in run.begin(); throw URLError(.cannotLoadFromNetwork) } as Void; XCTFail("ran") } catch {}        // memory pressure, backgrounding: it began, the files were not touched
+        XCTAssertTrue(packExists(s.m), "the baseline proves the 425 MB intact: it is not deleted for a load that failed once")
+    }
+    func testD3AFetchThatBeganAndLeftTheFilesDifferentFromTheSealedOnesDeletesThem() async throws {
+        let s = try await sealed()
+        do { try await ModelFetch.guarded(model: "pk", verifier: s.v, pins: s.pins) { run in run.begin(); try Data(count: 5).write(to: s.m.base.appendingPathComponent("pack/a.bin")); throw URLError(.networkConnectionLost) } as Void } catch {}
+        XCTAssertFalse(packExists(s.m), "(a): a digest proves the files differ from the sealed ones")
+    }
+    func testD4AStalePinWithAThrownLoadDeletesNothing() async throws {                         // B3
+        let s = try await sealed(); struct Boom: Error {}
+        let moved = FileVoiceReadiness(file: s.m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: s.m.spec, root: s.m.store, libraryPin: "fluidaudio-9.9.9") })
+        s.rec.markNotReady(model: "pk")                                                         // a fetch demoted it under the old pin: the baseline is the old pin's
+        let r = await ReadinessVerifier(record: moved).verify(model: "pk", check: { throw Boom() })
+        XCTAssertTrue(packExists(s.m), "an app update is not proof the files are bad"); XCTAssertTrue(r.note.contains("intact") || r.note.contains("kept"), r.note)
+        // and with no manifest and no baseline at all (nothing ever sealed them), a failed load of a FINISHED fetch also keeps them
+        let m2 = lib(); try await m2.lib.fetch()
+        let rec2 = FileVoiceReadiness(file: m2.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m2.spec, root: m2.store) })
+        _ = await ReadinessVerifier(record: rec2).verify(model: "pk", check: { throw Boom() })
+        XCTAssertTrue(packExists(m2), "only a fetch that did not finish deletes an unproven set; a check is not a fetch")
+    }
+    func testD5AHashThatFailsMidReadIsUnreadableNotDifferent() throws {
+        struct IO: Error {}
+        let d = tmp(); put(d, "f.bin", 3_000_000)                                              // three megabytes: three reads
+        let good = ModelManifests.sha256(d.appendingPathComponent("f.bin"))!
+        let entry = ModelManifest(pin: "p", files: [.init(path: "f.bin", bytes: 3_000_000, sha256: good)])
+        XCTAssertEqual(ModelManifests.check(entry, base: d), .intact)
+        final class N: @unchecked Sendable { var n = 0 }; let n = N()
+        let failing: (FileHandle) throws -> Data? = { h in n.n += 1; if n.n == 2 { throw IO() }; return try h.read(upToCount: 1 << 20) }
+        XCTAssertNil(ModelManifests.sha256(d.appendingPathComponent("f.bin"), read: failing), "a read that fails part-way gives no digest at all, never a partial one")
+        n.n = 0
+        XCTAssertEqual(ModelManifests.check(entry, base: d, read: failing), .unreadable, "an I/O error is never read as a change")
+    }
+    func testD6TheOneRuleItself() async {
+        let base = tmp(); put(base, "p/a.bin", 10)
+        let man = ModelManifests.build(pin: "x", base: base, folders: ["p"])!
+        let intact = ModelPin(pin: "x", present: { true }, proof: { ModelManifests.check(man, base: base) }, purge: { try? FileManager.default.removeItem(at: base.appendingPathComponent("p")) })
+        let none = ModelPin(pin: "x", present: { true }, proof: { nil }, purge: { try? FileManager.default.removeItem(at: base.appendingPathComponent("p")) })
+        var deleted = await ModelDeletion.reconcile(model: "d6", pin: intact, fetch: .unfinished); XCTAssertFalse(deleted, "proven intact: kept whatever the fetch did")
+        deleted = await ModelDeletion.reconcile(model: "d6", pin: none, fetch: .notStarted); XCTAssertFalse(deleted, "a fetch that never began wrote nothing")
+        deleted = await ModelDeletion.reconcile(model: "d6", pin: none, fetch: .finished); XCTAssertFalse(deleted, "a finished fetch with no proof is not a half pack")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: base.appendingPathComponent("p/a.bin").path))
+        deleted = await ModelDeletion.reconcile(model: "d6", pin: none, fetch: .unfinished); XCTAssertTrue(deleted, "(b) the half pack")
     }
 }

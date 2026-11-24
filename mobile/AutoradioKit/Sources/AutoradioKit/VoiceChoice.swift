@@ -215,24 +215,18 @@ public final class FileVoiceReadiness: VoiceReadinessRecord, @unchecked Sendable
         if outcome == .neverRan { return "The check did not run (it was cancelled or timed out), so nothing was changed. Try again." }
         guard let p = pins(model), p.purge != nil else { return note.isEmpty ? "It did not load from this phone's files." : note }
         if outcome == .judged { return note }                                                     // it loaded: its files are whole; the check judged the output and says what it found
-        // It did not load. Files are kept ONLY when they are proven intact; anything the record cannot vouch for is deleted so the next fetch starts clean (a library that checks only presence would skip it and fail again).
+        // It did not load. Whether files are deleted is `ModelDeletion`'s one rule (a fetch that finished: only digests that read to the end and differ). Everything else is kept and said.
         lock.lock(); let last = read()["~last:" + model]; lock.unlock()
-        var words: String; var purge = true
-        if let last, last != p.pin { words = "The files of this model were made for an older version of the app (the layout changed), so they were deleted. Download it again." }
-        else {
-            switch p.proof?() {
-            case .intact?: words = "It did not load from this phone's files. They are intact, so downloading it again would not help."; purge = false
-            case .unreadable?: words = "Its files could not be read just now, so nothing was deleted. Try again."; purge = false
-            case .changed?: words = "Its files on this phone were damaged, so they were deleted. Download it again."
-            case nil: words = "It did not load from this phone's files, and nothing proves they were complete, so they were deleted. Download it again."
-            }
-        }
-        if purge {
-            await ModelStore.shared.unload(model)                                                  // the manager that loaded over them goes first
-            p.purge?()
+        let updated = last.map { $0 != p.pin } ?? false
+        if await ModelDeletion.reconcile(model: model, pin: p, fetch: .finished) {
             lock.lock(); var s = read(); s["~last:" + model] = nil; s[model] = nil; write(s); lock.unlock()
+            return "Its files on this phone were damaged, so they were deleted. Download it again."
         }
-        return words
+        switch p.proof?() {
+        case .intact?: return "Its files are intact; the phone could not load it now." + (updated ? " (The app was updated since they were fetched.)" : "") + " Try again."
+        case .unreadable?: return "Its files could not be read just now, so nothing was deleted. Try again."
+        default: return "It did not load from this phone's files. Nothing shows them damaged, so they were kept." + (updated ? " (The app was updated since they were fetched.)" : "") + " Try again."
+        }
     }
     public func markNotReady(model: String) {
         lock.lock(); defer { lock.unlock() }
