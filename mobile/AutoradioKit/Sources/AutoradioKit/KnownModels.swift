@@ -227,7 +227,7 @@ public enum KnownModels {
                              approxBytes: kokoroBytes, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: t, cacheFolders: ["kokoro-82m-coreml", "kokoro"],
                              credit: VoiceRows.credit(model: "kokoro-82m-ane")),
             ManagedModelSpec(id: "pocket-tts", label: "PocketTTS 100M (Kyutai, Core ML)", source: "hf:FluidInference/pocket-tts-coreml",
-                             approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: t, cacheFolders: ["pocket-tts"],
+                             approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: t, cacheFolders: ["pocket-tts"], excludedFolders: ["pocket-tts/phonon"],
                              credit: "PocketTTS by Kyutai, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the files are modified Core ML conversions."),
             // Phonon 31M: the pack `pocket-tts-coreml/phonon/phonon-31m-en` (Apache-2.0, its own LICENSE; the repo's other folders are CC-BY-4.0).
             // FluidAudio's `PocketTtsSmallDownloader` keeps 126 of its files: the MLState model, the fp32 Mimi decoder, the constants and all 103

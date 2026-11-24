@@ -21,8 +21,9 @@ public final class ModelRunBook: @unchecked Sendable {
     }
     /// True when a test of this row is running.
     public func isRunning(_ key: String) -> Bool { lock.lock(); defer { lock.unlock() }; return ["recording", "working"].contains(lines[key]?.state ?? "") }
-    public func failed(_ id: String, _ line: String) { lock.lock(); failures[id] = line; lock.unlock() }
-    public func speakerFailed(_ line: String) { failed(ModelOffer.speakerID, line) }
+    /// A download that failed; `generation` is the account generation its fetch began in (a failure from before a sign-out is dropped).
+    public func failed(_ id: String, _ line: String, generation: Int) { lock.lock(); defer { lock.unlock() }; guard generation == AccountWipe.generation else { return }; failures[id] = line }
+    public func speakerFailed(_ line: String, generation: Int) { failed(ModelOffer.speakerID, line, generation: generation) }
     /// Sign-out.
     public func reset() { lock.lock(); lines = [:]; failures = [:]; lock.unlock() }
 

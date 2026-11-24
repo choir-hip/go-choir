@@ -21,19 +21,28 @@ final class ModelRunBookTests: XCTestCase {
     }
     func testB2AFailureOutlivesTheNextRowsRun() {
         let b = ModelRunBook()
-        b.failed("fluid-speech-pro", "The download failed (offline).")
+        b.failed("fluid-speech-pro", "The download failed (offline).", generation: AccountWipe.generation)
         var runs = b.runs(current: [["id": "silero-vad-v6.2.1", "state": "downloading", "progress": 0.2, "line": ""]], isReady: { _ in false })
         XCTAssertEqual(runs.first { ($0["id"] as? String) == "fluid-speech-pro" }?["line"] as? String, "The download failed (offline).")
         XCTAssertEqual(runs.first { ($0["id"] as? String) == "fluid-speech-pro" }?["state"] as? String, "failed")
         runs = b.runs(current: [["id": "fluid-speech-pro", "state": "downloading", "progress": 0.1, "line": ""]], isReady: { _ in false })
         XCTAssertEqual(runs.filter { ($0["id"] as? String) == "fluid-speech-pro" }.count, 1, "pressed again: the live run replaces the old failure")
         XCTAssertTrue(b.runs(current: [], isReady: { _ in false }).isEmpty, "the press cleared the failure it replaced")
-        b.failed("a", "x"); XCTAssertTrue(b.runs(current: [], isReady: { $0 == "a" }).isEmpty, "a model that is on the phone has no failure")
+        b.failed("a", "x", generation: AccountWipe.generation); XCTAssertTrue(b.runs(current: [], isReady: { $0 == "a" }).isEmpty, "a model that is on the phone has no failure")
     }
     func testB3TheSpeakerFetchHasAFailureState() {
         let b = ModelRunBook()
-        b.speakerFailed("The voice-print model could not be fetched.")
+        b.speakerFailed("The voice-print model could not be fetched.", generation: AccountWipe.generation)
         let r = b.runs(current: [], isReady: { _ in false }).first
         XCTAssertEqual(r?["id"] as? String, ModelOffer.speakerID); XCTAssertEqual(r?["state"] as? String, "failed")
+    }
+    // Review round 3: a failure written by a fetch that began under an account that has since left is dropped, like a test line.
+    func testB4AFailureFromBeforeTheWipeIsDropped() {
+        let b = ModelRunBook(); let gen = AccountWipe.generation
+        AccountWipe.bumpGeneration()
+        b.failed("m", "late failure", generation: gen); b.speakerFailed("late speaker failure", generation: gen)
+        XCTAssertTrue(b.runs(current: [], isReady: { _ in false }).isEmpty)
+        b.failed("m", "mine", generation: AccountWipe.generation)
+        XCTAssertEqual(b.runs(current: [], isReady: { _ in false }).count, 1)
     }
 }

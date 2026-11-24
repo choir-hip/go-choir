@@ -91,7 +91,7 @@ public enum ModelManifests {
         return unreadable ? .unreadable : .intact
     }
     /// Walk the model's folders (relative to `base`) and record every regular file's path, length and SHA-256. nil when there is no file, or when ANY entry cannot be read or is not a plain file or folder (a link, an unreadable file): a seal over a subset is not a seal.
-    public static func build(pin: String, base: URL, folders: [String]) -> ModelManifest? {
+    public static func build(pin: String, base: URL, folders: [String], excluding: [String] = []) -> ModelManifest? {
         let fm = FileManager.default; var entries: [ModelManifest.Entry] = []
         for f in folders {
             let dir = base.appendingPathComponent(f, isDirectory: true)
@@ -101,6 +101,7 @@ public enum ModelManifests {
                 let u = dir.appendingPathComponent(rel)
                 guard let attrs = try? fm.attributesOfItem(atPath: u.path), let type = attrs[.type] as? FileAttributeType else { return nil }
                 if type == .typeDirectory { continue }
+                if ModelFolders.isExcluded(f + "/" + rel, excluding) { continue }                  // another model's files that sit inside this folder
                 guard type == .typeRegular, let size = attrs[.size] as? NSNumber, let h = sha256(u) else { return nil }
                 entries.append(.init(path: f + "/" + rel, bytes: size.int64Value, sha256: h))
             }
@@ -125,6 +126,38 @@ public enum ModelManifests {
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
 }
+}
+
+/// Folders of one model that may hold another model's folder inside them (Phonon's pack is `pocket-tts/phonon`, inside Pocket's repo folder): each model owns its own files only.
+public enum ModelFolders {
+    /// Is this path (relative to the cache root) inside one of the excluded folders?
+    static func isExcluded(_ path: String, _ excluding: [String]) -> Bool { excluding.contains { path == $0 || path.hasPrefix($0 + "/") } }
+    /// Delete a folder of a model except the excluded folders inside it.
+    static func remove(_ folder: String, base: URL, excluding: [String]) {
+        let fm = FileManager.default
+        let dir = base.appendingPathComponent(folder, isDirectory: true)
+        let inside = excluding.filter { $0.hasPrefix(folder + "/") }
+        if inside.isEmpty { try? fm.removeItem(at: dir); return }
+        for child in (try? fm.contentsOfDirectory(atPath: dir.path)) ?? [] {
+            let rel = folder + "/" + child
+            if excluding.contains(rel) { continue }
+            if inside.contains(where: { $0.hasPrefix(rel + "/") }) { remove(rel, base: base, excluding: excluding); continue }       // an ancestor of an excluded folder: only what is not it
+            try? fm.removeItem(at: base.appendingPathComponent(rel))
+        }
+    }
+    /// Does the folder hold something of this model (not only an excluded folder)?
+    static func holds(_ folder: String, base: URL, excluding: [String]) -> Bool {
+        let fm = FileManager.default
+        let dir = base.appendingPathComponent(folder, isDirectory: true)
+        for child in (try? fm.contentsOfDirectory(atPath: dir.path)) ?? [] where child != ".DS_Store" {
+            let rel = folder + "/" + child
+            if excluding.contains(rel) { continue }
+            let inside = excluding.filter { $0.hasPrefix(rel + "/") }
+            if inside.isEmpty { return true }
+            if holds(rel, base: base, excluding: excluding) { return true }
+        }
+        return false
+    }
 }
 
 public enum ModelPins {
@@ -156,24 +189,26 @@ public enum ModelPins {
     /// A library-managed model: no digest is published for its files, so they are pinned by the manifest of what the first consented fetch left (trust on first fetch). `root` holds the manifests; the library's own folders are under the spec's `cachePath`.
     public static func managed(_ id: String, spec m: ManagedModelSpec, root: URL, libraryPin: String = ModelPins.libraryPin) -> ModelPin? {
         guard let base = m.cachePath, let folders = m.cacheFolders, !folders.isEmpty else { return nil }
+        let excl = m.excludedFolders ?? []
+        func removeAll() { for f in folders { ModelFolders.remove(f, base: base, excluding: excl) } }
         // A model that holds voices (Kokoro's packs) is pinned with how many it must hold: an install that sealed it with fewer voices is not ready for the new ones until they are fetched.
         let voices = VoiceRows.all.filter { $0.modelID == id }.count
         let pin = voices > 0 ? "\(libraryPin)|\(id)|voices:\(voices)" : "\(libraryPin)|\(id)"
         return ModelPin(pin: pin,
             present: { guard let man = ModelManifests.read(id, pin: pin, root: root) else { return false }; return ModelManifests.present(man, base: base) },
-            seal: { guard let man = ModelManifests.build(pin: pin, base: base, folders: folders) else { return false }; return ModelManifests.write(man, id: id, root: root) },
+            seal: { guard let man = ModelManifests.build(pin: pin, base: base, folders: folders, excluding: excl) else { return false }; return ModelManifests.write(man, id: id, root: root) },
             unseal: { ModelManifests.demote(id, pin: pin, root: root) },
             proof: { guard let man = ModelManifests.read(id, pin: pin, root: root) ?? ModelManifests.baseline(id, pin: pin, root: root) else { return nil }; return ModelManifests.check(man, base: base) },          // this pin's own seal only: another version's is unknown, never damage
-            purge: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; ModelManifests.delete(id, pin: pin, root: root) },
+            purge: { removeAll(); ModelManifests.delete(id, pin: pin, root: root) },
             retire: {
                 let old = ModelManifests.records(id, root: root).filter { $0.pin != pin }
                 guard !old.isEmpty else { return false }
-                for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }          // another version's files: this version's fetch starts clean
+                removeAll()          // another version's files: this version's fetch starts clean
                 for o in old { try? FileManager.default.removeItem(at: o.url) }
                 return true
             },
-            erase: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; for r in ModelManifests.records(id, root: root) { try? FileManager.default.removeItem(at: r.url) }; ModelManifests.clearPending(id, root: root) },
-            onDisk: { folders.contains { Self.nonEmpty(base.appendingPathComponent($0, isDirectory: true)) } },
+            erase: { removeAll(); for r in ModelManifests.records(id, root: root) { try? FileManager.default.removeItem(at: r.url) }; ModelManifests.clearPending(id, root: root) },
+            onDisk: { excl.isEmpty ? folders.contains { Self.nonEmpty(base.appendingPathComponent($0, isDirectory: true)) } : folders.contains { ModelFolders.holds($0, base: base, excluding: excl) } },
             pendingMark: { ModelManifests.markPending(id, root: root) },
             pendingClear: { ModelManifests.clearPending(id, root: root) },
             hasPending: { ModelManifests.hasPending(id, root: root) })

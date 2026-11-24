@@ -18,7 +18,8 @@ public enum ModelHub {
     /// Register every model stage into `registry` and the catalog into the store.
     public static func register(into registry: StageRegistry) {
         // The voice models' root is the library's own answer (`TtsCacheDirectory`), never a string of ours: Application Support/fluidaudio on iOS, a different case than the recogniser's tree.
-        KnownModels.ttsRootProvider = { ((try? TtsCacheDirectory.ensure()) ?? KnownModels.defaultTtsRoot().deletingLastPathComponent()).appendingPathComponent("Models", isDirectory: true) }
+        let ttsRoot = ((try? TtsCacheDirectory.ensure()) ?? KnownModels.defaultTtsRoot().deletingLastPathComponent()).appendingPathComponent("Models", isDirectory: true)      // asked of the library once: it creates the folder, and `managed` reads this on every readiness check
+        KnownModels.ttsRootProvider = { ttsRoot }
         // No library is left able to fetch: FluidAudio's registry points nowhere until the door opens a window (DownloadDoor.libraryWindow). FluidAudio ModelRegistry.swift:32 `baseURL`.
         DownloadDoor.shared.installLibraryGuard { ModelRegistry.baseURL = $0 }
         registry.register(.speechBounds, SileroVAD.self) { SileroVAD($0) }

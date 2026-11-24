@@ -31,6 +31,8 @@ final class OnboardingController: @unchecked Sendable {
     private var speakerFetching = false
     /// The Test lines (per account) and the last failure of each model's download (`ModelRunBook`). Native because the runs are.
     private let book = ModelRunBook()
+    /// The running Tests, so a sign-out cancels them (a Test must not open the microphone or play audio for the next account).
+    private var trialTasks: [String: Task<Void, Never>] = [:]
     /// Learning the person's voice (voice onboarding; Voice/VoiceEnrolment.swift): the sentences, the profile, the check.
     let capture = EnrolCapture(gate: .shared)
     /// The ONE owner of the microphone for enrolment (AutoradioKit Voice/SetupMicLease.swift): every open has its close on every exit, and between sentences the microphone is off and the engine's frames go to the tap alone.
@@ -112,7 +114,8 @@ final class OnboardingController: @unchecked Sendable {
     /// The voice-print model (WeSpeaker, about 8 MB) is fetched only after the person agreed on the download step; once loaded the gate can listen.
     func fetchSpeakerModel() {
         set { speakerFetching = true }
-        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e } else { self.book.speakerFailed("The voice-print model could not be fetched. Press Download to try again.") }; self.set { self.speakerFetching = false } }
+        let gen = AccountWipe.generation
+        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e } else { self.book.speakerFailed("The voice-print model could not be fetched. Press Download to try again.", generation: gen) }; self.set { self.speakerFetching = false } }
     }
 
     private func setupFinished(_ s: VoiceSetup, gen: Int, merging: Bool = false) {
@@ -131,7 +134,7 @@ final class OnboardingController: @unchecked Sendable {
         // The first run's choices become the running ones; a row's Download applies none (Download only fetches and verifies, only Use changes what is in use): `LabRuntime.applySetupChoices`.
         module.runtime.applySetupChoices(s)
         // A row that failed keeps its reason on its row until it is pressed again (`ModelRunBook`).
-        for r in s.rows where r.state == "failed" { lock.lock(); let id = runModels[r.stage]; lock.unlock(); if let id { book.failed(id, r.statusLine) } }
+        for r in s.rows where r.state == "failed" { lock.lock(); let id = runModels[r.stage]; lock.unlock(); if let id { book.failed(id, r.statusLine, generation: gen) } }
         changed()
     }
 
@@ -279,7 +282,8 @@ final class OnboardingController: @unchecked Sendable {
     func reset() {
         stop(); DownloadDoor.shared.reset(); SpeakerGate.shared.forget(); module.runtime.setHandsFree(false)           // sign-out: the microphone is closed and the switch stays off for the next person
         book.reset()
-        set { setup = nil; mic = "unasked"; level = 0; heard = ""; route = ""; talking = false; over = false; picked = 0; finishAsked = 0 }
+        lock.lock(); let running = trialTasks; trialTasks = [:]; lock.unlock(); for (_, t) in running { t.cancel() }
+        set { setup = nil; runModels = [:]; runStages = []; speakerFetching = false; mic = "unasked"; level = 0; heard = ""; route = ""; talking = false; over = false; picked = 0; finishAsked = 0 }
     }
 
     func mirror(finished f: Bool) { lock.lock(); over = f; lock.unlock() }
@@ -305,10 +309,11 @@ final class OnboardingController: @unchecked Sendable {
         if book.isRunning(key) { return }
         let gen = AccountWipe.generation
         book.test(key, state: "working", line: "", ms: 0, generation: gen); changed()
-        Task { [weak self] in
+        let task = Task { [weak self] in
             guard let self else { return }
             await ModelTrial.run(job: job, id: id, backend: LiveTrialBackend(controller: self), report: { state, line, ms in self.book.test(key, state: state, line: line, ms: ms, generation: gen); self.changed() })
         }
+        lock.lock(); trialTasks[key] = task; lock.unlock()
     }
 
     /// The microphone for `seconds`, through the same lease the voice learning uses (`SetupMicLease.record`: the frames go to this recording alone, and the lease is given back whole on every exit). nil when the microphone is refused.

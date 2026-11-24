@@ -35,7 +35,10 @@ public final class LiveConfigBackend: ConfigBackend, @unchecked Sendable {
         Voices.verifier.demote(model: c.id)          // its files are going: the radio must not prefer a voice that is not there
         if let b = KnownModels.bundles.first(where: { $0.id == c.id }) { await store.deleteBundle(b) }
         else if KnownModels.isPinned(c.id) { await store.delete(c.id) }
-        else { for d in managedFolders(c) { try? FileManager.default.removeItem(at: d) } }       // a rejected Core ML model's bundle (failure 6)
+        else if let spec = KnownModels.managed.first(where: { $0.id == c.id }), let root = spec.cachePath {
+            let base = root == KnownModels.ttsRoot ? root : managedRoot
+            for rel in (spec.cacheFolders ?? []) where managedFolders(c).contains(base.appendingPathComponent(rel, isDirectory: true)) { ModelFolders.remove(rel, base: base, excluding: spec.excludedFolders ?? []) }
+        }       // a rejected Core ML model's bundle (failure 6)
     }
     public func measure(_ cfg: Configuration, picks: [ConfigRole: ModelCandidate]) async throws -> ConfigMeasurement {
         guard let p = ModelProviders.current else { throw LabError.unavailable(ModelProviders.missingNote) }

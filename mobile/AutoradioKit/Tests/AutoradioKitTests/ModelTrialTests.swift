@@ -81,4 +81,20 @@ final class ModelTrialTests: XCTestCase {
         let b = Fake(); let a = await run("voice", "kokoro-82m-ane", b); let c = await run("voice", "kokoro-82m-ane", b)
         XCTAssertEqual(a.states, c.states); XCTAssertFalse(["recording", "working", "testing"].contains(a.states.last!))
     }
+    // Review round 3: a Test that was cancelled (the account left) says nothing more: no "done" line, no sound after the cancel.
+    func testT9ACancelledTestReportsNothingFurther() async {
+        final class Slow: TrialBackend, @unchecked Sendable {
+            func record(seconds: Double) async -> [Float]? { try? await Task.sleep(nanoseconds: 300_000_000); return [0.1] }
+            func transcribe(_ id: String, _ audio: [Float]) async throws -> String { "words" }
+            func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) { (0, 1) }
+            func speak(_ id: String, _ sentence: String) async throws -> Double { 1 }
+            func answer(_ id: String, job: String, prompt: String) async throws -> String { "a" }
+            func voiceprint(_ audio: [Float]) async throws -> String { "v" }
+            func search(_ query: String) async throws -> String { "s" }
+        }
+        let k = Sink()
+        let t = Task { await ModelTrial.run(job: "transcriber", id: "m", backend: Slow(), report: { k.put($0, $1, $2) }) }
+        try? await Task.sleep(nanoseconds: 50_000_000); t.cancel(); await t.value
+        XCTAssertEqual(k.states, ["recording"], "nothing after the cancel: \(k.states)")
+    }
 }
