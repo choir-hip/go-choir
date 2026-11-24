@@ -8,7 +8,7 @@ test "with no Textures page on top the list is answered by app.ts and says idle 
   expect state tlist.hasEdition == false
 
 // The Textures page is mounted from the launcher (the deck shows a placard until it is the page in front). The web host holds no key, so the create cannot succeed here. What this proves: the button is on the
-// page and is pressed; the failure comes back as words on the page, the busy state clears, nothing is opened (Textures is still the page
+// page and is pressed; the failure comes back as words on the page, tnewBusy is false after the answer, nothing is opened (Textures is still the page
 // in front, the editor is not on), and leaving Textures clears the words. NOT proved here: the busy state while a create is out (the web host answers within the press, so the test cannot read it in flight),  a made document opening in the editor (needs a key; the phone shows it) and the account moving mid-create.
 test "New document: pressed with no sign-in, it says why, opens nothing, and the words go when Textures is left"
   clock data
@@ -27,3 +27,8 @@ test "New document: pressed with no sign-in, it says why, opens nothing, and the
   expect text "textures-new-message" == "Sign in to make a document."
   expect state pg.top == "textures:"
   expect state edOn == false
+  tap "bar-mark"
+  clock settle
+  tap "place-paper"
+  clock settle
+  expect state tnewMessage == ""

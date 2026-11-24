@@ -21,7 +21,7 @@ members Autoradio
   // already open: edOn, edFor, ctlOpen, ctlFor; the draft is empty). The list is not refreshed here: `tlist` is asked again whenever Textures is the page in front (its input is pg.top), so it is right on return.
   // tnewBusy is set from the press to the answer: a second press while one create is out does nothing (the create route has no idempotency key, so two presses would make two documents) and the control says "Making...".
   // A failure opens nothing; its words are tnewErr, shown on the page and cleared by the next press and when Textures is left. If the listener has left Textures before the answer, nothing is opened under them:
-  // the document is in the list when they come back.
+  // the document is in the list when they come back (the launcher is a layer, so it counts as having left).
   state tnewBusy = false
   state tnewErr = ""
   mutation tnew as shape TextureMade then textureMade
@@ -38,7 +38,7 @@ members Autoradio
     tnewBusy = false
     if tnewTarget == ""
       tnewErr = tnewFail
-    else if pg.top == "textures:"
+    else if pg.top == "textures:" and layer == "" and flying == false
       order = [tnewTarget].concat(order.filter(a => a != tnewTarget))
       px = 0
       pdrag = false
