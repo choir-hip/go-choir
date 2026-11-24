@@ -212,6 +212,16 @@ func (h *Handler) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
 	emailHash := hashEmail(rt.Email)
 	log.Printf("[auth] operation=recovery_verify email_hash=%s user_id=%s step=token_valid", emailHash, rt.UserID)
 
+	// Whether the address was proved before this mail decides what finishing the
+	// recovery does: an address nobody had proved can be claimed by whoever
+	// registers it first (the app and the web both allow that), so the rightful
+	// owner's mail-proved recovery takes the account back, replacing every
+	// passkey, key and session it had. A proved address only gains a passkey.
+	source := ChallengeSourceRecovery
+	if prior, perr := h.store.GetUserByID(rt.UserID); perr == nil && prior.EmailVerifiedAt == nil {
+		source = ChallengeSourceRecoveryTakeback
+	}
+
 	// A consumed recovery link was mailed to the stored address: it proves
 	// the inbox (docs/design/email-sign-in-2026-10-31.md, Data).
 	if err := h.store.SetEmailVerified(rt.UserID); err != nil {
@@ -269,7 +279,7 @@ func (h *Handler) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
 		UserID:              user.ID,
 		Challenge:           session.Challenge,
 		Type:                "registration",
-		Source:              ChallengeSourceRecovery,
+		Source:              source,
 		WebAuthnSessionData: string(sessionDataJSON),
 		CreatedAt:           time.Now().UTC(),
 		ExpiresAt:           time.Now().UTC().Add(SessionChallengeTTL),

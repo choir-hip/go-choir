@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -224,5 +225,38 @@ func TestMailRecoveryOfAnUnprovedAddressTakesTheAccountBack(t *testing.T) {
 	recoverWith(newSoftPasskey(t))
 	if creds, _ = h.store.GetCredentialsByUserID(user.ID); len(creds) != 2 {
 		t.Fatalf("a proved address's recovery left %d credentials, want 2", len(creds))
+	}
+}
+
+// A stranger cannot grow the app-login challenge table without bound, a whole
+// IPv6 /64 is one source, and the ceiling never evicts a fresh challenge for an
+// older one.
+func TestAppChallengeTableIsBoundedAndNeverOutlivesItsCeiling(t *testing.T) {
+	var c appChallenges
+	now := timeNow()
+	// One host walking addresses inside its /64 holds eight challenges.
+	for i := 0; i < 500; i++ {
+		c.put(webauthn.SessionData{Challenge: fmt.Sprintf("v6-%d", i)}, fmt.Sprintf("2001:db8:1:2::%x", i+1), now)
+	}
+	if n := len(c.bySource["2001:db8:1:2::/64"]); n != appChallengePerAddr || len(c.m) != appChallengePerAddr {
+		t.Fatalf("a /64 holds %d challenges (table %d), want %d", n, len(c.m), appChallengePerAddr)
+	}
+	// Many distinct sources fill the ceiling and no further.
+	for i := 0; i < appChallengeMax+50; i++ {
+		c.put(webauthn.SessionData{Challenge: fmt.Sprintf("c-%d", i)}, fmt.Sprintf("10.%d.%d.%d", i>>16&255, i>>8&255, i&255), now)
+	}
+	if len(c.m) != appChallengeMax || c.order.Len() != appChallengeMax {
+		t.Fatalf("table = %d (queue %d), want ceiling %d", len(c.m), c.order.Len(), appChallengeMax)
+	}
+	if _, ok := c.take(fmt.Sprintf("c-%d", appChallengeMax+49), now); !ok {
+		t.Fatal("the newest challenge was dropped at the ceiling")
+	}
+	if _, ok := c.take("c-0", now); ok {
+		t.Fatal("the oldest challenge survived the ceiling")
+	}
+	// Time empties it from the front.
+	c.put(webauthn.SessionData{Challenge: "late"}, "192.0.2.1", now.Add(2*SessionChallengeTTL))
+	if len(c.m) != 1 {
+		t.Fatalf("expired challenges kept: %d", len(c.m))
 	}
 }

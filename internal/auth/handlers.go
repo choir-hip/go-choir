@@ -888,15 +888,16 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 		return nil, nil, false
 	}
 
-	// Look up the challenge state.
-	cs, err := h.store.GetChallengeStateByID(challengeID)
+	// Take the challenge: one atomic delete-and-return, so of several finishes
+	// carrying it exactly one proceeds, whether or not verification succeeds.
+	cs, err := h.store.ConsumeChallengeState(challengeID)
 	if err != nil {
 		log.Printf("[auth] operation=register_finish result=error step=challenge_lookup error=%q", err)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge not found or already used"})
 		return nil, nil, false
 	}
 
-	log.Printf("[auth] operation=register_finish user_id=%s challenge_type=registration step=challenge_found", cs.UserID)
+	log.Printf("[auth] operation=register_finish user_id=%s challenge_type=registration step=challenge_consumed", cs.UserID)
 
 	// Validate challenge type.
 	if cs.Type != "registration" {
@@ -907,20 +908,9 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 
 	// Check challenge not expired.
 	if time.Now().UTC().After(cs.ExpiresAt) {
-		_ = h.store.DeleteChallengeStateByID(cs.ID)
 		log.Printf("[auth] operation=register_finish user_id=%s result=error reason=challenge_expired", cs.UserID)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge expired"})
 		return nil, nil, false
-	}
-
-	// Delete the challenge immediately to prevent replay, regardless of whether
-	// the WebAuthn verification succeeds. This ensures that a replayed finish
-	// payload cannot find the challenge again.
-	if err := h.store.DeleteChallengeStateByID(cs.ID); err != nil {
-		log.Printf("[auth] operation=register_finish user_id=%s step=delete_challenge error=%q", cs.UserID, err)
-		// Continue anyway — the challenge is consumed.
-	} else {
-		log.Printf("[auth] operation=register_finish user_id=%s step=challenge_consumed", cs.UserID)
 	}
 
 	// Deserialize the WebAuthn session data.
@@ -947,7 +937,13 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 	}
 
 	// Build a WebAuthn user adapter.
-	creds, _ := h.store.GetCredentialsByUserID(user.ID)
+	creds, err := h.store.GetCredentialsByUserID(user.ID)
+	if err != nil {
+		// Fail closed: an unreadable account is not an account with no passkey.
+		log.Printf("[auth] operation=register_finish user_id=%s result=error step=read_credentials error=%q", user.ID, err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
+		return nil, nil, false
+	}
 	// A challenge begun by register/begin creates the account's first passkey
 	// and no other: begin refuses an address that has one, but several live
 	// challenges for one address can be begun before any finishes, and the
@@ -955,7 +951,7 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 	// key) on an account it did not create. Only a recovery challenge, begun
 	// after the address was proved by mail, adds a passkey to an account that
 	// has one.
-	if cs.Source != ChallengeSourceRecovery && len(creds) > 0 {
+	if cs.Source != ChallengeSourceRecovery && cs.Source != ChallengeSourceRecoveryTakeback && len(creds) > 0 {
 		log.Printf("[auth] operation=register_finish user_id=%s result=refused reason=account_has_credential", user.ID)
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "this account already has a passkey; sign in"})
 		return nil, nil, false
@@ -993,7 +989,14 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 		Flags:           marshalCredentialFlags(credential.Flags),
 		CreatedAt:       time.Now().UTC(),
 	}
-	if err := h.store.CreateCredential(dbCred); err != nil {
+	// The early check above only saves work; this is the check that holds: it
+	// and the insert are one atomic step.
+	if err := h.store.AddRegistrationCredential(dbCred, cs.Source); err != nil {
+		if errors.Is(err, ErrAccountHasCredential) {
+			log.Printf("[auth] operation=register_finish user_id=%s result=refused reason=account_has_credential step=insert", user.ID)
+			writeJSON(w, http.StatusConflict, errorResponse{Error: "this account already has a passkey; sign in"})
+			return nil, nil, false
+		}
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=store_credential error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to store credential"})
 		return nil, nil, false
@@ -1045,36 +1048,26 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the challenge state.
-	cs, err := h.store.GetChallengeStateByID(challengeID)
+	// Take the challenge atomically: one concurrent caller proceeds.
+	cs, err := h.store.ConsumeChallengeState(challengeID)
 	if err != nil {
 		log.Printf("[auth] operation=login_finish result=error step=challenge_lookup error=%q", err)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge not found or already used"})
 		return
 	}
 
-	log.Printf("[auth] operation=login_finish user_id=%s challenge_type=login step=challenge_found", cs.UserID)
+	log.Printf("[auth] operation=login_finish user_id=%s challenge_type=login step=challenge_consumed", cs.UserID)
 
-	// Validate challenge type.
 	if cs.Type != "login" {
 		log.Printf("[auth] operation=login_finish user_id=%s result=error reason=challenge_type_mismatch expected=login got=%s", cs.UserID, cs.Type)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge type mismatch"})
 		return
 	}
 
-	// Check challenge not expired.
 	if time.Now().UTC().After(cs.ExpiresAt) {
-		_ = h.store.DeleteChallengeStateByID(cs.ID)
 		log.Printf("[auth] operation=login_finish user_id=%s result=error reason=challenge_expired", cs.UserID)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge expired"})
 		return
-	}
-
-	// Delete the challenge immediately to prevent replay.
-	if err := h.store.DeleteChallengeStateByID(cs.ID); err != nil {
-		log.Printf("[auth] operation=login_finish user_id=%s step=delete_challenge error=%q", cs.UserID, err)
-	} else {
-		log.Printf("[auth] operation=login_finish user_id=%s step=challenge_consumed", cs.UserID)
 	}
 
 	// Deserialize the WebAuthn session data.

@@ -795,8 +795,12 @@ jobs:
       - name: Install Bun
         run: npm install --global bun@1.4.2
 
+      # package.json lists Exact's first-party @exact/passkeys as a file: dependency, as every Exact app does; the real package lives in mobile/.exact-src (gitignored, absent here). The tests never load it (exact-stubs-preload.ts answers the name), so the install only needs a directory with that name and no dependencies of its own, which is what the real manifest is.
       - name: Install the app's package
-        run: cd mobile/AutoradioLab && bun install --frozen-lockfile
+        run: |
+          mkdir -p mobile/.exact-src/packages/passkeys
+          printf '{"name":"@exact/passkeys","version":"1.0.0","private":true}\n' > mobile/.exact-src/packages/passkeys/package.json
+          cd mobile/AutoradioLab && bun install --frozen-lockfile
 
       - name: Shared-code tests
         run: cd mobile/AutoradioLab && bun test

@@ -285,6 +285,11 @@ type Credential struct {
 const (
 	ChallengeSourceRegister = "register"
 	ChallengeSourceRecovery = "recovery"
+	// ChallengeSourceRecoveryTakeback is a recovery challenge begun for an
+	// address that had not been proved before the mail was: whoever held the
+	// account until then claimed it by registering first, so finishing this
+	// challenge replaces every passkey, key and session the account had.
+	ChallengeSourceRecoveryTakeback = "recovery_takeback"
 )
 
 // ChallengeState represents a WebAuthn ceremony challenge row in the
@@ -300,9 +305,9 @@ type ChallengeState struct {
 	// creating an account; the account must have no passkey yet at finish) or
 	// ChallengeSourceRecovery (the address was proved by mail; it adds a passkey
 	// to an account that has one). Empty reads as register.
-	Source string
-	CreatedAt           time.Time
-	ExpiresAt           time.Time
+	Source    string
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 // RefreshSession represents a refresh/session record in the
@@ -640,6 +645,65 @@ func (s *Store) CreateCredential(c *Credential) error {
 	return nil
 }
 
+// ErrAccountHasCredential: a first-passkey insert found the account already has one.
+var ErrAccountHasCredential = errors.New("account already has a passkey")
+
+// AddRegistrationCredential stores the credential a finished registration
+// verified, as one atomic step decided by source:
+//   - ChallengeSourceRecovery adds it to whatever the account has;
+//   - ChallengeSourceRecoveryTakeback first revokes every API key, deletes every
+//     session and every passkey of the account, then adds it (one transaction);
+//   - any other source inserts it only if the account has no passkey, the check
+//     and the insert being a single statement, and returns ErrAccountHasCredential
+//     otherwise.
+func (s *Store) AddRegistrationCredential(c *Credential, source string) error {
+	switch source {
+	case ChallengeSourceRecovery:
+		return s.CreateCredential(c)
+	case ChallengeSourceRecoveryTakeback:
+		tx, err := s.db.Begin()
+		if err != nil {
+			return fmt.Errorf("takeback: %w", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		// The first statement writes, so the transaction holds the write lock
+		// from the start.
+		if _, err := tx.Exec("UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", time.Now().UTC(), c.UserID); err != nil {
+			return fmt.Errorf("takeback revoke keys: %w", err)
+		}
+		if _, err := tx.Exec("DELETE FROM refresh_sessions WHERE user_id = ?", c.UserID); err != nil {
+			return fmt.Errorf("takeback delete sessions: %w", err)
+		}
+		if _, err := tx.Exec("DELETE FROM credentials WHERE user_id = ?", c.UserID); err != nil {
+			return fmt.Errorf("takeback delete credentials: %w", err)
+		}
+		if _, err := tx.Exec(
+			"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt,
+		); err != nil {
+			return fmt.Errorf("create credential %q: %w", c.ID, err)
+		}
+		return tx.Commit()
+	default:
+		res, err := s.db.Exec(
+			`INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at)
+			 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM credentials WHERE user_id = ?)`,
+			c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt, c.UserID,
+		)
+		if err != nil {
+			return fmt.Errorf("create credential %q: %w", c.ID, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("create credential %q: %w", c.ID, err)
+		}
+		if n == 0 {
+			return ErrAccountHasCredential
+		}
+		return nil
+	}
+}
+
 // GetCredentialsByUserID returns all credentials for the given user.
 func (s *Store) GetCredentialsByUserID(userID string) ([]Credential, error) {
 	rows, err := s.db.Query(
@@ -837,6 +901,21 @@ func (s *Store) GetChallengeStateByID(id string) (*ChallengeState, error) {
 	cs := &ChallengeState{}
 	err := s.db.QueryRow(
 		"SELECT id, user_id, challenge, type, allowed_credentials, webauthn_session_data, source, created_at, expires_at FROM challenge_state WHERE id = ?",
+		id,
+	).Scan(&cs.ID, &cs.UserID, &cs.Challenge, &cs.Type, &cs.AllowedCredentials, &cs.WebAuthnSessionData, &cs.Source, &cs.CreatedAt, &cs.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	return cs, nil
+}
+
+// ConsumeChallengeState reads and deletes the challenge in one statement: of any
+// number of concurrent callers with one id, exactly one gets the row; the rest
+// get sql.ErrNoRows.
+func (s *Store) ConsumeChallengeState(id string) (*ChallengeState, error) {
+	cs := &ChallengeState{}
+	err := s.db.QueryRow(
+		"DELETE FROM challenge_state WHERE id = ? RETURNING id, user_id, challenge, type, allowed_credentials, webauthn_session_data, source, created_at, expires_at",
 		id,
 	).Scan(&cs.ID, &cs.UserID, &cs.Challenge, &cs.Type, &cs.AllowedCredentials, &cs.WebAuthnSessionData, &cs.Source, &cs.CreatedAt, &cs.ExpiresAt)
 	if err != nil {
