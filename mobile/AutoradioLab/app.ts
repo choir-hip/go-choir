@@ -262,6 +262,7 @@ const sources: Sources = {
   mailSaveDraft: ([address, to, subject, body]) => mail.mailSaveDraft(address, to, subject, body),
   mailApprovalEmail: ([address, draft]) => mail.mailApprovalEmail(address, draft),
   mailMarkUnread: ([address]) => mail.mailMarkUnread(address),
+  mailNoteSelect: ([last, unreadMsg, askMsg, spoken]) => ({ text: mail.noteOf(last, unreadMsg, askMsg, spoken) }),
   // Retrieval (retrieval-live.ts): the voice turn's ask (native raises it, the answer goes back through one native op) and the launcher's paper-wide search.
   retrievalServe: ([id, words, pageTitle, pageAddress, now, facts], _s, storage) => retrievalServe({ id, words, pageTitle, pageAddress, now, facts }, storage),
   paperSearch: ([q, local]) => paperSearch(q, local),

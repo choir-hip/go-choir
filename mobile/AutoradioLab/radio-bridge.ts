@@ -412,7 +412,7 @@ async function openRadioOf(r: Radio): Promise<void> {
 export async function radioPlayAudio(storage: Store | undefined, native: NativeReader | undefined, op: string, id: string, url: string, title: string, show: string, start: number): Promise<{ status: string; message: string }> {
   if (op === 'keep') {                                  // "Keep listening" to a clip: the clip no longer ends, the episode goes on from where it is (the deck's act, the player's own rule)
     const k = await getRadio(storage, native); k.writer.listenerActed();
-    await k.rt.act('clearEnd');
+    await k.rt.keepEnd();
     return { status: 'ok', message: '' };
   }
   if (url === '') return { status: 'error', message: 'This episode has no audio to play.' };

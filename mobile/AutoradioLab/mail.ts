@@ -425,3 +425,11 @@ export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
   console.log(`mail: sync ${folder} ${out.status} fetched=${out.fetched} held=${out.held}`);
   return out;
 }
+
+/** The note under a message: the LAST action's own words (`last` is set by the action; the others' answers may still be held by their mutations and must not hide it). */
+export function noteOf(last: string, unreadMsg: string, askMsg: string, spoken: string): string {
+  if (last === 'read') return spoken === '' ? 'There is nothing to read yet.' : 'Reading it now.';
+  if (last === 'unread') return unreadMsg;
+  if (last === 'ask') return askMsg;
+  return '';
+}

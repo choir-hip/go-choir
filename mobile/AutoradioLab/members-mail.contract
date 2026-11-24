@@ -7,7 +7,7 @@
 // a new message, or an existing draft). The compose fields are local state that takes the resource's seed (the
 // reply's recipient, subject and quoted text) the first time the person edits; after that the person's words win.
 use mailOpenReview, choirAsk, MailAck, SettingsAck from "@choir/autoradio"
-use MailBoxView, MailMessageView, MailComposeView, MailSyncView from "./mail-types.contract"
+use MailNote, MailBoxView, MailMessageView, MailComposeView, MailSyncView from "./mail-types.contract"
 
 members Autoradio
   // The mailbox's tab is page state, not a page: tapping a tab changes `mboxSel` in the same action, so the frame (title, tabs, counts)
@@ -62,8 +62,12 @@ members Autoradio
 
   derive mailQuoted = mailQuotedFor == pg.top
   derive mailOriginal = mailOriginalFor == pg.top
-  derive mailNoteRaw = match mun { case some(a) => a.message, case none => match mak { case some(a) => a.message, case none => match mrd { case some(r) => mailReadNote, case none => "" } } }
-  derive mailReadNote = mmsg.spoken == "" ? "There is nothing to read yet." : "Reading it now."
+  // ONE notice state: the last action sets `mailNoteSrc`, and the words are chosen from it in shared code (mail.ts `noteOf`), so an earlier answer (Mark unread, Ask) never hides the note of Read it to me.
+  state mailNoteSrc = ""
+  derive mailUnreadMsg = match mun { case some(a) => a.message, case none => "" }
+  derive mailAskMsg = match mak { case some(a) => a.message, case none => "" }
+  resource mnote = mailNoteSelect(mailNoteSrc, mailUnreadMsg, mailAskMsg, mmsg.spoken) as shape MailNote else empty()
+  derive mailNoteRaw = mnote.text
   derive mailNote = mailNoteFor == pg.top ? mailNoteRaw : ""
 
   action editMailTo(v: string)
@@ -90,6 +94,7 @@ members Autoradio
   action approveMail
     send mdr = mailApprovalEmail(pg.top, mailDraftId)
   action openMailReview(url: string)
+    mailNoteSrc = "ask"
     send mak = mailOpenReview(url=url)
 
   action toggleMailQuoted
@@ -98,12 +103,15 @@ members Autoradio
     mailOriginalFor = mailOriginalFor == pg.top ? "" : pg.top
   action readMail
     mailNoteFor = pg.top
+    mailNoteSrc = "read"
     send mrd = radioListen(pg.top, mmsg.subject, mmsg.spoken)
   action unreadMail
     mailNoteFor = pg.top
+    mailNoteSrc = "unread"
     send mun = mailMarkUnread(pg.top)
   action askMail(q: string)
     mailNoteFor = pg.top
+    mailNoteSrc = "ask"
     send mak = mailAsk(pg.top, q)
     if au.signedIn == false
       gate = "signin"
