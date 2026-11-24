@@ -281,11 +281,16 @@ type TapeSweepReport struct {
 	DestroyedProofs           []TapeSweepComputerProof            `json:"destroyed_proofs,omitempty"`
 	// ComputerIDs is the exact list a named sweep was made for (dry run and
 	// apply alike): the receipt says which computers it concerned.
-	ComputerIDs []string              `json:"computer_ids,omitempty"`
-	Apply       *TapeSweepApplyCounts `json:"apply,omitempty"`
-	Warnings    []string              `json:"warnings,omitempty"`
-	StartedAt   time.Time             `json:"started_at"`
-	DurationMs  int64                 `json:"duration_ms"`
+	ComputerIDs []string `json:"computer_ids,omitempty"`
+	// ForkLineageAcknowledgedFor is whom the operator acknowledged unrecorded
+	// fork lineage for, by name; RegistryComputers is how many computers the
+	// ownership registry listed when the proof was made.
+	ForkLineageAcknowledgedFor []string              `json:"fork_lineage_acknowledged_for,omitempty"`
+	RegistryComputers          int                   `json:"registry_computers"`
+	Apply                      *TapeSweepApplyCounts `json:"apply,omitempty"`
+	Warnings                   []string              `json:"warnings,omitempty"`
+	StartedAt                  time.Time             `json:"started_at"`
+	DurationMs                 int64                 `json:"duration_ms"`
 }
 
 // TapeSweepApplyCounts are the apply outcomes, by the GC log's op names.
