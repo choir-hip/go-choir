@@ -730,26 +730,41 @@ in
     rotate = lib.mkForce 21;
     minsize = lib.mkForce null;
     maxage = 21;
-    notifempty = lib.mkForce false;
+    # `ifempty` in the file's block overrides the module's global
+    # `notifempty`. Do NOT write `notifempty = false`: the module renders
+    # it as `nonotifempty`, which logrotate does not know.
     ifempty = true;
   });
-  # The daily age job (scripts/node-b-log-age says what it does and why).
-  # It removes the last-login records every run: sshd is told not to show
-  # them (PrintLastLog, above) and nothing else reads them. The dead files
-  # are one-off operator outputs from August to October 2026 that no program
-  # or document names.
+  # logrotate also runs two minutes after every boot and makes up a missed
+  # hour: a host that was off does not wait for the next hour mark.
+  systemd.timers.logrotate.timerConfig = {
+    Persistent = true;
+    OnBootSec = "2min";
+  };
+  # The age job (scripts/node-b-log-age says what it does and why): daily,
+  # and two minutes after every boot, so a host that was off is trimmed
+  # before it has been up long. It removes the last-login records every run:
+  # sshd is told not to show them (PrintLastLog, above); pam_lastlog2 in the
+  # login and su stacks writes a new one at the next console login. The dead
+  # files are three one-off operator outputs from August to October 2026
+  # that no program or document names.
+  #
+  # The lists go in `environment`, which NixOS writes quoted. A list in
+  # serviceConfig.Environment is written raw and systemd keeps only its
+  # first word (the gate reads the rendered unit for this reason).
   systemd.services.go-choir-log-age = {
     description = "go-choir: host logs older than 21 days are deleted";
-    after = [ "caddy.service" ];
-    path = [ pkgs.coreutils pkgs.gzip pkgs.gnused config.systemd.package ];
+    after = [ "caddy.service" "systemd-journald.service" ];
+    path = [ pkgs.coreutils pkgs.gzip pkgs.gnugrep config.systemd.package ];
+    environment = {
+      LOG_MAX_DAYS = "21";
+      JOURNAL_DIR = "/var/log/journal";
+      CADDY_LOG_DIR = "/var/log/caddy";
+      LOGIN_LAST_FILES = "/var/log/lastlog /var/log/lastlog.migrated /var/lib/lastlog/lastlog2.db /var/lib/lastlog/lastlog2.db-wal /var/lib/lastlog/lastlog2.db-shm /var/lib/lastlog/lastlog2.db-journal";
+      DEAD_LOG_FILES = "/var/lib/go-choir/rebuild-0333528.log /var/lib/go-choir/rebuild-near-head-20260909.log /var/lib/go-choir/paper-repair-20261029T223916Z.log";
+    };
     serviceConfig = {
       Type = "oneshot";
-      Environment = [
-        "LOG_MAX_DAYS=21"
-        "CADDY_LOG_DIR=/var/log/caddy"
-        "LOGIN_LAST_FILES=/var/log/lastlog /var/log/lastlog.migrated /var/lib/lastlog/lastlog2.db"
-        "DEAD_LOG_FILES=/var/lib/go-choir/rebuild-0333528.log /var/lib/go-choir/rebuild-near-head-20260909.log /var/lib/go-choir/paper-repair-20261029T223916Z.log /var/lib/go-choir/dump-20260826/bak-delete.log /var/lib/go-choir/dump-20260826/gc.log /var/lib/go-choir/dump-20260826/import.log /var/lib/go-choir/dump-20260826/dump.log"
-      ];
       ExecStart = pkgs.writeShellScript "go-choir-log-age" (builtins.readFile ../scripts/node-b-log-age);
     };
   };
@@ -757,8 +772,8 @@ in
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "daily";
+      OnBootSec = "2min";
       Persistent = true;
-      RandomizedDelaySec = "10min";
     };
   };
   # The access log is many lines a second under load; journald's default

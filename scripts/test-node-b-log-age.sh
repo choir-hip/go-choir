@@ -15,6 +15,19 @@
 #  A6 the last-login records stay.
 #  A7 a named dead file stays, or a file not named is removed.
 #  A8 a failed delete is not reported (exit 0).
+#  A9 the first entry's time is taken from a later "ts": in the line (a
+#     request header can carry one), so a young file is deleted or an old
+#     one kept; or a first entry dated in the future keeps a file for ever.
+#  A10 a file in the access-log folder that is not one of our access logs is
+#     deleted, or is left there without the job failing (nothing ages it).
+#  A11 the access-log folder exists and cannot be read, and the job says all
+#     is well.
+#  A12 a second journal folder (another machine id, a namespace) is on disk,
+#     which this trim does not reach, and the job says all is well.
+#  A13 a closed journal file whose first entry is past the limit is still
+#     there after the trim, and the job says all is well.
+#  A14 any failure is not printed at error priority (the "<3>" prefix the
+#     journal reads), so `journalctl -p err` does not show it.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 job="$HERE/node-b-log-age"
@@ -22,11 +35,13 @@ pass=0; fail=0
 ok() { pass=$((pass + 1)); }
 bad() { fail=$((fail + 1)); echo "FAIL: $1"; }
 root="$(mktemp -d)"; trap 'chmod -R u+w "$root" 2>/dev/null; rm -rf "$root"' EXIT
-mkdir -p "$root/bin" "$root/caddy/sub" "$root/var" "$root/dead"
+mkdir -p "$root/bin" "$root/caddy/sub" "$root/var" "$root/dead" "$root/journal/0123456789abcdef0123456789abcdef"
+jdir="$root/journal/0123456789abcdef0123456789abcdef"
+jname() { printf 'system@%s-%016x-%016x.journal' 4b6e7d5a52a146ff8e6bc012dcebf5e1 "$2" "$(( $1 * 1000000 ))"; } # first-entry time, sequence
 printf '#!/usr/bin/env bash\necho "$*" >>"%s/journalctl.calls"\n' "$root" >"$root/bin/journalctl"; chmod +x "$root/bin/journalctl"
 now=$(date +%s)
 line() { printf '{"level":"info","ts":%s.123,"logger":"http.log.access","msg":"handled request"}\n' "$1"; }
-run() { env PATH="$root/bin:$PATH" LOG_MAX_DAYS="${DAYS-21}" CADDY_LOG_DIR="$root/caddy" \
+run() { env PATH="$root/bin:$PATH" LOG_MAX_DAYS="${DAYS-21}" CADDY_LOG_DIR="$root/caddy" JOURNAL_DIR="$root/journal" \
   LOGIN_LAST_FILES="$root/var/lastlog $root/var/lastlog2.db $root/var/absent" DEAD_LOG_FILES="$root/dead/a.log $root/dead/gone.log" \
   bash "$job" >"$root/out" 2>&1; echo $? >"$root/rc"; }
 
@@ -35,7 +50,7 @@ for d in "" 6 29 x; do DAYS="$d" run; if [ "$(cat "$root/rc")" != 0 ] && [ ! -s 
 unset DAYS
 
 # Fixtures. Old first entry, written to yesterday (a quiet host's live file).
-{ line $((now - 60 * 86400)); line $((now - 86400)); } >"$root/caddy/access-quiet.log"
+{ line $((now - 60 * 86400)); line $((now - 86400)); } >"$root/caddy/access-quiet.example.log"
 # Old first entry, gzip.
 { line $((now - 22 * 86400)); line $((now - 21 * 86400)); } | gzip >"$root/caddy/access-a-2026-01-01T00-00-00.000-size.log.gz"
 # First entry inside the limit, but the file itself looks old.
@@ -43,20 +58,27 @@ unset DAYS
 { line $((now - 3600)); } | gzip >"$root/caddy/access-b-new.log.gz"
 # No readable first entry.
 echo "not a log line" >"$root/caddy/access-garbled.log"; : >"$root/caddy/access-empty.log"
-echo "x" >"$root/caddy/sub/keep.log"; ln -s "$root/var/target" "$root/caddy/link.log"; echo t >"$root/var/target"
+echo "x" >"$root/caddy/sub/access-keep.log"; ln -s "$root/var/target" "$root/caddy/access-link.log"; echo t >"$root/var/target"
 echo l >"$root/var/lastlog"; echo l >"$root/var/lastlog2.db"
+# A9: the first "ts": is the entry's; a later one is a header's.
+printf '{"level":"info","ts":%s.5,"request":{"headers":{"X":["\\"ts\\":%s"]}}}\n' $((now - 3600)) $((now - 90 * 86400)) >"$root/caddy/access-header-old.log"
+printf '{"level":"info","ts":%s.5,"request":{"headers":{"X":["\\"ts\\":%s"]}}}\n' $((now - 90 * 86400)) $((now + 3600)) >"$root/caddy/access-header-new.log"
+{ line $((now + 400 * 86400)); } >"$root/caddy/access-future.log"
+: >"$jdir/system.journal"; : >"$jdir/$(jname $((now - 5 * 86400)) 10)"; : >"$jdir/user-1000.journal"
 echo d >"$root/dead/a.log"; echo d >"$root/dead/b.log"
 run
 [ "$(cat "$root/rc")" = 0 ] && ok || bad "the job failed on a plain run: $(cat "$root/out")"
 [ "$(sed -n 1p "$root/journalctl.calls")" = "--rotate" ] && [ "$(sed -n 2p "$root/journalctl.calls")" = "--vacuum-time=21d" ] && ok || bad "A2 journalctl calls: $(tr '\n' ';' <"$root/journalctl.calls")"
-[ ! -e "$root/caddy/access-quiet.log" ] && ok || bad "A3 a file whose first entry is 60 days old stayed because it was written yesterday"
+[ ! -e "$root/caddy/access-quiet.example.log" ] && ok || bad "A3 a file whose first entry is 60 days old stayed because it was written yesterday"
 [ ! -e "$root/caddy/access-a-2026-01-01T00-00-00.000-size.log.gz" ] && ok || bad "A3 a compressed file whose first entry is 22 days old stayed"
 [ ! -e "$root/caddy/access-garbled.log" ] && [ ! -e "$root/caddy/access-empty.log" ] && ok || bad "A4 a file with no readable first entry stayed"
 [ -e "$root/caddy/access-young.log" ] && [ -e "$root/caddy/access-b-new.log.gz" ] && ok || bad "A5 a file whose first entry is inside the limit was deleted"
-[ -e "$root/caddy/sub/keep.log" ] && [ -L "$root/caddy/link.log" ] && [ -e "$root/var/target" ] && ok || bad "A5 a folder or a link was touched"
+[ -e "$root/caddy/sub/access-keep.log" ] && [ -L "$root/caddy/access-link.log" ] && [ -e "$root/var/target" ] && ok || bad "A5 a folder or a link was touched"
 [ ! -e "$root/var/lastlog" ] && [ ! -e "$root/var/lastlog2.db" ] && ok || bad "A6 a last-login record stayed"
+[ -e "$root/caddy/access-header-old.log" ] && [ ! -e "$root/caddy/access-header-new.log" ] && ok || bad "A9 the first entry's time was read from a header's ts"
+[ ! -e "$root/caddy/access-future.log" ] && ok || bad "A9 a file whose first entry is dated in the future stayed"
 [ ! -e "$root/dead/a.log" ] && [ -e "$root/dead/b.log" ] && ok || bad "A7 the named dead file stayed, or one not named was removed"
-grep -q "log age: max_days=21 access_deleted=4 access_kept=2 login_last_removed=2 dead_removed=1 failed=0" "$root/out" && ok || bad "the summary line is wrong: $(cat "$root/out")"
+grep -q "log age: max_days=21 journal_folders=1 access_deleted=6 access_kept=3 access_other=0 login_last_removed=2 dead_removed=1 failed=0" "$root/out" && ok || bad "the summary line is wrong: $(cat "$root/out")"
 # The folder may be gone once it is empty of our files: not an error.
 rm -rf "$root/caddy"; run
 [ "$(cat "$root/rc")" = 0 ] && ok || bad "a missing access-log folder is an error"
@@ -64,5 +86,23 @@ rm -rf "$root/caddy"; run
 mkdir -p "$root/caddy"; { line $((now - 60 * 86400)); } >"$root/caddy/access-stuck.log"; chmod a-w "$root/caddy"
 if [ "$(id -u)" != 0 ]; then run; [ "$(cat "$root/rc")" != 0 ] && grep -q "failed=1" "$root/out" && ok || bad "A8 a failed delete was not reported: $(cat "$root/out")"; fi
 chmod u+w "$root/caddy"
+# A10
+rm -rf "$root/caddy"; mkdir -p "$root/caddy"; echo "someone else's" >"$root/caddy/notes.txt"; run
+[ -e "$root/caddy/notes.txt" ] && ok || bad "A10 a file that is not an access log was deleted"
+[ "$(cat "$root/rc")" != 0 ] && grep -q "access_other=1" "$root/out" && grep -q "^<3>log age: .*notes.txt" "$root/out" && ok || bad "A10, A14 a stray file in the access-log folder did not fail the job at error priority: $(cat "$root/out")"
+rm -f "$root/caddy/notes.txt"; run; [ "$(cat "$root/rc")" = 0 ] && ok || bad "the job fails on an empty access-log folder: $(cat "$root/out")"
+# A11
+if [ "$(id -u)" != 0 ]; then chmod a-rx "$root/caddy"; run; chmod u+rwx "$root/caddy"
+  [ "$(cat "$root/rc")" != 0 ] && grep -q "^<3>log age: .*cannot be read" "$root/out" && ok || bad "A11 an unreadable access-log folder passed: $(cat "$root/out")"; fi
+# A12
+mkdir "$root/journal/fedcba9876543210fedcba9876543210.audit"; run
+[ "$(cat "$root/rc")" != 0 ] && grep -q "^<3>log age: .*journal folders" "$root/out" && ok || bad "A12 a second journal folder passed: $(cat "$root/out")"
+rmdir "$root/journal/fedcba9876543210fedcba9876543210.audit"
+# A13 (the stub journalctl deletes nothing, as a trim that did not work)
+old="$jdir/$(jname $((now - 40 * 86400)) 3)"; : >"$old"; run
+[ "$(cat "$root/rc")" != 0 ] && grep -q "^<3>log age: .*first entry is past" "$root/out" && ok || bad "A13 a closed journal file 40 days old passed: $(cat "$root/out")"
+rm -f "$old"; run; [ "$(cat "$root/rc")" = 0 ] && ok || bad "the job fails with only young journal files: $(cat "$root/out")"
+rm -rf "$root/journal"; run
+[ "$(cat "$root/rc")" != 0 ] && ok || bad "A12 a missing journal folder passed (the job must be told where the journal is)"
 echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]
