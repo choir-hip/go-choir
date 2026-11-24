@@ -310,11 +310,17 @@ func TestDeviceReturnSchemesAreTheAppsInAppJSON(t *testing.T) {
 		t.Fatalf("path %q", DeviceReturnPath)
 	}
 	// Every id the app builds with is one the passkey routes accept (and the
-	// apple-app-site-association file names).
+	// apple-app-site-association file names), except the first lab app: it is
+	// signed by a free team that cannot carry Associated Domains, so it can
+	// never use a passkey and the app says so.
+	const freeTeamLab = "news.choir.autoradio.lab"
 	for _, id := range want {
-		if !appids.Known(id) {
+		if id != freeTeamLab && !appids.Known(id) {
 			t.Fatalf("app.json id %q is not in appids.PasskeyApps", id)
 		}
+	}
+	if appids.Known(freeTeamLab) {
+		t.Fatalf("%s is on a free team and cannot use passkeys; it must not be accepted", freeTeamLab)
 	}
 }
 

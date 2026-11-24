@@ -948,6 +948,18 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 
 	// Build a WebAuthn user adapter.
 	creds, _ := h.store.GetCredentialsByUserID(user.ID)
+	// A challenge begun by register/begin creates the account's first passkey
+	// and no other: begin refuses an address that has one, but several live
+	// challenges for one address can be begun before any finishes, and the
+	// second to finish would hold a passkey (and, on the phone, a full-scope
+	// key) on an account it did not create. Only a recovery challenge, begun
+	// after the address was proved by mail, adds a passkey to an account that
+	// has one.
+	if cs.Source != ChallengeSourceRecovery && len(creds) > 0 {
+		log.Printf("[auth] operation=register_finish user_id=%s result=refused reason=account_has_credential", user.ID)
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "this account already has a passkey; sign in"})
+		return nil, nil, false
+	}
 	waUser, err := newWebAuthnUser(user, creds)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "internal error"})

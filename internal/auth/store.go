@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS challenge_state (
 	type               TEXT    NOT NULL CHECK(type IN ('registration', 'login')),
 	allowed_credentials TEXT,
 	webauthn_session_data TEXT,
+	source             TEXT    NOT NULL DEFAULT 'register',
 	created_at         DATETIME NOT NULL,
 	expires_at         DATETIME NOT NULL
 );
@@ -229,6 +230,9 @@ var schemaMigrations = []string{
 	// Added webauthn_session_data column for storing serialized SessionData
 	// needed by the finish handlers.
 	`ALTER TABLE challenge_state ADD COLUMN webauthn_session_data TEXT`,
+	// Where a registration challenge came from (ChallengeSourceRegister or
+	// ChallengeSourceRecovery); rows begun before this column read as register.
+	`ALTER TABLE challenge_state ADD COLUMN source TEXT NOT NULL DEFAULT 'register'`,
 	// Added flags column for storing WebAuthn CredentialFlags (backup_eligible,
 	// backup_state, user_present, user_verified) needed for re-login verification.
 	`ALTER TABLE credentials ADD COLUMN flags TEXT NOT NULL DEFAULT '{}'`,
@@ -277,6 +281,12 @@ type Credential struct {
 	LastUsedAt      *time.Time
 }
 
+// Who began a registration challenge (ChallengeState.Source).
+const (
+	ChallengeSourceRegister = "register"
+	ChallengeSourceRecovery = "recovery"
+)
+
 // ChallengeState represents a WebAuthn ceremony challenge row in the
 // challenge_state table.
 type ChallengeState struct {
@@ -286,6 +296,11 @@ type ChallengeState struct {
 	Type                string // "registration" or "login"
 	AllowedCredentials  string // JSON-encoded array (may be empty for registration)
 	WebAuthnSessionData string // JSON-serialized webauthn.SessionData for finish handlers
+	// Source is who began a registration: ChallengeSourceRegister (the person,
+	// creating an account; the account must have no passkey yet at finish) or
+	// ChallengeSourceRecovery (the address was proved by mail; it adds a passkey
+	// to an account that has one). Empty reads as register.
+	Source string
 	CreatedAt           time.Time
 	ExpiresAt           time.Time
 }
@@ -803,9 +818,13 @@ func (s *Store) UpdateCredentialSignCount(credID string, signCount int64) error 
 
 // SaveChallengeState inserts a challenge/session record for a WebAuthn ceremony.
 func (s *Store) SaveChallengeState(cs *ChallengeState) error {
+	source := cs.Source
+	if source == "" {
+		source = ChallengeSourceRegister
+	}
 	_, err := s.db.Exec(
-		"INSERT INTO challenge_state (id, user_id, challenge, type, allowed_credentials, webauthn_session_data, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		cs.ID, cs.UserID, cs.Challenge, cs.Type, cs.AllowedCredentials, cs.WebAuthnSessionData, cs.CreatedAt, cs.ExpiresAt,
+		"INSERT INTO challenge_state (id, user_id, challenge, type, allowed_credentials, webauthn_session_data, source, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		cs.ID, cs.UserID, cs.Challenge, cs.Type, cs.AllowedCredentials, cs.WebAuthnSessionData, source, cs.CreatedAt, cs.ExpiresAt,
 	)
 	if err != nil {
 		return fmt.Errorf("save challenge state %q: %w", cs.ID, err)
@@ -817,9 +836,9 @@ func (s *Store) SaveChallengeState(cs *ChallengeState) error {
 func (s *Store) GetChallengeStateByID(id string) (*ChallengeState, error) {
 	cs := &ChallengeState{}
 	err := s.db.QueryRow(
-		"SELECT id, user_id, challenge, type, allowed_credentials, webauthn_session_data, created_at, expires_at FROM challenge_state WHERE id = ?",
+		"SELECT id, user_id, challenge, type, allowed_credentials, webauthn_session_data, source, created_at, expires_at FROM challenge_state WHERE id = ?",
 		id,
-	).Scan(&cs.ID, &cs.UserID, &cs.Challenge, &cs.Type, &cs.AllowedCredentials, &cs.WebAuthnSessionData, &cs.CreatedAt, &cs.ExpiresAt)
+	).Scan(&cs.ID, &cs.UserID, &cs.Challenge, &cs.Type, &cs.AllowedCredentials, &cs.WebAuthnSessionData, &cs.Source, &cs.CreatedAt, &cs.ExpiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -839,7 +858,7 @@ func (s *Store) DeleteChallengeStateByID(id string) error {
 // ordered by created_at descending (most recent first).
 func (s *Store) GetChallengeStatesByUserID(userID string) ([]ChallengeState, error) {
 	rows, err := s.db.Query(
-		"SELECT id, user_id, challenge, type, allowed_credentials, webauthn_session_data, created_at, expires_at FROM challenge_state WHERE user_id = ? ORDER BY created_at DESC",
+		"SELECT id, user_id, challenge, type, allowed_credentials, webauthn_session_data, source, created_at, expires_at FROM challenge_state WHERE user_id = ? ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -850,7 +869,7 @@ func (s *Store) GetChallengeStatesByUserID(userID string) ([]ChallengeState, err
 	var results []ChallengeState
 	for rows.Next() {
 		var cs ChallengeState
-		if err := rows.Scan(&cs.ID, &cs.UserID, &cs.Challenge, &cs.Type, &cs.AllowedCredentials, &cs.WebAuthnSessionData, &cs.CreatedAt, &cs.ExpiresAt); err != nil {
+		if err := rows.Scan(&cs.ID, &cs.UserID, &cs.Challenge, &cs.Type, &cs.AllowedCredentials, &cs.WebAuthnSessionData, &cs.Source, &cs.CreatedAt, &cs.ExpiresAt); err != nil {
 			return nil, err
 		}
 		results = append(results, cs)

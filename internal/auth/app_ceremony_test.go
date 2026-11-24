@@ -25,7 +25,7 @@ import (
 const (
 	testRP     = "choir.news"
 	testOrigin = "https://choir.news"
-	testApp    = "news.choir.autoradio.lab"
+	testApp    = "news.choir.autoradio.lab.one"
 )
 
 func appEnv(t *testing.T) *Handler {
@@ -67,6 +67,7 @@ type softPasskey struct {
 	id     []byte
 	handle []byte // the user handle, set when the credential is created
 	count  uint32
+	noUV   bool // the authenticator did not verify the user
 }
 
 func newSoftPasskey(t *testing.T) *softPasskey {
@@ -106,7 +107,11 @@ func (p *softPasskey) create(t *testing.T, options map[string]any, origin string
 	cose = append(cose, cborInt(-3)...)
 	cose = append(cose, cborBytes(y)...)
 	// flags: user present, user verified, attested data, backup eligible, backed up (a synced passkey)
-	auth := append(rpHash(), 0x01|0x04|0x40|0x08|0x10, 0, 0, 0, 0)
+	flags := byte(0x01 | 0x04 | 0x40 | 0x08 | 0x10)
+	if p.noUV {
+		flags &^= 0x04
+	}
+	auth := append(rpHash(), flags, 0, 0, 0, 0)
 	auth = append(auth, make([]byte, 16)...)
 	auth = append(auth, byte(len(p.id)>>8), byte(len(p.id)))
 	auth = append(auth, p.id...)
@@ -133,7 +138,11 @@ func (p *softPasskey) assert(t *testing.T, options map[string]any, origin string
 	pk := options["publicKey"].(map[string]any)
 	challenge := pk["challenge"].(string)
 	p.count++
-	auth := append(rpHash(), 0x01|0x04|0x08|0x10, byte(p.count>>24), byte(p.count>>16), byte(p.count>>8), byte(p.count))
+	uv := byte(0x04)
+	if p.noUV {
+		uv = 0
+	}
+	auth := append(rpHash(), 0x01|uv|0x08|0x10, byte(p.count>>24), byte(p.count>>16), byte(p.count>>8), byte(p.count))
 	cd := fmt.Sprintf(`{"type":"webauthn.get","challenge":%q,"origin":%q,"crossOrigin":false}`, challenge, origin)
 	cdh := sha256.Sum256([]byte(cd))
 	digest := sha256.Sum256(append(append([]byte{}, auth...), cdh[:]...))
@@ -152,6 +161,11 @@ func (p *softPasskey) assert(t *testing.T, options map[string]any, origin string
 }
 
 func postJSON(h http.HandlerFunc, body any) *httptest.ResponseRecorder {
+	return postJSONFrom(h, "", body)
+}
+
+// postJSONFrom posts as the given address ("" is the recorder's default).
+func postJSONFrom(h http.HandlerFunc, addr string, body any) *httptest.ResponseRecorder {
 	var b []byte
 	switch v := body.(type) {
 	case []byte:
@@ -161,6 +175,9 @@ func postJSON(h http.HandlerFunc, body any) *httptest.ResponseRecorder {
 	}
 	req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
+	if addr != "" {
+		req.Header.Set("X-Forwarded-For", addr)
+	}
 	rec := httptest.NewRecorder()
 	h(rec, req)
 	return rec
@@ -275,7 +292,7 @@ func TestAppFinishNamesAnAppFromTheFixedList(t *testing.T) {
 	p := newSoftPasskey(t)
 	begin := postJSON(h.HandleRegisterBegin, map[string]string{"email": "a@example.com"})
 	cred := p.create(t, decodeMap(t, begin), testOrigin)
-	for _, app := range []string{"", "evil.example", "news.choir.autoradio.lab ", "NEWS.CHOIR.AUTORADIO.LAB", "news.choir.autoradio.labx"} {
+	for _, app := range []string{"", "evil.example", "news.choir.autoradio.lab ", "NEWS.CHOIR.AUTORADIO.LAB.ONE", "news.choir.autoradio.labx", "news.choir.autoradio.lab"} {
 		rec := postJSON(h.HandleAppRegisterFinish, appFinishBody(app, cred))
 		if rec.Code != 400 {
 			t.Fatalf("app %q = %d, want 400", app, rec.Code)
@@ -387,22 +404,50 @@ func TestAppCreateWithAnExistingEmailIsAConflict(t *testing.T) {
 	}
 }
 
-// F9: what strangers can cause is bounded: the in-memory challenge table has a
-// ceiling, and expired challenges are not used.
-func TestAppChallengeTableIsBounded(t *testing.T) {
+// F9: what strangers can cause is bounded, and never turns into a refusal for
+// everyone else: a few addresses cannot fill a global table (there is none to
+// fill), one address holds only appChallengePerAddr live challenges (its oldest
+// is dropped), and expired challenges are not used.
+func TestAppChallengesAreBoundedPerAddressAndNeverRefuseOthers(t *testing.T) {
 	h := appEnv(t)
-	for i := 0; i < appChallengeMax; i++ {
-		if rec := postJSON(h.HandleAppLoginBegin, map[string]string{}); rec.Code != 200 {
+	// Many addresses begin: every one is served.
+	for i := 0; i < 3000; i++ {
+		rec := postJSONFrom(h.HandleAppLoginBegin, fmt.Sprintf("10.%d.%d.%d", i>>16&255, i>>8&255, i&255), map[string]string{})
+		if rec.Code != 200 {
 			t.Fatalf("begin %d = %d", i, rec.Code)
 		}
 	}
-	if rec := postJSON(h.HandleAppLoginBegin, map[string]string{}); rec.Code != 503 {
-		t.Fatalf("begin past the ceiling = %d, want 503", rec.Code)
+	// One address begins past its own bound: the oldest of its challenges stops
+	// working, the newest works.
+	p := newSoftPasskey(t)
+	if rec := createAccount(t, h, "bound@example.com", p, testOrigin); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
 	}
+	var first, last map[string]any
+	for i := 0; i <= appChallengePerAddr; i++ {
+		o := decodeMap(t, postJSONFrom(h.HandleAppLoginBegin, "203.0.113.9", map[string]string{}))
+		if i == 0 {
+			first = o
+		}
+		last = o
+	}
+	if rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, p.assert(t, first, testOrigin))); rec.Code != 400 {
+		t.Fatalf("the oldest challenge of a busy address still works: %d", rec.Code)
+	}
+	if rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, p.assert(t, last, testOrigin))); rec.Code != 200 {
+		t.Fatalf("the newest challenge failed: %d %s", rec.Code, rec.Body.String())
+	}
+	// Another address is untouched by all of that.
+	o := decodeMap(t, postJSONFrom(h.HandleAppLoginBegin, "198.51.100.7", map[string]string{}))
+	if rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, p.assert(t, o, testOrigin))); rec.Code != 200 {
+		t.Fatalf("a fresh address could not sign in: %d", rec.Code)
+	}
+	// Expired entries are dropped and not used.
 	var c appChallenges
-	s := webauthn.SessionData{Challenge: "old"}
-	if !c.put(s, timeAgo(10)) {
-		t.Fatal("put")
+	c.put(webauthn.SessionData{Challenge: "old"}, "a", timeAgo(10))
+	c.put(webauthn.SessionData{Challenge: "new"}, "a", timeNow())
+	if len(c.m) != 1 {
+		t.Fatalf("an expired entry was kept: %d entries", len(c.m))
 	}
 	if _, ok := c.take("old", timeNow()); ok {
 		t.Fatal("an expired challenge was used")

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/appids"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -124,7 +125,7 @@ func TestAppleWebCredentialsListCoversTheAppManifest(t *testing.T) {
 		ids = append(ids, m.App.ID+v.IDSuffix)
 	}
 	for _, id := range ids {
-		if team := "S47GERGJZ3." + id; !slices.Contains(appleWebCredentialsApps, team) {
+		if team := "S47GERGJZ3." + id; !slices.Contains(appids.WebCredentialApps(), team) {
 			t.Errorf("app.json produces %s, which the association file does not list", team)
 		}
 	}

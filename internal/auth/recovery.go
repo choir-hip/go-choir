@@ -269,6 +269,7 @@ func (h *Handler) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
 		UserID:              user.ID,
 		Challenge:           session.Challenge,
 		Type:                "registration",
+		Source:              ChallengeSourceRecovery,
 		WebAuthnSessionData: string(sessionDataJSON),
 		CreatedAt:           time.Now().UTC(),
 		ExpiresAt:           time.Now().UTC().Add(SessionChallengeTTL),

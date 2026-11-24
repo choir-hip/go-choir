@@ -7,8 +7,6 @@
 // Domains.
 package appids
 
-import "strings"
-
 // App is one signed build: the Apple team that signs it and its bundle id. The
 // association file names an app by "<team>.<bundle id>".
 type App struct {
@@ -56,6 +54,3 @@ func WebCredentialApps() []string {
 	}
 	return out
 }
-
-// Label is a short human label for an app's key ("Autoradio app: <bundle>").
-func Label(bundle string) string { return strings.TrimSpace("Autoradio app: " + bundle) }
