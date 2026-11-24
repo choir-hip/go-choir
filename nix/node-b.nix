@@ -1675,7 +1675,7 @@ in
         "VM_HOST_BASE_PORT=9000"
         "VM_CPU_COUNT=2"
         "VM_MEM_MIB=4096"
-        # A computer made for a new account is 2 GiB (owner, 2026-11-23); the
+        # A computer made for a new account is 4 GiB (owner, 2026-11-24); the
         # size is recorded on its ownership at creation (ownership.mem_size_mib,
         # internal/vmctl). This setting is the size of every computer made
         # before that, the paper's and the owner's included, and the ceiling
