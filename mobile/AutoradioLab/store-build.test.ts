@@ -1021,9 +1021,9 @@ describe.skipIf(!MAC)('D6 a build number is given once', () => {
 });
 
 describe('D7 what the app grants is data the build reads', () => {
-  test('D7 the purpose strings are the two the app uses (the sign-in strings are the app.signin ones), and the background mode is playback only', () => {
+  test('D7 the purpose strings are the two the app uses, and the background mode is playback only', () => {
     const en = JSON.parse(readFileSync(join(MOBILE, 'AutoradioLab', 'strings', 'en.json'), 'utf8'));
-    expect(Object.keys(en).filter((k) => k.startsWith('purpose.')).sort()).toEqual(['purpose.microphone', 'purpose.speech']);
+    expect(Object.keys(en).sort()).toEqual(['purpose.microphone', 'purpose.speech']);
     expect(APP_JSON.host.ios.backgroundModes).toEqual(['audio']);
   });
 });

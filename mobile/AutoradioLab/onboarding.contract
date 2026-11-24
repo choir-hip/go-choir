@@ -52,19 +52,19 @@ component SignInScreen
         Mark(state="idle")
       column gap=8 align-items="center"
         text "Autoradio" font-size="-exact-large-title" font-weight=700 role="heading" aria-level=2 font-family=th.fontHead color=th.fg
-        text t("app.signin.intro") testId="signin-intro" text-align="center" font-size="-exact-body" line-height=1.45 font-family=th.fontText color=th.muted
+        text "Sign in with a passkey, or create an account. There is no password. A new account first checks your email address with a code we send." testId="signin-intro" text-align="center" font-size="-exact-body" line-height=1.45 font-family=th.fontText color=th.muted
       if siv.pending
         column gap=12 align-items="center" width="100%" max-width=420
-          text t("app.signin.waiting") testId="signin-waiting" text-align="center" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
+          text "Waiting for the passkey screen." testId="signin-waiting" text-align="center" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
           button press=cancelSignIn testId="signin-cancel" appearance="none"
-            Btn(label=t("app.signin.cancel"), primary=false, wide=false)
+            Btn(label="Cancel", primary=false, wide=false)
       if not siv.pending
         column gap=16 align-items="center" width="100%" max-width=420
           button press=signInPasskey testId="signin" appearance="none" width="100%"
-            Btn(label=t("app.signin.signin"), primary=true, wide=true)
-          text t("app.signin.or") testId="signin-or" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
+            Btn(label="Sign in with a passkey", primary=true, wide=true)
+          text "New here?" testId="signin-or" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
           column width="100%"
-            input type="email" value=authEmail input=editAuthEmail submit=createAccount placeholder=t("app.signin.email") aria-label=t("app.signin.email") testId="signup-email" enterkeyhint="go" min-height=44
+            input type="email" value=authEmail input=editAuthEmail submit=createAccount placeholder="Your email address" aria-label="Your email address" testId="signup-email" enterkeyhint="go" min-height=44
               font-family=th.fontText font-size=17 color=th.fg padding="8px 0px" border-width=0 background-color="transparent"
               ::placeholder
                 color=th.muted
@@ -72,21 +72,21 @@ component SignInScreen
           // A new account proves its address first: the email was sent, and the code from it is typed here.
           if siv.phase == "code"
             column width="100%" gap=8
-              text t("app.signin.codesent") testId="signup-code-sent" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
-              input type="text" value=authCode input=editAuthCode submit=createAccount placeholder=t("app.signin.code") aria-label=t("app.signin.code") testId="signup-code" enterkeyhint="go" min-height=44
+              text "We emailed you an 8-digit code. Type it here and tap Create account. If this email already has an account, no code will come: we emailed a recovery link instead. Open it on choir.news to add a passkey, then sign in here with the passkey." testId="signup-code-sent" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
+              input type="text" value=authCode input=editAuthCode submit=createAccount placeholder="8-digit code" aria-label="8-digit code" testId="signup-code" enterkeyhint="go" min-height=44
                 font-family=th.fontText font-size=17 color=th.fg padding="8px 0px" border-width=0 background-color="transparent"
                 ::placeholder
                   color=th.muted
               RowRule(indent=0)
           // The one place a person agrees (owner, 2026-11-23): readable, above the button, in the page's own text colour. Tapping "Create account" is the agreement.
-          text t("app.signin.consent") testId="signup-consent" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.fg text-align="center"
+          text "By creating an account you confirm you are 16 or older and agree to the Privacy Policy and Terms. What you ask the radio is sent to outside AI companies, which during the beta may use it to train their models." testId="signup-consent" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.fg text-align="center"
           row gap=24 justify-content="center"
-            text t("app.signin.privacy") href="https://choir.news/privacy" testId="signup-privacy" font-family=th.fontLabel font-size="-exact-footnote" color=th.accent
-            text t("app.signin.terms") href="https://choir.news/terms" testId="signup-terms" font-family=th.fontLabel font-size="-exact-footnote" color=th.accent
+            text "Privacy Policy" href="https://choir.news/privacy" testId="signup-privacy" font-family=th.fontLabel font-size="-exact-footnote" color=th.accent
+            text "Terms" href="https://choir.news/terms" testId="signup-terms" font-family=th.fontLabel font-size="-exact-footnote" color=th.accent
           button press=createAccount testId="signup-create" appearance="none" width="100%"
-            Btn(label=t("app.signin.create"), primary=true, wide=true)
+            Btn(label="Create account", primary=true, wide=true)
           button press=closeAuth testId="signin-close" appearance="none"
-            Btn(label=t("app.signin.notnow"), primary=false, wide=false)
+            Btn(label="Not now", primary=false, wide=false)
       if siv.message != ""
         text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
 
