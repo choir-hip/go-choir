@@ -35,17 +35,12 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         // A model that was fetched and loaded is ready (Voices.readiness): the default listening pipeline (ListenerPipeline) uses only ready models.
         case "silero-vad-v6.2.1": _ = try await SileroVAD.probabilities([Float](repeating: 0, count: 4096)); Voices.readiness.markReady(model: id)
         case "parakeet-eou-120m": let s = try await ParakeetEOUTranscriber(StageParams()).begin(); s.cancel(); Voices.readiness.markReady(model: id)
-        case "parakeet-tdt-0.6b-v2": let s = try await ParakeetTDTTranscriber(StageParams()).begin(); s.cancel(); Voices.readiness.markReady(model: id)
+        case "parakeet-tdt-0.6b-v2": let s = try await ParakeetTDTTranscriber(StageParams()).begin(); s.cancel()      // ready once its companions are in (below)
         case "fluid-speech-mini":
             // Only here, after voice setup's consent, is the folder fetched; the stage itself never downloads. Its files are checked one by
             // one against the SHA-256 pinned in KnownModels, then the model is loaded and run once (warm).
             _ = try await ModelStore.shared.ensureBundle(KnownModels.fluidSpeechMini) { done, _ in onBytes(done) }
-            _ = try await FluidSpeechMiniTranscriber(StageParams()).manager()
-            Voices.readiness.markReady(model: id)
-            // The pipeline needs the live words beside it: the model the list names for that job comes with it (one row for the person, two files).
-            for companion in ListenerPipeline.companions(of: id) where !Voices.readiness.isReady(model: companion) {
-                try await fetch(companion, role: role, onBytes: onBytes)
-            }
+            _ = try await FluidSpeechMiniTranscriber(StageParams()).manager()      // ready once its companions are in (below)
         case "kokoro-82m-ane":
             _ = try await KokoroVoice.synthesizeOnce("Ready.")
             Voices.readiness.markReady(model: id)          // fetched, compiled and heard to speak: the radio may prefer it now
@@ -66,6 +61,15 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             #endif
         }
         if let root { onBytes(max(0, ModelStore.directoryBytes(root) - baseline)) }
+        watcher.cancel()
+        // The pipeline needs the live words beside a batch recogniser: the model the list names for that job comes with it (one row for the
+        // person, two fetches), and the progress goes on from where this model ended instead of starting again from zero. The model is
+        // called ready only when everything it needs is in, so a failed companion never leaves a half pipeline recorded as ready (review B2).
+        let own: Int64 = spec?.approxBytes ?? 0
+        for companion in ListenerPipeline.companions(of: id) where !Voices.readiness.isReady(model: companion) {
+            try await fetch(companion, role: role, onBytes: { onBytes(own + $0) })
+        }
+        if id == "fluid-speech-mini" || id == "parakeet-tdt-0.6b-v2" { Voices.readiness.markReady(model: id) }
     }
 
     static func transcriberStage(_ id: String) -> Transcriber {

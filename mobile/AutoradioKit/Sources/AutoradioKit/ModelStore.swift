@@ -39,6 +39,16 @@ public struct ModelBundleSpec: Codable, Sendable {
         self.credit = credit; self.copies = copies
     }
     public var totalBytes: Int64 { files.reduce(0) { $0 + $1.bytes } }
+    /// A path from a list a server serves must stay inside the model's own folder: relative, no empty, `.` or `..` component, no backslash or NUL.
+    public static func isSafeRelativePath(_ p: String) -> Bool {
+        guard !p.isEmpty, !p.hasPrefix("/"), !p.contains("\\"), !p.unicodeScalars.contains("\0") else { return false }
+        return p.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+    }
+    /// The folder, every file's path and every copy name stay inside the store root.
+    public var pathsStayInside: Bool {
+        Self.isSafeRelativePath(folder) && files.allSatisfy { Self.isSafeRelativePath($0.path) }
+            && copies.allSatisfy { $0.count == 2 && Self.isSafeRelativePath($0[0]) && Self.isSafeRelativePath($0[1]) }
+    }
     public func url(for f: File) -> URL { URL(string: "https://huggingface.co/\(repo)/resolve/\(commit)/\(f.path)")! }
     /// The id the store registers a file under.
     func fileID(_ f: File) -> String { id + "/" + f.path }
@@ -118,6 +128,7 @@ public actor ModelStore {
 
     /// The folder of a bundle model if every file is on the phone at its size and the copies are made. Never fetches.
     public func bundleDirectoryIfPresent(_ b: ModelBundleSpec) -> URL? {
+        guard b.pathsStayInside else { return nil }
         let dir = root.appendingPathComponent(b.folder, isDirectory: true)
         let fm = FileManager.default
         for f in b.files {
@@ -131,6 +142,7 @@ public actor ModelStore {
     /// Fetch (or resume) every file of the bundle, each checked against its SHA-256, then make the copies. Called only after the person
     /// has agreed to the download (voice setup's consent); nothing else in the app calls it. `progress` receives bytes of the whole folder.
     public func ensureBundle(_ b: ModelBundleSpec, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        guard b.pathsStayInside else { throw LabError.badInput("model \(b.id) names a path outside its own folder") }
         let dir = root.appendingPathComponent(b.folder, isDirectory: true)
         let fm = FileManager.default
         var before: Int64 = 0
@@ -145,13 +157,20 @@ public actor ModelStore {
         }
         for c in b.copies where c.count == 2 {
             let from = dir.appendingPathComponent(c[0]), to = dir.appendingPathComponent(c[1])
-            if !fm.fileExists(atPath: to.path) { try fm.copyItem(at: from, to: to) }
+            // Always replaced: after a pin bump the verified source is new and a copy kept from the old pin would be the old network under the new name.
+            if fm.fileExists(atPath: to.path) { try fm.removeItem(at: to) }
+            try fm.copyItem(at: from, to: to)
         }
         return dir
     }
 
+    /// Whether any of a bundle's folder is on the phone (whole or part: a rejected configuration must remove either).
+    public func bundleFolderExists(_ b: ModelBundleSpec) -> Bool {
+        b.pathsStayInside && FileManager.default.fileExists(atPath: root.appendingPathComponent(b.folder, isDirectory: true).path)
+    }
     /// Delete a bundle's folder (a rejected configuration, or the person removing the model).
     public func deleteBundle(_ b: ModelBundleSpec) {
+        guard b.pathsStayInside else { return }
         try? FileManager.default.removeItem(at: root.appendingPathComponent(b.folder, isDirectory: true))
         loaded.remove(b.id)
     }

@@ -123,6 +123,52 @@ final class FluidSpeechMiniTests: XCTestCase {
         XCTAssertNil(after)
     }
 
+    // S1 (review of d67c0cb77): a path from a served list must stay inside the model's own folder.
+    func testAPathThatLeavesTheModelsFolderIsRefused() async throws {
+        let sha = String(repeating: "a", count: 64)
+        for bad in ["../escape.bin", "a/../../escape.bin", "/abs/escape.bin", "a//b", "a/./b", "a\\b", "", "a/", "a\u{0}b"] {
+            let b = ModelBundleSpec(id: "t", repo: "x/y", commit: String(repeating: "a", count: 40), files: [.init(path: bad, bytes: 1, sha256: sha)], folder: "t", license: "x", credit: "x")
+            XCTAssertFalse(b.pathsStayInside, "\(bad.debugDescription) was accepted")
+            let entry = ModelListEntry(id: "t", job: "transcriber", label: "", repository: "x/y", revision: b.commit, files: [.init(path: bad, bytes: 1, sha256: sha)], license: "", credit: nil, recommendedFor: [], rank: 1)
+            XCTAssertTrue(try ModelList.decode(ModelList(version: 1, models: [entry]).encoded()).models.isEmpty, "the list kept \(bad.debugDescription)")
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("trav-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: root) }
+            do { _ = try await ModelStore(root: root).ensureBundle(b); XCTFail("fetched \(bad.debugDescription)") } catch {}
+        }
+        let folderOut = ModelBundleSpec(id: "t", repo: "x/y", commit: String(repeating: "a", count: 40), files: [], folder: "../out", license: "", credit: "")
+        XCTAssertFalse(folderOut.pathsStayInside)
+        let ok = ModelBundleSpec(id: "t", repo: "x/y", commit: String(repeating: "a", count: 40), files: [.init(path: "a.mlmodelc/weights/w.bin", bytes: 1, sha256: sha)], folder: "t", license: "", credit: "")
+        XCTAssertTrue(ok.pathsStayInside)
+    }
+
+    // S2 (review): a pin bump must replace the copy a loader reads, not keep the old network under the new name.
+    func testACopyIsReplacedWhenTheSourceChanges() async throws {
+        let v1 = Data("old".utf8), v2 = Data("newer network".utf8)
+        func spec(_ d: Data) -> ModelBundleSpec { ModelBundleSpec(id: "t", repo: "x/y", commit: String(repeating: "a", count: 40),
+            files: [.init(path: "j.mlmodelc/w.bin", bytes: Int64(d.count), sha256: SHA256Probe.hex(d))], folder: "t", license: "x", credit: "x", copies: [["j.mlmodelc", "jcopy.mlmodelc"]]) }
+        let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubURLProtocol.self]
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("copy-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ModelStore(root: root, session: URLSession(configuration: cfg))
+        StubURLProtocol.responses = [spec(v1).url(for: spec(v1).files[0]): v1]
+        let dir = try await store.ensureBundle(spec(v1))
+        StubURLProtocol.responses = [spec(v2).url(for: spec(v2).files[0]): v2]
+        _ = try await store.ensureBundle(spec(v2))
+        XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("jcopy.mlmodelc/w.bin")), v2)
+    }
+
+    // S5 (review): the one-slot claim, counted: two callers at once make the model once.
+    func testTwoCallersAtOnceMakeTheModelOnce() async throws {
+        let slot = ModelSlot<Int>("slot-count-test")
+        let makes = Locked<Int>(0)
+        let make: @Sendable () async throws -> (Int, @Sendable () async -> Void) = {
+            makes.write { $0 += 1 }; try await Task.sleep(nanoseconds: 100_000_000); return (7, {})
+        }
+        async let a = slot.get(make), b = slot.get(make)
+        _ = try await (a, b)
+        XCTAssertEqual(makes.read { $0 }, 1)
+    }
+
     // MARK: F3
 
     func testBeginWithoutTheFilesThrowsAtOnce() async {
@@ -202,7 +248,7 @@ final class FluidSpeechMiniTests: XCTestCase {
         let stage = FluidSpeechMiniTranscriber(directory: { dir })
         async let a = stage.begin(), b = stage.begin()
         _ = try await (a, b)
-        XCTAssertTrue(FluidSpeechMiniTranscriber.slot.isLoaded)                                         // F7: one slot; a second load would have run twice (see the AUTORADIO model slot lines)
+        // F7: one slot (counted in testTwoCallersAtOnceMakeTheModelOnce)
         let audio = try Self.samples(Self.fixtures[0])
         async let t1: String = { let s = try await stage.begin(); for fr in self.frames(audio, step: 512) { s.append(fr) }; return try await s.finish() }()
         async let t2: String = { let s = try await stage.begin(); for fr in self.frames(audio, step: 512) { s.append(fr) }; return try await s.finish() }()
@@ -254,6 +300,26 @@ extension FluidSpeechMiniTests {
             errors += FluidSpeechMiniTests.wer(hyp, ref) * n; words += n; audio += a; took += t
         }
         var rate: Double { errors / max(words, 1) }
+    }
+
+    /// A turn past the model's 15 s window (the engine allows 30 s): FluidAudio's chunking must not drop spans (review note: only Mike's relayed 31-minute run backed this).
+    func testALongTurnKeepsEveryWord() async throws {
+        guard let folder = ProcessInfo.processInfo.environment["AUTORADIO_REAL_SPEECH"] else { throw XCTSkip("set AUTORADIO_REAL_SPEECH=<folder of wav clips and references.json>") }
+        let dir = URL(fileURLWithPath: folder)
+        let refs = try JSONDecoder().decode([Ref].self, from: Data(contentsOf: dir.appendingPathComponent("references.json")))
+        let (model, why) = await Self.modelDirectory()
+        guard let model else { throw XCTSkip(why) }
+        var audio: [Float] = [], text: [String] = []
+        for r in refs where audio.count < 16_000 * 28 {
+            audio += try AudioFiles.readMono(dir.appendingPathComponent("\(r.id).wav"), rate: 16_000); text.append(r.text)
+        }
+        XCTAssertGreaterThan(audio.count, 16_000 * 20, "the clips make a turn over 20 s")
+        let s = try await FluidSpeechMiniTranscriber(directory: { model }).begin()
+        for fr in frames(audio, step: 512) { s.append(fr) }
+        let heard = try await s.finish()
+        let w = Self.wer(heard, text.joined(separator: " "))
+        print("REAL-SPEECH long turn \(audio.count / 16_000) s: WER \(String(format: "%.4f", w))")
+        XCTAssertLessThanOrEqual(w, 0.10, "a long turn lost words: heard \(heard.count) characters")
     }
 
     func testRealSpeechWordError() async throws {

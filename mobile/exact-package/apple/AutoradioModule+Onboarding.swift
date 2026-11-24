@@ -75,9 +75,12 @@ final class OnboardingController: @unchecked Sendable {
             try? d.write(to: recordFile, options: .atomic)
         }
         // The listener's configuration: select what passed, where the kit has that stage registered.
-        for (kind, id) in s.choices where module.runtime.registry.stages(kind).contains(where: { $0.id == id }) {
+        // Speech detection and recognition come from the model list as it stands now that the models are ready, with the composite's parameters
+        // and applied to the running listener (a bare stage id would drop them, and a configuration set at launch would stay until the next launch).
+        for (kind, id) in s.choices where kind != .speechBounds && kind != .transcriber && module.runtime.registry.stages(kind).contains(where: { $0.id == id }) {
             module.runtime.setStage(kind, id: id)
         }
+        module.runtime.applyListenerChoice()
         // The responder model setup chose is the one the phone talks with (read again at every start).
         if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }), KnownModels.isPinned(r.chosen) { ResponderChoice.current = r.chosen }
         changed()

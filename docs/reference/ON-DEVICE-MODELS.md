@@ -499,11 +499,11 @@ macOS 15 (`config.json`), the same floor as the package. Batch, not streaming: n
 Neural Engine, about 277 MB of RAM per 15 s window, 1.51% word error on isolated clips against Parakeet 0.6B v3's 1.92%, and its output
 carries punctuation and capitals.
 
-**The pin (verified, `GET https://huggingface.co/api/models/FluidVoice-Labs/fluid-speech-mini-coreml?blobs=true`, no credentials, 2026-11-24).**
-Commit `d81c3160dfe5a5e1f8f7267164a07d30617a3a1a`, last modified 2026-10-13, tag `license:cc-by-4.0`. The repository lists 25 files; the app
-fetches the 24 the loader and the licence need (the model card, two example files and two images are not fetched; `parakeet_v3_vocab.json`
-is byte for byte `parakeet_vocab.json`, the same 151,122 bytes, and is not fetched). 252,730,493 bytes in all (253 MB). The API gives a
-SHA-256 only for the large files (LFS); the digests of the small ones were computed on the bytes downloaded at that commit, and the LFS
+**The pin (verified, `GET https://huggingface.co/api/models/FluidVoice-Labs/fluid-speech-mini-coreml/tree/<commit>?recursive=1`, no credentials, 2026-11-24).**
+Commit `d81c3160dfe5a5e1f8f7267164a07d30617a3a1a`, last modified 2026-10-13, tag `license:cc-by-4.0`. The repository lists 31 files; the app
+fetches the 24 the loader and the licence need (`.gitattributes`, the model card, two example files and two images are not fetched; `parakeet_v3_vocab.json`
+is byte for byte `parakeet_vocab.json`, the same 151,122 bytes, and is not fetched). 252,730,493 bytes in all (253 MB). The tree API gives the
+LFS object id (the SHA-256) only for the large files; the digests of the small ones were computed on the bytes downloaded at that commit, and the LFS
 ones were re-checked against the API's. Every file's size and SHA-256 is in `KnownModels.fluidSpeechMini`; the big ones are the encoder
 weights 233,096,704 B, the decoder weights 11,845,120 B, the joint weights 6,350,284 B.
 

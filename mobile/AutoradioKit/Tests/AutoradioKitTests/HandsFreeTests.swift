@@ -40,6 +40,14 @@ final class ScriptedTranscriber: Transcriber, @unchecked Sendable {
     }
 }
 
+/// A second recogniser, so a test can tell which one the engine built.
+final class OtherTranscriber: Transcriber, @unchecked Sendable {
+    static let stageID = "other-tr"
+    static var descriptor: StageDescriptor { StageDescriptor(displayName: "other tr") }
+    init(_ p: StageParams) {}
+    func begin() async throws -> TranscriptionSession { ScriptedTranscriber.Session() }
+}
+
 /// An answer that never finishes until the pipeline is cancelled: the radio is "speaking".
 final class HangingDesk: Desk, @unchecked Sendable {
     static let stageID = "hang-desk"
@@ -74,6 +82,7 @@ final class HandsFreeTests: XCTestCase {
         r.register(.voice, StubVoice.self) { StubVoice($0) }
         r.register(.speechBounds, LoudBounds.self) { LoudBounds($0) }
         r.register(.transcriber, ScriptedTranscriber.self) { ScriptedTranscriber($0) }
+        r.register(.transcriber, OtherTranscriber.self) { OtherTranscriber($0) }
         r.register(.desk, RecordingDesk.self) { RecordingDesk($0) }
         r.register(.desk, HangingDesk.self) { HangingDesk($0) }
         var cfg = StageRegistry.defaultConfiguration()
@@ -97,6 +106,29 @@ final class HandsFreeTests: XCTestCase {
         return AudioFrame(samples: [Float](repeating: loud ? 0.5 : 0, count: 512), sampleRate: 16000, t: t)
     }
     func push(_ e: TurnEngine, loud: Bool, _ n: Int) async { for _ in 0..<n { await e.ingestHandsFree(frame(loud: loud)) } }
+
+    // B1 (review of d67c0cb77): the listening stages are built on the first frame and were kept for the life of the process, so a
+    // configuration applied after voice setup (the models just became ready) never listened until a relaunch.
+    func testAConfigurationAppliedAfterTheFirstFrameIsWhatListensNext() async throws {
+        let (engine, _, _) = try make()
+        await engine.handsFreeSet(true)
+        await push(engine, loud: false, 3)
+        let before = await engine.hf.transcriber
+        XCTAssertTrue(before is ScriptedTranscriber)
+        var c = await engine.configuration; c.set(.transcriber, .init(id: "other-tr")); await engine.setConfiguration(c)
+        await push(engine, loud: false, 3)
+        let after = await engine.hf.transcriber
+        XCTAssertTrue(after is OtherTranscriber, "the new recogniser listens without a relaunch")
+    }
+    func testAConfigurationChangeDuringATurnWaitsForTheTurnToEnd() async throws {
+        let (engine, _, _) = try make()
+        await engine.handsFreeSet(true)
+        await push(engine, loud: true, 6)                                  // a turn is open
+        var c = await engine.configuration; c.set(.transcriber, .init(id: "other-tr")); await engine.setConfiguration(c)
+        await push(engine, loud: true, 2)
+        let during = await engine.hf.transcriber
+        XCTAssertTrue(during is ScriptedTranscriber, "the open turn keeps the recogniser that began it")
+    }
 
     // H1: speech, then silence: the turn is sent with the session's final text and no button.
     func testASpokenTurnReachesTheDeskWithNoButton() async throws {
