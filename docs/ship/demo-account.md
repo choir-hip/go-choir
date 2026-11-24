@@ -4,7 +4,7 @@ Owner, 2026-11-24: "yes, we should make a demo account as well." Apple's reviewe
 
 ## How a reviewer signs in (the app as it is, 2026-11-24)
 
-The app's sign-in is passkey only (a mailed code proves a new address). The reviewer does not use it: on the sign-in screen the small "Reviewer sign-in" link opens a page with a user name and a password; the press posts them to `/auth/app/demo/login`, and the key that comes back is kept by the same function as a passkey sign-in's (`keepKey`, the three Exact secrets). No passkey, no email and no code is involved. Sign-out and the revoke of a key that was minted and not kept use `DELETE /auth/api-keys/{own id}`, which a key may do to itself without `manage:keys`.
+The app's sign-in is passkey only (a mailed code proves a new address). The reviewer does not use it: there is no separate link or page (owner, 2026-11-24: "we dont want to have a 'reviewer sign-in' link which would confuse our regular beta testers"). The reviewer types the user name, which has no "@", into the sign-in screen's one "Your email address" field; a second field and a "Sign in" button then replace "Create account", and the press posts the name and the second field to `/auth/app/demo/login`, and the key that comes back is kept by the same function as a passkey sign-in's (`keepKey`, the three Exact secrets). No passkey, no email and no code is involved. Sign-out and the revoke of a key that was minted and not kept use `DELETE /auth/api-keys/{own id}`, which a key may do to itself without `manage:keys`.
 
 ## What the account can and cannot do
 
@@ -50,7 +50,7 @@ Run it as root on Node B. It revokes every key and deletes every session of the 
 ## What goes in Apple's review form
 
 - Sign-in required: yes. User name: `REVIEW_USER_PLACEHOLDER`. Password: `REVIEW_PASSWORD_PLACEHOLDER` (the value the credential command printed).
-- Notes (`docs/ship/testflight-texts.md`, "REVIEW ACCOUNT"): tap "Reviewer sign-in" at the bottom of the sign-in page. The listening, the paper and the reader work without any account.
+- Notes (`docs/ship/testflight-texts.md`, "REVIEW ACCOUNT"): type the user name in the email field of the sign-in screen; a password field appears; tap Sign in. The listening, the paper and the reader work without any account.
 
 ## Residuals
 
