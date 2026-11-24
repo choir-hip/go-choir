@@ -1,0 +1,56 @@
+== omni
+clean	73	1169	5.99%	sub 57 ins 6 del 7
+other	100	1828	6.46%	sub 90 ins 8 del 20
+ami	47	508	33.07%	sub 89 ins 25 del 54
+clean_radio10	73	1169	8.04%	sub 77 ins 7 del 10
+clean_radio5	73	1169	9.75%	sub 95 ins 9 del 10
+clean_radio0	73	1169	42.51%	sub 369 ins 50 del 78
+clean_cafe10	73	1169	8.38%	sub 76 ins 8 del 14
+clean_cafe5	73	1169	10.78%	sub 96 ins 10 del 20
+clean_cafe0	73	1169	27.63%	sub 257 ins 27 del 39
+clean_traffic10	73	1169	6.93%	sub 68 ins 4 del 9
+clean_traffic5	73	1169	7.70%	sub 75 ins 5 del 10
+clean_traffic0	73	1169	11.63%	sub 104 ins 14 del 18
+nospeech	16 clips	invented words 704 in 16 clips
+== pro
+clean	73	1169	3.76%	sub 39 ins 1 del 4
+other	100	1828	3.39%	sub 51 ins 2 del 9
+ami	47	508	27.95%	sub 81 ins 17 del 44
+clean_radio10	73	1169	4.02%	sub 40 ins 2 del 5
+clean_radio5	73	1169	5.05%	sub 51 ins 2 del 6
+clean_radio0	73	1169	17.28%	sub 149 ins 12 del 41
+clean_cafe10	73	1169	4.70%	sub 45 ins 3 del 7
+clean_cafe5	73	1169	5.05%	sub 50 ins 2 del 7
+clean_cafe0	73	1169	14.03%	sub 132 ins 7 del 25
+clean_traffic10	73	1169	3.93%	sub 37 ins 1 del 8
+clean_traffic5	73	1169	4.02%	sub 40 ins 1 del 6
+clean_traffic0	73	1169	6.16%	sub 58 ins 4 del 10
+nospeech	16 clips	invented words 1 in 1 clips
+== mini
+clean	73	1169	3.93%	sub 38 ins 2 del 6
+other	100	1828	3.56%	sub 54 ins 2 del 9
+ami	47	508	32.68%	sub 95 ins 15 del 56
+clean_radio10	73	1169	4.53%	sub 44 ins 3 del 6
+clean_radio5	73	1169	5.90%	sub 60 ins 3 del 6
+clean_radio0	73	1169	22.93%	sub 192 ins 13 del 63
+clean_cafe10	73	1169	4.45%	sub 44 ins 2 del 6
+clean_cafe5	73	1169	5.56%	sub 52 ins 3 del 10
+clean_cafe0	73	1169	17.19%	sub 151 ins 12 del 38
+clean_traffic10	73	1169	3.93%	sub 37 ins 1 del 8
+clean_traffic5	73	1169	4.36%	sub 41 ins 2 del 8
+clean_traffic0	73	1169	7.10%	sub 65 ins 6 del 12
+nospeech	16 clips	invented words 0 in 0 clips
+== tdt-v2
+clean	73	1169	2.57%	sub 26 ins 0 del 4
+other	100	1828	3.06%	sub 47 ins 2 del 7
+ami	47	508	28.15%	sub 81 ins 12 del 50
+clean_radio10	73	1169	27.80%	sub 108 ins 41 del 176
+clean_radio5	73	1169	56.80%	sub 236 ins 67 del 361
+clean_radio0	73	1169	91.70%	sub 637 ins 95 del 340
+clean_cafe10	73	1169	3.76%	sub 38 ins 1 del 5
+clean_cafe5	73	1169	5.39%	sub 50 ins 3 del 10
+clean_cafe0	73	1169	14.63%	sub 130 ins 12 del 29
+clean_traffic10	73	1169	2.74%	sub 28 ins 0 del 4
+clean_traffic5	73	1169	3.17%	sub 31 ins 1 del 5
+clean_traffic0	73	1169	5.65%	sub 53 ins 3 del 10
+nospeech	16 clips	invented words 4 in 1 clips

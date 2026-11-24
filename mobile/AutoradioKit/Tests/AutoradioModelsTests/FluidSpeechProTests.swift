@@ -137,4 +137,55 @@ final class FluidSpeechProTests: XCTestCase {
         let m = Self.footprint()
         print("MEASURE \(which) \(dir.lastPathComponent): \(clips.count) clips, \(String(format: "%.1f", minutes)) min | WER \(String(format: "%.4f", tally.rate)) over \(Int(tally.words)) words | \(String(format: "%.4f", tally.took / tally.audio)) s per s of audio | load+warm-up \(String(format: "%.1f", loadedAt)) s | footprint before \(Int(base.now)) MB, after \(Int(m.now)) MB, peak \(Int(m.peak)) MB")
     }
+
+    /// Developer measurement (2026-11-24, the Omni-ears comparison): one model, several set folders, each clip's transcript written to
+    /// `<AUTORADIO_REAL_OUT>/<model>/<set>.jsonl` as {"id","hyp","took"} so another script scores the same text for every recogniser.
+    /// AUTORADIO_REAL_ROOT=<folder of set folders> AUTORADIO_REAL_SETS=a,b,c AUTORADIO_REAL_OUT=<folder> AUTORADIO_REAL_MODEL=pro|mini|tdt-v2
+    func testTranscribeSetsToFiles() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let root = env["AUTORADIO_REAL_ROOT"], let sets = env["AUTORADIO_REAL_SETS"], let out = env["AUTORADIO_REAL_OUT"], let which = env["AUTORADIO_REAL_MODEL"] else { throw XCTSkip("set AUTORADIO_REAL_ROOT, AUTORADIO_REAL_SETS, AUTORADIO_REAL_OUT, AUTORADIO_REAL_MODEL") }
+        let outDir = URL(fileURLWithPath: out).appendingPathComponent(which); try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        let t0 = Date(); var loadedAt = 0.0
+        var run: ([Float]) async throws -> String
+        switch which {
+        case "pro", "mini":
+            let model: URL
+            if which == "pro" { let (d, why) = await Self.modelDirectory(); guard let d else { throw XCTSkip(why) }; model = d }
+            else { let (d, why) = await FluidSpeechMiniTests.modelDirectory(); guard let d else { throw XCTSkip(why) }; model = d }
+            let stage: Transcriber = which == "pro" ? FluidSpeechProTranscriber(directory: { model }) : FluidSpeechMiniTranscriber(directory: { model })
+            _ = try await stage.begin(); loadedAt = Date().timeIntervalSince(t0)
+            run = { audio in
+                let s = try await stage.begin()
+                for fr in Self.frames(audio, step: 512) { s.append(fr) }
+                return try await s.finish()
+            }
+        case "tdt-v2":
+            let models = try await AsrModels.downloadAndLoad(to: Self.cacheRoot.appendingPathComponent("parakeet-tdt-v2"), version: .v2)
+            let mgr = AsrManager(config: .default)
+            try await mgr.loadModels(models)
+            var st = TdtDecoderState.make(decoderLayers: await mgr.decoderLayerCount)
+            _ = try? await mgr.transcribe([Float](repeating: 0, count: 16_000), decoderState: &st); loadedAt = Date().timeIntervalSince(t0)
+            run = { audio in
+                var state = TdtDecoderState.make(decoderLayers: await mgr.decoderLayerCount)
+                return try await mgr.transcribe(audio, decoderState: &state).text
+            }
+        default: XCTFail("AUTORADIO_REAL_MODEL is pro, mini or tdt-v2"); return
+        }
+        for name in sets.split(separator: ",").map(String.init) {
+            let dir = URL(fileURLWithPath: root).appendingPathComponent(name)
+            let refs = try JSONDecoder().decode([FluidSpeechMiniTests.Ref].self, from: Data(contentsOf: dir.appendingPathComponent("references.json")))
+            var lines = ""; var audioSecs = 0.0, took = 0.0
+            for r in refs {
+                let audio = try AudioFiles.readMono(dir.appendingPathComponent("\(r.id).wav"), rate: 16_000)
+                let t1 = Date(); let text = (try? await run(audio)) ?? ""; let dt = Date().timeIntervalSince(t1)
+                audioSecs += Double(audio.count) / 16_000; took += dt
+                let obj: [String: Any] = ["id": r.id, "hyp": text, "took": dt, "audio_s": Double(audio.count) / 16_000]
+                lines += String(data: try JSONSerialization.data(withJSONObject: obj), encoding: .utf8)! + "\n"
+            }
+            try lines.write(to: outDir.appendingPathComponent("\(name).jsonl"), atomically: true, encoding: .utf8)
+            print("TRANSCRIBED \(which) \(name): \(refs.count) clips, \(String(format: "%.4f", took / max(audioSecs, 1))) s per s of audio")
+        }
+        let m = Self.footprint()
+        print("TRANSCRIBED \(which) done | load+warm-up \(String(format: "%.1f", loadedAt)) s | footprint after \(Int(m.now)) MB, peak \(Int(m.peak)) MB")
+    }
 }
