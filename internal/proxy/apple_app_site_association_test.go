@@ -92,7 +92,8 @@ func TestAppleAppSiteAssociationThroughRealChain(t *testing.T) {
 	}
 }
 
-// The paid-team development app in the list is the one the app's manifest produces.
+// Every app the manifest produces is in the list, except the first development app
+// (".lab"), which is left out on purpose (see appleWebCredentialsApps).
 func TestAppleWebCredentialsListCoversTheAppManifest(t *testing.T) {
 	raw, err := os.ReadFile("../../mobile/AutoradioLab/app.json")
 	if err != nil {
@@ -109,11 +110,22 @@ func TestAppleWebCredentialsListCoversTheAppManifest(t *testing.T) {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		t.Fatal(err)
 	}
-	suffix := m.Variants["one"].IDSuffix
-	if m.App.ID == "" || suffix == "" {
-		t.Fatalf("app.json has no app id or no variant one: %q %q", m.App.ID, suffix)
+	if m.App.ID == "" || len(m.Variants) == 0 {
+		t.Fatalf("app.json has no app id or no variants: %q %d", m.App.ID, len(m.Variants))
 	}
-	if id := "S47GERGJZ3." + m.App.ID + suffix; !slices.Contains(appleWebCredentialsApps, id) {
-		t.Errorf("app.json produces %s, which the association file does not list", id)
+	ids := []string{m.App.ID}
+	for _, v := range m.Variants {
+		if v.IDSuffix == "" {
+			t.Fatalf("app.json has a variant with no id suffix")
+		}
+		if v.IDSuffix == ".lab" {
+			continue
+		}
+		ids = append(ids, m.App.ID+v.IDSuffix)
+	}
+	for _, id := range ids {
+		if team := "S47GERGJZ3." + id; !slices.Contains(appleWebCredentialsApps, team) {
+			t.Errorf("app.json produces %s, which the association file does not list", team)
+		}
 	}
 }
