@@ -797,6 +797,16 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 	h.lifecycle.record("bootstrap.total", lifecycleHTTPStatus(recorder.status), time.Since(started))
 }
 
+// diagnosticReadNeverWakes is true for the guest's data-volume report asked
+// by a bearer key: a read for an investigator that must not wake a computer.
+// A cookie session resolves through vmctl's desktop route, which wakes; that
+// path is not changed here.
+func diagnosticReadNeverWakes(r *http.Request, authResult *AuthResult) bool {
+	return r != nil && r.URL != nil && authResult != nil && authResult.AuthMethod == "api_key" &&
+		r.Method == http.MethodGet && r.URL.Path == "/api/runtime/observability" &&
+		r.URL.Query().Get("data_volume") == "detail"
+}
+
 // HandleProtectedAPI is a generic handler for /api/* routes that require auth.
 // It validates the access JWT and forwards authenticated requests to the
 // autoputer. When vmctl routing is enabled, it resolves the user's VM through
@@ -847,6 +857,18 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resolveStarted := time.Now()
+	if diagnosticReadNeverWakes(r, authResult) && computerTarget != nil && computerTarget.State != "active" {
+		// An investigator's read of the data volume must not consume a
+		// hibernated computer's memory snapshot
+		// (docs/problems/computer-disks-hold-self-development-leftovers-2026-11-24.md).
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "computer is " + computerTarget.State + "; this diagnostic read does not wake it, so it was not woken",
+			"state": computerTarget.State,
+		})
+		h.lifecycle.record(stagePrefix+".resolve", "not_woken", time.Since(resolveStarted))
+		h.lifecycle.record(stagePrefix+".total", "not_woken", time.Since(started))
+		return
+	}
 	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy: failed to resolve autoputer for owner %s desktop %s: %v", authResult.UserID, desktopID, err)
