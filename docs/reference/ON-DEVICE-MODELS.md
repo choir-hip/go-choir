@@ -563,3 +563,9 @@ about 150 lines and a day. EouStream: Mike's `EouStream.swift` is 224 lines over
 about 250 lines with tests and a day. The speaker check as a stage: `SpeakerEmbedder` 196, `SpeakerFusion` 108 and `SpeakerProfile` 292 lines, two
 embedding models (WeSpeaker, CAM++) and the fusion file, behind the existing `SpeakerCheck` protocol plus an enrolment step in onboarding; about
 600 lines, two days, and it needs the models' pins read.
+
+## 12. How a model reaches the phone, and when it is ready (onboard-consent, 2026-11-24)
+
+- **One door.** `DownloadDoor` is the only way a model file is fetched: `ModelStore.ensure` and `ensureBundle`, the voice print (`WeSpeakerEmbedder`), the provider's library downloads (`HubModelProvider.fetch`, the Parakeet stage) all ask it. It refuses a model whose group (the voice, hearing you and the rest, search) the person has not agreed to; shared code pushes its consent record to it (`obConsent`). A Wi-Fi agreement gets a URLSession with cellular, expensive and constrained access off; only "agreed-mobile" leaves them on. A model that is in no group is refused. FluidAudio downloads on its own session, so for it the door can only refuse a start; a transfer already running there is not cut.
+- **One readiness record, one writer.** `Voices.readiness` is read-only for everything; `ReadinessVerifier` marks a model ready only after the check on this phone passed (setup's check, or the same check after a voice card's fetch) and demotes it on a failed one. Fetching marks nothing. The engine's listener choice and the Downloads page read the same record.
+- **The credit.** A licence that asks for one (CC BY 4.0) has its credit on the list entry (`ModelListEntry.credit`), shown beside the option on Settings > Downloads and the first-run welcome; a test fails for a CC model without one.

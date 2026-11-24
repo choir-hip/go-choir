@@ -7,7 +7,9 @@ public final class TurnGate: @unchecked Sendable {
     private let lock = NSLock()
     private var value = true, holds = 0
     /// False with no key, and while any screen holds turns back (`hold`).
-    public var allowed: Bool { get { lock.lock(); defer { lock.unlock() }; return value && holds == 0 } set { lock.lock(); value = newValue; lock.unlock() } }
+    /// Whether an account's key is there (set once by the app); nil in the engine alone (tests, the lab).
+    public var keyPresent: (@Sendable () -> Bool)?
+    public var allowed: Bool { get { lock.lock(); let k = keyPresent; let ok = value && holds == 0; lock.unlock(); return ok && (k?() ?? true) } set { lock.lock(); value = newValue; lock.unlock() } }
     /// A screen that listens for its own check (the first run's microphone check) holds turns back for as long as it listens; every `hold` has its `release`.
     public func hold() { lock.lock(); holds += 1; lock.unlock() }
     public func release() { lock.lock(); holds = max(0, holds - 1); lock.unlock() }

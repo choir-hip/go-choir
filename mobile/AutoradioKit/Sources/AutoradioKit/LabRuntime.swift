@@ -304,6 +304,7 @@ public final class LabRuntime: @unchecked Sendable {
     /// Hands-free on or off (one state, off at every launch): on, the microphone is open and the turn policy opens and closes turns; off,
     /// the engine hears nothing and an open turn is dropped now. `persist: false` is for one screen only (onboarding's "Talk to it").
     public func setHandsFree(_ on: Bool, persist: Bool = true) {
+        if on, !TurnGate.shared.allowed { return }          // no key (signed out), or a screen holds turns back: the radio only listens, the microphone does not open
         if persist { overrideBox.write { $0 = nil }; HandsFreeSwitch.shared.set(on) } else { overrideBox.write { $0 = on } }
         // The session follows the switch first (mic and voice processing only while on); then the engine is told whether the radio's own voice is
         // cancelled from the microphone, which is what lets the listener's speech pause the programme at once.

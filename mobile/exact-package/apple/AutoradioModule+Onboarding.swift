@@ -57,6 +57,7 @@ final class OnboardingController: @unchecked Sendable {
     init(module: AutoradioModule, support: URL) {
         self.module = module; self.support = support
         capture.onChange = { [weak self] in self?.changed() }
+        TurnGate.shared.keyPresent = { ChoirEnvironment.shared.keys.get(KeyAccount.apiKey) != nil }      // a turn needs an account's key: signed out the radio only listens
         WiFiMonitor.shared.onChange = { [weak self] in self?.changed() }      // the path moved: shared code asks the facts again
         EditionTalk.shared.onFinish = { [weak self] in self?.set { self?.finishAsked += 1 } }
     }
@@ -268,7 +269,7 @@ final class OnboardingController: @unchecked Sendable {
 
     /// Sign-out: nothing of the voice side's first run reaches the next account.
     func reset() {
-        stop()
+        stop(); module.runtime.setHandsFree(false)           // sign-out: the microphone is closed and the switch stays off for the next person
         set { setup = nil; mic = "unasked"; level = 0; heard = ""; route = ""; talking = false; over = false; picked = 0; finishAsked = 0 }
     }
 
