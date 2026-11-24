@@ -77,17 +77,17 @@
    "bytes": "number",
    "sizeLabel": "string",
    "recommended": "bool",
+   "note": "string",
    "ready": "bool"
   },
   "EnrolView": {
-   "phase": "string",
-   "taken": "number",
-   "needed": "number",
-   "again": "bool",
+   "state": "string",
    "level": "number",
-   "learned": "bool",
+   "usable": "bool",
+   "kept": "number",
+   "built": "bool",
    "ready": "bool",
-   "call": "string"
+   "reason": "string"
   }
  },
  "names": [
@@ -115,7 +115,7 @@
      "voiceReady": false,
      "hearingReady": false,
      "runStages": [],
-    "enrol": {"phase": "idle", "taken": 0, "needed": 3, "again": false, "level": 0, "learned": false, "ready": false, "call": ""}
+    "enrol": {"state": "idle", "level": 0, "usable": false, "kept": 0, "built": false, "ready": false, "reason": ""}
     }
    }
   }

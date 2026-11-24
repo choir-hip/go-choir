@@ -69,6 +69,7 @@ extension AutoradioModule {
             Task { [weak self] in
                 guard let self else { return }
                 let on = !HandsFreeSwitch.shared.isOn
+                if on, !self.choir.hasKey { DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }; return }        // signed out the radio only listens: the switch does not turn on
                 if on, !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
                 self.runtime.setHandsFree(on)
                 DispatchQueue.main.async { self.touch(["barFacts"], now: true); reply(self.json(self.runtime.snapshot())) }

@@ -69,7 +69,12 @@ extension TurnEngine {
     public func handsFreeConfigure(echoCancelled: Bool) { hf.echoCancelled = echoCancelled; hf.policy.echoCancelled = echoCancelled }
 
     /// One microphone frame in a voice session.
+    /// While set, every microphone frame goes to this closure and the engine does nothing else with it (`ingestHandsFree`).
+    public func setEnrolmentTap(_ tap: (@Sendable (AudioFrame) -> Void)?) { enrolmentTap = tap }
+
     public func ingestHandsFree(_ f: AudioFrame) async {
+        // Voice enrolment is listening (VoiceEnrolment page): the frames are its and nothing else's. No turn is looked for, so no sentence read to teach the radio a voice can become a request.
+        if let tap = enrolmentTap { tap(f); return }
         // Three minutes with no turn from the reader: voice turns itself off, silently (HandsFreeSwitch).
         if HandsFreeSwitch.shared.expireIfIdle() { await handsFreeSet(false) }
         guard hf.enabled else { return }        // off: the microphone is closed, nothing is looked at
@@ -296,6 +301,8 @@ extension TurnEngine {
     /// The policy says the turn is over: the session's final text becomes the turn.
     func hfCommit() async {
         guard let session = hf.session else { await hfFeed(.turnDiscarded); return }
+        // No key, no turn: signed out the radio only listens. A switch left on at sign-out, or turned on by some other path, still sends nothing (TurnGate).
+        if !TurnGate.shared.allowed { hfEndSession(cancel: true); hf.cut = nil; await setLevelTo(.play, reason: .resume); await hfFeed(.turnDiscarded); return }
         let (samples, heardCall) = (hf.samples, hf.speakerCall)
         let transcriber = hf.transcriber
         hfEndSession(cancel: false)

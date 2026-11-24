@@ -336,7 +336,7 @@ component OnboardingPage
             text "First it sets up the voice on this phone: these files, and a check that each one works here." font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
             DownloadLines(group="voice")
             DownloadLines(group="voice-rest")
-            text ob.totalLabel font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="ob-total"
+            text `Everything above: ${dl.setupTotal}` testId="ob-welcome-total" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             button press=obBegin testId="ob-begin" appearance="none"
               Btn(label=beginLabel, primary=true, wide=true)
             if ob.step == "skipped"

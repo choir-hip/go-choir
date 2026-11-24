@@ -9,7 +9,7 @@ final class ModelOfferTests: XCTestCase {
     private let phone = DeviceProfile(chip: "A", memoryGB: 8, freeDiskGB: 50, onWiFi: true, availableMemoryMB: 6000)
     func testM1JobsAreTheListsOwn() {
         let jobs = ModelOffer.jobs(profile: phone)
-        XCTAssertEqual(jobs.map(\.job), ["transcriber", "bounds", "voice", "responder", "speaker", "search"])
+        XCTAssertEqual(jobs.map(\.job), ["transcriber", "bounds", "voice", "decision", "responder", "speaker", "search"])
         XCTAssertEqual(jobs.last?.options.first?.bytes, KnownModels.embeddingGemma2.bytes)
         for j in jobs {
             XCTAssertEqual(j.host, "Hugging Face"); XCTAssertFalse(j.options.isEmpty)
@@ -17,7 +17,10 @@ final class ModelOfferTests: XCTestCase {
             XCTAssertLessThanOrEqual(j.options.filter(\.recommended).count, 1)
             XCTAssertEqual(ModelOffer.group(j.job), j.job == "voice" ? "voice" : j.job == "search" ? "search" : "voice-rest")
         }
-        XCTAssertFalse(jobs.contains { $0.job == "decision" })
+        // The decision stage downloads its own model, so it is a job on the page with its size (it was left out and fetched unshown).
+        XCTAssertEqual(jobs.first { $0.job == "decision" }?.options.first?.id, "qwen3-0.6b-q8_0")
+        // Every stage the setup runs that has a download is offered: nothing is fetched that is not here.
+        for st in SetupStage.allCases where SetupCatalog.ladder(st).contains(where: { $0.bytes > 0 }) { XCTAssertTrue(jobs.contains { $0.job == st.rawValue }, "\(st)") }
         XCTAssertFalse(jobs.flatMap(\.options).contains { ["apple-speech", "energy", "system-voice", "cue-only", "system1-computer"].contains($0.id) }, "a built-in floor is never an offer")
         let ready = ModelOffer.jobs(profile: phone, ready: ["voice": jobs.first { $0.job == "voice" }!.options[0].id])
         XCTAssertTrue(ready.first { $0.job == "voice" }!.options[0].ready); XCTAssertFalse(ready.first { $0.job == "transcriber" }!.options.contains { $0.ready })
@@ -44,6 +47,30 @@ final class ModelOfferTests: XCTestCase {
         XCTAssertEqual(big.options.first?.id, "fluid-speech-pro-test")
         let six = ModelOffer.jobs(profile: DeviceProfile(chip: "iPhone15,3", memoryGB: 5.6, freeDiskGB: 50, onWiFi: true), list: list).first { $0.job == "transcriber" }!
         XCTAssertEqual(six.options.first { $0.recommended }?.id, "fluid-speech-mini", "its rule does not fit a 6 GB iPhone15")
+    }
+    // The larger answering model carries a licence limit; the page must be able to say so (review 6).
+    func testM1dTheLicenceLimitTravelsWithTheOption() {
+        let r = ModelOffer.jobs(profile: DeviceProfile(chip: "iPhone15,3", memoryGB: 5.6, freeDiskGB: 50, onWiFi: true)).first { $0.job == "responder" }!
+        let lfm = r.options.first { $0.id.hasPrefix("lfm3") }!
+        XCTAssertTrue(lfm.note.contains("US$10M"), lfm.note); XCTAssertTrue(r.options.first { $0.id.hasPrefix("qwen3-0.6b") }!.note.isEmpty)
+        XCTAssertTrue(r.options.first { $0.recommended }!.id.hasPrefix("lfm3"), "LFM3 stays the recommended answering model (owner, 2026-11-24)")
+    }
+    // A pick makes the stage's plan the pick and the floor, nothing else: a failed pick ends on what is built in, never on a model the person was not shown (review 3). Run only the shown stages, never the others.
+    final class Fetched: @unchecked Sendable { var ids: [String] = []; let l = NSLock(); func add(_ i: String) { l.lock(); ids.append(i); l.unlock() } }
+    struct Recording: SetupBackend {
+        let seen: Fetched, failing: Set<String>
+        func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws { seen.add(c.id); if failing.contains(c.id) { throw URLError(.notConnectedToInternet) } }
+        func check(_ c: SetupCandidate) async throws -> SetupCheck { SetupCheck(loadMs: 5, speed: 0.1, unit: "x real time", memoryMB: 0, outputOK: true) }
+    }
+    func testM1ePreferLeavesOnlyThePickAndTheFloorAndOnlyShownStagesRun() async {
+        let seen = Fetched()
+        let s = VoiceSetup(backend: Recording(seen: seen, failing: ["lfm3-1.7b-q5_k_m"]), profile: phone, stallSeconds: 5, patience: 0.05, maxTries: 1)
+        let pick = ModelOffer.candidate(job: "responder", id: "lfm3-1.7b-q5_k_m")!
+        s.prefer(.responder, pick)
+        await s.run(only: [.responder])
+        XCTAssertEqual(seen.ids, ["lfm3-1.7b-q5_k_m"], "only the shown stage ran, and a failed pick fell to the floor, not to another model")
+        XCTAssertEqual(s.choices[.holder], "cue-only")
+        XCTAssertNil(ModelOffer.candidate(job: "responder", id: "not-in-the-table"), "a pick that cannot be built is not run")
     }
     func testM2Ready() {
         XCTAssertEqual(ModelOffer.readyStages(record: nil), [])

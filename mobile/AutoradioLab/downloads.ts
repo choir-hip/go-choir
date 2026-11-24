@@ -1,5 +1,5 @@
 // The model files voice needs, offered with their sizes before any byte is fetched (owner, 2026-11-23: "yes, we do need to download the 'optional' voice model downloads. from hugging face ... apple builtin recognizer and voice isnt
-// good enough"). Three groups, each one consented download, never hidden behind another action:
+// good enough"). Three groups, each its own consented download (the agreement is per group: one group's press never agrees to another's files):
 //   voice       the radio's speaking voice. What a listener who only listens needs first (the first screen offers this one alone); until it is on the phone the radio speaks with the iPhone's built-in voice.
 //   voice-rest  hearing you, knowing when you speak, the small language model: what voice needs. Voice is offered as ready only once they are present; turning voice on without them opens this page.
 //   search      the model that searches the phone's own stories, documents and mail.
@@ -19,20 +19,20 @@
 //  D8 A pick is kept (consent.ts), only for a job and option that are on offer, and the press that starts a group hands native exactly the chosen option of each job (never another); a job with nothing that fits starts nothing.
 //  D9 Fluid Speech Pro-like names are not special-cased: an option appears only when the list offers it.
 import type { Storage } from './app.contract.d.ts';
-import { consentAct, consentPick, consentPicks, consentView } from './consent.ts';
+import { consentAgree, consentPick, consentPicks, consentView } from './consent.ts';
 import { nativeLater } from './api.ts';
 import { kickSearch } from './search-kick.ts';
 import { noVoice, type VoiceFacts } from './onboarding.ts';
 import { chosen, needs, picksFor, sizeLabel, type OfferJob } from './offers.ts';
 
 export { sizeLabel };
-export type OptionView = { id: string; text: string; tag: string; selected: boolean; ready: boolean };
+export type OptionView = { id: string; text: string; tag: string; note: string; selected: boolean; ready: boolean };
 export type JobView = { job: string; title: string; options: OptionView[]; ready: boolean; none: string };
 export type Group = {
   id: string; title: string; why: string; jobs: JobView[]; total: string; host: string; ready: boolean; busy: boolean; status: string; onWiFi: boolean; mobileLine: string;
   startLabel: string; mobileLabel: string; hostLine: string; canStart: boolean;
 };
-export type Downloads = { groups: Group[]; rev: number; voiceReady: boolean; hearingReady: boolean };
+export type Downloads = { groups: Group[]; rev: number; voiceReady: boolean; hearingReady: boolean; setupTotal: string };
 
 const TITLES: Record<string, [string, string]> = {
   voice: ["The radio's voice", "What the radio speaks with. Until it is on this phone the radio uses the iPhone's built-in voice."],
@@ -40,11 +40,11 @@ const TITLES: Record<string, [string, string]> = {
   search: ['Search on this phone', 'Finds your stories, documents and mail on the phone without sending the question anywhere.'],
 };
 const JOB_TITLES: Record<string, string> = {
-  transcriber: 'Hearing you', bounds: 'Knowing when you speak', voice: 'The voice', responder: 'Answering while the computer works', speaker: 'Knowing your voice', search: 'Search on this phone',
+  transcriber: 'Hearing you', decision: 'Quick decisions', bounds: 'Knowing when you speak', voice: 'The voice', responder: 'Answering while the computer works', speaker: 'Knowing your voice', search: 'Search on this phone',
 };
 const ORDER = ['voice', 'voice-rest', 'search'];
 /** Native stage names each group runs through voice setup (search is not a voice stage: its file comes through the search pass; the voice-print model is fetched beside the setup). */
-export const GROUP_STAGES: Record<string, string[]> = { voice: ['voice'], 'voice-rest': ['transcriber', 'bounds', 'responder'] };
+export const GROUP_STAGES: Record<string, string[]> = { voice: ['voice'], 'voice-rest': ['transcriber', 'bounds', 'decision', 'responder'] };
 
 /** D1 to D3, D6, D7: the view, from the facts, the person's picks and whether the search model is on the phone. Calls nothing. */
 export function downloadsView(f: VoiceFacts, searchPresent: boolean | null, rev: number, picks: Record<string, string> = {}): Downloads {
@@ -65,7 +65,7 @@ export function downloadsView(f: VoiceFacts, searchPresent: boolean | null, rev:
       const c = chosen(j, picks);
       return {
         job: j.job, title: JOB_TITLES[j.job] ?? j.job, ready: !needs(j, picks),
-        options: j.options.map((o) => ({ id: o.id, text: `${o.model}, ${o.sizeLabel}`, tag: [o.recommended ? 'Recommended for this phone' : '', o.ready ? 'On this phone' : ''].filter(Boolean).join('. '), selected: c?.id === o.id, ready: o.ready })),
+        options: j.options.map((o) => ({ id: o.id, text: `${o.model}, ${o.sizeLabel}`, tag: [o.recommended ? 'Recommended for this phone' : '', o.ready ? 'On this phone' : ''].filter(Boolean).join('. '), note: o.note ?? '', selected: c?.id === o.id, ready: o.ready })),
         none: c ? '' : 'Nothing here fits this phone; it keeps what is built in.',
       };
     });
@@ -77,7 +77,10 @@ export function downloadsView(f: VoiceFacts, searchPresent: boolean | null, rev:
       startLabel: f.onWiFi ? 'Download on Wi-Fi' : 'Wait for Wi-Fi', mobileLabel: 'Download now',
     });
   }
-  return { groups, rev, voiceReady: f.voiceReady, hearingReady: f.hearingReady };
+  // What the first-run press fetches: the chosen option of every job of the two voice groups, each file once (the decision and the responder may be one file), the voice-print model among them.
+  const seen = new Set<string>(); let setup = 0;
+  for (const j of offers) if (j.group !== 'search') { const o = needs(j, picks); if (o && !seen.has(o.id)) { seen.add(o.id); setup += o.bytes; } }
+  return { groups, rev, voiceReady: f.voiceReady, hearingReady: f.hearingReady, setupTotal: seen.size === 0 ? '' : sizeLabel(setup) };
 }
 
 const present = async (): Promise<boolean | null> => {
@@ -105,8 +108,8 @@ export async function downloadsAct(op: string, group: string, facts: VoiceFacts 
   const g = known ? downloadsView(f, null, 0, picks).groups.find((x) => x.id === group) : undefined;
   const mobile = op === 'startMobile';
   if (g && g.canStart && (op === 'start' ? f.onWiFi : mobile)) {                                    // D4, D5: on mobile data only the mobile press starts anything
-    await consentAct(mobile ? 'agreeModelsMobile' : 'agreeModels', storage);
-    if (group === 'search') kickSearch();
+    if (!(await consentAgree(group, mobile, storage))) return downloadsPage(f, storage);          // D11: not recorded, nothing starts
+    if (group === 'search') kickSearch(storage);
     else if (later) {
       const jobs = f.offers.filter((j) => j.group === group);
       const chosenPicks = picksFor(jobs, [group], picks);

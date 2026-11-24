@@ -66,10 +66,10 @@ describe('what is offered', () => {
 describe('the press', () => {
   test('D4/D8 Wi-Fi: records the agreement and starts that group alone, with exactly the chosen option of each job', async () => {
     await downloadsAct('start', 'voice', f, storage);
-    expect(calls.find((c) => c.op === 'obSetupBegin')).toMatchObject({ only: true, stages: ['voice'], picks: { voice: 'zeta' }, speaker: false }); expect((await modelsAgreement(storage))).toEqual({ ok: true, mobile: false });
+    expect(calls.find((c) => c.op === 'obSetupBegin')).toMatchObject({ only: true, stages: ['voice'], picks: { voice: 'zeta' }, speaker: false }); expect((await modelsAgreement(storage, 'voice'))).toEqual({ ok: true, mobile: false });
     calls = []; await downloadsAct('pick', 'transcriber', f, storage, 'ear-small'); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined();     // a pick fetches nothing
     await downloadsAct('start', 'voice-rest', f, storage);
-    expect(calls.find((c) => c.op === 'obSetupBegin')).toMatchObject({ only: true, stages: ['transcriber', 'bounds', 'responder'], picks: { transcriber: 'ear-small', bounds: 'gate', responder: 'lm', speaker: 'print' }, speaker: true });
+    expect(calls.find((c) => c.op === 'obSetupBegin')).toMatchObject({ only: true, stages: ['transcriber', 'bounds', 'responder'], picks: { transcriber: 'ear-small', bounds: 'gate', responder: 'lm' }, speaker: true });
   });
   test('D8 a pick is kept, only for a job and an option that are on offer', async () => {
     await downloadsAct('pick', 'voice', f, storage, 'zeta-lite'); expect(await consentPicks(storage)).toEqual({ voice: 'zeta-lite' });
@@ -84,11 +84,11 @@ describe('the press', () => {
   });
   test('D4 mobile data: the Wi-Fi press starts nothing; the mobile press records the mobile agreement and starts', async () => {
     const m = { ...f, onWiFi: false };
-    await downloadsAct('start', 'voice', m, storage); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined(); expect((await consentView(storage)).models).toBe('');
-    await downloadsAct('startMobile', 'voice', m, storage); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeDefined(); expect((await modelsAgreement(storage))).toEqual({ ok: true, mobile: true });
+    await downloadsAct('start', 'voice', m, storage); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined(); expect((await modelsAgreement(storage, 'voice')).ok).toBe(false);
+    await downloadsAct('startMobile', 'voice', m, storage); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeDefined(); expect((await modelsAgreement(storage, 'voice'))).toEqual({ ok: true, mobile: true });
   });
   test('D4 search: the press records the agreement and asks the search pass to run; no voice setup starts', async () => {
-    await downloadsAct('start', 'search', f, storage); expect(kicks).toBe(1); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined(); expect((await modelsAgreement(storage)).ok).toBe(true);
+    await downloadsAct('start', 'search', f, storage); expect(kicks).toBe(1); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined(); expect((await modelsAgreement(storage, 'search')).ok).toBe(true);
     expect(files.has(CONSENT_FILE)).toBe(true);
   });
   test('D5 a voice-only run does not make the other group look busy', () => {
@@ -102,6 +102,30 @@ describe('the press', () => {
     expect(downloadsView(busy, false, 0).groups[0]).toMatchObject({ busy: true, status: 'Downloading, 40%.' });
     const done = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => ({ ...o, ready: true })) })) }; await downloadsAct('start', 'voice', done, storage); await downloadsAct('start', 'nonsense', f, storage);
     expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined(); expect(files.size).toBe(0);
+  });
+  test('D10 agreement is per group: a voice press leaves the search model unagreed, the search press agrees only search, and a Wi-Fi press never lowers a mobile agreement', async () => {
+    await downloadsAct('start', 'voice', f, storage); await downloadsAct('start', 'voice-rest', f, storage);
+    expect(await modelsAgreement(storage, 'search')).toEqual({ ok: false, mobile: false });
+    expect(await modelsAgreement(storage, 'voice')).toEqual({ ok: true, mobile: false });
+    await downloadsAct('start', 'search', f, storage); expect(await modelsAgreement(storage, 'search')).toEqual({ ok: true, mobile: false });
+    const m = { ...f, onWiFi: false }; await downloadsAct('startMobile', 'voice', m, storage); await downloadsAct('start', 'voice', f, storage);
+    expect(await modelsAgreement(storage, 'voice')).toEqual({ ok: true, mobile: true });
+  });
+  test('D11 nothing starts when the agreement could not be recorded (an unreadable file)', async () => {
+    files.set(CONSENT_FILE, new TextEncoder().encode('{}')); const bad = { fs: { ...(storage as { fs: Record<string, unknown> }).fs, readFile: async () => { throw new Error('EIO'); } } } as never;
+    await downloadsAct('start', 'voice', f, bad); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined();
+  });
+  test('D12 the setup total is the chosen options of the two voice groups, each file once, voice-print model included; the decision job is shown and counted', () => {
+    const o = offers().concat([job('decision', 'voice-rest', [opt('lm', 'Small LM', 640_000_000, true)])]);   // the same file as the responder's: one download
+    const v = downloadsView({ ...f, offers: o }, false, 0);
+    expect(v.setupTotal).toBe('1.6 GB');                                              // 351 voice + 600 ear + 2 gate + 640 lm (once) + 8 print = 1601 MB
+    expect(v.groups[1].jobs.map((j) => j.job)).toContain('decision');
+    expect(downloadsView({ ...f, offers: [] }, false, 0).setupTotal).toBe('');
+  });
+  test('D13 an option\'s limit (a licence) is shown with it', () => {
+    const lim = 'Commercial use above a revenue line needs a licence.';
+    f = { ...f, offers: [job('responder', 'voice-rest', [{ ...opt('big', 'Big LM', 1_260_000_000, true), note: lim }, opt('small', 'Small LM', 640_000_000)])] };
+    const o = downloadsView(f, false, 0).groups[0].jobs[0].options; expect(o[0].note).toBe(lim); expect(o[1].note).toBe('');
   });
   test('D9 an option appears only when the list offers it: no name is known here', () => {
     const v = downloadsView(f, false, 0); const all = v.groups.flatMap((g) => g.jobs.flatMap((j) => j.options.map((o) => o.text)));

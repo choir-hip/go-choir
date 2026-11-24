@@ -3,6 +3,7 @@ shape DownloadOption
   id: string
   text: string
   tag: string
+  note: string
   selected: bool
   ready: bool
 
@@ -35,3 +36,4 @@ shape DownloadsView
   rev: number
   voiceReady: bool
   hearingReady: bool
+  setupTotal: string

@@ -159,4 +159,26 @@ final class EngineEmbedder: VoiceEmbedder, @unchecked Sendable {
         var v = [Float](repeating: 0, count: 256); v[max(0, k)] = 1; v[100 + samples.count % 50] = 0.05
         return v
     }
+
+    final class Count: @unchecked Sendable { var n = 0 }
+    // Voice enrolment listens through the engine without the engine looking for turns: a sentence read to teach the radio a voice, even a long loud one with pauses, never becomes a request (review 5).
+    func testWhileEnrolmentListensNoTurnIsCommittedAndAfterwardsTurnsFlowAgain() async throws {
+        let g = SpeakerGate(url: nil, embedder: EngineEmbedder()); let e = try engine(g); let c = Count()
+        await e.setEnrolmentTap { _ in c.n += 1 }
+        try await talk(e, speaker: 1, words: "this is a sentence read to teach the radio my voice")
+        XCTAssertGreaterThan(c.n, 40, "the frames went to enrolment"); XCTAssertTrue(RecordingDesk.turns.isEmpty, "and no turn was committed")
+        await e.setEnrolmentTap(nil)
+        try await talk(e, speaker: 1, words: "what is on today")
+        XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "what is on today")
+    }
+    // Signed out the radio only listens (review 4): a hands-free switch left on sends nothing without a key.
+    func testNoKeyNoTurnWhateverTheSwitchSays() async throws {
+        TurnGate.shared.allowed = false; defer { TurnGate.shared.allowed = true }
+        let e = try engine(SpeakerGate(url: nil, embedder: nil))
+        try await talk(e, speaker: 1, words: "anyone at all")
+        XCTAssertTrue(RecordingDesk.turns.isEmpty)
+        TurnGate.shared.allowed = true
+        try await talk(e, speaker: 1, words: "now with a key")
+        XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "now with a key")
+    }
 }

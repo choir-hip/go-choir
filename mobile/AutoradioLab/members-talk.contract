@@ -23,7 +23,7 @@ members Autoradio
   // Settings, Listening: the learned voice (kept on this phone only).
   // "Learn again" opens the learn-your-voice page; native rewinds it (the old profile is deleted when the person starts).
   action learnVoice
-    send tk = voiceLearn()
+    send lrnm = learnAct("rewind", ovoice)
     send pms = pagesOpen("settings:voiceprint", "Your voice")
   action forgetVoice
     send tk = voiceForget()

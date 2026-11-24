@@ -22,7 +22,7 @@ const device: Device = { facts: async () => ({ ...v }), op: async (op, args) => 
 const env = (o: Partial<Env> = {}): Env => ({ storage, device, get: async () => edition, closePage: async (a) => { closed.push(a); }, openPage: async (a) => { opened.push(a); }, ...o });
 const act = (op: string, arg = '', topics = '', top = SETUP, e: Env = env()) => onboardingAct(op, arg, topics, top, e);
 const ops = (): string[] => calls.map((c) => c.op);
-beforeEach(() => { files.clear(); forgetOnboarding(); forgetConsent(); resetSeam(); v = noVoice(); calls = []; closed = []; opened = []; edition = { found: false }; });
+beforeEach(() => { files.clear(); forgetOnboarding(); forgetConsent(); resetSeam(); v = { ...noVoice(), offers: [{ job: 'voice', group: 'voice', host: 'Example Hub', options: [{ id: 'v', model: 'V', bytes: 1_000_000, sizeLabel: '1 MB', recommended: true, ready: false }] }] }; calls = []; closed = []; opened = []; edition = { found: false }; });
 
 describe('the steps', () => {
   test('O1 the walk, in order, ends at done with the edition made and the station released', async () => {
@@ -193,7 +193,7 @@ describe('the offer', () => {
   test('without a native module the page still answers, and every act does nothing native', async () => {
     const e = env({ device: null });
     expect((await onboardingPage(undefined, 0, SETUP, e)).step).toBe('welcome');
-    expect((await act('begin', '', '', SETUP, e)).step).toBe('setup');
+    expect((await act('begin', '', '', SETUP, e)).step).toBe('welcome');        // nothing offered, nothing started (O19)
   });
 });
 
@@ -251,7 +251,7 @@ describe('first run without an account, and the agreement', () => {
 });
 
 describe('the voice learning step and the choices', () => {
-  const offer = (job: string, group: string, ids: string[], rec: number): OfferJob => ({ job, group, host: 'Example Hub', options: ids.map((id, i) => ({ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: i === rec, ready: false })) });
+  const offerOf = (job: string, group: string, ids: string[], rec: number): OfferJob => ({ job, group, host: 'Example Hub', options: ids.map((id, i) => ({ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: i === rec, ready: false })) });
   test('O17 the learn step ends with learnDone into the voice step (native told to stop listening); Not now at the microphone skips to the voice step without opening it', async () => {
     await act('begin'); v = { ...v, setupStarted: true, setupFinished: true }; await onboardingPage(v, 0, SETUP, env());
     await act('micNext'); await act('hearing', 'true'); expect((await onboardingPage(v, 1, SETUP, env())).step).toBe('learn');
@@ -262,9 +262,15 @@ describe('the voice learning step and the choices', () => {
     await onboardingPage(v, 0, SETUP, env()); const s = await act('micSkip'); expect(s.step).toBe('voice'); expect(ops()).not.toContain('obMicStart');
   });
   test('O18 begin hands native the chosen option of every job (the pick, else the recommendation) and the voice-print model', async () => {
-    v = { ...v, offers: [offer('voice', 'voice', ['a', 'b'], 0), offer('transcriber', 'voice-rest', ['c', 'd'], 1), offer('speaker', 'voice-rest', ['print'], 0), offer('search', 'search', ['e'], 0)] };
+    v = { ...v, offers: [offerOf('voice', 'voice', ['a', 'b'], 0), offerOf('transcriber', 'voice-rest', ['c', 'd'], 1), offerOf('speaker', 'voice-rest', ['print'], 0), offerOf('search', 'search', ['e'], 0)] };
     await consentPick('transcriber', 'c', storage);
     await act('begin');
-    expect(calls.find((c) => c.op === 'obSetupBegin')?.args).toEqual({ picks: { voice: 'a', transcriber: 'c', speaker: 'print' }, speaker: true });
+    expect(calls.find((c) => c.op === 'obSetupBegin')?.args).toEqual({ only: true, stages: ['voice', 'transcriber'], picks: { voice: 'a', transcriber: 'c' }, speaker: true });
+  });
+  test('O19 the press runs only the shown stages (the decision stage too when it is shown), never the configurator, and refuses when nothing is offered', async () => {
+    v = { ...v, offers: [offerOf('voice', 'voice', ['a'], 0), offerOf('decision', 'voice-rest', ['q'], 0), offerOf('responder', 'voice-rest', ['l'], 0)] };
+    await act('begin'); expect(calls.find((c) => c.op === 'obSetupBegin')?.args).toMatchObject({ only: true, stages: ['voice', 'decision', 'responder'] });
+    forgetOnboarding(); files.clear(); calls = []; v = { ...noVoice(), offers: [] };
+    const r = await act('begin'); expect(ops()).not.toContain('obSetupBegin'); expect(r.step).toBe('welcome'); expect(r.message).toContain('not available');
   });
 });

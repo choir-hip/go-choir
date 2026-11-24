@@ -46,6 +46,8 @@ public final class ChoirApp: @unchecked Sendable {
     private var message = ""
     private var loading = false
     private var eventTask: Task<Void, Never>?
+    /// There is an account's key: the bar's microphone may be turned on (a signed-out listener only listens).
+    public var hasKey: Bool { signIn.current.signedIn }
     public var onChange: (@Sendable () -> Void)?
     nonisolated(unsafe) var continuity: PlaybackContinuity?
 
@@ -55,9 +57,11 @@ public final class ChoirApp: @unchecked Sendable {
         ChoirEnvironment.shared.keys = keys
         ChoirEnvironment.shared.log = runtime.log
         signIn = ChoirSignIn(baseURL: baseURL)
+        TurnGate.shared.allowed = signIn.current.signedIn
         registerAccountWipe()
         signIn.onChange = { [weak self] in
             guard let self else { return }
+            TurnGate.shared.allowed = self.signIn.current.signedIn
             if self.signIn.current.status == "idle", self.signIn.current.signedIn, self.signIn.current.message == "signed in" {
                 Task { await self.refresh() }
             }
@@ -214,6 +218,8 @@ public final class ChoirApp: @unchecked Sendable {
     /// answer and not a guess; what is not answered by then is dropped, never sent under a later account; then the local key goes and the account wipe runs (ChoirSignIn.signOut);
     /// the revoke follows in the background.
     public func signOut() async {
+        TurnGate.shared.allowed = false                         // first: no turn is sent from here on, and the microphone is closed (the switch stays off for the next person)
+        runtime.setHandsFree(false)
         await MainActor.run { TakeSession.live?.discard() }      // a take in hand is the old account's: dropped first (its give-back is a queued task that may land after the pause; the queue is cleared, so it plays nothing)
         lock.lock(); loading = false; lock.unlock()
         runtime.player.pause(reason: "sign out")

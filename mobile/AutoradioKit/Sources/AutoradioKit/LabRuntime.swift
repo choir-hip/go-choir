@@ -331,6 +331,8 @@ public final class LabRuntime: @unchecked Sendable {
         if handsFreeIsOn, let say = MicLog.finalError(state(), rate: Int(audio.micTapRate)) { log.emit(.error(stage: "listen", message: say)) }
     }
     /// The stored state again, after a screen's own turn-on.
+    /// Voice enrolment listens through the engine's microphone without the engine looking for turns (TurnEngine.enrolmentTap).
+    public func setEnrolmentTap(_ tap: (@Sendable (AudioFrame) -> Void)?) async { await engine.setEnrolmentTap(tap) }
     public func restoreHandsFree() { setHandsFree(HandsFreeSwitch.shared.isOn) }
     public var handsFreeIsOn: Bool { handsFreeOverride ?? HandsFreeSwitch.shared.isOn }
     /// Discard the turn being talked (Cancel beside Send): stop the capture, drop the audio and words, call nothing.
