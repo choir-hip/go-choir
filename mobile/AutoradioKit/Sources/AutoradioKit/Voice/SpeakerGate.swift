@@ -14,7 +14,7 @@ import Foundation
 //     turns, so one or two turns of another voice do not become the reader's voice.
 //  3. The reader's own voice with a cold, a different microphone: below the threshold by a little: it passes (a mismatch must be clear:
 //     `rejectMargin` below the threshold). Erring toward accepting the reader.
-//  4. A clear second speaker after the voice is learned: a mismatch; the turn is not shown and not sent.
+//  4. A clear second speaker after the voice is learned: a mismatch; in this build it is only logged (HandsFree.hfCommit), nothing is dropped.
 //  5. Short speech (under 1 s), no embedder, a model that failed or returned the wrong size: unknown, which passes.
 //  6. "Forget my voice": the stored profile is deleted and every turn passes again at once.
 //  7. A profile from another model version on disk: ignored (SpeakerStore.load), the voice is learned again.
@@ -107,7 +107,7 @@ extension SpeakerGate {
         i.learned = learned; i.heard = heardTurns; i.ready = canListen
         i.credit = WeSpeakerEmbedder.attribution
         if !i.ready { i.line = "The voice model is still being fetched (about 8 MB). Until then every voice is accepted." }
-        else if i.learned { i.line = "The radio ignores other voices, such as a television. Kept on this phone only, never uploaded." }
+        else if i.learned { i.line = "The radio notes whether each turn sounds like you (written to the log only for now; nothing is ignored). Kept on this phone only, never uploaded." }
         else { i.line = "Say a few things to the radio and it learns your voice. Kept on this phone only, never uploaded." }
         return i
     }

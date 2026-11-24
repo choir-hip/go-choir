@@ -36,6 +36,8 @@ members Autoradio
     send obm = onboardingAct("mic", "", "", pg.top)
   action obMicNext
     send obm = onboardingAct("micNext", "", "", pg.top)
+  action obMicSkip
+    send obm = onboardingAct("micSkip", "", "", pg.top)
   action obHearingYes
     send obm = onboardingAct("hearing", "true", "", pg.top)
   action obHearingNo

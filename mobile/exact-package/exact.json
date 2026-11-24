@@ -214,21 +214,35 @@
       "talking": "bool",
       "voicePicked": "number",
       "finishAsked": "number",
-      "plan": "PlanRowView[]",
+      "offers": "OfferJobView[]",
       "voiceReady": "bool",
       "hearingReady": "bool",
-      "runStages": "string[]"
+      "runStages": "string[]",
+      "enrol": "EnrolView"
     },
-    "PlanRowView": {
-      "stage": "string",
-      "name": "string",
-      "model": "string",
-      "id": "string",
-      "group": "string",
-      "host": "string",
-      "bytes": "number",
-      "sizeLabel": "string",
-      "ready": "bool"
+    "OfferJobView": {
+     "job": "string",
+     "group": "string",
+     "host": "string",
+     "options": "OfferOptionView[]"
+    },
+    "OfferOptionView": {
+     "id": "string",
+     "model": "string",
+     "bytes": "number",
+     "sizeLabel": "string",
+     "recommended": "bool",
+     "ready": "bool"
+    },
+    "EnrolView": {
+     "phase": "string",
+     "taken": "number",
+     "needed": "number",
+     "again": "bool",
+     "level": "number",
+     "learned": "bool",
+     "ready": "bool",
+     "call": "string"
     },
     "PodNow": {
       "episodeId": "string",
@@ -875,10 +889,11 @@
           "talking": false,
           "voicePicked": 0,
           "finishAsked": 0,
-          "plan": [],
+          "offers": [],
           "voiceReady": false,
           "hearingReady": false,
-          "runStages": []
+          "runStages": [],
+          "enrol": {"phase": "idle", "taken": 0, "needed": 3, "again": false, "level": 0, "learned": false, "ready": false, "call": ""}
         }
       }
     },

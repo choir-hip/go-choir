@@ -1,31 +1,37 @@
 import Foundation
 
-// What voice needs from the network, as a list shared code can show before any byte is fetched (owner, 2026-11-23: the hearing and voice models are not optional; the files stay on Hugging Face; the prompt names the whole set
-// with the true per-file sizes, read from the model list and never typed into a string; consent comes before any byte). The names and sizes are `SetupCatalog.ladder` (the first non-floor candidate of each stage, the one setup
-// downloads first on a phone that fits it) and `KnownModels.embeddingGemma2` (search), so a newer model in those lists is a new row with its own size, and the same consented download.
-// The three stages a listener who only LISTENS needs first: the speaking voice (group "voice"). The rest (group "voice-rest": hearing you, knowing when you speak, the small language model) is asked for when voice is turned on.
-public struct OfferRow: Sendable, Equatable {
-    public var stage: String, name: String, model: String, id: String, group: String, host: String
-    public var bytes: Int64, ready: Bool
+// What voice needs from the network, as jobs with their options, for shared code to show before any byte is fetched (owner, 2026-11-23/24: the prompt names the models with the true per-file sizes, read from the model list
+// (ModelList) and never typed into a string; consent comes before any byte; the person may choose per job, with one option marked as the recommendation for THIS phone). Groups, as the download step offers them:
+// "voice" (the speaking voice: what a listener who only LISTENS needs first), "voice-rest" (hearing you, knowing when you speak, the small language model, knowing your voice), "search".
+public struct OfferOption: Sendable, Equatable {
+    public var id: String, model: String
+    public var bytes: Int64, recommended: Bool, ready: Bool
     public var sizeLabel: String { SetupCatalog.sizeLabel(bytes) }
-    public var dict: [String: Any] { ["stage": stage, "name": name, "model": model, "id": id, "group": group, "host": host, "bytes": bytes, "sizeLabel": sizeLabel, "ready": ready] }
+    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready] }
+}
+public struct OfferJob: Sendable, Equatable {
+    public var job: String, group: String, host: String
+    public var options: [OfferOption]
+    public var dict: [String: Any] { ["job": job, "group": group, "host": host, "options": options.map { $0.dict }] }
 }
 
 public enum ModelOffer {
-    /// Where every file comes from: the pinned GGUF files by their own address (KnownModels), Parakeet, Silero and Kokoro through the FluidAudio library, which fetches from Hugging Face (README, "On-device models").
-    public static let host = "Hugging Face"
+    public static let host = ModelList.host
 
-    /// The stages that a model stands behind: the downloads setup would make first on this device (the floors are built in and not rows), grouped as above, plus the search model.
-    public static func rows(profile: DeviceProfile, smaller: Bool = false, ready: Set<String> = []) -> [OfferRow] {
-        let plan = SetupCatalog.plan(for: profile, smaller: smaller)
-        var out: [OfferRow] = []
-        var seen = Set<String>()
-        for s in [SetupStage.voice, .transcriber, .bounds, .responder] {
-            guard let c = plan[s]?.first, c.bytes > 0, seen.insert(c.id).inserted else { continue }
-            out.append(OfferRow(stage: s.rawValue, name: s.title, model: c.label, id: c.id, group: s == .voice ? "voice" : "voice-rest", host: host, bytes: c.bytes, ready: ready.contains(s.rawValue)))
+    /// Which group of the download step a job is in.
+    public static func group(_ job: String) -> String { job == "voice" ? "voice" : job == "search" ? "search" : "voice-rest" }
+
+    /// The jobs, in the list's order, each with its options (the list's own order is its rank) and the one marked recommended for this phone. `ready`: job -> the id on the phone and passed its check.
+    /// The decision job shares the responder's file and is not listed. A job with no option that fits this phone lists its options and recommends none (it stays on its built-in floor unless the person picks one).
+    public static func jobs(profile: DeviceProfile, list: ModelList = .active, ready: [String: String] = [:]) -> [OfferJob] {
+        var out: [OfferJob] = []
+        for j in ModelList.jobs {
+            let opts = list.options(j)
+            if opts.isEmpty { continue }
+            let rec = list.recommended(j, for: profile)?.id
+            out.append(OfferJob(job: j, group: group(j), host: opts[0].host,
+                                options: opts.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id) }))
         }
-        let e = KnownModels.embeddingGemma2
-        out.append(OfferRow(stage: "search", name: "Search on this phone", model: "EmbeddingGemma 2", id: e.id, group: "search", host: host, bytes: e.bytes, ready: ready.contains("search")))
         return out
     }
 
@@ -39,6 +45,15 @@ public enum ModelOffer {
             if let c = SetupCatalog.ladder(s).first(where: { $0.id == i.chosen }) { if c.bytes > 0 { out.insert(i.stage) } }
             else if !builtIn.contains(i.kitStageID) { out.insert(i.stage) }
         }
+        return out
+    }
+
+    /// job -> the model id on the phone: the stage's recorded choice when it is not that stage's built-in floor.
+    public static func readyChoices(record: SetupRecord?) -> [String: String] {
+        guard let record else { return [:] }
+        let ok = readyStages(record: record)
+        var out: [String: String] = [:]
+        for i in record.items where ok.contains(i.stage) { out[i.stage] = i.chosen }
         return out
     }
 

@@ -19,6 +19,7 @@ use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
 use DownloadCard from "./downloads.contract"
+use LearnCard from "./learn.contract"
 use SkeletonLine from "./transitions.contract"
 
 component SettingsPage
@@ -35,13 +36,15 @@ component SettingsPage
       VoiceScreen()
     if screen == "downloads"
       DownloadsScreen()
+    if screen == "voiceprint"
+      VoiceprintScreen()
     if screen == "computer"
       ComputerScreen()
     if screen == "learned"
       LearnedScreen()
     if screen == "about"
       AboutScreen()
-    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "downloads" and screen != "computer" and screen != "learned" and screen != "about"
+    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "downloads" and screen != "voiceprint" and screen != "computer" and screen != "learned" and screen != "about"
       RootScreen()
 
 // ---------------------------------------------------------------- shared pieces
@@ -386,12 +389,22 @@ component DownloadsScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Downloads", back=true)
-      text "Voice needs these files on the phone. Each one is fetched only when you press its button, and the sizes are the real files." testId="settings-downloads-note" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      text "Voice needs these files on the phone. Choose a model for each job, or keep the one recommended for this phone. Each group is fetched only when you press its button, and the sizes are the real files." testId="settings-downloads-note" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
       DownloadCard(group="voice")
       Hairline()
       DownloadCard(group="voice-rest")
       Hairline()
       DownloadCard(group="search")
+
+// ---------------------------------------------------------------- your voice
+
+component VoiceprintScreen
+  inject
+    th: Theme
+  view
+    ToolScroll(id="settings")
+      ScreenTitle(label="Your voice", back=true)
+      LearnCard(flow=false)
 
 // ---------------------------------------------------------------- computer
 

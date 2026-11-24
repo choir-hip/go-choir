@@ -32,6 +32,7 @@ component Autoradio
   members "./members-content.contract"        // the content row above the bar (owner, 2026-11-16)
   members "./members-talk.contract"
   members "./members-retrieval.contract"     // lane exact-retrieval: the voice turn's ask, the launcher's paper search
+  members "./members-learn.contract"         // lane onboard-consent: learning the person's voice
   members "./members-consent.contract"       // lane onboard-consent: what was agreed, the sheets in front of an ask
   // ---- lane autoradio-podcasts ----
   members "./members-podcasts.contract"
@@ -51,6 +52,11 @@ component Autoradio
     dl
     dlStart
     dlStartMobile
+    dlPick
+    lrn
+    lrnPress
+    lrnLeaveFlow
+    lrnLeaveSettings
     declineModels
     gateSignIn
     gateMakeAccount
@@ -373,6 +379,7 @@ component Autoradio
     obFallback
     obMic
     obMicNext
+    obMicSkip
     obHearingYes
     obHearingNo
     obTopics

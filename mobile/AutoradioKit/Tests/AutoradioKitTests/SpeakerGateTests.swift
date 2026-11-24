@@ -99,7 +99,7 @@ final class SpeakerGateTests: XCTestCase {
 
     // MARK: the engine
 
-    func engine(_ g: SpeakerGate) throws -> TurnEngine {
+    func engine(_ g: SpeakerGate, log: EventLog = EventLog(clock: LabClock())) throws -> TurnEngine {
         let r = StageRegistry.builtIn()
         r.register(.system1, StubS1.self) { StubS1($0) }
         r.register(.voice, StubVoice.self) { StubVoice($0) }
@@ -111,7 +111,7 @@ final class SpeakerGateTests: XCTestCase {
         cfg.set(.system1, .init(id: "stub-s1", params: ["delay": .number(0), "asks": .string("yes")]))
         cfg.set(.voice, .init(id: "stub-voice")); cfg.set(.holder, .init(id: "local-ack")); cfg.set(.desk, .init(id: "rec-desk"))
         RecordingDesk.turns = []; ScriptedTranscriber.finals = []; ScriptedTranscriber.sessions = []
-        var env = EngineEnvironment(registry: r, log: EventLog(clock: LabClock()), playback: StoppablePlayback())
+        var env = EngineEnvironment(registry: r, log: log, playback: StoppablePlayback())
         env.speakerGate = g
         return TurnEngine(env: env, configuration: cfg)
     }
@@ -129,17 +129,19 @@ final class SpeakerGateTests: XCTestCase {
         try await Task.sleep(nanoseconds: 400_000_000)
     }
 
-    func testWithALearnedVoiceATVTurnIsNotSentAndTheReadersIs() async throws {
+    func testWithALearnedVoiceATVTurnIsLoggedAndStillSentInThisBuild() async throws {
         let embed = EngineEmbedder()
         let g = SpeakerGate(url: nil, embedder: embed)
         for i in 0..<3 { await g.learn([Float](repeating: 0.3 + 0.1, count: 32_000 + i * 160)) }     // the reader: speaker 1
         XCTAssertTrue(g.learned)
-        let e = try engine(g)
+        let log = EventLog(clock: LabClock()); let e = try engine(g, log: log)
         try await talk(e, speaker: 3, words: "buy now while stocks last")         // the TV
-        XCTAssertTrue(RecordingDesk.turns.isEmpty, "another voice is not sent")
-        let p = await e.phase; XCTAssertNotEqual(p, .capturing)
+        XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "buy now while stocks last", "the check only logs: another voice is still sent")
         try await talk(e, speaker: 1, words: "what is on today")                  // the reader
-        XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "what is on today")
+        XCTAssertEqual(RecordingDesk.turns.last?.listenerWords, "what is on today")
+        let notes = log.events.compactMap { ev -> String? in if case .note(let n) = ev.event, n.hasPrefix("speaker: ") { return n }; return nil }
+        XCTAssertEqual(notes.count, 2, "one verdict per turn")
+        XCTAssertTrue(notes[0].hasPrefix("speaker: mismatch"), notes[0]); XCTAssertTrue(notes[1].hasPrefix("speaker: match"), notes[1])
     }
     func testWithNoLearnedVoiceEveryTurnIsSentAsToday() async throws {
         let g = SpeakerGate(url: nil, embedder: EngineEmbedder())

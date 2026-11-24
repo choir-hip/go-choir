@@ -22,10 +22,11 @@ extension AutoradioModule {
         // The reader's voice (lane autoradio-talk): the Core ML model is fetched quietly (about 8 MB) and, once loaded, the gate listens.
         // Learned from what the reader says to the radio; stored on this phone only (SpeakerStore); never uploaded.
         SpeakerGate.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["voiceProfile"]) } }
-        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e } }
+        // The model is fetched only after the person agreed on the download step (OnboardingController.fetchSpeakerModel); a phone that already has it loads it here, which fetches nothing.
+        Task { let e = WeSpeakerEmbedder.standard(); if e.onDisk, await e.ensureReady() { SpeakerGate.shared.embedder = e } }
         handle("voiceProfile") { [unowned self] _, reply in reply(self.json(SpeakerGate.shared.info())) }
-        handle("voiceLearn") { _, reply in SpeakerGate.shared.forget(); reply(["ok": true, "message": ""]) }
-        handle("voiceForget") { _, reply in SpeakerGate.shared.forget(); reply(["ok": true, "message": ""]) }
+        handle("voiceLearn") { _, reply in OnboardingController.shared?.enrolment.rewind(); reply(["ok": true, "message": ""]) }       // "Learn again" opens the page; the old profile is deleted when the person starts (VoiceEnrolment.start)
+        handle("voiceForget") { _, reply in OnboardingController.shared?.enrolment.forget(); OnboardingController.shared?.stopEnrolment(); SpeakerGate.shared.forget(); reply(["ok": true, "message": ""]) }
 
         // Native because the voice turn engine writes the entries; it hands them over as they are (and the id the card was closed on) and decides nothing. The bar's answer card is bar.ts.
         handle("conversationEntries") { [unowned self] _, reply in reply(["entries": Conversation.shared.entries().map { self.json($0) }]) }

@@ -2,8 +2,9 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { downloadsAct, downloadsView, sizeLabel } from './downloads.ts';
 import { onKickSearch } from './search-kick.ts';
-import { consentView, forgetConsent, modelsAgreement, CONSENT_FILE } from './consent.ts';
-import { noVoice, type PlanRow, type VoiceFacts } from './onboarding.ts';
+import { consentPicks, consentView, forgetConsent, modelsAgreement, CONSENT_FILE } from './consent.ts';
+import { noVoice, type VoiceFacts } from './onboarding.ts';
+import type { OfferJob } from './offers.ts';
 import { bindNative, resetSeam } from './api.ts';
 
 const files = new Map<string, Uint8Array>();
@@ -13,40 +14,73 @@ const storage = { fs: {
   stat: async (p: string) => { if (!files.has(p)) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); return {}; },
 } } as never;
 // Invented model names and sizes on purpose: nothing in downloads.ts may know a model's name.
-const row = (stage: string, group: string, name: string, model: string, bytes: number, ready = false): PlanRow => ({ stage, name, model, id: model.toLowerCase(), group, host: 'Example Hub', bytes, sizeLabel: sizeLabel(bytes), ready });
-const plan = (): PlanRow[] => [row('voice', 'voice', 'The voice', 'Zeta voice', 351_000_000), row('transcriber', 'voice-rest', 'Hearing you', 'Ear one', 481_400_000), row('bounds', 'voice-rest', 'Knowing when you speak', 'Gate', 2_000_000),
-  row('responder', 'voice-rest', 'Talking while it works', 'Small LM', 640_000_000), row('search', 'search', 'Search on this phone', 'Embedder', 309_855_456)];
+const opt = (id: string, model: string, bytes: number, recommended = false, ready = false) => ({ id, model, bytes, sizeLabel: sizeLabel(bytes), recommended, ready });
+const job = (j: string, group: string, options: ReturnType<typeof opt>[]): OfferJob => ({ job: j, group, host: 'Example Hub', options });
+const offers = (): OfferJob[] => [
+  job('voice', 'voice', [opt('zeta', 'Zeta voice', 351_000_000, true), opt('zeta-lite', 'Zeta lite', 300_000_000)]),
+  job('transcriber', 'voice-rest', [opt('ear-two', 'Ear two', 600_000_000, true), opt('ear-one', 'Ear one', 481_400_000), opt('ear-small', 'Ear small', 250_000_000)]),
+  job('bounds', 'voice-rest', [opt('gate', 'Gate', 2_000_000, true)]),
+  job('responder', 'voice-rest', [opt('lm', 'Small LM', 640_000_000, true)]),
+  job('speaker', 'voice-rest', [opt('print', 'Print', 8_000_000, true)]),
+  job('search', 'search', [opt('embedder', 'Embedder', 309_855_456, true)]),
+];
 let f: VoiceFacts; let calls: Record<string, unknown>[]; let kicks: number;
-beforeEach(() => { files.clear(); forgetConsent(); resetSeam(); calls = []; kicks = 0; f = { ...noVoice(), plan: plan() };
+beforeEach(() => { files.clear(); forgetConsent(); resetSeam(); calls = []; kicks = 0; f = { ...noVoice(), offers: offers() };
   bindNative({ later: async (r) => { calls.push(r); if (r.op === 'embedState') return { present: false }; return {}; } }); onKickSearch(() => { kicks += 1; }); });
 
 describe('what is offered', () => {
   test('D1 building the view calls nothing and fetches nothing', () => {
     const v = downloadsView(f, false, 0); expect(v.groups.map((g) => g.id)).toEqual(['voice', 'voice-rest', 'search']); expect(calls.length).toBe(0);
   });
-  test('D2 each group lists its files with the plan\'s sizes, their sum and the host; mobile data is said before starting', () => {
+  test('D2/D7 each job lists its options with the list\'s sizes, the recommended one tagged and chosen; the total is what is chosen, not the sum of options', () => {
     const g = downloadsView(f, false, 0).groups;
-    expect(g[0].lines).toEqual(['The voice: Zeta voice, 351 MB']); expect(g[0].total).toBe('351 MB'); expect(g[0].hostLine).toContain('from Example Hub');
-    expect(g[1].lines.length).toBe(3); expect(g[1].total).toBe('1.1 GB'); expect(g[2].total).toBe('310 MB');
+    expect(g[0].jobs[0].options.map((o) => o.text)).toEqual(['Zeta voice, 351 MB', 'Zeta lite, 300 MB']);
+    expect(g[0].jobs[0].options.map((o) => o.tag)).toEqual(['Recommended for this phone', '']); expect(g[0].jobs[0].options.map((o) => o.selected)).toEqual([true, false]);
+    expect(g[0].total).toBe('351 MB'); expect(g[0].hostLine).toContain('from Example Hub');
+    expect(g[1].total).toBe('1.3 GB');                                                                  // 600 + 2 + 640 + 8 MB: the recommended recogniser, not all three
+    expect(g[2].total).toBe('310 MB');
     expect(g[0].startLabel).toBe('Download on Wi-Fi'); expect(g[0].mobileLine).toBe('');
     const m = downloadsView({ ...f, onWiFi: false }, false, 0).groups[1];
-    expect(m.mobileLine).toBe('You are on mobile data. This will use about 1.1 GB of your plan.'); expect(m.startLabel).toBe('Wait for Wi-Fi'); expect(m.mobileLabel).toBe('Download now');
+    expect(m.mobileLine).toBe('You are on mobile data. This will use about 1.3 GB of your plan.'); expect(m.startLabel).toBe('Wait for Wi-Fi'); expect(m.mobileLabel).toBe('Download now');
   });
-  test('D3 a group is ready only when every file is; a newer model is an offer, not a silent fetch', () => {
-    f = { ...f, plan: plan().map((r) => (r.group === 'voice' ? { ...r, ready: true } : r)), voiceReady: true };
+  test('D7 a pick changes the chosen option and the total; a pick that is no longer offered falls back to the recommendation', () => {
+    let g = downloadsView(f, false, 0, { transcriber: 'ear-small' }).groups[1];
+    expect(g.jobs[0].options.map((o) => o.selected)).toEqual([false, false, true]); expect(g.total).toBe('900 MB');
+    g = downloadsView(f, false, 0, { transcriber: 'gone' }).groups[1]; expect(g.jobs[0].options.map((o) => o.selected)).toEqual([true, false, false]);
+  });
+  test('D3 a group is ready only when what is chosen is on the phone; a newer model is an offer, not a silent fetch', () => {
+    const on = (id: string) => offers().map((j) => ({ ...j, options: j.options.map((o) => (j.job === 'voice' && o.id === id ? { ...o, ready: true } : o)) }));
+    f = { ...f, offers: on('zeta'), voiceReady: true };
     let g = downloadsView(f, false, 0).groups; expect(g[0].ready).toBe(true); expect(g[0].total).toBe('Nothing to download.'); expect(g[1].ready).toBe(false);
-    f = { ...f, plan: plan().map((r) => (r.group === 'voice' ? { ...r, ready: true } : r)).map((r) => (r.stage === 'voice' ? { ...r, ready: false, model: 'Zeta voice 2', bytes: 400_000_000, sizeLabel: '400 MB' } : r)) };
-    g = downloadsView(f, false, 0).groups; expect(g[0].ready).toBe(false); expect(g[0].lines[0]).toBe('The voice: Zeta voice 2, 400 MB'); expect(calls.length).toBe(0);
+    g = downloadsView(f, false, 0, { voice: 'zeta-lite' }).groups; expect(g[0].ready).toBe(false); expect(g[0].total).toBe('300 MB'); expect(calls.length).toBe(0);
     expect(downloadsView(f, true, 0).groups[2].ready).toBe(true);                                       // the search file is on the phone: the native state says so
   });
   test('D6 sizes are worded as the native side words them', () => { expect(sizeLabel(0)).toBe('Built in'); expect(sizeLabel(2_000_000)).toBe('2 MB'); expect(sizeLabel(639_446_688)).toBe('639 MB'); expect(sizeLabel(1_810_000_000)).toBe('1.8 GB'); });
+  test('D3 a job with no option that fits this phone says it keeps what is built in, and needs nothing', () => {
+    f = { ...f, offers: offers().map((j) => (j.job === 'responder' ? { ...j, options: j.options.map((o) => ({ ...o, recommended: false })) } : j)) };
+    const g = downloadsView(f, false, 0).groups[1]; const r = g.jobs.find((j) => j.job === 'responder')!;
+    expect(r.ready).toBe(true); expect(r.none).toContain('built in'); expect(g.total).toBe('610 MB');
+  });
 });
 
 describe('the press', () => {
-  test('D4 Wi-Fi: records the agreement and starts that group alone', async () => {
+  test('D4/D8 Wi-Fi: records the agreement and starts that group alone, with exactly the chosen option of each job', async () => {
     await downloadsAct('start', 'voice', f, storage);
-    expect(calls.find((c) => c.op === 'obSetupBegin')).toMatchObject({ stages: ['voice'] }); expect((await modelsAgreement(storage))).toEqual({ ok: true, mobile: false });
-    calls = []; await downloadsAct('start', 'voice-rest', f, storage); expect(calls.find((c) => c.op === 'obSetupBegin')).toMatchObject({ stages: ['transcriber', 'bounds', 'responder'] });
+    expect(calls.find((c) => c.op === 'obSetupBegin')).toMatchObject({ only: true, stages: ['voice'], picks: { voice: 'zeta' }, speaker: false }); expect((await modelsAgreement(storage))).toEqual({ ok: true, mobile: false });
+    calls = []; await downloadsAct('pick', 'transcriber', f, storage, 'ear-small'); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined();     // a pick fetches nothing
+    await downloadsAct('start', 'voice-rest', f, storage);
+    expect(calls.find((c) => c.op === 'obSetupBegin')).toMatchObject({ only: true, stages: ['transcriber', 'bounds', 'responder'], picks: { transcriber: 'ear-small', bounds: 'gate', responder: 'lm', speaker: 'print' }, speaker: true });
+  });
+  test('D8 a pick is kept, only for a job and an option that are on offer', async () => {
+    await downloadsAct('pick', 'voice', f, storage, 'zeta-lite'); expect(await consentPicks(storage)).toEqual({ voice: 'zeta-lite' });
+    await downloadsAct('pick', 'voice', f, storage, 'nope'); await downloadsAct('pick', 'nonsense', f, storage, 'zeta'); expect(await consentPicks(storage)).toEqual({ voice: 'zeta-lite' });
+    forgetConsent(); expect(await consentPicks(storage)).toEqual({ voice: 'zeta-lite' });                                                              // across a restart
+    expect(downloadsView(f, false, 0, await consentPicks(storage)).groups[0].jobs[0].options.map((o) => o.selected)).toEqual([false, true]);
+  });
+  test('D8 only the voice-print model left to fetch: the press starts it and no stage', async () => {
+    f = { ...f, offers: offers().map((j) => (j.group === 'voice-rest' && j.job !== 'speaker' ? { ...j, options: j.options.map((o) => ({ ...o, ready: true })) } : j)) };
+    await downloadsAct('start', 'voice-rest', f, storage);
+    expect(calls.find((c) => c.op === 'obSetupBegin')).toMatchObject({ only: true, stages: [], speaker: true });
   });
   test('D4 mobile data: the Wi-Fi press starts nothing; the mobile press records the mobile agreement and starts', async () => {
     const m = { ...f, onWiFi: false };
@@ -66,7 +100,11 @@ describe('the press', () => {
     const busy: VoiceFacts = { ...f, setupStarted: true, rows: [{ stage: 'voice', name: '', model: '', sizeLabel: '', state: 'downloading', statusLine: '', numbers: '', progress: 0.4, isFallback: false, canRetry: false, canFallback: false }] };
     await downloadsAct('start', 'voice', busy, storage); expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined();
     expect(downloadsView(busy, false, 0).groups[0]).toMatchObject({ busy: true, status: 'Downloading, 40%.' });
-    const done = { ...f, plan: plan().map((r) => ({ ...r, ready: true })) }; await downloadsAct('start', 'voice', done, storage); await downloadsAct('start', 'nonsense', f, storage);
+    const done = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => ({ ...o, ready: true })) })) }; await downloadsAct('start', 'voice', done, storage); await downloadsAct('start', 'nonsense', f, storage);
     expect(calls.find((c) => c.op === 'obSetupBegin')).toBeUndefined(); expect(files.size).toBe(0);
+  });
+  test('D9 an option appears only when the list offers it: no name is known here', () => {
+    const v = downloadsView(f, false, 0); const all = v.groups.flatMap((g) => g.jobs.flatMap((j) => j.options.map((o) => o.text)));
+    expect(all.some((t) => /pro|fluid|parakeet|kokoro/i.test(t))).toBe(false);
   });
 });

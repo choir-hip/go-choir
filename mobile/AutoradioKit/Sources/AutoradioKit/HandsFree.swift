@@ -123,7 +123,8 @@ extension TurnEngine {
             let (gen, samples) = (hf.generation, hf.samples)
             Task { [weak self] in let c = await gate.judge(samples); await self?.hfSpeakerCall(c, generation: gen) }
         }
-        let show = hf.session != nil && hf.speakerCall != .mismatch
+        // Log only in this build (owner, 2026-11-24): the learned voice's verdict is written per turn and nothing is shown or dropped because of it.
+        let show = hf.session != nil
             && ListeningVisibility.visible(handsFree: hf.enabled, speechMs: hf.speechMs, words: words, addressed: hf.speakerCall == .match && words >= 1, notATurn: false)
         if show { if pipeline == nil, turn == nil { setPhase(.capturing) } }
         else if phase == .capturing, pipeline == nil, turn == nil { setPhase(.playing) }
@@ -137,7 +138,7 @@ extension TurnEngine {
     func hfSpeakerCall(_ c: SpeakerCall, generation: Int) {
         guard generation == hf.generation, hf.session != nil else { return }
         hf.speakerCall = c; hf.speakerPending = false
-        if c == .mismatch { env.log.emit(.note("hands-free: another voice, not shown and not sent")); hfUpdateVisibility() }
+        if c == .mismatch { hfUpdateVisibility() }
     }
 
     func hfNewPolicy() -> TurnPolicy {
@@ -312,13 +313,9 @@ extension TurnEngine {
         var call = heardCall
         let gate = env.speakerGate
         if call == .unknown, gate.learned, gate.canListen { call = await gate.judge(samples) }
-        if call == .mismatch {
-            env.log.emit(.notATurn(reason: "another voice (\(text.count) chars)"))
-            hf.cut = nil
-            await setLevelTo(.play, reason: .resume)
-            await hfFeed(.turnDiscarded)
-            return
-        }
+        // The verdict is logged for every turn and rejects nothing in this build (owner, 2026-11-24: "the check must only log"); a later build may act on it.
+        if gate.learned { env.log.emit(.note("speaker: \(call.rawValue) (\(text.count) chars)")) }
+        else { env.log.emit(.note("speaker: no learned voice")) }
         let id = "turn-" + UUID().uuidString.prefix(8).lowercased()
         let t = Turn(id: id, config: config, transcriber: transcriber, yield: yield, session: session, firstEventIndex: env.log.count)
         t.speakerSamples = samples

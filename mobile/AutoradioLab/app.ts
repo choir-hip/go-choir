@@ -32,6 +32,7 @@ import * as picks from './edition-picks.ts';
 import { signInSheet, liveSheetEnv } from './signin-sheet.ts';
 import { consentView, consentAct } from './consent.ts';
 import { downloadsPage, downloadsAct } from './downloads.ts';
+import { learnPage, learnAct } from './voicelearn.ts';
 import { signInRun, signInCancel, signInReopen, signInView, type AttemptEnv } from './signin-attempt.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -196,7 +197,10 @@ const sources: Sources = {
   consentAct: ([op], _s, storage) => consentAct(op, storage),
   // The model files voice needs, with their sizes (downloads.ts): the view, and one group's press.
   downloadsPage: ([facts, _rev], _s, storage) => downloadsPage(facts as never, storage),
-  downloadsAct: ([op, group, facts], _s, storage) => downloadsAct(op, group, facts as never, storage),
+  downloadsAct: ([op, group, facts, arg], _s, storage) => downloadsAct(op, group, facts as never, storage, arg ?? ''),
+  // Learning the person's voice (voicelearn.ts): the page from the voice side's facts, and one press.
+  learnPage: ([facts]) => learnPage(facts as never),
+  learnAct: ([op, facts]) => learnAct(op, facts as never, nativeLater() as never),
   // Sign-in (signin-attempt.ts): one attempt, one state machine with an id, owned here. The sheet (signin-sheet.ts) is how the approval page opens; native keeps the device code, one poll request and the Keychain write.
   signInRun: () => signInRun(attemptEnv()),
   signInCancel: () => signInCancel(attemptEnv()),
