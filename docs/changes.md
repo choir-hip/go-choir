@@ -40,6 +40,12 @@ the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-24
 
+### Host logs on Node B are kept 30 days, no more and no less (`lane/log-retention`, orange)
+- **What:** the journal keeps 29 days in files of one day under a 12 GB ceiling; the disk sweep and the deploy preflight trim it by time (29 days) and no longer by size; each Caddy access log rolls daily and rolled files go after 29 days; `/var/log/caddy` is swept of files untouched for 30 days; login records rotate weekly and go after 28 days.
+- **Why:** the privacy policy says server logs are kept up to 30 days and nothing enforced it; and a 256 MB size trim kept under a day of the journal (owner, 2026-11-23: "We can't lose logs"). [Problem record](problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md).
+- **Proof:** `scripts/test-node-b-log-retention.sh` (seen failing on every line before the change, passing after) and a nix eval of the whole host system. **Not proved on Node B**; the deployed proof command is in the problem record.
+- **Replaced:** `journalctl --vacuum-size=256M` in two places; Caddy's default log rolling (100 MB, 10 files, 90 days); NixOS's monthly login-record rotation. **Undo:** revert; the journal then shrinks back at the next sweep.
+
 ### Phone: the listening models come from the model list; Fluid Speech Mini is the recogniser (`lane/voice-default`, orange)
 - **What:** (1) a recognition stage for Fluid Speech Mini (stage `fluid-speech-mini`, ported from Mike's `FluidSpeechMini.swift`: warm, one pass over the speech-bounded audio), its model-list entry (repository, pinned commit, every file's size and SHA-256, CC BY 4.0 with its credit) and a store that fetches a folder of files, each checked against its digest. (2) a test that runs it on the fixture speech through Core ML on the Mac. (3) the listener configuration is no longer a fixed list: speech detection, live words and the final transcript are chosen from the model list (`Voice/ListenerPipeline`): Silero, Parakeet EOU for live words and Fluid Speech Mini for the transcript when their models are on the phone and ready, the energy detector and Apple's recogniser until then. A better model is a new row in `CandidateTable`.
 - **Why:** owner, 2026-11-24: Apple's recogniser "isnt good enough"; "we are only using that currently because of a coding bug. (we shuold be using fluid speech mini etc)"; "we will keep updating the models as better ones come".
