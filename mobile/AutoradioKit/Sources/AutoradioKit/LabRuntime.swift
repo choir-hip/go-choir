@@ -376,6 +376,39 @@ public final class LabRuntime: @unchecked Sendable {
         setConfiguration(c)
         log.emit(.note(heard.summary))
     }
+    /// A first-run setup finished: its choices become the running ones (the stages it set up, the listener from the list, the answering and decision models it fetched when none was ever chosen). A ROW's download (`rowDownload`)
+    /// applies NOTHING: Download only fetches and verifies; only `useModel` changes what the radio uses (review 2026-11-24).
+    public func applySetupChoices(_ s: VoiceSetup) {
+        guard !s.rowDownload else { return }
+        for (kind, id) in s.choices where kind != .speechBounds && kind != .transcriber && registry.stages(kind).contains(where: { $0.id == id }) { setStage(kind, id: id) }
+        applyListenerChoice()
+        if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }) { ResponderChoice.adopt(r.chosen) }
+        if let d = s.record.items.first(where: { $0.stage == SetupStage.decision.rawValue }) { DecisionChoice.adopt(d.chosen) }
+    }
+
+    /// The person's Use on a model's row: it becomes the model the radio uses for that job, and the stage that runs it is set. A model that is not on the phone changes nothing (false).
+    @discardableResult
+    public func useModel(job: String, id: String, live: Bool, readiness: VoiceReadiness = Voices.readiness, defaults: UserDefaults = .standard) -> Bool {
+        guard readiness.isReady(model: id) else { return false }
+        switch job {
+        case "responder":
+            guard KnownModels.isPinned(id) else { return false }
+            defaults.set(id, forKey: ResponderChoice.key)
+            setStage(.holder, id: "local-ack")
+        case "decision":
+            guard DecisionChoice.resolve(saved: id) == id else { return false }
+            defaults.set(id, forKey: DecisionChoice.key)
+            setStage(.system1, id: "llama-qwen3-0.6b")
+        case "voice":
+            guard let o = VoiceCatalog.options.first(where: { $0.modelID == id }) else { return false }
+            setVoice(o)
+        case "transcriber": ModelUse.standard.set(live ? "live" : "final", id); applyListenerChoice()
+        case "bounds": ModelUse.standard.set("bounds", id); applyListenerChoice()
+        default: return false
+        }
+        return true
+    }
+
     public func setStage(_ kind: StageKind, id: String) {
         var c = configuration
         c.set(kind, StageSetting(id: id))
