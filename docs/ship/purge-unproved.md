@@ -12,9 +12,13 @@ of 1,097 accounts, 27 holding a passkey, none owning a computer.
 Built with the services (`flake.nix`, `goServiceSubPackages`) and installed beside auth:
 `/var/lib/go-choir/services/auth/bin/purge-unproved` on Node B (not run through nix here: the flake parses; the
 derivation was not built). It needs read and write on the databases and the mail root, so it runs as root on
-Node B, **with `go-choir-auth` and `go-choir-maild` stopped** for the real run: a late mail could recreate a
-mailbox directory (the run looks once more at the end and says so), and a stopped auth removes any chance of a
-proof landing mid-run (the run also takes auth's write lock, below).
+Node B, **with `go-choir-auth` and `go-choir-maild` stopped from before the first `--apply` until a rerun has
+committed** (not just for one run): a late mail could recreate a mailbox directory (the run looks once more at
+the end and says so), and if a run dies after maild committed and auth is started before the rerun, a recovery
+could prove an account whose mail is already gone. The two PostgreSQL DSNs must be **different databases** (the
+command refuses identical ones, and each service must hold its own tables: control `owner_act_receipts` or
+`computer_version_route_slots`, graph `og_objects` or `publication_version_proposals`). A dry run opens every
+SQLite file read-only.
 
 ```
 purge-unproved --auth-db FILE --maild-db FILE --maild-root DIR \
@@ -43,9 +47,15 @@ purge-unproved ... --apply --digest <hex> --receipt FILE [--receipt-key-file FIL
   before auth's commit leaves the accounts in place and the run can be made again; what a service already
   committed stays deleted, and the output says which services committed. The mailbox directories go before the
   accounts do, so a rerun finds both.
-- **The receipt** is one JSON line appended and synced to `--receipt`: when, the digest, the services and what
-  each did, the rows per table, the full `sha256` of each purged id, and, with `--receipt-key-file`, a keyed
-  hash of each address (so a later "was my account deleted" can be answered without keeping the address).
+- **The receipt is a journal of intent** (`--receipt`, checked with `--receipt-key-file` and opened **before
+  anything is deleted**; a path or key that cannot be used stops the run first). One JSON line, synced, is
+  written **before each irreversible step**: `intent` (after the lock and the recheck), `before-commit:<service>`
+  for each service, `before-mail-dirs`, `before-commit:auth`, then `done` (or `stopped: <why>`). Each line has the
+  status of every planned service (pending, committed, failed), the mail directories removed so far (only ones
+  that existed), the rows per table, the full `sha256` of each purged id and, with a key file, a keyed hash of
+  each address. A line that cannot be written stops the run before the step it announces, and a failing write of
+  the last line makes the command exit non-zero. A rerun (a dry run too) reads the last line and warns when the
+  last run did not reach `done`.
 
 ## Refused, never deleted
 
@@ -89,7 +99,8 @@ target to be a direct child.
 `agent_evidence`, `og_objects`, `platform_texture_documents`, `platform_texture_revisions`,
 `proj_capture_resolution`, `proj_capture_index`, `proj_capture_terms`, `vec_captures`, `search_leads`;
 `owner_act_receipts.owner_user_id`; `publication_version_proposals.source_owner_id` and `.submitter_id`;
-`proposal_delivery_records.target_owner_id`; `computer_key_unwrap_requests.requested_by`;
+`proposal_delivery_records.target_owner_id` (its `target_id` names the object delivered to, a proposal, and is
+reviewed as not a user); `computer_key_unwrap_requests.requested_by`;
 `computer_key_unwrap_approvals.approver`; and the four route-ledger tables
 (`computer_version_route_slots`, `_transition_receipts`, `_authorization_evidence`, `_authority_modes`),
 whose `route_slot_id` is `"computer:<owner>:<computer>"` (matched by prefix and id).
@@ -109,8 +120,12 @@ whose `route_slot_id` is `"computer:<owner>:<computer>"` (matched by prefix and 
   the weekly prune passes them (and in any permanent `archive` snapshot). The run sets `secure_delete` on its
   SQLite connections so freed pages are overwritten; logs (journald) are not touched. "Deleted" in the product
   means gone from the live stores; the privacy policy's wording on backups is the owner's to settle.
-- **Postgres schemas were read from the code, not from a live database**: the first dry run on production is
-  also the check that the registry is complete (an unregistered table stops it).
+- **Postgres schemas**: the tests create the real control and graph schemas (`platform.Store.Bootstrap`) and the
+  real auth and maild SQLite schemas and check that no table of them is user-keyed and unregistered. A production
+  database may hold tables the code of this commit does not create; the first dry run there is still the check.
+- **Inbound webhook events**: `email_webhook_events` rows (the whole payload) of the account's messages are
+  deleted, found through the provider message index (by message id); events with no indexed message are not
+  matched.
 
 ## Proof
 
@@ -124,5 +139,6 @@ tables stop both runs, by name and by suffix; proposal, unwrap and route-ledger 
 variant of a kept address does not take that account's rows; unsafe ids never reach a path or a pattern and a
 symlinked `users/` is refused; account sets are repaired; vmctl down means no plan and no run; an empty
 database is not a service; 951 accounts are all deleted across chunks. **Not run**: against a Postgres
-database (the `$n` placeholders and `information_schema` queries are untested here), against a real mail or
-auth database, or through the command's flags.
+production database, or through the command's flags (the journal, the read-only open and the checks are tested as
+library functions). The real schemas, the journal order, the set repair (a proved member with a live session
+first, as auth's `repairSetTx`) and the webhook deletion are tested.

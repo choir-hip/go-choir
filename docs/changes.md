@@ -222,6 +222,7 @@ Undo: revert the lane's commit; the Swift is in git history.
 - **Why:** owner, 2026-11-24: "delete unproved accounts" (199 of 1,097 accounts, 27 with a passkey, none owning a computer).
 - **Proof:** tests over seeded SQLite databases (see the doc's Proof section); **not run** against Postgres, a real database or the command's flags; the nix derivation was not built. Backups on node-a keep the deleted accounts until pruned.
 - **Undo:** a deleted account cannot be undone (restore from a node-a snapshot); the command is removed by reverting the lane. Nothing calls it.
+- **Round 2:** `proposal_delivery_records.target_id` (a proposal, not a user) is reviewed, which a run against the real graph database needed; the tests create the real auth, maild and PostgreSQL control and graph schemas. The receipt is a journal written before each step (and opened and checked before any delete); control and graph must be distinct databases; the dry run opens SQLite read-only; webhook events of the account's messages are deleted; the set repair is auth's; only mail directories that existed are counted. Auth and maild stay stopped from the first `--apply` until a rerun commits.
 
 ## 2026-11-23
 
