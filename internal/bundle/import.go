@@ -445,6 +445,14 @@ func importRows(ctx context.Context, db *sql.DB, dir string, m Manifest, before 
 		return res, err
 	}
 	defer tx.Rollback()
+	// The tape sweep tombstones a computer under its own gate, which this
+	// import does not take; the tombstone is read again here, inside the
+	// transaction that inserts the rows.
+	if dead, err := tombstoned(ctx, tx, m.ComputerID); err != nil {
+		return res, err
+	} else if dead {
+		return res, refusef("computer %s tape is tombstoned on the target", m.ComputerID)
+	}
 	head, err := readHead(ctx, tx, m.ComputerID, true)
 	if err != nil {
 		return res, err

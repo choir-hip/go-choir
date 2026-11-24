@@ -376,8 +376,11 @@ the one gate**:
   this run wrote and fails the whole run with nothing deleted. No computer is
   ever skipped while another is deleted, so a shared object is never deleted
   for one sharer and kept for another. Tombstoning every named computer first
-  also means no named computer can gain a reference afterwards (every
-  reference-adding path refuses a tombstone).
+  stops the paths that take the gate (head CAS, snapshot-root registration,
+  lifecycle prepare) and the bundle import's rows transaction, which re-reads
+  the tombstone. It does not stop restore, rematerialize or cold recover in
+  `internal/proxy`, which take no gate: **a named id must not be restored,
+  rematerialized or imported from the dry run until the apply has ended.**
 - **Shared objects.** An object is listed only when no computer outside the
   named set references it (the dry run's live set: living, skipped, unnamed
   destroyed, tombstoned, and any computer whose references cannot be read

@@ -119,6 +119,7 @@ ap = rep.get("apply")
 if ap:
     print("deleted", ap.get("deleted"), "bytes_deleted", ap.get("bytes_deleted"), "computers_deleted", ap.get("computers_deleted"),
           "computers_skipped", ap.get("computers_skipped"), "deferred_by_cap", ap.get("deferred_by_cap"), "errors", ap.get("errors"))
+print("RULE: do not restore, rematerialize or import any of these computers from the dry run until the apply has ended.")
 print("report", rep.get("report_path", ""))
 for w in rep.get("warnings") or []:
     print("warning:", w)
