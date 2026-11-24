@@ -73,8 +73,9 @@ run bash scripts/test-check-guest-app-layer.sh
 run bash scripts/test-guest-tool-exec-wrapper.sh
 run bash scripts/test-node-b-deploy-disk-preflight.sh
 run bash scripts/test-node-b-disk-forecast.sh
-# host logs keep at most 30 days and are not trimmed by size; the nix part skips itself without nix
+# host logs keep up to 30 days and at least 28, and are not trimmed by size (needs nix and python3)
 run bash scripts/test-node-b-log-retention.sh
+run bash scripts/test-node-b-caddy-log-age.sh
 # the boot prune is safe only while it is ordered before the daemon and the runtime
 # and cannot be re-run beside them; skips itself without nix or python3
 run bash scripts/updater-prune-unit-nix-test.sh

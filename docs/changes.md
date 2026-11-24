@@ -40,10 +40,11 @@ the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-24
 
-### Host logs on Node B are kept 30 days, no more and no less (`lane/log-retention`, orange)
-- **What:** the journal keeps 29 days in files of one day under a 12 GB ceiling; the disk sweep and the deploy preflight trim it by time (29 days) and no longer by size; each Caddy access log rolls daily and rolled files go after 29 days; `/var/log/caddy` is swept of files untouched for 30 days; login records rotate weekly and go after 28 days.
-- **Why:** the privacy policy says server logs are kept up to 30 days and nothing enforced it; and a 256 MB size trim kept under a day of the journal (owner, 2026-11-23: "We can't lose logs"). [Problem record](problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md).
-- **Proof:** `scripts/test-node-b-log-retention.sh` (seen failing on every line before the change, passing after) and a nix eval of the whole host system. **Not proved on Node B**; the deployed proof command is in the problem record.
+### Host logs on Node B are kept up to 30 days (`lane/log-retention`, orange)
+- **What:** every host log has a time bound: a file of at most a day, a limit of 28 days, a daily deleter, so no entry passes 30 days and none is deleted before 28. The journal (28 days, one-day files, 12 GB ceiling; the disk sweep and the deploy preflight trim it by time, not to 256 MB); Caddy access logs (a roll at midnight UTC, rolled files deleted after 28 days, and a daily job, `go-choir-caddy-log-age`, for the files Caddy never rolls again); login records (weekly, 28 days).
+- **Why:** the privacy policy says server logs are kept up to 30 days and nothing enforced it; and a 256 MB size trim kept under a day of the journal (owner, 2026-11-23: "We can't lose logs"). [Problem record](problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md), with the arithmetic.
+- **Proof:** `scripts/test-node-b-log-retention.sh` and `scripts/test-node-b-caddy-log-age.sh` (each seen failing first; the lower bounds checked by breaking the settings on purpose), a nix eval of both systems, and the host's own Caddy parsing the rolling options. **Not proved on Node B**; the deployed proof is in the problem record.
+- **To know:** access logs were kept 90 days and are now kept 30 (the owner's to confirm). A nearly full disk may shorten the journal: the preflight trims it to 2 GiB as an announced last resort when its reclaim has not freed enough.
 - **Replaced:** `journalctl --vacuum-size=256M` in two places; Caddy's default log rolling (100 MB, 10 files, 90 days); NixOS's monthly login-record rotation. **Undo:** revert; the journal then shrinks back at the next sweep.
 
 ### Phone: the listening models come from the model list; Fluid Speech Mini is the recogniser (`lane/voice-default`, orange)

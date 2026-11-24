@@ -100,9 +100,11 @@ fi
 if ! curl -fsS -X POST -H 'X-Internal-Caller: true' "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/reclaim; then
   curl -fsS -X POST -H 'X-Internal-Caller: true' "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/idle-check || true
 fi
-# By time, never by size: a size trim at this volume keeps under a day of the
-# journal (docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md).
-journalctl --vacuum-time=29d || true
+# By time here, not by size: a size trim at this volume keeps under a day of
+# the journal (docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md).
+# The journal can hold up to 12 GiB (nix/node-b.nix); the size lever is the
+# last resort below, used only when this reclaim has not freed enough.
+journalctl --vacuum-time=28d || true
 # Which generations and builder-release roots stay is node-b-nix-retention's
 # (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
 GO_CHOIR_NIX_RETENTION_MODE="${GO_CHOIR_NIX_RETENTION_MODE:-enforce}" \
@@ -115,6 +117,17 @@ echo "    root_available_kib_after_reclaim=${avail_kib}"
 
 if ! is_count "$avail_kib"; then
   refuse "cannot read free space after the reclaim (df gave \"${avail_kib}\")"
+fi
+if ! at_least "$avail_kib" "$min_free_kib"; then
+  # A nearly full disk may shorten the logs: better a deploy that can fix the
+  # host than a month of journal. 2 GiB is about a week at today's volume.
+  echo "    LAST RESORT: still below the floor after the reclaim; trimming the journal to 2 GiB (this shortens the host logs kept)"
+  journalctl --vacuum-size=2G || true
+  avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
+  echo "    root_available_kib_after_journal_trim=${avail_kib}"
+  if ! is_count "$avail_kib"; then
+    refuse "cannot read free space after the journal trim (df gave \"${avail_kib}\")"
+  fi
 fi
 if ! at_least "$avail_kib" "$min_free_kib"; then
   refuse "root filesystem still below required headroom (${min_free_kib} KiB)"

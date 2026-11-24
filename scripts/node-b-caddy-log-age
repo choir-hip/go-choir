@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# node-b-caddy-log-age: the daily job that bounds the age of Caddy's access
+# logs where Caddy itself does not (tests: scripts/test-node-b-caddy-log-age.sh;
+# docs/problems/host-logs-kept-a-day-or-for-ever-2026-11-24.md).
+#
+# Caddy (2.11.7, timberjack 1.4.8) deletes a rolled file only when it next
+# rolls, by the time in the file's name, and it rolls only a file it has
+# written to since it started. So a quiet host name's files, a retired host
+# name's files, and a live file left behind by a restart are never aged by
+# Caddy. This job does two things in CADDY_LOG_DIR, to regular files directly
+# in it:
+#   1. deletes a file last written CADDY_LOG_MAX_DAYS days ago or more;
+#   2. sets aside a live file (no roll time in its name) not written for over
+#      a day, under a rolled name ending -idle.log. A live file Caddy is
+#      rolling is never that old (it rolls every midnight), so this one is
+#      not being rolled; left alone, a later request would be appended to it
+#      and the next roll would stamp its old lines with the new time. If
+#      Caddy does hold it open, its writes follow the rename and its next
+#      roll finds no live file and starts one: no line is lost.
+# The bound: a file spans at most a day, is deleted once its last write is
+# CADDY_LOG_MAX_DAYS old, and this job runs daily: 1 + 28 + 1 = 30 days.
+set -u
+dir="${CADDY_LOG_DIR:-}"
+max="${CADDY_LOG_MAX_DAYS:-}"
+if [ -z "$dir" ] || [ ! -d "$dir" ]; then echo "caddy log age: CADDY_LOG_DIR (\"$dir\") is not a directory; nothing done" >&2; exit 2; fi
+if ! [[ "$max" =~ ^[0-9]+$ ]] || [ "$max" -lt 2 ]; then echo "caddy log age: CADDY_LOG_MAX_DAYS (\"$max\") must be a number of at least 2; nothing done" >&2; exit 2; fi
+
+deleted=0; aside=0; failed=0
+# find's -mtime +N is "more than N whole days": +$((max - 1)) is max days or more.
+while IFS= read -r -d '' f; do
+  if rm -f -- "$f"; then deleted=$((deleted + 1)); else failed=$((failed + 1)); fi
+done < <(find "$dir" -maxdepth 1 -type f -mtime "+$((max - 1))" -print0)
+
+stamp="$(date -u +%Y-%m-%dT%H-%M-%S).000"
+while IFS= read -r -d '' f; do
+  name="${f##*/}"
+  case "$name" in *-20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]-*) continue ;; esac   # already a rolled file
+  case "$name" in *.log) base="${name%.log}" ;; *) continue ;; esac
+  to="$dir/$base-$stamp-idle.log"
+  if [ -e "$to" ]; then failed=$((failed + 1)); continue; fi
+  # mv keeps the file's last-write time, which step 1 goes by.
+  if mv -- "$f" "$to"; then aside=$((aside + 1)); else failed=$((failed + 1)); fi
+done < <(find "$dir" -maxdepth 1 -type f -mtime +0 -print0)
+
+echo "caddy log age: dir=$dir max_days=$max deleted=$deleted set_aside=$aside failed=$failed"
+[ "$failed" = 0 ]
