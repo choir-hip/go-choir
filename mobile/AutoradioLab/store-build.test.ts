@@ -600,6 +600,130 @@ describe('the store kind of the staged Swift (sync-exact-package.sh)', () => {
   });
 });
 
+describe('AR_VARIANT=dev: the explicit development profile and what dev may run (D1 to D6)', () => {
+  // Fixture profiles are plain plists read through DEV_PROFILE_DECODER=/bin/cat (the real decoder is `security cms -D`): no real profile and no keychain is touched.
+  const APPID = 'S47GERGJZ3.news.choir.autoradio', UDID = '00008120-00114DE80A90C01E';
+  const xml = (v: unknown): string => Array.isArray(v) ? `<array>${v.map(xml).join('')}</array>` : v instanceof Date ? `<date>${v.toISOString().replace(/\.\d+Z$/, 'Z')}</date>` :
+    typeof v === 'boolean' ? (v ? '<true/>' : '<false/>') : typeof v === 'string' ? `<string>${v}</string>` : `<dict>${Object.entries(v as object).map(([k, x]) => `<key>${k}</key>${xml(x)}`).join('')}</dict>`;
+  const day = 86400000;
+  type Over = { appid?: string; taskAllow?: boolean; domains?: string[] | string | null | false; exp?: number; platform?: string[]; devices?: string[] | null };
+  const profile = (dir: string, name: string, o: Over = {}) => {
+    const ent: Record<string, unknown> = { 'application-identifier': o.appid ?? APPID, 'get-task-allow': o.taskAllow ?? true };
+    if (o.domains !== null) ent['com.apple.developer.associated-domains'] = o.domains ?? ['*'];
+    const d: Record<string, unknown> = { Platform: o.platform ?? ['iOS'], ExpirationDate: new Date(Date.now() + (o.exp ?? 100) * day), Entitlements: ent };
+    if (o.devices !== null) d.ProvisionedDevices = o.devices ?? [UDID];
+    const f = join(dir, name + '.mobileprovision');
+    writeFileSync(f, `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0">${xml(d)}</plist>`);
+    return f;
+  };
+  const dp = (dir: string, args: string[] = [], extra: Record<string, string> = {}) => run(['/bin/sh', join(MOBILE, 'scripts', 'dev-profile.sh'), ...args],
+    { ...BASE, HOME: join(dir, 'nohome'), EXACT_PROFILE_DIR: dir, DEV_PROFILE_DECODER: '/bin/cat', ...extra });
+  const fresh = () => mkdtempSync(join(tmpdir(), 'dev-profile-'));
+  test('D1 the one valid profile is found among profiles that each fail one test, and each refusal is named', () => {
+    const d = fresh();
+    try {
+      const refusals: [string, Over][] = [['wildcard app id', { appid: 'S47GERGJZ3.*' }], ['regex lookalike id', { appid: 'S47GERGJZ3Xnews.choir.autoradio' }], ['another team', { appid: 'ABCDE12345.news.choir.autoradio' }],
+        ['a lab id', { appid: 'S47GERGJZ3.news.choir.autoradio.lab' }], ['get-task-allow false', { taskAllow: false }], ['no associated domains', { domains: null }], ['associated domains false', { domains: false as unknown as string }],
+        ['empty domains', { domains: [] }], ['applinks only', { domains: ['applinks:choir.news'] }], ['expired', { exp: -1 }], ['macOS', { platform: ['OSX'] }]];
+      for (const [why, o] of refusals) {
+        const dir = fresh();
+        try { profile(dir, 'bad', o); const r = dp(dir); expect(r.code, why).not.toBe(0); expect(r.out, why).toBe(''); expect(r.err, why).toContain('dev-profile:'); } finally { rmSync(dir, { recursive: true, force: true }); }
+      }
+      for (const [why, o] of refusals) profile(d, 'bad-' + why.replace(/\W/g, ''), { ...o, exp: o.exp ?? 5000 });   // every decoy expires later than the good one, so a missing test would pick it
+      const good = profile(d, 'good', { exp: 30 });
+      const r = dp(d, ['--phone', UDID]); expect(r.code, r.err).toBe(0); expect(r.out.trim()).toBe(good);
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+  test('D1 associated domains of "*", a string "*" and webcredentials:<host> each count; the phone named must be in the profile; the newest expiry wins, the same on every run', () => {
+    for (const domains of [['*'], '*', ['webcredentials:choir.news'], ['applinks:choir.news', 'webcredentials:*.choir.news']]) {
+      const d = fresh(); try { const f = profile(d, 'p', { domains }); expect(dp(d).out.trim(), JSON.stringify(domains)).toBe(f); } finally { rmSync(d, { recursive: true, force: true }); }
+    }
+    const d = fresh();
+    try {
+      profile(d, 'a', { exp: 10, devices: ['OTHER'] }); const b = profile(d, 'b', { exp: 20 }); profile(d, 'c', { exp: 30, devices: ['OTHER'] });
+      expect(dp(d, ['--phone', UDID]).out.trim()).toBe(b);                                 // c is newer but is for another phone
+      expect(dp(d, ['--phone=' + UDID]).out.trim()).toBe(b);
+      expect(dp(d, ['--phone', 'NOT-IN-ANY']).code).not.toBe(0);
+      expect(dp(d, ['--phone', UDID]).out.trim()).toBe(b);
+      const e = fresh(); try { profile(e, 'z', { exp: 7 }); const y = profile(e, 'y', { exp: 7 }); expect([y, join(e, 'z.mobileprovision')]).toContain(dp(e).out.trim()); const first = dp(e).out; for (let i = 0; i < 3; i++) expect(dp(e).out).toBe(first); } finally { rmSync(e, { recursive: true, force: true }); }
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+  test('D1 --check validates one named profile by the same tests: a good one is printed, a bad one, a missing one and a non-profile are refused', () => {
+    const d = fresh();
+    try {
+      const good = profile(d, 'good'); const wild = profile(d, 'wild', { appid: 'S47GERGJZ3.*' }); const exp = profile(d, 'old', { exp: -2 }); const other = profile(d, 'dev2', { devices: ['OTHER'] });
+      expect(dp(d, ['--check', good]).out.trim()).toBe(good);
+      expect(dp(d, ['--check', good, '--phone', UDID]).code).toBe(0);
+      for (const f of [wild, exp, join(d, 'nope.mobileprovision'), d]) { const r = dp(d, ['--check', f]); expect(r.code, f).not.toBe(0); expect(r.err).toContain('dev-profile:'); }
+      expect(dp(d, ['--check', other, '--phone', UDID]).code).not.toBe(0);
+      writeFileSync(join(d, 'junk.mobileprovision'), 'not a plist'); expect(dp(d, ['--check', join(d, 'junk.mobileprovision')]).code).not.toBe(0);
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+  const ex = (tr: Tree, args: string[], extra: Record<string, string> = {}) => run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), ...args], tr.env(extra));
+  const ran = (tr: Tree) => existsSync(join(tr.bin, 'bun.last'));
+  const seen = (tr: Tree) => readFileSync(join(tr.bin, 'bun.last'), 'utf8');
+  test('D2 EXACT_PROFILE reaches Exact only for an iOS device build: not for the simulator, the Mac, the web or a contract, whatever the caller exported', () => {
+    const tr = tree(); const d = fresh();
+    try {
+      const good = profile(d, 'good');
+      for (const args of [['ios'], ['ios', '--run'], ['mac', '--run'], ['web'], ['contract', 'build'], ['test', 'web'], ['agent', 'ios', 'tree']]) {
+        rmSync(join(tr.bin, 'bun.last'), { force: true });
+        const r = ex(tr, args, { AR_VARIANT: 'dev', EXACT_PROFILE: join(d, 'stale-store-profile.mobileprovision'), DEV_PROFILE_DECODER: '/bin/cat' });
+        expect(r.code, args.join(' ') + r.err).toBe(0); expect(seen(tr), args.join(' ')).toContain('EXACT_PROFILE=[unset]');
+      }
+      rmSync(join(tr.bin, 'bun.last'), { force: true });
+      const r = ex(tr, ['ios', '--device', '--phone', UDID], { AR_VARIANT: 'dev', EXACT_PROFILE_DIR: d, DEV_PROFILE_DECODER: '/bin/cat' });
+      expect(r.code, r.err).toBe(0); expect(seen(tr)).toContain(`EXACT_PROFILE=[${good}]`);
+    } finally { tr.cleanup(); rmSync(d, { recursive: true, force: true }); }
+  });
+  test('D3 a caller-supplied EXACT_PROFILE for a dev device build is checked like one found: a wildcard, an expired, a store, another phone\'s or a missing one is refused before Exact runs', () => {
+    const tr = tree(); const d = fresh();
+    try {
+      const good = profile(d, 'good');
+      const bad = [profile(d, 'wild', { appid: 'S47GERGJZ3.*' }), profile(d, 'old', { exp: -3 }), profile(d, 'store', { taskAllow: false, devices: null }), profile(d, 'other', { devices: ['OTHER'] }), join(d, 'missing.mobileprovision')];
+      for (const f of bad) {
+        rmSync(join(tr.bin, 'bun.last'), { force: true });
+        const r = ex(tr, ['ios', '--device', '--phone', UDID], { AR_VARIANT: 'dev', EXACT_PROFILE: f, DEV_PROFILE_DECODER: '/bin/cat' });
+        expect(r.code, f).not.toBe(0); expect(r.err).toContain('dev-profile:'); expect(ran(tr), f).toBe(false);
+      }
+      const r = ex(tr, ['ios', '--device', '--phone', UDID], { AR_VARIANT: 'dev', EXACT_PROFILE: good, DEV_PROFILE_DECODER: '/bin/cat' });
+      expect(r.code, r.err).toBe(0); expect(seen(tr)).toContain(`EXACT_PROFILE=[${good}]`);
+    } finally { tr.cleanup(); rmSync(d, { recursive: true, force: true }); }
+  });
+  test('D4 dev is the production id but not the production app\'s freedom: only the production list and a phone build are run; deploy, push, --unsigned, share, archive and the rest are refused', () => {
+    const tr = tree(); const d = fresh();
+    try {
+      const good = profile(d, 'good'); const env = { AR_VARIANT: 'dev', EXACT_PROFILE: good, DEV_PROFILE_DECODER: '/bin/cat' };
+      const refused = (args: string[], extra: Record<string, string> = {}) => { rmSync(join(tr.bin, 'bun.last'), { force: true }); const r = ex(tr, args, { ...env, ...extra }); expect(r.code, args.join(' ')).not.toBe(0); expect(r.err).toContain('exact.sh:'); expect(ran(tr), args.join(' ')).toBe(false); };
+      for (const args of [['deploy'], ['push'], ['share'], ['update'], ['lock'], ['add'], ['hatch'], ['snapback'], ['backend'], ['android'], ['linux'], ['frobnicate'], ['ios', '--unsigned'], ['ios', '--device', '--unsigned', '--phone', UDID],
+        ['mac', '--device'], ['ios', '--device', '--archive', '/tmp/x.ipa'], ['ios', '--archive=/tmp/x.ipa'], ['ios', '--release'], ['test', 'ios', '--unsigned'], ['ios', '--variant=lab'], ['ios', '--device', '--phone']]) refused(args);
+      for (const args of [['ios'], ['ios', '--run'], ['ios', '--device', '--phone', UDID], ['ios', '--device', '--run', '--phone=' + UDID], ['agent', 'ios', '--device', '--phone', UDID], ['test', 'web'], ['contract', 'build'], ['mac', '--run']]) {
+        rmSync(join(tr.bin, 'bun.last'), { force: true }); const r = ex(tr, args, env); expect(r.code, args.join(' ') + r.err).toBe(0); expect(ran(tr)).toBe(true);
+      }
+      refused(['ios', '--device', '--phone', UDID], { AUTORADIO_BUILD_TREE_FILE: join(tr.t, 'nowhere') });
+    } finally { tr.cleanup(); rmSync(d, { recursive: true, force: true }); }
+  });
+  test('D5 make-profile.sh refuses dev (the production id gets no development profile from the free team) and makes nothing; the store scripts refuse dev too', () => {
+    const tr = tree();
+    try {
+      writeFileSync(join(tr.bin, 'xcodegen'), `#!/bin/sh\ntouch "${tr.t}/xcodegen.ran"\n`); chmodSync(join(tr.bin, 'xcodegen'), 0o755);
+      const r = run(['/bin/sh', join(tr.m, 'scripts', 'make-profile.sh')], tr.env({ AR_VARIANT: 'dev' }));
+      expect(r.code).not.toBe(0); expect(r.err).toContain('make-profile:'); expect(existsSync(join(tr.t, 'xcodegen.ran'))).toBe(false); expect(existsSync(join(tr.t, 'xe.log'))).toBe(false);
+      writeFileSync(join(tr.t, 'x.ipa'), 'x'); writeFileSync(join(tr.t, 'k.p8'), 'k'); chmodSync(join(tr.t, 'k.p8'), 0o600);
+      for (const s of ['archive-store.sh', 'upload-store.sh', 'store-negative-control.sh']) {
+        const q = run(['/bin/sh', join(tr.m, 'scripts', s), join(tr.t, 'x.ipa')], tr.env({ AR_VARIANT: 'dev', ASC_KEY_ID: 'K', ASC_ISSUER_ID: 'I', ASC_KEY_FILE: join(tr.t, 'k.p8') })); expect(q.code, s).not.toBe(0); expect(q.err, s).toContain('AR_VARIANT'); expect(ran(tr)).toBe(false);
+      }
+    } finally { tr.cleanup(); }
+  });
+  test('D6 app-identity.sh version for dev fails on an app.json with no version, like the other identities', () => {
+    const d = fresh();
+    try {
+      const j = JSON.parse(JSON.stringify(APP_JSON)); delete j.version; const f = join(d, 'app.json'); writeFileSync(f, JSON.stringify(j));
+      for (const v of ['', 'dev', 'lab']) { const r = run(['/bin/sh', join(MOBILE, 'scripts', 'app-identity.sh'), 'version'], { ...BASE, AR_APP_JSON: f, ...(v ? { AR_VARIANT: v } : {}) }); expect(r.code, v).not.toBe(0); expect(r.out, v).toBe(''); }
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+});
+
 describe('exact.sh runs only what is on its list (A1, A3, A4, G1, G2)', () => {
   const ex = (tr: Tree, args: string[], extra: Record<string, string> = {}) => run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), ...args], tr.env(extra));
   const ran = (tr: Tree) => existsSync(join(tr.bin, 'bun.last'));
@@ -691,6 +815,24 @@ describe('exact.sh runs only what is on its list (A1, A3, A4, G1, G2)', () => {
       allowed(tr, ['ios'], { EXACT_VARIANT: '' });                                         // an empty value names nothing
       allowed(tr, ['ios'], { AR_VARIANT: 'lab-one' });
       expect(seen(tr)).toContain('EXACT_VARIANT=[lab-one]'); expect(seen(tr)).toContain(`APP_ID=[${LABONE}]`);
+    } finally { tr.cleanup(); }
+  });
+  test('A3 AR_VARIANT=dev is the production id as a development app: a phone build is allowed, Exact gets no variant and the explicit profile, share and archive stay refused', () => {
+    const tr = tree();
+    try {
+      allowed(tr, ['ios', '--run'], { AR_VARIANT: 'dev' });                                // the profile itself is D2/D3's: here, Exact gets no variant and the production id
+      expect(seen(tr)).toContain('EXACT_VARIANT=[unset]'); expect(seen(tr)).toContain(`APP_ID=[${PROD}]`);
+      refused(tr, ['share'], { AR_VARIANT: 'dev' }, 'share');
+      refused(tr, ['ios', '--device', '--archive', '/tmp/x.ipa'], { AR_VARIANT: 'dev' }, 'archive-store.sh');
+      refused(tr, ['ios', '--device', '--phone', 'X'], { AR_VARIANT: 'dev', AUTORADIO_BUILD_TREE_FILE: join(tr.t, 'nowhere') }, 'build tree');
+      // with no EXACT_PROFILE and no profile installed the build stops before Exact runs, naming what to make
+      rmSync(join(tr.bin, 'bun.last'), { force: true });
+      const r = ex(tr, ['ios', '--device', '--phone', 'X'], { AR_VARIANT: 'dev' });
+      expect(r.code).not.toBe(0); expect(r.err).toContain('dev-profile:'); expect(ran(tr)).toBe(false);
+      const id = (what: string, env: Record<string, string>) => run(['/bin/sh', join(MOBILE, 'scripts', 'app-identity.sh'), what], { ...BASE, ...env });
+      expect(id('id', { AR_VARIANT: 'dev' }).out.trim()).toBe(PROD); expect(id('name', { AR_VARIANT: 'dev' }).out.trim()).toBe('Autoradio 1'); expect(id('variant', { AR_VARIANT: 'dev' }).out.trim()).toBe('dev');
+      expect(id('id', { AR_VARIANT: 'dev', AR_APP_ID: LAB }).code).not.toBe(0);
+      expect(id('id', { AR_VARIANT: 'dev', AR_APP_NAME: 'Other' }).code).not.toBe(0);
     } finally { tr.cleanup(); }
   });
   test('A4 EXACT_DEV_MENU=0 reaches Exact for every build; a caller\'s other value is refused; nothing else of the caller\'s environment does', () => {

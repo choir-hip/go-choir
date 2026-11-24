@@ -12,6 +12,19 @@ exact_run() {
   EXACT2="$HERE/.exact-src" "$HERE/scripts/check-exact-pin.sh" || return 1      # the wrong Exact must never build quietly (see exact.pin)
   _variant="$("$HERE/scripts/app-identity.sh" variant)" || return 1
   _scheme="$("$HERE/scripts/app-identity.sh" id)" || return 1
+  if [ "$_variant" = dev ]; then      # the production id as a development app: Exact is given no variant
+    _variant=""
+    . "$HERE/scripts/exact-args.sh"
+    _phone=""; _p=""; for _a in "$@"; do [ "$_p" != 1 ] || _phone="$_a"; _p=""; case "$_a" in --phone) _p=1 ;; --phone=*) _phone="${_a#--phone=}" ;; esac; done
+    _ios=""; case "${1:-}:${2:-}" in ios:*|agent:ios|test:ios) _ios=1 ;; esac
+    if [ -n "$_ios" ] && { ea_has --device "$@" || ea_has --phone "$@"; }; then
+      # an iOS device build is signed with the explicit development profile, never the team's wildcard (it cannot carry Associated Domains): found, or the caller's own, checked the same way
+      if [ -n "${EXACT_PROFILE:-}" ]; then "$HERE/scripts/dev-profile.sh" ${_phone:+--phone "$_phone"} --check "$EXACT_PROFILE" >/dev/null || return 1
+      else EXACT_PROFILE="$("$HERE/scripts/dev-profile.sh" ${_phone:+--phone "$_phone"})" || return 1; fi
+      export EXACT_PROFILE
+    else unset EXACT_PROFILE      # nothing else of a dev build is signed with a provisioning profile: a caller's stale one (a store or lab profile) is not handed on
+    fi
+  fi
   _bun="${BUN:-$HOME/.bun-1.4.2/bin/bun}"
   set -- "$_bun" exact.mjs "$@"
   _n=$#
