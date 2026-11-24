@@ -44,6 +44,7 @@ public final class KokoroVoice: Voice, @unchecked Sendable {
     /// Load the model with every Kokoro voice of the catalog ready, so the voice cards switch voices without another fetch. If one of them
     /// will not load, the model loads with the wanted voice alone: one missing voice must not take the voice away.
     static func load(preferring voice: String) async throws -> (KokoroAneManager, @Sendable () async -> Void) {
+        try LibraryScope.require("kokoro-82m-ane")           // a library is initialised only for a model that is ready by manifest, or being fetched or checked: initialising it for missing files would be a download
         let all = Set([voice] + VoiceCatalog.options.filter { $0.stageID == stageID }.map(\.voice))
         let k = KokoroAneManager(version: .v3)
         do { try await k.initialize(preloadVoices: all) }
@@ -107,6 +108,7 @@ public final class PhononVoice: Voice, @unchecked Sendable {
     /// FluidAudio puts a small-model pack at `<directory>/Models/pocket-tts-coreml/phonon/phonon-31m-en`; with the directory one above
     /// `fluidRoot` (`.../FluidAudio/Models`) that is the folder the catalog's `cacheFolders` names, the one the progress bar watches.
     static func load(preferring voice: String) async throws -> (PocketTtsSmallManager, @Sendable () async -> Void) {
+        try LibraryScope.require("phonon-31m")
         let m = PocketTtsSmallManager(model: .phonon31m, defaultVoice: voice)
         try await m.initialize(directory: KnownModels.fluidRoot.deletingLastPathComponent())
         return (m, {})                       // the manager has no cleanup: its Core ML models go when the last reference does
@@ -166,6 +168,7 @@ public final class PocketTTSVoice: Voice, @unchecked Sendable {
             let task = Task {
                 do {
                     let m = try await Self.slot.get {
+                        try LibraryScope.require("pocket-tts")
                         let p = PocketTtsManager(defaultVoice: voice)
                         try await p.initialize()
                         return (p, { await p.cleanup() })
@@ -184,7 +187,7 @@ public final class PocketTTSVoice: Voice, @unchecked Sendable {
         }
     }
     public static func firstFrameMs(_ text: String, voice: String = "alba") async throws -> (firstMs: Double, totalMs: Double, seconds: Double) {
-        let m = try await slot.get { let p = PocketTtsManager(defaultVoice: voice); try await p.initialize(); return (p, { await p.cleanup() }) }
+        let m = try await slot.get { try LibraryScope.require("pocket-tts"); let p = PocketTtsManager(defaultVoice: voice); try await p.initialize(); return (p, { await p.cleanup() }) }
         let t0 = nowMs()
         var first = 0.0, n = 0
         for try await f in try await m.synthesizeStreaming(text: text, voice: voice) {

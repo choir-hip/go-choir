@@ -18,12 +18,26 @@ import AutoradioKit
 public final class HubModelProvider: ModelProvider, @unchecked Sendable {
     public static let shared = HubModelProvider()
 
-    /// The door's window around every library fetch: consent for the model's group, a path the agreement covers, the libraries' registry open only inside it and the transfer cut when the path stops being covered (DownloadDoor.libraryWindow).
+    /// The models whose files a LIBRARY downloads (everything else goes through the store, which has the door inside it).
+    static let libraryModels: Set<String> = ["silero-vad-v6.2.1", "parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "kokoro-82m-ane", "pocket-tts", "phonon-31m"]
+
+    /// A fetch DEMOTES the model first (its manifest is deleted: a failed re-fetch is not ready), then runs the body. A library model's body runs inside the door's window, and only the body: consent, a covered path, the registry open only inside it,
+    /// the transfer cut when the path stops being covered (DownloadDoor.libraryWindow). The store's models (the GGUFs, the bundle) never open the registry. A companion is fetched after, in its own window, never inside the primary's.
     public func fetch(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         guard KnownModels.contains(id) else { throw LabError.badInput("setup asked for \(id), which is not in the model catalog") }
-        try await DownloadDoor.shared.libraryWindow(model: id) { try await self.fetchInsideTheWindow(id, role: role, onBytes: onBytes) }
+        Voices.verifier.demote(model: id)
+        if Self.libraryModels.contains(id) {
+            try await DownloadDoor.shared.libraryWindow(model: id) { try await LibraryScope.$checking.withValue(id) { try await self.fetchBody(id, role: role, onBytes: onBytes) } }
+        } else {
+            try await fetchBody(id, role: role, onBytes: onBytes)
+        }
+        // The pipeline needs the live words beside a batch recogniser: the model the list names for that job comes with it (one row for the person, two fetches), progress continuing from where this model ended.
+        let own: Int64 = KnownModels.managed.first { $0.id == id }?.approxBytes ?? 0
+        for companion in ListenerPipeline.companions(of: id) where !Voices.readiness.isReady(model: companion) {
+            try await fetch(companion, role: role, onBytes: { onBytes(own + $0) })
+        }
     }
-    private func fetchInsideTheWindow(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
+    private func fetchBody(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         // The libraries do not report bytes in one shape, so the bytes on disk are watched while the load runs.
         let spec = KnownModels.managed.first { $0.id == id }
         let root = spec?.cachePath
@@ -63,13 +77,6 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         }
         if let root { onBytes(max(0, ModelStore.directoryBytes(root) - baseline)) }
         watcher.cancel()
-        // The pipeline needs the live words beside a batch recogniser: the model the list names for that job comes with it (one row for the
-        // person, two fetches), and the progress goes on from where this model ended instead of starting again from zero. The model is
-        // called ready only when everything it needs is in, so a failed companion never leaves a half pipeline recorded as ready (review B2).
-        let own: Int64 = spec?.approxBytes ?? 0
-        for companion in ListenerPipeline.companions(of: id) where !Voices.readiness.isReady(model: companion) {
-            try await fetch(companion, role: role, onBytes: { onBytes(own + $0) })
-        }
     }
 
     static func transcriberStage(_ id: String) -> Transcriber {
@@ -80,7 +87,11 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         }
     }
 
+    /// The check loads the model: the one time a library may be initialised for a model that is not yet ready (the scope says whose).
     public func check(_ id: String, role: String) async throws -> SetupCheck {
+        try await LibraryScope.$checking.withValue(id) { try await self.checkBody(id, role: role) }
+    }
+    private func checkBody(_ id: String, role: String) async throws -> SetupCheck {
         guard KnownModels.contains(id) else { throw LabError.badInput("setup asked for \(id), which is not in the model catalog") }
         guard let audio = FixtureTurn.micSamples16k(), !audio.isEmpty else {
             return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "The bundled utterance could not be read.")

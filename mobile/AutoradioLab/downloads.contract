@@ -13,6 +13,7 @@ component DownloadJobs
     dlPick: action
   props
     group: string
+    showWithheld: bool
   view
     for g in dl.groups key=g.id
       if g.id == group
@@ -21,17 +22,18 @@ component DownloadJobs
             column testId=`dl-job-${j.job}` width="100%" gap=2
               text j.title font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
               for o in j.options key=o.id
-                button press=dlPick(j.job, o.id) testId=`dl-opt-${j.job}-${o.id}` appearance="none"
-                  row width="100%" gap=8 align-items="center" padding="6px 0px"
-                    SelectMark(state=(o.selected ? "on" : "off"))
-                    column gap=1 flex-grow=1
-                      text o.text font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
-                      if o.tag != ""
-                        text o.tag font-family=th.fontLabel font-size="-exact-caption1" color=th.muted
-                      if o.note != ""
-                        text o.note testId=`dl-note-${j.job}-${o.id}` font-family=th.fontLabel font-size="-exact-caption1" line-height=1.35 color=th.muted
-                      if o.credit != ""
-                        text o.credit testId=`dl-credit-${j.job}-${o.id}` font-family=th.fontLabel font-size="-exact-caption1" line-height=1.35 color=th.muted
+                if o.withheld == false or showWithheld
+                  button press=dlPick(j.job, o.id) testId=`dl-opt-${j.job}-${o.id}` appearance="none"
+                    row width="100%" gap=8 align-items="center" padding="6px 0px"
+                      SelectMark(state=(o.selected ? "on" : "off"))
+                      column gap=1 flex-grow=1
+                        text o.text font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
+                        if o.tag != ""
+                          text o.tag font-family=th.fontLabel font-size="-exact-caption1" color=th.muted
+                        if o.note != ""
+                          text o.note testId=`dl-note-${j.job}-${o.id}` font-family=th.fontLabel font-size="-exact-caption1" line-height=1.35 color=th.muted
+                        if o.credit != ""
+                          text o.credit testId=`dl-credit-${j.job}-${o.id}` font-family=th.fontLabel font-size="-exact-caption1" line-height=1.35 color=th.muted
               if j.none != ""
                 text j.none font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
 
@@ -49,7 +51,7 @@ component DownloadCard
         column testId=`dl-${g.id}` width="100%" box-sizing="border-box" gap=8 padding="14px 0px"
           text g.title role="heading" aria-level=2 font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
           text g.why font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
-          DownloadJobs(group=group)
+          DownloadJobs(group=group, showWithheld=true)
           text g.total testId=`dl-${g.id}-total` font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
           text g.hostLine testId=`dl-${g.id}-host` font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
           if g.status != ""
@@ -74,5 +76,5 @@ component DownloadLines
     for g in dl.groups key=g.id
       if g.id == group and g.ready == false
         column testId=`dl-${g.id}` width="100%" gap=4
-          DownloadJobs(group=group)
+          DownloadJobs(group=group, showWithheld=false)
           text g.hostLine testId=`dl-${g.id}-host` font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted

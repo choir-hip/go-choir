@@ -27,7 +27,7 @@ import { noVoice, type VoiceFacts } from './onboarding.ts';
 import { chosen, needs, picksFor, setupBytes, sizeLabel, type OfferJob } from './offers.ts';
 
 export { sizeLabel };
-export type OptionView = { id: string; text: string; tag: string; note: string; credit: string; selected: boolean; ready: boolean };
+export type OptionView = { id: string; text: string; tag: string; note: string; credit: string; withheld: boolean; selected: boolean; ready: boolean };
 export type JobView = { job: string; title: string; options: OptionView[]; ready: boolean; none: string };
 export type Group = {
   id: string; title: string; why: string; jobs: JobView[]; total: string; host: string; ready: boolean; busy: boolean; status: string; onWiFi: boolean; mobileLine: string;
@@ -66,8 +66,8 @@ export function downloadsView(f: VoiceFacts, searchPresent: boolean | null, rev:
       const c = chosen(j, picks);
       return {
         job: j.job, title: JOB_TITLES[j.job] ?? j.job, ready: !needs(j, picks),
-        options: j.options.map((o) => ({ id: o.id, text: `${o.model}, ${o.sizeLabel}`, tag: [o.recommended ? 'Recommended for this phone' : '', o.ready ? 'On this phone' : ''].filter(Boolean).join('. '), note: o.note ?? '', credit: o.credit ?? '', selected: c?.id === o.id, ready: o.ready })),
-        none: c ? '' : 'Nothing here fits this phone; it keeps what is built in.',
+        options: j.options.map((o) => ({ id: o.id, text: `${o.model}, ${o.sizeLabel}`, tag: [o.recommended ? 'Recommended for this phone' : '', o.withheld ? 'Optional: fetched from this page only' : '', o.ready ? 'On this phone' : ''].filter(Boolean).join('. '), note: o.note ?? '', credit: o.credit ?? '', withheld: o.withheld === true, selected: c?.id === o.id, ready: o.ready })),
+        none: c ? '' : j.options.some((o) => o.withheld) ? 'Choose one to download it. Until then the radio keeps what is built in.' : 'Nothing here fits this phone; it keeps what is built in.',
       };
     });
     groups.push({

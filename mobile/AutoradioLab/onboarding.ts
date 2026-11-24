@@ -35,7 +35,7 @@ import { lookupEdition, seamGet, type Get } from './notebook.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
 import * as pages from './pages.ts';
 import { consentAgree, consentPicks } from './consent.ts';
-import { picksFor, setupBytes, totalWords, STAGE_JOBS, type OfferJob } from './offers.ts';
+import { picksFor, setupBytes, totalWords, forFirstRun, STAGE_JOBS, type OfferJob } from './offers.ts';
 import { noEnrol, type Enrol } from './voicelearn.ts';
 import { keyState } from './api.ts';
 
@@ -252,7 +252,8 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
       if (m.p.setupDone && m.step === 'skipped') { m.step = 'ready'; m.p.skipped = false; await save(env, m); break; }          // O7
       const f = await facts(env);
       if (m.step === 'setup' && f.setupStarted && !f.setupFinished) break;                                                    // O2: running
-      if (f.offers.length === 0) { m.message = NO_OFFERS_LINE; break; }                                                       // O19: nothing was shown, so nothing is fetched
+      const shown = forFirstRun(f.offers);                                                                                    // a withheld option is not the first run's
+      if (shown.length === 0) { m.message = NO_OFFERS_LINE; break; }                                                       // O19: nothing was shown, so nothing is fetched
       if (!f.onWiFi && arg !== 'true') { m.step = 'setup'; m.askMobile = true; m.message = ''; break; }                      // O2
       // What was shown is what is fetched (O18, O19): the chosen option of every job of the two voice groups (the person's pick, else the one recommended for this phone), each as the one stage it runs in, and the voice-print model beside them. Never the configurator, never a stage that was not shown.
       let agreed = true;
@@ -260,9 +261,9 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
       if (!agreed) { m.message = NOT_RECORDED_LINE; break; }                                                                   // the agreement is on disk before anything is fetched
       m.askMobile = false; m.step = 'setup'; m.message = ''; m.p.skipped = false;
       await save(env, m);
-      const picks = picksFor(f.offers, ['voice', 'voice-rest'], await consentPicks(env.storage));
+      const picks = picksFor(shown, ['voice', 'voice-rest'], await consentPicks(env.storage));
       const stages = STAGE_JOBS.filter((j) => j in picks);
-      const speaker = f.offers.some((j) => j.job === 'speaker' && j.options.some((o) => !o.ready));
+      const speaker = shown.some((j) => j.job === 'speaker' && j.options.some((o) => !o.ready));
       await dev(env, 'obSetupBegin', { only: true, stages, picks, speaker });
       break;
     }

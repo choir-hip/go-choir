@@ -5,6 +5,7 @@ shape DownloadOption
   tag: string
   note: string
   credit: string
+  withheld: bool
   selected: bool
   ready: bool
 

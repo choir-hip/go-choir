@@ -281,4 +281,12 @@ describe('the voice learning step and the choices', () => {
     v = { ...v, onWiFi: false }; expect((await onboardingPage(v, 0, SETUP, env())).totalLabel).toBe('About 1.6 GB. You are on mobile data, so I will ask before I start.');
     v = { ...v, offers: [] }; expect((await onboardingPage(v, 0, SETUP, env())).totalLabel).toBe('About 2.5 GB. On Wi-Fi this takes a few minutes.');          // nothing offered: native's own words
   });
+  test('O21 the first run never fetches a withheld option, even one picked on Settings; with nothing else offered for a group it starts nothing for it', async () => {
+    const w = (job: string, group: string, id: string): OfferJob => ({ job, group, host: 'H', options: [{ id, model: id, bytes: 350_000_000, sizeLabel: '350 MB', recommended: false, ready: false, withheld: true } as never] });
+    v = { ...v, offers: [w('voice', 'voice', 'kokoro-x'), offerOf('bounds', 'voice-rest', ['gate'], 0)] };
+    await consentPick('voice', 'kokoro-x', storage);
+    await act('begin');
+    expect(calls.find((c) => c.op === 'obSetupBegin')?.args).toEqual({ only: true, stages: ['bounds'], picks: { bounds: 'gate' }, speaker: false });
+  });
 });
+

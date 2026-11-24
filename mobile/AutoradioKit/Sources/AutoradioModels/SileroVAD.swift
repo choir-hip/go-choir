@@ -41,6 +41,7 @@ public final class SileroVAD: SpeechBounds, @unchecked Sendable {
         let manager: VadManager
         do {
             manager = try await Self.slot.get {
+                try LibraryScope.require("silero-vad-v6.2.1")
                 let m = try await VadManager(config: VadConfig(defaultThreshold: 0.6, computeUnits: .cpuAndNeuralEngine))
                 return (m, {})
             }

@@ -121,7 +121,7 @@ export async function learnAct(op: string, f: Facts, later: Later = nativeLater(
   const v = learnView(m, facts);
   // A release is unconditional and idempotent (Y12): never gated by what is running, never dropped. What was running is discarded when it comes back (`advance` checks the epoch).
   if (op === 'rewind' || op === 'forget' || op === 'gone' || op === 'close') {
-    m.epoch += 1;
+    m.epoch += 1; m.busy = false;                                                    // a step that was running is discarded when it returns; a Start now is not ignored
     if (op === 'rewind' || op === 'forget' || m.phase !== 'stored') Object.assign(m, { phase: 'idle', taken: 0, again: false, started: false, why: '' });
     await call(later, op === 'forget' ? 'obVoiceForget' : 'obEnrolDiscard');
     return learnView(m, facts);

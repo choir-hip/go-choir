@@ -10,8 +10,10 @@ public struct OfferOption: Sendable, Equatable {
     public var note: String = ""
     /// The credit its licence asks the app to show (CC BY 4.0 and the like), from the list entry; "" when none.
     public var credit: String = ""
+    /// Offered on Settings only (never recommended, never in the first run's total): a library model with no local-only load that has no manifest yet.
+    public var withheld: Bool = false
     public var sizeLabel: String { SetupCatalog.sizeLabel(bytes) }
-    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready, "note": note, "credit": credit] }
+    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready, "note": note, "credit": credit, "withheld": withheld] }
 }
 public struct OfferJob: Sendable, Equatable {
     public var job: String, group: String, host: String
@@ -30,6 +32,10 @@ public enum ModelOffer {
 
     /// Which group of the download step a job is in.
     public static func group(_ job: String) -> String { job == "voice" ? "voice" : job == "search" ? "search" : "voice-rest" }
+
+    /// The rule that withholds a model, derived and never a switch: a library model with no local-only load is offered only when its manifest exists (a phone has shown it loads from its folder with the registry closed). Its first fetch is the voice settings page's (the voice cards), not the first run's.
+    public static func isWithheld(_ m: ManagedModelSpec, ready: Bool) -> Bool { !m.loadsWithoutFetching && !ready }
+    public static func isWithheld(id: String, ready: Bool) -> Bool { KnownModels.managed.first { $0.id == id }.map { isWithheld($0, ready: ready) } ?? false }
 
     /// What the list's entry weighs: its pinned files when it has them, else the candidate table's size (FluidAudio fetches those itself).
     static func bytes(_ e: ModelListEntry, role: ConfigRole) -> Int64 {
@@ -54,9 +60,9 @@ public enum ModelOffer {
             }
             let opts2 = opts.filter { $0.bytes > 0 }
             if opts2.isEmpty { continue }
-            let rec = opts2.first { $0.fits }?.id
+            let rec = opts2.first { $0.fits && !isWithheld(id: $0.id, ready: ready[j] == $0.id) }?.id
             out.append(OfferJob(job: j, group: group(j), host: host,
-                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note, credit: $0.credit) }))
+                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note, credit: $0.credit, withheld: isWithheld(id: $0.id, ready: ready[j] == $0.id)) }))
         }
         return out
     }

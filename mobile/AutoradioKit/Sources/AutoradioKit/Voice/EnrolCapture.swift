@@ -24,6 +24,8 @@ public final class EnrolCapture: @unchecked Sendable {
     private var candidate: SpeakerProfile?
     /// The account generation this enrolment began under (V7): a write after the generation moved is refused.
     private var sessionGeneration: Int?
+    /// Counts discards: a build that began before one must not install its candidate after it.
+    private var discardSerial = 0
     public var onChange: (@Sendable () -> Void)?
     public init(gate: SpeakerGate = .shared) { self.gate = gate }
 
@@ -67,9 +69,9 @@ public final class EnrolCapture: @unchecked Sendable {
     }
     /// Build the candidate profile from the kept takes, in memory (V3, V4). True when they make one voice.
     public func build() async -> Bool {
-        lock.lock(); let t = takes; let gen = sessionGeneration; lock.unlock()
+        lock.lock(); let t = takes; let gen = sessionGeneration; let serial = discardSerial; lock.unlock()
         var p = await gate.buildCandidate(t)
-        lock.lock(); if gen == nil || gen != AccountWipe.generation { p = nil }; candidate = p; lock.unlock()
+        lock.lock(); if gen == nil || gen != AccountWipe.generation || serial != discardSerial { p = nil }; candidate = p; lock.unlock()
         onChange?()
         return p != nil
     }
@@ -95,7 +97,7 @@ public final class EnrolCapture: @unchecked Sendable {
     }
     /// Drop everything in progress: the takes, the candidate, the take being heard. The stored voice is not touched.
     public func discard() {
-        lock.lock(); takes = []; candidate = nil; sessionGeneration = nil; collector = TakeCollector(); reason = ""; stateValue = .idle; lock.unlock()
+        lock.lock(); discardSerial += 1; takes = []; candidate = nil; sessionGeneration = nil; collector = TakeCollector(); reason = ""; stateValue = .idle; lock.unlock()
         onChange?()
     }
 

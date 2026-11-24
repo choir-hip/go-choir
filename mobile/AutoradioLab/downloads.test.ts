@@ -156,4 +156,18 @@ describe('the press', () => {
     expect(await modelsAgreement(storage, 'voice')).toEqual({ ok: true, mobile: false });
     expect(calls.find((c) => c.op === 'obSetupBegin')).toBeDefined();
   });
+  // Round 5: a library model with no local-only load is WITHHELD (no manifest yet): shown on Settings only, never chosen by default, never in the first run's total; an explicit pick on Settings fetches it.
+  test('D17 a withheld option is shown with its flag, is never the default, and is not in the first run total; picking it on Settings makes it the job\'s choice', () => {
+    const withheld = (id: string, bytes: number, rec = false): ReturnType<typeof opt> & { withheld: boolean } => ({ ...opt(id, id, bytes, rec), withheld: true });
+    const offs = [job('voice', 'voice', [withheld('kokoro-x', 350_000_000)]), job('bounds', 'voice-rest', [opt('gate', 'Gate', 2_000_000, true)])];
+    const v = downloadsView({ ...f, offers: offs }, false, 0);
+    const voice = v.groups.find((g) => g.id === 'voice')!;
+    expect(voice.jobs[0].options[0]).toMatchObject({ id: 'kokoro-x', withheld: true, selected: false });
+    expect(voice.ready).toBe(true);                                                   // nothing is chosen for it: the system voice stays
+    expect(v.setupTotal).toBe('2 MB');                                                // the welcome counts the gate alone
+    const picked = downloadsView({ ...f, offers: offs }, false, 0, { voice: 'kokoro-x' });
+    expect(picked.groups.find((g) => g.id === 'voice')!.ready).toBe(false); expect(picked.groups.find((g) => g.id === 'voice')!.total).toBe('350 MB');
+    expect(picked.setupTotal).toBe('2 MB');                                           // and still not in the first run's
+  });
 });
+

@@ -11,6 +11,7 @@ enum LFM3Shared {
     static let slot = ModelSlot<LFM3AudioManager>(id)
     static func manager() async throws -> LFM3AudioManager {
         try await slot.get {
+            try LibraryScope.require(id)                        // not offered, so never ready: this stage cannot download its 2.9 GB by being asked to load
             await ModelHub.store.unloadAll(except: [id])
             let m = try await LFM3AudioManager.downloadAndLoad(backend: .coreML, includeSpeech: true)
             return (m, {})

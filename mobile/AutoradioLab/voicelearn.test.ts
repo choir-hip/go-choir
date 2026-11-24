@@ -155,5 +155,12 @@ describe('a release while a step is running', () => {
     await press('gone'); calls.length = 0; await press('gone'); await press('gone');
     expect(calls).toEqual(['obEnrolDiscard', 'obEnrolDiscard']);
   });
+  test('Y13 after leaving during "Learning your voice" and coming back, a quick Start is not ignored until the old step returns', async () => {
+    const release = await intoTheBuild();
+    await learnAct('gone', F()); calls.length = 0;
+    await learnAct('start', F(), later as never);
+    expect(calls).toContain('obEnrolBegin');
+    release();
+  });
 });
 
