@@ -61,6 +61,9 @@ public struct ModelCandidate: Codable, Equatable, Sendable {
     public var kitStageID: String
     /// Whether the model gives partial words while the listener speaks (a recogniser of the streaming kind). Only these can steer turn-taking live.
     public var streamsWords: Bool = false
+    /// The credit an attribution licence asks for (CC BY 4.0 section 3(a): who made it, the licence, its link), as data on the row; nil when the licence asks for none.
+    /// A page that lists the models shows this text. `ModelListTests` L8 fails when a CC BY row has none.
+    public var credit: String? = nil
     public var isFloor: Bool { bytes == 0 }
 }
 
@@ -118,15 +121,16 @@ public enum CandidateTable {
 
         // --- the audio models (fetched and compiled by FluidAudio from Hugging Face; the library checks them). Resident sizes are our Mac
         //     process growth on load; "first sound" on a phone is unmeasured (FluidAudio says Kokoro is unvalidated on iOS).
-        func audio(_ id: String, _ role: ConfigRole, _ label: String, rank: Int, basis: String, bytes: Int64, mb: Double, tier: DeviceClass, stage: String, license: String, measured: Bool = true, streams: Bool = false) {
+        func audio(_ id: String, _ role: ConfigRole, _ label: String, rank: Int, basis: String, bytes: Int64, mb: Double, tier: DeviceClass, stage: String, license: String, measured: Bool = true, streams: Bool = false, credit: String? = nil) {
             t.append(ModelCandidate(id: id, role: role, family: label, quant: "", label: label, bytes: bytes, qualityRank: rank, qualityBasis: basis, license: license, licenseLimit: nil,
                                     minTier: tier, residentMB: mb, contextMB: 0, measured: measured, source: KnownModels.managed.first { $0.id == id }?.source ?? "hf (FluidAudio)", kitStageID: stage,
-                                    streamsWords: streams))
+                                    streamsWords: streams, credit: credit ?? KnownModels.bundles.first { $0.id == id }?.credit))
         }
         audio("silero-vad-v6.2.1", .vad, "Silero speech detector", rank: 50, basis: "0.001 of real time on the Mac", bytes: 2_000_000, mb: 110, tier: .tier6, stage: "silero-vad", license: "MIT")
         t.append(ModelCandidate(id: "energy", role: .vad, family: "level detector", quant: "", label: "Level detector built in", bytes: 0, qualityRank: 10, qualityBasis: "the floor",
                                 license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: true, source: "built in", kitStageID: "energy-vad"))
-        audio("parakeet-tdt-0.6b-v2", .transcriber, "Parakeet, the larger listener", rank: 80, basis: "0.044 of real time on the Mac; more accurate than the streaming model, no partials", bytes: 480_000_000, mb: 700, tier: .tier6, stage: "parakeet-tdt", license: "CC-BY-4.0")
+        audio("parakeet-tdt-0.6b-v2", .transcriber, "Parakeet, the larger listener", rank: 80, basis: "0.044 of real time on the Mac; more accurate than the streaming model, no partials", bytes: 480_000_000, mb: 700, tier: .tier6, stage: "parakeet-tdt", license: "CC-BY-4.0",
+              credit: "Parakeet TDT 0.6B v2 by NVIDIA, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).")
         audio("parakeet-eou-120m", .transcriber, "Parakeet, the smaller listener", rank: 60, basis: "0.175 of real time on the Mac; streaming with end-of-utterance, partials while you speak", bytes: 250_000_000, mb: 250, tier: .tier6, stage: "parakeet-eou", license: "NVIDIA Open Model License", streams: true)
         // Fluid Speech Mini (FluidVoice, CC BY 4.0): the recogniser the owner chose and built in Mike (2026-11-24). Ranked above Parakeet TDT on Mike's own numbers
         // (1.51% against 1.92% word error on isolated clips; relayed, ON-DEVICE-MODELS.md section 11); the Mac numbers of ours are in the same section. Re-rank it when
@@ -138,7 +142,8 @@ public enum CandidateTable {
         t.append(ModelCandidate(id: "apple-speech", role: .transcriber, family: "Apple", quant: "", label: "Apple's recogniser", bytes: 0, qualityRank: 20, qualityBasis: "the floor",
                                 license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: true, source: "built in", kitStageID: "apple-speech", streamsWords: true))
         audio("kokoro-82m-ane", .voice, "Kokoro voice", rank: 80, basis: "first sound 243 ms on the Mac (does not stream); unvalidated on a phone", bytes: 350_000_000, mb: 750, tier: .tier6, stage: "kokoro", license: "Apache-2.0")
-        audio("pocket-tts", .voice, "Pocket voice, the lighter one", rank: 65, basis: "first frame 98 ms on the Mac, streams frames", bytes: 300_000_000, mb: 500, tier: .tier6, stage: "pocket-tts", license: "CC-BY-4.0")
+        audio("pocket-tts", .voice, "Pocket voice, the lighter one", rank: 65, basis: "first frame 98 ms on the Mac, streams frames", bytes: 300_000_000, mb: 500, tier: .tier6, stage: "pocket-tts", license: "CC-BY-4.0",
+              credit: "Pocket TTS by Kyutai, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).")
         t.append(ModelCandidate(id: "system-voice", role: .voice, family: "Apple", quant: "", label: "The system voice", bytes: 0, qualityRank: 20, qualityBasis: "the floor",
                                 license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: true, source: "built in", kitStageID: "avspeech"))
         return t

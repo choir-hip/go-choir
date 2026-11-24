@@ -99,7 +99,7 @@ public struct ModelList: Codable, Equatable, Sendable {
             let b = bundles.first { $0.id == c.id }
             return ModelListEntry(
                 id: c.id, job: c.role.rawValue, label: c.label, repository: b?.repo ?? c.source.replacingOccurrences(of: "hf:", with: ""), revision: b?.commit,
-                files: b?.files.map { .init(path: $0.path, bytes: $0.bytes, sha256: $0.sha256) }, license: b?.license ?? c.license, credit: b?.credit,
+                files: b?.files.map { .init(path: $0.path, bytes: $0.bytes, sha256: $0.sha256) }, license: b?.license ?? c.license, credit: b?.credit ?? c.credit,
                 recommendedFor: [.init(minMemoryGB: Double(c.minTier.rawValue) - 1, note: c.minTier.label + " and up")], rank: c.qualityRank)
         }
         return ModelList(version: 1, models: entries.filter(\.isValid))
