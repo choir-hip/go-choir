@@ -40,6 +40,13 @@ the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-24
 
+### A per-account usage report (`scripts/status-account-usage`, yellow)
+- **What:** one read-only ssh to Node B, then per account (by user id, no email): computers, calls and input tokens over 24 hours and 7 days, dollars today and yesterday, disk, memory and the top providers, most active first. No flag, no bound.
+- **Why:** owner, 2026-11-24: monitoring of usage, not a spend bound, for friendly testers.
+- **Proof:** `scripts/test-status-account-usage.sh` (24 checks, seen failing first); run against Node B on 2026-11-24: 1,097 accounts, 4 with a computer, 29,103 calls in the journal's reach.
+- **What it cannot say:** [problem record](problems/per-account-usage-is-recorded-thinly-2026-11-24.md): no history beyond the journal and a two-day spend file, no output tokens per computer, no computer hours.
+- **Replaced:** nothing. **Undo:** delete the script.
+
 ### Phone: the listening models come from the model list; Fluid Speech Mini is the recogniser (`lane/voice-default`, orange)
 - **What:** (1) a recognition stage for Fluid Speech Mini (stage `fluid-speech-mini`, ported from Mike's `FluidSpeechMini.swift`: warm, one pass over the speech-bounded audio), its model-list entry (repository, pinned commit, every file's size and SHA-256, CC BY 4.0 with its credit) and a store that fetches a folder of files, each checked against its digest. (2) a test that runs it on the fixture speech through Core ML on the Mac. (3) the listener configuration is no longer a fixed list: speech detection, live words and the final transcript are chosen from the model list (`Voice/ListenerPipeline`): Silero, Parakeet EOU for live words and Fluid Speech Mini for the transcript when their models are on the phone and ready, the energy detector and Apple's recogniser until then. A better model is a new row in `CandidateTable`.
 - **Why:** owner, 2026-11-24: Apple's recogniser "isnt good enough"; "we are only using that currently because of a coding bug. (we shuold be using fluid speech mini etc)"; "we will keep updating the models as better ones come".

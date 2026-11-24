@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""status-account-usage: who is using how much, per account, from what Node B
+already records. Monitoring only: it raises no flag, sets no bound and always
+exits 0 when it could read the host (owner, 2026-11-24: monitoring of usage,
+not a spend bound, for friendly testers).
+
+Read only against Node B: one ssh reads the gateway's hourly call lines from
+the journal, vmctl's ownership file (which computer belongs to which
+account), the gateway's spend file, the growth meter's ledger and a COUNT of
+accounts. No email address is read: an account is shown by its user id.
+Fetching and computing are separate: fetch() returns raw text, compute() is
+pure, and --fixture FILE feeds compute() a JSON file of the same raw shape
+(scripts/test-status-account-usage.sh).
+
+  status-account-usage [--json] [--fixture FILE] [--node HOST] [--days N]
+
+Exit 0; 2 when the fetch failed.
+
+Sources, and what each can and cannot say
+(docs/problems/per-account-usage-is-recorded-thinly-2026-11-24.md):
+  calls, input tokens  the gateway's log line, one per hour, computer and
+                       provider: "gateway: calls hour=H computer=VM
+                       provider=P calls=N input_tokens=T"
+                       (internal/gateway/call_tally.go). The hour in the line
+                       is used, not the log time. Output tokens are not in
+                       it. It reaches back only as far as the journal does;
+                       the report says how far.
+  dollars              the gateway's spend file, per provider and computer,
+                       today and the previous UTC day only
+                       (internal/gateway/paid_budget.go). Free providers
+                       count as $0.
+  computers, owner     vmctl's ownerships.json: computer, owner, state, last
+                       active, settled memory.
+  disk                 the growth meter's newest value for the computer's
+                       data image.
+  accounts             SELECT count(*) FROM users.
+Not recorded anywhere, so not shown: hours a computer was running, output
+tokens per computer, anything older than the journal and the two-day spend
+file.
+"""
+import calendar
+import json
+import re
+import subprocess
+import sys
+import time
+
+NODE = "node-b"
+GIB = 1 << 30
+NO_OWNER = "(no owner)"
+CALL_RE = re.compile(r"gateway: calls hour=(\S+) computer=(\S+) provider=(\S+) calls=(\d+) input_tokens=(\d+)")
+IMG_RE = re.compile(r'"fs\.vm-state\.([^."]+)\.data\.img"\s*:\s*("?)([A-Za-z0-9]+)\2')
+
+REMOTE = r"""
+echo "##NOW $(date -u +%s)"
+echo "##USERS"
+sudo -n sqlite3 -readonly /var/lib/go-choir/auth/auth.db "select count(*) from users" 2>/dev/null
+echo "##OWNERS"
+sudo -n jq -r '.ownerships | (if type=="array" then . else [.[]] end) | .[] | [.vm_id, .computer_id, .user_id, .state, .last_active_at, (.memory_settled_rss_bytes // 0)] | @tsv' /var/lib/go-choir/vm-state/ownerships.json 2>/dev/null
+echo "##CALLS"
+journalctl -u go-choir-gateway --since "-@DAYS@d" --no-pager -o cat 2>/dev/null | grep -a "gateway: calls hour="
+echo "##SPEND"
+sudo -n cat /var/lib/go-choir/paid-spend.json 2>/dev/null | tr -d '\n'
+echo
+echo "##LEDGER"
+cd /var/lib/go-choir/growth-meter 2>/dev/null && for f in $(ls [0-9]*.jsonl 2>/dev/null | tail -2); do tail -n 30 "$f"; done | grep -o '"ts": \?"[0-9T:Z-]*"\|"fs[.]vm-state[.][^"]*[.]data[.]img": \?"\?[A-Za-z0-9]*"\?' | tr '\n' ' ' | sed 's/"ts"/\n{"ts"/g'
+echo
+echo "##END"
+"""
+
+
+def hour_epoch(h):
+    try:
+        return calendar.timegm(time.strptime(h, "%Y-%m-%dT%H:%MZ"))
+    except ValueError:
+        return None
+
+
+def compute(raw, days=7):
+    now = int(raw.get("now") or time.time())
+    owner_of, comps = {}, {}
+    for ln in (raw.get("owners") or "").splitlines():
+        p = ln.split("\t")
+        if len(p) < 4 or not p[0]:
+            continue
+        vm, computer, user, state = p[0], p[1], p[2] or NO_OWNER, p[3]
+        owner_of[vm] = user
+        comps[vm] = {"computer": computer, "state": state, "last_active": p[4] if len(p) > 4 else "",
+                     "rss": int(p[5]) if len(p) > 5 and p[5].isdigit() else 0}
+
+    accounts = {}
+
+    def acct(user):
+        return accounts.setdefault(user, {
+            "account": user, "computers": 0, "active": 0, "last_active": "", "calls_24h": 0, "calls_7d": 0,
+            "input_tokens_24h": 0, "input_tokens_7d": 0, "providers_24h": {}, "usd_today": 0.0, "usd_yesterday": 0.0,
+            "disk_gib": None, "memory_gib": 0.0})
+
+    for vm, c in comps.items():
+        a = acct(owner_of[vm])
+        a["computers"] += 1
+        a["active"] += 1 if c["state"] == "active" else 0
+        a["last_active"] = max(a["last_active"], c["last_active"])
+        a["memory_gib"] = round(a["memory_gib"] + c["rss"] / GIB, 2)
+
+    oldest = None
+    for m in CALL_RE.finditer(raw.get("calls") or ""):
+        hour, vm, prov, calls, toks = m.group(1), m.group(2), m.group(3), int(m.group(4)), int(m.group(5))
+        t = hour_epoch(hour)
+        if t is None:
+            continue
+        if oldest is None or t < oldest[0]:
+            oldest = (t, hour)
+        age = now - t
+        if age < 0 or age > days * 86400:
+            continue
+        a = acct(owner_of.get(vm, NO_OWNER))
+        a["calls_7d"] += calls
+        a["input_tokens_7d"] += toks
+        if age <= 86400:
+            a["calls_24h"] += calls
+            a["input_tokens_24h"] += toks
+            a["providers_24h"][prov] = a["providers_24h"].get(prov, 0) + calls
+
+    spend_ok = False
+    try:
+        spend = json.loads(raw.get("spend") or "")
+        spend_ok = isinstance(spend, dict) and isinstance(spend.get("today"), dict)
+    except ValueError:
+        spend = {}
+    if spend_ok:
+        for key, field in (("today", "usd_today"), ("prev", "usd_yesterday")):
+            for prov in (spend.get(key) or {}).values():
+                for vm, usd in ((prov or {}).get("computers_usd") or {}).items():
+                    a = acct(owner_of.get(vm, NO_OWNER))
+                    a[field] = round(a[field] + float(usd), 6)
+    else:
+        for a in accounts.values():
+            a["usd_today"] = a["usd_yesterday"] = None
+
+    newest = {}
+    for ln in (raw.get("ledger") or "").splitlines():
+        for m in IMG_RE.finditer(ln):
+            if m.group(3).isdigit():           # the ledger writes "mixed" when it could not size one
+                newest[m.group(1)] = int(m.group(3))
+    for vm, size in newest.items():
+        if vm in owner_of:
+            a = acct(owner_of[vm])
+            a["disk_gib"] = round((a["disk_gib"] or 0) + size / GIB, 2)
+
+    rows = sorted(accounts.values(), key=lambda a: (-a["calls_24h"], -a["calls_7d"], a["account"]))
+    users = (raw.get("users") or "").strip()
+    return {
+        "now": time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(now)),
+        "days": days,
+        "calls_reach_back_to": oldest[1] if oldest else None,
+        "spend_available": spend_ok,
+        "spend_day": spend.get("day") if spend_ok else None,
+        "totals": {"accounts": int(users) if users.isdigit() else None,
+                   "accounts_with_a_computer": len([a for a in accounts if a != NO_OWNER and accounts[a]["computers"] > 0]),
+                   "computers": len(comps),
+                   "calls_24h": sum(a["calls_24h"] for a in rows),
+                   "usd_today": round(sum(a["usd_today"] or 0 for a in rows), 4) if spend_ok else None},
+        "accounts": rows,
+    }
+
+
+def render(r):
+    t = r["totals"]
+    o = ["== account usage, %s UTC ==" % r["now"],
+         "accounts %s, with a computer %d, computers %d; calls in the last 24h %d; dollars today %s" % (
+             "?" if t["accounts"] is None else t["accounts"], t["accounts_with_a_computer"], t["computers"], t["calls_24h"],
+             "unavailable (spend file not read)" if t["usd_today"] is None else "$%.2f" % t["usd_today"]),
+         "call lines reach back to %s (the window asked for is %d days; a shorter reach is the journal, not low use)" % (
+             r["calls_reach_back_to"] or "nothing: no call line was read", r["days"]),
+         ""]
+    if not r["accounts"]:
+        o.append("no account with a computer or a call")
+        return "\n".join(o)
+    o.append("%-38s %4s %4s %9s %9s %11s %8s %8s %7s %6s  %s" % (
+        "account (user id)", "comp", "on", "calls 24h", "calls %dd" % r["days"], "in-tok 24h", "$ today", "$ yest", "disk G", "mem G", "top providers 24h"))
+    usd = lambda v: "n/a" if v is None else "%.2f" % v
+    for a in r["accounts"]:
+        top = sorted(a["providers_24h"].items(), key=lambda kv: -kv[1])[:3]
+        o.append("%-38s %4d %4d %9d %9d %11d %8s %8s %7s %6.1f  %s" % (
+            a["account"][:38], a["computers"], a["active"], a["calls_24h"], a["calls_7d"], a["input_tokens_24h"],
+            usd(a["usd_today"]), usd(a["usd_yesterday"]), "n/a" if a["disk_gib"] is None else "%.1f" % a["disk_gib"],
+            a["memory_gib"], " ".join("%s:%d" % kv for kv in top)))
+    o += ["", "not recorded, so not shown: hours a computer ran, output tokens per computer, anything before the reach above;",
+          "dollars cover today and yesterday (UTC) only, and free providers count as $0."]
+    return "\n".join(o)
+
+
+def sections(text):
+    out, cur = {}, None
+    for ln in text.splitlines():
+        if ln.startswith("##"):
+            parts = ln[2:].split(" ", 1)
+            cur = parts[0]
+            out[cur] = [parts[1]] if len(parts) > 1 else []
+        elif cur:
+            out[cur].append(ln)
+    return out
+
+
+def fetch(node, days):
+    p = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node, REMOTE.replace("@DAYS@", str(int(days)))],
+                       capture_output=True, text=True, timeout=300)
+    s = sections(p.stdout)
+    if "NOW" not in s or "END" not in s:
+        raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
+    j = lambda k: "\n".join(s.get(k, []))
+    return {"now": int(s["NOW"][0]), "users": j("USERS"), "owners": j("OWNERS"), "calls": j("CALLS"),
+            "spend": j("SPEND"), "ledger": j("LEDGER")}
+
+
+def main(argv):
+    as_json = "--json" in argv
+    arg = lambda name, d: argv[argv.index(name) + 1] if name in argv else d
+    days = int(arg("--days", "7"))
+    try:
+        if "--fixture" in argv:
+            with open(arg("--fixture", "")) as f:
+                raw = json.load(f)
+        else:
+            raw = fetch(arg("--node", NODE), days)
+    except Exception as e:  # the fetch failed: say so, exit 2
+        print("status-account-usage: %s" % e, file=sys.stderr)
+        return 2
+    r = compute(raw, days)
+    print(json.dumps(r, indent=1) if as_json else render(r))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
