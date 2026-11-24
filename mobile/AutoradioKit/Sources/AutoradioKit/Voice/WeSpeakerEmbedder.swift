@@ -33,7 +33,7 @@ public final class WeSpeakerEmbedder: VoiceEmbedder, @unchecked Sendable {
         ("model.mil", 706_900, nil),
         ("weights/weight.bin", 7_243_904, "34004f6798d35cad7071e2fdc67e63faaa782f53697e1cb49bcb452cf81ae151"),
     ]
-    public static let attribution = "Voice model: WeSpeaker ResNet34 (CC BY 4.0), converted to Core ML by Fluid Inference."
+    public static let attribution = "Voice model: WeSpeaker ResNet34-LM (VoxCeleb) as published by pyannote, converted to Core ML by Fluid Inference (the files are modified conversions). Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."
 
     private let root: URL
     private let lock = NSLock()

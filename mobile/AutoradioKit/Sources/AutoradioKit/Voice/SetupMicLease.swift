@@ -9,6 +9,9 @@ import Foundation
 //  L2 A permission answer that arrives after the page is gone, or after the take was given up, opens nothing.
 //  L3 A refusal closes everything and says so.
 //  L4 `release` with nothing held, or twice, is harmless; it always clears the tap and restores the stored switch.
+//  L6 Nothing is asked of the person for a take that is not wanted any more.
+//  L7 An older begin that was overtaken never turns the newer take's microphone off.
+//  L8 The app going to the background releases the live lease (`releaseLive`).
 //  L5 A second `begin` while the first still waits for the system prompt makes the first do nothing.
 public actor SetupMicLease {
     public struct Hooks: Sendable {
@@ -35,10 +38,14 @@ public actor SetupMicLease {
     public init(_ hooks: Hooks) { self.hooks = hooks }
 
     public var isHeld: Bool { held }
+    /// The lease the app has live, so a lifecycle notice (the app going to the background) can let go without knowing the page.
+    nonisolated(unsafe) public static weak var live: SetupMicLease?
+    public static func releaseLive() async { await live?.release() }
 
     /// Open the microphone for one sentence. `wanted` is asked again after every wait: a take that was given up in the meantime opens nothing.
     public func begin(wanted: @escaping @Sendable () -> Bool, onFrame: @escaping @Sendable (AudioFrame) -> Void) async -> Outcome {
         token += 1; let mine = token; held = true
+        guard wanted() else { return await settle(mine) }                                         // no prompt for a take nobody wants (L6)
         let granted = await hooks.ask()
         guard mine == token, wanted() else { return await settle(mine) }                         // L2, L5
         if !granted { await release(); return .refused }                                          // L3
@@ -47,7 +54,7 @@ public actor SetupMicLease {
         await hooks.setTap(onFrame)
         if mine != token { await hooks.setTap(nil); return .stale }                              // released while the tap was being set
         await hooks.micOn(true)
-        if mine != token { await hooks.micOn(false); return .stale }
+        if mine != token { return .stale }                                                         // whoever overtook this begin owns the microphone now (L7)
         return .open
     }
     /// The sentence is over: the microphone is off, the tap stays (L1).

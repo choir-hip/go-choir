@@ -31,12 +31,14 @@ final class OnboardingController: @unchecked Sendable {
     private var takeSerial = 0
     private lazy var lease: SetupMicLease = {
         let m = module
-        return SetupMicLease(.init(
+        let l = SetupMicLease(.init(
             ask: { await LiveAudio.requestMicPermission() },      // the one system prompt: shared code showed its plain line first (the learn page: Continue / Not now)
             openEngine: { let rt = m.runtime!; await rt.start(virtual: m.virtualEngine); rt.audio.micMayRetry() },
             setTap: { tap in await m.runtime!.setEnrolmentTap(tap) },
             micOn: { on in m.runtime!.setHandsFree(on, persist: false) },
             restore: { m.runtime!.restoreHandsFree() }))
+        SetupMicLease.live = l
+        return l
     }()
     /// The first run is over (done or skipped): the station may start by itself. Told by shared code (obMirror).
     private var over = false
@@ -134,6 +136,8 @@ final class OnboardingController: @unchecked Sendable {
         Task { [weak self] in
             guard let self else { return }
             let granted = await LiveAudio.requestMicPermission()              // the one system prompt
+            self.lock.lock(); let here = self.micActive; self.lock.unlock()
+            if !here { return }                                               // the page was left while the prompt was up: the engine and the switch are not touched
             if !granted { self.set { self.mic = "refused"; self.micActive = false }; return }
             // One live check: start the engine, listen on this screen only (hands-free is off by default and the engine drops every frame
             // while it is off), feed the meter from the real input level, and pass on the first transcript or on a sustained level

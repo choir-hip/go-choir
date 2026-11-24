@@ -33,6 +33,8 @@ public final class WiFiMonitor: @unchecked Sendable {
     public var testOverride: Bool?
     /// The path changed (shared code asks the facts again, so a page rendered on Wi-Fi does not press on mobile data).
     public var onChange: (@Sendable () -> Void)?
+    /// A monitor that watches nothing (tests drive `report`).
+    init(testing: Bool) {}
     private init() {
         monitor.pathUpdateHandler = { [weak self] p in
             self?.report(wifi: Self.classify(satisfied: p.status == .satisfied, wifi: p.usesInterfaceType(.wifi), wired: p.usesInterfaceType(.wiredEthernet), expensive: p.isExpensive))

@@ -1,6 +1,6 @@
 // Learning the person's voice, the page's side (voicelearn.ts): Y1 to Y9, against a fake native that records its calls.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { CONFIRM_SENTENCE, MIC_OFF_LINE, MIC_PRE_LINE, SENTENCES, forgetLearn, learnAct, learnPage, noEnrol, wipeLearn, type Enrol } from './voicelearn.ts';
+import { learnIsOpen, CONFIRM_SENTENCE, MIC_OFF_LINE, MIC_PRE_LINE, SENTENCES, forgetLearn, learnAct, learnPage, noEnrol, wipeLearn, type Enrol } from './voicelearn.ts';
 import { bindNative, resetSeam } from './api.ts';
 
 let calls: string[]; let micNow: string | undefined; let usable = true; let built = true; let verdict = 'match'; let stored = true; let kept = 0;
@@ -106,3 +106,24 @@ describe('the live permission (review round 2)', () => {
     micNow = undefined; expect((await view(F({}, 'refused'))).step).toBe('refused');                  // native says nothing: the kept fact decides
   });
 });
+
+// DOOR C (review round 3): the microphone lease is bound to the page's LIFETIME. The page is open while it is on top, whatever the way it was reached; when it is not, shared code tells native to let go, whichever way it was left.
+describe('the page owns the lease', () => {
+  test('Y11 the learn page is open on Settings > Your voice, and on the first-run step "learn"; on every other page, or any other step, it is gone', () => {
+    expect(learnIsOpen('settings:voiceprint', '')).toBe(true);
+    expect(learnIsOpen('onboarding:setup', 'learn')).toBe(true);
+    for (const top of ['settings:root', 'radio:', 'paper:front', 'onboarding:edit', '', 'settings:downloads']) expect(learnIsOpen(top, 'learn')).toBe(false);
+    for (const step of ['welcome', 'mic', 'hearing', 'voice', 'topics', 'done', '']) expect(learnIsOpen('onboarding:setup', step)).toBe(false);
+  });
+  test('Y11 "gone" (any exit: the back gesture, another page, the deck switching) drops everything in progress and tells native to release; it keeps a stored voice', async () => {
+    await press('start'); calls.length = 0;
+    await press('gone'); expect(calls).toEqual(['obEnrolDiscard']); expect((await view()).step).toBe('intro');
+    for (let i = 0; i < 3; i++) { await press(i === 0 ? 'start' : 'read'); await view(F({ state: 'done', usable: true })); }
+    await press('read'); await view(F({ state: 'done', usable: true })); expect((await view()).step).toBe('stored');
+    calls.length = 0; await press('gone'); expect(calls).toEqual(['obEnrolDiscard']); expect((await view()).step).toBe('stored');
+  });
+  test('Y11 "gone" with nothing in progress is harmless and still releases (native may hold a lease the page never saw)', async () => {
+    calls.length = 0; await press('gone'); expect(calls).toEqual(['obEnrolDiscard']);
+  });
+});
+

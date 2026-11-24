@@ -87,7 +87,10 @@ public struct ManagedModelSpec: Codable, Sendable {
     /// The folders under `cachePath` that belong to this model alone (FluidAudio names them by its own rules). Deleting a rejected
     /// configuration's model removes exactly these, never `cachePath` itself, which other models share. nil: the kit does not delete it.
     public var cacheFolders: [String]?
-    public init(id: String, label: String, source: String, approxBytes: Int64, license: String, cachePath: URL? = nil, cacheFolders: [String]? = nil) {
+    /// The credit its licence asks the app to show (CC BY 4.0 and the like); nil when the licence asks for none.
+    public var credit: String?
+    public init(id: String, label: String, source: String, approxBytes: Int64, license: String, cachePath: URL? = nil, cacheFolders: [String]? = nil, credit: String? = nil) {
+        self.credit = credit
         self.id = id; self.label = label; self.source = source; self.approxBytes = approxBytes; self.license = license; self.cachePath = cachePath
         self.cacheFolders = cacheFolders
     }

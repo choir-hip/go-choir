@@ -19,12 +19,11 @@ final class NetworkPathTests: XCTestCase {
         XCTAssertFalse(DeviceProfile.current(onWiFi: false).onWiFi, "an explicit answer still wins")
     }
     func testN3APathChangeIsReported() {
-        defer { WiFiMonitor.shared.onChange = nil }
+        let m = WiFiMonitor(testing: true)                                    // not the live monitor: a real path update cannot fire in the middle
         final class C: @unchecked Sendable { var n = 0 }; let c = C()
-        WiFiMonitor.shared.report(wifi: false)
-        WiFiMonitor.shared.onChange = { c.n += 1 }
-        WiFiMonitor.shared.report(wifi: true); XCTAssertEqual(c.n, 1); XCTAssertTrue(WiFiMonitor.shared.onWiFi)
-        WiFiMonitor.shared.report(wifi: true); XCTAssertEqual(c.n, 1, "no change, no report")
-        WiFiMonitor.shared.report(wifi: false); XCTAssertEqual(c.n, 2)
+        m.onChange = { c.n += 1 }
+        m.report(wifi: true); XCTAssertEqual(c.n, 1); XCTAssertTrue(m.onWiFi)
+        m.report(wifi: true); XCTAssertEqual(c.n, 1, "no change, no report")
+        m.report(wifi: false); XCTAssertEqual(c.n, 2)
     }
 }

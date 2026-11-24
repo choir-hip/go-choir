@@ -38,4 +38,23 @@ final class ModelListTests: XCTestCase {
         let ids = Set(ModelList.builtIn().models.map(\.id))
         for c in CandidateTable.all where !c.isFloor { XCTAssertTrue(ids.contains(c.id), "\(c.id) is in the table but not the built-in list") }
     }
+
+    // DOOR E (review round 3): a licence that asks for a credit (every CC licence) cannot be offered without it. A new model with a CC licence and no credit fails here, not in review.
+    func testEveryOfferedModelWithACreativeCommonsLicenceCarriesItsCredit() {
+        let list = ModelList.builtIn()
+        var seen = 0
+        for e in list.models where e.license.uppercased().contains("CC-BY") || e.license.uppercased().contains("CC BY") {
+            seen += 1
+            XCTAssertFalse((e.credit ?? "").isEmpty, "\(e.id) (\(e.license)) is offered with no credit")
+            XCTAssertTrue((e.credit ?? "").contains("CC BY 4.0") || (e.credit ?? "").contains("CC-BY-4.0"), "\(e.id): the credit names the licence")
+            XCTAssertTrue((e.credit ?? "").contains("creativecommons.org/licenses/by/4.0"), "\(e.id): and links it")
+        }
+        XCTAssertGreaterThanOrEqual(seen, 3, "Fluid Speech Mini, Parakeet TDT and Pocket are CC BY 4.0")
+        let phone = DeviceProfile(chip: "A", memoryGB: 8, freeDiskGB: 50, onWiFi: true)
+        for j in ModelOffer.jobs(profile: phone, list: list) { for o in j.options where o.credit.isEmpty { XCTAssertFalse(list.models.first { $0.id == o.id }.map { $0.license.uppercased().contains("CC") } ?? false, "\(o.id) offered with no credit") } }
+    }
+    func testTheVoicePrintCreditNamesWeSpeakerPyannoteFluidInferenceTheLicenceAndTheChange() {
+        let c = WeSpeakerEmbedder.attribution
+        for want in ["WeSpeaker", "pyannote", "Fluid Inference", "CC BY 4.0", "creativecommons.org/licenses/by/4.0", "modified"] { XCTAssertTrue(c.contains(want), "the voice-print credit lacks \(want)") }
+    }
 }

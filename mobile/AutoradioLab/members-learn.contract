@@ -13,3 +13,13 @@ members Autoradio
   action lrnLeaveSettings
     send lrnm = learnAct("close", ovoice)
     send pms = pagesClose("settings:voiceprint")
+  // DOOR C: the microphone lease is bound to the page's lifetime, not to its buttons. The page is open while it is in front (learnIsOpen: Settings > Your voice, the first run's learn step); whenever that turns false, by the back gesture, another page,
+  // the deck or anything else, native is told to let go (learnAct "gone" = obEnrolDiscard). The app going to the background and sign-out release natively.
+  state learnHeld = false
+  derive learnOpen = pg.top == "settings:voiceprint" or (pg.top == "onboarding:setup" and ob.step == "learn")
+  task learnLeaseTask when learnOpen != learnHeld
+    after(10, learnLeaseSync)
+  action learnLeaseSync
+    if learnOpen == false and learnHeld
+      send lrnm = learnAct("gone", ovoice)
+    learnHeld = learnOpen

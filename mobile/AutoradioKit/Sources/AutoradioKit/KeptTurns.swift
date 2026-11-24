@@ -72,6 +72,7 @@ public final class KeptTurnStore: @unchecked Sendable {
         var removed = 0
         for (i, (url, at)) in dated.enumerated() {
             if i >= keep || now.timeIntervalSince(at) > maxAgeDays * 86_400 { try? fm.removeItem(at: url); removed += 1; continue }
+            if url.lastPathComponent == FixtureTurn.name { continue }          // the lab's installed fixture clip is a proof artifact, not the person's sound
             for audio in ["mic.caf", "reference.caf"] { try? fm.removeItem(at: url.appendingPathComponent(audio)) }
         }
         return removed

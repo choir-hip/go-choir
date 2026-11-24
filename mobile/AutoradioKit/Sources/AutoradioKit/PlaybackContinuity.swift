@@ -183,6 +183,7 @@ public final class SessionWatcher: @unchecked Sendable {
             runtime.coordinator.markSuspect("app in the background")
             runtime.coordinator.noteBackgrounded(true)                      // the fact now, in the order of the notices
             Task { await runtime.coordinator.applyBackgrounded() }          // voice on: the microphone is given up, the radio plays on
+            Task { await SetupMicLease.releaseLive() }                       // a setup screen's microphone lease too (learning the voice)
         case "didBecomeActive":
             runtime.coordinator.noteBackgrounded(false)
             Task { @MainActor in

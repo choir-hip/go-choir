@@ -129,7 +129,7 @@ members Autoradio
   action micContinue
     gate = ""
     if micFor == "take"
-      send tpm = takesAct("record", "")
+      send tpm = takesAct(micOp, micArg)
     if micFor == "talk"
       send obm = onboardingAct("talk", "", "", pg.top)
     if micFor == "voice"

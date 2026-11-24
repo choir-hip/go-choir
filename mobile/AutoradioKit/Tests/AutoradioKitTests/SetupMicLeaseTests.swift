@@ -69,4 +69,33 @@ final class SetupMicLeaseTests: XCTestCase {
         XCTAssertEqual(r.all.filter { $0 == "mic:on" }.count, 1)
         let held = await l.isHeld; XCTAssertTrue(held, "the newer begin keeps the lease")
     }
+    // Round 3: the prompt is not raised for a take nobody wants any more.
+    func testL6NothingIsAskedWhenTheTakeIsAlreadyUnwanted() async {
+        let r = Rec(); let l = make(r)
+        let out = await l.begin(wanted: { false }, onFrame: { _ in }); XCTAssertEqual(out, .stale)
+        XCTAssertFalse(r.all.contains("ask")); XCTAssertEqual(r.all.last, "restore")
+    }
+    // Round 3: an older begin that was overtaken must not close the newer take's microphone on its way out.
+    func testL7AnOvertakenBeginNeverTurnsTheNewerMicrophoneOff() async {
+        let r = Rec(); r.hold = false; let l = make(r)
+        final class Gate: @unchecked Sendable { let lock = NSLock(); var open = false; var v: Bool { get { lock.lock(); defer { lock.unlock() }; return open } set { lock.lock(); open = newValue; lock.unlock() } } }
+        let tapGate = Gate()
+        let slow = SetupMicLease(.init(ask: { true }, openEngine: {}, setTap: { t in r.add(t == nil ? "tap:nil" : "tap:set"); if t != nil { while !tapGate.v { try? await Task.sleep(nanoseconds: 2_000_000) } } },
+                                       micOn: { on in r.add(on ? "mic:on" : "mic:off") }, restore: { r.add("restore") }))
+        let first = Task { await slow.begin(wanted: { true }, onFrame: { _ in }) }
+        await waitFor(r, "tap:set")
+        await slow.release()                                   // the page left while the tap was being set
+        tapGate.v = true
+        let f = await first.value; XCTAssertEqual(f, .stale)
+        XCTAssertFalse(r.all.contains("mic:on"), "an overtaken begin never turns the microphone on")
+        _ = l
+    }
+    // Round 3: the app going to the background lets go.
+    func testL8TheAppGoingToTheBackgroundReleasesTheLiveLease() async {
+        let r = Rec(); let l = make(r); SetupMicLease.live = l
+        _ = await l.begin(wanted: { true }, onFrame: { _ in })
+        await SetupMicLease.releaseLive()
+        XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"]); let held = await l.isHeld; XCTAssertFalse(held)
+        SetupMicLease.live = nil
+    }
 }
