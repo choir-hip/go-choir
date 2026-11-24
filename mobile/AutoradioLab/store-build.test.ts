@@ -57,6 +57,9 @@
 //  D6 two archive runs (or a run after the record was lost) are given one build number; an override already given is given again.
 //  R11 check-store-signing.py refuses a valid App Store profile that omits get-task-allow, or one whose App ID prefix is not its team id (legacy prefix).
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
+// The store scripts run only on macOS: they call codesign, ditto, security and plutil at their system paths (F3), and the store archive is made only on the
+// lead's Mac. The groups that execute those tools run there and are skipped on the Linux CI runner, where the tools do not exist; every other group runs everywhere.
+const MAC = process.platform === 'darwin';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, renameSync, symlinkSync, realpathSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -363,7 +366,7 @@ describe('archive-store.sh refuses plainly before it builds anything', () => {
   });
 });
 
-describe('check-store-signing.py reads the profile as Apple writes it', () => {
+describe.skipIf(!MAC)('check-store-signing.py reads the profile as Apple writes it', () => {
   test('R11 a valid App Store profile that omits get-task-allow, or carries a legacy App ID prefix, is accepted; a prefix that is not the profile\'s own is refused', () => {
     const tr = tree();
     try {
@@ -386,7 +389,7 @@ describe('check-store-signing.py reads the profile as Apple writes it', () => {
   });
 });
 
-describe('archive-store.sh builds and reads the ipa back', () => {
+describe.skipIf(!MAC)('archive-store.sh builds and reads the ipa back', () => {
   test('S3 Exact is given the version, a rising build number, the export answer, the developer menu off, and the signing pair; the ipa is read back', () => {
     const tr = tree();
     try {
@@ -476,7 +479,7 @@ describe('archive-store.sh builds and reads the ipa back', () => {
   });
 });
 
-describe('upload-store.sh', () => {
+describe.skipIf(!MAC)('upload-store.sh', () => {
   // An ipa as archive-store.sh leaves it (makeIpa): archive kind, developer menu off, export answer false, a profile embedded, an executable. `info` overrides or (null) removes a key.
   const ipaFor = (tr: Tree, id = PROD, info: Record<string, unknown> = {}) => makeIpa(tr, 'x.ipa', { id, info });
   const upload = (tr: Tree, args: string[], extra: Record<string, string> = {}) => run(['/bin/sh', join(tr.m, 'scripts', 'upload-store.sh'), ...args], tr.env(extra));
@@ -706,7 +709,7 @@ describe('exact.sh runs only what is on its list (A1, A3, A4, G1, G2)', () => {
   });
 });
 
-describe('round 3: the second review', () => {
+describe.skipIf(!MAC)('round 3: the second review', () => {
   test('T1 the microphone string tells the truth about Take: it records, and a published take is uploaded', () => {
     const en = JSON.parse(readFileSync(join(MOBILE, 'AutoradioLab', 'strings', 'en.json'), 'utf8'));
     const t: string = en['purpose.microphone'];
@@ -757,7 +760,7 @@ describe('round 3: the second review', () => {
 });
 const KEY2 = 'ZZKEYIDTWO', ISS2 = '99999999-2222-3333-4444-555555555555';
 
-describe('round 3: the profile, the ipa and the rest', () => {
+describe.skipIf(!MAC)('round 3: the profile, the ipa and the rest', () => {
   const keyfile = (tr: Tree) => { const k = join(tr.t, 'AuthKey.p8'); writeFileSync(k, 'k'); chmodSync(k, 0o600); return k; };
   const ipa = (tr: Tree, info: Record<string, unknown> = {}, name = 'z.ipa') => makeIpa(tr, name, { info: { ...info, __corrupt: undefined }, corrupt: !!info.__corrupt });
   const up = (tr: Tree, p: string) => run(['/bin/sh', join(tr.m, 'scripts', 'upload-store.sh'), p], tr.env({ ASC_KEY_ID: 'ZZKEYIDTHREE', ASC_ISSUER_ID: '77777777-2222-3333-4444-555555555555', ASC_KEY_FILE: keyfile(tr) }));
@@ -831,7 +834,7 @@ const keyfileFor = (tr: Tree) => { const k = join(tr.t, 'AuthKey.p8'); writeFile
 const uploadOf = (tr: Tree, ipa: string, extra: Record<string, string> = {}) => run(['/bin/sh', join(tr.m, 'scripts', 'upload-store.sh'), ipa],
   tr.env({ ASC_KEY_ID: 'ZZKEYIDFOUR', ASC_ISSUER_ID: '66666666-2222-3333-4444-555555555555', ASC_KEY_FILE: keyfileFor(tr), ...extra }));
 
-describe('D1 archive-store.sh stages the store kind itself, every time, immediately before Exact reads the tree', () => {
+describe.skipIf(!MAC)('D1 archive-store.sh stages the store kind itself, every time, immediately before Exact reads the tree', () => {
   test('D1 a tree last staged for development (the launch hooks in it) is restaged: the "compiled" app holds none of them, and the order is sync(store) then Exact', () => {
     const tr = tree({ realStage: true });
     try {
@@ -865,7 +868,7 @@ describe('D1 archive-store.sh stages the store kind itself, every time, immediat
   });
 });
 
-describe('D2 check-store-ipa.py judges the executable inside the ipa', () => {
+describe.skipIf(!MAC)('D2 check-store-ipa.py judges the executable inside the ipa', () => {
   test('D2 every name on the list refuses the ipa, in archive-store.sh and in upload-store.sh; a clean executable and the same names beside it (in Info.plist, in the file names) pass', () => {
     expect(NAMES.length).toBeGreaterThanOrEqual(5);
     const tr = tree();
@@ -917,7 +920,7 @@ describe('D2b check-store-ipa.py --executable <file> (the lead\'s proof on a dev
   });
 });
 
-describe('D3 check-store-ipa.py reads the signature, not only the embedded profile', () => {
+describe.skipIf(!MAC)('D3 check-store-ipa.py reads the signature, not only the embedded profile', () => {
   test('D3 get-task-allow in the signature, another application-identifier, a development authority, a broken seal, a codesign that cannot read the app are each a plain refusal; a store signature passes', () => {
     const tr = tree();
     try {
@@ -995,7 +998,7 @@ describe('D5 the identity file is not replaceable for a store script', () => {
   });
 });
 
-describe('D6 a build number is given once', () => {
+describe.skipIf(!MAC)('D6 a build number is given once', () => {
   test('D6 two runs at the same moment get two numbers; a record that was lost does not give a number again; an override already given is refused', async () => {
     const tr = tree();
     try {
@@ -1045,7 +1048,7 @@ function addToIpa(ipa: string, files: Record<string, Buffer | string> = {}, link
 }
 const refuses = (r: R, words: string[], who = 'upload-store:') => { expect(r.code, r.out).not.toBe(0); expect(r.err).toContain(who); for (const w of words) expect(r.err).toContain(w); expect(r.err).not.toContain('Traceback'); };
 
-describe('F1 the names are searched in every Mach-O of the bundle', () => {
+describe.skipIf(!MAC)('F1 the names are searched in every Mach-O of the bundle', () => {
   test('F1 a listed name only in the module dylib, a framework binary, a plug-in or a loose dylib refuses the ipa, in upload-store.sh and in archive-store.sh', () => {
     const tr = tree();
     try {
@@ -1070,7 +1073,7 @@ describe('F1 the names are searched in every Mach-O of the bundle', () => {
   });
 });
 
-describe('F2 what is searched is what is signed', () => {
+describe.skipIf(!MAC)('F2 what is searched is what is signed', () => {
   test('F2 two apps in Payload, a symlink out of the bundle, a duplicate entry are each refused', () => {
     const tr = tree();
     try {
@@ -1085,7 +1088,7 @@ describe('F2 what is searched is what is signed', () => {
   });
 });
 
-describe('F3 the tools are the system\'s, not the caller\'s PATH', () => {
+describe.skipIf(!MAC)('F3 the tools are the system\'s, not the caller\'s PATH', () => {
   test('F3 stubs of codesign, ditto and security on PATH are ignored by upload-store.sh and archive-store.sh (the system\'s security refuses the fixture\'s profile and identity)', () => {
     const tr = tree({ systemTools: true });
     try {
@@ -1134,7 +1137,7 @@ describe('F3 the tools are the system\'s, not the caller\'s PATH', () => {
   });
 });
 
-describe('F4 the signature names Apple Distribution and the profile\'s team', () => {
+describe.skipIf(!MAC)('F4 the signature names Apple Distribution and the profile\'s team', () => {
   test('F4 "Apple Distribution Test" and a TeamIdentifier other than the profile\'s are refused; "Apple Distribution: Name (TEAM)" passes', () => {
     const tr = tree();
     try {
@@ -1150,7 +1153,7 @@ describe('F4 the signature names Apple Distribution and the profile\'s team', ()
   });
 });
 
-describe('F5 the list of names is parsed strictly and covers what is staged and what is compiled out', () => {
+describe.skipIf(!MAC)('F5 the list of names is parsed strictly and covers what is staged and what is compiled out', () => {
   test('F5 a line that is not "<kind> <name>" makes the checker refuse everything, instead of dropping the name', () => {
     const tr = tree();
     try {
@@ -1241,7 +1244,7 @@ describe('F5 the build-condition scan reads conditions, not just their presence'
   });
 });
 
-describe('F6 the build number claim', () => {
+describe.skipIf(!MAC)('F6 the build number claim', () => {
   test('F6 an unwritable claims directory is a refusal, not a loop; a staging that fails burns no number; an override raises the record for the default runs after it', () => {
     const tr = tree();
     try {
@@ -1309,7 +1312,7 @@ describe('F7 the wrapper around Exact', () => {
 //  N2 the control passes when the check does NOT refuse the development app (it must fail, saying the check is inert), or when it refuses for another reason.
 //  N3 the control can upload, or keeps the development ipa.
 const control = (tr: Tree, extra: Record<string, string> = {}) => { const e = tr.env(extra); if (!('ALLOW_NO_MODELS' in extra)) delete e.ALLOW_NO_MODELS; return run(['/bin/sh', join(tr.m, 'scripts', 'store-negative-control.sh')], e); };
-describe('N store-negative-control.sh', () => {
+describe.skipIf(!MAC)('N store-negative-control.sh', () => {
   test('N1 a development app built as the store app is, refused for a hook naming the file, then the store kind staged again; nothing uploaded; the ipa deleted', () => {
     const tr = tree({ realStage: true });
     try {
