@@ -135,6 +135,8 @@ final class ModelListTests: XCTestCase {
         XCTAssertTrue(ids.contains("pocket-tts:alba"))
         for r in VoiceRows.all { XCTAssertEqual(VoiceCatalog.option(id: r.id)?.setting, StageSetting(id: r.stageID, params: ["voice": .string(r.voice)]), "\(r.id): the voice id reaches the stage as its \"voice\" parameter") }
         XCTAssertEqual(Set(ids).count, ids.count)
+    }
+
     // MARK: LFM3-Omni-2B as a larger responder
 
     private let omniID = "lfm3-omni-2b-q8_0"

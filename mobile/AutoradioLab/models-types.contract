@@ -1,0 +1,44 @@
+// The shapes of Settings > Voice and models (models.ts `modelsPage`).
+shape ModelRow
+  id: string
+  job: string
+  section: string
+  name: string
+  size: string
+  tag: string
+  source: string
+  credit: string
+  note: string
+  state: string
+  line: string
+  progress: number
+  canDownload: bool
+  canUse: bool
+  canRemove: bool
+  canTest: bool
+  downloadLabel: string
+  mobileLine: string
+  testing: bool
+  testLine: string
+
+shape ModelSection
+  section: string
+  job: string
+  title: string
+  why: string
+  options: ModelRow[]
+
+shape FirstLine
+  id: string
+  text: string
+  credit: string
+
+shape ModelsView
+  jobs: ModelSection[]
+  rev: number
+  voiceReady: bool
+  hearingReady: bool
+  setupTotal: string
+  voiceNote: string
+  lines: FirstLine[]
+  voiceOffer: ModelRow[]

@@ -25,22 +25,22 @@ final class ModelOfferTests: XCTestCase {
         let ready = ModelOffer.jobs(profile: phone, ready: ["voice": jobs.first { $0.job == "voice" }!.options[0].id])
         XCTAssertTrue(ready.first { $0.job == "voice" }!.options[0].ready); XCTAssertFalse(ready.first { $0.job == "transcriber" }!.options.contains { $0.ready })
     }
-    // L4 (owner, 2026-11-24): an iPhone 14 Pro Max (6 GB, about 5.6 as the OS reports it) and newer is recommended Fluid Speech Mini, from the built-in list, no test-only list.
-    func testM1bFluidSpeechMiniIsRecommendedOnASixGigabyteIPhone() {
-        for (machine, gb) in [("iPhone15,3", 5.6), ("iPhone16,2", 7.4), ("iPhone17,1", 7.4)] {
-            let d = DeviceProfile(chip: machine, memoryGB: gb, freeDiskGB: 50, onWiFi: true)
-            let t = ModelOffer.jobs(profile: d).first { $0.job == "transcriber" }!
-            XCTAssertEqual(t.options.first { $0.recommended }?.id, "fluid-speech-mini", machine)
-            XCTAssertEqual(t.options.first?.id, "fluid-speech-mini", "the best-ranked row is first")
+    // L4 (owner, 2026-11-24): an iPhone 14 Pro Max (6 GB, about 5.6 as the OS reports it) is recommended Fluid Speech Mini; a phone of the 8 GB class is recommended Fluid Speech Pro (the voice-pro lane), from the built-in list, no test-only list.
+    func testM1bFluidSpeechMiniIsRecommendedOnASixGigabyteIPhoneAndProOnTheEightGigabyteClass() {
+        let six = ModelOffer.jobs(profile: DeviceProfile(chip: "iPhone15,3", memoryGB: 5.6, freeDiskGB: 50, onWiFi: true)).first { $0.job == "transcriber" }!
+        XCTAssertEqual(six.options.first { $0.recommended }?.id, "fluid-speech-mini")
+        XCTAssertTrue(six.options.contains { $0.id == "fluid-speech-pro" }, "Pro is listed on every phone, and recommended on none below its class")
+        for (machine, gb) in [("iPhone16,2", 7.4), ("iPhone17,1", 7.4)] {
+            let t = ModelOffer.jobs(profile: DeviceProfile(chip: machine, memoryGB: gb, freeDiskGB: 50, onWiFi: true)).first { $0.job == "transcriber" }!
+            XCTAssertEqual(t.options.first { $0.recommended }?.id, "fluid-speech-pro", machine)
+            XCTAssertEqual(t.options.first?.id, "fluid-speech-pro", "the best-ranked row is first")
         }
-        let all = ModelOffer.jobs(profile: phone).flatMap(\.options)
-        XCTAssertFalse(all.contains { $0.id.lowercased().contains("pro") }, "Fluid Speech Pro is not offered yet")
     }
     // A row added to the list is an option with no change to the code; its own device rule decides whether it is the recommendation (the voice-pro lane's row).
     func testM1cARowAddedToTheListIsOfferedAndItsRuleDecides() throws {
         var list = ModelList.builtIn()
         let base = list.models.first { $0.id == "fluid-speech-mini" }!
-        var pro = base; pro.id = "fluid-speech-pro-test"; pro.label = "A bigger recogniser"; pro.rank = 95
+        var pro = base; pro.id = "fluid-speech-pro-test"; pro.label = "A bigger recogniser"; pro.rank = 99
         pro.recommendedFor = [.init(machinePrefixes: ["iPhone17"], minMemoryGB: 7)]
         list.models.append(pro)
         let big = ModelOffer.jobs(profile: DeviceProfile(chip: "iPhone17,1", memoryGB: 7.4, freeDiskGB: 50, onWiFi: true), list: list).first { $0.job == "transcriber" }!
@@ -88,5 +88,28 @@ final class ModelOfferTests: XCTestCase {
         XCTAssertEqual(fluid.dict["credit"] as? String, fluid.credit)
         let speaker = ModelOffer.jobs(profile: phone, list: .builtIn()).first { $0.job == "speaker" }!
         XCTAssertFalse(speaker.options[0].credit.isEmpty, "the voice-print model's attribution is shown too")
+    }
+
+    // Voice and models lists every option of a job and says which are on the phone, which streams words and which is in use (owner, 2026-11-24).
+    //  V1 every option the readiness record calls ready is on the phone, not only the best-ranked one of its job.
+    //  V2 a recogniser that streams words says so (the page lists it as live words); one that does not, does not.
+    //  V3 what the radio is using is flagged, and the flag is in the dictionary shared code reads.
+    func testV1EveryReadyOptionIsOnThePhone() throws {
+        let ready: Set<String> = ["fluid-speech-mini", "parakeet-tdt-0.6b-v2"]
+        let t = try XCTUnwrap(ModelOffer.jobs(profile: phone, isReady: { ready.contains($0) }).first { $0.job == "transcriber" })
+        XCTAssertEqual(Set(t.options.filter(\.ready).map(\.id)), ready)
+        XCTAssertTrue(ModelOffer.jobs(profile: phone).flatMap(\.options).allSatisfy { !$0.ready }, "nothing is on the phone unless the record says so")
+    }
+    func testV2AStreamingRecogniserSaysSo() throws {
+        let t = try XCTUnwrap(ModelOffer.jobs(profile: phone).first { $0.job == "transcriber" })
+        XCTAssertEqual(t.options.first { $0.id == "parakeet-eou-120m" }?.streams, true)
+        XCTAssertEqual(t.options.first { $0.id == "fluid-speech-mini" }?.streams, false)
+        XCTAssertEqual(try XCTUnwrap(ModelOffer.jobs(profile: phone).first { $0.job == "voice" }).options.contains { $0.streams }, false)
+    }
+    func testV3WhatIsInUseIsFlagged() throws {
+        let t = try XCTUnwrap(ModelOffer.jobs(profile: phone, inUse: ["fluid-speech-mini"]).first { $0.job == "transcriber" })
+        XCTAssertEqual(t.options.filter(\.inUse).map(\.id), ["fluid-speech-mini"])
+        XCTAssertEqual(t.options.first { $0.id == "fluid-speech-mini" }?.dict["inUse"] as? Bool, true)
+        XCTAssertEqual(t.options.first { $0.id == "parakeet-eou-120m" }?.dict["streams"] as? Bool, true)
     }
 }

@@ -248,6 +248,13 @@ describe('first run without an account, and the agreement', () => {
     await act('begin', '', '', SETUP, e); expect(agreed).toEqual([]); expect(ops()).not.toContain('obSetupBegin');
     await act('begin', 'true', '', SETUP, e); expect(agreed).toEqual([true]); expect(ops()).toContain('obSetupBegin');
   });
+  test('O16b the first run agrees to the files it shows, model by model (the same keys Voice and models uses), never to a model it did not show', async () => {
+    const asked: string[][] = [];
+    const o = (job: string, group: string, ids: string[]): OfferJob => ({ job, group, host: 'Example Hub', options: ids.map((id, i) => ({ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: i === 0, ready: false })) });
+    v = { ...v, offers: [o('voice', 'voice', ['a', 'b']), o('transcriber', 'voice-rest', ['c']), o('speaker', 'voice-rest', ['print']), o('search', 'search', ['e'])] };
+    await act('begin', '', '', SETUP, env({ agree: async (_m, ids) => { asked.push(ids ?? []); } }));
+    expect(asked).toEqual([['a', 'c', 'print']]);
+  });
 });
 
 describe('the voice learning step and the choices', () => {
