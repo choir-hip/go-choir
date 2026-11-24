@@ -46,11 +46,11 @@ public final class ChoirSignIn: @unchecked Sendable {
         update { $0.status = "idle"; $0.message = "signed out" }
         if let id, let key { revoke(keyID: id, key: key) }
     }
-    /// Revoke one key on the server, holding it only for the one call (best effort).
-    func revokeNow(keyID id: String, key: String) async {
+    /// Revoke one key on the server, holding it only for the one call. True when the key is no longer live: revoked, or the server answered 401 or 404 (already dead or unknown).
+    func revokeNow(keyID id: String, key: String) async -> Bool {
         let held = ChoirClient(baseURL: baseURL, keys: InMemoryKeyStore([KeyAccount.apiKey: key]), session: env.session, log: nil, trustedOrigin: URL(string: env.configuredBaseURL))
-        do { try await held.send("DELETE", "/auth/api-keys/\(PathSegment.encode(id))", route: "/auth/api-keys/{id}", timeout: 8); env.log?.emit(.note("choir: a legacy key was revoked")) }
-        catch { env.log?.emit(.note("choir: a legacy key was not revoked on the server (\(error))")) }
+        do { try await held.send("DELETE", "/auth/api-keys/\(PathSegment.encode(id))", route: "/auth/api-keys/{id}", timeout: 8, okStatuses: [401, 404]); env.log?.emit(.note("choir: a legacy key was revoked")); return true }
+        catch { env.log?.emit(.note("choir: a legacy key was not revoked on the server; it is kept and retried at the next launch (\(error))")); return false }
     }
     private func revoke(keyID id: String, key: String) {
         let held = ChoirClient(baseURL: baseURL, keys: InMemoryKeyStore([KeyAccount.apiKey: key]), session: env.session, log: nil, trustedOrigin: URL(string: env.configuredBaseURL))

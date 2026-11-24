@@ -25,24 +25,37 @@ final class KeyStoreSharedWithExactTests: XCTestCase {
         XCTAssertNil(writer.get(KeyAccount.apiKey))
     }
 
-    // The old Swift sign-in's items: revoked and deleted once, nothing carried over.
-    func testALegacyKeyIsDeletedAndRevokedOnce() async {
+    // The old Swift sign-in's items: revoked first, deleted once the server has answered, nothing carried over.
+    func testALegacyKeyIsRevokedThenDeletedOnce() async {
         let store = InMemoryKeyStore(["api-key": "test-legacy-not-real", "key-id": "ak_old", "computer-id": "c1", "choir.key": "test-new-not-real"])
         var revoked: [(String, String)] = []
-        let found = await LegacyKey.retire(store: store) { id, key in revoked.append((id, key)) }
-        XCTAssertTrue(found)
+        var itemsHeldDuringRevoke = false
+        let found = await LegacyKey.retire(store: store) { id, key in
+            itemsHeldDuringRevoke = store.get("api-key") != nil
+            revoked.append((id, key)); return true
+        }
+        XCTAssertTrue(found); XCTAssertTrue(itemsHeldDuringRevoke, "the key is still on the phone while it is revoked")
         XCTAssertEqual(revoked.count, 1); XCTAssertEqual(revoked.first?.0, "ak_old"); XCTAssertEqual(revoked.first?.1, "test-legacy-not-real")
         for a in LegacyKey.accounts { XCTAssertNil(store.get(a)) }
         XCTAssertEqual(store.get("choir.key"), "test-new-not-real", "the new sign-in is not touched")
-        let again = await LegacyKey.retire(store: store) { _, _ in XCTFail("nothing is left to revoke") }
+        let again = await LegacyKey.retire(store: store) { _, _ in XCTFail("nothing is left to revoke"); return true }
         XCTAssertFalse(again)
     }
-    func testNothingLegacyIsANoOpAndAKeyWithoutAnIdIsStillDeleted() async {
+    func testAFailedRevokeKeepsTheItemsForTheNextLaunch() async {
+        let store = InMemoryKeyStore(["api-key": "test-legacy-not-real", "key-id": "ak_old", "computer-id": "c1"])
+        var tries = 0
+        _ = await LegacyKey.retire(store: store) { _, _ in tries += 1; return false }
+        XCTAssertEqual(tries, 1); XCTAssertEqual(store.get("api-key"), "test-legacy-not-real"); XCTAssertEqual(store.get("key-id"), "ak_old")
+        let found = await LegacyKey.retire(store: store) { _, _ in tries += 1; return true }
+        XCTAssertTrue(found); XCTAssertEqual(tries, 2)
+        for a in LegacyKey.accounts { XCTAssertNil(store.get(a)) }
+    }
+    func testNothingLegacyIsANoOpAndAKeyWithoutAnIdCannotBeRevokedSoItsPlaintextGoes() async {
         let empty = InMemoryKeyStore()
-        let none = await LegacyKey.retire(store: empty) { _, _ in XCTFail("no key") }
+        let none = await LegacyKey.retire(store: empty) { _, _ in XCTFail("no key"); return true }
         XCTAssertFalse(none)
         let partial = InMemoryKeyStore(["api-key": "test-legacy-not-real"])
-        let found = await LegacyKey.retire(store: partial) { _, _ in XCTFail("no id to revoke by") }
+        let found = await LegacyKey.retire(store: partial) { _, _ in XCTFail("no id to revoke by"); return true }
         XCTAssertTrue(found); XCTAssertNil(partial.get("api-key"))
     }
     func testTheLegacyServiceIsNeverTheCurrentOne() {

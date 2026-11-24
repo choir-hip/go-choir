@@ -8,7 +8,7 @@
 // source again, and a declared event on a Contract node: docs/reference/exact/native-modules.md, "Out (Swift to the UI)"). Sign-out is
 // started by a Contract action, so shared code can lead and call native once; no hook is needed, and no shared store can be missed by a
 // native list. The drift guard in account.test.ts (S4) fails when a shared module keeps a path no wipe here covers.
-// Sign-in stays Swift; the key is never read or moved here.
+// Signing in is shared code (app-signin.ts); the key is an Exact secret that this module never reads.
 //
 // ONE FUNCTION decides what a launch and the end of every sign-out do about the account's data (`reconcile`, below): three facts in, one action out.
 //   key state (native, THREE answers: present with a digest / absent = the Keychain said item-not-found / unreadable = locked or anything else),

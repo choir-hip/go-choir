@@ -14,8 +14,8 @@ import Security
 // The edition picks' calls (`editionMirror`, `editionMirrorReset`, `editionHeard`, `editionSaid`): the voice's in-memory copy of the picks, and the words the voice heard at the setup screen (docs/reference/AUTORADIO-EDITION-PICKS.md).
 //
 // The second native call, `{op: "signOut"}` (later only), answers `{done: Bool}` once the native half of sign-out has finished. Sign-out is led
-// by shared code (AutoradioLab/account.ts); the reason it is native is that the key is a Keychain item the Swift sign-in wrote and the Swift stores
-// (AccountWipe: the voice's and the pages not yet moved) are wiped by Swift. It goes with them when sign-in itself moves.
+// by shared code (AutoradioLab/account.ts); the reason it is native is that the Swift stores
+// (AccountWipe: the voice's and the pages not yet moved) are wiped by Swift, and the voice code deletes the Keychain items there. It goes with them when those stores move.
 // The sign-out reconcile (AutoradioLab/account.ts) needs the stored key as THREE answers, which the reader's `nil` cannot give: `keystate` -> present (the item is
 // there), absent (the Keychain answered item-not-found) or unreadable (locked before the first unlock, or any other status). Read only: no data is returned, nothing
 // is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.

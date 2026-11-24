@@ -481,6 +481,7 @@ func (h *Handler) HandleDeviceToken(w http.ResponseWriter, r *http.Request) {
 	switch res.Status {
 	case DeviceStatusApproved:
 		log.Printf("[auth] operation=device_token key_id=%s result=success", res.KeyID)
+		w.Header().Set("Cache-Control", "no-store") // the answer carries a bearer key
 		writeJSON(w, http.StatusOK, deviceTokenResponse{APIKey: res.Secret, KeyID: res.KeyID, Label: res.Label, Scopes: res.Scopes})
 	case DeviceStatusPending:
 		writeJSON(w, http.StatusBadRequest, deviceErrorResponse{Error: "authorization_pending", Description: "waiting for the owner to approve"})

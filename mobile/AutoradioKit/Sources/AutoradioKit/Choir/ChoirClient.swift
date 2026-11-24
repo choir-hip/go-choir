@@ -106,17 +106,17 @@ public final class KeychainKeyStore: KeyStore, @unchecked Sendable {
 }
 #endif
 
-// The old Swift sign-in's Keychain items (service `news.choir.autoradio.choir`) are never read again, nothing is carried over (owner, 2026-11-20), but that full-access key must not outlive its sign-in:
-// once, at the first launch that finds the items, they are deleted and the key revoked (best effort). Native only: Exact's store cannot reach another service.
+// The old Swift sign-in's Keychain items (service `news.choir.autoradio.choir`) are never read again (owner, 2026-11-20), but that full-access key must not outlive its sign-in: it is revoked first (`revoke` answers true when the key is no longer live), and the items are deleted only once the server has
+// answered, so a failed revoke is retried at the next launch. A key with no key-id cannot be revoked (the server revokes by id): its plaintext is deleted and it stays live until revoked in Settings, a named residual. Native only: Exact's store cannot reach another service.
 public enum LegacyKey {
     public static let service = "news.choir.autoradio.choir"
     public static let accounts = ["api-key", "key-id", "computer-id"]
     @discardableResult
-    public static func retire(store: KeyStore, revoke: (_ keyID: String, _ key: String) async -> Void) async -> Bool {
+    public static func retire(store: KeyStore, revoke: (_ keyID: String, _ key: String) async -> Bool) async -> Bool {
         let key = store.get("api-key"), id = store.get("key-id")
         guard accounts.contains(where: { store.get($0) != nil }) else { return false }
-        for a in accounts { store.delete(a) }          // the items first: a revoke that hangs must not keep a key on the phone
-        if let key, !key.isEmpty, let id, !id.isEmpty { await revoke(id, key) }
+        if let key, !key.isEmpty, let id, !id.isEmpty, !(await revoke(id, key)) { return true }   // kept: retried at the next launch
+        for a in accounts { store.delete(a) }
         return true
     }
 }

@@ -10,7 +10,7 @@ import { activityPage } from './activity.ts';
 import { onboardingPage, onboardingAct, liveEnv as onboardingEnv } from './onboarding.ts';
 import * as cards from './cards.ts';
 import { aboutBuild } from './about.ts';
-import { accountSignOut, settleAccount } from './account.ts';
+import { accountSignOut, resetSettled, settleAccount } from './account.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
@@ -113,7 +113,8 @@ sqlite.open app:/data/content.db`;
 const signInEnv = (store: Store): SignInEnv => ({
   ceremony: { origin: ORIGIN, passkeys: credentials as never },
   appId: APP_ID,
-  keep: (key, keyId) => keepKey(store, key, keyId),
+  // A new key may be another account's (the old one was refused): the next answer reconciles again, so another account's stored data is wiped before any source answers (account.ts decide: 'account-change').
+  keep: (key, keyId) => { keepKey(store, key, keyId); resetSettled(); },
   revoke: async (key, keyId) => { await fetch(`${ORIGIN}/auth/api-keys/${segment(keyId)}`, { method: 'DELETE', headers: { authorization: `Bearer ${key}` }, redirect: 'manual', exactTimeout: 8000 } as RequestInit); },
   newId: () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''),
   log: (l) => console.log(l),

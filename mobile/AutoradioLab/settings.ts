@@ -1,6 +1,6 @@
 // The Settings page's account source. `settingsAccount` answers who is signed in (GET /auth/whoami) as the Account screen draws it.
-// It replaces the Swift AccountModel, AccountClient and WhoAmI. Sign-in and sign-out stay Swift tonight (the Keychain item is read in
-// place by the signed-in seam in api.ts). The key itself is never read here: the view carries the handle, key id, key label and scopes.
+// It replaces the Swift AccountModel, AccountClient and WhoAmI. Sign-in is shared code (app-signin.ts); the key, an Exact secret, is read in
+// place by the signed-in seam in api.ts. The key itself is never read here: the view carries the handle, key id, key label and scopes.
 //
 // Failure list (each line has a test in settings.test.ts):
 //  A1 the key or an email is shown or logged: only handle, key id, key label and scopes are copied; a failure logs nothing.
