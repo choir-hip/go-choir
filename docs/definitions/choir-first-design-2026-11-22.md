@@ -104,6 +104,16 @@ boundaries:
   - decision: 'where two designs conflict, the newer one supersedes the older. Order, newest first: the ideal-form draft and design session of 2026-11-23 with the rulings since; the first design, draft 4 (2026-11-22/23); the semantic layer design of 2026-11-20. In particular management does not decide captures in the redesign'
     said: you should think that everything where designs conflict, the new design superceded ... remember, in the redesign management doesnt decide captures. mgmt is currently overloaded and thats the problem
     'on': '2026-11-24'
+  - decision: there is one Texture desk; stories are addressable inside it (a story is not its own desk)
+    said: 1. one texture desk. stories are addressable
+    'on': '2026-11-24'
+  - decision: management, beside computer-wide coherence and admitting engineering, also scores some predictions
+    said: 2. management also does some scoring of predictions
+    'on': '2026-11-24'
+  - decision: the root opens stories; a story may open its own successor, provided that cannot run away
+    said: 3. yes, the root opens stories... and can stories open successors? good question. id say yes, as long as it doesnt spin out of control
+    'on': '2026-11-24'
+    reading: 'lead''s reading: a bound on self-opened successors is needed that is a correctness refusal and not a quota on model calls, for example one live successor per story and a successor that draws no arrivals of its own in a day folds back into its predecessor as a section (the ideal-form draft''s rule)'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
