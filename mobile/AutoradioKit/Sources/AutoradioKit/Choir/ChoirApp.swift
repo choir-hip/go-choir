@@ -9,12 +9,9 @@ extension StageRegistry {
         r.register(.desk, AutoradioDeskStage.self) { AutoradioDeskStage($0) }
     }
 
-    /// What the listener's app runs: the real programme, System 1 and desk on the listener's computer; the listening stages chosen from the model
-    /// list (`ListenerPipeline.choose`): speech detection, live words and the final transcript by the best models that are on the phone and
-    /// ready, the level detector and Apple's recogniser until then. The voice is the saved choice, or on a fresh install the catalog's neural default (the speaker
+    /// What the listener's app runs: the real programme, System 1 and desk on the listener's computer; the listening stages come from the model list (`ListenerPipeline.choose`): the best ready models, the level detector and Apple's recogniser until then. The voice is the saved choice, or on a fresh install the catalog's neural default (the speaker
     /// falls back to the system voice while that model is not on the phone, `makeSpeaker`). Stubs and fixtures stay registered and selectable in the Lab tab.
-    public static func listenerConfiguration(voice: StageSetting = VoiceCatalog.defaultOption.setting, registry: StageRegistry? = nil,
-                                             readiness: VoiceReadiness = Voices.readiness) -> LabConfiguration {
+    public static func listenerConfiguration(voice: StageSetting = VoiceCatalog.defaultOption.setting, registry: StageRegistry? = nil, readiness: VoiceReadiness = Voices.readiness) -> LabConfiguration {
         let heard = ListenerPipeline.choose(registry: registry, readiness: readiness)
         var c = LabConfiguration(name: "listener", stages: [
             .micSource: .init(id: "builtin"), .addressing: .init(id: "open"), .speechBounds: heard.bounds,
