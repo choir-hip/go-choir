@@ -33,7 +33,7 @@ describe('the steps', () => {
     expect(kept().setupDone).toBe(true);
     expect((await act('micNext')).step).toBe('hearing'); expect(ops()).toContain('obHearingPlay');
     expect((await act('hearing', 'true')).step).toBe('learn');                                   // O5, O17
-    expect((await act('learnDone')).step).toBe('voice'); expect(ops()).toContain('obVoiceStop');
+    expect((await act('learnDone')).step).toBe('voice'); expect(ops()).toContain('obEnrolDiscard');
     v = { ...v, voicePicked: 1 };
     expect((await onboardingPage(v, 2, SETUP, env())).step).toBe('ready');                       // O6
     expect((await act('topics')).step).toBe('topics');
@@ -255,7 +255,7 @@ describe('the voice learning step and the choices', () => {
   test('O17 the learn step ends with learnDone into the voice step (native told to stop listening); Not now at the microphone skips to the voice step without opening it', async () => {
     await act('begin'); v = { ...v, setupStarted: true, setupFinished: true }; await onboardingPage(v, 0, SETUP, env());
     await act('micNext'); await act('hearing', 'true'); expect((await onboardingPage(v, 1, SETUP, env())).step).toBe('learn');
-    expect(await act('learnDone')).toMatchObject({ step: 'voice' }); expect(ops()).toContain('obVoiceStop'); expect(ops().filter((o) => o === 'obVoiceStart' || o === 'obVoiceBegin').length).toBe(0);
+    expect(await act('learnDone')).toMatchObject({ step: 'voice' }); expect(ops()).toContain('obEnrolDiscard'); expect(ops()).not.toContain('obEnrolBegin');   // the ops native really answers (a stale name is dropped silently)
     expect((await act('learnDone')).step).toBe('voice');                                           // not a step it is on: nothing moves
     forgetOnboarding(); files.clear(); calls = [];
     await act('begin'); await onboardingPage({ ...v, setupFinished: true }, 0, SETUP, env()); v = { ...v, setupFinished: true };
@@ -272,5 +272,13 @@ describe('the voice learning step and the choices', () => {
     await act('begin'); expect(calls.find((c) => c.op === 'obSetupBegin')?.args).toMatchObject({ only: true, stages: ['voice', 'decision', 'responder'] });
     forgetOnboarding(); files.clear(); calls = []; v = { ...noVoice(), offers: [] };
     const r = await act('begin'); expect(ops()).not.toContain('obSetupBegin'); expect(r.step).toBe('welcome'); expect(r.message).toContain('not available');
+  });
+  // The setup page's total (the mobile-data card too) is the picks' sum, the welcome's number, not native's plan for the whole ladder (review 3).
+  test('O20 the total on the setup page is what will be fetched: the chosen options, each file once, the voice print too', async () => {
+    const big = (job: string, group: string, id: string, bytes: number): OfferJob => ({ job, group, host: 'H', options: [{ id, model: id, bytes, sizeLabel: '', recommended: true, ready: false }] });
+    v = { ...v, totalLabel: 'About 2.5 GB. On Wi-Fi this takes a few minutes.', offers: [big('voice', 'voice', 'a', 351_000_000), big('responder', 'voice-rest', 'r', 1_260_000_000), big('speaker', 'voice-rest', 'print', 8_000_000)] };
+    expect((await onboardingPage(v, 0, SETUP, env())).totalLabel).toBe('About 1.6 GB. On Wi-Fi this takes a few minutes.');
+    v = { ...v, onWiFi: false }; expect((await onboardingPage(v, 0, SETUP, env())).totalLabel).toBe('About 1.6 GB. You are on mobile data, so I will ask before I start.');
+    v = { ...v, offers: [] }; expect((await onboardingPage(v, 0, SETUP, env())).totalLabel).toBe('About 2.5 GB. On Wi-Fi this takes a few minutes.');          // nothing offered: native's own words
   });
 });

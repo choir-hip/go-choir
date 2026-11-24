@@ -23,7 +23,7 @@ import { consentAgree, consentPick, consentPicks, consentView } from './consent.
 import { nativeLater } from './api.ts';
 import { kickSearch } from './search-kick.ts';
 import { noVoice, type VoiceFacts } from './onboarding.ts';
-import { chosen, needs, picksFor, sizeLabel, type OfferJob } from './offers.ts';
+import { chosen, needs, picksFor, setupBytes, sizeLabel, type OfferJob } from './offers.ts';
 
 export { sizeLabel };
 export type OptionView = { id: string; text: string; tag: string; note: string; selected: boolean; ready: boolean };
@@ -77,10 +77,8 @@ export function downloadsView(f: VoiceFacts, searchPresent: boolean | null, rev:
       startLabel: f.onWiFi ? 'Download on Wi-Fi' : 'Wait for Wi-Fi', mobileLabel: 'Download now',
     });
   }
-  // What the first-run press fetches: the chosen option of every job of the two voice groups, each file once (the decision and the responder may be one file), the voice-print model among them.
-  const seen = new Set<string>(); let setup = 0;
-  for (const j of offers) if (j.group !== 'search') { const o = needs(j, picks); if (o && !seen.has(o.id)) { seen.add(o.id); setup += o.bytes; } }
-  return { groups, rev, voiceReady: f.voiceReady, hearingReady: f.hearingReady, setupTotal: seen.size === 0 ? '' : sizeLabel(setup) };
+  const setup = setupBytes(offers, picks);
+  return { groups, rev, voiceReady: f.voiceReady, hearingReady: f.hearingReady, setupTotal: setup === 0 ? '' : sizeLabel(setup) };
 }
 
 const present = async (): Promise<boolean | null> => {
