@@ -33,6 +33,7 @@ import type { Storage } from './app.contract.d.ts';
 import { complete, generalEdition, localWriter, FAILED_LINE, TIMED_OUT_LINE, type Edition, type Writer, editionLines } from './edition-writer.ts';
 import { lookupEdition, seamGet, type Get } from './notebook.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
+import { writeTopicsOf } from './notebook-topics.ts';
 import * as pages from './pages.ts';
 import { consentAgree, consentPicks } from './consent.ts';
 import { picksFor, setupBytes, totalWords, forFirstRun, STAGE_JOBS, type OfferJob } from './offers.ts';
@@ -116,7 +117,7 @@ const blank = (): Mem => ({ gen: launchGen === undefined ? (launchGen = accountG
 /** For tests: a new process. */
 export function forgetOnboarding(): void { mem = null; }
 
-export type Env = { storage: Storage | undefined; device: Device | null; get: Get; agree?: (mobile: boolean) => Promise<boolean | void>; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void> };
+export type Env = { storage: Storage | undefined; device: Device | null; get: Get; agree?: (mobile: boolean) => Promise<boolean | void>; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void>; notebook?: (topics: string[]) => Promise<boolean> };
 export const liveEnv = (storage: Storage | undefined): Env => ({ storage, device: nativeDevice(), get: seamGet,
   agree: async (mobile) => (await consentAgree('voice', mobile, storage)) && (await consentAgree('voice-rest', mobile, storage)),
   closePage: async (a) => { await pages.pagesClose(storage, a); }, openPage: async (a, t) => { await pages.pagesOpen(storage, a, t); } });
@@ -226,7 +227,7 @@ async function writeEdition(env: Env, m: Mem, topics: string[], edit: boolean): 
   if (m.gen !== accountGeneration()) return;                                                                                // another account now: nothing of this edition is theirs
   if (out.kind === 'written') {
     await ready(env, m, out.edition, edit);
-    await dev(env, 'obNotebookTopics', { topics });                                                                        // the first lines of the notebook (native: Notebook.swift writes it)
+    await (env.notebook ?? ((t: string[]) => writeTopicsOf(env.storage, t)))(topics).catch(() => false);      // the first lines of the notebook (notebook-topics.ts: a quiet failure; the notebook page asks again)
   } else { m.status = 'failed'; m.error = out.kind === 'timedOut' ? TIMED_OUT_LINE : FAILED_LINE; }
 }
 

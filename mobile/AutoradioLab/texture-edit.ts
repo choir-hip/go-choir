@@ -206,7 +206,7 @@ export class Editor {
     }
     for (const [d, e] of Object.entries(docs)) if (!this.journal[d]) { this.journal[d] = e; this.last.set(d, { kind: 'offline', label: LABELS.launch }); }
     this.loaded = true; this.bump();
-    if (this.diskPending) void this.persist();
+    if (this.diskPending) await this.persist();
   }
   private persist(): Promise<void> {
     this.pDirty = true;
@@ -356,7 +356,7 @@ export class Editor {
     return this.run<'saved' | 'busy' | 'failed'>(doc, async () => {
       if (this.journal[doc]) return 'busy';
       this.journal[doc] = { text, from, base: '', key: uuid() }; this.bump();
-      void this.persist();
+      await this.persist();
       await this.settle(doc);
       await this.save(doc);
       const l = this.last.get(doc);
@@ -424,12 +424,15 @@ export class Editor {
 // THE MODULE: one instance per signed-in account, built only when the account's id is known.
 const real: Net = { json: (path, opts) => authedJSON(path, opts) };
 let live: { account: string; ed: Editor; storage: Storage | undefined } | null = null;
-onSignOutBegin(() => { if (live) { live.ed.kill(); live = null; } });
+let hooked = false;
+/** Registered at the first use, not at import (api.ts imports app.ts, which imports this: a call at load meets an api.ts not yet initialised). */
+function hook(): void { if (!hooked) { hooked = true; onSignOutBegin(() => { if (live) { live.ed.kill(); live = null; } }); } }
 const readOnly = (address: string): Info => ({ status: 'idle', label: LABELS.readOnly, notice: '', address, editable: editableDoc(address) !== null, writable: false, kept: '', hasKept: false, waiting: 0, stamp: 0, head: '', opened: false });
 async function wipeFolder(storage: Storage | undefined): Promise<void> { if (storage) { try { await storage.fs.rm(PENDING_DIR); } catch { /* none */ } } }
 /** The editor for the account signed in now, or null (read-only). The id is read once per call: another id than the instance's is treated as a sign-out (kill, wipe the folder, build anew); an id that cannot be read is
  * not another account, and the instance goes on. While a sign-out is under way no instance is built. */
 async function current(storage: Storage | undefined): Promise<Editor | null> {
+  hook();
   if (sealingBlocked()) return null;
   const id = await accountId();
   if (id === null) return live?.ed ?? null;

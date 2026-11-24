@@ -95,8 +95,8 @@ final class ModelsModule: ExactModule {
             Task.detached { reply.send(await EmbedDevice.op(request)) }
             return
         }
-        // The notebook's and the content sync's native facts (AutoradioModule+Notebook.swift `notebookOp`, with the reason for each).
-        if let op = op, op.hasPrefix("notebook") || op == "contentBusy" {
+        // The content sync's one native fact (AutoradioModule+Notebook.swift `notebookOp`, with its reason).
+        if op == "contentBusy" {
             Task { @MainActor in reply.send(await AutoradioModule.current?.notebookOp(request) ?? [:]) }
             return
         }
@@ -106,7 +106,7 @@ final class ModelsModule: ExactModule {
         }
         if op == "pagesMirror" {
             // Shared code (AutoradioLab/pages.ts) owns the open pages and hands the voice their facts after every change (AutoradioModule+Spine.swift `holdPages`). Only native code can use them: the
-            // voice engine, the local model's warm-up and the Texture editor's flush on leaving a page are native. Answers {ok}.
+            // voice engine and the local model's warm-up are native (the Texture editor's flush is shared code's: texture-edit.ts). Answers {ok}.
             Task { @MainActor in reply.send(["ok": await AutoradioModule.current?.holdPages(request) ?? false]) }
             return
         }

@@ -90,8 +90,6 @@ public final class AutoradioModule: ExactPackage {
     var runtime: LabRuntime!
     var owner: PlatformSessionOwner!
     var choir: ChoirApp!
-    /// The spine's shared kit objects: every lane reads these and none replaces them.
-    let pageSources = PageSources()
     /// The last page a native module asked to open (see `requestPage`).
     var pageRequestState: (id: Int, address: String, title: String) = (0, "", "")
     /// name -> handler. Looked up first in `later`; the integrator's switch below answers the rest.
@@ -154,7 +152,6 @@ public final class AutoradioModule: ExactPackage {
             AccountWipe.removeContents(of: support.appendingPathComponent("books")); AccountWipe.removeContents(of: filesCache)
             AccountWipe.removeContents(of: support.appendingPathComponent("content"))      // the pre-release content store's folder (the phone's copy is shared code's app:/data/content.db now): never read, only removed
         }
-        pageSources.register(NotYetPageSource())
         // Registration: the spine, then one line per lane (each defined in that lane's own file).
         registerSpine()
         registerBar()
@@ -166,11 +163,9 @@ public final class AutoradioModule: ExactPackage {
         registerQueue()          // lane autoradio-queue
         registerDeck()           // the deck: shared code commands it and reads its journal (Deck.swift)
         registerTakes()          // takes: record, review, publish (station L7)
-        registerNotebook()       // my notebook (station L6)
         registerImported()
         registerTalk()
         registerRetrieval()     // the voice turn's ask for passages (shared code answers) and the embedding model's ops
-        registerTextureEdit()   // your own Texture documents in rich text
         Task { [choir] in await choir?.refresh() }
     }
 
