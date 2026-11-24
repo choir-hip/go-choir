@@ -114,6 +114,19 @@ boundaries:
     said: 3. yes, the root opens stories... and can stories open successors? good question. id say yes, as long as it doesnt spin out of control
     'on': '2026-11-24'
     reading: 'lead''s reading: a bound on self-opened successors is needed that is a correctness refusal and not a quota on model calls, for example one live successor per story and a successor that draws no arrivals of its own in a day folds back into its predecessor as a section (the ideal-form draft''s rule)'
+  - decision: no single capture reaches a desk; host code does arrival, cleaning, copy check, embedding, neighbours, the new-words read, grouping and counting; System 1 or a batched model call takes only the ambiguous remainder; desks see totals and are woken by events
+    said: 4. sounds good
+    'on': '2026-11-24'
+  - decision: '"happening" is the lead''s word, not the owner''s; whether it is a thing apart from a subject is open and is investigated before any design depends on it'
+    said: 5. hmm, this question, idk. i never used the word "happening". lets investigate more deeply
+    'on': '2026-11-24'
+  - decision: importance is a property of subjects; a capture or story with many important subjects is therefore important. Novelty is the other dimension, semantic sparsity, and is not importance. The two multiply
+    said: 6. yes, importance is a property of subjects. and captures and stories with many important subjects are therefore important. semantic sparsity is the other dimension. not importance but novelty. these are multiplicative
+    'on': '2026-11-24'
+  - decision: 'every decision point makes a forecast that is scored; management is responsible for managing scoring: many scores come from objective data, and System 1 models and LLM or RLM desks may also score, which management arranges'
+    said: 7. yes, and mgmt is responsible for managing scoring. many scores come from objective data, but we can also use system1 models and llms/rlm desks for scoring, and mgmt handles that
+    'on': '2026-11-24'
+    reading: 'lead''s reading: management does not decide captures or open stories; it is the scoring authority, so no desk scores its own forecast. Objective settlement stays host code; management chooses and runs the scorer where plain code cannot settle'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
