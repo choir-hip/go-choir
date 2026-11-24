@@ -14,7 +14,11 @@ public struct ModelPin: Sendable {
     public let proof: (@Sendable () -> ModelManifests.Proof?)?
     /// Delete the model's files and its manifest (damaged, or made for another version of the library).
     public let purge: (@Sendable () -> Void)?
-    public init(pin: String, present: @escaping @Sendable () -> Bool, seal: (@Sendable () -> Bool)? = nil, unseal: (@Sendable () -> Void)? = nil, proof: (@Sendable () -> ModelManifests.Proof?)? = nil, purge: (@Sendable () -> Void)? = nil) { self.pin = pin; self.present = present; self.seal = seal; self.unseal = unseal; self.proof = proof; self.purge = purge }
+    /// Files and records of ANOTHER pin (another version of the library) exist: remove them (the folders and those records) so this version's fetch starts clean. true when something was removed.
+    public let retire: (@Sendable () -> Bool)?
+    /// The person's Remove: every file of the model and every record of it, of every pin.
+    public let erase: (@Sendable () -> Void)?
+    public init(pin: String, present: @escaping @Sendable () -> Bool, seal: (@Sendable () -> Bool)? = nil, unseal: (@Sendable () -> Void)? = nil, proof: (@Sendable () -> ModelManifests.Proof?)? = nil, purge: (@Sendable () -> Void)? = nil, retire: (@Sendable () -> Bool)? = nil, erase: (@Sendable () -> Void)? = nil) { self.pin = pin; self.present = present; self.seal = seal; self.unseal = unseal; self.proof = proof; self.purge = purge; self.retire = retire; self.erase = erase }
 }
 
 /// Every file of a library-managed model: its relative path, exact length and SHA-256, written when the check that grants readiness passed.
@@ -25,23 +29,41 @@ public struct ModelManifest: Codable, Sendable {
 }
 
 public enum ModelManifests {
-    static func file(_ id: String, root: URL) -> URL { root.appendingPathComponent("manifests", isDirectory: true).appendingPathComponent(id.replacingOccurrences(of: "/", with: "_") + ".json") }
-    public static func read(_ id: String, root: URL = KnownModels.storeRoot) -> ModelManifest? {
-        guard let d = try? Data(contentsOf: file(id, root: root)) else { return nil }
-        return try? JSONDecoder().decode(ModelManifest.self, from: d)
+    /// Records belong to ONE pin (one version of the library): the file name carries it, and nothing compares a file set with a record of another pin.
+    static func tag(_ pin: String) -> String { String(pin.map { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" ? $0 : "_" }) }
+    static func dir(_ root: URL) -> URL { root.appendingPathComponent("manifests", isDirectory: true) }
+    static func file(_ id: String, pin: String, root: URL) -> URL { dir(root).appendingPathComponent(id.replacingOccurrences(of: "/", with: "_") + "@" + tag(pin) + ".json") }
+    static func baselineFile(_ id: String, pin: String, root: URL) -> URL { dir(root).appendingPathComponent(id.replacingOccurrences(of: "/", with: "_") + "@" + tag(pin) + ".baseline.json") }
+    public static func read(_ id: String, pin: String, root: URL = KnownModels.storeRoot) -> ModelManifest? {
+        guard let d = try? Data(contentsOf: file(id, pin: pin, root: root)), let m = try? JSONDecoder().decode(ModelManifest.self, from: d), m.pin == pin else { return nil }
+        return m
     }
-    public static func delete(_ id: String, root: URL = KnownModels.storeRoot) { try? FileManager.default.removeItem(at: file(id, root: root)) }
-    /// The last good manifest, kept when a fetch demotes the model: the baseline a re-download's files are compared with.
-    static func baselineFile(_ id: String, root: URL) -> URL { file(id, root: root).deletingPathExtension().appendingPathExtension("baseline.json") }
-    public static func baseline(_ id: String, root: URL = KnownModels.storeRoot) -> ModelManifest? {
-        guard let d = try? Data(contentsOf: baselineFile(id, root: root)) else { return nil }
-        return try? JSONDecoder().decode(ModelManifest.self, from: d)
+    public static func delete(_ id: String, pin: String, root: URL = KnownModels.storeRoot) { try? FileManager.default.removeItem(at: file(id, pin: pin, root: root)) }
+    /// The last good manifest OF THIS PIN, kept when a fetch demotes the model: what a re-download's files are compared with.
+    public static func baseline(_ id: String, pin: String, root: URL = KnownModels.storeRoot) -> ModelManifest? {
+        guard let d = try? Data(contentsOf: baselineFile(id, pin: pin, root: root)), let m = try? JSONDecoder().decode(ModelManifest.self, from: d), m.pin == pin else { return nil }
+        return m
     }
-    /// A demotion keeps the manifest as the baseline (it is no longer a claim that the files are there).
-    public static func demote(_ id: String, root: URL = KnownModels.storeRoot) {
-        let fm = FileManager.default, f = file(id, root: root), b = baselineFile(id, root: root)
+    public static func demote(_ id: String, pin: String, root: URL = KnownModels.storeRoot) {
+        let fm = FileManager.default, f = file(id, pin: pin, root: root), b = baselineFile(id, pin: pin, root: root)
         guard fm.fileExists(atPath: f.path) else { return }
         try? fm.removeItem(at: b); try? fm.moveItem(at: f, to: b)
+    }
+    /// Every record (manifest or baseline) kept for this model, with the pin it describes (read from the record, so an older build's unnamed files are found too).
+    public static func records(_ id: String, root: URL = KnownModels.storeRoot) -> [(url: URL, pin: String)] {
+        let fm = FileManager.default, key = id.replacingOccurrences(of: "/", with: "_")
+        let names = (try? fm.contentsOfDirectory(atPath: dir(root).path)) ?? []
+        return names.filter { $0.hasPrefix(key + "@") || $0.hasPrefix(key + ".") }.compactMap { n in
+            let u = dir(root).appendingPathComponent(n)
+            guard let d = try? Data(contentsOf: u), let m = try? JSONDecoder().decode(ModelManifest.self, from: d) else { return nil }
+            return (u, m.pin)
+        }
+    }
+    public static func write(_ m: ModelManifest, id: String, root: URL = KnownModels.storeRoot) -> Bool {
+        let f = file(id, pin: m.pin, root: root)
+        try? FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard let d = try? JSONEncoder().encode(m) else { return false }
+        return (try? d.write(to: f, options: .atomic)) != nil
     }
     public enum Proof: Sendable, Equatable { case intact, changed, unreadable }
     /// Digests against a manifest. A missing or resized file is `changed`; a file that exists and cannot be read now is `unreadable` (not proof of damage).
@@ -74,12 +96,6 @@ public enum ModelManifests {
         }
         return entries.isEmpty ? nil : ModelManifest(pin: pin, files: entries.sorted { $0.path < $1.path })
     }
-    public static func write(_ m: ModelManifest, id: String, root: URL = KnownModels.storeRoot) -> Bool {
-        let f = file(id, root: root)
-        try? FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard let d = try? JSONEncoder().encode(m) else { return false }
-        return (try? d.write(to: f, options: .atomic)) != nil
-    }
     /// Every file present with its exact length: what every launch checks.
     public static func present(_ m: ModelManifest, base: URL) -> Bool {
         let fm = FileManager.default
@@ -109,14 +125,15 @@ public enum ModelPins {
         let fm = FileManager.default
         if let b = KnownModels.bundles.first(where: { $0.id == id }) {
             let dir = root.appendingPathComponent(b.folder, isDirectory: true)
-            return ModelPin(pin: "bundle:" + b.pinIdentity) {
+            return ModelPin(pin: "bundle:" + b.pinIdentity, present: {
                 guard (try? String(contentsOf: dir.appendingPathComponent(ModelStore.pinFile), encoding: .utf8)) == b.pinIdentity else { return false }
                 return b.files.allSatisfy { f in ((try? fm.attributesOfItem(atPath: dir.appendingPathComponent(f.path).path)[.size]) as? NSNumber)?.int64Value == f.bytes }
-            }
+            }, erase: { try? FileManager.default.removeItem(at: dir) })
         }
         if let s = KnownModels.pinned.first(where: { $0.id == id }) {
             let file = root.appendingPathComponent(s.fileName)
-            return ModelPin(pin: "sha256:" + s.sha256.lowercased()) { ((try? fm.attributesOfItem(atPath: file.path)[.size]) as? NSNumber)?.int64Value == s.bytes }
+            return ModelPin(pin: "sha256:" + s.sha256.lowercased(), present: { ((try? fm.attributesOfItem(atPath: file.path)[.size]) as? NSNumber)?.int64Value == s.bytes },
+                            erase: { try? fm.removeItem(at: file); try? fm.removeItem(at: file.appendingPathExtension("part")) })
         }
         if let m = KnownModels.managed.first(where: { $0.id == id }) { return managed(id, spec: m, root: root) }
         return nil
@@ -127,11 +144,19 @@ public enum ModelPins {
         guard let base = m.cachePath, let folders = m.cacheFolders, !folders.isEmpty else { return nil }
         let pin = "\(libraryPin)|\(id)"
         return ModelPin(pin: pin,
-            present: { guard let man = ModelManifests.read(id, root: root), man.pin == pin else { return false }; return ModelManifests.present(man, base: base) },
+            present: { guard let man = ModelManifests.read(id, pin: pin, root: root) else { return false }; return ModelManifests.present(man, base: base) },
             seal: { guard let man = ModelManifests.build(pin: pin, base: base, folders: folders) else { return false }; return ModelManifests.write(man, id: id, root: root) },
-            unseal: { ModelManifests.demote(id, root: root) },
-            proof: { guard let man = ModelManifests.read(id, root: root) ?? ModelManifests.baseline(id, root: root) else { return nil }; return ModelManifests.check(man, base: base) },      // digests of the files against what was sealed, whichever version sealed it
-            purge: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; ModelManifests.delete(id, root: root) })
+            unseal: { ModelManifests.demote(id, pin: pin, root: root) },
+            proof: { guard let man = ModelManifests.read(id, pin: pin, root: root) ?? ModelManifests.baseline(id, pin: pin, root: root) else { return nil }; return ModelManifests.check(man, base: base) },          // this pin's own seal only: another version's is unknown, never damage
+            purge: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; ModelManifests.delete(id, pin: pin, root: root) },
+            retire: {
+                let old = ModelManifests.records(id, root: root).filter { $0.pin != pin }
+                guard !old.isEmpty else { return false }
+                for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }          // another version's files: this version's fetch starts clean
+                for o in old { try? FileManager.default.removeItem(at: o.url) }
+                return true
+            },
+            erase: { for f in folders { try? FileManager.default.removeItem(at: base.appendingPathComponent(f, isDirectory: true)) }; for r in ModelManifests.records(id, root: root) { try? FileManager.default.removeItem(at: r.url) } })
     }
 }
 
@@ -154,7 +179,7 @@ public enum ModelDeletion {
     public static func reconcile(model id: String, pin: ModelPin?, fetch: Fetch) async -> Bool {
         guard let pin, let purge = pin.purge else { return false }
         let proof = pin.proof?()
-        let differs = proof == .changed
+        let differs = proof == .changed && fetch != .notStarted                 // a fetch that never began deletes nothing, whatever the files look like
         let halfPack = proof == nil && fetch == .unfinished
         guard differs || halfPack else { return false }
         await ModelStore.shared.unload(id)
@@ -163,21 +188,68 @@ public enum ModelDeletion {
     }
 }
 
-/// Every fetch of a library model: DEMOTE first (the manifest becomes the baseline), run the body, and let `ModelDeletion` decide what a failure leaves. The body calls `run.begin()` when it starts to write.
+/// Every fetch of a library model runs through here. Inside the door, once admitted, the body calls `run.begin()`: that DEMOTES the model (a refused or queued-out fetch demotes nothing) and, when the files on the phone came from another version of the library, removes them so this
+/// version starts clean. A failure then leaves what `ModelDeletion` decides. "Did not finish" is evidence: the door killed the window (`run.interrupt()`), or the error is a transport one; a library error from the load after the download finished is not.
 public enum ModelFetch {
     public final class Run: @unchecked Sendable {
-        private let l = NSLock(); private var started = false
-        public init() {}
-        public func begin() { l.lock(); started = true; l.unlock() }
-        var state: ModelDeletion.Fetch { l.lock(); defer { l.unlock() }; return started ? .unfinished : .notStarted }
+        private let l = NSLock(); private var started = false, interrupted = false
+        private let model: String, verifier: ReadinessVerifier, pins: (String) -> ModelPin?
+        init(model: String, verifier: ReadinessVerifier, pins: @escaping (String) -> ModelPin?) { self.model = model; self.verifier = verifier; self.pins = pins }
+        public func begin() {
+            l.lock(); let first = !started; started = true; l.unlock()
+            guard first else { return }
+            verifier.demote(model: model)
+            _ = pins(model)?.retire?()
+        }
+        /// The door killed the window: the registry was closed under the transfer.
+        public func interrupt() { l.lock(); interrupted = true; l.unlock() }
+        func state(for error: Error) -> ModelDeletion.Fetch {
+            l.lock(); defer { l.unlock() }
+            if !started { return .notStarted }
+            return interrupted || isTransport(error) ? .unfinished : .finished
+        }
+        private func isTransport(_ e: Error) -> Bool {
+            if e is CancellationError || e is URLError { return true }
+            if let r = e as? DownloadDoor.Refusal, r == .timedOut { return true }
+            return (e as NSError).domain == NSURLErrorDomain
+        }
     }
-    public static func guarded<T>(model id: String, verifier: ReadinessVerifier = Voices.verifier, pins: (String) -> ModelPin? = { ModelPins.current($0) }, _ body: (Run) async throws -> T) async throws -> T {
-        verifier.demote(model: id)
-        let run = Run()
+    public static func guarded<T>(model id: String, verifier: ReadinessVerifier = Voices.verifier, pins: @escaping (String) -> ModelPin? = { ModelPins.current($0) }, _ body: (Run) async throws -> T) async throws -> T {
+        let run = Run(model: id, verifier: verifier, pins: pins)
         do { return try await body(run) }
         catch {
-            await ModelDeletion.reconcile(model: id, pin: pins(id), fetch: run.state)
+            await ModelDeletion.reconcile(model: id, pin: pins(id), fetch: run.state(for: error))
             throw error
         }
+    }
+}
+
+extension ModelDeletion {
+    public enum Removal: Sendable, Equatable { case removed, inUse, notRemovable }
+    /// The person's Remove on a downloaded model: everything of it goes (files, manifest, baseline, readiness), except the model in use. The one deletion that is a person's own act, so it is not the rule's.
+    public static func remove(model id: String, pin: ModelPin?, inUse: Set<String>, verifier: ReadinessVerifier = Voices.verifier) async -> Removal {
+        if inUse.contains(id) { return .inUse }
+        guard let erase = pin?.erase else { return .notRemovable }
+        await ModelStore.shared.unload(id)
+        verifier.demote(model: id)
+        erase()
+        return .removed
+    }
+}
+
+/// What the radio is using right now (the voice, the listener's stages, the answering model): the Remove of these is refused.
+public enum ModelInUse {
+    public static func ids(config: LabConfiguration, responder: String?) -> Set<String> {
+        var out = Set<String>()
+        if let v = config.setting(.voice), let o = VoiceCatalog.option(matching: v), !o.modelID.isEmpty { out.insert(o.modelID) }
+        func models(forStage s: String) -> [String] { CandidateTable.all.filter { $0.kitStageID == s && !$0.isFloor }.map(\.id) }
+        for k in [StageKind.transcriber, .speechBounds] {
+            guard let st = config.setting(k) else { continue }
+            if st.id == ListenerPipeline.liveThenFinalStageID {
+                for key in ["live", "final"] { if case .string(let sid)? = st.params[key] { out.formUnion(models(forStage: sid)) } }
+            } else { out.formUnion(models(forStage: st.id)) }
+        }
+        if let r = responder, !r.isEmpty { out.insert(r) }
+        return out
     }
 }

@@ -290,7 +290,8 @@ final class OnboardingController: @unchecked Sendable {
         let ready = ModelOffer.readyStages(choices: readyChoices0)
         var readyChoices = readyChoices0
         if WeSpeakerEmbedder.standard().onDisk { readyChoices["speaker"] = ModelOffer.speakerID }
-        let offers = ModelOffer.jobs(profile: profile, ready: readyChoices).map { $0.dict }
+        let inUse = ModelInUse.ids(config: module.runtime.configuration, responder: ResponderChoice.current)
+        let offers = ModelOffer.jobs(profile: profile, ready: readyChoices, inUse: inUse).map { $0.dict }
         var device = ""
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
         return ["rows": rows, "summary": setup?.summary ?? [],
@@ -329,6 +330,13 @@ extension AutoradioModule {
         // The system's microphone permission, read and nothing asked (shared code decides whether to show its plain line first: micask.ts). Native because only the platform knows it.
         // Shared code's consent record, as it stands: native's ONE download door refuses every model fetch without it (DownloadDoor). Native because the transport is.
         case "obConsent": DownloadDoor.shared.sync(agreed: (r["agreed"] as? [String: String]) ?? [:])
+        // The person's Remove on a downloaded model: everything of it goes, except the model in use (ModelDeletion.remove). Native because the files are.
+        case "obRemoveModel":
+            let id = r["id"] as? String ?? ""
+            let inUse = ModelInUse.ids(config: c.module.runtime.configuration, responder: ResponderChoice.current)
+            let removal = await ModelDeletion.remove(model: id, pin: ModelPins.current(id), inUse: inUse)
+            c.changed()
+            return ["result": "\(removal)"]
         case "obMicState": return ["state": MicPermissionWord.current()]
         case "obEnrolBegin": c.beginCapture()
         case "obEnrolKeep": return ["kept": c.capture.keep(), "usable": c.capture.usable]

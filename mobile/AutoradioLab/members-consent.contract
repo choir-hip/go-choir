@@ -36,5 +36,8 @@ members Autoradio
   action dlStartMobile(group: string)
     send dlm = downloadsAct("startMobile", group, ovoice, "")
   // The person chooses one option for one job (kept); nothing is fetched by it.
+  // Remove a downloaded model that is not in use (downloads.ts D19).
+  action dlRemove(job: string, id: string)
+    send dlm = downloadsAct("remove", job, ovoice, id)
   action dlPick(job: string, id: string)
     send dlm = downloadsAct("pick", job, ovoice, id)

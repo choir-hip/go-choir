@@ -5,6 +5,7 @@ import CryptoKit
 // Round 5: readiness by MANIFEST, not by "90% of a round number". A library-managed model is ready iff a manifest (every file's relative path, exact length, SHA-256 of the files as they were when the check passed) exists for the current pin and every
 // file is present with that length. Trust on first consented fetch: the digests are of what the first consented fetch left on disk.
 final class ModelManifestTests: XCTestCase {
+    let kkPin = ModelPins.libraryPin + "|kk", pkPin = ModelPins.libraryPin + "|pk"
     func tmp() -> URL { let d = FileManager.default.temporaryDirectory.appendingPathComponent("man-\(UUID().uuidString)", isDirectory: true); try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true); return d }
     func put(_ base: URL, _ path: String, _ bytes: Int) { let u = base.appendingPathComponent(path); try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true); try? Data((0..<bytes).map { UInt8($0 % 251) }).write(to: u) }
     /// A fake library cache: two folders under a base; the "model card" says 350 MB and the library keeps a few KB: the round number must not matter.
@@ -22,7 +23,7 @@ final class ModelManifestTests: XCTestCase {
         XCTAssertFalse(r.isReady(model: "kk"), "nothing passed yet")
         r.markReady(model: "kk")                                                       // the verifier's pass: seals the manifest
         XCTAssertTrue(r.isReady(model: "kk"), "3.8 KB on disk of a 350 MB card figure: exact, not 90%")
-        let man = ModelManifests.read("kk", root: m.store)!
+        let man = ModelManifests.read("kk", pin: kkPin, root: m.store)!
         XCTAssertEqual(Set(man.files.map(\.path)), ["kokoro/a.mlmodelc/weights/w.bin", "kokoro/a.mlmodelc/model.mil", "kokoro-82m-coreml/voices.json"])
         XCTAssertEqual(man.files.first { $0.path.hasSuffix("w.bin") }?.bytes, 3000)
     }
@@ -38,7 +39,7 @@ final class ModelManifestTests: XCTestCase {
     func testM4AFetchDemotesFirst_SoAFailedReFetchIsNotReady() {
         let m = make(), r = pins(m); r.markReady(model: "kk"); XCTAssertTrue(r.isReady(model: "kk"))
         r.markNotReady(model: "kk")                                                    // what the provider does before every fetch
-        XCTAssertNil(ModelManifests.read("kk", root: m.store), "the manifest is gone")
+        XCTAssertNil(ModelManifests.read("kk", pin: kkPin, root: m.store), "the manifest is gone")
         XCTAssertFalse(r.isReady(model: "kk"), "the files are all there and it is still not ready: a re-fetch that fails must not leave it ready")
     }
     func testM5APinChangeIsNotReady() {
@@ -48,7 +49,7 @@ final class ModelManifestTests: XCTestCase {
     }
     func testM6HashesAreVerifiedWhenAskedAndCatchAChangeThatKeepsTheLength() {
         let m = make(), r = pins(m); r.markReady(model: "kk")
-        let man = ModelManifests.read("kk", root: m.store)!
+        let man = ModelManifests.read("kk", pin: kkPin, root: m.store)!
         XCTAssertTrue(ModelManifests.verifyHashes(man, base: m.base))
         var d = try! Data(contentsOf: m.base.appendingPathComponent("kokoro/a.mlmodelc/model.mil")); d[0] ^= 0xFF; try! d.write(to: m.base.appendingPathComponent("kokoro/a.mlmodelc/model.mil"))
         XCTAssertTrue(r.isReady(model: "kk"), "lengths only on every launch")
@@ -85,7 +86,7 @@ final class ModelManifestTests: XCTestCase {
         let f = m.base.appendingPathComponent("kokoro/a.mlmodelc/model.mil"); try? FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: f.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: f.path) }
         r.markReady(model: "kk"); XCTAssertFalse(r.isReady(model: "kk"), "a seal over a subset is not a seal")
-        XCTAssertNil(ModelManifests.read("kk", root: m.store))
+        XCTAssertNil(ModelManifests.read("kk", pin: kkPin, root: m.store))
     }
     func testM9ASymlinkedEntryFailsTheSealInsteadOfPoisoningThePaths() {
         let m = make(), r = pins(m)
@@ -179,7 +180,7 @@ final class ModelManifestTests: XCTestCase {
         // a baseline (the last good manifest, kept across the demotion) that matches: intact -> kept
         m = lib(); rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
         try await m.lib.fetch(); rec.markReady(model: "pk"); rec.markNotReady(model: "pk")                     // sealed once, then demoted by a fetch
-        XCTAssertNotNil(ModelManifests.baseline("pk", root: m.store), "the last good manifest stays as the baseline")
+        XCTAssertNotNil(ModelManifests.baseline("pk", pin: pkPin, root: m.store), "the last good manifest stays as the baseline")
         r = await ReadinessVerifier(record: rec).verify(model: "pk", check: { throw Boom() })
         XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "proven intact: kept"); XCTAssertTrue(r.note.contains("intact"), r.note)
         // a baseline that no longer matches: changed -> deleted
@@ -227,7 +228,7 @@ final class ModelManifestTests: XCTestCase {
         let s = try await sealed()
         for e: Error in [DownloadDoor.Refusal.noConsent(group: "voice"), DownloadDoor.Refusal.notOffered(model: "pk"), DownloadDoor.Refusal.pathNotAgreed(group: "voice"), DownloadDoor.Refusal.timedOut, CancellationError()] {
             do { try await ModelFetch.guarded(model: "pk", verifier: s.v, pins: s.pins) { _ in throw e } as Void; XCTFail("ran") } catch {}      // the body never began: nothing was written
-            XCTAssertTrue(packExists(s.m), "a ready model survived \(e)")
+            XCTAssertTrue(packExists(s.m), "a ready model survived \(e)"); XCTAssertTrue(s.rec.isReady(model: "pk"), "and is still ready: \(e)")
         }
     }
     func testD2ATransientLoadFailureInTheFetchBodyKeepsAReadyModelWhoseFilesAreProvenIntact() async throws {         // B2
@@ -275,4 +276,85 @@ final class ModelManifestTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: base.appendingPathComponent("p/a.bin").path))
         deleted = await ModelDeletion.reconcile(model: "d6", pin: none, fetch: .unfinished); XCTAssertTrue(deleted, "(b) the half pack")
     }
+
+    // ---- Round 9: records are per PIN; nothing is compared across versions; a fetch under a new pin starts clean; "unfinished" is evidence.
+    func newPinPins(_ m: (base: URL, store: URL, spec: ManagedModelSpec, lib: PresenceOnlyLibrary)) -> (String) -> ModelPin? { { ModelPins.managed($0, spec: m.spec, root: m.store, libraryPin: "fluidaudio-9.9.9") } }
+    func testP1AFreshDownloadUnderANewPinIsNotComparedWithTheOldPinsBaselineAndEndsReady() async throws {      // F1
+        let s = try await sealed()                                                          // the old voice, sealed under the old pin
+        let newPins = newPinPins(s.m); let rec = FileVoiceReadiness(file: s.m.store.appendingPathComponent("ready.json"), pins: newPins); let v = ReadinessVerifier(record: rec)
+        XCTAssertFalse(rec.isReady(model: "pk"), "a pin bump: not ready under the new pin")
+        // the person downloads: the library writes DIFFERENT bytes (a new version), the check passes
+        try await ModelFetch.guarded(model: "pk", verifier: v, pins: newPins) { run in run.begin(); try FileManager.default.createDirectory(at: s.m.base.appendingPathComponent("pack"), withIntermediateDirectories: true); try Data(count: 7).write(to: s.m.base.appendingPathComponent("pack/a.bin")); try Data(count: 9).write(to: s.m.base.appendingPathComponent("pack/b.bin")); try Data(count: 11).write(to: s.m.base.appendingPathComponent("pack/weights.bin")) }
+        let r = await v.verify(model: "pk", check: { SetupCheck(loadMs: 1, speed: 1, unit: "x", memoryMB: 0, outputOK: true) })
+        XCTAssertTrue(r.outputOK); XCTAssertTrue(rec.isReady(model: "pk"), "the download ends ready")
+        // and a failed load now (new pin, sealed): the new files are judged by the NEW pin's seal only
+        struct Boom: Error {}
+        let r2 = await ReadinessVerifier(record: rec).verify(model: "pk", check: { throw Boom() })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: s.m.base.appendingPathComponent("pack/a.bin").path), "never 'damaged' against the old version's baseline"); XCTAssertFalse(r2.note.contains("damaged"), r2.note)
+    }
+    func testP2AFetchUnderANewPinClearsTheOldVersionFirst_NotKeptForever() async throws {                          // F2
+        let s = try await sealed(); let newPins = newPinPins(s.m)
+        XCTAssertTrue(packExists(s.m)); XCTAssertFalse(ModelManifests.records("pk", root: s.m.store).isEmpty)
+        let v = ReadinessVerifier(record: FileVoiceReadiness(file: s.m.store.appendingPathComponent("ready.json"), pins: newPins))
+        _ = try? await ModelFetch.guarded(model: "pk", verifier: v, pins: newPins) { run in run.begin(); XCTAssertFalse(self.packExists(s.m), "the old version's files were removed before the new body wrote"); throw CancellationError() } as Void
+        XCTAssertTrue(ModelManifests.records("pk", root: s.m.store).filter { $0.pin != "fluidaudio-9.9.9|pk" }.isEmpty, "and its records")
+    }
+    func testP3ARefusalThatNeverBeganDoesNotDeleteFilesThatWereAlreadyDifferent() async throws {                 // F1, second trigger
+        let s = try await sealed()
+        try Data(count: 5).write(to: s.m.base.appendingPathComponent("pack/a.bin"))                  // a crash mid-write, a cache rewrite: different from the seal
+        do { try await ModelFetch.guarded(model: "pk", verifier: s.v, pins: s.pins) { _ in throw DownloadDoor.Refusal.pathNotAgreed(group: "voice") } as Void } catch {}
+        XCTAssertTrue(packExists(s.m), "a refusal deletes nothing, whatever the files look like")
+    }
+    func testP4ACompleteDownloadWhoseWarmLoadThrowsIsKept_AnInterruptedOneIsNot() async throws {                  // F3
+        struct CoreMLError: Error {}
+        var m = lib(); var rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
+        do { try await ModelFetch.guarded(model: "pk", verifier: ReadinessVerifier(record: rec), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { run in run.begin(); try await m.lib.fetch(); throw CoreMLError() } as Void } catch {}
+        XCTAssertTrue(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "the download finished and the load failed: the 350 MB is kept")
+        m = lib(); rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
+        do { try await ModelFetch.guarded(model: "pk", verifier: ReadinessVerifier(record: rec), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { run in run.begin(); m.lib.failAfterFiles = 1; try await m.lib.fetch() } as Void } catch {}
+        XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "a transport failure mid-download is a half pack")
+        m = lib(); rec = FileVoiceReadiness(file: m.store.appendingPathComponent("ready.json"), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) })
+        do { try await ModelFetch.guarded(model: "pk", verifier: ReadinessVerifier(record: rec), pins: { ModelPins.managed($0, spec: m.spec, root: m.store) }) { run in run.begin(); try? FileManager.default.createDirectory(at: m.base.appendingPathComponent("pack"), withIntermediateDirectories: true); run.interrupt(); throw CoreMLError() } as Void } catch {}
+        XCTAssertFalse(FileManager.default.fileExists(atPath: m.base.appendingPathComponent("pack").path), "the door killed the window (the registry closed): whatever error the library gave, it did not finish")
+    }
+    func testP5ARefusalLeavesAReadyModelReady() async throws {                                                      // F5
+        let s = try await sealed()
+        for e: Error in [DownloadDoor.Refusal.pathNotAgreed(group: "voice"), DownloadDoor.Refusal.timedOut] {
+            do { try await ModelFetch.guarded(model: "pk", verifier: s.v, pins: s.pins) { _ in throw e } as Void } catch {}
+            XCTAssertTrue(s.rec.isReady(model: "pk"), "a working voice is still the voice after a press that was refused: \(e)")
+        }
+    }
+    func testP6RecordsAreScopedByPin() async throws {
+        let s = try await sealed()
+        let other = ModelPins.managed("pk", spec: s.m.spec, root: s.m.store, libraryPin: "fluidaudio-9.9.9")!
+        XCTAssertNil(other.proof?(), "another pin has no seal: unknown, never damage"); XCTAssertFalse(other.present())
+    }
+
+    // ---- Round 9 (2): Remove. Every downloaded model has one, except the model in use.
+    func testX1RemoveDeletesAModelsFilesAndRecordsAndItsReadiness_ExceptTheOneInUse() async throws {
+        let s = try await sealed()
+        var r = await ModelDeletion.remove(model: "pk", pin: s.pins("pk"), inUse: ["pk"], verifier: s.v)
+        XCTAssertEqual(r, .inUse); XCTAssertTrue(packExists(s.m)); XCTAssertTrue(s.rec.isReady(model: "pk"))
+        r = await ModelDeletion.remove(model: "pk", pin: s.pins("pk"), inUse: [], verifier: s.v)
+        XCTAssertEqual(r, .removed); XCTAssertFalse(packExists(s.m)); XCTAssertFalse(s.rec.isReady(model: "pk"))
+        XCTAssertTrue(ModelManifests.records("pk", root: s.m.store).isEmpty, "no manifest and no baseline is left to judge a later download by")
+        let none = await ModelDeletion.remove(model: "pk", pin: nil, inUse: [], verifier: s.v); XCTAssertEqual(none, .notRemovable)
+    }
+    func testX2WhatIsInUse() {
+        var c = LabConfiguration(name: "t")
+        c.set(.voice, StageSetting(id: "kokoro", params: ["voice": .string("af_heart")]))
+        XCTAssertTrue(ModelInUse.ids(config: c, responder: "lfm3-1.7b-q5_k_m").isSuperset(of: [VoiceCatalog.kokoroModel, "lfm3-1.7b-q5_k_m"]))
+        c.set(.transcriber, StageSetting(id: ListenerPipeline.liveThenFinalStageID, params: ["live": .string("parakeet-eou"), "final": .string("fluid-speech-mini")]))
+        XCTAssertTrue(ModelInUse.ids(config: c, responder: nil).isSuperset(of: ["parakeet-eou-120m", "fluid-speech-mini"]))
+        XCTAssertFalse(ModelInUse.ids(config: c, responder: nil).contains("pocket-tts"))
+    }
+    func testX3TheOfferSaysWhichOptionsCanBeRemoved() {
+        let phone = DeviceProfile(chip: "A", memoryGB: 8, freeDiskGB: 50, onWiFi: true)
+        let jobs = ModelOffer.jobs(profile: phone, ready: ["transcriber": "fluid-speech-mini", "voice": VoiceCatalog.kokoroModel], inUse: ["fluid-speech-mini"])
+        let t = jobs.first { $0.job == "transcriber" }!.options.first { $0.id == "fluid-speech-mini" }!
+        XCTAssertTrue(t.ready); XCTAssertFalse(t.removable, "in use"); XCTAssertEqual(t.dict["removable"] as? Bool, false)
+        let v = jobs.first { $0.job == "voice" }!.options.first { $0.id == VoiceCatalog.kokoroModel }!
+        XCTAssertTrue(v.removable); XCTAssertFalse(jobs.first { $0.job == "transcriber" }!.options.first { !$0.ready }!.removable, "not on the phone: nothing to remove")
+    }
 }
+

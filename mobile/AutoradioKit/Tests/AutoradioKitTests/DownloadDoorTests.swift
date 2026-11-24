@@ -282,13 +282,13 @@ final class DownloadDoorTests: XCTestCase {
         do { try await d.libraryWindow(model: "fluid-speech-mini") { try await Task.sleep(nanoseconds: 2_000_000_000) } as Void; XCTFail("silent body survived") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
     }
     func testQ6ExclusiveHasADeadline_AndItsSlotIsFreedOnlyWhenTheBodyHasEnded() async throws {
-        let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 0.3, body: 0.1))
+        let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 0.2, body: 0.3))
         final class F: @unchecked Sendable { let l = NSLock(); var stop = false; var ended = false
             func set() { l.lock(); stop = true; l.unlock() }; var s: Bool { l.lock(); defer { l.unlock() }; return stop }
             func end() { l.lock(); ended = true; l.unlock() } }
         let f = F()
         let hang = Hang(); defer { hang.release() }
-        do { try await d.exclusive { await hang.wait(); f.end() } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }   // a body that ignores cancellation
+        do { try await d.exclusive(model: "fluid-speech-mini") { await hang.wait(); f.end() } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }   // a body that ignores cancellation
         // the caller was told at once, but the body is still running: the slot is NOT free, so nothing else runs beside it
         do { let _: Int = try await d.exclusive { 5 }; XCTFail("a second body ran beside the one that outlived its deadline") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut, "it waited, and its patience ran out") }
         hang.release(); try? await Task.sleep(nanoseconds: 100_000_000)                                     // the body returns: the slot is freed
@@ -303,4 +303,20 @@ final class DownloadDoorTests: XCTestCase {
         let t0 = Date(); t.cancel(); _ = try? await t.value
         XCTAssertLessThan(Date().timeIntervalSince(t0), 1); XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0)
     }
+
+    // ---- Round 9 (F4): a body that never returns cannot wedge the door for ever. At the hard cap (twice the deadline) the slot is released, but that model's windows stay refused until the body ends, and the registry is closed.
+    func testH1ABodyThatNeverReturnsReleasesTheSlotAtTheCapAndKeepsItsOwnModelRefused() async throws {
+        let r = Registry(); let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.1)); d.sync(agreed: ["voice-rest": "agreed", "voice": "agreed"]); d.installLibraryGuard { r.set($0) }
+        let hang = Hang(); defer { hang.release() }
+        do { try await d.exclusive(model: "fluid-speech-mini") { await hang.wait() } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
+        let t0 = Date()
+        let ok: Int = try await d.exclusive(model: "kokoro-82m-ane") { 5 }                       // another model: after the cap the slot is free, no five minute wait
+        XCTAssertEqual(ok, 5); XCTAssertLessThan(Date().timeIntervalSince(t0), 2)
+        do { try await d.libraryWindow(model: "fluid-speech-mini") { } as Void; XCTFail("opened for the model whose body is still running") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }
+        XCTAssertEqual(r.now, DownloadDoor.closedRegistry)
+        let other: Int = try await d.libraryWindow(model: VoiceCatalog.kokoroModel) { 9 }; XCTAssertEqual(other, 9, "another model's window is not refused")
+        hang.release(); try? await Task.sleep(nanoseconds: 100_000_000)
+        let again: Int = try await d.libraryWindow(model: "fluid-speech-mini") { 1 }; XCTAssertEqual(again, 1, "refused only until the body ends")
+    }
 }
+

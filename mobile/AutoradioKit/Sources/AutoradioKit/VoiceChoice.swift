@@ -167,7 +167,7 @@ public final class ReadinessVerifier: @unchecked Sendable {
         var failed = result
         let rec = record
         // The words and any clean-up happen holding the door's slot: no window can be open and no fetch can start in between.
-        failed.note = (try? await DownloadDoor.shared.exclusive { await rec.diagnose(model: id, note: result.note, outcome: outcome) }) ?? result.note
+        failed.note = (try? await DownloadDoor.shared.exclusive(model: id) { await rec.diagnose(model: id, note: result.note, outcome: outcome) }) ?? result.note
         record.markNotReady(model: id)
         return failed
     }

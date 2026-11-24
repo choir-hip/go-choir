@@ -18,6 +18,7 @@
 //  D7 Each job's options are listed with name and size, the recommended one tagged; with no pick the recommended one is chosen; the group's total is the chosen options not yet on the phone, not the sum of the options.
 //  D8 A pick is kept (consent.ts), only for a job and option that are on offer, and the press that starts a group hands native exactly the chosen option of each job (never another); a job with nothing that fits starts nothing.
 //  D14 A press reads the facts as they are NOW (the network path moved since the page was drawn): on mobile data only the mobile press starts anything.
+//  D19 Remove: a downloaded model that is not in use can be removed from its card (native deletes it, its records and its readiness); the one in use, and one that is not on the phone, cannot.
 //  D9 Fluid Speech Pro-like names are not special-cased: an option appears only when the list offers it.
 import type { Storage } from './app.contract.d.ts';
 import { consentAgree, consentPick, consentPicks, consentView } from './consent.ts';
@@ -27,7 +28,7 @@ import { noVoice, type VoiceFacts } from './onboarding.ts';
 import { chosen, forFirstRun, needs, picksFor, setupBytes, sizeLabel, type OfferJob } from './offers.ts';
 
 export { sizeLabel };
-export type OptionView = { id: string; text: string; tag: string; note: string; credit: string; withheld: boolean; selected: boolean; ready: boolean };
+export type OptionView = { id: string; text: string; tag: string; note: string; credit: string; withheld: boolean; removable: boolean; selected: boolean; ready: boolean };
 export type JobView = { job: string; title: string; options: OptionView[]; ready: boolean; none: string };
 export type Group = {
   id: string; title: string; why: string; jobs: JobView[]; total: string; host: string; ready: boolean; busy: boolean; status: string; onWiFi: boolean; mobileLine: string;
@@ -68,7 +69,7 @@ export function downloadsView(f: VoiceFacts, searchPresent: boolean | null, rev:
       const c = chosen(j, picks);
       return {
         job: j.job, title: JOB_TITLES[j.job] ?? j.job, ready: !needs(j, picks),
-        options: j.options.map((o) => ({ id: o.id, text: `${o.model}, ${o.sizeLabel}`, tag: [o.recommended ? 'Recommended for this phone' : '', o.withheld ? 'Optional: fetched from this page only' : '', o.ready ? 'On this phone' : ''].filter(Boolean).join('. '), note: o.note ?? '', credit: o.credit ?? '', withheld: o.withheld === true, selected: c?.id === o.id, ready: o.ready })),
+        options: j.options.map((o) => ({ id: o.id, text: `${o.model}, ${o.sizeLabel}`, tag: [o.recommended ? 'Recommended for this phone' : '', o.withheld ? 'Optional: fetched from this page only' : '', o.ready ? 'On this phone' : ''].filter(Boolean).join('. '), note: o.note ?? '', credit: o.credit ?? '', withheld: o.withheld === true, removable: o.removable === true, selected: c?.id === o.id, ready: o.ready })),
         none: c ? '' : j.options.some((o) => o.withheld) ? 'Choose one to download it. Until then the radio keeps what is built in.' : 'Nothing here fits this phone; it keeps what is built in.',
       };
     });
@@ -105,6 +106,11 @@ async function liveFacts(later: ReturnType<typeof nativeLater>, page: VoiceFacts
 export async function downloadsAct(op: string, group: string, facts: VoiceFacts | null | undefined, storage: Storage | undefined, arg = ''): Promise<Downloads> {
   const later = nativeLater();
   const f = await liveFacts(later, { ...noVoice(), ...(facts ?? {}) });                        // D14: the facts as they are at the press, not as the page was drawn
+  if (op === 'remove') {                                                                           // D19: the person's Remove, for a model that is on the phone and not in use
+    const o = f.offers.find((x) => x.job === group)?.options.find((x) => x.id === arg);
+    if (o && o.removable === true && o.ready) { try { await later?.({ op: 'obRemoveModel', id: arg }); } catch { /* the facts say it is still there */ } }
+    return downloadsPage(f, storage);
+  }
   if (op === 'pick') {                                                                              // D8
     const j = f.offers.find((x) => x.job === group);
     if (j && j.options.some((o) => o.id === arg)) await consentPick(group, arg, storage);

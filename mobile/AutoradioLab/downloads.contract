@@ -11,6 +11,7 @@ component DownloadJobs
     th: Theme
     dl: DownloadsView
     dlPick: action
+    dlRemove: action
   props
     group: string
     showWithheld: bool
@@ -34,6 +35,9 @@ component DownloadJobs
                           text o.note testId=`dl-note-${j.job}-${o.id}` font-family=th.fontLabel font-size="-exact-caption1" line-height=1.35 color=th.muted
                         if o.credit != ""
                           text o.credit testId=`dl-credit-${j.job}-${o.id}` font-family=th.fontLabel font-size="-exact-caption1" line-height=1.35 color=th.muted
+                if o.removable and showWithheld
+                  button press=dlRemove(j.job, o.id) testId=`dl-remove-${j.job}-${o.id}` appearance="none" aria-label="Remove this download"
+                    text "Remove" font-family=th.fontAction font-size="-exact-footnote" color=th.danger font-weight=600
               if j.none != ""
                 text j.none font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
 

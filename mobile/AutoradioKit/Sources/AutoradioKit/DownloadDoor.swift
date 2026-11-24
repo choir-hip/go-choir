@@ -114,8 +114,8 @@ public final class DownloadDoor: @unchecked Sendable {
         if none { setRegistry(Self.closedRegistry) }
     }
 
-    private final class CancelBox: @unchecked Sendable { let lock = NSLock(); var cancel: (@Sendable () -> Void)?; var killed = false
-        func kill() { lock.lock(); killed = true; let c = cancel; lock.unlock(); c?() }
+    private final class CancelBox: @unchecked Sendable { let lock = NSLock(); var cancel: (@Sendable () -> Void)?; var killed = false; var onKilled: (@Sendable () -> Void)?
+        func kill() { lock.lock(); killed = true; let c = cancel; let k = onKilled; lock.unlock(); k?(); c?() }
         func set(_ c: @escaping @Sendable () -> Void) { lock.lock(); cancel = c; let k = killed; lock.unlock(); if k { c() } } }
 
     private struct Waiter { let id: UUID; let c: CheckedContinuation<Void, Error> }
@@ -173,18 +173,34 @@ public final class DownloadDoor: @unchecked Sendable {
         } onCancel: { if gate.finish(.failure(CancellationError())) { result.cancel(); kill() } }
     }
 
+    /// Models whose cold-load body outlived the hard cap: its slot was released, so nothing wedges, but its windows are refused (and the registry stays closed) until the body ends.
+    private var stuck: [String: Int] = [:]
+    private final class Release: @unchecked Sendable { let l = NSLock(); var done = false; func once() -> Bool { l.lock(); defer { l.unlock() }; if done { return false }; done = true; return true } }
+    private func stickOn(_ model: String) { lock.lock(); stuck[model, default: 0] += 1; lock.unlock() }
+    private func unstick(_ model: String) { lock.lock(); if let n = stuck[model] { stuck[model] = n > 1 ? n - 1 : nil }; lock.unlock() }
+    private func isStuck(_ model: String) -> Bool { lock.lock(); defer { lock.unlock() }; return stuck[model] != nil }
+
     /// Run `body` holding the slot with NO window open anywhere (the registry stays closed): what a check needs, so that its load is a cold load that cannot fetch and cannot borrow another model's window. It has the same silence deadline.
-    public func exclusive<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) async throws -> T {
+    /// The slot is freed when the body has ended; a body that never ends frees it at the hard cap (twice the deadline) and its `model` stays refused until it does (never released with the registry open).
+    public func exclusive<T: Sendable>(model: String = "*", _ body: @escaping @Sendable () async throws -> T) async throws -> T {
         try await acquireSlot(every: 2, whileQueued: nil)
-        // The caller is answered at once on a timeout or a cancel, but the SLOT is freed only when the body has returned (or been cancelled and has acknowledged it): a cold load that outlives its slot would run beside the next fetch's window.
-        return try await raced(body, onBodyEnded: { [self] in releaseSlot() }, kill: { })
+        let rel = Release()
+        let cap = Task { [self] in
+            try? await Task.sleep(nanoseconds: UInt64(deadlines.body * 2 * 1e9))
+            if !Task.isCancelled, rel.once() { stickOn(model); closeNow(); releaseSlot() }
+        }
+        return try await raced(body, onBodyEnded: { [self] in
+            cap.cancel()
+            if rel.once() { releaseSlot() } else { unstick(model) }          // it ended after the cap released the slot: the model is allowed again
+        }, kill: { })
     }
 
-    public func libraryWindow<T: Sendable>(model id: String, queuedEvery: TimeInterval = 2, whileQueued: (@Sendable () -> Void)? = nil, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
+    public func libraryWindow<T: Sendable>(model id: String, queuedEvery: TimeInterval = 2, whileQueued: (@Sendable () -> Void)? = nil, onKilled: (@Sendable () -> Void)? = nil, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
+        if isStuck(id) || isStuck("*") { throw Refusal.timedOut }          // its last cold load has not ended yet
         let early = try authorize(model: id)                             // an early, cheap refusal (the authoritative look is inside the lock, after the wait)
         if early == .wifi, !allowAll, !onWiFi() { throw Refusal.pathNotAgreed(group: groups[id] ?? "") }
         try await acquireSlot(every: queuedEvery, whileQueued: whileQueued); defer { releaseSlot() }
-        let key = UUID(), box = CancelBox()
+        let key = UUID(), box = CancelBox(); box.onKilled = onKilled
         try enterWindow(key, model: id, box)                            // the authoritative check, under the lock that opens the registry
         defer { leaveWindow(key) }
         // A body past its silence deadline, or a cancelled caller, fails the call at once: the window is killed (the registry closed whatever the library does) and the call does not wait for a body that ignores cancellation.

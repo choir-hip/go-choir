@@ -28,7 +28,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         // Demote first; a fetch that fails or is cancelled deletes the model's folders (ModelFetch): a half pack must not look whole to a library that checks only presence.
         try await ModelFetch.guarded(model: id) { run in
             if Self.libraryModels.contains(id) {
-                try await DownloadDoor.shared.libraryWindow(model: id, whileQueued: { onBytes(-1) }) { run.begin(); return try await LibraryScope.$checking.withValue(id) { try await self.fetchBody(id, role: role, onBytes: onBytes) } }
+                try await DownloadDoor.shared.libraryWindow(model: id, whileQueued: { onBytes(-1) }, onKilled: { run.interrupt() }) { run.begin(); return try await LibraryScope.$checking.withValue(id) { try await self.fetchBody(id, role: role, onBytes: onBytes) } }
             } else {
                 try await self.fetchBody(id, role: role, onBytes: onBytes)
             }
@@ -95,7 +95,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
     /// phone's files. Only a pass of THAT seals the manifest and makes the model ready, so "ready" means "loads from this phone's files without the network".
     public func check(_ id: String, role: String) async throws -> SetupCheck {
         if Self.libraryModels.contains(id) {
-            return try await DownloadDoor.shared.exclusive {
+            return try await DownloadDoor.shared.exclusive(model: id) {
                 await ModelStore.shared.unload(id)
                 return try await LibraryScope.$checking.withValue(id) { try await self.checkBody(id, role: role) }
             }

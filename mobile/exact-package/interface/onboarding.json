@@ -80,6 +80,7 @@
    "note": "string",
    "credit": "string",
    "withheld": "bool",
+   "removable": "bool",
    "ready": "bool"
   },
   "EnrolView": {
@@ -128,7 +129,8 @@
          "note": "",
          "credit": "",
          "ready": false,
-         "withheld": false
+         "withheld": false,
+         "removable": false
         }
        ]
       },
@@ -146,7 +148,8 @@
          "note": "",
          "credit": "Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).",
          "ready": false,
-         "withheld": false
+         "withheld": false,
+         "removable": false
         }
        ]
       }

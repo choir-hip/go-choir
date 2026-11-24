@@ -51,6 +51,7 @@ component Autoradio
     dlStart
     dlStartMobile
     dlPick
+    dlRemove
     lrn
     lrnPress
     lrnLeaveFlow

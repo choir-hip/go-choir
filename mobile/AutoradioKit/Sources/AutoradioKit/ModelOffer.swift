@@ -12,8 +12,10 @@ public struct OfferOption: Sendable, Equatable {
     public var credit: String = ""
     /// Offered on Settings only (never recommended, never in the first run's total): a library model with no local-only load that has no manifest yet.
     public var withheld: Bool = false
+    /// It is on this phone, it is not what the radio is using, and the person may remove it.
+    public var removable: Bool = false
     public var sizeLabel: String { SetupCatalog.sizeLabel(bytes) }
-    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready, "note": note, "credit": credit, "withheld": withheld] }
+    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready, "note": note, "credit": credit, "withheld": withheld, "removable": removable] }
 }
 public struct OfferJob: Sendable, Equatable {
     public var job: String, group: String, host: String
@@ -46,7 +48,7 @@ public enum ModelOffer {
     /// The jobs, each with every option the list holds for it (best-ranked first) and the one marked recommended for this phone: the first entry whose device rule fits it (`ModelListEntry.isRecommended`, the machine
     /// identifier and the memory). A row added to the list (a newer model, another recogniser) is an option here with no change to this code. The floors are not in the list. A job whose entries fit no rule lists them and recommends none.
     /// `ready`: job -> the id on the phone and passed its check. Every voice-setup stage that downloads is a job here, the quick-decision model too: what the first-run press fetches is exactly these jobs' chosen options and nothing else.
-    public static func jobs(profile: DeviceProfile, list: ModelList = .builtIn(), ready: [String: String] = [:]) -> [OfferJob] {
+    public static func jobs(profile: DeviceProfile, list: ModelList = .builtIn(), ready: [String: String] = [:], inUse: Set<String> = []) -> [OfferJob] {
         var out: [OfferJob] = []
         for j in jobIDs {
             var opts: [(id: String, label: String, bytes: Int64, fits: Bool, note: String, credit: String)] = []
@@ -62,7 +64,7 @@ public enum ModelOffer {
             if opts2.isEmpty { continue }
             let rec = opts2.first { $0.fits && !isWithheld(id: $0.id, ready: ready[j] == $0.id) }?.id
             out.append(OfferJob(job: j, group: group(j), host: host,
-                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note, credit: $0.credit, withheld: isWithheld(id: $0.id, ready: ready[j] == $0.id)) }))
+                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note, credit: $0.credit, withheld: isWithheld(id: $0.id, ready: ready[j] == $0.id), removable: ready[j] == $0.id && !inUse.contains($0.id) && j != "speaker") }))
         }
         return out
     }

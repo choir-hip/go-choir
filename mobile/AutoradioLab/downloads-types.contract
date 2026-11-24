@@ -6,6 +6,7 @@ shape DownloadOption
   note: string
   credit: string
   withheld: bool
+  removable: bool
   selected: bool
   ready: bool
 
