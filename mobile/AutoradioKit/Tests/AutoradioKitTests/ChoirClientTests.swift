@@ -130,10 +130,20 @@ final class ChoirClientTests: XCTestCase {
         try? keys.set("k1", account: KeyAccount.keyID)
         let si = ChoirSignIn(env: env)
         await si.signOut()
-        await si.waitForRevoke()
         XCTAssertNil(keys.get(KeyAccount.apiKey)); XCTAssertNil(keys.get(KeyAccount.computerID))
         XCTAssertEqual(StubProtocol.seen.first?.method, "DELETE")
         XCTAssertEqual(StubProtocol.seen.first?.path, "/auth/api-keys/k1")
+    }
+
+    /// The key goes only once the server has revoked it: a revoke that cannot be made leaves the key in place (and the wipe unrun), so no live key is left with no copy to revoke.
+    func testSignOutWithoutAConnectionKeepsTheKey() async {
+        try? keys.set("k1", account: KeyAccount.keyID)
+        StubProtocol.handler = { _ in .init(status: 500, json: ["error": "down"]) }
+        let si = ChoirSignIn(env: env)
+        var wiped = false
+        si.onSignOut = { wiped = true }
+        await si.signOut()
+        XCTAssertNotNil(keys.get(KeyAccount.apiKey)); XCTAssertNotNil(keys.get(KeyAccount.keyID)); XCTAssertFalse(wiped)
     }
 
     // MARK: Programme

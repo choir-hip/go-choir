@@ -36,34 +36,22 @@ public final class ChoirSignIn: @unchecked Sendable {
 
     private func client() -> ChoirClient { env.client(baseURL: baseURL) }
 
-    /// Delete the local key and wipe the account's state at once; then revoke on the server in the background (best effort). The old key is held
-    /// only for that one call: it is in no store, and nothing else can use it.
+    /// Revoke the key on the server first; only once the server has answered do the local key go and the account wipe run. A sign-out with no connection leaves the key and the person
+    /// signed in (the screen says sign-out did not finish), never a live full-access key with no copy on the phone to revoke later.
     public func signOut() async {
         let id = env.keys.get(KeyAccount.keyID), key = env.keys.get(KeyAccount.apiKey)
+        if let id, let key, !(await revokeNow(keyID: id, key: key)) { env.log?.emit(.note("choir: sign-out needs a connection to revoke the key; nothing was signed out")); return }
         env.keys.delete(KeyAccount.apiKey); env.keys.delete(KeyAccount.keyID); env.keys.delete(KeyAccount.computerID)
         await onSignOut?()           // everything of the account on the phone goes (AccountWipe)
-        env.log?.emit(.note("choir: signed out" + (id != nil && key != nil ? "; revoking the key in the background" : "")))
+        env.log?.emit(.note("choir: signed out"))
         update { $0.status = "idle"; $0.message = "signed out" }
-        if let id, let key { revoke(keyID: id, key: key) }
     }
     func revokeNow(keyID id: String, key: String) async -> Bool {
         let held = ChoirClient(baseURL: baseURL, keys: InMemoryKeyStore([KeyAccount.apiKey: key]), session: env.session, log: nil, trustedOrigin: URL(string: env.configuredBaseURL))
         if id.isEmpty { env.log?.emit(.note("choir: a legacy key has no id, so it cannot be revoked here; revoke it in Settings")); return true }
-        do { try await held.send("DELETE", "/auth/api-keys/\(PathSegment.encode(id))", route: "/auth/api-keys/{id}", timeout: 8, okStatuses: [401, 404]); env.log?.emit(.note("choir: a legacy key was revoked")); return true }
-        catch { env.log?.emit(.note("choir: a legacy key was not revoked on the server; it is kept and retried at the next launch (\(error))")); return false }
+        do { try await held.send("DELETE", "/auth/api-keys/\(PathSegment.encode(id))", route: "/auth/api-keys/{id}", timeout: 8, okStatuses: [401, 404]); env.log?.emit(.note("choir: a key was revoked")); return true }
+        catch { env.log?.emit(.note("choir: a key was not revoked on the server; it is kept and retried (\(error))")); return false }
     }
-    private func revoke(keyID id: String, key: String) {
-        let held = ChoirClient(baseURL: baseURL, keys: InMemoryKeyStore([KeyAccount.apiKey: key]), session: env.session, log: nil, trustedOrigin: URL(string: env.configuredBaseURL))
-        let enc = PathSegment.encode(id), log = env.log
-        let t = Task.detached {
-            do { try await held.send("DELETE", "/auth/api-keys/\(enc)", route: "/auth/api-keys/{id}", timeout: 8); log?.emit(.note("choir: the key was revoked")) }
-            catch { log?.emit(.note("choir: the key was not revoked on the server (\(error))")) }
-        }
-        lock.lock(); revokeTask = t; lock.unlock()
-    }
-    /// The background revoke (tests wait on it).
-    private var revokeTask: Task<Void, Never>?
-    public func waitForRevoke() async { let t = { lock.lock(); defer { lock.unlock() }; return revokeTask }(); await t?.value }
     /// Set by the app: wipes what belongs to the account (AccountWipe.run).
     public var onSignOut: (@Sendable () async -> Void)?
 }
