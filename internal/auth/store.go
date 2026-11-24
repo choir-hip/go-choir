@@ -440,7 +440,10 @@ func (s *Store) migrateOperator() error {
 		return err
 	}
 	for _, d := range legacyTestDomains {
-		if _, err := tx.Exec(`UPDATE users SET operator = 1 WHERE lower(substr(email, instr(email, '@') + 1)) = ?`, d); err != nil {
+		// Only rows that already hold a passkey: an unfinished sign-up on one
+		// of these domains is a stranger's until it proves otherwise.
+		if _, err := tx.Exec(`UPDATE users SET operator = 1 WHERE lower(substr(email, instr(email, '@') + 1)) = ?
+			AND EXISTS (SELECT 1 FROM credentials WHERE credentials.user_id = users.id)`, d); err != nil {
 			return err
 		}
 	}

@@ -457,7 +457,7 @@ func loadPulseAccountsFromAuthDB(path string) ([]pulseAccountRecord, []string) {
 	for rows.Next() {
 		var rec pulseAccountRecord
 		if err := rows.Scan(&rec.UserID, &rec.Email, &rec.CreatedAt, &rec.Operator); err != nil {
-			return out, []string{"auth users unavailable; account counts partially unavailable"}
+			return nil, []string{"auth users unavailable; account counts partially unavailable"}
 		}
 		rec.FirstPasskeyAt, rec.HasPasskey = firstPasskey[strings.TrimSpace(rec.UserID)]
 		rec.UserID = strings.TrimSpace(rec.UserID)
@@ -465,7 +465,7 @@ func loadPulseAccountsFromAuthDB(path string) ([]pulseAccountRecord, []string) {
 		out = append(out, rec)
 	}
 	if err := rows.Err(); err != nil {
-		return out, []string{"auth users unavailable; account counts partially unavailable"}
+		return nil, []string{"auth users unavailable; account counts partially unavailable"}
 	}
 	return out, nil
 }

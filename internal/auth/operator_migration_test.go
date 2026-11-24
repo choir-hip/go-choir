@@ -27,7 +27,9 @@ func TestMigrateOperatorMarksLegacyDomainsOnceAndNeverAgain(t *testing.T) {
 	}
 	for _, q := range []string{
 		`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, created_at DATETIME NOT NULL)`,
-		`INSERT INTO users VALUES ('a', 'ci1@example.com', '2026-11-01 00:00:00+00:00'), ('b', 'ci2@Example.TEST', '2026-11-01 00:00:00+00:00'), ('c', 'person@mosiah.org', '2026-11-01 00:00:00+00:00'), ('d', 'x@notexample.com', '2026-11-01 00:00:00+00:00')`,
+		`CREATE TABLE credentials (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, public_key BLOB NOT NULL DEFAULT x'', attestation_type TEXT NOT NULL DEFAULT 'none', transport TEXT NOT NULL DEFAULT '[]', sign_count INTEGER NOT NULL DEFAULT 0, aaguid BLOB NOT NULL DEFAULT x'', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+		`INSERT INTO users VALUES ('a', 'ci1@example.com', '2026-11-01 00:00:00+00:00'), ('b', 'ci2@Example.TEST', '2026-11-01 00:00:00+00:00'), ('c', 'person@mosiah.org', '2026-11-01 00:00:00+00:00'), ('d', 'x@notexample.com', '2026-11-01 00:00:00+00:00'), ('e', 'unfinished@example.com', '2026-11-01 00:00:00+00:00')`,
+		`INSERT INTO credentials (id, user_id) VALUES ('ca', 'a'), ('cb', 'b'), ('cc', 'c')`,
 	} {
 		if _, err := legacy.Exec(q); err != nil {
 			t.Fatal(err)
@@ -39,7 +41,8 @@ func TestMigrateOperatorMarksLegacyDomainsOnceAndNeverAgain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]bool{"a": true, "b": true, "c": false, "d": false}
+	// e is an unfinished sign-up on a legacy domain: a stranger's until it finishes.
+	want := map[string]bool{"a": true, "b": true, "c": false, "d": false, "e": false}
 	for id, marked := range want {
 		if got, err := store.IsOperatorAccount(id); err != nil || got != marked {
 			t.Fatalf("after the migration %s operator = %v, %v; want %v", id, got, err, marked)
@@ -138,5 +141,28 @@ func TestResumedSignUpIsNotSweptAndAGoneRowFailsCleanly(t *testing.T) {
 	}, 5)
 	if err == nil || !errors.Is(err, ErrUserGone) {
 		t.Fatalf("a finish for a deleted row = %v, want ErrUserGone", err)
+	}
+}
+
+// Review finding 2: an unfinished sign-up that an operator begun (marked) and
+// never finished is not an exemption for the next person to resume it.
+func TestResumingAnUnfinishedOperatorRowWithoutTheSecretLosesTheMark(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	h.config.RegistrationCap = 1
+	h.config.OperatorSecret = testOperatorSecret
+	addPasskey(t, h, "p1", "one@mosiah.org") // the cap is full
+	if rec := registerBeginAs(t, h, "ops@example.com", testOperatorSecret); rec.Code != http.StatusOK {
+		t.Fatalf("operator begin: %d", rec.Code)
+	}
+	u, _ := h.store.GetUserByEmail("ops@example.com")
+	if marked, _ := h.store.IsOperatorAccount(u.ID); !marked {
+		t.Fatal("the operator's begin did not mark the row")
+	}
+	// A stranger types the same address, with no secret, at a full cap.
+	if rec := registerBegin(t, h, "ops@example.com"); rec.Code != http.StatusForbidden {
+		t.Fatalf("a stranger resuming the operator's unfinished row: %d, want 403", rec.Code)
+	}
+	if marked, _ := h.store.IsOperatorAccount(u.ID); marked {
+		t.Fatal("the unfinished row kept its operator mark after a stranger's begin")
 	}
 }

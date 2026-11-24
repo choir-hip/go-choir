@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
 	"errors"
@@ -71,7 +72,12 @@ func (h *Handler) operatorRequest(r *http.Request) bool {
 		return false
 	}
 	got := r.Header.Get(OperatorHeader)
-	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(secret)) == 1
+	if got == "" {
+		return false
+	}
+	// Digests, so even the secret's length is not timed.
+	a, b := sha256.Sum256([]byte(got)), sha256.Sum256([]byte(secret))
+	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
 }
 
 // CountRegisteredUsers counts the accounts holding at least one passkey that
@@ -94,6 +100,16 @@ func countRegistered(q queryRower) (int, error) {
 // begins again is in a ceremony, and the sweep must not take the row.
 func (s *Store) RefreshSignUp(userID string) error {
 	_, err := s.db.Exec(`UPDATE users SET created_at = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM credentials WHERE user_id = ?)`, time.Now().UTC(), userID, userID)
+	return err
+}
+
+// ClearUnfinishedOperatorMark removes the operator mark from a row that holds
+// no passkey: it was set by an earlier begin that carried the secret and was
+// never finished. A begin without the secret calls it before the cap is
+// asked, so a stranger who resumes the row does not inherit the exemption;
+// a begin with the secret marks the row again afterwards.
+func (s *Store) ClearUnfinishedOperatorMark(userID string) error {
+	_, err := s.db.Exec(`UPDATE users SET operator = 0 WHERE id = ? AND operator = 1 AND NOT EXISTS (SELECT 1 FROM credentials WHERE user_id = ?)`, userID, userID)
 	return err
 }
 

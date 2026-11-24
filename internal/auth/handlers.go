@@ -663,6 +663,14 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 		}
 		// User exists but has no credentials (started but didn't complete registration).
 		// Allow them to proceed with registration, unless the cap is reached.
+		// An operator mark left by an unfinished begin is not inherited.
+		if !operator {
+			if err := h.store.ClearUnfinishedOperatorMark(user.ID); err != nil {
+				log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=error step=clear_operator_mark error=%q", emailHash, user.ID, err)
+				writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
+				return
+			}
+		}
 		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, user.ID, req.Email, operator) {
 			return
 		}
