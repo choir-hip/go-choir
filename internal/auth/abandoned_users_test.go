@@ -94,3 +94,45 @@ func TestSweepAbandonedUsersFreesTheEmailForANewAttempt(t *testing.T) {
 		t.Fatalf("a begin after the sweep: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// Failure modes 4 and 5, completed (review of 2026-11-24): a session or an
+// account-set membership with no passkey keeps the row, and so does a
+// ceremony still live (a returning person's old row, begun a minute ago).
+func TestSweepKeepsRowsWithASessionAMembershipOrALiveChallenge(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	ctx := context.Background()
+	db := h.store.DB()
+	for _, id := range []string{"with-session", "with-member", "with-challenge", "with-expired-challenge"} {
+		if _, err := h.store.CreateUser(id, id+"@mosiah.org"); err != nil {
+			t.Fatal(err)
+		}
+		backdateUser(t, h, id, 90*24*time.Hour)
+	}
+	now := time.Now().UTC()
+	if _, err := db.Exec(`INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at, created_at) VALUES ('s1', 'with-session', 'h', ?, ?)`, now.Add(time.Hour), now); err != nil {
+		t.Fatalf("session fixture: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO account_set (id, handle_hash, active_user_id, created_at, last_used_at) VALUES ('set1', 'hh', 'with-member', ?, ?)`, now, now); err != nil {
+		t.Fatalf("account set fixture: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO account_set_member (set_id, user_id, refresh_session_id, added_at) VALUES ('set1', 'with-member', 'rs', ?)`, now); err != nil {
+		t.Fatalf("member fixture: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO challenge_state (id, user_id, type, challenge, expires_at, created_at) VALUES ('c1', 'with-challenge', 'registration', 'x', ?, ?)`, now.Add(5*time.Minute), now); err != nil {
+		t.Fatalf("challenge fixture: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO challenge_state (id, user_id, type, challenge, expires_at, created_at) VALUES ('c2', 'with-expired-challenge', 'registration', 'x', ?, ?)`, now.Add(-time.Hour), now.Add(-2*time.Hour)); err != nil {
+		t.Fatalf("expired challenge fixture: %v", err)
+	}
+	if _, err := h.store.SweepAbandonedUsers(ctx, now.Add(-AbandonedUserRetention)); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"with-session", "with-member", "with-challenge"} {
+		if !userExists(h, id) {
+			t.Fatalf("the sweep deleted %s", id)
+		}
+	}
+	if userExists(h, "with-expired-challenge") {
+		t.Fatal("a row whose only challenge expired should be swept")
+	}
+}

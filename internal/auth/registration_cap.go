@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"crypto/subtle"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,8 +20,9 @@ import (
 // hold a passkey (abandoned ceremonies do not count). At the cap a new
 // sign-up, or an incomplete one resuming, is refused before any user row is
 // written, and the email goes on the waitlist for the owner to invite later.
-// The finish re-checks, so ceremonies begun below the cap cannot all land
-// above it. A count that cannot be read refuses (fail closed). 0 is no cap.
+// The finish stores the passkey and counts in one transaction, so ceremonies
+// begun below the cap cannot all land above it. The operator's own accounts
+// (a secret the server checks) are not counted. A count that cannot be read refuses (fail closed). 0 is no cap.
 
 const registrationWaitlistCode = "registration_waitlist"
 
@@ -35,51 +39,103 @@ type WaitlistEntry struct {
 	Attempts   int
 }
 
-// CountRegisteredUsers counts users holding at least one passkey.
+// OperatorHeader carries the operator secret on a registration made by the
+// operator's own tools (CI, drills). See Config.OperatorSecret.
+const OperatorHeader = "X-Choir-Operator"
+
+// ErrRegistrationClosed is the cap refusing a passkey at the moment it would
+// be stored.
+var ErrRegistrationClosed = errors.New("registration is closed")
+
+// normalizeEmail is the one spelling of an address the register handlers
+// store and look up: surrounding space removed and the domain lower-cased
+// (the local part keeps its case, as sign-in has always matched it).
+func normalizeEmail(email string) string {
+	email = strings.TrimSpace(email)
+	if at := strings.LastIndex(email, "@"); at >= 0 {
+		return email[:at+1] + strings.ToLower(email[at+1:])
+	}
+	return email
+}
+
+// operatorRequest reports whether r carries the operator secret. With no
+// secret configured nothing is an operator.
+func (h *Handler) operatorRequest(r *http.Request) bool {
+	secret := h.config.OperatorSecret
+	if secret == "" {
+		return false
+	}
+	got := r.Header.Get(OperatorHeader)
+	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(secret)) == 1
+}
+
+// CountRegisteredUsers counts the accounts holding at least one passkey that
+// are not the operator's: each gets a computer, which is what binds.
 func (s *Store) CountRegisteredUsers() (int, error) {
+	return countRegistered(s.db)
+}
+
+type queryRower interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func countRegistered(q queryRower) (int, error) {
 	var n int
-	err := s.db.QueryRow("SELECT COUNT(DISTINCT user_id) FROM credentials").Scan(&n)
+	err := q.QueryRow(`SELECT COUNT(DISTINCT c.user_id) FROM credentials c JOIN users u ON u.id = c.user_id WHERE u.operator = 0`).Scan(&n)
 	return n, err
 }
 
-// CountRegisteredUsersSplit counts users holding a passkey, apart by whether
-// their address is on one of testDomains (case-insensitive, lower-case
-// domains): people, then test addresses.
-func (s *Store) CountRegisteredUsersSplit(testDomains []string) (people, test int, err error) {
-	total, err := s.CountRegisteredUsers()
-	if err != nil {
-		return 0, 0, err
-	}
-	if len(testDomains) == 0 {
-		return total, 0, nil
-	}
-	marks := strings.TrimSuffix(strings.Repeat("?,", len(testDomains)), ",")
-	args := make([]any, len(testDomains))
-	for i, d := range testDomains {
-		args[i] = d
-	}
-	err = s.db.QueryRow(`SELECT COUNT(DISTINCT c.user_id) FROM credentials c JOIN users u ON u.id = c.user_id
-		WHERE lower(substr(u.email, instr(u.email, '@') + 1)) IN (`+marks+`)`, args...).Scan(&test)
-	if err != nil {
-		return 0, 0, err
-	}
-	return total - test, test, nil
+// MarkOperatorAccount marks an account as the operator's own.
+func (s *Store) MarkOperatorAccount(userID string) error {
+	_, err := s.db.Exec(`UPDATE users SET operator = 1 WHERE id = ?`, userID)
+	return err
 }
 
-// isTestAddress reports whether email is on one of the configured test
-// domains. With none configured every address is a person's.
-func isTestAddress(email string, testDomains []string) bool {
-	at := strings.LastIndex(email, "@")
-	if at < 0 {
-		return false
+// IsOperatorAccount reports whether the account is marked as the operator's.
+func (s *Store) IsOperatorAccount(userID string) (bool, error) {
+	var v int
+	if err := s.db.QueryRow(`SELECT operator FROM users WHERE id = ?`, userID).Scan(&v); err != nil {
+		return false, err
 	}
-	domain := strings.ToLower(strings.TrimSpace(email[at+1:]))
-	for _, d := range testDomains {
-		if domain == d {
-			return true
+	return v != 0, nil
+}
+
+// CreateCredentialWithinCap stores a passkey, refusing with
+// ErrRegistrationClosed when the user is a new holder, not the operator's,
+// and cap holders already exist (cap 0: no cap). The count and the insert
+// are one transaction on the store's one connection, so concurrent finishes
+// cannot overshoot.
+func (s *Store) CreateCredentialWithinCap(c *Credential, cap int) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if cap > 0 {
+		var operator, held int
+		if err := tx.QueryRow(`SELECT operator FROM users WHERE id = ?`, c.UserID).Scan(&operator); err != nil {
+			return fmt.Errorf("read account: %w", err)
+		}
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM credentials WHERE user_id = ?`, c.UserID).Scan(&held); err != nil {
+			return fmt.Errorf("read credentials: %w", err)
+		}
+		if operator == 0 && held == 0 {
+			n, err := countRegistered(tx)
+			if err != nil {
+				return fmt.Errorf("count registered users: %w", err)
+			}
+			if n >= cap {
+				return ErrRegistrationClosed
+			}
 		}
 	}
-	return false
+	if _, err := tx.Exec(
+		"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt,
+	); err != nil {
+		return fmt.Errorf("create credential %q: %w", c.ID, err)
+	}
+	return tx.Commit()
 }
 
 // AddRegistrationWaitlist records a refused sign-up; a repeat attempt bumps
@@ -111,15 +167,20 @@ func (s *Store) ListRegistrationWaitlist() ([]WaitlistEntry, error) {
 }
 
 // registrationClosed reports whether a sign-up for userID (empty for a new
-// user) with address email must be refused. A user who already holds a
-// passkey is never closed out. An unreadable count closes registration. A
-// test address is bounded by its own cap (RegistrationTestCap), so CI and
-// drills neither use the people's room nor bypass it.
-func (h *Handler) registrationClosed(userID, email string) (bool, error) {
-	if h.config == nil || (h.config.RegistrationCap <= 0 && h.config.RegistrationTestCap <= 0) {
+// user) must be refused. The operator's accounts and a user who already holds
+// a passkey are never closed out. An unreadable count closes registration.
+func (h *Handler) registrationClosed(userID string, operator bool) (bool, error) {
+	if h.config == nil || h.config.RegistrationCap <= 0 || operator {
 		return false, nil
 	}
 	if userID != "" {
+		marked, err := h.store.IsOperatorAccount(userID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return true, fmt.Errorf("read account: %w", err)
+		}
+		if marked {
+			return false, nil
+		}
 		creds, err := h.store.GetCredentialsByUserID(userID)
 		if err != nil {
 			return true, fmt.Errorf("read credentials: %w", err)
@@ -128,20 +189,17 @@ func (h *Handler) registrationClosed(userID, email string) (bool, error) {
 			return false, nil
 		}
 	}
-	people, test, err := h.store.CountRegisteredUsersSplit(h.config.RegistrationTestDomains)
+	n, err := h.store.CountRegisteredUsers()
 	if err != nil {
 		return true, fmt.Errorf("count registered users: %w", err)
 	}
-	if isTestAddress(email, h.config.RegistrationTestDomains) {
-		return h.config.RegistrationTestCap > 0 && test >= h.config.RegistrationTestCap, nil
-	}
-	return h.config.RegistrationCap > 0 && people >= h.config.RegistrationCap, nil
+	return n >= h.config.RegistrationCap, nil
 }
 
 // refuseIfRegistrationClosed answers the request and returns true when the
 // cap refuses this sign-up. email is waitlisted when non-empty.
-func (h *Handler) refuseIfRegistrationClosed(w http.ResponseWriter, operation, emailHash, userID, email string) bool {
-	closed, err := h.registrationClosed(userID, email)
+func (h *Handler) refuseIfRegistrationClosed(w http.ResponseWriter, operation, emailHash, userID, email string, operator bool) bool {
+	closed, err := h.registrationClosed(userID, operator)
 	if !closed {
 		return false
 	}
@@ -150,6 +208,12 @@ func (h *Handler) refuseIfRegistrationClosed(w http.ResponseWriter, operation, e
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "registration is unavailable right now; please try again later"})
 		return true
 	}
+	h.writeWaitlisted(w, operation, emailHash, email)
+	return true
+}
+
+// writeWaitlisted keeps the email on the list and says so, as it stands.
+func (h *Handler) writeWaitlisted(w http.ResponseWriter, operation, emailHash, email string) {
 	if email != "" {
 		if err := h.store.AddRegistrationWaitlist(email); err != nil {
 			log.Printf("[auth] operation=%s email_hash=%s result=error step=waitlist error=%q", operation, emailHash, err)
@@ -157,7 +221,6 @@ func (h *Handler) refuseIfRegistrationClosed(w http.ResponseWriter, operation, e
 	}
 	log.Printf("[auth] operation=%s email_hash=%s result=waitlisted cap=%d", operation, emailHash, h.config.RegistrationCap)
 	writeJSON(w, http.StatusForbidden, waitlistResponse{Error: registrationWaitlistMessage, Code: registrationWaitlistCode})
-	return true
 }
 
 type waitlistResponse struct {

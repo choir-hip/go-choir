@@ -62,14 +62,14 @@ type Config struct {
 	// sign-up is refused and its email waitlisted (registration_cap.go).
 	RegistrationCap int
 
-	// RegistrationTestDomains are the address domains of test accounts (CI
-	// and drills; AUTH_REGISTRATION_TEST_DOMAINS, comma-separated). Such an
-	// address is counted against RegistrationTestCap
-	// (AUTH_REGISTRATION_TEST_CAP) and never against RegistrationCap, so it
-	// neither uses the people's room nor lets a stranger bypass it. Empty:
-	// every address is a person's.
-	RegistrationTestDomains []string
-	RegistrationTestCap     int
+	// OperatorSecret (the contents of AUTH_OPERATOR_SECRET_FILE) is what
+	// the operator's own tools (CI, drills, scripts/test-computer-create) send
+	// in OperatorHeader so that the account they register is marked an
+	// operator account: it is not counted against RegistrationCap and gets
+	// the operator's computer size. Nothing a stranger can type stands in for
+	// it, an address least of all. Empty: no account can be marked, and the
+	// header is ignored.
+	OperatorSecret string
 
 	// EmailSignIn is the auth.email_sign_in switch (AUTH_EMAIL_SIGN_IN: on,
 	// true, 1 or yes). Off, begin answers as if every address were unknown,
@@ -88,6 +88,9 @@ type Config struct {
 
 // DefaultEmailSessionTTL is the absolute life of an email session.
 const DefaultEmailSessionTTL = 7 * 24 * time.Hour
+
+// minOperatorSecretLen is the shortest accepted operator secret.
+const minOperatorSecretLen = 32
 
 // minEmailCodeKeyLen is the shortest accepted AUTH_EMAIL_CODE_KEY.
 const minEmailCodeKeyLen = 32
@@ -152,17 +155,18 @@ func LoadConfig() (*Config, error) {
 		cfg.RegistrationCap = n
 	}
 
-	if v := strings.TrimSpace(os.Getenv("AUTH_REGISTRATION_TEST_CAP")); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			return nil, fmt.Errorf("auth config: AUTH_REGISTRATION_TEST_CAP must be a whole number >= 0 (0 is no cap), got %q", v)
+	// A named secret file that cannot be read, or is short, stops the
+	// service: the operator would otherwise be silently counted as people.
+	if path := strings.TrimSpace(os.Getenv("AUTH_OPERATOR_SECRET_FILE")); path != "" {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("auth config: AUTH_OPERATOR_SECRET_FILE unreadable: %w", err)
 		}
-		cfg.RegistrationTestCap = n
-	}
-	for _, d := range strings.Split(os.Getenv("AUTH_REGISTRATION_TEST_DOMAINS"), ",") {
-		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
-			cfg.RegistrationTestDomains = append(cfg.RegistrationTestDomains, d)
+		secret := strings.TrimSpace(string(raw))
+		if len(secret) < minOperatorSecretLen {
+			return nil, fmt.Errorf("auth config: AUTH_OPERATOR_SECRET_FILE holds fewer than %d bytes", minOperatorSecretLen)
 		}
+		cfg.OperatorSecret = secret
 	}
 
 	cfg.EmailSignIn = envOn("AUTH_EMAIL_SIGN_IN")

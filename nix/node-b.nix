@@ -19,21 +19,29 @@ let
   # signup once we hit limits. then i will get more infra"). One place, read by
   # the auth service (it refuses at the cap) and by vmctl (the capacity
   # reading on /api/pulse/summary shows the same number). The cap counts
-  # accounts holding a passkey whose address is not a test address; test
-  # addresses (CI and drills) have their own cap so they neither use the
-  # room nor bypass it. The owner changes a number here, in a reviewed commit
-  # and a deploy (an owner act: it spends the owner's host); 0 is no cap.
-  # Derivation, from Node B on 2026-11-23 (docs/changes.md, the capacity
-  # entry): the binding limit is disk, not memory. 153 GiB free less the 60
-  # GiB deploy floor less about 40 GiB kept for the paper's growth leaves
-  # about 50 GiB; a new computer takes 2.7 GiB (the lightest measured, with
-  # its snapshot) to 9 GiB (the heaviest measured), so about 20 computers
-  # at the light figure. 17 accounts hold a passkey now (4 hold a computer).
-  # 17 + 23 = 40. Memory carries it: at most 4 to 6 strangers' 2 GiB
-  # computers run at once beside the paper, and the idle ones hibernate.
-  registrationCap = 40;
-  registrationTestCap = 1100; # 908 test accounts exist; about 40 a month join
-  registrationTestDomains = "example.com,example.test";
+  # accounts that hold a passkey, because each is given a computer, and the
+  # computer's disk is what binds, not the account rows (owner, 2026-11-24:
+  # "i dont think we have a 40 account cap ... the 'real persons' werent
+  # real"). The operator's own accounts (CI, drills) are not counted; they are
+  # marked by the operator secret below, never by an address a stranger can
+  # type. The owner changes the number here, in a reviewed commit and a
+  # deploy (an owner act: it spends the owner's host); 0 is no cap.
+  # Arithmetic, from Node B on 2026-11-24 (docs/changes.md, the capacity
+  # entry): 154 GiB free of 476; less the 60 GiB deploy floor; less 40 GiB
+  # kept for the paper's growth: 154 - 60 - 40 = 54 GiB for new computers.
+  # A new computer takes about 3 GiB (2.7 GiB measured for the lightest, with
+  # its snapshot; the 2 GiB memory image is most of it), so 54 / 3 = 18 new
+  # computers. 4 computers already exist (their disk is inside the 154), so
+  # the cap on accounts that may each hold a computer is 4 + 18 = 22.
+  # Hibernation frees memory, not disk. Memory is not the limit: at most 4 to
+  # 6 strangers' 2 GiB computers run at once beside the paper, and idle ones
+  # hibernate. Raise the number when the Pulse "Disk free" reading allows it.
+  registrationCap = 22;
+  # The operator's secret (AUTH_OPERATOR_SECRET_FILE): generated once on the
+  # host, 0600; the operator's tools read it over ssh and send it as the
+  # X-Choir-Operator header on register/begin (CHOIR_OPERATOR_SECRET in
+  # frontend/tests/helpers/auth.js). Missing or short, auth refuses to start.
+  operatorSecretFile = "/var/lib/go-choir/auth-signing/operator-secret";
   # Host fetch route (SDC NET-01; internal/hostfetch,
   # docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md). One
   # list, read by vmctl (writes the grant on the credential disk at cold
@@ -520,6 +528,7 @@ let
   hostSecretPaths = {
     jwtKey = "-${authSigningDir}/ed25519-key";
     emailCodeKey = "-${authSigningDir}/email-code-key";
+    operatorSecret = "-${operatorSecretFile}";
     providerEnv = "-/var/lib/go-choir/gateway-provider.env";
     codexAuth = "-/var/lib/go-choir/codex-auth.json";
     maildEnv = "-/var/lib/go-choir/maild.env";
@@ -885,6 +894,8 @@ in
         # 0600, kept beside the signing key. Missing with the switch on, the
         # service refuses to start.
         "${pkgs.bash}/bin/bash -c 'test -s /var/lib/go-choir/auth-signing/email-code-key || (umask 077 && head -c 48 /dev/urandom | base64 -w0 > /var/lib/go-choir/auth-signing/email-code-key)'"
+        # The operator secret (AUTH_OPERATOR_SECRET_FILE), generated once, 0600.
+        "${pkgs.bash}/bin/bash -c 'test -s ${operatorSecretFile} || (umask 077 && head -c 48 /dev/urandom | base64 -w0 > ${operatorSecretFile})'"
       ];
       ExecStart = "${serviceExec "auth" goChoirPackages.auth}";
       Restart = "on-failure";
@@ -892,7 +903,7 @@ in
       StateDirectory = "go-choir/auth";
       # Read-write paths for auth persistence and signing key.
       ReadWritePaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/auth-signing" ];
-      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" "emailCodeKey" ];
+      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" "emailCodeKey" "operatorSecret" ];
       # auth.db holds sessions and API-key records; it was 0644 in a 0755
       # directory, private only because /var/lib/go-choir is 0750.
       StateDirectoryMode = "0750";
@@ -919,8 +930,7 @@ in
         # Sign-up cap with a waitlist (L4-03, internal/auth/registration_cap.go);
         # the numbers are at the top of this file (registrationCap).
         "AUTH_REGISTRATION_CAP=${toString registrationCap}"
-        "AUTH_REGISTRATION_TEST_CAP=${toString registrationTestCap}"
-        "AUTH_REGISTRATION_TEST_DOMAINS=${registrationTestDomains}"
+        "AUTH_OPERATOR_SECRET_FILE=${operatorSecretFile}"
         internalAuthEnv
       ];
     };
@@ -1536,10 +1546,8 @@ in
       Environment = [
         "VMCTL_PORT=8083"
         # The capacity reading on /api/pulse/summary shows the sign-up cap
-        # the auth service enforces (the same values, at the top of this file).
+        # the auth service enforces (the same value, at the top of this file).
         "VMCTL_REGISTRATION_CAP=${toString registrationCap}"
-        "VMCTL_REGISTRATION_TEST_CAP=${toString registrationTestCap}"
-        "VMCTL_REGISTRATION_TEST_DOMAINS=${registrationTestDomains}"
         "VMCTL_GUEST_DNS_PORT=${toString guestDnsPort}"
         # SEC-10 guest side (internal/vmmanager/guest_dns.go): the computers
         # named here boot with choir.dns=<their tap host address> and resolve

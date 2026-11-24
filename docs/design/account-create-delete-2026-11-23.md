@@ -92,3 +92,5 @@ Estimate with one landing and one deploy at a time (about 2 hours each) and two 
 ## What I could not confirm
 
 The deployed value of the registration cap; whether passkey *creation* works in the sheet; Apple's exact deletion wording (memory); the real footprint of an empty computer; whether any code removes capture bodies, mail or gateway identity by user; whether the proxy can serve the AASA unchanged; the Exact passkeys package on a device (its checklist marks it undriven).
+
+Note 2026-11-24: the sign-up cap is now set (`registrationCap` in `nix/node-b.nix`); statements here that no cap is set are superseded by docs/changes.md.

@@ -221,18 +221,20 @@ func TestGuestCacheReturnEnv(t *testing.T) {
 }
 
 // The capacity reading shows the sign-up cap the auth service enforces; a
-// malformed value reads as no cap, never a crash at boot.
+// malformed value reads as unreadable, never as no cap and never a crash.
 func TestRegistrationCapConfigFromEnv(t *testing.T) {
-	t.Setenv("VMCTL_REGISTRATION_CAP", "40")
-	t.Setenv("VMCTL_REGISTRATION_TEST_CAP", "1100")
-	t.Setenv("VMCTL_REGISTRATION_TEST_DOMAINS", "Example.com, example.test")
-	cfg := registrationCapConfigFromEnv()
-	if cfg.Cap != 40 || cfg.TestCap != 1100 || len(cfg.TestDomains) != 2 || cfg.TestDomains[0] != "example.com" {
+	t.Setenv("VMCTL_REGISTRATION_CAP", "22")
+	if cfg := registrationCapConfigFromEnv(); cfg.Cap != 22 || cfg.Unreadable {
 		t.Fatalf("config = %+v", cfg)
 	}
-	t.Setenv("VMCTL_REGISTRATION_CAP", "many")
-	t.Setenv("VMCTL_REGISTRATION_TEST_CAP", "-3")
-	if cfg := registrationCapConfigFromEnv(); cfg.Cap != 0 || cfg.TestCap != 0 {
-		t.Fatalf("malformed values = %+v, want no cap", cfg)
+	for _, bad := range []string{"many", "-3"} {
+		t.Setenv("VMCTL_REGISTRATION_CAP", bad)
+		if cfg := registrationCapConfigFromEnv(); !cfg.Unreadable {
+			t.Fatalf("%q = %+v, want unreadable", bad, cfg)
+		}
+	}
+	t.Setenv("VMCTL_REGISTRATION_CAP", "")
+	if cfg := registrationCapConfigFromEnv(); cfg.Cap != 0 || cfg.Unreadable {
+		t.Fatalf("unset = %+v, want no cap", cfg)
 	}
 }

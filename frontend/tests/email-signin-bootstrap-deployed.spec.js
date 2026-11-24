@@ -135,7 +135,11 @@ test('bootstrap the email sign-in test account', async ({ page, authenticator })
   // after the window is safe; back-to-back test computers hit it.
   const continueRetrying429 = async (route) => {
     for (let attempt = 0; ; attempt++) {
-      const res = await route.fetch();
+      // The operator's own account is marked by a secret, not an address
+      // (CHOIR_OPERATOR_SECRET; internal/auth OperatorHeader).
+      const operatorSecret = process.env.CHOIR_OPERATOR_SECRET || '';
+      const marks = operatorSecret && route.request().url().endsWith('/auth/register/begin');
+      const res = await route.fetch(marks ? { headers: { ...route.request().headers(), 'x-choir-operator': operatorSecret } } : undefined);
       if (res.status() !== 429 || attempt >= 3) {
         await route.fulfill({ response: res });
         return;

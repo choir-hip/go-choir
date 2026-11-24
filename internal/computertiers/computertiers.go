@@ -184,6 +184,9 @@ func (t Tiers) TestComputer(computerID string) bool {
 // TestComputerIDs lists the named test computers, sorted.
 func (t Tiers) TestComputerIDs() []string { return sortedKeys(t.test) }
 
+// OperatorProofComputerIDs lists the operator proof computers, sorted.
+func (t Tiers) OperatorProofComputerIDs() []string { return sortedKeys(t.proof) }
+
 // PaidUserIDs lists the paid accounts, sorted.
 func (t Tiers) PaidUserIDs() []string { return sortedKeys(t.paid) }
 

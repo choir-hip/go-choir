@@ -3,8 +3,13 @@ package auth
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -103,10 +108,10 @@ func TestRegistrationCapRefusesAndWaitlists(t *testing.T) {
 		t.Fatalf("existing user: %d, want 409", rec.Code)
 	}
 	// The finish re-checks: a ceremony begun below the cap cannot finish above it.
-	if closed, err := h.registrationClosed("abandoned", "abandoned@mosiah.org"); err != nil || !closed {
+	if closed, err := h.registrationClosed("abandoned", false); err != nil || !closed {
 		t.Fatalf("registrationClosed = %v, %v; want closed", closed, err)
 	}
-	if closed, err := h.registrationClosed("u1", "one@mosiah.org"); err != nil || closed {
+	if closed, err := h.registrationClosed("u1", false); err != nil || closed {
 		t.Fatalf("a user who already has a passkey is never closed out: %v, %v", closed, err)
 	}
 	// Raising the cap reopens.
@@ -122,7 +127,7 @@ func TestRegistrationCapFailsClosed(t *testing.T) {
 	if err := h.store.db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if closed, err := h.registrationClosed("", "x@mosiah.org"); err == nil || !closed {
+	if closed, err := h.registrationClosed("", false); err == nil || !closed {
 		t.Fatalf("an unreadable count must close registration: %v, %v", closed, err)
 	}
 }
@@ -148,68 +153,180 @@ func TestRegistrationCapFromEnv(t *testing.T) {
 	}
 }
 
-// Test addresses (example.com, example.test: the CI and drill accounts, 908
-// of the 925 passkey holders on Node B on 2026-11-23) are counted apart, so
-// they neither fill nor bypass the owner's cap for strangers:
-//  8. test addresses counting against the cap for people (CI would close
-//     sign-up within days);
-//  9. a test address bypassing the cap for people (an address nobody can
-//     verify, so a stranger could use it): it has its own, separate cap;
-//  10. no test domains configured leaving every address a person.
+// What binds is computers, and a computer is made for each account that
+// holds a passkey. The cap counts those accounts, except the operator's own
+// (CI and drills), and the operator's mark is a secret the server checks, not
+// an address a stranger can type (review of 2026-11-24, B1):
+//  8. an address on a test domain (example.com) counting as exempt: it is a
+//     person's like any other;
+//  9. a wrong, empty or absent operator secret exempting anyone, and an empty
+//     configured secret making an empty header an operator;
+//  10. an operator account filling the room for people;
+//  11. count and insert racing: many finishes at cap-1 all landing;
+//  12. the same address with spaces or a different case in the domain
+//      slipping past or splitting the count.
 
-func TestRegistrationCapCountsTestAddressesApart(t *testing.T) {
+const testOperatorSecret = "operator-secret-0123456789-0123456789-abcdef"
+
+func registerBeginAs(t *testing.T, h *Handler, email, secret string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin", bytes.NewBufferString(`{"email":"`+email+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	if secret != "" {
+		req.Header.Set(OperatorHeader, secret)
+	}
+	rec := httptest.NewRecorder()
+	h.HandleRegisterBegin(rec, req)
+	return rec
+}
+
+func TestATestAddressIsAPersonAtTheCap(t *testing.T) {
 	h, _ := testHandlerEnv(t)
 	h.config.RegistrationCap = 2
-	h.config.RegistrationTestCap = 3
-	h.config.RegistrationTestDomains = []string{"example.com", "example.test"}
-	addPasskey(t, h, "p1", "person@mosiah.org")
-	addPasskey(t, h, "t1", "ci1@example.com")
-	addPasskey(t, h, "t2", "ci2@Example.Test")
-
-	// Two test accounts do not use the people's room.
-	if rec := registerBegin(t, h, "second@mosiah.org"); rec.Code != http.StatusOK {
-		t.Fatalf("a person below the cap: %d %s", rec.Code, rec.Body.String())
-	}
-	addPasskey(t, h, "p2", "second-done@mosiah.org")
-	if rec := registerBegin(t, h, "third@mosiah.org"); rec.Code != http.StatusForbidden {
-		t.Fatalf("a person at the cap: %d, want 403", rec.Code)
-	}
-	// A test address is bounded by its own cap, not by the people's.
-	if rec := registerBegin(t, h, "ci3@example.com"); rec.Code != http.StatusOK {
-		t.Fatalf("a test address below its cap: %d %s", rec.Code, rec.Body.String())
-	}
-	addPasskey(t, h, "t3", "ci3-done@example.com")
-	rec := registerBegin(t, h, "ci4@example.com")
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("a test address at its cap: %d, want 403", rec.Code)
-	}
-	if _, err := h.store.GetUserByEmail("ci4@example.com"); err == nil {
-		t.Fatal("a refused test address created a user")
-	}
-
-	// No test domains: every address is a person.
-	h.config.RegistrationTestDomains = nil
-	h.config.RegistrationCap = 3
-	if rec := registerBegin(t, h, "ci5@example.com"); rec.Code != http.StatusForbidden {
-		t.Fatalf("with no test domains example.com counts as a person: %d, want 403", rec.Code)
+	h.config.OperatorSecret = testOperatorSecret
+	addPasskey(t, h, "p1", "one@mosiah.org")
+	addPasskey(t, h, "p2", "ci1@example.com")
+	for _, email := range []string{"x@example.com", "x@example.test", "x@EXAMPLE.COM", " x@example.com "} {
+		if rec := registerBegin(t, h, email); rec.Code != http.StatusForbidden {
+			t.Fatalf("%q at the cap: %d, want 403 (a typed test address must not be exempt)", email, rec.Code)
+		}
 	}
 }
 
-func TestRegistrationTestCapFromEnv(t *testing.T) {
-	t.Setenv("AUTH_REGISTRATION_CAP", "40")
-	t.Setenv("AUTH_REGISTRATION_TEST_CAP", "1100")
-	t.Setenv("AUTH_REGISTRATION_TEST_DOMAINS", " Example.com, example.test ,")
-	cfg, err := LoadConfig()
+func TestOnlyTheOperatorSecretExemptsAnAccount(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	h.config.RegistrationCap = 1
+	h.config.OperatorSecret = testOperatorSecret
+	addPasskey(t, h, "p1", "one@mosiah.org")
+	for _, secret := range []string{"wrong", testOperatorSecret + "x", testOperatorSecret[:10]} {
+		if rec := registerBeginAs(t, h, "ci@example.com", secret); rec.Code != http.StatusForbidden {
+			t.Fatalf("secret %q: %d, want 403", secret, rec.Code)
+		}
+	}
+	if rec := registerBeginAs(t, h, "ci@example.com", testOperatorSecret); rec.Code != http.StatusOK {
+		t.Fatalf("the operator secret: %d %s", rec.Code, rec.Body.String())
+	}
+	u, err := h.store.GetUserByEmail("ci@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.RegistrationTestCap != 1100 || len(cfg.RegistrationTestDomains) != 2 ||
-		cfg.RegistrationTestDomains[0] != "example.com" || cfg.RegistrationTestDomains[1] != "example.test" {
-		t.Fatalf("config = %d %v", cfg.RegistrationTestCap, cfg.RegistrationTestDomains)
+	if marked, err := h.store.IsOperatorAccount(u.ID); err != nil || !marked {
+		t.Fatalf("operator account marked = %v, %v", marked, err)
 	}
-	t.Setenv("AUTH_REGISTRATION_TEST_CAP", "-2")
-	if _, err := LoadConfig(); err == nil {
-		t.Fatal("AUTH_REGISTRATION_TEST_CAP=-2 must be refused at load")
+	// With no secret configured, the header means nothing, even empty.
+	h.config.OperatorSecret = ""
+	if rec := registerBeginAs(t, h, "ci2@example.com", "anything"); rec.Code != http.StatusForbidden {
+		t.Fatalf("no secret configured: %d, want 403", rec.Code)
+	}
+}
+
+func TestOperatorAccountsDoNotFillTheRoomForPeople(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	h.config.RegistrationCap = 2
+	h.config.OperatorSecret = testOperatorSecret
+	for i, id := range []string{"o1", "o2", "o3"} {
+		addPasskey(t, h, id, id+"@example.com")
+		if err := h.store.MarkOperatorAccount(id); err != nil {
+			t.Fatal(err, i)
+		}
+	}
+	addPasskey(t, h, "p1", "one@mosiah.org")
+	if rec := registerBegin(t, h, "two@mosiah.org"); rec.Code != http.StatusOK {
+		t.Fatalf("a person with three operator accounts present: %d %s", rec.Code, rec.Body.String())
+	}
+	n, err := h.store.CountRegisteredUsers()
+	if err != nil || n != 1 {
+		t.Fatalf("counted = %d, %v; want 1", n, err)
+	}
+}
+
+func TestFinishAtTheCapIsAtomic(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	const cap = 5
+	for i := 0; i < cap-1; i++ {
+		addPasskey(t, h, "p"+string(rune('a'+i)), "p"+string(rune('a'+i))+"@mosiah.org")
+	}
+	const racers = 12
+	for i := 0; i < racers; i++ {
+		if _, err := h.store.CreateUser("r"+string(rune('a'+i)), "r"+string(rune('a'+i))+"@mosiah.org"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var wg sync.WaitGroup
+	var landed, refused int32
+	for i := 0; i < racers; i++ {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			err := h.store.CreateCredentialWithinCap(&Credential{
+				ID: "cred-" + id, UserID: id, PublicKey: []byte("k"), AttestationType: "none",
+				Transport: `["internal"]`, AAGUID: make([]byte, 16), Flags: "{}", CreatedAt: time.Now().UTC(),
+			}, cap)
+			switch {
+			case err == nil:
+				atomic.AddInt32(&landed, 1)
+			case errors.Is(err, ErrRegistrationClosed):
+				atomic.AddInt32(&refused, 1)
+			default:
+				t.Errorf("unexpected error: %v", err)
+			}
+		}("r" + string(rune('a'+i)))
+	}
+	wg.Wait()
+	if landed != 1 || refused != racers-1 {
+		t.Fatalf("landed %d, refused %d; want 1 and %d", landed, refused, racers-1)
+	}
+	if n, _ := h.store.CountRegisteredUsers(); n != cap {
+		t.Fatalf("count = %d, want %d", n, cap)
+	}
+}
+
+func TestAddressesAreNormalisedOnce(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	h.config.RegistrationCap = 3
+	if rec := registerBegin(t, h, "  Pat@Mosiah.ORG "); rec.Code != http.StatusOK {
+		t.Fatalf("spaced address: %d %s", rec.Code, rec.Body.String())
+	}
+	if _, err := h.store.GetUserByEmail("Pat@mosiah.org"); err != nil {
+		t.Fatalf("the stored address is not the normalised one: %v", err)
+	}
+	// The same address typed another way resumes the one row; it is not a second user.
+	if rec := registerBegin(t, h, "Pat@mosiah.org  "); rec.Code != http.StatusOK {
+		t.Fatalf("second spelling: %d %s", rec.Code, rec.Body.String())
+	}
+	var n int
+	if err := h.store.DB().QueryRow("SELECT COUNT(*) FROM users WHERE lower(email) = 'pat@mosiah.org'").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("rows for one address = %d, %v", n, err)
+	}
+	if got := normalizeEmail("  A@B.Com "); got != "A@b.com" {
+		t.Fatalf("normalizeEmail = %q", got)
+	}
+}
+
+func TestOperatorSecretFromEnvFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	short := filepath.Join(dir, "short")
+	good := filepath.Join(dir, "good")
+	if err := os.WriteFile(short, []byte("tiny\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(good, []byte(testOperatorSecret+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AUTH_OPERATOR_SECRET_FILE", good)
+	cfg, err := LoadConfig()
+	if err != nil || cfg.OperatorSecret != testOperatorSecret {
+		t.Fatalf("good file: %q, %v", cfg.OperatorSecret, err)
+	}
+	for _, bad := range []string{short, filepath.Join(dir, "missing")} {
+		t.Setenv("AUTH_OPERATOR_SECRET_FILE", bad)
+		if _, err := LoadConfig(); err == nil {
+			t.Fatalf("AUTH_OPERATOR_SECRET_FILE=%s must refuse to start", bad)
+		}
+	}
+	t.Setenv("AUTH_OPERATOR_SECRET_FILE", "")
+	if cfg, err := LoadConfig(); err != nil || cfg.OperatorSecret != "" {
+		t.Fatalf("unset: %q, %v", cfg.OperatorSecret, err)
 	}
 }
 

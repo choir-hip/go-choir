@@ -108,6 +108,7 @@ func main() {
 		log.Printf("vmctl: pressure reclaim mode=%s signal=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.Signal, cfg.MinIdle, cfg.MaxCandidates)
 	}
 	registry.SetRegistrationCapConfig(registrationCapConfigFromEnv())
+	registry.SetOperatorAccountLookup(vmctl.OperatorAccountFromAuthDB(os.Getenv("VMCTL_RETENTION_AUTH_DB_PATH")))
 	admission := hostAdmissionConfigFromEnv()
 	registry.SetHostAdmissionConfig(admission)
 	log.Printf("vmctl: host admission mode=%s default_need_mib=%d min_need_mib=%d headroom_mib=%d settle=%s make_room=%s make_room_max_victims=%d make_room_settle=%s",
@@ -926,20 +927,18 @@ func retentionRulesFromEnv(cfg *vmctl.RetentionPruneConfig, prefix string) {
 
 // registrationCapConfigFromEnv reads the sign-up cap the auth service
 // enforces, for the capacity reading only (nix/node-b.nix sets both from one
-// value). A missing or malformed number reads as no cap.
+// value). A malformed number is marked unreadable, and the reading says so
+// rather than showing a cap of none.
 func registrationCapConfigFromEnv() vmctl.RegistrationCapConfig {
-	num := func(key string) int {
-		n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
-		if err != nil || n < 0 {
-			return 0
-		}
-		return n
+	raw := strings.TrimSpace(os.Getenv("VMCTL_REGISTRATION_CAP"))
+	if raw == "" {
+		return vmctl.RegistrationCapConfig{}
 	}
-	var domains []string
-	for _, d := range splitEnvList(os.Getenv("VMCTL_REGISTRATION_TEST_DOMAINS")) {
-		domains = append(domains, strings.ToLower(d))
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return vmctl.RegistrationCapConfig{Unreadable: true}
 	}
-	return vmctl.RegistrationCapConfig{Cap: num("VMCTL_REGISTRATION_CAP"), TestCap: num("VMCTL_REGISTRATION_TEST_CAP"), TestDomains: domains}
+	return vmctl.RegistrationCapConfig{Cap: n}
 }
 
 func splitEnvList(raw string) []string {
@@ -974,6 +973,10 @@ func warmnessPolicyConfigFromEnv() (vmctl.WarmnessPolicyConfig, error) {
 	cfg.TestComputerIDs = map[string]bool{}
 	for _, id := range tiers.TestComputerIDs() {
 		cfg.TestComputerIDs[id] = true
+	}
+	cfg.OperatorProofComputerIDs = map[string]bool{}
+	for _, id := range tiers.OperatorProofComputerIDs() {
+		cfg.OperatorProofComputerIDs[id] = true
 	}
 	return cfg, nil
 }

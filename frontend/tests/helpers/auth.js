@@ -25,6 +25,22 @@
  * @returns {Promise<{ok: boolean, user?: {id: string, email: string, created_at: string}}>}
  */
 export async function registerPasskey(page, email, baseURL = 'http://localhost:4173') {
+  // The operator's own accounts (CI, drills) are marked by a secret the auth
+  // service checks (CHOIR_OPERATOR_SECRET; internal/auth OperatorHeader), so
+  // they are not counted against the sign-up cap. No address stands in for it.
+  const operatorSecret = process.env.CHOIR_OPERATOR_SECRET || '';
+  const mark = operatorSecret
+    ? (route) => route.continue({ headers: { ...route.request().headers(), 'x-choir-operator': operatorSecret } })
+    : null;
+  if (mark) await page.route('**/auth/register/begin', mark);
+  try {
+    return await registerPasskeyInPage(page, email, baseURL);
+  } finally {
+    if (mark) await page.unroute('**/auth/register/begin', mark);
+  }
+}
+
+async function registerPasskeyInPage(page, email, baseURL) {
   return page.evaluate(async (opts) => {
     const { email, baseURL } = opts;
 

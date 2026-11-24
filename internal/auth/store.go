@@ -380,6 +380,9 @@ func (s *Store) bootstrap() error {
 	if err := s.migrateEmailVerifiedAt(); err != nil {
 		return fmt.Errorf("migrate email_verified_at: %w", err)
 	}
+	if err := s.migrateOperator(); err != nil {
+		return fmt.Errorf("migrate operator: %w", err)
+	}
 
 	// The legacy desktop handoff schema carried raw access and refresh bearer
 	// values. The redirect-only handoff now stores only a user reference, but
@@ -410,6 +413,36 @@ func (s *Store) migrateEmailVerifiedAt() error {
 	}
 	if _, err := tx.Exec(`UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL AND EXISTS (SELECT 1 FROM credentials WHERE credentials.user_id = users.id)`); err != nil {
 		return err
+	}
+	return tx.Commit()
+}
+
+// legacyTestDomains are the address domains the CI and drill accounts made
+// before the operator mark existed were registered on. The run that adds
+// users.operator marks the rows already on them, once, as the operator's;
+// after that no address marks anyone (only the operator secret does).
+var legacyTestDomains = []string{"example.com", "example.test"}
+
+// migrateOperator adds users.operator (the account is the operator's own:
+// not counted against the sign-up cap, and given the operator's computer
+// size) and, only on the run that adds it, backfills the existing rows on
+// legacyTestDomains.
+func (s *Store) migrateOperator() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`ALTER TABLE users ADD COLUMN operator INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if isDuplicateColumnErr(err) {
+			return nil
+		}
+		return err
+	}
+	for _, d := range legacyTestDomains {
+		if _, err := tx.Exec(`UPDATE users SET operator = 1 WHERE lower(substr(email, instr(email, '@') + 1)) = ?`, d); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -568,8 +601,9 @@ func (s *Store) SweepAbandonedUsers(ctx context.Context, cutoff time.Time) (int6
 		AND NOT EXISTS (SELECT 1 FROM credentials c WHERE c.user_id = users.id)
 		AND NOT EXISTS (SELECT 1 FROM api_keys k WHERE k.user_id = users.id)
 		AND NOT EXISTS (SELECT 1 FROM refresh_sessions r WHERE r.user_id = users.id)
-		AND NOT EXISTS (SELECT 1 FROM account_set_member m WHERE m.user_id = users.id)`,
-		cutoff, BootstrapAdminAPIKeyUserID)
+		AND NOT EXISTS (SELECT 1 FROM account_set_member m WHERE m.user_id = users.id)
+		AND NOT EXISTS (SELECT 1 FROM challenge_state ch WHERE ch.user_id = users.id AND ch.expires_at > ?)`,
+		cutoff, BootstrapAdminAPIKeyUserID, time.Now().UTC())
 	if err != nil {
 		return 0, fmt.Errorf("sweep abandoned users: %w", err)
 	}

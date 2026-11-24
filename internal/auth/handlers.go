@@ -624,17 +624,23 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// One spelling of the address from here on: lookup, creation, waitlist.
+	req.Email = normalizeEmail(req.Email)
 	emailHash := hashEmail(req.Email)
+	operator := h.operatorRequest(r)
 
 	// Look up the user by email.
 	user, err := h.store.GetUserByEmail(req.Email)
 	if err != nil {
 		// User doesn't exist yet — create them, unless the cap is reached.
-		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, "", req.Email) {
+		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, "", req.Email, operator) {
 			return
 		}
 		userID := uuid.NewString()
 		user, err = h.store.CreateUser(userID, req.Email)
+		if err == nil && operator {
+			err = h.store.MarkOperatorAccount(userID)
+		}
 		if err != nil {
 			log.Printf("[auth] operation=register_begin email_hash=%s result=error step=create_user error=%q", emailHash, err)
 			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create user"})
@@ -657,8 +663,15 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 		}
 		// User exists but has no credentials (started but didn't complete registration).
 		// Allow them to proceed with registration, unless the cap is reached.
-		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, user.ID, req.Email) {
+		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, user.ID, req.Email, operator) {
 			return
+		}
+		if operator {
+			if err := h.store.MarkOperatorAccount(user.ID); err != nil {
+				log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=error step=mark_operator error=%q", emailHash, user.ID, err)
+				writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
+				return
+			}
 		}
 		log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s step=resume_incomplete_registration", emailHash, user.ID)
 	}
@@ -917,7 +930,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The cap again: ceremonies begun below it must not all finish above it.
-	if h.refuseIfRegistrationClosed(w, "register_finish", hashEmail(user.Email), user.ID, user.Email) {
+	if h.refuseIfRegistrationClosed(w, "register_finish", hashEmail(user.Email), user.ID, user.Email, false) {
 		return
 	}
 
@@ -956,7 +969,13 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 		Flags:           marshalCredentialFlags(credential.Flags),
 		CreatedAt:       time.Now().UTC(),
 	}
-	if err := h.store.CreateCredential(dbCred); err != nil {
+	if err := h.store.CreateCredentialWithinCap(dbCred, h.config.RegistrationCap); err != nil {
+		if errors.Is(err, ErrRegistrationClosed) {
+			// The cap closed between the check and the store: the same
+			// answer as at the start, and the email is kept on the list.
+			h.writeWaitlisted(w, "register_finish", hashEmail(user.Email), user.Email)
+			return
+		}
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=store_credential error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to store credential"})
 		return

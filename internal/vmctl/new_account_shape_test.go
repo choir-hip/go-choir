@@ -1,6 +1,7 @@
 package vmctl
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -99,10 +100,62 @@ func TestPaperComputerIsNeverGivenTheSmallShape(t *testing.T) {
 
 func TestNewAccountShapeNeverExceedsTheHostSetting(t *testing.T) {
 	t.Setenv(interactiveVMMemSizeMibEnv, "1024")
-	if got := newComputerMemSizeMib(WarmnessClassPrimary); got != 1024 {
+	if got := newComputerMemSizeMib(WarmnessClassPrimary, false); got != 1024 {
 		t.Fatalf("new account size with a 1024 host setting = %d, want 1024", got)
 	}
-	if got := newComputerMemSizeMib(WarmnessClassCriticalProtected); got != 0 {
+	if got := newComputerMemSizeMib(WarmnessClassCriticalProtected, false); got != 0 {
 		t.Fatalf("protected computer got a recorded size %d", got)
+	}
+}
+
+// The small shape is for strangers. The owner's paid always-on computer, the
+// operator proof computer, a test computer and an operator-marked account's
+// computer (scripts/test-computer-create) keep the interactive size when
+// their ownership is created afresh (review of 2026-11-24, S3 and S4): a
+// 2 GiB computer cannot run an engineering capsule.
+func TestOwnerProofAndOperatorComputersAreNotMadeSmall(t *testing.T) {
+	cases := []struct {
+		name  string
+		user  string
+		setup func(p *WarmnessPolicyConfig, userID, computerID string)
+		op    func(userID string) (bool, error)
+	}{
+		{name: "paid owner", user: "owner-user", setup: func(p *WarmnessPolicyConfig, u, _ string) { p.PaidUserIDs[u] = true }},
+		{name: "operator proof computer", user: "proof-user", setup: func(p *WarmnessPolicyConfig, _, c string) { p.OperatorProofComputerIDs = map[string]bool{c: true} }},
+		{name: "test computer", user: "test-user", setup: func(p *WarmnessPolicyConfig, _, c string) { p.TestComputerIDs = map[string]bool{c: true} }},
+		{name: "operator-marked account", user: "op-user", op: func(u string) (bool, error) { return u == "op-user", nil }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			policy := DefaultWarmnessPolicyConfig()
+			if tc.setup != nil {
+				tc.setup(&policy, tc.user, stableComputerID(tc.user, PrimaryDesktopID, ""))
+			}
+			reg, mgr, _ := newAccountFixture(t, policy)
+			if tc.op != nil {
+				reg.SetOperatorAccountLookup(tc.op)
+			}
+			own, err := reg.ResolveOrAssign(tc.user)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if own.MemSizeMib != 0 || len(mgr.boots) != 1 || mgr.boots[0].MachineMemSizeMib != 8192 {
+				t.Fatalf("recorded %d, boots %+v; want no recorded size and one 8192 boot", own.MemSizeMib, mgr.boots)
+			}
+		})
+	}
+}
+
+// A lookup that cannot answer never grants the big shape: a stranger is made
+// small when the operator mark cannot be read.
+func TestUnreadableOperatorMarkMakesTheComputerSmall(t *testing.T) {
+	reg, mgr, _ := newAccountFixture(t, DefaultWarmnessPolicyConfig())
+	reg.SetOperatorAccountLookup(func(string) (bool, error) { return true, errors.New("auth db unreadable") })
+	own, err := reg.ResolveOrAssign("a-stranger")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if own.MemSizeMib != 2048 || mgr.boots[0].MachineMemSizeMib != 2048 {
+		t.Fatalf("recorded %d, boots %+v; want 2048", own.MemSizeMib, mgr.boots)
 	}
 }

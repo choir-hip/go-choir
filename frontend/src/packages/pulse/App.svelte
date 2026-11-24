@@ -180,7 +180,7 @@
     <section class="panel" data-pulse-capacity>
       <div class="panel-heading">
         <h2>Capacity</h2>
-        <span class="chip">{capReg?.open ? 'sign-up open' : 'sign-up closed'}</span>
+        <span class="chip">{capReg?.available ? (capReg.open ? 'sign-up open' : 'sign-up closed') : 'no reading'}</span>
       </div>
       <dl class="facts">
         <div><dt>Memory free</dt><dd>{formatBytes(capMemory?.available_bytes)} of {formatBytes(capMemory?.total_bytes)}</dd></div>
@@ -192,7 +192,6 @@
         <div><dt>Accounts counted</dt><dd>{formatNumber(capReg?.counted)} of {capReg?.cap ? formatNumber(capReg.cap) : 'no cap'}</dd></div>
         <div><dt>Room left</dt><dd>{capReg?.cap ? formatNumber(capReg?.remaining) : 'no cap'}</dd></div>
         <div><dt>Sign-ups, 24h</dt><dd>{formatNumber(capReg?.sign_ups_last_24h)}</dd></div>
-        <div><dt>Test accounts</dt><dd>{formatNumber(capReg?.test_counted)} of {capReg?.test_cap ? formatNumber(capReg.test_cap) : 'no cap'}</dd></div>
       </dl>
     </section>
 

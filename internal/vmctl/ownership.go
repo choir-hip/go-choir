@@ -657,6 +657,8 @@ type OwnershipRegistry struct {
 	pressureSampler hostPressureSampler
 	// registrationCap is the sign-up cap shown on the capacity reading.
 	registrationCap RegistrationCapConfig
+	// operatorAccount reads the operator mark (see SetOperatorAccountLookup).
+	operatorAccount func(userID string) (bool, error)
 	// pressureWin is the pressure monitor's sustained-signal window and
 	// the hibernate in-flight/cool-down bookkeeping (pressure_sustained.go).
 	pressureWin pressureWindow
@@ -1431,10 +1433,17 @@ const newAccountVMMemSizeMib = 2048
 // with warmness class class, or 0 to record none (the host's interactive
 // shape, or the platform shape, applies). A protected platform computer is
 // never made small, so the paper cannot come back at 2 GiB if its ownership
-// is ever recreated. The size never exceeds the host's interactive setting.
-func newComputerMemSizeMib(class WarmnessClass) int {
+// is ever recreated; neither is the owner's paid always-on computer, and
+// exempt marks a computer the operator needs at the interactive size (the
+// operator proof computer, a test computer, an operator-marked account: an
+// engineering capsule needs about 1.8 GiB and cannot run in 2 GiB). The
+// size never exceeds the host's interactive setting.
+func newComputerMemSizeMib(class WarmnessClass, exempt bool) int {
+	if exempt {
+		return 0
+	}
 	switch class {
-	case WarmnessClassCriticalProtected, WarmnessClassPublicPlatform:
+	case WarmnessClassCriticalProtected, WarmnessClassPublicPlatform, WarmnessClassPremiumAlwaysOn:
 		return 0
 	}
 	_, interactive := interactiveMachineShape()
@@ -1442,6 +1451,31 @@ func newComputerMemSizeMib(class WarmnessClass) int {
 		return interactive
 	}
 	return newAccountVMMemSizeMib
+}
+
+// newComputerMemSizeMibLocked is the size to record for the computer being
+// created for userID. A lookup of the operator mark that fails or is not
+// wired never grants the big shape. Callers hold r.mu.
+func (r *OwnershipRegistry) newComputerMemSizeMibLocked(userID, desktopID string) int {
+	computerID := stableComputerID(userID, desktopID, "")
+	class := warmnessClassForOwnership(&VMOwnership{UserID: userID, DesktopID: desktopID, ComputerID: computerID}, r.warmnessPolicy)
+	exempt := r.warmnessPolicy.OperatorProofComputerIDs[computerID] || r.warmnessPolicy.TestComputerIDs[computerID]
+	if !exempt && r.operatorAccount != nil {
+		if marked, err := r.operatorAccount(userID); err != nil {
+			log.Printf("vmctl: operator mark for %s unreadable (%v); the computer is made at the new-account size", userID, err)
+		} else {
+			exempt = marked
+		}
+	}
+	return newComputerMemSizeMib(class, exempt)
+}
+
+// SetOperatorAccountLookup wires the reader of the auth service's operator
+// mark (users.operator), consulted once when a computer is created.
+func (r *OwnershipRegistry) SetOperatorAccountLookup(fn func(userID string) (bool, error)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.operatorAccount = fn
 }
 
 // interactiveMachineShape returns the interactive guest CPU/memory shape,
@@ -2526,8 +2560,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 	// host would fall below its memory floor, counting the starts already in
 	// flight (host_admission.go). The reservation ends with this boot.
 	booted := false
-	newMemMib := newComputerMemSizeMib(warmnessClassForOwnership(
-		&VMOwnership{UserID: userID, DesktopID: desktopID, ComputerID: stableComputerID(userID, desktopID, "")}, r.warmnessPolicy))
+	newMemMib := r.newComputerMemSizeMibLocked(userID, desktopID)
 	if r.vmManager != nil {
 		candidate := &VMOwnership{VMID: vmID, UserID: userID, DesktopID: desktopID, Kind: VMKindInteractive,
 			ComputerID: stableComputerID(userID, desktopID, ""), MemSizeMib: newMemMib}

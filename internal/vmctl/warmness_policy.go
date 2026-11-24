@@ -38,6 +38,9 @@ type WarmnessPolicyConfig struct {
 	// (internal/computertiers test_computers). A platform computer or a
 	// paid account's computer listed here keeps its own class.
 	TestComputerIDs map[string]bool
+	// OperatorProofComputerIDs names the operator proof computers
+	// (computertiers operator_proof_computers).
+	OperatorProofComputerIDs map[string]bool
 }
 
 type WarmnessPolicyConfigSummary struct {

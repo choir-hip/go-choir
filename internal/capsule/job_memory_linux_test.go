@@ -3,6 +3,7 @@
 package capsule
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -126,5 +127,28 @@ func TestFinishJobReturnsMemoryBeforeDone(t *testing.T) {
 	jf.executor.finishJob(jf.job, nil, capsulejob.StateStopped, "the capsule ended before the job did")
 	if maxAtDone != 2048*mib || cg.max != 2048*mib || jf.executor.vmMemoryUsed != 2048*mib {
 		t.Fatalf("finish: max at done=%d max=%d used=%d", maxAtDone>>20, cg.max>>20, jf.executor.vmMemoryUsed>>20)
+	}
+}
+
+// A 2 GiB computer (about 1.5 GiB for capsules) cannot hold an engineering
+// capsule (about 1.8 GiB). It is refused plainly, as a fact about the
+// computer, and a request that fits but is crowded out keeps the old words.
+func TestCapsuleTooBigForTheComputerIsRefusedPlainly(t *testing.T) {
+	f := newJobMemoryFixture(t)
+	f.budget = 1536 * mib
+	f.e.vmMemoryUsed = 0
+	f.e.mu.Lock()
+	err := f.e.admitCapsuleMemoryLocked(1800 * mib)
+	f.e.mu.Unlock()
+	if !errors.Is(err, ErrComputerTooSmall) || !strings.Contains(err.Error(), "self-development is not available on a computer this size") ||
+		!strings.Contains(err.Error(), "1536 MiB") || !strings.Contains(err.Error(), "1800 MiB") {
+		t.Fatalf("too big: %v", err)
+	}
+	f.e.vmMemoryUsed = 1024 * mib
+	f.e.mu.Lock()
+	err = f.e.admitCapsuleMemoryLocked(1024 * mib)
+	f.e.mu.Unlock()
+	if err == nil || strings.Contains(err.Error(), "self-development is not available") {
+		t.Fatalf("crowded out should keep the ordinary refusal: %v", err)
 	}
 }

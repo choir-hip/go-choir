@@ -2,6 +2,8 @@ package vmctl
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,6 +129,12 @@ type pulseAccountRecord struct {
 	Email      string
 	CreatedAt  time.Time
 	HasPasskey bool
+	// Operator is the operator's own account (CI, drills): not counted
+	// against the sign-up cap.
+	Operator bool
+	// FirstPasskeyAt is when the first passkey was stored: the moment the
+	// sign-up finished (CreatedAt is when it began).
+	FirstPasskeyAt time.Time
 }
 
 // PulseCapacitySummary is what the owner decides capacity on (the owner,
@@ -162,28 +170,28 @@ type PulseCapacityComputers struct {
 }
 
 type PulseCapacityRegistration struct {
-	// Cap is the owner's number of accounts that hold a passkey (test
-	// addresses aside); 0 is no cap.
+	// Available is false when the reading cannot be trusted: the auth
+	// database could not be read, or the cap's configuration was malformed.
+	// Open and Remaining mean nothing then.
+	Available bool `json:"available"`
+	// Cap is the owner's number of accounts that hold a passkey (the
+	// operator's own aside); 0 is no cap.
 	Cap int `json:"cap"`
 	// Counted is the accounts holding a passkey that count against Cap.
 	Counted   int  `json:"counted"`
 	Remaining int  `json:"remaining"`
 	Open      bool `json:"open"`
-	// TestCap and TestCounted are the same for the test addresses.
-	TestCap     int `json:"test_cap"`
-	TestCounted int `json:"test_counted"`
 	// SignUpsLast24h are accounts that finished a passkey in the last day,
-	// test addresses aside.
+	// the operator's own aside.
 	SignUpsLast24h int `json:"sign_ups_last_24h"`
 }
 
 // RegistrationCapConfig is the sign-up cap the auth service enforces
-// (AUTH_REGISTRATION_CAP and its test-address twin), read here from the same
-// nix values so the owner sees the number the service uses.
+// (AUTH_REGISTRATION_CAP), read here from the same nix value so the owner
+// sees the number the service uses. Unreadable: the value was malformed.
 type RegistrationCapConfig struct {
-	Cap         int
-	TestCap     int
-	TestDomains []string
+	Cap        int
+	Unreadable bool
 }
 
 // SetRegistrationCapConfig records the cap for the capacity reading.
@@ -193,7 +201,7 @@ func (r *OwnershipRegistry) SetRegistrationCapConfig(cfg RegistrationCapConfig) 
 	r.registrationCap = cfg
 }
 
-func pulseCapacity(now time.Time, users []pulseAccountRecord, ownerships []*VMOwnership, sample HostPressureSample, cfg PressureReclaimConfig, reg RegistrationCapConfig) PulseCapacitySummary {
+func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable bool, ownerships []*VMOwnership, sample HostPressureSample, cfg PressureReclaimConfig, reg RegistrationCapConfig) PulseCapacitySummary {
 	out := PulseCapacitySummary{
 		Memory: PulseCapacityMemory{TotalBytes: sample.MemoryTotalBytes, AvailableBytes: sample.MemoryAvailableBytes, FloorBytes: sample.MemoryFloorBytes},
 		Disk:   PulseCapacityDisk{AvailableBytes: sample.StateDirAvailableBytes, FloorBytes: cfg.MinStateDirAvailableBytes},
@@ -213,30 +221,21 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, ownerships []*VMOw
 			out.Computers.Other++
 		}
 	}
-	isTest := func(email string) bool {
-		domain := emailDomain(strings.ToLower(strings.TrimSpace(email)))
-		for _, d := range reg.TestDomains {
-			if domain != "" && domain == strings.ToLower(strings.TrimSpace(d)) {
-				return true
-			}
-		}
-		return false
-	}
 	for _, u := range users {
-		if !u.HasPasskey {
-			continue
-		}
-		if isTest(u.Email) {
-			out.Registration.TestCounted++
+		if !u.HasPasskey || u.Operator {
 			continue
 		}
 		out.Registration.Counted++
-		if age := now.Sub(u.CreatedAt); !u.CreatedAt.IsZero() && age >= 0 && age <= 24*time.Hour {
+		finished := u.FirstPasskeyAt
+		if finished.IsZero() {
+			finished = u.CreatedAt
+		}
+		if age := now.Sub(finished); !finished.IsZero() && age >= 0 && age <= 24*time.Hour {
 			out.Registration.SignUpsLast24h++
 		}
 	}
+	out.Registration.Available = usersAvailable && !reg.Unreadable
 	out.Registration.Cap = reg.Cap
-	out.Registration.TestCap = reg.TestCap
 	out.Registration.Open = reg.Cap <= 0 || out.Registration.Counted < reg.Cap
 	if reg.Cap > 0 && out.Registration.Counted < reg.Cap {
 		out.Registration.Remaining = reg.Cap - out.Registration.Counted
@@ -265,7 +264,7 @@ func (r *OwnershipRegistry) PulseSummary() PulseSummary {
 	if sampler == nil {
 		sampler = sampleHostPressure
 	}
-	summary.Capacity = pulseCapacity(now, users, ownerships, sampler(pcfg), pcfg, regCap)
+	summary.Capacity = pulseCapacity(now, users, authDataAvailable, ownerships, sampler(pcfg), pcfg, regCap)
 	return summary
 }
 
@@ -417,7 +416,29 @@ func loadPulseAccountsFromAuthDB(path string) ([]pulseAccountRecord, []string) {
 		return nil, []string{"auth db unavailable; account counts unavailable"}
 	}
 	defer db.Close()
-	rows, err := db.Query(`SELECT id, email, created_at, EXISTS(SELECT 1 FROM credentials c WHERE c.user_id = users.id) FROM users`)
+	// A passkey's own created_at is when the sign-up finished.
+	firstPasskey := map[string]time.Time{}
+	credRows, err := db.Query(`SELECT user_id, created_at FROM credentials`)
+	if err != nil {
+		return nil, []string{"auth credentials unavailable; account counts unavailable"}
+	}
+	for credRows.Next() {
+		var id string
+		var at time.Time
+		if err := credRows.Scan(&id, &at); err != nil {
+			_ = credRows.Close()
+			return nil, []string{"auth credentials unavailable; account counts unavailable"}
+		}
+		if prev, ok := firstPasskey[id]; !ok || at.Before(prev) {
+			firstPasskey[id] = at
+		}
+	}
+	if err := credRows.Err(); err != nil {
+		_ = credRows.Close()
+		return nil, []string{"auth credentials unavailable; account counts unavailable"}
+	}
+	_ = credRows.Close()
+	rows, err := db.Query(`SELECT id, email, created_at, operator FROM users`)
 	if err != nil {
 		return nil, []string{"auth users unavailable; account counts unavailable"}
 	}
@@ -425,9 +446,10 @@ func loadPulseAccountsFromAuthDB(path string) ([]pulseAccountRecord, []string) {
 	var out []pulseAccountRecord
 	for rows.Next() {
 		var rec pulseAccountRecord
-		if err := rows.Scan(&rec.UserID, &rec.Email, &rec.CreatedAt, &rec.HasPasskey); err != nil {
+		if err := rows.Scan(&rec.UserID, &rec.Email, &rec.CreatedAt, &rec.Operator); err != nil {
 			return out, []string{"auth users unavailable; account counts partially unavailable"}
 		}
+		rec.FirstPasskeyAt, rec.HasPasskey = firstPasskey[strings.TrimSpace(rec.UserID)]
 		rec.UserID = strings.TrimSpace(rec.UserID)
 		rec.Email = strings.TrimSpace(rec.Email)
 		out = append(out, rec)
@@ -539,4 +561,31 @@ func pulseManualSnapshotUsage(stateDir string) (int64, int) {
 		return nil
 	})
 	return bytes, count
+}
+
+// OperatorAccountFromAuthDB returns a reader of the auth service's operator
+// mark (users.operator) from its database at path, read-only and per call:
+// consulted once when a computer is created. A user the database does not
+// know is not marked; any other failure is an error, and the caller makes
+// the computer at the new-account size.
+func OperatorAccountFromAuthDB(path string) func(userID string) (bool, error) {
+	return func(userID string) (bool, error) {
+		path := strings.TrimSpace(path)
+		if path == "" {
+			return false, fmt.Errorf("auth db path is not configured")
+		}
+		db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+		if err != nil {
+			return false, err
+		}
+		defer db.Close()
+		var v int
+		switch err := db.QueryRow(`SELECT operator FROM users WHERE id = ?`, strings.TrimSpace(userID)).Scan(&v); {
+		case errors.Is(err, sql.ErrNoRows):
+			return false, nil
+		case err != nil:
+			return false, err
+		}
+		return v != 0, nil
+	}
 }
