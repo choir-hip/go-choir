@@ -877,7 +877,6 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	// realization and has no path to the wake, and its refusal is a 409.
 	neverWake := diagnosticReadNeverWakes(r, authResult)
 	var autoputerURL string
-	var err error
 	if neverWake {
 		if computerTarget == nil {
 			err = errAPIKeyRealizationUnavailable
