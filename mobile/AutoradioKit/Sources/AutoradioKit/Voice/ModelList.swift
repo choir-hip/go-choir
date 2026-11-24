@@ -61,7 +61,7 @@ public struct ModelListEntry: Codable, Equatable, Sendable {
         guard !id.isEmpty, ConfigRole(rawValue: job) != nil else { return false }
         if let revision, revision.count != 40 || !revision.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) { return false }
         let fs = files ?? []
-        if Set(fs.map(\.path)).count != fs.count { return false }
+        if Set(fs.map(\.path)).count != fs.count || !fs.allSatisfy({ ModelBundleSpec.isSafeRelativePath($0.path) }) { return false }   // a served path never leaves the model's folder (S1)
         if !fs.isEmpty, revision == nil { return false }
         return fs.allSatisfy { $0.bytes > 0 && $0.sha256.count == 64 && $0.sha256.allSatisfy { $0.isHexDigit && !$0.isUppercase } }
     }

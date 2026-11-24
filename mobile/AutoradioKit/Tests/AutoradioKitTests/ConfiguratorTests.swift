@@ -175,6 +175,34 @@ final class ConfiguratorTests: XCTestCase {
         XCTAssertTrue(ConfigPlanner.verdict(m, config: cfg, device: d).ok, "the planner's budget stands in: headroom is the assumed available minus the estimate")
     }
 
+    // MARK: B2 (review of d67c0cb77): the live-words model that comes with a batch recogniser is part of the configuration
+
+    func fluidConfigurations(_ d: DeviceProbe) -> [Configuration] { ConfigPlanner.plan(device: d).filter { $0.pick(.transcriber) == "fluid-speech-mini" } }
+
+    func testTheDownloadAndMemoryOfAConfigurationIncludeTheLiveWordsModelThatComesWithIt() throws {
+        let d = DeviceProbe.simulated(.tier8)
+        let cfg = try XCTUnwrap(fluidConfigurations(d).first)
+        let eou = try XCTUnwrap(CandidateTable.candidate("parakeet-eou-120m", .transcriber))
+        var seen = Set<String>(), expected: Int64 = 0
+        for (_, id) in cfg.picks { if let c = CandidateTable.all.first(where: { $0.id == id }), !c.isFloor, seen.insert(c.id).inserted { expected += c.bytes } }
+        XCTAssertEqual(cfg.downloadBytes, expected + eou.bytes, "what the person agrees to is what is fetched")
+        let picks = Dictionary(uniqueKeysWithValues: cfg.picks.compactMap { (k, v) in ConfigRole(rawValue: k).flatMap { r in CandidateTable.all.first { $0.id == v && $0.role == r }.map { (r, $0) } } })
+        let without = ConfigPlanner.estimateMB(picks, table: [])                  // an empty list names no companion
+        XCTAssertEqual(cfg.estimatedMB, without + eou.residentMB, accuracy: 0.5)
+    }
+
+    func testTheAcceptedConfigurationKeepsItsLiveWordsModelOnDisk() async throws {
+        let d = DeviceProbe.simulated(.tier8)
+        let b = FakeConfigBackend(d)
+        let first = try XCTUnwrap(ConfigPlanner.plan(device: d).first)
+        try XCTSkipUnless(first.pick(.transcriber) == "fluid-speech-mini", "the best configuration here does not use Fluid Speech Mini")
+        b.onDisk = ["parakeet-eou-120m"]                                           // the provider fetched it beside the batch model
+        let rec = await runner(b).run()
+        XCTAssertEqual(rec.chosen, first)
+        XCTAssertFalse(b.deleted.contains("parakeet-eou-120m"), "it was deleted in the run that fetched it")
+        XCTAssertTrue(b.onDisk.contains("parakeet-eou-120m"))
+    }
+
     // MARK: the runner
 
     func testTheFirstConfigurationThatFitsIsAcceptedAndNothingElseStaysOnDisk() async {

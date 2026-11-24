@@ -22,6 +22,8 @@ import Foundation
 struct HandsFreeState {
     var policy = TurnPolicy(config: HandsFreeState.voiceConfig)
     var ready = false
+    /// The listening settings the stages were built from; a different configuration rebuilds them when no turn is open (review B1).
+    var builtBounds: StageSetting?, builtTranscriber: StageSetting?
     var echoCancelled = true
     var bounds: SpeechBounds?
     var transcriber: Transcriber?
@@ -72,7 +74,7 @@ extension TurnEngine {
         if HandsFreeSwitch.shared.expireIfIdle() { await handsFreeSet(false) }
         guard hf.enabled else { return }        // off: the microphone is closed, nothing is looked at
         lastFrameT = f.t
-        if !hf.ready { await hfPrepare() }
+        if !hf.ready || hfListenerChanged { await hfPrepare() }
         let startMs = hf.nowMs
         hf.nowMs += max(1, Int((f.duration * 1000).rounded()))
         let endMs = hf.nowMs
@@ -166,8 +168,15 @@ extension TurnEngine {
         if phase == .capturing, pipeline == nil, turn == nil { setPhase(.playing) }
     }
 
+    /// The configuration names other listening stages than the ones built, and nothing is being heard or answered, so rebuilding drops no turn.
+    var hfListenerChanged: Bool {
+        hf.session == nil && !hf.inSpeech && hf.answerTurnID == nil
+            && (config.setting(.speechBounds) != hf.builtBounds || config.setting(.transcriber) != hf.builtTranscriber)
+    }
+
     func hfPrepare() async {
         hf.ready = true
+        hf.builtBounds = config.setting(.speechBounds); hf.builtTranscriber = config.setting(.transcriber)
         // A stage the configuration names that this build cannot make (a model stage in a build without the model libraries, or a name that
         // changed) must never leave the radio deaf: the floor stages, which are always built in, listen instead, and the log says so.
         do { hf.bounds = try env.registry.make(.speechBounds, as: SpeechBounds.self, config) }
@@ -192,6 +201,8 @@ extension TurnEngine {
         let s: TranscriptionSession
         do { s = try await env.log.timed("transcriber.begin") { try await tr.begin() } }
         catch { env.log.emit(.error(stage: "transcriber", message: "\(error); this turn has no transcript")); s = EmptyTranscription() }
+        // The begin can take a model load; voice may have been turned off, or another turn begun, while it ran: that session is not this turn's.
+        guard hf.session == nil, hf.enabled else { s.cancel(); preroll = []; return }
         hf.samples = []; hf.speakerCall = .unknown; hf.speakerPending = false
         for f in preroll { s.append(f); hfKeepAudio(f) }
         preroll = []

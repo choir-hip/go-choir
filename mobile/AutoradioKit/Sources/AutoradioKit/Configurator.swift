@@ -127,14 +127,23 @@ public struct Configuration: Codable, Equatable, Sendable {
 
 public enum ConfigPlanner {
     /// Memory of a set of picks resident together: each file's weights once (two roles on one file share them, each adds its own context), plus the app's base.
-    public static func estimateMB(_ picks: [ConfigRole: ModelCandidate], thresholds: ConfigThresholds = .standard) -> Double {
+    public static func estimateMB(_ picks: [ConfigRole: ModelCandidate], thresholds: ConfigThresholds = .standard, table: [ModelCandidate] = CandidateTable.all) -> Double {
         var seen = Set<String>(), total = thresholds.appBaseMB
         for r in ConfigRole.allCases {
             guard let c = picks[r] else { continue }
             if c.isFloor { continue }
             if seen.insert(c.id).inserted { total += c.residentMB } else { total += c.contextMB }
         }
+        for c in companions(of: picks, table: table) where seen.insert(c.id).inserted { total += c.residentMB }
         return total
+    }
+
+    /// The models that come with a pick because the listening pipeline needs them together (the live words beside a batch recogniser,
+    /// `ListenerPipeline.companions`): fetched, kept and held in memory with it, so they count in the download the person agrees to, in the memory
+    /// estimate and in what the accepted configuration keeps (review B2).
+    public static func companions(of picks: [ConfigRole: ModelCandidate], table: [ModelCandidate] = CandidateTable.all) -> [ModelCandidate] {
+        guard let t = picks[.transcriber], !t.isFloor else { return [] }
+        return ListenerPipeline.companions(of: t.id, table: table).compactMap { id in table.first { $0.id == id && !$0.isFloor } }
     }
 
     /// Every configuration that could fit this device, best quality first. Ties go to the one that uses less memory. A floor-only configuration is last and always possible.
@@ -147,11 +156,12 @@ public enum ConfigPlanner {
         var out: [Configuration] = []
         func walk(_ i: Int, _ picks: [ConfigRole: ModelCandidate]) {
             if i == ConfigRole.allCases.count {
-                let mb = estimateMB(picks, thresholds: thresholds)
+                let mb = estimateMB(picks, thresholds: thresholds, table: table)
                 guard mb <= budget else { return }
                 let score = picks.reduce(0.0) { $0 + $1.key.weight * Double($1.value.qualityRank) }
                 var seen = Set<String>(), dl: Int64 = 0
                 for (_, c) in picks where !c.isFloor { if seen.insert(c.id).inserted { dl += c.bytes } }
+                for c in companions(of: picks, table: table) where seen.insert(c.id).inserted { dl += c.bytes }
                 out.append(Configuration(picks: Dictionary(uniqueKeysWithValues: picks.map { ($0.key.rawValue, $0.value.id) }), score: score, estimatedMB: mb, downloadBytes: dl))
                 return
             }
@@ -349,16 +359,22 @@ public final class ConfigRunner: @unchecked Sendable {
             // Unload the rejected configuration; delete what it fetched unless the next configuration wants it (failure 3).
             for (c, r) in loaded { await backend.unload(c, role: r) }
             let next = plan.first { !$0.picks.values.contains(where: { unavailable.contains($0) }) }
-            let nextIDs = Set(next.map { Array($0.picks.values) } ?? [])
+            let nextIDs = Set(next.map { Array($0.picks.values) + companionIDs($0) } ?? [])
             for (c, _) in loaded where !nextIDs.contains(c.id) { await backend.delete(c) }
         }
         rec.notes.append("no configuration passed on this device; the built-in voice only")
         return await accept(floors(), rec)
     }
 
+    /// The ids of the models that come with a configuration's picks (B2).
+    private func companionIDs(_ cfg: Configuration) -> [String] {
+        guard let t = cfg.pick(.transcriber) else { return [] }
+        return ListenerPipeline.companions(of: t, table: table)
+    }
+
     /// The accepted configuration stays; every other candidate's weights on disk are deleted (failure 6).
     private func accept(_ cfg: Configuration, _ rec: ConfigurationRecord) async -> ConfigurationRecord {
-        let keep = Set(cfg.picks.values)
+        let keep = Set(cfg.picks.values + companionIDs(cfg))
         for c in table where !c.isFloor && !keep.contains(c.id) { if await backend.isOnDisk(c) { await backend.delete(c) } }
         return finalize(rec, cfg)
     }

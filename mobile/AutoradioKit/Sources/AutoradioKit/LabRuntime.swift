@@ -43,6 +43,7 @@ public struct TurnRow: Codable, Sendable { public var id, transcript, configName
 /// A host (the Exact module) creates one, then calls `start`, `setStage`, `replay` ...
 public final class LabRuntime: @unchecked Sendable {
     public let registry: StageRegistry
+    let readiness: VoiceReadiness
     public let clock = LabClock()
     public let log: EventLog
     public let bus = AudioBus()
@@ -70,15 +71,15 @@ public final class LabRuntime: @unchecked Sendable {
 
     /// `emptyProgramme`: the radio starts with nothing loaded (the phone and the Mac): the lab's fixture edition is for tests and the lab, and
     /// must never be spoken on a listener's device. Everything that plays is a run sheet entry.
-    public init(supportDir: URL, session: AudioSessionOwner, registry: StageRegistry = .builtIn(), emptyProgramme: Bool = false) {
-        self.registry = registry
+    public init(supportDir: URL, session: AudioSessionOwner, registry: StageRegistry = .builtIn(), emptyProgramme: Bool = false, readiness: VoiceReadiness = Voices.readiness) {
+        self.registry = registry; self.readiness = readiness
         let log = EventLog(clock: clock)
         self.log = log
         let voiceStore = VoiceChoiceStore(file: supportDir.appendingPathComponent("voice-choice.json"))
         self.voiceStore = voiceStore
         // The saved voice, or on a fresh install the neural default. The model stages register after this runs, so the stage is not checked
         // here: `makeSpeaker` falls back to the system voice for a stage that is not registered.
-        let cfg = StageRegistry.listenerConfiguration(voice: voiceStore.current(), registry: registry)
+        let cfg = StageRegistry.listenerConfiguration(voice: voiceStore.current(), registry: registry, readiness: readiness)
         self.config = cfg
         let policyBox = PolicyBox(cfg.audio)
         self.policyBox = policyBox
@@ -352,6 +353,15 @@ public final class LabRuntime: @unchecked Sendable {
         var c = configuration
         c.audioPolicy = p
         setConfiguration(c)
+    }
+    /// After voice setup (the models just became ready): speech detection and recognition are chosen from the list again and applied together, with
+    /// the composite's parameters, to the running app. Without this the listener built at launch stays until the next launch (review B1).
+    public func applyListenerChoice() {
+        let heard = ListenerPipeline.choose(registry: registry, readiness: readiness)
+        var c = configuration
+        c.set(.speechBounds, heard.bounds); c.set(.transcriber, heard.transcriber)
+        setConfiguration(c)
+        log.emit(.note(heard.summary))
     }
     public func setStage(_ kind: StageKind, id: String) {
         var c = configuration

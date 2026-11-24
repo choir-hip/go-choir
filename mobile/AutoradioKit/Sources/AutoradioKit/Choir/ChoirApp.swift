@@ -15,8 +15,7 @@ extension StageRegistry {
     /// falls back to the system voice while that model is not on the phone, `makeSpeaker`). Stubs and fixtures stay registered and selectable in the Lab tab.
     public static func listenerConfiguration(voice: StageSetting = VoiceCatalog.defaultOption.setting, registry: StageRegistry? = nil,
                                              readiness: VoiceReadiness = Voices.readiness) -> LabConfiguration {
-        let heard = ListenerPipeline.choose(isReady: { readiness.isReady(model: $0) },
-                                            hasStage: { kind, id in registry?.stages(kind).contains { $0.id == id } ?? false })
+        let heard = ListenerPipeline.choose(registry: registry, readiness: readiness)
         var c = LabConfiguration(name: "listener", stages: [
             .micSource: .init(id: "builtin"), .addressing: .init(id: "open"), .speechBounds: heard.bounds,
             .speakerCheck: .init(id: "none"), .transcriber: heard.transcriber, .yieldPolicy: .init(id: "dip-then-pause"),

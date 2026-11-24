@@ -86,6 +86,11 @@ public enum ListenerPipeline {
         return Choice(bounds: bounds, transcriber: transcriber, models: models, summary: summary)
     }
 
+    /// The choice for a running app: what is ready on the phone (`readiness`) and registered in this build's `registry`.
+    public static func choose(registry: StageRegistry?, readiness: VoiceReadiness) -> Choice {
+        choose(isReady: { readiness.isReady(model: $0) }, hasStage: { kind, id in registry?.stages(kind).contains { $0.id == id } ?? false })
+    }
+
     /// What a configuration's listening stages are, in plain words (written to the trace when a voice session starts, so a run says which recogniser it used).
     public static func summary(of c: LabConfiguration) -> String {
         func name(_ s: StageSetting?) -> String {
@@ -171,8 +176,13 @@ public final class LiveThenFinalTranscriber: Transcriber, @unchecked Sendable {
         }
         func append(_ frame: AudioFrame) { live?.append(frame); final?.append(frame) }
         func finish() async throws -> String {
+            // The live session is always finished, never cancelled: its worker is joined before the next turn reuses the shared manager (S3).
             if let final {
-                if let text = try? await final.finish() { live?.cancel(); return text }
+                if let text = try? await final.finish() {
+                    // An empty final transcript is not an answer when the live recogniser heard words (S4).
+                    let liveText = (try? await live?.finish()) ?? ""
+                    return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? liveText : text
+                }
                 // the final recogniser failed: the live one's own transcript is the answer
             }
             guard let live else { throw LabError.unavailable("the final recogniser failed and no live one ran") }

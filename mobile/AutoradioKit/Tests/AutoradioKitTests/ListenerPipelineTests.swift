@@ -109,10 +109,10 @@ final class ListenerPipelineTests: XCTestCase {
         final class Session: TranscriptionSession, @unchecked Sendable {
             let partials: AsyncStream<String>; let cont: AsyncStream<String>.Continuation
             let text: String, fail: Bool
-            var frames = 0, cancelled = false
+            var frames = 0, cancelled = false, finished = false
             init(text: String, fail: Bool) { self.text = text; self.fail = fail; (partials, cont) = AsyncStream<String>.makeStream() }
             func append(_ frame: AudioFrame) { frames += 1 }
-            func finish() async throws -> String { cont.finish(); if fail { throw LabError.unavailable("boom") }; return text }
+            func finish() async throws -> String { cont.finish(); finished = true; if fail { throw LabError.unavailable("boom") }; return text }
             func cancel() { cancelled = true; cont.finish() }
         }
     }
@@ -136,7 +136,9 @@ final class ListenerPipelineTests: XCTestCase {
         XCTAssertEqual(live.sessions[0].frames, 2); XCTAssertEqual(final.sessions[0].frames, 2)
         let text = try await s.finish()
         XCTAssertEqual(text, "Tell me more about the park.", "the final transcript, not the live one")
-        XCTAssertTrue(live.sessions[0].cancelled, "the live session is closed once the final one answered")
+        // S3: the live session is finished (its worker joined), never cancelled while its worker may still touch the shared manager
+        XCTAssertTrue(live.sessions[0].finished, "the live session is closed once the final one answered")
+        XCTAssertFalse(live.sessions[0].cancelled)
     }
 
     func testTheLiveWordsAreTheSessionsPartials() async throws {
@@ -170,6 +172,33 @@ final class ListenerPipelineTests: XCTestCase {
         let s = try await stage(registry(live: live, final: final), ready: ["live-model", "final-model"]).begin()
         let text = try await s.finish()
         XCTAssertEqual(text, "tell me more")
+    }
+
+    // S4: an empty final transcript is not an answer when the live recogniser heard words.
+    func testAnEmptyFinalTranscriptFallsBackToTheLiveWords() async throws {
+        let live = StubTranscriber(text: "tell me more"), final = StubTranscriber(text: "")
+        let s = try await stage(registry(live: live, final: final), ready: ["live-model", "final-model"]).begin()
+        let text = try await s.finish()
+        XCTAssertEqual(text, "tell me more")
+        let both = StubTranscriber(text: ""), none = StubTranscriber(text: "")
+        let s2 = try await stage(registry(live: both, final: none), ready: ["live-model", "final-model"]).begin()
+        let empty = try await s2.finish()
+        XCTAssertEqual(empty, "", "nothing heard by either is still nothing")
+    }
+
+    // B1: after voice setup the running app's listener is rebuilt from the list, speech detection and recognition together, with the composite's params.
+    func testApplyingTheChoiceAfterSetupRebuildsTheRunningListener() {
+        let r = StageRegistry.builtIn()
+        r.register(.speechBounds, id: "silero-vad", descriptor: StageDescriptor(displayName: "silero")) { _ in EnergyVAD(StageParams()) }
+        r.register(.transcriber, id: "parakeet-eou", descriptor: StageDescriptor(displayName: "eou")) { _ in StubTranscriber(text: "") }
+        r.register(.transcriber, id: "fluid-speech-mini", descriptor: StageDescriptor(displayName: "fluid")) { _ in StubTranscriber(text: "") }
+        let ready = MemoryReadiness()
+        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("lp-\(UUID().uuidString)"), session: NullSessionOwner(), registry: r, readiness: ready)
+        XCTAssertEqual(rt.configuration.setting(.transcriber)?.id, "apple-speech", "before the models are on the phone")
+        for m in [silero, eou, fluid] { ready.markReady(model: m) }
+        rt.applyListenerChoice()
+        XCTAssertEqual(rt.configuration.setting(.speechBounds)?.id, "silero-vad")
+        XCTAssertEqual(rt.configuration.setting(.transcriber), StageSetting(id: "live-then-final", params: ["live": .string("parakeet-eou"), "final": .string("fluid-speech-mini")]))
     }
 
     // C3
