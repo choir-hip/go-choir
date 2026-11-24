@@ -455,6 +455,11 @@ export async function loginPasskey(email) {
     if (finishRes.status === 403 && err.error === 'account_deletion_pending') {
       throw new DeletionPendingError(err);
     }
+    // The 72 hours are over and the removal has begun: nothing to cancel, and
+    // no offer (a cancel button that cannot work would be worse than none).
+    if (finishRes.status === 403 && err.error === 'account_deletion_purging') {
+      throw new DeletionPurgingError();
+    }
     const failure = new Error(err.error || `Login finish failed (${finishRes.status})`);
     failure.code = err.code || ''; // e.g. address_unproved: the sheet words it
     throw failure;
@@ -474,6 +479,14 @@ export class DeletionPendingError extends Error {
     this.name = 'DeletionPendingError';
     this.cancelToken = typeof offer.cancel_token === 'string' ? offer.cancel_token : '';
     this.purgeAfter = typeof offer.purge_after === 'string' ? offer.purge_after : '';
+  }
+}
+
+/** The passkey sign-in of an account whose removal has begun: no session, no offer. */
+export class DeletionPurgingError extends Error {
+  constructor() {
+    super('This account is being removed and cannot be cancelled.');
+    this.name = 'DeletionPurgingError';
   }
 }
 

@@ -24,7 +24,7 @@
   import { onMount } from 'svelte';
   import {
     getSession, loginPasskey, deleteAccountWithPasskey, cancelAccountDeletion, passkeyErrorMessage,
-    DeletionPendingError, plainDeletionDate, AuthRequiredError,
+    DeletionPendingError, DeletionPurgingError, plainDeletionDate, AuthRequiredError,
   } from './auth.js';
 
   type RouteState = 'checking' | 'signin' | 'info' | 'sure' | 'working' | 'scheduled' | 'offer' | 'cancelled';
@@ -58,6 +58,11 @@
       if (err instanceof DeletionPendingError) {
         offer = err;
         state = 'offer';
+        return;
+      }
+      if (err instanceof DeletionPurgingError) {
+        error = 'This account is being removed now. The removal has begun and cannot be cancelled.';
+        state = 'signin';
         return;
       }
       error = passkeyErrorMessage(err, 'login');
@@ -121,13 +126,15 @@
       <h1>Delete your account</h1>
       <h2>What is removed</h2>
       <p class="body" data-delete-removed>
-        Your account, your computer and everything on it: your edition, notes, documents, files, mail and its address,
-        your listening history, and any takes you published. Your passkey is removed from your account.
+        Your account and your passkey. Your computer, with its disk and its stored history: your edition, notes, documents,
+        files, mail and its address, and your listening history. Your synced documents. Any takes you published, their words and their audio.
       </p>
       <h2>What stays</h2>
       <p class="body" data-delete-stays>
+        <!-- LEAD: say "30 days" here and in the app's Delete page (settings.contract) only when the log retention is enforced (data-inventory section 7). -->
         Stories you published stay public, with your name taken off. A short receipt that the deletion happened, with no
-        personal details, and server logs for 30 days. Outside AI providers may keep copies of requests you made; we ask
+        personal details, and server logs, which are kept for a limited time. Mail you sent or received stays with the people
+        on the other end and with our mail provider. Outside AI providers may keep copies of requests you made; we ask
         them to delete them where their terms allow.
       </p>
       <h2>When</h2>

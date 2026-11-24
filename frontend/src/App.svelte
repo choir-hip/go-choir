@@ -30,7 +30,7 @@
   import DeleteAccountRoute from './lib/DeleteAccountRoute.svelte';
   import DeletionCancelOffer from './lib/DeletionCancelOffer.svelte';
   import { legacyAutopaperRedirect } from './lib/autopaper';
-  import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError, DeletionPendingError } from './lib/auth.js';
+  import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError, DeletionPendingError, DeletionPurgingError } from './lib/auth.js';
   import { markReturning, onAccountSwitched, scopedKey, setLastUserId, switchAccount } from './lib/accounts.js';
   import { prepareAccountSwitch } from './lib/shell-services';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
@@ -320,6 +320,8 @@
         // The account asked to be deleted: no session was made; the offer cancels it.
         deletionOffer = err;
         passkeyError = '';
+      } else if (err instanceof DeletionPurgingError) {
+        passkeyError = 'This account is being removed now. The removal has begun and cannot be cancelled.';
       } else {
         passkeyError = passkeyErrorMessage(err, type);
       }
