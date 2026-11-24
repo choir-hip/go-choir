@@ -49,6 +49,13 @@
 #     backup) is deleted as one; or it, a folder or a link passes unseen.
 #  A26 another login store (wtmpdb, faillog, tallylog) passes unseen.
 #  A27 an access-log file a process still holds open is unlinked.
+#  A28 a rotated login file is judged by when it was last written, not by its
+#     oldest record: the file logrotate has just made from a months-old live
+#     file is kept another whole limit.
+#  A29 a live login file whose oldest record is past the limit is left as it
+#     is (it must be emptied, never deleted); or the dry run empties it.
+#  A30 run by hand with no settings and no dry-run flag, the job deletes.
+#  A31 a last-login file a process holds open is unlinked.
 #  A14 any failure is not printed at error priority (the "<3>" prefix the
 #     journal reads), so `journalctl -p err` does not show it.
 set -u
@@ -64,9 +71,9 @@ jname() { printf 'system@%s-%016x-%016x.journal' 4b6e7d5a52a146ff8e6bc012dcebf5e
 printf '#!/usr/bin/env bash\necho "$*" >>"%s/journalctl.calls"\n' "$root" >"$root/bin/journalctl"; chmod +x "$root/bin/journalctl"
 now=$(date +%s)
 line() { printf '{"level":"info","ts":%s.123,"logger":"http.log.access","msg":"handled request"}\n' "$1"; }
-run() { env PATH="$root/bin:$PATH" LOG_MAX_DAYS="${DAYS-21}" CADDY_LOG_DIR="$root/caddy" JOURNAL_DIR="$root/journal" \
+run() { env -u INVOCATION_ID ${INV:+INVOCATION_ID=$INV} PATH="$root/bin:$PATH" LOG_MAX_DAYS="${DAYS-21}" CADDY_LOG_DIR="$root/caddy" JOURNAL_DIR="$root/journal" \
   LOGIN_LAST_FILES="$root/var/lastlog $root/var/lastlog2.db $root/var/absent" DEAD_LOG_FILES="$root/dead/a.log $root/dead/gone.log" \
-  LOGIN_RECORD_FILES="$root/var/btmp $root/var/wtmp" LOGROTATE_STATUS="$root/var/logrotate.status" LOG_AGE_DRY_RUN="${DRY-}" \
+  LOGIN_RECORD_FILES="$root/var/btmp $root/var/wtmp" LOGROTATE_STATUS="$root/var/logrotate.status" LOG_AGE_DRY_RUN="${DRY-}" LOG_AGE_REAL="${REAL-1}" \
   LOGIN_OTHER_STORES="$root/var/wtmpdb $root/var/faillog" PROC_DIR="$root/proc" \
   bash "$job" >"$root/out" 2>&1; echo $? >"$root/rc"; }
 ymd() { date -u -d "@$1" +%Y-%-m-%-d 2>/dev/null || date -u -r "$1" +%Y-%-m-%-d; }
@@ -119,7 +126,7 @@ run
 [ -e "$root/caddy/access-header-old.log" ] && [ ! -e "$root/caddy/access-header-new.log" ] && ok || bad "A9 the first entry's time was read from a header's ts"
 [ ! -e "$root/caddy/access-future.log" ] && ok || bad "A9 a file whose first entry is dated in the future stayed"
 [ ! -e "$root/dead/a.log" ] && [ -e "$root/dead/b.log" ] && ok || bad "A7 the named dead file stayed, or one not named was removed"
-grep -q "log age: max_days=21 journal_folders=1 access_deleted=6 access_kept=3 access_other=0 login_rotated_deleted=2 login_last_removed=2 dead_removed=1 journal_damaged_deleted=1 failed=0" "$root/out" && ok || bad "the summary line is wrong: $(cat "$root/out")"
+grep -q "log age: max_days=21 journal_folders=1 access_deleted=6 access_kept=3 access_other=0 login_rotated_deleted=2 login_last_removed=2 dead_removed=1 journal_damaged_deleted=1 login_truncated=0 failed=0" "$root/out" && ok || bad "the summary line is wrong: $(cat "$root/out")"
 # The folder may be gone once it is empty of our files: not an error.
 rm -rf "$root/caddy"; run
 [ "$(cat "$root/rc")" = 0 ] && ok || bad "a missing access-log folder is an error"
@@ -203,5 +210,27 @@ rm -f "$root/var/wtmpdb"
 echo '{"ts":1.0}' >"$root/caddy/access-held.log"; mkdir -p "$root/proc/4242/fd"; ln -s "$root/caddy/access-held.log" "$root/proc/4242/fd/7"; run
 [ -e "$root/caddy/access-held.log" ] && [ "$(cat "$root/rc")" != 0 ] && grep -q "^<3>log age: .*access-held.log is still open in process 4242" "$root/out" && ok || bad "A27 an access-log file a process holds open was deleted or passed: $(cat "$root/out")"
 rm -rf "$root/proc" "$root/caddy/access-held.log"; run; [ "$(cat "$root/rc")" = 0 ] && ok || bad "the final baseline fails: $(cat "$root/out")"
+# A28: utmp records are 384 bytes with the time, seconds, at byte 340.
+utmp() { python3 -c 'import struct,sys
+f,t,n=sys.argv[1],int(sys.argv[2]),int(sys.argv[3])
+open(f,"wb").write(b"".join(b"\0"*340+struct.pack("<i",t+i)+b"\0"*40 for i in range(n)))' "$1" "$2" "${3:-2}"; }
+utmp "$root/var/btmp.1" $((now - 40 * 86400)); utmp "$root/var/wtmp.1" $((now - 3 * 86400))
+utmp "$root/var/wtmp.2" $((now - 30 * 86400)); gzip -n "$root/var/wtmp.2"
+utmp "$root/var/btmp" $((now - 3600)); utmp "$root/var/wtmp" $((now - 3600)); run
+[ ! -e "$root/var/btmp.1" ] && [ ! -e "$root/var/wtmp.2.gz" ] && ok || bad "A28 a freshly written rotation whose oldest record is 40 (or 30, gzipped) days old stayed: $(cat "$root/out")"
+[ -e "$root/var/wtmp.1" ] && [ -s "$root/var/btmp" ] && [ "$(cat "$root/rc")" = 0 ] && grep -q "login_rotated_deleted=2 .*login_truncated=0 failed=0" "$root/out" && ok || bad "A28 a rotation three days old went, a live file was touched, or the job failed: $(cat "$root/out")"
+# A29
+utmp "$root/var/wtmp" $((now - 200 * 86400)) 5
+DRY=1 run; [ "$(wc -c <"$root/var/wtmp" | tr -d ' ')" = 1920 ] && grep -q "^would truncate $root/var/wtmp (oldest record 20" "$root/out" && grep -q "would_login_truncated=1 " "$root/out" && ok || bad "A29 the dry run emptied the live file or did not say it would: $(cat "$root/out")"
+run; [ -e "$root/var/wtmp" ] && [ ! -s "$root/var/wtmp" ] && [ -s "$root/var/btmp" ] && grep -q " login_truncated=1 failed=0" "$root/out" && ok || bad "A29 a live login file with a 200-day-old record was not emptied in place: $(cat "$root/out")"
+# A30
+echo '{"ts":1.0}' >"$root/caddy/access-old.log"
+REAL= run; [ "$(cat "$root/rc")" = 2 ] && [ -e "$root/caddy/access-old.log" ] && grep -q "^<3>log age: .*LOG_AGE_REAL=1" "$root/out" && ok || bad "A30 a real run by hand with no flag was not refused: $(cat "$root/out")"
+REAL= INV=abc run; [ "$(cat "$root/rc")" = 0 ] && [ ! -e "$root/caddy/access-old.log" ] && ok || bad "A30 a run started by systemd (INVOCATION_ID) was refused: $(cat "$root/out")"
+echo '{"ts":1.0}' >"$root/caddy/access-old.log"; REAL= DRY=1 run; [ "$(cat "$root/rc")" = 0 ] && ok || bad "A30 the dry run needs the real-run flag"; rm -f "$root/caddy/access-old.log"
+# A31
+echo l >"$root/var/lastlog2.db"; mkdir -p "$root/proc/77/fd"; ln -s "$root/var/lastlog2.db" "$root/proc/77/fd/5"; run
+[ -e "$root/var/lastlog2.db" ] && [ "$(cat "$root/rc")" != 0 ] && grep -q "^<3>log age: .*lastlog2.db is still open in process 77" "$root/out" && ok || bad "A31 a last-login file a process holds open was deleted or passed: $(cat "$root/out")"
+rm -rf "$root/proc"; run; [ ! -e "$root/var/lastlog2.db" ] && [ "$(cat "$root/rc")" = 0 ] && ok || bad "A31 the file was not removed once released: $(cat "$root/out")"
 echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]

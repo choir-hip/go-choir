@@ -24,8 +24,12 @@
 #    else in that folder (another file, a folder, a link, a hidden file) is
 #    left alone and fails the job: nothing ages it.
 #  3 Login records (LOGIN_RECORD_FILES: btmp, wtmp). logrotate, another
-#    unit, puts them in daily files. This job deletes a rotated file last
-#    written past the limit, and fails when logrotate's own record
+#    unit, puts them in daily files. This job deletes a rotated file whose
+#    OLDEST record is past the limit (the first record's time, read from
+#    the file; by its last write only when no record can be read), so the
+#    file logrotate makes at its first run from a months-old live file goes
+#    at once. A live file whose oldest record is past the limit is emptied
+#    in place, never deleted. The job fails when logrotate's own record
 #    (LOGROTATE_STATUS) shows a live file not rotated for over two days.
 #  4 The last-login records (who logged in last, from which address): removed
 #    every run. They have one record per account and no age to go by.
@@ -43,6 +47,11 @@
 # list is what the deploy's first run deletes. It deletes nothing and does
 # not call journalctl. It prints three things, kept apart:
 #   "would delete <path>"                  this job's own deletions, now;
+#   "would truncate <path> (oldest ...)"   a live login file whose records
+#                                          are past the limit: on the host
+#                                          logrotate moves them into a
+#                                          rotation first and the job deletes
+#                                          that; either way they go;
 #   "the journal trim would delete <path>" closed journal files past the limit;
 #   "logrotate would rotate <path>"        login-record files logrotate, which
 #                                          the unit runs first, puts into a
@@ -73,6 +82,10 @@ days="$LOG_MAX_DAYS"
 case "$days" in ''|*[!0-9]*) echo "<3>log age: LOG_MAX_DAYS is not a number of days" >&2; exit 2 ;; esac
 if [ "$days" -lt 7 ] || [ "$days" -gt 28 ]; then echo "<3>log age: LOG_MAX_DAYS=$days is outside 7 to 28" >&2; exit 2; fi
 dry="${LOG_AGE_DRY_RUN:-}"
+if [ -z "$dry" ] && [ -z "${INVOCATION_ID:-}" ] && [ "${LOG_AGE_REAL:-}" != 1 ]; then
+  # The defaults are the production paths: a run by hand must say it means it.
+  echo "<3>log age: refused: a real run deletes files. systemd starts it (INVOCATION_ID); by hand set LOG_AGE_REAL=1, or LOG_AGE_DRY_RUN=1 to list and delete nothing" >&2; exit 2
+fi
 case "$dry" in ''|1) ;; *) echo "<3>log age: LOG_AGE_DRY_RUN is '$dry': only 1 is a dry run; unset it for a real run" >&2; exit 2 ;; esac
 failed=0
 err() { failed=$((failed + 1)); echo "<3>log age: $*"; }
@@ -91,6 +104,15 @@ holder() { # the process id that has this file open, if any
     if [ "$(readlink "$l" 2>/dev/null)" = "$1" ]; then l="${l#"$PROC_DIR"/}"; echo "${l%%/*}"; return 0; fi
   done
   return 0
+}
+oldest() { # a login-record file's first record's time, or nothing
+  # utmp records (x86-64 Linux) are 384 bytes; the time, in seconds, is the
+  # 32-bit number at byte 340 (read on Node B 2026-11-24: sizes divide by 384
+  # and the first times match the files' history).
+  local t
+  t="$(gzip -cdf -- "$1" 2>/dev/null | od -An -tu4 -j340 -N4 2>/dev/null | tr -d ' \n')"
+  case "$t" in ''|*[!0-9]*) return 0 ;; esac
+  if [ "$t" -gt 1000000000 ] && [ "$t" -le $(( now + 86400 )) ]; then echo "$t"; fi
 }
 ymd() { date -u -d "@$1" +%Y-%-m-%-d 2>/dev/null || date -u -r "$1" +%Y-%-m-%-d; }
 
@@ -160,7 +182,7 @@ deleted=$went
 # without .gz (logrotate's two naming schemes); its last write is its newest
 # record. Anything else under the name is not ours to delete and nothing
 # ages it: it fails the job.
-went=0
+went=0; truncated=0
 status="$LOGROTATE_STATUS"
 for live in $LOGIN_RECORD_FILES; do
   for f in "$live".* "$live"-*; do
@@ -168,9 +190,22 @@ for live in $LOGIN_RECORD_FILES; do
     if [ -L "$f" ] || [ ! -f "$f" ] || ! printf '%s' "${f#"$live"}" | grep -Eq '^(\.[0-9]+|-[0-9]{8})(\.gz)?$'; then
       err "$f is under a login record's name and is not a rotation: nothing ages it"; continue
     fi
-    if [ -n "$(find "$f" -maxdepth 0 -mmin +$(( days * 1440 )) 2>/dev/null)" ]; then remove "$f"; fi
+    first="$(oldest "$f")"
+    if [ -n "$first" ]; then
+      if [ "$first" -lt "$cutoff" ]; then remove "$f"; fi
+    elif [ -n "$(find "$f" -maxdepth 0 -mmin +$(( days * 1440 )) 2>/dev/null)" ]; then remove "$f"; fi
   done
   [ -s "$live" ] || continue # absent or empty: nothing to age
+  [ -f "$live" ] && [ ! -L "$live" ] || { err "$live is not a plain file"; continue; }
+  first="$(oldest "$live")"
+  if [ -n "$first" ] && [ "$first" -lt "$cutoff" ]; then
+    # Its records are past the limit. On the host logrotate has usually just
+    # moved them into a rotation, deleted above; when it has not, the file
+    # is emptied in place (its writers keep their handle).
+    if [ -n "$dry" ]; then echo "would truncate $live (oldest record $(ymd "$first"))"; truncated=$((truncated + 1))
+    elif : >"$live" 2>/dev/null; then truncated=$((truncated + 1)); continue
+    else err "could not empty $live"; fi
+  fi
   last="$(grep -F "\"$live\" " "$status" 2>/dev/null | head -n 1 | awk '{print $2}' | cut -d- -f1-3)"
   recent=
   for back in -1 0 1 2; do [ -n "$last" ] && [ "$last" = "$(ymd $(( now - back * 86400 )))" ] && recent=1; done
@@ -188,12 +223,16 @@ done
 rotated=$went
 
 went=0
-for f in $LOGIN_LAST_FILES; do remove "$f"; done
+for f in $LOGIN_LAST_FILES; do
+  pid="$(holder "$f")"
+  if [ -n "$pid" ]; then err "$f is still open in process $pid: not deleted under it; the next run takes it"; continue; fi
+  remove "$f"
+done
 login=$went
 went=0
 for f in $DEAD_LOG_FILES; do remove "$f"; done
 dead=$went
 
 w=; [ -n "$dry" ] && w=would_
-echo "log age: ${dry:+dry_run=1 }max_days=$days journal_folders=$folders ${w}access_deleted=$deleted access_kept=$kept access_other=$other ${w}login_rotated_deleted=$rotated ${w}login_last_removed=$login ${w}dead_removed=$dead ${w}journal_damaged_deleted=$damaged failed=$failed"
+echo "log age: ${dry:+dry_run=1 }max_days=$days journal_folders=$folders ${w}access_deleted=$deleted access_kept=$kept access_other=$other ${w}login_rotated_deleted=$rotated ${w}login_last_removed=$login ${w}dead_removed=$dead ${w}journal_damaged_deleted=$damaged ${w}login_truncated=$truncated failed=$failed"
 [ "$failed" = 0 ]

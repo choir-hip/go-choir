@@ -53,7 +53,7 @@ gate reading option lists could not see (below).
 | --- | --- | --- |
 | journal: every service, and the web access log | `MaxRetentionSec=21day`. journald names a closed file by its first entry's time and deletes by that (systemd `journal-vacuum.c`, read). The job `go-choir-log-age` runs `journalctl --rotate` (returns when the rotation is complete, journalctl(1); closes the open file whether or not anything was written), then `--vacuum-time=21d`, then CHECKS that no closed file with a first entry past the limit is left | 1 (a file's span, added though deletion is by first entry) + 21 + 1 (wait for the job) + 1 (a missed run) = **24 days** |
 | access-log files left under `/var/log/caddy` | the job deletes `access-*.log` and `access-*.log.gz` whose first line (the oldest entry) is past 21 days, dated in the future, or unreadable. Caddy no longer writes there. Any other file in the folder fails the job | 23 days |
-| `btmp`, `wtmp` (login attempts, with addresses) | logrotate: daily files, 21 kept, `maxage 21`, rotated when small and when empty. The age job runs logrotate first, then deletes any rotated file last written past 21 days itself and fails if logrotate's record shows a live file not rotated for over two days: so the job's success covers these too | 1 + 21 + 1 + 1 = **24 days** |
+| `btmp`, `wtmp` (login attempts, with addresses) | logrotate: daily files, 21 kept, `maxage 21`, rotated when small and when empty. The age job runs logrotate first, then deletes any rotated file whose **oldest record** is past 21 days (the first record's time, read from the file; by last write only when no record can be read), empties in place a live file whose oldest record is past 21 days, and fails if logrotate's record shows a live file not rotated for over two days: so the job's success covers these too | 1 + 21 + 1 + 1 = **24 days** |
 | `lastlog`, `lastlog.migrated`, `lastlog2.db` and its side files | removed at every run of the job; sshd no longer prints it. One record per account, so there is no age to go by | 1 day (2 with a missed run) |
 
 **One job's success means the whole bound.** `go-choir-log-age` deletes or
@@ -75,7 +75,11 @@ this: the unit runs logrotate first, which rotates and deletes.
 
 The script's own defaults are the production paths and the 21-day limit (the
 gate fails if they differ from the unit's), so the list is the deploy's. It
-deletes nothing and does not call journalctl. It prints, kept apart: `would
+deletes nothing and does not call journalctl. A real run by hand is refused
+unless `LOG_AGE_REAL=1` is set (systemd's own start is recognised), so
+forgetting the dry-run flag deletes nothing. It prints, kept apart: `would
+truncate <path> (oldest record <date>)` for a live login file whose records
+are past the limit; `would
 delete <path>` for this job's own deletions (old access-log files, rotated
 login files past the limit such as `btmp.1`, damaged journal files past the
 limit, the last-login files, the dead files); `the journal trim would delete
@@ -118,7 +122,9 @@ host's named gap, not new here.
 
 The lead's condition for the absolute one was that every hole is closed.
 They are narrowed, not closed: an off host cannot delete. **So the qualified
-sentence is the one that is strictly true; the absolute one is the owner's
+sentence is the one that is strictly true, from the job's first successful
+run on (that run removes every login record, access-log entry and journal
+entry past the limit; there is no settling window); the absolute one is the owner's
 call.**
 
 **Neither sentence covers** (copied into `docs/ship/privacy-policy.md`):
@@ -149,8 +155,10 @@ call.**
 | other files in `/var/log/caddy` | 0 | |
 | last-login records | 3 files | `lastlog` (292 bytes), `lastlog.migrated` and `lastlog2.db` (empty) |
 | dead operator outputs | 3 files, 29 kB | `rebuild-0333528.log`, `rebuild-near-head-20260909.log`, `paper-repair-20261029T223916Z.log`, directly under `/var/lib/go-choir`; no program or document names them; contents not read |
-| by logrotate at its next run | `btmp.1` (19 MB, 2026-10-31) deleted; `btmp` and `wtmp` start daily files | |
-| journal | nothing | its oldest entry is a day old; no damaged (`.journal~`) file was present. One older than 21 days would be deleted and would show in the dry list |
+| login records, at the first run | all records older than 21 days go | Read 2026-11-24 (first record's time only): live `wtmp` holds records from 2026-03-07, live `btmp` from 2026-11-01, `btmp.1` from 2026-10-01. logrotate runs first and moves the two live files into new `.1` files (the old `btmp.1` becomes `btmp.2`); the job then deletes every rotation whose oldest record is past 21 days, which is all three. The dry run, taken before logrotate, shows the same content under the names it has then: `would delete /var/log/btmp.1` and `would truncate` for `wtmp` and `btmp`. After the run a new, young `btmp.1` may exist: "btmp.1 is gone" is not the check, the oldest record is |
+| journal | nothing | its oldest entry is a day old; no damaged (`.journal~`) file was present. One set aside more than 21 days ago would be deleted and would show in the dry list (a damaged file is aged by when journald set it aside, the only time in its name, not by its first entry) |
+| last-login side files (`lastlog2.db-wal`, `-shm`, `-journal`) | 0 today | absent at the dry run; removed if they appear, unless a process has one open, when the job fails and the next run takes it |
+| not on this list | | the deploy preflight's last resort (`--vacuum-size=2G`, only when the disk is under its floor, announced in the deploy log) can delete journal files |
 | an access-log file a process still has open | 0 expected | the job does not unlink it; it fails and names the process |
 
 Journal folders: 1. User journals: none.
@@ -177,7 +185,7 @@ build's own `logrotate --debug` check stays on.
 ## Remaining error
 
 - **Access logs go from 90 days to at most 24** and login-attempt records
-  from about 60 to about 23. That follows from the policy's number, not from
+  from about 60 to about 24. That follows from the policy's number, not from
   an owner ruling: the owner's to confirm with the deletion list.
 - The access log is read with `sudo journalctl -u caddy -o cat`, mixed with
   Caddy's own messages. A line over journald's 48 KiB limit is split and is
@@ -201,6 +209,9 @@ build's own `logrotate --debug` check stays on.
 - The 2 GiB last resort can trim the journal and still refuse the deploy.
 - Caddy's configuration is not parsed in the gate (no Caddy on the Mac); the
   log block was parsed by the host's Caddy by hand.
+- The open-file check compares the path a process opened: a file held
+  through a link or a bind mount, or deleted and still open, is not seen.
+- The approval shows the dry run's whole count line, through `failed=`.
 - Not yet proved on Node B. Before the landing, the lead runs the dry run
   there (the one command above, read-only) and the owner approves its list. The deployed proof,
   read-only, after the deploy (make one request to the site first):
