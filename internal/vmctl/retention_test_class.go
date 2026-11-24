@@ -185,6 +185,9 @@ func testIdleKeepReasons(own *VMOwnership, cfg RetentionPruneConfig, warmness Wa
 	if own.IsHeld() {
 		reasons = append(reasons, "held")
 	}
+	if cfg.accountDeleting(own.UserID) {
+		reasons = append(reasons, "account_deletion_pending")
+	}
 	if retentionSelectorNamed(cfg, own) {
 		reasons = append(reasons, "selector_named")
 	}
@@ -488,6 +491,9 @@ func inspectQuarantine(cfg RetentionPruneConfig, warmness WarmnessPolicyConfig, 
 		if owner.IsHeld() {
 			reasons = append(reasons, "owner_held")
 		}
+		if cfg.accountDeleting(owner.UserID) {
+			reasons = append(reasons, "owner_account_deletion_pending")
+		}
 		if owner.StoppedBy == "recover_current" {
 			reasons = append(reasons, "owner_recovering")
 		}
@@ -605,7 +611,7 @@ func (r *OwnershipRegistry) destroyTestIdleCandidate(candidate RetentionPruneCan
 	now := r.retentionNow()
 	r.mu.Lock()
 	mgr := r.vmManager
-	cfg := normalizeRetentionPruneConfig(r.retentionPrune)
+	cfg := withDeletionRecords(normalizeRetentionPruneConfig(r.retentionPrune))
 	warmness := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
 	current := r.vmByID[candidate.VMID]
 	if mgr == nil || current == nil || current.UserID != candidate.UserID ||
@@ -672,7 +678,7 @@ func (r *OwnershipRegistry) destroyTestIdleCandidate(candidate RetentionPruneCan
 func (r *OwnershipRegistry) removeRetentionQuarantine(planned RetentionQuarantineEntry) (int64, bool) {
 	now := r.retentionNow()
 	r.mu.RLock()
-	cfg := normalizeRetentionPruneConfig(r.retentionPrune)
+	cfg := withDeletionRecords(normalizeRetentionPruneConfig(r.retentionPrune))
 	warmness := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
 	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {

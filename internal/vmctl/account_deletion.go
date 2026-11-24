@@ -176,6 +176,7 @@ func (r *OwnershipRegistry) StopAccountComputers(userID string) (int, error) {
 // AccountDestroyResult counts what a destroy removed.
 type AccountDestroyResult struct {
 	Computers []string `json:"computers"`
+	VMIDs     []string `json:"vm_ids,omitempty"`
 	VMStates  int      `json:"vm_states"`
 }
 
@@ -248,6 +249,7 @@ func (r *OwnershipRegistry) DestroyAccountComputers(userID string, now time.Time
 			continue
 		}
 		res.Computers = append(res.Computers, c.ComputerID)
+		res.VMIDs = append(res.VMIDs, c.VMID)
 		res.VMStates++
 		log.Printf("vmctl: account deletion destroyed computer %s (%s)", c.ComputerID, c.VMID)
 	}
