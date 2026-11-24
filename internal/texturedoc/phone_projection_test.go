@@ -24,6 +24,7 @@ type phoneProjectionCase struct {
 	HeadBody *json.RawMessage     `json:"head_body,omitempty"`
 	HeadText string               `json:"head_content,omitempty"`
 	BodyDoc  StructuredTextureDoc `json:"body_doc"`
+	Entities []SourceEntity       `json:"entities,omitempty"`
 	Content  string               `json:"content"`
 }
 
@@ -42,7 +43,7 @@ func TestPhoneProjectionFixture(t *testing.T) {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.Projection) < 10 || len(f.Merge) < 8 {
+	if len(f.Projection) < 20 || len(f.Merge) < 14 {
 		t.Fatalf("the fixture has %d projection and %d merge cases", len(f.Projection), len(f.Merge))
 	}
 	if os.Getenv("UPDATE_PHONE_PROJECTION") == "1" {
@@ -52,14 +53,28 @@ func TestPhoneProjectionFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, key := range []string{"projection", "merge"} {
-			for _, item := range g[key].([]any) {
-				c := item.(map[string]any)
+			items, ok := g[key].([]any)
+			if !ok {
+				t.Fatalf("the fixture has no %q list", key)
+			}
+			for _, item := range items {
+				c, ok := item.(map[string]any)
+				if !ok {
+					t.Fatalf("%q holds a case that is not an object", key)
+				}
 				body, _ := json.Marshal(c["body_doc"])
 				var doc StructuredTextureDoc
 				if err := json.Unmarshal(body, &doc); err != nil {
 					t.Fatalf("%v: %v", c["name"], err)
 				}
-				p, err := Project(doc, nil)
+				var ents []SourceEntity
+				if raw, has := c["entities"]; has {
+					eb, _ := json.Marshal(raw)
+					if err := json.Unmarshal(eb, &ents); err != nil {
+						t.Fatalf("%v: entities: %v", c["name"], err)
+					}
+				}
+				p, err := Project(doc, ents)
 				if err != nil {
 					t.Fatalf("%v: the server refuses this body_doc: %v", c["name"], err)
 				}
@@ -77,7 +92,7 @@ func TestPhoneProjectionFixture(t *testing.T) {
 	}
 	for _, group := range [][]phoneProjectionCase{f.Projection, f.Merge} {
 		for _, c := range group {
-			p, err := Project(c.BodyDoc, nil)
+			p, err := Project(c.BodyDoc, c.Entities)
 			if err != nil {
 				t.Errorf("%s: the server refuses this body_doc: %v", c.Name, err)
 				continue
@@ -88,7 +103,7 @@ func TestPhoneProjectionFixture(t *testing.T) {
 		}
 	}
 	for _, c := range f.Merge {
-		if want := strings.TrimRight(c.Text, "\n"); !strings.Contains(c.Name, "markup") && c.Content != want {
+		if want := strings.TrimRight(c.Text, "\n"); !strings.Contains(c.Name, "markup") && !strings.Contains(c.Name, "cited") && c.Content != want {
 			t.Errorf("%s: the text %q was sent and the server derives %q", c.Name, c.Text, c.Content)
 		}
 	}

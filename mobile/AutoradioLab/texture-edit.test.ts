@@ -4,14 +4,20 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Editor, PENDING_DIR, editableDoc, textureEditInfo, textureEdit, textureEditOpen, textureFlush, wipeTextureEdit, forgetTextureEdit, type Net, type Info } from './texture-edit.ts';
 import { HTTPError, SignedOutError, resetSeam, bindNative, beginSignOut, nextGeneration } from './api.ts';
-import { projectBody } from './texture-body.ts';
+import { projectBody, citedIds } from './texture-body.ts';
 
 // ---------------------------------------------------------------------------------------------------------------- the fake server
-type Rev = { id: string; content: string; body: unknown; n: number };
+type Rev = { id: string; content: string; body: unknown; n: number; entities?: unknown[] };
 let revs: Map<string, Rev>; let head: Record<string, string>; let traj: Record<string, string>; let keys: Map<string, string>;
 let log: { method: string; path: string; body?: Record<string, unknown> }[];
 let failNext: (() => Error) | null; let postMode: 'normal' | 'landHang' | 'dropHang'; let getGate: Promise<void> | null; let postGate: Promise<void> | null; let failGets: boolean; let seq: number;
 const body = (t: string): unknown => ({ schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'd' }, content: [{ type: 'paragraph', attrs: { id: 'p' }, content: [{ type: 'text', text: t }] }] } });
+const ENTITY = { source_entity_id: 'src_a', target: { kind: 'web_url', uri: 'https://example.net/a' }, selectors: [{ kind: 'whole_resource' }], display: { mode: 'numbered_ref', title: 'Report A' }, evidence: { state: 'available', open_surface: 'source' }, provenance: { created_by: 'test' } };
+const CITED_BODY = { schema: 'choir.texture_doc.v1', doc: { type: 'doc', attrs: { id: 'dc' }, content: [
+  { type: 'paragraph', attrs: { id: 'p1' }, content: [{ type: 'text', text: 'The claim ' }, { type: 'source_ref', attrs: { id: 'r1', source_entity_id: 'src_a', display_mode: 'numbered_ref' } }, { type: 'text', text: '.' }] },
+  { type: 'embed', attrs: { id: 'e1', kind: 'file', title: 'report.pdf', target: { path: 'Files/report.pdf', mime: 'application/pdf' } } },
+  { type: 'paragraph', attrs: { id: 'p3' }, content: [{ type: 'text', text: 'Last.' }] }] } };
+const CITED_TEXT = 'The claim [1].\n\n[file: report.pdf]\n\nLast.';
 const hang = (): Promise<never> => new Promise<never>(() => undefined);
 const reply = (b: unknown) => ({ body: b, serverTime: null, raw: '' });
 const net: Net = { json: async (path, opts) => {
@@ -21,7 +27,7 @@ const net: Net = { json: async (path, opts) => {
   let m = path.match(/^\/api\/texture\/documents\/([^/]+)$/);
   if (m && method === 'GET') return reply({ document: { doc_id: m[1], current_revision_id: head[m[1]], ...(traj[m[1]] ? { trajectory_id: traj[m[1]] } : {}) } });
   m = path.match(/^\/api\/texture\/revisions\/([^/]+)$/);
-  if (m) { const r = revs.get(m[1])!; return reply({ revision: { revision_id: r.id, content: r.content, body_doc: r.body, version_number: r.n } }); }
+  if (m) { const r = revs.get(m[1])!; return reply({ revision: { revision_id: r.id, content: r.content, body_doc: r.body, version_number: r.n, ...(r.entities ? { source_entities: r.entities } : {}) } }); }
   m = path.match(/^\/api\/texture\/lifecycle\/([^/]+)$/);
   if (m) return reply({ trajectory: { lifecycle_version: 7 } });
   m = path.match(/^\/api\/texture\/documents\/([^/]+)\/revisions$/);
@@ -32,11 +38,18 @@ const net: Net = { json: async (path, opts) => {
     const done = keys.get(String(b.idempotency_key));
     if (done) return reply({ revision: { revision_id: done, version_number: revs.get(done)!.n } });         // the same key twice is one revision
     // the real server's rule (internal/store/texture_structured_revision.go): content is the projection of body_doc, else 400. projectBody is held to the server's own function by the shared fixture (texture-body-projection.test.ts).
-    if (b.body_doc && String(b.content ?? '').trim() !== '' && b.content !== projectBody(b.body_doc as never)) throw new HTTPError(400, 'HTTP 400: invalid texture revision: content must match derived body_doc projection');
+    // Validate (internal/texturedoc/schema.go): every source_ref names a source entity the revision carries, and every entity it carries is cited
+    if (b.body_doc) {
+      const have = new Set(((b.source_entities as { source_entity_id: string }[] | undefined) ?? []).map((e) => e.source_entity_id));
+      const cited = citedIds(b.body_doc as never);
+      for (const c of cited) if (!have.has(c)) throw new HTTPError(400, `HTTP 400: invalid texture revision: source_ref source_entity_id "${c}" does not resolve`);
+      for (const h of have) if (!cited.has(h)) throw new HTTPError(400, `HTTP 400: invalid texture revision: source_entity_id "${h}" is not referenced by a source_ref node`);
+    }
+    if (b.body_doc && String(b.content ?? '').trim() !== '' && b.content !== projectBody(b.body_doc as never, (b.source_entities as never) ?? [])) throw new HTTPError(400, 'HTTP 400: invalid texture revision: content must match derived body_doc projection');
     if (postMode === 'dropHang') return hang();
     if (String(b.parent_revision_id ?? '') !== head[doc]) throw new HTTPError(409, 'HTTP 409: document head changed');
     seq += 1; const id = `rev-new-${seq}`;
-    revs.set(id, { id, content: String(b.content), body: b.body_doc, n: (revs.get(head[doc])?.n ?? -1) + 1 }); head[doc] = id; keys.set(String(b.idempotency_key), id);
+    revs.set(id, { id, content: String(b.content), body: b.body_doc, n: (revs.get(head[doc])?.n ?? -1) + 1, entities: b.source_entities as unknown[] | undefined }); head[doc] = id; keys.set(String(b.idempotency_key), id);
     if (postMode === 'landHang') return hang();
     return reply({ revision: { revision_id: id, version_number: revs.get(id)!.n } });
   }
@@ -66,7 +79,7 @@ const tick = (ms = 15): Promise<void> => new Promise((r) => setTimeout(r, ms));
 beforeEach(() => {
   resetSeam(); files.clear(); log = []; failNext = null; postMode = 'normal'; getGate = null; postGate = null; failGets = false; seq = 0; keys = new Map(); traj = {};
   writeHook = null; writes = 0; readError = false; rmHook = null;
-  revs = new Map([['r0', { id: 'r0', content: 'Hello world.', body: body('Hello world.'), n: 0 }]]); head = { d1: 'r0', d2: 'r0', d3: '' };
+  revs = new Map([['r0', { id: 'r0', content: 'Hello world.', body: body('Hello world.'), n: 0 }], ['rc', { id: 'rc', content: CITED_TEXT, body: CITED_BODY, n: 0, entities: [ENTITY] }]]); head = { d1: 'r0', d2: 'r0', d3: '', d4: 'rc' };
 });
 const other = (id: string, content: string, doc = 'd1'): void => { revs.set(id, { id, content, body: body(content), n: 5 }); head[doc] = id; };
 
@@ -401,7 +414,7 @@ describe('kills', () => {
   test('K3 killed during the post: it did NOT land -> posted again with the SAME key; it DID land -> acknowledged, no second revision', async () => {
     postMode = 'dropHang'; const e = mk('acct-1', 30); await e.edit(A, 'Hello world. a', 'Hello world.'); await e.flush(A); const key = journal().d1.key; e.kill();
     postMode = 'normal'; const i = await mk().flush(A);
-    expect(i.status).toBe('saved'); expect(posts().filter((p) => p.body!.idempotency_key === key).length).toBe(2); expect(revs.size).toBe(2);
+    expect(i.status).toBe('saved'); expect(posts().filter((p) => p.body!.idempotency_key === key).length).toBe(2); expect(revs.size).toBe(3);                 // r0, the cited document's rc, and the one revision
     // landed:
     head.d2 = 'r0'; postMode = 'landHang'; const f = mk('acct-1', 30); await f.edit(B, 'Hello world. b', 'Hello world.'); await f.flush(B); f.kill();
     const before = revs.size; postMode = 'normal'; const j = await mk().flush(B);
@@ -464,6 +477,32 @@ describe('the review of 2026-11-24 (seat 1, exact-editor)', () => {
     expect(revs.get(head.d3)!.content).toBe(OWNER);
     const top = ((posts()[0].body!.body_doc as { doc: { content: { content: { type: string }[] }[] } }).doc.content);
     expect(top.length).toBe(1); expect(top[0].content.map((x) => x.type)).toEqual(['text', 'hard_break', 'text']);
+  });
+  test('X1 a marks-only edit is saved, not dropped as "the same text": the body changes, the content does not', async () => {
+    const e = mk(); await e.open(A);
+    await e.edit(A, 'Hello **world**.', 'Hello world.'); const i = await e.flush(A);
+    expect(i.status).toBe('saved'); expect(posts().length).toBe(1);
+    const marks = JSON.stringify(posts()[0].body!.body_doc); expect(marks).toContain('"strong"');
+  });
+  const CITED_DOC = 'texture:d4';
+  test('X2 a cited and embedded document is saved with its sources and keeps ONE embed, however often it is saved (it was 400, then an embed line that grew)', async () => {
+    const e = mk(); await e.open(CITED_DOC);
+    await e.edit(CITED_DOC, 'The claim [1].\n\n[file: report.pdf]\n\nLast, edited.', CITED_TEXT); expect((await e.flush(CITED_DOC)).status).toBe('saved');
+    const first = revs.get(head.d4)!;
+    expect(first.content.split('[file: report.pdf]').length - 1).toBe(1); expect(first.content).toBe('The claim [1].\n\n[file: report.pdf]\n\nLast, edited.');
+    expect((first.entities as unknown[]).length).toBe(1);
+    await e.edit(CITED_DOC, 'The claim [1].\n\n[file: report.pdf]\n\nLast, edited twice.', 'The claim [1].\n\n[file: report.pdf]\n\nLast, edited.');
+    const i = await e.flush(CITED_DOC); expect(i.status).toBe('saved');
+    expect(revs.get(head.d4)!.content).toBe('The claim [1].\n\n[file: report.pdf]\n\nLast, edited twice.');
+    const types = ((revs.get(head.d4)!.body as { doc: { content: { type: string }[] } }).doc.content).map((n) => n.type);
+    expect(types).toEqual(['paragraph', 'embed', 'paragraph']);
+  });
+  test('X3 editing the cited paragraph itself keeps its source_ref and the typed words; a deleted cited paragraph drops its entity (no "not referenced" 400)', async () => {
+    const e = mk(); await e.open(CITED_DOC);
+    await e.edit(CITED_DOC, 'The claim, reworded [1].\n\n[file: report.pdf]\n\nLast.', CITED_TEXT); expect((await e.flush(CITED_DOC)).status).toBe('saved');
+    expect(revs.get(head.d4)!.content).toContain('The claim, reworded'); expect(revs.get(head.d4)!.content).toContain('[1]');
+    await e.edit(CITED_DOC, '[file: report.pdf]\n\nLast.', revs.get(head.d4)!.content); expect((await e.flush(CITED_DOC)).status).toBe('saved');
+    expect((revs.get(head.d4)!.entities ?? []).length).toBe(0);
   });
   test('W2 an Enter at the end, then more typing: saved, and the next keystroke is no conflict with our own save', async () => {
     const e = mk(); await e.open(NEW);

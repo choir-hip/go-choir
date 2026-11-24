@@ -272,7 +272,7 @@ const root = (content: Node[], like: Body | null): Body => {
 export const topNodes = (body: Body | null): Node[] => (isObj(body?.doc) && Array.isArray((body!.doc as Record<string, unknown>).content) ? ((body!.doc as Record<string, unknown>).content as Node[]) : []);
 
 /** The `body_doc` for `newMarkdown`, given the revision it was loaded from (`original`, `originalMarkdown`). */
-export function merge(original: Body | null, originalMarkdown: string, newMarkdown: string): Merged {
+export function merge(original: Body | null, originalMarkdown: string, newMarkdown: string, entities: Entity[] = []): Merged {
   if (original !== null && newMarkdown === originalMarkdown) return { body: original, opaqueEdits: 0 };
   const s = topNodes(original);
   const b = blocks(originalMarkdown);
@@ -284,12 +284,13 @@ export function merge(original: Body | null, originalMarkdown: string, newMarkdo
   }
   // Which original node each original block is (forward, by what it says and what it is).
   const map: (number | null)[] = b.map(() => null);
+  const texts = projectNodes(s, entities);                                                       // what the server projected for each node: an unchanged block IS its node's text (an embed's line, a cited paragraph's markers)
   let cursor = 0;
   for (let i = 0; i < b.length; i += 1) {
     const k = kindOf(b[i]);
     const kk = key(b[i]);
     for (let j = cursor; j < s.length; j += 1) {
-      if (compatible(k, str(s[j].type)) && nodeKey(s[j]) === kk) { map[i] = j; cursor = j + 1; break; }
+      if (texts[j] === b[i] || (compatible(k, str(s[j].type)) && nodeKey(s[j]) === kk)) { map[i] = j; cursor = j + 1; break; }
     }
   }
   // Nodes no block claims (an embed, a source flow, an unknown node) stay after the block that came before them.
@@ -327,7 +328,8 @@ export function merge(original: Body | null, originalMarkdown: string, newMarkdo
       const di = t < deleted.length ? map[deleted[t]] : null;
       const old: Node | null = di !== null && di !== undefined ? s[di] : null;
       if (old !== null && !WRITABLE.has(str(old.type))) { out.push(old); opaque += 1; return; }      // a table, an embed, an unknown node: kept; the edit lives in `content`
-      const fresh = nodeFor(n[kk]);
+      const cited = old !== null && old.type === 'paragraph' && (Array.isArray(old.content) ? (old.content as Node[]) : []).some((x) => x.type === 'source_ref');
+      const fresh = nodeFor(cited ? n[kk].replace(/\[source \d+: [^\]]*\]|\[\d+\]/g, '') : n[kk]);      // the markers are the refs' own: they are not typed text (the server refuses a literal "[1]"); the refs stay with the paragraph
       if (old !== null) carry(old, fresh);
       out.push(fresh);
     });
@@ -354,38 +356,51 @@ function carry(old: Node, fresh: Node): void {
 
 // ---------------------------------------------------------------------------------------------------------------- the server's projection
 
-/** The text the server derives from a body_doc (internal/texturedoc/projection.go `Project`): blocks a blank line apart, no inline marks, hard breaks as newlines, the end trimmed of newlines. A numbered source_ref
- * is its `[n]` (numbers by first appearance; the same marker twice in a row is one); an expanded one would need its source entity's title, which the phone does not hold: it is written as numbered. */
-export function projectBody(body: Body | null): string {
+export type Entity = Record<string, unknown>;
+/** The server's `stringAttr`: a string attribute, trimmed. */
+const sattr = (n: Node, k: string): string => (isObj(n.attrs) && typeof (n.attrs as Record<string, unknown>)[k] === 'string' ? ((n.attrs as Record<string, unknown>)[k] as string).trim() : '');
+/** The server's `intAttr`: a whole number (a JSON number with no fraction), else none. */
+const iattr = (n: Node, k: string): number | null => { const v = isObj(n.attrs) ? (n.attrs as Record<string, unknown>)[k] : undefined; return typeof v === 'number' && Number.isInteger(v) ? v : null; };
+/** What the server prints for an expanded source (`sourceTitle`): the entity's display title, else label, else its target id, else uri, else its own id. */
+const entityTitle = (e: Entity | undefined, id: string): string => {
+  const d = isObj(e?.display) ? (e!.display as Record<string, unknown>) : {};
+  const g = isObj(e?.target) ? (e!.target as Record<string, unknown>) : {};
+  for (const v of [d.title, d.label, g.id, g.uri]) if (typeof v === 'string' && v !== '') return v;
+  return id;
+};
+
+/** The text of each top-level node as the server's projection writes it (numbers of sources by first appearance across the whole document). */
+export function projectNodes(nodes: Node[], entities: Entity[] = []): string[] {
   const numbers = new Map<string, number>();
-  const attr = (n: Node, k: string): unknown => (isObj(n.attrs) ? (n.attrs as Record<string, unknown>)[k] : undefined);
+  const byId = new Map<string, Entity>(entities.map((e) => [str(e.source_entity_id).trim(), e]));
   const kids = (n: Node): Node[] => (Array.isArray(n.content) ? (n.content as Node[]) : []);
-  const inlineOf = (nodes: Node[], out: { s: string }): void => {
-    for (const n of nodes) {
+  const inlineOf = (list: Node[], out: { s: string }): void => {
+    for (const n of list) {
       if (n.type === 'text') out.s += str(n.text);
       else if (n.type === 'hard_break') out.s += '\n';
       else if (n.type === 'source_ref') {
-        const id = str(attr(n, 'source_entity_id'));
+        const id = sattr(n, 'source_entity_id');
         let num = numbers.get(id);
         if (num === undefined) { num = numbers.size + 1; numbers.set(id, num); }
+        if (sattr(n, 'display_mode') === 'expanded_ref') { out.s += `[source ${num}: ${entityTitle(byId.get(id), id)}]`; continue; }
         const marker = `[${num}]`;
-        if (!out.s.replace(/ +$/, '').endsWith(marker)) out.s += marker;
+        if (!out.s.replace(/ +$/, '').endsWith(marker)) out.s += marker;     // adjacent citations of one source read as one marker
       }
     }
   };
   const item = (n: Node, depth: number, out: { s: string }): void => {
     kids(n).forEach((c, i) => { if (i > 0) out.s += '\n' + '  '.repeat(depth + 1); block(c, depth + 1, out); });
   };
-  const sequence = (nodes: Node[], depth: number, out: { s: string }): void => {
-    nodes.forEach((n, i) => { block(n, depth, out); if (i < nodes.length - 1) out.s += '\n\n'; });
+  const sequence = (list: Node[], depth: number, out: { s: string }): void => {
+    list.forEach((n, i) => { block(n, depth, out); if (i < list.length - 1) out.s += '\n\n'; });
   };
   const block = (n: Node, depth: number, out: { s: string }): void => {
     switch (n.type) {
       case 'paragraph': inlineOf(kids(n), out); break;
-      case 'heading': { const lv = Number(attr(n, 'level')); out.s += '#'.repeat(Number.isFinite(lv) && lv > 0 ? Math.trunc(lv) : 0) + ' '; inlineOf(kids(n), out); break; }
+      case 'heading': { const lv = iattr(n, 'level') ?? 0; out.s += '#'.repeat(Math.max(lv, 0)) + ' '; inlineOf(kids(n), out); break; }
       case 'bullet_list': kids(n).forEach((it, i, all) => { out.s += '  '.repeat(depth) + '- '; item(it, depth, out); if (i < all.length - 1) out.s += '\n'; }); break;
       case 'ordered_list': {
-        const start = typeof attr(n, 'start') === 'number' ? (attr(n, 'start') as number) : 1;
+        const start = iattr(n, 'start') ?? 1;
         kids(n).forEach((it, i, all) => { out.s += '  '.repeat(depth) + `${start + i}. `; item(it, depth, out); if (i < all.length - 1) out.s += '\n'; });
         break;
       }
@@ -396,13 +411,13 @@ export function projectBody(body: Body | null): string {
         out.s += inner.s.replace(/\n+$/, '').split('\n').map((l) => '> ' + l).join('\n');
         break;
       }
-      case 'code_block': out.s += '```' + str(attr(n, 'language')) + '\n' + kids(n).map((c) => str(c.text)).join('\n') + '\n```'; break;
+      case 'code_block': out.s += '```' + sattr(n, 'language') + '\n' + kids(n).map((c) => str(c.text)).join('\n') + '\n```'; break;
       case 'horizontal_rule': out.s += '---'; break;
       case 'embed': out.s += embedText(n); break;
     }
   };
   const embedText = (n: Node): string => {
-    const a = (k: string): string => str(attr(n, k)).trim();
+    const a = (k: string): string => sattr(n, k);
     switch (a('kind')) {
       case 'capsule_evidence': return `[evidence: ${a('caption')}]`;
       case 'file': return `[file: ${a('title')}]`;
@@ -412,9 +427,21 @@ export function projectBody(body: Body | null): string {
     }
     return '[embed]';
   };
-  const out = { s: '' };
-  sequence(topNodes(body), 0, out);
-  return out.s.replace(/\n+$/, '');
+  return nodes.map((n) => { const out = { s: '' }; block(n, 0, out); return out.s; });
+}
+
+/** The text the server derives from a body_doc (internal/texturedoc/projection.go `Project`): blocks a blank line apart, no inline marks, hard breaks as newlines, the end trimmed of newlines. The phone has no
+ * source entities of its own; those of the revision it read come in `entities` (an expanded source reads its title there). */
+export function projectBody(body: Body | null, entities: Entity[] = []): string {
+  return projectNodes(topNodes(body), entities).join('\n\n').replace(/\n+$/, '');
+}
+
+/** The ids of the source entities a body cites. */
+export function citedIds(body: Body | null): Set<string> {
+  const out = new Set<string>();
+  const walk = (n: Node): void => { if (n.type === 'source_ref') out.add(sattr(n, 'source_entity_id')); (Array.isArray(n.content) ? (n.content as Node[]) : []).forEach(walk); };
+  topNodes(body).forEach(walk);
+  return out;
 }
 
 /** A Markdown text as the server would hold it: the projection of the document the phone writes for it. Two texts are the same text when their `canon` is equal (a trailing newline, an Enter typed at the end, marks,

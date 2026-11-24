@@ -124,6 +124,8 @@ import { authedJSON, accountId, onSignOutBegin, sealingBlocked, segment, SignedO
 import * as Body from './texture-body.ts';
 /** Two Markdown texts are the same text when the server would hold the same content for both (a trailing newline, marks and a continuation's indent are not a difference): the one rule that compares the field with the head. */
 const same = (a: string, b: string): boolean => a === b || Body.canon(a) === Body.canon(b);
+/** Nothing to send only when the text is the head's text (a trailing newline aside): a marks-only edit has the same projection and is still an edit. */
+const unchanged = (a: string, b: string): boolean => a.replace(/\n+$/, '') === b.replace(/\n+$/, '');
 
 export const PENDING_DIR = 'app:/data/texture-pending';
 /** One network call of the editor ends in this: a link that answers nothing must not hold a document's queue. The unsent text is on disk before any call. */
@@ -132,7 +134,7 @@ export type Net = { json(path: string, opts?: { method?: 'GET' | 'POST'; body?: 
 export type Info = { status: string; label: string; notice: string; address: string; editable: boolean; writable: boolean; kept: string; hasKept: boolean; waiting: number; stamp: number; head: string; opened: boolean };
 export type Deps = { net: Net; storage: Storage | undefined; account: string; timeoutMs?: number };
 type Entry = { text: string; from: string | null; base: string; key: string };
-type Head = { id: string; content: string; body: Body.Body | null; version: number };
+type Head = { id: string; content: string; body: Body.Body | null; version: number; entities: Body.Entity[] };
 type Last = { kind: 'none' } | { kind: 'offline'; label: string } | { kind: 'failed'; label: string } | { kind: 'saved'; version: number };
 
 const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -260,12 +262,12 @@ export class Editor {
     return { id: str(d.current_revision_id), trajectory: str(d.trajectory_id) };
   }
   private async revision(rid: string): Promise<Head> {
-    if (rid === '') return { id: '', content: '', body: null, version: 0 };
+    if (rid === '') return { id: '', content: '', body: null, version: 0, entities: [] };
     const r = await this.json(`/api/texture/revisions/${segment(rid)}`);
     let v = obj(r.body) ? r.body : {};
     if (obj(v.revision)) v = v.revision;
     const n = typeof v.version_number === 'number' ? v.version_number : -1;
-    return { id: rid, content: str(v.content), body: obj(v.body_doc) ? (v.body_doc as Body.Body) : null, version: n + 1 };
+    return { id: rid, content: str(v.content), body: obj(v.body_doc) ? (v.body_doc as Body.Body) : null, version: n + 1, entities: Array.isArray(v.source_entities) ? (v.source_entities.filter(obj) as Body.Entity[]) : [] };
   }
   /** Reads the head into the facts. False when it could not (last says why, unless the answer was let go). */
   private async readHead(doc: string): Promise<{ row: { id: string; trajectory: string }; head: Head } | null> {
@@ -315,7 +317,7 @@ export class Editor {
     if (!this.heads.has(doc) && !(await this.readHead(doc))) return;
     const e = this.journal[doc], h = this.heads.get(doc);
     if (!e || !h) return;
-    if (same(e.text, h.content)) { delete this.journal[doc]; this.bump(); await this.persist(); return; }      // the same text as the head: nothing unsent
+    if (unchanged(e.text, h.content)) { delete this.journal[doc]; this.bump(); await this.persist(); return; }      // the same text as the head: nothing unsent
     if (e.base === '' && h.id !== '' && (e.from === null || same(e.from, h.content))) { e.base = h.id; await this.persist(); }
   }
   /** Post what is waiting now (Done, the idle pause, leaving the page, the retry: '' = every document with unsent text and no conflict). */
@@ -390,14 +392,17 @@ export class Editor {
       const e = this.journal[doc];
       if (!e) return;
       if (h.id !== e.base) {
-        if (same(h.content, e.text)) { this.acknowledged(doc, e.text, h.version); await this.persist(); return; }
+        if (unchanged(h.content, e.text)) { this.acknowledged(doc, e.text, h.version); await this.persist(); return; }
         if ((e.base === '' && e.from === null) || (e.from !== null && same(h.content, e.from))) { e.base = h.id; await this.persist(); }
         else { this.conflictAt.set(doc, h.id); this.bump(); return; }
       }
       const posted = e.text;
-      const merged = Body.merge(h.body, h.content, posted);
-      const content = Body.projectBody(merged.body);                                         // the text the server derives from body_doc: it refuses any other (400 content must match derived body_doc projection)
+      const merged = Body.merge(h.body, h.content, posted, h.entities);
+      const cited = Body.citedIds(merged.body);
+      const entities = h.entities.filter((x) => cited.has(str(x.source_entity_id).trim()));        // the sources the body cites: the server refuses a ref it cannot resolve and an entity nothing cites
+      const content = Body.projectBody(merged.body, entities);                                         // the text the server derives from body_doc: it refuses any other (400 content must match derived body_doc projection)
       const payload: Record<string, unknown> = { content, body_doc: merged.body, idempotency_key: e.key };
+      if (entities.length > 0) payload.source_entities = entities;
       if (h.id !== '') payload.parent_revision_id = h.id;
       if (row.trajectory !== '') {                                                            // as the web does: a document with a trajectory is saved against its lifecycle version
         const life = await this.json(`/api/texture/lifecycle/${segment(row.trajectory)}`);
@@ -412,7 +417,7 @@ export class Editor {
         if (err instanceof HTTPError && err.status === 409) {                                 // the head moved between the read and the post
           const again = await this.readHead(doc);
           if (!again) return;
-          if (same(again.head.content, posted)) {
+          if (unchanged(again.head.content, content)) {
             const cur = this.journal[doc];
             if (cur && cur.text !== posted) { cur.base = again.head.id; cur.from = again.head.content; }     // typed while it was posting: its base is the revision that holds the posted text
             this.acknowledged(doc, posted, again.head.version); await this.persist(); return;
@@ -426,7 +431,7 @@ export class Editor {
       if (obj(o.revision)) o = o.revision;
       const n = typeof o.version_number === 'number' ? o.version_number : -1;
       const id = str(o.revision_id);
-      this.heads.set(doc, { id, content, body: merged.body, version: n + 1 });
+      this.heads.set(doc, { id, content, body: merged.body, version: n + 1, entities });
       const cur = this.journal[doc];
       if (cur && cur.text !== posted) { cur.base = id; cur.from = content; }                   // typed while it was posting: its base is the revision just made
       this.acknowledged(doc, posted, n + 1);

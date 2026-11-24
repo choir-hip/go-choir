@@ -5,12 +5,12 @@
       "body_doc": {
         "doc": {
           "attrs": {
-            "id": "doc-24ddd9ff"
+            "id": "doc-1c924910"
           },
           "content": [
             {
               "attrs": {
-                "id": "paragraph-0d53875e"
+                "id": "paragraph-f540fd01"
               },
               "content": [
                 {
@@ -47,7 +47,7 @@
           "content": [
             {
               "attrs": {
-                "id": "paragraph-bf1fa27d"
+                "id": "paragraph-c2eac09c"
               },
               "content": [
                 {
@@ -96,12 +96,12 @@
       "body_doc": {
         "doc": {
           "attrs": {
-            "id": "doc-2f264e85"
+            "id": "doc-e4d1d734"
           },
           "content": [
             {
               "attrs": {
-                "id": "paragraph-2716b12c"
+                "id": "paragraph-c0aae67d"
               },
               "content": [
                 {
@@ -113,7 +113,7 @@
             },
             {
               "attrs": {
-                "id": "paragraph-62dbea0b"
+                "id": "paragraph-a131d230"
               },
               "content": [
                 {
@@ -138,12 +138,12 @@
       "body_doc": {
         "doc": {
           "attrs": {
-            "id": "doc-a65bd5c6"
+            "id": "doc-3a5e5826"
           },
           "content": [
             {
               "attrs": {
-                "id": "paragraph-9c53ed21"
+                "id": "paragraph-e9dfe0d0"
               },
               "content": [
                 {
@@ -169,7 +169,7 @@
             },
             {
               "attrs": {
-                "id": "paragraph-8219ea25"
+                "id": "paragraph-ea1c3d47"
               },
               "content": [
                 {
@@ -194,12 +194,12 @@
       "body_doc": {
         "doc": {
           "attrs": {
-            "id": "doc-b468251b"
+            "id": "doc-ad5d6408"
           },
           "content": [
             {
               "attrs": {
-                "id": "paragraph-1b37a088"
+                "id": "paragraph-f03d4f30"
               },
               "content": [
                 {
@@ -224,12 +224,12 @@
       "body_doc": {
         "doc": {
           "attrs": {
-            "id": "doc-63d34f89"
+            "id": "doc-b65919a2"
           },
           "content": [
             {
               "attrs": {
-                "id": "heading-484094e6",
+                "id": "heading-f4b6493b",
                 "level": 1
               },
               "content": [
@@ -242,17 +242,17 @@
             },
             {
               "attrs": {
-                "id": "list-71c25c9c"
+                "id": "list-1bea79e4"
               },
               "content": [
                 {
                   "attrs": {
-                    "id": "list-item-15a54c95"
+                    "id": "list-item-b90d37eb"
                   },
                   "content": [
                     {
                       "attrs": {
-                        "id": "paragraph-20398ef9"
+                        "id": "paragraph-2f726d2f"
                       },
                       "content": [
                         {
@@ -267,12 +267,12 @@
                 },
                 {
                   "attrs": {
-                    "id": "list-item-80ccd974"
+                    "id": "list-item-344c4e66"
                   },
                   "content": [
                     {
                       "attrs": {
-                        "id": "paragraph-79436bff"
+                        "id": "paragraph-a0cc2cb1"
                       },
                       "content": [
                         {
@@ -290,18 +290,18 @@
             },
             {
               "attrs": {
-                "id": "list-5ee622ec",
+                "id": "list-4f1f967c",
                 "start": 1
               },
               "content": [
                 {
                   "attrs": {
-                    "id": "list-item-5de309e6"
+                    "id": "list-item-5b190d1a"
                   },
                   "content": [
                     {
                       "attrs": {
-                        "id": "paragraph-e47bb293"
+                        "id": "paragraph-55482713"
                       },
                       "content": [
                         {
@@ -316,12 +316,12 @@
                 },
                 {
                   "attrs": {
-                    "id": "list-item-cb49337b"
+                    "id": "list-item-798746c6"
                   },
                   "content": [
                     {
                       "attrs": {
-                        "id": "paragraph-43540d61"
+                        "id": "paragraph-9a83fde1"
                       },
                       "content": [
                         {
@@ -352,17 +352,17 @@
       "body_doc": {
         "doc": {
           "attrs": {
-            "id": "doc-4fd85f65"
+            "id": "doc-9401d06c"
           },
           "content": [
             {
               "attrs": {
-                "id": "blockquote-a4fad2bb"
+                "id": "blockquote-4091790d"
               },
               "content": [
                 {
                   "attrs": {
-                    "id": "paragraph-c2c975b9"
+                    "id": "paragraph-98ea7e43"
                   },
                   "content": [
                     {
@@ -384,7 +384,7 @@
             },
             {
               "attrs": {
-                "id": "code-block-6384711c",
+                "id": "code-block-bb74d49a",
                 "language": "go"
               },
               "content": [
@@ -410,12 +410,12 @@
       "body_doc": {
         "doc": {
           "attrs": {
-            "id": "doc-58085f54"
+            "id": "doc-8b2fdd97"
           },
           "content": [
             {
               "attrs": {
-                "id": "paragraph-ea67a3ad"
+                "id": "paragraph-579b96f3"
               },
               "content": [
                 {
@@ -427,13 +427,13 @@
             },
             {
               "attrs": {
-                "id": "hr-edb255e7"
+                "id": "hr-adda2a21"
               },
               "type": "horizontal_rule"
             },
             {
               "attrs": {
-                "id": "paragraph-43a0892a"
+                "id": "paragraph-3e6855ef"
               },
               "content": [
                 {
@@ -617,12 +617,12 @@
       "body_doc": {
         "doc": {
           "attrs": {
-            "id": "doc-0410ba10"
+            "id": "doc-1422e15b"
           },
           "content": [
             {
               "attrs": {
-                "id": "paragraph-f180bfbe"
+                "id": "paragraph-c27baf0f"
               },
               "content": [
                 {
@@ -677,6 +677,521 @@
       "head_content": "",
       "name": "markup is not in the text",
       "text": "some **bold** and *em* and `code`"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Intro.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "The claim ",
+                  "type": "text"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "numbered_ref",
+                    "id": "r1",
+                    "source_entity_id": "src_a"
+                  },
+                  "type": "source_ref"
+                },
+                {
+                  "text": ".",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "e1",
+                "kind": "file",
+                "target": {
+                  "mime": "application/pdf",
+                  "path": "Files/report.pdf"
+                },
+                "title": "report.pdf"
+              },
+              "type": "embed"
+            },
+            {
+              "attrs": {
+                "id": "p3"
+              },
+              "content": [
+                {
+                  "text": "Last, edited.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast, edited.",
+      "entities": [
+        {
+          "display": {
+            "mode": "numbered_ref",
+            "title": "Report A"
+          },
+          "evidence": {
+            "open_surface": "source",
+            "state": "available"
+          },
+          "provenance": {
+            "created_by": "fixture"
+          },
+          "selectors": [
+            {
+              "kind": "whole_resource"
+            }
+          ],
+          "source_entity_id": "src_a",
+          "target": {
+            "kind": "web_url",
+            "uri": "https://example.net/src_a"
+          }
+        }
+      ],
+      "head_body": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Intro.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "The claim ",
+                  "type": "text"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "numbered_ref",
+                    "id": "r1",
+                    "source_entity_id": "src_a"
+                  },
+                  "type": "source_ref"
+                },
+                {
+                  "text": ".",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "e1",
+                "kind": "file",
+                "target": {
+                  "mime": "application/pdf",
+                  "path": "Files/report.pdf"
+                },
+                "title": "report.pdf"
+              },
+              "type": "embed"
+            },
+            {
+              "attrs": {
+                "id": "p3"
+              },
+              "content": [
+                {
+                  "text": "Last.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "head_content": "Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast.",
+      "name": "an edit next to an embed leaves ONE embed and one marker line",
+      "text": "Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast, edited."
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Intro.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "The claim, reworded.",
+                  "type": "text"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "numbered_ref",
+                    "id": "r1",
+                    "source_entity_id": "src_a"
+                  },
+                  "type": "source_ref"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "e1",
+                "kind": "file",
+                "target": {
+                  "mime": "application/pdf",
+                  "path": "Files/report.pdf"
+                },
+                "title": "report.pdf"
+              },
+              "type": "embed"
+            },
+            {
+              "attrs": {
+                "id": "p3"
+              },
+              "content": [
+                {
+                  "text": "Last.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Intro.\n\nThe claim, reworded.[1]\n\n[file: report.pdf]\n\nLast.",
+      "entities": [
+        {
+          "display": {
+            "mode": "numbered_ref",
+            "title": "Report A"
+          },
+          "evidence": {
+            "open_surface": "source",
+            "state": "available"
+          },
+          "provenance": {
+            "created_by": "fixture"
+          },
+          "selectors": [
+            {
+              "kind": "whole_resource"
+            }
+          ],
+          "source_entity_id": "src_a",
+          "target": {
+            "kind": "web_url",
+            "uri": "https://example.net/src_a"
+          }
+        }
+      ],
+      "head_body": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Intro.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "The claim ",
+                  "type": "text"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "numbered_ref",
+                    "id": "r1",
+                    "source_entity_id": "src_a"
+                  },
+                  "type": "source_ref"
+                },
+                {
+                  "text": ".",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "e1",
+                "kind": "file",
+                "target": {
+                  "mime": "application/pdf",
+                  "path": "Files/report.pdf"
+                },
+                "title": "report.pdf"
+              },
+              "type": "embed"
+            },
+            {
+              "attrs": {
+                "id": "p3"
+              },
+              "content": [
+                {
+                  "text": "Last.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "head_content": "Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast.",
+      "name": "an edit of a cited paragraph keeps its source_ref",
+      "text": "Intro.\n\nThe claim, reworded.\n\n[file: report.pdf]\n\nLast."
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Intro.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "The claim ",
+                  "type": "text"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "numbered_ref",
+                    "id": "r1",
+                    "source_entity_id": "src_a"
+                  },
+                  "type": "source_ref"
+                },
+                {
+                  "text": ".",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "e1",
+                "kind": "file",
+                "target": {
+                  "mime": "application/pdf",
+                  "path": "Files/report.pdf"
+                },
+                "title": "report.pdf"
+              },
+              "type": "embed"
+            },
+            {
+              "attrs": {
+                "id": "p3"
+              },
+              "content": [
+                {
+                  "text": "Last.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast.",
+      "entities": [
+        {
+          "display": {
+            "mode": "numbered_ref",
+            "title": "Report A"
+          },
+          "evidence": {
+            "open_surface": "source",
+            "state": "available"
+          },
+          "provenance": {
+            "created_by": "fixture"
+          },
+          "selectors": [
+            {
+              "kind": "whole_resource"
+            }
+          ],
+          "source_entity_id": "src_a",
+          "target": {
+            "kind": "web_url",
+            "uri": "https://example.net/src_a"
+          }
+        }
+      ],
+      "head_body": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Intro.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "The claim ",
+                  "type": "text"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "numbered_ref",
+                    "id": "r1",
+                    "source_entity_id": "src_a"
+                  },
+                  "type": "source_ref"
+                },
+                {
+                  "text": ".",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "e1",
+                "kind": "file",
+                "target": {
+                  "mime": "application/pdf",
+                  "path": "Files/report.pdf"
+                },
+                "title": "report.pdf"
+              },
+              "type": "embed"
+            },
+            {
+              "attrs": {
+                "id": "p3"
+              },
+              "content": [
+                {
+                  "text": "Last.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "head_content": "Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast.",
+      "name": "an unchanged cited document keeps every node",
+      "text": "Intro.\n\nThe claim [1].\n\n[file: report.pdf]\n\nLast."
     }
   ],
   "projection": [
@@ -1210,6 +1725,425 @@
       },
       "content": "```go\na := 1\nb := 2\n```",
       "name": "a code block with a language"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "A",
+                  "type": "text"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "numbered_ref",
+                    "id": "r1",
+                    "source_entity_id": "src_a"
+                  },
+                  "type": "source_ref"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "numbered_ref",
+                    "id": "r2",
+                    "source_entity_id": "src_a"
+                  },
+                  "type": "source_ref"
+                },
+                {
+                  "text": " and B",
+                  "type": "text"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "numbered_ref",
+                    "id": "r3",
+                    "source_entity_id": "src_b"
+                  },
+                  "type": "source_ref"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "A[1] and B[2]",
+      "entities": [
+        {
+          "display": {
+            "mode": "numbered_ref",
+            "title": "Report A"
+          },
+          "evidence": {
+            "open_surface": "source",
+            "state": "available"
+          },
+          "provenance": {
+            "created_by": "fixture"
+          },
+          "selectors": [
+            {
+              "kind": "whole_resource"
+            }
+          ],
+          "source_entity_id": "src_a",
+          "target": {
+            "kind": "web_url",
+            "uri": "https://example.net/src_a"
+          }
+        },
+        {
+          "display": {
+            "mode": "numbered_ref"
+          },
+          "evidence": {
+            "open_surface": "source",
+            "state": "available"
+          },
+          "provenance": {
+            "created_by": "fixture"
+          },
+          "selectors": [
+            {
+              "kind": "whole_resource"
+            }
+          ],
+          "source_entity_id": "src_b",
+          "target": {
+            "kind": "web_url",
+            "uri": "https://example.net/src_b"
+          }
+        }
+      ],
+      "name": "a numbered source_ref is [1], the same marker twice in a row once"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "display_mode": "expanded_ref",
+                    "id": "r1",
+                    "source_entity_id": "src_a"
+                  },
+                  "type": "source_ref"
+                },
+                {
+                  "text": " ",
+                  "type": "text"
+                },
+                {
+                  "attrs": {
+                    "display_mode": "expanded_ref",
+                    "id": "r2",
+                    "source_entity_id": "src_b"
+                  },
+                  "type": "source_ref"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "[source 1: Report A] [source 2: https://example.net/src_b]",
+      "entities": [
+        {
+          "display": {
+            "mode": "numbered_ref",
+            "title": "Report A"
+          },
+          "evidence": {
+            "open_surface": "source",
+            "state": "available"
+          },
+          "provenance": {
+            "created_by": "fixture"
+          },
+          "selectors": [
+            {
+              "kind": "whole_resource"
+            }
+          ],
+          "source_entity_id": "src_a",
+          "target": {
+            "kind": "web_url",
+            "uri": "https://example.net/src_a"
+          }
+        },
+        {
+          "display": {
+            "mode": "numbered_ref"
+          },
+          "evidence": {
+            "open_surface": "source",
+            "state": "available"
+          },
+          "provenance": {
+            "created_by": "fixture"
+          },
+          "selectors": [
+            {
+              "kind": "whole_resource"
+            }
+          ],
+          "source_entity_id": "src_b",
+          "target": {
+            "kind": "web_url",
+            "uri": "https://example.net/src_b"
+          }
+        }
+      ],
+      "name": "an expanded source_ref is [source N: title], the title falling back to the entity id"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Before.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "e1",
+                "kind": "file",
+                "target": {
+                  "mime": "application/pdf",
+                  "path": "Files/report.pdf"
+                },
+                "title": "report.pdf"
+              },
+              "type": "embed"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "After.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Before.\n\n[file: report.pdf]\n\nAfter.",
+      "name": "an embed is its own line"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "c1",
+                "language": " go "
+              },
+              "content": [
+                {
+                  "text": "x",
+                  "type": "text"
+                }
+              ],
+              "type": "code_block"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "```go\nx\n```",
+      "name": "a padded code language is trimmed by the server"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "l1",
+                "start": 2.5
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "id": "i1"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "p1"
+                      },
+                      "content": [
+                        {
+                          "text": "a",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                }
+              ],
+              "type": "ordered_list"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "1. a",
+      "name": "a start that is not an integer counts from 1"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "l1"
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "id": "i1"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "p1"
+                      },
+                      "content": [
+                        {
+                          "text": "a",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    },
+                    {
+                      "attrs": {
+                        "id": "p2"
+                      },
+                      "content": [
+                        {
+                          "text": "b",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                }
+              ],
+              "type": "bullet_list"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "- a\n  b",
+      "name": "a list item of two paragraphs"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "c1"
+              },
+              "content": [],
+              "type": "code_block"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "```\n\n```",
+      "name": "an empty code block"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Café — 日本語 😀",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Café — 日本語 😀",
+      "name": "unicode"
     },
     {
       "body_doc": {
