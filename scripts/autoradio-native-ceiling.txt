@@ -10,6 +10,7 @@
 # seen: without it every push is refused until the process dies), `SharedGeneration.admit` (the check and the write under one lock), the `generation` op in ModelsEntry.swift (the boot announcement and the wipe's floor),
 # and editionMirror answering `ok`. Set by hand to the exact count, not folded; --update refuses a rise.
 # 2026-11-23 (exact-flip-player): 49 files, 5741 lines, 26 names. Down 103 lines and one name: the radio view's item window (RadioItem, `items`), the `radioJump` send, the Swift story list and ChoirFront (the paper's list is now pushed by shared code with the queue snapshot: `candidates`), RadioPage.length.
-files 49
-lines 5741
+# 2026-11-24 (native passkeys, on main's 5741): 48 files, 5648 lines, 26 names, -93 lines and -1 file: CredentialReader.swift deleted; ChoirSignIn.swift lost the device flow's begin, poll and forget; the sign-in ops left ModelsEntry.swift; the sign-out ops and the legacy-key retire were added. Signing in is shared code (AutoradioLab/app-signin.ts). Set by hand.
+files 48
+lines 5648
 names 26
