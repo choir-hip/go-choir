@@ -10,6 +10,13 @@
 # 21), so the Go limit is 8 GiB under the backup unit's own 10G and 12G
 # lines; never run it uncapped beside the guests. Everything lands under a scratch directory,
 # never a live path, and each piece deletes its restore before it exits.
+#
+# A restore for real (not this drill) brings back every account deleted since
+# the snapshot. Before the restored host serves anyone, run on the restored
+# auth.db: `auth deletion-restore-check -db <auth.db> -ledger <ledger> -reapply`
+# (the ledger is account-deletion-ledger.jsonl beside the live auth.db; it is
+# not in the backup). Docs: docs/problems/no-off-host-backup-2026-10-20.md,
+# "Deleted accounts and a restore".
 #   tape:  200 random tape files compared byte for byte with live, and the
 #          two sqlite stores' integrity checks. Since the backup split the
 #          flat sha256/ directories into shard snapshots (status.json

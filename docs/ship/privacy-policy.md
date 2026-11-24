@@ -148,15 +148,16 @@ The app downloads voice and language model files to your phone. They are data fi
 
 ## 9. Deleting your account
 
-You can delete your account in the app (Settings, Account, Delete account) or at choir.news. You confirm with your passkey. [WHEN-BUILT]
+You can delete your account in the app (Settings, Account, Delete account) or at choir.news/account/delete. You confirm with your passkey. (Built 2026-11-24, not deployed: this section is true when the deployed drill has passed.)
 
 What happens:
 
 - Access is revoked at once. Every sign-in and key for your account stops working, and you are signed out on every device.
 - Nothing is erased for 72 hours. If you sign in during those 72 hours, the deletion is cancelled.
-- After 72 hours everything is permanently removed: your account, your email address and your passkeys, your computer and everything on it (documents, files, mail, notes and play history), the log of your requests and answers, and the key that seals it. Your takes are removed.
+- After 72 hours everything below is permanently removed from our servers: your account, your email address and your passkeys; your computer with its disk, its stored history (including the log of your requests and answers) and the key that seals it, and everything on it (documents, files, mail, notes and play history); your mail and its address; your synced documents; and your takes, their words and their audio.
 - Stories that Autopaper already published stay public. Your name is detached from them.
-- We keep a deletion receipt and 30 days of abuse logs. The destroyed computer may be kept in an archive for a further 7 days before it is erased. [CHECK: this 7-day figure is being verified.]
+- We keep a deletion receipt (a job number, counts and times, no content) and server logs. No archive of your computer is kept: the purge asks for none (`no_archive`, `docs/changes.md` 2026-11-24). Server logs are kept for a limited time; the period is settled in lane `log-retention` and is stated here when it is enforced. Mail you sent or received stays with the people on the other end and with our mail provider.
+- Our encrypted off-site backups still hold a copy of your account for up to three weeks (the backup keeps the last two daily sets and is cleaned up weekly, `scripts/off-host-backup.sh`), and it is deleted with them. If a backup is ever restored, the deletion is carried out again (`auth deletion-restore-check`, `docs/problems/no-off-host-backup-2026-10-20.md`).
 - After the 72 hours, deletion cannot be undone.
 - Deletion does not remove data already sent to outside AI model providers. Section 5 says why.
 

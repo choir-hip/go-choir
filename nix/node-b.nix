@@ -1612,6 +1612,16 @@ in
       # vm-state). Read-only here means a VMM escape cannot replace corpusd's
       # binary or the kernel every later cold boot runs. auth/ stays readable
       # for the retention sweep (VMCTL_RETENTION_AUTH_DB_PATH).
+      # The account purge reads the deletion record through the same mount
+      # (internal/purgeguard). SQLite reads a WAL database on a read-only
+      # mount only while another process (the auth service) holds it open and
+      # its -wal and -shm exist: internal/vmctl/account_deletion_ro_test.go
+      # runs exactly that, with the files and the directory read-only. With
+      # the auth service down the read FAILS and never answers empty, the
+      # retention sweeper keeps everything, and the purge's preflight (a
+      # vmctl route, before anything irreversible) pauses the purge with the
+      # account whole and cancellable. Do not widen this to ReadWritePaths:
+      # vmctl runs the VMs.
       ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" "-/var/lib/go-choir/guest-releases" "-/var/lib/go-choir/guest-bases" "-/var/lib/go-choir/guest-tools" "-/var/lib/go-choir/guest-layered" ];
       LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ pgClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host

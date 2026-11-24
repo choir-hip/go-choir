@@ -254,9 +254,11 @@ may adjust them as the system matures.
 **Event log history:** Each computer's history is kept as a sealed, append-only
 event log (the "tape"), encrypted under a key that belongs to that computer.
 Deleting an item removes it from the computer's working state, but its earlier
-versions remain on the tape. The tape is not rewritten. Stored file contents
-(binary attachments and other large blobs) can be deleted from Choir's servers
-on request; the tape keeps the record that they existed.
+versions remain on the tape. The tape is not rewritten for a single item.
+Stored file contents (binary attachments and other large blobs) can be deleted
+from Choir's servers on request; the tape keeps the record that they existed.
+Deleting your account destroys the whole computer, its tape and the key that
+seals it (Section 6.2).
 
 **Restoring earlier states:** A computer can be restored to an earlier state
 for about a week. Restoration exists to recover from failed self-development,
@@ -331,20 +333,29 @@ Section 10.
 
 ### 6.2 Right to Erasure (Right to Be Forgotten)
 
-You can request that we delete your personal data. We will:
+You can delete your account yourself, inside the Autoradio app (Settings,
+Account, Delete account) or at https://choir.news/account/delete, and confirm
+with your passkey. You can also ask us to do it (Section 10). Your access ends
+at once. For 72 hours nothing is removed, and signing in with your passkey
+cancels the deletion. After 72 hours we:
 
 - Delete your account, email, and WebAuthn credentials from the auth
   database.
-- Delete your textures, documents, and artifact state from PostgreSQL and
-  from your computer's SQLite database.
+- Destroy your computer: its disk, its tape (the sealed event log of your
+  computer's history, including your requests and the answers), the key that
+  seals it, and the files, notes and documents on it. No archive of it is
+  kept, and the deletion cannot be undone.
+- Delete your mail and your mail address, your synced documents and artifact
+  state, and the takes you published (their words and their audio).
 - Delete stored file contents (binary attachments and other large blobs) from
   Choir's servers.
 
-Your computer's tape is not rewritten by an erasure request: it remains
-sealed under your computer's key. We plan to offer deletion of a whole
-computer, which destroys that key so the tape can no longer be read by anyone.
-It will be offered after your computer can sync to your own machine, so you
-can keep a copy first.
+We keep a short receipt of the deletion (a job number, counts and times, no
+personal details) and server logs for a limited time. Our encrypted off-site
+backups still hold a copy of your account for up to three weeks, and it is
+deleted with them; if a backup is ever restored, the deletion is carried out
+again. Mail you sent or received stays with the people on the other end and
+with our mail provider.
 
 **Limitations:** We may need to retain certain data where required by law, or
 where data has been anonymized/aggregated such that it no longer identifies

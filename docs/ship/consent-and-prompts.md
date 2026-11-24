@@ -119,13 +119,13 @@ Screen title:
 
 Body:
 
-> This removes your account, your computer and everything on it: your edition, notes, documents, files, mail, listening history and your takes.
+> **What is removed.** Your account and your passkey. Your computer, with its disk, its stored history and the key that seals it: your edition, notes, documents, files, mail and its address, and your listening history. Your synced documents. Any takes you published, their words and their audio.
 >
-> Stories the paper already published stay public, with your name taken off.
+> **What stays.** Stories you published stay public, with your name taken off. A short receipt that the deletion happened, with no personal details, and server logs, which are kept for a limited time. Mail you sent or received stays with the people on the other end and with our mail provider. Our encrypted backups still hold a copy of the account for up to three weeks, and it is deleted with them; if a backup is ever restored, the deletion is carried out again. Outside AI providers may keep copies of requests you made; we ask them to delete them where their terms allow.
 >
-> Your access ends now, on every device. Everything is permanently removed after 72 hours. If you sign in before then, the deletion is cancelled.
->
-> Outside AI companies may keep what you sent them. We cannot delete it for you.
+> **When.** Your access ends the moment you confirm, on every device. The removal itself waits 72 hours. If you change your mind, sign in with your passkey in that time and choose Cancel deletion; nothing will have been removed. After 72 hours it cannot be undone.
+
+(These are the words of the app's page, `DeleteScreen`, and of `DeleteAccountRoute.svelte`; the policy's section 9 says the same.)
 
 Buttons:
 
