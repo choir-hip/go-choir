@@ -16,23 +16,51 @@ public struct OfferJob: Sendable, Equatable {
 }
 
 public enum ModelOffer {
-    public static let host = ModelList.host
+    /// Where every file comes from: the pinned GGUF files by their own address (KnownModels), the audio models through the FluidAudio library, the voice-print model by its pinned revision, all on Hugging Face.
+    public static let host = "Hugging Face"
+
+    /// The jobs the download step lists, in order, by the name shared code uses: the voice setup stages ("bounds" is the list's "vad") and the two files that are not voice-setup stages. (No turn-detector job: the list has none yet.)
+    public static let jobIDs = ["transcriber", "bounds", "voice", "responder", "speaker", "search"]
+    /// The voice-print model's id (WeSpeaker, about 8 MB: the files' own sizes summed).
+    public static let speakerID = "wespeaker-resnet34"
 
     /// Which group of the download step a job is in.
     public static func group(_ job: String) -> String { job == "voice" ? "voice" : job == "search" ? "search" : "voice-rest" }
 
-    /// The jobs, in the list's order, each with its options (the list's own order is its rank) and the one marked recommended for this phone. `ready`: job -> the id on the phone and passed its check.
-    /// The decision job shares the responder's file and is not listed. A job with no option that fits this phone lists its options and recommends none (it stays on its built-in floor unless the person picks one).
-    public static func jobs(profile: DeviceProfile, list: ModelList = .active, ready: [String: String] = [:]) -> [OfferJob] {
+    /// What the list's entry weighs: its pinned files when it has them, else the candidate table's size (FluidAudio fetches those itself).
+    static func bytes(_ e: ModelListEntry, role: ConfigRole) -> Int64 {
+        if let l = SetupCatalog.ladder(role.stage).first(where: { $0.id == e.id }), l.bytes > 0 { return l.bytes }       // what setup downloads for it, with its companions
+        return e.totalBytes > 0 ? e.totalBytes : (CandidateTable.candidate(e.id, role)?.bytes ?? 0)
+    }
+
+    /// The jobs, each with every option the list holds for it (best-ranked first) and the one marked recommended for this phone: the first entry whose device rule fits it (`ModelListEntry.isRecommended`, the machine
+    /// identifier and the memory). A row added to the list (a newer model, another recogniser) is an option here with no change to this code. The floors are not in the list. A job whose entries fit no rule lists them and recommends none.
+    /// `ready`: job -> the id on the phone and passed its check. The decision job shares the responder's file and is not listed.
+    public static func jobs(profile: DeviceProfile, list: ModelList = .builtIn(), ready: [String: String] = [:]) -> [OfferJob] {
         var out: [OfferJob] = []
-        for j in ModelList.jobs {
-            let opts = list.options(j)
-            if opts.isEmpty { continue }
-            let rec = list.recommended(j, for: profile)?.id
-            out.append(OfferJob(job: j, group: group(j), host: opts[0].host,
-                                options: opts.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id) }))
+        for j in jobIDs {
+            var opts: [(id: String, label: String, bytes: Int64, fits: Bool)] = []
+            if let role = ConfigRole.allCases.first(where: { $0.stage.rawValue == j }), j != "decision" {
+                let all = list.models.filter { $0.job == role.rawValue }.sorted { $0.rank > $1.rank }
+                opts = all.map { ($0.id, $0.label, bytes($0, role: role), $0.isRecommended(machine: profile.chip, memoryGB: profile.memoryGB)) }
+            } else if j == "speaker" {
+                opts = [(speakerID, "Your voice, kept on this phone", Int64(WeSpeakerEmbedder.files.reduce(0) { $0 + $1.size }), true)]
+            } else if j == "search" {
+                opts = [(KnownModels.embeddingGemma2.id, "EmbeddingGemma 2", KnownModels.embeddingGemma2.bytes, true)]
+            }
+            let opts2 = opts.filter { $0.bytes > 0 }
+            if opts2.isEmpty { continue }
+            let rec = opts2.first { $0.fits }?.id
+            out.append(OfferJob(job: j, group: group(j), host: host,
+                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id) }))
         }
         return out
+    }
+
+    /// The setup candidate for a pick the ladder does not carry (a row of the list that is not on a stage's ladder): built from the list's own table row.
+    public static func candidate(job: String, id: String) -> SetupCandidate? {
+        guard let st = SetupStage(rawValue: job), let role = ConfigRole.allCases.first(where: { $0.stage == st }), let c = CandidateTable.candidate(id, role) else { return nil }
+        return SetupCandidate(id: c.id, label: c.label, bytes: c.bytes, minMemoryGB: Double(c.minTier.rawValue), kitStageID: c.kitStageID, role: role == .responder ? "responder" : "", needsMB: c.residentMB)
     }
 
     /// The stages whose chosen model passed its check on this phone (a stage that fell to its built-in floor is not ready for this purpose), from the record setup keeps (voice-setup.json).

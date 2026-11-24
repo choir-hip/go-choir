@@ -7,7 +7,7 @@ const page = (en: Partial<Enrol>, mic = 'heard') => learnPage({ enrol: e(en), mi
 
 describe('what the page says', () => {
   test('Y1 three sentences in a fixed order, then one to confirm; the confirming one is never shown before the voice is built', () => {
-    const shown = [0, 1, 2].map((n) => page({ phase: 'idle', taken: n }, 'heard')).map((v) => v.sentence);
+    const shown = [0, 1, 2].map((n) => page({ phase: 'idle', taken: n, again: n === 0 }, 'heard')).map((v) => v.sentence);        // taken 0 with nothing heard yet is the intro, which shows none
     expect(n3(shown)).toEqual([SENTENCES[0], SENTENCES[1], SENTENCES[2]]);
     for (const p of ['idle', 'listening', 'building']) for (let t = 0; t < 3; t++) expect(page({ phase: p, taken: t }).sentence).not.toBe(CONFIRM_SENTENCE);
     const c = page({ phase: 'confirm', taken: 3, learned: true }); expect(c.sentence).toBe(CONFIRM_SENTENCE); expect(c.primaryOp).toBe('read');

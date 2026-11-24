@@ -4,6 +4,8 @@ import { onboardingAct, onboardingPage, forgetOnboarding, wipeOnboarding, parseP
   MIC_REFUSED_LINE, MIC_SILENT_LINE, TALK_REFUSED_LINE, HEARING_AGAIN_LINE, type Env, type VoiceFacts, type Device } from './onboarding.ts';
 import { resetSeam, nextGeneration, bindNative } from './api.ts';
 import { firstRunOver } from './onboarding.ts';
+import type { OfferJob } from './offers.ts';
+import { consentPick, forgetConsent } from './consent.ts';
 import { FAILED_LINE, type Writer } from './edition-writer.ts';
 
 const files = new Map<string, Uint8Array>();
@@ -20,7 +22,7 @@ const device: Device = { facts: async () => ({ ...v }), op: async (op, args) => 
 const env = (o: Partial<Env> = {}): Env => ({ storage, device, get: async () => edition, closePage: async (a) => { closed.push(a); }, openPage: async (a) => { opened.push(a); }, ...o });
 const act = (op: string, arg = '', topics = '', top = SETUP, e: Env = env()) => onboardingAct(op, arg, topics, top, e);
 const ops = (): string[] => calls.map((c) => c.op);
-beforeEach(() => { files.clear(); forgetOnboarding(); resetSeam(); v = noVoice(); calls = []; closed = []; opened = []; edition = { found: false }; });
+beforeEach(() => { files.clear(); forgetOnboarding(); forgetConsent(); resetSeam(); v = noVoice(); calls = []; closed = []; opened = []; edition = { found: false }; });
 
 describe('the steps', () => {
   test('O1 the walk, in order, ends at done with the edition made and the station released', async () => {
@@ -30,7 +32,8 @@ describe('the steps', () => {
     expect((await onboardingPage(v, 1, SETUP, env())).step).toBe('mic');                         // O3
     expect(kept().setupDone).toBe(true);
     expect((await act('micNext')).step).toBe('hearing'); expect(ops()).toContain('obHearingPlay');
-    expect((await act('hearing', 'true')).step).toBe('voice');
+    expect((await act('hearing', 'true')).step).toBe('learn');                                   // O5, O17
+    expect((await act('learnDone')).step).toBe('voice'); expect(ops()).toContain('obVoiceStop');
     v = { ...v, voicePicked: 1 };
     expect((await onboardingPage(v, 2, SETUP, env())).step).toBe('ready');                       // O6
     expect((await act('topics')).step).toBe('topics');
@@ -66,7 +69,7 @@ describe('the steps', () => {
     await act('mic'); expect(ops()).toContain('obMicStart');
     v = { ...v, mic: 'refused' };
     expect(await onboardingPage(v, 1, SETUP, env())).toMatchObject({ step: 'mic', message: MIC_REFUSED_LINE }); expect(kept().micRefused).toBe(true);
-    await act('micNext'); await act('hearing', 'true'); await act('topics'); calls = [];
+    await act('micNext'); await act('hearing', 'true'); await act('learnDone'); await act('topics'); calls = [];
     const t = await act('talk'); expect(t.message).toBe(TALK_REFUSED_LINE); expect(ops().filter((o) => o === 'obTalk').length).toBe(0);
     v = { ...v, mic: 'silent' }; forgetOnboarding();
     await act('begin'); v = { ...v, setupFinished: true, mic: 'silent' };
@@ -81,7 +84,7 @@ describe('the steps', () => {
   test('O5 "No" plays it again and says what to try; "Yes" goes on', async () => {
     await act('begin'); v = { ...v, setupStarted: true, setupFinished: true }; await onboardingPage(v, 0, SETUP, env()); await act('micNext'); calls = [];
     const no = await act('hearing', 'false'); expect(no).toMatchObject({ step: 'hearing', message: HEARING_AGAIN_LINE }); expect(ops()).toContain('obHearingPlay');
-    expect((await act('hearing', 'true')).step).toBe('voice'); expect(kept().setupDone).toBe(true);
+    expect((await act('hearing', 'true')).step).toBe('learn'); expect(kept().setupDone).toBe(true);
   });
   test('Talk toggles the voice at the topic screen', async () => {
     await act('topics'); calls = [];
@@ -244,5 +247,24 @@ describe('first run without an account, and the agreement', () => {
     forgetOnboarding(); files.clear(); calls = []; agreed.length = 0; v = { ...v, onWiFi: false };
     await act('begin', '', '', SETUP, e); expect(agreed).toEqual([]); expect(ops()).not.toContain('obSetupBegin');
     await act('begin', 'true', '', SETUP, e); expect(agreed).toEqual([true]); expect(ops()).toContain('obSetupBegin');
+  });
+});
+
+describe('the voice learning step and the choices', () => {
+  const offer = (job: string, group: string, ids: string[], rec: number): OfferJob => ({ job, group, host: 'Example Hub', options: ids.map((id, i) => ({ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: i === rec, ready: false })) });
+  test('O17 the learn step ends with learnDone into the voice step (native told to stop listening); Not now at the microphone skips to the voice step without opening it', async () => {
+    await act('begin'); v = { ...v, setupStarted: true, setupFinished: true }; await onboardingPage(v, 0, SETUP, env());
+    await act('micNext'); await act('hearing', 'true'); expect((await onboardingPage(v, 1, SETUP, env())).step).toBe('learn');
+    expect(await act('learnDone')).toMatchObject({ step: 'voice' }); expect(ops()).toContain('obVoiceStop'); expect(ops().filter((o) => o === 'obVoiceStart' || o === 'obVoiceBegin').length).toBe(0);
+    expect((await act('learnDone')).step).toBe('voice');                                           // not a step it is on: nothing moves
+    forgetOnboarding(); files.clear(); calls = [];
+    await act('begin'); await onboardingPage({ ...v, setupFinished: true }, 0, SETUP, env()); v = { ...v, setupFinished: true };
+    await onboardingPage(v, 0, SETUP, env()); const s = await act('micSkip'); expect(s.step).toBe('voice'); expect(ops()).not.toContain('obMicStart');
+  });
+  test('O18 begin hands native the chosen option of every job (the pick, else the recommendation) and the voice-print model', async () => {
+    v = { ...v, offers: [offer('voice', 'voice', ['a', 'b'], 0), offer('transcriber', 'voice-rest', ['c', 'd'], 1), offer('speaker', 'voice-rest', ['print'], 0), offer('search', 'search', ['e'], 0)] };
+    await consentPick('transcriber', 'c', storage);
+    await act('begin');
+    expect(calls.find((c) => c.op === 'obSetupBegin')?.args).toEqual({ picks: { voice: 'a', transcriber: 'c', speaker: 'print' }, speaker: true });
   });
 });
