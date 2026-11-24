@@ -13,7 +13,8 @@
 import passkeyApps from './passkey-apps.json';
 import { CeremonyError, ceremonyMessage, createCeremony, getCeremony, postPublic, refusal, sendRegisterCode, type CeremonyEnv, type Proof } from './passkey-ceremony.ts';
 
-export type Mode = 'create' | 'signin';
+export type Mode = 'create' | 'signin' | 'reviewer';
+type CeremonyMode = Exclude<Mode, 'reviewer'>;
 /** `code`: the mail was sent and the screen waits for the code the person types (a resting phase, not an end). */
 export type Phase = 'idle' | 'working' | 'code' | 'done' | 'failed' | 'cancelled';
 export type Attempt = { id: string; mode: Mode; phase: Phase; message: string };
@@ -101,7 +102,7 @@ function dispatch(env: SignInEnv, e: Event): void {
 type Minted = { key: string; keyId: string };
 const str = (o: unknown, k: string): string => (o && typeof o === 'object' && typeof (o as Record<string, unknown>)[k] === 'string' ? ((o as Record<string, unknown>)[k] as string) : '');
 
-async function finish(env: SignInEnv, mode: Mode, credential: unknown): Promise<Minted> {
+async function finish(env: SignInEnv, mode: CeremonyMode, credential: unknown): Promise<Minted> {
   const path = mode === 'create' ? '/auth/app/register/finish' : '/auth/app/login/finish';
   const r = await postPublic(env.ceremony, path, { app: env.appId, credential });
   if (r.status !== 200) throw refusal(r);
@@ -111,7 +112,7 @@ async function finish(env: SignInEnv, mode: Mode, credential: unknown): Promise<
 }
 
 /** Start an attempt and run it to its end. A running attempt is superseded (the newest wins; its late answer is ignored, and a key it mints is revoked, never kept). Returns the phase it ended in. */
-export async function signInRun(env: SignInEnv, mode: Mode, email = '', code = ''): Promise<{ phase: Phase; rev: number }> {
+export async function signInRun(env: SignInEnv, mode: CeremonyMode, email = '', code = ''): Promise<{ phase: Phase; rev: number }> {
   if (cur && cur.phase === 'working') dispatch(env, { t: 'cancel', id: cur.id });
   const id = env.newId();
   adopt(env, begin(id, mode));
@@ -157,6 +158,40 @@ export async function signInRun(env: SignInEnv, mode: Mode, email = '', code = '
 export function signInCancel(env: SignInEnv): { phase: Phase; rev: number } {
   if (cur && cur.phase === 'working') dispatch(env, { t: 'cancel', id: cur.id });
   return { phase: cur ? cur.phase : 'idle', rev };
+}
+
+export const REVIEWER_PATH = '/auth/app/demo/login';
+const REVIEWER_WORDS: Record<number, string> = {
+  401: 'That name or secret is not right.',
+  404: 'Signing in with a name is not available.',
+  429: 'Too many tries. Try again in a few minutes.',
+  503: 'Choir is busy. Try again in a moment.',
+};
+
+/** The reviewer sign-in (docs/ship/demo-account.md): a user name and a password, for Apple's reviewers, who cannot hold a passkey for this site. The same attempt machine and the same `keep` as the
+ * passkey flow; the server answers a key for one account with a narrow grant. Nothing here logs the user name or the password, and neither is kept: they live in this call's arguments only. */
+export async function reviewerRun(env: SignInEnv, username: string, password: string): Promise<{ phase: Phase; rev: number }> {
+  if (cur && cur.phase === 'working') dispatch(env, { t: 'cancel', id: cur.id });
+  const id = env.newId();
+  adopt(env, begin(id, 'reviewer'));
+  let minted: Minted | null = null;
+  try {
+    if (username.trim() === '' || password === '') { dispatch(env, { t: 'failed', id, message: REVIEWER_WORDS[401] }); return left(id); }
+    const r = await postPublic(env.ceremony, REVIEWER_PATH, { app: env.appId, username: username.trim(), password });
+    if (r.status !== 200) { dispatch(env, { t: 'failed', id, message: REVIEWER_WORDS[r.status] ?? 'Something went wrong. Try again.' }); return left(id); }
+    const key = str(r.body, 'api_key'), keyId = str(r.body, 'key_id');
+    if (!key.startsWith('choir_sk_') || keyId === '') throw new CeremonyError('failed', 'the server sent no key');
+    minted = { key, keyId };
+    if (!live(id)) { await env.revoke(key, keyId).catch(() => undefined); return left(id); }
+    env.keep(key, keyId);                                     // no await between the check above and this write
+    minted = null;
+    dispatch(env, { t: 'done', id });
+  } catch (e) {
+    if (minted) await env.revoke(minted.key, minted.keyId).catch(() => undefined);
+    env.log(`signin: attempt ${id.slice(0, 6)} reviewer ended: ${e instanceof CeremonyError ? e.kind : 'error'}`);
+    dispatch(env, { t: 'failed', id, message: e instanceof CeremonyError && e.kind === 'offline' ? ceremonyMessage(e, 'signin') : 'Something went wrong. Try again.' });
+  }
+  return left(id);
 }
 
 /** Opening the screen again after an end starts clean: an old "failed" or "done" is not shown to the next person. */

@@ -74,9 +74,9 @@ members Autoradio
   derive sivKey = `${sivTick}|${match signedRun { case some(r) => r.rev, case none => 0 }}|${match signedCancel { case some(r) => r.rev, case none => 0 }}|${match signedOpen { case some(r) => r.rev, case none => 0 }}`
   resource siv = signInView(sivKey) as shape SignInView else empty()
   // A sign-in call is still answering (the screen is in its waiting state then, and shows no message from an earlier attempt).
-  derive signRunning = pending(signedRun)
+  derive signRunning = pending(signedRun) or pending(revRun)
   // The view is asked again twice a second while an attempt runs (the machine changes under a running answer, with no event to carry it), and not at all otherwise.
-  task sivWatch when pending(signedRun) key=sivTick
+  task sivWatch when pending(signedRun) or pending(revRun) key=sivTick
     after(500, bumpSiv)
   // Opening the screen starts clean: an old failure is not shown again (a running attempt is left alone).
   action signIn
@@ -90,8 +90,30 @@ members Autoradio
   // "Create account": the email typed, the consent line above the button read, the passkey screen. Tapping it is the agreement (owner, 2026-11-23).
   // With no code typed it mails one (the screen then asks for it); with the code it makes the passkey.
   action createAccount
-    send signedRun = signInRun("create", authEmail, authCode)
-    sivTick = sivTick + 1
+    if not nameLogin
+      send signedRun = signInRun("create", authEmail, authCode)
+      sivTick = sivTick + 1
+  // A user name instead of an address (docs/ship/demo-account.md): a name with no "@" typed into the same field shows a second field and "Sign in" in place of "Create account"; the press
+  // posts the name and that field (app-signin.ts `reviewerRun`). An address keeps the flow above exactly. The second field lives in this state only while it is typed and is cleared at the press.
+  mutation revRun as shape SignInEnd then bumpSiv
+  state namePass = ""
+  derive nameLogin = authEmail != "" and not authEmail.includes("@")
+  action editNamePass(v: string)
+    namePass = v
+  action nameSignIn
+    if nameLogin
+      send revRun = reviewerRun(authEmail, namePass)
+      namePass = ""
+      sivTick = sivTick + 1
+  // The email field's Go key: the name's sign-in for a name, the account creation for an address (each action also guards itself).
+  action emailSubmit
+    if nameLogin
+      send revRun = reviewerRun(authEmail, namePass)
+      namePass = ""
+      sivTick = sivTick + 1
+    if not nameLogin
+      send signedRun = signInRun("create", authEmail, authCode)
+      sivTick = sivTick + 1
   // "Sign in": the passkey screen with no email typed (a discoverable credential).
   action signInPasskey
     send signedRun = signInRun("signin", "", "")
@@ -103,6 +125,7 @@ members Autoradio
   // "Not now": the screen goes away and a running attempt ends.
   action closeAuth
     authOpen = false
+    namePass = ""
     send signedCancel = signInCancel()
     // The attempt is put away with the screen: opening sign-in again starts from idle, never from the last attempt's failure or success.
     send signedOpen = signInOpen()
@@ -110,12 +133,13 @@ members Autoradio
   // A finished sign-in puts the screen away by itself (the paper is then signed in).
   action finishAuth
     authOpen = false
+    namePass = ""
     authEmail = ""
     authCode = ""
     send signedOpen = signInOpen()
     send acct = choirRefresh()
   // Only a finished attempt puts the screen away: not while any sign-in call is still answering (a stale "done" before a new attempt starts must not close the new screen).
-  task authDone when siv.phase == "done" and authOpen and not pending(siv) and not pending(signedRun) and not pending(signedOpen) key=sivTick
+  task authDone when siv.phase == "done" and authOpen and not pending(siv) and not pending(signedRun) and not pending(revRun) and not pending(signedOpen) key=sivTick
     after(400, finishAuth)
   action signOut
     // The unsent text of a message being written belongs to the account that is leaving (it may quote that account's mail).

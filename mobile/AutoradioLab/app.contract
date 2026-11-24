@@ -96,6 +96,11 @@ component Autoradio
     closeAuth
     createAccount
     signInPasskey
+    nameLogin
+    namePass
+    editNamePass
+    nameSignIn
+    emailSubmit
     editAuthEmail
     authEmail
     editAuthCode

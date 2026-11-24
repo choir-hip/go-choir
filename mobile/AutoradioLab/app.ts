@@ -35,7 +35,7 @@ import { micPermission } from './micask.ts';
 import { downloadsPage, downloadsAct } from './downloads.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
-import { signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
+import { COMPUTER_ID_NAME, KEY_ID_NAME, KEY_NAME, reviewerRun, signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
 import { radioPlayClip } from './clip-play.ts';
 import { podcastNow } from './podcast-now.ts';
 
@@ -209,7 +209,8 @@ const sources: Sources = {
   learnPage: ([facts]) => learnPage(facts as never),
   learnAct: ([op, facts]) => learnAct(op, facts as never, nativeLater() as never),
   // Sign-in and account creation (app-signin.ts): one attempt, one state machine with an id, owned there. The passkey screen is the platform's; the key is kept as Exact secrets. No native code is involved.
-  signInRun: ([mode, email, code], store) => signInRun(signInEnv(store), (mode === 'create' ? 'create' : 'signin') as Mode, String(email ?? ''), String(code ?? '')),
+  signInRun: ([mode, email, code], store) => signInRun(signInEnv(store), (mode === 'create' ? 'create' : 'signin') as 'create' | 'signin', String(email ?? ''), String(code ?? '')),
+  reviewerRun: ([username, password], store) => reviewerRun(signInEnv(store), String(username ?? ''), String(password ?? '')),
   signInCancel: (_a, store) => signInCancel(signInEnv(store)),
   signInOpen: (_a, store) => signInReset(signInEnv(store)),
   signInView: ([_tick]) => signInView(),

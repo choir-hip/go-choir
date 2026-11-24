@@ -15,3 +15,78 @@ test "Sign in opens the passkey screen: sign in, an email field, the consent lin
   expect tree has "signin-close"
   expect tree missing "signup-code"
   expect tree missing "signin-open"
+
+test "An email address keeps today's flow: no password field, Create account stays"
+  clock data
+  tap "signedout-signin"
+  clock data
+  type "signup-email" "someone@example.com"
+  clock data
+  expect state nameLogin == false
+  expect tree has "signup-create"
+  expect tree has "signup-consent"
+  expect tree missing "name-pass"
+  expect tree missing "name-submit"
+  expect tree missing "reviewer-link"
+
+test "A bare name (no @) in the email field shows a password field and Sign in, and nothing on the screen names reviewers"
+  clock data
+  tap "signedout-signin"
+  clock data
+  expect tree missing "reviewer-link"
+  type "signup-email" "someone"
+  clock data
+  expect state nameLogin == true
+  expect tree has "name-pass"
+  expect tree has "name-submit"
+  expect tree missing "signup-create"
+  expect tree missing "reviewer-link"
+  expect tree missing "reviewer-title"
+  expect tree missing "reviewer-user"
+  type "signup-email" "someone@example.com"
+  clock data
+  expect state nameLogin == false
+  expect tree missing "name-pass"
+  expect tree has "signup-create"
+
+test "Leaving the sign-in screen puts a name-login attempt away: no message is left for the next sign-in"
+  clock data
+  tap "signedout-signin"
+  clock data
+  type "signup-email" "someone"
+  clock data
+  tap "name-submit"
+  clock data
+  clock data
+  expect tree has "signin-message"
+  tap "signin-close"
+  clock data
+  clock data
+  tap "signedout-signin"
+  clock data
+  clock data
+  expect tree missing "signin-message"
+
+test "The keyboard's Go on a bare name signs in with the name; it never starts the sign-up flow"
+  clock data
+  tap "signedout-signin"
+  clock data
+  type "signup-email" "someone"
+  clock data
+  type "signup-email" key "Enter"
+  clock data
+  clock data
+  expect text "signin-message" == "That name or secret is not right."
+  expect tree missing "signup-code"
+
+test "The keyboard's Go on an address keeps the sign-up flow: no name sign-in is made"
+  clock data
+  tap "signedout-signin"
+  clock data
+  type "signup-email" "someone@example.com"
+  clock data
+  type "signup-email" key "Enter"
+  clock data
+  clock data
+  expect state nameLogin == false
+  expect tree missing "name-pass"
