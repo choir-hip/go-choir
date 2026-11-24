@@ -9,8 +9,8 @@ final class ModelOfferTests: XCTestCase {
     private let phone = DeviceProfile(chip: "A", memoryGB: 8, freeDiskGB: 50, onWiFi: true, availableMemoryMB: 6000)
     func testM1JobsAreTheListsOwn() {
         let jobs = ModelOffer.jobs(profile: phone)
-        XCTAssertEqual(jobs.map(\.job), ModelList.jobs.filter { j in !ModelList.builtIn.options(j).isEmpty })
-        XCTAssertEqual(jobs.last?.job, "search"); XCTAssertEqual(jobs.last?.options.first?.bytes, KnownModels.embeddingGemma2.bytes)
+        XCTAssertEqual(jobs.map(\.job), ["transcriber", "bounds", "voice", "responder", "speaker", "search"])
+        XCTAssertEqual(jobs.last?.options.first?.bytes, KnownModels.embeddingGemma2.bytes)
         for j in jobs {
             XCTAssertEqual(j.host, "Hugging Face"); XCTAssertFalse(j.options.isEmpty)
             XCTAssertTrue(j.options.allSatisfy { $0.bytes > 0 && !$0.sizeLabel.isEmpty && !$0.model.isEmpty })
@@ -18,10 +18,32 @@ final class ModelOfferTests: XCTestCase {
             XCTAssertEqual(ModelOffer.group(j.job), j.job == "voice" ? "voice" : j.job == "search" ? "search" : "voice-rest")
         }
         XCTAssertFalse(jobs.contains { $0.job == "decision" })
-        let tr = jobs.first { $0.job == "transcriber" }!
-        XCTAssertEqual(tr.options.first { $0.recommended }?.id, SetupCatalog.plan(for: phone)[.transcriber]?.first?.id, "the recommendation is what setup would download first")
+        XCTAssertFalse(jobs.flatMap(\.options).contains { ["apple-speech", "energy", "system-voice", "cue-only", "system1-computer"].contains($0.id) }, "a built-in floor is never an offer")
         let ready = ModelOffer.jobs(profile: phone, ready: ["voice": jobs.first { $0.job == "voice" }!.options[0].id])
         XCTAssertTrue(ready.first { $0.job == "voice" }!.options[0].ready); XCTAssertFalse(ready.first { $0.job == "transcriber" }!.options.contains { $0.ready })
+    }
+    // L4 (owner, 2026-11-24): an iPhone 14 Pro Max (6 GB, about 5.6 as the OS reports it) and newer is recommended Fluid Speech Mini, from the built-in list, no test-only list.
+    func testM1bFluidSpeechMiniIsRecommendedOnASixGigabyteIPhone() {
+        for (machine, gb) in [("iPhone15,3", 5.6), ("iPhone16,2", 7.4), ("iPhone17,1", 7.4)] {
+            let d = DeviceProfile(chip: machine, memoryGB: gb, freeDiskGB: 50, onWiFi: true)
+            let t = ModelOffer.jobs(profile: d).first { $0.job == "transcriber" }!
+            XCTAssertEqual(t.options.first { $0.recommended }?.id, "fluid-speech-mini", machine)
+            XCTAssertEqual(t.options.first?.id, "fluid-speech-mini", "the best-ranked row is first")
+        }
+        let all = ModelOffer.jobs(profile: phone).flatMap(\.options)
+        XCTAssertFalse(all.contains { $0.id.lowercased().contains("pro") }, "Fluid Speech Pro is not offered yet")
+    }
+    // A row added to the list is an option with no change to the code; its own device rule decides whether it is the recommendation (the voice-pro lane's row).
+    func testM1cARowAddedToTheListIsOfferedAndItsRuleDecides() throws {
+        var list = ModelList.builtIn()
+        let base = list.models.first { $0.id == "fluid-speech-mini" }!
+        var pro = base; pro.id = "fluid-speech-pro-test"; pro.label = "A bigger recogniser"; pro.rank = 95
+        pro.recommendedFor = [.init(machinePrefixes: ["iPhone17"], minMemoryGB: 7)]
+        list.models.append(pro)
+        let big = ModelOffer.jobs(profile: DeviceProfile(chip: "iPhone17,1", memoryGB: 7.4, freeDiskGB: 50, onWiFi: true), list: list).first { $0.job == "transcriber" }!
+        XCTAssertEqual(big.options.first?.id, "fluid-speech-pro-test")
+        let six = ModelOffer.jobs(profile: DeviceProfile(chip: "iPhone15,3", memoryGB: 5.6, freeDiskGB: 50, onWiFi: true), list: list).first { $0.job == "transcriber" }!
+        XCTAssertEqual(six.options.first { $0.recommended }?.id, "fluid-speech-mini", "its rule does not fit a 6 GB iPhone15")
     }
     func testM2Ready() {
         XCTAssertEqual(ModelOffer.readyStages(record: nil), [])

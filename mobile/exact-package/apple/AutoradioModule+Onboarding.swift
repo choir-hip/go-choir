@@ -73,9 +73,7 @@ final class OnboardingController: @unchecked Sendable {
         if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
         for (job, id) in picks {
             guard let st = SetupStage(rawValue: job) else { continue }
-            if let c = ModelList.active.options(job).first(where: { $0.id == id }) {
-                s.prefer(st, SetupCatalog.ladder(st).first { $0.id == id } ?? SetupCandidate(id: c.id, label: c.label, bytes: c.bytes, minMemoryGB: c.minMemoryGB, kitStageID: SetupCatalog.ladder(st).first?.kitStageID ?? "", needsMB: c.needsMB))
-            }
+            if let c = SetupCatalog.ladder(st).first(where: { $0.id == id }) ?? ModelOffer.candidate(job: job, id: id) { s.prefer(st, c) }
         }
         s.onChange = { [weak self] in self?.changed() }
         set { setup = s; runStages = only ? stages : [] }
@@ -279,7 +277,7 @@ final class OnboardingController: @unchecked Sendable {
         let record = ModelOffer.readRecord(recordFile)
         let ready = ModelOffer.readyStages(record: record)
         var readyChoices = ModelOffer.readyChoices(record: record)
-        if WeSpeakerEmbedder.standard().onDisk { readyChoices["speaker"] = "wespeaker-resnet34" }
+        if WeSpeakerEmbedder.standard().onDisk { readyChoices["speaker"] = ModelOffer.speakerID }
         let offers = ModelOffer.jobs(profile: profile, ready: readyChoices).map { $0.dict }
         var device = ""
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }

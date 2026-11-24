@@ -19,7 +19,7 @@ component DownloadJobs
         column testId=`dl-${g.id}-jobs` width="100%" gap=10
           for j in g.jobs key=j.job
             column testId=`dl-job-${j.job}` width="100%" gap=2
-              text j.title font-family=th.fontLabel font-size="-exact-footnote" font-weight=600 color=th.fg
+              text j.title font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
               for o in j.options key=o.id
                 button press=dlPick(j.job, o.id) testId=`dl-opt-${j.job}-${o.id}` appearance="none"
                   row width="100%" gap=8 align-items="center" padding="6px 0px"
@@ -46,7 +46,7 @@ component DownloadCard
           text g.title role="heading" aria-level=2 font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
           text g.why font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
           DownloadJobs(group=group)
-          text g.total testId=`dl-${g.id}-total` font-family=th.fontLabel font-size="-exact-footnote" font-weight=600 color=th.fg
+          text g.total testId=`dl-${g.id}-total` font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
           text g.hostLine testId=`dl-${g.id}-host` font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
           if g.status != ""
             text g.status testId=`dl-${g.id}-status` font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
