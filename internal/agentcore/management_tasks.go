@@ -281,15 +281,20 @@ func managementTaskID(cellID, localID string, group int) string {
 }
 
 // startQueuedManagementTasks is the slot starter (R2-6): while fewer than K
-// tasks run, it claims queued tasks newest delegation first
-// (store.NewestQueuedFirst) and starts their runs. A queued
-// task is an open task round with no run; its start is the inbox_record
-// wake of its opening Cast, or the start wake a task's closure mints for
-// the next one. Both are restart work kinds: a crash boot interrupts them
-// (and closes the rounds), a planned boot delivers them. One wake fills
-// every free slot (S2b, FM8), in one pass over one listing of the queue, so
-// a task that cannot start is not retried within the call and a refused
-// claim takes no slot (FM29). It returns the first run it started.
+// tasks run, it claims queued tasks oldest first and starts their runs. A
+// queued task is an open task round with no run; its start is the
+// inbox_record wake of its opening Cast, or the start wake a task's closure
+// mints for the next one. Both are restart work kinds: a crash boot
+// interrupts them (and closes the rounds), a planned boot delivers them. One
+// wake fills every free slot (S2b, FM8), in one pass over one listing of the
+// queue, so a task that cannot start is not retried within the call and a
+// refused claim takes no slot (FM29). It returns the first run it started.
+//
+// Oldest first, and no task leaves the queue by age (2026-11-24,
+// docs/problems/captures-dropped-and-stalled-2026-11-24.md): newest first
+// with a 24-hour expiry closed 481 tasks, 1,352 captures, undecided when
+// other desks slowed the slots for a day. A queue that outruns its slots now
+// grows and says so (the queue line below) instead of dropping work.
 func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, computerID string) (*types.RunRecord, error) {
 	if rt == nil || rt.store == nil {
 		return nil, nil
@@ -307,36 +312,33 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 			busy++
 		}
 	}
-	// The paper's slots are nearly always full, so the expiry sweep cannot
-	// wait for a free slot; it runs at most once a minute while they are
-	// full, so a busy computer does not decode its whole queue on every wake.
+	// With every slot busy the queue is read only for its line, at most once
+	// a minute, so a busy computer does not decode its whole queue on every
+	// wake.
 	now := rt.managementTaskClock()
-	sweep := now.Sub(rt.managementTaskLastSweep) >= managementTaskSweepEvery
-	if busy >= slots && !sweep {
+	logDue := now.Sub(rt.managementTaskLastQueueLog) >= managementTaskQueueLogEvery
+	if busy >= slots && !logDue {
 		return nil, nil
 	}
 	queued, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), ownerID, computerID, types.ManagementTaskQueued)
 	if err != nil {
 		return nil, fmt.Errorf("management tasks: list queued: %w", err)
 	}
-	if sweep {
-		queued = rt.expireStaleQueuedTasks(ctx, queued, managementTaskExpireBatch)
-		rt.managementTaskLastSweep = rt.managementTaskClock()
+	if logDue {
+		// One line a minute per computer while tasks are delegated: the
+		// depth and the oldest wait, read before this pass starts any, so a
+		// queue that is not draining is seen within the hour.
+		oldest := 0.0
+		if len(queued) > 0 {
+			oldest = now.Sub(queued[0].CreatedAt).Seconds()
+		}
+		log.Printf("runtime: management task queue: queued=%d oldest_age_s=%.0f running=%d slots=%d computer=%s", len(queued), oldest, busy, slots, computerID)
+		rt.managementTaskLastQueueLog = now
 	}
-	if busy >= slots {
-		return nil, nil
-	}
-	// A task past the queue's age never starts, even when a sweep has not
-	// reached it (between sweeps, past a batch, or after a failed close): it
-	// waits for the next sweep to close it.
-	cutoff := now.Add(-managementTaskQueueMaxAge)
 	var first *types.RunRecord
-	for _, task := range store.NewestQueuedFirst(queued) {
+	for _, task := range queued { // ListManagementTasks lists oldest first
 		if busy >= slots {
 			break
-		}
-		if task.CreatedAt.Before(cutoff) {
-			continue
 		}
 		rec, err := rt.startManagementTask(ctx, task, slots)
 		if err != nil {
@@ -354,49 +356,14 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 	return first, nil
 }
 
-// managementTaskQueueMaxAge is how long a task may wait in the queue. A
-// capture a day old is not news (the paper, 2026-11-09: 1763 queued, the
-// oldest 70 hours old, growing 11 an hour): older tasks close as
-// expired_in_queue instead of waiting forever.
-const managementTaskQueueMaxAge = 24 * time.Hour
-
-// managementTaskExpireBatch bounds the closures one wake makes, oldest
-// first, so a backlog does not hold the single-connection write pool; later
-// wakes finish the rest.
-const managementTaskExpireBatch = 200
-
-// managementTaskSweepEvery spaces the expiry sweeps made while every slot is
-// busy.
-const managementTaskSweepEvery = time.Minute
+// managementTaskQueueLogEvery spaces the queue line.
+const managementTaskQueueLogEvery = time.Minute
 
 func (rt *Runtime) managementTaskClock() time.Time {
 	if rt.managementTaskNow != nil {
 		return rt.managementTaskNow()
 	}
 	return time.Now()
-}
-
-// expireStaleQueuedTasks closes the queued tasks older than the queue's
-// maximum age (at most a batch per call, oldest first) and returns the
-// queue without them. The closing Report lists every capture as a residual,
-// the captures are closed with the task, and the close wakes no one and
-// starts nothing. queued is ListManagementTasks' oldest-first listing.
-func (rt *Runtime) expireStaleQueuedTasks(ctx context.Context, queued []types.ManagementTask, batch int) []types.ManagementTask {
-	cutoff := rt.managementTaskClock().Add(-managementTaskQueueMaxAge)
-	var fresh []types.ManagementTask
-	closed := 0
-	for _, task := range queued {
-		if !task.CreatedAt.Before(cutoff) || closed >= batch {
-			fresh = append(fresh, task)
-			continue
-		}
-		closed++
-		rt.closeManagementTask(ctx, task, types.TaskClosureExpired, "", "", "")
-		if cur, err := rt.store.GetManagementTask(taskCustodianReads(ctx), task.OwnerID, task.ComputerID, task.TaskID); err == nil && cur.State != types.ManagementTaskClosed {
-			fresh = append(fresh, task) // the close did not land: leave it for a later wake
-		}
-	}
-	return fresh
 }
 
 // managementTaskClaimGrace bounds a claim with no bound run: claim, run

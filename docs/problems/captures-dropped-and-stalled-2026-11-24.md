@@ -49,6 +49,37 @@ path the capture desk replaces (design mission, G4 and G5). The capture desk
 must be built so that a capture cannot leave the queue without a decision
 record row saying what happened to it.
 
+## The fix on today's code (`lane/intake-starve`, 2026-11-24)
+
+This is the smallest fix for the mechanism; the capture desk still replaces
+the path.
+
+- **A task's run never waits for a shared slot.** Its inbox has its own
+  dispatcher lane, as wide as the most task slots. This is smaller than
+  moving the slot claim to after admission: the dispatcher already has lanes
+  (source polls, engineering admission), one line adds one, and the claim,
+  bind and close order is untouched. The invariant: a held task slot has a
+  run the dispatcher starts at once.
+- **Oldest first.** Newest first was chosen on 2026-11-08 because the queue
+  outran its slots and only two-day-old news was served. The cause then was
+  slots held by dead rows, and on 11-19 slots slowed by other desks; the
+  order hid both by starving the old tasks.
+- **The expiry: removed, not kept with a record.** The two options were to
+  remove the 24-hour expiry, or to keep a bound whose expiry writes a counted
+  record per capture and returns the captures to intake. Removing it is the
+  conservative one, as nothing is dropped, and it is also the smaller: a
+  returned capture would be delegated again into the same queue, which is
+  the same wait with more records. The cost is that a queue which outruns
+  its slots grows without bound; that is now visible within a minute (the
+  queue line) instead of silent for a day. Whether old captures should be
+  declined by a decision is management's to judge, with a record, in the
+  capture desk design.
+- **The queue line**, once a minute: depth, oldest wait, running, slots.
+
+Not changed: the 476 captures in seven days left on a task that closed
+without deciding them (a failed run, a passivated run, a deadline). That is
+the second loss in this record and needs its own change.
+
 ## Remaining error
 
 - The copy is torn; counts near the gap and the tail are approximate.

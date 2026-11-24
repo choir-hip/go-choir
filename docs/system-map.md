@@ -54,7 +54,8 @@ not released [6][CH].
    minute later the event layer joins captures to world events with one
    more call [4].
 4. One arrival record per poll mints a management task: up to 12 captures,
-   4 at once (max 8), 10 minute deadline. The task sees stories updated in
+   4 at once (max 8), 10 minute deadline; queued tasks start oldest first,
+   never expire, and run in their own dispatcher lane. The task sees stories updated in
    8 h and up to 12 candidate stories per capture, and must Feed a story,
    Decline, or open a new one with a main point (20 to 240 chars) [4][3].
 5. Texture, the sole writer of a story, writes a revision and ends the turn
