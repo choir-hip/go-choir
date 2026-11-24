@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import AutoradioKit
 
 // The model list as data. Failure list (each line a test): L1 the built-in copy does not survive JSON; L2 an unknown job or field from a newer
@@ -10,8 +11,23 @@ final class ModelListTests: XCTestCase {
     func testServedListIsTheBuiltInList() throws {
         let served = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../../internal/proxy/phone_model_list.json").standardizedFileURL
         let built = ModelList.builtIn()
-        if ProcessInfo.processInfo.environment["AR_WRITE_MODEL_LIST"] == "1" { try (built.encoded() + Data("\n".utf8)).write(to: served) }
+        // The record CI reads (internal/proxy TestPhoneModelListSourcesUnchanged): the digest of the list and of every file it is built from.
+        let record = served.deletingLastPathComponent().appendingPathComponent("phone_model_list.sources.json")
+        let sourceDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../Sources/AutoradioKit").standardizedFileURL
+        func digest(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
+        func sources() throws -> [String: String] {
+            try ["KnownModels.swift", "ModelCandidates.swift", "ModelStore.swift", "Voice/ModelList.swift"].reduce(into: [:]) { $0[$1] = digest(try Data(contentsOf: sourceDir.appendingPathComponent($1))) }
+        }
+        if ProcessInfo.processInfo.environment["AR_WRITE_MODEL_LIST"] == "1" {
+            let body = try built.encoded() + Data("\n".utf8)
+            try body.write(to: served)
+            let rec: [String: Any] = ["list_sha256": digest(body), "sources": try sources()]
+            try (JSONSerialization.data(withJSONObject: rec, options: [.sortedKeys, .prettyPrinted]) + Data("\n".utf8)).write(to: record)
+        }
         let data = try Data(contentsOf: served)
+        let rec = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: record)) as? [String: Any])
+        XCTAssertEqual(rec["list_sha256"] as? String, digest(data), "the served list was edited after it was generated")
+        XCTAssertEqual(rec["sources"] as? [String: String], try sources(), "a file the list is built from changed: regenerate with AR_WRITE_MODEL_LIST=1")
         let raw = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let list = try ModelList.decode(data)
         XCTAssertEqual(list.models.count, (raw["models"] as? [Any])?.count, "the phone dropped a served entry as invalid")

@@ -552,8 +552,19 @@ repository; it is made from the parquet file named above).
 **The model list as data (`Voice/ModelList.swift`).** `ModelList` is one structure (job, repository, pinned revision, files with size and
 SHA-256, licence and credit, per-device recommendation rules, rank) that decodes from JSON, skips an entry it cannot verify or a job it does not
 know, and has a built-in copy derived from `CandidateTable` and `KnownModels.bundles`. The server serves the list at `GET https://choir.news/api/phone/model-list` (public, no sign-in; `internal/proxy/phone_model_list.json`), and
-`ModelListTests.testServedListIsTheBuiltInList` fails when the served file and the built-in copy differ (run it with `AR_WRITE_MODEL_LIST=1`
-to rewrite the file after a change to the tables). Not built: the fetch, and the choice reading the list instead of `CandidateTable`.
+`ModelListTests.testServedListIsTheBuiltInList` (Mac only) fails when the served file and the built-in copy differ; run it with
+`AR_WRITE_MODEL_LIST=1` to rewrite the file and its record of source digests after a change to the tables. CI cannot run Swift, so the Go
+test `TestPhoneModelListSourcesUnchanged` fails there when `KnownModels.swift`, `ModelCandidates.swift`, `ModelStore.swift` or
+`Voice/ModelList.swift` changed since the list was written, or the list was edited by hand. Not built: the fetch, and the choice reading
+the list instead of `CandidateTable`.
+
+**Before the phone fetches the served list, three things must be built** (review, 2026-11-24). The digests in the list are integrity, not
+authenticity: they arrive in the same document, so a compromised host could serve a self-consistent list naming any public repository.
+(1) The list is signed with a key built into the app (Ed25519 over the canonical bytes), verified before any use, with the built-in list
+kept on any failure. (2) The version only rises and the phone refuses a list older than the highest it accepted. (3) The allowed effect
+is stated and enforced on the phone: add entries only, or also change which built-in model is recommended. Today only one entry
+(`fluid-speech-mini`) carries pinned files; the other 21 name a model a library or the app's own tables fetch, so a new responder still
+needs an app release.
 
 **What is left of Mike's pipeline (sizes in lines of Swift, plus model files).** Silero is already the speech detector the pipeline picks when
 its model is ready (nothing to port; making it ready by default is voice setup's download). Smart Turn v3.2: Mike's `SmartTurn.swift` is 56 lines

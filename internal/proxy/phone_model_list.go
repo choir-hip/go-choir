@@ -16,13 +16,31 @@ import (
 // (mobile/AutoradioKit/Sources/AutoradioKit/Voice/ModelList.swift).
 const phoneModelListPath = "/api/phone/model-list"
 
-// phoneModelListBody is the served list. It is the app's built-in list
-// written out; the phone-side test ModelListTests.testServedListIsTheBuiltInList
-// fails when the two differ and rewrites this file when run with
-// AR_WRITE_MODEL_LIST=1. Change the list by changing the app's tables and
-// regenerating, or by editing this file to offer phones in the field a model
-// their build does not carry (that test then names the difference, and the
-// build's tables are brought to match).
+// phoneModelListBody is the served list: the app's built-in list written out
+// by the phone-side test ModelListTests.testServedListIsTheBuiltInList run
+// with AR_WRITE_MODEL_LIST=1 (Mac only), which also writes
+// phone_model_list.sources.json, the digests of the list and of the Swift
+// files it is built from. TestPhoneModelListSourcesUnchanged (CI) fails when
+// the list was edited by hand or one of those files changed since, so a
+// change to the app's model tables cannot land without regenerating. The
+// two are equal at every landing; they are not equal by construction.
+//
+// BEFORE THE PHONE FETCHES THIS LIST (it does not today), all three must be
+// built, because the digests in the list are integrity, not authenticity:
+// they arrive in the same document, so a host that is compromised, or a bad
+// deploy, could serve a self-consistent list naming any public repository.
+//  1. The list is signed with a key built into the app: Ed25519 over the
+//     canonical bytes; the phone verifies before any use and keeps the
+//     built-in list on any failure.
+//  2. The list carries a version that only rises, and the phone refuses one
+//     older than the highest it has accepted, so a replay cannot undo a
+//     withdrawal.
+//  3. The allowed effect is stated and enforced on the phone: whether a
+//     served list may only add entries, or may also change which built-in
+//     model is recommended (today it would do the second implicitly).
+//
+// This path is a platform route on the public host, ahead of the
+// per-computer /api/ routes: a computer's own app cannot serve this path.
 //
 //go:embed phone_model_list.json
 var phoneModelListBody []byte

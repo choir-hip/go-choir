@@ -1,9 +1,12 @@
 package proxy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,8 +27,11 @@ import (
 //	M4 a method other than GET or HEAD changes or reads something.
 //	M5 a neighbouring path serves the list.
 //
-// That the served list equals the list this build of the app carries is the
-// phone side's test (ModelListTests.testServedListIsTheBuiltInList).
+//	M6 the app's model tables change and the served list is not regenerated:
+//	   the equality test is Swift and runs only on a Mac, so CI would stay
+//	   green. TestPhoneModelListSourcesUnchanged closes that here.
+//	M7 a hand-edit serves an entry over the phone's size bounds (4 GiB a
+//	   file, 8 GiB a model, 256 files): the phone drops it silently.
 func TestPhoneModelListThroughRealChain(t *testing.T) {
 	handler, _, _ := testProxyEnv(t)
 	srv := server.NewServer("proxy-test", "0")
@@ -68,18 +74,52 @@ func TestPhoneModelListThroughRealChain(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "https://choir.news"+path, nil)
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if strings.Contains(rec.Body.String(), `"models"`) {
-			t.Fatalf("%s served the model list (status %d)", path, rec.Code)
+		if rec.Code == http.StatusOK || strings.Contains(rec.Body.String(), `"models"`) {
+			t.Fatalf("%s answered %d or served the model list; only the exact path is public", path, rec.Code)
 		}
 	}
 }
 
+// The phone's rules for a served entry, rule for rule
+// (mobile/AutoradioKit/Sources/AutoradioKit/Voice/ModelList.swift isValid and
+// ModelStore.swift: isValidRepository, isSafeRelativePath, maxFileBytes,
+// maxModelBytes, maxFiles). Nothing is omitted; change both together.
 var (
-	hex40   = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	hex64   = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	hfRepo  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$`)
-	pathSeg = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	hex40      = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	hex64      = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	hfRepoPart = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 )
+
+const (
+	phoneMaxFileBytes  = int64(4) << 30
+	phoneMaxModelBytes = int64(8) << 30
+	phoneMaxFiles      = 256
+)
+
+func phoneValidRepository(r string) bool {
+	parts := strings.Split(r, "/")
+	if len(parts) != 2 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "." || p == ".." || !hfRepoPart.MatchString(p) {
+			return false
+		}
+	}
+	return true
+}
+
+func phoneSafeRelativePath(p string) bool {
+	if p == "" || strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\\x00") {
+		return false
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return false
+		}
+	}
+	return true
+}
 
 // checkPhoneModelList applies the phone's rules for a served entry (M2, M3).
 func checkPhoneModelList(t *testing.T, body []byte) {
@@ -142,8 +182,11 @@ func checkPhoneModelList(t *testing.T, body []byte) {
 		if m.Revision == nil {
 			bad("files without a revision")
 		}
-		if !hfRepo.MatchString(*m.Repository) {
+		if !phoneValidRepository(*m.Repository) {
 			bad("repository is not owner/name")
+		}
+		if len(m.Files) > phoneMaxFiles {
+			bad("more than 256 files")
 		}
 		paths := map[string]bool{}
 		var total int64
@@ -152,18 +195,60 @@ func checkPhoneModelList(t *testing.T, body []byte) {
 				bad("path listed twice: " + f.Path)
 			}
 			paths[f.Path] = true
-			for _, seg := range strings.Split(f.Path, "/") {
-				if !pathSeg.MatchString(seg) || seg == "." || seg == ".." {
-					bad("unsafe path " + f.Path)
-				}
+			if !phoneSafeRelativePath(f.Path) {
+				bad("unsafe path " + f.Path)
 			}
-			if f.Bytes <= 0 || !hex64.MatchString(f.SHA256) {
-				bad("file " + f.Path + " has no size or a bad digest")
+			if f.Bytes <= 0 || f.Bytes > phoneMaxFileBytes || !hex64.MatchString(f.SHA256) {
+				bad("file " + f.Path + " has no size, is over 4 GiB or has a bad digest")
 			}
 			total += f.Bytes
 		}
-		if total > 8<<30 {
+		if total > phoneMaxModelBytes {
 			bad("more than 8 GiB of files")
+		}
+	}
+}
+
+// M6. The served list is the app's built-in list written out by the Swift
+// test (ModelListTests.testServedListIsTheBuiltInList with
+// AR_WRITE_MODEL_LIST=1), which also records the SHA-256 of every Swift file
+// the list is built from. That test runs only on a Mac; this one runs in CI
+// and fails when any of those files has changed since the list was written,
+// so a change to the app's model tables cannot land without regenerating.
+// A comment-only edit to one of them also asks for a regeneration: that is
+// the price of a check that needs no Swift.
+func TestPhoneModelListSourcesUnchanged(t *testing.T) {
+	raw, err := os.ReadFile("phone_model_list.sources.json")
+	if err != nil {
+		t.Fatalf("no record of the sources the served list was built from: %v", err)
+	}
+	var rec struct {
+		ListSHA256 string            `json:"list_sha256"`
+		Sources    map[string]string `json:"sources"`
+	}
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	sum := func(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+	if got := sum(phoneModelListBody); got != rec.ListSHA256 {
+		t.Errorf("phone_model_list.json was edited after it was generated (sha256 %s, recorded %s): regenerate it from the app's tables", got, rec.ListSHA256)
+	}
+	for _, want := range []string{"KnownModels.swift", "ModelCandidates.swift", "ModelStore.swift", "Voice/ModelList.swift"} {
+		if _, ok := rec.Sources[want]; !ok {
+			t.Errorf("the record does not cover %s", want)
+		}
+	}
+	for name, want := range rec.Sources {
+		if !phoneSafeRelativePath(name) {
+			t.Fatalf("unsafe source name %q", name)
+		}
+		b, err := os.ReadFile("../../mobile/AutoradioKit/Sources/AutoradioKit/" + name)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if got := sum(b); got != want {
+			t.Errorf("%s changed since the served model list was written: rerun ModelListTests with AR_WRITE_MODEL_LIST=1 (through the Swift slot) and commit phone_model_list.json and phone_model_list.sources.json", name)
 		}
 	}
 }
