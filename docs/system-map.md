@@ -345,7 +345,7 @@ Not true, though a reader would assume it:
 
 ## 10. Where the maps disagree with the docs or each other
 
-- **Design documents: the newer supersedes the older where they conflict** (owner, 2026-11-24). Newest first: `docs/design/ideal-form-draft-2026-11-23.md`; `docs/design/first-design-2026-11-22.md`; `docs/design/semantic-layer-2026-11-20.md`. Each older file says at its top what of it is superseded.
+- **Design documents: the newer supersedes the older where they conflict** (owner, 2026-11-24). Newest first: `docs/design/desks-and-engine-2026-11-24.md` (the current design: the desks, the capture desk, the RLM substrate, each part marked built or not); `docs/design/ideal-form-draft-2026-11-23.md`; `docs/design/first-design-2026-11-22.md`; `docs/design/semantic-layer-2026-11-20.md`. Each older file says at its top what of it is superseded.
 
 Each is open. Both readings are given.
 1. Off-host backup. [1] saw a daily encrypted `offhost-backup` timer that
@@ -438,7 +438,7 @@ One line each; source in brackets.
 - Changing a desk or the runtime: `internal/deskmanifest/manifest.go`;
   `internal/actor/dispatcher.go` with `internal/actorruntime/handler.go`;
   `internal/agentcore/tool_profiles.go` and `rlm_reduce.go` [3].
-- Changing the Autopaper pipeline: `docs/design/first-design-2026-11-22.md`
+- Changing the Autopaper pipeline: `docs/design/desks-and-engine-2026-11-24.md` first, then `docs/design/first-design-2026-11-22.md`
   and the offline-slice evidence note; `internal/agentcore/
   source_schedule.go` (`HandleSourcePollDue`); `story_publish.go` [4][D4].
 - Changing the phone app: CLAUDE.md "Product" bullet; `docs/reference/

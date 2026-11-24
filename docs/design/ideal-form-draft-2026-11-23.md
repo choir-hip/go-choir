@@ -1,5 +1,8 @@
 # The ideal form: from an arriving item to a better corpus, and the root that holds the view
 
+> **Superseded in part (2026-11-24).** [Desks and engine](desks-and-engine-2026-11-24.md) is the current design and wins where they conflict. Superseded here: "happening" as a kind (a group that matters is named and becomes a subject); flat batches into one model call with no desk (capture is its own desk on the RLM pattern, grouped calls with learned context); the graph custodian as a free-standing host service (it is the capture desk's); management holding a bound on the root (management manages scoring). Still standing: the measure, importance counted from independent origins on subjects, the page as a host render the root steers, the path that begins with instrumenting and experiments.
+
+
 Draft for the owner, 2026-11-23. A peer's proposal, read-only on the repository (`origin/main` in `lead-docs2`). Nothing here is built. Numbers are from today's session record, draft 4 of the first design, the offline-slice evidence and the system map unless marked **(guess)** or **(estimate)**, which means I derived or assumed them and nobody has measured them.
 
 The short version:
