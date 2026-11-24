@@ -3,8 +3,20 @@ import XCTest
 
 // The model list as data. Failure list (each line a test): L1 the built-in copy does not survive JSON; L2 an unknown job or field from a newer
 // server empties the list; L3 an entry the store could not verify is offered; L4 recommendations ignore the device; L5 the bundle the store
-// fetches differs from the one the build pins; L6 the built-in copy disagrees with CandidateTable.
+// fetches differs from the one the build pins; L6 the built-in copy disagrees with CandidateTable; L8 a model under an attribution licence has no credit on its row.
 final class ModelListTests: XCTestCase {
+    /// L8: a model under an attribution licence carries its credit as data on its row (CC BY 4.0 section 3(a)); the page that shows credits reads this field.
+    func testEveryAttributionLicenceCarriesItsCredit() {
+        for c in CandidateTable.all where c.license.uppercased().contains("CC-BY") {
+            XCTAssertFalse((c.credit ?? "").isEmpty, "\(c.id) is \(c.license) and has no credit on its row")
+        }
+        for e in ModelList.builtIn().models where e.license.uppercased().contains("CC-BY") || e.license.uppercased().contains("CC BY") {
+            let credit = e.credit ?? ""
+            XCTAssertTrue(credit.contains("CC BY 4.0") && credit.contains("creativecommons.org/licenses/by/4.0"), "\(e.id): the credit names the licence and its link")
+        }
+        XCTAssertTrue(ModelList.builtIn().models.first { $0.id == "parakeet-tdt-0.6b-v2" }?.credit?.contains("NVIDIA") == true)
+        XCTAssertTrue(ModelList.builtIn().models.first { $0.id == "pocket-tts" }?.credit?.contains("Kyutai") == true)
+    }
     func testBuiltInSurvivesJSON() throws {                                                            // L1
         let list = ModelList.builtIn()
         XCTAssertFalse(list.models.isEmpty)
