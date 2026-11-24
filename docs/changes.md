@@ -38,6 +38,20 @@ Counted 2026-11-23: 520 lane branches on the remote; 468 are landed, 13
 superseded, 11 evidence only, 26 are distinct live work (the rows above and
 the first table's). Seven designs exist only on lanes.
 
+## 2026-11-24
+
+### Phone: the rest of the non-voice Swift moved to Exact (lane `exact-rest`, orange; red where it touches the mail store)
+
+What: the Texture editor (`texture-edit.ts`, `texture-body.ts`), the notebook's topics (`notebook-topics.ts`), podcast clips and "now playing" (`clip-play.ts`, `podcast-now.ts`), the pages' open set and
+the other leftovers of the Swift page models are shared code, and about 3,400 lines of non-voice Swift are deleted (the table is in the lane's report). Mail is stored on the phone's disk by shared code:
+`mail-seal.ts` and the native `MailSeal` pair are gone, the files are plain JSON under `app:/data/mail` (owner, 2026-11-23). "Read this to me" in mail is the shared radio's `radioListen`, so
+`MailReading` and the native `mailRead` are gone. The run sheet's Swift copy is gone: shared code pushes the voice's retrieval the entries on air and ahead and the take recorder the story on air
+(`voice-facts.ts`, `radioSet`), and native decodes nothing of the sheet.
+Why: "get everything in exact, as much as possible" (owner, 2026-11-20); "we should get all this converted to exact overnight" (owner, 2026-11-23).
+Proof: `bun test` in `mobile/AutoradioLab` (whole suite), `bun exact.mjs contract build app.contract`, the Swift package suite through the lock. Not proved: a native Exact build, a simulator, a device (the app module's Swift in `exact-package/apple` is not compiled by the package suite).
+Replaced: the Swift editor, notebook, pages, podcast clips, mail seal, run sheet types. A page moved to Exact carries nothing over from the Swift build: sealed mail files and the old editor's files are not read.
+Undo: revert the lane's commits; the previous Swift is in git history. Mail written plain by this build is read by the old one only if reverted with its files removed (sign out).
+
 ## 2026-11-23
 
 ### A voice ask searches the paper (`2d44744e0`, `95ce70334`, `42fa0d9f4`, orange)

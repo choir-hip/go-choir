@@ -348,24 +348,21 @@ Swift data the moved page still needs (here the reader's saved topics) becomes a
 small package source the contract passes in as an argument, until its owner page
 moves too.
 
-## Mail on the phone: sealed in shared code (2026-11-19, lane `exact-mail`)
+## Mail on the phone: plain files written by shared code (2026-11-19 lane `exact-mail`; the seal removed 2026-11-24, lane `exact-rest`)
 
 The Mail pages, the signed-in requests to the listener's computer and the phone's copy of the mail are `mail.ts` and its siblings in `mobile/AutoradioLab`
-(`mail-model.ts` pure data, `mail-sanitize.ts` the allowlist HTML cleaner, `mail-seal.ts` the cipher, `mail-store.ts` the copy). Three sends stay native
-(`mailOpenReview`, `mailRead`, `mailAsk`: the in-app web view, the radio's voice, the Swift signal log).
+(`mail-model.ts` pure data, `mail-sanitize.ts` the allowlist HTML cleaner, `mail-store.ts` the copy). One send stays native (`mailOpenReview`: the in-app web view);
+"Read this to me" is shared code's radio (`radioListen`), and `mailAsk` is shared code's too.
 
-- **At rest.** The cipher is the platform's: ONE native pair on the app module, `mailSeal` and `mailOpen` (`Choir/MailSeal.swift`, CryptoKit AES-256-GCM), with a key
-  made and kept natively in the Keychain (its own item, this device only, after first unlock) and never returned to shared code; Exact's `crypto.subtle` has digests
-  and ECDSA only. Every file under `app:/data/mail` is sealed (format `MS3`), and the record's identity (`msg|<id>`, `rows|<folder>`, `state`) is authenticated data, so a
-  file swapped to another record fails. The native open answers three things: opened, `bad` (the tag failed: the file is removed and fetched again) or `cannot` (no key
-  could be read now: the file is KEPT and nothing is judged). A key is made only while the sign-in key is stored. With no cipher (`mailCan` unanswered: Android today)
-  nothing is written, nothing is fetched for storing, and "Show original" is not offered. `app:/data` is `Library/Application Support/exact/<app id>/data` and IS in a device backup
-  (`host/apple/src/picker.rs:46-51`), which is why the key is this-device-only. Mail is not in local search: a search index of mail would hold its words unsealed, and the plain
-  mail sync in `content.ts` and `mailDocs` in `search.ts` were deleted; a search over sealed mail has to be designed first.
+- **At rest.** The owner, 2026-11-23: "yes, get rid of mail seal. i do want mail stored on phone's disk". There is no cipher and no key: shared code writes plain JSON
+  under `app:/data/mail` (`rows-<folder>.json`, `msg-<hash of the id>.json`, `state.json`), and the platform's own file protection is the only seal. The native pair
+  `mailSeal`/`mailOpen`/`mailForget`/`mailCan` (`Choir/MailSeal.swift`) and `mail-seal.ts` are deleted; the earlier sealed files (`*.bin`) are never read (the app has not launched).
+  A file that does not parse is removed and fetched again. `app:/data` is `Library/Application Support/exact/<app id>/data` and IS in a device backup
+  (`host/apple/src/picker.rs:46-51`). Mail is not yet in local search (the plain mail sync in `content.ts` and `mailDocs` in `search.ts` were deleted with the seal work;
+  a search over the phone's copy is now possible and is owed).
 - **Show original.** `iframe` has no `srcdoc` (gaps.md 30), so the cleaned document is written PLAIN to `app:/cache/mail-<hash>.html` only while it is asked for, and every
   other `mail-*.html` is removed on each message answer, at sign-out and at every launch. `app:/cache` is `$HOME/Library/Caches/exact/<app id>` (`host/apple/src/picker.rs:52`):
   under Apple's rules Library/Caches is not in a device backup; the file is plain on the phone while the page is open (residual). A link in it is inert (no `href`; its
   address is written after it). A body over 120 000 characters shows a statement that it is too large to show in full; the message page shows the text, cut at 200 000 (the HTML is read up to 300 000).
-- **Sign-out.** Shared code leads (`account.ts`): `beginSignOut` moves the account generation and turns sealing off BEFORE the native sign-out; a store write checks the generation
-  before and after it seals and writes; `wipeMail` removes the files and the key. (The Swift registration `AccountWipe.removeMailCopy` is a second path for the same files.)
-  same and also forgets the key, and is what the shared sign-out will call.
+- **Sign-out.** Shared code leads (`account.ts`): `beginSignOut` moves the account generation and turns mail writes off BEFORE the native sign-out; a store write checks the generation
+  before and after it writes; `wipeMail` removes the files. (The Swift registration `AccountWipe.removeMailCopy` is a second path for the same files.)
