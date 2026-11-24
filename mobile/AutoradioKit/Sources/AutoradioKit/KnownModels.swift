@@ -122,9 +122,12 @@ public enum KnownModels {
 
     /// More GGUF quantisations of the responder families, for the configurator (the candidate table, ModelCandidates.swift). Sizes and
     /// SHA-256 digests are the Hugging Face API file listings' (LFS object ids) fetched 2026-11-11; names are the repos' own, not guessed.
-    struct ExtraGGUF { var spec: ModelSpec; var repo: String; var license: String }
-    static func gguf(_ id: String, repo: String, file: String, sha: String, bytes: Int64, license: String) -> ExtraGGUF {
-        ExtraGGUF(spec: ModelSpec(id: id, url: URL(string: "https://huggingface.co/\(repo)/resolve/main/\(file)")!, sha256: sha, bytes: bytes, fileName: file), repo: repo, license: license)
+    /// `revision`: the repository commit the file was read at; when set, the download url names it and not the moving `main`, and the model list
+    /// carries it. The older rows below were pinned by digest alone.
+    struct ExtraGGUF { var spec: ModelSpec; var repo: String; var license: String; var revision: String? = nil; var credit: String? = nil }
+    static func gguf(_ id: String, repo: String, file: String, sha: String, bytes: Int64, license: String, revision: String? = nil, credit: String? = nil) -> ExtraGGUF {
+        ExtraGGUF(spec: ModelSpec(id: id, url: URL(string: "https://huggingface.co/\(repo)/resolve/\(revision ?? "main")/\(file)")!, sha256: sha, bytes: bytes, fileName: file),
+                  repo: repo, license: license, revision: revision, credit: credit)
     }
     static let lfmLicense = "LFM Open License v1.0 (commercial use at or above US$10M annual revenue needs a separate licence from Liquid AI)"
     static let extraGGUF: [ExtraGGUF] = [
@@ -133,6 +136,11 @@ public enum KnownModels {
         gguf("lfm3-1.7b-q6_k", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q6_K.gguf", sha: "54e1bd947c77167823d45bf495f1c3e2d226ca7fb242f83cfa141ee3a6ab55c6", bytes: 1_427_638_304, license: lfmLicense),
         gguf("lfm3-1.7b-q8_0", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q8_0.gguf", sha: "8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6", bytes: 1_846_238_496, license: lfmLicense),
         gguf("lfm3-1.7b-nvfp4", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-NVFP4.gguf", sha: "462c2379586a45b30fe3dbfa30e6ff08cbb440734d6934689e24e4fe59a67bec", bytes: 1_280_019_776, license: lfmLicense),
+        // LFM3-Omni-2B (owner, 2026-11-24: a bigger model for newer phones), vendor repo at commit d508b88, Q8_0 of the text path only (the mmproj, which holds
+        // the vision and audio encoders and the speech-out path, is NOT fetched: text in, text out). LICENSE read from the hub 2026-11-24 (SHA-256 4d28ca14...).
+        gguf("lfm3-omni-2b-q8_0", repo: "LiquidAI/LFM3-Omni-2B-GGUF", file: "LFM3-Omni-2B-Q8_0.gguf", sha: "59118f661eaacb93d204723d76355b53347f0940b508c11412f6290fd49158d4",
+             bytes: 1_846_240_768, license: lfmLicense, revision: "d508b88f08a5b4286f2d2805a6a8d69a0ff44c72",
+             credit: "LFM3-Omni-2B by Liquid AI, used under the LFM Open License v1.0 (https://huggingface.co/LiquidAI/LFM3-Omni-2B/blob/main/LICENSE)."),
         gguf("qwen3-1.7b-q6_k", repo: "unsloth/Qwen3-1.7B-GGUF", file: "Qwen3-1.7B-Q6_K.gguf", sha: "6a9cadec4883df6f3efcf337103479dcc6a3efa9f5f8cc64a904dba57808207a", bytes: 1_417_755_200, license: "Apache-2.0"),
         gguf("qwen3-1.7b-q8_0", repo: "unsloth/Qwen3-1.7B-GGUF", file: "Qwen3-1.7B-Q8_0.gguf", sha: "0becaa825564295d82e9af4d008bca5f8b7f5f73bf1c6a0b58f7c53ef26b47fd", bytes: 1_834_426_944, license: "Apache-2.0"),
         gguf("qwen3.5-0.8b-q8_0", repo: "unsloth/Qwen3.5-0.8B-GGUF", file: "Qwen3.5-0.8B-Q8_0.gguf", sha: "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c", bytes: 811_843_840, license: "Apache-2.0"),
