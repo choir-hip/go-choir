@@ -139,6 +139,9 @@ func DefaultRegistry() *Registry {
 		// by the boot reconcile (the kernel), keyed by sequence.
 		{Kind: "choir.desk_package_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.DeskPackageEvent"},
 		{Kind: "choir.lease", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "lease.Record"},
+		// The decision record: one append-only row per capture and stage,
+		// written by host code (system:decisions), never by a desk.
+		{Kind: "choir.decision_record", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "types.DecisionRecord"},
 		{Kind: "choir.package_install", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},
 		{Kind: "choir.package_install_pending", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstallPending"},
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PackageInstall"},

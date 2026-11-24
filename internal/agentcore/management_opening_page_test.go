@@ -407,12 +407,12 @@ func TestStoryChoiceLineCarriesPageCandidatesAndTheJudgment(t *testing.T) {
 	d := choiceDetail{Window: openingWindow, InWindow: 312, Offered: []string{"docA", "docB"}, Answers: map[string]string{"docA": "next"},
 		Sources: candidateSources{Near: 2, Lead: 1}, Captures: 3, MainPoint: 58, Succeeds: "docA"}
 	got := managementStoryChoiceLine("run-9", "open", "doc-7", 312, 0, d)
-	want := "management story choice run=run-9 choice=open story=doc-7 opening_shown=312 verb_shown=0 candidates_shown=312 window=8h page_in_window=312 page_left_out=0 offered=docA,docB answers=docA:next,docB:none captures=3 sources=near:2,lead:1 main_point=58 succeeds=docA"
+	want := "management story choice run=run-9 choice=open story=doc-7 opening_shown=312 verb_shown=0 candidates_shown=312 window=8h page_in_window=312 page_left_out=0 offered=docA,docB answers=docA:next,docB:none captures=3 sources=near:2,lead:1 main_point=58 succeeds=docA capture_ids=-"
 	if got != want {
 		t.Fatalf("L1: line = %q\nwant        %q", got, want)
 	}
 	got = managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{Window: openingWindow, InWindow: 400, LeftOut: 77, Captures: 2})
-	want = "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=8h page_in_window=400 page_left_out=77 offered=- answers=- captures=2 sources=near:0,lead:0 main_point=0 succeeds=-"
+	want = "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=8h page_in_window=400 page_left_out=77 offered=- answers=- captures=2 sources=near:0,lead:0 main_point=0 succeeds=- capture_ids=-"
 	if got != want {
 		t.Fatalf("L1: line = %q\nwant        %q", got, want)
 	}

@@ -38,6 +38,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/subcalls", h.HandleSubCalls)
 	s.HandleFunc("/api/trust", h.HandleTrust)
 	s.HandleFunc("/api/captures", h.HandleCaptures)
+	s.HandleFunc("/api/decisions", h.HandleDecisions)
 	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
 	s.HandleFunc("/api/costs", api.HandleCosts)
 	api.SetSlotSource(h.InstalledSlots)

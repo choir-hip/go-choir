@@ -1,10 +1,15 @@
 package agentcore
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,10 +46,10 @@ func TestStoriesShownCountsPerRunAndIsForgotten(t *testing.T) {
 }
 
 func TestManagementStoryChoiceLine(t *testing.T) {
-	if got := managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{}); got != "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=- page_in_window=0 page_left_out=0 offered=- answers=- captures=0 sources=near:0,lead:0 main_point=0 succeeds=-" {
+	if got := managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{}); got != "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=- page_in_window=0 page_left_out=0 offered=- answers=- captures=0 sources=near:0,lead:0 main_point=0 succeeds=- capture_ids=-" {
 		t.Fatalf("feed line = %q", got)
 	}
-	if got := managementStoryChoiceLine("run-9", "open", "", 0, 0, choiceDetail{}); got != "management story choice run=run-9 choice=open story=- opening_shown=0 verb_shown=0 candidates_shown=0 window=- page_in_window=0 page_left_out=0 offered=- answers=- captures=0 sources=near:0,lead:0 main_point=0 succeeds=-" {
+	if got := managementStoryChoiceLine("run-9", "open", "", 0, 0, choiceDetail{}); got != "management story choice run=run-9 choice=open story=- opening_shown=0 verb_shown=0 candidates_shown=0 window=- page_in_window=0 page_left_out=0 offered=- answers=- captures=0 sources=near:0,lead:0 main_point=0 succeeds=- capture_ids=-" {
 		t.Fatalf("open line = %q", got)
 	}
 }
@@ -162,5 +167,133 @@ func TestFeedSentAsACastLogsItsCapturesFromThePacket(t *testing.T) {
 		Kind: yaegikernel.IntentFeed, Captures: []string{"c1"}})
 	if !strings.Contains(out.String(), "captures=1") {
 		t.Errorf("a Feed verb's captures are not counted: %q", out.String())
+	}
+}
+
+// R0: the story-choice line gains its capture ids, and the host writes one
+// decision-record row per capture from the choice it observed, with the
+// candidates offered for that capture alone. Ways this fails: the line lacks
+// the ids; a row carries another capture's candidates; a decline or open
+// writes no rows; the row names management as having written it (the decider
+// is observed, the writer is the decisions service); a non-management profile
+// writes rows.
+func TestChoiceLineNamesCaptureIDsAndRowsAreOnePerCapture(t *testing.T) {
+	rt := &Runtime{}
+	rt.noteOpeningOffer("run-r", &openingOffer{ByCapture: map[string][]string{"c1": {"docA"}, "c2": {"docB", "docC"}}})
+	var out strings.Builder
+	prev := log.Writer()
+	log.SetOutput(&out)
+	defer log.SetOutput(prev)
+	p := 0.8
+	rec := types.InboxRecordReceipt{Inbox: deskmanifest.DocumentInbox("docA")}
+	c := rt.logManagementStoryChoice("run-r", deskmanifest.AdmitterName(), rec, yaegikernel.StagedIntent{
+		Kind: yaegikernel.IntentFeed, Captures: []string{"c1", "c2", "c1"}, Req: &types.RequestFields{PSuccess: &p}})
+	if c == nil || !strings.Contains(out.String(), "capture_ids=c1,c2") {
+		t.Fatalf("line = %q, choice = %+v", out.String(), c)
+	}
+	at := time.Date(2026, 11, 24, 3, 0, 0, 0, time.UTC)
+	rows := rt.decisionRows("o1", "comp1", "run-r", "cmd-1", *c, at)
+	if len(rows) != 2 || rows[0].CaptureID != "c1" || rows[1].CaptureID != "c2" {
+		t.Fatalf("rows = %+v", rows)
+	}
+	if got := rows[0].Candidates; len(got) != 1 || got[0] != "docA" {
+		t.Errorf("c1 candidates = %v", got)
+	}
+	if got := rows[1].Candidates; len(got) != 2 || got[0] != "docB" {
+		t.Errorf("c2 candidates = %v", got)
+	}
+	r := rows[0]
+	if r.Stage != types.DecisionStageManagementRoute || r.Decision != "feed" || r.Target != "docA" || r.DeciderKind != types.DeciderDesk || r.Decider != deskmanifest.AdmitterName() || r.CommandID != "cmd-1" || r.RunID != "run-r" || r.Probability == nil || *r.Probability != 0.8 || !r.At.Equal(at) {
+		t.Errorf("row = %+v", r)
+	}
+	d := rt.logManagementStoryChoice("run-r", deskmanifest.AdmitterName(), types.InboxRecordReceipt{}, yaegikernel.StagedIntent{Kind: yaegikernel.IntentDecline, Captures: []string{"c2"}})
+	if d == nil || d.Choice != "decline" || d.Story != "" || len(rt.decisionRows("o1", "comp1", "run-r", "cmd-2", *d, at)) != 1 || rt.decisionRows("o1", "comp1", "run-r", "cmd-2", *d, at)[0].Probability != nil {
+		t.Errorf("decline = %+v", d)
+	}
+	// An open whose captures are on the intent and not in the packet still names them.
+	o := rt.logManagementStoryChoice("run-r", deskmanifest.AdmitterName(), types.InboxRecordReceipt{OpenedStory: true, Inbox: deskmanifest.DocumentInbox("docN")},
+		yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, Captures: []string{"c9"}, Statement: "{}"})
+	if o == nil || o.Choice != types.DecisionOpen || len(o.Captures) != 1 || o.Captures[0] != "c9" {
+		t.Errorf("open = %+v, want the intent's capture c9", o)
+	}
+	if got := rt.logManagementStoryChoice("run-r", "texture", rec, yaegikernel.StagedIntent{Kind: yaegikernel.IntentFeed, Captures: []string{"c1"}}); got != nil {
+		t.Errorf("a non-management profile made a choice: %+v", got)
+	}
+}
+
+// decisionLogBuf is a log sink safe for a concurrent writer.
+type decisionLogBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (d *decisionLogBuf) Write(p []byte) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.b.Write(p)
+}
+func (d *decisionLogBuf) String() string { d.mu.Lock(); defer d.mu.Unlock(); return d.b.String() }
+
+// R0: rows reach the store through appendDecisionRows and are read back by
+// the route; a failure to write never panics or returns an error to the
+// decision (the record is observation); the route refuses an unauthenticated
+// caller and a bad window.
+func TestDecisionRowsReachTheStoreAndTheRoute(t *testing.T) {
+	rt, st := testRuntime(t)
+	rt.cfg.ComputerID = "computer-d1"
+	at := time.Date(2026, 11, 24, 3, 0, 0, 0, time.UTC)
+	rt.appendDecisionRows(context.Background(), []types.DecisionRecord{{OwnerID: "owner-d1", ComputerID: "computer-d1", CaptureID: "cap-1", Stage: types.DecisionStageManagementRoute,
+		Decision: "open", Target: "doc-9", DeciderKind: types.DeciderDesk, Decider: "management", RunID: "r", CommandID: "cmd", At: at}})
+	got, err := st.ListDecisionRecords(context.Background(), "owner-d1", "computer-d1", types.DecisionFilter{CaptureID: "cap-1"})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("store rows = %v, %v", got, err)
+	}
+	// An invalid row is logged, not returned.
+	logged := &decisionLogBuf{}
+	log.SetOutput(logged)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	rt.appendDecisionRows(context.Background(), []types.DecisionRecord{{OwnerID: "owner-d1"}})
+	log.SetOutput(os.Stderr)
+	if !strings.Contains(logged.String(), "decision record: 1 rows not written") {
+		t.Fatalf("an invalid row was not logged: %q", logged.String())
+	}
+	if again, _ := st.ListDecisionRecords(context.Background(), "owner-d1", "computer-d1", types.DecisionFilter{}); len(again) != 1 {
+		t.Fatalf("an invalid row changed the store: %d rows", len(again))
+	}
+	// A cell cancelled right after its commit still gets its rows written.
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	rt.appendDecisionRows(cancelled, []types.DecisionRecord{{OwnerID: "owner-d1", ComputerID: "computer-d1", CaptureID: "cap-2", Stage: types.DecisionStageManagementRoute,
+		Decision: "decline", DeciderKind: types.DeciderDesk, Decider: "management", RunID: "r", CommandID: "cmd", At: at}})
+	if got2, _ := st.ListDecisionRecords(context.Background(), "owner-d1", "computer-d1", types.DecisionFilter{CaptureID: "cap-2"}); len(got2) != 1 {
+		t.Fatalf("a cancelled cell lost its rows: %d", len(got2))
+	}
+	(*Runtime)(nil).appendDecisionRows(context.Background(), got)
+
+	h := &APIHandler{rt: rt}
+	get := func(query string, auth bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/decisions"+query, nil)
+		if auth {
+			req.Header.Set("X-Authenticated-User", "owner-d1")
+		}
+		rec := httptest.NewRecorder()
+		h.HandleDecisions(rec, req)
+		return rec
+	}
+	if rec := get("", false); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated = %d", rec.Code)
+	}
+	if rec := get("?since=yesterday", true); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad since = %d", rec.Code)
+	}
+	rec := get("?capture=cap-1&stage=management_route", true)
+	var out struct {
+		Decisions []types.DecisionRecord `json:"decisions"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &out) != nil || len(out.Decisions) != 1 || out.Decisions[0].Target != "doc-9" {
+		t.Fatalf("route = %d %s", rec.Code, rec.Body)
+	}
+	if rec := get("?capture=cap-none", true); !strings.Contains(rec.Body.String(), `"decisions":[]`) {
+		t.Fatalf("an unknown capture answered %s", rec.Body)
 	}
 }

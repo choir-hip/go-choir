@@ -44,6 +44,10 @@ const (
 	Lease = "lease"
 	// Autoradio is the radio's media kinds; reserved, no code writes them.
 	Autoradio = "autoradio"
+	// Decisions is the decision record: one append-only row per capture and
+	// stage, written by host code from what it observes of a decision. It is
+	// a log, not a judgment, and no desk owns it (owner, 2026-11-24).
+	Decisions = "decisions"
 )
 
 // Manifest is one kernel service's declaration.
@@ -114,6 +118,7 @@ var builtin = []Manifest{
 		"choir.desktop_session", "choir.desktop_app_instance",
 	}},
 	{Name: Lease, OwnedKinds: []string{"choir.lease"}},
+	{Name: Decisions, OwnedKinds: []string{"choir.decision_record"}},
 	{Name: Autoradio, OwnedKinds: []string{
 		"choir.media_item", "choir.audio_recording", "choir.transcript",
 	}},

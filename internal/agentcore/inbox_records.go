@@ -868,10 +868,14 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		// them (S2b, FM28).
 		rt.storyLibraryShown.Store(strings.TrimSpace(r.scope.RunID), committed.StoryLibraryHead)
 	}
+	var decisionRows []types.DecisionRecord
+	decidedAt := time.Now()
 	for i, in := range localIDs {
 		seq, opened := int64(0), ""
 		if i < len(committed.Records) {
-			rt.logManagementStoryChoice(r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i], in)
+			if choice := rt.logManagementStoryChoice(r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i], in); choice != nil {
+				decisionRows = append(decisionRows, rt.decisionRows(r.scope.OwnerID, r.scope.ComputerID, r.scope.RunID, req.CommandID, *choice, decidedAt)...)
+			}
 			if in.Kind == yaegikernel.IntentReport && i < len(records) && records[i].Report != nil {
 				// A research Report counts once its record is committed: a Report the
 				// commit refused or dropped is never logged.
@@ -887,7 +891,10 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		}
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: uint64(seq), Kind: in.Kind, Inbox: opened})
 	}
+	// The decision record: the host writes the rows from what it observed of
+	// the committed choices (never management), after the commit.
 	finishTask()
+	rt.appendDecisionRows(ctx, decisionRows)
 	// Management's dispositions are compared with Jev's labels; a mismatch
 	// is recorded as an override on the label (L2a A3 / R2-5). Best effort:
 	// the records are committed.

@@ -538,6 +538,10 @@ type choiceDetail struct {
 	// document the new story succeeds, "" for none.
 	MainPoint int
 	Succeeds  string
+	// CaptureIDs are the captures the act disposes of, in the order named
+	// and once each; the story-choice line carries them so the choice joins
+	// to the captures' ids.
+	CaptureIDs []string
 }
 
 func (d choiceDetail) offeredText() string {
@@ -592,6 +596,7 @@ func (rt *Runtime) detailOfDecision(runID string, in stagedDecision) choiceDetai
 			}
 		}
 	}
+	d.CaptureIDs = uniqueIDs(captures)
 	offer := rt.openingOfferOf(runID)
 	if offer == nil {
 		return d
@@ -618,6 +623,19 @@ func (rt *Runtime) detailOfDecision(runID string, in stagedDecision) choiceDetai
 type stagedDecision struct {
 	captures []string
 	packet   string
+}
+
+// uniqueIDs trims ids and drops blanks and repeats, keeping the first order.
+func uniqueIDs(ids []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func nonEmpty(ids []string) []string {

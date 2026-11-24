@@ -73,6 +73,10 @@ const (
 	WriterShell Writer = "system:shell"
 	// WriterLease is the lease service (MA3.4): the issuer of lease records.
 	WriterLease Writer = "system:lease"
+	// WriterDecisions is the decision record's custodian: host code that
+	// appends one row per capture and stage from what it observes of a
+	// decision. No desk writes the kind.
+	WriterDecisions Writer = "system:decisions"
 	// WriterCorpusd is the publication layer (Store B).
 	WriterCorpusd Writer = "system:corpusd"
 	// WriterStore is the VM store acting for itself, not for a desk: the
@@ -89,7 +93,7 @@ const (
 var BuiltinWriters = map[Writer]bool{
 	WriterTexture: true, WriterManagement: true, WriterEngineering: true, WriterResearch: true,
 	WriterAutoradio: true, WriterKernel: true, WriterOwnerFiles: true, WriterShell: true,
-	WriterCorpusd: true, WriterStore: true, WriterLease: true,
+	WriterCorpusd: true, WriterStore: true, WriterLease: true, WriterDecisions: true,
 }
 
 var appDeskWriter = regexp.MustCompile(`^desk:[a-z][a-z0-9_-]{1,31}$`)
