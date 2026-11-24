@@ -1,0 +1,27 @@
+# The phone's Texture save builds the document by inference, and the server has no route that does it (2026-11-24)
+
+Problem: rounds 4 and 5 of review on `lane/exact-editor` both found defects in the phone's port of the server's body model (`mobile/AutoradioLab/texture-body.ts`: `merge`, `projectBody`, `canon`): an embed that grew a marker paragraph, a cited document that 400'd, a typed paragraph that replaced a deleted embed and was dropped, a cited paragraph whose stored text differs from the field's and leaves a permanent false conflict. Each fix moved the defect. Rule 7 (three rounds without convergence): stop patching, change the frame.
+
+## Question
+Does the server already have a route or mode that takes the edited Markdown and the parent revision and derives `body_doc` itself, keeping the parent's untouched nodes (embeds, source refs), as the web editor saves?
+
+## Answer: no (read, not run)
+- **`POST /api/texture/documents/{id}/revisions`** (`HandleTextureRevisions`, `internal/textureowner/texture.go:1074`; `reviseDocument`, `revise_edit.go`) takes `content`, optional `body_doc`, `source_entities`, `parent_revision_id`, `allow_rebase`. With a `body_doc` it validates it and requires `content` to equal `texturedoc.Project(body_doc)` (`prepareTextureRevision`, `internal/store/texture_structured_revision.go:123`). It rewrites the phone's `content` first (`stabilizeTextureUserMarkdownStructures`, `revise_edit.go:80`, a parent Markdown table kept after a collapsed draft), then checks.
+- **Without a `body_doc`** the server builds ONE paragraph from `content` (`userAuthoredTextStructuredTextureDoc`: one paragraph, a `hard_break` per newline, `texture_structured_revision.go:251`) and refuses `source_entities` ("source_entities require body_doc"). That flattens headings, lists, quotes, embeds and refs: not a merge.
+- **`allow_rebase`** (`revise_edit.go:208`, `texture_structure.go:117 rebaseUserDraftContent`) is a text-level three-way merge of `content` when the parent is stale, and only when there is no `body_doc`; it derives no body either.
+- **`POST .../revise`** is the agent route (a prompt, a runtime task), not an edit. Import, open-file, fork and restore take a whole document, not an edit of one.
+- **The web editor** (`frontend/src/packages/texture/App.svelte:760-765`, `texture-structured-editor-doc.ts`) builds `body_doc` itself from the editor's DOM (`serializeEditorStructuredDoc(surface, { existingDoc })`), computes `content` with its own TypeScript projection (`projectStructuredTextureDocText`) and picks the entities with `sourceEntitiesForStructuredDoc`. It does not infer anything: an embed or a source ref is an atom in the DOM (`data-texture-embed`, `data-texture-source-ref`) that the serializer carries over by id. The server also forbids the owner to add or alter an embed (`newEmbeds`, `revise_edit.go:116`), only to keep, delete or move one.
+
+So the web is client-owned too, but it has the atoms. The phone's editor is Exact's Markdown text, which has no atom for an embed or a source ref (Exact's atoms exist on iOS, macOS and web; Android's are "still out", `docs/reference/exact/markdown-editor-and-textflow.md`), so the phone must infer which node a block was. Every defect above is that inference.
+
+## Options
+1. **The server owns the merge (recommended; red, its own lane).** One field on the existing revisions route, for example `derive_from_markdown: true`: the server loads the parent revision (`body_doc`, `source_entities`), runs one Go function `texturedoc.MergeMarkdown(parent, entities, markdown)` (the port of `texture-body.ts` `merge`, which lives next to `Project`), keeps the parent's untouched nodes and the entities they cite, computes `content` and the entity list, and then goes through the SAME `prepareTextureRevision`, so `Validate` and `Project` stay the single truth. The phone sends `{content: markdown, parent_revision_id, derive_from_markdown: true}` and deletes its `merge`, `projectBody`, `canon` and the entity handling. Proof: the shared fixture cases move to a Go test of `MergeMarkdown` (they are already data), plus a route test. Protected surfaces: Texture canonical writes, run acceptance. Rollback: the field is additive; the phone without it keeps today's behaviour.
+   - The phone then needs no text equality with the server: it keeps `lastKnownText` (what the field showed when opened and what it last posted) for "nothing unsent" and the head's revision id for conflict, so `canon` goes too.
+2. **Atoms for non-text nodes in the phone's editor (not now).** An embed or a ref as an Exact atom whose id is the node id, as the web's DOM does. Blocked on Android, and a Contract/Exact change on iOS.
+3. **Keep patching the port.** Not recommended: five rounds, each finding in the shapes the fixture omits.
+
+## Until option 1 lands (a small phone change, not another patch of the merge)
+Make the phone refuse the documents it cannot merge exactly: a head whose body holds an embed, a source ref or a table is read-only on the phone, with one line saying so ("This document has sources or files; edit it on the web for now."). Plain-text documents (the owner's own, which round 3 and the owner's phone proved) keep the editor. That removes both round-5 blockers without more inference. I will write it only when asked.
+
+## Not decided
+Whether the interim guard ships with App Review's build, and who takes the server lane. No code is written for either until the coordinator answers.
