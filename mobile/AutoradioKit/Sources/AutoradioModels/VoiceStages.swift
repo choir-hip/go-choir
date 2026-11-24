@@ -46,7 +46,7 @@ public final class KokoroVoice: Voice, @unchecked Sendable {
     static func load(preferring voice: String) async throws -> (KokoroAneManager, @Sendable () async -> Void) {
         try LibraryScope.require("kokoro-82m-ane")           // a library is initialised only for a model that is ready by manifest, or being fetched or checked: initialising it for missing files would be a download
         // Every Kokoro voice of the catalog (the generated English rows: 28) is loaded with the model, inside the one fetch the person agreed to: a voice pack fetched only when its card is tapped would
-        // be a library fetch outside the download door's window. Each voice pack is a 2.7 MB file the pack lists (`VoiceRow.bytes`), 75 MB in all, which the offered size of this model does not yet count.
+        // be a library fetch outside the download door's window. Each voice pack is a 2.7 MB file the pack lists (`VoiceRow.bytes`), 75 MB in all, which the offered size of this model counts (`KnownModels.kokoroBytes`).
         let all = Set([voice] + VoiceCatalog.options.filter { $0.stageID == stageID }.map(\.voice))
         let k = KokoroAneManager(version: .v3)
         do { try await k.initialize(preloadVoices: all) }

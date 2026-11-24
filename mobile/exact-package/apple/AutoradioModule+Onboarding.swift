@@ -79,7 +79,8 @@ final class OnboardingController: @unchecked Sendable {
     /// `only` false: the whole voice setup (the configurator plans the pipeline together, unless the person picked models). `only` true: just `stages` (`["voice"]` is the radio's speaking voice, asked for first and alone: owner, 2026-11-23), each on its own ladder.
     /// `picks` (stage -> model id): the models the person chose in the download step (the list's recommendation when they chose none), tried first on their stage; with picks the configurator, which would choose other models, is not used (the person's choice is what is fetched).
     /// `speaker`: also fetch the voice-print model (about 8 MB) the person agreed to with the rest, which is what learning their voice needs.
-    func begin(stages: [String] = [], only: Bool = false, picks: [String: String] = [:], speaker: Bool = false) {
+    /// `row`: the press was ONE model's Download on Settings > Voice and models: it fails as itself, at once (no wait for a choice, no built-in floor marked ready in its place; `VoiceSetup.rowDownload`).
+    func begin(stages: [String] = [], only: Bool = false, picks: [String: String] = [:], speaker: Bool = false, row: Bool = false) {
         if speaker { fetchSpeakerModel() }
         if only && stages.isEmpty { return }
         lock.lock()
@@ -95,8 +96,8 @@ final class OnboardingController: @unchecked Sendable {
         let stall = 20.0, patience = 45.0
         // The configurator picks one model per role for THIS phone, the whole pipeline resident together, by measuring it: only when the person did not choose.
         let configurator: ConfigBackend? = (only || !picks.isEmpty) ? nil : LiveConfigBackend()
-        var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, configBackend: configurator)
-        if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
+        var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, rowDownload: row, configBackend: configurator)
+        if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, rowDownload: row, configBackend: configurator) }
         if only { for (st, c) in planned.chosen { s.prefer(st, c) } }
         else { for (job, id) in picks { if let st = SetupStage(rawValue: job), let c = SetupCatalog.ladder(st).first(where: { $0.id == id }) ?? ModelOffer.candidate(job: job, id: id) { s.prefer(st, c) } } }
         s.onChange = { [weak self] in self?.changed() }
@@ -134,9 +135,9 @@ final class OnboardingController: @unchecked Sendable {
         }
         module.runtime.applyListenerChoice()
         // The responder model setup chose is the one the phone talks with (read again at every start).
-        if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }), KnownModels.isPinned(r.chosen) { ResponderChoice.current = r.chosen }
+        if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }) { ResponderChoice.adopt(r.chosen) }      // a download never replaces what the person uses: only Use does (it fills a choice never made)
         // The quick-decision model setup chose is the one that scores what the listener said (read again at every start; Qwen3-0.6B when the choice is not a file on the phone). Native: it is the voice runtime's choice of weights.
-        if let d = s.record.items.first(where: { $0.stage == SetupStage.decision.rawValue }) { DecisionChoice.current = DecisionChoice.resolve(saved: d.chosen) }
+        if let d = s.record.items.first(where: { $0.stage == SetupStage.decision.rawValue }) { DecisionChoice.adopt(d.chosen) }
         changed()
     }
 
@@ -323,22 +324,9 @@ final class OnboardingController: @unchecked Sendable {
         }
     }
 
-    /// The microphone for `seconds`, through the same lease the voice learning uses: the frames go to this recording alone and the engine looks for no turn in them. nil when the microphone is refused.
+    /// The microphone for `seconds`, through the same lease the voice learning uses (`SetupMicLease.record`: the frames go to this recording alone, and the lease is given back whole on every exit). nil when the microphone is refused.
     func recordAudio(seconds: Double) async -> [Float]? {
-        final class Take: @unchecked Sendable { let l = NSLock(); var samples: [Float] = []; var done = false
-            func add(_ s: [Float]) { l.lock(); if !done { samples += s }; l.unlock() }
-            func finish() -> [Float] { l.lock(); done = true; defer { l.unlock() }; return samples }
-            var open: Bool { l.lock(); defer { l.unlock() }; return !done } }
-        let take = Take()
-        let out = await lease.begin(wanted: { take.open }, onFrame: { take.add($0.samples) })
-        switch out {
-        case .refused: set { mic = "refused" }; return nil
-        case .stale: return nil
-        case .open:
-            try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9))
-            let samples = take.finish(); await lease.endTake()
-            return samples.isEmpty ? nil : samples
-        }
+        await lease.record(seconds: seconds)
     }
 
     // MARK: What shared code sees
@@ -356,8 +344,8 @@ final class OnboardingController: @unchecked Sendable {
         let ready = ModelOffer.readyStages(choices: readyChoices0)
         var readyChoices = readyChoices0
         if WeSpeakerEmbedder.standard().onDisk { readyChoices["speaker"] = ModelOffer.speakerID }
-        let inUse = ModelInUse.ids(config: module.runtime.configuration, registry: module.runtime.registry, responder: ResponderChoice.current)
-        let offers = ModelOffer.jobs(profile: profile, ready: readyChoices, inUse: inUse, isReady: { Voices.readiness.isReady(model: $0) }).map { $0.dict }
+        let inUse = ModelInUse.ids(config: module.runtime.configuration, registry: module.runtime.registry, responder: ResponderChoice.current, decision: DecisionChoice.current)
+        let offers = ModelOffer.jobs(profile: profile, ready: readyChoices, inUse: inUse, chosen: ["responder": ResponderChoice.current, "decision": DecisionChoice.current], isReady: { Voices.readiness.isReady(model: $0) }).map { $0.dict }
         var runs: [[String: Any]] = (setup?.rows ?? []).compactMap { r in
             guard let id = runModels[r.stage], r.state != "ready" else { return nil }
             return ["id": id, "state": r.state == "stalled" ? "downloading" : r.state, "progress": r.progress, "line": r.statusLine]
@@ -398,7 +386,7 @@ extension AutoradioModule {
         guard let c = OnboardingController.shared else { return [:] }
         switch r["op"] as? String ?? "" {
         case "obFacts": return c.facts()
-        case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [], only: (r["only"] as? Bool) ?? false, picks: (r["picks"] as? [String: String]) ?? [:], speaker: (r["speaker"] as? Bool) ?? false)
+        case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [], only: (r["only"] as? Bool) ?? false, picks: (r["picks"] as? [String: String]) ?? [:], speaker: (r["speaker"] as? Bool) ?? false, row: (r["row"] as? Bool) ?? false)
         // The system's microphone permission, read and nothing asked (shared code decides whether to show its plain line first: micask.ts). Native because only the platform knows it.
         // Shared code's consent record, as it stands: native's ONE download door refuses every model fetch without it (DownloadDoor). Native because the transport is.
         case "obConsent": DownloadDoor.shared.sync(agreed: (r["agreed"] as? [String: String]) ?? [:])
@@ -407,7 +395,7 @@ extension AutoradioModule {
             let id = r["id"] as? String ?? ""
             let m = c.module
             let removal = await ModelDeletion.remove(model: id, pin: ModelPins.current(id),
-                                                     inUse: { ModelInUse.ids(config: m.runtime.configuration, registry: m.runtime.registry, responder: ResponderChoice.current) },
+                                                     inUse: { ModelInUse.ids(config: m.runtime.configuration, registry: m.runtime.registry, responder: ResponderChoice.current, decision: DecisionChoice.current) },
                                                      busy: { OnboardingController.shared?.setupRunning ?? false })
             c.changed()
             return ["result": "\(removal)"]

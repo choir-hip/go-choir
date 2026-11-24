@@ -33,11 +33,6 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
                 try await self.fetchBody(id, role: role, onBytes: onBytes)
             }
         }
-        // The pipeline needs the live words beside a batch recogniser: the model the list names for that job comes with it (one row for the person, two fetches), progress continuing from where this model ended.
-        let own: Int64 = KnownModels.managed.first { $0.id == id }?.approxBytes ?? 0
-        for companion in ListenerPipeline.companions(of: id) where !Voices.readiness.isReady(model: companion) {
-            try await fetch(companion, role: role, onBytes: { onBytes(own + $0) })
-        }
     }
     private func fetchBody(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         // The libraries do not report bytes in one shape, so the bytes on disk are watched while the load runs.
@@ -61,11 +56,11 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             // Only here, after voice setup's consent, is the folder fetched; the stage itself never downloads. Its files are checked one by
             // one against the SHA-256 pinned in KnownModels, then the model is loaded and run once (warm).
             _ = try await ModelStore.shared.ensureBundle(KnownModels.fluidSpeechMini) { done, _ in onBytes(done) }
-            _ = try await FluidSpeechMiniTranscriber(StageParams()).manager()      // ready once its companions are in (below)
+            _ = try await FluidSpeechMiniTranscriber(StageParams()).manager()
         case "fluid-speech-pro":
             // The same as Mini: fetched here only, after consent, every file checked against its pinned SHA-256, then loaded and run once.
             _ = try await ModelStore.shared.ensureBundle(KnownModels.fluidSpeechPro) { done, _ in onBytes(done) }
-            _ = try await FluidSpeechProTranscriber(StageParams()).manager()      // ready once its companions are in (below)
+            _ = try await FluidSpeechProTranscriber(StageParams()).manager()
         case "kokoro-82m-ane":
             _ = try await KokoroVoice.synthesizeOnce("Ready.")
         case "pocket-tts":

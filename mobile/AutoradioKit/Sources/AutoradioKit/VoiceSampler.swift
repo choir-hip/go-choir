@@ -63,7 +63,11 @@ public final class VoiceSampler: @unchecked Sendable {
 
     public var selectedID: String { st.value.selected }
     /// The choice was changed elsewhere (the Components page): the cards show it. Plays nothing.
-    public func syncSelected(_ id: String) { if options.contains(where: { $0.id == id }) { st.write { $0.selected = id } } }
+    public func syncSelected(_ id: String) {
+        guard options.contains(where: { $0.id == id }) else { return }
+        let moved = st.write { s -> Bool in let was = s.selected != id; s.selected = id; return was }
+        if moved { onChange?() }
+    }
 
     public func cards() -> [VoiceCardState] {
         let s = st.value

@@ -46,6 +46,8 @@ export const VOICE_NOTE = "The radio uses the iPhone's voice for now. A better v
 
 /** The tests Exact runs itself (search: the index is shared code); native's are in the facts. */
 const local = new Map<string, ModelTest>();
+/** Sign-out (account.ts WIPES): the test lines belong to the account that ran them. */
+export const forgetModelTests = (): void => { local.clear(); };
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
 function row(f: VoiceFacts, j: OfferJob, o: Option, section: string, blocked: boolean): ModelRow {
@@ -138,7 +140,8 @@ export async function modelsAct(op: string, section: string, id: string, facts: 
         const speaker = job === 'speaker';
         const stages = STAGE_JOBS.includes(job) ? [job] : [];
         const picks: Record<string, string> = STAGE_JOBS.includes(job) ? { [job]: id } : {};
-        try { await later({ op: 'obSetupBegin', only: true, stages, picks, speaker }); } catch { /* the facts say it did not start */ }
+        try { await later({ op: 'obSetupBegin', only: true, stages, picks, speaker, row: true }); }       // row: this press fails as itself (no wait, no fallback in its place)
+         catch { /* the facts say it did not start */ }
       }
     }
   } else if (op === 'use') {

@@ -285,6 +285,11 @@ extension VoiceRows {
 public enum ResponderChoice {
     public static let defaultID = "qwen3-0.6b-q8_0"
     static let key = "AutoradioResponderModel"
+    /// A download finishing never changes what is in use (only Use does): it may fill a choice that was never made, and only with a model that can be one. True when it wrote.
+    @discardableResult public static func adopt(_ id: String, defaults: UserDefaults = .standard) -> Bool {
+        guard KnownModels.isPinned(id), defaults.string(forKey: key) == nil else { return false }
+        defaults.set(id, forKey: key); return true
+    }
     public static var current: String {
         get { UserDefaults.standard.string(forKey: key).flatMap { KnownModels.isPinned($0) ? $0 : nil } ?? defaultID }
         set { UserDefaults.standard.set(newValue, forKey: key) }
@@ -295,6 +300,11 @@ public enum ResponderChoice {
 public enum DecisionChoice {
     public static let defaultID = "qwen3-0.6b-q8_0"
     static let key = "AutoradioDecisionModel"
+    /// As `ResponderChoice.adopt`: fills a choice never made, with a model that can be the decision model (a built-in id that setup fell back to is not one).
+    @discardableResult public static func adopt(_ id: String, defaults: UserDefaults = .standard) -> Bool {
+        guard resolve(saved: id) == id, defaults.string(forKey: key) == nil else { return false }
+        defaults.set(id, forKey: key); return true
+    }
     /// The decision model a saved name means. The decision role loads weights through llama.cpp, so only a pinned GGUF is one.
     public static func resolve(saved: String?) -> String { saved.flatMap { KnownModels.isPinned($0) && $0 != KnownModels.lfm3Text.id ? $0 : nil } ?? defaultID }
     public static var current: String {

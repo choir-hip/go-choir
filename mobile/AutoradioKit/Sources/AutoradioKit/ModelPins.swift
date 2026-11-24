@@ -156,7 +156,9 @@ public enum ModelPins {
     /// A library-managed model: no digest is published for its files, so they are pinned by the manifest of what the first consented fetch left (trust on first fetch). `root` holds the manifests; the library's own folders are under the spec's `cachePath`.
     public static func managed(_ id: String, spec m: ManagedModelSpec, root: URL, libraryPin: String = ModelPins.libraryPin) -> ModelPin? {
         guard let base = m.cachePath, let folders = m.cacheFolders, !folders.isEmpty else { return nil }
-        let pin = "\(libraryPin)|\(id)"
+        // A model that holds voices (Kokoro's packs) is pinned with how many it must hold: an install that sealed it with fewer voices is not ready for the new ones until they are fetched.
+        let voices = VoiceRows.all.filter { $0.modelID == id }.count
+        let pin = voices > 0 ? "\(libraryPin)|\(id)|voices:\(voices)" : "\(libraryPin)|\(id)"
         return ModelPin(pin: pin,
             present: { guard let man = ModelManifests.read(id, pin: pin, root: root) else { return false }; return ModelManifests.present(man, base: base) },
             seal: { guard let man = ModelManifests.build(pin: pin, base: base, folders: folders) else { return false }; return ModelManifests.write(man, id: id, root: root) },
@@ -268,7 +270,7 @@ extension ModelDeletion {
 /// What the radio is using right now, DERIVED: the models the registry's descriptors of the configured stages need (the voice whatever its saved parameter, the decision model, the recogniser, the speech detector), the models of a composite transcriber's two halves, and the answering model.
 public enum ModelInUse {
     /// A library-managed model that is configured but has not passed its check is not "in use": the radio is speaking with the phone's voice (`makeSpeaker` refuses an unready neural voice), and the kept half pack of the voice the person tapped must be removable. The files the answering stages load (GGUFs, the bundle) stay protected whether or not they passed a check.
-    public static func ids(config: LabConfiguration, registry: StageRegistry, responder: String?, readiness: VoiceReadiness = Voices.readiness, pins: (String) -> ModelPin? = { ModelPins.current($0) }) -> Set<String> {
+    public static func ids(config: LabConfiguration, registry: StageRegistry, responder: String?, decision: String? = nil, readiness: VoiceReadiness = Voices.readiness, pins: (String) -> ModelPin? = { ModelPins.current($0) }) -> Set<String> {
         var out = ModelStore.needed(by: config, registry: registry)
         if let st = config.setting(.transcriber), st.id == ListenerPipeline.liveThenFinalStageID {
             for key in ["live", "final"] {
@@ -277,6 +279,7 @@ public enum ModelInUse {
         }
         out = out.filter { id in pins(id)?.seal == nil || readiness.isReady(model: id) }
         if let r = responder, !r.isEmpty { out.insert(r) }
+        if let d = decision, !d.isEmpty { out.insert(d) }          // the decision model the phone uses is protected as the answering one is (its stage lists Qwen3 whatever was chosen)
         return out
     }
 }
