@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Prints (or installs) the launchd user agent that keeps cmd/podcast-worker
+# running on a Mac (docs/design/podcast-clips-2026-11-15.md 3.1); the macOS twin
+# of scripts/podcast-worker-user-unit.
+#
+#   scripts/podcast-worker-launchd --worker-bin B --key-file K --model M \
+#       --vad-model V --ffmpeg F --parakeet P --feeds FEEDS [--install]
+#   ... --install   writes ~/Library/LaunchAgents/news.choir.podcast-worker.plist
+#                   and the log-trim agent's plist; it does not load or start
+#                   anything
+#
+# The agent runs one worker (serve, at most 4 threads) as a background process
+# (Nice 19, low-priority I/O), restarts it after a crash (not after a clean
+# exit), waits 30 s between starts, and writes stdout and stderr to
+# ~/Library/Logs/choir-podcast-worker.log. A launchd user agent loaded into the
+# gui/UID domain starts at login and survives logout of other sessions; with
+# automatic login it also survives a reboot. The key file is read by the worker;
+# this script never reads it.
+#
+# Log bound (owner rule: no log grows forever): newsyslog is not used, because it
+# renames the file and launchd's descriptor would keep writing to the renamed
+# one, and it needs root. Instead --install writes a second user agent,
+# news.choir.podcast-worker-logtrim, that runs hourly (StartInterval, low
+# priority) and, when the log is over 5 MB, copies it to the log name plus ".1"
+# (replacing the older copy) and truncates the log in place; launchd opens the
+# log for append, so the worker keeps writing at the start of the emptied file.
+# The log therefore never exceeds about 10 MB with its one copy. Load both
+# agents (the install output prints the commands).
+set -euo pipefail
+worker="" key="" model="" vad="" ffmpeg="" parakeet="" feeds="" install=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --worker-bin) worker=$2; shift 2 ;;
+    --key-file) key=$2; shift 2 ;;
+    --model) model=$2; shift 2 ;;
+    --vad-model) vad=$2; shift 2 ;;
+    --ffmpeg) ffmpeg=$2; shift 2 ;;
+    --parakeet) parakeet=$2; shift 2 ;;
+    --feeds) feeds=$2; shift 2 ;;
+    --install) install=1; shift ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+for v in worker key model vad ffmpeg parakeet feeds; do
+  [ -n "${!v}" ] || { echo "missing --${v//_/-}" >&2; exit 2; }
+done
+label=news.choir.podcast-worker
+log="$HOME/Library/Logs/choir-podcast-worker.log"
+arg() { printf '    <string>%s</string>\n' "$1"; }
+plist=$(cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$label</string>
+  <key>ProgramArguments</key>
+  <array>
+$(arg "$worker")
+$(arg serve)
+$(arg --server)
+$(arg https://choir.news)
+$(arg --api-key-file)
+$(arg "$key")
+$(arg --feeds)
+$(arg "$feeds")
+$(arg --ffmpeg)
+$(arg "$ffmpeg")
+$(arg --parakeet)
+$(arg "$parakeet")
+$(arg --model)
+$(arg "$model")
+$(arg --vad-model)
+$(arg "$vad")
+$(arg --threads)
+$(arg 4)
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key>
+  <dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>Nice</key><integer>19</integer>
+  <key>LowPriorityIO</key><true/>
+  <key>LowPriorityBackgroundIO</key><true/>
+  <key>StandardOutPath</key><string>$log</string>
+  <key>StandardErrorPath</key><string>$log</string>
+</dict>
+</plist>
+PLIST
+)
+if [ "$install" = 1 ]; then
+  dir="$HOME/Library/LaunchAgents"
+  mkdir -p "$dir" "$HOME/Library/Logs" "$HOME/.config/choir-podcast"
+  printf '%s\n' "$plist" > "$dir/$label.plist"
+  plutil -lint "$dir/$label.plist" >/dev/null
+  trim="$dir/$label-logtrim.plist"
+  cat > "$trim" <<TRIM
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$label-logtrim</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>f="$log"; [ -f "\$f" ] &amp;&amp; [ "\$(stat -f %z "\$f")" -gt 5242880 ] &amp;&amp; cp "\$f" "\$f.1" &amp;&amp; : &gt; "\$f"; exit 0</string>
+  </array>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>Nice</key><integer>19</integer>
+</dict>
+</plist>
+TRIM
+  plutil -lint "$trim" >/dev/null
+  echo "installed $dir/$label.plist and $trim (not loaded)"
+  echo "load:  launchctl bootstrap gui/\$(id -u) $dir/$label.plist && launchctl bootstrap gui/\$(id -u) $trim"
+  echo "see:   tail -f $log     launchctl print gui/\$(id -u)/$label"
+  echo "stop:  launchctl bootout gui/\$(id -u)/$label"
+else
+  printf '%s\n' "$plist"
+fi

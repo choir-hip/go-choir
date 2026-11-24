@@ -150,7 +150,17 @@ next week probably". So `podcast-worker serve` is the long-running mode.
   a `systemd --user` unit (restart on failure, nice 19, idle I/O, CPUWeight 1,
   2 GB ceiling); it survives logout only with linger on, which is off on that
   guest today (`loginctl show-user agent` says `Linger=no`), and turning it on is
-  an act on the host that the lead decides. Option (c), tonight's stopgap,
+  an act on the host that the lead decides. **On the owner's iMac (2026-11-24)** the
+  worker is installed under `~/.local/share/choir-podcast` (parakeet-cli built
+  from mudler/parakeet.cpp, CPU only, the 110M q8_0 and Silero f16 GGUFs
+  checked against the sha256 Hugging Face publishes) and kept by
+  `scripts/podcast-worker-launchd`: a launchd user agent (Nice 19, background
+  process type, low-priority I/O, restart after a crash, 30 s throttle, log in
+  `~/Library/Logs/choir-podcast-worker.log` bounded by a second hourly agent
+  that trims it past 5 MB). It is written but not loaded until the operator
+  key exists at `~/.config/choir-podcast/operator.key`; once loaded it starts
+  at login and survives logout and a restart of the Mac (a restart needs
+  automatic login for the user agent to start). Option (c), tonight's stopgap,
   is `systemd-run --user` or `nohup` with the same flags, which lasts while the
   guest's user manager lives.
 - **When hardware scales.** Nothing in the worker changes: it is one process
