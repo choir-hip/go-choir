@@ -788,3 +788,15 @@ describe('R9 the last races and words', () => {
     expect(M.words(new Error('network: The Internet connection appears to be offline')).status).toBe('offline');
   });
 });
+
+describe('N1 the note under a message is the LAST action\'s own', () => {
+  const { noteOf } = mail;
+  test('Read it to me after Mark unread (and after Ask) shows its own note, never the earlier action\'s', () => {
+    expect(noteOf('unread', 'Marked unread.', '', 'Words.')).toBe('Marked unread.');
+    expect(noteOf('read', 'Marked unread.', 'Asked.', 'Words.')).toBe('Reading it now.');
+    expect(noteOf('read', 'Marked unread.', 'Asked.', '')).toBe('There is nothing to read yet.');
+    expect(noteOf('ask', 'Marked unread.', 'Asked.', 'Words.')).toBe('Asked.');
+    expect(noteOf('unread', 'Marked unread.', 'Asked.', 'Words.')).toBe('Marked unread.');
+    expect(noteOf('', 'Marked unread.', 'Asked.', 'Words.')).toBe('');
+  });
+});

@@ -153,6 +153,15 @@ export class RadioRuntime {
     await this.deck.play(it);
     this.onChange?.();
   }
+  /** "Keep listening" with no restart: the deck stops ending the clip (`clearEnd`), the entry is recorded as kept (the run sheet's view and the episode page read it) and the screens are told. Nothing when no clip is on air. */
+  async keepEnd(): Promise<void> {
+    const air = this.store.onAir(), spec = air ? audioSpec(air) : undefined;
+    if (!air || !spec || !spec.is_clip || this.kept.has(air.id)) return;
+    await this.deck.act('clearEnd');
+    this.kept.add(air.id);
+    this.onChange?.();
+  }
+  isKept(id: string): boolean { return this.kept.has(id); }
   /** What the deck is speaking now: the programme's headline and, for a paper story, its route (what the Autoradio page names an untitled entry by). */
   programme(): { title: string; route: string } {
     const air = this.store.onAir(), it = air ? this.known.get(air.id) : undefined;

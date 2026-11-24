@@ -14,6 +14,7 @@ import type { Entry } from './runsheet-model.ts';
 import { getRadio, radioPlayAudio, wipeRadio } from './radio-bridge.ts';
 import { forgetOnboarding } from './onboarding.ts';
 import { adoptNative, resetSeam } from './api.ts';
+import { podcastNow } from './podcast-now.ts';
 
 const body = JSON.parse(readFileSync(new URL('../fixtures/podcasts/clips.json', import.meta.url), 'utf8')) as { clips: Record<string, unknown>[] };
 const all = parseClips(body);
@@ -77,18 +78,40 @@ describe('the act, on the real path', () => {
 });
 
 describe('keep listening', () => {
-  test('P5 the deck is told to clear the clip\'s end', async () => {
+  const setup = async () => {
     resetSeam(); forgetOnboarding(); await wipeRadio(undefined);
     const seen: { op: string; name?: string; args?: Record<string, unknown> }[] = [];
+    let item = '';
     const native = { available: true, later: async (r: { op: string; name?: string; args?: Record<string, unknown> }) => {
       seen.push(r);
       if (r.op === 'radioFacts') return { at: 0, ready: true, inbox: [], position: { block: 0, seconds: 0 }, foreground: true, sentences: [], sentenceIndex: 0, progress: 0 };
-      if (r.op === 'deck') return { why: 'playing', item: 'x', block: 0, seconds: 3, duration: 100, held: [], seq: 1, acked: 0, journal: [] };
+      if (r.op === 'deck') { if (r.name === 'deckPlay') item = String(r.args?.id); return { why: item ? 'playing' : 'empty', item, block: 0, seconds: 3, duration: 100, held: [], seq: 1, acked: 0, journal: [] }; }
       return { ok: true };
     } };
     adoptNative(native as never, 'test');
+    await radioPlayClip(undefined, native as never, 'play', withFp.clipID, JSON.stringify(withFp.raw));
+    return { native, seen };
+  };
+  test('P5 the deck is told to clear the clip\'s end', async () => {
+    const { native, seen } = await setup();
     expect(await radioPlayAudio(undefined, native as never, 'keep', 'pod:a/b', '', '', '', 0)).toEqual({ status: 'ok', message: '' });
     expect(seen.some((r) => r.op === 'deck' && r.name === 'deckAct' && r.args?.op === 'clearEnd')).toBe(true);
+  });
+  test('P5b after Keep listening the clip is no longer a clip, on the run sheet\'s view and on the episode page, and the screens are told', async () => {
+    const { native } = await setup();
+    const r = await getRadio(undefined, native as never, false);
+    await r.rt.peek(true);
+    expect(r.rt.view().clip).toBe(true); expect((await podcastNow(undefined, native as never)).clip).toBe(true);
+    const tick = r.tick;
+    await radioPlayAudio(undefined, native as never, 'keep', 'pod:a/b', '', '', '', 0);
+    expect(r.rt.view().clip).toBe(false); expect((await podcastNow(undefined, native as never)).clip).toBe(false); expect(r.tick).toBeGreaterThan(tick);
+  });
+  test('P5c Keep listening with no clip on air changes nothing', async () => {
+    resetSeam(); forgetOnboarding(); await wipeRadio(undefined);
+    const seen: string[] = []; const native = { available: true, later: async (r: { op: string; name?: string; args?: Record<string, unknown> }) => { seen.push(`${r.op}:${r.args?.op ?? ''}`); return r.op === 'deck' ? { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [] } : r.op === 'radioFacts' ? { at: 0, ready: true, inbox: [], position: { block: 0, seconds: 0 }, foreground: true, sentences: [], sentenceIndex: 0, progress: 0 } : {}; } };
+    adoptNative(native as never, 'test');
+    await radioPlayAudio(undefined, native as never, 'keep', '', '', '', '', 0);
+    expect(seen.some((x) => x.endsWith('clearEnd'))).toBe(false);
   });
 });
 

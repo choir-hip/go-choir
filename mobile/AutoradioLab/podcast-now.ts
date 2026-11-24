@@ -13,12 +13,12 @@ export type PodNow = { episodeId: string; clip: boolean; start: number; elapsed:
 const NONE: PodNow = { episodeId: '', clip: false, start: 0, elapsed: 0, duration: 0 };
 
 /** The answer for the entry on air and the deck's state. Empty unless the deck holds that entry and it is a podcast episode (its id parses as an episode key). */
-export function podcastNowOf(onAir: Entry | undefined, deck: DeckState): PodNow {
+export function podcastNowOf(onAir: Entry | undefined, deck: DeckState, kept = false): PodNow {
   if (!onAir || deck.item !== onAir.id || deck.why === 'stopped' || deck.why === 'empty') return NONE;
   const a = audioSpec(onAir);
   const id = a?.episode_id;
   if (!a || id === undefined || parseEpisodeKey(id) === null) return NONE;
-  return { episodeId: id, clip: a.end !== undefined, start: a.start ?? 0, elapsed: deck.seconds, duration: deck.duration };
+  return { episodeId: id, clip: a.end !== undefined && !kept, start: a.start ?? 0, elapsed: deck.seconds, duration: deck.duration };
 }
 
 /** The source: the pulse's arguments only make it asked again (a data source may not read the clock). Never throws. */
@@ -27,6 +27,6 @@ export async function podcastNow(storage: Store | undefined, native: NativeReade
     const r = await getRadio(storage as never, native, false);
     const e = r.rt.store.onAir();
     if (!e) return NONE;
-    return podcastNowOf(e, await r.rt.deckNow());
+    return podcastNowOf(e, await r.rt.deckNow(), r.rt.isKept(e.id));
   } catch { return NONE; }
 }
