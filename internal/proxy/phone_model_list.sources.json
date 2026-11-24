@@ -1,0 +1,9 @@
+{
+  "list_sha256" : "bc526c3262c258333e61b2a2f90b3a41eeed4db1e4796e07710e69efff8d5680",
+  "sources" : {
+    "KnownModels.swift" : "c37460748ad87be722c30a922063768ee65ad83460ffa0aeb1af3bbedd809c38",
+    "ModelCandidates.swift" : "33c1a9404fd99d6af9b95e2a083dc060ede236dd12cb5faa9872e4eab6285a87",
+    "ModelStore.swift" : "8385d1862b1e1daafce4bf5f3ef91d1c633d5f07e1328c4c221d6861eb457866",
+    "Voice\/ModelList.swift" : "ba49b456f1b122be27d6ed16eeb0060c1ef6222cb2d35bd7dcc572f6cc5a5a72"
+  }
+}
