@@ -176,6 +176,10 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 	}
 	report.Sweeps = run.header.Sweeps
 	report.ComputerIDs = p.named
+	report.ForkLineageAcknowledgedFor = p.named
+	if !sameStringList(run.header.ForkLineageAcknowledgedFor, p.named) {
+		return report, fmt.Errorf("tape sweep: the manifest's fork-lineage acknowledgement named %v; apply names %v; nothing deleted", run.header.ForkLineageAcknowledgedFor, p.named)
+	}
 	if !sameStringList(run.header.Computers, p.named) {
 		return report, fmt.Errorf("tape sweep: the manifest was made for computers %v; apply names %v and must name exactly those; nothing deleted", run.header.Computers, p.named)
 	}
@@ -222,9 +226,18 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 			for _, id := range ids {
 				run.listed[strings.TrimSpace(id)] = true
 			}
+			report.RegistryComputers = len(ids)
+			if reason := registryRefusal(ids, run.nowHeads); reason != "" {
+				run.destroyErr = reason
+			}
 			if run.routed, err = s.tapeRoutedComputers(ctx); err != nil {
 				run.destroyErr = err.Error()
 			}
+		}
+		if !run.deltaOK && run.destroyErr == "" {
+			// A living computer's event appended since the dry run cannot be
+			// read, so what it references is unknown: no payload is deleted.
+			run.destroyErr = "an event appended since the dry run is unreadable, so the live references are incomplete"
 		}
 		if run.destroyErr != "" {
 			report.DestroyedRefused = run.destroyErr
@@ -452,6 +465,39 @@ func (s *Service) reproveDestroyed(ctx context.Context, run *tapeSweepApplyRun, 
 	return ""
 }
 
+// reproveChunks re-checks the computer's snapshot chunk digests against what
+// is living now: the computers a named apply deletes are excluded, any other
+// computer's roots, in-flight registrations and file roots are not.
+func (s *Service) reproveChunks(ctx context.Context, run *tapeSweepApplyRun, id string, items []tapeSweepItem) (string, error) {
+	var digests []string
+	for _, it := range items {
+		if it.Namespace == tapeNSFileCASChunks {
+			digests = append(digests, it.Digest)
+		}
+	}
+	if len(digests) == 0 {
+		return "", nil
+	}
+	doomed := []string{id}
+	if len(run.p.named) > 0 {
+		doomed = run.p.named
+	}
+	living, err := s.livingChunkDigests(ctx, doomed)
+	if err != nil {
+		return "", err
+	}
+	n := 0
+	for _, d := range digests {
+		if living[d] {
+			n++
+		}
+	}
+	if n > 0 {
+		return fmt.Sprintf("%d snapshot chunk digests are named by a snapshot, an in-flight registration or a file root of a computer this run does not delete", n), nil
+	}
+	return "", nil
+}
+
 // applyDestroyedComputer re-proves, tombstones, archives and deletes one
 // destroyed computer's tape.
 func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run *tapeSweepApplyRun, proof TapeSweepComputerProof, items []tapeSweepItem, dirs []string, rows map[string]int64) error {
@@ -482,6 +528,15 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 		}
 	}
 	if reason := s.reproveDestroyed(ctx, run, proof); reason != "" {
+		dropTomb()
+		s.tapeSweepSkipComputer(run, proof, items, reason)
+		return nil
+	}
+	if reason, err := s.reproveChunks(ctx, run, id, items); err != nil {
+		dropTomb()
+		s.tapeSweepSkipComputer(run, proof, items, "snapshot chunk check failed: "+err.Error())
+		return nil
+	} else if reason != "" {
 		dropTomb()
 		s.tapeSweepSkipComputer(run, proof, items, reason)
 		return nil
@@ -536,6 +591,7 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 			run.log.record(tapeSweepLogRecord{Op: "error", Sweep: TapeSweepDestroyed, Computer: id, Error: "archive: " + err.Error()})
 			_ = run.log.flush()
 			log.Printf("tape sweep: computer=%s archive failed, nothing deleted: %v", id, err)
+			run.skipped = append(run.skipped, id)
 			return nil
 		}
 		run.counts.Archives = append(run.counts.Archives, archive.Archive)
@@ -589,6 +645,10 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	if complete {
 		tomb.Status = tapeTombstoneDeleted
 		run.counts.ComputersDeleted++
+	} else {
+		// Not fully deleted (a cap, a failed unlink, directory or rows step):
+		// a named apply fails on it.
+		run.skipped = append(run.skipped, id)
 	}
 	if perr := s.store.putTapeTombstone(context.WithoutCancel(ctx), tomb); perr != nil && err == nil {
 		err = perr

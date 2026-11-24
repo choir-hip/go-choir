@@ -13,8 +13,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computertiers"
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
@@ -49,16 +51,30 @@ const (
 )
 
 // tapeSweepProtectedComputers is the hard refusal list: the paper and the
-// owner's computer. No request field, proof, manifest or flag overrides it.
+// owner's computer. The platform computers and the operator proof computer
+// that computer-tiers.json names are protected too (tapeSweepProtected). No
+// request field, proof, manifest or flag overrides it.
 var tapeSweepProtectedComputers = map[string]string{
 	"computer-1355b83bced1613eb048ee28d66688a8": "the paper computer",
 	"computer-03335285269bdba4f94377e56879f9e6": "the owner computer",
 }
 
-// tapeSweepProtected returns an error for a computer on the hard refusal list.
+var tapeSweepTiers = sync.OnceValues(computertiers.Load)
+
+// tapeSweepProtected returns an error for a computer on the hard refusal list
+// or on the platform or operator-proof tiers. The tiers are embedded; if they
+// cannot be read, every computer is refused.
 func tapeSweepProtected(computerID string) error {
-	if what, ok := tapeSweepProtectedComputers[strings.TrimSpace(computerID)]; ok {
+	id := strings.TrimSpace(computerID)
+	if what, ok := tapeSweepProtectedComputers[id]; ok {
 		return fmt.Errorf("tape sweep: computer %s is protected (%s); it is never deleted", computerID, what)
+	}
+	tiers, err := tapeSweepTiers()
+	if err != nil {
+		return fmt.Errorf("tape sweep: the computer tiers are unreadable (%v); no computer is deletable", err)
+	}
+	if tiers.OperatorActComputer(id) {
+		return fmt.Errorf("tape sweep: computer %s is a platform or operator-proof computer; it is never deleted", computerID)
 	}
 	return nil
 }
@@ -224,10 +240,11 @@ func (s *Service) tapePurgeRowCounts(ctx context.Context, computerID string) (ma
 	return out, nil
 }
 
-// tapePurgeReferencedElsewhere reports another computer's file root that names
-// this computer's file-CAS paths. File-CAS namespaces are per computer by
-// construction (ClaimFileChunk never finds another computer's chunk), so this
-// is a belt: a computer something else points into is not deleted.
+// tapePurgeReferencedElsewhere reports another computer's file root whose
+// manifest_ref (the root manifest's own path) names this computer's tree. A
+// root manifest lives in its own computer's directory, so this is a belt that
+// almost never fires; it does NOT see chunk digests inside a manifest. What
+// guards shared chunk content is livingChunkDigests (tape_sweep.go).
 func (s *Service) tapePurgeReferencedElsewhere(ctx context.Context, computerID string) (string, error) {
 	var other string
 	err := s.store.db.QueryRowContext(ctx, `SELECT computer_id FROM computer_file_roots WHERE computer_id<>? AND POSITION(? IN manifest_ref)>0 LIMIT 1`, computerID, "/"+computerID+"/").Scan(&other)

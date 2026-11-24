@@ -357,6 +357,19 @@ type snapshotRootPending struct {
 	n  map[string]int
 }
 
+// keys lists the pending chunk keys (computer/digest).
+func (p *snapshotRootPending) keys() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]string, 0, len(p.n))
+	for k, n := range p.n {
+		if n > 0 {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 func (p *snapshotRootPending) add(keys []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
