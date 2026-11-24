@@ -41,16 +41,12 @@ const managementTaskDeadline = 10 * time.Minute
 
 // managementTaskSlots is K (O7, S2b): how many tasks run at once on this
 // computer; the rest queue, never refused. It is the runtime config's
-// ManagementTaskSlots (default 4, at most 8), or 1 while the owner's
-// management.serial_tasks setting is on: the live rollback to S2a's one at
-// a time, read on every start, so it needs no restart. Concurrent tasks
+// ManagementTaskSlots (default 4, at most 8), a bound on guest memory, not on
+// model calls. Concurrent tasks
 // are kept coherent by the store, not by K: the lease and the disposition
 // index (one capture, one disposition) and the story-library head (an open
 // from a run that has not seen the stories opened since is refused).
 func (rt *Runtime) managementTaskSlots(ctx context.Context, ownerID, computerID string) int {
-	if rt.computerSettingOn(ctx, ownerID, computerID, store.SettingManagementSerialTasks) {
-		return 1
-	}
 	return provideriface.NormalizeManagementTaskSlots(rt.cfg.ManagementTaskSlots)
 }
 
@@ -411,11 +407,10 @@ func (rt *Runtime) managementTaskHoldsSlot(ctx context.Context, ownerID string, 
 // managementTaskObservability is the slot starter's state on
 // /api/runtime/observability (S2b): the probe reads K and the queue from a
 // product route. Slots is K in force; ConfiguredSlots is the runtime
-// config's K, which management.serial_tasks overrides with 1.
+// config's K.
 type managementTaskObservability struct {
 	Slots            int     `json:"slots"`
 	ConfiguredSlots  int     `json:"configured_slots"`
-	SerialTasks      bool    `json:"serial_tasks"`
 	Running          int     `json:"running"`
 	Queued           int     `json:"queued"`
 	OldestQueuedAgeS float64 `json:"oldest_queued_age_s,omitempty"`
@@ -427,7 +422,6 @@ func (rt *Runtime) managementTaskObservability(ctx context.Context, ownerID, com
 	out := &managementTaskObservability{
 		Slots:           rt.managementTaskSlots(ctx, ownerID, computerID),
 		ConfiguredSlots: provideriface.NormalizeManagementTaskSlots(rt.cfg.ManagementTaskSlots),
-		SerialTasks:     rt.computerSettingOn(ctx, ownerID, computerID, store.SettingManagementSerialTasks),
 	}
 	running, err := rt.store.ListManagementTasks(taskCustodianReads(ctx), ownerID, computerID, types.ManagementTaskRunning)
 	if err != nil {

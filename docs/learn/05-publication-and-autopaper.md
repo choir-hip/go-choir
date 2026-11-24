@@ -521,8 +521,7 @@ override on a mismatch, which becomes a worked example for the next labels.
 **Delegation and its guards.** Management delegates batches of captures to
 **management tasks** (S2a, then S2b). `managementTaskSlots`
 (`internal/agentcore/management_tasks.go`) runs up to K at once (default 4,
-at most 8; the owner setting `management.serial_tasks` drops it to 1 as a
-live rollback). Coherence comes from the store, not from K
+at most 8; the `management.serial_tasks` rollback setting is gone). Coherence comes from the store, not from K
 (`internal/store/management_tasks.go`, header comment):
 
 - a **lease**: the task's open round is the lease on its captures;

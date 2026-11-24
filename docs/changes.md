@@ -38,6 +38,43 @@ the downloads, the recogniser in use after a download, the microphone at screen 
 **Replaced.** The unprompted 310 MB search-model download; the first run's welcome text without sizes; Apple's recogniser and the energy detector at every launch; the voice gate that dropped another voice's turn (now logged only); the quiet fetch of the voice-print model at launch; kept turn audio; the not-built "told" row.
 Left native on purpose: the kept-turn retention rule (`KeptTurnStore.prune`: 20 turns, 30 days, no sound) because the voice turn engine writes that store and the prune runs at launch before anything reads it; the voice-print and search files are not rows of the one model list (the list is the voice-default lane's); the voice cards go through the same door (their model needs the voice group's agreement; the card says to agree on Settings > Downloads when it has none).
 **Undo.** Revert the lane's commits; `consent.json` is an inert file.
+## 2026-11-24
+### The sub-call spacer and the serial-tasks switch are deleted (red; lane `spacer-out`)
+- **What.** `callSpacer`, `spacedProvider` and `subRLMCallSpacer` are gone:
+  research children and management task runs no longer start their model
+  calls 1.5 s apart (40 a minute across the computer). The computer setting
+  `management.serial_tasks`, its constant, its place in the known settings
+  and the `serial_tasks` field of the observability route are gone; a stored
+  row for it stays on the tape and is ignored.
+- **Why.** The spacer existed to stay under the gateway's 60-a-minute
+  per-computer bucket, which was removed on 2026-11-10; nobody removed the
+  spacer. Owner, 2026-11-24: "how did the 40 calls a minute thing get there?
+  thats wrong." The switch is a rollback lever, which the rule forbids.
+  Record: [sub-call-spacer-outlived-its-bucket-2026-11-24](problems/sub-call-spacer-outlived-its-bucket-2026-11-24.md),
+  with a verdict for every other limit on our own model calls.
+- **What a burst does now.** 16 simultaneous child and task calls reach the
+  gateway at once. The gateway has no per-computer count limit on model calls
+  (removed 2026-11-10); it logs them (`gateway: calls hour=`). What can slow
+  them is the provider's own refusal: the per-model circuit breaker, Devin
+  hourly pacing (sheds threads to the next pool member), the paid daily
+  budgets, and on a provider 429 the guest waits out Retry-After (up to 10
+  waits of a minute, never past the caller's deadline). All of those are
+  unchanged. That back-off is shared: a model's breaker is the gateway's, across every caller, and after its failure threshold the rest of a burst is refused at once and fails over rather than retrying alone (no second gate was written). One thing added: a breaker opened by an ordinary provider failure (a plain 429 or 5xx) is now logged, `gateway: model P/M narrowed by a provider failure (<refusal>; trip N, ...)`, as quota, concurrency and hard opens already were. Concurrency is still bounded by the memory caps: 4 children a
+  `choir.Research` call and K management tasks (default 4, at most 8).
+- **Proof.** Tests seen failing then passing: the first four child calls
+  and the first K task calls start together (no spacing); K is the config's
+  with no setting able to hold it at 1; a stored `management.serial_tasks` row is
+  invisible and harmless; a burst of 16 is ungated with no refusals, opened for every caller by refusals, and opened again by a successful probe (`TestBurstOfSubCallsIsHeldOnlyByTheProvidersRefusals`); the guest's 429 Retry-After wait test is unchanged
+  and passes. Not proved until deploy: ledger claim C244 (task call gaps no
+  longer floored at 1.5 s on the paper; no rise in provider 429s in 6 hours).
+- **Replaced.** The 40-a-minute spacer and the K = 1 rollback.
+- **Still in the code, with verdicts** (record's table): research children 4
+  at a time and K tasks (memory bounds, replaced by the delegation protocol
+  and the capture desk); 12 captures a task (prompt size; the capture desk
+  replaces that path); 120 wakes an hour per app desk (bound on strangers'
+  packages); 20 root digests an hour (a forbidden limit, behind the root desk
+  switch; removed with that desk); `System1MaxQuestions` 12 (size bound).
+- **Undo.** Revert the commit.
 
 ## Not landed (in flight or dropped)
 

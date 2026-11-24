@@ -68,6 +68,9 @@ type CircuitBreakingProvider struct {
 	// concurrencyStreak counts each model's concurrency 429s since its last
 	// success.
 	concurrencyStreak map[string]int
+	// loggedOpenUntil is the open window last logged per model by
+	// logOrdinaryNarrowing, so one open is one line.
+	loggedOpenUntil map[string]time.Time
 	// quotaHolds is each model whose breaker an exhausted quota opened, and
 	// when the quota is expected to reset, so a call the open breaker
 	// refuses is answered as the quota it is, not "model unhealthy"
@@ -161,6 +164,7 @@ func NewCircuitBreakingProvider(p provider.Provider, cfg health.BreakerConfig) *
 		hardCooldown:      doublingCooldown(upstreamHardBase, upstreamHardCap),
 		models:            make(map[string]*health.CircuitBreaker),
 		concurrencyStreak: make(map[string]int),
+		loggedOpenUntil:   make(map[string]time.Time),
 		quotaHolds:        make(map[string]quotaHold),
 		recovering:        make(map[string]bool),
 		quotaCooldownMax:  qMax,
@@ -315,6 +319,7 @@ func (c *CircuitBreakingProvider) execute(ctx context.Context, model, thread str
 				c.pacer.trip(dispatched)
 			}
 			c.observeModelOutcome(ctx, model, modelBreaker, callErr)
+			c.logOrdinaryNarrowing(ctx, model, modelBreaker, callErr)
 		}
 		return innerErr
 	}, func(err error) bool { return providerUnreachable(ctx, err) })
@@ -517,6 +522,37 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 			delete(c.quotaHolds, key)
 		}
 		c.mu.Unlock()
+	}
+}
+
+// logOrdinaryNarrowing logs the open of a model's breaker by an ordinary
+// provider failure (a 429 that is not a quota, a 5xx, a timeout), with the
+// refusal that caused it. Quota, concurrency-streak and hard opens log their
+// own lines in observeModelOutcome. The breaker is the one back-off every
+// caller of the model shares; with the guest's call spacer gone
+// (docs/problems/sub-call-spacer-outlived-its-bucket-2026-11-24.md) this line
+// is how a narrowing is seen and the bound is learned from the provider.
+func (c *CircuitBreakingProvider) logOrdinaryNarrowing(ctx context.Context, model string, b *health.CircuitBreaker, err error) {
+	if err == nil || !providerFailureCounts(ctx, err) || provider.IsQuotaExhausted(err) ||
+		errors.Is(err, provider.ErrUpstreamConcurrencyLimit) || isHardUpstreamError(err) {
+		return
+	}
+	snap := b.Snapshot()
+	if snap.State != health.StateOpen {
+		return
+	}
+	key := strings.TrimSpace(model)
+	c.mu.Lock()
+	var until time.Time
+	if snap.OpenUntil != nil {
+		until = *snap.OpenUntil
+	}
+	opened := !until.Equal(c.loggedOpenUntil[key])
+	c.loggedOpenUntil[key] = until
+	c.mu.Unlock()
+	if opened {
+		log.Printf("gateway: model %s/%s narrowed by a provider failure (%s; trip %d, half-opens at %s)",
+			c.inner.Name(), modelLabel(model), logText(err.Error()), snap.Trips, formatUntil(snap.OpenUntil))
 	}
 }
 

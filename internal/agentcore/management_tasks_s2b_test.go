@@ -28,7 +28,6 @@ import (
 //	FM28           a task's own open refuses its next open;
 //	FM14           K tasks' model calls burst past the gateway's limit;
 //	FM29           a refused claim takes a slot, or a failing start spins;
-//	FM31           no rollback to K = 1 without a deploy.
 //
 // FM9 and AC6 at K = 2 are in TestManagementTasksAtACrashBootAndAPlannedBoot.
 
@@ -36,15 +35,12 @@ import (
 // at K = 3 (from config). Concurrent wakes start exactly three, whose model
 // calls are in flight together; the rest start only through the durable
 // start wakes the closures mint, and the queue drains with at most K
-// running. Task model calls are spaced on the shared sub-RLM spacer.
+// running. Task model calls are not spaced: the first K start together.
 func TestManagementTasksRunKAtOnceAndTheQueueDrains(t *testing.T) {
 	f := newDelegationFixture(t, "owner-task-drain")
 	ctx := context.Background()
 	const k = 3
 	f.rt.cfg.ManagementTaskSlots = k
-	// FM14: a short interval so the test can see the spacing.
-	const interval = 150 * time.Millisecond
-	f.rt.researchChildCalls = &callSpacer{interval: interval}
 	model := &concurrencyModel{StubProvider: provider.NewStubProvider(0), parentCell: delegateAllCell, gate: make(chan struct{})}
 	model.taskCell = func(step int, _ string) (string, bool) {
 		if step > 0 {
@@ -140,16 +136,14 @@ choir.Done("declined")`, true
 			t.Fatalf("task %s outcome = %+v", task.TaskID, report.TaskOutcome)
 		}
 	}
-	// FM14: consecutive task model calls started at least one spacer
-	// interval apart, though K tasks called at once.
+	// The first K task model calls, issued by K tasks that started
+	// together, are not queued apart (no spacer; 2026-11-24).
 	starts := model.taskCallStarts()
 	if len(starts) < 6 {
 		t.Fatalf("task model calls = %d, want at least 6 (one per task; Done ends the run)", len(starts))
 	}
-	for i := 1; i < len(starts); i++ {
-		if gap := starts[i].Sub(starts[i-1]); gap < interval/2 {
-			t.Fatalf("FM14: task calls %d and %d started %s apart; the spacer interval is %s", i-1, i, gap, interval)
-		}
+	if span := starts[k-1].Sub(starts[0]); span > time.Second {
+		t.Fatalf("the first %d task model calls started over %s, want them issued together", k, span)
 	}
 }
 
@@ -296,70 +290,34 @@ choir.Delegate("intake", ids, []any{ids})`}
 	}
 }
 
-// TestSerialTasksSettingIsTheLiveRollback (FM31): the owner's
-// management.serial_tasks setting holds K at 1 on the next start, without a
-// restart; turning it off lets the starter fill K slots again.
-func TestSerialTasksSettingIsTheLiveRollback(t *testing.T) {
+// TestTaskSlotsAreTheConfiguredK: K is the runtime config's, with no
+// computer setting able to hold it at 1 (management.serial_tasks was a
+// switch and is gone), and the probe's route does not report one.
+func TestTaskSlotsAreTheConfiguredK(t *testing.T) {
 	f := newDelegationFixture(t, "owner-task-serial")
 	ctx := context.Background()
 	f.rt.cfg.ManagementTaskSlots = 4
-	setSerial := func(on bool) {
-		t.Helper()
-		if err := f.s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: f.owner, ComputerID: f.computer, Key: store.SettingManagementSerialTasks, Value: on}); err != nil {
-			t.Fatal(err)
-		}
+	if got := f.rt.managementTaskSlots(ctx, f.owner, f.computer); got != 4 {
+		t.Fatalf("slots = %d, want the configured 4", got)
 	}
-	if def, known := store.KnownComputerSettings[store.SettingManagementSerialTasks]; !known || def {
-		t.Fatalf("management.serial_tasks known %v, default %v; want known, off", known, def)
+	if _, known := store.KnownComputerSettings["management.serial_tasks"]; known {
+		t.Fatal("management.serial_tasks is still a known setting")
 	}
-	setSerial(true)
-	if got := f.rt.managementTaskSlots(ctx, f.owner, f.computer); got != 1 {
-		t.Fatalf("slots with serial_tasks on = %d, want 1", got)
-	}
-	f.model.mu.Lock()
-	f.model.gate = make(chan struct{})
-	gate := f.model.gate
-	f.model.mu.Unlock()
-	seedArrival(t, f.s, f.owner, f.computer, "rss:s1", []types.CaptureArrival{{CaptureID: "cap-s1", Title: "Listing", URL: "https://s.example/1"}})
-	seedArrival(t, f.s, f.owner, f.computer, "rss:s2", []types.CaptureArrival{{CaptureID: "cap-s2", Title: "Listing two", URL: "https://s.example/2"}})
-	f.parentTurn()
-	queued := f.tasks(types.ManagementTaskQueued)
-	if len(queued) != 2 {
-		t.Fatalf("queued = %+v", queued)
-	}
-	for _, task := range queued {
-		if _, err := f.rt.WakeRecordsInbox(ctx, f.owner, f.computer, task.TaskInbox); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if running := f.tasks(types.ManagementTaskRunning); len(running) != 1 {
-		t.Fatalf("FM31: %d tasks running with serial_tasks on", len(running))
-	}
-	// The probe reads K, the slots in use, the queue from the product
-	// route.
 	req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability", nil)
 	req.Header.Set("X-Authenticated-User", f.owner)
 	rec := httptest.NewRecorder()
 	(&APIHandler{rt: f.rt}).HandleGuestObservability(rec, req)
 	var obs struct {
-		ManagementTasks *managementTaskObservability `json:"management_tasks"`
+		ManagementTasks map[string]any `json:"management_tasks"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil || rec.Code != http.StatusOK {
 		t.Fatalf("observability = %d %s (%v)", rec.Code, rec.Body, err)
 	}
-	if m := obs.ManagementTasks; m == nil || m.Slots != 1 || m.ConfiguredSlots != 4 || !m.SerialTasks || m.Running != 1 || m.Queued != 1 || m.OldestQueuedAgeS < 0 {
-		t.Fatalf("observability management_tasks = %+v", obs.ManagementTasks)
+	if obs.ManagementTasks == nil || obs.ManagementTasks["slots"] != float64(4) {
+		t.Fatalf("observability management_tasks = %v", obs.ManagementTasks)
 	}
-	setSerial(false)
-	if rec, err := f.rt.WakeRecordsInbox(ctx, f.owner, f.computer, queued[1].TaskInbox); err != nil || rec == nil {
-		t.Fatalf("FM31: with serial_tasks off the second task did not start: %v, %v", rec, err)
-	}
-	if running := f.tasks(types.ManagementTaskRunning); len(running) != 2 {
-		t.Fatalf("running after serial_tasks off = %d, want 2", len(running))
-	}
-	close(gate)
-	for _, task := range queued {
-		eventually(t, func() bool { return f.task(task.TaskID).State == types.ManagementTaskClosed })
+	if _, has := obs.ManagementTasks["serial_tasks"]; has {
+		t.Fatalf("observability still reports serial_tasks: %v", obs.ManagementTasks)
 	}
 }
 

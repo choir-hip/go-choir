@@ -190,7 +190,7 @@ func TestDocumentModelProvenanceReachesResearchChildren(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	p := &quotaThenOK{}
-	rt.provider, rt.researchChildCalls = p, &callSpacer{}
+	rt.provider = p
 	const owner, docID, trajectory = "owner-children", "doc-children", "trajectory-children"
 	research := provenanceRun(t, s, types.RunRecord{RunID: "run-children-research", AgentID: "research:" + docID, ChannelID: docID, OwnerID: owner,
 		TrajectoryID: trajectory, AgentProfile: "research", AgentRole: "research"})

@@ -32,12 +32,11 @@ var defaultOnFeatures = []string{
 // reason the audit names: an operator bound or rollback lever, or a feature
 // whose default-on would break something today.
 var heldDefaults = []string{
-	SettingManagementSerialTasks, // rollback lever (on = K=1)
-	SettingCompactForce,          // proof lever for d@e
-	SettingTextureRootDesk,       // F4/F5 re-proof on d@e; the paper's hourly batch not built
-	SettingResearchRelatedStory,  // its finish rule would bind every owner research desk
-	SettingEvidenceGraph,         // owner: measure the import on a paper copy first
-	SettingTelemetryPartitions,   // GC starvation; floor 5 on every computer
+	SettingCompactForce,         // proof lever for d@e
+	SettingTextureRootDesk,      // F4/F5 re-proof on d@e; the paper's hourly batch not built
+	SettingResearchRelatedStory, // its finish rule would bind every owner research desk
+	SettingEvidenceGraph,        // owner: measure the import on a paper copy first
+	SettingTelemetryPartitions,  // GC starvation; floor 5 on every computer
 	// Experiment arms, not features: none held is the shipped behaviour and
 	// E1's comparator (docs/design/calibration-experiment-e1-2026-11-04.md).
 	SettingCalibrationE1Restate,

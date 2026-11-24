@@ -272,8 +272,7 @@ type Config struct {
 	// ManagementTaskSlots is K, how many management tasks run at once on a
 	// computer; the rest queue, never refused (management delegation O7,
 	// S2b). Unset or below 1 is DefaultManagementTaskSlots; it is capped at
-	// MaxManagementTaskSlots. The owner's management.serial_tasks setting
-	// holds it at 1 live. Env: RUNTIME_MANAGEMENT_TASK_SLOTS.
+	// MaxManagementTaskSlots. Env: RUNTIME_MANAGEMENT_TASK_SLOTS.
 	ManagementTaskSlots int
 }
 

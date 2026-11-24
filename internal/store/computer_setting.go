@@ -21,13 +21,6 @@ const ogKindComputerSetting = objectgraph.ObjectKind("choir.computer_setting")
 // 2026-11-03: "nothing is off by default"); a stored off is the rollback.
 const SettingIntakeLabels = "intake.labels"
 
-// SettingManagementSerialTasks holds management tasks to one at a time
-// (K = 1, S2a's behaviour) on the next start, without a restart: the live
-// rollback of management delegation S2b on an always-busy computer. Off by
-// default (K from the runtime config); running tasks finish, none is
-// cancelled.
-const SettingManagementSerialTasks = "management.serial_tasks"
-
 // SettingTelemetryBatch turns on run-telemetry batching for the computer: the
 // ten high-volume trace event kinds are sealed in small windows instead of one
 // acknowledged tape write each, and a crash may lose the open window
@@ -185,7 +178,6 @@ const (
 // setting nobody reads.
 var KnownComputerSettings = map[string]bool{
 	SettingIntakeLabels:                 true,
-	SettingManagementSerialTasks:        false,
 	SettingTelemetryBatch:               true,
 	SettingResearchRelatedStory:         false,
 	SettingEngineeringProgressToTexture: true,

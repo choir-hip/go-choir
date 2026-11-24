@@ -20,14 +20,14 @@ child count and memory.
 |---|---|---|
 | Depth | 1. A research child has no `Research` verb and its broker handle lacks `ActionResearch`; pinned by `TestResearchTreeReturnsWithinItsTime` | `yaegikernel/choir.go` (child module set, handle actions); owner PD1 2026-10-11, "rounds over recursion" |
 | Wall time | Carved: a desk's `Research` call returns within 10 min; each child gets 0.75 of the time left when it starts and is told it | `research_children.go` `researchCallWindow`, `researchChildShare` |
-| Model-call rate | One computer-wide spacer, 40 calls a minute for all sub-RLMs (research children and management tasks) | `research_children.go` `subRLMCallSpacer` |
+| Model-call rate | None. The computer-wide spacer (40 a minute) was deleted 2026-11-24: its gateway bucket was removed 2026-11-10 ([record](sub-call-spacer-outlived-its-bucket-2026-11-24.md)) | was `research_children.go` `subRLMCallSpacer` |
 | Child count | Unbounded per call; 4 run at once per call, the rest queue | `researchChildConcurrency` |
 | Tokens | Not totalled. Each child logs its own tokens on one line; the parent cell never sees them and no line sums a tree | `runResearchChild` log line |
 | Egress bytes | Not counted per child or per tree | host-mediated `SearchStart`/`Read` |
 | Memory | Indirect: 4 worker processes per call; nothing bounds calls across desks | `researchChildConcurrency` |
 
 Management tasks are the other sub-RLM tree: K slots (default 4, at most
-8), a 10-minute deadline per task, the same call spacer, and no spending
+8), a 10-minute deadline per task, no call spacer (deleted 2026-11-24), and no spending
 total.
 
 ## Defects
@@ -48,6 +48,14 @@ total.
 4. **Egress bytes and memory have no per-tree slice.** Memory is bounded
    per call, not per computer. That belongs with VM sizing (RES lanes,
    FP8's vmctl/vmmanager/image work).
+
+## Residual closed (2026-11-24)
+
+The call spacer was listed here as a resource control. It had no premise
+left and is deleted; the record is
+[sub-call-spacer-outlived-its-bucket-2026-11-24.md](sub-call-spacer-outlived-its-bucket-2026-11-24.md),
+which also gives a verdict for every other limit on our own model calls.
+The concurrency caps (4 children, K tasks) stay as memory bounds.
 
 ## Not a defect
 

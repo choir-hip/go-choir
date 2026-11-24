@@ -317,11 +317,6 @@ type Runtime struct {
 	shotJobsMu        sync.Mutex
 	shotJobsLive      map[string]chan struct{}
 	shotImageQueue    map[string][]json.RawMessage
-	// researchChildCalls spaces every sub-RLM's model calls on this
-	// computer: research children and management tasks
-	// (subRLMCallSpacer, research_children.go).
-	researchChildCalls     *callSpacer
-	researchChildCallsOnce sync.Once
 
 	// The sub-call judge (subcall_judge.go): batches waiting to be judged,
 	// the work in flight, and a wait group the tests and shutdown join.
@@ -4104,12 +4099,6 @@ func payloadWithPhase(payload json.RawMessage, phase string) json.RawMessage {
 // enabling the LLM to invoke registered Go function-call tools.
 func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord, registry *toolregistry.ToolRegistry, emit provideriface.EventEmitFunc) {
 	tlp := toolregistry.AsToolLoopProvider(rt.provider)
-	if isManagementTaskRun(rec) {
-		// K tasks call at once: every task model call, compaction
-		// included, waits on the sub-RLM spacer research children share
-		// (S2b, FM14).
-		tlp = spacedProvider{ToolLoopProvider: tlp, spacer: rt.subRLMCallSpacer()}
-	}
 
 	// Build the initial conversation from the run prompt.
 	initialMessages := []json.RawMessage{}

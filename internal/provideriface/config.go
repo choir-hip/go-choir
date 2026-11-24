@@ -63,10 +63,9 @@ const (
 
 	// DefaultManagementTaskSlots is K (management delegation O7, S2b): four
 	// tasks at once, as research children and intake labels. Each task is
-	// a desk worker (about 17 MiB) and shares the sub-RLM call spacer.
+	// a desk worker (about 17 MiB).
 	DefaultManagementTaskSlots = 4
-	// MaxManagementTaskSlots caps K for guest memory and the gateway's
-	// per-computer call budget.
+	// MaxManagementTaskSlots caps K for guest memory.
 	MaxManagementTaskSlots = 8
 )
 

@@ -975,15 +975,11 @@ S2b (commit 433ce4d6e on `origin/main`) runs K tasks at once:
   "an open task round with no run", not an in-memory queue; its start is
   an outbox wake of a restart work kind, so a crash boot interrupts it
   and a planned boot delivers it once.
-- **Shared model-call pacing.** Task model calls join the research
-  children's computer-wide spacer: 1.5 s apart, 40 a minute
-  (`internal/agentcore/research_children.go`, `researchChildCallInterval`;
-  renamed `subRLMCallSpacer` in S2b), under the gateway's 60 a minute per
-  computer.
-- **A live rollback.** The owner setting `management.serial_tasks` forces
-  K = 1 on the next start, with no deploy. That matters because "the
-  paper is always busy, and deploys never restart a busy computer"
-  (design §18.1, FM31).
+- **No model-call pacing.** Task model calls were once spaced 1.5 s
+  apart (40 a minute) with the research children's, under a gateway bucket
+  of 60 a minute. The bucket went on 2026-11-10 and the spacer on
+  2026-11-24 (`problems/sub-call-spacer-outlived-its-bucket-2026-11-24.md`);
+  the `management.serial_tasks` rollback setting went with it.
 
 Note that the design note's §17 and §18 headings say "not pushed"; the
 commits are on `origin/main` now (code: `git log origin/main` shows

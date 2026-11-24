@@ -158,9 +158,6 @@ func newDelegationFixtureWith(t *testing.T, owner string, openPope bool) *delega
 	deskTestWorkerBin(t)
 	rt, s := testRuntime(t)
 	rt.cfg.ManagementTaskSlots = 1
-	// Task model calls are spaced on the sub-RLM spacer (S2b, FM14); a
-	// short interval keeps the fixture fast.
-	rt.researchChildCalls = &callSpacer{interval: time.Millisecond}
 	f := &delegationFixture{t: t, rt: rt, s: s, owner: owner, computer: rt.cfg.ComputerID}
 	f.model = &delegationModel{StubProvider: provider.NewStubProvider(0), parentCell: delegateAllCell}
 	rt.provider = f.model

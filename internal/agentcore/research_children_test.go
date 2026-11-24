@@ -166,19 +166,18 @@ fmt.Println(string(b), err)`
 	}
 }
 
-// problems/research-fanout-overruns-computer-model-budget-2026-10-11.md: a
-// tree of children called the model as fast as it could and the gateway's
-// per-computer limiter rejected thousands of calls. Failure mode pinned:
-// child model calls are not spaced by one computer-wide gate, so a wide or
-// deep tree bursts past the computer's budget.
-func TestResearchChildModelCallsShareOneComputerGate(t *testing.T) {
+// docs/problems/sub-call-spacer-outlived-its-bucket-2026-11-24.md: a spacer
+// started every child model call 1.5 s after the last, for a gateway bucket
+// that was removed on 2026-11-10. Failure mode pinned: the first calls of
+// four children that start together are queued apart instead of issued
+// together. The provider's own refusals are waited out in the guest client
+// (gatewayruntime TestGatewayCallWaitsOutTheRateLimitWindow), not here.
+func TestResearchChildModelCallsStartTogether(t *testing.T) {
 	deskTestWorkerBin(t)
 	provider := &researchChildProvider{}
-	const interval = 150 * time.Millisecond
 	rt := &Runtime{
-		provider:           provider,
-		modelPolicy:        modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
-		researchChildCalls: &callSpacer{interval: interval},
+		provider:    provider,
+		modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
 		researchDeps: &researchtools.Dependencies{
 			Search: stubSearchClient{},
 		},
@@ -201,10 +200,8 @@ fmt.Println(len(res), err)`
 	if len(at) < 4 {
 		t.Fatalf("children made %d model calls, want at least 4", len(at))
 	}
-	for i := 1; i < len(at); i++ {
-		if gap := at[i].Sub(at[i-1]); gap < interval-20*time.Millisecond {
-			t.Fatalf("child model calls %d and %d were %s apart, want at least %s: %v", i-1, i, gap, interval, at)
-		}
+	if span := at[3].Sub(at[0]); span > time.Second {
+		t.Fatalf("the first four child model calls started over %s, want them issued together (no imposed spacing): %v", span, at[:4])
 	}
 }
 
@@ -248,10 +245,9 @@ func TestResearchTreeReturnsWithinItsTime(t *testing.T) {
 	defer func() { researchCallWindow = window }()
 	provider := &timedChildProvider{}
 	rt := &Runtime{
-		provider:           provider,
-		modelPolicy:        modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
-		researchChildCalls: &callSpacer{},
-		researchDeps:       &researchtools.Dependencies{Search: stubSearchClient{}},
+		provider:     provider,
+		modelPolicy:  modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
+		researchDeps: &researchtools.Dependencies{Search: stubSearchClient{}},
 	}
 	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
 	execCtx := deskEvalExecCtx(t)
@@ -321,10 +317,9 @@ func (p *spendingChildProvider) CallWithTools(ctx context.Context, req provideri
 func TestResearchChildrenReportTheirSpending(t *testing.T) {
 	deskTestWorkerBin(t)
 	rt := &Runtime{
-		provider:           &spendingChildProvider{},
-		modelPolicy:        modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
-		researchChildCalls: &callSpacer{},
-		researchDeps:       &researchtools.Dependencies{Search: stubSearchClient{}},
+		provider:     &spendingChildProvider{},
+		modelPolicy:  modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
+		researchDeps: &researchtools.Dependencies{Search: stubSearchClient{}},
 	}
 	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
 	execCtx := deskEvalExecCtx(t)

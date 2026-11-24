@@ -174,7 +174,7 @@ func TestReviewWaitIsNotChargedToTheBuild(t *testing.T) {
 // every-model incident is invisible, or keyed by the parent's run.
 func TestResearchChildSwitchesOnQuotaWithTheComputersLedgerAndChain(t *testing.T) {
 	p := &quotaThenOK{}
-	rt := &Runtime{provider: p, modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{}), researchChildCalls: &callSpacer{}}
+	rt := &Runtime{provider: p, modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{})}
 	parent := toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c", AgentID: "research:o", RunID: "run-parent"}
 	lineage := researchLineage{ownerID: "o", selection: provideriface.LLMSelection{Provider: "synthetic", Model: "m"}}
 	spec := yaegikernel.ResearchChild{Objective: "alpha"}
@@ -191,7 +191,7 @@ func TestResearchChildSwitchesOnQuotaWithTheComputersLedgerAndChain(t *testing.T
 
 func TestResearchChildIncidentIsVisibleAndKeyedByTheChild(t *testing.T) {
 	p := &allQuotaProvider{}
-	rt := &Runtime{provider: p, modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{}), researchChildCalls: &callSpacer{}}
+	rt := &Runtime{provider: p, modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{})}
 	parent := toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c", AgentID: "research:o", RunID: "run-parent"}
 	lineage := researchLineage{ownerID: "o", selection: provideriface.LLMSelection{Provider: "synthetic", Model: "m"}}
 	ctx, cancel := context.WithCancel(context.Background())

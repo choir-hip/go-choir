@@ -19,8 +19,8 @@ spending refusal**:
   They are about shape, not cost, so they are not spending caps.
 - **Spending slices queue; they never refuse.** A tree past its token or
   egress slice is not killed. Its next model call waits behind the root
-  desks' calls (a lower priority at the computer's spacer, and later at the
-  gateway's fair-share queue, RES-11). Time is the only budget that ends a
+  desks' calls (a lower priority, once there is a gateway fair-share queue, RES-11; the
+  computer's spacer is gone). Time is the only budget that ends a
   tree, and it already does.
 
 **Owner question (DEC-07):** is this reading right? In particular, is a
@@ -33,7 +33,7 @@ per-call child-count bound (proposed: 16) a structural bound or a cap?
 | Wall time | 0.75 of the parent's remaining time; desk call at most 10 min | context deadline | **done** (research); tasks have 10 min each |
 | Depth | 1 | child module set and broker handle | **done**; see deviation below |
 | Tokens | tracked per child and per tree; later a soft slice that lowers priority | `ResearchChildResult` usage, tree log line | **slice 1 (this station, observe only)** |
-| Model calls | computer-wide 40/min for sub-RLMs | `subRLMCallSpacer` | done; moves to the gateway with RES-11 |
+| Model calls | none; the computer-wide 40/min spacer was deleted 2026-11-24 (no premise: the gateway bucket went 2026-11-10) | (was `subRLMCallSpacer`) | removed; provider refusals are waited out and broken on as before |
 | Child count | 4 concurrent per call; proposed refusal above 16 per call | `runResearchChildren` | slice 3, waits on DEC-07 |
 | Egress bytes | tracked per tree | count bytes the host returns to a child for `Read`/`SearchStart`, in the broker | slice 2, no VM files; needs a design pass on the broker's return path |
 | Memory | computer-wide bound on live child workers across desks | worker pool size from VM size | slice 4, with RES/FP8 VM sizing; not this lane |
@@ -65,7 +65,7 @@ fields ignore them.
 ## Later slices and their owners
 
 2. Egress bytes per tree (broker return path; FP10 or a follow-up lane).
-3. Per-call child bound and token-slice priority at the spacer (after
+3. Per-call child bound and token-slice priority (the spacer is gone; after
    DEC-07).
 4. Computer-wide live-worker bound (VM sizing; with FP8 / RES items, since
    it touches vmctl/vmmanager sizing).

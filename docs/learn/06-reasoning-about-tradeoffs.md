@@ -1033,8 +1033,7 @@ K (default 4, at most 8), "the rest queue, never refused". Read its
 comment for the three things that make concurrency safe here: "Concurrent
 tasks are kept coherent by the store, not by K: the lease and the
 disposition index (one capture, one disposition) and the story-library
-head". It also has a live rollback: the owner's `management.serial_tasks`
-setting sets K = 1, "read on every start, so it needs no restart". And
+head". (It had a live rollback, `management.serial_tasks`, deleted 2026-11-24.) And
 there is a shared resource that K does not raise: the embedded Dolt
 engine is serialized by `engineMu` (`internal/objectgraph/dolt_store.go`,
 code), so the design lists "H3: engine-lock waits stay small at K = 4" as

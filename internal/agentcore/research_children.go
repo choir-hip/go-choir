@@ -66,15 +66,6 @@ var researchChildPreamble = map[string]string{
 	researchTextureRole: `You are the Texture child of a parent research desk, working on one objective. Your only verb beyond reading your own session is choir.SearchTexture(query, limit), the Texture custodian's guarded search of the owner's own stories: ranked refs with short snippets, never a whole document. You cannot reach the web, fan out further, report, message or write: whatever you end your turn with is returned to the parent as your Report, labelled as the owner's private text. Search with several wordings, then end with your findings: each claim with the story ref it comes from, and what the owner's stories do not cover. The world verbs and the research procedure in the prompt below are not yours; ignore them.`,
 }
 
-// researchChildCallInterval spaces research-child model calls across the
-// whole computer: 40 a minute, under the gateway's default per-computer
-// budget of 60 (internal/gateway/ratelimit.go), leaving the rest for desks.
-// A tree of any depth or width queues on it instead of bursting into 429s
-// (problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
-// It gates calls, not child lifetimes, so a parent waiting on its children
-// never holds a slot they need.
-const researchChildCallInterval = 1500 * time.Millisecond
-
 // The time carve-out (M6.5: "a carve-out of the parent's budget"). A
 // desk's choir.Research call returns within researchCallWindow, so the desk
 // can report; each child gets researchChildShare of that time and is told
@@ -84,62 +75,6 @@ const researchChildCallInterval = 1500 * time.Millisecond
 var researchCallWindow = 10 * time.Minute
 
 const researchChildShare = 0.75
-
-// callSpacer hands out model-call start times at least interval apart.
-type callSpacer struct {
-	mu       sync.Mutex
-	next     time.Time
-	interval time.Duration
-}
-
-func (s *callSpacer) wait(ctx context.Context) error {
-	s.mu.Lock()
-	at := time.Now()
-	if s.next.After(at) {
-		at = s.next
-	}
-	s.next = at.Add(s.interval)
-	s.mu.Unlock()
-	d := time.Until(at)
-	if d <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-// spacedProvider waits on the computer's sub-RLM call spacer before each
-// model call.
-type spacedProvider struct {
-	provideriface.ToolLoopProvider
-	spacer *callSpacer
-}
-
-func (p spacedProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
-	if err := p.spacer.wait(ctx); err != nil {
-		return nil, err
-	}
-	return p.ToolLoopProvider.CallWithTools(ctx, req)
-}
-
-// subRLMCallSpacer is the one computer-wide spacer every sub-RLM's model
-// calls share: research children and management tasks (management
-// delegation O5, S2b FM14), 40 a minute together, so the root desks keep
-// about 20 of the gateway's 60.
-func (rt *Runtime) subRLMCallSpacer() *callSpacer {
-	rt.researchChildCallsOnce.Do(func() {
-		if rt.researchChildCalls == nil {
-			rt.researchChildCalls = &callSpacer{interval: researchChildCallInterval}
-		}
-	})
-	return rt.researchChildCalls
-}
 
 type researchLineageKey struct{}
 
@@ -353,7 +288,7 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 	// written on the parent run under the child's role so the
 	// parent's document reads them (review r1, B2).
 	childEmit := rt.researchChildServedEmitter(ctx, parent, role)
-	provider := spacedProvider{ToolLoopProvider: toolregistry.AsToolLoopProvider(rt.provider), spacer: rt.subRLMCallSpacer()}
+	provider := toolregistry.AsToolLoopProvider(rt.provider)
 	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, provider, registry,
 		[]json.RawMessage{runContextMessage(time.Now(), researchChildTime(share)), userMsg}, systemPrompt,
 		provideriface.MaxInteractiveOutputTokensForSelection(selection, deskmanifest.ResearcherName()),
