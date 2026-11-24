@@ -14,7 +14,8 @@
         "privacy": { "data_mode": "aggregate-only", "surface": "public-readonly" },
         "freshness": { "generated_by": "vmctl" }
       }
-    }
+    },
+    { "method": "GET", "path": "/api/platform/operator/capacity", "status": 403, "json": { "error": "operator only" } }
   ],
   "expect": [
     { "selector": "[data-pulse-summary]", "text": "Public aggregate health" },
@@ -27,6 +28,7 @@
     { "see": "[data-pulse-summary]", "text": "aggregate-only" }
   ],
   "expect_requests": [
-    { "request": "GET /api/pulse/summary" }
+    { "request": "GET /api/pulse/summary" },
+    { "request": "GET /api/platform/operator/capacity" }
   ]
 }
