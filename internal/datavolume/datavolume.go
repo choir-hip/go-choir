@@ -32,6 +32,16 @@ const OtherName = "(other)"
 // MaxChildren bounds the rows of one second-level group, besides OtherName.
 const MaxChildren = 24
 
+// minShareTime and minShareEntries are what every top-level entry still to be
+// walked is promised, however much an earlier one used. Above that floor an
+// entry may use all that is left, so one large directory (the candidate source
+// copies under capsule-artifacts) finishes instead of being cut at an equal
+// share, and what a small entry does not use passes on.
+const (
+	minShareTime    = 50 * time.Millisecond
+	minShareEntries = 1000
+)
+
 // Limits bounds one walk. Budget is a wall-time deadline for the whole walk;
 // MaxEntries is the number of directory entries examined. Neither is a call
 // limit: they bound the work one diagnostic request may cause.
@@ -70,6 +80,13 @@ type Entry struct {
 	Errors uint64 `json:"errors,omitempty"`
 	// OtherFilesystem says a mount point sits inside and was not walked.
 	OtherFilesystem bool `json:"other_filesystem,omitempty"`
+	// OldestChanged and NewestChanged bound the inode change times (ctime:
+	// the last write, chmod or link) of the files under the row. A candidate
+	// source copy is written and made read-only once, so for it they are when
+	// it was made; for a quarantine they are when its files were last
+	// written. Absent when the row holds no file.
+	OldestChanged *time.Time `json:"oldest_changed,omitempty"`
+	NewestChanged *time.Time `json:"newest_changed,omitempty"`
 }
 
 // Group is the named children of one listed directory.
@@ -242,8 +259,19 @@ var detailSpecs = map[string]labeler{
 		}
 		return tempLabel(n)
 	},
-	"go":         fixed("pkg", "bin"),
-	"go/pkg/mod": fixed("cache"),
+	// One row per candidate source copy, named by its content digest, and
+	// one per kind of receipt. The egress ledgers, job records and job logs
+	// are flat directories of files: their rows under capsule-artifacts carry
+	// their sizes, counts and ages.
+	"capsule-artifacts/subjects": func(n string) string {
+		if digestRE.MatchString(n) {
+			return n
+		}
+		return tempLabel(n)
+	},
+	"capsule-artifacts/receipts": fixed("execution", "fate", "granted"),
+	"go":                         fixed("pkg", "bin"),
+	"go/pkg/mod":                 fixed("cache"),
 	"go-build-cache": func(n string) string {
 		if cacheBucket.MatchString(n) {
 			return "(objects)"
@@ -251,6 +279,11 @@ var detailSpecs = map[string]labeler{
 		return ""
 	},
 }
+
+// detailMax overrides MaxChildren for a group whose every row matters: the
+// candidate source copies are about three hundred on a computer that has run
+// self-development for a month.
+var detailMax = map[string]int{"capsule-artifacts/subjects": 1024}
 
 // DetailPaths lists the directories the walk reports one level deeper.
 func DetailPaths() []string {
@@ -267,9 +300,26 @@ type inodeKey struct{ dev, ino uint64 }
 type totals struct {
 	alloc, apparent, files, errs uint64
 	truncated, otherFS           bool
+	// oldest and newest are inode change times in Unix nanoseconds; zero
+	// means no file seen (a real ctime is never zero).
+	oldest, newest int64
+}
+
+func (t *totals) noteChanged(ns int64) {
+	if ns == 0 {
+		return
+	}
+	if t.oldest == 0 || ns < t.oldest {
+		t.oldest = ns
+	}
+	if ns > t.newest {
+		t.newest = ns
+	}
 }
 
 func (t *totals) add(o totals) {
+	t.noteChanged(o.oldest)
+	t.noteChanged(o.newest)
 	t.alloc += o.alloc
 	t.apparent += o.apparent
 	t.files += o.files
@@ -282,6 +332,10 @@ func (t totals) entry(name string, members int) Entry {
 	e := Entry{Name: name, AllocatedBytes: t.alloc, ApparentBytes: t.apparent, Files: t.files, Truncated: t.truncated, Errors: t.errs, OtherFilesystem: t.otherFS}
 	if members > 1 {
 		e.Members = members
+	}
+	if t.oldest != 0 {
+		o, n := time.Unix(0, t.oldest).UTC(), time.Unix(0, t.newest).UTC()
+		e.OldestChanged, e.NewestChanged = &o, &n
 	}
 	return e
 }
@@ -334,8 +388,19 @@ func (s *Scanner) walk(ctx context.Context, root string, lim Limits) *Walk {
 		if uint64(lim.MaxEntries) > w.examined {
 			left = uint64(lim.MaxEntries) - w.examined
 		}
-		w.entryCap = w.examined + (left+uint64(remaining)-1)/uint64(remaining)
-		w.deadline = time.Now().Add(deadline.Sub(time.Now()) / time.Duration(remaining))
+		// An entry may use all that is left except what the entries after it
+		// are promised; with less left than that, an equal share.
+		share := (left + uint64(remaining) - 1) / uint64(remaining)
+		if reserve := uint64(remaining-1) * minShareEntries; left > reserve && left-reserve > share {
+			share = left - reserve
+		}
+		w.entryCap = w.examined + share
+		timeLeft := time.Until(deadline)
+		timeShare := timeLeft / time.Duration(remaining)
+		if reserve := time.Duration(remaining-1) * minShareTime; timeLeft-reserve > timeShare {
+			timeShare = timeLeft - reserve
+		}
+		w.deadline = time.Now().Add(timeShare)
 		w.stopped = false
 		label := name
 		if !topNameRE.MatchString(name) {
@@ -366,7 +431,11 @@ func (s *Scanner) walk(ctx context.Context, root string, lim Limits) *Walk {
 	out.Top = rows(top, 0)
 	for _, p := range DetailPaths() {
 		if g, ok := w.groups[p]; ok {
-			out.Detail = append(out.Detail, Group{Path: p, Children: rows(g, MaxChildren)})
+			limit := MaxChildren
+			if m := detailMax[p]; m > 0 {
+				limit = m
+			}
+			out.Detail = append(out.Detail, Group{Path: p, Children: rows(g, limit)})
 		}
 	}
 	return out
@@ -466,6 +535,7 @@ func (w *walker) account(full, rel string, st *syscall.Stat_t) (totals, bool) {
 	t.apparent = uint64(st.Size)
 	if !isDir {
 		t.files = 1
+		t.noteChanged(changeTimeNanos(st))
 		return t, true
 	}
 	f, err := os.Open(full)
