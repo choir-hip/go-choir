@@ -171,11 +171,25 @@ final class VoiceModelsTests: XCTestCase {
         let plan = SetupCatalog.plan(for: tight)
         XCTAssertEqual(plan[.responder]!.first?.id, "qwen3-0.6b-q4_k_m", "600 MB fits in 1200 minus headroom")
         XCTAssertFalse(plan[.responder]!.contains { $0.id == "lfm3-1.7b-qad-q4_0" }, "1.5 GB does not")
-        XCTAssertEqual(plan[.transcriber]!.first?.id, "fluid-speech-mini", "Fluid Speech Mini with its live words (550 MB) fits what is left; Parakeet TDT (700 MB) does not")
-        XCTAssertFalse(plan[.transcriber]!.contains { $0.id == "parakeet-tdt-0.6b-v2" })
+        XCTAssertEqual(plan[.transcriber]!.first?.id, "parakeet-eou-120m", "Fluid Speech Mini with its live words (550 + 250 MB) does not fit 600 MB; the small listener does")
+        var fits = device(8); fits.availableMemoryMB = 1400            // 800 MB left after the headroom
+        let fitPlan = SetupCatalog.plan(for: fits)[.transcriber]!
+        XCTAssertEqual(fitPlan.first?.id, "fluid-speech-mini", "the pair of 800 MB fits")
+        XCTAssertFalse(fitPlan.contains { $0.id == "parakeet-tdt-0.6b-v2" }, "Parakeet TDT with its live words (700 + 250 MB) does not")
         var roomy = device(8); roomy.availableMemoryMB = 4000
         XCTAssertEqual(SetupCatalog.plan(for: roomy)[.transcriber]!.first?.id, "fluid-speech-mini")
         XCTAssertEqual(DeviceProfile.current().availableMemoryMB == nil, true, "on the Mac there is no such reading (iOS only)")
+    }
+
+    // SF1: the ladder asks for the memory of the whole pair, the same as the configurator's estimate.
+    func testALadderRowThatBringsLiveWordsNeedsTheirMemoryToo() throws {
+        let eou = try XCTUnwrap(CandidateTable.candidate("parakeet-eou-120m", .transcriber))
+        for (id, base) in [("fluid-speech-mini", 550.0), ("parakeet-tdt-0.6b-v2", 700.0)] {
+            let row = try XCTUnwrap(SetupCatalog.ladder(.transcriber).first { $0.id == id })
+            XCTAssertEqual(row.needsMB, base + eou.residentMB, id)
+        }
+        var tighter = device(8); tighter.availableMemoryMB = 1300     // 700 MB left after the headroom: the pair of 800 MB does not fit
+        XCTAssertEqual(SetupCatalog.plan(for: tighter)[.transcriber]!.first?.id, "parakeet-eou-120m")
     }
 
     func testTooSlowOrTooLittleMemoryLeftIsAFailedCheckSetupMovesOn() async throws {

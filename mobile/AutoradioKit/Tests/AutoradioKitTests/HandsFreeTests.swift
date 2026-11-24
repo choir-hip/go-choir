@@ -130,6 +130,27 @@ final class HandsFreeTests: XCTestCase {
         XCTAssertTrue(during is ScriptedTranscriber, "the open turn keeps the recogniser that began it")
     }
 
+    // SF4: Cancel on an answer that is on its way ends that answer for the listener too: a configuration applied afterwards still reaches it.
+    func testACancelledAnswerDoesNotBlockTheListenerRebuild() async throws {
+        let (engine, _, _) = try make(desk: "hang-desk")
+        LocalLanguage.model = FakeLocalModel(pieces: ["One moment."]); defer { LocalLanguage.model = nil }
+        ScriptedTranscriber.finals = ["ask the harbor"]
+        await engine.handsFreeSet(true)
+        await push(engine, loud: true, 12)
+        await push(engine, loud: false, 45)
+        let started = await poll(8) { !HangingDesk.turns.isEmpty }
+        XCTAssertTrue(started)
+        let answering = await engine.hf.answerTurnID
+        XCTAssertNotNil(answering, "the answer is on its way")
+        await engine.cancelTurn()
+        let after = await engine.hf.answerTurnID
+        XCTAssertNil(after, "a cancelled answer is over")
+        var c = await engine.configuration; c.set(.transcriber, .init(id: "other-tr")); await engine.setConfiguration(c)
+        await push(engine, loud: false, 3)
+        let rebuilt = await engine.hf.transcriber
+        XCTAssertTrue(rebuilt is OtherTranscriber, "the rebuild is not suppressed")
+    }
+
     // H1: speech, then silence: the turn is sent with the session's final text and no button.
     func testASpokenTurnReachesTheDeskWithNoButton() async throws {
         let (engine, _, _) = try make()

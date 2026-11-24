@@ -334,6 +334,9 @@ public final class LabRuntime: @unchecked Sendable {
 
     // MARK: Configuration
 
+    private let engineHops = Locked<Task<Void, Never>?>(nil)
+    /// Every configuration handed to the engine so far has been applied (tests).
+    func settled() async { await engineHops.value?.value }
     public var configuration: LabConfiguration { lock.lock(); defer { lock.unlock() }; return config }
     public func setConfiguration(_ conf: LabConfiguration) {
         var c = conf
@@ -346,7 +349,9 @@ public final class LabRuntime: @unchecked Sendable {
         policyBox.value = c.audio
         if policyChanged { Task { [coordinator] in await coordinator.reapply() } }
         player.setConfiguration(c)
-        Task { await engine.setConfiguration(c) }
+        // Each hop waits for the one before it: tasks are not ordered, and the engine must end on the last configuration set.
+        let applied = c
+        engineHops.write { prev in let before = prev; prev = Task { [engine] in await before?.value; await engine.setConfiguration(applied) } }
         refresh()
     }
     public func setAudioPolicy(_ p: AudioPolicy) {

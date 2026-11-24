@@ -191,6 +191,21 @@ final class ConfiguratorTests: XCTestCase {
         XCTAssertEqual(cfg.estimatedMB, without + eou.residentMB, accuracy: 0.5)
     }
 
+    // SF1: the Fluid row says what it downloads (its own files and the live-words model that comes with it) and its bar fills over that total.
+    func testTheFluidRowShowsAndCountsTheLiveWordsModelToo() throws {
+        let fluidC = try XCTUnwrap(CandidateTable.candidate("fluid-speech-mini", .transcriber))
+        let eou = try XCTUnwrap(CandidateTable.candidate("parakeet-eou-120m", .transcriber))
+        let total = fluidC.bytes + eou.bytes
+        XCTAssertEqual(ConfigPlanner.footprintBytes(fluidC), total)
+        let row = VoiceSetup.configRow(.transcriber, fluidC, state: "waiting", line: "")
+        XCTAssertEqual(row.sizeLabel, SetupCatalog.sizeLabel(total))
+        XCTAssertEqual(VoiceSetup.downloadProgress(fluidC.bytes, of: fluidC), Double(fluidC.bytes) / Double(total), accuracy: 0.001)
+        XCTAssertLessThan(VoiceSetup.downloadProgress(fluidC.bytes, of: fluidC), 0.6, "the bar is not full when only Fluid's own files are in")
+        XCTAssertEqual(VoiceSetup.downloadProgress(total, of: fluidC), 1, accuracy: 0.0001)
+        let apple = try XCTUnwrap(CandidateTable.candidate("apple-speech", .transcriber))
+        XCTAssertEqual(ConfigPlanner.footprintBytes(apple), 0)
+    }
+
     func testTheAcceptedConfigurationKeepsItsLiveWordsModelOnDisk() async throws {
         let d = DeviceProbe.simulated(.tier8)
         let b = FakeConfigBackend(d)

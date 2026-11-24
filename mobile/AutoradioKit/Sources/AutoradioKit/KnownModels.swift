@@ -80,7 +80,7 @@ public enum KnownModels {
     /// the LFS object ids) and, for the files the API gives no digest for, computed on the downloaded bytes at that commit. Only the files the
     /// loader reads are listed (the model card, its examples and its images are not fetched). FluidAudio loads it as `.ultra` and wants the joint
     /// network under the name `JointDecisionv3.mlmodelc`, so the folder is copied under that name after the download (Mike's fetch script does the same).
-    /// Licence CC BY 4.0: the credit below is the one NOTICE in the repository asks for, and is shown wherever the app lists the models it uses.
+    /// Licence CC BY 4.0: the credit below is the one NOTICE in the repository asks for. NO SCREEN SHOWS IT YET: an About page that does is a release blocker before any build holding this model is distributed (CC BY 4.0 section 3(a)).
     /// docs/reference/ON-DEVICE-MODELS.md, "Fluid Speech Mini".
     public static let fluidSpeechMini = ModelBundleSpec(
         id: "fluid-speech-mini", repo: "FluidVoice-Labs/fluid-speech-mini-coreml", commit: "d81c3160dfe5a5e1f8f7267164a07d30617a3a1a",

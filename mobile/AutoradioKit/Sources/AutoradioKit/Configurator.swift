@@ -146,6 +146,13 @@ public enum ConfigPlanner {
         return ListenerPipeline.companions(of: t.id, table: table).compactMap { id in table.first { $0.id == id && !$0.isFloor } }
     }
 
+    /// What choosing this candidate downloads: its own bytes and those of the models that come with it (the live words beside a batch recogniser).
+    /// The size a row shows and the total its progress is measured against.
+    public static func footprintBytes(_ c: ModelCandidate, table: [ModelCandidate] = CandidateTable.all) -> Int64 {
+        guard !c.isFloor else { return 0 }
+        return c.bytes + companions(of: [c.role: c], table: table).reduce(0) { $0 + $1.bytes }
+    }
+
     /// Every configuration that could fit this device, best quality first. Ties go to the one that uses less memory. A floor-only configuration is last and always possible.
     public static func plan(device: DeviceProbe, thresholds: ConfigThresholds = .standard, table: [ModelCandidate] = CandidateTable.all, excluding: Set<String> = []) -> [Configuration] {
         guard device.supported else { return [] }

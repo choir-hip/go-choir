@@ -25,8 +25,9 @@ import Foundation
 //  2. A ready model's stage is not in this build (a build without the model libraries): that model is skipped, never named in the configuration.
 //  3. The list changes (a new row with a higher rank): the choice follows it with no code change.
 //  4. Only a streaming model is ready (no final model): it is both the live words and the transcript, with no wrapper.
-//  5. A model is ready by the record but its files went (storage purged): the stage fails at `begin`; the composite falls back (below) and
-//     the engine falls back to the floors if even that cannot make a stage (HandsFree `hfPrepare`).
+//  5. A model is ready by the record but its files went (storage purged): the stage fails at `begin`; the composite falls back (below). If
+//     even that cannot make a stage, `begin` throws and the engine goes on with a turn that has no transcript (`EmptyTranscription`,
+//     HandsFree `hfBeginSession`); it does not rebuild the floor stages. (`hfPrepare` falls back to the floors only when a stage cannot be *made*.)
 
 public enum ListenerPipeline {
     /// The one stage that holds two recognisers: live words from one, the final transcript from the other.
@@ -104,10 +105,16 @@ public enum ListenerPipeline {
         return "listening with speech detection \(name(c.setting(.speechBounds))); recognition \(name(c.setting(.transcriber)))"
     }
 
+    /// A recogniser that gives words only at the end of the turn (no live words of its own): it is ready only once its companions are in.
+    public static func isBatchRecogniser(_ id: String, table: [ModelCandidate] = CandidateTable.all) -> Bool {
+        guard let c = table.first(where: { $0.id == id && $0.role == .transcriber }) else { return false }
+        return !c.streamsWords && !c.isFloor
+    }
+
     /// The models voice setup fetches along with a chosen one, because the pipeline needs them together (the live words beside the final
     /// transcript): the chosen model's own file is fetched first, these after it. Read from the list, never written in the setup code.
     public static func companions(of id: String, table: [ModelCandidate] = CandidateTable.all) -> [String] {
-        guard let c = table.first(where: { $0.id == id && $0.role == .transcriber }), !c.streamsWords, !c.isFloor else { return [] }
+        guard isBatchRecogniser(id, table: table) else { return [] }
         // A final-only model (batch) gets the best streaming model beside it.
         return CandidateTable.candidates(.transcriber, in: table).filter { $0.streamsWords && !$0.isFloor }.prefix(1).map(\.id)
     }
@@ -139,6 +146,8 @@ public final class LiveThenFinalTranscriber: Transcriber, @unchecked Sendable {
     /// Held strongly: the registry holds makers, never stages, so there is no cycle, and a stage must outlive the caller's reference to the registry.
     private let registry: StageRegistry?
     private let readiness: VoiceReadiness
+    /// The last turn's live session being closed in the background: the next `begin` waits for it (the live stage may share one manager across turns).
+    private let closing = Locked<Task<Void, Never>?>(nil)
     /// What the last `begin` ran, in plain words (for the trace).
     public private(set) var notes: [String] = []
     public init(_ p: StageParams, registry: StageRegistry?, readiness: VoiceReadiness = Voices.readiness) {
@@ -158,36 +167,47 @@ public final class LiveThenFinalTranscriber: Transcriber, @unchecked Sendable {
     }
 
     public func begin() async throws -> TranscriptionSession {
+        // The previous turn's live session is joined before a new one starts (S3), for at most two seconds: a live recogniser that cannot
+        // finish must not stop the next turn. The turn that just ended never waited for it (SF2).
+        if let previous = closing.value { _ = await withDeadline(2) { await previous.value }; closing.value = nil }
         var why: [String] = []
         var liveSession = await start(live, &why)
         if liveSession == nil, live != ListenerPipeline.floorTranscriber { liveSession = await start(ListenerPipeline.floorTranscriber, &why) }
         let finalSession = final == live ? nil : await start(final, &why)
         notes = why
         guard liveSession != nil || finalSession != nil else { throw LabError.unavailable("no recogniser could start: " + why.joined(separator: "; ")) }
-        return Session(live: liveSession, final: finalSession)
+        return Session(live: liveSession, final: finalSession, closing: closing)
     }
 
     final class Session: TranscriptionSession, @unchecked Sendable {
         let live: TranscriptionSession?, final: TranscriptionSession?
         let partials: AsyncStream<String>
-        init(live: TranscriptionSession?, final: TranscriptionSession?) {
-            self.live = live; self.final = final
+        let closing: Locked<Task<Void, Never>?>
+        init(live: TranscriptionSession?, final: TranscriptionSession?, closing: Locked<Task<Void, Never>?> = Locked(nil)) {
+            self.live = live; self.final = final; self.closing = closing
             partials = live?.partials ?? AsyncStream<String> { $0.finish() }
         }
         func append(_ frame: AudioFrame) { live?.append(frame); final?.append(frame) }
         func finish() async throws -> String {
-            // The live session is always finished, never cancelled: its worker is joined before the next turn reuses the shared manager (S3).
+            // The live session is finished, never cancelled: its worker is joined before the next turn reuses the shared manager (S3). With a
+            // final transcript in hand the join happens in the background and the next `begin` waits for it (SF2); only an empty final
+            // makes this turn wait for the live words.
             if let final {
                 if let text = try? await final.finish() {
-                    // An empty final transcript is not an answer when the live recogniser heard words (S4).
+                    // A final with no letter or digit is not an answer when the live recogniser heard words (S4, SF3).
+                    if Self.hasWords(text) {
+                        if let live { closing.value = Task { _ = try? await live.finish() } }
+                        return text
+                    }
                     let liveText = (try? await live?.finish()) ?? ""
-                    return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? liveText : text
+                    return Self.hasWords(liveText) ? liveText : text
                 }
                 // the final recogniser failed: the live one's own transcript is the answer
             }
             guard let live else { throw LabError.unavailable("the final recogniser failed and no live one ran") }
             return try await live.finish()
         }
+        static func hasWords(_ t: String) -> Bool { t.contains { $0.isLetter || $0.isNumber } }
         func cancel() { live?.cancel(); final?.cancel() }
     }
 }

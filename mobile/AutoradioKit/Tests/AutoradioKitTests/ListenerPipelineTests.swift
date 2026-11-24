@@ -100,19 +100,25 @@ final class ListenerPipelineTests: XCTestCase {
         static let stageID = "stub-tr"
         static var descriptor: StageDescriptor { StageDescriptor(displayName: "stub") }
         var text: String; var failBegin = false; var failFinish = false
+        /// How long `finish` takes (an Apple recogniser waiting for its own final result).
+        var finishDelayMs = 0
         var sessions: [Session] = []
-        init(text: String, failBegin: Bool = false, failFinish: Bool = false) { self.text = text; self.failBegin = failBegin; self.failFinish = failFinish }
+        init(text: String, failBegin: Bool = false, failFinish: Bool = false, finishDelayMs: Int = 0) { self.text = text; self.failBegin = failBegin; self.failFinish = failFinish; self.finishDelayMs = finishDelayMs }
         func begin() async throws -> TranscriptionSession {
             if failBegin { throw LabError.unavailable("no model") }
-            let s = Session(text: text, fail: failFinish); sessions.append(s); return s
+            let s = Session(text: text, fail: failFinish, delayMs: finishDelayMs); sessions.append(s); return s
         }
         final class Session: TranscriptionSession, @unchecked Sendable {
             let partials: AsyncStream<String>; let cont: AsyncStream<String>.Continuation
-            let text: String, fail: Bool
+            let text: String, fail: Bool, delayMs: Int
             var frames = 0, cancelled = false, finished = false
-            init(text: String, fail: Bool) { self.text = text; self.fail = fail; (partials, cont) = AsyncStream<String>.makeStream() }
+            init(text: String, fail: Bool, delayMs: Int = 0) { self.text = text; self.fail = fail; self.delayMs = delayMs; (partials, cont) = AsyncStream<String>.makeStream() }
             func append(_ frame: AudioFrame) { frames += 1 }
-            func finish() async throws -> String { cont.finish(); finished = true; if fail { throw LabError.unavailable("boom") }; return text }
+            func finish() async throws -> String {
+                cont.finish()
+                if delayMs > 0 { try? await Task.sleep(nanoseconds: UInt64(delayMs) * 1_000_000) }
+                finished = true; if fail { throw LabError.unavailable("boom") }; return text
+            }
             func cancel() { cancelled = true; cont.finish() }
         }
     }
@@ -131,14 +137,44 @@ final class ListenerPipelineTests: XCTestCase {
 
     func testBothHearEveryFrameAndTheFinalOneGivesTheTranscript() async throws {
         let live = StubTranscriber(text: "tell me"), final = StubTranscriber(text: "Tell me more about the park.")
-        let s = try await stage(registry(live: live, final: final), ready: ["live-model", "final-model"]).begin()
+        let t = stage(registry(live: live, final: final), ready: ["live-model", "final-model"])
+        let s = try await t.begin()
         s.append(frame()); s.append(frame())
         XCTAssertEqual(live.sessions[0].frames, 2); XCTAssertEqual(final.sessions[0].frames, 2)
         let text = try await s.finish()
         XCTAssertEqual(text, "Tell me more about the park.", "the final transcript, not the live one")
-        // S3: the live session is finished (its worker joined), never cancelled while its worker may still touch the shared manager
-        XCTAssertTrue(live.sessions[0].finished, "the live session is closed once the final one answered")
+        // S3: the live session is finished (its worker joined), never cancelled while its worker may still touch the shared manager;
+        // SF2: the join happens before the next turn's begin, not before this turn's answer.
+        _ = try await t.begin()
+        XCTAssertTrue(live.sessions[0].finished, "the live session is closed before the next turn uses the shared manager")
         XCTAssertFalse(live.sessions[0].cancelled)
+    }
+
+    // SF2: a final transcript in hand is returned at once; a slow live recogniser (Apple's, waiting for its own final) never holds the turn.
+    func testASlowLiveRecogniserDoesNotHoldBackAFinalTranscript() async throws {
+        let live = StubTranscriber(text: "tell me", finishDelayMs: 800), final = StubTranscriber(text: "Tell me more about the park.")
+        let t = stage(registry(live: live, final: final), ready: ["live-model", "final-model"])
+        let s = try await t.begin()
+        let t0 = Date()
+        let text = try await s.finish()
+        XCTAssertEqual(text, "Tell me more about the park.")
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 0.4, "the turn waited for the live recogniser")
+        _ = try await t.begin()                                                  // the next turn waits for the join (the shared manager)
+        XCTAssertTrue(live.sessions[0].finished)
+    }
+
+    // SF3: a final with no letter or digit is empty; the live words that had content are the answer.
+    func testAFinalWithNoLetterOrDigitFallsBackToTheLiveWords() async throws {
+        for junk in [".", " ?! ", "…", "\n"] {
+            let live = StubTranscriber(text: "tell me more"), final = StubTranscriber(text: junk)
+            let s = try await stage(registry(live: live, final: final), ready: ["live-model", "final-model"]).begin()
+            let text = try await s.finish()
+            XCTAssertEqual(text, "tell me more", "final \(junk.debugDescription)")
+        }
+        let live = StubTranscriber(text: "tell me more"), final = StubTranscriber(text: "42")
+        let s = try await stage(registry(live: live, final: final), ready: ["live-model", "final-model"]).begin()
+        let digits = try await s.finish()
+        XCTAssertEqual(digits, "42", "a digit is a word")
     }
 
     func testTheLiveWordsAreTheSessionsPartials() async throws {
@@ -184,6 +220,32 @@ final class ListenerPipelineTests: XCTestCase {
         let s2 = try await stage(registry(live: both, final: none), ready: ["live-model", "final-model"]).begin()
         let empty = try await s2.finish()
         XCTAssertEqual(empty, "", "nothing heard by either is still nothing")
+    }
+
+    // Relaunch: the models setup marked ready (a file on the phone, written by the provider as each one finished) are what listens at the next launch.
+    func testWhatSetupMarkedReadyIsWhatListensAfterARelaunch() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("relaunch-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("voice-ready.json")
+        let r = StageRegistry.builtIn()
+        r.register(.speechBounds, id: "silero-vad", descriptor: StageDescriptor(displayName: "silero")) { _ in EnergyVAD(StageParams()) }
+        r.register(.transcriber, id: "parakeet-eou", descriptor: StageDescriptor(displayName: "eou")) { _ in StubTranscriber(text: "") }
+        r.register(.transcriber, id: "fluid-speech-mini", descriptor: StageDescriptor(displayName: "fluid")) { _ in StubTranscriber(text: "") }
+        let setup = FileVoiceReadiness(file: file)                           // the process that ran setup
+        for m in [silero, eou, fluid] { setup.markReady(model: m) }
+        let launched = FileVoiceReadiness(file: file)                        // a new process reads the same record
+        let rt = LabRuntime(supportDir: dir.appendingPathComponent("support"), session: NullSessionOwner(), registry: r, readiness: launched)
+        XCTAssertEqual(rt.configuration.setting(.speechBounds)?.id, "silero-vad")
+        XCTAssertEqual(rt.configuration.setting(.transcriber), StageSetting(id: "live-then-final", params: ["live": .string("parakeet-eou"), "final": .string("fluid-speech-mini")]))
+    }
+
+    // Review note: each configuration is handed to the engine from its own task; the last one set must be the one the engine ends on.
+    func testTheEngineEndsOnTheLastConfigurationSet() async {
+        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("lp-\(UUID().uuidString)"), session: NullSessionOwner(), registry: .builtIn(), readiness: MemoryReadiness())
+        for i in 0..<60 { var c = rt.configuration; c.name = "c\(i)"; rt.setConfiguration(c) }
+        await rt.settled()
+        let name = await rt.engine.configuration.name
+        XCTAssertEqual(name, "c59")
     }
 
     // B1: after voice setup the running app's listener is rebuilt from the list, speech detection and recognition together, with the composite's params.

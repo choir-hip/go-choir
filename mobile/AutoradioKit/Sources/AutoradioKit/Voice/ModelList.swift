@@ -48,7 +48,7 @@ public struct ModelListEntry: Codable, Equatable, Sendable {
     public func isRecommended(machine: String, memoryGB: Double) -> Bool {
         recommendedFor.isEmpty || recommendedFor.contains { $0.matches(machine: machine, memoryGB: memoryGB) }
     }
-    public var totalBytes: Int64 { (files ?? []).reduce(0) { $0 + $1.bytes } }
+    public var totalBytes: Int64 { (files ?? []).reduce(0) { let (n, o) = $0.addingReportingOverflow($1.bytes); return o ? Int64.max : n } }
 
     /// What the store needs to fetch a folder of pinned files; nil when the entry has no pinned files or revision.
     public func bundleSpec(folder: String, copies: [[String]] = []) -> ModelBundleSpec? {
@@ -63,7 +63,10 @@ public struct ModelListEntry: Codable, Equatable, Sendable {
         let fs = files ?? []
         if Set(fs.map(\.path)).count != fs.count || !fs.allSatisfy({ ModelBundleSpec.isSafeRelativePath($0.path) }) { return false }   // a served path never leaves the model's folder (S1)
         if !fs.isEmpty, revision == nil { return false }
-        return fs.allSatisfy { $0.bytes > 0 && $0.sha256.count == 64 && $0.sha256.allSatisfy { $0.isHexDigit && !$0.isUppercase } }
+        // Served text must be fetchable without trapping and within what a phone may be asked to hold (a served size is never trusted unbounded).
+        if !fs.isEmpty, !ModelBundleSpec.isValidRepository(repository) { return false }
+        if fs.count > ModelBundleSpec.maxFiles || totalBytes > ModelBundleSpec.maxModelBytes { return false }
+        return fs.allSatisfy { $0.bytes > 0 && $0.bytes <= ModelBundleSpec.maxFileBytes && $0.sha256.count == 64 && $0.sha256.allSatisfy { $0.isHexDigit && !$0.isUppercase } }
     }
 }
 
