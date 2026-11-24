@@ -86,3 +86,25 @@ func withDeadline<T: Sendable>(_ seconds: Double, _ body: @escaping @Sendable ()
         once.resume(nil); tasks.cancelAll()
     }
 }
+
+// MARK: A single waiting point
+
+/// Resolved once; any number of waiters. Used where a result may come from two places (a stretch and a deadline) and the loser must not
+/// hold the winner up (a task group would wait for it).
+final class OneShot<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: T?
+    private var waiters: [CheckedContinuation<T, Never>] = []
+    func fire(_ v: T) {
+        lock.lock()
+        guard value == nil else { lock.unlock(); return }
+        value = v; let w = waiters; waiters = []; lock.unlock()
+        for c in w { c.resume(returning: v) }
+    }
+    func wait() async -> T {
+        await withCheckedContinuation { c in
+            lock.lock()
+            if let v = value { lock.unlock(); c.resume(returning: v) } else { waiters.append(c); lock.unlock() }
+        }
+    }
+}

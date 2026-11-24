@@ -240,7 +240,7 @@ public final class ChoirApp: @unchecked Sendable {
         var v = ChoirPlayerView()
         v.signedIn = signIn.current.signedIn
         lock.lock(); v.loading = loading; v.message = message; lock.unlock()
-        let onAir = onMainThread { Deck.shared.current != nil || RadioBridge.shared.onAirEntry() != nil }
+        let onAir = onMainThread { Deck.shared.current != nil || RadioBridge.shared.hasOnAir() }
         v.title = p.document.title
         if let si = p.document.segmentIndex(containingBlock: p.blockIndex) { v.title = p.document.segments[si].title }   // the entry's title
         if p.document.blocks.indices.contains(p.blockIndex) { v.passage = p.document.blocks[p.blockIndex].spokenText ?? p.document.blocks[p.blockIndex].summary }

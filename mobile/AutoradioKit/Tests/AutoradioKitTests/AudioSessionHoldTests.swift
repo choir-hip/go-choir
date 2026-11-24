@@ -5,8 +5,6 @@ import XCTest
 /// listener's pause; the lab's fixture is never spoken on a listener's device.
 @MainActor
 final class AudioSessionHoldTests: XCTestCase {
-    func entry(_ id: String) -> RunSheetEntry { RunSheetEntry(id: id, kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 5) }
-
     /// 2: the session cannot be taken for a while; the entry stays on air with no outcome, and speaks when it can.
 
 

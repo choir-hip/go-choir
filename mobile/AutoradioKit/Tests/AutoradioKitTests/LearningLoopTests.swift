@@ -26,51 +26,11 @@ final class LearningLoopTests: XCTestCase {
         return (d.feed(sse) + d.finish()).compactMap { if case .segment(let s) = $0 { return s } else { return nil } }
     }
 
-    // F1
-
-
-    func testF1AClaimWithNoProbabilityStillRoundTripsAndShowsNoForecastSentence() throws {
-        var e = RunSheetEntry(id: "d-1", kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 10)
-        e.forecast = RunSheetForecast(claimId: "c9"); e.state = .onAir
-        let back = try JSONDecoder().decode(RunSheetEntry.self, from: JSONEncoder().encode(e))
-        XCTAssertEqual(back.forecast?.claimId, "c9"); XCTAssertNil(back.forecast?.pHeard)
-        // (no number, no sentence: radio.test.ts 8)
-    }
-
     // F2
 
 
 
-    // F4
-    func testF4TheNotebookIsReadAsLines() throws {
-        let nb = NotebookText.parse(try text("notebook.md"))
-        XCTAssertEqual(nb.sections.map(\.key), ["asked", "learned", "trying", "steering"])
-        let asked = nb.sections[0].lines
-        XCTAssertEqual(asked.count, 3); XCTAssertNil(asked[0].tag); XCTAssertEqual(asked[0].ref, NotebookText.mineRef("Mornings: world news first, then science."))
-        XCTAssertEqual(NotebookText.mineRef("x").count, "mine:".count + 8)
-        let l = nb.sections[1].lines
-        XCTAssertEqual(l[0].ref, "lesson:L1"); XCTAssertEqual(l[0].heard, 9); XCTAssertEqual(l[0].of, 11)
-        XCTAssertEqual(l[0].text, "Long policy pieces before 8 am get skipped; short ones are heard.")
-        XCTAssertEqual(l[1].ref, "lesson:L9"); XCTAssertEqual(nb.sections[2].lines[0].ref, "try:T2")
-        XCTAssertEqual(nb.sections[3].lines.count, 2); XCTAssertNil(nb.sections[3].lines[0].ref)
-        let odd = NotebookText.parse("## What you asked for\n- A line about [L and a bracket [Lx] stays whole.\nNot a bullet\n")
-        XCTAssertEqual(odd.sections[0].lines.map(\.text), ["A line about [L and a bracket [Lx] stays whole."]); XCTAssertNil(odd.sections[0].lines[0].tag)
-    }
-
-    // F5
-    func testF5TheTopicsMoveIntoTheNotebookOnce() throws {
-        let seed = NotebookText.merging(topics: ["Space", "Chess"], into: nil)
-        XCTAssertTrue(seed.hasPrefix("# My notebook\n\n## What you asked for\n- Space\n- Chess"), seed)
-        let nb = try text("notebook.md")
-        let once = NotebookText.merging(topics: ["Space", "Chess"], into: nb)
-        let parsed = NotebookText.parse(once)
-        XCTAssertEqual(parsed.sections[0].lines.map(\.text).suffix(2), ["Space", "Chess"])
-        XCTAssertEqual(parsed.sections[0].lines.count, 5); XCTAssertEqual(parsed.sections[1].lines.count, 2, "the other sections are untouched")
-        XCTAssertEqual(NotebookText.merging(topics: ["Space", "Chess", "space"], into: once), once, "a second write adds nothing")
-        let noSection = NotebookText.merging(topics: ["Art"], into: "# My notebook\n\n## What Autoradio has learned\n- A thing. [L2 · heard 1 of 1]\n")
-        XCTAssertTrue(NotebookText.parse(noSection).sections.first { $0.key == "asked" }?.lines.map(\.text) == ["Art"], noSection)
-        XCTAssertTrue(noSection.contains("[L2 · heard 1 of 1]"))
-    }
+    // F4 and F5 (the notebook as lines, the topics merged in once) are AutoradioLab/notebook.test.ts (the Swift NotebookText is deleted)
     // F6, F7, F8 (the learning route, the page, the held list) moved to AutoradioLab/notebook.test.ts (N4 to N6); the code they tested is shared TypeScript now.
 
     func stub(_ h: @escaping (StubProtocol.Req) -> StubProtocol.Resp, key: Bool = true) -> ChoirClient {

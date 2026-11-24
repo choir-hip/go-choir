@@ -131,7 +131,9 @@ export class RadioRuntime {
     return this.store.onAir() ? 'started' : 'nothing';
   }
   /** The listener's pause or the voice's yield: the deck's transport. */
-  async act(op: 'pause' | 'resume' | 'stop'): Promise<void> { await this.deck.act(op); }
+  async act(op: 'pause' | 'resume' | 'stop' | 'clearEnd'): Promise<void> { await this.deck.act(op); }
+  /** The deck's state as it is now (what the page models read: a podcast's place). */
+  deckNow(): Promise<DeckState> { return this.deck.state(); }
   /** Back: the start of this entry when it has gone on a little (or it is audio), else the entry before it. */
   async previous(): Promise<void> {
     const st = await this.deck.state(); this.deckState = st;

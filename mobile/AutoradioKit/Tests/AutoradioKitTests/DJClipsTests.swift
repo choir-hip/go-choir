@@ -15,8 +15,6 @@ private func clipRow(_ id: String, route: String = "/a", start: Double = 10, end
 private func hex(_ n: Int) -> String { "clip-" + String(format: "%012x", n) }
 
 final class ClipCandidatesTests: XCTestCase {
-    func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
-
     // C9 (the story page's rows) is shared code now: clips.test.ts H1.
     func testC3_ABlockForTheClipFollowsTheLeadIn() throws {
         let seg = IncomingSegment(stretchID: "s", segmentID: "s/1", kind: "podcast_clip", title: "Show on it", text: "Here is how Show put it.", cites: [], blockCount: 1,

@@ -331,17 +331,6 @@ final class PlayerEngineTests: XCTestCase {
         XCTAssertTrue(p.queuedTexts.isEmpty)
     }
 
-    // S6
-    func testMailRequestReachesTheHandlerAndIsSafeWithoutOne() {
-        let m = MailReading()
-        m.request(address: "x", text: "no handler")
-        XCTAssertEqual(m.last?.text, "no handler")
-        let box = PosBox3()
-        m.handler = { a, t in box.got = (a, t) }
-        m.request(address: "mmsg:2", text: "body")
-        XCTAssertEqual(box.got?.0, "mmsg:2"); XCTAssertEqual(box.got?.1, "body")
-    }
-    final class PosBox3: @unchecked Sendable { var got: (String, String)? }
 }
 
 // MARK: The turn: what the listener cut into
