@@ -117,4 +117,35 @@
 // WHAT IS NOT A STATE: "again", "pending save", "loaded", a token, a generation, an epoch, an owner string compared at an await.
 //
 // Sentences the page shows come from this file (`LABELS`), one per derived status; the contract shows them and decides nothing.
-export {};
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// THE STUB (first commit of the tests: every method fails, so the tests are seen failing before the code exists)
+import type { Storage } from './app.contract.d.ts';
+export const PENDING_DIR = 'app:/data/texture-pending';
+export type Reply = { body: unknown; serverTime: number | null; raw: string };
+export type Net = { json(path: string, opts?: { method?: 'GET' | 'POST'; body?: unknown }): Promise<Reply> };
+export type Info = { status: string; label: string; notice: string; address: string; editable: boolean; writable: boolean; kept: string; hasKept: boolean; waiting: number; stamp: number; head: string; opened: boolean };
+export type Deps = { net: Net; storage: Storage | undefined; account: string; timeoutMs?: number };
+const nope = (): never => { throw new Error('not built'); };
+export class Editor {
+  dead = false;
+  constructor(_deps: Deps) { void _deps; }
+  kill(): void { nope(); }
+  settleWrites(): Promise<void> { return nope(); }
+  info(_a: string): Promise<Info> { return nope(); }
+  open(_a: string): Promise<Info> { return nope(); }
+  edit(_a: string, _t: string, _from: string | null): Promise<Info> { return nope(); }
+  flush(_a: string): Promise<Info> { return nope(); }
+  discard(_a: string): Promise<Info> { return nope(); }
+  overwrite(_a: string): Promise<Info> { return nope(); }
+  writeAutomatic(_a: string, _t: string, _from: string | null): Promise<'saved' | 'busy' | 'failed'> { return nope(); }
+}
+export const editableDoc = (a: string): string | null => { void a; return nope(); };
+export const textureEditInfo = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
+export const textureEditOpen = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
+export const textureEdit = (_a: string, _t: string, _f: string, _s: Storage | undefined): Promise<Info> => nope();
+export const textureFlush = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
+export const textureDiscard = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
+export const textureOverwrite = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
+export const wipeTextureEdit = (_s: Storage | undefined): Promise<void> => nope();
+export const forgetTextureEdit = (): void => nope();
