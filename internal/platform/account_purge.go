@@ -385,14 +385,19 @@ func (s *Service) runAccountTapePurge(ctx context.Context, ids []string) Account
 		return job
 	}
 	proofs := map[string]TapeSweepComputerProof{}
-	for _, p := range dry.DestroyedProofs {
+	for _, p := range dry.NamedProofs {
 		proofs[p.ComputerID] = p
 	}
 	for _, id := range ids {
 		p, ok := proofs[id]
 		switch {
 		case !ok:
-			// No head: the computer never wrote a tape here; nothing to purge.
+			// Every named computer has a proof; a missing one is a bug, and
+			// the purge says so instead of calling the tape gone.
+			job.Error = "no proof for " + id
+			return job
+		case p.Reason == "no tape head":
+			// The computer never wrote a tape here; nothing to purge.
 		case p.Reason == "already deleted":
 		case !p.Deletable:
 			job.Refusal = id + ": " + p.Reason

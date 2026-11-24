@@ -255,11 +255,17 @@ type TapeSweepReport struct {
 	DestroyedRows             int64                               `json:"destroyed_rows"`
 	DestroyedClasses          map[string]TapeSweepClassCounts     `json:"destroyed_classes,omitempty"`
 	NoArchive                 bool                                `json:"no_archive,omitempty"`
-	DestroyedProofs           []TapeSweepComputerProof            `json:"destroyed_proofs,omitempty"`
-	Apply                     *TapeSweepApplyCounts               `json:"apply,omitempty"`
-	Warnings                  []string                            `json:"warnings,omitempty"`
-	StartedAt                 time.Time                           `json:"started_at"`
-	DurationMs                int64                               `json:"duration_ms"`
+	// NamedProofs is, for a request that names computers, the proof of each
+	// named computer whether or not it is destroyed: a named computer that is
+	// still owned, listed or routed is here with its reason, and one with no
+	// tape head is here as such. A caller that must know a named computer's
+	// tape is gone reads this, never the absence of a row in DestroyedProofs.
+	NamedProofs     []TapeSweepComputerProof `json:"named_proofs,omitempty"`
+	DestroyedProofs []TapeSweepComputerProof `json:"destroyed_proofs,omitempty"`
+	Apply           *TapeSweepApplyCounts    `json:"apply,omitempty"`
+	Warnings        []string                 `json:"warnings,omitempty"`
+	StartedAt       time.Time                `json:"started_at"`
+	DurationMs      int64                    `json:"duration_ms"`
 }
 
 // TapeSweepApplyCounts are the apply outcomes, by the GC log's op names.
@@ -1134,6 +1140,16 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 		}
 	}
 	deletable := func(id string) bool { pr := proofs[id]; return pr != nil && pr.Deletable }
+	fillNamed := func() {
+		for id := range p.only {
+			if pr := proofs[id]; pr != nil {
+				report.NamedProofs = append(report.NamedProofs, *pr)
+			} else {
+				report.NamedProofs = append(report.NamedProofs, TapeSweepComputerProof{ComputerID: id, Reason: "no tape head"})
+			}
+		}
+		sort.Slice(report.NamedProofs, func(i, j int) bool { return report.NamedProofs[i].ComputerID < report.NamedProofs[j].ComputerID })
+	}
 
 	// Reference sets. live holds every reference of every computer that is
 	// not deletable plus every extra record; doomed holds the deletable
@@ -1344,6 +1360,7 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 			}
 		}
 	}
+	fillNamed()
 	digest, err := mw.close()
 	if err != nil {
 		return report, fmt.Errorf("tape sweep: manifest: %w", err)
