@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { begin, keepKey, KEY_ID_NAME, KEY_NAME, COMPUTER_ID_NAME, passkeySupport, resetAttempt, signInCancel, signInReset, signInRun, signInView, step, type SignInEnv, type View } from './app-signin.ts';
+import { begin, keepKey, KEY_ID_NAME, KEY_NAME, COMPUTER_ID_NAME, PASSKEY_APP_IDS, passkeySupport, resetAttempt, signInCancel, signInReset, signInRun, signInView, step, type SignInEnv, type View } from './app-signin.ts';
 
 const ORIGIN = 'https://choir.news';
 const KEY_A = 'choir_sk_test-key-a-not-real', KEY_B = 'choir_sk_test-key-b-not-real';
@@ -231,5 +231,14 @@ describe('where passkeys can work', () => {
   test('the web build and an undecided host are not gated by the app id', () => {
     expect(passkeySupport('news.choir.autoradio.lab', 'web')).toBe('');
     expect(passkeySupport('news.choir.autoradio.lab', '')).toBe('');
+  });
+});
+
+describe('the list of passkey apps', () => {
+  test('every id app.json builds is on it, except the free-team lab app', async () => {
+    const m = JSON.parse(await Bun.file(new URL('./app.json', import.meta.url)).text());
+    const ids = [m.app.id, ...Object.values(m.variants as Record<string, { idSuffix: string }>).map((v) => m.app.id + v.idSuffix)];
+    const off = ids.filter((id) => !PASSKEY_APP_IDS.includes(id));
+    expect(off).toEqual(['news.choir.autoradio.lab']);
   });
 });

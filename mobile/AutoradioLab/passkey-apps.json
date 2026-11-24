@@ -1,0 +1,7 @@
+{
+  "note": "The apps that can make passkeys for choir.news: team and bundle id. Read by app-signin.ts (passkeySupport); internal/appids/appids_test.go requires the Go list (the association file and the finish routes) to equal it. The free-team lab app news.choir.autoradio.lab is on no list: it cannot carry Associated Domains.",
+  "apps": [
+    { "team": "S47GERGJZ3", "bundle": "news.choir.autoradio" },
+    { "team": "S47GERGJZ3", "bundle": "news.choir.autoradio.lab.one" }
+  ]
+}

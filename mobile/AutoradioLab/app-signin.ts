@@ -9,6 +9,7 @@
 // the Keychain on Apple, AfterFirstUnlockThisDeviceOnly). It never leaves this file's data layer: not a log line, not an answer, not a contract resource. The answer of a press
 // is `{phase, rev}` and the view is `{phase, pending, mode, message, rev}`; no word of either can hold a key. The native voice code reads the same Keychain items (they are
 // the one place the key lives) and writes none of them at sign-in.
+import passkeyApps from './passkey-apps.json';
 import { CeremonyError, ceremonyMessage, createCeremony, getCeremony, postPublic, refusal, type CeremonyEnv } from './passkey-ceremony.ts';
 
 export type Mode = 'create' | 'signin';
@@ -21,9 +22,9 @@ export const KEY_NAME = 'choir.key';
 export const KEY_ID_NAME = 'choir.key-id';
 export const COMPUTER_ID_NAME = 'choir.computer-id';
 
-/** The apps that can make passkeys for choir.news: the ones the server accepts and its association file names (internal/appids, one list). The first lab app, `news.choir.autoradio.lab`, is signed by a
+/** The apps that can make passkeys for choir.news: the ones the server accepts and its association file names (passkey-apps.json; internal/appids must equal it, tested in Go). The first lab app, `news.choir.autoradio.lab`, is signed by a
  * free developer team, which cannot carry Associated Domains, so no passkey can be made in it. */
-export const PASSKEY_APP_IDS = ['news.choir.autoradio', 'news.choir.autoradio.lab.one'];
+export const PASSKEY_APP_IDS: string[] = (passkeyApps.apps as { bundle: string }[]).map((a) => a.bundle);
 /** '' when this app on this host can sign in with a passkey; 'app' for a build that cannot (its id is not on the list; judged only on Apple hosts, where the id is signed in); 'android' where the server
  * accepts no origin yet. `platform` is `exactPage().platform`; the web build and an undecided host are not gated here. */
 export function passkeySupport(appId: string, platform: string): '' | 'app' | 'android' {
