@@ -64,3 +64,5 @@ if sha != "-":
     certs = p.get("DeveloperCertificates")
     if not isinstance(certs, list) or sha.lower() not in {hashlib.sha1(c).hexdigest() for c in certs if isinstance(c, bytes)}:
         no("EXACT_PROFILE was not made for the identity EXACT_IDENTITY names (make the profile with that Apple Distribution certificate).")
+if sha == "-":
+    print(ents.get("application-identifier"))   # the caller (check-store-ipa.py) compares it with what the signature carries

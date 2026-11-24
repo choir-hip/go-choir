@@ -36,9 +36,9 @@ import (
 //     the default id and each variant's), so a build's callback scheme is refused
 //     or an unknown one is admitted.
 //  R9 a deny answers no return_to (the app learns of it by its poll), and it mints nothing.
-//  R11 (2026-11-23, the store build) the production app's id, news.choir.autoradio, is
-//     not on the list: its sign-in sheet never returns. Only that exact id, the two
-//     lab ids and no near miss of any of them may be answered.
+//  R11 (2026-11-23, the store build) the list lacks the production app's id,
+//     news.choir.autoradio (so its sign-in sheet never returns), or it admits a near
+//     miss of that id or of the two lab ids. Exactly those three are answered.
 //  R10 an over-long hint cannot decide anything: 400 before the lookup.
 
 const goodState = "k3VqS0m9Zt_xA1b2C3d4-E5f"

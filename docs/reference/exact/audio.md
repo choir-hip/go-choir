@@ -196,7 +196,7 @@ Source: `origin/lane/ar-integrate` `mobile/README.md`, with `host/apple/Sources/
 - Reported but unmeasured by us: 20 to 41 s route-switch stalls with AirPods on
   iOS 27.0.1; our adapter emits an `error` at 5 s [unrun on a phone].
 - `Info.plist` for our lab carries `UIBackgroundModes: [audio]`,
-  `ExactAudioSession: playback` (the lab's grant `device.microphone-background` and its `ExactCapturesInBackground: true` were removed 2026-11-23: the microphone closes when the screen locks), and the microphone and speech usage
+  `ExactAudioSession: playback` (the lab's grant `device.microphone-background` and its `ExactCapturesInBackground: true` were removed 2026-11-23, and removing them is not what closes the microphone: `SessionCoordinator.applyBackgrounded()` releases it on `didEnterBackground` whatever the Info.plist says, and Exact reads `ExactCapturesInBackground` only in its `media-capture` package, which this app does not use), and the microphone and speech usage
   strings (from `strings/en.json`) [run]. That the programme keeps playing with
   the screen locked is not proven.
 

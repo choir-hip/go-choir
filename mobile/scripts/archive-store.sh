@@ -5,16 +5,20 @@
 # It refuses (plain message, nothing built) unless: no AR_VARIANT/AR_APP_ID is set (the store build is the production app), this is the build tree, EXACT_IDENTITY is a
 # 40-hex SHA-1 of an Apple Distribution identity this Mac holds, and EXACT_PROFILE is an unexpired App Store profile for exactly the production id made for that identity
 # (check-store-signing.py; it names what is wrong and prints no key material). It never searches for an identity or a profile.
-# Then: the build number (below), the store kind of the build (AR_BUILD_KIND=store: build-lab.sh, sync-exact-package.sh), and Exact's own archive command
+# Then: the build number (below); the STORE staging of the Swift, made here every time immediately before the build (stage-app.sh <ios> store: sync-exact-package.sh leaves the developer
+# launch hooks out, so nothing an earlier development build staged is what Exact reads); and Exact's own archive command, run by this script itself through exact-env.sh
+# (exact.sh and build-lab.sh refuse every archive: this is the ONE route, so no marker or environment variable can make another)
 #   bun exact.mjs ios --device --archive <ipa> --json      (reference.md "Build an iOS app on a CI machine"; --archive bakes production trust and Swift's release build)
 # with EXACT_VERSION (app.json "version"), EXACT_BUILD_NUMBER, EXACT_NON_EXEMPT_ENCRYPTION=false (HTTPS and the system's encryption only; Exact writes ITSAppUsesNonExemptEncryption)
-# and the marker AR_STORE_ARCHIVE=1, without which exact-guard.sh refuses every archive (with it, exact.sh itself requires these settings and runs check-store-signing.py again,
-# so setting the marker by hand gains nothing). exact.sh gives every build EXACT_DEV_MENU=0 (Exact's developer menu, four fingers, is off in every build of this app). Last, it reads the .ipa back and prints its
-# path, bundle id, version and build number, and fails if they are not what was asked for.
+# and EXACT_DEV_MENU=0 (exact-env.sh gives it to every build: Exact's developer menu, four fingers, is off in every build of this app). Last, it reads the .ipa back and prints its
+# path, bundle id, version and build number, and fails if they are not what was asked for, if the executable holds a name from store-dev-names.txt (the developer launch hooks), or
+# if the signature is not an Apple Distribution one for the production id (check-store-ipa.py).
 # The BUILD NUMBER (CFBundleVersion): by default whole minutes since 2026-01-01 00:00 UTC, or one more than the last number this script gave if that is higher ($OUTDIR/last-build),
 # so a default number is never at or below the record, a re-upload of the same commit is a higher number (App Store Connect takes a build number once per version), and it has at
 # most 9 digits for centuries. AR_BUILD_NUMBER=<n> (a whole number, 1 to 999999999) is used as given, even if it is at or below the record (App Store Connect refuses a number it
-# already holds; the script cannot know one it was not given), and raises the record only when it is higher; later default numbers stay above the record. The caller holds the build lock (the command above), which serializes runs; this script takes none, so the record is what keeps two runs apart.
+# already holds; the script cannot know one it was not given), and raises the record only when it is higher; later default numbers stay above the record. A number is CLAIMED
+# atomically: the directory $OUTDIR/claims/<number> is made (mkdir fails if it exists), so two runs at once, or a run after the record was lost, never give one number twice, and an
+# AR_BUILD_NUMBER this script gave before is refused. The caller holds the build lock (the command above); this script takes none.
 # The .ipa goes to $AR_STORE_OUT_DIR (default ~/.cache/autoradio-store), outside the repo. EXACT_PROFILE and AR_STORE_OUT_DIR may be relative to where this is run; they are made absolute.
 # ALLOW_NO_MODELS is refused (a store archive always carries the voice models).
 set -eu
@@ -22,6 +26,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 PATH="$PATH:/usr/bin:/bin:/usr/sbin:/sbin"
 no() { echo "archive-store: $1" >&2; exit 1; }
 [ -z "${AR_VARIANT:-}${AR_APP_ID:-}${AR_APP_NAME:-}" ] || no "the store build is the production app: unset AR_VARIANT, AR_APP_ID and AR_APP_NAME (a development app is never uploaded)"
+[ -z "${AR_APP_JSON:-}" ] || no "AR_APP_JSON is set: the store build reads the app's own app.json only (another identity file would ship another id, name or version); unset it"
 "$HERE/scripts/build-tree.sh" is || no "this is not the build tree ($("$HERE/scripts/build-tree.sh" path 2>/dev/null || echo none named)). Push your lane; the lead archives it there."
 ID="$("$HERE/scripts/app-identity.sh" id)" || exit 1
 NAME="$("$HERE/scripts/app-identity.sh" name)" || exit 1
@@ -38,26 +43,38 @@ EXACT_PROFILE="$(cd "$(dirname "$EXACT_PROFILE")" && pwd -P)/$(basename "$EXACT_
 OUTDIR="${AR_STORE_OUT_DIR:-$HOME/.cache/autoradio-store}"
 mkdir -p "$OUTDIR"
 OUTDIR="$(cd "$OUTDIR" && pwd -P)"
-# The build number: the minute count, but never at or below the last number this script gave (kept in $OUTDIR/last-build, written under the build lock), so a second run in
-# one minute and a run after AR_BUILD_NUMBER=<a larger number> still rise. A given AR_BUILD_NUMBER is used as given and raises the record, never lowers it.
+# The build number: the minute count, but never at or below the last number this script gave (kept in $OUTDIR/last-build), and claimed atomically (see the header).
 LASTF="$OUTDIR/last-build"; LAST=0
 if [ -e "$LASTF" ]; then
   LAST="$(cat "$LASTF")"
   case "$LAST" in ''|0?*|*[!0-9]*) no "$LASTF holds no whole number (the last build number given): fix or delete it." ;; esac
   [ "${#LAST}" -le 9 ] || no "$LASTF holds no whole number (the last build number given): fix or delete it."
 fi
-if [ -n "${AR_BUILD_NUMBER:-}" ]; then BUILD="$AR_BUILD_NUMBER"
-else BUILD=$(( ($(date -u +%s) - 1767225600) / 60 )); [ "$BUILD" -gt "$LAST" ] || BUILD=$((LAST + 1)); fi
-case "$BUILD" in ''|0*|*[!0-9]*) bad=1 ;; *) bad="" ;; esac
-[ -z "$bad" ] && [ "${#BUILD}" -le 9 ] || no "the build number must be a whole number from 1 to 999999999 (AR_BUILD_NUMBER, or the record in $LASTF)."
-[ "$BUILD" -gt "$LAST" ] && printf '%s\n' "$BUILD" > "$LASTF"
+okbuild() { case "$1" in ''|0*|*[!0-9]*) return 1 ;; esac; [ "${#1}" -le 9 ]; }
+CLAIMS="$OUTDIR/claims"; mkdir -p "$CLAIMS"
+if [ -n "${AR_BUILD_NUMBER:-}" ]; then
+  BUILD="$AR_BUILD_NUMBER"
+  okbuild "$BUILD" || no "the build number must be a whole number from 1 to 999999999 (AR_BUILD_NUMBER, or the record in $LASTF)."
+  mkdir "$CLAIMS/$BUILD" 2>/dev/null || no "build number $BUILD was already given by this script (its claim is in $CLAIMS): App Store Connect takes a number once per version; give another."
+else
+  BUILD=$(( ($(date -u +%s) - 1767225600) / 60 )); [ "$BUILD" -gt "$LAST" ] || BUILD=$((LAST + 1))
+  while :; do
+    okbuild "$BUILD" || no "the build number must be a whole number from 1 to 999999999 (AR_BUILD_NUMBER, or the record in $LASTF)."
+    mkdir "$CLAIMS/$BUILD" 2>/dev/null && break
+    BUILD=$((BUILD + 1))
+  done
+fi
+if [ "$BUILD" -gt "$LAST" ]; then printf '%s\n' "$BUILD" > "$LASTF.$$" && mv -f "$LASTF.$$" "$LASTF"; fi
 IPA="$OUTDIR/$(printf '%s' "$NAME" | tr -c 'A-Za-z0-9.\n' '-')-$VERSION-$BUILD.ipa"
 rm -f "$IPA"
 LOG="$OUTDIR/archive-$BUILD.stdout"
 echo "archive-store: $NAME $ID version $VERSION build $BUILD"
+export EXACT_VERSION="$VERSION" EXACT_BUILD_NUMBER="$BUILD" EXACT_NON_EXEMPT_ENCRYPTION=false
+# Stage the store kind NOW, then run Exact on what was just staged: nothing between the two, and nothing before reads the tree for the build.
+"$HERE/scripts/stage-app.sh" ios store || no "staging the store kind failed (see above); nothing was built"
+. "$HERE/scripts/exact-env.sh"
 set +e
-AR_BUILD_KIND=store AR_STORE_ARCHIVE=1 EXACT_VERSION="$VERSION" EXACT_BUILD_NUMBER="$BUILD" EXACT_NON_EXEMPT_ENCRYPTION=false \
-  "$HERE/scripts/build-lab.sh" ios --device --archive "$IPA" --json > "$LOG"
+exact_run ios --device --archive "$IPA" --json > "$LOG"
 RC=$?
 set -e
 [ "$RC" -eq 0 ] || { tail -5 "$LOG" >&2; no "Exact's archive failed (exit $RC); its log is above on stderr, its JSON line is in $LOG"; }
