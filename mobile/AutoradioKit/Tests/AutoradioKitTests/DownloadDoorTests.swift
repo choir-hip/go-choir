@@ -162,12 +162,18 @@ final class DownloadDoorTests: XCTestCase {
     // ---- Round 5: the window's edges. Consent and path are checked INSIDE the lock that opens the registry; a path change, a reset or a withdrawn agreement CLOSES it at once; windows are one at a time.
     final class Flip: @unchecked Sendable { let lock = NSLock(); var calls = 0; var after: Int; init(after: Int) { self.after = after }
         func wifi() -> Bool { lock.lock(); defer { lock.unlock() }; calls += 1; return calls <= after } }
+    /// Wi-Fi until `arm()`, then Wi-Fi at the first look and gone from the second: so only the check made INSIDE the lock that opens the registry can refuse (what `sync` and the early look consume before it does not count).
+    final class Armed: @unchecked Sendable { let lock = NSLock(); var armed = false, calls = 0
+        func arm() { lock.lock(); armed = true; lock.unlock() }
+        func wifi() -> Bool { lock.lock(); defer { lock.unlock() }; if !armed { return true }; calls += 1; return calls <= 1 } }
     func testW1OffWifiBetweenTheCheckAndTheOpenOpensNothing() async {
-        let r = Registry(); let f = Flip(after: 1)                                      // Wi-Fi at the first look, gone at the second
+        let r = Registry(); let f = Armed()
         let d = DownloadDoor(onWiFi: { f.wifi() }); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        f.arm()                                                                         // from here: the early look sees Wi-Fi, the look inside the lock does not
         final class Ran: @unchecked Sendable { var v = false }; let ran = Ran()
         do { try await d.libraryWindow(model: "fluid-speech-mini") { ran.v = true } as Void; XCTFail("opened") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .pathNotAgreed(group: "voice-rest")) }
         XCTAssertFalse(ran.v); XCTAssertEqual(r.log, [DownloadDoor.closedRegistry], "the registry was never opened"); XCTAssertEqual(d.openWindowCount, 0)
+        XCTAssertEqual(f.calls, 2, "it looked twice: before the lock, and inside it")
     }
     func testW2AResetDuringAFetchClosesTheRegistryAtOnceAndACancelFollows() async throws {
         let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed-mobile"]); d.installLibraryGuard { r.set($0) }
@@ -217,5 +223,44 @@ final class DownloadDoorTests: XCTestCase {
         _ = try await a.value; _ = try await b.value
         XCTAssertEqual(l.log, ["A+", "A-", "B+", "B-"], "B's body ran only after A's window closed")
         XCTAssertEqual(r.now, DownloadDoor.closedRegistry)
+    }
+
+    // ---- Round 6: the queue. A cancelled waiter never opens a window; a body that outlives its deadline is failed and frees the slot; a queued fetch tells the watchdog it is queued; `exclusive` (the check) runs with no window anywhere.
+    func testQ1ACancelledWaiterNeverOpensAWindow() async throws {
+        let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        final class S: @unchecked Sendable { var ranB = false, aStarted = false }; let st = S()
+        let a = Task { try await d.libraryWindow(model: "fluid-speech-mini") { st.aStarted = true; try? await Task.sleep(nanoseconds: 150_000_000) } as Void }
+        for _ in 0..<200 where !st.aStarted { try? await Task.sleep(nanoseconds: 5_000_000) }
+        let b = Task { try await d.libraryWindow(model: "parakeet-eou-120m") { st.ranB = true } as Void }
+        try? await Task.sleep(nanoseconds: 30_000_000); b.cancel()
+        do { try await b.value; XCTFail("ran") } catch {}
+        _ = try await a.value
+        XCTAssertFalse(st.ranB); XCTAssertEqual(r.log.filter { $0 == DownloadDoor.openRegistry }.count, 1, "the registry was opened once, for A"); XCTAssertEqual(d.openWindowCount, 0)
+    }
+    func testQ2ABodyThatOutlivesItsDeadlineIsFailedAndTheSlotIsFreed() async throws {
+        let r = Registry(); let d = DownloadDoor(onWiFi: { true }, deadlines: (wait: 5, body: 0.1)); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        let t0 = Date()
+        do { try await d.libraryWindow(model: "fluid-speech-mini") { while true { try? await Task.sleep(nanoseconds: 20_000_000) } } as Void; XCTFail("ran on") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .timedOut) }     // a body that ignores cancellation
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 2, "it did not wait for a body that never returns")
+        XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0)
+        let ok: Int = try await d.libraryWindow(model: "fluid-speech-mini") { 3 }; XCTAssertEqual(ok, 3, "and the next fetch is not stuck behind it")
+    }
+    func testQ3AQueuedFetchTellsTheWatchdogItIsQueued() async throws {
+        let d = door(); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { _ in }
+        final class S: @unchecked Sendable { var started = false; var told = 0 }; let st = S()
+        let a = Task { try await d.libraryWindow(model: "fluid-speech-mini") { st.started = true; try? await Task.sleep(nanoseconds: 400_000_000) } as Void }
+        for _ in 0..<200 where !st.started { try? await Task.sleep(nanoseconds: 5_000_000) }
+        let b = Task { try await d.libraryWindow(model: "parakeet-eou-120m", queuedEvery: 0.05, whileQueued: { st.told += 1 }) { } as Void }
+        _ = try await a.value; _ = try await b.value
+        XCTAssertGreaterThanOrEqual(st.told, 3, "the waiter reported while it waited, so a stall watchdog does not read the wait as a stall")
+    }
+    func testQ4ExclusiveRunsWithNoWindowAnywhereAndWindowsWaitForIt() async throws {
+        let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        final class L: @unchecked Sendable { let lock = NSLock(); var log: [String] = []; func add(_ s: String) { lock.lock(); log.append(s); lock.unlock() } }; let l = L()
+        let e = Task { try await d.exclusive { l.add("E+:" + r.now); try? await Task.sleep(nanoseconds: 100_000_000); l.add("E-") } }
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        let w = Task { try await d.libraryWindow(model: "fluid-speech-mini") { l.add("W+") } as Void }
+        _ = try await e.value; _ = try await w.value
+        XCTAssertEqual(l.log, ["E+:" + DownloadDoor.closedRegistry, "E-", "W+"], "the check ran with the registry closed and no window open; the window waited")
     }
 }

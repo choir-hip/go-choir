@@ -24,13 +24,16 @@ final class LibraryClosedTests: XCTestCase {
         do { _ = try await VadManager(config: VadConfig(defaultThreshold: 0.6, computeUnits: .cpuOnly), modelDirectory: d); XCTFail("a VAD appeared from nothing") } catch {}     // VadManager.swift:110: it resolves through ModelHub and would download
         XCTAssertEqual(files(in: d), 0, "nothing was fetched")
     }
-    func testL4TheStagesLoadLocallyAndFailClosedWhenTheFilesAreAbsent() async {
-        // The TDT stage loads with `loadLocal` (never downloads). Its own folder is the real one, so this only runs where it is absent.
-        let tdt = AsrModels.defaultCacheDirectory(for: .v2)
-        guard !FileManager.default.fileExists(atPath: tdt.path) else { return }
-        let before = files(in: tdt.deletingLastPathComponent())
-        do { _ = try await ParakeetTDTTranscriber(StageParams()).begin(); XCTFail("began from nothing") } catch {}
-        XCTAssertEqual(files(in: tdt.deletingLastPathComponent()), before)
+    func testL4AStageInitialisesOnlyForAReadyModelAndChangesNoFile() async {
+        // The TDT stage loads with `loadLocal` and only for a model that is ready by manifest (or being fetched or checked). On a Mac that has the files, they are not touched; on one that does not, nothing appears. Either way: not ready here, so it refuses.
+        let tdt = AsrModels.defaultCacheDirectory(for: .v2).deletingLastPathComponent()
+        let before = ModelStore.directoryBytes(tdt)
+        do { _ = try await ParakeetTDTTranscriber(StageParams()).begin(); XCTFail("began for a model that is not ready") } catch { XCTAssertTrue("\(error)".contains("not ready"), "\(error)") }
+        XCTAssertEqual(ModelStore.directoryBytes(tdt), before, "no file was added, changed or removed")
+        await ModelStore.shared.unload("silero-vad-v6.2.1")                 // a manager another test left in the slot would answer without asking
+        if !Voices.readiness.isReady(model: "silero-vad-v6.2.1") {           // a Mac that really holds a sealed Silero is allowed to load it
+        do { _ = try await SileroVAD.probabilities([Float](repeating: 0, count: 4096)); XCTFail("silero initialised for a model that is not ready") } catch { XCTAssertTrue("\(error)".contains("not ready"), "\(error)") }
+        }
     }
     func testL5NoConsentNoWindow() async {
         do { try await HubModelProvider.shared.fetch("parakeet-tdt-0.6b-v2", role: "", onBytes: { _ in }); XCTFail("fetched") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .noConsent(group: "voice-rest")) }

@@ -169,5 +169,12 @@ describe('the press', () => {
     expect(picked.groups.find((g) => g.id === 'voice')!.ready).toBe(false); expect(picked.groups.find((g) => g.id === 'voice')!.total).toBe('350 MB');
     expect(picked.setupTotal).toBe('2 MB');                                           // and still not in the first run's
   });
+  test('D18 when the voice job is withheld the first run says so in one line: the iPhone voice for now, a better one in Settings > Downloads; with a voice on offer or no voice job it says nothing', () => {
+    const w = (id: string) => ({ ...opt(id, id, 350_000_000), withheld: true });
+    const line = "The radio uses the iPhone's voice for now. A better voice is in Settings > Downloads.";
+    expect(downloadsView({ ...f, offers: [job('voice', 'voice', [w('kokoro-x')]), job('bounds', 'voice-rest', [opt('gate', 'Gate', 2_000_000, true)])] }, false, 0).voiceNote).toBe(line);
+    expect(downloadsView({ ...f, offers: [job('voice', 'voice', [opt('plain', 'Plain', 350_000_000, true), w('kokoro-x')])] }, false, 0).voiceNote).toBe('');
+    expect(downloadsView({ ...f, offers: [job('bounds', 'voice-rest', [opt('gate', 'Gate', 2_000_000, true)])] }, false, 0).voiceNote).toBe('');
+  });
 });
 
