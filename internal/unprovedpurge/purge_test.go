@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,8 +44,8 @@ func exec(t *testing.T, db *sql.DB, q string, a ...any) {
 	}
 }
 
-// newWorld seeds a proved account, four unproved accounts that must be refused (a computer owner, an
-// owner-key holder, the bootstrap admin, one with platform rows) and one unproved account that goes.
+// newWorld seeds a proved account, and unproved accounts: one that goes, and ones that must be refused (a computer
+// owner, an owner-key holder, the bootstrap admin, one with platform rows, one with route-ledger rows).
 func newWorld(t *testing.T) *world {
 	t.Helper()
 	dir := t.TempDir()
@@ -53,13 +54,14 @@ func newWorld(t *testing.T) *world {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	w := &world{t: t, auth: store, root: filepath.Join(dir, "mail"), owners: map[string]bool{}}
+	w := &world{t: t, auth: store, root: filepath.Join(dir, "mail"), owners: map[string]bool{"__any__": true}}
 	w.maild = openSQLite(t, filepath.Join(dir, "mail.db"))
 	exec(t, w.maild, `CREATE TABLE email_owner_addresses (id text primary key, owner_id text not null, address text)`)
 	exec(t, w.maild, `CREATE TABLE email_aliases (id text primary key, target_type text not null, target_id text not null)`)
 	exec(t, w.maild, `CREATE TABLE digest_subscriptions (id text primary key, owner_id text not null)`)
 	w.platform = openSQLite(t, filepath.Join(dir, "platform.db"))
 	exec(t, w.platform, `CREATE TABLE events (id text primary key, owner_id text not null)`)
+	exec(t, w.platform, `CREATE TABLE computer_version_route_slots (route_slot_id text primary key, current_code_ref text)`)
 
 	now := time.Now().UTC()
 	user := func(id, email string, proved bool) {
@@ -76,31 +78,38 @@ func newWorld(t *testing.T) *world {
 		exec(t, w.maild, `INSERT INTO email_owner_addresses (id, owner_id, address) VALUES (?, ?, ?)`, "a-"+id, id, id+"@choir.news")
 		exec(t, w.maild, `INSERT INTO email_aliases (id, target_type, target_id) VALUES (?, 'user', ?)`, "al-"+id, id)
 		exec(t, w.maild, `INSERT INTO digest_subscriptions (id, owner_id) VALUES (?, ?)`, "d-"+id, id)
-		if err := os.MkdirAll(filepath.Join(w.root, "users", id), 0o755); err != nil {
-			t.Fatal(err)
+		for _, d := range mailDirs(w.root, id) {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(d, "f"), []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
 		}
-		if err := os.WriteFile(filepath.Join(w.root, "users", id, "mailbox.db"), []byte("x"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+	}
+	if err := os.MkdirAll(filepath.Join(w.root, "users"), 0o755); err != nil {
+		t.Fatal(err)
 	}
 	user("proved", "proved@example.com", true)
 	user("goes", "Goes@Example.com", false)
 	user("computer", "computer@example.com", false)
 	user("rooted", "rooted@example.com", false)
 	user("platformed", "platformed@example.com", false)
+	user("ledgered", "ledgered@example.com", false)
 	user(auth.BootstrapAdminAPIKeyUserID, "bootstrap@choir.local", false)
 	w.owners["computer"] = true
 	exec(t, store.DB(), `INSERT INTO owner_root_keys (owner_id, created_at) VALUES ('rooted', CURRENT_TIMESTAMP)`)
 	exec(t, w.platform, `INSERT INTO events (id, owner_id) VALUES ('e1', 'platformed')`)
+	exec(t, w.platform, `INSERT INTO computer_version_route_slots (route_slot_id, current_code_ref) VALUES ('computer:ledgered:c1', 'x')`)
 	exec(t, store.DB(), `INSERT INTO registration_waitlist (email, created_at, last_seen_at) VALUES ('goes@example.com', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), ('other@example.com', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
 	return w
 }
 
 func (w *world) services() []Service {
 	return []Service{
-		{Name: "auth", DB: w.auth.DB(), Kind: dbx.SQLite, Keys: AuthKeys},
-		{Name: "maild", DB: w.maild, Kind: dbx.SQLite, Keys: MaildKeys, MailboxRoot: w.root},
-		{Name: "platform", DB: w.platform, Kind: dbx.SQLite, Keys: PlatformKeys},
+		{Name: "auth", DB: w.auth.DB(), Kind: dbx.SQLite, Keys: AuthKeys, CoreAny: []string{"users"}},
+		{Name: "maild", DB: w.maild, Kind: dbx.SQLite, Keys: MaildKeys, MailboxRoot: w.root, CoreAny: []string{"email_aliases"}},
+		{Name: "platform", DB: w.platform, Kind: dbx.SQLite, Keys: PlatformKeys, CoreAny: []string{"events"}},
 	}
 }
 
@@ -116,6 +125,12 @@ func rowsFor(t *testing.T, db *sql.DB, q string, a ...any) int {
 }
 
 func (w *world) footprint(id string) []int {
+	dirs := 0
+	for _, d := range mailDirs(w.root, id) {
+		if _, err := os.Lstat(d); err == nil {
+			dirs++
+		}
+	}
 	return []int{
 		rowsFor(w.t, w.auth.DB(), `SELECT COUNT(*) FROM users WHERE id = ?`, id),
 		rowsFor(w.t, w.auth.DB(), `SELECT COUNT(*) FROM credentials WHERE user_id = ?`, id),
@@ -124,10 +139,14 @@ func (w *world) footprint(id string) []int {
 		rowsFor(w.t, w.maild, `SELECT COUNT(*) FROM email_aliases WHERE target_id = ?`, id),
 		rowsFor(w.t, w.maild, `SELECT COUNT(*) FROM digest_subscriptions WHERE owner_id = ?`, id),
 		rowsFor(w.t, w.platform, `SELECT COUNT(*) FROM events WHERE owner_id = ?`, id),
+		dirs,
 	}
 }
 
 func equal(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
 	for i := range a {
 		if a[i] != b[i] {
 			return false
@@ -136,10 +155,13 @@ func equal(a, b []int) bool {
 	return true
 }
 
+var whole = []int{1, 1, 1, 1, 1, 1, 0, 2}
+var gone = []int{0, 0, 0, 0, 0, 0, 0, 0}
+
 func TestDryRunChangesNothingAndCountsExactly(t *testing.T) {
 	w := newWorld(t)
 	before := map[string][]int{}
-	for _, id := range []string{"proved", "goes", "computer", "rooted", "platformed", auth.BootstrapAdminAPIKeyUserID} {
+	for _, id := range []string{"proved", "goes", "computer", "rooted", "platformed", "ledgered", auth.BootstrapAdminAPIKeyUserID} {
 		before[id] = w.footprint(id)
 	}
 	plan, err := BuildPlan(context.Background(), w.auth.DB(), w.owner, w.services())
@@ -153,18 +175,35 @@ func TestDryRunChangesNothingAndCountsExactly(t *testing.T) {
 	for _, r := range plan.Refused {
 		reasons[r.IDHash] = r.Reason
 	}
-	for id, want := range map[string]string{"computer": "computer", "rooted": "owner key", auth.BootstrapAdminAPIKeyUserID: "bootstrap", "platformed": "events"} {
+	for id, want := range map[string]string{"computer": "computer", "rooted": "owner key", auth.BootstrapAdminAPIKeyUserID: "bootstrap", "platformed": "events", "ledgered": "computer_version_route_slots"} {
 		if !strings.Contains(reasons[Hash(id)], want) {
 			t.Errorf("%s refused as %q, want it to mention %q", id, reasons[Hash(id)], want)
 		}
 	}
-	if plan.Mailboxes != 1 {
-		t.Errorf("mailbox directories = %d, want 1", plan.Mailboxes)
+	if plan.Mailboxes != 2 {
+		t.Errorf("mail directories = %d, want 2 (mailbox and outbound attachments)", plan.Mailboxes)
 	}
-	want := map[string]int64{"auth.users.id": 1, "auth.credentials.user_id": 1, "auth.refresh_sessions.user_id": 1, "auth.registration_waitlist.email": 1, "maild.email_owner_addresses.owner_id": 1, "maild.email_aliases.target_id": 1, "maild.digest_subscriptions.owner_id": 1, "platform.events.owner_id": 0}
+	// The exact expected list: a table missing from the plan fails here, not silently.
+	want := map[string]int64{
+		"auth.credentials.user_id": 1, "auth.refresh_sessions.user_id": 1, "auth.challenge_state.user_id": 0, "auth.api_keys.user_id": 0,
+		"auth.pending_registrations.email": 0, "auth.registration_waitlist.email": 1, "auth.users.id": 1, "auth.account_set (repaired)": 0,
+		"maild.email_owner_addresses.owner_id": 1, "maild.email_aliases.target_id": 1, "maild.digest_subscriptions.owner_id": 1,
+		"platform.events.owner_id": 0, "platform.computer_version_route_slots.route_slot_id": 0,
+	}
+	seen := map[string]bool{}
 	for _, c := range plan.Counts {
-		if n, ok := want[c.Service+"."+c.Table+"."+c.Column]; ok && c.Rows != n {
-			t.Errorf("%s.%s.%s = %d rows, want %d", c.Service, c.Table, c.Column, c.Rows, n)
+		k := c.Service + "." + c.Table + "." + c.Column
+		if c.Table == "account_set" {
+			k = "auth.account_set (repaired)"
+		}
+		seen[k] = true
+		if n, ok := want[k]; ok && c.Rows != n {
+			t.Errorf("%s = %d rows, want %d", k, c.Rows, n)
+		}
+	}
+	for k := range want {
+		if !seen[k] {
+			t.Errorf("the plan lists no %s", k)
 		}
 	}
 	for id, b := range before {
@@ -172,92 +211,283 @@ func TestDryRunChangesNothingAndCountsExactly(t *testing.T) {
 			t.Errorf("the dry run changed %s", id)
 		}
 	}
-	if plan.Digest != Digest([]string{"goes"}) {
-		t.Errorf("digest = %s", plan.Digest)
-	}
 }
 
 func TestRealRunNeedsTheDigestAndDeletesOnlyTheListed(t *testing.T) {
 	w := newWorld(t)
 	ctx := context.Background()
 	keep := map[string][]int{}
-	for _, id := range []string{"proved", "computer", "rooted", "platformed", auth.BootstrapAdminAPIKeyUserID} {
+	for _, id := range []string{"proved", "computer", "rooted", "platformed", "ledgered", auth.BootstrapAdminAPIKeyUserID} {
 		keep[id] = w.footprint(id)
 	}
-	// No digest, a wrong digest: nothing goes.
 	for _, d := range []string{"", "deadbeef"} {
 		if _, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), d); err == nil {
 			t.Fatalf("a run with digest %q was accepted", d)
 		}
 	}
-	if got := w.footprint("goes"); !equal(got, []int{1, 1, 1, 1, 1, 1, 0}) {
+	if got := w.footprint("goes"); !equal(got, whole) {
 		t.Fatalf("a refused run changed the account: %v", got)
 	}
 	plan, err := BuildPlan(ctx, w.auth.DB(), w.owner, w.services())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), plan.Digest); err != nil {
+	res, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), plan.Digest)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := w.footprint("goes"); !equal(got, []int{0, 0, 0, 0, 0, 0, 0}) {
-		t.Fatalf("the purged account left rows behind: %v", got)
+	if len(res.Services) != 3 || !res.Services[len(res.Services)-1].Committed || res.Services[len(res.Services)-1].Name != "auth" {
+		t.Fatalf("services = %+v, want maild and platform, then auth last, all committed", res.Services)
+	}
+	if got := w.footprint("goes"); !equal(got, gone) {
+		t.Fatalf("the purged account left rows or directories behind: %v", got)
 	}
 	if rowsFor(t, w.auth.DB(), `SELECT COUNT(*) FROM registration_waitlist WHERE email = 'goes@example.com'`) != 0 || rowsFor(t, w.auth.DB(), `SELECT COUNT(*) FROM registration_waitlist WHERE email = 'other@example.com'`) != 1 {
 		t.Fatal("the waitlist entry of the purged address went, or another's did not stay")
-	}
-	if _, err := os.Stat(filepath.Join(w.root, "users", "goes")); !os.IsNotExist(err) {
-		t.Fatal("the mailbox directory of the purged account is still there")
 	}
 	for id, b := range keep {
 		if !equal(b, w.footprint(id)) {
 			t.Errorf("%s was touched: %v, then %v", id, b, w.footprint(id))
 		}
-		if _, err := os.Stat(filepath.Join(w.root, "users", id)); err != nil {
-			t.Errorf("the mailbox of %s is gone", id)
+	}
+}
+
+// The seat's scenario: an account proves between the plan and the lock. Nothing of it may be deleted, in any
+// service, and the answer says so.
+func TestAnAccountProvedAfterThePlanLosesNothingInAnyService(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	plan, err := BuildPlan(ctx, w.auth.DB(), w.owner, w.services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterPlanHook = func() {
+		exec(t, w.auth.DB(), `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP WHERE id = 'goes'`)
+	}
+	t.Cleanup(func() { afterPlanHook = nil })
+	res, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), plan.Digest)
+	if !errors.Is(err, ErrChanged) {
+		t.Fatalf("err = %v, want ErrChanged", err)
+	}
+	if got := w.footprint("goes"); !equal(got, whole) {
+		t.Fatalf("an account that proved itself lost rows or directories (maild committed before auth checked?): %v", got)
+	}
+	for _, s := range res.Services {
+		if s.Committed {
+			t.Fatalf("service %s committed before the check", s.Name)
 		}
 	}
-	if rowsFor(t, w.auth.DB(), `SELECT COUNT(*) FROM users WHERE id = 'proved'`) != 1 {
-		t.Fatal("the proved account is gone")
+}
+
+// A passkey added after the plan is a change too, though the address is still unproved.
+func TestAnAccountThatChangedAfterThePlanIsNotDeleted(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	plan, _ := BuildPlan(ctx, w.auth.DB(), w.owner, w.services())
+	afterPlanHook = func() {
+		exec(t, w.auth.DB(), `INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) VALUES ('c2', 'goes', x'01', 'none', '[]', 0, x'00', '{}', '', CURRENT_TIMESTAMP)`)
+	}
+	t.Cleanup(func() { afterPlanHook = nil })
+	if _, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), plan.Digest); !errors.Is(err, ErrChanged) {
+		t.Fatalf("err = %v, want ErrChanged", err)
+	}
+	if got := w.footprint("goes"); got[3] != 1 || got[7] != 2 {
+		t.Fatalf("the account lost mail rows or directories: %v", got)
 	}
 }
 
-// A table keyed by a user that the registry does not name stops the run: it is never a table left behind.
+// A table keyed by a user that the registry does not name stops the run, by name and by suffix.
 func TestAnUnregisteredUserKeyedTableStopsTheRun(t *testing.T) {
-	w := newWorld(t)
-	exec(t, w.platform, `CREATE TABLE brand_new_things (id text primary key, owner_id text not null)`)
-	if _, err := BuildPlan(context.Background(), w.auth.DB(), w.owner, w.services()); !errors.Is(err, ErrUnregistered) || !strings.Contains(err.Error(), "brand_new_things.owner_id") {
-		t.Fatalf("dry run err = %v", err)
-	}
-	if _, err := Apply(context.Background(), w.auth.DB(), w.owner, w.services(), Digest([]string{"goes"})); !errors.Is(err, ErrUnregistered) {
-		t.Fatalf("real run err = %v", err)
-	}
-	if got := w.footprint("goes"); !equal(got, []int{1, 1, 1, 1, 1, 1, 0}) {
-		t.Fatalf("a stopped run changed the account: %v", got)
+	for _, col := range []string{"owner_id", "source_owner_id", "submitter_id", "target_owner_id", "requested_by", "account_id", "mailbox_owner_id"} {
+		w := newWorld(t)
+		exec(t, w.platform, fmt.Sprintf(`CREATE TABLE brand_new_things (id text primary key, %s text not null)`, col))
+		if _, err := BuildPlan(context.Background(), w.auth.DB(), w.owner, w.services()); !errors.Is(err, ErrUnregistered) || !strings.Contains(err.Error(), "brand_new_things."+col) {
+			t.Fatalf("%s: dry run err = %v", col, err)
+		}
+		if _, err := Apply(context.Background(), w.auth.DB(), w.owner, w.services(), Digest([]string{"goes"})); !errors.Is(err, ErrUnregistered) {
+			t.Fatalf("%s: real run err = %v", col, err)
+		}
+		if got := w.footprint("goes"); !equal(got, whole) {
+			t.Fatalf("%s: a stopped run changed the account: %v", col, got)
+		}
 	}
 }
 
-// An account proved between the dry run and the real run is no longer on the list, so the digest is no longer right.
-func TestAnAccountProvedBetweenTheRunsIsNotDeleted(t *testing.T) {
+// The composite route slot "computer:<owner>:<computer>" refuses the owner; so do the tables the first list missed.
+func TestRouteLedgerProposalAndUnwrapRowsRefuseTheAccount(t *testing.T) {
 	w := newWorld(t)
+	exec(t, w.platform, `CREATE TABLE publication_version_proposals (id text primary key, source_owner_id text, submitter_id text)`)
+	exec(t, w.platform, `CREATE TABLE proposal_delivery_records (id text primary key, target_owner_id text)`)
+	exec(t, w.platform, `CREATE TABLE computer_key_unwrap_requests (request_id text primary key, requested_by text)`)
+	exec(t, w.platform, `INSERT INTO publication_version_proposals VALUES ('p1', 'someone', 'goes')`)
 	plan, err := BuildPlan(context.Background(), w.auth.DB(), w.owner, w.services())
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec(t, w.auth.DB(), `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP WHERE id = 'goes'`)
-	if _, err := Apply(context.Background(), w.auth.DB(), w.owner, w.services(), plan.Digest); err == nil {
-		t.Fatal("the run went ahead on a list that had changed")
+	for _, c := range plan.Purge {
+		if c.ID == "goes" {
+			t.Fatal("an account that submitted a proposal was listed for purge")
+		}
 	}
-	if got := w.footprint("goes"); !equal(got, []int{1, 1, 1, 1, 1, 1, 0}) {
-		t.Fatalf("the account that was proved lost rows: %v", got)
+}
+
+// An address a surviving account holds in another case is that account's: its recovery links, pending sign-up and waitlist entry stay.
+func TestACaseVariantOfAKeptAddressIsLeftAlone(t *testing.T) {
+	w := newWorld(t)
+	// "proved@example.com" is the kept account's; an unproved account holds "Proved@Example.com".
+	exec(t, w.auth.DB(), `INSERT INTO users (id, email, created_at) VALUES ('variant', 'Proved@Example.com', CURRENT_TIMESTAMP)`)
+	exec(t, w.auth.DB(), `INSERT INTO registration_waitlist (email, created_at, last_seen_at) VALUES ('proved@example.com', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+	exec(t, w.auth.DB(), `INSERT INTO pending_registrations (challenge, email, user_id, session_data, created_at, expires_at) VALUES ('ch', 'proved@example.com', 'proved', '{}', CURRENT_TIMESTAMP, datetime('now', '+5 minutes'))`)
+	ctx := context.Background()
+	plan, err := BuildPlan(ctx, w.auth.DB(), w.owner, w.services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var variant bool
+	for _, c := range plan.Purge {
+		variant = variant || c.ID == "variant"
+	}
+	if !variant {
+		t.Fatal("the unproved case variant was not planned for purge")
+	}
+	if _, err := Apply(ctx, w.auth.DB(), w.owner, w.services(), plan.Digest); err != nil {
+		t.Fatal(err)
+	}
+	if rowsFor(t, w.auth.DB(), `SELECT COUNT(*) FROM registration_waitlist WHERE email = 'proved@example.com'`) != 1 {
+		t.Fatal("the waitlist entry of the kept account's address went with a case variant")
+	}
+	if rowsFor(t, w.auth.DB(), `SELECT COUNT(*) FROM pending_registrations WHERE challenge = 'ch'`) != 1 {
+		t.Fatal("a pending sign-up of the kept account went with a case variant")
+	}
+}
+
+func TestUnsafeIdsAreRefusedAndNeverReachAPath(t *testing.T) {
+	for _, id := range []string{"", ".", "..", "../x", "a/b", `a\b`, ".hidden", "a b", "x;y", strings.Repeat("a", 200)} {
+		if SafeID(id) {
+			t.Errorf("%q was taken for a safe id", id)
+		}
+	}
+	for _, id := range []string{"3f2a9c1e-0b7d-4a55-9d3e-1c2b3a4d5e6f", "u_1", "choir-bootstrap-admin"} {
+		if !SafeID(id) {
+			t.Errorf("%q was refused", id)
+		}
+	}
+	w := newWorld(t)
+	for _, bad := range []string{"..", ".", "", "../../etc"} {
+		exec(t, w.auth.DB(), `PRAGMA foreign_keys = OFF`)
+		exec(t, w.auth.DB(), `INSERT INTO users (id, email, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, bad, "bad"+fmt.Sprint(len(bad))+"@example.com")
+	}
+	plan, err := BuildPlan(context.Background(), w.auth.DB(), w.owner, w.services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range plan.Purge {
+		if !SafeID(c.ID) {
+			t.Fatalf("an unsafe id %q is on the purge list", c.ID)
+		}
+	}
+	if _, err := Apply(context.Background(), w.auth.DB(), w.owner, w.services(), plan.Digest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(w.root, "users")); err != nil {
+		t.Fatal("the users directory of the mail root is gone")
+	}
+	if got := w.footprint("proved"); !equal(got, whole) {
+		t.Fatalf("a kept mailbox was removed: %v", got)
+	}
+}
+
+func TestASymlinkedMailRootIsRefused(t *testing.T) {
+	w := newWorld(t)
+	target := t.TempDir()
+	if err := os.RemoveAll(filepath.Join(w.root, "users")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(w.root, "users")); err != nil {
+		t.Skip("no symlinks here")
+	}
+	plan, err := BuildPlan(context.Background(), w.auth.DB(), w.owner, w.services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(context.Background(), w.auth.DB(), w.owner, w.services(), plan.Digest); err == nil {
+		t.Fatal("the run went ahead with users/ a symlink")
+	}
+	if rowsFor(t, w.auth.DB(), `SELECT COUNT(*) FROM users WHERE id = 'goes'`) != 1 {
+		t.Fatal("an account was deleted although the mail root was refused")
+	}
+}
+
+// A browser's account set shared with a kept account stays whole: the kept member becomes the active one; an empty set goes.
+func TestAnAccountSetIsRepairedNotLeftWithoutAnActiveMember(t *testing.T) {
+	w := newWorld(t)
+	db := w.auth.DB()
+	exec(t, db, `INSERT INTO account_set (id, handle_hash, active_user_id, created_at, last_used_at) VALUES ('s1', 'h1', 'goes', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), ('s2', 'h2', 'goes', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+	exec(t, db, `INSERT INTO account_set_member (set_id, user_id, refresh_session_id, added_at) VALUES ('s1', 'proved', 'rs-proved', CURRENT_TIMESTAMP), ('s1', 'goes', 'rs-goes', datetime('now', '+1 minute')), ('s2', 'goes', 'rs-goes', CURRENT_TIMESTAMP)`)
+	plan, err := BuildPlan(context.Background(), db, w.owner, w.services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(context.Background(), db, w.owner, w.services(), plan.Digest); err != nil {
+		t.Fatal(err)
+	}
+	var active string
+	if err := db.QueryRow(`SELECT active_user_id FROM account_set WHERE id = 's1'`).Scan(&active); err != nil || active != "proved" {
+		t.Fatalf("the shared set's active member = %q (%v), want the kept account", active, err)
+	}
+	if rowsFor(t, db, `SELECT COUNT(*) FROM account_set WHERE id = 's2'`) != 0 {
+		t.Fatal("a set left with no member was kept")
 	}
 }
 
 // vmctl being unreachable is not "owns nothing".
-func TestWithoutTheComputerOwnersNothingIsPlanned(t *testing.T) {
+func TestWithoutTheComputerOwnersNothingIsPlannedOrApplied(t *testing.T) {
 	w := newWorld(t)
-	_, err := BuildPlan(context.Background(), w.auth.DB(), func(context.Context) (map[string]bool, error) { return nil, errors.New("vmctl down") }, w.services())
-	if err == nil {
+	down := func(context.Context) (map[string]bool, error) { return nil, errors.New("vmctl down") }
+	if _, err := BuildPlan(context.Background(), w.auth.DB(), down, w.services()); err == nil {
 		t.Fatal("a plan was made without knowing who owns a computer")
+	}
+	if _, err := Apply(context.Background(), w.auth.DB(), down, w.services(), Digest([]string{"goes"})); err == nil {
+		t.Fatal("a run was applied without knowing who owns a computer")
+	}
+	if got := w.footprint("goes"); !equal(got, whole) {
+		t.Fatalf("a refused run changed the account: %v", got)
+	}
+}
+
+// A database that is not the one it is named for (a mistyped path makes an empty file) is not a service.
+func TestAnEmptyDatabaseIsNotAService(t *testing.T) {
+	w := newWorld(t)
+	empty := openSQLite(t, filepath.Join(t.TempDir(), "typo.db"))
+	svcs := w.services()
+	svcs[1].DB = empty
+	if _, err := BuildPlan(context.Background(), w.auth.DB(), w.owner, svcs); !errors.Is(err, ErrIncomplete) {
+		t.Fatalf("err = %v, want ErrIncomplete", err)
+	}
+}
+
+// More ids than one statement holds: the chunks are all deleted.
+func TestManyAccountsAreAllDeleted(t *testing.T) {
+	w := newWorld(t)
+	for i := 0; i < 950; i++ {
+		id := fmt.Sprintf("bulk-%d", i)
+		exec(t, w.auth.DB(), `INSERT INTO users (id, email, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)`, id, id+"@example.com")
+		exec(t, w.maild, `INSERT INTO email_owner_addresses (id, owner_id) VALUES (?, ?)`, "a-"+id, id)
+	}
+	plan, err := BuildPlan(context.Background(), w.auth.DB(), w.owner, w.services())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Purge) != 951 {
+		t.Fatalf("planned %d, want 951", len(plan.Purge))
+	}
+	if _, err := Apply(context.Background(), w.auth.DB(), w.owner, w.services(), plan.Digest); err != nil {
+		t.Fatal(err)
+	}
+	if n := rowsFor(t, w.maild, `SELECT COUNT(*) FROM email_owner_addresses WHERE owner_id LIKE 'bulk-%'`); n != 0 {
+		t.Fatalf("%d bulk rows left", n)
+	}
+	if n := rowsFor(t, w.auth.DB(), `SELECT COUNT(*) FROM users WHERE id LIKE 'bulk-%'`); n != 0 {
+		t.Fatalf("%d bulk users left", n)
 	}
 }
