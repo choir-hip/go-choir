@@ -25,9 +25,13 @@ demo-account credential --user <a user name, for example "reviewer"> --out /var/
 
 It prints the 32-character password once and writes the file (mode 0600: the user name, then an argon2id hash). Copy the password into Apple's form; it is not stored anywhere else. The auth service reads the file on every attempt, so there is nothing to restart. **To rotate**, run the same command again: the old password stops working at once, and keys already issued keep working until they expire or `reset` revokes them.
 
-## Turn it off
+## Turn it off (one step)
 
-`rm /var/lib/go-choir/auth-signing/demo-credential`. The route answers "not available" at once. The account stays protected from deletion as long as `demo-account-id` stays. To forget the account entirely, remove that file too.
+```
+demo-account off --id-file /var/lib/go-choir/auth-signing/demo-account-id --out /var/lib/go-choir/auth-signing/demo-credential
+```
+
+Removes the credential file (the route answers "not available" at once), then revokes every key and session the account holds, so a reviewer's phone is out at once and not after the 30 days. The id file stays, so the account stays protected from deletion; remove it too to forget the account. The computer is left as it is (`reset` removes it). Run as root on Node B. `rm` of the credential file alone stops new sign-ins but leaves issued keys working until they expire.
 
 ## Before each review: reset
 

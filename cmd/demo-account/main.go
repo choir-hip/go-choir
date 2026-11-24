@@ -9,6 +9,13 @@
 //	    service reads the file on every attempt, so the old password stops
 //	    working at once. Removing the file turns the reviewer sign-in off.
 //
+//	demo-account off --id-file PATH --out CREDENTIAL_PATH [--auth-db PATH]
+//	    The owner's one step to turn the account off: removes the credential
+//	    file (no new sign-in) first, then revokes every key and session the
+//	    account holds (no phone stays in). It keeps the id file, so the
+//	    account stays protected, and leaves the computer alone (reset removes
+//	    it). Idempotent.
+//
 //	demo-account reset --id-file PATH [--auth-db PATH] [--vmctl URL]
 //	    Returns the account to empty before a review: revokes every key and
 //	    every session the account holds (each reviewer phone is signed out),
@@ -25,6 +32,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -60,7 +68,7 @@ func newPassword() (string, error) {
 
 func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: demo-account credential|reset ...")
+		fmt.Fprintln(stderr, "usage: demo-account credential|off|reset ...")
 		return 2
 	}
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
@@ -92,24 +100,36 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 		}
 		fmt.Fprintln(stdout, pw)
 		return 0
+	case "off":
+		id, err := readID(*idFile)
+		if err != nil || *out == "" {
+			fmt.Fprintln(stderr, "off needs --id-file (readable) and --out (the credential file)")
+			return 2
+		}
+		// Sign-in first: nothing new can come in while the keys are revoked.
+		if err := os.Remove(*out); err != nil && !os.IsNotExist(err) {
+			fmt.Fprintln(stderr, "off: remove credential:", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "credential file removed: the reviewer sign-in answers not available")
+		keys, sessions, err := revokeAll(*authDB, id)
+		if err != nil {
+			fmt.Fprintln(stderr, "off:", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "revoked %d keys and %d sessions\n", keys, sessions)
+		return 0
 	case "reset":
 		if *idFile == "" {
 			fmt.Fprintln(stderr, "reset needs --id-file")
 			return 2
 		}
-		raw, err := os.ReadFile(*idFile)
-		id := strings.TrimSpace(strings.SplitN(string(raw), "\n", 2)[0])
-		if err != nil || id == "" {
+		id, err := readID(*idFile)
+		if err != nil {
 			fmt.Fprintln(stderr, "reset: cannot read the account id file")
 			return 1
 		}
-		store, err := auth.OpenStore(*authDB)
-		if err != nil {
-			fmt.Fprintln(stderr, "reset: open auth db:", err)
-			return 1
-		}
-		defer func() { _ = store.Close() }()
-		keys, sessions, err := auth.ResetDemoAccess(context.Background(), store, id)
+		keys, sessions, err := revokeAll(*authDB, id)
 		if err != nil {
 			fmt.Fprintln(stderr, "reset:", err)
 			return 1
@@ -125,6 +145,24 @@ func run(args []string, stdout, stderr io.Writer, client *http.Client) int {
 	}
 	fmt.Fprintln(stderr, "unknown command", args[0])
 	return 2
+}
+
+func readID(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	id := strings.TrimSpace(strings.SplitN(string(raw), "\n", 2)[0])
+	if err != nil || id == "" {
+		return "", errors.New("no account id")
+	}
+	return id, nil
+}
+
+func revokeAll(authDB, id string) (int, int, error) {
+	store, err := auth.OpenStore(authDB)
+	if err != nil {
+		return 0, 0, fmt.Errorf("open auth db: %w", err)
+	}
+	defer func() { _ = store.Close() }()
+	return auth.ResetDemoAccess(context.Background(), store, id)
 }
 
 func writeAtomic(path string, data []byte) error {

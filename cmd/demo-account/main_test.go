@@ -95,3 +95,66 @@ func mustKeys(t *testing.T, s *auth.Store, id string) []auth.APIKey {
 	}
 	return k
 }
+
+// One step turns the reviewer account off: the credential file goes (no new
+// sign-in) and every key and session the account holds is revoked (no phone
+// stays in). It touches the one account in the id file, never its computer,
+// and never another account.
+func TestOffRemovesTheCredentialAndRevokesEveryKeyOfTheDemoAccountOnly(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "auth.db")
+	store, err := auth.OpenStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := store.CreateUser("demo-uid", "throwaway@example.invalid")
+	o, _ := store.CreateUser("other-uid", "other@example.invalid")
+	ctx := context.Background()
+	_, _, _ = store.CreateAPIKey(ctx, u.ID, "a", []string{"read:runtime"}, nil)
+	otherKey, _, _ := store.CreateAPIKey(ctx, o.ID, "c", []string{"read:runtime"}, nil)
+	_ = store.Close()
+	idFile := filepath.Join(dir, "id")
+	credFile := filepath.Join(dir, "cred")
+	_ = os.WriteFile(idFile, []byte(u.ID+"\n"), 0o600)
+	_ = os.WriteFile(credFile, []byte("x\n"), 0o600)
+
+	var so, se bytes.Buffer
+	if code := run([]string{"off", "--id-file", idFile, "--out", credFile, "--auth-db", dbPath}, &so, &se, nil); code != 0 {
+		t.Fatalf("%d %s", code, se.String())
+	}
+	if _, err := os.Stat(credFile); !os.IsNotExist(err) {
+		t.Fatal("the credential file is still there")
+	}
+	if _, err := os.Stat(idFile); err != nil {
+		t.Fatal("the id file must stay: the account stays protected")
+	}
+	store, _ = auth.OpenStore(dbPath)
+	defer func() { _ = store.Close() }()
+	for _, k := range mustKeys(t, store, u.ID) {
+		if k.RevokedAt == nil {
+			t.Fatal("a demo key survived")
+		}
+	}
+	for _, k := range mustKeys(t, store, o.ID) {
+		if k.ID == otherKey && k.RevokedAt != nil {
+			t.Fatal("another account's key was revoked")
+		}
+	}
+	// Idempotent: a second run, with the file already gone, still succeeds.
+	if code := run([]string{"off", "--id-file", idFile, "--out", credFile, "--auth-db", dbPath}, &so, &se, nil); code != 0 {
+		t.Fatalf("second run %d %s", code, se.String())
+	}
+}
+
+func TestOffWithoutAnIdFileRefusesAndLeavesTheCredential(t *testing.T) {
+	dir := t.TempDir()
+	credFile := filepath.Join(dir, "cred")
+	_ = os.WriteFile(credFile, []byte("x\n"), 0o600)
+	var so, se bytes.Buffer
+	if code := run([]string{"off", "--id-file", filepath.Join(dir, "missing"), "--out", credFile}, &so, &se, nil); code == 0 {
+		t.Fatal("off ran without an account id")
+	}
+	if _, err := os.Stat(credFile); err != nil {
+		t.Fatal("the credential was removed although the keys could not be")
+	}
+}
