@@ -101,6 +101,11 @@ internal/maildesk/
 # (internal/mirrorgrant, written by vmmanager's capsule_mirrors.go) is not listed.
 host:internal/vmctl/
 host:internal/gateway/
+# purgeguard is the one rule every destructive step of an account deletion
+# asks (72 hours after a deletion record; the paper's and the owner's computer
+# are never touched); vmctl, corpusd, maild, the gateway and the retention
+# sweeper link it, so a change to it changes what they will destroy.
+host:internal/purgeguard/
 host:internal/maild/api.go
 host:internal/proxy/guest_authority.go
 host:internal/proxy/guest_feeds.go
