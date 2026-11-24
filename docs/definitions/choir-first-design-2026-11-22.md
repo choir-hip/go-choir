@@ -189,6 +189,10 @@ boundaries:
   - decision: the corpus in the REPL is for research as well as the capture desk, and is overdue
     said: the corpus in the repl is important for capture desk and research too. im surprised we haven done that yet
     'on': '2026-11-24'
+  - decision: some concurrency limits may be required, because providers rate-limit and because of system resource pressure; what they are is learned, not chosen by us in advance
+    said: some concurrency limits may be required otherwise we get rate limited by providers. and may cause system resource pressure. but thats something we should learn
+    'on': '2026-11-24'
+    reading: 'lead''s reading: this fits the delivery rule, which keeps backing off after a provider''s real refusal. A bound on concurrency is allowed when it is derived from observed evidence (a provider''s refusals, measured memory or load) and moves with that evidence, with the evidence logged; a constant picked by us, like the 1.5 second spacer, is not. The fixed spacer is still removed'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
