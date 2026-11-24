@@ -1250,12 +1250,15 @@ func hashDesktopExchangeCode(code string) string {
 
 // CreateDesktopExchangeCode inserts a new one-time exchange code.
 func (s *Store) CreateDesktopExchangeCode(c *DesktopExchangeCode) error {
-	_, err := s.db.Exec(
-		"INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at, auth_method, not_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		hashDesktopExchangeCode(c.Code), c.UserID, "", "", c.CreatedAt, c.ExpiresAt, normalizeAuthMethod(c.AuthMethod), c.NotAfter,
+	res, err := s.db.Exec(
+		"INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at, auth_method, not_after) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id = ? AND "+liveDeletion+")",
+		hashDesktopExchangeCode(c.Code), c.UserID, "", "", c.CreatedAt, c.ExpiresAt, normalizeAuthMethod(c.AuthMethod), c.NotAfter, c.UserID,
 	)
 	if err != nil {
 		return fmt.Errorf("create desktop exchange code: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrDeletionPending
 	}
 	return nil
 }

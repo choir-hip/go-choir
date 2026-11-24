@@ -387,3 +387,69 @@ func TestTheReviewerAccountCannotBeDeleted(t *testing.T) { // V8
 var _ = strings.Contains
 var _ = protocol.VerificationRequired
 
+// Round 2 (seat 2 F4, seat 1 #6 and #10): the routes a copied access cookie
+// could still reach inside its five minutes, the email sign-in that told a
+// pending account's state, and the two inserts that did not check the record.
+func TestAStaleAccessCookieOfADeletedAccountReachesNoPasskeySessionRoute(t *testing.T) { // F4
+	e := newDelEnv(t, "r2a")
+	cookies := e.cookies(t, AuthMethodPasskey)
+	req := httptest.NewRequest(http.MethodDelete, "/auth/credentials/x", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	if u := e.h.requirePasskeySession(httptest.NewRecorder(), req); u == nil {
+		t.Fatal("control: a live passkey session is refused")
+	}
+	if _, _, err := e.h.store.RequestAccountDeletion(e.user.ID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	if u := e.h.requirePasskeySession(rec, req); u != nil || rec.Code != http.StatusUnauthorized {
+		t.Fatalf("a cookie copied before the request still passes the passkey-session gate: %d", rec.Code)
+	}
+}
+
+func TestEmailSignInIsNotOfferedToAPendingAccount(t *testing.T) { // seat 1 #6
+	e := newDelEnv(t, "r2b")
+	if err := e.h.store.SetEmailVerified(e.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if e.h.lookupEligibleSignInUser(e.user.Email) == nil {
+		t.Fatal("control: an eligible account is not eligible")
+	}
+	if _, _, err := e.h.store.RequestAccountDeletion(e.user.ID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if e.h.lookupEligibleSignInUser(e.user.Email) != nil {
+		t.Fatal("a pending account is sent an email sign-in code, and the verify answer would tell its state")
+	}
+}
+
+func TestNoExchangeCodeOrDeviceKeyIsWrittenForAPendingAccount(t *testing.T) { // seat 1 #10
+	e := newDelEnv(t, "r2c")
+	if _, _, err := e.h.store.RequestAccountDeletion(e.user.ID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := e.h.store.CreateDesktopExchangeCode(&DesktopExchangeCode{Code: "code-late", UserID: e.user.ID, CreatedAt: now, ExpiresAt: now.Add(time.Minute), AuthMethod: AuthMethodPasskey}); !errors.Is(err, ErrDeletionPending) {
+		t.Fatalf("exchange code: %v", err)
+	}
+	// A device authorization approved for the account after the request (a
+	// late writer): the poll collects no key.
+	if _, err := e.h.store.db.Exec(`INSERT INTO device_authorizations (id, device_code_hash, user_code_hash, label, user_agent_summary, place_summary, ip_hash, created_at, expires_at, status, user_id, decided_at) VALUES ('dev1','dch','uch','late','','','iph',?,?,?,?,?)`,
+		now, now.Add(time.Hour), DeviceStatusApproved, e.user.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.h.store.PollDeviceAuthorization(context.Background(), "dch", []string{"read:runtime"}, 0, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Secret != "" || res.KeyID != "" {
+		t.Fatalf("a key was handed to a pending account: %+v", res)
+	}
+	var n int
+	_ = e.h.store.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE user_id = ? AND revoked_at IS NULL`, e.user.ID).Scan(&n)
+	if n != 0 {
+		t.Fatalf("%d live keys for a pending account", n)
+	}
+}

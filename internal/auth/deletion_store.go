@@ -29,6 +29,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,6 +47,8 @@ CREATE TABLE IF NOT EXISTS account_deletions (
 	purge_after          DATETIME NOT NULL,
 	computers            TEXT NOT NULL DEFAULT '[]',
 	vm_ids               TEXT NOT NULL DEFAULT '[]',
+	destroy_computers    TEXT NOT NULL DEFAULT '[]',
+	destroy_vm_ids       TEXT NOT NULL DEFAULT '[]',
 	steps                TEXT NOT NULL DEFAULT '{}',
 	cancel_token_hash    TEXT NOT NULL DEFAULT '',
 	cancel_token_expires DATETIME,
@@ -110,20 +113,28 @@ type DeletionStep struct {
 
 // AccountDeletion is the job row.
 type AccountDeletion struct {
-	UserID       string
-	JobID        string
-	State        string
-	RequestedAt  time.Time
-	PurgeAfter   time.Time
-	Computers    []string
+	UserID      string
+	JobID       string
+	State       string
+	RequestedAt time.Time
+	PurgeAfter  time.Time
+	Computers   []string
 	// VMIDs are the VM ids of those computers: the gateway keys a credential by
 	// the VM it authenticates, not by the product computer.
-	VMIDs        []string
-	Steps        map[string]DeletionStep
-	AttemptStart *time.Time
-	Attempts     int
-	LastError    string
-	UpdatedAt    time.Time
+	VMIDs []string
+	// DestroyComputers and DestroyVMIDs are the computers (and their VM ids)
+	// the purge acts on: the ones vmctl listed as the account's own when the
+	// purge began, plus any it reported destroying. The gateway and the tape
+	// are driven from this set alone, never from Computers (the list at the
+	// time of the request): a computer that left the account inside the 72
+	// hours is not in it, so its gateway bearer and tape are not touched.
+	DestroyComputers []string
+	DestroyVMIDs     []string
+	Steps            map[string]DeletionStep
+	AttemptStart     *time.Time
+	Attempts         int
+	LastError        string
+	UpdatedAt        time.Time
 }
 
 // DeletionReceipt is what remains of a purged account.
@@ -149,13 +160,13 @@ func (s *Store) migrateDeletion() error {
 	return nil
 }
 
-const deletionColumns = `user_id, job_id, state, requested_at, purge_after, computers, vm_ids, steps, attempt_started_at, attempts, last_error, updated_at`
+const deletionColumns = `user_id, job_id, state, requested_at, purge_after, computers, vm_ids, destroy_computers, destroy_vm_ids, steps, attempt_started_at, attempts, last_error, updated_at`
 
 func scanDeletion(row interface{ Scan(...any) error }) (*AccountDeletion, error) {
 	d := &AccountDeletion{}
-	var computers, vmIDs, steps string
+	var computers, vmIDs, destroyComputers, destroyVMIDs, steps string
 	var attempt sql.NullTime
-	if err := row.Scan(&d.UserID, &d.JobID, &d.State, &d.RequestedAt, &d.PurgeAfter, &computers, &vmIDs, &steps, &attempt, &d.Attempts, &d.LastError, &d.UpdatedAt); err != nil {
+	if err := row.Scan(&d.UserID, &d.JobID, &d.State, &d.RequestedAt, &d.PurgeAfter, &computers, &vmIDs, &destroyComputers, &destroyVMIDs, &steps, &attempt, &d.Attempts, &d.LastError, &d.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(computers), &d.Computers); err != nil {
@@ -163,6 +174,12 @@ func scanDeletion(row interface{ Scan(...any) error }) (*AccountDeletion, error)
 	}
 	if err := json.Unmarshal([]byte(vmIDs), &d.VMIDs); err != nil {
 		return nil, fmt.Errorf("deletion vm ids: %w", err)
+	}
+	if err := json.Unmarshal([]byte(destroyComputers), &d.DestroyComputers); err != nil {
+		return nil, fmt.Errorf("deletion destroy computers: %w", err)
+	}
+	if err := json.Unmarshal([]byte(destroyVMIDs), &d.DestroyVMIDs); err != nil {
+		return nil, fmt.Errorf("deletion destroy vm ids: %w", err)
 	}
 	d.Steps = map[string]DeletionStep{}
 	if err := json.Unmarshal([]byte(steps), &d.Steps); err != nil {
@@ -233,7 +250,7 @@ func (s *Store) RequestAccountDeletion(userID string, now time.Time) (*AccountDe
 	d := &AccountDeletion{
 		UserID: userID, JobID: "del-" + uuid.NewString(), State: DeletionPending,
 		RequestedAt: now, PurgeAfter: now.Add(purgeguard.GracePeriod),
-		Computers: []string{}, VMIDs: []string{}, Steps: map[string]DeletionStep{}, UpdatedAt: now,
+		Computers: []string{}, VMIDs: []string{}, DestroyComputers: []string{}, DestroyVMIDs: []string{}, Steps: map[string]DeletionStep{}, UpdatedAt: now,
 	}
 	if _, err := tx.Exec(`INSERT INTO account_deletions (user_id, job_id, state, requested_at, purge_after, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		d.UserID, d.JobID, d.State, d.RequestedAt, d.PurgeAfter, d.UpdatedAt); err != nil {
@@ -515,6 +532,70 @@ func (s *Store) RecordDeletionComputers(userID string, computers, vmIDs []string
 	rawVM, _ := json.Marshal(vmIDs)
 	_, err := s.db.Exec(`UPDATE account_deletions SET computers = ?, vm_ids = ?, updated_at = ? WHERE user_id = ? AND `+liveDeletion, string(raw), string(rawVM), now.UTC(), userID)
 	return err
+}
+
+func unionStrings(a, b []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, id := range append(append([]string{}, a...), b...) {
+		id = strings.TrimSpace(id)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// RecordDeletionDestroySet adds computers (and VM ids) to the set the purge
+// acts on. It only ever grows: a crash between vmctl's destroy and this
+// record leaves the id recorded from before the destroy (the runner records
+// the list first), and a retry never forgets one.
+func (s *Store) RecordDeletionDestroySet(userID string, computers, vmIDs []string, now time.Time) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var rc, rv string
+	if err := tx.QueryRow(`SELECT destroy_computers, destroy_vm_ids FROM account_deletions WHERE user_id = ? AND `+liveDeletion, userID).Scan(&rc, &rv); err != nil {
+		return err
+	}
+	var oc, ov []string
+	_ = json.Unmarshal([]byte(rc), &oc)
+	_ = json.Unmarshal([]byte(rv), &ov)
+	nc, _ := json.Marshal(unionStrings(oc, computers))
+	nv, _ := json.Marshal(unionStrings(ov, vmIDs))
+	if _, err := tx.Exec(`UPDATE account_deletions SET destroy_computers = ?, destroy_vm_ids = ?, updated_at = ? WHERE user_id = ?`, string(nc), string(nv), now.UTC(), userID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ClearDeletionSteps forgets the named steps, so the runner does them again.
+func (s *Store) ClearDeletionSteps(userID string, names ...string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var raw string
+	if err := tx.QueryRow(`SELECT steps FROM account_deletions WHERE user_id = ? AND `+liveDeletion, userID).Scan(&raw); err != nil {
+		return err
+	}
+	steps := map[string]DeletionStep{}
+	if err := json.Unmarshal([]byte(raw), &steps); err != nil {
+		return err
+	}
+	for _, n := range names {
+		delete(steps, n)
+	}
+	out, _ := json.Marshal(steps)
+	if _, err := tx.Exec(`UPDATE account_deletions SET steps = ? WHERE user_id = ?`, string(out), userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // RecordDeletionStep stores one step's result.

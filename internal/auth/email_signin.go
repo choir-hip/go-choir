@@ -343,6 +343,11 @@ func (h *Handler) lookupEligibleSignInUser(trimmed string) *User {
 	if err != nil || user == nil || user.EmailVerifiedAt == nil {
 		return nil
 	}
+	// An account that asked to be deleted is sent no sign-in code or link, and
+	// so tells nobody its state: email begin answers as it does for no account.
+	if h.store.AccountAccessRevoked(user.ID) {
+		return nil
+	}
 	creds, err := h.store.GetCredentialsByUserID(user.ID)
 	if err != nil || len(creds) == 0 {
 		return nil
@@ -677,6 +682,14 @@ func (h *Handler) requirePasskeySession(w http.ResponseWriter, r *http.Request) 
 	}
 	userID, method, err := h.validateAccessTokenMethod(cookie.Value)
 	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return nil
+	}
+	// The access token is signed for five minutes; a deleted account's is
+	// refused from the moment of the request, on these routes too (they would
+	// otherwise let a cookie copied before the request delete the only passkey
+	// that can cancel).
+	if h.store.AccountAccessRevoked(userID) {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return nil
 	}

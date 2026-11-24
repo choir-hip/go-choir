@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/yusefmosiah/go-choir/internal/accountpurge"
@@ -16,6 +18,11 @@ type authRouteRegistrar interface {
 }
 
 func main() {
+	// `auth deletion-restore-check`: after a restore from backup, find the
+	// accounts deleted since (restore_check.go). It does not start the service.
+	if len(os.Args) > 1 && os.Args[1] == "deletion-restore-check" {
+		os.Exit(runDeletionRestoreCheck(os.Args[2:], os.Stdout))
+	}
 	cfg, err := auth.LoadConfig()
 	if err != nil {
 		log.Fatalf("auth config: %v", err)
@@ -74,6 +81,10 @@ func main() {
 	// suspended, and purges after 72 hours. It re-reads the deletion table
 	// every minute; a boot only closes an attempt a crash left open.
 	purge := accountpurge.New(store, accountpurge.NewHost(cfg.VMCTLURL, cfg.CorpusdURL, cfg.MaildURL, cfg.GatewayURL))
+	// The ledger of finished deletions sits beside auth.db, not in it and not in
+	// what the backup copies: after a restore, cmd/deletion-restore-check finds
+	// the accounts that must be deleted again.
+	purge.LedgerPath = filepath.Join(filepath.Dir(cfg.DBPath), "account-deletion-ledger.jsonl")
 	handler.SetDeletionHost(purge)
 	// The reviewer account (lane demo-account) may not be deleted by anyone:
 	// when that lane lands, its Handler.IsDemoAccount goes here, as
