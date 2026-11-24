@@ -251,6 +251,9 @@ type PulseCapacityRoom struct {
 	// does not show yet.
 	Accounts  int    `json:"accounts"`
 	HeldBytes uint64 `json:"held_bytes"`
+	// AccountsAvailable is false when the auth database could not be read:
+	// Accounts and SignUpsLast24h are then unread, not 0.
+	AccountsAvailable bool `json:"accounts_available"`
 	// Places is how many more computers the host can hold; sign-up is open
 	// when it is at least one.
 	Places int  `json:"places"`
@@ -281,7 +284,9 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 	if sample.ObservationError == "" && sample.MemoryTotalBytes > 0 {
 		out.Memory = PulseCapacityMemory{Available: true, TotalBytes: sample.MemoryTotalBytes, AvailableBytes: sample.MemoryAvailableBytes, FloorBytes: sample.MemoryFloorBytes}
 	}
-	diskRead := sample.ObservationError == "" && sample.StateDirAvailableBytes > 0
+	// The disk figure and the room depend on the statfs alone, as auth's
+	// admit does, not on the other probes; a full disk is a real 0.
+	diskRead := sample.StateDirRead
 	if diskRead {
 		out.Disk = PulseCapacityDisk{Available: true, AvailableBytes: sample.StateDirAvailableBytes, FloorBytes: cfg.MinStateDirAvailableBytes}
 	}
@@ -324,6 +329,7 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 	}
 	out.Room.Available = true
 	out.Room.ReserveBytes, out.Room.FootprintBytes = plan.ReserveBytes, plan.FootprintBytes
+	out.Room.AccountsAvailable = usersAvailable
 	out.Room.Accounts = len(holders)
 	out.Room.HeldBytes = plan.Held(owners)
 	out.Room.Places = plan.Places(sample.StateDirAvailableBytes, out.Room.HeldBytes)

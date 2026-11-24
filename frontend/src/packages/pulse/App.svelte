@@ -198,10 +198,10 @@
         <div><dt>Sign-up reserve (deploy floor and paper)</dt><dd>{capRoom?.available ? formatBytes(capRoom.reserve_bytes) : 'no reading'}</dd></div>
         <div><dt>Running</dt><dd>{formatNumber(capComputers?.running)}</dd></div>
         <div><dt>Hibernated</dt><dd>{formatNumber(capComputers?.hibernated)}</dd></div>
-        <div><dt>Accounts with a passkey</dt><dd>{capRoom?.available ? formatNumber(capRoom.accounts) : 'no reading'}</dd></div>
+        <div><dt>Accounts with a passkey</dt><dd>{capRoom?.available && capRoom.accounts_available ? formatNumber(capRoom.accounts) : 'no reading'}</dd></div>
         <div><dt>One computer's footprint</dt><dd>{capRoom?.available ? formatBytes(capRoom.footprint_bytes) : 'no reading'}</dd></div>
         <div><dt>Places left</dt><dd>{capRoom?.available ? formatNumber(capRoom.places) : 'no reading'}</dd></div>
-        <div><dt>Sign-ups, 24h</dt><dd>{capRoom?.available ? formatNumber(capRoom.sign_ups_last_24h) : 'no reading'}</dd></div>
+        <div><dt>Sign-ups, 24h</dt><dd>{capRoom?.available && capRoom.accounts_available ? formatNumber(capRoom.sign_ups_last_24h) : 'no reading'}</dd></div>
       </dl>
       {/if}
     </section>
