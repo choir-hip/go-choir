@@ -17,7 +17,7 @@ final class LiveConfigBackendBundleTests: XCTestCase {
         try Data("x".utf8).write(to: dir.appendingPathComponent("config.json"))
         let on = await b.isOnDisk(c)
         XCTAssertTrue(on, "a partly fetched folder is on disk too: it is what a rejected configuration must remove")
-        Voices.readiness.markReady(model: c.id)
+        _ = await Voices.verifier.verify(model: c.id, check: { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: true) })
         await b.delete(c)
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
         XCTAssertFalse(Voices.readiness.isReady(model: c.id))

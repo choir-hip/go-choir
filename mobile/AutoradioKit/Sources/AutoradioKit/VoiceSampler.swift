@@ -32,11 +32,14 @@ public final class VoiceSampler: @unchecked Sendable {
     /// Fetch and load the model; `onBytes` receives bytes on disk so far.
     public typealias Fetch = @Sendable (_ modelID: String, _ onBytes: @escaping @Sendable (Int64) -> Void) async throws -> Void
     /// Make the sample line in this voice and play it; returns when it has been heard, throws when the voice could not speak.
+    /// Run the check on the fetched model and say whether it works on this phone. The host's one verifier (`ReadinessVerifier`) writes readiness inside it; the sampler can only read it.
+    public typealias Verify = @Sendable (_ modelID: String) async -> Bool
     public typealias Say = @Sendable (_ option: VoiceOption) async throws -> Void
 
     public let options: [VoiceOption]
     private let readiness: VoiceReadiness
     private let fetch: Fetch
+    private let verify: Verify
     private let say: Say
     private let halt: @Sendable () -> Void
     private let choose: @Sendable (VoiceOption) -> Void
@@ -55,10 +58,10 @@ public final class VoiceSampler: @unchecked Sendable {
     private let st: Locked<State>
     public var onChange: (@Sendable () -> Void)?
 
-    public init(options: [VoiceOption] = VoiceCatalog.options, selected: String, readiness: VoiceReadiness, fetch: @escaping Fetch, say: @escaping Say,
+    public init(options: [VoiceOption] = VoiceCatalog.options, selected: String, readiness: VoiceReadiness, fetch: @escaping Fetch, verify: @escaping Verify, say: @escaping Say,
                 halt: @escaping @Sendable () -> Void, choose: @escaping @Sendable (VoiceOption) -> Void,
                 approxBytes: @escaping @Sendable (String) -> Int64 = { id in KnownModels.managed.first { $0.id == id }?.approxBytes ?? 0 }) {
-        self.options = options; self.readiness = readiness; self.fetch = fetch; self.say = say; self.halt = halt; self.choose = choose
+        self.options = options; self.readiness = readiness; self.fetch = fetch; self.verify = verify; self.say = say; self.halt = halt; self.choose = choose
         self.approxBytes = approxBytes
         st = Locked(State(selected: selected))
     }
@@ -138,7 +141,9 @@ public final class VoiceSampler: @unchecked Sendable {
                 var failure: String?
                 do {
                     try await self.fetch(model) { n in self.st.write { $0.bytes[model] = n }; self.onChange?() }
-                    self.readiness.markReady(model: model)
+                    if !(await self.verify(model)) { failure = "That voice did not work on this phone. The radio will use the phone's voice." }
+                } catch let r as DownloadDoor.Refusal {
+                    if case .notOffered = r { failure = "This voice is not offered for download." } else { failure = "Download this voice from Settings, Downloads first: that is where you agree to it and see its size." }
                 } catch is CancellationError { failure = "The download was stopped. Tap to try again." }
                 catch { failure = "The download did not finish. Check the connection and tap to try again." }   // failure 4
                 self.st.write { s in s.downloads.remove(model); if let f = failure { s.failed[model] = f } }

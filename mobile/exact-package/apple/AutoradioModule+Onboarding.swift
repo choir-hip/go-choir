@@ -322,6 +322,8 @@ extension AutoradioModule {
         case "obFacts": return c.facts()
         case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [], only: (r["only"] as? Bool) ?? false, picks: (r["picks"] as? [String: String]) ?? [:], speaker: (r["speaker"] as? Bool) ?? false)
         // The system's microphone permission, read and nothing asked (shared code decides whether to show its plain line first: micask.ts). Native because only the platform knows it.
+        // Shared code's consent record, as it stands: native's ONE download door refuses every model fetch without it (DownloadDoor). Native because the transport is.
+        case "obConsent": DownloadDoor.shared.sync(agreed: (r["agreed"] as? [String: String]) ?? [:])
         case "obMicState": return ["state": MicPermissionWord.current()]
         case "obEnrolBegin": c.beginCapture()
         case "obEnrolKeep": return ["kept": c.capture.keep(), "usable": c.capture.usable]

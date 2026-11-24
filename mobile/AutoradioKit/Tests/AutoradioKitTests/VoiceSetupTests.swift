@@ -181,8 +181,8 @@ final class SetupReadinessTests: XCTestCase {
         }
     }
     func testR1AModelTheCheckRejectedIsNotReady_AndTheOneThatPassedIs() async {
-        let ready = MemoryVoiceReadiness(); ready.markReady(model: "fluid-speech-mini")           // a fetch that marked it too early (an older build, or a leftover)
-        let s = VoiceSetup(backend: Backend(rejects: ["fluid-speech-mini"]), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, readiness: ready)
+        let ready = MemoryVoiceReadiness(); ready.markReady(model: "fluid-speech-mini")           // a leftover mark (an older build)
+        let s = VoiceSetup(backend: Backend(rejects: ["fluid-speech-mini"]), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: ready))
         await s.run(only: [.transcriber])
         XCTAssertFalse(ready.isReady(model: "fluid-speech-mini"), "it failed its check on this phone: the listener must not choose it")
         let chosen = s.record.items.first { $0.stage == "transcriber" }?.chosen
@@ -190,7 +190,7 @@ final class SetupReadinessTests: XCTestCase {
     }
     func testR2APassingModelAndItsCompanionsAreReadyOnlyAfterTheCheck() async {
         let ready = MemoryVoiceReadiness()
-        let s = VoiceSetup(backend: Backend(rejects: []), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, readiness: ready)
+        let s = VoiceSetup(backend: Backend(rejects: []), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: ready))
         XCTAssertFalse(ready.isReady(model: "fluid-speech-mini"), "nothing is ready before setup ran")
         await s.run(only: [.transcriber])
         XCTAssertTrue(ready.isReady(model: "fluid-speech-mini"))

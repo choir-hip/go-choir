@@ -221,29 +221,29 @@
       "enrol": "EnrolView"
     },
     "OfferJobView": {
-     "job": "string",
-     "group": "string",
-     "host": "string",
-     "options": "OfferOptionView[]"
+      "job": "string",
+      "group": "string",
+      "host": "string",
+      "options": "OfferOptionView[]"
     },
     "OfferOptionView": {
-     "id": "string",
-     "model": "string",
-     "bytes": "number",
-     "sizeLabel": "string",
-     "recommended": "bool",
-     "note": "string",
-     "credit": "string",
-     "ready": "bool"
+      "id": "string",
+      "model": "string",
+      "bytes": "number",
+      "sizeLabel": "string",
+      "recommended": "bool",
+      "note": "string",
+      "credit": "string",
+      "ready": "bool"
     },
     "EnrolView": {
-     "state": "string",
-     "level": "number",
-     "usable": "bool",
-     "kept": "number",
-     "built": "bool",
-     "ready": "bool",
-     "reason": "string"
+      "state": "string",
+      "level": "number",
+      "usable": "bool",
+      "kept": "number",
+      "built": "bool",
+      "ready": "bool",
+      "reason": "string"
     },
     "PodNow": {
       "episodeId": "string",
@@ -890,11 +890,54 @@
           "talking": false,
           "voicePicked": 0,
           "finishAsked": 0,
-          "offers": [],
+          "offers": [
+            {
+              "job": "voice",
+              "group": "voice",
+              "host": "Hugging Face",
+              "options": [
+                {
+                  "id": "sample-voice",
+                  "model": "Sample voice",
+                  "bytes": 350000000,
+                  "sizeLabel": "350 MB",
+                  "recommended": true,
+                  "note": "",
+                  "credit": "",
+                  "ready": false
+                }
+              ]
+            },
+            {
+              "job": "transcriber",
+              "group": "voice-rest",
+              "host": "Hugging Face",
+              "options": [
+                {
+                  "id": "fluid-speech-mini",
+                  "model": "Fluid Speech Mini, the listener, with live words",
+                  "bytes": 600000000,
+                  "sizeLabel": "600 MB",
+                  "recommended": true,
+                  "note": "",
+                  "credit": "Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).",
+                  "ready": false
+                }
+              ]
+            }
+          ],
           "voiceReady": false,
           "hearingReady": false,
           "runStages": [],
-          "enrol": {"state": "idle", "level": 0, "usable": false, "kept": 0, "built": false, "ready": false, "reason": ""}
+          "enrol": {
+            "state": "idle",
+            "level": 0,
+            "usable": false,
+            "kept": 0,
+            "built": false,
+            "ready": true,
+            "reason": ""
+          }
         }
       }
     },

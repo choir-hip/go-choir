@@ -32,7 +32,7 @@ public final class LiveConfigBackend: ConfigBackend, @unchecked Sendable {
     }
     public func unload(_ c: ModelCandidate, role: ConfigRole) async { await ModelProviders.current?.unload(c.id, role: roleName(role)) }
     public func delete(_ c: ModelCandidate) async {
-        Voices.readiness.markNotReady(model: c.id)          // its files are going: the radio must not prefer a voice that is not there
+        Voices.verifier.demote(model: c.id)          // its files are going: the radio must not prefer a voice that is not there
         if let b = KnownModels.bundles.first(where: { $0.id == c.id }) { await store.deleteBundle(b) }
         else if KnownModels.isPinned(c.id) { await store.delete(c.id) }
         else { for d in managedFolders(c) { try? FileManager.default.removeItem(at: d) } }       // a rejected Core ML model's bundle (failure 6)

@@ -35,7 +35,7 @@ final class FakeVoice: Voice, @unchecked Sendable {
     }
 }
 
-final class MemoryReadiness: VoiceReadiness, @unchecked Sendable {
+final class MemoryReadiness: VoiceReadinessRecord, @unchecked Sendable {
     private let lock = NSLock()
     var ready: Set<String>
     init(_ ready: Set<String> = []) { self.ready = ready }
@@ -246,13 +246,14 @@ final class VoiceSamplerTests: XCTestCase {
     final class Host: @unchecked Sendable {
         private let lock = NSLock()
         var said: [String] = [], chosen: [String] = [], halts = 0, fetched: [String] = []
-        var failFetch = false, failSay = false, sayDelay: UInt64 = 0, fetchDelay: UInt64 = 0
+        var failFetch = false, failVerify = false, failSay = false, sayDelay: UInt64 = 0, fetchDelay: UInt64 = 0
         func record(_ f: () -> Void) { lock.lock(); f(); lock.unlock() }
         func read<T>(_ f: () -> T) -> T { lock.lock(); defer { lock.unlock() }; return f() }
     }
     struct Down: Error {}
     func make(_ host: Host, ready: Set<String> = [], selected: String = "kokoro:af_heart") -> (VoiceSampler, MemoryReadiness) {
         let r = MemoryReadiness(ready)
+        let verifier = ReadinessVerifier(record: r)
         let s = VoiceSampler(selected: selected, readiness: r,
             fetch: { m, onBytes in
                 host.record { host.fetched.append(m) }
@@ -260,6 +261,7 @@ final class VoiceSamplerTests: XCTestCase {
                 onBytes(1_000_000)
                 if host.read({ host.failFetch }) { throw Down() }
             },
+            verify: { m in await verifier.verify(model: m, check: { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: !host.read({ host.failVerify })) }).outputOK },
             say: { o in
                 host.record { host.said.append(o.id) }
                 if host.sayDelay > 0 { try await Task.sleep(nanoseconds: host.sayDelay) }

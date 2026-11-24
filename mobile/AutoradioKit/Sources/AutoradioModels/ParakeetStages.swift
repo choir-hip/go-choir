@@ -93,6 +93,7 @@ public final class ParakeetTDTTranscriber: Transcriber, @unchecked Sendable {
     public func begin() async throws -> TranscriptionSession {
         let v = version
         let m = try await Self.slot.get {
+            try DownloadDoor.shared.authorizeLibrary(model: "parakeet-tdt-0.6b-v2")       // the door: this call downloads when the files are missing
             let models = try await AsrModels.downloadAndLoad(version: v)
             let mgr = AsrManager(config: .default)
             try await mgr.loadModels(models)

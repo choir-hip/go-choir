@@ -85,3 +85,25 @@ describe('the words', () => {
     expect((en as Record<string, string>)['purpose.recordingInBackground']).toMatch(/stops listening when the screen locks/);
   });
 });
+
+// DOOR A (review round 3): native's download door holds a copy of what the person agreed to, pushed at every change, at load and at sign-out. A fetch with no push has no agreement.
+describe('the door is told what was agreed', () => {
+  let sent: { op: string; agreed?: Record<string, string> }[];
+  beforeEach(() => { sent = []; bindNative({ later: async (r) => { if (r.op === 'obConsent') sent.push(r as never); return {}; } }); });
+  test('C8 the record is pushed when it is loaded, when a group is agreed (Wi-Fi, then mobile), and emptied at sign-out', async () => {
+    await consentView(storage);
+    expect(sent.at(-1)?.agreed).toEqual({});
+    await consentAgree('voice', false, storage); expect(sent.at(-1)?.agreed).toEqual({ voice: 'agreed' });
+    await consentAgree('voice', true, storage); expect(sent.at(-1)?.agreed).toEqual({ voice: 'agreed-mobile' });
+    await consentAgree('search', false, storage); expect(sent.at(-1)?.agreed).toEqual({ voice: 'agreed-mobile', search: 'agreed' });
+    await wipeConsent(storage); expect(sent.at(-1)?.agreed).toEqual({});
+  });
+  test('C8 an agreement that could not be written is not pushed: the door stays closed', async () => {
+    files.set(CONSENT_FILE, new TextEncoder().encode('{}'));
+    const bad = { fs: { ...(storage as { fs: Record<string, unknown> }).fs, atomicWriteFile: async () => { throw new Error('EIO'); } } } as never;
+    await consentView(bad); sent = [];
+    expect(await consentAgree('voice', false, bad)).toBe(false);
+    expect(sent.some((r) => r.agreed?.voice)).toBe(false);
+  });
+});
+

@@ -113,7 +113,7 @@ export async function downloadsAct(op: string, group: string, facts: VoiceFacts 
   const g = known ? downloadsView(f, null, 0, picks).groups.find((x) => x.id === group) : undefined;
   const mobile = op === 'startMobile';
   if (g && g.canStart && (op === 'start' ? f.onWiFi : mobile)) {                                    // D4, D5: on mobile data only the mobile press starts anything
-    if (!(await consentAgree(group, mobile, storage))) return downloadsPage(f, storage);          // D11: not recorded, nothing starts
+    if (!(await consentAgree(group, mobile && !f.onWiFi, storage))) return downloadsPage(f, storage);          // a mobile press on Wi-Fi is a Wi-Fi agreement          // D11: not recorded, nothing starts
     if (group === 'search') kickSearch(storage);
     else if (later) {
       const jobs = f.offers.filter((j) => j.group === group);

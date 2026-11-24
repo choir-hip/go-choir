@@ -40,7 +40,8 @@ public final class WeSpeakerEmbedder: VoiceEmbedder, @unchecked Sendable {
     private var model: MLModel?
     private var loadTried = false
 
-    public init(root: URL) { self.root = root }
+    private let door: DownloadDoor
+    public init(root: URL, door: DownloadDoor = .shared) { self.root = root; self.door = door }
     public static func standard() -> WeSpeakerEmbedder {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/models", isDirectory: true)
         return WeSpeakerEmbedder(root: d)
@@ -72,6 +73,7 @@ public final class WeSpeakerEmbedder: VoiceEmbedder, @unchecked Sendable {
     }
 
     func download() async -> Bool {
+        guard (try? door.authorize(model: ModelOffer.speakerID)) != nil else { return false }       // the door, before any file is touched
         let fm = FileManager.default
         let tmp = root.appendingPathComponent("download-\(UUID().uuidString.prefix(8))", isDirectory: true)
         defer { try? fm.removeItem(at: tmp) }
@@ -80,7 +82,7 @@ public final class WeSpeakerEmbedder: VoiceEmbedder, @unchecked Sendable {
                 let dst = tmp.appendingPathComponent(f.path)
                 try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
                 let url = URL(string: "https://huggingface.co/\(Self.repository)/resolve/\(Self.revision)/\(Self.folder)/\(f.path)")!
-                let (data, resp) = try await URLSession.shared.data(from: url)
+                let (data, resp) = try await door.session(for: ModelOffer.speakerID).data(from: url)       // the door: consent and a transport that cannot spend mobile data unless agreed
                 guard (resp as? HTTPURLResponse)?.statusCode == 200, data.count == f.size else { return false }
                 if let want = f.sha256, Self.sha256Hex(data) != want { return false }
                 try data.write(to: dst)

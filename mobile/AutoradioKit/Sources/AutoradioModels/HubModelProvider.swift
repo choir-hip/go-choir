@@ -20,6 +20,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
 
     public func fetch(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         guard KnownModels.contains(id) else { throw LabError.badInput("setup asked for \(id), which is not in the model catalog") }
+        try DownloadDoor.shared.authorizeLibrary(model: id)       // the door: no consent, no start; a Wi-Fi agreement does not start on mobile data (the libraries' own sessions cannot be configured)
         // The libraries do not report bytes in one shape, so the bytes on disk are watched while the load runs.
         let spec = KnownModels.managed.first { $0.id == id }
         let root = spec?.cachePath

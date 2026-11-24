@@ -1,0 +1,35 @@
+// The learn-your-voice page and the model downloads page on the real plan and the web host (review round 3). The web host has no phone behind it: its voice side is the interface's stand-in (exact-package/interface/onboarding.json, `substitute`):
+// the voice model "on the phone" (enrol.ready), the microphone unasked, two offers with a licence credit. So what is proved here is the page: the words and the buttons the state machine's first view is given (voicelearn.ts), through the real wiring (the press opens the page, the resource answers it), and that a
+// licence credit from the list is shown with its option. The state machine's own steps (three sentences, the confirming one, a match stores, a mismatch stores nothing, Not now at each step) need a device that answers: they are voicelearn.test.ts (bun test)
+// against the same learnPage/learnAct, and the microphone's sheet (signed in only) cannot be reached here because the web host has no account.
+test "Settings, Learn my voice: the page the press opens is answered with the intro: what will happen, what it asks for, and Not now"
+  clock data
+  tap "bar-mark"
+  clock settle
+  tap "place-settings"
+  clock settle
+  tap "settings-voice-learn"
+  clock data
+  clock settle
+  expect state pg.top == "settings:voiceprint"
+  expect state lrn.step == "intro"
+  expect state lrn.title == "Teach the radio your voice"
+  expect state lrn.primary == "Continue"
+  expect state lrn.secondary == "Not now"
+  expect state lrn.sentence == ""
+  expect state lrn.line == "Read 3 short sentences out loud, about ten seconds in all. Kept on this phone only, never uploaded. To talk to the radio or record a take, Autoradio 1 needs your microphone and speech recognition."
+
+test "Settings, Downloads: a licence credit is shown with its option, and an option without one shows none"
+  clock data
+  tap "bar-mark"
+  clock settle
+  tap "place-settings"
+  clock settle
+  tap "settings-nav-downloads"
+  clock settle
+  expect tree has "dl-voice-rest"
+  expect tree has "dl-opt-transcriber-fluid-speech-mini"
+  expect text "dl-credit-transcriber-fluid-speech-mini" == "Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."
+  expect tree has "dl-opt-voice-sample-voice"
+  expect tree missing "dl-credit-voice-sample-voice"
+  expect tree has "dl-voice-rest-total"
