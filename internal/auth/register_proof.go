@@ -85,6 +85,10 @@ func (h *Handler) HandleRegisterMail(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
+	if !requireJSONContentType(r) {
+		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "content type must be application/json"})
+		return
+	}
 	var req registerMailRequest
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
@@ -110,29 +114,23 @@ func (h *Handler) HandleRegisterMail(w http.ResponseWriter, r *http.Request) {
 	}
 	emailHash := hashEmail(email)
 
+	// The answer must not say whether the address has an account: the same
+	// shape, the same limits, the same refusals for both. An address that has
+	// one is looked up without regard to case (one mailbox, one account).
 	existing, lerr := h.store.GetUserByEmail(email)
-	if lerr == nil && existing != nil {
-		// An address with an account: its holder proves it by the recovery mail.
-		status, body := h.startRecovery(r, email)
-		if status != http.StatusOK {
-			writeJSON(w, status, body)
-			return
-		}
-		id, err := randomHex(16)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
-			return
-		}
-		writeJSON(w, http.StatusOK, emailBeginResponse{AttemptID: id})
-		return
-	}
-	if !errors.Is(lerr, sql.ErrNoRows) {
+	known := lerr == nil && existing != nil
+	if !known && !errors.Is(lerr, sql.ErrNoRows) {
 		log.Printf("[auth] operation=register_mail email_hash=%s result=error step=lookup error=%q", emailHash, lerr)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
 		return
 	}
-	// The cap, before any mail goes out.
-	if h.refuseIfRegistrationClosed(w, "register_mail", emailHash, "", email) {
+	// The cap refuses a known address too (it is told the same thing; only a new
+	// address is put on the waitlist), before any mail goes out.
+	waitlisted := email
+	if known {
+		waitlisted = ""
+	}
+	if h.refuseIfRegistrationClosed(w, "register_mail", emailHash, "", waitlisted) {
 		return
 	}
 
@@ -159,6 +157,16 @@ func (h *Handler) HandleRegisterMail(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:        now,
 		ExpiresAt:        now.Add(EmailAttemptTTL),
 	}
+	if known {
+		// A known address gets a row that matches nothing, and counts against the
+		// same limits, so the 429 comes at the same request for either kind.
+		junk, jerr := randomToken(32)
+		if jerr != nil {
+			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
+			return
+		}
+		a.CodeHash = h.emailKeyed("nomatch", junk)
+	}
 	if err := h.store.CreateEmailAttempt(r.Context(), a); err != nil {
 		if errors.Is(err, ErrEmailRateLimited) {
 			writeJSON(w, http.StatusTooManyRequests, errorResponse{Error: "too many requests; try again later"})
@@ -168,10 +176,18 @@ func (h *Handler) HandleRegisterMail(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
 		return
 	}
-	// The mail says "verify your address": maild has the two purposes it has.
-	mailed := *a
-	mailed.Purpose = EmailAttemptPurposeVerifyAddress
-	h.sendSignInMail(r, &mailed, email, code, "")
+	if known {
+		// The holder proves the address by the recovery mail. Its own limits are
+		// not shown to the caller: past them no mail goes out and the answer is the same.
+		if status, _ := h.startRecovery(r, email); status != http.StatusOK {
+			log.Printf("[auth] operation=register_mail email_hash=%s result=recovery_not_sent status=%d", emailHash, status)
+		}
+	} else {
+		// The mail says "verify your address": maild has the two purposes it has.
+		mailed := *a
+		mailed.Purpose = EmailAttemptPurposeVerifyAddress
+		h.sendSignInMail(r, &mailed, email, code, "")
+	}
 	log.Printf("[auth] operation=register_mail attempt=%s email_hash=%s result=created", shortHash(attemptID), emailHash)
 	writeJSON(w, http.StatusOK, emailBeginResponse{AttemptID: attemptID})
 }
@@ -191,6 +207,10 @@ func randomHex(n int) (string, error) {
 func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	if !requireJSONContentType(r) {
+		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "content type must be application/json"})
 		return
 	}
 	var req registerBeginRequest
@@ -283,9 +303,6 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[auth] operation=register_begin email_hash=%s result=success challenge_type=registration proved=true", emailHash)
 	writeJSON(w, http.StatusOK, creation)
 }
-
-// errAddressUnproved: the account's address was never proved, so it mints nothing.
-var errAddressUnproved = errors.New("the account's address is not proved")
 
 const addressUnprovedCode = "address_unproved"
 

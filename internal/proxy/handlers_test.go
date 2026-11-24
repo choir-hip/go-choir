@@ -189,10 +189,10 @@ func issueTestAccessJWTWithTTL(priv ed25519.PrivateKey, userID string, ttl time.
 func issueTestAccessJWTWithClaims(priv ed25519.PrivateKey, userID, email string, ttl time.Duration) string {
 	now := time.Now().UTC()
 	claims := jwt.MapClaims{
-		"sub":   userID,
-		"iat":   now.Unix(),
-		"exp":   now.Add(ttl).Unix(),
-		"scope": "access",
+		"sub": userID,
+		"iat": now.Unix(),
+		"exp": now.Add(ttl).Unix(),
+		"ev":  time.Now().Unix(), "scope": "access",
 	}
 	if email != "" {
 		claims["email"] = email
@@ -1917,7 +1917,6 @@ func TestComputeStatusDoesNotCreateOwnershipAndRedactsIdentity(t *testing.T) {
 		}
 	}
 }
-
 
 func TestComputeStatusListsOnlyUserComputers(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)

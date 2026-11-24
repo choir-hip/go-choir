@@ -104,7 +104,7 @@ func TestPlatformOperatorYankIsASessionActWithAPlatformReceipt(t *testing.T) {
 		emailSession := func(req *http.Request) {
 			token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
 				"sub": "user-1", "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Minute).Unix(),
-				"scope": "access", "am": am,
+				"ev": time.Now().Unix(), "scope": "access", "am": am,
 			})
 			signed, err := token.SignedString(priv)
 			if err != nil {

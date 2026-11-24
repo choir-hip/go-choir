@@ -613,7 +613,7 @@ func (s *Store) GetUserByID(id string) (*User, error) {
 // GetUserByEmail returns the user with the given email, or sql.ErrNoRows.
 func (s *Store) GetUserByEmail(email string) (*User, error) {
 	return scanUser(s.db.QueryRow(
-		"SELECT id, email, created_at, email_verified_at FROM users WHERE email = ?", email,
+		"SELECT id, email, created_at, email_verified_at FROM users WHERE lower(email) = lower(?) ORDER BY created_at LIMIT 1", email,
 	))
 }
 
@@ -656,6 +656,18 @@ func (s *Store) CreateCredential(c *Credential) error {
 	return nil
 }
 
+// ErrAddressUnproved: the account's address was never proved, so no credential of it is
+// accepted and none is made. The rule is kept where credentials are validated and redeemed
+// (the access-token validator, GetAPIKeyByHash, GetRefreshSessionByTokenHash, the device and
+// desktop grant redemptions, CreateComputerScopedAPIKey, issueAccessJWT), not in handlers.
+var ErrAddressUnproved = errors.New("the account's address is not proved")
+
+// provedUserSQL(col) is true for a user whose address was proved, and for the operator's
+// synthetic bootstrap account. col is the column holding the user id.
+func provedUserSQL(col string) string {
+	return "EXISTS (SELECT 1 FROM users pu WHERE pu.id = " + col + " AND (pu.email_verified_at IS NOT NULL OR pu.id = '" + BootstrapAdminAPIKeyUserID + "'))"
+}
+
 // ErrAddressTaken: an account already exists for the address.
 var ErrAddressTaken = errors.New("an account already exists for this address")
 
@@ -671,6 +683,8 @@ type PendingRegistration struct {
 
 // SavePendingRegistration keeps a pending registration. No user exists yet.
 func (s *Store) SavePendingRegistration(p *PendingRegistration) error {
+	// Expired rows go as new ones come, so the table holds only what five minutes of begins can make.
+	_, _ = s.db.Exec("DELETE FROM pending_registrations WHERE expires_at < ?", time.Now().UTC())
 	_, err := s.db.Exec(
 		"INSERT INTO pending_registrations (challenge, email, user_id, session_data, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
 		p.Challenge, p.Email, p.UserID, p.SessionData, p.CreatedAt, p.ExpiresAt,
@@ -699,6 +713,15 @@ func (s *Store) ConsumePendingRegistration(challenge string, now time.Time) (*Pe
 	return p, nil
 }
 
+// CleanExpiredPendingRegistrations deletes the pending registrations nobody finished.
+func (s *Store) CleanExpiredPendingRegistrations() (int64, error) {
+	res, err := s.db.Exec("DELETE FROM pending_registrations WHERE expires_at < ?", time.Now().UTC())
+	if err != nil {
+		return 0, fmt.Errorf("clean expired pending registrations: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // CreateAccountWithCredential makes the account and its first passkey, with
 // the address marked proved, in one transaction: nothing exists for the address
 // before it commits, and the address's unique index decides a race (the loser
@@ -710,6 +733,16 @@ func (s *Store) CreateAccountWithCredential(p *PendingRegistration, c *Credentia
 		return fmt.Errorf("create account: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// One mailbox, one account, whatever the case it was typed in: the unique
+	// index is case-sensitive, so the fold is checked here, in the transaction
+	// that writes (the store runs on one connection, so two creations serialize).
+	var taken int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM users WHERE lower(email) = lower(?)", p.Email).Scan(&taken); err != nil {
+		return fmt.Errorf("create account: %w", err)
+	}
+	if taken > 0 {
+		return ErrAddressTaken
+	}
 	if _, err := tx.Exec(
 		"INSERT INTO users (id, email, created_at, email_verified_at) VALUES (?, ?, ?, ?)",
 		p.UserID, p.Email, now, now,
@@ -756,6 +789,9 @@ func (s *Store) AddRecoveryCredential(c *Credential) error {
 			"DELETE FROM desktop_exchange_codes WHERE user_id = ?",
 			"DELETE FROM device_authorizations WHERE user_id = ?",
 			"DELETE FROM email_signin_attempts WHERE user_id = ?",
+			"DELETE FROM account_set_member WHERE user_id = ?",
+			"DELETE FROM owner_root_key_wraps WHERE owner_id = ?",
+			"DELETE FROM owner_root_keys WHERE owner_id = ?",
 			"DELETE FROM credentials WHERE user_id = ?",
 		} {
 			args := []any{c.UserID}
@@ -794,6 +830,7 @@ func (s *Store) RevokeUnprovedAccess(exemptUserID string) (int64, error) {
 		"DELETE FROM desktop_exchange_codes WHERE " + where,
 		"DELETE FROM device_authorizations WHERE " + where,
 		"DELETE FROM email_signin_attempts WHERE " + where,
+		"DELETE FROM account_set_member WHERE " + where,
 	} {
 		args := []any{exemptUserID}
 		if strings.HasPrefix(q, "UPDATE api_keys") {
@@ -1091,7 +1128,7 @@ func (s *Store) GetRefreshSessionByTokenHash(tokenHash string) (*RefreshSession,
 		lastUsedAt sql.NullTime
 	)
 	err := s.db.QueryRow(
-		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at, auth_method FROM refresh_sessions WHERE token_hash = ?",
+		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at, auth_method FROM refresh_sessions WHERE token_hash = ? AND "+provedUserSQL("refresh_sessions.user_id"),
 		tokenHash,
 	).Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rs.RotatedFrom, &deviceInfo, &lastUsedAt, &rs.AuthMethod)
 	if err != nil {
@@ -1178,7 +1215,7 @@ func (s *Store) ConsumeDesktopExchangeCode(code string) (*DesktopExchangeCode, e
 	defer tx.Rollback()
 
 	row := tx.QueryRow(
-		"SELECT user_id, created_at, expires_at, auth_method, not_after FROM desktop_exchange_codes WHERE code = ?",
+		"SELECT user_id, created_at, expires_at, auth_method, not_after FROM desktop_exchange_codes WHERE code = ? AND "+provedUserSQL("desktop_exchange_codes.user_id"),
 		codeHash,
 	)
 	c := &DesktopExchangeCode{Code: code}
@@ -1281,12 +1318,17 @@ func (s *Store) CreateComputerScopedAPIKey(ctx context.Context, userID, label st
 	}
 	id = "ak_" + uuid.NewString()
 	now := time.Now().UTC()
-	_, err = s.db.ExecContext(ctx,
-		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, computer_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		id, userID, keyHash, label, string(scopesJSON), nullableAPIKeyComputerID(computerID), now, expiresAt,
+	res, err := s.db.ExecContext(ctx,
+		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, computer_id, created_at, expires_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE "+provedUserSQL("?"),
+		id, userID, keyHash, label, string(scopesJSON), nullableAPIKeyComputerID(computerID), now, expiresAt, userID,
 	)
 	if err != nil {
 		return "", "", fmt.Errorf("create api key: %w", err)
+	}
+	if n, nerr := res.RowsAffected(); nerr != nil {
+		return "", "", fmt.Errorf("create api key: %w", nerr)
+	} else if n != 1 {
+		return "", "", ErrAddressUnproved
 	}
 	return id, secret, nil
 }
@@ -1308,7 +1350,7 @@ func (s *Store) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, e
 		revokedAt  sql.NullTime
 	)
 	err := s.db.QueryRowContext(ctx,
-		"SELECT id, user_id, label, scopes, COALESCE(computer_id, ''), created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL",
+		"SELECT id, user_id, label, scopes, COALESCE(computer_id, ''), created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL AND "+provedUserSQL("api_keys.user_id"),
 		keyHash,
 	).Scan(&ak.ID, &ak.UserID, &ak.Label, &scopesJSON, &ak.ComputerID, &ak.CreatedAt, &expiresAt, &lastUsedAt, &revokedAt)
 	if err != nil {

@@ -180,8 +180,9 @@ func (s *Store) PollDeviceAuthorization(ctx context.Context, deviceCodeHash stri
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// A grant approved for an account whose address is not proved is not redeemed: it reads as unknown.
 	a, err := scanDeviceAuthorization(tx.QueryRowContext(ctx,
-		"SELECT "+deviceAuthorizationColumns+" FROM device_authorizations WHERE device_code_hash = ?", deviceCodeHash))
+		"SELECT "+deviceAuthorizationColumns+" FROM device_authorizations WHERE device_code_hash = ? AND (user_id IS NULL OR "+provedUserSQL("device_authorizations.user_id")+")", deviceCodeHash))
 	if errors.Is(err, sql.ErrNoRows) {
 		return &DevicePollResult{}, nil
 	}

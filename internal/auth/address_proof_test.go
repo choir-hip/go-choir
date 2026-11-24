@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/golang-jwt/jwt/v5"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -390,5 +392,184 @@ func TestAccessTokenOfAnUnprovedAccountIsRefused(t *testing.T) {
 	h.HandleCreateAPIKey(rec, req)
 	if rec.Code == http.StatusOK || rec.Code == http.StatusCreated {
 		t.Fatalf("an unproved account's access token minted a key: %d", rec.Code)
+	}
+}
+
+// One mailbox, one account, whatever case it was typed in.
+func TestOneMailboxIsOneAccountWhateverTheCase(t *testing.T) {
+	h := appEnv(t)
+	h.recoveryMailer = &fakeRecoveryMailer{}
+	h.recoveryMailDispatch = func(f func()) { f() }
+	if rec := createAccount(t, h, "Case@Example.com", newSoftPasskey(t), testOrigin); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	before := len(testMailer(h).mails())
+	fields, rec := proofFields(t, h, "case@example.com")
+	if rec.Code != http.StatusOK || fields == nil {
+		t.Fatalf("register/mail = %d", rec.Code)
+	}
+	if len(testMailer(h).mails()) != before {
+		t.Fatal("a registration code was mailed for a mailbox that has an account (typed in another case)")
+	}
+	if rec := postJSONFrom(h.HandleRegisterBegin, nextTestIP(), fields); rec.Code == http.StatusOK {
+		t.Fatal("register/begin worked for a mailbox that has an account")
+	}
+	// Even a pending registration that got past the mail cannot make a second account.
+	err := h.store.CreateAccountWithCredential(&PendingRegistration{UserID: "dup", Email: "CASE@example.com"}, &Credential{ID: "dupc", PublicKey: []byte("k"), AttestationType: "none", Transport: "[]", AAGUID: make([]byte, 16), Flags: "{}", CreatedAt: time.Now().UTC()})
+	if err != ErrAddressTaken {
+		t.Fatalf("a second account for one mailbox: %v", err)
+	}
+}
+
+// register/mail does not say whether the address has an account: the same
+// statuses and the same words, request for request, past the limits and at the cap.
+func TestRegisterMailAnswersAKnownAndANewAddressAlike(t *testing.T) {
+	h := appEnv(t)
+	h.recoveryMailer = &fakeRecoveryMailer{}
+	h.recoveryMailDispatch = func(f func()) { f() }
+	if rec := createAccount(t, h, "known@example.com", newSoftPasskey(t), testOrigin); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	run := func(email string) (codes []int, errs []string) {
+		for i := 0; i < 8; i++ {
+			rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": email, "binding": newBinding(t)})
+			codes = append(codes, rec.Code)
+			var b map[string]any
+			_ = json.Unmarshal(rec.Body.Bytes(), &b)
+			s, _ := b["error"].(string)
+			errs = append(errs, s)
+		}
+		return
+	}
+	kc, ke := run("known@example.com")
+	nc, ne := run("brand-new@example.com")
+	for i := range kc {
+		if kc[i] != nc[i] || ke[i] != ne[i] {
+			t.Fatalf("request %d: known %d %q, new %d %q", i, kc[i], ke[i], nc[i], ne[i])
+		}
+	}
+	// At the cap both are refused the same way, and only the new one is waitlisted.
+	h2 := appEnv(t)
+	h2.config.RegistrationCap = 1
+	addPasskey(t, h2, "u1", "held@example.com")
+	a := postJSONFrom(h2.HandleRegisterMail, nextTestIP(), map[string]string{"email": "held@example.com", "binding": newBinding(t)})
+	b := postJSONFrom(h2.HandleRegisterMail, nextTestIP(), map[string]string{"email": "fresh@example.com", "binding": newBinding(t)})
+	if a.Code != http.StatusForbidden || a.Code != b.Code || a.Body.String() != b.Body.String() {
+		t.Fatalf("at the cap: known %d %s, new %d %s", a.Code, a.Body.String(), b.Code, b.Body.String())
+	}
+	entries, _ := h2.store.ListRegistrationWaitlist()
+	if len(entries) != 1 || entries[0].Email != "fresh@example.com" {
+		t.Fatalf("waitlist = %+v, want only the new address", entries)
+	}
+}
+
+func TestRegisterRoutesWantJSON(t *testing.T) {
+	h := appEnv(t)
+	for name, f := range map[string]http.HandlerFunc{"mail": h.HandleRegisterMail, "begin": h.HandleRegisterBegin} {
+		req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(`{"email":"a@example.com"}`))
+		req.Header.Set("Content-Type", "text/plain")
+		rec := httptest.NewRecorder()
+		f(rec, req)
+		if rec.Code != http.StatusUnsupportedMediaType {
+			t.Fatalf("register/%s with text/plain = %d, want 415", name, rec.Code)
+		}
+	}
+}
+
+// Pending registrations nobody finished are swept, and never outlive five minutes in the table's growth.
+func TestPendingRegistrationsAreSwept(t *testing.T) {
+	h := appEnv(t)
+	old := time.Now().UTC().Add(-time.Hour)
+	if err := h.store.SavePendingRegistration(&PendingRegistration{Challenge: "old", Email: "a@example.com", UserID: "u", SessionData: "{}", CreatedAt: old, ExpiresAt: old.Add(5 * time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := h.store.CleanExpiredPendingRegistrations(); err != nil || n != 1 {
+		t.Fatalf("sweep = %d, %v; want 1", n, err)
+	}
+	// A new begin also drops what has expired.
+	_ = h.store.SavePendingRegistration(&PendingRegistration{Challenge: "old2", Email: "b@example.com", UserID: "u2", SessionData: "{}", CreatedAt: old, ExpiresAt: old.Add(5 * time.Minute)})
+	_ = h.store.SavePendingRegistration(&PendingRegistration{Challenge: "new", Email: "c@example.com", UserID: "u3", SessionData: "{}", CreatedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(5 * time.Minute)})
+	var n int
+	_ = h.store.DB().QueryRow(`SELECT COUNT(*) FROM pending_registrations`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("pending rows = %d, want 1", n)
+	}
+}
+
+// Recovery of an unproved account clears the old holder's data ROOT and browser
+// sessions; recovery of a proved account only adds a passkey and takes nothing.
+func TestRecoveryClearsTheOldHoldersRootOnlyWhenTheAddressWasNeverProved(t *testing.T) {
+	h := appEnv(t)
+	seed := func(id string) {
+		t.Helper()
+		if _, err := h.store.CreateUser(id, id+"@example.com"); err != nil {
+			t.Fatal(err)
+		}
+		for _, q := range []string{
+			`INSERT INTO owner_root_keys (owner_id, created_at) VALUES ('` + id + `', CURRENT_TIMESTAMP)`,
+			`INSERT INTO owner_root_key_wraps (owner_id, credential_id, prf_salt, wrapped_root, created_at) VALUES ('` + id + `', x'01', x'02', x'03', CURRENT_TIMESTAMP)`,
+			`INSERT INTO account_set (id, handle_hash, active_user_id, created_at, last_used_at) VALUES ('set-` + id + `', 'h-` + id + `', '` + id + `', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+			`INSERT INTO account_set_member (set_id, user_id, refresh_session_id, added_at) VALUES ('set-` + id + `', '` + id + `', 'rs', CURRENT_TIMESTAMP)`,
+		} {
+			if _, err := h.store.DB().Exec(q); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	count := func(id string) (n int) {
+		for _, q := range []string{`SELECT COUNT(*) FROM owner_root_keys WHERE owner_id = ?`, `SELECT COUNT(*) FROM owner_root_key_wraps WHERE owner_id = ?`, `SELECT COUNT(*) FROM account_set_member WHERE user_id = ?`} {
+			var c int
+			_ = h.store.DB().QueryRow(q, id).Scan(&c)
+			n += c
+		}
+		return
+	}
+	cred := func(id string) *Credential {
+		return &Credential{ID: "new-" + id, UserID: id, PublicKey: []byte("k"), AttestationType: "none", Transport: "[]", AAGUID: make([]byte, 16), Flags: "{}", CreatedAt: time.Now().UTC()}
+	}
+	seed("unproved")
+	seed("proved")
+	if _, err := h.store.DB().Exec(`UPDATE users SET email_verified_at = NULL WHERE id = 'unproved'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.AddRecoveryCredential(cred("unproved")); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.AddRecoveryCredential(cred("proved")); err != nil {
+		t.Fatal(err)
+	}
+	if n := count("unproved"); n != 0 {
+		t.Fatalf("an unproved account's root and account-set rows survive recovery: %d", n)
+	}
+	if n := count("proved"); n != 3 {
+		t.Fatalf("recovery of a proved account took %d of its 3 root and account-set rows", 3-n)
+	}
+}
+
+// A token made before the proof rule carries no proof claim and is refused, for a proved account too.
+func TestAccessTokenWithoutTheProofClaimIsRefused(t *testing.T) {
+	h := appEnv(t)
+	u, _ := h.store.CreateUser("u-proved2", "proved2@example.com")
+	good, err := h.issueAccessJWT(u, AuthMethodPasskey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.ValidateAccessToken(good); err != nil {
+		t.Fatalf("a token the server just made is refused: %v", err)
+	}
+	legacy := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"sub": u.ID, "iat": time.Now().Unix(), "exp": time.Now().Add(time.Minute).Unix(), "scope": "access"})
+	tok, _ := legacy.SignedString(h.signer)
+	if _, err := h.ValidateAccessToken(tok); err == nil {
+		t.Fatal("a token with no proof claim was accepted")
+	}
+	if _, err := h.store.DB().Exec(`UPDATE users SET email_verified_at = NULL WHERE id = ?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.ValidateAccessToken(good); err == nil {
+		t.Fatal("a token of an account that is no longer proved was accepted")
+	}
+	unproved, _ := h.store.GetUserByID(u.ID)
+	if _, err := h.issueAccessJWT(unproved, AuthMethodPasskey); err == nil {
+		t.Fatal("a token was made for an unproved account")
 	}
 }

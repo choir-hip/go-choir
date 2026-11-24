@@ -499,6 +499,11 @@ func (h *Handler) HandleDeviceToken(w http.ResponseWriter, r *http.Request) {
 // sweepChallenges deletes expired WebAuthn challenge rows, which nothing else
 // removes (every begin writes one).
 func (h *Handler) sweepChallenges() {
+	if n, err := h.store.CleanExpiredPendingRegistrations(); err != nil {
+		log.Printf("[auth] operation=pending_registration_sweep result=error error=%q", err)
+	} else if n > 0 {
+		log.Printf("[auth] operation=pending_registration_sweep deleted=%d", n)
+	}
 	if n, err := h.store.CleanExpiredChallenges(); err != nil {
 		log.Printf("[auth] operation=challenge_sweep result=error error=%q", err)
 	} else if n > 0 {

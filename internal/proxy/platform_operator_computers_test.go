@@ -77,7 +77,7 @@ type operatorWorld struct {
 	vmctlPaths     []string
 	refreshCode    int
 	refreshBody    string
-	refreshSent    []string // the bodies deploy-refresh was asked with
+	refreshSent    []string        // the bodies deploy-refresh was asked with
 	extraComputers map[string]bool // computers the fake vmctl knows besides the two defaults
 	receiptCode    int             // what the guest's restart-receipt route answers
 }
@@ -250,7 +250,7 @@ func TestOperatorAdmissionFailsClosed(t *testing.T) {
 	// A7 an email session of the operator account.
 	for _, am := range []string{"email_code", "email_link"} {
 		emailSession := func(req *http.Request) {
-			token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"sub": opAccount, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Minute).Unix(), "scope": "access", "am": am})
+			token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{"sub": opAccount, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Minute).Unix(), "ev": time.Now().Unix(), "scope": "access", "am": am})
 			signed, err := token.SignedString(w.priv)
 			if err != nil {
 				t.Fatal(err)

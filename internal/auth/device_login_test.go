@@ -46,7 +46,7 @@ func passkeyCookieReq(method, path string, body any, priv ed25519.PrivateKey, us
 func emailSessionCookieReq(method, path string, body any, priv ed25519.PrivateKey, userID string) *http.Request {
 	claims := jwt.MapClaims{
 		"sub": userID, "email": "test@example.com", "iat": time.Now().Unix(),
-		"exp": time.Now().Add(5 * time.Minute).Unix(), "scope": "access", "am": AuthMethodEmailCode,
+		"exp": time.Now().Add(5 * time.Minute).Unix(), "ev": time.Now().Unix(), "scope": "access", "am": AuthMethodEmailCode,
 	}
 	signed, err := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims).SignedString(priv)
 	if err != nil {

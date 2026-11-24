@@ -332,8 +332,19 @@ func hashAPIKeySecret(secret string) string {
 // Path=/auth refresh cookie is not sent to /api/*). A token without "am",
 // issued before email sign-in, reads as passkey and lives at most one TTL.
 func (h *Handler) issueAccessJWT(user *User, method string) (string, error) {
+	// No token is made for an account whose address is not proved, and every token
+	// made carries the proof's time ("ev"): the validators here and in the proxy
+	// refuse a token without it, so a token made before this rule never works.
+	if !mayMint(user) {
+		return "", ErrAddressUnproved
+	}
+	ev := int64(1)
+	if user.EmailVerifiedAt != nil {
+		ev = user.EmailVerifiedAt.Unix()
+	}
 	now := time.Now().UTC()
 	claims := jwt.MapClaims{
+		"ev":    ev,
 		"sub":   user.ID,
 		"email": user.Email,
 		"iat":   now.Unix(),
@@ -469,9 +480,6 @@ func (h *Handler) issueSessionRow(w http.ResponseWriter, r *http.Request, user *
 // adding the account to this browser's set. HandleDesktopRedeem calls the
 // plain issuer instead, so a native handoff never mints an orphan set.
 func (h *Handler) signInSession(w http.ResponseWriter, r *http.Request, user *User, method string) (*userInfo, error) {
-	if !mayMint(user) {
-		return nil, errAddressUnproved
-	}
 	info, rs, err := h.issueSessionRow(w, r, user, method, nil)
 	if err != nil {
 		return nil, err
@@ -888,6 +896,9 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=store_credential error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to store credential"})
 		return nil, nil, false
+	} else {
+		// A recovery may have replaced an old holder: no cached rotation of theirs is handed back.
+		h.revokeRotatedGraceForUser(user.ID)
 	}
 	if pending == nil {
 		if fresh, err := h.store.GetUserByID(user.ID); err == nil {
@@ -1010,14 +1021,6 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// An account whose address was never proved mints nothing: it proves the
-	// address by mail first (recovery).
-	if !mayMint(user) {
-		log.Printf("[auth] operation=login_finish user_id=%s result=refused reason=address_unproved", user.ID)
-		writeUnproved(w)
-		return
-	}
-
 	// Update the credential sign count.
 	newSignCount := int64(credential.Authenticator.SignCount)
 	if err := h.store.UpdateCredentialSignCount(string(credential.ID), newSignCount); err != nil {
@@ -1034,6 +1037,11 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 
 	// Issue cookie-backed auth state.
 	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
+	if errors.Is(err, ErrAddressUnproved) {
+		log.Printf("[auth] operation=login_finish user_id=%s result=refused reason=address_unproved", user.ID)
+		writeUnproved(w)
+		return
+	}
 	if err != nil {
 		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=error step=issue_session error=%q", user.ID, string(credential.ID), err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
@@ -1493,6 +1501,19 @@ func (h *Handler) validateAccessTokenMethod(tokenStr string) (string, string, er
 		return "", "", errors.New("token is not an access token")
 	}
 
+	// The proof claim: a token made before the proof rule (or for an unproved account) has none.
+	if ev, _ := claims["ev"].(float64); ev <= 0 {
+		return "", "", errors.New("access token carries no proof of the address")
+	}
+	// The one place an access token becomes authority: the account must still be proved.
+	user, err := h.store.GetUserByID(userID)
+	if err != nil {
+		return "", "", errors.New("access token user not found")
+	}
+	if !mayMint(user) {
+		return "", "", ErrAddressUnproved
+	}
+
 	method, _ := claims["am"].(string)
 	return userID, normalizeAuthMethod(method), nil
 }
@@ -1772,7 +1793,7 @@ func (h *Handler) requireAuthUser(w http.ResponseWriter, r *http.Request) *User 
 		return nil
 	}
 	user, err := h.store.GetUserByID(userID)
-	if err != nil || !mayMint(user) {
+	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return nil
 	}
@@ -1789,7 +1810,7 @@ func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) (*U
 		userID, err := h.ValidateAccessToken(cookie.Value)
 		if err == nil {
 			user, err := h.store.GetUserByID(userID)
-			if err == nil && mayMint(user) {
+			if err == nil {
 				return user, nil
 			}
 		}

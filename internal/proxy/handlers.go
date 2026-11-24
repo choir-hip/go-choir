@@ -557,6 +557,12 @@ func (h *Handler) validateAccessJWT(r *http.Request) (*AuthResult, error) {
 	if scope != "access" {
 		return nil, errors.New("token is not an access token")
 	}
+	// The auth service puts the time of the address's proof in "ev" and signs no token
+	// for an unproved account: a token without it is one made before that rule (or
+	// forged without it) and is refused here exactly as the auth service refuses it.
+	if ev, _ := claims["ev"].(float64); ev <= 0 {
+		return nil, errors.New("access token carries no proof of the address")
+	}
 	email, _ := claims["email"].(string)
 	signInMethod, _ := claims["am"].(string)
 	if signInMethod == "" {

@@ -1480,10 +1480,10 @@ func TestAuthenticatedSessionDoesNotLeakCredentialMaterial(t *testing.T) {
 
 	// Create a valid JWT for this user.
 	claims := jwt.MapClaims{
-		"sub":   user.ID,
-		"exp":   time.Now().Add(5 * time.Minute).Unix(),
-		"iat":   time.Now().Unix(),
-		"scope": "access",
+		"sub": user.ID,
+		"exp": time.Now().Add(5 * time.Minute).Unix(),
+		"iat": time.Now().Unix(),
+		"ev":  time.Now().Unix(), "scope": "access",
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	tokenStr, err := token.SignedString(priv)
@@ -1553,10 +1553,10 @@ func TestRefreshRotationRenewsAccessJWT(t *testing.T) {
 
 	// Create an expired access JWT (simulating access token expiry).
 	expiredClaims := jwt.MapClaims{
-		"sub":   user.ID,
-		"exp":   time.Now().Add(-1 * time.Hour).Unix(), // expired
-		"iat":   time.Now().Add(-2 * time.Hour).Unix(),
-		"scope": "access",
+		"sub": user.ID,
+		"exp": time.Now().Add(-1 * time.Hour).Unix(), // expired
+		"iat": time.Now().Add(-2 * time.Hour).Unix(),
+		"ev":  time.Now().Unix(), "scope": "access",
 	}
 	expiredToken := jwt.NewWithClaims(jwt.SigningMethodEdDSA, expiredClaims)
 	expiredTokenStr, err := expiredToken.SignedString(priv)
@@ -1661,10 +1661,10 @@ func TestRefreshRotationRejectsExpiredRefresh(t *testing.T) {
 
 	// Create an expired access JWT.
 	expiredClaims := jwt.MapClaims{
-		"sub":   user.ID,
-		"exp":   time.Now().Add(-1 * time.Hour).Unix(),
-		"iat":   time.Now().Add(-2 * time.Hour).Unix(),
-		"scope": "access",
+		"sub": user.ID,
+		"exp": time.Now().Add(-1 * time.Hour).Unix(),
+		"iat": time.Now().Add(-2 * time.Hour).Unix(),
+		"ev":  time.Now().Unix(), "scope": "access",
 	}
 	expiredToken := jwt.NewWithClaims(jwt.SigningMethodEdDSA, expiredClaims)
 	expiredTokenStr, _ := expiredToken.SignedString(priv)
@@ -1712,10 +1712,10 @@ func TestReplayedOldRefreshTokenFailsAfterRotation(t *testing.T) {
 
 	// Use the refresh to rotate (simulate access expiry).
 	expiredClaims := jwt.MapClaims{
-		"sub":   user.ID,
-		"exp":   time.Now().Add(-1 * time.Hour).Unix(),
-		"iat":   time.Now().Add(-2 * time.Hour).Unix(),
-		"scope": "access",
+		"sub": user.ID,
+		"exp": time.Now().Add(-1 * time.Hour).Unix(),
+		"iat": time.Now().Add(-2 * time.Hour).Unix(),
+		"ev":  time.Now().Unix(), "scope": "access",
 	}
 	expiredToken := jwt.NewWithClaims(jwt.SigningMethodEdDSA, expiredClaims)
 	expiredTokenStr, _ := expiredToken.SignedString(priv)
@@ -1858,10 +1858,10 @@ func TestValidateAccessTokenRejectsExpiredJWT(t *testing.T) {
 
 	// Create an expired JWT manually.
 	claims := jwt.MapClaims{
-		"sub":   user.ID,
-		"exp":   time.Now().Add(-1 * time.Hour).Unix(),
-		"iat":   time.Now().Add(-2 * time.Hour).Unix(),
-		"scope": "access",
+		"sub": user.ID,
+		"exp": time.Now().Add(-1 * time.Hour).Unix(),
+		"iat": time.Now().Add(-2 * time.Hour).Unix(),
+		"ev":  time.Now().Unix(), "scope": "access",
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	tokenStr, _ := token.SignedString(priv)
@@ -2056,10 +2056,10 @@ func TestLogoutInvalidatesAuthenticatedSession(t *testing.T) {
 	// Create an expired access JWT and try to use it with the old refresh.
 	// The old refresh session was deleted, so this should fail.
 	expiredClaims := jwt.MapClaims{
-		"sub":   user.ID,
-		"exp":   time.Now().Add(-1 * time.Hour).Unix(),
-		"iat":   time.Now().Add(-2 * time.Hour).Unix(),
-		"scope": "access",
+		"sub": user.ID,
+		"exp": time.Now().Add(-1 * time.Hour).Unix(),
+		"iat": time.Now().Add(-2 * time.Hour).Unix(),
+		"ev":  time.Now().Unix(), "scope": "access",
 	}
 	expiredToken := jwt.NewWithClaims(jwt.SigningMethodEdDSA, expiredClaims)
 	expiredTokenStr, err := expiredToken.SignedString(priv)
@@ -2319,10 +2319,10 @@ func TestDeployedCookieContractOnRefreshRotation(t *testing.T) {
 
 	// Create an expired access JWT.
 	expiredClaims := jwt.MapClaims{
-		"sub":   user.ID,
-		"exp":   time.Now().Add(-1 * time.Hour).Unix(),
-		"iat":   time.Now().Add(-2 * time.Hour).Unix(),
-		"scope": "access",
+		"sub": user.ID,
+		"exp": time.Now().Add(-1 * time.Hour).Unix(),
+		"iat": time.Now().Add(-2 * time.Hour).Unix(),
+		"ev":  time.Now().Unix(), "scope": "access",
 	}
 	expiredToken := jwt.NewWithClaims(jwt.SigningMethodEdDSA, expiredClaims)
 	expiredTokenStr, err := expiredToken.SignedString(priv)
@@ -2634,6 +2634,7 @@ func sha256Sum(data []byte) string {
 	hash := sha256.Sum256(data)
 	return fmt.Sprintf("%x", hash)
 }
+
 // TestCredentialFlagsRestoredOnWebAuthnUser verifies that when a webauthnUser
 // is created from stored credentials, the CredentialFlags and
 // Authenticator.SignCount are properly restored. This is the core of the
@@ -2705,6 +2706,7 @@ func TestCredentialFlagsRestoredOnWebAuthnUser(t *testing.T) {
 		t.Errorf("AAGUID length: got %d, want 16", len(waCreds[0].Authenticator.AAGUID))
 	}
 }
+
 // TestSignCounterUpdatedOnLogin verifies that the sign counter is updated
 // in the credentials table after a successful login (simulated by calling
 // the store directly).
@@ -2799,6 +2801,7 @@ func TestReLoginCredentialIdentity(t *testing.T) {
 		t.Errorf("credential ID mismatch: got %x, want %x", waCreds[0].ID, originalID)
 	}
 }
+
 // TestLogoutThenReLoginFlow simulates the complete register → login →
 // logout → re-login lifecycle at the handler level, verifying that
 // session state is properly managed across all transitions.
@@ -2858,10 +2861,10 @@ func TestLogoutThenReLoginFlow(t *testing.T) {
 	// after some time, and verify that the refresh token (deleted during logout)
 	// cannot restore the session.
 	expiredClaims := jwt.MapClaims{
-		"sub":   user.ID,
-		"exp":   time.Now().Add(-1 * time.Hour).Unix(),
-		"iat":   time.Now().Add(-2 * time.Hour).Unix(),
-		"scope": "access",
+		"sub": user.ID,
+		"exp": time.Now().Add(-1 * time.Hour).Unix(),
+		"iat": time.Now().Add(-2 * time.Hour).Unix(),
+		"ev":  time.Now().Unix(), "scope": "access",
 	}
 	expiredToken := jwt.NewWithClaims(jwt.SigningMethodEdDSA, expiredClaims)
 	expiredTokenStr, err := expiredToken.SignedString(priv)
@@ -3453,7 +3456,6 @@ func TestDuplicateEmailRegistrationRejected(t *testing.T) {
 	}
 }
 
-
 // TestRegisterBeginRefusesAnAccountWithoutCredentials: an account that exists
 // but has no passkey (an interrupted recovery) is not a registration target. A
 // stranger who asks for a code gets nothing that works: the address's holder
@@ -3545,7 +3547,7 @@ func issueTestAccessJWTForHandler(priv ed25519.PrivateKey, userID string) string
 		"email": "test@example.com",
 		"iat":   time.Now().Unix(),
 		"exp":   time.Now().Add(5 * time.Minute).Unix(),
-		"scope": "access",
+		"ev":    time.Now().Unix(), "scope": "access",
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	signed, err := token.SignedString(priv)
