@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -431,7 +432,7 @@ func TestMidWalkDeadlineTruncatesOneEntryAndSparesTheNext(t *testing.T) {
 	var once sync.Once
 	w := scanWith(t, root, Limits{Budget: 400 * time.Millisecond, MaxEntries: 1 << 30}, func(path string) {
 		if strings.HasSuffix(path, "/d") {
-			once.Do(func() { time.Sleep(250 * time.Millisecond) })
+			once.Do(func() { time.Sleep(370 * time.Millisecond) })
 		}
 	})
 	if !topByName(t, w, "aaa-slow").Truncated {
@@ -532,4 +533,178 @@ func TestSmallEntryBoundStillExaminesTheFirstEntries(t *testing.T) {
 	if a := topByName(t, w, "a"); a.Truncated || a.Files != 1 {
 		t.Fatalf("the first entry got a zero share: %+v", a)
 	}
+}
+
+// What can go wrong in the leftovers report, each covered below:
+//   - the candidate source copies folded into one row, so a reader cannot say
+//     how many there are or which is large (the 2026-11-24 drill record);
+//   - a row with a size and no age, so a collector cannot tell a copy a week
+//     old from one made a minute ago;
+//   - the one large directory cut at an equal share of the walk while its
+//     small siblings used almost none of theirs (the walk reported a floor);
+//   - a large first directory spending what later entries were promised;
+//   - a user's file name appearing under the new groups.
+
+func TestSubjectsAreNamedByDigestWithSizesCountsAndAges(t *testing.T) {
+	root := t.TempDir()
+	before := time.Now().Add(-time.Second)
+	var digests []string
+	for i := 0; i < 40; i++ {
+		d := strings.Repeat(string(rune('a'+i%6)), 60) + string(rune('a'+i/6%6)) + string(rune('a'+i/36)) + "00"
+		digests = append(digests, d)
+		write(t, filepath.Join(root, "capsule-artifacts", "subjects", d, "workspace", "platform", "main.go"), 4096*(i+1))
+		write(t, filepath.Join(root, "capsule-artifacts", "subjects", d, "workspace", "platform", "go.mod"), 10)
+	}
+	write(t, filepath.Join(root, "capsule-artifacts", "subjects", "not a digest", "x"), 10)
+	time.Sleep(20 * time.Millisecond)
+	late := strings.Repeat("f", 64)
+	write(t, filepath.Join(root, "capsule-artifacts", "subjects", late, "workspace", "platform", "main.go"), 100)
+	w := scan(t, root, DefaultLimits)
+	if w.Truncated {
+		t.Fatal("a small volume's walk was cut")
+	}
+	g := groupByPath(t, w, "capsule-artifacts/subjects")
+	// All forty-one digests are named: more than MaxChildren, none folded.
+	var named int
+	for _, c := range g.Children {
+		if c.Name != OtherName {
+			named++
+		}
+	}
+	if named != 41 {
+		t.Fatalf("%d subject rows named, want 41: %+v", named, g.Children)
+	}
+	big := child(t, g, digests[39])
+	if big.Files != 2 || big.AllocatedBytes < 4096*40 {
+		t.Fatalf("subject row has no size or count: %+v", big)
+	}
+	if big.OldestChanged == nil || big.NewestChanged == nil || big.OldestChanged.Before(before) || big.NewestChanged.Before(*big.OldestChanged) {
+		t.Fatalf("subject row has no usable age: %+v", big)
+	}
+	if !child(t, g, late).NewestChanged.After(*big.NewestChanged) {
+		t.Fatal("a copy written later does not read as newer")
+	}
+	other := child(t, g, OtherName)
+	if other.Files != 1 {
+		t.Fatalf("a name that is not a digest was not folded: %+v", other)
+	}
+	if strings.Contains(string(mustJSON(t, w)), "not a digest") {
+		t.Fatal("the report echoes a name that is not a digest")
+	}
+	for i := 1; i < len(g.Children); i++ {
+		a, b := g.Children[i-1], g.Children[i]
+		if a.Name != OtherName && b.Name != OtherName && a.AllocatedBytes < b.AllocatedBytes {
+			t.Fatal("subjects are not largest first")
+		}
+	}
+	// The top row for capsule-artifacts carries the whole and its age too.
+	if top := topByName(t, w, "capsule-artifacts"); top.Files != 83 || top.OldestChanged == nil {
+		t.Fatalf("capsule-artifacts top row: %+v", top)
+	}
+}
+
+func TestReceiptsAreRowsByKindAndTheLogDirectoriesCarryAges(t *testing.T) {
+	root := t.TempDir()
+	for _, k := range []string{"execution", "fate", "granted"} {
+		for i := 0; i < 3; i++ {
+			write(t, filepath.Join(root, "capsule-artifacts", "receipts", k, strings.Repeat("c", 60)+string(rune('a'+i))+".json"), 300)
+		}
+	}
+	write(t, filepath.Join(root, "capsule-artifacts", "receipts", "private-kind", "x"), 5)
+	write(t, filepath.Join(root, "capsule-artifacts", "egress", "capsule-1.jsonl"), 800)
+	write(t, filepath.Join(root, "capsule-artifacts", "jobs", "j1.json"), 200)
+	write(t, filepath.Join(root, "capsule-artifacts", "job-logs", strings.Repeat("d", 64)+".log"), 5000)
+	w := scan(t, root, DefaultLimits)
+	rec := groupByPath(t, w, "capsule-artifacts/receipts")
+	for _, k := range []string{"execution", "fate", "granted"} {
+		if c := child(t, rec, k); c.Files != 3 || c.OldestChanged == nil {
+			t.Fatalf("receipts/%s: %+v", k, c)
+		}
+	}
+	if child(t, rec, OtherName).Files != 1 {
+		t.Fatalf("an unknown receipt kind was named: %+v", rec.Children)
+	}
+	ca := groupByPath(t, w, "capsule-artifacts")
+	for name, files := range map[string]uint64{"egress": 1, "jobs": 1, "job-logs": 1, "receipts": 10} {
+		c := child(t, ca, name)
+		if c.Files != files || c.OldestChanged == nil || c.NewestChanged == nil || c.AllocatedBytes == 0 {
+			t.Fatalf("capsule-artifacts/%s has no size, count and age: %+v", name, c)
+		}
+	}
+}
+
+func TestQuarantinesAreNamedRowsWithAges(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "rematerialize-quarantine-20261115T041047Z", "state.db"), 20000)
+	write(t, filepath.Join(root, "rematerialize-quarantine-20261115T054339Z", "state.db"), 30000)
+	write(t, filepath.Join(root, "workspace-replaced-20261101T000000Z", "x"), 100)
+	w := scan(t, root, DefaultLimits)
+	for _, n := range []string{"rematerialize-quarantine-20261115T041047Z", "rematerialize-quarantine-20261115T054339Z", "workspace-replaced-20261101T000000Z"} {
+		e := topByName(t, w, n)
+		if e.AllocatedBytes == 0 || e.Files == 0 || e.OldestChanged == nil || e.NewestChanged == nil {
+			t.Fatalf("%s: %+v", n, e)
+		}
+	}
+}
+
+func TestOneLargeDirectoryFinishesWhenItsSiblingsAreSmall(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < 9000; i++ {
+		write(t, filepath.Join(root, "capsule-artifacts", "subjects", strings.Repeat("a", 64), "d"+string(rune('a'+i%26)), "f"+strconv.Itoa(i)), 1)
+	}
+	for i := 0; i < 10; i++ {
+		write(t, filepath.Join(root, "small"+strconv.Itoa(i), "x"), 1)
+	}
+	// An equal share of 20,000 entries over eleven top entries is 1,819: the
+	// old walk cut the large one there and reported a floor.
+	w := scan(t, root, Limits{Budget: time.Minute, MaxEntries: 20000})
+	if w.Truncated || topByName(t, w, "capsule-artifacts").Truncated {
+		t.Fatalf("the large directory was cut with room to spare: %+v", topByName(t, w, "capsule-artifacts"))
+	}
+	if got := topByName(t, w, "capsule-artifacts").Files; got != 9000 {
+		t.Fatalf("%d files counted, want 9000", got)
+	}
+}
+
+func TestALargeFirstDirectoryDoesNotStarveTheEntriesAfterIt(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < 15000; i++ {
+		write(t, filepath.Join(root, "aaa-huge", "d"+string(rune('a'+i%26)), "f"+strconv.Itoa(i)), 1)
+	}
+	for i := 0; i < 10; i++ {
+		write(t, filepath.Join(root, "small"+strconv.Itoa(i), "x"), 1)
+	}
+	w := scan(t, root, Limits{Budget: time.Minute, MaxEntries: 20000})
+	if !topByName(t, w, "aaa-huge").Truncated {
+		t.Fatal("the bound did not apply to the large directory")
+	}
+	for i := 0; i < 10; i++ {
+		if s := topByName(t, w, "small"+strconv.Itoa(i)); s.Truncated || s.Files != 1 {
+			t.Fatalf("an entry after the large one was starved: %+v", s)
+		}
+	}
+}
+
+func TestLeftoversReportSample(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "state.db"), 200000)
+	write(t, filepath.Join(root, "rematerialize-quarantine-20261115T041047Z", "state.db"), 90000)
+	for i, d := range []string{strings.Repeat("a", 64), strings.Repeat("b", 64)} {
+		write(t, filepath.Join(root, "capsule-artifacts", "subjects", d, "workspace", "platform", "main.go"), 40000*(i+1))
+	}
+	write(t, filepath.Join(root, "capsule-artifacts", "receipts", "fate", "r1.json"), 300)
+	write(t, filepath.Join(root, "capsule-artifacts", "egress", "capsule-1.jsonl"), 800)
+	var s Scanner
+	rep := s.Read(context.Background(), root, DefaultLimits, true)
+	raw, _ := json.MarshalIndent(rep.Walk, "", " ")
+	t.Logf("sample report:\n%s", raw)
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
