@@ -178,6 +178,7 @@ stations:
   depends_on:
   - X0
   status: working
+  lane: lane/exact-rest
 - id: X4
   name: The bar and the run sheet page models
   scope: lane exact-bar-runsheet, in slices; the player and audio session stay native as a state snapshot and commands; the slice that posts run sheet ops to the server is red.
@@ -186,6 +187,7 @@ stations:
   depends_on:
   - X0
   status: working
+  lane: lane/exact-rest
 - id: X5
   name: Mail and files leftovers and the open-pages set
   scope: lane exact-mail-files-rest; dead Swift deleted first; the live mail store's server writes are red
@@ -194,6 +196,7 @@ stations:
   depends_on:
   - X0
   status: working
+  lane: lane/exact-rest
 - id: X6
   name: Imported documents (the code's "shelf"), onboarding and settings models
   scope: 'The owner, 2026-11-20: "if you upload a file that''s actually going to your computer, your VM on Choir.news. So uploaded files really shouldn''t be deleted because they''re saved in the cloud." That is true of the Files page (it uploads to the computer) and NOT of the reader''s imports today: an imported PDF or EPUB is kept only on the phone (Application Support/Autoradio/books, AutoradioModule+Books.swift:23). So this station makes an imported document a file on the owner''s computer, with the phone holding a cache; list, search, reading position and read-aloud hand-off in shared code, named for what they are (not "books" or "shelf"); PDF text extraction may need a native op, with its reason. Onboarding and settings page models. Start when two of X3 to X5 have landed a slice.'
@@ -201,7 +204,8 @@ stations:
   review: one seat a slice
   depends_on:
   - X1
-  status: pending
+  status: working
+  lane: lane/exact-rest and lane/onboard-consent
 - id: X7
   name: The Texture editor on what Exact's editor already holds
   scope: 'docs/reference/exact/markdown-editor-and-textflow.md: Exact''s editor holds the draft, the selection and undo. So the field is the draft, and shared code keeps one pair (the field''s text and the revision it descends from); a merge writes into the field''s value and Exact applies it as a minimal edit with the caret kept. Tests for each step before code. Patch 0001 (no syntax visible on iPhone) proved once on the simulator. Known costs: a remote merge clears undo; on Android stock Exact shows Markdown source (owner decision Q5). Textflow and the reflow measure are reader work: use them for the reader''s layout as a slice of X3.'
@@ -209,7 +213,8 @@ stations:
   review: two seats
   depends_on:
   - X0
-  status: pending
+  status: working
+  lane: lane/exact-rest
 - id: X8
   name: What is left native, counted and justified
   scope: 'when X1 to X7 have landed: read every remaining non-voice native file; each is deleted, moved, or kept with its reason beside the call; the ceiling is set to what remains and the problem record of 2026-11-18 is closed or restated.'
@@ -220,14 +225,16 @@ stations:
   - X5
   - X6
   - X7
-  status: pending
+  status: working
+  lane: lane/exact-rest
 - id: O0
   name: The unified design, read by the owner
   scope: docs/design/semantic-layer-2026-11-20.md returns; the lead checks it against the as-built survey and the owner's brief, has it challenged by a panel (skills/agentic-consensus) on identity grain and custody, and brings the owner its opening page and decisions. It replaces this file's O and C stations with its own landing sequence in the same change. It rules on lane/story-events-e5 and the stopped E3.
   class: green
   review: a panel on the design; no code review
-  status: working
+  status: superseded
   result: 'the design is written (4a1aaeb4c): judgments as tape records with the graph as their projection; happenings, entities (outlets among them), stories and claims in the Autopaper object graph; choir.World with Get, Find, Neighbors, Walk, Ask, Judge; landings L1 (C1b), L2 (the flush writes recorded judgments, 50 vector neighbours, clustering within a flush), L3 (happenings into the graph; the story-events-e5 lane changed, not landed as is: its index is capped at 10,000 events). It rates under 1,000 searches a day at p 0.10 and 2,400 at p 0.50. Not yet read by the owner; not yet challenged by a panel. To amend for the owner''s rulings: a story is one main point; material on the same main point revises it and a change of main point starts a new story, judged by reasoning.'
+  note: 'superseded 2026-11-24: events and entities are retired; the work is M2 stations G1 to G6 (docs/design/desks-and-engine-2026-11-24.md)'
 - id: O1
   name: One identity space
   scope: 'as the design sequences it: events, their members and the story-to-event and capture-to-event edges in the Autopaper object graph beside stories, captures and entities; one id form per thing with the others resolvable; outlets as objects; the custody tension over management and events resolved in doctrine''s terms; the og_edges id columns declared COLLATE "C". No rewrite of large tables in one step.'
@@ -235,7 +242,8 @@ stations:
   review: two seats a landing
   depends_on:
   - O0
-  status: pending
+  status: superseded
+  note: 'superseded 2026-11-24: events and entities are retired; the work is M2 stations G1 to G6 (docs/design/desks-and-engine-2026-11-24.md)'
 - id: O2
   name: Identity as recorded judgments
   scope: event joins and entity identity decided by vectors for candidates, System 1 typed questions with the distribution recorded, and an RLM agent for the unclear cases; merge, split and retire as superseding records, undoable; the flush stays one Jev call. The research.related_story switch is removed. Edges written and never read are deleted or given a reader.
@@ -243,7 +251,8 @@ stations:
   review: two seats a landing
   depends_on:
   - O1
-  status: pending
+  status: superseded
+  note: 'superseded 2026-11-24: events and entities are retired; the work is M2 stations G1 to G6 (docs/design/desks-and-engine-2026-11-24.md)'
 - id: O3
   name: The typed library in the cell
   scope: 'the Go surface a research or management cell imports: read an event, an entity, a claim, an outlet, an edge; vector and graph in one call; typed results with ids and provenance; a read''s bounds in its type; custody and disclosure labels enforced by the surface. Proved by the design''s ten questions run on d@e. The first read-only verbs may land before O2 over what exists today.'
@@ -251,14 +260,16 @@ stations:
   review: two seats
   depends_on:
   - O0
-  status: pending
+  status: superseded
+  note: 'superseded 2026-11-24: events and entities are retired; the work is M2 stations G1 to G6 (docs/design/desks-and-engine-2026-11-24.md)'
 - id: O4
   name: Quality read by someone other than the writer
   scope: a standing hand-read sample of joins and attachments scored against precommitted claims (the learning engine's forecast and score), with a status script line; the baselines are in the as-built survey.
   class: yellow
   depends_on:
   - O2
-  status: pending
+  status: superseded
+  note: 'superseded 2026-11-24: events and entities are retired; the work is M2 stations G1 to G6 (docs/design/desks-and-engine-2026-11-24.md)'
 - id: C1
   name: How much the paper duplicates itself
   scope: 'docs/evidence/duplicate-stories-on-the-paper-2026-11-20.md: the share of a day''s new stories that report a happening an earlier story already covers, with examples and what each duplicate cost in searches and model calls. Sets C2''s threshold and its expected effect.'
@@ -272,7 +283,8 @@ stations:
   review: one seat
   depends_on:
   - C1
-  status: working
+  status: superseded
+  note: 'superseded 2026-11-24: events and entities are retired; the work is M2 stations G1 to G6 (docs/design/desks-and-engine-2026-11-24.md)'
 - id: C2
   name: One narrative per topic
   scope: 'built on the ontology, replacing C1b. A capture whose happening overlaps significantly with what a story already tells (the same happening, a development of it, or a part of the same situation) becomes material for a revision of that story, with what is new since its last version, and no new story opens; the story deepens over time into a single narrative with its history. The unit is the main point (owner, 2026-11-20): material that serves a story''s main point revises it, and a change of main point starts a new story (before an election: momentum, ads, a debate are different stories; election night is the results coming in; the next day is who won). The judgment is made by reasoning over the story and the new material, recorded with its reason, and scored by a hand read; a research run begins from the event''s state and searches the web only for what the corpus does not hold; duplicates already published are linked, not deleted. Search station L2 (a side measurement) was stopped after three send-backs (docs/problems/search-sufficiency-measurement-three-reviews-no-landing-2026-11-20.md); the read-before-send it was preparing, with its record, is built here as part of the one verb (L3).'
@@ -282,14 +294,16 @@ stations:
   - O1
   - O3
   - C1
-  status: pending
+  status: superseded
+  note: 'superseded 2026-11-24: events and entities are retired; the work is M2 stations G1 to G6 (docs/design/desks-and-engine-2026-11-24.md)'
 - id: C3
   name: The day's number
   scope: a full UTC day under 1,000 web searches with coverage not lower, read from the search usage history
   class: yellow
   depends_on:
   - C2
-  status: pending
+  status: superseded
+  note: 'superseded 2026-11-24: events and entities are retired; the work is M2 stations G1 to G6 (docs/design/desks-and-engine-2026-11-24.md)'
 - id: P1
   name: Stories that cannot publish
   scope: the label carry that keeps twelve stories unpublished since 2026-11-08 (fix at the carry, not the gate); the 502 on loading the private revision (time the read first; then the read stops scanning the whole scope and a timed-out publish is retried; orange); the reply wake (lane reply-wake-fix). Each its own landing.
@@ -301,22 +315,69 @@ stations:
   scope: the hourly tick, now also reporting the native ceiling; the Mac build queue at ~/.local/state/choir-buildq; settle open claims at their times (C165, C178, C183); an owner letter with the reporter skill at each real change in the story, naming every expedite; lanes removed when they land or are dropped.
   class: yellow
   status: working
+- id: X9
+  name: The device probe
+  scope: 'on a real phone: the round trip native fact to shared code to native command, and whether shared code keeps running on a locked phone while a speech-playback claim is held; everything after depends on these two numbers'
+  class: yellow
+  review: none
+  depends_on: []
+  status: pending
+  note: docs/evidence/exact-conversion-audit-2026-11-24.md slice 1
+- id: X10
+  name: Model configuration and choice in Exact
+  scope: the model list, candidates, configurator, listener pipeline, offers, voice choice catalog and setup steps move to shared code; native keeps fetch, load and device facts; about 2,900 Swift lines and 99 tests go
+  class: orange
+  review: one seat
+  depends_on:
+  - X9
+  status: pending
+  note: docs/evidence/exact-conversion-audit-2026-11-24.md slice 2; waits for lanes voice-default and onboard-consent to land
+- id: X11
+  name: Speaker scoring, enrolment and kept turns in Exact
+  scope: scoring and the enrolment state machine in shared code over vectors native returns; native keeps the embedding call and writing the audio file
+  class: orange
+  review: one seat
+  depends_on:
+  - X10
+  status: pending
+  note: docs/evidence/exact-conversion-audit-2026-11-24.md slice 3
+- id: X12
+  name: Turn policy and hands-free state in Exact
+  scope: endpointing, barge-in, the hands-free switch and commit move to shared code driven by time-stamped native events; tests written from the behaviour list, not translated
+  class: orange
+  review: one seat
+  depends_on:
+  - X9
+  status: pending
+  note: docs/evidence/exact-conversion-audit-2026-11-24.md slice 4; every policy threshold is 300 ms or longer
+- id: X13
+  name: The turn pipeline in Exact
+  scope: the turn lifecycle, System 1, the holder, the desk client, the desk context, local acknowledgement prompting, the conversation and the timeline move to shared code; needs a server route that streams the desk answer over WebSocket or a ticketed GET first
+  class: orange for the phone; orange for the route
+  review: one seat each
+  depends_on:
+  - X12
+  status: pending
+  note: docs/evidence/exact-conversion-audit-2026-11-24.md slice 5; the largest slice
+- id: X14
+  name: Deck rules and remote audio in Exact
+  scope: the deck's rules and held list move; the remote player is replaced by Exact's audio element once it has playback rate and an ended event
+  class: orange
+  review: one seat
+  depends_on:
+  - X9
+  status: pending
+  note: docs/evidence/exact-conversion-audit-2026-11-24.md slice 6
+- id: X15
+  name: The lab harness retired
+  scope: the Mac replay tool, the lab config store and fixtures replaced by trace replay in shared tests
+  class: yellow
+  review: none
+  depends_on:
+  - X13
+  status: pending
+  note: docs/evidence/exact-conversion-audit-2026-11-24.md slice 7
 decisions_for_the_owner:
-- id: Q1
-  question: Which part of the semantic layer's design do you want changed before red work starts on it?
-  why: every later station builds on its kinds, identity grain and custody
-  options:
-  - accept the opening page as written
-  - change named parts
-  - stop and redesign
-  default: no red station of track O or C starts until the owner has answered; read-only verbs over what exists today (part of O3) and all of track X continue
-- id: Q3
-  question: Do the root desk, owner-act enforcement and the snapshot rewrite stay parked?
-  why: each was stopped after repeated send-backs and needs substrate work
-  options:
-  - parked until this mission ends
-  - bring one back
-  default: parked
 - id: Q4
   question: Is the About page's Build row showing the commit and time what you meant by "the actual build"?
   why: the lead read it that way and built it
@@ -333,8 +394,8 @@ decisions_for_the_owner:
   default: accept for now; Android is outside this mission
 now:
   status: working
-  as_of: 2026-11-21T09:00Z
-  slice: 'X-train (lane/exact-train1: ten package lanes merged, app builds, first simulator proof passed five drives and failed at imported; the integrator drives the proof loop); the run sheet flip''s review fixes (lane/exact-radio-fix); the account boundary (lane/account-boundary-l1, world mechanism, seat 1 accepted the delta, seat 2 reading); search landing A, the main-point judgment with story trajectories (lane/story-main-point, sent back once); search landing B, read first (lane/search-read-first, seat 1 accepted)'
+  as_of: 2026-11-24T02:21Z
+  slice: lane exact-rest (reader, editor, run sheet, clips, notebook, pages, mail out of Swift) in its second two-seat review; onboarding's enrolment logic moving to Exact in lane onboard-consent; X9 to X15 (the conversation logic beside the voice) wait for the voice lanes to land
   source_ref: origin/main 8578a1aa8 plus docs
   deploy_identity: staging and the paper on 8578a1aa8 (the publish load fix); the owners iPhone on the takes build
   candidate: none frozen
@@ -347,11 +408,11 @@ now:
     scope_if_supported: consolidation is the main lever on search volume; continue to C3
     ledger_id: C183
     status: untested
-  believed_state: main holds 17,664 non-voice Swift lines and the train holds 6,242 with the app building; the run sheet now runs in shared code and its review found that background playback depends on shared code staying awake, which is unproven, so the native deck is being made self-sufficient before the train lands; the publish failures are fixed on the paper; web searches still run near 2,650 a day and the two search landings are built and in review
-  main_uncertainty: 'whether the radio plays with the screen locked after the flip (only the owner''s phone can say); whether Texture stops casting research once it has read what it was fed, and whether read-first brings searches per run under 2.0 (builder: 0.40); whether the train''s proof converges in a few runs'
-  next_observation: the train's PROOF OK line; scripts/proofs/publish-load-deployed.sh for a clean hour on 8578a1aa8 (C186); after each search landing, scripts/status-search-reads and scripts/status-story-choice on the paper
+  believed_state: after exact-rest, 19,280 Swift lines and 669 tests remain; an audit says about 55% of the lines and 369 of the tests can move, and names the narrow native interface that is left (docs/evidence/exact-conversion-audit-2026-11-24.md). The ontology track of this mission (events, entities) is superseded by the desks and engine design
+  main_uncertainty: the native-to-shared round trip and whether shared code runs on a locked phone (X9); Exact lacks a streamed POST response, a native push, and playback rate and ended on its audio element
+  next_observation: the exact-rest re-review; the first native build with the lanes merged; the X9 probe on the owner's phone
   blocker: none
-  next_action: land read-first when seat 2 accepts, then the main-point judgment after its re-review, one deploy each with a reading between; land the train after the radio fixes and one proof; install on the phone and ask the owner for the locked-screen test; rebase the account boundary onto the train and run its drills
+  next_action: land exact-rest when accepted; run X9 in the first device build; start X10 when voice-default and onboard-consent have landed
 operating_notes:
 - 'Roles: the lead orchestrates; Sonnet subagents build in lanes (cd /Users/wiz/Dev/go-choir && git fetch && lane new <name> --base origin/main); Opus only for open design. Review seats are in CLAUDE.md: seat 1 Gemini 4 Hydrogen through the official agy CLI (a Sonnet subagent on a rate limit), seat 2 DeepSeek through the agentic-consensus runner on a frozen copy; orange one seat, red two. After two send-backs of one mechanism, change the mechanism, not the patch.'
 - 'Page moves: rewrite from what the page must do, then delete the Swift; nothing carried over; account ownership (accountGeneration, writeCurrent, the wipe list) from the first commit; tests red before code; slices that each lower the ceiling. The lead runs the one native build and the simulator proof through the queue and reads the screenshots.'

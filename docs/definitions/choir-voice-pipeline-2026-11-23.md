@@ -135,6 +135,7 @@ stations:
   depends_on:
   - V0
   status: working
+  lane: lane/voice-default (Fluid Speech Mini, one model list as data; review fixes in progress)
 - id: V3
   name: End of turn by model
   scope: the turn model and the end-of-utterance stream from the owner's earlier engine brought in behind the policy that already exists
@@ -174,12 +175,48 @@ stations:
   depends_on:
   - V2
   - V3
+  status: working
+  lane: lane/onboard-consent
+  note: 'voice enrolment in onboarding: three sentences and one to confirm, stored only on a match, verdicts logged and nothing rejected in the first build; its state machine lives in Exact'
+- id: V8
+  name: Fluid Speech Pro for phones that can hold it
+  scope: one more recogniser row with its own device rule, measured against Mini on the repository's real-speech word-error test
+  class: orange
+  review: one seat
+  depends_on:
+  - V2
+  lane: lane/voice-pro
+  status: working
+- id: V9
+  name: A larger answering model for newer phones
+  scope: LFM3-Omni-2B as a responder row offered on phones with enough memory, text only at first; the LFM3 already running stays first on the owner's phone class
+  class: orange
+  review: one seat
+  depends_on:
+  - V2
+  lane: lane/responder-omni
+  status: working
+- id: V10
+  name: The model list served
+  scope: the phone fetches the model list from the server so models and per-device recommendations change without an app release; paths from the list are refused outside the model's folder
+  class: orange
+  review: one seat
+  depends_on:
+  - V2
+  status: pending
+- id: V11
+  name: The conversation logic in Exact
+  scope: 'turn policy, hands-free state and the turn pipeline leave Swift: M1 stations X9 to X15'
+  class: orange
+  review: one seat (see M1 X9 to X15)
+  depends_on:
+  - V2
   status: pending
 decisions_for_the_owner: []
 now:
   status: working
-  as_of: 2026-11-23T22:02Z
-  slice: not started; waits for the design discussion and for the records track's turn records
+  as_of: 2026-11-24T02:21Z
+  slice: V2 in review fixes (lane voice-default); V7 enrolment in lane onboard-consent; V8 and V9 building and measuring on the Mac
   source_ref: origin/main bcea7eefd
   deploy_identity: staging on a2ba96767
   candidate: none
@@ -187,7 +224,7 @@ now:
   main_uncertainty: which of the specified models the owner's phone runs within its memory and latency, measured on the phone
   next_observation: the owner's answer on Q1
   blocker: none
-  next_action: write up to executable after the design discussion; V0 first
+  next_action: land V2 when its review accepts; the first device build proves Fluid Speech Mini and enrolment on the owner's phone; recordings from that phone with the radio playing are the first real-condition accuracy measure
 operating_notes:
 - Every stage change is measured on the phone against the stage it replaces, on the same recorded set.
 receipts:

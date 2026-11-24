@@ -1,6 +1,6 @@
 ---
 definition_version: 7
-readiness: intent
+readiness: executable
 authority: 'the owner, 2026-11-23: "We can''t lose logs"; "we want to have some measure of perplexity of our corpus versus the world"; "We should do experiments before we decide on the design"; on records and measurement as its own track: "Yes, that matches as a third track".'
 review:
   reviewer: none (an intention recorded from the owner's words; reviewed before it becomes executable)
@@ -92,7 +92,9 @@ stations:
   class: orange; red if it is written to the tape
   review: one seat; two if red
   depends_on: []
-  status: pending
+  status: working
+  lane: lane/decision-record
+  note: stage-agnostic so the capture desk writes the same rows; gains a row per front page render (the order shown and why), since E1 could not rebuild the page
 - id: R1
   name: What a run saw
   scope: the run ledger gains the prompt a model saw, what woke the run and its search queries; guest log lines reach the host journal before the console rotates
@@ -114,21 +116,24 @@ stations:
   review: none
   depends_on:
   - R0
-  status: pending
+  status: proved
+  note: 'settled 2026-11-24: the measure sees the group and not the misranking (C215 false, C218 false); the page shown cannot be rebuilt because only the latest importance is kept; docs/evidence/offline-experiments-2026-11-24/README.md'
 - id: E2
   name: Do happenings grow more slowly than sources
   scope: the replayed week with 10, 25, 50 and 100 per cent of sources; count happenings reported by two or more independent origins; the claim is an exponent under 0.85
   class: yellow
   review: none
   depends_on: []
-  status: pending
+  status: proved
+  note: 'settled 2026-11-24: no saturation law; groups with two or more origins grow faster than sources (C216 false); docs/evidence/offline-experiments-2026-11-24/README.md'
 - id: E3
   name: Are vector groups happenings
   scope: a hand read of 100 groups at two and three origins, and whether the Huang group forms and bursts in replay
   class: yellow
   review: none
   depends_on: []
-  status: pending
+  status: proved
+  note: 'settled 2026-11-24: 68% of sampled groups were one thing (C217 false, narrowly); 90% had exactly one main subject and none spanned several (C219 true): a group is not a kind apart from a subject; docs/evidence/offline-experiments-2026-11-24/README.md'
 - id: E4
   name: The turn detector against real turns
   scope: '20 hand-collected cases where a story''s point moved, today''s among them, against a detector with no count in it: does a rival main point explain recent arrivals better than the story''s own'
@@ -136,7 +141,8 @@ stations:
   review: none
   depends_on:
   - E3
-  status: pending
+  status: working
+  note: 'run 2026-11-24 as novelty relative to the subject (C221 to C231): every distance-based novelty fails on a turn; burst finds the turn and not the echo; new subject pairs reward lists; burst with near-copies zeroed worked on one day, found after the fact. A second day is owed; docs/evidence/offline-experiments-2026-11-24/README.md'
 - id: E5
   name: Batching against the staged funnel
   scope: four arms on one replayed day (the staged funnel; batches of about 25 with no retrieval; batches with each item's nearest stories; what management did), scored by what the world did next, a blind reader and the turn set, priced at the paid rate, kill lines set first
@@ -145,7 +151,8 @@ stations:
   depends_on:
   - R0
   - E3
-  status: pending
+  status: working
+  note: 'model arms on 2026-11-23''s arrivals: flat batches, with neighbours'' names, with a digest, grouped fan-out with per-group context, and the batch-size test (C232 to C243 entered before any call); lane/offline-experiments'
 - id: R3
   name: The measure, live
   scope: the measure and its cost as a host fold the root reads, with the daily outside check research runs; density step 2a (ledger C203) settles here
@@ -164,16 +171,16 @@ decisions_for_the_owner:
   default: the host holds derived folds; nothing canonical is added until the owner rules
 now:
   status: working
-  as_of: 2026-11-23T22:02Z
-  slice: nothing building; the first three experiments read only captures and may start on the owner's word
+  as_of: 2026-11-24T02:21Z
+  slice: E5's model arms running; R0 with the page-render record building in lane decision-record; a backlog measurement from a copy of the paper's database
   source_ref: origin/main bcea7eefd
   deploy_identity: staging on a2ba96767
   candidate: none
-  believed_state: the holes are known from today's reads; nothing is built
-  main_uncertainty: whether the measure, computed on our own sources, tracks what the owner means by the world
-  next_observation: the owner's word on starting E1 to E3
+  believed_state: 'E1 to E3 are settled and E4 has one day: importance counted on subjects holds; novelty is the open problem and cheap counting does not solve it; there is no saturation law; "happening" is not a kind'
+  main_uncertainty: whether a model reading a group with its context sees a turn (E5 arm E against D); whether any novelty form holds on a second day
+  next_observation: the E5 report
   blocker: none
-  next_action: on the owner's word, R0 and E1 to E3; then write this file up to executable
+  next_action: settle C232 to C243; pick the capture desk's first context recipe from E5; rerun E4's burst-without-copies form on another day, precommitted
 operating_notes:
 - 'This track goes first: the voice and engine tracks are settled by its records.'
 receipts:

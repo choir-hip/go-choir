@@ -171,11 +171,27 @@ stations:
   review: a panel on the design
   depends_on: []
   status: pending
+- id: S10
+  name: Self-development leftovers measured, then collected
+  scope: the data-volume report shows every capsule leftover by size and age without waking a hibernated computer; then a collector that runs some time after boot when idle, never at boot (owner, 2026-11-24)
+  class: orange for the report; red for the collector
+  review: one seat; two for the collector
+  depends_on: []
+  lane: lane/disk-leftovers (the report; built, unreviewed)
+  status: working
+- id: S11
+  name: The removed computers' remains deleted
+  scope: the destroyed sweep takes an exact list of computer ids, refuses by name any with an owner, a route or a recent head, and proves no chunk is shared with a living computer; the owner sees the dry-run list before any delete
+  class: black
+  review: two seats and the owner
+  depends_on: []
+  lane: lane/disk-leftovers (built, unreviewed; five candidates named, about 6.3 GB of tape and 1.4 GB of chunks)
+  status: working
 decisions_for_the_owner: []
 now:
   status: working
-  as_of: 2026-11-23T21:33Z
-  slice: S3 building in lane snapshot-capture-s3; a read-only measurement of the disk, the store reading, snapshot sharing, story versions and the receipt table running
+  as_of: 2026-11-24T02:21Z
+  slice: S3 review fixes; S10 report and S11 command built in lane disk-leftovers and awaiting review; a 55.7 GB copy of the paper's database is on the Mac for a backlog measurement (owner's permission, 2026-11-24) and is deleted when that is done
   source_ref: origin/main c8d48a589
   deploy_identity: staging and the paper on c27a50d98; a deploy of main in flight
   candidate: none frozen
@@ -192,7 +208,7 @@ now:
   main_uncertainty: 'which indexes hold the 21 GiB of the file that is not stored values (stored values are 30.2 of 51.6 GiB: object bodies 16.0, run memory 7.5, object headers 5.7)'
   next_observation: S0's report on the paper; S1's and S2's commits
   blocker: none
-  next_action: review S3 (two seats) and land it; then S8; read S0's report from the paper when it finishes (about 05:45Z on 11-24 at the latest) and write S6's design from it; the receipt table swap is held while the disk has room
+  next_action: two-seat review of lane disk-leftovers; show the owner the S11 dry-run list after deploy; review S3 when its builder reports
 operating_notes:
 - One landing and one deploy at a time, in the metamission's order; S1 goes early because it stops the next staged copy.
 - A snapshot or restore test never runs against the paper. A restored store's equivalence is proved on d@e.

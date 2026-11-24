@@ -203,6 +203,7 @@ stations:
   review: one seat
   depends_on: []
   status: working
+  lane: lane/onboard-consent
 - id: P3
   name: Native passkey account creation and sign-in, and account deletion in the app
   scope: creation and sign-in by the platform's passkey screen through Exact's passkeys package, the associated-domains file served by choir.news, a server route that gives the phone its key from a passkey ceremony; the device-code flow leaves the app. Deletion started in the app with a fresh passkey assertion, on the defaults the owner accepted. Lanes native-passkey and account-delete
@@ -210,13 +211,15 @@ stations:
   review: two seats
   depends_on: []
   status: working
+  lane: lane/native-passkey and lane/account-delete
 - id: P4
   name: Consent, permissions and models
   scope: one consent at account creation covering what is sent to models on our servers and to outside providers; model files downloaded only after consent, sizes stated; the microphone asked only when a signed-in listener turns voice on, and closed when the screen locks; voice turn audio on the phone pruned. Lane onboard-consent
   class: orange
   review: one seat
   depends_on: []
-  status: pending
+  status: working
+  lane: lane/onboard-consent
 - id: P5
   name: Spoken onboarding
   scope: 'with the voice track (V7): the listener says what they are interested in'
@@ -224,7 +227,8 @@ stations:
   review: one seat
   depends_on:
   - 'M6: V7'
-  status: pending
+  status: working
+  lane: lane/onboard-consent
 - id: P6
   name: Screenshots, previews and the reviewer's notes
   scope: scripted slim-simulator runs with seeded content, captured at Apple's current sizes, previews of captured footage only, the review notes and a short walk-through; with a new privacy policy, the privacy label answers and the store texts, drafted for the owner to read
@@ -270,6 +274,7 @@ stations:
   review: two seats
   depends_on: []
   status: working
+  lane: lane/tester-capacity
 - id: P11
   name: The rest of the Exact cutover, before the first build
   scope: 'the radio run sheet, queue and player flip to the shared runtime (lane exact-flip-player); every other non-voice Swift file ported or deleted (lane exact-rest). Measured before: 49 files, 5,844 lines of Swift that is not voice. This is mission M1''s remaining work, done here because the owner wants testers to get the shared app'
@@ -277,6 +282,7 @@ stations:
   review: one seat each
   depends_on: []
   status: working
+  lane: lane/exact-rest
 - id: P12
   name: A demo account for Apple's reviewers
   scope: one designated account, a user name and password exchanged for a narrow key for that account only, a "Reviewer sign-in" link on the sign-in screen, a runbook. Lane demo-account, on top of native-passkey
@@ -285,11 +291,27 @@ stations:
   depends_on:
   - P3
   status: working
+  lane: lane/demo-account
+- id: P13
+  name: Test accounts deleted and usage watched
+  scope: a reviewed operator command deletes the automated-test and hand-test accounts (never one that owns a computer; the owner's, the one gmail, b@c and d@e stay); a per-account usage view replaces a spend bound for friendly testers
+  class: black for the delete; orange for the view
+  review: two seats and the owner for the delete
+  depends_on:
+  - P10
+  status: pending
+- id: P14
+  name: Thirty days of host logs, enforced
+  scope: the host keeps abuse logs for 30 days and no longer, set and verified, before the privacy policy that says so is published
+  class: orange
+  review: one seat
+  depends_on: []
+  status: pending
 decisions_for_the_owner: []
 now:
   status: working
-  as_of: 2026-11-23T23:59Z
-  slice: 'overnight: store-build fixes; native-passkey; account-delete; onboard-consent; tester-capacity; radio-first-run; each reviewed by two seats where red, landed in as few trains as the reviews allow; exact-flip-player; exact-rest'
+  as_of: 2026-11-24T02:21Z
+  slice: 'landed: the association file (caf05a3cc) and the player lane (255007456). In review or review fixes: native-passkey (a race in register/finish), tester-capacity (4 GiB computers), account-delete (both seats sent back), store-build (approach changed: one route and a judged artifact), onboard-consent (five blocking), exact-rest (re-review), voice-default. The owner''s win line: apply to App Review by about 2026-11-25T02:30Z'
   source_ref: origin/main bcea7eefd
   deploy_identity: staging on a2ba96767
   candidate: none
@@ -297,7 +319,7 @@ now:
   main_uncertainty: whether Exact's archive passes Apple's processing, and what a reviewer makes of AI-written news
   next_observation: the three agents' reports; the first upload's processing result
   blocker: none
-  next_action: land the trains overnight, archive and upload, prove on the owner's phone and the drill account; the owner reads the drafts in docs/ship; submit for beta review on the owner's word
+  next_action: 'land each lane as its review accepts, one at a time with its deployed proof: capacity, passkey, voice-default, onboarding, exact-rest, demo account, account deletion, store build; then merge into the build tree, one native build, install on the owner''s phone with the QA list, first archive and upload; submission is the owner''s act'
 operating_notes:
 - The before-we-ship list is kept in docs/design/design-session-2026-11-23.md until this file is executable; then it lives here as stations.
 receipts:

@@ -25,7 +25,7 @@ metamission:
     readiness: executable
     status: working
     depends_on: []
-    note: 'storage: no routine operation writes a second copy of a store, restore fits its budget, the store is measured by kind and cut. Stations S0 to S7. Added on the owner''s word after Node B''s disk refused deploys and wakes on 2026-11-22. Runs in the background before and during the other tracks (owner, 2026-11-23).'
+    note: 'storage: no routine operation writes a second copy of a store, restore fits its budget, the store is measured by kind and cut. Stations S0 to S7. Added on the owner''s word after Node B''s disk refused deploys and wakes on 2026-11-22. Runs in the background before and during the other tracks (owner, 2026-11-23). Added 2026-11-24: S10 (self-development leftovers measured, then collected after boot when idle) and S11 (the removed computers'' remains, the owner sees the dry-run list first).'
   - id: M4
     path: docs/definitions/choir-autoradio-on-android-2026-11-22.md
     readiness: executable
@@ -34,22 +34,22 @@ metamission:
     note: 'Android: Autoradio running on an old Motorola from the shared codebase, and a measured table of which on-device models such a phone can run. Stations A0 to A5. Added on the owner''s word, 2026-11-22. Deferred on the owner''s word, 2026-11-23: no station starts until they say.'
   - id: M5
     path: docs/definitions/choir-records-and-measurement-2026-11-23.md
-    readiness: intent
+    readiness: executable
     status: working
     depends_on: []
-    note: 'track T3, first: durable decision and turn records, the measure of the paper against the world with its cost, and the replay experiments (E1 to E5) that decide the engines design. Intent; the first three experiments read only captures and may start on the owners word.'
+    note: 'track T3: the decision record (with a row per front page render), turn records, the measure, and the experiments. E1 to E3 settled 2026-11-24 and E4 has one day (importance on subjects holds; novelty is open; no saturation law; a group is not a kind); E5''s model arms are running and choose the capture desk''s first context recipe.'
   - id: M6
     path: docs/definitions/choir-voice-pipeline-2026-11-23.md
     readiness: intent
-    status: pending
+    status: working
     depends_on: []
-    note: 'track T1: the voice pipeline as the owner specified it, on the phone: kept choices, model speech detection, the named recogniser, model end of turn, the same sound with voice on, the handover to the desk, spoken onboarding. Intent; written up after the design discussion.'
+    note: 'track T1: the voice pipeline as the owner specified it, on the phone: kept choices, model speech detection, the named recogniser, model end of turn, the same sound with voice on, the handover to the desk, spoken onboarding. Intent; written up after the design discussion. Added 2026-11-24: V2 Fluid Speech Mini and V7 enrolment are in review fixes; V8 Fluid Speech Pro, V9 a larger answering model, V10 the served model list, V11 the conversation logic in Exact (M1 X9 to X15).'
   - id: M7
     path: docs/definitions/choir-shipping-the-app-2026-11-23.md
     readiness: drafted
     status: working
     depends_on: []
-    note: 'FIRST in order on the owner''s word (2026-11-23: "metamission wise, we can prioritize this, as we will have a couple days to wait on apples review"). Track T5: TestFlight and the App Store; the radio signed out, an account made and deleted in the app, consent and permissions, screenshots and previews, reviewer notes, a release an agent runs. Intent; the owners account steps come first.'
+    note: 'FIRST in order on the owner''s word (2026-11-23: "metamission wise, we can prioritize this, as we will have a couple days to wait on apples review"). Track T5: TestFlight and the App Store; the radio signed out, an account made and deleted in the app, consent and permissions, screenshots and previews, reviewer notes, a release an agent runs. Intent; the owners account steps come first. Added 2026-11-24: P13 (test accounts deleted, usage watched) and P14 (thirty days of host logs enforced). Win line: apply by about 2026-11-25T02:30Z.'
   - id: M8
     path: docs/definitions/choir-operations-podcasts-and-providers-2026-11-23.md
     readiness: intent
