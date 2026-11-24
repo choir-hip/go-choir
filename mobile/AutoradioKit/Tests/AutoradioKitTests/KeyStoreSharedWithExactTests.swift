@@ -55,8 +55,9 @@ final class KeyStoreSharedWithExactTests: XCTestCase {
         let none = await LegacyKey.retire(store: empty) { _, _ in XCTFail("no key"); return true }
         XCTAssertFalse(none)
         let partial = InMemoryKeyStore(["api-key": "test-legacy-not-real"])
-        let found = await LegacyKey.retire(store: partial) { _, _ in XCTFail("no id to revoke by"); return true }
-        XCTAssertTrue(found); XCTAssertNil(partial.get("api-key"))
+        var asked: [String] = []
+        let found = await LegacyKey.retire(store: partial) { id, _ in asked.append(id); return true }   // the caller is told there is no id, so it can say so
+        XCTAssertTrue(found); XCTAssertNil(partial.get("api-key")); XCTAssertEqual(asked, [""])
     }
     func testTheLegacyServiceIsNeverTheCurrentOne() {
         XCTAssertNotEqual(LegacyKey.service, KeychainKeyStore.defaultService)

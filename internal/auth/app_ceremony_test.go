@@ -410,8 +410,8 @@ func TestAppCreateWithAnExistingEmailIsRefused(t *testing.T) {
 }
 
 // F9: what strangers can cause is bounded, and never turns into a refusal for
-// everyone else: a few addresses cannot fill a global table (there is none to
-// fill), one address holds only appChallengePerAddr live challenges (its oldest
+// everyone else: a few addresses cannot fill the table (it has a ceiling that
+// drops the oldest, never a refusal), one address holds only appChallengePerAddr live challenges (its oldest
 // is dropped), and expired challenges are not used.
 func TestAppChallengesAreBoundedPerAddressAndNeverRefuseOthers(t *testing.T) {
 	h := appEnv(t)

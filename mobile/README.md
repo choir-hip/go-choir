@@ -172,7 +172,7 @@ in parallel with System 1 and the desk; System 1's answers select only what foll
 The app is called Autoradio and opens to the radio. No stage names, ids or jargon on this path; the Lab and Trace live behind the last tab, "Lab".
 
 1. Opens the app. Not signed in: the paper plays; a Sign in action opens a screen: "Sign in with a passkey", or an email field and "Create account" (the consent line above it, with the Privacy Policy and Terms).
-2. Taps one of them. The system's passkey screen appears over the app (no code, no browser; `@exact/passkeys`, docs/reference/exact/passkeys.md).
+2. Taps one of them. The system's passkey screen appears over the app (no browser; a new account first types the 8-digit code mailed to its address; `@exact/passkeys`, docs/reference/exact/passkeys.md).
 3. Confirms with Face ID. The app has kept the key (an Exact secret in the Keychain), found the listener's computer, and shows the Player.
 4. The Player has loaded the newest story from choir.news. It shows the story title, the passage being read, "3 of 12", a large Play button, and below it a list of stories.
 5. Taps Play. The first tap starts audio (the microphone permission prompt appears here, once). The passage is read aloud, block by block.

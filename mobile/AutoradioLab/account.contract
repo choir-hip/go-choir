@@ -92,7 +92,7 @@ members Autoradio
     sivTick = sivTick + 1
   // "Sign in": the passkey screen with no email typed (a discoverable credential).
   action signInPasskey
-    send signedRun = signInRun("signin", "")
+    send signedRun = signInRun("signin", "", "")
     sivTick = sivTick + 1
   // The screen's Cancel while the passkey screen is up: the machine moves first (every later answer is ignored), so no key is kept after it.
   action cancelSignIn

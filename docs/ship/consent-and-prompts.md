@@ -95,7 +95,7 @@ Body:
 
 > Listening needs no account. Asking, your edition, notes and mail need one, so the radio has a computer to keep them on.
 >
-> Sign in or make an account with a passkey. The phone's passkey screen opens. There is no password and no code.
+> Sign in or make an account with a passkey. The phone's passkey screen opens. There is no password. A new account first checks your email address with a code we send.
 
 Buttons:
 
