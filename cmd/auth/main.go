@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/yusefmosiah/go-choir/internal/accountpurge"
 	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -67,6 +68,14 @@ func main() {
 	}
 	handler.StartEmailSweeper(context.Background(), 0)
 	handler.StartNumberReconciler(context.Background(), 0)
+
+	// Account deletion (docs/design/account-create-delete-2026-11-23.md):
+	// the loop that holds a pending account's computer stopped and takes
+	// suspended, and purges after 72 hours. It re-reads the deletion table
+	// every minute; a boot only closes an attempt a crash left open.
+	purge := accountpurge.New(store, accountpurge.NewHost(cfg.VMCTLURL, cfg.CorpusdURL, cfg.MaildURL, cfg.GatewayURL))
+	handler.SetDeletionHost(purge)
+	purge.Start(context.Background())
 	handler.StartDeviceSweeper(context.Background(), 0)
 
 	s := server.NewServer("auth", cfg.Port)

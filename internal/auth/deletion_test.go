@@ -466,6 +466,30 @@ func TestPendingAccountSignInOffersCancelOnly(t *testing.T) {
 	}
 }
 
+// A failed restore keeps the record and the offer.
+func TestCancelWithFailedRestoreKeepsTheRecord(t *testing.T) {
+	e := newDelEnv(t, "u7b")
+	deleteAccount(t, e)
+	var offer deletionOffer
+	_ = json.Unmarshal(e.passkeySignIn(t).Body.Bytes(), &offer)
+	e.h.SetDeletionHost(&failingRestoreHost{})
+	body, _ := json.Marshal(cancelRequest{CancelToken: offer.CancelToken})
+	if rec := e.call(e.h.HandleDeleteCancel, "/auth/account/delete/cancel", body, nil, ""); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("failed restore: %d %s", rec.Code, rec.Body)
+	}
+	if d, _ := e.h.store.AccountDeletionFor(e.user.ID); d == nil {
+		t.Fatal("the record was cancelled though the restore failed")
+	}
+	e.h.SetDeletionHost(e.host)
+	if rec := e.call(e.h.HandleDeleteCancel, "/auth/account/delete/cancel", body, nil, ""); rec.Code != http.StatusOK {
+		t.Fatalf("retry: %d %s", rec.Code, rec.Body)
+	}
+}
+
+type failingRestoreHost struct{ fakeDeletionHost }
+
+func (f *failingRestoreHost) Restore(context.Context, string) error { return errors.New("corpusd down") }
+
 func TestCancelTokenExpiresAndPurgingRefuses(t *testing.T) {
 	e := newDelEnv(t, "u8")
 	deleteAccount(t, e)

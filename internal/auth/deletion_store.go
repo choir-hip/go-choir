@@ -298,6 +298,34 @@ func (s *Store) OfferDeletionCancel(userID string, now time.Time) (token string,
 	return token, nil
 }
 
+// PeekCancelOffer checks a cancel token without consuming it and returns the
+// pending record it belongs to. The cancel handler restores the account's
+// takes between the peek and the cancel, so a failed restore leaves the
+// record, and the person can try again, instead of a cancelled record with
+// takes still held back.
+func (s *Store) PeekCancelOffer(token string, now time.Time) (*AccountDeletion, error) {
+	if strings.TrimSpace(token) == "" {
+		return nil, ErrNoDeletion
+	}
+	var exp sql.NullTime
+	var userID, state string
+	err := s.db.QueryRow(`SELECT user_id, state, cancel_token_expires FROM account_deletions WHERE cancel_token_hash = ? AND cancel_token_hash != ''`, hashCancelToken(token)).
+		Scan(&userID, &state, &exp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNoDeletion
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !exp.Valid || now.UTC().After(exp.Time) {
+		return nil, ErrNoDeletion
+	}
+	if state != DeletionPending {
+		return nil, ErrDeletionNotCancellable
+	}
+	return s.AccountDeletionFor(userID)
+}
+
 // CancelAccountDeletion consumes a cancel token and removes the pending
 // record. Nothing was purged, so nothing is restored here: the account's
 // passkeys and rows are as they were; its sessions and keys stay revoked and

@@ -70,6 +70,10 @@ const (
 	FormerAuthorLabel = "former-writer"
 
 	accountPurgeScan = 2000
+
+	// accountTapeRetryAfter is how long a failed tape purge job is reported
+	// as it is before a new one is started.
+	accountTapeRetryAfter = 5 * time.Minute
 )
 
 // ErrAccountPurgeRefused is a refusal of the rule, not a failure to retry.
@@ -339,8 +343,17 @@ func (s *Service) StartAccountTapePurge(userID string, computerIDs []string, req
 	if st.jobs == nil {
 		st.jobs = map[string]*AccountTapeJob{}
 	}
-	if j := st.jobs[key]; j != nil && (j.State == "running" || j.State == "done") {
-		return *j, nil
+	if j := st.jobs[key]; j != nil {
+		switch {
+		case j.State == "running" || j.State == "done":
+			return *j, nil
+		case j.State == "failed":
+			// A failure stays readable for a while, so the caller sees why
+			// (a named refusal, an error) before the job is started again.
+			if at, err := time.Parse(time.RFC3339, j.FinishedAt); err == nil && time.Since(at) < accountTapeRetryAfter {
+				return *j, nil
+			}
+		}
 	}
 	job := &AccountTapeJob{State: "running", Computers: ids, StartedAt: time.Now().UTC().Format(time.RFC3339)}
 	st.jobs[key] = job

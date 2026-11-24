@@ -317,7 +317,8 @@ func (h *Handler) HandleDeleteCancel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
-	d, err := h.store.CancelAccountDeletion(req.CancelToken, time.Now().UTC())
+	now := time.Now().UTC()
+	peek, err := h.store.PeekCancelOffer(req.CancelToken, now)
 	switch {
 	case errors.Is(err, ErrDeletionNotCancellable):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "the deletion has begun and cannot be cancelled"})
@@ -326,12 +327,26 @@ func (h *Handler) HandleDeleteCancel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "the cancel offer is invalid or expired; sign in again"})
 		return
 	}
+	// Takes are served again before the record goes: if the platform is
+	// unreachable the record stays and the offer is still good.
 	if h.deletionHost != nil {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 20*time.Second)
-		if err := h.deletionHost.Restore(ctx, d.UserID); err != nil {
-			log.Printf("[auth] operation=delete_cancel user_id=%s result=restore_deferred error=%q", d.UserID, err)
-		}
+		err := h.deletionHost.Restore(ctx, peek.UserID)
 		cancel()
+		if err != nil {
+			log.Printf("[auth] operation=delete_cancel user_id=%s result=restore_failed error=%q", peek.UserID, err)
+			writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "could not restore the account just now; try again in a minute"})
+			return
+		}
+	}
+	d, err := h.store.CancelAccountDeletion(req.CancelToken, now)
+	switch {
+	case errors.Is(err, ErrDeletionNotCancellable):
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "the deletion has begun and cannot be cancelled"})
+		return
+	case err != nil:
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "the cancel offer is invalid or expired; sign in again"})
+		return
 	}
 	user, err := h.store.GetUserByID(d.UserID)
 	if err != nil {
