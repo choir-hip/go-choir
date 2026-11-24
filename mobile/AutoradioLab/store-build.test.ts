@@ -1352,7 +1352,7 @@ describe.skipIf(!MAC)('N store-negative-control.sh', () => {
   });
 });
 
-describe('N4 the check says when it is looking at little', () => {
+describe.skipIf(!MAC)('N4 the check says when it is looking at little', () => {
   test('N4 a store ipa with only its main executable, or with no product name in any binary, passes with a warning that says so; one with the module framework and a product name does not warn', () => {
     const tr = tree();
     try {
