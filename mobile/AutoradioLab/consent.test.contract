@@ -31,7 +31,7 @@ test "Sign in in the sheet puts the sign-in screen up, with the attempt's messag
   clock settle
   expect tree has "gate-signin"
   tap "gate-signin"
-  clock settle
+  clock data
   expect tree missing "gate-sheet"
   expect state authOpen == true
   expect tree has "signin-close"
@@ -52,3 +52,17 @@ test "Make an account in the sheet puts the create-account screen up"
   expect tree has "signup-email"
   expect tree has "signup-consent"
   expect tree has "signup-create"
+
+// Leaving the sign-in screen puts the attempt away: the machine is idle again, so opening sign-in later never starts from the last attempt's failure.
+test "Leaving the sign-in screen after a failed attempt leaves the machine idle"
+  clock data
+  tap "bar-mic"
+  clock settle
+  tap "gate-signin"
+  clock data
+  expect tree has "signin-message"
+  expect state siv.phase == "failed"
+  tap "signin-close"
+  clock data
+  expect state authOpen == false
+  expect state siv.phase == "idle"

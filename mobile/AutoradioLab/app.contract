@@ -102,6 +102,7 @@ component Autoradio
     authCode
     authOpen
     siv
+    signRunning
     signOut
     signOutNote
     acs

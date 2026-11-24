@@ -38,6 +38,7 @@ component SignInScreen
   inject
     th: Theme
     siv: SignInView
+    signRunning: bool
     authEmail: string
     editAuthEmail: action
     authCode: string
@@ -53,12 +54,12 @@ component SignInScreen
       column gap=8 align-items="center"
         text "Autoradio" font-size="-exact-large-title" font-weight=700 role="heading" aria-level=2 font-family=th.fontHead color=th.fg
         text "Sign in with a passkey, or create an account. There is no password. A new account first checks your email address with a code we send." testId="signin-intro" text-align="center" font-size="-exact-body" line-height=1.45 font-family=th.fontText color=th.muted
-      if siv.pending
+      if siv.pending or signRunning
         column gap=12 align-items="center" width="100%" max-width=420
           text "Waiting for the passkey screen." testId="signin-waiting" text-align="center" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
           button press=cancelSignIn testId="signin-cancel" appearance="none"
             Btn(label="Cancel", primary=false, wide=false)
-      if not siv.pending
+      if not siv.pending and not signRunning
         column gap=16 align-items="center" width="100%" max-width=420
           button press=signInPasskey testId="signin" appearance="none" width="100%"
             Btn(label="Sign in with a passkey", primary=true, wide=true)
@@ -87,7 +88,7 @@ component SignInScreen
             Btn(label="Create account", primary=true, wide=true)
           button press=closeAuth testId="signin-close" appearance="none"
             Btn(label="Not now", primary=false, wide=false)
-      if siv.message != ""
+      if siv.message != "" and not siv.pending and not signRunning
         text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
 
 // ---------------------------------------------------------------- the page
