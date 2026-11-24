@@ -78,7 +78,7 @@ public final class LabRuntime: @unchecked Sendable {
         self.voiceStore = voiceStore
         // The saved voice, or on a fresh install the neural default. The model stages register after this runs, so the stage is not checked
         // here: `makeSpeaker` falls back to the system voice for a stage that is not registered.
-        let cfg = StageRegistry.listenerConfiguration(voice: voiceStore.current())
+        let cfg = StageRegistry.listenerConfiguration(voice: voiceStore.current(), registry: registry)
         self.config = cfg
         let policyBox = PolicyBox(cfg.audio)
         self.policyBox = policyBox

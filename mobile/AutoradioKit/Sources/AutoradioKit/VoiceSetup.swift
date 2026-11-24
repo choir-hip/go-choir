@@ -103,13 +103,21 @@ public struct DeviceProfile: Codable, Equatable, Sendable {
 /// The model table for setup: per stage, a ladder from the recommended model to the floor. Sizes are the model cards'
 /// figures (ModelHub.catalog), not measurements; setup replaces them with measured numbers in the record.
 public enum SetupCatalog {
+    /// The size of the models a row downloads beside its own (`ListenerPipeline.companions`), from the catalog.
+    static func companionBytes(_ id: String) -> Int64 {
+        ListenerPipeline.companions(of: id).reduce(0) { n, c in n + (KnownModels.managed.first { $0.id == c }?.approxBytes ?? 0) }
+    }
     public static func ladder(_ s: SetupStage) -> [SetupCandidate] {
         switch s {
         case .bounds:
             return [SetupCandidate(id: "silero-vad-v6.2.1", label: "Silero speech detector", bytes: 2_000_000, minMemoryGB: 1, kitStageID: "silero-vad", needsMB: 110),
                     SetupCandidate(id: "energy", label: "Level detector built in", bytes: 0, minMemoryGB: 0, kitStageID: "energy-vad")]
         case .transcriber:
-            return [SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener", bytes: 480_000_000, minMemoryGB: 6, kitStageID: "parakeet-tdt", needsMB: 700),
+            // Fluid Speech Mini first (the owner's choice, 2026-11-24). Its row downloads the live-words model with it (`ListenerPipeline.companions`:
+            // the pipeline needs both), so the size and the memory are the two together.
+            return [SetupCandidate(id: "fluid-speech-mini", label: "Fluid Speech Mini, the listener, with live words", bytes: KnownModels.fluidSpeechMini.totalBytes + companionBytes("fluid-speech-mini"), minMemoryGB: 4,
+                                   kitStageID: ListenerPipeline.liveThenFinalStageID, needsMB: 550),
+                    SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener, with live words", bytes: 480_000_000 + companionBytes("parakeet-tdt-0.6b-v2"), minMemoryGB: 6, kitStageID: "parakeet-tdt", needsMB: 700),
                     SetupCandidate(id: "parakeet-eou-120m", label: "Parakeet, the smaller listener", bytes: 250_000_000, minMemoryGB: 3, kitStageID: "parakeet-eou", needsMB: 250),
                     SetupCandidate(id: "apple-speech", label: "Apple's recogniser", bytes: 0, minMemoryGB: 0, kitStageID: "apple-speech")]
         case .voice:

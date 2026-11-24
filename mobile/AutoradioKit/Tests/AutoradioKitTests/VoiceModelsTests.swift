@@ -53,7 +53,9 @@ final class VoiceModelsTests: XCTestCase {
         for st in SetupStage.allCases {
             for c in SetupCatalog.ladder(st) where !c.isFloor {
                 let spec = KnownModels.managed.first { $0.id == c.id }
-                XCTAssertEqual(c.bytes, spec?.approxBytes, "\(c.id): the size setup promises is the catalog's")
+                // a row that downloads a companion model with it (the live words beside the final transcript) promises the two together
+                let with = ListenerPipeline.companions(of: c.id).reduce(0) { n, id in n + (KnownModels.managed.first { $0.id == id }?.approxBytes ?? 0) }
+                XCTAssertEqual(c.bytes, spec.map { $0.approxBytes + with }, "\(c.id): the size setup promises is the catalog's")
             }
         }
     }
@@ -141,7 +143,7 @@ final class VoiceModelsTests: XCTestCase {
         let s = VoiceSetup(backend: backend, profile: device(8), stallSeconds: 5, patience: 5)
         await s.run()
         XCTAssertEqual(s.choices[.speechBounds], "silero-vad")
-        XCTAssertEqual(s.choices[.transcriber], "parakeet-tdt")
+        XCTAssertEqual(s.choices[.transcriber], "live-then-final")
         XCTAssertEqual(s.choices[.voice], "pocket-tts", "Kokoro failed its check, the next on the ladder is used")
         XCTAssertEqual(s.choices[.system1], "llama-qwen3-0.6b")
         XCTAssertEqual(s.choices[.holder], "local-ack")
@@ -169,9 +171,10 @@ final class VoiceModelsTests: XCTestCase {
         let plan = SetupCatalog.plan(for: tight)
         XCTAssertEqual(plan[.responder]!.first?.id, "qwen3-0.6b-q4_k_m", "600 MB fits in 1200 minus headroom")
         XCTAssertFalse(plan[.responder]!.contains { $0.id == "lfm3-1.7b-qad-q4_0" }, "1.5 GB does not")
-        XCTAssertEqual(plan[.transcriber]!.first?.id, "parakeet-eou-120m", "the larger listener does not fit what is left")
+        XCTAssertEqual(plan[.transcriber]!.first?.id, "fluid-speech-mini", "Fluid Speech Mini with its live words (550 MB) fits what is left; Parakeet TDT (700 MB) does not")
+        XCTAssertFalse(plan[.transcriber]!.contains { $0.id == "parakeet-tdt-0.6b-v2" })
         var roomy = device(8); roomy.availableMemoryMB = 4000
-        XCTAssertEqual(SetupCatalog.plan(for: roomy)[.transcriber]!.first?.id, "parakeet-tdt-0.6b-v2")
+        XCTAssertEqual(SetupCatalog.plan(for: roomy)[.transcriber]!.first?.id, "fluid-speech-mini")
         XCTAssertEqual(DeviceProfile.current().availableMemoryMB == nil, true, "on the Mac there is no such reading (iOS only)")
     }
 

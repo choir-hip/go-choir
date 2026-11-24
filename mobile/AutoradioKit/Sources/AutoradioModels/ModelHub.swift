@@ -19,6 +19,7 @@ public enum ModelHub {
         registry.register(.speechBounds, SileroVAD.self) { SileroVAD($0) }
         registry.register(.transcriber, ParakeetEOUTranscriber.self) { ParakeetEOUTranscriber($0) }
         registry.register(.transcriber, ParakeetTDTTranscriber.self) { ParakeetTDTTranscriber($0) }
+        registry.register(.transcriber, FluidSpeechMiniTranscriber.self) { FluidSpeechMiniTranscriber($0) }
         registry.register(.voice, KokoroVoice.self) { KokoroVoice($0) }
         registry.register(.voice, PocketTTSVoice.self) { PocketTTSVoice($0) }
         registry.register(.voice, PhononVoice.self) { PhononVoice($0) }

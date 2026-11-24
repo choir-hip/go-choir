@@ -74,6 +74,49 @@ public enum KnownModels {
         sha256: "43a7d09a0e9cba91b63eb7052488b9564569bddfd65754d2e426465e572a7452",
         bytes: 1_049_615_680, fileName: "LFM3-1.7B-QAD-Q4_0.gguf")
 
+
+    /// Fluid Speech Mini by FluidVoice: English speech recognition, a Core ML build of a Parakeet TDT 0.6B v3 derivative, in one folder of files.
+    /// Repository, commit, every file's size and every SHA-256 were read on 2026-11-24 from Hugging Face's API (`/api/models/<repo>?blobs=true`,
+    /// the LFS object ids) and, for the files the API gives no digest for, computed on the downloaded bytes at that commit. Only the files the
+    /// loader reads are listed (the model card, its examples and its images are not fetched). FluidAudio loads it as `.ultra` and wants the joint
+    /// network under the name `JointDecisionv3.mlmodelc`, so the folder is copied under that name after the download (Mike's fetch script does the same).
+    /// Licence CC BY 4.0: the credit below is the one NOTICE in the repository asks for, and is shown wherever the app lists the models it uses.
+    /// docs/reference/ON-DEVICE-MODELS.md, "Fluid Speech Mini".
+    public static let fluidSpeechMini = ModelBundleSpec(
+        id: "fluid-speech-mini", repo: "FluidVoice-Labs/fluid-speech-mini-coreml", commit: "d81c3160dfe5a5e1f8f7267164a07d30617a3a1a",
+        files: [
+            .init(path: "Decoder.mlmodelc/analytics/coremldata.bin", bytes: 243, sha256: "d4beee43a6eab29b2adcc298f2e8582e8fb79d5fe3aa9f1ab692ade681ca369d"),
+            .init(path: "Decoder.mlmodelc/coremldata.bin", bytes: 491, sha256: "6094d06d05c1ca4599c7b13c9a4ca7c00826ee2396796cf3084ce602a9884468"),
+            .init(path: "Decoder.mlmodelc/metadata.json", bytes: 3_373, sha256: "13fcb358af8b028703dc7f424fd149ce9524642de510f3d682b75d471b1a001d"),
+            .init(path: "Decoder.mlmodelc/model.mil", bytes: 13_411, sha256: "4ccd8ecbc7eb59bed7ad38d471bf6b78ef52a24500bf64619c549ed45fbee4e9"),
+            .init(path: "Decoder.mlmodelc/weights/weight.bin", bytes: 11_845_120, sha256: "d173e381488d07fd7648e2ccecbfb1bceff0457d75461550b26ba7fa2d23309a"),
+            .init(path: "Encoder.mlmodelc/analytics/coremldata.bin", bytes: 243, sha256: "3a3caa2c6aec983d94a5659eff09a00f77077147ea6726b8ddfdf022f0238ce9"),
+            .init(path: "Encoder.mlmodelc/coremldata.bin", bytes: 427, sha256: "494d8e2ce30b37bcdf494b3ba7ddf6e1bc921b9a59e369a9efd44d013ca3bf7d"),
+            .init(path: "Encoder.mlmodelc/metadata.json", bytes: 2_906, sha256: "1a2229e2cc4c271e4876715c9e36aef18bc7287e35690022c7f3939d85260ea9"),
+            .init(path: "Encoder.mlmodelc/model.mil", bytes: 712_643, sha256: "f96b7707936ea7ce5517c5b0f5c15cc634006bc58af1fe2587ac5979dd180343"),
+            .init(path: "Encoder.mlmodelc/weights/weight.bin", bytes: 233_096_704, sha256: "cf0b61022de8c698984a8c7185c2d093fa744694621881ff062c46fee2546131"),
+            .init(path: "JointDecision.mlmodelc/analytics/coremldata.bin", bytes: 243, sha256: "9e767d69e1092b27b28d9f236b9cbcded58ff3891e320cba7855e2c24e803d69"),
+            .init(path: "JointDecision.mlmodelc/coremldata.bin", bytes: 462, sha256: "284b235c08cd4769202af017f854deace69c0209c29f2253a2073bb68d58d38d"),
+            .init(path: "JointDecision.mlmodelc/metadata.json", bytes: 2_790, sha256: "fe1ce083f9ff57524926a92fc264b0cf7d88f3ba9852f7acf9f59dcdf427e01f"),
+            .init(path: "JointDecision.mlmodelc/model.mil", bytes: 7_547, sha256: "1109ce72f6d014a6b99e49b41e83b3082d7555d74a6275838e7cbea42a6bd0ee"),
+            .init(path: "JointDecision.mlmodelc/weights/weight.bin", bytes: 6_350_284, sha256: "f991f65979c1b3fee3db39a645aa87e6bef1a304ed1816d074b17479bea797fc"),
+            .init(path: "LICENSE", bytes: 18_657, sha256: "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"),
+            .init(path: "NOTICE", bytes: 690, sha256: "05119420d65cf41d7434a83027c23f1360740d7e8c25d6b47263698ffe1f4c86"),
+            .init(path: "Preprocessor.mlmodelc/analytics/coremldata.bin", bytes: 243, sha256: "c9beeb989c8d66f8be11df59bc6df277ec76cee404f6865b46243835ef562f6d"),
+            .init(path: "Preprocessor.mlmodelc/coremldata.bin", bytes: 486, sha256: "dbde3f2300842c1fd51ef3ff948a0bcffe65ffd2dca10707f2509f32c1d65b1d"),
+            .init(path: "Preprocessor.mlmodelc/metadata.json", bytes: 2_841, sha256: "2a98699e22d279dd37fa1d238aeb1c6db1df0d6fad687775324157689d8f3acf"),
+            .init(path: "Preprocessor.mlmodelc/model.mil", bytes: 28_181, sha256: "4b8518a956450fec57f06c2a21bdffc26973f7f1fa6842fb38fe917f896b6b93"),
+            .init(path: "Preprocessor.mlmodelc/weights/weight.bin", bytes: 491_072, sha256: "129b76e3aeafa8afa3ea76d995b964b145fe83700d579f6ff42c4c38fa0968ea"),
+            .init(path: "config.json", bytes: 314, sha256: "5e6e1189fd8e9da59633b929a977c716d696b84aff6ab9b040423bc8b9c8b3be"),
+            .init(path: "parakeet_vocab.json", bytes: 151_122, sha256: "7ec60e05f1b24480736ec0eed40900f4626bce1fa9a60fd700ec7e2a59198735")
+        ],
+        folder: "fluid-speech-mini", license: "CC BY 4.0",
+        credit: "Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).",
+        copies: [["JointDecision.mlmodelc", "JointDecisionv3.mlmodelc"]])
+
+    /// Models that are a folder of files fetched by the store.
+    public static var bundles: [ModelBundleSpec] { [fluidSpeechMini] }
+
     /// Models fetched by us over HTTP, pinned by SHA-256.
     public static var pinned: [ModelSpec] { [qwen3, qwen3Q4, qwen317, qwen35, lfm3Text, embeddingGemma2] + extraGGUF.map(\.spec) }
 
@@ -112,6 +155,9 @@ public enum KnownModels {
                              approxBytes: 250_000_000, license: "NVIDIA Open Model License (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["parakeet-eou-streaming"]),
             ManagedModelSpec(id: "parakeet-tdt-0.6b-v2", label: "Parakeet TDT 0.6B v2 (English, Core ML)", source: "hf:FluidInference/parakeet-tdt-0.6b-v2-coreml",
                              approxBytes: 480_000_000, license: "CC-BY-4.0 (NVIDIA model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v2-coreml"]),
+            ManagedModelSpec(id: fluidSpeechMini.id, label: "Fluid Speech Mini (English, Core ML)", source: "hf:" + fluidSpeechMini.repo,
+                             approxBytes: fluidSpeechMini.totalBytes, license: fluidSpeechMini.license + " (FluidVoice model); FluidAudio Apache-2.0",
+                             cachePath: storeRoot, cacheFolders: [fluidSpeechMini.folder]),
             ManagedModelSpec(id: "kokoro-82m-ane", label: "Kokoro 82M ANE v3 (Core ML)", source: "hf:FluidInference/kokoro-82m-coreml",
                              approxBytes: 350_000_000, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["kokoro-82m-coreml", "kokoro"]),
             ManagedModelSpec(id: "pocket-tts", label: "PocketTTS 100M (Kyutai, Core ML)", source: "hf:FluidInference/pocket-tts-coreml",
