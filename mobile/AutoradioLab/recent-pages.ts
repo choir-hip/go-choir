@@ -37,11 +37,17 @@ async function load(storage: Storage | undefined): Promise<void> {
 }
 
 let saving: Promise<unknown> = Promise.resolve();
+/** The write is issued NOW, from the answer that called: Exact's one storage queue runs the writes in the order they were issued, so the last state wins the file, and a call made after the answer ended
+ * is refused (reference.md, "refused in background work"), which a write chained on an earlier one would be. A failed write is logged. */
 function save(storage: Storage | undefined, gen: number): Promise<void> {
-  const run = saving.then(() => writeCurrent(gen, storage, RECENT_FILE, new TextEncoder().encode(JSON.stringify({ events: ring }))), () => undefined);
-  saving = run.catch(() => undefined);
-  return run.then(() => undefined);
+  const run = writeCurrent(gen, storage, RECENT_FILE, new TextEncoder().encode(JSON.stringify({ events: ring }))).then((ok) => {
+    if (!ok && storage && gen === accountGeneration()) console.log('recent-pages: the recent pages were not saved');
+  });
+  saving = Promise.all([saving, run]);
+  return run;
 }
+/** For tests: every write issued so far has finished. */
+export async function recentSettled(): Promise<void> { await saving; }
 
 /** A page was opened or closed. */
 /** There is no clock in a data source: `at` is a sequence number, the order of the events (one more than the newest kept). */
@@ -49,9 +55,18 @@ export async function note(storage: Storage | undefined, kind: 'open' | 'close',
   const gen = accountGeneration();
   await load(storage);
   if (gen !== accountGeneration()) return;                      // a sign-out began while the ring loaded: nothing of this is kept
+  await noteNow(storage, kind, address, gen);
+}
+
+/** The ring is read (the first note of a launch waits for it; a page's open does not wait for the note itself, only for this). */
+export const isLoaded = (): boolean => loaded;
+
+/** The note and its write, started now and not waited for by the caller that does not await the result. The ring must be loaded. */
+export function noteNow(storage: Storage | undefined, kind: 'open' | 'close', address: string, gen: number = accountGeneration()): Promise<void> {
+  if (gen !== accountGeneration()) return Promise.resolve();
   ring.push({ at: ring.reduce((m, e) => Math.max(m, e.at), 0) + 1, kind, address });
   if (ring.length > KEEP) ring = ring.slice(-KEEP);
-  await save(storage, gen);
+  return save(storage, gen);
 }
 
 /** Addresses opened or closed lately, newest first, without those open now, one entry each, none with an unknown scheme (it would open a "not built yet" page). */
@@ -69,5 +84,5 @@ export function addresses(events: RecentEvent[], excluding: Set<string>, limit =
 export async function events(storage: Storage | undefined): Promise<RecentEvent[]> { await load(storage); return [...ring]; }
 
 /** Sign-out and tests. */
-export function forget(): void { ring = []; loaded = false; loading = null; epoch += 1; }
+export function forget(): void { ring = []; loaded = false; loading = null; epoch += 1; saving = Promise.resolve(); }
 export async function wipeRecent(storage: Storage | undefined): Promise<void> { forget(); if (!storage) return; try { await storage.fs.rm(RECENT_FILE); } catch { /* absent */ } }

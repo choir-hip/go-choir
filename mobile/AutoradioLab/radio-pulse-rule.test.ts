@@ -38,6 +38,9 @@ const ALLOWED: Record<string, string> = {
   'notebook-run.ts::void (async () => {': 'one native push whose first call is made inside the answer; a miss is pushed again by the next read',
   'radio-runtime.ts::if (how === \'restart\') { const it = this.known.get(air.id); if (it) void this.deck.play(it); }': 'one native call started inside the pump (a mutation); the journal says if it did not play',
   'radio-runtime.ts::if (!this.inPump) void this.pump();': 'joined by the caller\'s own `await rt.pump()` (the chain), so the answer waits for it',
+  'pages.ts::void save(storage, gen)': 'the open set\'s write, issued inside the answer (storage is not a fetch; Exact runs it in its one queue and it lands behind the answer); a failure is logged by save',
+  'pages.ts::void noteRecentNow(': 'the recent note\'s write, issued inside the answer after the open set\'s; the ring is read before (recentEvents), so nothing waits on a read; a failure is logged',
+  'pages.ts::void mirror(gen)': 'one native call (pagesMirror) whose call is made inside the answer before its first await; best effort by design (a miss leaves the voice its last facts, the next change pushes again)',
   'reader.ts::void Promise.resolve().then(() => send(': 'one native call in the same turn as its answer',
   'runsheet-store.ts::void this.save();': 'a storage write (storage is not a fetch)',
 };

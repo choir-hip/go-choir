@@ -15,12 +15,11 @@ async function lines<T>(run: () => Promise<T>): Promise<string[]> {
   return out.filter((l) => l.startsWith('lap: '));
 }
 
-test('L1 pagesOpen marks its entry, the load, the save, the recent note and the mirror, each with the page address', async () => {
-  const got = await lines(() => P.pagesOpen(storage, 'paper:front', ''));
-  expect(got.filter((l) => l.includes('pagesOpen'))).toEqual([
-    'lap: open pagesOpen entry paper:front', 'lap: open pagesOpen loaded paper:front', 'lap: open pagesOpen saved paper:front',
-    'lap: open pagesOpen recent noted paper:front', 'lap: open pagesOpen mirrored paper:front',
-  ]);
+test('L1 pagesOpen marks its entry, the load and the view; the save, the recent note and the mirror finish behind it; each carries the page address', async () => {
+  const got = await lines(async () => { await P.pagesOpen(storage, 'paper:front', ''); await P.pagesSettled(); await new Promise((r) => setTimeout(r, 5)); });
+  const m = got.filter((l) => l.includes('pagesOpen'));
+  expect(m.slice(0, 3)).toEqual(['lap: open pagesOpen entry paper:front', 'lap: open pagesOpen loaded paper:front', 'lap: open pagesOpen view ready paper:front']);
+  expect(m.slice(3).sort()).toEqual(['lap: open pagesOpen mirrored paper:front', 'lap: open pagesOpen recent noted paper:front', 'lap: open pagesOpen saved paper:front']);
 });
 
 test('L2 a page source marks its entry, the settling and its end with the page address; a source that is not a page writes none', async () => {

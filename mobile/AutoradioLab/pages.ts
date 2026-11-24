@@ -4,7 +4,7 @@
 // Sign-out: only the radio stays and the file goes (account.ts wipes it). Logs carry counts only.
 import type { Storage } from './app.contract.d.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
-import { note as noteRecent } from './recent-pages.ts';
+import { note as noteRecent, noteNow as noteRecentNow, isLoaded as recentLoaded, events as recentEvents } from './recent-pages.ts';
 import { lapOpen } from './lap.ts';
 
 export const PAGES_FILE = 'app:/data/open-pages-shared.json';
@@ -118,12 +118,17 @@ async function load(storage: Storage | undefined): Promise<void> {
 }
 
 let saving: Promise<unknown> = Promise.resolve();
-/** Saves run one after another and each writes the set as it is WHEN IT RUNS, so the last state wins the file whatever order the host finishes the writes in. */
+/** The write is issued NOW, from the answer that called, and carries the set as it is now. Exact runs a module's storage in one queue in the order issued, so the last state wins the file; and a storage or native
+ * call made after the answer ended is refused (docs/reference.md "refused in background work"), which a write chained on an earlier one (`.then`) would be when the earlier one is still out. A failed write is logged. */
 function save(storage: Storage | undefined, gen: number): Promise<void> {
-  const run = saving.then(() => writeCurrent(gen, storage, PAGES_FILE, new TextEncoder().encode(JSON.stringify({ pages, recency }))), () => undefined);   // a sign-out in flight writes nothing
-  saving = run.catch(() => undefined);
-  return run.then(() => undefined);
+  const run = writeCurrent(gen, storage, PAGES_FILE, new TextEncoder().encode(JSON.stringify({ pages, recency }))).then((ok) => {
+    if (!ok && storage && gen === accountGeneration()) console.log('pages: open set not saved');
+  });
+  saving = Promise.all([saving, run]);
+  return run;
 }
+/** For tests: every write issued so far has finished. */
+export async function pagesSettled(): Promise<void> { await saving; }
 
 function view(): PageList {
   const rows = recency.flatMap((a) => pages.filter((x) => x.address === a));
@@ -165,14 +170,20 @@ export async function pagesOpen(storage: Storage | undefined, rawAddress: string
   await load(storage);
   lapOpen('pagesOpen loaded', address);
   if (gen !== accountGeneration()) return view();                          // a sign-out began while the set loaded: nothing of this open is kept
+  // The recent ring is read at the first page of a launch (the one wait kept: its first note needs it); every later open finds it held.
+  if (!recentLoaded()) await recentEvents(storage);
+  if (gen !== accountGeneration()) return view();
   openLocked({ address, kind: kindOf(address), title: title !== '' ? title : defaultTitle(address), opener: recency[0] ?? '', pinned: false });
-  await save(storage, gen);
-  lapOpen('pagesOpen saved', address);
-  await noteRecent(storage, 'open', address);                              // the launcher's Recent rows (recent-pages.ts)
-  lapOpen('pagesOpen recent noted', address);
-  await mirror(gen);
-  lapOpen('pagesOpen mirrored', address);
-  return view();
+  // The page mounts now. Its three records are STARTED here, in order, and not waited for: the open-set file, the launcher's recent note and the voice's copy. Exact refuses a storage or native call made after the
+  // answer has ended, so they must be issued inside it; it runs the storage in the order issued, and the voice's call goes after both. What is later than the view: the files on disk (a kill in those few milliseconds
+  // loses one open, and a launch lands on the radio anyway) and the voice's facts (they arrive when the call lands; the acknowledgement names the page in front from them, and it is asked after the person has the page).
+  // A failure is logged by each step (a write: `pages: open set not saved`), and the open stands in memory.
+  const v = view();
+  lapOpen('pagesOpen view ready', address);
+  void save(storage, gen).then(() => lapOpen('pagesOpen saved', address));
+  void noteRecentNow(storage, 'open', address, gen).then(() => lapOpen('pagesOpen recent noted', address));
+  void mirror(gen).then(() => lapOpen('pagesOpen mirrored', address));
+  return v;
 }
 export async function pagesFocus(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
@@ -212,5 +223,5 @@ export async function pagesPin(storage: Storage | undefined, rawAddress: string)
 }
 
 /** Sign-out and tests: only the radio stays; the file is removed by the account wipe. */
-export function forget(): void { pages = []; recency = []; lastClosed = null; loaded = false; loading = null; epoch += 1; mirrored = false; lastRequest = 0; }
+export function forget(): void { pages = []; recency = []; lastClosed = null; loaded = false; loading = null; epoch += 1; saving = Promise.resolve(); mirrored = false; lastRequest = 0; }
 export async function wipePages(storage: Storage | undefined): Promise<void> { forget(); if (!storage) return; try { await storage.fs.rm(PAGES_FILE); } catch { /* absent */ } }

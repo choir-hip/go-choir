@@ -81,7 +81,7 @@ describe('pages', () => {
   test('P9 a write that lands after a sign-out began is removed', async () => {
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
     const slow = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { await gate; files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
-    const p = P.pagesOpen(slow, 'paper:front', ''); await new Promise((r) => setTimeout(r, 5)); nextGeneration(); release(); await p;
+    const p = P.pagesOpen(slow, 'paper:front', ''); await new Promise((r) => setTimeout(r, 5)); nextGeneration(); release(); await p; await P.pagesSettled();
     expect(files.has(P.PAGES_FILE)).toBe(false);
   });
 });
@@ -126,13 +126,14 @@ describe('load', () => {
 });
 
 describe('round 6', () => {
-  test('S1 saves are serialized: the last state wins the file even if an older write is slower', async () => {
-    const delays = [60, 0, 0]; let n = 0;
-    const slowFirst = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { const w = delays[n++] ?? 0; await new Promise((r) => setTimeout(r, w)); files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
+  test('S1 the last state wins the file: writes are issued at once, in order, and Exact\'s one storage queue runs them in that order even when the first is slow', async () => {
+    // The host's storage runs one operation at a time in the order issued (docs/reference.md, "Every storage operation of a module runs in one queue"); the fake does the same.
+    const delays = [60, 0, 0]; let n = 0; let tail: Promise<void> = Promise.resolve();
+    const queued = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: (p: string, d: Uint8Array) => { const w = delays[n++] ?? 0; const run = tail.then(async () => { await new Promise((r) => setTimeout(r, w)); files.set(p, d); }); tail = run; return run; }, rm: async (p: string) => { files.delete(p); } } } as never;
     const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-    await P.pagesView(slowFirst);
-    const p1 = P.pagesOpen(slowFirst, 'paper:front', ''); await sleep(5); const p2 = P.pagesOpen(slowFirst, 'textures:', ''); await sleep(5); const p3 = P.pagesOpen(slowFirst, 'file:/', '');
-    await Promise.all([p1, p2, p3]);
+    await P.pagesView(queued);
+    const p1 = P.pagesOpen(queued, 'paper:front', ''); await sleep(5); const p2 = P.pagesOpen(queued, 'textures:', ''); await sleep(5); const p3 = P.pagesOpen(queued, 'file:/', '');
+    await Promise.all([p1, p2, p3]); await P.pagesSettled();
     const saved = JSON.parse(new TextDecoder().decode(files.get(P.PAGES_FILE)!)) as { recency: string[] };
     expect(saved.recency[0]).toBe('file:/'); expect(saved.recency.length).toBe(4);
   });
