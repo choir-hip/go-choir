@@ -77,7 +77,7 @@ not released [6][CH].
    an on-device voice, and keeps playing while shared code is frozen [6].
 10. A hands-free voice turn: mic, voice-activity check, recogniser (the
     best listening models on the phone from the model list, Silero and
-    Fluid Speech Mini with Parakeet live words; Apple's recogniser and the
+    Fluid Speech Pro (8 GB phones and up) or Mini with Parakeet live words; Apple's recogniser and the
     energy detector until they are downloaded), turn policy, then plain-word queue commands (no model) or a first answer
     from an on-device model and a streamed `POST /api/autoradio/turns`
     (queue plus 40 candidate stories), spoken sentence by sentence [6].
