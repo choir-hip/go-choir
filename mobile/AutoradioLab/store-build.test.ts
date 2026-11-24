@@ -29,8 +29,8 @@
 //  R6 the build number does not rise past an override or inside a minute.
 //  R7 the key-file warning misses a group-only or other-only readable key.
 //  R8 make-profile.sh with no choice makes a development profile of the production id (see test-app-identity.sh).
-//  R9 docs still tell a builder to run a phone build with no variant, count four app names, or cite the retired variant `one`.
-//  R10 a store build keeps -AutoradioProofSilent (a developer default) because it is not behind the development condition.
+//  R9 docs still tell a builder to run a phone build with no variant, count four app names, or cite the retired variant `one`. (NO TEST: documentation, read by hand; named so in docs/changes.md.)
+//  R10 a store build keeps -AutoradioProofSilent (a developer default) because it is not behind the development condition. (Covered since round 5 by D4: every use of a "compiled" name sits inside a build condition.)
 //  Review round 3 (the second reviewer's review, read after the first fixes):
 //  T1 the microphone purpose string says the app listens only when Voice is on, but Take records the voice and a published take is uploaded.
 //  T2 build-lab.sh takes AR_BUILD_KIND=store with a development variant (it must refuse itself, not only through exact.sh at the end).
@@ -58,7 +58,7 @@
 //  R11 check-store-signing.py refuses a valid App Store profile that omits get-task-allow, or one whose App ID prefix is not its team id (legacy prefix).
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, symlinkSync, realpathSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { cpSync, existsSync, renameSync, symlinkSync, realpathSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -67,9 +67,12 @@ const MOBILE = join(dirname(new URL(import.meta.url).pathname), '..');
 const APP_JSON = JSON.parse(readFileSync(join(MOBILE, 'AutoradioLab', 'app.json'), 'utf8'));
 const PROD = 'news.choir.autoradio', LAB = 'news.choir.autoradio.lab', LABONE = 'news.choir.autoradio.lab.one';
 
+const CHILD_MS = 30000;
 type R = { code: number; out: string; err: string };
 const run = (cmd: string[], env: Record<string, string>, cwd?: string): R => {
-  const p = Bun.spawnSync(cmd, { env, cwd, stdout: 'pipe', stderr: 'pipe' });
+  // Every child has a deadline: a script that spins fails the test (and is killed) instead of holding the machine's test lock.
+  const p = Bun.spawnSync(cmd, { env, cwd, stdout: 'pipe', stderr: 'pipe', timeout: CHILD_MS, killSignal: 'SIGKILL' });
+  if (p.exitCode === null || p.signalCode) throw new Error(`a child ran longer than ${CHILD_MS / 1000}s and was killed: ${cmd.join(' ')}`);
   return { code: p.exitCode ?? -1, out: p.stdout.toString(), err: p.stderr.toString() };
 };
 const BASE = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: process.env.HOME ?? '/tmp' };
@@ -128,12 +131,20 @@ describe('the build identity (app-identity.sh over the real app.json)', () => {
 
 // ---- a copy of the tree over stubs ----------------------------------------------------------------------------------------------------------------------
 type Tree = { t: string; m: string; bin: string; env: (extra?: Record<string, string>) => Record<string, string>; cleanup: () => void };
-type TreeOpts = { realStage?: boolean };
+type TreeOpts = { realStage?: boolean; systemTools?: boolean };   // systemTools: the two checkers are the real ones with no tools argument (the system's own tools, not this tree's stubs)
 function tree(opts: TreeOpts = {}): Tree {
   const t = mkdtempSync(join(tmpdir(), 'store-build-'));
   const m = join(t, 'mobile'), bin = join(t, 'bin'), home = join(t, 'home');
   for (const d of [join(m, 'AutoradioLab'), bin, join(home, 'Library')]) mkdirSync(d, { recursive: true });
   cpSync(join(MOBILE, 'scripts'), join(m, 'scripts'), { recursive: true });
+  if (!opts.systemTools) {
+    // The checkers find codesign, ditto and security in /usr/bin and nowhere else; a test's stubs reach them through their own `--tools <dir>` argument, which archive-store.sh and
+    // upload-store.sh never pass. In THIS copy of the tree only, each checker is a two-line shim that hands its real self that argument; the real files are what runs.
+    for (const c of ['check-store-ipa', 'check-store-signing']) {
+      renameSync(join(m, 'scripts', c + '.py'), join(m, 'scripts', c + '.real.py'));
+      writeFileSync(join(m, 'scripts', c + '.py'), `#!/usr/bin/python3 -I\nimport os, sys\nreal = os.path.join(os.path.dirname(os.path.abspath(__file__)), "${c}.real.py")\nextra = [] if "--tools" in sys.argv[1:3] else ["--tools", "${bin}"]\nos.execv("/usr/bin/python3", ["python3", "-I", real] + extra + sys.argv[1:])\n`);
+    }
+  }
   cpSync(join(MOBILE, 'AutoradioLab', 'app.json'), join(m, 'AutoradioLab', 'app.json'));
   run(['git', 'init', '-q', join(m, '.exact-src')], BASE);
   run(['git', '-C', join(m, '.exact-src'), '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'pin'], BASE);
@@ -159,7 +170,7 @@ function tree(opts: TreeOpts = {}): Tree {
 D="${bin}"
 [ "\${1:-}" = install ] && exit 0
 printf 'exact\\n' >> "${t}/order.log"
-{ printf 'staged=[%s]\\n' "$(ls modules/apple 2>/dev/null | tr '\\n' ' ')"; printf 'args=[%s]\\n' "$*"; for v in EXACT_VARIANT SIGNIN_SCHEME EXACT_VERSION EXACT_BUILD_NUMBER EXACT_NON_EXEMPT_ENCRYPTION EXACT_DEV_MENU EXACT_IDENTITY EXACT_PROFILE EXACT_FEEDBACK; do eval "x=\\\${$v-unset}"; printf '%s=[%s]\\n' "$v" "$x"; done; } > "$D/bun.last"
+{ printf 'staged=[%s]\\n' "$(ls modules/apple 2>/dev/null | tr '\\n' ' ')"; printf 'args=[%s]\\n' "$*"; for v in EXACT_VARIANT SIGNIN_SCHEME EXACT_VERSION EXACT_BUILD_NUMBER EXACT_NON_EXEMPT_ENCRYPTION EXACT_DEV_MENU EXACT_IDENTITY EXACT_PROFILE EXACT_FEEDBACK EXACT_SIM; do eval "x=\\\${$v-unset}"; printf '%s=[%s]\\n' "$v" "$x"; done; } > "$D/bun.last"
 out=""; prev=""; for a in "$@"; do [ "$prev" = --archive ] && out="$a"; prev="$a"; done
 [ -n "$out" ] || exit 0
 mode="$(cat "$D/mode" 2>/dev/null || echo ok)"
@@ -189,6 +200,7 @@ with zipfile.ZipFile(out, "w") as z:
     for f in sorted(glob.glob("modules/apple/*.swift")): exe += open(f, "rb").read()
     if os.path.exists(sys.argv[4] + "/exe-extra"): exe += open(sys.argv[4] + "/exe-extra", "rb").read()
     z.writestr("Payload/Autoradio 1.app/Autoradio1", exe)
+    if os.path.exists(sys.argv[4] + "/framework-extra"): z.writestr("Payload/Autoradio 1.app/Frameworks/ExactModules.framework/ExactModules", b"\\xcf\\xfa\\xed\\xfe\\x0c\\x00\\x00\\x01" + open(sys.argv[4] + "/framework-extra", "rb").read())
     if mode != "no-profile": z.writestr("Payload/Autoradio 1.app/embedded.mobileprovision", b"x")
 print("null" if mode == "json-null" else json.dumps({"path": out, "target": "ios", "trust": "production", "signing": os.environ.get("EXACT_IDENTITY", "ad-hoc")}))
 PY
@@ -243,10 +255,10 @@ ${over.devices ? '<key>ProvisionedDevices</key><array><string>0000</string></arr
   return profile;
 }
 // What `codesign -d` says of the signed app: the entitlements as a plist, the authority lines, and whether `codesign --verify` passes.
-function writeCodesign(tr: Pick<Tree, 'bin'>, over: { id?: string; taskAllow?: boolean | null; authority?: string; verify?: number } = {}) {
+function writeCodesign(tr: Pick<Tree, 'bin'>, over: { id?: string; taskAllow?: boolean | null; authority?: string; verify?: number; team?: string } = {}) {
   const ta = over.taskAllow === null ? '' : `<key>get-task-allow</key>${over.taskAllow ? '<true/>' : '<false/>'}`;
   writeFileSync(join(tr.bin, 'ents.plist'), `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>application-identifier</key><string>${over.id ?? 'ABCDE12345.' + PROD}</string>${ta}</dict></plist>\n`);
-  writeFileSync(join(tr.bin, 'dv.txt'), `Identifier=${PROD}\nAuthority=${over.authority ?? 'Apple Distribution: Someone (ABCDE12345)'}\nAuthority=Apple Worldwide Developer Relations Certification Authority\nTeamIdentifier=ABCDE12345\n`);
+  writeFileSync(join(tr.bin, 'dv.txt'), `Identifier=${PROD}\nAuthority=${over.authority ?? 'Apple Distribution: Someone (ABCDE12345)'}\nAuthority=Apple Worldwide Developer Relations Certification Authority\nTeamIdentifier=${over.team ?? 'ABCDE12345'}\n`);
   writeFileSync(join(tr.bin, 'verify'), String(over.verify ?? 0));
 }
 // An ipa as Exact writes one, for check-store-ipa.py: `info` overrides or (null) removes a key; `exe` is the executable's bytes (null: none in the archive); `profile` false leaves the profile out.
@@ -850,18 +862,18 @@ describe('D2 check-store-ipa.py judges the executable inside the ipa', () => {
     const tr = tree();
     try {
       writeSigning(tr);
-      for (const { name } of NAMES) {
-        for (const exe of [`-${name}-`, `prefix-${name}`, `$s7Autoradio${name.length}${name}V`]) {
-          const r = uploadOf(tr, makeIpa(tr, 'bad.ipa', { exe: 'MZ' + exe + ' tail' }));
-          expect(r.code, name + ' in ' + exe).not.toBe(0); expect(r.err).toContain(name); expect(r.err).toContain('upload-store:');
-          expect(existsSync(join(tr.t, 'xe.log')), 'altool must not run').toBe(false);
-        }
-        const profile = writeSigning(tr);
-        writeFileSync(join(tr.bin, 'exe-extra'), 'compiled with ' + name);
-        const a = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
-        expect(a.code, name).not.toBe(0); expect(a.err).toContain(name); expect(a.err).toContain('archive-store:');
-        rmSync(join(tr.bin, 'exe-extra'));
+      // all the names at once, in three shapes (a refusal names every name it finds, so each name must be in the message: a name the checker did not search is missing from it)
+      for (const shape of [(n: string) => `-${n}-`, (n: string) => `prefix-${n}`, (n: string) => `$s7Autoradio${n.length}${n}V`]) {
+        const r = uploadOf(tr, makeIpa(tr, 'bad.ipa', { exe: 'MZ' + NAMES.map((n) => shape(n.name)).join(' ') + ' tail' }));
+        expect(r.code).not.toBe(0); expect(r.err).toContain('upload-store:');
+        for (const { name } of NAMES) expect(r.err, name).toContain(name);
+        expect(existsSync(join(tr.t, 'xe.log')), 'altool must not run').toBe(false);
       }
+      const profile = writeSigning(tr);
+      writeFileSync(join(tr.bin, 'exe-extra'), 'compiled with ' + NAMES.map((n) => n.name).join(' '));
+      const a = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
+      expect(a.code).not.toBe(0); expect(a.err).toContain('archive-store:'); for (const { name } of NAMES) expect(a.err, name).toContain(name);
+      rmSync(join(tr.bin, 'exe-extra'));
       const clean = uploadOf(tr, makeIpa(tr, 'ok.ipa', { exe: 'MZ nothing of a developer in here' }));
       expect(clean.code, clean.err).toBe(0);
       const okWithNamesElsewhere = uploadOf(tr, makeIpa(tr, 'ok2.ipa', { exe: 'MZ clean', info: { SomeKey: NAMES.map((n) => n.name).join(' ') } }));
@@ -980,7 +992,7 @@ describe('D6 a build number is given once', () => {
     try {
       const profile = writeSigning(tr);
       const e = tr.env({ EXACT_IDENTITY: SHA, EXACT_PROFILE: profile }); delete e.ALLOW_NO_MODELS;
-      const go = () => Bun.spawn(['/bin/sh', join(tr.m, 'scripts', 'archive-store.sh')], { env: e, stdout: 'pipe', stderr: 'pipe' });
+      const go = () => Bun.spawn(['/bin/sh', join(tr.m, 'scripts', 'archive-store.sh')], { env: e, stdout: 'pipe', stderr: 'pipe', timeout: CHILD_MS, killSignal: 'SIGKILL' });
       const procs = [go(), go(), go()];
       const outs = await Promise.all(procs.map(async (p) => { const code = await p.exited; return { code, out: await new Response(p.stdout).text(), err: await new Response(p.stderr).text() }; }));
       for (const o of outs) expect(o.code, o.err).toBe(0);
@@ -1001,5 +1013,227 @@ describe('D7 what the app grants is data the build reads', () => {
     const en = JSON.parse(readFileSync(join(MOBILE, 'AutoradioLab', 'strings', 'en.json'), 'utf8'));
     expect(Object.keys(en).sort()).toEqual(['purpose.microphone', 'purpose.speech']);
     expect(APP_JSON.host.ios.backgroundModes).toEqual(['audio']);
+  });
+});
+
+// ---- round 5: every Mach-O of the bundle, the system's own tools -------------------------------------------------------------------------------------------
+// Failure list (docs/changes.md; each line is a test below):
+//  F1 the hooks are searched for in CFBundleExecutable only: Exact links the app module into libexact_modules.dylib (on iOS production, Frameworks/ExactModules.framework/ExactModules) and package
+//     Swift into frameworks, so a name that is only in one of those passes. Every Mach-O in the bundle is searched (the main executable, Frameworks/, PlugIns/, any .dylib).
+//  F2 two .app directories in Payload, a symlink that leaves the bundle, a duplicate zip entry: what is searched is not what is signed.
+//  F3 codesign, ditto and security are found on the caller's PATH: a stub there fools the signature and the profile checks.
+//  F4 the codesign authority is only a prefix match (Apple Distribution Test); the signed TeamIdentifier is not the profile's team.
+//  F5 a malformed line of store-dev-names.txt silently drops a name; a store-staged file nobody listed; a "compiled" name used outside a build condition; ProofKey unlisted.
+//  F6 archive-store.sh spins on an unwritable claims directory, claims a number before the staging that can fail, lets last-build go backwards.
+//  F7 exact.sh splits an EXACT_SIM with spaces; checks the pin of the caller's EXACT2 and not the Exact it runs; ea_only treats an argument as a glob; --phone alone is not a phone build.
+const MACHO = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0x00, 0x00, 0x01]);
+// Entries added to an ipa (zip) after makeIpa: files (path -> bytes), symlinks (path -> target).
+function addToIpa(ipa: string, files: Record<string, Buffer | string> = {}, links: Record<string, string> = {}) {
+  const spec = JSON.stringify({ files: Object.fromEntries(Object.entries(files).map(([k, v]) => [k, Buffer.from(v).toString('base64')])), links });
+  const r = run(['/usr/bin/python3', '-I', '-c', 'import json,sys,base64,zipfile\nd=json.loads(sys.argv[2])\nz=zipfile.ZipFile(sys.argv[1],"a")\nfor k,v in d["files"].items(): z.writestr(k,base64.b64decode(v))\nfor k,v in d["links"].items():\n    i=zipfile.ZipInfo(k); i.create_system=3; i.external_attr=(0o120755<<16); z.writestr(i,v)\nz.close()', ipa, spec], BASE);
+  expect(r.code, r.err).toBe(0);
+  return ipa;
+}
+const refuses = (r: R, words: string[], who = 'upload-store:') => { expect(r.code, r.out).not.toBe(0); expect(r.err).toContain(who); for (const w of words) expect(r.err).toContain(w); expect(r.err).not.toContain('Traceback'); };
+
+describe('F1 the names are searched in every Mach-O of the bundle', () => {
+  test('F1 a listed name only in the module dylib, a framework binary, a plug-in or a loose dylib refuses the ipa, in upload-store.sh and in archive-store.sh', () => {
+    const tr = tree();
+    try {
+      writeSigning(tr);
+      const places = ['Frameworks/ExactModules.framework/ExactModules', 'libexact_modules.dylib', 'Frameworks/ExactPkg_autoradio.framework/ExactPkg_autoradio', 'PlugIns/Share.appex/Share', 'Frameworks/libextra.dylib'];
+      for (const where of places) {                                                         // every name at once, in each place: the message must name them all
+        const ipa = addToIpa(makeIpa(tr, 'f1.ipa', { exe: 'MZ clean' }), { ['Payload/A.app/' + where]: Buffer.concat([MACHO, Buffer.from(NAMES.map((n) => '..' + n.name + '..').join(' '))]) });
+        const r = uploadOf(tr, ipa);
+        refuses(r, NAMES.map((n) => n.name)); expect(r.err).toContain(where.split('/').pop()!);
+        expect(existsSync(join(tr.t, 'xe.log')), 'altool must not run').toBe(false);
+      }
+      // a dylib that carries no Mach-O magic is still searched by its name; a plain resource file that holds a listed name (a string table, a script) is not a binary and passes
+      refuses(uploadOf(tr, addToIpa(makeIpa(tr, 'f1b.ipa', { exe: 'MZ clean' }), { 'Payload/A.app/Frameworks/libodd.dylib': 'odd ' + NAMES[0].name })), [NAMES[0].name]);
+      const ok = uploadOf(tr, addToIpa(makeIpa(tr, 'f1c.ipa', { exe: 'MZ clean' }), { 'Payload/A.app/strings.json': NAMES.map((n) => n.name).join(' '), 'Payload/A.app/Frameworks/ExactModules.framework/ExactModules': Buffer.concat([MACHO, Buffer.from('product code only')]) }));
+      expect(ok.code, ok.err).toBe(0);
+      // archive-store.sh: the .ipa Exact wrote holds the name in a framework only
+      const profile = writeSigning(tr);
+      writeFileSync(join(tr.bin, 'framework-extra'), 'compiled with ' + NAMES[1].name);
+      const a = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
+      refuses(a, [NAMES[1].name], 'archive-store:');
+    } finally { tr.cleanup(); }
+  });
+});
+
+describe('F2 what is searched is what is signed', () => {
+  test('F2 two apps in Payload, a symlink out of the bundle, a duplicate entry are each refused', () => {
+    const tr = tree();
+    try {
+      writeSigning(tr);
+      refuses(uploadOf(tr, addToIpa(makeIpa(tr, 'two.ipa'), { 'Payload/B.app/Info.plist': '<plist/>' })), ['Payload']);
+      refuses(uploadOf(tr, addToIpa(makeIpa(tr, 'link.ipa'), {}, { 'Payload/A.app/Frameworks/out': '../../../../../../etc/hosts' })), ['symlink']);
+      refuses(uploadOf(tr, addToIpa(makeIpa(tr, 'abs.ipa'), {}, { 'Payload/A.app/Frameworks/out': '/usr/bin/true' })), ['symlink']);
+      refuses(uploadOf(tr, addToIpa(makeIpa(tr, 'dup.ipa'), { 'Payload/A.app/A': 'a second executable of the same name' })), ['twice']);
+      const inside = uploadOf(tr, addToIpa(makeIpa(tr, 'in.ipa'), { 'Payload/A.app/Frameworks/X.framework/X': Buffer.concat([MACHO, Buffer.from('x')]) }, { 'Payload/A.app/Frameworks/X.framework/Current': 'X' }));
+      expect(inside.code, inside.err).toBe(0);                                              // a link that stays inside the bundle is not followed and is not a defect
+    } finally { tr.cleanup(); }
+  });
+});
+
+describe('F3 the tools are the system\'s, not the caller\'s PATH', () => {
+  test('F3 stubs of codesign, ditto and security on PATH are ignored by upload-store.sh and archive-store.sh (the real tools judge the fixture and refuse it)', () => {
+    const tr = tree({ systemTools: true });
+    try {
+      const profile = writeSigning(tr);
+      for (const t of ['ditto', 'unzip']) { writeFileSync(join(tr.bin, t), '#!/bin/sh\nexit 0\n'); chmodSync(join(tr.bin, t), 0o755); }
+      const r = uploadOf(tr, makeIpa(tr, 'fixture.ipa'));
+      expect(r.code, 'a fixture ipa is no signed app: the real tools refuse it').not.toBe(0); expect(r.err).toContain('upload-store:'); expect(r.err).not.toContain('Traceback');
+      expect(existsSync(join(tr.t, 'xe.log'))).toBe(false);
+      const a = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });          // the real `security` finds no such identity: the stub that says it does is not asked
+      expect(a.code).not.toBe(0); expect(a.err).toContain('archive-store:'); expect(a.err).toContain('identity'); expect(existsSync(join(tr.bin, 'bun.last'))).toBe(false);
+    } finally { tr.cleanup(); }
+  });
+  test('F3 the checker takes a tools directory only as an explicit argument (a test\'s; the two store scripts never pass one): with it the stubs judge, without it the real tools do', () => {
+    const tr = tree();
+    try {
+      writeSigning(tr);
+      const ipa = makeIpa(tr, 'direct.ipa');
+      const direct = (tools: string[]) => run(['/usr/bin/python3', '-I', join(MOBILE, 'scripts', 'check-store-ipa.py'), ...tools, 'direct', ipa, PROD, '1.0'], BASE);
+      expect(direct([]).code).not.toBe(0);                                                  // the real codesign on a fixture
+      const r = direct(['--tools', tr.bin]); expect(r.code, r.err).toBe(0);
+    } finally { tr.cleanup(); }
+  });
+});
+
+describe('F4 the signature names Apple Distribution and the profile\'s team', () => {
+  test('F4 "Apple Distribution Test" and a TeamIdentifier other than the profile\'s are refused; "Apple Distribution: Name (TEAM)" passes', () => {
+    const tr = tree();
+    try {
+      writeSigning(tr);
+      const ipa = makeIpa(tr, 'sig.ipa');
+      writeCodesign(tr, { authority: 'Apple Distribution Test' });
+      refuses(uploadOf(tr, ipa), ['Apple Distribution']);
+      writeCodesign(tr, { team: 'OTHERTEAM1' });
+      refuses(uploadOf(tr, ipa), ['team']);
+      writeCodesign(tr);
+      expect(uploadOf(tr, ipa).code).toBe(0);
+    } finally { tr.cleanup(); }
+  });
+});
+
+describe('F5 the list of names is parsed strictly and covers what is staged and what is compiled out', () => {
+  test('F5 a line that is not "<kind> <name>" makes the checker refuse everything, instead of dropping the name', () => {
+    const tr = tree();
+    try {
+      writeSigning(tr);
+      const f = join(tr.m, 'scripts', 'store-dev-names.txt');
+      for (const bad of ['staged EmbedDeviceTrial   # the launch hook', 'staged', 'sometimes EmbedDeviceTrial', 'staged A B']) {
+        writeFileSync(f, readFileSync(join(MOBILE, 'scripts', 'store-dev-names.txt'), 'utf8') + bad + '\n');
+        const r = uploadOf(tr, makeIpa(tr, 'strict.ipa'));
+        refuses(r, ['store-dev-names.txt'], '');
+      }
+    } finally { tr.cleanup(); }
+  });
+  test('F5 every line of the real list is "<staged|compiled> <name>", and ProofKey and its file name are on it', () => {
+    const lines = readFileSync(join(MOBILE, 'scripts', 'store-dev-names.txt'), 'utf8').split('\n').filter((l) => l.trim() && !l.trim().startsWith('#'));
+    for (const l of lines) expect(l, l).toMatch(/^(staged|compiled) [A-Za-z0-9_.-]+$/);
+    expect(lines).toContain('compiled ProofKey'); expect(lines).toContain('compiled proof-key');
+  });
+  test('F5 every file the development staging has and the store staging lacks is named by the list; every use of a "compiled" name is inside a build condition', () => {
+    const files = (kind: string | null) => {
+      const t = mkdtempSync(join(tmpdir(), 'dev-files-')); const m = join(t, 'mobile');
+      mkdirSync(join(m, 'AutoradioKit', 'Sources', 'AutoradioKit'), { recursive: true }); mkdirSync(join(m, 'AutoradioLab', 'modules', 'apple'), { recursive: true });
+      mkdirSync(join(m, 'exact-package', 'apple'), { recursive: true }); mkdirSync(join(m, '.deps', 'xcframeworks', 'FluidAudio.xcframework'), { recursive: true });
+      cpSync(join(MOBILE, 'scripts'), join(m, 'scripts'), { recursive: true });
+      cpSync(join(MOBILE, 'AutoradioKit', 'Sources', 'AutoradioModels'), join(m, 'AutoradioKit', 'Sources', 'AutoradioModels'), { recursive: true });
+      writeFileSync(join(m, 'scripts', 'gen-build-info.sh'), '#!/bin/sh\nexit 0\n');
+      const r = run(['/bin/sh', join(m, 'scripts', 'sync-exact-package.sh')], { ...BASE, ...(kind ? { AR_BUILD_KIND: kind } : {}) });
+      expect(r.code, r.err).toBe(0);
+      const dir = join(m, 'AutoradioLab', 'modules', 'apple');
+      const out: Record<string, string> = {};
+      for (const f of readdirSync(dir)) if (f.endsWith('.swift')) out[f] = readFileSync(join(dir, f), 'utf8');
+      rmSync(t, { recursive: true, force: true });
+      return out;
+    };
+    const dev = files(null), store = files('store');
+    for (const f of Object.keys(dev)) {
+      if (f in store && store[f] === dev[f]) continue;
+      const names = NAMES.filter((n) => n.kind === 'staged').map((n) => n.name);
+      expect(names.some((n) => dev[f].includes(n) || f.includes(n)), f + ' differs between the kinds but holds no listed name: add the name that gives it away to scripts/store-dev-names.txt').toBe(true);
+    }
+    // every use of a compiled name is under #if (EXACT_DEVELOPMENT | targetEnvironment(simulator))
+    const roots = [join(MOBILE, 'AutoradioKit', 'Sources'), join(MOBILE, 'AutoradioLab', 'modules', 'apple')];
+    const swift = roots.flatMap((r) => readdirSync(r, { recursive: true }).map(String).filter((f) => f.endsWith('.swift')).map((f) => join(r, f)));
+    for (const { kind, name } of NAMES.filter((n) => n.kind === 'compiled')) {
+      let seen = 0;
+      for (const f of swift) {
+        const stack: boolean[] = [];
+        for (const line of readFileSync(f, 'utf8').split('\n')) {
+          const t = line.trim();
+          if (t.startsWith('#if ')) stack.push(/EXACT_DEVELOPMENT|targetEnvironment\(simulator\)/.test(t)); else if (t.startsWith('#else') || t.startsWith('#elseif')) stack[stack.length - 1] = false; else if (t.startsWith('#endif')) stack.pop();
+          else if (!t.startsWith('//') && line.includes(name)) { seen++; expect(stack.some(Boolean), `${f}: "${name}" is used outside a development-only build condition: ${t}`).toBe(true); }
+        }
+      }
+      expect(seen, name + ' is no longer used anywhere: renamed? update scripts/store-dev-names.txt').toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('F6 the build number claim', () => {
+  test('F6 an unwritable claims directory is a refusal, not a loop; a staging that fails burns no number; an override raises the record for the default runs after it', () => {
+    const tr = tree();
+    try {
+      const profile = writeSigning(tr);
+      const out = join(tr.t, 'out'); mkdirSync(join(out, 'claims'), { recursive: true }); chmodSync(join(out, 'claims'), 0o555);
+      const t0 = Date.now();
+      let r = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
+      expect(r.code).not.toBe(0); expect(r.err).toContain('claim'); expect(Date.now() - t0).toBeLessThan(20000);
+      chmodSync(join(out, 'claims'), 0o755);
+      writeFileSync(join(tr.m, 'scripts', 'sync-exact-package.sh'), '#!/bin/sh\nexit 1\n');
+      r = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile, AR_BUILD_NUMBER: '4242' });
+      expect(r.code).not.toBe(0); expect(r.err).toContain('staging');
+      expect(existsSync(join(out, 'claims', '4242')), 'a number must not be claimed before the staging that can fail').toBe(false);
+      expect(existsSync(join(out, 'last-build'))).toBe(false);
+    } finally { tr.cleanup(); }
+  });
+  test('F6 the record never goes down: a run that holds a lower number does not overwrite a higher record', () => {
+    const tr = tree();
+    try {
+      const profile = writeSigning(tr);
+      const out = join(tr.t, 'out'); mkdirSync(out, { recursive: true });
+      writeFileSync(join(out, 'last-build'), '900000000\n');
+      const r = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile, AR_BUILD_NUMBER: '5' });
+      expect(r.code, r.err).toBe(0);
+      expect(readFileSync(join(out, 'last-build'), 'utf8').trim()).toBe('900000000');
+      const d = archive(tr, { EXACT_IDENTITY: SHA, EXACT_PROFILE: profile });
+      expect(d.code, d.err).toBe(0); expect(Number(/build number: (\d+)/.exec(d.out)![1])).toBe(900000001);
+    } finally { tr.cleanup(); }
+  });
+});
+
+describe('F7 the wrapper around Exact', () => {
+  test('F7 EXACT_SIM with spaces reaches Exact as one value', () => {
+    const tr = tree();
+    try {
+      const r = run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), 'ios'], tr.env({ EXACT_SIM: 'iPhone 18 Pro' }));
+      expect(r.code, r.err).toBe(0); expect(readFileSync(join(tr.bin, 'bun.last'), 'utf8')).toContain('EXACT_SIM=[iPhone 18 Pro]');
+    } finally { tr.cleanup(); }
+  });
+  test('F7 the pin that is checked is the Exact that runs (mobile/.exact-src), not the caller\'s EXACT2', () => {
+    const tr = tree();
+    try {
+      const other = join(tr.t, 'other-exact');
+      run(['git', 'clone', '-q', join(tr.m, '.exact-src'), other], BASE);
+      run(['git', '-C', join(tr.m, '.exact-src'), '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'moved'], BASE);   // the tree's own Exact is no longer at the pin
+      const r = run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), 'ios'], tr.env({ EXACT2: other }));
+      expect(r.code).not.toBe(0); expect(r.err).toContain('pin'); expect(existsSync(join(tr.bin, 'bun.last'))).toBe(false);
+    } finally { tr.cleanup(); }
+  });
+  test('F7 an argument is a word, not a pattern: --ru? is not --run; --phone alone is a phone build for a development app and runs only in the build tree', () => {
+    const tr = tree();
+    try {
+      const ex = (args: string[], extra: Record<string, string> = {}) => run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), ...args], tr.env(extra));
+      let r = ex(['ios', '--ru?']); expect(r.code).not.toBe(0); expect(existsSync(join(tr.bin, 'bun.last'))).toBe(false);
+      r = ex(['ios', '--r*']); expect(r.code).not.toBe(0);
+      r = ex(['ios', '--run']); expect(r.code, r.err).toBe(0);
+      writeFileSync(join(tr.t, 'tree'), '/nowhere\n');                                      // not the build tree
+      r = ex(['agent', 'ios', '--phone', 'X'], { AR_VARIANT: 'lab' }); expect(r.code).not.toBe(0); expect(r.err).toContain('build tree');
+    } finally { tr.cleanup(); }
   });
 });

@@ -12,6 +12,6 @@ case "$KIND" in development|store) ;; *) echo "stage-app: the kind is developmen
 # The model libraries first: a build without them has no model stages (only fallbacks), which is a defect, not a build.
 [ -n "${ALLOW_NO_MODELS:-}" ] || "$HERE/scripts/ensure-deps.sh" "$PLATFORM"
 AR_BUILD_KIND="$KIND" "$HERE/scripts/sync-exact-package.sh"
-python3 -I "$HERE/scripts/gen-exact-interface.py" >/dev/null
+/usr/bin/python3 -I "$HERE/scripts/gen-exact-interface.py" >/dev/null
 BUN="${BUN:-$HOME/.bun-1.4.2/bin/bun}"
 (cd "$HERE/AutoradioLab" && rm -rf node_modules/@choir && "$BUN" install >/dev/null)

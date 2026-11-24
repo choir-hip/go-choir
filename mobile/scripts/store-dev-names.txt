@@ -1,10 +1,13 @@
-# Names a store binary must not hold (check-store-ipa.py searches the executable inside the .ipa for each; store-build.test.ts keeps the list from rotting).
+# Names a store binary must not hold (check-store-ipa.py searches every Mach-O file inside the .ipa for each; store-build.test.ts keeps the list from rotting).
 #   staged    the store kind of sync-exact-package.sh leaves the file or the call out of the staged sources, so the name is in a development staging only
 #   compiled  the source holds it behind a build condition (#if EXACT_DEVELOPMENT) that Exact leaves undefined for an archive
-# One per line: <kind> <name>. A launch-hook type, and the launch-argument key it reads.
+# One per line: <kind> <name>, exactly two words (the checker refuses the whole list on any other line: no trailing comment). A launch-hook type, and the launch-argument key it reads.
+# Which of these survive a release compile is read on the first real archive (the Swift identifiers may be inlined or stripped; the string literals, "EmbedTrial", "ModelProofStages", "AutoradioProofSilent", "proof-key", stay).
 staged EmbedDeviceTrial
 staged EmbedTrialFixture
 staged EmbedTrial
 staged ModelProofStages
 staged runFromLaunchArguments
 compiled AutoradioProofSilent
+compiled ProofKey
+compiled proof-key

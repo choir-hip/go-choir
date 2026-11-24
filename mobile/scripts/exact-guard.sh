@@ -31,7 +31,7 @@ if ea_has --variant "$@"; then no "name the development app with AR_VARIANT=lab 
 # Exact's own developer menu is off in every build of this app (exact.sh sets EXACT_DEV_MENU=0); a caller's other value is not honoured.
 [ "${EXACT_DEV_MENU-0}" = 0 ] || no "EXACT_DEV_MENU is always 0 for this app (Exact's developer menu is off in every build); unset it"
 VARIANT="$("$HERE/scripts/app-identity.sh" variant)" || exit 1
-HAS_DEVICE=""; ea_has --device "$@" && HAS_DEVICE=1
+HAS_DEVICE=""; ea_has --device "$@" && HAS_DEVICE=1; ea_has --phone "$@" && HAS_DEVICE=1       # --phone names a phone as --device does: either is a phone build
 in_tree() { "$HERE/scripts/build-tree.sh" is || no "$1 runs in the build tree ($("$HERE/scripts/build-tree.sh" path 2>/dev/null || echo none named)); push your lane, the lead builds it there"; }
 
 # An empty first argument is no verb: `exact.sh "" ios --device` must not ride on "no verb prints help".

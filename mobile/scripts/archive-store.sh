@@ -11,7 +11,7 @@
 #   bun exact.mjs ios --device --archive <ipa> --json      (reference.md "Build an iOS app on a CI machine"; --archive bakes production trust and Swift's release build)
 # with EXACT_VERSION (app.json "version"), EXACT_BUILD_NUMBER, EXACT_NON_EXEMPT_ENCRYPTION=false (HTTPS and the system's encryption only; Exact writes ITSAppUsesNonExemptEncryption)
 # and EXACT_DEV_MENU=0 (exact-env.sh gives it to every build: Exact's developer menu, four fingers, is off in every build of this app). Last, it reads the .ipa back and prints its
-# path, bundle id, version and build number, and fails if they are not what was asked for, if the executable holds a name from store-dev-names.txt (the developer launch hooks), or
+# path, bundle id, version and build number, and fails if they are not what was asked for, if any Mach-O of the app (the executable, the module dylib or framework, plug-ins) holds a name from store-dev-names.txt (the developer launch hooks), or
 # if the signature is not an Apple Distribution one for the production id (check-store-ipa.py).
 # The BUILD NUMBER (CFBundleVersion): by default whole minutes since 2026-01-01 00:00 UTC, or one more than the last number this script gave if that is higher ($OUTDIR/last-build),
 # so a default number is never at or below the record, a re-upload of the same commit is a higher number (App Store Connect takes a build number once per version), and it has at
@@ -23,7 +23,7 @@
 # ALLOW_NO_MODELS is refused (a store archive always carries the voice models).
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-PATH="$PATH:/usr/bin:/bin:/usr/sbin:/sbin"
+PATH="/usr/bin:/bin:/usr/sbin:/sbin"     # the system's tools only: a codesign, ditto or security earlier on the caller's PATH must not judge a store build (the checkers name /usr/bin themselves too)
 no() { echo "archive-store: $1" >&2; exit 1; }
 [ -z "${AR_VARIANT:-}${AR_APP_ID:-}${AR_APP_NAME:-}" ] || no "the store build is the production app: unset AR_VARIANT, AR_APP_ID and AR_APP_NAME (a development app is never uploaded)"
 [ -z "${AR_APP_JSON:-}" ] || no "AR_APP_JSON is set: the store build reads the app's own app.json only (another identity file would ship another id, name or version); unset it"
@@ -43,6 +43,8 @@ EXACT_PROFILE="$(cd "$(dirname "$EXACT_PROFILE")" && pwd -P)/$(basename "$EXACT_
 OUTDIR="${AR_STORE_OUT_DIR:-$HOME/.cache/autoradio-store}"
 mkdir -p "$OUTDIR"
 OUTDIR="$(cd "$OUTDIR" && pwd -P)"
+# Stage the store kind NOW, before a number is claimed (a staging that fails burns none), then run Exact on what was just staged: nothing between the two reads the tree for the build.
+"$HERE/scripts/stage-app.sh" ios store || no "staging the store kind failed (see above); nothing was built"
 # The build number: the minute count, but never at or below the last number this script gave (kept in $OUTDIR/last-build), and claimed atomically (see the header).
 LASTF="$OUTDIR/last-build"; LAST=0
 if [ -e "$LASTF" ]; then
@@ -55,23 +57,28 @@ CLAIMS="$OUTDIR/claims"; mkdir -p "$CLAIMS"
 if [ -n "${AR_BUILD_NUMBER:-}" ]; then
   BUILD="$AR_BUILD_NUMBER"
   okbuild "$BUILD" || no "the build number must be a whole number from 1 to 999999999 (AR_BUILD_NUMBER, or the record in $LASTF)."
-  mkdir "$CLAIMS/$BUILD" 2>/dev/null || no "build number $BUILD was already given by this script (its claim is in $CLAIMS): App Store Connect takes a number once per version; give another."
+  mkdir "$CLAIMS/$BUILD" 2>/dev/null || { [ -d "$CLAIMS/$BUILD" ] || no "cannot claim a build number in $CLAIMS (is it writable?)"; no "build number $BUILD was already given by this script (its claim is in $CLAIMS): App Store Connect takes a number once per version; give another."; }
 else
   BUILD=$(( ($(date -u +%s) - 1767225600) / 60 )); [ "$BUILD" -gt "$LAST" ] || BUILD=$((LAST + 1))
   while :; do
     okbuild "$BUILD" || no "the build number must be a whole number from 1 to 999999999 (AR_BUILD_NUMBER, or the record in $LASTF)."
     mkdir "$CLAIMS/$BUILD" 2>/dev/null && break
+    [ -d "$CLAIMS/$BUILD" ] || no "cannot claim a build number in $CLAIMS (is it writable?)"      # a mkdir that failed for another reason than "taken" is not a number to skip
     BUILD=$((BUILD + 1))
   done
 fi
-if [ "$BUILD" -gt "$LAST" ]; then printf '%s\n' "$BUILD" > "$LASTF.$$" && mv -f "$LASTF.$$" "$LASTF"; fi
+# The record only goes up: re-read under a short lock (a directory made and removed), so a run holding a lower number cannot write over a higher one another run just wrote.
+RLOCK="$OUTDIR/last-build.lock"; _w=0
+until mkdir "$RLOCK" 2>/dev/null; do _w=$((_w + 1)); [ "$_w" -lt 100 ] || no "$RLOCK is held (another run is recording a number; if none is running, remove that directory)"; sleep 0.1; done
+CUR=0; [ -e "$LASTF" ] && CUR="$(cat "$LASTF")"
+case "$CUR" in ''|*[!0-9]*) CUR=0 ;; esac
+if [ "$BUILD" -gt "$CUR" ]; then printf '%s\n' "$BUILD" > "$LASTF.$$" && mv -f "$LASTF.$$" "$LASTF"; fi
+rmdir "$RLOCK"
 IPA="$OUTDIR/$(printf '%s' "$NAME" | tr -c 'A-Za-z0-9.\n' '-')-$VERSION-$BUILD.ipa"
 rm -f "$IPA"
 LOG="$OUTDIR/archive-$BUILD.stdout"
 echo "archive-store: $NAME $ID version $VERSION build $BUILD"
 export EXACT_VERSION="$VERSION" EXACT_BUILD_NUMBER="$BUILD" EXACT_NON_EXEMPT_ENCRYPTION=false
-# Stage the store kind NOW, then run Exact on what was just staged: nothing between the two, and nothing before reads the tree for the build.
-"$HERE/scripts/stage-app.sh" ios store || no "staging the store kind failed (see above); nothing was built"
 . "$HERE/scripts/exact-env.sh"
 set +e
 exact_run ios --device --archive "$IPA" --json > "$LOG"

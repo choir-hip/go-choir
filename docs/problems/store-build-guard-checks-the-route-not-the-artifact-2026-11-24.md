@@ -49,3 +49,21 @@ first archive. That first archive is also the proof: the lead runs the check
 on a development `.ipa` (must refuse) and on the store `.ipa` (must pass).
 If round 4 is sent back for the same class again, the scripts are dropped
 and the archive is made by hand from Xcode for the first submission.
+
+## Round 4 review (2026-11-24): the artifact check was itself incomplete
+
+Both blocking findings were about the check, not the route. (1) It searched
+`CFBundleExecutable` only; Exact compiles the app module into
+`libexact_modules.dylib` (`host/apple/build.mjs:1099`, `compose.mjs:23`), and
+on an iOS production build that is wrapped as
+`Frameworks/ExactModules.framework/ExactModules`
+(`moduleLibraryLinkArgs({ wrapped: forIos && production })`), so the hooks
+were most likely never in the file that was searched. It now searches every
+Mach-O of the unpacked bundle. (2) `codesign`, `ditto` and `security` were
+found on the caller's `PATH`; they are now `/usr/bin`'s, and tests reach the
+checkers' stubs only through a `--tools` argument the store scripts never
+pass. Belief: the shape is now right (judge the whole artifact with the
+system's tools); the remaining error is still the real binaries, which have
+not been seen: the first archive carries a negative control (a release,
+archive-kind, dev-staged build must be refused) and a positive control
+(a known product symbol is found in the module binary).

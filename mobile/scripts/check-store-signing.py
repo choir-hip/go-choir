@@ -1,13 +1,19 @@
 #!/usr/bin/python3 -I
-"""check-store-signing.py <bundle id> <identity sha1 | -> <profile path>
+"""check-store-signing.py [--tools <dir>] <bundle id> <identity sha1 | -> <profile path>
 
 Says whether the NAMED identity and the NAMED provisioning profile can sign an App Store build of <bundle id>. It looks at nothing else: it never searches for an
 identity or a profile, and it prints no key material, no certificate and no hash (only what is wrong, in plain words). Exit 0: fine. Exit 1: the reason on stderr.
 With `-` for the identity only the profile is judged (check-store-ipa.py holds the profile embedded in an .ipa to the same rules).
-The tools are `security` (find-identity, cms -D) found on PATH, as archive-store.sh runs them."""
-import datetime, hashlib, plistlib, subprocess, sys
+The tool is /usr/bin/security (find-identity, cms -D), never one found on PATH: a stub on the caller's PATH cannot judge a profile. `--tools <dir>` (the first two arguments, and
+only a test passes it: archive-store.sh and upload-store.sh never do) names a directory whose `security` is used when it has one."""
+import datetime, hashlib, os, plistlib, subprocess, sys
 
-bundle, sha, path = sys.argv[1:4]
+args = sys.argv[1:]
+tools = None
+if len(args) >= 2 and args[0] == "--tools":
+    tools, args = args[1], args[2:]
+bundle, sha, path = args[0:3]
+SECURITY = os.path.join(tools, "security") if tools and os.path.exists(os.path.join(tools, "security")) else "/usr/bin/security"
 
 def no(msg):
     sys.stderr.write("archive-store: " + msg + "\n")
@@ -15,7 +21,7 @@ def no(msg):
 
 def run(args):
     try:
-        p = subprocess.run(["security"] + args, capture_output=True)
+        p = subprocess.run([SECURITY] + args, capture_output=True)
     except OSError:
         no("the `security` tool could not be run.")
     return p.returncode, p.stdout
@@ -65,4 +71,5 @@ if sha != "-":
     if not isinstance(certs, list) or sha.lower() not in {hashlib.sha1(c).hexdigest() for c in certs if isinstance(c, bytes)}:
         no("EXACT_PROFILE was not made for the identity EXACT_IDENTITY names (make the profile with that Apple Distribution certificate).")
 if sha == "-":
-    print(ents.get("application-identifier"))   # the caller (check-store-ipa.py) compares it with what the signature carries
+    print(ents.get("application-identifier"))   # the caller (check-store-ipa.py) compares these two lines, the application-identifier and the team, with what the signature carries
+    print(team)

@@ -6,7 +6,7 @@
 # password flag. Refuses unless the ipa is what archive-store.sh makes, whatever made it (check-store-ipa.py: the production app, archive kind, developer menu off, export answer, no development keys, an App Store profile for that id, an executable with no developer launch hook in it, and a signature that codesign reads as Apple Distribution for that id). Run outside the Nix shell (xe.sh).
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-PATH="$PATH:/usr/bin:/bin:/usr/sbin:/sbin"
+PATH="/usr/bin:/bin:/usr/sbin:/sbin"     # the system's tools only (the checkers name /usr/bin themselves too)
 no() { echo "upload-store: $1" >&2; exit 1; }
 IPA="${1:-}"
 [ -n "$IPA" ] && [ -f "$IPA" ] && case "$IPA" in *.ipa) true ;; *) false ;; esac || no "give the path of an .ipa file (archive-store.sh prints it)"
