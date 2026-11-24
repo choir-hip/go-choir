@@ -6,9 +6,9 @@ import Foundation
 // Each entry is a model for one job (speech detection, recognition, voice, ...): where it comes from (repository and the pinned revision),
 // the files with their size and SHA-256 when the store fetches them itself, the licence and the credit the licence asks for, and which devices
 // it is recommended for. The list decodes from JSON and a copy is built in (`builtIn`, made from the tables this build already carries), so a
-// phone with no network, or with a server that is down, has the same list it shipped with. NOT BUILT: the server route that serves it, the
-// fetch, and the choice reading this list instead of `CandidateTable` (today the pipeline still reads `CandidateTable`; this is the shape the
-// served list will take, and `builtIn` is derived from that table so the two cannot disagree).
+// phone with no network, or with a server that is down, has the same list it shipped with. The server serves this build's list at /api/phone/model-list
+// (internal/proxy/phone_model_list.json; ModelListTests L7 keeps the two equal). NOT BUILT: the fetch, and the choice reading this list instead
+// of `CandidateTable` (today the pipeline still reads `CandidateTable`; `builtIn` is derived from that table so the two cannot disagree).
 //
 // WAYS THIS CAN FAIL (each has a test in ModelListTests):
 //  1. A newer server sends a job this build does not know, or a field it has not heard of: that entry is skipped (or the field ignored), the

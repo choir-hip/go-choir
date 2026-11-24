@@ -40,6 +40,13 @@ the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-24
 
+### The server serves the phone's model list (`lane/model-list-route`, orange)
+- **What:** `GET https://choir.news/api/phone/model-list` answers the list of on-device models as JSON (22 entries today: job, repository, pinned revision, files with size and SHA-256, licence, device rules, rank), public and with no sign-in, GET and HEAD only. The body is `internal/proxy/phone_model_list.json`, the app's built-in list written out.
+- **Why:** owner, 2026-11-24: "we should be downloading the model list from the server".
+- **Proof:** the route's test through the real route table (`TestPhoneModelListThroughRealChain`) on the build VM, and the phone-side test that the served file equals the built-in list and loses no entry to the phone's validity rules (seen failing with no file, then passing). **Not proved on staging**: `curl -fsS https://choir.news/api/phone/model-list | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["models"]))'` should print 22.
+- **Not built:** the phone does not fetch it yet, and the pipeline still chooses from its own table. Until then the route changes nothing a person sees.
+- **Replaced:** nothing. **Undo:** revert. A lane that changes the phone's model tables must rerun the phone-side test with `AR_WRITE_MODEL_LIST=1`, or it fails.
+
 ### Phone: the listening models come from the model list; Fluid Speech Mini is the recogniser (`lane/voice-default`, orange)
 - **What:** (1) a recognition stage for Fluid Speech Mini (stage `fluid-speech-mini`, ported from Mike's `FluidSpeechMini.swift`: warm, one pass over the speech-bounded audio), its model-list entry (repository, pinned commit, every file's size and SHA-256, CC BY 4.0 with its credit) and a store that fetches a folder of files, each checked against its digest. (2) a test that runs it on the fixture speech through Core ML on the Mac. (3) the listener configuration is no longer a fixed list: speech detection, live words and the final transcript are chosen from the model list (`Voice/ListenerPipeline`): Silero, Parakeet EOU for live words and Fluid Speech Mini for the transcript when their models are on the phone and ready, the energy detector and Apple's recogniser until then. A better model is a new row in `CandidateTable`.
 - **Why:** owner, 2026-11-24: Apple's recogniser "isnt good enough"; "we are only using that currently because of a coding bug. (we shuold be using fluid speech mini etc)"; "we will keep updating the models as better ones come".

@@ -3,8 +3,20 @@ import XCTest
 
 // The model list as data. Failure list (each line a test): L1 the built-in copy does not survive JSON; L2 an unknown job or field from a newer
 // server empties the list; L3 an entry the store could not verify is offered; L4 recommendations ignore the device; L5 the bundle the store
-// fetches differs from the one the build pins; L6 the built-in copy disagrees with CandidateTable.
+// fetches differs from the one the build pins; L6 the built-in copy disagrees with CandidateTable; L7 the served list differs from the build's, or holds an entry the phone drops.
 final class ModelListTests: XCTestCase {
+    /// L7: the list the server hands out (internal/proxy/phone_model_list.json, served at /api/phone/model-list) is this build's list. A phone
+    /// that fetches it must lose no entry to the validity rules, and the two must not drift: run once with AR_WRITE_MODEL_LIST=1 to rewrite the file.
+    func testServedListIsTheBuiltInList() throws {
+        let served = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../../internal/proxy/phone_model_list.json").standardizedFileURL
+        let built = ModelList.builtIn()
+        if ProcessInfo.processInfo.environment["AR_WRITE_MODEL_LIST"] == "1" { try (built.encoded() + Data("\n".utf8)).write(to: served) }
+        let data = try Data(contentsOf: served)
+        let raw = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let list = try ModelList.decode(data)
+        XCTAssertEqual(list.models.count, (raw["models"] as? [Any])?.count, "the phone dropped a served entry as invalid")
+        XCTAssertEqual(list, built, "the served list differs from the build's: regenerate with AR_WRITE_MODEL_LIST=1, or bring the tables to match")
+    }
     func testBuiltInSurvivesJSON() throws {                                                            // L1
         let list = ModelList.builtIn()
         XCTAssertFalse(list.models.isEmpty)

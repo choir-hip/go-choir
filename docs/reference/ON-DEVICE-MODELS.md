@@ -551,8 +551,9 @@ repository; it is made from the parquet file named above).
 
 **The model list as data (`Voice/ModelList.swift`).** `ModelList` is one structure (job, repository, pinned revision, files with size and
 SHA-256, licence and credit, per-device recommendation rules, rank) that decodes from JSON, skips an entry it cannot verify or a job it does not
-know, and has a built-in copy derived from `CandidateTable` and `KnownModels.bundles`. Not built: the server route, the fetch, and the choice
-reading it instead of `CandidateTable`.
+know, and has a built-in copy derived from `CandidateTable` and `KnownModels.bundles`. The server serves the list at `GET https://choir.news/api/phone/model-list` (public, no sign-in; `internal/proxy/phone_model_list.json`), and
+`ModelListTests.testServedListIsTheBuiltInList` fails when the served file and the built-in copy differ (run it with `AR_WRITE_MODEL_LIST=1`
+to rewrite the file after a change to the tables). Not built: the fetch, and the choice reading the list instead of `CandidateTable`.
 
 **What is left of Mike's pipeline (sizes in lines of Swift, plus model files).** Silero is already the speech detector the pipeline picks when
 its model is ready (nothing to port; making it ready by default is voice setup's download). Smart Turn v3.2: Mike's `SmartTurn.swift` is 56 lines
