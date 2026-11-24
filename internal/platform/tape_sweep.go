@@ -548,7 +548,7 @@ func namedTapeSweepIDs(req TapeSweepRequest, p tapeSweepParams) ([]string, error
 	return out, nil
 }
 
-func sameStrings(a, b []string) bool {
+func sameStringList(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}

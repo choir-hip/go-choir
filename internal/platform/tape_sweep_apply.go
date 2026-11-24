@@ -176,7 +176,7 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 	}
 	report.Sweeps = run.header.Sweeps
 	report.ComputerIDs = p.named
-	if !sameStrings(run.header.Computers, p.named) {
+	if !sameStringList(run.header.Computers, p.named) {
 		return report, fmt.Errorf("tape sweep: the manifest was made for computers %v; apply names %v and must name exactly those; nothing deleted", run.header.Computers, p.named)
 	}
 	report.NoArchive = run.header.NoArchive
