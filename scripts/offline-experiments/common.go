@@ -446,6 +446,8 @@ func main() {
 		runE1(os.Args[2], os.Args[3])
 	case "e1b":
 		runE1b(os.Args[2], os.Args[3])
+	case "e4set":
+		runE4Set(os.Args[2], os.Args[3])
 	case "e4":
 		runE4(os.Args[2], os.Args[3])
 	case "e2":
