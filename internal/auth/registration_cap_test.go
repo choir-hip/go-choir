@@ -253,14 +253,19 @@ func TestTenNewComputersOpenAndTheRoomDoesNotGrow(t *testing.T) {
 	}
 	const fresh = 644245094
 	var os []hostroom.Owner
-	for _, id := range ids {
+	for i, id := range ids {
 		os = append(os, hostroom.Owner{UserID: id, DiskBytes: fresh})
 		f.free -= fresh
-	}
-	f.ownersWith(t, time.Now(), os...)
-	// Ten computers took ten places (ten footprints less nothing): now none.
-	if rec := registerBeginFor(t, h, "eleventh@example.com"); rec.Code != 403 {
-		t.Fatalf("ten computers opening made room: %d %s", rec.Code, rec.Body.String())
+		f.ownersWith(t, time.Now(), os...)
+		// Each opening takes one place: after k computers 10-k remain, and
+		// the room is closed only once the tenth has opened.
+		var want error
+		if i == 9 {
+			want = ErrRegistrationClosed
+		}
+		if err := h.room.admit(); err != want {
+			t.Fatalf("after %d computers opened: %v, want %v (opening must not make room)", i+1, err, want)
+		}
 	}
 }
 
@@ -281,7 +286,7 @@ func TestAccountsWithoutAComputerHoldNothing(t *testing.T) {
 			}
 		}
 	}
-	if err := h.room.admit(h.store.db); err != nil {
+	if err := h.room.admit(); err != nil {
 		t.Fatalf("898 records with no computer closed sign-up: %v", err)
 	}
 	if rec := createAccount(t, h, "new@choir.news", newSoftPasskey(t), testOrigin); rec.Code != 200 {
@@ -294,20 +299,20 @@ func TestAccountsWithoutAComputerHoldNothing(t *testing.T) {
 func TestAnOwnerHoldsItsGapAndLessThanAFootprintOverTheReserveIsClosed(t *testing.T) {
 	h := appEnv(t)
 	f := withRoom(t, h, 118) // two places
-	if err := h.room.admit(h.store.db); err != nil {
+	if err := h.room.admit(); err != nil {
 		t.Fatal(err)
 	}
 	f.ownersWith(t, time.Now(), hostroom.Owner{UserID: "small", DiskBytes: 1 * gib}) // holds 8 GiB
-	if err := h.room.admit(h.store.db); err != nil {
+	if err := h.room.admit(); err != nil {
 		t.Fatalf("118 - 100 - 8 = 10 GiB is one place: %v", err)
 	}
 	f.ownersWith(t, time.Now(), hostroom.Owner{UserID: "small", DiskBytes: 1 * gib}, hostroom.Owner{UserID: "small2", DiskBytes: 1 * gib}) // 16 held
-	if err := h.room.admit(h.store.db); err != ErrRegistrationClosed {
+	if err := h.room.admit(); err != ErrRegistrationClosed {
 		t.Fatalf("118 - 100 - 16 = 2 GiB left admitted: %v", err)
 	}
 	f.ownersWith(t, time.Now())
 	f.setFree(108) // 8 GiB over the reserve, under the 9 GiB footprint
-	if err := h.room.admit(h.store.db); err != ErrRegistrationClosed {
+	if err := h.room.admit(); err != ErrRegistrationClosed {
 		t.Fatalf("less than a footprint over the reserve admitted: %v", err)
 	}
 }
@@ -433,14 +438,14 @@ func TestRoomFromEnv(t *testing.T) {
 	if err != nil || cfg.Room != nil {
 		t.Fatalf("unset: %v, %+v", err, cfg.Room)
 	}
-	if newHostRoom(cfg.Room, "/x/auth.db").admit(nil) == nil {
+	if newHostRoom(cfg.Room, "/x/auth.db").admit() == nil {
 		t.Fatal("an unset plan admitted")
 	}
 	t.Setenv("AUTH_ROOM_RESERVE_GIB", "100")
-	t.Setenv("AUTH_ROOM_FOOTPRINT_GIB", "15")
+	t.Setenv("AUTH_ROOM_FOOTPRINT_GIB", "2")
 	t.Setenv("AUTH_ROOM_OWNERS_PATH", "/x/computer-owners.json")
 	cfg, err = LoadConfig()
-	if err != nil || cfg.Room == nil || cfg.Room.Err != "" || cfg.Room.ReserveGiB != 100 || cfg.Room.FootprintGiB != 15 || cfg.Room.OwnersPath != "/x/computer-owners.json" {
+	if err != nil || cfg.Room == nil || cfg.Room.Err != "" || cfg.Room.ReserveGiB != 100 || cfg.Room.FootprintGiB != 2 || cfg.Room.OwnersPath != "/x/computer-owners.json" {
 		t.Fatalf("set: %v, %+v", err, cfg.Room)
 	}
 	for name, set := range map[string]func(){
@@ -462,7 +467,7 @@ func TestRoomFromEnv(t *testing.T) {
 		if cfg.Room == nil || cfg.Room.Err == "" {
 			t.Fatalf("%s loaded as a usable plan: %+v", name, cfg.Room)
 		}
-		if newHostRoom(cfg.Room, "/x/auth.db").admit(nil) == nil {
+		if newHostRoom(cfg.Room, "/x/auth.db").admit() == nil {
 			t.Fatalf("%s admitted", name)
 		}
 	}

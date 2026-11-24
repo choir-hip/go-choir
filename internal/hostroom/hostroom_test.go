@@ -76,8 +76,8 @@ func TestAccountsWithoutAComputerHoldNothing(t *testing.T) {
 
 // Ten accounts are admitted, then all ten open their computers. Each new
 // computer's disk is a fraction of a footprint, and the free reading falls by
-// exactly that. The places before and after are the same: opening a computer
-// never makes room.
+// exactly that. Each opening takes one place and leaves the rest as they
+// were: opening a computer never makes room.
 func TestTenNewComputersOpenAndTheRoomDoesNotGrow(t *testing.T) {
 	p := Plan{ReserveBytes: 100 * gib, FootprintBytes: 9 * gib}
 	free := 190 * gib // ten places

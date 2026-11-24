@@ -1,8 +1,8 @@
 // Package hostroom is the bound on sign-ups: the host can hold one more
 // computer. Sign-up is open when the free disk, less a reserve, less the room
 // the computers that exist will still take (Plan.Held), is at least one
-// computer's footprint. The auth service decides it inside the transaction
-// that makes the account; the capacity reading on Pulse shows the same number.
+// computer's footprint. The auth service decides it at sign-up (nothing
+// serializes the decision with the insert); the capacity reading on Pulse shows the same number.
 // A missing or stale reading means closed, never open.
 //
 // What is scarce is the host's disk, for computers. An account is not scarce,
@@ -24,8 +24,8 @@ import (
 // user accounts use like 0.5 to 2GB unless they do heavy usage of self-dev"),
 // would admit past what the host can hold; a typo that went under them is
 // refused where the plan is read. A computer that grows past the footprint is
-// counted at its real size (Plan.Held), so the footprint is the promise made
-// to an account with no computer yet, not a ceiling.
+// counted at its real size (Plan.Held), so the footprint is what a new
+// computer is expected to take, not a ceiling.
 const (
 	MinReserveGiB   = 60
 	MinFootprintGiB = 2

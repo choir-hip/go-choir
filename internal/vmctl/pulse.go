@@ -134,7 +134,7 @@ type pulseAccountRecord struct {
 	HasPasskey bool
 	// Proved is true when the account's address was proved (users.
 	// email_verified_at): only such an account can sign in and open a
-	// computer, so only such an account holds a place in the room.
+	// computer. It is read for the account counts, not for the room.
 	Proved bool
 	// FirstPasskeyAt is when the first passkey was stored: the moment the
 	// sign-up finished (CreatedAt is when it began).
@@ -235,10 +235,11 @@ type PulseCapacityComputers struct {
 }
 
 // PulseCapacityRoom is the reading sign-up is decided on (internal/hostroom):
-// free disk over the reserve, less one footprint for each account that holds
-// a passkey and has no computer yet, in whole footprints. Available is false
-// when the auth database, the disk sample or the plan is missing: then no
-// number is shown and sign-up is not open.
+// free disk over the reserve, less the gap to a footprint for each computer
+// that has not grown to one, in whole footprints. An account with no computer
+// holds nothing. Available is false when the disk sample, the owners file or
+// the plan is missing: then no number is shown and sign-up is not open. The
+// auth database is read only for Accounts and SignUpsLast24h.
 type PulseCapacityRoom struct {
 	Available      bool   `json:"available"`
 	ReserveBytes   uint64 `json:"reserve_bytes"`
@@ -301,13 +302,15 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 	}
 	// The same reading the auth service decides on: the owners file, and its
 	// age. A file auth cannot use closes sign-up there, so it is no reading here.
-	if !usersAvailable || !diskRead || !plan.Valid() || !ownersAvailable {
-		// No reading: no numbers and not open, never a guess from a partial list.
+	if !diskRead || !plan.Valid() || !ownersAvailable {
+		// No reading: no numbers and not open, never a guess.
 		return out
 	}
+	// The auth database gives only the account counts; the room does not
+	// depend on it.
 	var holders []string
 	for _, u := range users {
-		if !u.HasPasskey || !u.Proved {
+		if !usersAvailable || !u.HasPasskey || !u.Proved {
 			continue
 		}
 		holders = append(holders, u.UserID)

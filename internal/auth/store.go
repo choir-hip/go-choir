@@ -765,8 +765,9 @@ func (s *Store) CleanExpiredPendingRegistrations() (int64, error) {
 // the address marked proved, in one transaction: nothing exists for the address
 // before it commits, and the address's unique index decides a race (the loser
 // gets ErrAddressTaken and leaves nothing). admit, when set, is the host's room
-// decision (host_room.go) made inside the same transaction.
-func (s *Store) CreateAccountWithCredential(p *PendingRegistration, c *Credential, admit func(queryRower) error) error {
+// decision (host_room.go); it reads the disk and the owners file, not this
+// transaction, so racing finishes are bounded only by the free reading.
+func (s *Store) CreateAccountWithCredential(p *PendingRegistration, c *Credential, admit func() error) error {
 	now := time.Now().UTC()
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -783,10 +784,10 @@ func (s *Store) CreateAccountWithCredential(p *PendingRegistration, c *Credentia
 	if taken > 0 {
 		return ErrAddressTaken
 	}
-	// The host's room, read through this transaction: of several finishes
-	// racing for the last place only the first sees it.
+	// The host's room (a reading of disk and the owners file, not of this
+	// transaction).
 	if admit != nil {
-		if err := admit(tx); err != nil {
+		if err := admit(); err != nil {
 			return err
 		}
 	}

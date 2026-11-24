@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -27,10 +26,6 @@ import (
 // ErrRoomUnreadable: the reading the bound needs is missing or stale. The
 // person is told to try again; nobody is admitted on a guess.
 var ErrRoomUnreadable = errors.New("the host's room cannot be read")
-
-type queryRower interface {
-	Query(query string, args ...any) (*sql.Rows, error)
-}
 
 // RoomConfig is the plan and where its readings are (AUTH_ROOM_*).
 type RoomConfig struct {
@@ -70,10 +65,10 @@ func newHostRoom(cfg *RoomConfig, dbPath string) *hostRoom {
 }
 
 // admit decides whether one more account may be made. It reads no account: the
-// room is the free disk and the owners file. q is the transaction that is about
-// to insert the account; it is not used, so two finishes that race for the last
-// place can both take it (the residual named above).
-func (r *hostRoom) admit(_ queryRower) error {
+// room is the free disk and the owners file. Nothing serializes it with the
+// insert, so finishes that race for the last place can all take it (the
+// residual named above).
+func (r *hostRoom) admit() error {
 	if r == nil {
 		return fmt.Errorf("%w: no room plan", ErrRoomUnreadable)
 	}

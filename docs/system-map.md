@@ -125,16 +125,16 @@ under a 32 GiB disk floor or when memory admission fails; "make room"
 hibernates up to 3 idle computers. A computer made for a new account is
 4 GiB (recorded as `mem_size_mib`; older computers keep theirs). Sign-up is
 open only while the host can hold one more computer: free disk over a 100 GiB
-reserve, less 15 GiB for each proved passkey holder with no computer yet and the
-gap to 15 GiB for each account whose computers (image and memory snapshot, as
-exact bytes on disk, btrfs compression seen; anything not exactly measured
-counts 0) hold less, is at least 15 GiB. The
-auth service decides it inside `register/finish` from its own `statfs` and the
-file vmctl writes every 30 s, and closes when either is missing or stale, or
-when no plan is configured (`internal/hostroom`). The public Pulse says only
-open, closed or no reading; the figures are on the platform operator's
-`/api/platform/operator/capacity`. The 15 GiB is the worst measured computer
-(drill, 14 GiB), not a tester's. No account is exempt.
+reserve, less the gap to 2 GiB for each computer that holds less (image and
+memory snapshot, as exact bytes on disk, btrfs compression seen; anything not
+exactly measured counts 0), is at least 2 GiB. An account with no computer holds
+nothing (owner, 2026-11-24), so sign-ups that finish before their computers
+exist are bounded only by the free reading. The auth service decides it from
+its own `statfs` and the file vmctl writes every 30 s, and closes when either
+is missing or stale, or when no plan is configured (`internal/hostroom`). The
+public Pulse says only open, closed or no reading; the figures are on the
+platform operator's `/api/platform/operator/capacity`. The 2 GiB is what a real
+user's computer takes (owner: 0.5 to 2 GB; the owner's own are 12 to 87 GB). No account is exempt.
 
 Key paths: `internal/vmctl/`, `internal/vmmanager/`, `internal/proxy/`,
 `internal/auth/`, `nix/node-b.nix`, `.github/scripts/node-b-ci-deploy`.

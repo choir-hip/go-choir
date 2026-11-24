@@ -290,7 +290,7 @@ func roomConfigFromEnv() *RoomConfig {
 	}
 	f, err := strconv.ParseUint(footprint, 10, 32)
 	if err != nil || f < hostroom.MinFootprintGiB {
-		return &RoomConfig{Err: fmt.Sprintf("AUTH_ROOM_FOOTPRINT_GIB must be a whole number of GiB, at least %d (the largest computer measured), got %q", hostroom.MinFootprintGiB, footprint)}
+		return &RoomConfig{Err: fmt.Sprintf("AUTH_ROOM_FOOTPRINT_GIB must be a whole number of GiB, at least %d (what a real user's computer takes), got %q", hostroom.MinFootprintGiB, footprint)}
 	}
 	return &RoomConfig{ReserveGiB: r, FootprintGiB: f, OwnersPath: owners}
 }

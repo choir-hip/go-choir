@@ -13,10 +13,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/hostroom"
 )
 
-// The auth service decides sign-up on which accounts already have a computer
-// (their disk is in the free reading) and which are still promised one. vmctl
-// is the only one that knows, and tells it through a file, with the disk each
-// computer holds now. The file is SUBTRACTED from the footprint, so a figure
+// The auth service decides sign-up on the computers that exist and the disk
+// each holds now (an account with no computer holds nothing). vmctl is the
+// only one that knows, and tells it through a file. The file is SUBTRACTED from the footprint, so a figure
 // too high opens a place; the disk is therefore counted only as far as it is
 // measured exactly (the btrfs extent reading), and a file measured any other
 // way counts 0. Failure modes guarded:

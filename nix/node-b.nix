@@ -26,8 +26,8 @@ let
   # account without a computer. all real accounts have a computer. we just have
   # records of email adddresses where we deleted the computers for testing");
   # sign-ups that finish before their computers exist are bounded only by the
-  # free reading (a named residual). The auth service decides this inside the
-  # transaction that makes the account, reading the free disk itself and the
+  # free reading (a named residual). The auth service decides this at sign-up,
+  # reading the free disk itself and the
   # file vmctl writes every half minute naming the accounts that have a
   # computer and the disk each holds; a missing or stale reading, or a plan
   # that is not set, closes sign-up. The Pulse capacity reading shows the same

@@ -29,7 +29,7 @@ if set(c.keys()) != {"room"} or set(c["room"].keys()) != {"available", "open"}:
 if not c["room"]["available"] or not c["room"]["open"]:
     print("FAIL sign-up is not open with a trusted reading; the proof cannot register its account"); sys.exit(1)
 ' || fails=$((fails + 1))
-echo "MANUAL step 1a: the owner reads the figures: signed in as the platform operator (passkey), GET $HOST/api/platform/operator/capacity or open Pulse; note room.places, room.promised, room.held_bytes, disk.available_bytes. Anyone else must get 401 or 403."
+echo "MANUAL step 1a: the owner reads the figures: signed in as the platform operator (passkey), GET $HOST/api/platform/operator/capacity or open Pulse; note room.places, room.held_bytes, disk.available_bytes. Anyone else must get 401 or 403."
 echo "step 1b (read-only, on Node B): the owners file auth reads is whole, fresh and says what each computer holds"
 owners=$(ssh -o BatchMode=yes "$SSH" 'cat /var/lib/go-choir/host-room/computer-owners.json') || { echo "FAIL the owners file cannot be read on Node B"; fails=$((fails + 1)); owners=""; }
 if [ -n "$owners" ]; then
@@ -67,7 +67,7 @@ case "$inexact" in
   *) echo "FAIL $inexact file(s) were not measured exactly (counted 0; the room holds their footprint back)"; fails=$((fails + 1)) ;;
 esac
 cat <<'MANUAL'
-MANUAL step 3: register the drill account in the browser at the site (mailed code, then passkey). Note its user id from the sign-in session; call it $UID_. The owner reading: room.promised rises by one and places fall by one until its computer exists (step 4); after it exists, places must not rise (the gap to 15 GiB is held until it has grown).
+MANUAL step 3: register the drill account in the browser at the site (mailed code, then passkey). Note its user id from the sign-in session; call it $UID_. The owner reading: an account with no computer holds nothing, so places do not change at sign-up; once its computer exists (step 4), places must not rise (the gap to 2 GiB is held until it has grown).
 MANUAL step 4: sign in, open the computer, wait for it to answer. Then on Node B:
   jq '.[] | select(.user_id=="'$UID_'") | {vm_id, computer_id, mem_size_mib, state}' /var/lib/go-choir/vm-state/ownerships.json
   PASS only if mem_size_mib is 4096 and state is active. Record vm_id and computer_id.
@@ -76,7 +76,7 @@ MANUAL step 5: the boot receipt (cold boot at 4 GiB, no out-of-memory in replay)
   journalctl -u go-choir-vmctl --since '-15min' | grep -i "$VM"   # no oom, no kill
 MANUAL step 6: hibernate it (the idle sweep, or the drill verb on this one computer), then
   curl -s ... 'localhost:8083/internal/vmctl/boot-timeline?computer_id=$CID&kind=hibernate'
-  Before the hibernate record the owner reading's room.places (call it P0). PASS only if a snapshot was taken, its meta.json says disk_bytes_method btrfs_extents, and room.places read right after the hibernate is still P0 (a hibernate must not open a place); record its size in GiB (disk use per computer is the room bound's footprint: it assumes 15 GiB, nix/node-b.nix; a smaller measured figure is the evidence to lower it).
+  Before the hibernate record the owner reading's room.places (call it P0). PASS only if a snapshot was taken, its meta.json says disk_bytes_method btrfs_extents, and room.places read right after the hibernate is still P0 (a hibernate must not open a place); record its size in GiB (disk use per computer is the room bound's footprint: it assumes 2 GiB, nix/node-b.nix; a larger measured figure of a real user's computer is the evidence to raise it).
 MANUAL step 7: sign in again; the wake must be snapshot_resume (boot-timeline kind boot) and the desktop must answer. FAIL if room.places on the owner reading after the wake differs from P0 (a wake must not open a place either; allow the 30 s tick to settle).
 MANUAL step 8: land any commit that deploys; after the planned refresh the computer must be running again at 4096 (ownerships.json mem_size_mib unchanged; boot-timeline shows the new boot).
 MANUAL step 9: ask the computer for an engineering capsule (a self-development change) from the drill account: it must admit (the capsule budget is 3/4 of 4 GiB, a capsule asks 2 GiB). If it is refused for memory, the 4 GiB shape cannot hold a capsule and the owner decides.
