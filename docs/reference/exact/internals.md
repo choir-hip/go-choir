@@ -59,6 +59,9 @@ spec we can read.
   a 64 MiB heap (`:2198`). Relevant to streaming model replies into the lab.
   Sockets exist (`js/src/socket.rs`; `ws:` needs a `net.websocket` grant)
   [src, doc].
+- **Nothing is issued after an answer returns** (`docs/reference.md:3005-3037` in the Exact checkout [doc]; used by `pages.ts` since 2026-11-24). Storage an answer starts and does not await finishes behind it
+  (run in the one storage queue, in the order issued); a storage call, a `fetch` or a `native.call` made when no answer is in flight is refused and logged, and a write chained with `.then` behind an
+  earlier one is issued only when that one lands, which can be after the answer. So "behind the view" means started inside the answer and not awaited, never chained. [unrun on a phone]
 - Rust data sources implement `exact_runner::DataSource`; on iOS a replaced
   Rust module runs interpreted (`wasmi`) in development only [doc].
 - Swift packages talk to the runner through the same seam: `later` answers

@@ -178,13 +178,14 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
 const yieldTurn = (label: string): Promise<void> => lapYield(`bridge: ${label}`);
 
 /** `read` false: the screens' reads (the queue, the bar's run, the page's facts) need what the pulse just read, not their own native call for it. Mutations and the pulse read (the device's time first). */
-export async function getRadio(storage: Store | undefined, native: NativeReader | undefined, read = true): Promise<Radio> {
+export async function getRadio(storage: Store | undefined, native: NativeReader | undefined, read = true, beside?: (r: Radio) => void): Promise<Radio> {
   if (!radio) radio = await makeRadio(storage, native);
   const r = radio;                                          // held locally: a sign-out (`wipeRadio`) clears the module's variable at any await below
   if (read) { const f = await readFacts(r); if (f !== NO_FACTS) r.rt.useFacts(f); }      // the device's time first: nothing below may run on a stale clock; the runtime keeps what was read (the pulse's peek does not read it again)
   if (radio !== r) {                                          // signed out meanwhile: this radio is the old account's. What native handed over in that read was drained from native: it goes to the radio that replaced this one, not into the one discarded (review B1-10)
     const next = await getRadio(storage, native, read); next.inbox.unshift(...r.inbox); r.inbox = []; return next;
   }
+  beside?.(r);                                              // work that does not need the sheet (the front list's request) starts now, beside the restore below; the caller awaits it in this same answer
   if (!restored) {
     if (sheetFileStuck) { try { await storage?.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch { /* still there: not read either */ } restored = Promise.resolve(); }
     else restored = r.rt.restore().then(() => lapOpen('run sheet restored', 'radio:'));
@@ -281,20 +282,29 @@ const flagNow = (r: Radio): number => (clock.ms > 0 ? clock.ms : r.pulses * 1000
 const flagBusy = (r: Radio, f: Flag | undefined): boolean => f !== undefined && flagNow(r) - f.at < (f.phase === 'running' ? WORK_STALE_MS : DUE_STALE_MS);
 // one radioHold at a time: a second send would take the first's place, and the first would be let go
 export async function radioHold(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
-  const r = await getRadio(storage, native);
+  const ask: FrontAsk = {};
+  const r = await getRadio(storage, native, true, (rr) => askFront(rr, ask));
   const mine: Flag = { phase: 'running', at: flagNow(r) }; r.holdFlag = mine;
-  try { return await holdInner(storage, native); } finally { if (r.holdFlag === mine) r.holdFlag = undefined; }
+  try { return await holdInner(storage, native, ask); } finally { if (r.holdFlag === mine) r.holdFlag = undefined; }
 }
-async function holdInner(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
-  const r = await getRadio(storage, native);
+/** The front page the radio speaks from is asked FIRST, beside the sheet's restore, the pump and the first-run read, which do not need it (it used to be asked after all three, one after the other). It is awaited in
+ * holdInner, in this same answer: a request left running after its answer ends is never run (Exact), so it is started here and finished there. */
+type FrontAsk = { p?: Promise<void> };
+function askFront(r: Radio, ask: FrontAsk): void {
+  // Only when the radio is going to start: the first run is over (or nothing has asked yet, the first hold of a launch), nothing is on air and it has not started. A hold that is not about the start asks nothing.
+  if (ask.p === undefined && !r.started && r.front.lines.length === 0 && (r.ready || r.pulses === 0) && !r.rt.store.onAir()) ask.p = r.fetchFront().then(() => undefined, () => undefined);
+}
+async function holdInner(storage: Store | undefined, native: NativeReader | undefined, ask: FrontAsk = {}): Promise<Pulse> {
+  const r = await getRadio(storage, native, true, (rr) => askFront(rr, ask));
   await r.rt.pump();
   if (!r.ready) r.ready = await firstRunOver(storage as never);
   while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
+  if (ask.p) await ask.p;
   if (startDue(r)) {
     if (r.readySince === 0) r.readySince = clock.ms;
-    // The front page it speaks from is fetched first and the radio opens in this same answer once it is held, or once 2 s have passed since the first run was over (the opening then says it has no front page yet).
+    // The radio opens in this same answer once the front page is held, or once 2 s have passed since the first run was over (the opening then says it has no front page yet).
     // (It used to fetch in one answer and open in the next: with nothing else moving the tick, no next answer was asked, and a plain launch never started.)
-    if (r.front.lines.length === 0) { try { await r.fetchFront(); } catch { /* none yet */ } }
+    if (r.front.lines.length === 0 && !ask.p) { try { await r.fetchFront(); } catch { /* none yet */ } }
     if (r.front.lines.length > 0 || clock.ms - r.readySince > 2000) await openRadioOf(r);
   }
   await r.rt.peek();
