@@ -81,6 +81,7 @@ type Handler struct {
 
 	// The phone app's sign-in challenges (app_ceremony.go), held in memory.
 	appChallenges appChallenges
+	demoGate      *demoGate // the reviewer sign-in's bounds (demo_account.go)
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -102,6 +103,7 @@ func NewHandler(store *Store, wa *webauthn.WebAuthn, cfg *Config, signer ed25519
 		h.room = newHostRoom(cfg.Room, cfg.DBPath)
 	}
 	h.numberNudge = make(chan struct{}, 1)
+	h.demoGate = newDemoGate(time.Now)
 	h.initEmailSignIn()
 	return h
 }

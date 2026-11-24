@@ -65,6 +65,13 @@ type Config struct {
 	// unbounded mode, development servers and tests give a plan.
 	Room *RoomConfig
 
+	// DemoAccountID names the one account the reviewer sign-in may open
+	// (AUTH_DEMO_ACCOUNT_ID), and DemoCredentialFile the host file that holds
+	// its user name and password hash (AUTH_DEMO_CREDENTIAL_FILE). Either
+	// absent, the route answers "not available" (demo_account.go).
+	DemoAccountID      string
+	DemoCredentialFile string
+
 	// EmailSignIn is the auth.email_sign_in switch (AUTH_EMAIL_SIGN_IN: on,
 	// true, 1 or yes). Off, begin answers as if every address were unknown,
 	// verify refuses, and unconsumed attempts are deleted at startup.
@@ -140,6 +147,8 @@ func LoadConfig() (*Config, error) {
 
 	cfg.Room = roomConfigFromEnv()
 
+	cfg.DemoAccountID = strings.TrimSpace(os.Getenv("AUTH_DEMO_ACCOUNT_ID"))
+	cfg.DemoCredentialFile = strings.TrimSpace(os.Getenv("AUTH_DEMO_CREDENTIAL_FILE"))
 	cfg.EmailSignIn = envOn("AUTH_EMAIL_SIGN_IN")
 	cfg.EmailSessionTTL = envDuration("AUTH_EMAIL_SESSION_TTL", DefaultEmailSessionTTL)
 	key := strings.TrimSpace(os.Getenv("AUTH_EMAIL_CODE_KEY"))
