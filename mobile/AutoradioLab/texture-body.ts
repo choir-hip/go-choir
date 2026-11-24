@@ -15,6 +15,9 @@
 //  4. An edited block whose original node this phone cannot write (a table, an embed) is flattened into a paragraph: it keeps its node and the edit lives in
 //     `content` (counted in `opaqueEdits`).
 //  5. A new document (no body_doc) gets none, or one the web editor cannot open: it gets schema and doc with fresh ids.
+//  6. The `content` sent with a body_doc is not the text the server derives from it: the server refuses the revision (400 "content must match derived body_doc projection"). `projectBody` is the server's
+//     projection (internal/texturedoc/projection.go), held to it by the shared fixture mobile/fixtures/texture-body/projection.json (written by a Go test; texture-body-projection.test.ts reads it). `canon` is the
+//     one rule that says two Markdown texts are the same text: their projections are equal.
 
 export type Node = Record<string, unknown>;
 export type Body = Record<string, unknown>;
@@ -135,10 +138,12 @@ export function nodeFor(block: string): Node {
   switch (kindOf(block)) {
     case 'code': {
       const lines = block.split('\n');
-      lines.shift();
+      const language = trim(trim(lines.shift() ?? '').replace(/^(```|~~~)/, ''));
       const last = lines[lines.length - 1];
       if (last !== undefined && (trim(last).startsWith('```') || trim(last).startsWith('~~~'))) lines.pop();
-      return { type: 'code_block', attrs: { id: newID('code-block') }, content: [{ type: 'text', text: lines.join('\n') }] };
+      const attrs: Record<string, unknown> = { id: newID('code-block') };
+      if (language !== '') attrs.language = language;                                       // the projection writes it after the fence
+      return { type: 'code_block', attrs, content: lines.length === 0 ? [] : [{ type: 'text', text: lines.join('\n') }] };
     }
     case 'heading': {
       const h = headingLevel(trim(block)) ?? { level: 1, text: block };
@@ -224,7 +229,7 @@ export function inline(src: string): Node[] {
         buf += s[i + 1]; i += 2; continue;
       }
       if (c === ' ' && i + 2 < s.length && s[i + 1] === ' ' && s[i + 2] === '\n') { flush(); out.push({ type: 'hard_break' }); i += 3; continue; }
-      if (c === '\n') { buf += ' '; i += 1; continue; }
+      if (c === '\n') { flush(); out.push({ type: 'hard_break' }); i += 1; continue; }      // ONE newline is a line break, as the server reads plain text (plainTextInlineNodes) and the web's Shift+Enter writes `<br>`; a blank line is a new paragraph (blocks())
       if (c === '`') {
         const j = indexFrom(s, '`', i + 1);
         if (j >= 0) { flush(); add(s.slice(i + 1, j).join(''), marks.includes('code') ? marks : [...marks, 'code']); i = j + 1; continue; }
@@ -272,7 +277,8 @@ export function merge(original: Body | null, originalMarkdown: string, newMarkdo
   const s = topNodes(original);
   const b = blocks(originalMarkdown);
   const n = blocks(newMarkdown);
-  if (original === null || (s.length === 0 && b.length === 0)) {
+  const blank = (nodes: Node[]): boolean => nodes.every((x) => x.type === 'paragraph' && plainText(x) === '');            // no text at all: nothing to keep, nothing to match
+  if (original === null || (blank(s) && b.length === 0)) {
     const nodes = n.map(nodeFor);
     return { body: root(nodes.length === 0 ? [paragraph('')] : nodes, original), opaqueEdits: 0 };
   }
@@ -344,4 +350,76 @@ function carry(old: Node, fresh: Node): void {
   if (old.type !== 'paragraph' || fresh.type !== 'paragraph') return;
   const refs = (Array.isArray(old.content) ? (old.content as Node[]) : []).filter((x) => x.type === 'source_ref');
   if (refs.length > 0) fresh.content = [...(Array.isArray(fresh.content) ? (fresh.content as Node[]) : []), ...refs];
+}
+
+// ---------------------------------------------------------------------------------------------------------------- the server's projection
+
+/** The text the server derives from a body_doc (internal/texturedoc/projection.go `Project`): blocks a blank line apart, no inline marks, hard breaks as newlines, the end trimmed of newlines. A numbered source_ref
+ * is its `[n]` (numbers by first appearance; the same marker twice in a row is one); an expanded one would need its source entity's title, which the phone does not hold: it is written as numbered. */
+export function projectBody(body: Body | null): string {
+  const numbers = new Map<string, number>();
+  const attr = (n: Node, k: string): unknown => (isObj(n.attrs) ? (n.attrs as Record<string, unknown>)[k] : undefined);
+  const kids = (n: Node): Node[] => (Array.isArray(n.content) ? (n.content as Node[]) : []);
+  const inlineOf = (nodes: Node[], out: { s: string }): void => {
+    for (const n of nodes) {
+      if (n.type === 'text') out.s += str(n.text);
+      else if (n.type === 'hard_break') out.s += '\n';
+      else if (n.type === 'source_ref') {
+        const id = str(attr(n, 'source_entity_id'));
+        let num = numbers.get(id);
+        if (num === undefined) { num = numbers.size + 1; numbers.set(id, num); }
+        const marker = `[${num}]`;
+        if (!out.s.replace(/ +$/, '').endsWith(marker)) out.s += marker;
+      }
+    }
+  };
+  const item = (n: Node, depth: number, out: { s: string }): void => {
+    kids(n).forEach((c, i) => { if (i > 0) out.s += '\n' + '  '.repeat(depth + 1); block(c, depth + 1, out); });
+  };
+  const sequence = (nodes: Node[], depth: number, out: { s: string }): void => {
+    nodes.forEach((n, i) => { block(n, depth, out); if (i < nodes.length - 1) out.s += '\n\n'; });
+  };
+  const block = (n: Node, depth: number, out: { s: string }): void => {
+    switch (n.type) {
+      case 'paragraph': inlineOf(kids(n), out); break;
+      case 'heading': { const lv = Number(attr(n, 'level')); out.s += '#'.repeat(Number.isFinite(lv) && lv > 0 ? Math.trunc(lv) : 0) + ' '; inlineOf(kids(n), out); break; }
+      case 'bullet_list': kids(n).forEach((it, i, all) => { out.s += '  '.repeat(depth) + '- '; item(it, depth, out); if (i < all.length - 1) out.s += '\n'; }); break;
+      case 'ordered_list': {
+        const start = typeof attr(n, 'start') === 'number' ? (attr(n, 'start') as number) : 1;
+        kids(n).forEach((it, i, all) => { out.s += '  '.repeat(depth) + `${start + i}. `; item(it, depth, out); if (i < all.length - 1) out.s += '\n'; });
+        break;
+      }
+      case 'list_item': item(n, depth, out); break;
+      case 'blockquote': {
+        const inner = { s: '' };
+        sequence(kids(n), depth, inner);
+        out.s += inner.s.replace(/\n+$/, '').split('\n').map((l) => '> ' + l).join('\n');
+        break;
+      }
+      case 'code_block': out.s += '```' + str(attr(n, 'language')) + '\n' + kids(n).map((c) => str(c.text)).join('\n') + '\n```'; break;
+      case 'horizontal_rule': out.s += '---'; break;
+      case 'embed': out.s += embedText(n); break;
+    }
+  };
+  const embedText = (n: Node): string => {
+    const a = (k: string): string => str(attr(n, k)).trim();
+    switch (a('kind')) {
+      case 'capsule_evidence': return `[evidence: ${a('caption')}]`;
+      case 'file': return `[file: ${a('title')}]`;
+      case 'video': return a('caption') !== '' ? `[video: ${a('caption')}]` : `[video: ${a('alt')}]`;
+      case 'audio': return `[audio: ${a('title')}]`;
+      case 'image': return a('caption') !== '' ? `[image: ${a('caption')}]` : `[image: ${a('alt')}]`;
+    }
+    return '[embed]';
+  };
+  const out = { s: '' };
+  sequence(topNodes(body), 0, out);
+  return out.s.replace(/\n+$/, '');
+}
+
+/** A Markdown text as the server would hold it: the projection of the document the phone writes for it. Two texts are the same text when their `canon` is equal (a trailing newline, an Enter typed at the end, marks,
+ * a continuation line's indent do not make a different text). */
+export function canon(markdown: string): string {
+  const nodes = blocks(markdown).map(nodeFor);
+  return projectBody(root(nodes.length === 0 ? [paragraph('')] : nodes, null));
 }

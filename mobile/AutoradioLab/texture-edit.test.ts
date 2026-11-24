@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Editor, PENDING_DIR, editableDoc, textureEditInfo, textureEdit, textureEditOpen, textureFlush, wipeTextureEdit, forgetTextureEdit, type Net, type Info } from './texture-edit.ts';
 import { HTTPError, SignedOutError, resetSeam, bindNative, beginSignOut, nextGeneration } from './api.ts';
+import { projectBody } from './texture-body.ts';
 
 // ---------------------------------------------------------------------------------------------------------------- the fake server
 type Rev = { id: string; content: string; body: unknown; n: number };
@@ -30,6 +31,8 @@ const net: Net = { json: async (path, opts) => {
     const b = opts!.body as Record<string, unknown>; const doc = m[1];
     const done = keys.get(String(b.idempotency_key));
     if (done) return reply({ revision: { revision_id: done, version_number: revs.get(done)!.n } });         // the same key twice is one revision
+    // the real server's rule (internal/store/texture_structured_revision.go): content is the projection of body_doc, else 400. projectBody is held to the server's own function by the shared fixture (texture-body-projection.test.ts).
+    if (b.body_doc && String(b.content ?? '').trim() !== '' && b.content !== projectBody(b.body_doc as never)) throw new HTTPError(400, 'HTTP 400: invalid texture revision: content must match derived body_doc projection');
     if (postMode === 'dropHang') return hang();
     if (String(b.parent_revision_id ?? '') !== head[doc]) throw new HTTPError(409, 'HTTP 409: document head changed');
     seq += 1; const id = `rev-new-${seq}`;
@@ -63,7 +66,7 @@ const tick = (ms = 15): Promise<void> => new Promise((r) => setTimeout(r, ms));
 beforeEach(() => {
   resetSeam(); files.clear(); log = []; failNext = null; postMode = 'normal'; getGate = null; postGate = null; failGets = false; seq = 0; keys = new Map(); traj = {};
   writeHook = null; writes = 0; readError = false; rmHook = null;
-  revs = new Map([['r0', { id: 'r0', content: 'Hello world.', body: body('Hello world.'), n: 0 }]]); head = { d1: 'r0', d2: 'r0' };
+  revs = new Map([['r0', { id: 'r0', content: 'Hello world.', body: body('Hello world.'), n: 0 }]]); head = { d1: 'r0', d2: 'r0', d3: '' };
 });
 const other = (id: string, content: string, doc = 'd1'): void => { revs.set(id, { id, content, body: body(content), n: 5 }); head[doc] = id; };
 
@@ -451,6 +454,30 @@ describe('the background', () => {
 });
 
 describe('the review of 2026-11-24 (seat 1, exact-editor)', () => {
+  const NEW = 'texture:d3';
+  const OWNER = 'Hello\nThis is my first time using texture editing on autoradio 1';
+  test("W1 the owner's text on a new document (no revision, no body_doc) is saved: the server accepts it (it was 400 content must match derived body_doc projection)", async () => {
+    const e = mk(); await e.open(NEW);
+    await e.edit(NEW, OWNER, ''); const i = await e.flush(NEW);
+    expect(i.status).toBe('saved'); expect(posts().length).toBe(1);
+    expect(posts()[0].body!.content).toBe(OWNER); expect(posts()[0].path).toBe('/api/texture/documents/d3/revisions'); expect(posts()[0].body!.parent_revision_id).toBeUndefined();
+    expect(revs.get(head.d3)!.content).toBe(OWNER);
+    const top = ((posts()[0].body!.body_doc as { doc: { content: { content: { type: string }[] }[] } }).doc.content);
+    expect(top.length).toBe(1); expect(top[0].content.map((x) => x.type)).toEqual(['text', 'hard_break', 'text']);
+  });
+  test('W2 an Enter at the end, then more typing: saved, and the next keystroke is no conflict with our own save', async () => {
+    const e = mk(); await e.open(NEW);
+    await e.edit(NEW, 'Hello\n', ''); expect((await e.flush(NEW)).status).toBe('saved');
+    await e.edit(NEW, 'Hello\nThere', 'Hello\n'); const i = await e.flush(NEW);
+    expect(i.status).toBe('saved'); expect(revs.get(head.d3)!.content).toBe('Hello\nThere');
+  });
+  test('W3 marks in the text: saved, and the next keystroke is no conflict (the server keeps the text without the marks)', async () => {
+    const e = mk(); await e.open(NEW);
+    await e.edit(NEW, 'some **bold** words', ''); expect((await e.flush(NEW)).status).toBe('saved');
+    expect(revs.get(head.d3)!.content).toBe('some bold words');
+    await e.edit(NEW, 'some **bold** words here', 'some **bold** words'); const i = await e.flush(NEW);
+    expect(i.status).toBe('saved');
+  });
   test('R9a the posted body keeps the id of an unchanged node (the body merge)', async () => {
     const e = mk(); await e.edit(A, 'Hello world. more', 'Hello world.'); await e.flush(A);
     const doc = (posts()[0].body!.body_doc as { doc: { content: { attrs: { id: string } }[] } }).doc;

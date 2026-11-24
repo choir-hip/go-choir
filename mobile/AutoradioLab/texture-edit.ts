@@ -122,6 +122,8 @@
 import type { Storage } from './app.contract.d.ts';
 import { authedJSON, accountId, onSignOutBegin, sealingBlocked, segment, SignedOutError, HTTPError, type Reply } from './api.ts';
 import * as Body from './texture-body.ts';
+/** Two Markdown texts are the same text when the server would hold the same content for both (a trailing newline, marks and a continuation's indent are not a difference): the one rule that compares the field with the head. */
+const same = (a: string, b: string): boolean => a === b || Body.canon(a) === Body.canon(b);
 
 export const PENDING_DIR = 'app:/data/texture-pending';
 /** One network call of the editor ends in this: a link that answers nothing must not hold a document's queue. The unsent text is on disk before any call. */
@@ -298,7 +300,7 @@ export class Editor {
     const cur = this.journal[doc], head = this.heads.get(doc);
     let base = '', f = from;
     if (cur) { base = cur.base; f = cur.base !== '' ? from : cur.from; }                       // a keystroke over unsent text INHERITS the base of the text it replaces
-    else if (head) { base = from === null || from === head.content ? head.id : ''; if (head.id === '') f = head.content; }
+    else if (head) { base = from === null || same(from, head.content) ? head.id : ''; if (head.id === '') f = head.content; }
     this.journal[doc] = { text, from: f, base, key: uuid() };
     const k = this.last.get(doc)?.kind; if (k === 'offline' || k === 'failed') this.last.delete(doc);      // a keystroke after a failed save is a draft again (the idle pause saves it)
     this.bump();
@@ -313,8 +315,8 @@ export class Editor {
     if (!this.heads.has(doc) && !(await this.readHead(doc))) return;
     const e = this.journal[doc], h = this.heads.get(doc);
     if (!e || !h) return;
-    if (e.text === h.content) { delete this.journal[doc]; this.bump(); await this.persist(); return; }      // the same text as the head: nothing unsent
-    if (e.base === '' && h.id !== '' && (e.from === null || e.from === h.content)) { e.base = h.id; await this.persist(); }
+    if (same(e.text, h.content)) { delete this.journal[doc]; this.bump(); await this.persist(); return; }      // the same text as the head: nothing unsent
+    if (e.base === '' && h.id !== '' && (e.from === null || same(e.from, h.content))) { e.base = h.id; await this.persist(); }
   }
   /** Post what is waiting now (Done, the idle pause, leaving the page, the retry: '' = every document with unsent text and no conflict). */
   async flush(address: string): Promise<Info> {
@@ -388,13 +390,14 @@ export class Editor {
       const e = this.journal[doc];
       if (!e) return;
       if (h.id !== e.base) {
-        if (h.content === e.text) { this.acknowledged(doc, e.text, h.version); await this.persist(); return; }
-        if ((e.base === '' && e.from === null) || h.content === e.from) { e.base = h.id; await this.persist(); }
+        if (same(h.content, e.text)) { this.acknowledged(doc, e.text, h.version); await this.persist(); return; }
+        if ((e.base === '' && e.from === null) || (e.from !== null && same(h.content, e.from))) { e.base = h.id; await this.persist(); }
         else { this.conflictAt.set(doc, h.id); this.bump(); return; }
       }
       const posted = e.text;
       const merged = Body.merge(h.body, h.content, posted);
-      const payload: Record<string, unknown> = { content: posted, body_doc: merged.body, idempotency_key: e.key };
+      const content = Body.projectBody(merged.body);                                         // the text the server derives from body_doc: it refuses any other (400 content must match derived body_doc projection)
+      const payload: Record<string, unknown> = { content, body_doc: merged.body, idempotency_key: e.key };
       if (h.id !== '') payload.parent_revision_id = h.id;
       if (row.trajectory !== '') {                                                            // as the web does: a document with a trajectory is saved against its lifecycle version
         const life = await this.json(`/api/texture/lifecycle/${segment(row.trajectory)}`);
@@ -409,9 +412,9 @@ export class Editor {
         if (err instanceof HTTPError && err.status === 409) {                                 // the head moved between the read and the post
           const again = await this.readHead(doc);
           if (!again) return;
-          if (again.head.content === posted) {
+          if (same(again.head.content, posted)) {
             const cur = this.journal[doc];
-            if (cur && cur.text !== posted) { cur.base = again.head.id; cur.from = posted; }     // typed while it was posting: its base is the revision that holds the posted text
+            if (cur && cur.text !== posted) { cur.base = again.head.id; cur.from = again.head.content; }     // typed while it was posting: its base is the revision that holds the posted text
             this.acknowledged(doc, posted, again.head.version); await this.persist(); return;
           }
           this.conflictAt.set(doc, again.head.id); this.bump(); return;
@@ -423,9 +426,9 @@ export class Editor {
       if (obj(o.revision)) o = o.revision;
       const n = typeof o.version_number === 'number' ? o.version_number : -1;
       const id = str(o.revision_id);
-      this.heads.set(doc, { id, content: posted, body: merged.body, version: n + 1 });
+      this.heads.set(doc, { id, content, body: merged.body, version: n + 1 });
       const cur = this.journal[doc];
-      if (cur && cur.text !== posted) { cur.base = id; cur.from = posted; }                   // typed while it was posting: its base is the revision just made
+      if (cur && cur.text !== posted) { cur.base = id; cur.from = content; }                   // typed while it was posting: its base is the revision just made
       this.acknowledged(doc, posted, n + 1);
       await this.persist();
     } catch (err) {
