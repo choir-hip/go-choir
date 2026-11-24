@@ -416,6 +416,18 @@ entered below as lapsed, not scored.
 | C229 | 2026-11-24T01:47Z | true | ranks 2, through the aggregator roll; the next Huang arrival is 13th | 0.640 |
 | C230 | 2026-11-24T01:47Z | true | ranks 1, through the same roll (11 subjects, 81% new pairs); the next Huang arrival is 21st | 0.563 |
 | C231 | 2026-11-24T01:47Z | false | (d2) has the turn at 1 and echoes at 0.31; (e) has echoes at 0.64 and the turn at 25 | 0.123 |
+| C232 | 2026-11-24T05:37Z | true | measured total $3.687 (A 0.426, B 1.160, D 1.006, E 1.067, A5 0.015, A2 0.014), under the $4 line; part of B's and E's cost is retries of calls that hit the 16,000-token output cap (`e5-cost.json`, `e5-calls.tsv`, `e5-report.txt`) | 0.090 |
+| C233 | 2026-11-24T05:37Z | true | 30 subjects, mean distinct names per subject: A 2.77, B 1.80, D 1.70, E 2.77; B over A is 0.65 (needs 0.8 or less), counted over arrivals every arm compressed (0.63 over all); the matching pattern per subject is the author's and loose (`e5-drift.tsv`, `e5-drift-score.txt`) | 0.203 |
+| C234 | 2026-11-24T05:37Z | false | turn arrivals (20) carrying a reinstatement symbol: A 12, B 0, D 0, E 0; B fails the 50% half. The petition set is empty under the rule as written (no Huang-pattern arrival of 11-23 before 11:00Z holds 'petition'), so the second half could not be scored for any arm; the clause the model writes names the reinstatement in 20 of 20 under A, D, E and 19 of 19 under B (`e5-report.txt`) | 0.203 |
+| C235 | 2026-11-24T05:37Z | false | best Huang-pattern arrival at (18:00, 19:00] ranks 4 under A and 37 under B (needs 3 or better under one); D 32, E 3; C (C230) ranks it 1 (`e5-report.txt`) | 0.063 |
+| C236 | 2026-11-24T05:37Z | true | echo median rank share 0.892 under A and 0.759 under B, both over 0.60 (149 echoes); D 0.829, E 0.886 | 0.250 |
+| C237 | 2026-11-24T05:37Z | true | mean Jaccard of A against the 5-to-a-call run 0.606, against A' (25 to a call, other batches) 0.608, difference 0.002 (needs 0.05); arm A missing 1 of 3,529 (0.03%). Agreement, not accuracy; two identical-prompt runs agree on only 0.61 of subjects (`e5-report.txt`) | 0.250 |
+| C238 | 2026-11-24T05:37Z | false | errors from not knowing what came after the training cutoff in the 60-arrival hand read: B 2, D 1 (one fewer; needs three); both B errors are 'Theresa May' as a subject of a Burnham item, D keeps one of them (`e5-cutoff.tsv`, `e5-cutoff-score.txt`); the author is the reader | 0.203 |
+| C239 | 2026-11-24T05:37Z | true | digest 3,657 prompt tokens a call over B (in 2,000 to 6,000); D's cost over B is -$0.154 as measured and -$0.041 with no cache (needs at most $0.20 and $0.08), but B paid for 9 capped calls retried once; cache reads were 8% of D's input | 0.203 |
+| C240 | 2026-11-24T05:37Z | true | mean distinct names D 1.70 against B 1.80; best Huang-pattern arrival at 19:00 ranks 32 under D and 37 under B (D higher) | 0.360 |
+| C241 | 2026-11-24T05:37Z | true | E's input is 247 tokens an arrival against D's 580 (prior was that E would be higher: wrong); E makes 18.7 calls an hour against D's 5.9, a ratio of 3.15 (needs 4 or less) | 0.563 |
+| C242 | 2026-11-24T05:37Z | false | turn arrivals with a reinstatement symbol under E 0 of 20 (needs 10); D also 0; the 20 turn arrivals fall in 2 calls under E and 7 under D | 0.203 |
+| C243 | 2026-11-24T05:37Z | false | (a) true: E errors 0, D 1 (needs E at most D plus 2); (b) false: errors 0 of 23 in a group and 0 of 37 singletons, not lower (E has 4 blank sample arrivals, all from capped pooled calls, scored 0) | 0.090 |
 
 ### Scorecard
 

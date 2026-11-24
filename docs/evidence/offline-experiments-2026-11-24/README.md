@@ -378,3 +378,273 @@ Reading, the lead's:
   turn's reports are close to the story's earlier reports (that is what makes them a running story). The signal that
   worked is a rate (burst), not a distance.
 
+
+## E5, how a model should compress the day's arrivals (C232 to C243)
+
+Question for the capture desk's first slice: turn each source arrival into a
+symbolic compression (5 to 12 subjects in one list, plus one clause for what is
+asserted), and decide what context the model is given. Population: all 3,529
+arrivals of 2026-11-23 in time order (after the copy check). Model: River
+`deepseek-ai/DeepSeek-V4.1-Flash-1017`, temperature 0, reasoning effort low,
+16,000 output tokens a call. Nothing was written on Node B; the key was
+read from the environment on the build VM and never stored. Arms:
+
+- **A** flat batches of 25, no context.
+- **B** the same, each arrival with its ten nearest earlier arrivals' subject
+  names (the model's own, as B gave them) and the titles of its three nearest
+  stories; told to reuse an existing name exactly and to mark each subject
+  existing or new.
+- **C** keyword and entity extraction, no model (the C218/C230 extractor; its
+  numbers are in E4 and not rerun).
+- **D** B plus a digest of the paper as of the start of the clock hour (front
+  page top 60 with a line each, the 20 subjects of most origins in the previous
+  24 hours, and a month-by-month layer of top subjects and stories since the
+  cutoff), first in the prompt, no model to build it.
+- **E** the grouped fan-out: code groups each hour's arrivals (vector groups
+  joined by shared subjects; singletons pooled up to 25), each group is one call
+  with only its arrivals and a context chosen for it (nearest stories, known
+  names, the slice of the digest matching its subjects). 353 group calls (1,456
+  arrivals) and 95 pooled calls (2,073 arrivals).
+- **A5** and **A2** the 100-arrival sample (seed 20261124, 12:00 to 20:00Z) at 5
+  to a call, and again at 25 to a call in other batches.
+
+### What was run, and two deviations
+
+Programs: `scripts/offline-experiments/e5-run.py` (calls), `e5prep.go`,
+`e5digest.go`, `e5ecalls.go` (inputs, digest, grouping), `e5analyze.go`
+(report, hand-read sheets, scoring); results under this folder (`e5-*`).
+Everything ran on the build VM `choir-agents`; the files named in the first
+handover (`~/e5-*` on `choir-runner`) are an unrelated job of 2026-11-20.
+
+- **The arms ran concurrently with each other**: A first, then B, D and E
+  together with A from 01:43Z, and A5 and A2 at the end. This deviates from
+  C232's "one after another". Calls within an arm were strictly sequential, as
+  B and E need their own earlier names. Wall times are inflated by an
+  unknown amount by the sharing (A alone ran 20 calls of 5 in 10.9 s each; not
+  comparable).
+- **Two things did not finish and were rerun by the second builder.** (1) Arm E
+  stopped at call 124 of 448 on a bug in the runner (a group with no terms
+  serialises as `null`, and the digest slicer iterated it); fixed in
+  `e5-run.py`, E resumed from call 124, calls 1 to 123 are untouched. (2) A5 and
+  A2 had never run: the chain that was to start them after A found its working
+  directory deleted by a resync and failed. Both were run after the fix. B and D
+  were still running and finished unchanged.
+- **Calls that hit the output cap.** 9 of B's 142 calls (225 arrivals), 3 of E's
+  448 (75 arrivals; all three pooled calls, none of 353 group calls) and none of
+  A's or D's produced 16,000 output tokens, were cut off in the middle of the
+  JSON and failed again on the one retry the runner allows. They are counted as
+  missing, not re-run: a cap hit is the arm's behaviour at that batch size.
+
+### Cost, time, completeness (measured from the vendor's usage fields)
+
+| Arm | Calls | Input tokens | Output tokens | Cost | Seconds in calls | s a call | Arrivals compressed |
+|---|---|---|---|---|---|---|---|
+| A | 142 | 374,903 | 793,645 | $0.426 | 4,804 | 33.8 | 3,528 of 3,529 |
+| B | 142 | 1,529,045 | 1,744,937 | $1.160 | 10,851 | 76.4 | 3,304 (9 capped calls) |
+| C | 0 | | | $0 | | | all |
+| D | 142 | 2,048,311 | 1,529,059 | $1.006 | 9,635 | 67.9 | 3,528 |
+| E | 448 | 872,340 | 1,856,668 | $1.067 | 11,889 | 26.5 | 3,454 (3 capped pooled calls) |
+| A5 | 20 | 13,514 | 27,529 | $0.015 | 218 | 10.9 | 100 |
+| A2 | 4 | 10,579 | 26,428 | $0.014 | 158 | 39.5 | 100 |
+
+Total **$3.687** (estimate was $0.8, "$0.5 to $3"; the 25-to-a-call arms emit
+5,500 to 12,000 output tokens a call, most of it the model's reasoning). Output
+tokens, not input, are the cost: $0.12 to $0.33 per thousand arrivals.
+
+Projection (today 147 arrivals an hour, calls strictly one after another):
+
+| Arm | Calls an hour, today | Seconds of calls an hour | Dollars an hour | At 10 times: calls an hour | Seconds (share of the hour) |
+|---|---|---|---|---|---|
+| A | 5.9 | 199 (6%) | 0.018 | 59 | 1,990 (55%) |
+| B | 5.9 | 451 (13%) | 0.048 | 59 | 4,510 (125%) |
+| D | 5.9 | 401 (11%) | 0.042 | 59 | 4,010 (111%) |
+| E | 18.7 | 495 (14%) | 0.044 | up to 187 | up to 4,950 (138%) |
+
+For E the 10x figure is a ceiling (it assumes the number of groups grows with
+the arrivals; E2 found multi-origin groups grow faster than origins and groups
+of any size slightly slower, so the true figure sits below it). At 10x B, D and
+E need more than one call in flight; the project rule forbids a cap on our own
+calls, so the way to stay under the wall is fewer, shorter outputs (below), not
+a queue.
+
+### Name drift (C233)
+
+30 groups of 11-23 with three or more members and two or more origins (the
+sheet drew 45 candidates, seed 20261129; 15 had no one subject, such as rolls
+of earthquakes or of Axios items, and were skipped). For each the author named
+the one real subject and a pattern for the names that denote it
+(`e5-drift.tsv`; the patterns are loose, topic words included), then counted
+distinct normalised names per arm over the members all four arms compressed.
+
+| | A | B | D | E |
+|---|---|---|---|---|
+| mean distinct names per subject | 2.77 | 1.80 | 1.70 | 2.77 |
+| ratio | | B/A 0.65 | D/B 0.94 | E/D 1.63 |
+
+Naming the existing names and asking the model to reuse them cuts drift by
+about a third (C233 true). The digest takes a little more. **E does not**: its
+names drift as much as the free prompt, and two thirds of its subjects are
+marked new (A: not asked; B 36%, D 35%, E 67%), because a group is called
+before the other arrivals around it are, so the "known names" of its
+neighbours are often not yet written. E also leaks the origin into the symbols
+(8.5% of E's subjects are a host name such as `pubeurope.com`; D 0.9%, B 1.7%),
+because the item header carries the origin.
+
+### The turn, importance times symbolic novelty, echoes (C234 to C236, C240, C242)
+
+Turn arrivals: the 20 Huang-pattern arrivals in (14:00, 15:00] that say
+"reinstat". Petition arrivals: **none exist** under the rule as written (no
+Huang-pattern arrival of 11-23 before 11:00Z holds "petition"), so the second half
+of C234 could not be scored for any arm.
+
+| | A | B | D | E |
+|---|---|---|---|---|
+| turn arrivals carrying a subject with reinstat, return or restor | 12 of 20 | 0 of 19 | 0 of 20 | 0 of 20 |
+| turn arrivals whose clause says reinstated or restored | 20 | 19 | 20 | 20 |
+| best Huang-pattern rank, (18:00, 19:00] of 170 (`I_sum` x `Ne`) | 4 | 37 | 32 | 3 |
+| best Huang-pattern rank, turn hour (14:00, 15:00] of 169 | 3 | 1 | 13 | 8 |
+| echo median rank share (149 echoes) | 0.892 | 0.759 | 0.829 | 0.886 |
+| the turn arrivals fall in this many calls | 7 (as D) | | 7 | 2 |
+
+The turn is in the clause in every arm, and in the subject list only in A,
+the arm that mints names freely: told to reuse existing names, B, D and E give
+the 20 arrivals the pairs `Jensen Huang`, `Nvidia`, `CEO`, `board` and nothing
+new. So a symbolic novelty over the subject list cannot see the reinstatement
+in the three arms that control drift; it can only be seen in the clause (or by
+a symbol the prompt asks for explicitly, such as an event or a verb). Under
+A the pairs the turn carries that the petition arrivals lack are
+`ceo + reinstatement`, `jensen huang + reinstatement`, `nvidia + reinstatement`
+(12 each), but with no petition arrivals the comparison is vacuous. Two
+arrivals under B carry "petition-backed campaign" as a subject: it is the
+paper's own headline for the Huang story (the nearest-story titles and the
+19:00 digest both carry it), copied onto arrivals that do not say it. Context
+leaks into the symbols; that is not a cutoff error. At 19:00 the best-ranked
+Huang arrival is third under E, fourth under A, and 32nd and 37th under D and
+B, where C's `e` form (E4, C230) ranks the 18:21 aggregator roll first:
+importance times symbolic novelty from a model's names does not do better than
+from the extractor's. The plain echo scores low in all four arms (C236 true), as it does under C.
+
+### Batch size (C237)
+
+| | mean Jaccard of subject sets |
+|---|---|
+| A (25 a call) against 5 a call | 0.606 |
+| A against A' (25 a call, other batches) | 0.608 |
+| subjects per arrival, 25 a call / 5 a call | 7.21 / 7.41 |
+
+Batch size changes nothing measurable: 5 to a call differs from 25 to a call
+exactly as much as one 25-to-a-call run differs from another. The finding is
+the size of that number: **two runs of the same prompt agree on about 61% of
+the subjects** (reasoning at low effort is not deterministic at temperature 0
+over different batches), so any later step must take a symbol's identity from
+reuse against names the paper already holds, not from the model repeating
+itself. Whether 25 a call is safe is another matter: A had no failed call, but
+B hit the output cap in 9 of 142 calls and E's pooled calls in 3 of 95 (the
+cost of the `{"name", "e"}` object form and of the reasoning; B's median call
+emits 12,200 tokens, A's 5,500).
+
+### The digest (C238, C239, C240)
+
+The hand read: 60 arrivals (30 members of the drift groups, 10 turn arrivals,
+20 singletons of arm E; `e5-cutoff-sheet.md`, `e5-cutoff.tsv`) marked by the
+author for a compression wrong because the model did not know something after
+its cutoff.
+
+| | B | D | E |
+|---|---|---|---|
+| errors in 60 | 2 | 1 | 0 |
+| ... in the 23 arrivals that sat in an E group | 1 | 0 | 0 |
+| ... in the 37 singletons | 1 | 1 | 0 |
+
+The errors are one kind: a UK-EU item about Andy Burnham carries `Theresa May`
+as a subject (B on two arrivals; D on one of the two). No arm read the
+reinstatement as a first appointment; the clause says reinstated in all 20 turn
+arrivals. D's digest costs 3,657 prompt tokens a call over B and no money:
+D came out $0.154 cheaper than B as measured and $0.041 cheaper with no cache,
+because B paid for the 9 capped calls twice. The cache served 8% of D's input.
+D made no capped call; whether the digest is why is not shown (one run).
+
+### E against D (C241 to C243)
+
+E's input is 247 tokens an arrival against D's 580 (the digest repeated in
+every flat call was the larger part), its output 526 against 433; its calls
+an hour are 3.15 times D's and its cost the same. A group call sees the turn
+in one place: the 20 turn arrivals sit in 2 calls under E and 7 under D, and no
+group call failed, but this did not turn into a better symbol (0 of 20 in
+both) or fewer errors (E 0, D 1, B 2 among 60; with 4 blank E rows scored
+0 because their pooled calls were capped). Errors on grouped arrivals were not
+lower than on singletons (0 of 23 and 0 of 37).
+
+### Does grouping with context beat flat batches? Does the digest help? Is 25 a call safe?
+
+- **Grouping with context** did not beat the flat batch on any measure that
+  could be scored: names drift like the free prompt, 2.1% of arrivals missing,
+  8.5% host names among the subjects, the turn no better seen. Its value was
+  cost shape: shorter calls (26 s, none failing among the 353 group calls),
+  fewer input tokens, and the same dollars. The groups are ours (the earlier
+  builder wrote the grouping, and the order of calls by hour starves the
+  context), so this is a result about this grouping.
+- **The digest** helped a little and cost nothing: names 1.70 against 1.80,
+  one error fewer in 60 (needs three, not met), no capped calls, and the
+  best Huang arrival at 19:00 ranks 32 against 37. None of these is outside
+  noise on one day. It also repeats about 3,700 tokens in every call.
+- **25 a call** is safe for subject agreement (0.61 whether 5 or 25) but not
+  safe for the prompt that gives each subject an object with a flag: 6% of
+  B's calls hit the output cap and lost the whole batch.
+
+### Recommended recipe for the capture desk's first slice
+
+D's recipe in a smaller form: flat batches of up to 25 arrivals in time order,
+each with the known names of its ten nearest earlier arrivals and the titles of
+its three nearest stories, the digest as a cacheable prefix per clock hour,
+subjects as plain strings (the existing/new flag costs about twice the output
+and its marks were not used by anything measured here), reuse of an existing
+name enforced by matching the model's name against the names the paper already
+holds in code and not by the model's own repetition, and a correctness
+refusal for the output cap: a call cut off is split in two and run again, not
+dropped. Ask explicitly for the event or action as a subject (a verb phrase
+such as "reinstatement") if the symbolic novelty is to see a turn; the free
+prompt did, the reuse prompts did not. Keep grouping (E) out of the first
+slice: it triples the calls and the names, and it gained nothing measured.
+Sequential calls are 12 to 14% of the wall clock today and exceed it at ten
+times today's rate whichever arm is used, so a deadline-driven design needs the
+number of output tokens per arrival down (strings, lower reasoning) before more
+calls in flight.
+
+### Limits
+
+One day, 11-23, mostly social posts (four fifths of the arrivals) and the one
+Huang event. The grouping is ours and was written by the earlier builder; the
+digest has only the paper's own record behind it, which starts 2026-10-13 (two
+month lines: November 7,898 finished stories, October 3,637; the 19:00 digest is
+`e5-digest-19.txt`), so it never reaches back to the model's training cutoff. Both hand reads (name drift, cutoff errors) are by the
+author, who also built the grouping and the arms: leads, not independent
+judgments; the drift patterns are loose and the cutoff sample has 3 errors
+in 180 labels, so a difference of one or two is noise. Agreement of subject
+sets is a proxy for accuracy: neither run is the truth. The runs were
+concurrent between arms and one stream was stopped by a bug and resumed. The
+arms were run once each; the model, its effort and the 16,000 cap are as set
+and not tuned. Ledger C232 to C243 were entered before any call; settlement
+below.
+
+### E5 settlements
+
+| Id | p | Outcome | Evidence | Brier |
+|---|---|---|---|---|
+| C232 | 0.70 | true | $3.687 total | 0.090 |
+| C233 | 0.55 | true | B/A 0.65 | 0.203 |
+| C234 | 0.45 | false | turn symbol 12/0/0/0 of 20 under A/B/D/E; petition set empty | 0.203 |
+| C235 | 0.25 | false | A rank 4, B rank 37 | 0.063 |
+| C236 | 0.50 | true | echo share A 0.892, B 0.759 | 0.250 |
+| C237 | 0.50 | true | Jaccard 0.606 against 0.608; 0.03% missing | 0.250 |
+| C238 | 0.45 | false | B 2, D 1 errors | 0.203 |
+| C239 | 0.55 | true | 3,657 tokens; added cost negative | 0.203 |
+| C240 | 0.40 | true | drift 1.70 against 1.80; rank 32 against 37 | 0.360 |
+| C241 | 0.25 | true | 247 against 580 tokens an arrival; 3.15 times the calls | 0.563 |
+| C242 | 0.45 | false | E 0 of 20 | 0.203 |
+| C243 | 0.30 | false | (a) true, (b) false | 0.090 |
+
+Mean Brier 0.223 over twelve claims, which are not independent (one day, one
+event, one set of arms). The two worst are C241 (prior 0.25 that E's tokens an
+arrival would be no higher than D's; they are less than half) and C240 (prior
+0.40; both halves held, narrowly).

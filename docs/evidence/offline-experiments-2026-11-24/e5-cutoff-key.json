@@ -1,0 +1,302 @@
+[
+ {
+  "id": "a0177",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a1180",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a1404",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a0278",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a0277",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a2835",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a3061",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a1999",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a1021",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a0428",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a3154",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a3465",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a2598",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a0807",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a2992",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a2037",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a2866",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a2622",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a2613",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a0637",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a0326",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a1672",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a1797",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a1337",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a2463",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a3073",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a2097",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a2859",
+  "source": "drift-group member",
+  "in_group": false
+ },
+ {
+  "id": "a1697",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a3381",
+  "source": "drift-group member",
+  "in_group": true
+ },
+ {
+  "id": "a2004",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a1949",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a2025",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a2050",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a2023",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a2029",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a1921",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a2011",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a2008",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a1954",
+  "source": "Huang turn arrival",
+  "in_group": true
+ },
+ {
+  "id": "a3098",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a0854",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a2860",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a0982",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a0345",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a2725",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a2675",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a2537",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a0639",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a2773",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a1670",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a0658",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a2787",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a1513",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a0762",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a1023",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a0174",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a1434",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a1856",
+  "source": "singleton of arm E",
+  "in_group": false
+ },
+ {
+  "id": "a1715",
+  "source": "singleton of arm E",
+  "in_group": false
+ }
+]

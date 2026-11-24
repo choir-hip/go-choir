@@ -32,7 +32,7 @@ def norm(s):
     return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", s.lower())).strip()
 
 def slice_digest(call, names_known, ds):
-    terms = [norm(t) for t in call["terms"]] + [norm(n) for n in names_known]
+    terms = [norm(t) for t in (call.get("terms") or [])] + [norm(n) for n in names_known]
     terms = [t for t in dict.fromkeys(terms) if len(t) >= 4]
     out = []
     front = [l for l in ds["front"] if any(t in norm(l) for t in terms)][:8]
@@ -57,7 +57,7 @@ def render_e(items, call, names, ds):
                     known.append(n)
     known = known[:40]
     ctx = []
-    if call["stories"]:
+    if call.get("stories"):
         ctx.append("Nearby stories: " + " || ".join(call["stories"]))
     if known:
         ctx.append("Known names: " + "; ".join(known))

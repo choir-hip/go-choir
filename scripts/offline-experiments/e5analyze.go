@@ -255,7 +255,7 @@ func runE5Report(dir, outDir string) {
 	}
 	arms := map[string]map[string]e5Out{}
 	recsOf := map[string][]e5Rec{}
-	for _, a := range []string{"A", "B", "D", "A5", "A2"} {
+	for _, a := range []string{"A", "B", "D", "E", "A5", "A2"} {
 		r, o := loadArm(filepath.Join(outDir, "e5-"+a+".jsonl"))
 		if len(r) > 0 {
 			recsOf[a], arms[a] = r, o
@@ -263,7 +263,7 @@ func runE5Report(dir, outDir string) {
 	}
 	w("== cost, time and parse, per arm ==\narm | calls | failed calls | retried without effort | input tokens | cached | output tokens | cost $ | seconds total | mean s/call | arrivals covered | missing or unparsed\n")
 	totalCost := 0.0
-	for _, a := range []string{"A", "B", "D", "A5", "A2"} {
+	for _, a := range []string{"A", "B", "D", "E", "A5", "A2"} {
 		rs := recsOf[a]
 		if len(rs) == 0 {
 			continue
@@ -335,7 +335,7 @@ func runE5Report(dir, outDir string) {
 	for i, it := range items {
 		idxByBin[hourBin(it)] = append(idxByBin[hourBin(it)], i)
 	}
-	for _, a := range []string{"A", "B", "D"} {
+	for _, a := range []string{"A", "B", "D", "E"} {
 		o := arms[a]
 		if o == nil {
 			continue
@@ -407,7 +407,7 @@ func runE5Report(dir, outDir string) {
 		}
 		return false
 	}
-	for _, a := range []string{"A", "B", "D"} {
+	for _, a := range []string{"A", "B", "D", "E"} {
 		o := arms[a]
 		if o == nil {
 			continue
@@ -472,6 +472,84 @@ func runE5Report(dir, outDir string) {
 			w(" [%s x%d]", x.k, x.n)
 		}
 		w("\n")
+	}
+	// C241, C242: arm E against arm D
+	if re, rd := recsOf["E"], recsOf["D"]; len(re) > 0 {
+		w("\n== arm E (grouped fan-out) against arm D: calls and tokens ==\n")
+		tally := func(rs []e5Rec) (calls, arrivals, pin, comp int) {
+			for _, r := range rs {
+				calls++
+				arrivals += len(r.IDs)
+				pin += r.Usage.Prompt
+				comp += r.Usage.Compl
+			}
+			return
+		}
+		ec, ea, ei, eo := tally(re)
+		w("E: %d calls for %d arrivals (%.2f an arrival per call); input %d tokens = %.0f per arrival; output %d = %.0f per arrival\n", ec, ea, float64(ea)/float64(max(ec, 1)), ei, float64(ei)/float64(max(ea, 1)), eo, float64(eo)/float64(max(ea, 1)))
+		if len(rd) > 0 {
+			dc, da, di, do := tally(rd)
+			w("D: %d calls for %d arrivals (%.2f per call); input %d = %.0f per arrival; output %d = %.0f per arrival\n", dc, da, float64(da)/float64(max(dc, 1)), di, float64(di)/float64(max(da, 1)), do, float64(do)/float64(max(da, 1)))
+			w("calls an hour at today's rate (full day / 24): E %.1f, D %.1f; ratio E/D %.2f (scaled to the arrivals covered: E %.2f calls per 100 arrivals, D %.2f)\n", float64(ec)/24, float64(dc)/24, float64(ec)/float64(max(dc, 1)), 100*float64(ec)/float64(max(ea, 1)), 100*float64(dc)/float64(max(da, 1)))
+		}
+		kinds := map[string][2]int{}
+		kindOf := map[string]string{}
+		if data, err := os.ReadFile(filepath.Join(outDir, "e5-ecalls.jsonl")); err == nil {
+			for _, l := range strings.Split(string(data), "\n") {
+				var c e5Call
+				if json.Unmarshal([]byte(l), &c) == nil {
+					for _, id := range c.IDs {
+						kindOf[id] = c.Kind
+					}
+					v := kinds[c.Kind]
+					v[0]++
+					v[1] += len(c.IDs)
+					kinds[c.Kind] = v
+				}
+			}
+		}
+		for k, v := range kinds {
+			w("E calls of kind %s: %d calls, %d arrivals\n", k, v[0], v[1])
+		}
+		// which call holds each arrival, under D (batch of 25 by index) and E
+		callOfE := map[string]int{}
+		for _, r := range re {
+			for _, id := range r.IDs {
+				callOfE[id] = r.Batch
+			}
+		}
+		callOfD := map[string]int{}
+		for _, r := range rd {
+			for _, id := range r.IDs {
+				callOfD[id] = r.Batch
+			}
+		}
+		var petition, turn []string
+		for _, it := range items {
+			if !it.Huang {
+				continue
+			}
+			txt := it.Title + " " + it.Text
+			if it.Time < "2026-11-23T11:00:00Z" && rePetition.MatchString(txt) {
+				petition = append(petition, it.ID)
+			}
+			if it.Time > "2026-11-23T14:00:00Z" && it.Time <= "2026-11-23T15:00:00Z" && strings.Contains(strings.ToLower(txt), "reinstat") {
+				turn = append(turn, it.ID)
+			}
+		}
+		distinct := func(ids []string, m map[string]int) int {
+			set := map[int]bool{}
+			for _, id := range ids {
+				if c, ok := m[id]; ok {
+					set[c] = true
+				}
+			}
+			return len(set)
+		}
+		w("C242: the %d turn arrivals fall in %d distinct calls under D and %d under E; the %d petition arrivals in %d under D and %d under E\n", len(turn), distinct(turn, callOfD), distinct(turn, callOfE), len(petition), distinct(petition, callOfD), distinct(petition, callOfE))
+		for _, id := range turn {
+			w("  turn %s: E kind %s, call %d\n", id, kindOf[id], callOfE[id])
+		}
 	}
 	// C237: batch size
 	if a5, a2 := arms["A5"], arms["A2"]; a5 != nil || a2 != nil {
@@ -549,7 +627,7 @@ func runE5Sheet(dir, outDir string) {
 		cands = cands[:45]
 	}
 	arms := map[string]map[string]e5Out{}
-	for _, a := range []string{"A", "B", "D"} {
+	for _, a := range []string{"A", "B", "D", "E"} {
 		_, arms[a] = loadArm(filepath.Join(outDir, "e5-"+a+".jsonl"))
 	}
 	var sb strings.Builder
@@ -569,7 +647,7 @@ func runE5Sheet(dir, outDir string) {
 				t = "(post) " + it.Text
 			}
 			fmt.Fprintf(&sb, "- %s %s | %s\n", id, it.Origin, trunc(t, 100))
-			for _, a := range []string{"A", "B", "D"} {
+			for _, a := range []string{"A", "B", "D", "E"} {
 				if o, ok := arms[a][id]; ok {
 					fmt.Fprintf(&sb, "    %s: %s\n", a, strings.Join(o.Subjects, "; "))
 				}
@@ -611,7 +689,7 @@ func runE5Drift(dir, outDir string) {
 	r := rand.New(rand.NewSource(20261124 + 5))
 	r.Shuffle(len(cands), func(i, j int) { cands[i], cands[j] = cands[j], cands[i] })
 	arms := map[string]map[string]e5Out{}
-	for _, a := range []string{"A", "B", "D"} {
+	for _, a := range []string{"A", "B", "D", "E"} {
 		_, arms[a] = loadArm(filepath.Join(outDir, "e5-"+a+".jsonl"))
 	}
 	f, err := os.Open(filepath.Join(outDir, "e5-drift.tsv"))
@@ -620,7 +698,7 @@ func runE5Drift(dir, outDir string) {
 	tot := map[string]float64{}
 	nSub := 0
 	var sb strings.Builder
-	sb.WriteString("group | subject | members | distinct names A | B | D\n")
+	sb.WriteString("group | subject | members | distinct names A | B | D | E\n")
 	for sc.Scan() {
 		fs := strings.Split(sc.Text(), "\t")
 		if len(fs) < 3 || strings.HasPrefix(fs[0], "#") {
@@ -631,9 +709,19 @@ func runE5Drift(dir, outDir string) {
 		re := regexp.MustCompile("(?i)" + fs[2])
 		g := gs[cands[gnum-1]]
 		row := fmt.Sprintf("%s | %s | %d |", fs[0], fs[1], len(g.Members))
-		for _, a := range []string{"A", "B", "D"} {
+		for _, a := range []string{"A", "B", "D", "E"} {
 			names := map[string]bool{}
 			for _, m := range g.Members {
+				// only arrivals every arm compressed, so a failed call does not lower an arm's count
+				missing := false
+				for _, a2 := range []string{"A", "B", "D", "E"} {
+					if _, ok := arms[a2][posOf[m]]; !ok {
+						missing = true
+					}
+				}
+				if missing {
+					continue
+				}
 				for _, s := range arms[a][posOf[m]].Subjects {
 					if re.MatchString(s) {
 						names[normName(s)] = true
@@ -646,7 +734,7 @@ func runE5Drift(dir, outDir string) {
 		nSub++
 		sb.WriteString(row + "\n")
 	}
-	fmt.Fprintf(&sb, "subjects %d; mean distinct names per subject: A %.2f, B %.2f, D %.2f; B/A %.2f, D/B %.2f\n", nSub, tot["A"]/float64(nSub), tot["B"]/float64(nSub), tot["D"]/float64(nSub), tot["B"]/tot["A"], tot["D"]/tot["B"])
+	fmt.Fprintf(&sb, "subjects %d; mean distinct names per subject: A %.2f, B %.2f, D %.2f, E %.2f; B/A %.2f, D/B %.2f, E/D %.2f\n", nSub, tot["A"]/float64(nSub), tot["B"]/float64(nSub), tot["D"]/float64(nSub), tot["E"]/float64(nSub), tot["B"]/tot["A"], tot["D"]/tot["B"], tot["E"]/tot["D"])
 	must(os.WriteFile(filepath.Join(outDir, "e5-drift-score.txt"), []byte(sb.String()), 0o644))
 	fmt.Print(sb.String())
 }

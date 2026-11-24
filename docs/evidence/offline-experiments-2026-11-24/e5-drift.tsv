@@ -1,0 +1,31 @@
+# group<TAB>the one real subject<TAB>regex for the names that denote it (hand: the author)
+D01	Justin Herbert	Herbert
+D02	Andy Burnham	Burnham
+D03	Tarik Skubal	Skubal
+D04	California concert shooting	concert|shooting
+D05	Russian plot against Ukrainian rapper	rapper|assassinat
+D08	GTA 6	GTA
+D09	Sanchez wealth tax	ultra|wealth|billionaire|impuesto|\btax
+D12	cold progression (Soeder)	progression|bracket creep
+D13	Tajikistan leaves the ICC	\bICC\b|Criminal Court|Tajik
+D14	49ers rout Vikings	49ers|niners|San Francisco
+D15	India pledge to Nepal	Nepal|Balendra
+D16	Jensen Huang	Huang
+D18	Jets beat Chargers	Chargers
+D19	Shawn Levy 21 Laps deal	Levy|21 Laps
+D20	attacks on medics, West Bank	medic|ambulance|Physicians
+D22	Indonesia factory fire	factory|fire|blaze|candy
+D23	Russian nuclear satellite	nuclear|satellite|atom
+D24	Dylan Larkin trade	Larkin
+D25	Amazon buys Decart	Decart
+D26	CrowdStrike buys Zscaler	Zscaler
+D27	Next cyber breach	\bNext\b
+D28	Russian nuclear satellite (2)	nuclear|satellite
+D29	CAS ruling Senegal AFCON	\bCAS\b|Court of Arbitration|AFCON|Africa Cup
+D30	Iran shadow banking sanctions	shadow|sanction
+D31	Grand Paris Express	Grand Paris|ligne 18|line 18
+D32	Anthropic IPO	\bIPO\b
+D34	Russian military deaths data	suicide|military death|war dead|casualt|death toll
+D35	Labaziuk sentencing	Labaz|Лабазюк
+D36	Trump meme coin gala	meme coin|crypto gala|gala
+D37	ICE detains father and daughter	\bICE\b|Immigration

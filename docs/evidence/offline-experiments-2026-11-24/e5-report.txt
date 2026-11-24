@@ -1,0 +1,120 @@
+== cost, time and parse, per arm ==
+arm | calls | failed calls | retried without effort | input tokens | cached | output tokens | cost $ | seconds total | mean s/call | arrivals covered | missing or unparsed
+A | 142 | 0 | 0 | 374903 | 2304 | 793645 | 0.4257 | 4804 | 33.8 | 3528 of 3529 | 1 (0.03%)
+B | 142 | 9 | 0 | 1529045 | 30720 | 1744937 | 1.1597 | 10851 | 76.4 | 3304 of 3529 | 225 (6.38%)
+D | 142 | 0 | 0 | 2048311 | 164608 | 1529059 | 1.0058 | 9635 | 67.9 | 3528 of 3529 | 1 (0.03%)
+E | 448 | 3 | 0 | 872340 | 110080 | 1856668 | 1.0670 | 11889 | 26.5 | 3454 of 3529 | 75 (2.13%)
+A5 | 20 | 0 | 0 | 13514 | 0 | 27529 | 0.0148 | 218 | 10.9 | 100 of 100 | 0 (0.00%)
+A2 | 4 | 0 | 0 | 10579 | 0 | 26428 | 0.0140 | 158 | 39.5 | 100 of 100 | 0 (0.00%)
+total measured cost (all arms) $3.6870
+
+== digest size and cost (D over B, 142 paired calls) ==
+prompt tokens D minus B per call, mean: 3657 (the digest, as the vendor counts it; the two prompts differ also in the model's own earlier names)
+D input 2048311 tokens, of which cached 164608 (8.0%); B input 1529045
+D cost with the cache as measured $1.0058; B $1.1597; added $-0.1538
+without any cache: D $0.9797, B $1.0211, added $-0.0413
+
+== projection (arm B per call: 76.4 s, $0.0082) ==
+1x today's rate: 147 arrivals an hour -> 5.9 calls an hour, 449 s of calls an hour, $0.048 an hour (sequential: 12.5% of wall clock)
+10x today's rate: 1470 arrivals an hour -> 58.8 calls an hour, 4495 s of calls an hour, $0.480 an hour (sequential: 124.8% of wall clock)
+
+== importance x symbolic novelty (e) per arm: best Huang-pattern arrival in the hour ending 19:00, in the turn hour, and echo rank shares ==
+A, hour ending 19:00 (170 arrivals): Huang ranks [4 17 90 104 106 111 135 136 152 158 160 168]
+A, hour ending 15:00 (169 arrivals): Huang ranks [3 5 17 21 43 51 55 63 81 88 93 99]
+A: echoes n 149, median rank share 0.892, 10th percentile 0.359
+top 10 at 19:00 under A (score | Huang | echo | text):
+  13.13 | false | false | (post) Cuatro detenidos por disparar a su vecino en un pie y matar a puñaladas a...
+  11.75 | false | false | Only six beds for trans victims of domestic abuse in UK, report finds
+  10.69 | false | false | (post) Brazilian court bars cruise ship departure over financial dispute https:/...
+  10.61 | true | false | (post) Why are Nvidia shares soaring after Jensen Huang’s return as CEO? | Reute...
+  10.40 | false | false | (post) BYD hat ein Verkaufsverbot für seinen SUV Ti7 in der EU erhalten. Das Mod...
+  10.30 | false | false | United States Files Action to Recover More Than $1 Billion in Cryptocurrency Ass...
+  10.24 | false | false | (post) El tiempo de la semana: bajan las temperaturas y nuevos frentes regarán n...
+  10.24 | false | false | Former prince Andrew was paid £750,000 in hope of helping Turkish woman with pas...
+  10.00 | false | false | (post) FSU Fanbase Divided After $2.2M SEC Coach Named as Strong Mike Norvell Re...
+  10.00 | false | false | (post) . @kian_sabeti 217 años de prisión por 32 bahá’ís en solo 6 meses; estas ...
+B, hour ending 19:00 (170 arrivals): Huang ranks [37 53 54 68 72 96 108 115 120 122 123 134]
+B, hour ending 15:00 (169 arrivals): Huang ranks [1 2 4 5 23 24 25 40 57 97 98 100]
+B: echoes n 149, median rank share 0.759, 10th percentile 0.503
+top 10 at 19:00 under B (score | Huang | echo | text):
+  10.97 | false | false | (post) “The figure measures annualized pledges, not money already disbursed.” # ...
+  10.58 | false | false | Peacock subscriptions are up to 66 percent off for Black Friday
+  10.49 | false | false | See how much more money the richest Americans are spending on the holidays compa...
+  9.93 | false | false | (post) Transcript: HC Jeff Hafley Press Conference Jeff Hafley: Medical. Obvious...
+  9.76 | false | false | (post) # 9to5google - Google Meet unlocks 1080p video streaming for all accounts...
+  9.36 | false | false | (post) 🟡 Naval Diplomacy | 7/10 🇹🇷 🇬🇧 Turkish Naval Commander Makes Official Vis...
+  9.32 | false | false | (post) Стартовало голосование за номинантов 10-й премии Steam Awards. До 30-го н...
+  9.22 | false | false | (post) Residents of Rose Heights, St. James protest absence of potable water IRI...
+  9.04 | false | false | (post) All The Songs In ‘Clashing Through The Snow’ From Sabrina Carpenter To Ol...
+  8.98 | false | false | Steven Spielberg to make a western written by Paul Thomas Anderson
+D, hour ending 19:00 (170 arrivals): Huang ranks [32 67 81 115 117 123 141 141 143 150 150 150]
+D, hour ending 15:00 (169 arrivals): Huang ranks [13 25 31 37 57 73 96 98 107 128 132 135]
+D: echoes n 149, median rank share 0.829, 10th percentile 0.560
+top 10 at 19:00 under D (score | Huang | echo | text):
+  12.48 | false | false | See how much more money the richest Americans are spending on the holidays compa...
+  10.87 | false | false | (post) From AP: Palestinian children take swimming lessons in the Mediterranean ...
+  10.38 | false | false | (post) Brazilian court bars cruise ship departure over financial dispute https:/...
+  10.32 | false | false | (post) 🇫🇷 Le président du #Sénat Gérard Larcher a affirmé avoir demandé au Premi...
+  10.24 | false | false | (post) # News # Minnesota Two 18-year-old men have been arrested in connection w...
+  9.98 | false | false | (post) Akinlade, GNI Faults Abiodun’s Claim That Ogun APC Aspirants Agreed On Ya...
+  9.96 | false | false | (post) # 9to5google - Google Meet unlocks 1080p video streaming for all accounts...
+  9.93 | false | false | (post) All The Songs In ‘Clashing Through The Snow’ From Sabrina Carpenter To Ol...
+  9.92 | false | false | Peacock subscriptions are up to 66 percent off for Black Friday
+  9.86 | false | false | (post) Die Tötung von Frauen durch ihre Partner oder Ex-Partner zieht bisher nic...
+E, hour ending 19:00 (170 arrivals): Huang ranks [3 45 55 61 74 96 127 141 148 154 157 161]
+E, hour ending 15:00 (169 arrivals): Huang ranks [8 19 28 35 46 59 61 74 79 91 121 129]
+E: echoes n 149, median rank share 0.886, 10th percentile 0.517
+top 10 at 19:00 under E (score | Huang | echo | text):
+  14.06 | false | false | (post) # News # Minnesota Two 18-year-old men have been arrested in connection w...
+  12.67 | false | false | How should an LLM see a computer?
+  12.57 | true | false | (post) Why are Nvidia shares soaring after Jensen Huang’s return as CEO? | Reute...
+  12.34 | false | false | Kagi Mail is here (Public Beta)
+  12.28 | false | false | (post) Chinese AI firms like MiniMax and Moonshot are setting up U.S. outposts t...
+  11.71 | false | false | (post) Cuatro detenidos por disparar a su vecino en un pie y matar a puñaladas a...
+  11.26 | false | false | What tactics will Burnham use to sell his EU plans? – podcast
+  11.01 | false | false | (post) “That does not settle anything, but it illustrates the disagreement.” # N...
+  10.94 | false | false | (post) ⚠️ Settler attack detected: Wadi Sa'ir, N- of Al-Khalil # westbank ⚠️✊ Cl...
+  10.55 | false | false | Former prince Andrew was paid £750,000 in hope of helping Turkish woman with pas...
+
+== C234: reinstatement symbols (a model subject containing reinstat, return or restor) ==
+petition arrivals: 0; turn arrivals: 20
+A: turn arrivals with a reinstatement symbol 12 of 20; petition arrivals 0 of 0
+  A: pairs in turn arrivals and in no petition arrival, commonest: [jensen huang + nvidia x20] [ceo + jensen huang x18] [ceo + nvidia x18] [ceo + reinstatement x12] [jensen huang + reinstatement x12] [nvidia + reinstatement x12]
+B: turn arrivals with a reinstatement symbol 0 of 20; petition arrivals 0 of 0
+  B: pairs in turn arrivals and in no petition arrival, commonest: [board + ceo x19] [board + jensen huang x19] [board + nvidia x19] [ceo + jensen huang x19] [ceo + nvidia x19] [jensen huang + nvidia x19]
+D: turn arrivals with a reinstatement symbol 0 of 20; petition arrivals 0 of 0
+  D: pairs in turn arrivals and in no petition arrival, commonest: [jensen huang + nvidia x20] [jensen huang + nvidia board x20] [nvidia + nvidia board x20] [ceo + jensen huang x19] [ceo + nvidia x19] [ceo + nvidia board x19]
+E: turn arrivals with a reinstatement symbol 0 of 20; petition arrivals 0 of 0
+  E: pairs in turn arrivals and in no petition arrival, commonest: [board of nvidia + ceo x20] [board of nvidia + jensen huang x20] [board of nvidia + nvidia x20] [ceo + jensen huang x20] [ceo + nvidia x20] [jensen huang + nvidia x20]
+
+== arm E (grouped fan-out) against arm D: calls and tokens ==
+E: 448 calls for 3529 arrivals (7.88 an arrival per call); input 872340 tokens = 247 per arrival; output 1856668 = 526 per arrival
+D: 142 calls for 3529 arrivals (24.85 per call); input 2048311 = 580 per arrival; output 1529059 = 433 per arrival
+calls an hour at today's rate (full day / 24): E 18.7, D 5.9; ratio E/D 3.15 (scaled to the arrivals covered: E 12.69 calls per 100 arrivals, D 4.02)
+E calls of kind group: 353 calls, 1456 arrivals
+E calls of kind pool: 95 calls, 2073 arrivals
+C242: the 20 turn arrivals fall in 7 distinct calls under D and 2 under E; the 0 petition arrivals in 0 under D and 0 under E
+  turn a1921: E kind group, call 246
+  turn a1948: E kind group, call 246
+  turn a1949: E kind group, call 246
+  turn a1950: E kind group, call 246
+  turn a1954: E kind group, call 246
+  turn a1964: E kind group, call 246
+  turn a1993: E kind group, call 246
+  turn a1994: E kind group, call 246
+  turn a2004: E kind group, call 246
+  turn a2008: E kind group, call 246
+  turn a2011: E kind group, call 246
+  turn a2014: E kind group, call 246
+  turn a2022: E kind group, call 246
+  turn a2023: E kind group, call 246
+  turn a2024: E kind group, call 255
+  turn a2025: E kind group, call 255
+  turn a2028: E kind group, call 255
+  turn a2029: E kind group, call 255
+  turn a2050: E kind group, call 255
+  turn a2056: E kind group, call 255
+
+== C237: 25 to a call against 5 to a call and against another 25-to-a-call run, on the 100-arrival sample ==
+mean Jaccard of the subject sets, A (25 a call) against 5 a call: 0.606 (n 100); against A' (25 a call, other batches): 0.608 (n 100)
+mean subjects per arrival: 25 a call 7.21, 5 a call 7.41
