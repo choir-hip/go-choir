@@ -369,7 +369,7 @@ component OnboardingPage
         Card(level=1, testId="ob-mic", minHeight=0)
           column padding=18 gap=12
             if ob.mic == "unasked" or ob.mic == "refused" or ob.mic == "silent"
-              text "To talk to the radio or record a take, Autoradio 1 needs your microphone and speech recognition." testId="ob-mic-why" font-size="-exact-title3" font-weight=600 line-height=1.35 font-family=th.fontHead
+              text "To talk to the radio, record a take or learn your voice, Autoradio 1 needs your microphone and speech recognition." testId="ob-mic-why" font-size="-exact-title3" font-weight=600 line-height=1.35 font-family=th.fontHead
               text "What you say stays on this phone as sound; only the words go to your computer." font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
               if ob.mic != "refused"
                 button press=obMic testId="ob-mic-ask" appearance="none"

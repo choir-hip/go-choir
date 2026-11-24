@@ -11,4 +11,6 @@
 4. **Every voice-profile write carries the account generation captured when the operation began** (the turn, not the write).
 5. **A credit for every licence that asks for one comes from the model list**: a test fails when a list entry whose licence is a CC licence has none.
 
-**Remaining error.** FluidAudio's own downloads (the recogniser, the voices) run inside the library on its URLSession, which we do not configure: the door authorises them and refuses a start on a path that the agreement does not cover, but cannot cut a transfer already running on that library's session. That gap is named in `docs/changes.md` and must be looked at on a phone (Wi-Fi to cellular during the recogniser's download).
+**Round 4 (what a door being a convention cost).** A release gated by a running step (so a door that could be skipped), a library that could fetch whenever it was initialised, and a readiness that was an id set outliving its files were each a door that was a convention. Now: releases are not gated; the libraries' registry is closed except inside the one window; readiness is derived from the files and the pin.
+
+**Remaining error.** The FluidAudio models are not pinned by file digest, and Silero, Kokoro, Pocket and Phonon cannot load without being able to fetch (no local-only entry point): they rely on the closed registry, which a phone must prove (they speak and listen after a relaunch with it closed). A transfer cut by a path change is cut by Task cancellation: a phone must show the bytes after Wi-Fi to cellular.

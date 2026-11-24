@@ -1,5 +1,5 @@
 {
-  "purpose.microphone": "Autoradio listens when you turn Voice on, so you can ask about a story or tell the radio what to do, and when you record a take. Speech is turned into text on this phone and the audio is not uploaded, except a take you choose to publish.",
+  "purpose.microphone": "Autoradio listens when you turn Voice on, so you can ask about a story or tell the radio what to do, when you record a take, and when you teach it your voice. Speech is turned into text on this phone and the audio is not uploaded, except a take you choose to publish.",
   "purpose.recordingInBackground": "Voice stops listening when the screen locks; the radio keeps playing.",
   "purpose.speech": "Autoradio turns what you say into text on this phone so it can understand your request.",
   "onboarding.askSignIn.title": "Sign in to ask the radio",

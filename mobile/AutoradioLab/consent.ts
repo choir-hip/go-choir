@@ -83,7 +83,7 @@ export async function consentAgree(group: string, mobile: boolean, storage: Stor
   const m = await load(storage);
   if (!m.loaded || group === '') return false;                                                    // never write over what was not read
   const next = mobile || m.c.agreed[group] === 'agreed-mobile' ? 'agreed-mobile' : 'agreed';
-  if (m.c.agreed[group] === next) return true;
+  if (m.c.agreed[group] === next) { await pushAgreement({ ...m.c.agreed }); return true; }                  // never skipped: the door may have lost it
   const before = m.c.agreed[group];
   m.c.agreed[group] = next; m.rev += 1;
   if (storage && !(await writeCurrent(m.gen, storage, CONSENT_FILE, new TextEncoder().encode(JSON.stringify(m.c))))) { if (before === undefined) delete m.c.agreed[group]; else m.c.agreed[group] = before; return false; }

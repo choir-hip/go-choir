@@ -61,6 +61,8 @@ public enum VoiceCatalog {
     /// Phonon (an alternative to Kokoro, to be heard beside it) sits right after Kokoro's cards: three of its 103 voices, the ones the pack
     /// ships as ready-made states, so they start without a prefill (names are the pack's own: `<locale>_<Name>`, `voices/` and `voices_catalog.jsonl`,
     /// listed by the Hugging Face API on 2026-11-15). The system voice stays last.
+    /// The cards the person is shown: a voice whose model no download group contains is not offered (it could never be fetched).
+    public static func offered(by door: DownloadDoor = .shared) -> [VoiceOption] { options.filter { $0.modelID.isEmpty || door.group(ofModel: $0.modelID) != nil } }
     public static let options: [VoiceOption] = [
         VoiceOption(id: "kokoro:af_heart", stageID: "kokoro", voice: "af_heart", name: "Heart", blurb: "Warm and clear",
                     sample: "Hello, I'm Heart. I'll read you the paper.", modelID: kokoroModel),

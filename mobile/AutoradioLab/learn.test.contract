@@ -17,7 +17,7 @@ test "Settings, Learn my voice: the page the press opens is answered with the in
   expect state lrn.primary == "Continue"
   expect state lrn.secondary == "Not now"
   expect state lrn.sentence == ""
-  expect state lrn.line == "Read 3 short sentences out loud, about ten seconds in all. Kept on this phone only, never uploaded. To talk to the radio or record a take, Autoradio 1 needs your microphone and speech recognition."
+  expect state lrn.line == "Read 3 short sentences out loud, about ten seconds in all. Kept on this phone only, never uploaded. To talk to the radio, record a take or learn your voice, Autoradio 1 needs your microphone and speech recognition."
 
 test "Settings, Downloads: a licence credit is shown with its option, and an option without one shows none"
   clock data

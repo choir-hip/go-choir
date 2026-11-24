@@ -50,7 +50,7 @@ public enum ModelOffer {
             } else if j == "speaker" {
                 opts = [(speakerID, "Your voice, kept on this phone", Int64(WeSpeakerEmbedder.files.reduce(0) { $0 + $1.size }), true, "", WeSpeakerEmbedder.attribution)]
             } else if j == "search" {
-                opts = [(KnownModels.embeddingGemma2.id, "EmbeddingGemma 2", KnownModels.embeddingGemma2.bytes, true, "", "")]
+                opts = [(KnownModels.embeddingGemma2.id, "EmbeddingGemma 2", KnownModels.embeddingGemma2.bytes, true, "Google's Gemma terms apply to this model: its use must follow the Gemma Prohibited Use Policy (https://ai.google.dev/gemma/prohibited_use_policy).", "")]
             }
             let opts2 = opts.filter { $0.bytes > 0 }
             if opts2.isEmpty { continue }

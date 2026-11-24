@@ -37,7 +37,7 @@ public final class SFSpeechTranscriber: Transcriber, @unchecked Sendable {
         if SFSpeechRecognizer.authorizationStatus() == .notDetermined && !LabEnvironment.promptsAllowed {
             throw LabError.unavailable("speech recognition not yet authorized; not asking while driven by an agent")
         }
-        let status = await withCheckedContinuation { c in SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) } }
+        let status = await LiveAudio.requestSpeechPermission()
         guard status == .authorized else { throw LabError.unavailable("speech recognition not authorized (\(status.rawValue))") }
         guard let rec = SFSpeechRecognizer(locale: Locale(identifier: locale)), rec.isAvailable else { throw LabError.unavailable("recognizer unavailable for \(locale)") }
         guard rec.supportsOnDeviceRecognition else { throw LabError.unavailable("on-device recognition not supported for \(locale)") }

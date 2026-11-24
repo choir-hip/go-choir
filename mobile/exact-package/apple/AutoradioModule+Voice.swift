@@ -29,6 +29,7 @@ final class VoiceController: @unchecked Sendable {
         let readiness: VoiceReadiness = verifier.reading
         let current = VoiceCatalog.option(matching: rt.configuration.setting(.voice) ?? VoiceCatalog.defaultOption.setting)?.id ?? VoiceCatalog.defaultOption.id
         sampler = VoiceSampler(
+            options: VoiceCatalog.offered(),            // a voice no download group contains is not shown
             selected: current, readiness: readiness,
             fetch: { model, onBytes in
                 if virtual {                              // no models and no network under the agent: a short, honest-looking wait

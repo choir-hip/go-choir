@@ -35,7 +35,7 @@ Microphone with the screen locked (purpose.recordingInBackground):
 
 Where each is asked: the microphone and speech prompts appear only when the listener first turns Voice on or first turns on a take. Never at launch, at Play or at sign-in. Before the system prompt, the app shows one line:
 
-> To talk to the radio or record a take, Autoradio 1 needs your microphone and speech recognition.
+> To talk to the radio, record a take or learn your voice, Autoradio 1 needs your microphone and speech recognition.
 
 Buttons: Continue, Not now. If the listener declines in the system prompt:
 

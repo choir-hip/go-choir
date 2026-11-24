@@ -8,7 +8,7 @@
 //  M3 Reading the state asks nothing of the person.
 //  M4 No native side, or one that fails, is "granted": nothing is gated that cannot be asked.
 import { nativeLater } from './api.ts';
-export const MIC_PRE_LINE = 'To talk to the radio or record a take, Autoradio 1 needs your microphone and speech recognition.';
+export const MIC_PRE_LINE = 'To talk to the radio, record a take or learn your voice, Autoradio 1 needs your microphone and speech recognition.';
 export const MIC_OFF_LINE = 'Microphone is off for Autoradio 1. You can turn it on in Settings.';
 
 export const MIC_TEXT = { pre: MIC_PRE_LINE, off: MIC_OFF_LINE, continue: 'Continue', notNow: 'Not now', ok: 'OK' } as const;

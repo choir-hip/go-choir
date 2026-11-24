@@ -57,4 +57,19 @@ final class ModelListTests: XCTestCase {
         let c = WeSpeakerEmbedder.attribution
         for want in ["WeSpeaker", "pyannote", "Fluid Inference", "CC BY 4.0", "creativecommons.org/licenses/by/4.0", "modified"] { XCTAssertTrue(c.contains(want), "the voice-print credit lacks \(want)") }
     }
+
+    // Round 4: the credit/licence test covers every offered FILE, not only list rows.
+    func testEveryOfferedFileWhoseLicenceAsksForSomethingCarriesIt() {
+        let phone = DeviceProfile(chip: "A", memoryGB: 8, freeDiskGB: 50, onWiFi: true)
+        var seen = 0
+        for j in ModelOffer.jobs(profile: phone) { for o in j.options {
+            seen += 1
+            let lic = (KnownModels.managed.first { $0.id == o.id }?.license ?? (o.id == ModelOffer.speakerID ? "CC-BY-4.0" : "")).uppercased()
+            if lic.contains("CC-BY") || lic.contains("CC BY") { XCTAssertFalse(o.credit.isEmpty, "\(o.id) is CC BY and is offered with no credit") }
+            if lic.contains("PROHIBITED USE") { XCTAssertTrue(o.note.contains("Prohibited Use Policy"), "\(o.id): the use policy its licence names is shown where it is offered") }
+        } }
+        XCTAssertGreaterThan(seen, 10)
+        let search = ModelOffer.jobs(profile: phone).first { $0.job == "search" }!.options[0]
+        XCTAssertTrue(search.note.contains("Gemma") && search.note.contains("Prohibited Use Policy"), search.note)
+    }
 }
