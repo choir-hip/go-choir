@@ -4,7 +4,7 @@
 //  T5 no topics: nothing.                                                      T6 the account moved on while it ran: no marker, nothing of it is kept.
 //  T7 a refused save: false, no marker (the page asks again).                  T8 two asks at once make one document.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { writeTopics, MARKER } from './notebook-topics.ts';
+import { writeTopics, forgetTopicsWrite, MARKER } from './notebook-topics.ts';
 import { Editor, type Net } from './texture-edit.ts';
 import { HTTPError, resetSeam, nextGeneration } from './api.ts';
 
@@ -97,5 +97,19 @@ describe('the topics write', () => {
     const d = live(['Space']);
     const [a, b] = await Promise.all([writeTopics(storage, d), writeTopics(storage, d)]);
     expect(a && b).toBe(true); expect(created).toBe(1); expect(posts().length).toBe(1);
+  });
+});
+
+describe('the topics write across a sign-out', () => {
+  test('T9 the old write ending does not forget the new account\'s write: the next ask joins it', async () => {
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    const slow = { ...live(['Space']), topics: async () => { await gate; return ['Space']; } };
+    const old = writeTopics(storage, slow);
+    forgetTopicsWrite();                                                                         // sign-out: the old write is let go
+    let release2: () => void = () => undefined; const gate2 = new Promise<void>((r) => { release2 = r; });
+    const fresh = writeTopics(storage, { ...live(['Chess']), topics: async () => { await gate2; return ['Chess']; } });
+    release(); await old.catch(() => undefined);
+    expect(writeTopics(storage, live(['Chess']))).toBe(fresh);                                   // the new account's write is still the one in flight
+    release2(); await fresh;
   });
 });

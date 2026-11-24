@@ -133,6 +133,7 @@ Why: "we should get all this converted to exact overnight ... i do want to prior
 Proof: `texture-edit.test.ts` (60 tests, one per table row and per kill, written first and seen failing against a stub), the whole `bun test`, `bun exact.mjs contract build` and `test web`, `swift test`, `scripts/gates`. Not proved: a native Exact build, a device, two real writers, the editor against a real computer.
 Replaced: the Swift editor, notebook store and page-model source; unsent text of the Swift build is not read (nothing carried over).
 Undo: revert the lane's commits. The mail seal and mail files are not in this change.
+After seat 1's review (2026-11-24): `waiting` and the retry count only text that was tried and not saved; a keystroke after a failed save makes the text a draft again; a failed automatic write leaves no conflict behind; the 409 that finds our own text carries a keystroke typed during the post; the sign-out wipe waits for the writes of an instance it killed; an account change is decided one call at a time; the editor asks again when the computer becomes known; the topics write of the old account no longer forgets the new one's.
 
 ### Phone: the run sheet's Swift copy, podcast clips and the dead non-voice Swift moved to Exact (lane `exact-rest-a`, orange; rollback: revert)
 

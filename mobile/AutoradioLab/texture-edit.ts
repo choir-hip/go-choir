@@ -1,7 +1,7 @@
 // Editing your own Texture documents on the phone, in shared code. It was Swift (TextureEditor.swift); the body merge is texture-body.ts. The editor is Exact's `textarea markup="markdown"` over the
 // document's Markdown (members-content.contract); this file is everything behind it.
 //
-// THIS COMMIT IS THE STATE MODEL ONLY. The code and the tests are derived from the table below and land after it (docs/problems/texture-editor-in-exact-three-reviews-no-landing-2026-11-20.md: an earlier
+// THE STATE MODEL, WRITTEN FIRST. The code and the tests below it are derived from this table (docs/problems/texture-editor-in-exact-three-reviews-no-landing-2026-11-20.md: an earlier
 // port was sent back by review four times for patching a design that had no written model; the lane's rule 7 says change the approach, so the approach is written here first).
 //
 // =====================================================================================================================================================================================
@@ -236,10 +236,11 @@ export class Editor {
     if (l.kind === 'saved') return { status: 'saved', label: l.version > 0 ? `Saved · version ${l.version}` : 'Saved' };
     return { status: 'idle', label: '' };
   }
+  private retryable(doc: string): boolean { const k = this.last.get(doc)?.kind; return !!this.journal[doc] && !this.conflictAt.has(doc) && (k === 'offline' || k === 'failed'); }
   async info(address: string): Promise<Info> {
     await this.ready();
     const doc = editableDoc(address);
-    const waiting = Object.keys(this.journal).filter((d) => !this.conflictAt.has(d)).length;      // a conflict waits for the listener, not for a retry
+    const waiting = Object.keys(this.journal).filter((d) => this.retryable(d)).length;            // text a retry can send: tried and not saved (offline or refused); a draft being typed is not waiting, and a conflict waits for the listener
     const base = { notice: this.notice, address, writable: true, waiting, stamp: this.stamp };
     if (doc === null) return { ...base, status: 'idle', label: '', editable: false, kept: '', hasKept: false, head: '', opened: false };
     const e = this.journal[doc], h = this.heads.get(doc), st = this.statusOf(doc);
@@ -295,6 +296,7 @@ export class Editor {
     if (cur) { base = cur.base; f = cur.base !== '' ? from : cur.from; }                       // a keystroke over unsent text INHERITS the base of the text it replaces
     else if (head) { base = from === null || from === head.content ? head.id : ''; if (head.id === '') f = head.content; }
     this.journal[doc] = { text, from: f, base, key: uuid() };
+    const k = this.last.get(doc)?.kind; if (k === 'offline' || k === 'failed') this.last.delete(doc);      // a keystroke after a failed save is a draft again (the idle pause saves it)
     this.bump();
     const onDisk = this.persist();
     const applied = this.run(doc, async () => { await this.settle(doc); return this.info(address); }, () => this.info(address));
@@ -314,7 +316,7 @@ export class Editor {
   async flush(address: string): Promise<Info> {
     await this.ready();
     if (address === '') {
-      for (const doc of Object.keys(this.journal)) await this.run(doc, async () => { if (!this.conflictAt.has(doc)) await this.save(doc); }, async () => undefined);
+      for (const doc of Object.keys(this.journal)) await this.run(doc, async () => { if (this.retryable(doc)) await this.save(doc); }, async () => undefined);
       return this.info('');
     }
     const doc = editableDoc(address);
@@ -355,13 +357,18 @@ export class Editor {
     await this.ready();
     return this.run<'saved' | 'busy' | 'failed'>(doc, async () => {
       if (this.journal[doc]) return 'busy';
+      const before = this.last.get(doc);
       this.journal[doc] = { text, from, base: '', key: uuid() }; this.bump();
       await this.persist();
       await this.settle(doc);
       await this.save(doc);
       const l = this.last.get(doc);
       if (!this.journal[doc] && l && l.kind === 'saved') return 'saved';
-      if (this.journal[doc]?.text === text) { delete this.journal[doc]; this.bump(); await this.persist(); }
+      if (this.journal[doc]?.text === text) {                                                // its own text goes, and what it left on the document's status with it
+        delete this.journal[doc]; this.conflictAt.delete(doc);
+        if (before) this.last.set(doc, before); else this.last.delete(doc);
+        this.bump(); await this.persist();
+      }
       return 'failed';
     }, async () => 'failed');
   }
@@ -398,7 +405,11 @@ export class Editor {
         if (err instanceof HTTPError && err.status === 409) {                                 // the head moved between the read and the post
           const again = await this.readHead(doc);
           if (!again) return;
-          if (again.head.content === posted) { this.acknowledged(doc, posted, again.head.version); await this.persist(); return; }
+          if (again.head.content === posted) {
+            const cur = this.journal[doc];
+            if (cur && cur.text !== posted) { cur.base = again.head.id; cur.from = posted; }     // typed while it was posting: its base is the revision that holds the posted text
+            this.acknowledged(doc, posted, again.head.version); await this.persist(); return;
+          }
           this.conflictAt.set(doc, again.head.id); this.bump(); return;
         }
         throw err;
@@ -425,18 +436,27 @@ export class Editor {
 const real: Net = { json: (path, opts) => authedJSON(path, opts) };
 let live: { account: string; ed: Editor; storage: Storage | undefined } | null = null;
 let hooked = false;
+const dying = new Set<Editor>();                                                              // killed by a sign-out, possibly still writing: the wipe waits for each
 /** Registered at the first use, not at import (api.ts imports app.ts, which imports this: a call at load meets an api.ts not yet initialised). */
-function hook(): void { if (!hooked) { hooked = true; onSignOutBegin(() => { if (live) { live.ed.kill(); live = null; } }); } }
+function hook(): void { if (!hooked) { hooked = true; onSignOutBegin(() => { if (live) { live.ed.kill(); dying.add(live.ed); live = null; } }); } }
 const readOnly = (address: string): Info => ({ status: 'idle', label: LABELS.readOnly, notice: '', address, editable: editableDoc(address) !== null, writable: false, kept: '', hasKept: false, waiting: 0, stamp: 0, head: '', opened: false });
+async function settleDying(): Promise<void> { for (const ed of [...dying]) { await ed.settleWrites(); dying.delete(ed); } }
 async function wipeFolder(storage: Storage | undefined): Promise<void> { if (storage) { try { await storage.fs.rm(PENDING_DIR); } catch { /* none */ } } }
 /** The editor for the account signed in now, or null (read-only). The id is read once per call: another id than the instance's is treated as a sign-out (kill, wipe the folder, build anew); an id that cannot be read is
  * not another account, and the instance goes on. While a sign-out is under way no instance is built. */
-async function current(storage: Storage | undefined): Promise<Editor | null> {
+let turn: Promise<unknown> = Promise.resolve();
+/** One call at a time decides which instance is current: an account change (kill, wait, wipe, build anew) is finished before another call looks. */
+function current(storage: Storage | undefined): Promise<Editor | null> {
   hook();
+  const p = turn.then(() => decide(storage), () => decide(storage));
+  turn = p.catch(() => undefined);
+  return p;
+}
+async function decide(storage: Storage | undefined): Promise<Editor | null> {
   if (sealingBlocked()) return null;
   const id = await accountId();
   if (id === null) return live?.ed ?? null;
-  if (live && live.account !== id) { const old = live.ed; old.kill(); live = null; await old.settleWrites(); await wipeFolder(storage); }
+  if (live && live.account !== id) { const old = live.ed; old.kill(); live = null; await old.settleWrites(); await settleDying(); await wipeFolder(storage); }
   if (!live) live = { account: id, ed: new Editor({ net: real, storage, account: id }), storage };
   return live.ed;
 }
@@ -451,7 +471,8 @@ export const textureWriteAutomatic = async (a: string, t: string, from: string |
 export async function wipeTextureEdit(storage: Storage | undefined): Promise<void> {
   const old = live; live = null;
   if (old) { old.ed.kill(); await old.ed.settleWrites(); }
+  await settleDying();
   await wipeFolder(storage);
 }
 /** For tests: a fresh process. */
-export function forgetTextureEdit(): void { if (live) live.ed.kill(); live = null; }
+export function forgetTextureEdit(): void { if (live) live.ed.kill(); live = null; dying.clear(); }

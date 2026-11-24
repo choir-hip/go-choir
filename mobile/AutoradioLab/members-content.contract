@@ -18,7 +18,10 @@ members Autoradio
   state ctlPanel = ""
 
   // ---- your own Texture document: edited in rich text with Exact's Markdown editor (texture-edit.ts, shared code; its state model is at the head of that file)
-  resource edInfo = textureEditInfo(pg.top) as shape TextureEditInfo else empty()
+  // The second argument is only the key that asks again: the editor is writable once the computer is known, and a sign-in (acs.state, signedOutTick) or a discovery (edAsk, below) changes that without pg.top moving.
+  // It cannot name rdoc: rdoc reads edInfo.status.
+  state edAskTick = 0
+  resource edInfo = textureEditInfo(pg.top, `${acs.state}|${signedOutTick}|${edAskTick}`) as shape TextureEditInfo else empty()
   // Three mutations so one never lets another go (answers-let-go.md): the typed text, the saves (Done, the idle pause, leaving the page, the listener's choice after a conflict) and the retry.
   mutation edm as shape TextureEditInfo refreshes edInfo
   mutation edf as shape TextureEditInfo refreshes edInfo
@@ -38,6 +41,11 @@ members Autoradio
   state edUnavail = ""
   state edCurLink = ""
   state edUrl = ""
+  // A document that opened (rdoc is ready: the computer was found by that very request) while the editor still answers "not writable": ask again, a few times, never in a loop.
+  action edAsk
+    edAskTick = edAskTick + 1
+  task edKnow when topAddr.startsWith("texture:") and rdoc.address == topAddr and rdoc.status == "ready" and not edInfo.writable and edAskTick < 5 key=edAskTick
+    after(500, edAsk)
   derive edReady = topAddr.startsWith("texture:") and rdoc.address == topAddr and rdoc.status == "ready" and rdoc.editable and edInfo.writable
 
   derive ctlMode = qv.webUrl != "" ? "barweb" : ((webUrl != "" and webFor == topAddr) ? "web" : ((topAddr.startsWith("doc:") and ldInfo.address == topAddr and ldInfo.status == "ready") ? "doc" : (edReady ? "texture" : "")))

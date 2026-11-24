@@ -28,7 +28,7 @@ let writing: Promise<boolean> | null = null;
 /** True when the notebook holds the topics afterwards (or there is nothing to write). */
 export function writeTopics(storage: Storage | undefined, deps: Deps = real(storage)): Promise<boolean> {
   if (writing) return writing;
-  const p = writeNow(storage, deps).catch(() => false).finally(() => { writing = null; });
+  const p = writeNow(storage, deps).catch(() => false).finally(() => { if (writing === p) writing = null; });
   writing = p;
   return p;
 }

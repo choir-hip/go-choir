@@ -43,13 +43,13 @@ const posts = (): typeof log => log.filter((l) => l.method === 'POST');
 
 // ---------------------------------------------------------------------------------------------------------------- the fake disk
 const files = new Map<string, Uint8Array>();
-let writeHook: ((n: number) => Promise<void>) | null; let writes: number; let readError: boolean;
+let writeHook: ((n: number) => Promise<void>) | null; let writes: number; let readError: boolean; let rmHook: (() => Promise<void>) | null = null;
 const err = (code: string): Error => Object.assign(new Error(code), { code });
 const storage = { fs: {
   readFile: async (p: string) => { if (readError && p.startsWith(PENDING_DIR)) throw err('EIO'); const b = files.get(p); if (!b) throw err('ENOENT'); return b; },
   atomicWriteFile: async (p: string, d: Uint8Array) => { writes += 1; const n = writes; if (writeHook) await writeHook(n); files.set(p, new Uint8Array(d)); },
   mkdir: async () => undefined,
-  rm: async (p: string) => { let any = files.delete(p); for (const k of [...files.keys()]) if (k.startsWith(p + '/')) { files.delete(k); any = true; } if (!any) throw err('ENOENT'); },
+  rm: async (p: string) => { if (rmHook) await rmHook(); let any = files.delete(p); for (const k of [...files.keys()]) if (k.startsWith(p + '/')) { files.delete(k); any = true; } if (!any) throw err('ENOENT'); },
   readdir: async (p: string) => { const n = [...files.keys()].filter((k) => k.startsWith(p + '/')).map((k) => k.slice(p.length + 1)).filter((x) => !x.includes('/')); if (n.length === 0) throw err('ENOENT'); return n; },
   stat: async (p: string) => { const b = files.get(p); if (!b) throw err('ENOENT'); return { size: b.length, isFile: true, isDirectory: false, modifiedMs: 0 }; },
 } } as never;
@@ -62,7 +62,7 @@ const tick = (ms = 15): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 beforeEach(() => {
   resetSeam(); files.clear(); log = []; failNext = null; postMode = 'normal'; getGate = null; postGate = null; failGets = false; seq = 0; keys = new Map(); traj = {};
-  writeHook = null; writes = 0; readError = false;
+  writeHook = null; writes = 0; readError = false; rmHook = null;
   revs = new Map([['r0', { id: 'r0', content: 'Hello world.', body: body('Hello world.'), n: 0 }]]); head = { d1: 'r0', d2: 'r0' };
 });
 const other = (id: string, content: string, doc = 'd1'): void => { revs.set(id, { id, content, body: body(content), n: 5 }); head[doc] = id; };
@@ -231,10 +231,10 @@ describe('a keystroke during a save, and what is derived', () => {
     const e = mk(); await e.edit(A, 'Hello world. a', 'Hello world.'); failNext = () => new TypeError('down'); await e.flush(A);
     const i = await e.flush(''); expect(i.waiting).toBe(0); expect(journal()).toEqual({}); expect(posts().length).toBe(2);
   });
-  test('T20 KEY while offline: the entry is the new text; the status stays offline until the next attempt', async () => {
+  test('T20 KEY while offline: the entry is the new text; the status goes back to dirty (the Swift editor did), so the idle pause saves it again', async () => {
     const e = mk(); await e.edit(A, 'Hello world. a', 'Hello world.'); failNext = () => new TypeError('down'); await e.flush(A);
     const i = await e.edit(A, 'Hello world. ab', 'Hello world. a');
-    expect(i.status).toBe('offline'); expect(i.kept).toBe('Hello world. ab'); expect(journal().d1.text).toBe('Hello world. ab');
+    expect(i.status).toBe('dirty'); expect(i.kept).toBe('Hello world. ab'); expect(journal().d1.text).toBe('Hello world. ab');
   });
 });
 
@@ -447,6 +447,67 @@ describe('the background', () => {
     const e = mk('acct-1', 30); await e.edit(A, 'Hello world. a', 'Hello world.'); postMode = 'dropHang';
     const i = await e.flush(A);
     expect(['offline', 'dirty']).toContain(i.status); expect(journal().d1.text).toBe('Hello world. a'); expect(i.hasKept).toBe(true);
+  });
+});
+
+describe('the review of 2026-11-24 (seat 1, exact-editor)', () => {
+  test('R9a the posted body keeps the id of an unchanged node (the body merge)', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. more', 'Hello world.'); await e.flush(A);
+    const doc = (posts()[0].body!.body_doc as { doc: { content: { attrs: { id: string } }[] } }).doc;
+    expect(doc.content[0].attrs.id).toBe('p');
+  });
+  test('R9b an address that is not the head of a document edits, flushes and discards nothing', async () => {
+    const e = mk();
+    for (const a of ['texture:d1@r0', 'pub:story']) {
+      const i = await e.edit(a, 'x', null); await e.flush(a); await e.discard(a); await e.overwrite(a);
+      expect(i.editable).toBe(false); expect(i.status).toBe('idle');
+    }
+    expect(posts().length).toBe(0); expect(files.size).toBe(0);
+  });
+  const session = (key: string, computer: string): void => bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: true, value: key, computerId: computer } : { state: 'present' }) } as never);
+  test('R3 `waiting` counts only text a retry can send: a draft being typed is not waiting, an offline one is', async () => {
+    const e = mk(); const typing = await e.edit(A, 'Hello world. a', 'Hello world.');
+    expect(typing.waiting).toBe(0);
+    expect((await e.flush('')).waiting).toBe(0); expect(posts().length).toBe(0);                // the retry does not post a draft that was never tried
+    failNext = () => new TypeError('down'); await e.flush(A);
+    expect((await e.info(A)).waiting).toBe(1);
+    expect((await e.flush('')).waiting).toBe(0); expect(posts().length).toBe(2);
+  });
+  test('R4 a failed automatic write leaves no conflict and no status behind: the listener can still edit that document', async () => {
+    const e = mk();
+    expect(await e.writeAutomatic(A, 'auto text', 'text the head never had')).toBe('failed');
+    const i = await e.info(A);
+    expect(i.status).not.toBe('conflict'); expect(i.hasKept).toBe(false);
+    await e.edit(A, 'Hello world. mine', 'Hello world.'); const saved = await e.flush(A);
+    expect(saved.status).toBe('saved'); expect(posts().length).toBe(1);
+  });
+  test('R6 the 409 that finds our own text already there carries a keystroke typed during the post into the entry (base, from)', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. t1', 'Hello world.');
+    let release: () => void = () => undefined; postGate = new Promise<void>((r) => { release = r; });
+    const f = e.flush(A); await tick();
+    other('r1', 'Hello world. t1'); failNext = () => new HTTPError(409, 'HTTP 409: document head changed');
+    const k2 = e.edit(A, 'Hello world. t2', 'Hello world. t1'); const k3 = e.edit(A, 'Hello world. t3', 'Hello world. t2'); await tick();
+    release(); await Promise.all([f, k2, k3]);
+    expect(journal().d1).toMatchObject({ text: 'Hello world. t3', base: 'r1', from: 'Hello world. t1' });
+    expect((await e.flush(A)).status).toBe('saved');
+  });
+  test('R2 the wipe waits for the write of an instance the sign-out already killed', async () => {
+    forgetTextureEdit(); session('key-1-not-real', 'c1'); await textureEdit(A, 'Hello world. a', 'Hello world.', storage);
+    writeHook = async () => { await tick(80); };
+    const p = textureEdit(A, 'Hello world. ab', 'Hello world. a', storage); await tick(30);
+    await beginSignOut(); nextGeneration();
+    await wipeTextureEdit(storage);
+    await p.catch(() => undefined); await tick(120);                                             // whatever was in flight has landed by now
+    expect([...files.keys()].filter((k) => k.startsWith(PENDING_DIR))).toEqual([]);
+  });
+  test('R5 two calls meeting an account change do not undo each other: the new account keeps what it writes', async () => {
+    forgetTextureEdit(); session('key-1-not-real', 'c1'); await textureEdit(A, 'old account text', 'Hello world.', storage);
+    session('key-2-not-real', 'c2'); rmHook = async () => { await tick(30); };
+    await Promise.all([textureEditInfo(A, storage), textureEdit(A, 'new account text', 'Hello world.', storage)]);
+    rmHook = null;
+    const kept = [...files.keys()].filter((k) => k.startsWith(PENDING_DIR));
+    expect(kept.length).toBe(1); expect(JSON.stringify(journal(kept[0]))).toContain('new account text');
+    expect(JSON.stringify([...files.values()].map((v) => new TextDecoder().decode(v)))).not.toContain('old account text');
   });
 });
 

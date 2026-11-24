@@ -123,6 +123,12 @@ members Autoradio
     mailTo = ""
     mailSubject = ""
     mailBody = ""
+    // The open editor's field belongs to the account that is leaving too.
+    edOn = false
+    edFor = ""
+    edDraft = ""
+    edUrl = ""
+    edCurLink = ""
     send so = accountSignOut()
     // A signed-out phone starts the next sign-in from idle: the last attempt's done is not carried across.
     send signedOpen = signInOpen()
