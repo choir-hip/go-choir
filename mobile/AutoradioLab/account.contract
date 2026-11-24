@@ -57,7 +57,7 @@ members Autoradio
   mutation down as shape LabState
   mutation up as shape LabState
 
-  // SIGN-IN and ACCOUNT CREATION are one attempt with an id, a state machine owned in one place (app-signin.ts): the platform's passkey screen (Exact's @exact/passkeys), no code, no browser sheet.
+  // SIGN-IN and ACCOUNT CREATION are one attempt with an id, a state machine owned in one place (app-signin.ts): the platform's passkey screen (Exact's @exact/passkeys), no browser sheet; a new account's address is proved by a mailed code first; a user name with no "@" typed in the email field signs in the demo account instead (docs/ship/demo-account.md).
   // This file only renders the machine's view and sends the person's presses; it keeps no copy of its state. Each press answers with the machine's `rev` after its last change, and settling
   // bumps the tick (`then`): the view is always read once more after the attempt's LAST transition.
   mutation signedRun as shape SignInEnd then bumpSiv

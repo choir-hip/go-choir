@@ -59,7 +59,7 @@ Takes. Record a take of up to 60 seconds. It is shared with other listeners only
 
 Your computer. Each account has its own computer on our server. It holds what you make and what you ask the radio to remember.
 
-Sign in with a passkey. There are no passwords and no codes. You make an account in the app with your email address and a passkey, and you can delete it in the app. Access ends at once, and your account, your computer and your data are permanently removed after 72 hours. You must be 16 or older. [WHEN-BUILT]
+Sign in with a passkey. You make an account in the app with your email address, which we check once with a code we send, and a passkey, and you can delete it in the app. Access ends at once, and your account, your computer and your data are permanently removed after 72 hours. You must be 16 or older. [WHEN-BUILT]
 
 What to know before you use it:
 

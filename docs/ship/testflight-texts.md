@@ -63,7 +63,7 @@ SEE IT WORK IN ONE MINUTE, NO ACCOUNT
 No model download is needed for this. The app plays with the system voice if no model file is present. If you ask the radio something while signed out, the app asks you to sign in or make an account.
 
 CREATE AN ACCOUNT AND DELETE IT [WHEN-BUILT]
-Tap Make an account on any prompt that asks for one. The app shows the phone's own passkey screen, where you make an account with any email address and a passkey. There is no password and no code. To delete the account, open Settings, Account, Delete account, and confirm with the passkey. Access ends at once and everything is permanently removed after 72 hours; signing in again within 72 hours cancels it.
+Tap Make an account on any prompt that asks for one. The app shows the phone's own passkey screen, where you make an account with any email address and a passkey; a new account first checks the address with a code we send. To delete the account, open Settings, Account, Delete account, and confirm with the passkey. Access ends at once and everything is permanently removed after 72 hours; signing in again within 72 hours cancels it.
 
 REVIEW ACCOUNT
 If you cannot use a passkey, type the user name in the email field of the sign-in screen (a name has no "@"); a password field appears; type the password and tap Sign in. It opens a prepared account with an empty computer. That account cannot be deleted from the app.
