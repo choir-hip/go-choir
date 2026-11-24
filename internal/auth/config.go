@@ -66,10 +66,11 @@ type Config struct {
 	Room *RoomConfig
 
 	// DemoAccountID names the one account the reviewer sign-in may open
-	// (AUTH_DEMO_ACCOUNT_ID), and DemoCredentialFile the host file that holds
+	// (AUTH_DEMO_ACCOUNT_ID_FILE: a host file holding the id), and DemoCredentialFile the host file that holds
 	// its user name and password hash (AUTH_DEMO_CREDENTIAL_FILE). Either
 	// absent, the route answers "not available" (demo_account.go).
-	DemoAccountID      string
+	DemoAccountID      string // tests; the host sets DemoAccountIDFile so no id is in the repo
+	DemoAccountIDFile  string
 	DemoCredentialFile string
 
 	// EmailSignIn is the auth.email_sign_in switch (AUTH_EMAIL_SIGN_IN: on,
@@ -147,7 +148,7 @@ func LoadConfig() (*Config, error) {
 
 	cfg.Room = roomConfigFromEnv()
 
-	cfg.DemoAccountID = strings.TrimSpace(os.Getenv("AUTH_DEMO_ACCOUNT_ID"))
+	cfg.DemoAccountIDFile = strings.TrimSpace(os.Getenv("AUTH_DEMO_ACCOUNT_ID_FILE"))
 	cfg.DemoCredentialFile = strings.TrimSpace(os.Getenv("AUTH_DEMO_CREDENTIAL_FILE"))
 	cfg.EmailSignIn = envOn("AUTH_EMAIL_SIGN_IN")
 	cfg.EmailSessionTTL = envDuration("AUTH_EMAIL_SESSION_TTL", DefaultEmailSessionTTL)

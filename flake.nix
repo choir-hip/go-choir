@@ -324,7 +324,7 @@
       # one build cache. mkGoService copies one binary out and keeps the
       # per-service identity the deploy verifies (build.json, skills, frontend).
       goServiceSubPackages = [
-        "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/vmctl"
+        "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/demo-account" "cmd/vmctl"
         "cmd/gateway" "cmd/corpusd" "cmd/checkpointd"
         "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
         "cmd/autoputer" "cmd/choir-builder" "cmd/goproxy"
@@ -427,6 +427,10 @@
         maildctl = mkGoService {
           pname = "maildctl";
           subPackage = "cmd/maildctl";
+        };
+        demo-account = mkGoService {
+          pname = "demo-account";
+          subPackage = "cmd/demo-account";
         };
         vmctl = mkGoService {
           pname = "vmctl";

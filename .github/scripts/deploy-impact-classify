@@ -268,6 +268,10 @@ for path in "${changed[@]}"; do
       mark_host_os_only
       add_explanation "$path -> maildctl host package in Node B system environment"
       ;;
+    cmd/demo-account/*)
+      mark_host_os_only
+      add_explanation "$path -> demo-account host package in Node B system environment"
+      ;;
     scripts/off-host-backup.sh)
       mark_host_os_only
       add_explanation "$path -> host oneshot script read into nix/node-b.nix (off-host backup)"

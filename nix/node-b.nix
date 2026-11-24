@@ -541,6 +541,7 @@ let
   hostSecretPaths = {
     jwtKey = "-${authSigningDir}/ed25519-key";
     emailCodeKey = "-${authSigningDir}/email-code-key";
+    demoCredential = "-${authSigningDir}/demo-credential";
     providerEnv = "-/var/lib/go-choir/gateway-provider.env";
     codexAuth = "-/var/lib/go-choir/codex-auth.json";
     maildEnv = "-/var/lib/go-choir/maild.env";
@@ -1017,7 +1018,7 @@ in
       StateDirectory = "go-choir/auth";
       # Read-write paths for auth persistence and signing key.
       ReadWritePaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/auth-signing" ];
-      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" "emailCodeKey" ];
+      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" "emailCodeKey" "demoCredential" ];
       # auth.db holds sessions and API-key records; it was 0644 in a 0755
       # directory, private only because /var/lib/go-choir is 0750.
       StateDirectoryMode = "0750";
@@ -1048,6 +1049,10 @@ in
         "AUTH_ROOM_RESERVE_GIB=${toString roomReserveGiB}"
         "AUTH_ROOM_FOOTPRINT_GIB=${toString roomFootprintGiB}"
         "AUTH_ROOM_OWNERS_PATH=${roomOwnersPath}"
+        # Reviewer sign-in (docs/ship/demo-account.md, internal/auth/demo_account.go):
+        # two host files, outside the repo. Absent, the route answers "not available".
+        "AUTH_DEMO_ACCOUNT_ID_FILE=${authSigningDir}/demo-account-id"
+        "AUTH_DEMO_CREDENTIAL_FILE=${authSigningDir}/demo-credential"
         internalAuthEnv
       ];
     };
@@ -3480,6 +3485,7 @@ in
     python3
     pkg-config
     goChoirPackages.maildctl
+    goChoirPackages.demo-account
     # PostgreSQL client tools for operators (psql, pg_dump).
     postgresql_17
     procps

@@ -72,7 +72,7 @@ func good() map[string]any {
 
 func TestDemoNotAvailableWithoutConfiguration(t *testing.T) {
 	cases := map[string]func(e *demoEnvT){
-		"no account id": func(e *demoEnvT) { e.h.config.DemoAccountID = "" },
+		"no account id": func(e *demoEnvT) { e.h.config.DemoAccountID = ""; e.h.config.DemoAccountIDFile = "" },
 		"no file path":  func(e *demoEnvT) { e.h.config.DemoCredentialFile = "" },
 		"file removed":  func(e *demoEnvT) { _ = os.Remove(e.file) },
 		"file garbage":  func(e *demoEnvT) { _ = os.WriteFile(e.file, []byte("not a credential\n"), 0o600) },
@@ -244,6 +244,21 @@ func TestDemoReadsTheFileEachTimeSoRemovingItTurnsTheRouteOff(t *testing.T) {
 	}
 	if e.h.IsDemoAccount(e.uid) != true {
 		t.Fatal("the account stays protected from deletion even when sign-in is off")
+	}
+}
+
+func TestDemoAccountIDComesFromAHostFile(t *testing.T) {
+	e := demoEnv(t)
+	idFile := filepath.Join(t.TempDir(), "demo-id")
+	_ = os.WriteFile(idFile, []byte(e.uid+"\n"), 0o600)
+	e.h.config.DemoAccountID = ""
+	e.h.config.DemoAccountIDFile = idFile
+	if w := e.post(t, "198.51.100.1", good()); w.Code != http.StatusOK || !e.h.IsDemoAccount(e.uid) {
+		t.Fatalf("got %d", w.Code)
+	}
+	_ = os.Remove(idFile)
+	if w := e.post(t, "198.51.100.2", good()); w.Code != http.StatusNotFound {
+		t.Fatalf("got %d", w.Code)
 	}
 }
 

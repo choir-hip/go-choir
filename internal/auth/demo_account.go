@@ -31,7 +31,7 @@ import (
 //	POST /auth/app/demo/login {app, username, password}  ->  the app's key
 //
 // What makes it narrow:
-//   - The account is AUTH_DEMO_ACCOUNT_ID, never anything in the request; the
+//   - The account is the id in AUTH_DEMO_ACCOUNT_ID_FILE, never anything in the request; the
 //     body refuses unknown fields, so a request cannot even try to name one.
 //   - The credential is a host file (AUTH_DEMO_CREDENTIAL_FILE): line 1 the
 //     user name, line 2 an argon2id hash in the standard encoded form. It is
@@ -231,11 +231,31 @@ func verifyDemoPassword(h *demoHash, password string) bool {
 // depend on the credential file: the account stays protected (not deletable,
 // credentials not changeable) while sign-in is off.
 func (h *Handler) IsDemoAccount(userID string) bool {
-	return userID != "" && h.config != nil && h.config.DemoAccountID == userID
+	return userID != "" && h.demoAccountID() == userID
+}
+
+// demoAccountID is the configured account: the host file's first line (read
+// each time, so a change needs no restart), or the test-only field.
+func (h *Handler) demoAccountID() string {
+	if h.config == nil {
+		return ""
+	}
+	if h.config.DemoAccountID != "" {
+		return h.config.DemoAccountID
+	}
+	if h.config.DemoAccountIDFile == "" {
+		return ""
+	}
+	data, err := os.ReadFile(h.config.DemoAccountIDFile)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(strings.SplitN(string(data), "\n", 2)[0])
 }
 
 func (h *Handler) loadDemo() (string, *demoHash, *User) {
-	if h.config == nil || h.config.DemoAccountID == "" || h.config.DemoCredentialFile == "" {
+	id := h.demoAccountID()
+	if id == "" || h.config.DemoCredentialFile == "" {
 		return "", nil, nil
 	}
 	data, err := os.ReadFile(h.config.DemoCredentialFile)
@@ -247,7 +267,7 @@ func (h *Handler) loadDemo() (string, *demoHash, *User) {
 		log.Printf("[auth] operation=app_demo_login result=unavailable reason=credential_file_invalid")
 		return "", nil, nil
 	}
-	u, err := h.store.GetUserByID(h.config.DemoAccountID)
+	u, err := h.store.GetUserByID(id)
 	if err != nil || u == nil {
 		return "", nil, nil
 	}
@@ -326,4 +346,29 @@ func (h *Handler) HandleAppDemoLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[auth] operation=app_demo_login result=success addr=%s key_id=%s app=%s", addr, id, req.App)
 	writeJSON(w, http.StatusOK, demoKeyResponse{appKeyResponse{APIKey: secret, KeyID: id, Label: label, Scopes: DemoScopes}, true})
+}
+
+// ResetDemoAccess revokes every API key and deletes every refresh session of
+// the account, for the host's reset command. It answers how many keys it
+// revoked and how many sessions it found.
+func ResetDemoAccess(ctx context.Context, s *Store, userID string) (keys, sessions int, err error) {
+	list, err := s.ListAPIKeys(ctx, userID)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, k := range list {
+		if k.RevokedAt != nil {
+			continue
+		}
+		if err := s.RevokeAPIKey(ctx, userID, k.ID); err != nil {
+			return keys, 0, err
+		}
+		keys++
+	}
+	rs, err := s.ListRefreshSessionsByUserID(userID)
+	if err != nil {
+		return keys, 0, err
+	}
+	sessions = len(rs)
+	return keys, sessions, s.DeleteRefreshSessionsByUserID(userID)
 }
