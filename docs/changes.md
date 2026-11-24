@@ -218,10 +218,10 @@ Undo: revert the lane's commit; the Swift is in git history.
 ## 2026-11-24
 
 ### purge-unproved: one operator command that deletes the accounts whose address was never proved (`lane/purge-unproved`, black)
-- **What:** `cmd/purge-unproved` (`internal/unprovedpurge`), run by hand, never by a service. A dry run prints the accounts to purge and the ones it refuses (hashed), the rows per table, and a digest; the real run needs the digest. It refuses an account that is the bootstrap admin, holds an owner key, owns or owned a computer (vmctl's list, required), or has rows in a store that exists for computer users. Every user-keyed table is in the registry (`docs/ship/purge-unproved.md`) and a user-keyed table that is not stops the run.
+- **What:** `cmd/purge-unproved` (`internal/unprovedpurge`), run by hand with auth and maild stopped, never by a service. A dry run prints the accounts to purge and the ones it refuses (hashed), the rows per table, and a digest over the accounts with a state fingerprint each; the real run needs the digest and a receipt path, takes auth's write lock, re-checks every account under it, deletes the other services, then the mail directories, then the accounts (auth commits last), and writes a receipt. It refuses an account that is the bootstrap admin, holds an owner key, owns a computer in vmctl's list now, has an unsafe id, or has rows in a store that exists for computer or platform use (the route ledger included). The registry in `docs/ship/purge-unproved.md` names the user-keyed tables found by reading the code; a user-keyed table (by name or suffix) that is not in it stops the run.
 - **Why:** owner, 2026-11-24: "delete unproved accounts" (199 of 1,097 accounts, 27 with a passkey, none owning a computer).
-- **Proof:** tests over seeded databases (a proved account and a computer owner survive untouched; an unregistered table stops the run); not run on a real database.
-- **Undo:** a deleted account cannot be undone; the command is removed by reverting the lane. Nothing calls it.
+- **Proof:** tests over seeded SQLite databases (see the doc's Proof section); **not run** against Postgres, a real database or the command's flags; the nix derivation was not built. Backups on node-a keep the deleted accounts until pruned.
+- **Undo:** a deleted account cannot be undone (restore from a node-a snapshot); the command is removed by reverting the lane. Nothing calls it.
 
 ## 2026-11-23
 
