@@ -803,8 +803,18 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 // path is not changed here.
 func diagnosticReadNeverWakes(r *http.Request, authResult *AuthResult) bool {
 	return r != nil && r.URL != nil && authResult != nil && authResult.AuthMethod == "api_key" &&
-		r.Method == http.MethodGet && r.URL.Path == "/api/runtime/observability" &&
+		(r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/api/runtime/observability" &&
 		r.URL.Query().Get("data_volume") == "detail"
+}
+
+func noWakeState(t *resolvedComputerTarget) string {
+	if t == nil || t.State == "" {
+		return "not active"
+	}
+	if t.State == "active" {
+		return "active but has no address"
+	}
+	return t.State
 }
 
 // HandleProtectedAPI is a generic handler for /api/* routes that require auth.
@@ -857,13 +867,13 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resolveStarted := time.Now()
-	if diagnosticReadNeverWakes(r, authResult) && computerTarget != nil && computerTarget.State != "active" {
+	if diagnosticReadNeverWakes(r, authResult) && (computerTarget == nil || computerTarget.State != "active" || strings.TrimSpace(computerTarget.ComputerURL) == "") {
 		// An investigator's read of the data volume must not consume a
 		// hibernated computer's memory snapshot
 		// (docs/problems/computer-disks-hold-self-development-leftovers-2026-11-24.md).
 		writeJSON(w, http.StatusConflict, map[string]any{
-			"error": "computer is " + computerTarget.State + "; this diagnostic read does not wake it, so it was not woken",
-			"state": computerTarget.State,
+			"error": "computer is " + noWakeState(computerTarget) + "; this diagnostic read does not wake it, so it was not woken",
+			"state": noWakeState(computerTarget),
 		})
 		h.lifecycle.record(stagePrefix+".resolve", "not_woken", time.Since(resolveStarted))
 		h.lifecycle.record(stagePrefix+".total", "not_woken", time.Since(started))
