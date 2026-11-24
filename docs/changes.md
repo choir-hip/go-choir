@@ -40,6 +40,11 @@ the first table's). Seven designs exist only on lanes.
 
 ## 2026-11-24
 
+### Phone: the listening models come from the model list; Fluid Speech Mini is the recogniser (`lane/voice-default`, orange)
+- **What:** (1) a recognition stage for Fluid Speech Mini (stage `fluid-speech-mini`, ported from Mike's `FluidSpeechMini.swift`: warm, one pass over the speech-bounded audio), its model-list entry (repository, pinned commit, every file's size and SHA-256, CC BY 4.0 with its credit) and a store that fetches a folder of files, each checked against its digest. (2) a test that runs it on the fixture speech through Core ML on the Mac. (3) the listener configuration is no longer a fixed list: speech detection, live words and the final transcript are chosen from the model list (`Voice/ListenerPipeline`): Silero, Parakeet EOU for live words and Fluid Speech Mini for the transcript when their models are on the phone and ready, the energy detector and Apple's recogniser until then. A better model is a new row in `CandidateTable`.
+- **Why:** owner, 2026-11-24: Apple's recogniser "isnt good enough"; "we are only using that currently because of a coding bug. (we shuold be using fluid speech mini etc)"; "we will keep updating the models as better ones come".
+- **Proof:** Swift package tests on the Mac (numbers in `docs/reference/ON-DEVICE-MODELS.md` section 11, marked Mac, not phone). **Not proved on a phone**: the list the lead must check is in the lane's report.
+- **Replaced:** the first-commit fixed list (energy detector, Apple's recogniser) in `ChoirApp.listenerConfiguration`; voice setup's transcriber ladder now starts at Fluid Speech Mini with its live words (one row, two downloads). **Undo:** revert the commits; nothing is migrated.
 ### choir.news serves the app association file for passkeys
 
 - **What:** `GET /.well-known/apple-app-site-association` on choir.news answers 200 with JSON naming two app ids of team S47GERGJZ3 (`news.choir.autoradio` and `news.choir.autoradio.lab.one`) under `webcredentials`. It is a public route with no sign-in, served by the proxy (`internal/proxy/apple_app_site_association.go`).

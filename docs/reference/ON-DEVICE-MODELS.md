@@ -484,3 +484,47 @@ Sources: https://huggingface.co/gradium/phonon-31m-en ; https://huggingface.co/F
 (and `/api/models/FluidInference/pocket-tts-coreml/tree/main/phonon/phonon-31m-en?recursive=true`) ;
 https://huggingface.co/FluidInference/phonon-2-coreml ; https://github.com/FluidInference/FluidAudio/releases (v0.18.0 to v0.18.3) ;
 FluidAudio tag v0.18.3 `PocketTtsSmallManager.swift`, `PocketTtsSmallModel.swift`, `PocketTtsSmallSession.swift`.
+
+## 11. Fluid Speech Mini, the recogniser the owner chose (2026-11-24)
+
+Owner, 2026-11-24: Apple's recogniser and voice "isnt good enough"; "we are only using that currently because of a coding bug. (we shuold be
+using fluid speech mini etc)"; "we will keep updating the models as better ones come". The model is the one the owner chose and built into
+their other app, Mike. Everything below was read on 2026-11-24 and is marked: **verified** (primary source that day), **relayed** (Mike's own
+notes, not re-run here), **not run** (needs the phone).
+
+**What it is (verified, the repository's `config.json` and `NOTICE`).** `FluidVoice-Labs/fluid-speech-mini-coreml`, version 1.1.0, English
+only, 16 kHz mono, 15-second windows, vocabulary 8192 plus a blank. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra (the
+decoder and joint network are Parakeet Ultra's; the audio preprocessor is FluidInference's Parakeet v3 Core ML one). Minimum OS iOS 18 and
+macOS 15 (`config.json`), the same floor as the package. Batch, not streaming: no partial words. Mike's notes (**relayed**): runs on the
+Neural Engine, about 277 MB of RAM per 15 s window, 1.51% word error on isolated clips against Parakeet 0.6B v3's 1.92%, and its output
+carries punctuation and capitals.
+
+**The pin (verified, `GET https://huggingface.co/api/models/FluidVoice-Labs/fluid-speech-mini-coreml?blobs=true`, no credentials, 2026-11-24).**
+Commit `d81c3160dfe5a5e1f8f7267164a07d30617a3a1a`, last modified 2026-10-13, tag `license:cc-by-4.0`. The repository lists 25 files; the app
+fetches the 24 the loader and the licence need (the model card, two example files and two images are not fetched; `parakeet_v3_vocab.json`
+is byte for byte `parakeet_vocab.json`, the same 151,122 bytes, and is not fetched). 252,730,493 bytes in all (253 MB). The API gives a
+SHA-256 only for the large files (LFS); the digests of the small ones were computed on the bytes downloaded at that commit, and the LFS
+ones were re-checked against the API's. Every file's size and SHA-256 is in `KnownModels.fluidSpeechMini`; the big ones are the encoder
+weights 233,096,704 B, the decoder weights 11,845,120 B, the joint weights 6,350,284 B.
+
+**Loading (verified, FluidAudio v0.18.3 source, `AsrModels.loadLocal`, and Mike's `FluidSpeechMini.swift`).** `AsrModels.loadLocal(from: dir,
+version: .ultra)` reads exactly that folder and never downloads; the `.ultra` build wants `Preprocessor`, `Encoder`, `Decoder` and
+`JointDecisionv3` `.mlmodelc` and `parakeet_vocab.json`. The repository names the joint network `JointDecision.mlmodelc`, so the store copies
+it as `JointDecisionv3.mlmodelc` after the download (`ModelBundleSpec.copies`). Use upstream `FluidInference/FluidAudio`, which the app pins
+at 0.18.3, and not the `altic-dev` fork: Mike's spike (2026-10-21, **relayed**) found the fork's long-audio stitching dropped whole spans (22.4%
+word error on a 31-minute stream) where upstream gave 2.05%.
+
+**Licence and credit (verified, `LICENSE` and `NOTICE`).** CC BY 4.0. It asks for the credit "Fluid Speech Mini by FluidVoice. Built on
+NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra.", a link to the licence, and that LICENSE and NOTICE stay with the files (the
+store fetches both into the model's folder). The credit text is `KnownModels.fluidSpeechMini.credit`. **The app has no About or licences
+page that lists the models it uses yet** (the About page shows the build and server commits only, `mobile/AutoradioLab/about.ts`); until
+one exists the credit is carried by the model list, and showing it is an open item for the lane that owns Settings.
+
+**How the app fetches it.** Through the model store (`ModelStore.ensureBundle`), file by file, resumable, each file checked against its
+SHA-256 before it is moved into place, only from voice setup's fetch after the person has agreed (the lane `onboard-consent` owns the
+prompt). The stage itself never downloads: asked to begin without the whole folder it throws `unavailable`.
+
+**What was built.** `FluidSpeechMiniTranscriber` (stage `fluid-speech-mini`, `AutoradioModels/FluidSpeechMini.swift`): ported from Mike's
+file, keeping its behaviour: the model is warm (it runs once on a second of silence when it loads, because Core ML specialises for the Neural
+Engine on the first prediction) and one pass over the speech-bounded audio gives the final transcript. Registered with the other model stages
+in `ModelHub.register`, fetched and checked in `HubModelProvider`, a case in `ModelProof`.
