@@ -1,46 +1,394 @@
 package auth
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // The invariant (docs/problems/passkey-claims-an-unproved-address-2026-11-24.md):
 // no account is ever bound to an address that its holder has not proved, in the
 // same ceremony; an account whose address is not proved mints nothing.
 
+var proofSeq atomic.Int64
+
+// nextTestIP is a fresh client address, so the per-address limits of the
+// mailed code (10 begins and 30 verifies an hour) never join separate tests.
+func nextTestIP() string {
+	n := proofSeq.Add(1)
+	return fmt.Sprintf("198.51.%d.%d", n>>8&255, n&255)
+}
+
+func testMailer(h *Handler) *fakeSignInMailer { return h.signInMailer.(*fakeSignInMailer) }
+
+func newBinding(t *testing.T) string {
+	t.Helper()
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+	}
+	return hex.EncodeToString(b)
+}
+
+// proofFields asks for the code and reads it from the mail. When the address
+// was not mailed a code (an account exists: it got the recovery path) the code
+// field is a wrong one, so the server's own refusal answers.
+func proofFields(t *testing.T, h *Handler, email string) (map[string]string, *httptest.ResponseRecorder) {
+	t.Helper()
+	binding := newBinding(t)
+	before := len(testMailer(h).mails())
+	rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": email, "binding": binding})
+	if rec.Code != http.StatusOK {
+		return nil, rec
+	}
+	id, _ := decodeMap(t, rec)["attempt_id"].(string)
+	code := "00000000"
+	if m := testMailer(h).mails(); len(m) > before {
+		code = m[len(m)-1].Code
+	}
+	return map[string]string{"email": email, "attempt_id": id, "code": code, "binding": binding}, rec
+}
+
+// registerBeginFor runs the two steps and answers the second; when the first
+// is refused (the cap, a bad address) it answers that refusal.
+func registerBeginFor(t *testing.T, h *Handler, email string) *httptest.ResponseRecorder {
+	t.Helper()
+	fields, rec := proofFields(t, h, email)
+	if fields == nil {
+		return rec
+	}
+	return postJSONFrom(h.HandleRegisterBegin, nextTestIP(), fields)
+}
+
+// withProof adds a proof to a register/begin body whose address is new; a body
+// that cannot get one (a bad address, a refused sign-up) is returned as it is.
+func withProof(t *testing.T, h *Handler, body string) string {
+	t.Helper()
+	var in map[string]string
+	if err := json.Unmarshal([]byte(body), &in); err != nil || in["email"] == "" {
+		return body
+	}
+	fields, _ := proofFields(t, h, in["email"])
+	if fields == nil {
+		return body
+	}
+	out, _ := json.Marshal(fields)
+	return string(out)
+}
+
 // A registration that names an address and carries no proof of the inbox is
 // refused, and nothing exists for the address afterwards.
 func TestRegisterBeginWithoutProofIsRefusedAndLeavesNothing(t *testing.T) {
 	h := appEnv(t)
 	rec := postJSON(h.HandleRegisterBegin, map[string]string{"email": "stranger@example.com"})
-	if rec.Code == http.StatusOK {
-		t.Fatalf("register/begin answered 200 with no proof: %s", rec.Body.String())
+	if rec.Code != http.StatusBadRequest || decodeMap(t, rec)["code"] != registerProofRequiredCode {
+		t.Fatalf("register/begin with no proof = %d %s", rec.Code, rec.Body.String())
 	}
-	if _, err := h.store.GetUserByEmail("stranger@example.com"); err == nil {
-		t.Fatal("a user row exists for an address nobody proved")
+	// A wrong code, a code for another address and another client's binding are refused too.
+	fields, _ := proofFields(t, h, "owner@example.com")
+	for name, mut := range map[string]func(map[string]string){
+		"wrong code":    func(f map[string]string) { f["code"] = "00000000" },
+		"other address": func(f map[string]string) { f["email"] = "stranger@example.com" },
+		"other binding": func(f map[string]string) { f["binding"] = newBindingNoT() },
+	} {
+		f := map[string]string{}
+		for k, v := range fields {
+			f[k] = v
+		}
+		mut(f)
+		if rec := postJSONFrom(h.HandleRegisterBegin, nextTestIP(), f); rec.Code == http.StatusOK {
+			t.Fatalf("%s: register/begin answered 200: %s", name, rec.Body.String())
+		}
+	}
+	for _, e := range []string{"stranger@example.com", "owner@example.com"} {
+		if _, err := h.store.GetUserByEmail(e); err == nil {
+			t.Fatalf("a user row exists for %s before any passkey finished", e)
+		}
+	}
+	var pending int
+	_ = h.store.DB().QueryRow(`SELECT COUNT(*) FROM pending_registrations`).Scan(&pending)
+	if pending != 0 {
+		t.Fatalf("%d pending registrations from refused begins", pending)
+	}
+}
+
+func newBindingNoT() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// The proof is single use, ten minutes, and works once: a reused or an expired
+// code is refused.
+func TestRegistrationProofIsSingleUseAndExpires(t *testing.T) {
+	h := appEnv(t)
+	fields, _ := proofFields(t, h, "once@example.com")
+	if rec := postJSONFrom(h.HandleRegisterBegin, nextTestIP(), fields); rec.Code != http.StatusOK {
+		t.Fatalf("first begin = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := postJSONFrom(h.HandleRegisterBegin, nextTestIP(), fields); rec.Code == http.StatusOK {
+		t.Fatalf("a spent code was accepted again: %s", rec.Body.String())
+	}
+	old, _ := proofFields(t, h, "late@example.com")
+	if _, err := h.store.DB().Exec(`UPDATE email_signin_attempts SET expires_at = ? WHERE id = ?`, time.Now().UTC().Add(-time.Minute), old["attempt_id"]); err != nil {
+		t.Fatal(err)
+	}
+	if rec := postJSONFrom(h.HandleRegisterBegin, nextTestIP(), old); rec.Code == http.StatusOK {
+		t.Fatalf("an expired code was accepted: %s", rec.Body.String())
+	}
+	// Five wrong tries kill the attempt, the right code included.
+	live, _ := proofFields(t, h, "tries@example.com")
+	for i := 0; i < EmailMaxWrongCodes; i++ {
+		bad := map[string]string{"email": live["email"], "attempt_id": live["attempt_id"], "code": "00000000", "binding": live["binding"]}
+		postJSONFrom(h.HandleRegisterBegin, nextTestIP(), bad)
+	}
+	if rec := postJSONFrom(h.HandleRegisterBegin, nextTestIP(), live); rec.Code == http.StatusOK {
+		t.Fatal("an attempt that took five wrong codes still accepted the right one")
+	}
+}
+
+// Of several finishes made from separate proofs for one address exactly one
+// account exists; of one challenge finished twice exactly one finish wins.
+func TestConcurrentFinishesForOneAddressMakeOneAccount(t *testing.T) {
+	h := appEnv(t)
+	for round := 0; round < 15; round++ {
+		email := fmt.Sprintf("one%d@example.com", round)
+		var bodies []any
+		for i := 0; i < 4; i++ {
+			begin := decodeMap(t, registerBeginFor(t, h, email))
+			bodies = append(bodies, appFinishBody(testApp, newSoftPasskey(t).create(t, begin, testOrigin)))
+		}
+		codes := finishTogether(h.HandleAppRegisterFinish, bodies)
+		var users, creds, keys int
+		_ = h.store.DB().QueryRow(`SELECT COUNT(*) FROM users WHERE email = ?`, email).Scan(&users)
+		_ = h.store.DB().QueryRow(`SELECT COUNT(*) FROM credentials WHERE user_id IN (SELECT id FROM users WHERE email = ?)`, email).Scan(&creds)
+		_ = h.store.DB().QueryRow(`SELECT COUNT(*) FROM api_keys WHERE user_id IN (SELECT id FROM users WHERE email = ?)`, email).Scan(&keys)
+		if countOf(codes, 200) != 1 || users != 1 || creds != 1 || keys != 1 {
+			t.Fatalf("round %d: codes %v, users %d, credentials %d, keys %d; want one of each", round, codes, users, creds, keys)
+		}
+	}
+	// One challenge, finished three times at once.
+	begin := decodeMap(t, registerBeginFor(t, h, "same@example.com"))
+	codes := finishTogether(h.HandleAppRegisterFinish, []any{
+		appFinishBody(testApp, newSoftPasskey(t).create(t, begin, testOrigin)),
+		appFinishBody(testApp, newSoftPasskey(t).create(t, begin, testOrigin)),
+		appFinishBody(testApp, newSoftPasskey(t).create(t, begin, testOrigin)),
+	})
+	if countOf(codes, 200) != 1 {
+		t.Fatalf("one challenge finished three times: %v, want exactly one 200", codes)
+	}
+}
+
+// A finish whose pending row expired or was never made creates nothing.
+func TestFinishWithoutAPendingRegistrationCreatesNothing(t *testing.T) {
+	h := appEnv(t)
+	begin := decodeMap(t, registerBeginFor(t, h, "expired@example.com"))
+	if _, err := h.store.DB().Exec(`UPDATE pending_registrations SET expires_at = ?`, time.Now().UTC().Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	rec := postJSON(h.HandleAppRegisterFinish, appFinishBody(testApp, newSoftPasskey(t).create(t, begin, testOrigin)))
+	if rec.Code == http.StatusOK {
+		t.Fatalf("an expired registration finished: %s", rec.Body.String())
+	}
+	if _, err := h.store.GetUserByEmail("expired@example.com"); err == nil {
+		t.Fatal("an account exists for an expired registration")
+	}
+}
+
+// A read error while checking the pending row fails closed.
+func TestRegisterFinishFailsClosedWhenThePendingRowCannotBeRead(t *testing.T) {
+	h := appEnv(t)
+	begin := decodeMap(t, registerBeginFor(t, h, "closed@example.com"))
+	body := appFinishBody(testApp, newSoftPasskey(t).create(t, begin, testOrigin))
+	if _, err := h.store.DB().Exec(`DROP TABLE pending_registrations`); err != nil {
+		t.Fatal(err)
+	}
+	if rec := postJSON(h.HandleAppRegisterFinish, body); rec.Code == http.StatusOK {
+		t.Fatalf("finish succeeded with an unreadable pending table: %s", rec.Body.String())
+	}
+	if _, err := h.store.GetUserByEmail("closed@example.com"); err == nil {
+		t.Fatal("an account was made")
+	}
+}
+
+// An address that has an account is never registered again: asking for a code
+// mails the recovery link, answers like any address, and a guessed code or a
+// proof for another address binds nothing.
+func TestAnAddressWithAnAccountGoesToRecoveryNotRegistration(t *testing.T) {
+	h := appEnv(t)
+	rm := &fakeRecoveryMailer{}
+	h.recoveryMailer = rm
+	h.recoveryMailDispatch = func(f func()) { f() }
+	if rec := createAccount(t, h, "held@example.com", newSoftPasskey(t), testOrigin); rec.Code != 200 {
+		t.Fatalf("setup: %s", rec.Body.String())
+	}
+	user, _ := h.store.GetUserByEmail("held@example.com")
+	mailsBefore := len(testMailer(h).mails())
+	fields, rec := proofFields(t, h, "held@example.com")
+	if rec.Code != http.StatusOK || fields == nil {
+		t.Fatalf("register/mail for an existing address = %d (it must answer like any address)", rec.Code)
+	}
+	if len(testMailer(h).mails()) != mailsBefore {
+		t.Fatal("a registration code was mailed for an address that has an account")
+	}
+	if len(rm.mails()) != 1 {
+		t.Fatalf("recovery mails = %d, want 1", len(rm.mails()))
+	}
+	if rec := postJSONFrom(h.HandleRegisterBegin, nextTestIP(), fields); rec.Code == http.StatusOK {
+		t.Fatal("register/begin for an address with an account answered 200")
+	}
+	creds, _ := h.store.GetCredentialsByUserID(user.ID)
+	if len(creds) != 1 {
+		t.Fatalf("credentials = %d, want 1", len(creds))
+	}
+}
+
+// A proved address with no passkey (an interrupted recovery) cannot be claimed
+// by a stranger either: it is an account, so registration is refused and only
+// the mail can add a passkey.
+func TestAProvedAddressWithNoPasskeyCannotBeClaimed(t *testing.T) {
+	h := appEnv(t)
+	h.recoveryMailer = &fakeRecoveryMailer{}
+	h.recoveryMailDispatch = func(f func()) { f() }
+	if _, err := h.store.CreateUser("u-proved", "proved@example.com"); err != nil { // proved, no credential
+		t.Fatal(err)
+	}
+	fields, rec := proofFields(t, h, "proved@example.com")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("register/mail = %d", rec.Code)
+	}
+	if rec := postJSONFrom(h.HandleRegisterBegin, nextTestIP(), fields); rec.Code == http.StatusOK {
+		t.Fatalf("a stranger began a registration for a proved address with no passkey: %s", rec.Body.String())
+	}
+	if creds, _ := h.store.GetCredentialsByUserID("u-proved"); len(creds) != 0 {
+		t.Fatal("a passkey was attached without the mail")
 	}
 }
 
 // An account whose address was never proved (a row from before this rule)
-// cannot sign in on the app route or mint a key.
-func TestAccountWithAnUnprovedAddressCannotSignInOrMintAKey(t *testing.T) {
+// cannot sign in on the app route or the web route, or mint a key; the
+// recovery that proves the address replaces its passkeys, keys and sessions.
+func TestAccountWithAnUnprovedAddressMintsNothingUntilMailRecoveryProvesIt(t *testing.T) {
 	h := appEnv(t)
-	p := newSoftPasskey(t)
-	if rec := createAccount(t, h, "legacy@example.com", p, testOrigin); rec.Code != 200 {
+	h.recoveryMailer = &fakeRecoveryMailer{}
+	h.recoveryMailDispatch = func(f func()) { f() }
+	squatter := newSoftPasskey(t)
+	if rec := createAccount(t, h, "legacy@example.com", squatter, testOrigin); rec.Code != 200 {
 		t.Fatalf("setup: %d %s", rec.Code, rec.Body.String())
 	}
 	if _, err := h.store.DB().Exec(`UPDATE users SET email_verified_at = NULL WHERE email = ?`, "legacy@example.com"); err != nil {
 		t.Fatal(err)
 	}
 	user, _ := h.store.GetUserByEmail("legacy@example.com")
-	before := countKeys(t, h, user.ID)
+	keys := countKeys(t, h, user.ID)
 	begin := decodeMap(t, postJSON(h.HandleAppLoginBegin, map[string]string{}))
-	rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, p.assert(t, begin, testOrigin)))
-	if rec.Code == http.StatusOK {
-		t.Fatalf("an unproved account signed in on the app route: %s", rec.Body.String())
+	rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, squatter.assert(t, begin, testOrigin)))
+	if rec.Code != http.StatusForbidden || decodeMap(t, rec)["code"] != addressUnprovedCode {
+		t.Fatalf("an unproved account on the app route = %d %s", rec.Code, rec.Body.String())
 	}
-	if countKeys(t, h, user.ID) != before {
+	if countKeys(t, h, user.ID) != keys {
 		t.Fatal("a key was minted for an unproved account")
+	}
+	if _, err := h.mintAppKey(context.Background(), user, testApp); err == nil {
+		t.Fatal("mintAppKey minted for an unproved account")
+	}
+	// The owner's mail proves the address; the recovery replaces the squatter's passkey.
+	if _, err := h.store.RevokeUnprovedAccess(BootstrapAdminAPIKeyUserID); err != nil {
+		t.Fatal(err)
+	}
+	var live int
+	_ = h.store.DB().QueryRow(`SELECT COUNT(*) FROM api_keys WHERE user_id = ? AND revoked_at IS NULL`, user.ID).Scan(&live)
+	if live != 0 {
+		t.Fatalf("%d keys of an unproved account survive the start-up revoke", live)
+	}
+	owner := newSoftPasskey(t)
+	token, err := h.store.CreateRecoveryToken(context.Background(), user.ID, "legacy@example.com", hashEmail("legacy@example.com"), hashIP("127.0.0.1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vr := postJSON(h.HandleRecoveryVerify, map[string]string{"token": token})
+	if vr.Code != 200 {
+		t.Fatalf("recovery verify = %d %s", vr.Code, vr.Body.String())
+	}
+	// Verify alone proves nothing: an interrupted recovery leaves the account unproved and the squatter's passkey in place.
+	if u, _ := h.store.GetUserByEmail("legacy@example.com"); u.EmailVerifiedAt != nil {
+		t.Fatal("recovery/verify marked the address proved before any passkey was made")
+	}
+	if fr := postJSON(h.HandleRegisterFinish, owner.create(t, decodeMap(t, vr), testOrigin)); fr.Code != 200 {
+		t.Fatalf("recovery finish = %d %s", fr.Code, fr.Body.String())
+	}
+	creds, _ := h.store.GetCredentialsByUserID(user.ID)
+	if len(creds) != 1 {
+		t.Fatalf("after recovery %d passkeys, want only the owner's", len(creds))
+	}
+	if u, _ := h.store.GetUserByEmail("legacy@example.com"); u.EmailVerifiedAt == nil {
+		t.Fatal("the address is still unproved after the recovery finished")
+	}
+	// The squatter's passkey is gone; the owner's signs in.
+	begin = decodeMap(t, postJSON(h.HandleAppLoginBegin, map[string]string{}))
+	if rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, squatter.assert(t, begin, testOrigin))); rec.Code == 200 {
+		t.Fatal("the squatter's passkey still signs in")
+	}
+	begin = decodeMap(t, postJSON(h.HandleAppLoginBegin, map[string]string{}))
+	if rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, owner.assert(t, begin, testOrigin))); rec.Code != 200 {
+		t.Fatalf("the owner cannot sign in after recovery: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// An interrupted recovery (the challenge is never finished) changes nothing: a
+// second recovery still finds the account unproved and replaces the squatter.
+func TestInterruptedRecoveryDoesNotDisableTheReplacement(t *testing.T) {
+	h := appEnv(t)
+	squatter := newSoftPasskey(t)
+	if rec := createAccount(t, h, "retry@example.com", squatter, testOrigin); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	_, _ = h.store.DB().Exec(`UPDATE users SET email_verified_at = NULL WHERE email = ?`, "retry@example.com")
+	user, _ := h.store.GetUserByEmail("retry@example.com")
+	for i := 0; i < 2; i++ {
+		token, _ := h.store.CreateRecoveryToken(context.Background(), user.ID, "retry@example.com", hashEmail("retry@example.com"), hashIP("127.0.0.1"))
+		vr := postJSON(h.HandleRecoveryVerify, map[string]string{"token": token})
+		if vr.Code != 200 {
+			t.Fatalf("verify %d = %d", i, vr.Code)
+		}
+		if i == 0 {
+			continue // the passkey sheet was cancelled
+		}
+		if fr := postJSON(h.HandleRegisterFinish, newSoftPasskey(t).create(t, decodeMap(t, vr), testOrigin)); fr.Code != 200 {
+			t.Fatalf("finish = %d %s", fr.Code, fr.Body.String())
+		}
+	}
+	if creds, _ := h.store.GetCredentialsByUserID(user.ID); len(creds) != 1 {
+		t.Fatalf("%d passkeys, want only the owner's", len(creds))
+	}
+}
+
+// An access token of an unproved account is refused by the auth handlers.
+func TestAccessTokenOfAnUnprovedAccountIsRefused(t *testing.T) {
+	h := appEnv(t)
+	u, err := h.store.CreateUser("u-unproved", "unproved@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := h.issueAccessJWT(u, AuthMethodPasskey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.DB().Exec(`UPDATE users SET email_verified_at = NULL WHERE id = ?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", nil)
+	req.AddCookie(&http.Cookie{Name: AccessTokenCookieName, Value: tok})
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+	if rec.Code == http.StatusOK || rec.Code == http.StatusCreated {
+		t.Fatalf("an unproved account's access token minted a key: %d", rec.Code)
 	}
 }

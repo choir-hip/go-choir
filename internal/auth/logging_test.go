@@ -51,7 +51,7 @@ func TestLogsDoNotContainRawEmail(t *testing.T) {
 	email := "sensitive@example.com"
 	logs := captureLogs(t, func() {
 		body := fmt.Sprintf(`{"email":%q}`, email)
-		req := httptest.NewRequest(http.MethodPost, "/auth/register/begin", bytes.NewBufferString(body))
+		req := httptest.NewRequest(http.MethodPost, "/auth/register/begin", bytes.NewBufferString(withProof(t, h, body)))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		h.HandleRegisterBegin(rec, req)
@@ -84,7 +84,7 @@ func TestLogsDoNotContainJSONResponseData(t *testing.T) {
 	email := "json@example.com"
 	logs := captureLogs(t, func() {
 		body := fmt.Sprintf(`{"email":%q}`, email)
-		req := httptest.NewRequest(http.MethodPost, "/auth/register/begin", bytes.NewBufferString(body))
+		req := httptest.NewRequest(http.MethodPost, "/auth/register/begin", bytes.NewBufferString(withProof(t, h, body)))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		h.HandleRegisterBegin(rec, req)

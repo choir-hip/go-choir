@@ -506,7 +506,7 @@ func (h *Handler) consumeTypedCode(r *http.Request, purpose, attemptID, code, wa
 		return "", ErrEmailAttemptInvalid
 	}
 	want := h.emailCodeHash(attemptID, purpose, code)
-	return h.store.ConsumeEmailCode(r.Context(), attemptID, sha256SumHex(cookie.Value), purpose, wantUserID,
+	return h.store.ConsumeEmailCode(r.Context(), attemptID, sha256SumHex(cookie.Value), purpose, wantUserID, "",
 		func(stored string) bool {
 			return hmac.Equal([]byte(stored), []byte(want))
 		})

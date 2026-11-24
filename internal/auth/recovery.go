@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -68,8 +69,8 @@ func clientIP(r *http.Request) string {
 		return strings.TrimSpace(xff)
 	}
 	addr := r.RemoteAddr
-	if idx := strings.LastIndexByte(addr, ':'); idx >= 0 {
-		addr = addr[:idx]
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		addr = host // "[2001:db8::1]:443" is "2001:db8::1"
 	}
 	return strings.TrimSpace(addr)
 }
@@ -106,7 +107,17 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	emailHash := hashEmail(req.Email)
+	status, body := h.startRecovery(r, req.Email)
+	writeJSON(w, status, body)
+}
+
+// startRecovery is the recovery request after the address is known to be
+// well-formed: the limits, the token, and the mail to the stored address of a
+// real account. It answers the same for an unknown address. Registration of an
+// address that already has an account comes here too: the recovery mail is the
+// proof that adds a passkey to it.
+func (h *Handler) startRecovery(r *http.Request, email string) (int, any) {
+	emailHash := hashEmail(email)
 	ip := clientIP(r)
 	ipHash := hashIP(ip)
 
@@ -121,29 +132,25 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 	emailCount, err := h.store.CountRecoveryTokensByEmailSince(ctx, emailHash, oneHourAgo)
 	if err != nil {
 		log.Printf("[auth] operation=recovery_request email_hash=%s result=error step=count_email error=%q", emailHash, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
-		return
+		return http.StatusInternalServerError, errorResponse{Error: "internal error"}
 	}
 	if emailCount >= RecoveryMaxPerEmail {
 		log.Printf("[auth] operation=recovery_request email_hash=%s result=rate_limited reason=email_limit count=%d", emailHash, emailCount)
-		writeJSON(w, http.StatusTooManyRequests, errorResponse{Error: "too many recovery requests for this email"})
-		return
+		return http.StatusTooManyRequests, errorResponse{Error: "too many recovery requests for this email"}
 	}
 
 	ipCount, err := h.store.CountRecoveryTokensByIPSince(ctx, ipHash, oneHourAgo)
 	if err != nil {
 		log.Printf("[auth] operation=recovery_request email_hash=%s result=error step=count_ip error=%q", emailHash, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
-		return
+		return http.StatusInternalServerError, errorResponse{Error: "internal error"}
 	}
 	if ipCount >= RecoveryMaxPerIP {
 		log.Printf("[auth] operation=recovery_request email_hash=%s result=rate_limited reason=ip_limit count=%d", emailHash, ipCount)
-		writeJSON(w, http.StatusTooManyRequests, errorResponse{Error: "too many recovery requests from this address"})
-		return
+		return http.StatusTooManyRequests, errorResponse{Error: "too many recovery requests from this address"}
 	}
 
 	// --- Look up user (anti-enumeration: same response either way) ---
-	user, err := h.store.GetUserByEmail(req.Email)
+	user, err := h.store.GetUserByEmail(email)
 	var userID string
 	if err == nil {
 		userID = user.ID
@@ -155,11 +162,10 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 		log.Printf("[auth] operation=recovery_request email_hash=%s step=user_not_found", emailHash)
 	}
 
-	token, err := h.store.CreateRecoveryToken(ctx, userID, req.Email, emailHash, ipHash)
+	token, err := h.store.CreateRecoveryToken(ctx, userID, email, emailHash, ipHash)
 	if err != nil {
 		log.Printf("[auth] operation=recovery_request email_hash=%s result=error step=create_token error=%q", emailHash, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create recovery token"})
-		return
+		return http.StatusInternalServerError, errorResponse{Error: "failed to create recovery token"}
 	}
 
 	log.Printf("[auth] operation=recovery_request email_hash=%s result=success step=token_created", emailHash)
@@ -171,7 +177,7 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 		h.sendRecoveryMail(user.Email, emailHash, userID, token)
 	}
 
-	writeJSON(w, http.StatusOK, recoveryResponse{OK: true})
+	return http.StatusOK, recoveryResponse{OK: true}
 }
 
 // HandleRecoveryVerify handles POST /auth/recovery/verify.
@@ -211,22 +217,6 @@ func (h *Handler) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
 
 	emailHash := hashEmail(rt.Email)
 	log.Printf("[auth] operation=recovery_verify email_hash=%s user_id=%s step=token_valid", emailHash, rt.UserID)
-
-	// Whether the address was proved before this mail decides what finishing the
-	// recovery does: an address nobody had proved can be claimed by whoever
-	// registers it first (the app and the web both allow that), so the rightful
-	// owner's mail-proved recovery takes the account back, replacing every
-	// passkey, key and session it had. A proved address only gains a passkey.
-	source := ChallengeSourceRecovery
-	if prior, perr := h.store.GetUserByID(rt.UserID); perr == nil && prior.EmailVerifiedAt == nil {
-		source = ChallengeSourceRecoveryTakeback
-	}
-
-	// A consumed recovery link was mailed to the stored address: it proves
-	// the inbox (docs/design/email-sign-in-2026-10-31.md, Data).
-	if err := h.store.SetEmailVerified(rt.UserID); err != nil {
-		log.Printf("[auth] operation=recovery_verify email_hash=%s user_id=%s result=warning step=set_email_verified error=%q", emailHash, rt.UserID, err)
-	}
 
 	// Look up the user.
 	user, err := h.store.GetUserByID(rt.UserID)
@@ -279,7 +269,7 @@ func (h *Handler) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
 		UserID:              user.ID,
 		Challenge:           session.Challenge,
 		Type:                "registration",
-		Source:              source,
+		Source:              ChallengeSourceRecovery,
 		WebAuthnSessionData: string(sessionDataJSON),
 		CreatedAt:           time.Now().UTC(),
 		ExpiresAt:           time.Now().UTC().Add(SessionChallengeTTL),

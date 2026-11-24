@@ -52,7 +52,7 @@ func TestConcurrentAppRegisterFinishesAdmitExactlyOne(t *testing.T) {
 		email := fmt.Sprintf("race%d@example.com", round)
 		var bodies []any
 		for i := 0; i < 4; i++ {
-			begin := decodeMap(t, postJSON(h.HandleRegisterBegin, map[string]string{"email": email}))
+			begin := decodeMap(t, registerBeginFor(t, h, email))
 			bodies = append(bodies, appFinishBody(testApp, newSoftPasskey(t).create(t, begin, testOrigin)))
 		}
 		codes := finishTogether(h.HandleAppRegisterFinish, bodies)
@@ -72,7 +72,7 @@ func TestConcurrentWebRegisterFinishesAdmitExactlyOne(t *testing.T) {
 		email := fmt.Sprintf("webrace%d@example.com", round)
 		var bodies []any
 		for i := 0; i < 4; i++ {
-			begin := decodeMap(t, postJSON(h.HandleRegisterBegin, map[string]string{"email": email}))
+			begin := decodeMap(t, registerBeginFor(t, h, email))
 			bodies = append(bodies, rawJSON(newSoftPasskey(t).create(t, begin, testOrigin)))
 		}
 		codes := finishTogether(h.HandleRegisterFinish, bodies)
@@ -108,44 +108,40 @@ func TestOneChallengeFinishedTwiceAtOnceSucceedsOnce(t *testing.T) {
 	}
 }
 
-// A read error on the credentials is a refusal, never "no passkey yet".
-func TestRegisterFinishRefusesWhenTheCredentialsCannotBeRead(t *testing.T) {
+// A read error on the credentials is a refusal, never "no passkey yet": a
+// recovery finish whose account's credentials cannot be read answers 500 and
+// adds nothing.
+func TestRecoveryFinishRefusesWhenTheCredentialsCannotBeRead(t *testing.T) {
 	h := appEnv(t)
 	email := "unreadable@example.com"
 	if rec := createAccount(t, h, email, newSoftPasskey(t), testOrigin); rec.Code != 200 {
 		t.Fatal(rec.Body.String())
 	}
 	user, _ := h.store.GetUserByEmail(email)
-	begin := decodeMap(t, mustBeginFor(t, h, user))
-	body := appFinishBody(testApp, newSoftPasskey(t).create(t, begin, testOrigin))
-	// Hide the credentials behind a view that cannot be read in full but still
-	// takes inserts, so a guard that ignores the read error would add a second.
+	begin := saveRecoveryChallenge(t, h, user, ChallengeSourceRecovery)
+	body := rawJSON(newSoftPasskey(t).create(t, begin, testOrigin))
+	// Hide the credentials behind a view of every column in which one value
+	// cannot be scanned (a text where an integer is read), so the read fails and
+	// an insert still goes through to the real table.
 	for _, q := range []string{
 		`ALTER TABLE credentials RENAME TO credentials_real`,
-		`CREATE VIEW credentials AS SELECT id, user_id FROM credentials_real`,
+		`CREATE VIEW credentials AS SELECT id, user_id, public_key, attestation_type, transport, 'bad' AS sign_count, aaguid, flags, name, prf_capable, prf_salt, created_at, last_used_at FROM credentials_real`,
 		`CREATE TRIGGER credentials_ins INSTEAD OF INSERT ON credentials BEGIN
 			INSERT INTO credentials_real (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at)
-			VALUES (NEW.id, NEW.user_id, x'00', 'none', '[]', 0, x'00', '{}', '', CURRENT_TIMESTAMP); END`,
+			VALUES (NEW.id, NEW.user_id, NEW.public_key, NEW.attestation_type, NEW.transport, 0, NEW.aaguid, NEW.flags, NEW.name, NEW.created_at); END`,
 	} {
 		if _, err := h.store.DB().Exec(q); err != nil {
 			t.Fatalf("%s: %v", q, err)
 		}
 	}
-	rec := postJSON(h.HandleAppRegisterFinish, body)
-	if rec.Code == http.StatusOK {
-		t.Fatalf("finish succeeded with unreadable credentials: %s", rec.Body.String())
+	rec := postJSON(h.HandleRegisterFinish, body)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("finish with unreadable credentials = %d, want 500: %s", rec.Code, rec.Body.String())
 	}
 	var n int
 	if err := h.store.DB().QueryRow(`SELECT COUNT(*) FROM credentials_real WHERE user_id = ?`, user.ID).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("credentials = %d (%v); want the one that was there", n, err)
 	}
-}
-
-// mustBeginFor begins a register challenge for a user that already has a
-// passkey (as a second begin raced before the first finished would have).
-func mustBeginFor(t *testing.T, h *Handler, user *User) *httptest.ResponseRecorder {
-	t.Helper()
-	return jsonRecorder(t, beginOptionsFor(t, h, user, ChallengeSourceRegister))
 }
 
 func beginOptionsFor(t *testing.T, h *Handler, user *User, source string) any {
@@ -177,56 +173,6 @@ func saveRecoveryChallenge(t *testing.T, h *Handler, user *User, source string) 
 }
 
 func rawJSON(b []byte) json.RawMessage { return json.RawMessage(b) }
-
-// The rightful owner of an address nobody proved can take it back by mail: the
-// claim's passkey, keys and sessions are replaced. A proved address only gains
-// a passkey by recovery.
-func TestMailRecoveryOfAnUnprovedAddressTakesTheAccountBack(t *testing.T) {
-	h := appEnv(t)
-	email := "owner@example.com"
-	// Mallory registers the address first and holds a key.
-	mallory := newSoftPasskey(t)
-	rec := createAccount(t, h, email, mallory, testOrigin)
-	if rec.Code != 200 {
-		t.Fatal(rec.Body.String())
-	}
-	user, _ := h.store.GetUserByEmail(email)
-	if countKeys(t, h, user.ID) != 1 {
-		t.Fatal("setup: Mallory holds no key")
-	}
-	recoverWith := func(p *softPasskey) {
-		t.Helper()
-		token, err := h.store.CreateRecoveryToken(context.Background(), user.ID, email, hashEmail(email), hashIP("127.0.0.1"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		vr := postJSON(h.HandleRecoveryVerify, map[string]string{"token": token})
-		if vr.Code != 200 {
-			t.Fatalf("recovery verify = %d: %s", vr.Code, vr.Body.String())
-		}
-		if fr := postJSON(h.HandleRegisterFinish, p.create(t, decodeMap(t, vr), testOrigin)); fr.Code != 200 {
-			t.Fatalf("recovery finish = %d: %s", fr.Code, fr.Body.String())
-		}
-	}
-	owner := newSoftPasskey(t)
-	recoverWith(owner)
-	creds, _ := h.store.GetCredentialsByUserID(user.ID)
-	if len(creds) != 1 {
-		t.Fatalf("after takeback: %d credentials, want only the owner's", len(creds))
-	}
-	var live int
-	if err := h.store.db.QueryRow("SELECT COUNT(*) FROM api_keys WHERE user_id = ? AND revoked_at IS NULL", user.ID).Scan(&live); err != nil || live != 0 {
-		t.Fatalf("Mallory's key survived the takeback (%d live, %v)", live, err)
-	}
-	if u, _ := h.store.GetUserByEmail(email); u.EmailVerifiedAt == nil {
-		t.Fatal("the address is still unproved after mail recovery")
-	}
-	// A second recovery, the address now proved, adds a passkey and removes none.
-	recoverWith(newSoftPasskey(t))
-	if creds, _ = h.store.GetCredentialsByUserID(user.ID); len(creds) != 2 {
-		t.Fatalf("a proved address's recovery left %d credentials, want 2", len(creds))
-	}
-}
 
 // A stranger cannot grow the app-login challenge table without bound, a whole
 // IPv6 /64 is one source, and the ceiling never evicts a fresh challenge for an

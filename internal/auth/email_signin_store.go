@@ -21,6 +21,9 @@ const (
 	// EmailAttemptPurposeVerifyAddress is an attempt that proves the inbox
 	// of a signed-in (passkey) user.
 	EmailAttemptPurposeVerifyAddress = "verify_address"
+	// EmailAttemptPurposeRegister is an attempt that proves the inbox of an
+	// address that has no account yet (register_proof.go). It has no user.
+	EmailAttemptPurposeRegister = "register"
 
 	// EmailAttemptTTL is the life of a code and a link.
 	EmailAttemptTTL = 10 * time.Minute
@@ -110,6 +113,12 @@ func (s *Store) CreateEmailAttempt(ctx context.Context, a *EmailAttempt) error {
 			a.CreatedAt, a.UserID, a.Purpose, a.CreatedAt); err != nil {
 			return fmt.Errorf("create email attempt: supersede: %w", err)
 		}
+	} else if a.Purpose == EmailAttemptPurposeRegister {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE email_signin_attempts SET expires_at = ? WHERE email_hash = ? AND purpose = ? AND consumed_at IS NULL AND expires_at > ?",
+			a.CreatedAt, a.EmailHash, a.Purpose, a.CreatedAt); err != nil {
+			return fmt.Errorf("create email attempt: supersede: %w", err)
+		}
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO email_signin_attempts
@@ -168,7 +177,7 @@ func (s *Store) GetEmailAttempt(ctx context.Context, id string) (*EmailAttempt, 
 // single-statement updates; matches is called with the stored code hash only
 // after the count is taken, and its result gates the consumption. Every
 // failure is ErrEmailAttemptInvalid. It returns the attempt's user id.
-func (s *Store) ConsumeEmailCode(ctx context.Context, id, cookieHash, purpose, wantUserID string, matches func(codeHash string) bool) (string, error) {
+func (s *Store) ConsumeEmailCode(ctx context.Context, id, cookieHash, purpose, wantUserID, wantEmailHash string, matches func(codeHash string) bool) (string, error) {
 	now := time.Now().UTC()
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -178,12 +187,12 @@ func (s *Store) ConsumeEmailCode(ctx context.Context, id, cookieHash, purpose, w
 	defer func() { _ = tx.Rollback() }()
 
 	var (
-		storedCookie, storedCode, storedPurpose string
-		userID                                  sql.NullString
+		storedCookie, storedCode, storedPurpose, storedEmail string
+		userID                                               sql.NullString
 	)
 	err = tx.QueryRowContext(ctx,
-		"SELECT cookie_hash, code_hash, purpose, user_id FROM email_signin_attempts WHERE id = ?", id,
-	).Scan(&storedCookie, &storedCode, &storedPurpose, &userID)
+		"SELECT cookie_hash, code_hash, purpose, user_id, email_hash FROM email_signin_attempts WHERE id = ?", id,
+	).Scan(&storedCookie, &storedCode, &storedPurpose, &userID, &storedEmail)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrEmailAttemptInvalid
 	}
@@ -195,7 +204,11 @@ func (s *Store) ConsumeEmailCode(ctx context.Context, id, cookieHash, purpose, w
 	if subtle.ConstantTimeCompare([]byte(storedCookie), []byte(cookieHash)) != 1 {
 		return "", ErrEmailAttemptInvalid
 	}
-	if storedPurpose != purpose || !userID.Valid || userID.String == "" {
+	// A register attempt has no user: the address it proves has no account.
+	if storedPurpose != purpose || (purpose != EmailAttemptPurposeRegister && (!userID.Valid || userID.String == "")) {
+		return "", ErrEmailAttemptInvalid
+	}
+	if wantEmailHash != "" && subtle.ConstantTimeCompare([]byte(storedEmail), []byte(wantEmailHash)) != 1 {
 		return "", ErrEmailAttemptInvalid
 	}
 	if wantUserID != "" && userID.String != wantUserID {

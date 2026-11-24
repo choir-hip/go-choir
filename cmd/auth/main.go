@@ -50,6 +50,16 @@ func main() {
 	handler := auth.NewHandler(store, wa, cfg, signer)
 	rateLimiters := auth.NewRateLimiters()
 
+	// An account whose address was never proved is inert (it signs in to
+	// nothing and mints nothing); what it still holds from before that rule is
+	// revoked now, once per start, and the mail recovery that proves the
+	// address replaces its passkeys (docs/problems/passkey-claims-an-unproved-address-2026-11-24.md).
+	if n, err := store.RevokeUnprovedAccess(auth.BootstrapAdminAPIKeyUserID); err != nil {
+		log.Fatalf("auth revoke unproved access: %v", err)
+	} else if n > 0 {
+		log.Printf("auth: revoked %d key, session or grant rows of accounts with an unproved address", n)
+	}
+
 	// Email sign-in: with the switch off (AUTH_EMAIL_SIGN_IN), delete the
 	// attempts and email sessions a previous run left; a sweeper expires rows.
 	if err := handler.ApplyEmailSignInSwitch(); err != nil {
@@ -87,6 +97,7 @@ func authRoutes(handler *auth.Handler) []authRoute {
 		sensitive = auth.RateClassSensitive
 	)
 	return []authRoute{
+		{"/auth/register/mail", begin, handler.HandleRegisterMail},
 		{"/auth/register/begin", begin, handler.HandleRegisterBegin},
 		{"/auth/register/finish", ceremony, handler.HandleRegisterFinish},
 		{"/auth/login/begin", begin, handler.HandleLoginBegin},

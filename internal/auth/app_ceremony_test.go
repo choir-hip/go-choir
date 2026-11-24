@@ -198,7 +198,7 @@ func appFinishBody(app string, credential []byte) map[string]any {
 
 func createAccount(t *testing.T, h *Handler, email string, p *softPasskey, origin string) *httptest.ResponseRecorder {
 	t.Helper()
-	begin := postJSON(h.HandleRegisterBegin, map[string]string{"email": email})
+	begin := registerBeginFor(t, h, email)
 	if begin.Code != 200 {
 		return begin
 	}
@@ -290,7 +290,7 @@ func countKeys(t *testing.T, h *Handler, userID string) int {
 func TestAppFinishNamesAnAppFromTheFixedList(t *testing.T) {
 	h := appEnv(t)
 	p := newSoftPasskey(t)
-	begin := postJSON(h.HandleRegisterBegin, map[string]string{"email": "a@example.com"})
+	begin := registerBeginFor(t, h, "a@example.com")
 	cred := p.create(t, decodeMap(t, begin), testOrigin)
 	for _, app := range []string{"", "evil.example", "news.choir.autoradio.lab ", "NEWS.CHOIR.AUTORADIO.LAB.ONE", "news.choir.autoradio.labx", "news.choir.autoradio.lab"} {
 		rec := postJSON(h.HandleAppRegisterFinish, appFinishBody(app, cred))
@@ -342,7 +342,7 @@ func TestAppLoginRefusesUnknownPasskeysAndCrossedChallenges(t *testing.T) {
 	}
 	// A registration challenge cannot finish a login, and a login challenge cannot finish a registration.
 	p := newSoftPasskey(t)
-	reg := decodeMap(t, postJSON(h.HandleRegisterBegin, map[string]string{"email": "c@example.com"}))
+	reg := decodeMap(t, registerBeginFor(t, h, "c@example.com"))
 	cred := p.create(t, reg, testOrigin)
 	p.handle = []byte("x")
 	fake := p.assert(t, reg, testOrigin)
@@ -368,14 +368,14 @@ func TestAppCreateAnswersTheWaitlistWhenSignUpIsClosed(t *testing.T) {
 		t.Fatalf("first = %d: %s", rec.Code, rec.Body.String())
 	}
 	h.config.RegistrationCap = 1
-	rec := postJSON(h.HandleRegisterBegin, map[string]string{"email": "second@example.com"})
+	rec := registerBeginFor(t, h, "second@example.com")
 	if rec.Code != 403 || decodeMap(t, rec)["code"] != "registration_waitlist" {
 		t.Fatalf("begin over the cap = %d: %s", rec.Code, rec.Body.String())
 	}
 	// Begun below the cap, finished above it.
 	h.config.RegistrationCap = 2
 	second := newSoftPasskey(t)
-	begin := decodeMap(t, postJSON(h.HandleRegisterBegin, map[string]string{"email": "third@example.com"}))
+	begin := decodeMap(t, registerBeginFor(t, h, "third@example.com"))
 	h.config.RegistrationCap = 1
 	fin := postJSON(h.HandleAppRegisterFinish, appFinishBody(testApp, second.create(t, begin, testOrigin)))
 	if fin.Code != 403 || decodeMap(t, fin)["code"] != "registration_waitlist" {
@@ -399,7 +399,7 @@ func TestAppCreateWithAnExistingEmailIsAConflict(t *testing.T) {
 	if rec := createAccount(t, h, "dup@example.com", newSoftPasskey(t), testOrigin); rec.Code != 200 {
 		t.Fatal(rec.Body.String())
 	}
-	if rec := postJSON(h.HandleRegisterBegin, map[string]string{"email": "dup@example.com"}); rec.Code != 409 {
+	if rec := registerBeginFor(t, h, "dup@example.com"); rec.Code != 409 {
 		t.Fatalf("duplicate begin = %d", rec.Code)
 	}
 }

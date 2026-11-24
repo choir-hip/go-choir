@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS challenge_state (
 	expires_at         DATETIME NOT NULL
 );
 
+-- A registration whose address was proved and whose passkey is not yet made
+-- (register_proof.go). The account does not exist: the users row, the
+-- credential and email_verified_at are written together at register/finish.
+CREATE TABLE IF NOT EXISTS pending_registrations (
+	challenge    TEXT PRIMARY KEY,
+	email        TEXT NOT NULL,
+	user_id      TEXT NOT NULL,
+	session_data TEXT NOT NULL,
+	created_at   DATETIME NOT NULL,
+	expires_at   DATETIME NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS refresh_sessions (
 	id           TEXT PRIMARY KEY,
 	user_id      TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -285,11 +297,6 @@ type Credential struct {
 const (
 	ChallengeSourceRegister = "register"
 	ChallengeSourceRecovery = "recovery"
-	// ChallengeSourceRecoveryTakeback is a recovery challenge begun for an
-	// address that had not been proved before the mail was: whoever held the
-	// account until then claimed it by registering first, so finishing this
-	// challenge replaces every passkey, key and session the account had.
-	ChallengeSourceRecoveryTakeback = "recovery_takeback"
 )
 
 // ChallengeState represents a WebAuthn ceremony challenge row in the
@@ -579,17 +586,21 @@ func (s *Store) DB() *sql.DB {
 	return s.db
 }
 
-// CreateUser inserts a new user and returns it.
+// CreateUser inserts an account the server itself makes (the operator's
+// bootstrap key's user) or a test makes, with its address marked proved: the
+// caller vouches for it. A person's account is made only by
+// CreateAccountWithCredential, together with the proof of the address and the
+// first passkey.
 func (s *Store) CreateUser(id, email string) (*User, error) {
 	now := time.Now().UTC()
 	_, err := s.db.Exec(
-		"INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)",
-		id, email, now,
+		"INSERT INTO users (id, email, created_at, email_verified_at) VALUES (?, ?, ?, ?)",
+		id, email, now, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create user %q: %w", email, err)
 	}
-	return &User{ID: id, Email: email, CreatedAt: now}, nil
+	return &User{ID: id, Email: email, CreatedAt: now, EmailVerifiedAt: &now}, nil
 }
 
 // GetUserByID returns the user with the given ID, or sql.ErrNoRows.
@@ -645,63 +656,157 @@ func (s *Store) CreateCredential(c *Credential) error {
 	return nil
 }
 
-// ErrAccountHasCredential: a first-passkey insert found the account already has one.
-var ErrAccountHasCredential = errors.New("account already has a passkey")
+// ErrAddressTaken: an account already exists for the address.
+var ErrAddressTaken = errors.New("an account already exists for this address")
 
-// AddRegistrationCredential stores the credential a finished registration
-// verified, as one atomic step decided by source:
-//   - ChallengeSourceRecovery adds it to whatever the account has;
-//   - ChallengeSourceRecoveryTakeback first revokes every API key, deletes every
-//     session and every passkey of the account, then adds it (one transaction);
-//   - any other source inserts it only if the account has no passkey, the check
-//     and the insert being a single statement, and returns ErrAccountHasCredential
-//     otherwise.
-func (s *Store) AddRegistrationCredential(c *Credential, source string) error {
-	switch source {
-	case ChallengeSourceRecovery:
-		return s.CreateCredential(c)
-	case ChallengeSourceRecoveryTakeback:
-		tx, err := s.db.Begin()
-		if err != nil {
-			return fmt.Errorf("takeback: %w", err)
-		}
-		defer func() { _ = tx.Rollback() }()
-		// The first statement writes, so the transaction holds the write lock
-		// from the start.
-		if _, err := tx.Exec("UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", time.Now().UTC(), c.UserID); err != nil {
-			return fmt.Errorf("takeback revoke keys: %w", err)
-		}
-		if _, err := tx.Exec("DELETE FROM refresh_sessions WHERE user_id = ?", c.UserID); err != nil {
-			return fmt.Errorf("takeback delete sessions: %w", err)
-		}
-		if _, err := tx.Exec("DELETE FROM credentials WHERE user_id = ?", c.UserID); err != nil {
-			return fmt.Errorf("takeback delete credentials: %w", err)
-		}
-		if _, err := tx.Exec(
-			"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt,
-		); err != nil {
-			return fmt.Errorf("create credential %q: %w", c.ID, err)
-		}
-		return tx.Commit()
-	default:
-		res, err := s.db.Exec(
-			`INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at)
-			 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM credentials WHERE user_id = ?)`,
-			c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt, c.UserID,
-		)
-		if err != nil {
-			return fmt.Errorf("create credential %q: %w", c.ID, err)
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("create credential %q: %w", c.ID, err)
-		}
-		if n == 0 {
-			return ErrAccountHasCredential
-		}
-		return nil
+// PendingRegistration is a proved address waiting for its passkey.
+type PendingRegistration struct {
+	Challenge   string
+	Email       string
+	UserID      string
+	SessionData string
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+}
+
+// SavePendingRegistration keeps a pending registration. No user exists yet.
+func (s *Store) SavePendingRegistration(p *PendingRegistration) error {
+	_, err := s.db.Exec(
+		"INSERT INTO pending_registrations (challenge, email, user_id, session_data, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+		p.Challenge, p.Email, p.UserID, p.SessionData, p.CreatedAt, p.ExpiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("save pending registration: %w", err)
 	}
+	return nil
+}
+
+// ConsumePendingRegistration takes the registration with one DELETE ...
+// RETURNING: of any number of concurrent callers exactly one gets it, the rest
+// sql.ErrNoRows. An expired row is deleted and also reads as sql.ErrNoRows.
+func (s *Store) ConsumePendingRegistration(challenge string, now time.Time) (*PendingRegistration, error) {
+	p := &PendingRegistration{}
+	err := s.db.QueryRow(
+		"DELETE FROM pending_registrations WHERE challenge = ? RETURNING challenge, email, user_id, session_data, created_at, expires_at",
+		challenge,
+	).Scan(&p.Challenge, &p.Email, &p.UserID, &p.SessionData, &p.CreatedAt, &p.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	if now.After(p.ExpiresAt) {
+		return nil, sql.ErrNoRows
+	}
+	return p, nil
+}
+
+// CreateAccountWithCredential makes the account and its first passkey, with
+// the address marked proved, in one transaction: nothing exists for the address
+// before it commits, and the address's unique index decides a race (the loser
+// gets ErrAddressTaken and leaves nothing).
+func (s *Store) CreateAccountWithCredential(p *PendingRegistration, c *Credential) error {
+	now := time.Now().UTC()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("create account: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(
+		"INSERT INTO users (id, email, created_at, email_verified_at) VALUES (?, ?, ?, ?)",
+		p.UserID, p.Email, now, now,
+	); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return ErrAddressTaken
+		}
+		return fmt.Errorf("create account: user: %w", err)
+	}
+	c.UserID = p.UserID
+	if _, err := tx.Exec(
+		"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt,
+	); err != nil {
+		return fmt.Errorf("create account: credential %q: %w", c.ID, err)
+	}
+	return tx.Commit()
+}
+
+// AddRecoveryCredential stores the passkey a mail-proved recovery made, and in
+// the same transaction proves the address. If that changed a row, the address
+// had never been proved, so whoever held the account until now had no proof of
+// the inbox: their passkeys, keys, sessions and grants are deleted before the
+// new passkey goes in. (Such an account can mint nothing, and the login and
+// mint paths refuse it, so these statements are belt, not the mechanism.) A
+// proved account only gains the passkey.
+func (s *Store) AddRecoveryCredential(c *Credential) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("recovery credential: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	// The first statement writes: the transaction holds the write lock.
+	res, err := tx.Exec("UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL", time.Now().UTC(), c.UserID)
+	if err != nil {
+		return fmt.Errorf("recovery credential: prove address: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("recovery credential: prove address: %w", err)
+	} else if n == 1 {
+		for _, q := range []string{
+			"UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+			"DELETE FROM refresh_sessions WHERE user_id = ?",
+			"DELETE FROM desktop_exchange_codes WHERE user_id = ?",
+			"DELETE FROM device_authorizations WHERE user_id = ?",
+			"DELETE FROM email_signin_attempts WHERE user_id = ?",
+			"DELETE FROM credentials WHERE user_id = ?",
+		} {
+			args := []any{c.UserID}
+			if strings.HasPrefix(q, "UPDATE api_keys") {
+				args = []any{time.Now().UTC(), c.UserID}
+			}
+			if _, err := tx.Exec(q, args...); err != nil {
+				return fmt.Errorf("recovery credential: replace old holder: %w", err)
+			}
+		}
+	}
+	if _, err := tx.Exec(
+		"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt,
+	); err != nil {
+		return fmt.Errorf("create credential %q: %w", c.ID, err)
+	}
+	return tx.Commit()
+}
+
+// RevokeUnprovedAccess deletes, for every account whose address was never
+// proved (except the operator's synthetic account), the keys, sessions and
+// grants it holds. Such accounts are inert: nothing they can reach mints, so
+// the set is closed and this need only run at start.
+func (s *Store) RevokeUnprovedAccess(exemptUserID string) (int64, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	where := "user_id IN (SELECT id FROM users WHERE email_verified_at IS NULL AND id != ?)"
+	var total int64
+	for _, q := range []string{
+		"UPDATE api_keys SET revoked_at = ? WHERE revoked_at IS NULL AND " + where,
+		"DELETE FROM refresh_sessions WHERE " + where,
+		"DELETE FROM desktop_exchange_codes WHERE " + where,
+		"DELETE FROM device_authorizations WHERE " + where,
+		"DELETE FROM email_signin_attempts WHERE " + where,
+	} {
+		args := []any{exemptUserID}
+		if strings.HasPrefix(q, "UPDATE api_keys") {
+			args = []any{time.Now().UTC(), exemptUserID}
+		}
+		res, err := tx.Exec(q, args...)
+		if err != nil {
+			return 0, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, tx.Commit()
 }
 
 // GetCredentialsByUserID returns all credentials for the given user.

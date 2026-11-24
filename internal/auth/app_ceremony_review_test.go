@@ -16,8 +16,8 @@ import (
 func TestSecondRegistrationFinishForOneEmailIsRefused(t *testing.T) {
 	h := appEnv(t)
 	a, b := newSoftPasskey(t), newSoftPasskey(t)
-	beginA := decodeMap(t, postJSON(h.HandleRegisterBegin, map[string]string{"email": "alice@example.com"}))
-	beginB := decodeMap(t, postJSON(h.HandleRegisterBegin, map[string]string{"email": "alice@example.com"}))
+	beginA := decodeMap(t, registerBeginFor(t, h, "alice@example.com"))
+	beginB := decodeMap(t, registerBeginFor(t, h, "alice@example.com"))
 	if rec := postJSON(h.HandleAppRegisterFinish, appFinishBody(testApp, a.create(t, beginA, testOrigin))); rec.Code != 200 {
 		t.Fatalf("first finish = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -31,8 +31,8 @@ func TestSecondRegistrationFinishForOneEmailIsRefused(t *testing.T) {
 		t.Fatalf("credentials %d, keys %d; want 1 and 1", len(creds), countKeys(t, h, user.ID))
 	}
 	// The web finish is the same check.
-	beginC := decodeMap(t, postJSON(h.HandleRegisterBegin, map[string]string{"email": "web@example.com"}))
-	beginD := decodeMap(t, postJSON(h.HandleRegisterBegin, map[string]string{"email": "web@example.com"}))
+	beginC := decodeMap(t, registerBeginFor(t, h, "web@example.com"))
+	beginD := decodeMap(t, registerBeginFor(t, h, "web@example.com"))
 	if rec := postJSON(h.HandleRegisterFinish, newSoftPasskey(t).create(t, beginC, testOrigin)); rec.Code != 200 {
 		t.Fatalf("web first finish = %d: %s", rec.Code, rec.Body.String())
 	}

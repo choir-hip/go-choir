@@ -199,6 +199,9 @@ func writeKeyJSON(w http.ResponseWriter, key *appKeyResponse) {
 // mintAppKey gives the app the grant a device approval gives: a full-access key
 // (every scope), owner-wide, until revoked.
 func (h *Handler) mintAppKey(ctx context.Context, user *User, app string) (*appKeyResponse, error) {
+	if !mayMint(user) {
+		return nil, errAddressUnproved
+	}
 	scopes := AllScopes()
 	label := appKeyLabel + app
 	id, secret, err := h.store.CreateAPIKey(ctx, user.ID, label, scopes, nil)
@@ -293,6 +296,11 @@ func (h *Handler) HandleAppLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.store.TouchCredentialLastUsed(string(cred.ID)); err != nil {
 		log.Printf("[auth] operation=app_login_finish user_id=%s result=warning step=touch_last_used error=%q", user.ID, err)
+	}
+	if !mayMint(user) {
+		log.Printf("[auth] operation=app_login_finish user_id=%s result=refused reason=address_unproved", user.ID)
+		writeUnproved(w)
+		return
 	}
 	key, err := h.mintAppKey(r.Context(), user, app)
 	if err != nil {

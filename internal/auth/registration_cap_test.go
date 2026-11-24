@@ -25,7 +25,7 @@ import (
 
 func registerBegin(t *testing.T, h *Handler, email string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin", bytes.NewBufferString(`{"email":"`+email+`"}`))
+	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin", bytes.NewBufferString(withProof(t, h, `{"email":"`+email+`"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)

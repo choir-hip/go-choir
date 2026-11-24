@@ -469,6 +469,9 @@ func (h *Handler) issueSessionRow(w http.ResponseWriter, r *http.Request, user *
 // adding the account to this browser's set. HandleDesktopRedeem calls the
 // plain issuer instead, so a native handoff never mints an orphan set.
 func (h *Handler) signInSession(w http.ResponseWriter, r *http.Request, user *User, method string) (*userInfo, error) {
+	if !mayMint(user) {
+		return nil, errAddressUnproved
+	}
 	info, rs, err := h.issueSessionRow(w, r, user, method, nil)
 	if err != nil {
 		return nil, err
@@ -601,122 +604,6 @@ func isValidEmail(email string) bool {
 }
 
 // --- HTTP Handlers ---
-
-// HandleRegisterBegin handles POST /auth/register/begin.
-// It creates a new user (if not existing), generates WebAuthn registration
-// options with a challenge, and returns them as JSON.
-func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
-		return
-	}
-
-	var req beginRequest
-	if err := readJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
-		return
-	}
-
-	if req.Email == "" {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "email is required"})
-		return
-	}
-
-	if !isValidEmail(req.Email) {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "please enter a valid email address"})
-		return
-	}
-
-	emailHash := hashEmail(req.Email)
-
-	// Look up the user by email.
-	user, err := h.store.GetUserByEmail(req.Email)
-	if err != nil {
-		// User doesn't exist yet — create them, unless the cap is reached.
-		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, "", req.Email) {
-			return
-		}
-		userID := uuid.NewString()
-		user, err = h.store.CreateUser(userID, req.Email)
-		if err != nil {
-			log.Printf("[auth] operation=register_begin email_hash=%s result=error step=create_user error=%q", emailHash, err)
-			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create user"})
-			return
-		}
-		log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s step=user_created", emailHash, user.ID)
-	} else {
-		// User exists — check if they already have credentials.
-		creds, credErr := h.store.GetCredentialsByUserID(user.ID)
-		if credErr != nil {
-			log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=error step=check_credentials error=%q", emailHash, user.ID, credErr)
-			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
-			return
-		}
-		if len(creds) > 0 {
-			// User already has registered passkeys — reject duplicate registration.
-			log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=rejected reason=duplicate_registration", emailHash, user.ID)
-			writeJSON(w, http.StatusConflict, errorResponse{Error: "email already registered"})
-			return
-		}
-		// User exists but has no credentials (started but didn't complete registration).
-		// Allow them to proceed with registration, unless the cap is reached.
-		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, user.ID, req.Email) {
-			return
-		}
-		log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s step=resume_incomplete_registration", emailHash, user.ID)
-	}
-
-	// Build a WebAuthn user adapter.
-	waUser, err := newWebAuthnUser(user, nil) // no credentials for registration
-	if err != nil {
-		log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=error step=webauthn_adapter error=%q", emailHash, user.ID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
-		return
-	}
-
-	// Begin the WebAuthn registration ceremony.
-	creation, session, err := h.webauthn.BeginRegistration(waUser,
-		webauthn.WithConveyancePreference("none"),
-		webauthn.WithAuthenticatorSelection(
-			webauthn.SelectAuthenticator("platform", nil, "required"),
-		),
-		webauthn.WithExtensions(protocol.AuthenticationExtensions{
-			"prf": map[string]any{},
-		}),
-	)
-	if err != nil {
-		log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=error step=begin_registration error=%q", emailHash, user.ID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to begin registration"})
-		return
-	}
-
-	// Serialize the WebAuthn session data for the finish handler.
-	sessionDataJSON, err := json.Marshal(session)
-	if err != nil {
-		log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=error step=marshal_session error=%q", emailHash, user.ID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
-		return
-	}
-
-	// Persist the challenge state so the finish handler can verify it.
-	challengeState := &ChallengeState{
-		ID:                  session.Challenge,
-		UserID:              user.ID,
-		Challenge:           session.Challenge,
-		Type:                "registration",
-		WebAuthnSessionData: string(sessionDataJSON),
-		CreatedAt:           time.Now().UTC(),
-		ExpiresAt:           time.Now().UTC().Add(SessionChallengeTTL),
-	}
-	if err := h.store.SaveChallengeState(challengeState); err != nil {
-		log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=error step=save_challenge error=%q", emailHash, user.ID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to save challenge"})
-		return
-	}
-
-	log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s result=success challenge_type=registration", emailHash, user.ID)
-	writeJSON(w, http.StatusOK, creation)
-}
 
 // HandleLoginBegin handles POST /auth/login/begin.
 // It looks up an existing user and their credentials, then returns
@@ -876,84 +763,86 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 }
 
 // verifyRegistration checks a WebAuthn registration response against its
-// stored challenge, stores the credential and nudges the numbered address. It
-// answers the request itself and returns false on any refusal; on success it
-// returns the user and the stored credential and the caller issues whatever
-// the client gets (a cookie session on the web, a key for the phone app).
+// stored challenge and stores the result. There are two kinds of challenge and
+// no other: a pending registration (the address was proved by a mailed code
+// and no account exists: the account, its passkey and the proof are written
+// together here) and a recovery challenge (the address's holder proved it by the
+// mailed link: the passkey is added to the account, see AddRecoveryCredential).
+// It answers the request itself and returns false on any refusal; on success it
+// returns the user and the stored credential and the caller issues whatever the
+// client gets (a cookie session on the web, a key for the phone app).
 func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User, *Credential, bool) {
-	// Extract the challenge from the WebAuthn response to look up the session.
 	challengeID, err := extractChallengeFromBody(body)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid webauthn response: " + err.Error()})
 		return nil, nil, false
 	}
+	now := time.Now().UTC()
 
+	var (
+		user        *User
+		pending     *PendingRegistration
+		sessionJSON string
+		creds       []Credential
+	)
 	// Take the challenge: one atomic delete-and-return, so of several finishes
 	// carrying it exactly one proceeds, whether or not verification succeeds.
-	cs, err := h.store.ConsumeChallengeState(challengeID)
-	if err != nil {
-		log.Printf("[auth] operation=register_finish result=error step=challenge_lookup error=%q", err)
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge not found or already used"})
-		return nil, nil, false
-	}
-
-	log.Printf("[auth] operation=register_finish user_id=%s challenge_type=registration step=challenge_consumed", cs.UserID)
-
-	// Validate challenge type.
-	if cs.Type != "registration" {
-		log.Printf("[auth] operation=register_finish user_id=%s result=error reason=challenge_type_mismatch expected=registration got=%s", cs.UserID, cs.Type)
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge type mismatch"})
-		return nil, nil, false
-	}
-
-	// Check challenge not expired.
-	if time.Now().UTC().After(cs.ExpiresAt) {
-		log.Printf("[auth] operation=register_finish user_id=%s result=error reason=challenge_expired", cs.UserID)
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge expired"})
-		return nil, nil, false
-	}
-
-	// Deserialize the WebAuthn session data.
-	if cs.WebAuthnSessionData == "" {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge has no session data"})
-		return nil, nil, false
-	}
-
-	var sessionData webauthn.SessionData
-	if err := json.Unmarshal([]byte(cs.WebAuthnSessionData), &sessionData); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid session data"})
-		return nil, nil, false
-	}
-
-	// Look up the user.
-	user, err := h.store.GetUserByID(cs.UserID)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "user not found"})
-		return nil, nil, false
-	}
-	// The cap again: ceremonies begun below it must not all finish above it.
-	if h.refuseIfRegistrationClosed(w, "register_finish", hashEmail(user.Email), user.ID, user.Email) {
-		return nil, nil, false
-	}
-
-	// Build a WebAuthn user adapter.
-	creds, err := h.store.GetCredentialsByUserID(user.ID)
-	if err != nil {
-		// Fail closed: an unreadable account is not an account with no passkey.
-		log.Printf("[auth] operation=register_finish user_id=%s result=error step=read_credentials error=%q", user.ID, err)
+	pending, perr := h.store.ConsumePendingRegistration(challengeID, now)
+	switch {
+	case perr == nil:
+		user = &User{ID: pending.UserID, Email: pending.Email, CreatedAt: now, EmailVerifiedAt: &now}
+		sessionJSON = pending.SessionData
+		// The cap again: ceremonies begun below it must not all finish above it.
+		if h.refuseIfRegistrationClosed(w, "register_finish", hashEmail(user.Email), "", user.Email) {
+			return nil, nil, false
+		}
+	case errors.Is(perr, sql.ErrNoRows):
+		pending = nil
+		cs, err := h.store.ConsumeChallengeState(challengeID)
+		if err != nil {
+			log.Printf("[auth] operation=register_finish result=error step=challenge_lookup error=%q", err)
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge not found or already used"})
+			return nil, nil, false
+		}
+		// The only registration challenge in the table is a recovery one: the
+		// address's holder proved the inbox by the mailed link.
+		if cs.Type != "registration" || cs.Source != ChallengeSourceRecovery {
+			log.Printf("[auth] operation=register_finish user_id=%s result=error reason=challenge_type_mismatch type=%s source=%s", cs.UserID, cs.Type, cs.Source)
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge type mismatch"})
+			return nil, nil, false
+		}
+		if now.After(cs.ExpiresAt) {
+			log.Printf("[auth] operation=register_finish user_id=%s result=error reason=challenge_expired", cs.UserID)
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge expired"})
+			return nil, nil, false
+		}
+		sessionJSON = cs.WebAuthnSessionData
+		user, err = h.store.GetUserByID(cs.UserID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "user not found"})
+			return nil, nil, false
+		}
+		// Fail closed: an unreadable account is not an account with no passkeys.
+		creds, err = h.store.GetCredentialsByUserID(user.ID)
+		if err != nil {
+			log.Printf("[auth] operation=register_finish user_id=%s result=error step=read_credentials error=%q", user.ID, err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
+			return nil, nil, false
+		}
+	default:
+		log.Printf("[auth] operation=register_finish result=error step=pending_lookup error=%q", perr)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
 		return nil, nil, false
 	}
-	// A challenge begun by register/begin creates the account's first passkey
-	// and no other: begin refuses an address that has one, but several live
-	// challenges for one address can be begun before any finishes, and the
-	// second to finish would hold a passkey (and, on the phone, a full-scope
-	// key) on an account it did not create. Only a recovery challenge, begun
-	// after the address was proved by mail, adds a passkey to an account that
-	// has one.
-	if cs.Source != ChallengeSourceRecovery && cs.Source != ChallengeSourceRecoveryTakeback && len(creds) > 0 {
-		log.Printf("[auth] operation=register_finish user_id=%s result=refused reason=account_has_credential", user.ID)
-		writeJSON(w, http.StatusConflict, errorResponse{Error: "this account already has a passkey; sign in"})
+
+	log.Printf("[auth] operation=register_finish user_id=%s challenge_type=registration step=challenge_consumed", user.ID)
+	if sessionJSON == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "challenge has no session data"})
+		return nil, nil, false
+	}
+	var sessionData webauthn.SessionData
+	if err := json.Unmarshal([]byte(sessionJSON), &sessionData); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid session data"})
 		return nil, nil, false
 	}
 	waUser, err := newWebAuthnUser(user, creds)
@@ -961,23 +850,17 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "internal error"})
 		return nil, nil, false
 	}
-
-	// Parse the WebAuthn response from the buffered body.
 	parsedResponse, err := protocol.ParseCredentialCreationResponseBody(bytes.NewReader(body))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid registration response: " + err.Error()})
 		return nil, nil, false
 	}
-
-	// Verify the WebAuthn registration.
 	credential, err := h.webauthn.CreateCredential(waUser, sessionData, parsedResponse)
 	if err != nil {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=verify_credential error=%q", user.ID, err)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "registration verification failed: " + err.Error()})
 		return nil, nil, false
 	}
-
-	// Store the verified credential in our persistence.
 	dbCred := &Credential{
 		ID:              string(credential.ID),
 		UserID:          user.ID,
@@ -987,19 +870,29 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 		SignCount:       int64(credential.Authenticator.SignCount),
 		AAGUID:          credential.Authenticator.AAGUID,
 		Flags:           marshalCredentialFlags(credential.Flags),
-		CreatedAt:       time.Now().UTC(),
+		CreatedAt:       now,
 	}
-	// The early check above only saves work; this is the check that holds: it
-	// and the insert are one atomic step.
-	if err := h.store.AddRegistrationCredential(dbCred, cs.Source); err != nil {
-		if errors.Is(err, ErrAccountHasCredential) {
-			log.Printf("[auth] operation=register_finish user_id=%s result=refused reason=account_has_credential step=insert", user.ID)
-			writeJSON(w, http.StatusConflict, errorResponse{Error: "this account already has a passkey; sign in"})
+	if pending != nil {
+		// The account, its passkey and the proof of its address, in one transaction.
+		if err := h.store.CreateAccountWithCredential(pending, dbCred); err != nil {
+			if errors.Is(err, ErrAddressTaken) {
+				log.Printf("[auth] operation=register_finish user_id=%s result=refused reason=address_taken", user.ID)
+				writeJSON(w, http.StatusConflict, errorResponse{Error: "email already registered"})
+				return nil, nil, false
+			}
+			log.Printf("[auth] operation=register_finish user_id=%s result=error step=create_account error=%q", user.ID, err)
+			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to store credential"})
 			return nil, nil, false
 		}
+	} else if err := h.store.AddRecoveryCredential(dbCred); err != nil {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=store_credential error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to store credential"})
 		return nil, nil, false
+	}
+	if pending == nil {
+		if fresh, err := h.store.GetUserByID(user.ID); err == nil {
+			user = fresh
+		}
 	}
 
 	if passkeyPRFEnabled(parsedResponse.ClientExtensionResults) {
@@ -1114,6 +1007,14 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[auth] operation=login_finish user_id=%s result=error step=verify_login error=%q", user.ID, err)
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "login verification failed: " + err.Error()})
+		return
+	}
+
+	// An account whose address was never proved mints nothing: it proves the
+	// address by mail first (recovery).
+	if !mayMint(user) {
+		log.Printf("[auth] operation=login_finish user_id=%s result=refused reason=address_unproved", user.ID)
+		writeUnproved(w)
 		return
 	}
 
@@ -1871,7 +1772,7 @@ func (h *Handler) requireAuthUser(w http.ResponseWriter, r *http.Request) *User 
 		return nil
 	}
 	user, err := h.store.GetUserByID(userID)
-	if err != nil {
+	if err != nil || !mayMint(user) {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return nil
 	}
@@ -1888,7 +1789,7 @@ func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) (*U
 		userID, err := h.ValidateAccessToken(cookie.Value)
 		if err == nil {
 			user, err := h.store.GetUserByID(userID)
-			if err == nil {
+			if err == nil && mayMint(user) {
 				return user, nil
 			}
 		}

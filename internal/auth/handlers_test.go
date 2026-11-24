@@ -56,7 +56,12 @@ func testHandlerEnv(t *testing.T) (*Handler, ed25519.PrivateKey) {
 		t.Fatalf("create webauthn: %v", err)
 	}
 
+	// Sign-up proves the address by a mailed code: a key for the code's hash
+	// and a mailer that keeps what it was asked to send.
+	cfg.EmailCodeKey = []byte(testEmailKey)
 	handler := NewHandler(store, wa, cfg, priv)
+	handler.signInMailer = &fakeSignInMailer{}
+	handler.signInMailDispatch = func(f func()) { f() }
 	return handler, priv
 }
 
@@ -170,7 +175,7 @@ func TestRegisterBeginReturnsRPBoundChallenge(t *testing.T) {
 
 	body := `{"email": "alice@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
+		bytes.NewBufferString(withProof(t, h, body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
@@ -229,7 +234,7 @@ func TestRegisterBeginCreatesUserAndChallengeInStore(t *testing.T) {
 
 	body := `{"email": "bob@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
+		bytes.NewBufferString(withProof(t, h, body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
@@ -258,7 +263,7 @@ func TestRegisterBeginIdempotentForExistingUser(t *testing.T) {
 
 	body := `{"email": "charlie@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
+		bytes.NewBufferString(withProof(t, h, body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
@@ -693,7 +698,7 @@ func TestRegisterThenLoginBeginFlow(t *testing.T) {
 	// Step 1: Register begin for "alice@example.com"
 	regBody := `{"email": "alice@example.com"}`
 	regReq := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(regBody))
+		bytes.NewBufferString(withProof(t, h, regBody)))
 	regReq.Header.Set("Content-Type", "application/json")
 	regRec := httptest.NewRecorder()
 	h.HandleRegisterBegin(regRec, regReq)
@@ -752,7 +757,7 @@ func TestRegisterBeginWithDeployedRPID(t *testing.T) {
 
 	body := `{"email": "deployed-alice@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
+		bytes.NewBufferString(withProof(t, h, body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
@@ -2516,7 +2521,7 @@ func TestDeployedOriginRegisterBeginReachable(t *testing.T) {
 
 	body := `{"email": "deployed-reachability@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
+		bytes.NewBufferString(withProof(t, h, body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
@@ -3223,7 +3228,7 @@ func TestRegisterBeginRejectsInvalidEmail(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			body := fmt.Sprintf(`{"email": %q}`, tt.email)
 			req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-				bytes.NewBufferString(body))
+				bytes.NewBufferString(withProof(t, h, body)))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 			h.HandleRegisterBegin(rec, req)
@@ -3285,7 +3290,7 @@ func TestRegisterBeginRejectsOldUsernameField(t *testing.T) {
 	// now expects "email".
 	body := `{"username": "alice@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
+		bytes.NewBufferString(withProof(t, h, body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
@@ -3384,7 +3389,7 @@ func TestDuplicateEmailRegistrationRejected(t *testing.T) {
 	// Step 1: Register a user successfully (first registration).
 	firstBody := `{"email": "duplicate@example.com"}`
 	req1 := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(firstBody))
+		bytes.NewBufferString(withProof(t, h, firstBody)))
 	req1.Header.Set("Content-Type", "application/json")
 	rec1 := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec1, req1)
@@ -3419,7 +3424,7 @@ func TestDuplicateEmailRegistrationRejected(t *testing.T) {
 	// Step 2: Attempt to register the same email again.
 	secondBody := `{"email": "duplicate@example.com"}`
 	req2 := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(secondBody))
+		bytes.NewBufferString(withProof(t, h, secondBody)))
 	req2.Header.Set("Content-Type", "application/json")
 	rec2 := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec2, req2)
@@ -3479,7 +3484,7 @@ func TestRegisterBeginAllowsUserWithoutCredentials(t *testing.T) {
 	// Attempt to register should succeed since user has no passkeys.
 	body := `{"email": "partial@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
+		bytes.NewBufferString(withProof(t, h, body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
@@ -3534,7 +3539,7 @@ func TestDuplicateRegistrationNoNewUserRecord(t *testing.T) {
 	// Attempt duplicate registration.
 	body := `{"email": "norecord@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register/begin",
-		bytes.NewBufferString(body))
+		bytes.NewBufferString(withProof(t, h, body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.HandleRegisterBegin(rec, req)
