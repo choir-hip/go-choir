@@ -119,33 +119,336 @@
 // Sentences the page shows come from this file (`LABELS`), one per derived status; the contract shows them and decides nothing.
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// THE STUB (first commit of the tests: every method fails, so the tests are seen failing before the code exists)
 import type { Storage } from './app.contract.d.ts';
+import { authedJSON, accountId, onSignOutBegin, sealingBlocked, segment, SignedOutError, HTTPError, type Reply } from './api.ts';
+import * as Body from './texture-body.ts';
+
 export const PENDING_DIR = 'app:/data/texture-pending';
-export type Reply = { body: unknown; serverTime: number | null; raw: string };
+/** One network call of the editor ends in this: a link that answers nothing must not hold a document's queue. The unsent text is on disk before any call. */
+export const NET_TIMEOUT_MS = 20_000;
 export type Net = { json(path: string, opts?: { method?: 'GET' | 'POST'; body?: unknown }): Promise<Reply> };
 export type Info = { status: string; label: string; notice: string; address: string; editable: boolean; writable: boolean; kept: string; hasKept: boolean; waiting: number; stamp: number; head: string; opened: boolean };
 export type Deps = { net: Net; storage: Storage | undefined; account: string; timeoutMs?: number };
-const nope = (): never => { throw new Error('not built'); };
+type Entry = { text: string; from: string | null; base: string; key: string };
+type Head = { id: string; content: string; body: Body.Body | null; version: number };
+type Last = { kind: 'none' } | { kind: 'offline'; label: string } | { kind: 'failed'; label: string } | { kind: 'saved'; version: number };
+
+const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const uuid = (): string => { const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80; const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(''); return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`; };
+/** The document id of an address the listener may edit (the head of a Texture document), else null. A revision (`texture:<doc>@<rev>`) and a story (`pub:`) are read-only. */
+export function editableDoc(address: string): string | null {
+  if (!address.startsWith('texture:')) return null;
+  const rest = address.slice('texture:'.length);
+  return rest === '' || rest.includes('@') ? null : rest;
+}
+const isLetGo = (e: unknown): boolean => e instanceof Error && /let go/i.test(e.message);
+const isOffline = (e: unknown): boolean => (e instanceof HTTPError ? e.status >= 500 || e.status === 404 || e.status === 429 : !(e instanceof SignedOutError));
+const sentence = (e: unknown): string => (e instanceof SignedOutError ? 'Sign in again to save.' : e instanceof HTTPError ? (e.status === 403 ? 'This device is not allowed to save here.' : `Could not save. ${e.message}`) : 'Something went wrong saving the document.');
+/** An error that says "there is no such file" (the kept file is not there yet), against one that says it could not be read. */
+const isAbsent = (e: unknown): boolean => { const c = (e as { code?: unknown } | null)?.code; return c === 'ENOENT' || /no such file|not found|does not exist|ENOENT/i.test(e instanceof Error ? e.message : ''); };
+
+export const LABELS = {
+  conflict: 'Not saved: this document changed somewhere else, and your changes could not be combined with it. Your text is kept on this phone.',
+  saving: 'Saving', dirty: 'Editing', offline: 'Offline: kept on this phone, posts when it can', launch: 'Edits kept on this phone',
+  readOnly: 'The editor needs your account to be known before it keeps your text. Try again in a moment.',
+  bad: 'Unsent text could not be read and was set aside.',
+} as const;
+
 export class Editor {
   dead = false;
-  constructor(_deps: Deps) { void _deps; }
-  kill(): void { nope(); }
-  settleWrites(): Promise<void> { return nope(); }
-  info(_a: string): Promise<Info> { return nope(); }
-  open(_a: string): Promise<Info> { return nope(); }
-  edit(_a: string, _t: string, _from: string | null): Promise<Info> { return nope(); }
-  flush(_a: string): Promise<Info> { return nope(); }
-  discard(_a: string): Promise<Info> { return nope(); }
-  overwrite(_a: string): Promise<Info> { return nope(); }
-  writeAutomatic(_a: string, _t: string, _from: string | null): Promise<'saved' | 'busy' | 'failed'> { return nope(); }
+  private net: Net; private storage: Storage | undefined; private account: string; private timeoutMs: number;
+  private journal: Record<string, Entry> = {};               // the entries: the file's content, one per document (a keystroke writes it; a run op only rewrites base/from and deletes by text)
+  private heads = new Map<string, Head>(); private inFlight = new Set<string>(); private conflictAt = new Map<string, string>(); private last = new Map<string, Last>();
+  private chain = new Map<string, Promise<unknown>>(); private stamp = 0; private notice = '';
+  private loaded = false; private loading: Promise<void> | undefined; private diskPending = false; private pDirty = false; private pRun: Promise<void> | undefined;
+  constructor(d: Deps) { this.net = d.net; this.storage = d.storage; this.account = d.account; this.timeoutMs = d.timeoutMs ?? NET_TIMEOUT_MS; }
+  private file(): string { return `${PENDING_DIR}/${this.account}.json`; }
+  private bump(): void { this.stamp += 1; }
+  /** Sign-out began, or another account: this instance does nothing more. One flag, read at the door (`run`), the network (`json`) and the file writer (`writeFile`). */
+  kill(): void { this.dead = true; }
+  /** For the wipe: waits for a write that is in flight to end (the writer starts no new one once dead). */
+  async settleWrites(): Promise<void> { while (this.pRun) await this.pRun; }
+
+  // ----------------------------------------------------------------------------------------------------------------- the door
+  private run<T>(doc: string, fn: () => Promise<T>, empty: () => Promise<T>): Promise<T> {
+    const go = async (): Promise<T> => (this.dead ? empty() : fn());
+    const p = (this.chain.get(doc) ?? Promise.resolve()).then(go, go);
+    this.chain.set(doc, p.then(() => undefined, () => undefined));
+    return p;
+  }
+  // ----------------------------------------------------------------------------------------------------------------- the network exit
+  private async json(path: string, opts?: { method?: 'GET' | 'POST'; body?: unknown }): Promise<Reply> {
+    if (this.dead) throw new Error('the editor was closed');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error('timeout: no answer from the computer')), this.timeoutMs); });
+    try { const r = await Promise.race([this.net.json(path, opts), late]); if (this.dead) throw new Error('the editor was closed'); return r; } finally { clearTimeout(timer); }
+  }
+  // ----------------------------------------------------------------------------------------------------------------- the file: read once, one writer
+  private ready(): Promise<void> {
+    if (this.loaded) return Promise.resolve();
+    return (this.loading ??= this.load().finally(() => { this.loading = undefined; }));
+  }
+  private async load(): Promise<void> {
+    if (!this.storage) { this.loaded = true; return; }
+    let bytes: Uint8Array;
+    try { bytes = new Uint8Array(await this.storage.fs.readFile(this.file())); }
+    catch (e) { if (isAbsent(e)) { this.loaded = true; return; } return; }                    // an I/O error is not "no file": left alone, asked again at the next call, nothing written over it
+    let docs: Record<string, Entry> = {};
+    try {
+      const o = JSON.parse(new TextDecoder().decode(bytes));
+      if (!obj(o) || !obj(o.docs)) throw new Error('shape');
+      for (const [d, v] of Object.entries(o.docs)) if (obj(v) && typeof v.text === 'string' && typeof v.base === 'string') docs[d] = { text: v.text, from: typeof v.from === 'string' ? v.from : null, base: v.base, key: str(v.key) || uuid() };
+    } catch {
+      docs = {};                                                                              // corrupt: set aside as the ONE .bad (replaced), and say so
+      try { await this.storage.fs.atomicWriteFile(`${PENDING_DIR}/${this.account}.bad`, bytes); await this.storage.fs.rm(this.file()); } catch { /* the notice is still given */ }
+      this.notice = LABELS.bad;
+    }
+    for (const [d, e] of Object.entries(docs)) if (!this.journal[d]) { this.journal[d] = e; this.last.set(d, { kind: 'offline', label: LABELS.launch }); }
+    this.loaded = true; this.bump();
+    if (this.diskPending) void this.persist();
+  }
+  private persist(): Promise<void> {
+    this.pDirty = true;
+    if (!this.pRun) this.pRun = (async () => { try { while (this.pDirty) { this.pDirty = false; await this.writeFile(); } } finally { this.pRun = undefined; } })();
+    return this.pRun;
+  }
+  private async writeFile(): Promise<void> {
+    if (this.dead || !this.storage) return;
+    if (!this.loaded) { this.diskPending = true; return; }                                    // the file that is there has not been read: not written over
+    this.diskPending = false;
+    try {
+      if (Object.keys(this.journal).length === 0) { try { await this.storage.fs.rm(this.file()); } catch { /* none */ } return; }
+      try { await this.storage.fs.mkdir(PENDING_DIR); } catch { /* there */ }
+      await this.storage.fs.atomicWriteFile(this.file(), new TextEncoder().encode(JSON.stringify({ account: this.account, docs: this.journal })));
+    } catch { this.diskPending = true; }
+  }
+  // ----------------------------------------------------------------------------------------------------------------- what the page sees: derived, never assigned
+  private statusOf(doc: string): { status: string; label: string } {
+    const e = this.journal[doc], l = this.last.get(doc) ?? { kind: 'none' as const };
+    if (this.conflictAt.has(doc)) return { status: 'conflict', label: LABELS.conflict };
+    if (this.inFlight.has(doc)) return { status: 'saving', label: LABELS.saving };
+    if (e) {
+      if (l.kind === 'offline') return { status: 'offline', label: l.label };
+      if (l.kind === 'failed') return { status: 'failed', label: l.label };
+      return { status: 'dirty', label: this.diskPending ? 'Editing (not yet saved on this phone)' : LABELS.dirty };
+    }
+    if (l.kind === 'saved') return { status: 'saved', label: l.version > 0 ? `Saved · version ${l.version}` : 'Saved' };
+    return { status: 'idle', label: '' };
+  }
+  async info(address: string): Promise<Info> {
+    await this.ready();
+    const doc = editableDoc(address);
+    const waiting = Object.keys(this.journal).filter((d) => !this.conflictAt.has(d)).length;      // a conflict waits for the listener, not for a retry
+    const base = { notice: this.notice, address, writable: true, waiting, stamp: this.stamp };
+    if (doc === null) return { ...base, status: 'idle', label: '', editable: false, kept: '', hasKept: false, head: '', opened: false };
+    const e = this.journal[doc], h = this.heads.get(doc), st = this.statusOf(doc);
+    return { ...base, ...st, editable: true, kept: e?.text ?? '', hasKept: !!e, head: h?.content ?? '', opened: !!h };
+  }
+  // ----------------------------------------------------------------------------------------------------------------- reads (inside run)
+  private async docRow(doc: string): Promise<{ id: string; trajectory: string }> {
+    const r = await this.json(`/api/texture/documents/${segment(doc)}`);
+    let d = obj(r.body) ? r.body : {};
+    if (obj(d.document)) d = d.document;
+    return { id: str(d.current_revision_id), trajectory: str(d.trajectory_id) };
+  }
+  private async revision(rid: string): Promise<Head> {
+    if (rid === '') return { id: '', content: '', body: null, version: 0 };
+    const r = await this.json(`/api/texture/revisions/${segment(rid)}`);
+    let v = obj(r.body) ? r.body : {};
+    if (obj(v.revision)) v = v.revision;
+    const n = typeof v.version_number === 'number' ? v.version_number : -1;
+    return { id: rid, content: str(v.content), body: obj(v.body_doc) ? (v.body_doc as Body.Body) : null, version: n + 1 };
+  }
+  /** Reads the head into the facts. False when it could not (last says why, unless the answer was let go). */
+  private async readHead(doc: string): Promise<{ row: { id: string; trajectory: string }; head: Head } | null> {
+    try { const row = await this.docRow(doc); const head = await this.revision(row.id); this.heads.set(doc, head); return { row, head }; }
+    catch (e) { this.fail(doc, e); return null; }
+  }
+  private fail(doc: string, e: unknown): void {
+    if (this.dead || isLetGo(e)) return;                                                         // a newer answer of the same mutation does the work
+    this.last.set(doc, isOffline(e) ? { kind: 'offline', label: LABELS.offline } : { kind: 'failed', label: `Not saved: ${sentence(e)}` }); this.bump();
+  }
+  /** The entry's text is on the server: the entry goes (compared by text: a newer keystroke keeps its own). */
+  private acknowledged(doc: string, text: string, version: number): void {
+    const e = this.journal[doc];
+    if (e && e.text === text) delete this.journal[doc];
+    this.last.set(doc, { kind: 'saved', version }); this.conflictAt.delete(doc); this.bump();
+  }
+
+  // ----------------------------------------------------------------------------------------------------------------- the events
+  /** The head is read, and the field can be seeded from it. Offline: `opened` is false and the field keeps what the page shows. */
+  async open(address: string): Promise<Info> {
+    const doc = editableDoc(address);
+    if (doc === null) return this.info(address);
+    await this.ready();
+    return this.run(doc, async () => { await this.readHead(doc); return this.info(address); }, () => this.info(address));
+  }
+  /** KEY: the entry is made and written FIRST (no network, no queue); then the apply enters the document's queue. `from` is what the field showed before this keystroke (null: no claim; '' is an empty text). */
+  async edit(address: string, text: string, from: string | null): Promise<Info> {
+    const doc = editableDoc(address);
+    if (doc === null || this.dead) return this.info(address);
+    await this.ready();
+    if (this.dead) return this.info(address);
+    const cur = this.journal[doc], head = this.heads.get(doc);
+    let base = '', f = from;
+    if (cur) { base = cur.base; f = cur.base !== '' ? from : cur.from; }                       // a keystroke over unsent text INHERITS the base of the text it replaces
+    else if (head) { base = from === null || from === head.content ? head.id : ''; if (head.id === '') f = head.content; }
+    this.journal[doc] = { text, from: f, base, key: uuid() };
+    this.bump();
+    const onDisk = this.persist();
+    const applied = this.run(doc, async () => { await this.settle(doc); return this.info(address); }, () => this.info(address));
+    await onDisk;
+    return applied;
+  }
+  /** Inside the queue: the head of the document is known (read once while there is none), and the entry's base is settled against it. */
+  private async settle(doc: string): Promise<void> {
+    await this.ready();
+    if (!this.heads.has(doc) && !(await this.readHead(doc))) return;
+    const e = this.journal[doc], h = this.heads.get(doc);
+    if (!e || !h) return;
+    if (e.text === h.content) { delete this.journal[doc]; this.bump(); await this.persist(); return; }      // the same text as the head: nothing unsent
+    if (e.base === '' && h.id !== '' && (e.from === null || e.from === h.content)) { e.base = h.id; await this.persist(); }
+  }
+  /** Post what is waiting now (Done, the idle pause, leaving the page, the retry: '' = every document with unsent text and no conflict). */
+  async flush(address: string): Promise<Info> {
+    await this.ready();
+    if (address === '') {
+      for (const doc of Object.keys(this.journal)) await this.run(doc, async () => { if (!this.conflictAt.has(doc)) await this.save(doc); }, async () => undefined);
+      return this.info('');
+    }
+    const doc = editableDoc(address);
+    if (doc === null) return this.info(address);
+    return this.run(doc, async () => { await this.save(doc); return this.info(address); }, () => this.info(address));
+  }
+  /** "Use theirs": the head wins. The entry goes only if its text is still the text that was discarded (a newer keystroke is the listener's and stays). */
+  async discard(address: string): Promise<Info> {
+    const doc = editableDoc(address);
+    if (doc === null) return this.info(address);
+    await this.ready();
+    const asked = this.journal[doc]?.text;
+    return this.run(doc, async () => {
+      if (asked !== undefined && this.journal[doc]?.text === asked) delete this.journal[doc];
+      this.conflictAt.delete(doc); this.heads.delete(doc); this.last.delete(doc); this.bump(); await this.persist();
+      return this.info(address);
+    }, () => this.info(address));
+  }
+  /** "Keep mine": re-based on the head as it is now, then saved. */
+  async overwrite(address: string): Promise<Info> {
+    const doc = editableDoc(address);
+    if (doc === null) return this.info(address);
+    await this.ready();
+    return this.run(doc, async () => {
+      const e = this.journal[doc];
+      if (!e) return this.info(address);
+      const got = await this.readHead(doc);
+      if (!got) return this.info(address);
+      e.base = got.head.id; e.from = got.head.content; e.key = uuid(); this.conflictAt.delete(doc); this.bump(); await this.persist();
+      await this.save(doc);
+      return this.info(address);
+    }, () => this.info(address));
+  }
+  /** For a writer that is not the listener (the notebook's topics): ONE op inside the queue, reading and writing there. 'busy' when the listener has text here; on a failure it drops its own text, if still its own. */
+  async writeAutomatic(address: string, text: string, from: string | null): Promise<'saved' | 'busy' | 'failed'> {
+    const doc = editableDoc(address);
+    if (doc === null) return 'failed';
+    await this.ready();
+    return this.run<'saved' | 'busy' | 'failed'>(doc, async () => {
+      if (this.journal[doc]) return 'busy';
+      this.journal[doc] = { text, from, base: '', key: uuid() }; this.bump();
+      void this.persist();
+      await this.settle(doc);
+      await this.save(doc);
+      const l = this.last.get(doc);
+      if (!this.journal[doc] && l && l.kind === 'saved') return 'saved';
+      if (this.journal[doc]?.text === text) { delete this.journal[doc]; this.bump(); await this.persist(); }
+      return 'failed';
+    }, async () => 'failed');
+  }
+
+  /** Inside the queue. THE FLUSH RULE (header): read the head, then post over it, acknowledge, rebase, or conflict. */
+  private async save(doc: string): Promise<void> {
+    const e0 = this.journal[doc];
+    if (!e0 || this.conflictAt.has(doc)) return;
+    try {
+      const got = await this.readHead(doc);
+      if (!got) return;
+      const { row, head: h } = got;
+      const e = this.journal[doc];
+      if (!e) return;
+      if (h.id !== e.base) {
+        if (h.content === e.text) { this.acknowledged(doc, e.text, h.version); await this.persist(); return; }
+        if ((e.base === '' && e.from === null) || h.content === e.from) { e.base = h.id; await this.persist(); }
+        else { this.conflictAt.set(doc, h.id); this.bump(); return; }
+      }
+      const posted = e.text;
+      const merged = Body.merge(h.body, h.content, posted);
+      const payload: Record<string, unknown> = { content: posted, body_doc: merged.body, idempotency_key: e.key };
+      if (h.id !== '') payload.parent_revision_id = h.id;
+      if (row.trajectory !== '') {                                                            // as the web does: a document with a trajectory is saved against its lifecycle version
+        const life = await this.json(`/api/texture/lifecycle/${segment(row.trajectory)}`);
+        const t = obj(life.body) && obj(life.body.trajectory) ? life.body.trajectory : {};
+        if (t.lifecycle_version !== undefined) payload.expected_lifecycle_version = t.lifecycle_version;
+      }
+      this.inFlight.add(doc); this.last.set(doc, { kind: 'none' }); this.bump();
+      let r: Reply;
+      try { r = await this.json(`/api/texture/documents/${segment(doc)}/revisions`, { method: 'POST', body: payload }); }
+      catch (err) {
+        this.inFlight.delete(doc);
+        if (err instanceof HTTPError && err.status === 409) {                                 // the head moved between the read and the post
+          const again = await this.readHead(doc);
+          if (!again) return;
+          if (again.head.content === posted) { this.acknowledged(doc, posted, again.head.version); await this.persist(); return; }
+          this.conflictAt.set(doc, again.head.id); this.bump(); return;
+        }
+        throw err;
+      }
+      this.inFlight.delete(doc);
+      let o = obj(r.body) ? r.body : {};
+      if (obj(o.revision)) o = o.revision;
+      const n = typeof o.version_number === 'number' ? o.version_number : -1;
+      const id = str(o.revision_id);
+      this.heads.set(doc, { id, content: posted, body: merged.body, version: n + 1 });
+      const cur = this.journal[doc];
+      if (cur && cur.text !== posted) { cur.base = id; cur.from = posted; }                   // typed while it was posting: its base is the revision just made
+      this.acknowledged(doc, posted, n + 1);
+      await this.persist();
+    } catch (err) {
+      this.inFlight.delete(doc);
+      this.fail(doc, err);
+    }
+  }
 }
-export const editableDoc = (a: string): string | null => { void a; return nope(); };
-export const textureEditInfo = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
-export const textureEditOpen = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
-export const textureEdit = (_a: string, _t: string, _f: string, _s: Storage | undefined): Promise<Info> => nope();
-export const textureFlush = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
-export const textureDiscard = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
-export const textureOverwrite = (_a: string, _s: Storage | undefined): Promise<Info> => nope();
-export const wipeTextureEdit = (_s: Storage | undefined): Promise<void> => nope();
-export const forgetTextureEdit = (): void => nope();
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// THE MODULE: one instance per signed-in account, built only when the account's id is known.
+const real: Net = { json: (path, opts) => authedJSON(path, opts) };
+let live: { account: string; ed: Editor; storage: Storage | undefined } | null = null;
+onSignOutBegin(() => { if (live) { live.ed.kill(); live = null; } });
+const readOnly = (address: string): Info => ({ status: 'idle', label: LABELS.readOnly, notice: '', address, editable: editableDoc(address) !== null, writable: false, kept: '', hasKept: false, waiting: 0, stamp: 0, head: '', opened: false });
+async function wipeFolder(storage: Storage | undefined): Promise<void> { if (storage) { try { await storage.fs.rm(PENDING_DIR); } catch { /* none */ } } }
+/** The editor for the account signed in now, or null (read-only). The id is read once per call: another id than the instance's is treated as a sign-out (kill, wipe the folder, build anew); an id that cannot be read is
+ * not another account, and the instance goes on. While a sign-out is under way no instance is built. */
+async function current(storage: Storage | undefined): Promise<Editor | null> {
+  if (sealingBlocked()) return null;
+  const id = await accountId();
+  if (id === null) return live?.ed ?? null;
+  if (live && live.account !== id) { const old = live.ed; old.kill(); live = null; await old.settleWrites(); await wipeFolder(storage); }
+  if (!live) live = { account: id, ed: new Editor({ net: real, storage, account: id }), storage };
+  return live.ed;
+}
+export const textureEditInfo = async (a: string, s: Storage | undefined): Promise<Info> => { const e = await current(s); return e ? e.info(a) : readOnly(a); };
+export const textureEditOpen = async (a: string, s: Storage | undefined): Promise<Info> => { const e = await current(s); return e ? e.open(a) : readOnly(a); };
+export const textureEdit = async (a: string, t: string, from: string, s: Storage | undefined): Promise<Info> => { const e = await current(s); return e ? e.edit(a, t, from) : readOnly(a); };
+export const textureFlush = async (a: string, s: Storage | undefined): Promise<Info> => { const e = await current(s); return e ? e.flush(a) : readOnly(a); };
+export const textureDiscard = async (a: string, s: Storage | undefined): Promise<Info> => { const e = await current(s); return e ? e.discard(a) : readOnly(a); };
+export const textureOverwrite = async (a: string, s: Storage | undefined): Promise<Info> => { const e = await current(s); return e ? e.overwrite(a) : readOnly(a); };
+export const textureWriteAutomatic = async (a: string, t: string, from: string | null, s: Storage | undefined): Promise<'saved' | 'busy' | 'failed'> => { const e = await current(s); return e ? e.writeAutomatic(a, t, from) : 'failed'; };
+/** Sign-out (account.ts): the instance dies, its last write ends, and the whole folder goes (every account's file and the .bad). */
+export async function wipeTextureEdit(storage: Storage | undefined): Promise<void> {
+  const old = live; live = null;
+  if (old) { old.ed.kill(); await old.ed.settleWrites(); }
+  await wipeFolder(storage);
+}
+/** For tests: a fresh process. */
+export function forgetTextureEdit(): void { if (live) live.ed.kill(); live = null; }
