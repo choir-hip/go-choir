@@ -191,6 +191,9 @@ func requestDesktopID(r *http.Request) string {
 
 // Handler provides HTTP and WebSocket handlers for the proxy routes.
 type Handler struct {
+	// testWakingResolverHook runs whenever the waking resolver is called (tests).
+	testWakingResolverHook func()
+
 	cfg          *Config
 	pubKey       ed25519.PublicKey
 	reverseProxy *httputil.ReverseProxy
@@ -867,10 +870,24 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resolveStarted := time.Now()
-	if diagnosticReadNeverWakes(r, authResult) && (computerTarget == nil || computerTarget.State != "active" || strings.TrimSpace(computerTarget.ComputerURL) == "") {
-		// An investigator's read of the data volume must not consume a
-		// hibernated computer's memory snapshot
-		// (docs/problems/computer-disks-hold-self-development-leftovers-2026-11-24.md).
+	// An investigator's read of the data volume must not consume a hibernated
+	// computer's memory snapshot
+	// (docs/problems/computer-disks-hold-self-development-leftovers-2026-11-24.md):
+	// it resolves through the strict resolver, which serves only an active
+	// realization and has no path to the wake, and its refusal is a 409.
+	neverWake := diagnosticReadNeverWakes(r, authResult)
+	var autoputerURL string
+	var err error
+	if neverWake {
+		if computerTarget == nil {
+			err = errAPIKeyRealizationUnavailable
+		} else {
+			autoputerURL, err = h.resolveActiveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
+		}
+	} else {
+		autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
+	}
+	if errors.Is(err, errAPIKeyRealizationUnavailable) && neverWake {
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"error": "computer is " + noWakeState(computerTarget) + "; this diagnostic read does not wake it, so it was not woken",
 			"state": noWakeState(computerTarget),
@@ -879,7 +896,6 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		h.lifecycle.record(stagePrefix+".total", "not_woken", time.Since(started))
 		return
 	}
-	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy: failed to resolve autoputer for owner %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)

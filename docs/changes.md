@@ -51,10 +51,12 @@ the first table's). Seven designs exist only on lanes.
 
 ### The data-volume report names the candidate source copies; a bearer read of it does not wake a hibernated computer (`lane/disk-report`, not landed; yellow and orange)
 
-- **What:** `GET /api/runtime/observability?data_volume=detail` names one row per candidate source copy under `capsule-artifacts/subjects` (by digest, up to 1,024 rows) and one per receipt kind, and gives every row the oldest and newest inode change time of its files. The walk gives each top-level entry all the time and entries left except a minimum promised to the entries after it, so one large directory is no longer cut at an equal share. A bearer-key GET or HEAD of that detail read on a computer that is not active, or active with no address, answers 409 naming the state and does not wake it. Cookie sessions still wake (vmctl's desktop route does); the plain read still wakes.
+- **What:** `GET /api/runtime/observability?data_volume=detail` names one row per candidate source copy under `capsule-artifacts/subjects` (by digest, up to 1,024 rows) and one per receipt kind, and gives every row the oldest and newest inode change time of its files. The walk gives each top-level entry all the time and entries left except a minimum promised to the entries after it, so one large directory is no longer cut at an equal share. A bearer-key GET or HEAD of that detail read resolves through the strict resolver, which has no path to the wake; a computer that is not active, or has no address, answers 409 naming the state. Cookie sessions still wake (vmctl's desktop route does); the plain read still wakes.
 - **Why:** two test computers hold 9 and 13 GB where a new one holds 0.5 to 0.7; 6.4 GB of the drill's has no name ([problem record](problems/computer-disks-hold-self-development-leftovers-2026-11-24.md)), and an investigator's read woke the drill from hibernation and consumed its 1.5 GB snapshot.
 - **Proof:** Go tests for the walk and the proxy on the build VM. Not proved: the report on the drill (claim C206), the 409 against the real vmctl.
 - **Replaced:** the equal-share walk.
+- **Class note:** the subject of `a6c0693da` says yellow; the report is a runtime API response, so the whole entry is orange (history not rewritten).
+- **Residuals (the reviewer's):** a cookie session on this route still wakes (the scope is bearer-only); above 1,024 candidate copies the rest fold into `(other)`; the 50 ms promised to each later top-level entry means a very slow early directory can leave later ones a short share.
 - **Undo:** revert the commits; nothing is deleted or written by them.
 
 ### choir.news serves the app association file for passkeys

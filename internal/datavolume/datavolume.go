@@ -140,8 +140,18 @@ type Scanner struct {
 
 	// testHook runs after a directory chunk is listed and before its entries
 	// are examined; fakeDevice makes a path look like another filesystem.
-	testHook   func(dir string)
+	testHook func(dir string)
+	// clock replaces time.Now in tests, so a deadline test needs no wall-clock
+	// margin.
+	clock      func() time.Time
 	fakeDevice func(path string) bool
+}
+
+func (s *Scanner) now() time.Time {
+	if s.clock != nil {
+		return s.clock()
+	}
+	return time.Now()
 }
 
 // Read reports the volume rooted at root. The statfs is always fresh. With
@@ -361,14 +371,14 @@ func (w *walker) stop() bool {
 	if w.stopped {
 		return true
 	}
-	if w.examined >= w.entryCap || (w.examined&127 == 0 && (time.Now().After(w.deadline) || w.ctx.Err() != nil)) {
+	if w.examined >= w.entryCap || (w.examined&127 == 0 && (w.s.now().After(w.deadline) || w.ctx.Err() != nil)) {
 		w.stopped = true
 	}
 	return w.stopped
 }
 
 func (s *Scanner) walk(ctx context.Context, root string, lim Limits) *Walk {
-	start := time.Now()
+	start := s.now()
 	out := &Walk{ReadAt: start.UTC(), Top: []Entry{}, Detail: []Group{}}
 	defer func() { out.ElapsedMillis = time.Since(start).Milliseconds() }()
 	var rootSt syscall.Stat_t
@@ -395,12 +405,12 @@ func (s *Scanner) walk(ctx context.Context, root string, lim Limits) *Walk {
 			share = left - reserve
 		}
 		w.entryCap = w.examined + share
-		timeLeft := time.Until(deadline)
+		timeLeft := deadline.Sub(s.now())
 		timeShare := timeLeft / time.Duration(remaining)
 		if reserve := time.Duration(remaining-1) * minShareTime; timeLeft-reserve > timeShare {
 			timeShare = timeLeft - reserve
 		}
-		w.deadline = time.Now().Add(timeShare)
+		w.deadline = s.now().Add(timeShare)
 		w.stopped = false
 		label := name
 		if !topNameRE.MatchString(name) {

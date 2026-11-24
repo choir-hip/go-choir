@@ -219,8 +219,15 @@ func (h *Handler) touchedAPIKeyTarget(target *resolvedComputerTarget) *resolvedC
 // opaque 502 (docs/problems/api-key-request-to-a-hibernated-computer-gets-502-2026-10-26.md).
 // On a successful wake target is updated to the re-joined realization.
 func (h *Handler) resolveComputerURLForComputerTarget(ctx context.Context, authResult *AuthResult, target *resolvedComputerTarget, desktopID string) (string, error) {
+	if h.testWakingResolverHook != nil {
+		h.testWakingResolverHook()
+	}
 	return h.resolveAPIKeyComputerURL(ctx, authResult, target, desktopID, true)
 }
+
+// errAPIKeyRealizationUnavailable is the strict resolver's answer for a computer
+// that is not active or has no address.
+var errAPIKeyRealizationUnavailable = errors.New("api key computer realization unavailable")
 
 // resolveActiveComputerURLForComputerTarget is the strict variant: it serves
 // only the joined computer's current active realization and never wakes. Owner
@@ -246,7 +253,7 @@ func (h *Handler) resolveAPIKeyComputerURL(ctx context.Context, authResult *Auth
 	}
 	if target.State != "active" || target.ComputerURL == "" {
 		if !wake {
-			return "", fmt.Errorf("api key computer realization unavailable")
+			return "", errAPIKeyRealizationUnavailable
 		}
 		if err := h.ensureComputerVersionRoute(ctx, target.UserID, target.DesktopID); err != nil {
 			return "", err
