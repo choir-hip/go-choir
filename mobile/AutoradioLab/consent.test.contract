@@ -23,3 +23,32 @@ test "the voice button while signed out opens the sign-in sheet"
   tap "gate-scrim"
   clock settle
   expect tree missing "gate-sheet"
+
+// The sheet's two buttons lead to the sign-in screen (SignInScreen), which owns the passkey screen's waiting, cancel and failure: if it were not up, a cancelled or failed attempt would show nothing.
+test "Sign in in the sheet puts the sign-in screen up, with the attempt's message when it cannot go on"
+  clock data
+  tap "bar-mic"
+  clock settle
+  expect tree has "gate-signin"
+  tap "gate-signin"
+  clock settle
+  expect tree missing "gate-sheet"
+  expect state authOpen == true
+  expect tree has "signin-close"
+  expect tree has "signup-email"
+  expect tree has "signin-message"
+  tap "signin-close"
+  clock settle
+  expect state authOpen == false
+
+test "Make an account in the sheet puts the create-account screen up"
+  clock data
+  tap "bar-mic"
+  clock settle
+  tap "gate-make"
+  clock settle
+  expect tree missing "gate-sheet"
+  expect state authOpen == true
+  expect tree has "signup-email"
+  expect tree has "signup-consent"
+  expect tree has "signup-create"

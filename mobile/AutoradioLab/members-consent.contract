@@ -20,6 +20,9 @@ members Autoradio
     gate = ""
   action gateSignIn
     gate = ""
+    // The sign-in screen goes up first (it shows the passkey screen's waiting, Cancel and failure, and `authDone` puts it away on success), after the machine is reset so an older done or failed state cannot show or end it.
+    authOpen = true
+    send signedOpen = signInOpen()
     send signedRun = signInRun("signin", "", "")
     sivTick = sivTick + 1
   // Make an account: the create-account screen (account.contract: the email, the consent line, the mailed code, then the passkey screen) opens, as it does from the card and Settings.

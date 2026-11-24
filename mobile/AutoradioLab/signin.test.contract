@@ -13,5 +13,5 @@ test "Sign in opens the passkey screen: sign in, an email field, the consent lin
   expect tree has "signup-terms"
   expect tree has "signup-create"
   expect tree has "signin-close"
-  expect tree missing "signin-code"
+  expect tree missing "signup-code"
   expect tree missing "signin-open"
