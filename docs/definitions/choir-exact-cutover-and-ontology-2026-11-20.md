@@ -133,6 +133,9 @@ boundaries:
     said: yes, we need to convert everything to exact that can be converted. im adamant about this. its essential.
     'on': '2026-11-24'
     reading: 'lead''s reading: this includes the conversation logic now in Swift beside the voice (turn policy, the talk state machine, the local acknowledgement, hands-free state, turn context, the programme player), leaving Swift only the audio session, the microphone, speech and the on-device models. Tests are rewritten from the behaviour, failure list first, not translated line by line'
+  - decision: mail on the phone is stored without extra encryption; Android encryption needs are dealt with later
+    said: 2) yes, accept it. mail without extra encryption is fine. we will deal with android encryption needs later
+    'on': '2026-11-24'
   must_preserve:
   - no secrets, tokens or the owner's email in the repo or in output; .env, .env.bak-bedrock-20261109124037 and stash devin-provider-wip hold secrets and are left alone
   - the owner's iPhone credential is never changed, moved or re-keyed

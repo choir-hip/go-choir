@@ -193,6 +193,12 @@ boundaries:
     said: some concurrency limits may be required otherwise we get rate limited by providers. and may cause system resource pressure. but thats something we should learn
     'on': '2026-11-24'
     reading: 'lead''s reading: this fits the delivery rule, which keeps backing off after a provider''s real refusal. A bound on concurrency is allowed when it is derived from observed evidence (a provider''s refusals, measured memory or load) and moves with that evidence, with the evidence logged; a constant picked by us, like the 1.5 second spacer, is not. The fixed spacer is still removed'
+  - decision: the lead may take a read-only copy of the paper's database to the iMac to measure the backlog; it may not be duplicated on Node B
+    said: 1) yes. you can copy that to the imac. but you cant duplicate it on node-b
+    'on': '2026-11-24'
+  - decision: a root edit to the subject index needs no second look before it takes effect; it is a visible, revertible revision scored as a forecast
+    said: 3) no, default.
+    'on': '2026-11-24'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it

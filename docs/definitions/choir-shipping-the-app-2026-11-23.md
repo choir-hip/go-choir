@@ -167,6 +167,9 @@ boundaries:
   - decision: 'the automated-test accounts and the six hand-test accounts are deleted; kept: the owner''s, the one gmail account, b@c.com and d@e.com. Lead''s constraint, not the owner''s words: no account that owns a computer is deleted (one example.com address owns the 58 GiB computer), and the deletion runs through a reviewed operator command, never by hand on Node B'
     said: we dont need per-account bounds yet, just good monitoring of usage. we will invite friendly users. otherwise i agree with your recommendations 1-7
     'on': '2026-11-24'
+  - decision: applying to App Review within 24 hours (by about 2026-11-25T02:30Z) is a win; reviews sending lanes back is the reviews working correctly
+    said: and yes, the reviews are working correctly. i think we will make great progress though. many hours from now to application. if we apply to app review in 24 hours thats a win
+    'on': '2026-11-24'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
   - signing keys and API keys never enter the repo or an agent's output; key files are passed by path
