@@ -6,7 +6,7 @@ Cut from the earlier draft because it is not built or not true (2026-11-24): the
 
 Open for the owner (all with a default; see submission-checklist.md): territories and price (default free, United States first); secondary category (default none); whether the model files move to our own host (the text names Hugging Face until then); the support page (section "URLs").
 
-Rulings applied (owner, 2026-11-23 and 24): minimum age 16 (age rating 16+); one app; passkey accounts made and deleted inside the app; model files only after the person presses Download; during the beta every account is free tier and providers may train on what is sent.
+Rulings applied (owner, 2026-11-23 and 24): minimum age 16 (age rating 16+); one app; passkey accounts made and deleted inside the app; model files only after the person agrees in voice setup (one agreement, the total size shown); during the beta every account is free tier and providers may train on what is sent.
 
 ## Name
 
@@ -63,14 +63,14 @@ Stories are written by AI, not by reporters. The sources are cited and linked. P
 
 Voice and takes use the microphone only when you turn them on. The iPhone shows its microphone indicator while it is on.
 
-The app can download speech and language model files to your phone from Hugging Face. They are large. Nothing downloads until you press Download on a model in Settings, under Voice and models, where its size is shown.
+When you set up voice, the app recommends the speech and language models that fit your phone, shows their total size, and downloads them from Hugging Face only after you agree. In Settings, Voice and models, you can try, switch or remove models.
 
 The news can include war, crime and other serious subjects.
 
 Privacy policy: https://choir.news/privacy
 ```
 
-Depends on: lane account-delete (the deletion sentence, with its 72 hour hold), lane voice-models (the Voice and models page and per-model Download), origin/main (the create-account line above the button, `onboarding.contract`; the "Written by AI" label, `reader-parse.ts` DISCLOSURE_STORY; takes 3 to 60 seconds, `takes.ts`). Not proven on a phone, and the lead must see each on the build before upload: lock-screen controls and playing with the screen locked (docs/current-architecture.md says built, not run on a phone), the Voice and models page, and the deletion path. If the lead cannot see one, cut its sentence.
+Depends on: lane account-delete (the deletion sentence, with its 72 hour hold), lane voice-models (first-run voice setup's recommendation and agreement, and the Voice and models page), origin/main (the create-account line above the button, `onboarding.contract`; the "Written by AI" label, `reader-parse.ts` DISCLOSURE_STORY; takes 3 to 60 seconds, `takes.ts`). Not proven on a phone, and the lead must see each on the build before upload: lock-screen controls and playing with the screen locked (docs/current-architecture.md says built, not run on a phone), the Voice and models page, and the deletion path. If the lead cannot see one, cut its sentence.
 
 The support URL goes in its own field only (section "URLs"), so no placeholder is in the description.
 

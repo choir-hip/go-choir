@@ -21,6 +21,10 @@ Win line: apply to App Review by about 2026-11-25T02:30Z. Uploading a build and 
 
 So the record and a 1.0 version already exist; nothing needs creating except the review detail, price and availability.
 
+## Draft uploaded by the lead (2026-11-24)
+
+The lead sent the draft to App Store Connect: listing texts, category, age rating, content rights, availability (everywhere except mainland China) and a free price. The App Review detail is not made yet: it waits on a contact phone from the owner. The "What App Store Connect holds now" table above is the state before that upload; re-GET before relying on it. Still empty or the owner's: support URL, privacy policy URL until the policy is published, reviewer sign-in, build, screenshots, App Privacy form.
+
 ## Fields
 
 | Field | Value or where it is | State |
