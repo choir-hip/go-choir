@@ -57,6 +57,7 @@ component Autoradio
     lrnLeaveSettings
     gateSignIn
     gateMakeAccount
+    micContinue
     // ---- lane autoradio-joins ----
     shClips
     hearClips
