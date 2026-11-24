@@ -197,24 +197,37 @@ func TestRecoveryLinkRefusedAfterExpiry(t *testing.T) {
 	}
 }
 
-func TestRecoveryNewLinkSupersedesOlderLink(t *testing.T) {
+// expireRecoveryLinks ends the life of every link made so far, as fifteen minutes would.
+func expireRecoveryLinks(t *testing.T, h *Handler) {
+	t.Helper()
+	if _, err := h.store.DB().Exec("UPDATE recovery_tokens SET expires_at = ? WHERE used_at IS NULL", time.Now().UTC().Add(-time.Second)); err != nil {
+		t.Fatalf("expire links: %v", err)
+	}
+}
+
+// A request while a link is live makes no new link and sends no mail; once it has expired the next request makes
+// a new one and the old one stays dead.
+func TestRecoveryRequestWhileALinkIsLiveKeepsIt(t *testing.T) {
 	h, mailer := recoveryMailTestEnv(t)
 	if _, err := h.store.CreateUser("mail-user-5", "twice@example.com"); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
 	postRecoveryRequest(t, h, "twice@example.com", "")
 	postRecoveryRequest(t, h, "twice@example.com", "")
-	mails := mailer.mails()
-	if len(mails) != 2 {
-		t.Fatalf("mails = %d, want 2", len(mails))
+	if len(mailer.mails()) != 1 {
+		t.Fatalf("mails = %d, want 1: the live link was replaced", len(mailer.mails()))
 	}
-	older := tokenFromRecoveryLink(t, mails[0].link)
-	newer := tokenFromRecoveryLink(t, mails[1].link)
-	if rec := postRecoveryVerify(t, h, older); rec.Code != http.StatusBadRequest {
-		t.Fatalf("older link verify = %d, want 400", rec.Code)
+	first := tokenFromRecoveryLink(t, mailer.mails()[0].link)
+	expireRecoveryLinks(t, h)
+	postRecoveryRequest(t, h, "twice@example.com", "")
+	if len(mailer.mails()) != 2 {
+		t.Fatalf("mails = %d, want a new link after the first expired", len(mailer.mails()))
 	}
-	if rec := postRecoveryVerify(t, h, newer); rec.Code != http.StatusOK {
-		t.Fatalf("newer link verify = %d; body=%s", rec.Code, rec.Body.String())
+	if rec := postRecoveryVerify(t, h, first); rec.Code != http.StatusBadRequest {
+		t.Fatalf("the expired link verify = %d, want 400", rec.Code)
+	}
+	if rec := postRecoveryVerify(t, h, tokenFromRecoveryLink(t, mailer.mails()[1].link)); rec.Code != http.StatusOK {
+		t.Fatalf("the new link verify = %d; body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -224,10 +237,12 @@ func TestRecoveryRateLimitStopsMail(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 	for i := 0; i < RecoveryMaxPerEmail; i++ {
+		expireRecoveryLinks(t, h) // each request after the last link's life, or a live link would answer it
 		if rec := postRecoveryRequest(t, h, "flood@example.com", fmt.Sprintf("198.51.100.%d:1000", 10+i)); rec.Code != http.StatusOK {
 			t.Fatalf("request %d = %d", i+1, rec.Code)
 		}
 	}
+	expireRecoveryLinks(t, h)
 	if rec := postRecoveryRequest(t, h, "flood@example.com", "198.51.100.99:1000"); rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("over-limit request = %d, want 429", rec.Code)
 	}
@@ -237,8 +252,10 @@ func TestRecoveryRateLimitStopsMail(t *testing.T) {
 
 	// An unknown address is limited the same way, so 429 reveals nothing.
 	for i := 0; i < RecoveryMaxPerEmail; i++ {
+		expireRecoveryLinks(t, h)
 		postRecoveryRequest(t, h, "nobody@example.com", fmt.Sprintf("198.51.100.%d:1000", 50+i))
 	}
+	expireRecoveryLinks(t, h)
 	if rec := postRecoveryRequest(t, h, "nobody@example.com", "198.51.100.98:1000"); rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("unknown over-limit request = %d, want 429", rec.Code)
 	}

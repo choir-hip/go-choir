@@ -170,8 +170,14 @@ func (h *Handler) startRecovery(r *http.Request, email string) (int, any) {
 	// A link made by this route that is still good is not replaced: a request while one is live makes no link and
 	// sends no mail and answers the same 200, so three requests from a stranger cannot supersede the owner's link or
 	// spend the budget (the owner's link in the inbox stays good for its life).
-	if userID != "" {
-		live, lerr := h.store.HasLiveRecoveryToken(userID, "", time.Now().UTC())
+	{
+		var live bool
+		var lerr error
+		if userID != "" {
+			live, lerr = h.store.HasLiveRecoveryToken(userID, "", time.Now().UTC())
+		} else {
+			live, lerr = h.store.HasLiveRecoveryDummy(emailHash, time.Now().UTC())
+		}
 		if lerr != nil {
 			log.Printf("[auth] operation=recovery_request email_hash=%s result=error step=live_token error=%q", emailHash, lerr)
 			return http.StatusInternalServerError, errorResponse{Error: "internal error"}

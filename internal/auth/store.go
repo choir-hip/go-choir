@@ -716,6 +716,17 @@ func (s *Store) ConsumePendingRegistration(challenge string, now time.Time) (*Pe
 	return p, nil
 }
 
+// HasLiveRecoveryDummy: an unknown address already has a link-shaped row made by /auth/recovery/request that is
+// still within its life. Known and unknown addresses are treated alike, so a request while one is live adds no row
+// to either and the 429 comes at the same request for both.
+func (s *Store) HasLiveRecoveryDummy(emailHash string, now time.Time) (bool, error) {
+	var n int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM recovery_tokens WHERE (user_id IS NULL OR user_id = '') AND email_hash = ? AND used_at IS NULL AND source = '' AND expires_at > ?", emailHash, now).Scan(&n); err != nil {
+		return false, fmt.Errorf("live recovery dummy: %w", err)
+	}
+	return n > 0, nil
+}
+
 // DiscardRecoveryToken kills a link that was made and could not be mailed, so a retry is not suppressed by a
 // live link nobody received. The row stays (it is rate-limit history); only its use is spent.
 func (s *Store) DiscardRecoveryToken(ctx context.Context, token string) error {

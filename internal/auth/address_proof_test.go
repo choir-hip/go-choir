@@ -747,3 +747,18 @@ func TestDirectRecoveryRequestsDoNotSupersedeALiveLink(t *testing.T) {
 		t.Fatalf("recovery rows = %d (%v), want the one link", rows, err)
 	}
 }
+
+// A known and an unknown address are answered alike however fast the requests come: the live-link rule applies to both.
+func TestRecoveryRequestAnswersAKnownAndAnUnknownAddressAlike(t *testing.T) {
+	h, _ := recoveryMailTestEnv(t)
+	if _, err := h.store.CreateUser("held6", "held6@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 8; i++ {
+		k := postRecoveryRequest(t, h, "held6@example.com", fmt.Sprintf("203.0.113.%d:1", 80+i))
+		u := postRecoveryRequest(t, h, "nobody6@example.com", fmt.Sprintf("203.0.113.%d:1", 120+i))
+		if k.Code != u.Code || k.Body.String() != u.Body.String() {
+			t.Fatalf("request %d: known %d %s, unknown %d %s", i, k.Code, k.Body.String(), u.Code, u.Body.String())
+		}
+	}
+}

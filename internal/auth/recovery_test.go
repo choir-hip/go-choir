@@ -272,8 +272,9 @@ func TestRecoveryRequestRateLimitsByEmail(t *testing.T) {
 
 	h.store.CreateUser("rate-email-user", "rateemail@example.com")
 
-	// Make 3 requests (the limit).
+	// Make 3 requests (the limit), each after the previous link's life (a live link answers the request without a new one).
 	for i := 0; i < RecoveryMaxPerEmail; i++ {
+		_, _ = h.store.DB().Exec("UPDATE recovery_tokens SET expires_at = ? WHERE used_at IS NULL", time.Now().UTC().Add(-time.Second))
 		body := `{"email":"rateemail@example.com"}`
 		req := httptest.NewRequest(http.MethodPost, "/auth/recovery/request", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -286,6 +287,7 @@ func TestRecoveryRequestRateLimitsByEmail(t *testing.T) {
 	}
 
 	// 4th request should be rate limited.
+	_, _ = h.store.DB().Exec("UPDATE recovery_tokens SET expires_at = ? WHERE used_at IS NULL", time.Now().UTC().Add(-time.Second))
 	body := `{"email":"rateemail@example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/recovery/request", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
