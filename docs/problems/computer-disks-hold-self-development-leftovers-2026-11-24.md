@@ -307,3 +307,14 @@ Class and proof use the repo's table. Frees are for the drill unless said.
 ## Owner ruling, 2026-11-24
 
 "i like measuring. i dont like running the collector at boot. should wait some time after boot." Option 2 is therefore not a boot-time collector: it runs after the computer has been up and idle for a set time, never in the boot path. The other options are agreed in the order given.
+
+## Update 2026-11-24 (lane `disk-report`, not landed)
+
+Option 1 is built: the data-volume report names `capsule-artifacts/subjects`
+by digest, `receipts` by kind, gives every row an oldest and newest change
+time, and no longer cuts the first large directory at an equal share. The
+claims above are entered as C206, C207 and C208. The investigator's wake came
+from the proxy's generic route, which wakes a hibernated computer for any
+bearer request; the detail read now answers 409 instead. A cookie session
+still wakes. The report runs inside the guest, so a hibernated computer cannot
+be read without waking it, only left unread.
