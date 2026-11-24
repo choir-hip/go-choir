@@ -10,6 +10,17 @@
  *   3. signing in on /account/delete offers "Cancel deletion" and makes no session;
  *   4. cancelling signs the browser in again and the account is as it was.
  *
+ * This spec proves the request and the cancel. It does NOT prove the purge: that needs an operator on the
+ * drill host (docs/changes.md 2026-11-24, ledger claim C231), who, on a SECOND throwaway account that has
+ * published a take, a story and a capture and has run its computer: requests the deletion, moves BOTH
+ * requested_at and purge_after of its account_deletions row back 73 hours in auth.db, then reads, in order:
+ * `accountpurge: job=... step=preflight|mail|data|computers|gateway|tape begin/done` in the auth journal
+ * (no step halts, no ALERT), the vmctl destroy line, the receipt (account_deletion_receipts: counts, no
+ * email, no `undecided:*`), the user row gone, the state directory and the snapshot-vault directory gone,
+ * the gateway identity gone by VM id and by computer id, the take's audio and CAS body gone, the story
+ * still public with the byline `former-writer`, and a line in account-deletion-ledger.jsonl. Never the
+ * paper's or the owner's account or computers; the drill address must not be on an ephemeral domain.
+ *
  * Env: BASE_URL (default https://choir.news).
  */
 import { expect } from '@playwright/test';
@@ -29,7 +40,7 @@ test('delete an account with a passkey, find it scheduled, and cancel it by sign
   await page.goto(`${BASE_URL}/account/delete`);
   const route = page.locator('[data-delete-route]');
   await expect(route).toHaveAttribute('data-delete-state', 'info', { timeout: 30_000 });
-  await expect(page.locator('[data-delete-removed]')).toContainText('everything on it');
+  await expect(page.locator('[data-delete-removed]')).toContainText('stored history');
   await expect(page.locator('[data-delete-stays]')).toContainText('stay public');
   await expect(page.locator('[data-delete-when]')).toContainText('72 hours');
   await page.locator('[data-delete-ask]').click();

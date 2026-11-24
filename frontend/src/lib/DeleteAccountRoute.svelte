@@ -126,16 +126,17 @@
       <h1>Delete your account</h1>
       <h2>What is removed</h2>
       <p class="body" data-delete-removed>
-        Your account and your passkey. Your computer, with its disk and its stored history: your edition, notes, documents,
-        files, mail and its address, and your listening history. Your synced documents. Any takes you published, their words and their audio.
+        Your account and your passkey. Your computer, with its disk, its stored history and the key that seals it: your edition,
+        notes, documents, files, mail and its address, and your listening history. Your synced documents. Any takes you published,
+        their words and their audio.
       </p>
       <h2>What stays</h2>
       <p class="body" data-delete-stays>
         <!-- LEAD: say "30 days" here and in the app's Delete page (settings.contract) only when the log retention is enforced (data-inventory section 7). -->
         Stories you published stay public, with your name taken off. A short receipt that the deletion happened, with no
         personal details, and server logs, which are kept for a limited time. Mail you sent or received stays with the people
-        on the other end and with our mail provider. Outside AI providers may keep copies of requests you made; we ask
-        them to delete them where their terms allow.
+        on the other end and with our mail provider. Our encrypted backups still hold a copy of the account for up to three weeks, and it is deleted with them; if a backup is ever restored, the deletion is carried out again. Outside AI providers may keep copies of requests you
+        made; we ask them to delete them where their terms allow.
       </p>
       <h2>When</h2>
       <p class="body" data-delete-when>
