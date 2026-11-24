@@ -405,6 +405,17 @@ entered below as lapsed, not scored.
 | C217 | 2026-11-24T01:30Z | false | ONE 34 of 50 = 68% (needs 70%), MERGE 8 of 50 = 16% (needs 15% or less), SPLIT 6 of 40 = 15% (met); one reader who built the grouping, a lead | 0.203 |
 | C218 | 2026-11-24T01:30Z | false | best Huang-pattern arrival ranks 14 of 170 by importance times sparsity, none in the top 3; rank 2 by importance alone, 132 by sparsity alone (same README) | 0.063 |
 | C219 | 2026-11-24T01:30Z | true | exactly one main subject for 45 of 50 groups (90%, interval 79 to 96); one reader, a lead | 0.203 |
+| C221 | 2026-11-24T01:47Z | false | best Huang-pattern arrival at (18:00, 19:00] ranks 38 by importance times subject-scoped sparsity (`e4-results.txt`) | 0.040 |
+| C222 | 2026-11-24T01:47Z | false | ranks 65 by importance times story-scoped sparsity | 0.040 |
+| C223 | 2026-11-24T01:47Z | false | ranks 4 by importance times new words (count), one place short; the share form ranks 1, not the registered form | 0.010 |
+| C224 | 2026-11-24T01:47Z | true | ranks 3 by importance times burst, through an arrival whose top subject was `democrats`, not Huang: luck of the top-subject choice | 0.640 |
+| C225 | 2026-11-24T01:47Z | false | burst has the turn at rank 1 and echoes at median share 0.35; the novelty forms have echoes at 0.43 to 0.85 and the turn at 24 or lower | 0.090 |
+| C226 | 2026-11-24T01:47Z | false | ranks 14 (`I_sum`), 2 with `I_top5` (not the pass line) (`e4set-results.txt`) | 0.063 |
+| C227 | 2026-11-24T01:47Z | false | ranks 8 | 0.063 |
+| C228 | 2026-11-24T01:47Z | false | ranks 14 | 0.010 |
+| C229 | 2026-11-24T01:47Z | true | ranks 2, through the aggregator roll; the next Huang arrival is 13th | 0.640 |
+| C230 | 2026-11-24T01:47Z | true | ranks 1, through the same roll (11 subjects, 81% new pairs); the next Huang arrival is 21st | 0.563 |
+| C231 | 2026-11-24T01:47Z | false | (d2) has the turn at 1 and echoes at 0.31; (e) has echoes at 0.64 and the turn at 25 | 0.123 |
 
 ### Scorecard
 

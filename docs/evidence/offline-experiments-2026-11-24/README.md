@@ -305,3 +305,76 @@ Brier is `(p - outcome)^2`.
 
 Mean Brier of the five: 0.13. Five claims, one outcome per claim, but C215 and
 C218 share one day and one event, so they are not independent observations.
+
+## E4, novelty relative to what the paper holds on the subject (C221 to C231)
+
+Hypothesis (coordinator, from C218): corpus-wide sparsity buries a follow-up in a dense region, so novelty must be
+measured against what the paper already holds *on the arrival's subject*. Program `scripts/offline-experiments/e4`
+(one top subject per arrival: C221 to C225, entered first) and `e4set` (the whole subject set: C226 to C231, entered
+after the owner ruled one top subject out and before they were computed). Data and importance as C218: 6,268
+arrivals, the extractor's names as subjects (4.3 per arrival on 11-23), furniture dropped above 2%.
+Hour bins are (X-1:00, X:00]; the primary hour is (18:00, 19:00] (170 arrivals, 12 Huang-pattern), the turn hour
+(14:00, 15:00] (169 arrivals, 22 Huang-pattern, the first reinstatement reports from 14:11Z). Rank 1 is the top.
+
+### Single top subject (C221 to C225)
+
+| Form (importance `I` times) | Best Huang arrival, hour ending 19:00 | Turn hour, best | Median echo rank share | Claim |
+|---|---|---|---|---|
+| (none, `I` alone) | 2 | 4 | 0.34 | |
+| C218, 10th nearest corpus-wide | 14 | 33 | 0.47 | |
+| (a) nearest earlier arrival on the same subject | 38 | 62 | 0.85 | C221 false |
+| (b) the covering story's passages | 65 | 30 | 0.43 | C222 false |
+| (c) new eligible words (count) | 4 | 24 | 0.72 | C223 false (rank 4, one place short) |
+| (d) burst, fast over slow origin rate | 3 | 1 | 0.35 | C224 true |
+| C225: a form with the turn in the top 3 and echoes at 0.60 or more | | | | false: (d) has the first and not the second; (a) and (c) the second and not the first |
+
+(c') the share form ranks the best Huang arrival 1 at 19:00. The C224 pass is the 18:06 arrival of The Hill (the
+Congress hearing on Huang) whose top subject is `democrats`: the burst is the subject's, not the story's, so the pass
+is luck of the top-subject choice. A reinstat* word is new at 11:07 (`reinstatement`, MarketWatch), at 14:11
+(`reinstated`, The Verge) and at 14:19 for the company release and wire copies, and again at 18:06 for an arrival
+in another subject: it fires for the turn, as expected, and is not new by 18:00.
+
+### The whole subject set (C226 to C231)
+
+`I_sum` is the sum over the arrival's subjects of log2(1 + `R_s`) (as C218, which already summed over all subjects);
+`I_top5` the mean of the five largest. Ranks of the best Huang arrival:
+
+| Form | 19:00, `I_sum` | 19:00, `I_top5` | Turn hour, `I_sum` | Echo median share, `I_sum` | Huang echoes, median share | Claim |
+|---|---|---|---|---|---|---|
+| `I` alone | 2 | 3 | 4 | 0.34 | 0.23 | |
+| (a2) nearest earlier arrival sharing two subjects | 14 | 2 | 17 | 0.90 | 0.77 | C226 false |
+| (b2) the story covering the set | 8 | 4 | 44 | 0.47 | 0.80 | C227 false |
+| (c2) new words among arrivals on its subjects | 14 | 15 | 23 | 0.81 | 0.77 | C228 false |
+| (d2) burst of its five main subjects | 2 | 6 | 1 | 0.31 | 0.13 | C229 true |
+| (e) new subject pairs and new subjects | 1 | 1 | 25 | 0.64 | 0.66 | C230 true |
+| C231: turn in the top 3 and echoes at 0.60 or more | | | | | | false |
+
+Reading, the lead's:
+
+- **Both passes are one arrival.** The arrival that ranks 1 under (e) and 2 under (d2) at 19:00 is an 18:21 post by an
+  aggregator account (`fllics.com`) that strings a Huang headline together with a roll of other Reuters headlines;
+  it carries 11 subjects, importance 19.4 and 81% new pairs. The next Huang arrival is 21st under (e) and 13th
+  under (d2). The set form does not find "the story"; it finds the arrival with the most symbols.
+- **(e) floods its top ten with many-subject arrivals,** which are press releases, arXiv titles, heise features and
+  rolls: by hand, 5 of the ten at 19:00 and 21:00, 6 at 15:00 and 5 at 03:00, and 9 at 09:00 are routine or a roll
+  (the turn itself, a German Nvidia piece, is 6th at 15:00). The number of subjects an arrival carries drives the
+  score. (d2) is cleaner at 15:00, where 8 of the top ten are the Huang reinstatement reports (the others a deal and
+  a recipe) and the hour's top is the BBC piece on the US government's role, but at 03:00, 09:00 and 21:00 it
+  floods with arXiv, earthquake and sports items (6 to 8 of ten, by hand).
+- **Which form separates a turn from an echo and from an ordinary follow-up.** None of the registered forms. Burst
+  separates the turn from the follow-ups at the arrival level (turn hour: Huang arrivals ranked 1 to 8; the
+  18:00 to 19:00 follow-ups 13 and below once the roll is set aside) and cannot tell an echo (echo median 0.31,
+  Huang echoes 0.13: it ranks them high, because an echo is part of the burst). The novelty forms (a, c, a2, c2) rank
+  echoes low (0.72 to 0.90) and the turn low (best 17 to 62). (e) is in between on both.
+- **Post hoc, not registered, one day:** burst with echoes zeroed (an arrival whose nearest earlier arrival is
+  within cosine 0.95 scores nothing) keeps the turn at ranks 1 2 3 4 5 7 13 in the turn hour, puts the
+  follow-ups at 2 13 16 22 32 ... and ranks echoes at median share 0.89. That echoes rank low by
+  construction is trivial; what is not trivial is that the turn arrivals are mostly not near-copies of earlier
+  arrivals and keep their place. This is the one combination that, on this day, separates a turn from an echo and
+  a follow-up. It was found after the outcome and has not been tested on another day.
+- **Does importance alone do the work?** Importance `I` ranks the best Huang arrival 2 at 19:00 and 1 in the hours
+  16, 17, 22 and 00; what it cannot do is tell an old running story's follow-up from its turn, and every novelty
+  form that tried to do that with a distance (a, b, c and their set forms) failed to rank the turn, because the
+  turn's reports are close to the story's earlier reports (that is what makes them a running story). The signal that
+  worked is a rate (burst), not a distance.
+

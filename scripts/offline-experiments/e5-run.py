@@ -51,7 +51,7 @@ def slice_digest(call, names_known, ds):
 def render_e(items, call, names, ds):
     known = []
     for it in items:
-        for nid in it["neighbors"]:
+        for nid in (it["neighbors"] or []):
             for n in names.get(nid, [])[:10]:
                 if n not in known:
                     known.append(n)
@@ -84,7 +84,7 @@ def render(items, arm, names, digest=None):
         extra = ""
         if arm in ("B", "D"):
             ks = []
-            for nid in it["neighbors"]:
+            for nid in (it["neighbors"] or []):
                 if nid in names:
                     ks.append("  - " + "; ".join(names[nid][:10]))
             if ks:

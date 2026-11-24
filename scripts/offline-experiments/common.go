@@ -454,6 +454,10 @@ func main() {
 		runE5Drift(os.Args[2], os.Args[3])
 	case "e5ecalls":
 		runE5ECalls(os.Args[2], os.Args[3])
+	case "e5cutoff":
+		runE5Cutoff(os.Args[2], os.Args[3])
+	case "e5cutoffscore":
+		runE5CutoffScore(os.Args[2])
 	case "e5digest":
 		runE5Digest(os.Args[2], os.Args[3])
 	case "e5prep":

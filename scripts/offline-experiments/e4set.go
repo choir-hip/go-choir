@@ -282,6 +282,18 @@ func runE4Set(dir, out string) {
 		{"(c2) I_top5 x new words", func(r *e4sRow) float64 { return r.Itop5 * r.Nc2 }},
 		{"(d2) I_top5 x burst", func(r *e4sRow) float64 { return r.Itop5 * r.Bset }},
 		{"(e) I_top5 x symbolic novelty", func(r *e4sRow) float64 { return r.Itop5 * r.Ne }},
+		{"POST HOC (d2) I_sum x burst, echoes zeroed", func(r *e4sRow) float64 {
+			if r.Echo {
+				return 0
+			}
+			return r.Isum * r.Bset
+		}},
+		{"POST HOC (e) I_sum x novelty, echoes zeroed", func(r *e4sRow) float64 {
+			if r.Echo {
+				return 0
+			}
+			return r.Isum * r.Ne
+		}},
 	}
 	bin := func(i int) int { return int((arr[i].Fetched.Add(-time.Nanosecond).Sub(day)) / time.Hour) }
 	byBin := map[int][]int{}

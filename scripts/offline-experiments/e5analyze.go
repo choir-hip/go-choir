@@ -650,3 +650,175 @@ func runE5Drift(dir, outDir string) {
 	must(os.WriteFile(filepath.Join(outDir, "e5-drift-score.txt"), []byte(sb.String()), 0o644))
 	fmt.Print(sb.String())
 }
+
+// runE5Cutoff writes the cutoff hand-read sheet (ledger C238, C243): 30 arrivals (one member of each of the
+// first 30 drift candidates), up to 10 Huang-pattern turn arrivals that carry "reinstat", and 20 singletons of arm E's grouping.
+func runE5Cutoff(dir, outDir string) {
+	items := loadItems(filepath.Join(outDir, "e5-input.jsonl"))
+	byID := map[string]e5Item{}
+	posOf := map[int]string{}
+	for _, it := range items {
+		byID[it.ID] = it
+		posOf[it.Idx] = it.ID
+	}
+	arr, _ := loadArrivals(dir)
+	day := time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
+	var idx []int
+	for i := range arr {
+		if !arr[i].Fetched.Before(day) {
+			idx = append(idx, i)
+		}
+	}
+	gs := groupArrivals(arr, idx)
+	var cands []int
+	for gi, g := range gs {
+		o := map[string]bool{}
+		for _, m := range g.Members {
+			o[arr[m].Origin] = true
+		}
+		if len(g.Members) >= 3 && len(o) >= 2 {
+			cands = append(cands, gi)
+		}
+	}
+	r := rand.New(rand.NewSource(20261124 + 5))
+	r.Shuffle(len(cands), func(i, j int) { cands[i], cands[j] = cands[j], cands[i] })
+	var sample []string
+	r2 := rand.New(rand.NewSource(20261124 + 7))
+	for _, gi := range cands[:30] {
+		g := gs[gi]
+		sample = append(sample, posOf[g.Members[r2.Intn(len(g.Members))]])
+	}
+	var turn []string
+	for _, it := range items {
+		if it.Huang && it.Time > "2026-11-23T14:00:00Z" && it.Time <= "2026-11-23T15:00:00Z" && strings.Contains(strings.ToLower(it.Title+" "+it.Text), "reinstat") {
+			turn = append(turn, it.ID)
+		}
+	}
+	r2.Shuffle(len(turn), func(i, j int) { turn[i], turn[j] = turn[j], turn[i] })
+	if len(turn) > 10 {
+		turn = turn[:10]
+	}
+	inGroup := map[string]bool{}
+	f, err := os.Open(filepath.Join(outDir, "e5-ecalls.jsonl"))
+	must(err)
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 1<<26)
+	var singles []string
+	for sc.Scan() {
+		var c e5Call
+		must(json.Unmarshal(sc.Bytes(), &c))
+		for _, id := range c.IDs {
+			if c.Kind == "group" {
+				inGroup[id] = true
+			} else {
+				singles = append(singles, id)
+			}
+		}
+	}
+	f.Close()
+	r2.Shuffle(len(singles), func(i, j int) { singles[i], singles[j] = singles[j], singles[i] })
+	singles = singles[:20]
+	type keyRow struct {
+		ID      string `json:"id"`
+		Source  string `json:"source"`
+		InGroup bool   `json:"in_group"`
+	}
+	var key []keyRow
+	seen := map[string]bool{}
+	add := func(ids []string, src string) {
+		for _, id := range ids {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			key = append(key, keyRow{id, src, inGroup[id]})
+		}
+	}
+	add(sample, "drift-group member")
+	add(turn, "Huang turn arrival")
+	add(singles, "singleton of arm E")
+	arms := map[string]map[string]e5Out{}
+	for _, a := range []string{"B", "D", "E"} {
+		_, arms[a] = loadArm(filepath.Join(outDir, "e5-"+a+".jsonl"))
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "# E5 cutoff sheet: %d arrivals. For each, mark B, D, E 1 if the compression is wrong because the model did not know something after its training cutoff (a reinstatement read as a first appointment, an out-of-date role, an unknown event or product), else 0.\n\n", len(key))
+	for _, k := range key {
+		it := byID[k.ID]
+		t := it.Title
+		if t == "" {
+			t = "(post)"
+		}
+		fmt.Fprintf(&sb, "## %s [%s; in an E group: %v] %s %s\n%s\n%s\n", k.ID, k.Source, k.InGroup, it.Time[11:16], it.Origin, t, trunc(it.Text, 420))
+		for _, a := range []string{"B", "D", "E"} {
+			o := arms[a][k.ID]
+			fmt.Fprintf(&sb, "  %s: %s || %s\n", a, strings.Join(o.Subjects, "; "), o.Asserts)
+		}
+		sb.WriteString("\n")
+	}
+	must(os.WriteFile(filepath.Join(outDir, "e5-cutoff-sheet.md"), []byte(sb.String()), 0o644))
+	kb, _ := json.MarshalIndent(key, "", " ")
+	must(os.WriteFile(filepath.Join(outDir, "e5-cutoff-key.json"), kb, 0o644))
+	fmt.Printf("wrote e5-cutoff-sheet.md: %d arrivals (%d drift-group members, %d turn, %d singletons)\n", len(key), len(sample), len(turn), len(singles))
+}
+
+func runE5CutoffScore(outDir string) {
+	var key []struct {
+		ID      string `json:"id"`
+		Source  string `json:"source"`
+		InGroup bool   `json:"in_group"`
+	}
+	kb, err := os.ReadFile(filepath.Join(outDir, "e5-cutoff-key.json"))
+	must(err)
+	must(json.Unmarshal(kb, &key))
+	lab := map[string][3]int{}
+	f, err := os.Open(filepath.Join(outDir, "e5-cutoff.tsv"))
+	must(err)
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		fs := strings.Split(sc.Text(), "\t")
+		if len(fs) >= 4 && !strings.HasPrefix(fs[0], "#") {
+			var v [3]int
+			for k := 0; k < 3; k++ {
+				fmt.Sscanf(fs[k+1], "%d", &v[k])
+			}
+			lab[fs[0]] = v
+		}
+	}
+	var sb strings.Builder
+	p := func(f string, a ...any) { fmt.Fprintf(&sb, f, a...) }
+	names := []string{"B", "D", "E"}
+	count := func(pred func(i int) bool) (n int, errs [3]int) {
+		for i, k := range key {
+			_ = k
+			if pred(i) {
+				n++
+				v := lab[key[i].ID]
+				for a := 0; a < 3; a++ {
+					errs[a] += v[a]
+				}
+			}
+		}
+		return
+	}
+	for _, s := range []struct {
+		name string
+		pred func(i int) bool
+	}{
+		{"all", func(i int) bool { return true }},
+		{"drift-group members", func(i int) bool { return key[i].Source == "drift-group member" }},
+		{"Huang turn arrivals", func(i int) bool { return key[i].Source == "Huang turn arrival" }},
+		{"arrivals in a group of arm E", func(i int) bool { return key[i].InGroup }},
+		{"singletons of arm E", func(i int) bool { return !key[i].InGroup }},
+	} {
+		n, e := count(s.pred)
+		p("%s: n %d;", s.name, n)
+		for a := 0; a < 3; a++ {
+			lo, hi := wilson(e[a], n)
+			p(" %s errors %d (%.0f%%, %.0f to %.0f);", names[a], e[a], 100*float64(e[a])/float64(max(n, 1)), 100*lo, 100*hi)
+		}
+		p("\n")
+	}
+	must(os.WriteFile(filepath.Join(outDir, "e5-cutoff-score.txt"), []byte(sb.String()), 0o644))
+	fmt.Print(sb.String())
+}
