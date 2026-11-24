@@ -64,6 +64,7 @@ type ReviseBody struct {
 	Citations                json.RawMessage `json:"citations,omitempty"`
 	Metadata                 json.RawMessage `json:"metadata,omitempty"`
 	AllowRebase              bool            `json:"allow_rebase,omitempty"`
+	DeriveFromMarkdown       bool            `json:"derive_from_markdown,omitempty"`
 	ExpectedLifecycleVersion int64           `json:"expected_lifecycle_version,omitempty"`
 }
 

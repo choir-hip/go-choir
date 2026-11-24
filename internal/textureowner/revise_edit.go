@@ -71,6 +71,9 @@ func (h *Handler) commitOwnerBodyEdit(ctx context.Context, doc types.Document, o
 		metadata = mergeTextureRevisionMetadata(metadata, in.Metadata)
 	}
 	content := req.Content
+	if req.DeriveFromMarkdown && (len(strings.TrimSpace(string(req.BodyDoc))) > 0 || len(strings.TrimSpace(string(req.SourceEntities))) > 0) {
+		return ReviseReceipt{}, refuseOwnerRevision(http.StatusBadRequest, "derive_from_markdown derives body_doc and source_entities: send neither")
+	}
 	var parentRev types.Revision
 	var hasParentRev bool
 	if strings.TrimSpace(parentID) != "" {
@@ -78,7 +81,7 @@ func (h *Handler) commitOwnerBodyEdit(ctx context.Context, doc types.Document, o
 			parentRev = rev
 			hasParentRev = true
 			var stabilized bool
-			if !in.Verbatim {
+			if !in.Verbatim && !req.DeriveFromMarkdown {
 				content, stabilized = stabilizeTextureUserMarkdownStructures(parentRev.Content, content)
 			}
 			if stabilized {
@@ -97,6 +100,15 @@ func (h *Handler) commitOwnerBodyEdit(ctx context.Context, doc types.Document, o
 		recordTrajectoryID = doc.TrajectoryID
 	}
 	metadata = carryForwardTextureMetadataForRecord(metadata, parentRev.Metadata, recordTrajectoryID)
+	if req.DeriveFromMarkdown {
+		// The owner's text is the whole of what he sent: the body and the entities are the parent's, merged with it (texturedoc.MergeMarkdown), and the content is what that body projects to. The draft
+		// stabilizer above repairs a table-shaped draft the owner typed as a flat text; here the structure is derived, not guessed, so its rewrite is not applied to the text it was handed.
+		derived, err := deriveOwnerBody(parentRev, hasParentRev, req.Content)
+		if err != nil {
+			return ReviseReceipt{}, refuseOwnerRevision(http.StatusBadRequest, err.Error())
+		}
+		req.BodyDoc, req.SourceEntities, content = derived.bodyDoc, derived.sourceEntities, derived.content
+	}
 	// Only Texture's evidence path writes an embed (station TE, design E7):
 	// the owner may keep, delete or move one, never add or alter one.
 	var parentBody json.RawMessage

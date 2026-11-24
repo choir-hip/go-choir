@@ -209,15 +209,18 @@ const (
 // POST /api/texture/documents/{id}/revisions. The public route always creates
 // user-authored revisions.
 type textureCreateRevisionRequest struct {
-	Content                  string          `json:"content"`
-	BodyDoc                  json.RawMessage `json:"body_doc,omitempty"`
-	SourceEntities           json.RawMessage `json:"source_entities,omitempty"`
-	Citations                json.RawMessage `json:"citations,omitempty"`
-	Metadata                 json.RawMessage `json:"metadata,omitempty"`
-	ParentRevisionID         string          `json:"parent_revision_id,omitempty"`
-	AllowRebase              bool            `json:"allow_rebase,omitempty"`
-	IdempotencyKey           string          `json:"idempotency_key,omitempty"`
-	ExpectedLifecycleVersion int64           `json:"expected_lifecycle_version,omitempty"`
+	Content          string          `json:"content"`
+	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
+	Citations        json.RawMessage `json:"citations,omitempty"`
+	Metadata         json.RawMessage `json:"metadata,omitempty"`
+	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
+	AllowRebase      bool            `json:"allow_rebase,omitempty"`
+	// DeriveFromMarkdown: `content` is the Markdown the owner typed and the server derives body_doc and source_entities from it and the parent revision (texturedoc.MergeMarkdown), keeping what the text did not
+	// touch. A client that has only text sends this and no body_doc; one that builds its own body (the web editor) does not.
+	DeriveFromMarkdown       bool   `json:"derive_from_markdown,omitempty"`
+	IdempotencyKey           string `json:"idempotency_key,omitempty"`
+	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version,omitempty"`
 }
 
 // textureRevisionResponse is the JSON response for revision-related endpoints.
@@ -1115,7 +1118,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 		Body: &ReviseBody{
 			Content: req.Content, BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities,
 			Citations: req.Citations, Metadata: req.Metadata,
-			AllowRebase: req.AllowRebase, ExpectedLifecycleVersion: req.ExpectedLifecycleVersion,
+			AllowRebase: req.AllowRebase, DeriveFromMarkdown: req.DeriveFromMarkdown, ExpectedLifecycleVersion: req.ExpectedLifecycleVersion,
 		},
 	})
 	if err != nil {

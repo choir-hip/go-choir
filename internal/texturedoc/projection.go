@@ -212,3 +212,23 @@ func sourceTitle(entity SourceEntity) string {
 	}
 	return entity.SourceEntityID
 }
+
+// ProjectBlockTexts is the text each top-level block of the document projects to, with the numbers of the sources taken across the whole document (the text of the whole is these joined by a blank line, its end
+// trimmed). MergeMarkdown finds an unchanged block of the owner's text by it. It does not validate: the caller has a stored document.
+func ProjectBlockTexts(doc StructuredTextureDoc, entities []SourceEntity) []string {
+	entityByID := make(map[string]SourceEntity, len(entities))
+	for _, entity := range entities {
+		entityByID[entity.SourceEntityID] = entity
+	}
+	p := projector{entities: entityByID, numbers: make(map[string]int)}
+	out := make([]string, len(doc.Doc.Content))
+	for i := range doc.Doc.Content {
+		start := p.builder.Len()
+		p.renderBlock(doc.Doc.Content[i], 0)
+		out[i] = p.builder.String()[start:]
+		if i < len(doc.Doc.Content)-1 {
+			p.writeParagraphBreak()
+		}
+	}
+	return out
+}
