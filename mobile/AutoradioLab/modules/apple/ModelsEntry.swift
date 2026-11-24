@@ -65,6 +65,7 @@ final class ModelsModule: ExactModule {
             SharedGeneration.announce((request["gen"] as? NSNumber)?.intValue ?? 0)      // shared code's generation moved when the sign-out began: what it pushed under an older one is refused from now on
             Task { @MainActor in
                 guard let m = AutoradioModule.current else { reply.send(["done": false]); return }
+                if op == "signOut", let keyId = request["keyId"] as? String, !keyId.isEmpty, KeychainKeyStore().get(KeyAccount.keyID) != keyId { reply.send(["done": false, "superseded": true]); return }      // a sign-in kept another key meanwhile: it is not the one being signed out, and nothing of it is deleted
                 await m.signOutForShared(keepKey: op == "wipe")
                 MailSeal().forget()      // the mail copy's key goes with the account, whatever shared code does next
                 // Truthful: the Keychain delete ignores its status (ChoirClient.swift), so read the item again. Still there: not done. The Account screen's sign-out then wipes

@@ -446,7 +446,7 @@ describe('S19 a key that replaces the key of another account in the same launch'
 
 describe('S20 sign-out clears the phone at once and revokes with the key it held', () => {
   const enc = (t: string) => new TextEncoder().encode(t);
-  const pendingId = (m: ReturnType<typeof memFs>): string | null => { const b = m.files.get(PENDING_REVOKE_FILE); return b ? JSON.parse(new TextDecoder().decode(b)).id : null; };
+  const pendingId = (m: ReturnType<typeof memFs>): string | null => { const b = m.files.get(PENDING_REVOKE_FILE); return b ? JSON.parse(new TextDecoder().decode(b))[0].id : null; };
   const HELD = { key: 'choir_sk_test-held-not-real', id: 'ak_held' };
   test('a revoke that was sent: signed out, nothing pending, no note', async () => {
     W = newWorld('present'); const m = memFs(SEED);

@@ -8,7 +8,7 @@
 // source again, and a declared event on a Contract node: docs/reference/exact/native-modules.md, "Out (Swift to the UI)"). Sign-out is
 // started by a Contract action, so shared code can lead and call native once; no hook is needed, and no shared store can be missed by a
 // native list. The drift guard in account.test.ts (S4) fails when a shared module keeps a path no wipe here covers.
-// Signing in is shared code (app-signin.ts); the key is an Exact secret that this module never reads.
+// Signing in is shared code (app-signin.ts); the key is an Exact secret that this module reads only at sign-out (to revoke the key it lets go of, never logged or moved).
 //
 // ONE FUNCTION decides what a launch and the end of every sign-out do about the account's data (`reconcile`, below): three facts in, one action out.
 //   key state (native, THREE answers: present with a digest / absent = the Keychain said item-not-found / unreadable = locked or anything else),
@@ -111,7 +111,7 @@ export async function wipeAll(storage: Storage | undefined, store: Store | undef
   return failed;
 }
 
-export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe'; gen?: number }): Promise<unknown> };
+export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe'; gen?: number; keyId?: string }): Promise<unknown> };
 export type SignOutResult = { done: boolean; failed: string; message: string; epoch: number };
 /** A deadline, not a limit: a native sign-out that never answers leaves the page retryable. */
 export const NATIVE_DEADLINE_MS = 30000;
@@ -246,7 +246,7 @@ export type RevokeResult = 'revoked' | 'pending' | 'noid';
 export type RevokeHeld = (held: HeldKey) => Promise<RevokeResult>;
 const REVOKE_DEADLINE_MS = 8000;
 const PENDING_REVOKE_KEEP_TRIES = 60;      // launches or sign-ins that answered "not yours" before the file is dropped (data sources have no clock)
-export const REVOKE_PENDING_NOTE = 'Signed out on this phone. The server could not be reached, so the key is not yet revoked: it is revoked the next time you open the app signed in. To revoke it now, use Settings on the web.';
+export const REVOKE_PENDING_NOTE = 'Signed out on this phone. The server could not be reached, so the key is not yet revoked: it is revoked the next time you sign in to this account. To revoke it now, use Settings on the web.';
 export const REVOKE_NOID_NOTE = 'Signed out on this phone. This key has no id on the phone and the server could not be reached, so it is not revoked: revoke it from Settings on the web.';
 
 async function bearer(key: string, path: string, method: 'GET' | 'DELETE'): Promise<{ status: number; body: unknown }> {
@@ -273,23 +273,50 @@ export const revokeDirect: RevokeHeld = async (held) => {
 };
 const idOf = (body: unknown): string => (body && typeof body === 'object' && typeof (body as Record<string, unknown>).key_id === 'string' ? (body as { key_id: string }).key_id : '');
 
-/** The pending-revoke file: the id of a key the phone has let go of and the server has not yet revoked, with how many retries answered "not this key's". It is written (atomically) BEFORE the key is deleted, so a kill or a timeout at any later step leaves it. */
-const pendingBody = (id: string, tries = 0): string => JSON.stringify({ id, tries });
-const parsePending = (text: string | null): { id: string; tries: number } | null => { try { const o = JSON.parse(text ?? ''); return typeof o.id === 'string' && o.id ? { id: o.id, tries: Number(o.tries) || 0 } : null; } catch { return null; } };
+/** The pending-revoke file: a list (at most 8) of {id, tries}: the ids of keys the phone has let go of and the server has not yet revoked, each with how many retries answered "not this key's". An id is written (atomically) BEFORE the key is
+ * deleted, so a kill or a timeout at any later step leaves it; a later sign-out adds its id and never replaces one that is unresolved. When the list is full the entry that has answered "not yours" most goes (it is the likeliest to be stale). */
+export type PendingEntry = { id: string; tries: number };
+const PENDING_REVOKE_MAX = 8;
+const parsePending = (text: string | null): PendingEntry[] => {
+  try {
+    const o = JSON.parse(text ?? '');
+    const list: unknown[] = Array.isArray(o) ? o : [o];                       // a file of the first form held one object
+    return list.filter((e): e is { id: string; tries?: unknown } => !!e && typeof (e as { id?: unknown }).id === 'string' && (e as { id: string }).id !== '').map((e) => ({ id: e.id, tries: Number(e.tries) || 0 }));
+  } catch { return []; }
+};
+const readPending = async (storage: Storage | undefined): Promise<PendingEntry[]> => (storage ? parsePending(await readText(storage, PENDING_REVOKE_FILE)) : []);
+const writePending = async (storage: Storage | undefined, list: PendingEntry[]): Promise<boolean> => (list.length === 0 ? removeFile(storage, PENDING_REVOKE_FILE) : mark(storage, PENDING_REVOKE_FILE, JSON.stringify(list)));
+const addPending = async (storage: Storage | undefined, id: string): Promise<boolean> => {
+  const list = await readPending(storage);
+  if (list.some((e) => e.id === id)) return true;
+  if (list.length >= PENDING_REVOKE_MAX) {
+    let worst = 0;
+    list.forEach((e, i) => { if (e.tries > list[worst].tries) worst = i; });
+    list.splice(worst, 1);
+  }
+  list.push({ id, tries: 0 });
+  return writePending(storage, list);
+};
+const dropPending = async (storage: Storage | undefined, id: string): Promise<void> => { await writePending(storage, (await readPending(storage)).filter((e) => e.id !== id)); };
 
-/** Retry the revoke of the file, signed in (at launch, and after a sign-in): with the key held now. 2xx: done, the file goes. 404 or 403: this key cannot revoke it (another account's key, or a narrower one): the file stays,
- * since the account it belongs to may sign in later, and goes after 60 such answers. A phone that is offline keeps it. */
+/** Retry the revokes of the list, signed in (at launch, and after a sign-in): with the key held now, each entry in turn. 2xx: done, the entry goes. 404 or 403: this key cannot revoke it (another account's key, or a narrower one): the entry stays,
+ * since the account it belongs to may sign in later, and goes after 60 such answers. A phone that cannot reach the server stops and keeps what is left. An entry that is the key the phone holds is stale (the sign-out did not happen) and goes. */
 export async function retryPendingRevoke(storage: Storage | undefined, store: Store | undefined): Promise<void> {
   if (!storage || !store) return;
-  const p = parsePending(await readText(storage, PENDING_REVOKE_FILE));
-  if (!p || (await keyState()).state !== 'present') return;
-  if ((store.get(KEY_ID_NAME) ?? '') === p.id) { await removeFile(storage, PENDING_REVOKE_FILE); return; }      // the key is still this phone's: the sign-out did not happen, and this must not end it
-  try { await authedJSON(`/auth/api-keys/${encodeURIComponent(p.id)}`, { method: 'DELETE' }); }
-  catch (e) {
-    if (e instanceof HTTPError && (e.status === 404 || e.status === 403)) { if (p.tries + 1 >= PENDING_REVOKE_KEEP_TRIES) await removeFile(storage, PENDING_REVOKE_FILE); else await mark(storage, PENDING_REVOKE_FILE, pendingBody(p.id, p.tries + 1)); }
-    return;
+  const list = await readPending(storage);
+  if (list.length === 0 || (await keyState()).state !== 'present') return;
+  const keep: PendingEntry[] = [];
+  let reachable = true;
+  for (const p of list) {
+    if (!reachable) { keep.push(p); continue; }
+    if ((store.get(KEY_ID_NAME) ?? '') === p.id) continue;                              // the key is still this phone's: the sign-out did not happen, and this must not end it
+    try { await authedJSON(`/auth/api-keys/${encodeURIComponent(p.id)}`, { method: 'DELETE' }); }
+    catch (e) {
+      if (e instanceof HTTPError && (e.status === 404 || e.status === 403)) { if (p.tries + 1 < PENDING_REVOKE_KEEP_TRIES) keep.push({ id: p.id, tries: p.tries + 1 }); }
+      else { reachable = false; keep.push(p); }
+    }
   }
-  await removeFile(storage, PENDING_REVOKE_FILE);
+  await writePending(storage, keep);
 }
 
 /** The sign-out: the result carries the wipe counter (a monotonic value the contract passes on to the sources that keep state in memory). */
@@ -314,7 +341,7 @@ async function signOutInner(
   // What the phone holds is read now, before native lets go of it. Its id goes into the pending-revoke file BEFORE anything is deleted (a kill, a timeout or a failed step later cannot lose it); the server revoke is made
   // after native has flushed the run sheet (it posts under the key, so the key must still work) and cleared the phone.
   const held = opts.held !== undefined ? opts.held : heldKey(store);
-  if (held && held.id && !(await mark(storage, PENDING_REVOKE_FILE, pendingBody(held.id)))) {
+  if (held && held.id && !(await addPending(storage, held.id))) {
     await removeFile(storage, PENDING_FILE);
     return { done: false, failed: '', message: 'Sign-out did not start. Try again.' };
   }
@@ -324,13 +351,15 @@ async function signOutInner(
   step('begun');
   let late = false;
   let nativeDone: Promise<unknown>;
-  try { nativeDone = native.later({ op: 'signOut', gen: accountGeneration() }); } catch { nativeDone = Promise.resolve({ done: false }); }
+  try { nativeDone = native.later({ op: 'signOut', gen: accountGeneration(), keyId: held?.id || undefined }); } catch { nativeDone = Promise.resolve({ done: false }); }
   const wipes = opts.wipes ?? DATA_WIPES;
   // A native call that outlives the deadline keeps its continuation: if it answers done:true later, the shared stores are wiped then and the marker goes.
   nativeDone.then(async (r) => {
     if (!late || !r || (r as { done?: unknown }).done !== true) return;
-    if ((await keyState()).state === 'present') return;                          // a sign-in finished inside the window: its stores are its own
+    if ((await keyState()).state === 'present') return;                          // a sign-in finished inside the window: its key and stores are its own
     await sharedWipeThen(storage, store, async () => { if (storage && (await readText(storage, PENDING_FILE)) !== token) return; await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); });
+    // The key was let go of late: the server revoke is made now, with the key that was held, and its id forgotten only when the server has answered.
+    if (held && (await (opts.revoke ?? revokeDirect)(held)) === 'revoked' && held.id) await dropPending(storage, held.id);
   }, () => undefined);
   const r = await Promise.race([nativeDone.then((x) => x, () => ({ done: false, threw: true })), timeout(opts.deadlineMs ?? NATIVE_DEADLINE_MS)]);
   if (r === 'timeout') { late = true; return { done: false, failed: '', message: 'Sign-out is taking long. It will finish by itself; nothing more to do.' }; }   // the marker stays; sealing stays off
@@ -339,13 +368,13 @@ async function signOutInner(
     // Not signed out (the key may still be there). An explicit "not done" means the key remains: the marker goes. A throw is unknown: the marker stays and the next
     // reconcile decides by the key (present: the marker is cleared and nothing is wiped).
     abortSignOut(!ans.threw);                                                    // a throw is unknown: the radio is not handed the new generation (api.ts)
-    if (!ans.threw) { await removeFile(storage, PENDING_FILE); await removeFile(storage, PENDING_REVOKE_FILE); }
+    if (!ans.threw) { await removeFile(storage, PENDING_FILE); if (!(ans as { superseded?: boolean }).superseded && held?.id) await dropPending(storage, held.id); }      // a superseded sign-out left a newer key: the old id stays to be revoked
     return { done: false, failed: '', message: 'Sign-out did not finish. Try again.' };
   }
   step('native');
   const result: RevokeResult | 'none' = held ? await (opts.revoke ?? revokeDirect)(held) : 'none';
   let note = '';
-  if (result === 'revoked') await removeFile(storage, PENDING_REVOKE_FILE);
+  if (result === 'revoked' && held?.id) await dropPending(storage, held.id);
   else if (result === 'pending') note = REVOKE_PENDING_NOTE;
   else if (result === 'noid') note = REVOKE_NOID_NOTE;
   forgetCredentials();                                                          // the native half deleted the Keychain items; the store's own state agrees

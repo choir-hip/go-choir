@@ -36,8 +36,7 @@ public final class ChoirSignIn: @unchecked Sendable {
 
     private func client() -> ChoirClient { env.client(baseURL: baseURL) }
 
-    /// Clear the phone at once: the key, then the account's state (AccountWipe). The server revoke is shared code's (AutoradioLab/account.ts `revokeHeldKey`, run while the key is still here, with a retry file when the
-    /// phone is offline), so nothing here waits on a network.
+    /// Clear the phone at once: the key, then the account's state (AccountWipe); the server revoke is shared code's (account.ts `revokeDirect`, made after this with the key it read before).
     public func signOut() async {
         env.keys.delete(KeyAccount.apiKey); env.keys.delete(KeyAccount.keyID); env.keys.delete(KeyAccount.computerID)
         await onSignOut?()           // everything of the account on the phone goes (AccountWipe)
