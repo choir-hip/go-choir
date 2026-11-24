@@ -26,7 +26,9 @@ public enum ModelTrial {
     public static let sentence = "Good morning. This is your radio, speaking from this phone."
     public typealias Report = @Sendable (_ state: String, _ line: String, _ ms: Double) -> Void
 
-    public static func run(job: String, id: String, backend b: TrialBackend, report: Report) async {
+    public static func run(job: String, id: String, backend b: TrialBackend, report rawReport: Report) async {
+        // A cancelled test (the account left) says nothing more.
+        func report(_ state: String, _ line: String, _ ms: Double) { if !Task.isCancelled { rawReport(state, line, ms) } }
         func ms(_ since: DispatchTime) -> Double { Double(DispatchTime.now().uptimeNanoseconds - since.uptimeNanoseconds) / 1e6 }
         func s1(_ x: Double) -> String { String(format: "%.1f", x) }
         func failed(_ why: String) { report("failed", why, 0) }

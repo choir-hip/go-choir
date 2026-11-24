@@ -22,7 +22,7 @@ import { onKickSearch, onTestSearch } from './search-kick.ts';
 import { consentPicks, forgetConsent, modelsAgreement, CONSENT_FILE } from './consent.ts';
 import { noVoice, type VoiceFacts } from './onboarding.ts';
 import { sizeLabel, type OfferJob, type Option } from './offers.ts';
-import { bindNative, resetSeam } from './api.ts';
+import { bindNative, nextGeneration, resetSeam } from './api.ts';
 
 const files = new Map<string, Uint8Array>();
 const storage = { fs: {
@@ -217,6 +217,16 @@ describe('the search test (shared code runs it)', () => {
     let v: Awaited<ReturnType<typeof modelsAct>>; try { v = await modelsAct('test', 'search', 'embedder', g, storage); } finally { Date.now = realNow; if (was) onTestSearch(was); }
     expect(asked.length).toBe(1); expect(calls.filter((c) => c.op === 'obModelTest').length).toBe(0);
     expect(row(v, 'search', 'embedder')).toMatchObject({ testing: false }); expect(row(v, 'search', 'embedder').testLine).toContain('It found 3 stories and documents');
+  });
+});
+
+describe('the search test across a sign-out', () => {
+  test('M13c a search test that finishes after the account left writes nothing', async () => {
+    embedPresent = true;
+    const was = onTestSearch(async () => { nextGeneration(); return 'It found 3 stories and documents on this phone for: x'; });     // the account leaves while the query runs
+    const g: VoiceFacts = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (o.id === 'embedder' ? { ...o, ready: true } : o)) })) };
+    try { await modelsAct('test', 'search', 'embedder', g, storage); expect(row(view(g, true), 'search', 'embedder').testLine).toBe(''); }
+    finally { if (was) onTestSearch(was); }
   });
 });
 

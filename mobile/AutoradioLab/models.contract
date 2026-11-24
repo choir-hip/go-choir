@@ -5,7 +5,7 @@
 //   md-use-<section>-<id>, md-test-<section>-<id>, md-remove-<section>-<id>, md-test-result-<section>-<id>; the first run: md-first-lines, md-first-line-<id>, md-first-total, md-voice-offer-<id>.
 use Theme from "@choir/autoradio"
 use ModelsView from "./models-types.contract"
-use VoiceCards from "@choir/autoradio"
+use VoiceCards, VoiceCard from "@choir/autoradio"
 use Btn, ChoiceWord from "./ui.contract"
 
 // One option of a job.
@@ -51,12 +51,12 @@ component ModelRowFace
                   if o.mobileLine != ""
                     button press=mdDownloadMobile(s.section, o.id) testId=`md-download-${s.section}-${o.id}` appearance="none"
                       Btn(label=o.downloadLabel, primary=false, wide=false)
-                if o.canUse
-                  button press=mdUse(s.section, o.id) testId=`md-use-${s.section}-${o.id}` appearance="none"
-                    Btn(label="Use", primary=false, wide=false)
                 if o.canTest
                   button press=mdTest(s.section, o.id) testId=`md-test-${s.section}-${o.id}` appearance="none"
                     Btn(label="Test", primary=false, wide=false)
+                if o.canUse
+                  button press=mdUse(s.section, o.id) testId=`md-use-${s.section}-${o.id}` appearance="none"
+                    Btn(label="Use", primary=false, wide=false)
                 if o.canRemove
                   button press=mdRemove(s.section, o.id) testId=`md-remove-${s.section}-${o.id}` appearance="none" aria-label="Remove this model from the phone"
                     text "Remove" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.danger
@@ -133,32 +133,30 @@ component ModelsTabBar
 component VoiceRowFace
   inject
     th: Theme
-    vc: VoiceCards
     vcPick: action
     vcHear: action
   props
-    id: string
+    c: VoiceCard
   view
-    for c in vc.cards key=c.id
-      if c.id == id
-        column testId=`mv-voice-${c.id}` width="100%" box-sizing="border-box" gap=4 padding="12px 0px"
-          row width="100%" gap=8 align-items="flex-start"
-            column flex=1 min-width=0 gap=2
-              text c.name testId=`mv-voice-name-${c.id}` font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
-              text `${c.blurb} · ${c.sizeLabel}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-            text (c.playing ? "Playing" : c.selected ? "In use" : c.state == "ready" ? "On this phone" : c.state == "downloading" ? "Downloading" : "Not on this phone") testId=`mv-voice-line-${c.id}` font-family=th.fontLabel font-size="-exact-footnote" color=(c.selected or c.playing ? th.success : th.muted)
-          if c.state == "downloading"
-            column height=4 background-color=th.rule width="100%"
-              box height=4 background-color=th.accent width=`${floor(c.progress * 100)}%`
-          if c.state != "ready" and c.note != ""
-            text c.note font-family=th.fontLabel font-size="-exact-caption1" line-height=1.35 color=th.muted
-          row gap=16 align-items="center"
-            if c.state == "ready"
-              button press=vcHear(c.id) testId=`mv-voice-test-${c.id}` appearance="none"
-                Btn(label="Test", primary=false, wide=false)
-            if c.selected == false
-              button press=vcPick(c.id) testId=`mv-voice-use-${c.id}` appearance="none"
-                Btn(label="Use", primary=false, wide=false)
+    if c.id != ""
+      column testId=`mv-voice-${c.id}` width="100%" box-sizing="border-box" gap=4 padding="12px 0px"
+        row width="100%" gap=8 align-items="flex-start"
+          column flex=1 min-width=0 gap=2
+            text c.name testId=`mv-voice-name-${c.id}` font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
+            text `${c.blurb} · ${c.sizeLabel}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+          text (c.playing ? "Playing" : c.selected ? "In use" : c.state == "ready" ? "On this phone" : c.state == "downloading" ? "Downloading" : "Not on this phone") testId=`mv-voice-line-${c.id}` font-family=th.fontLabel font-size="-exact-footnote" color=(c.selected or c.playing ? th.success : th.muted)
+        if c.state == "downloading"
+          column height=4 background-color=th.rule width="100%"
+            box height=4 background-color=th.accent width=`${floor(c.progress * 100)}%`
+        if c.state != "ready" and c.note != ""
+          text c.note font-family=th.fontLabel font-size="-exact-caption1" line-height=1.35 color=th.muted
+        row gap=16 align-items="center"
+          if c.state == "ready"
+            button press=vcHear(c.id) testId=`mv-voice-test-${c.id}` appearance="none"
+              Btn(label="Test", primary=false, wide=false)
+          if c.selected == false
+            button press=vcPick(c.id) testId=`mv-voice-use-${c.id}` appearance="none"
+              Btn(label="Use", primary=false, wide=false)
 
 // A model's credit is shown once above its voices, as before.
 component VoiceRows
@@ -173,7 +171,7 @@ component VoiceRows
             text c.group testId=`voice-group-name-${c.model}` role="heading" aria-level=3 font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg
             if c.credit != ""
               text c.credit testId=`voice-credit-${c.model}` font-family=th.fontLabel font-size="-exact-caption2" line-height=1.35 color=th.muted
-        VoiceRowFace(id=c.id)
+        VoiceRowFace(c=c)
 
 component ModelsTabBody
   inject
