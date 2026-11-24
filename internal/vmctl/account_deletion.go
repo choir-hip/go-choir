@@ -113,6 +113,9 @@ func (r *OwnershipRegistry) accountComputersLocked(userID string) []AccountCompu
 		switch {
 		case purgeguard.ClassRefused(string(class)) || policy.PlatformComputerIDs[strings.TrimSpace(own.ComputerID)]:
 			c.Refused = "protected class " + string(class)
+		case isHardProtected(own.ComputerID):
+			c.Refused = "on the hard refusal list"
+
 		case own.IsHeld():
 			c.Refused = "under a maintenance hold"
 		case normalizeDesktopID(own.DesktopID) != PrimaryDesktopID && liveState(own.State):
@@ -121,6 +124,11 @@ func (r *OwnershipRegistry) accountComputersLocked(userID string) []AccountCompu
 		out = append(out, c)
 	}
 	return out
+}
+
+func isHardProtected(computerID string) bool {
+	_, ok := purgeguard.ProtectedComputer(computerID)
+	return ok
 }
 
 func liveState(s VMState) bool {

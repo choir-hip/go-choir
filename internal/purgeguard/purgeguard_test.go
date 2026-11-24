@@ -29,3 +29,17 @@ func TestClassRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestProtectedComputerList(t *testing.T) {
+	for id := range ProtectedComputers {
+		if what, ok := ProtectedComputer(" " + id + " "); !ok || what == "" {
+			t.Fatalf("%s is not refused", id)
+		}
+	}
+	if len(ProtectedComputers) != 2 {
+		t.Fatalf("the hard list is the paper and the owner's computer; it holds %d", len(ProtectedComputers))
+	}
+	if _, ok := ProtectedComputer("computer-0000"); ok {
+		t.Fatal("an ordinary computer is on the hard list")
+	}
+}

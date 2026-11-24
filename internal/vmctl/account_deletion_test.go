@@ -279,3 +279,22 @@ func TestAccountDestroyReadsTheRealAuthDatabaseReadOnly(t *testing.T) {
 		t.Fatalf("old record: %+v %v", res, err)
 	}
 }
+
+// The hard list refuses an account whatever class vmctl computes: the paper's
+// and the owner's computer ids, on an ordinary class.
+func TestAccountDestroyRefusesTheHardListWhateverTheClass(t *testing.T) {
+	for id := range purgeguard.ProtectedComputers {
+		e := newAcctEnv(t)
+		e.reg.mu.Lock()
+		e.reg.ownerships[ownershipKey(e.user, PrimaryDesktopID)].ComputerID = id
+		e.reg.mu.Unlock()
+		e.request(t, time.Now().Add(-10*purgeguard.GracePeriod))
+		if _, err := e.reg.DestroyAccountComputers(e.user, time.Now()); !errors.Is(err, ErrAccountRefused) {
+			t.Fatalf("%s: %v", id, err)
+		}
+		if err := e.reg.AccountPrecheck(e.user); !errors.Is(err, ErrAccountRefused) {
+			t.Fatalf("%s precheck: %v", id, err)
+		}
+		e.intact(t)
+	}
+}

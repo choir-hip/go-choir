@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/purgeguard"
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
@@ -50,10 +51,7 @@ const (
 
 // tapeSweepProtectedComputers is the hard refusal list: the paper and the
 // owner's computer. No request field, proof, manifest or flag overrides it.
-var tapeSweepProtectedComputers = map[string]string{
-	"computer-1355b83bced1613eb048ee28d66688a8": "the paper computer",
-	"computer-03335285269bdba4f94377e56879f9e6": "the owner computer",
-}
+var tapeSweepProtectedComputers = purgeguard.ProtectedComputers
 
 // tapeSweepProtected returns an error for a computer on the hard refusal list.
 func tapeSweepProtected(computerID string) error {

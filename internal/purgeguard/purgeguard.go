@@ -95,3 +95,18 @@ func ClassRefused(class string) bool {
 	}
 	return false
 }
+
+// ProtectedComputers is the hard refusal list: the paper's computer and the
+// owner's. No account deletion touches either, whatever its class says and
+// whoever asks. The tape sweep (internal/platform/tape_purge.go) reads this
+// same map, so one list is refused in vmctl, corpusd and the sweep.
+var ProtectedComputers = map[string]string{
+	"computer-1355b83bced1613eb048ee28d66688a8": "the paper computer",
+	"computer-03335285269bdba4f94377e56879f9e6": "the owner computer",
+}
+
+// ProtectedComputer reports whether the computer id is on the hard list.
+func ProtectedComputer(computerID string) (string, bool) {
+	what, ok := ProtectedComputers[strings.TrimSpace(computerID)]
+	return what, ok
+}
