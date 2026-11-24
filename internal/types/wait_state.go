@@ -284,8 +284,6 @@ func ProviderDisplayName(provider string) string {
 		return "Devin"
 	case "opencode-go", "opencode":
 		return "OpenCode"
-	case "zai":
-		return "Z.ai"
 	case "bedrock":
 		return "Bedrock"
 	case "":

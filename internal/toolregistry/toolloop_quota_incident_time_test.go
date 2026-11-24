@@ -162,13 +162,13 @@ func TestQuotaLedgerHoldsNameMemberUntilAndSource(t *testing.T) {
 	l.MarkSourced(synthMember, now.Add(time.Minute), false)
 	l.MarkSourced(lunaMember, now.Add(2*time.Minute), true)
 	l.Mark(routerMember, now.Add(-time.Minute))
-	l.Demote(zaiMember, now)
+	l.Demote(devinMember, now)
 	holds := l.Holds(now)
 	got := map[string]string{}
 	for _, h := range holds {
 		got[h.Member] = h.Source
 	}
-	want := map[string]string{servingSelectionID(synthMember): QuotaHoldProviderReset, servingSelectionID(lunaMember): QuotaHoldEstimated, servingSelectionID(zaiMember): QuotaHoldFailure}
+	want := map[string]string{servingSelectionID(synthMember): QuotaHoldProviderReset, servingSelectionID(lunaMember): QuotaHoldEstimated, servingSelectionID(devinMember): QuotaHoldFailure}
 	if len(got) != len(want) {
 		t.Fatalf("holds = %+v, want %v (the expired hold omitted)", holds, want)
 	}

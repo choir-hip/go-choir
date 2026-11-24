@@ -156,7 +156,7 @@ Several incidents in this document are exactly that.
   +--------------------------------------------------------------+
         | HTTPS, credentials from gateway-provider.env, ~/.codex
         v
-  chatgpt, opencode-go, opencode-zen, bedrock, zai, fireworks;
+  chatgpt, opencode-go, opencode-zen, bedrock, fireworks;
   OpenRouter (Jev); 9 search providers incl. local SearXNG
 ```
 
@@ -441,11 +441,11 @@ model was chosen.
 **At the gateway**, `resolveFromMultiProvider` (code:
 `internal/gateway/handlers.go:500`) takes the provider name the guest
 sent and refuses a model that the catalog does not list for a catalogued
-provider. Without a provider name it falls back to model-name heuristics:
-a `glm-` prefix goes to Z.AI, anything containing `claude` or `anthropic`
-to Bedrock. Each provider adapter speaks one of three wire shapes: OpenAI
+provider. Without a provider name the catalog decides; an uncatalogued
+model is refused, except that anything containing `claude` or `anthropic`
+goes to Bedrock. Each provider adapter speaks one of three wire shapes: OpenAI
 Responses (chatgpt), OpenAI Chat Completions (opencode-go for most
-models, fireworks) or Anthropic Messages (bedrock, zai, some opencode-go
+models, fireworks) or Anthropic Messages (bedrock, some opencode-go
 models) (code: `openCodeWireShapeForModel`, `provider.go:1220`).
 
 ### 3.3 Where it is weak

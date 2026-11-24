@@ -31,7 +31,7 @@ import (
 
 var (
 	routerMember = provideriface.LLMSelection{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free"}
-	zaiMember    = provideriface.LLMSelection{Provider: "zai", Model: "glm-5.2"}
+	devinMember  = provideriface.LLMSelection{Provider: "devin", Model: "swe-2-flash"}
 )
 
 func shortenQuota(t *testing.T) {
@@ -131,15 +131,15 @@ func TestPoolLastMemberSwitchesToTheContinuationChain(t *testing.T) {
 		"chatgpt":   {quotaErrFor("chatgpt", time.Now().Add(time.Hour))},
 	}}
 	r := &quotaRun{}
-	text, err := runQuota(context.Background(), p, r, quotaSetup{chain: []provideriface.LLMSelection{lunaMember, routerMember, zaiMember}}, synthMember, lunaMember)
+	text, err := runQuota(context.Background(), p, r, quotaSetup{chain: []provideriface.LLMSelection{lunaMember, routerMember, devinMember}}, synthMember, lunaMember)
 	if err != nil || text != "done by openrouter" {
 		t.Fatalf("run = %q, %v; want the chain's first usable model", text, err)
 	}
 	if len(r.switches) != 2 || r.switches[1]["to_provider"] != "openrouter" {
 		t.Fatalf("switches = %v, want pool member then chain", r.switches)
 	}
-	if p.count("synthetic") != 1 || p.count("chatgpt") != 1 || p.count("openrouter") != 1 || p.count("zai") != 0 {
-		t.Fatalf("calls synth %d luna %d router %d zai %d; each model once, in order", p.count("synthetic"), p.count("chatgpt"), p.count("openrouter"), p.count("zai"))
+	if p.count("synthetic") != 1 || p.count("chatgpt") != 1 || p.count("openrouter") != 1 || p.count("devin") != 0 {
+		t.Fatalf("calls synth %d luna %d router %d devin %d; each model once, in order", p.count("synthetic"), p.count("chatgpt"), p.count("openrouter"), p.count("devin"))
 	}
 }
 
@@ -275,9 +275,9 @@ func runQuotaMessages(p *poolProvider, r *quotaRun, message string, chain []prov
 func TestImageRunSkipsTextOnlyModelsOnQuota(t *testing.T) {
 	shortenQuota(t)
 	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErrFor("synthetic", time.Now().Add(time.Hour))}}}
-	text, err := runQuotaMessages(p, &quotaRun{}, imageMessage, []provideriface.LLMSelection{zaiMember, lunaMember}, synthMember)
-	if err != nil || text != "done by chatgpt" || p.count("zai") != 0 {
-		t.Fatalf("run = %q, %v, zai calls %d; want the text-only model skipped", text, err, p.count("zai"))
+	text, err := runQuotaMessages(p, &quotaRun{}, imageMessage, []provideriface.LLMSelection{devinMember, lunaMember}, synthMember)
+	if err != nil || text != "done by chatgpt" || p.count("devin") != 0 {
+		t.Fatalf("run = %q, %v, devin calls %d; want the text-only model skipped", text, err, p.count("devin"))
 	}
 }
 
@@ -285,9 +285,9 @@ func TestImageRunWithNoVisionModelLeftTakesTheIncidentPath(t *testing.T) {
 	shortenQuota(t)
 	p := &poolProvider{errs: map[string][]error{"synthetic": {quotaErrFor("synthetic", time.Now().Add(time.Hour))}}}
 	r := &quotaRun{}
-	_, err := runQuotaMessages(p, r, imageMessage, []provideriface.LLMSelection{zaiMember}, synthMember)
-	if err == nil || !strings.Contains(err.Error(), "every model is out of quota") || p.count("zai") != 0 {
-		t.Fatalf("err = %v, zai calls %d; want the incident path and no image to a text-only model", err, p.count("zai"))
+	_, err := runQuotaMessages(p, r, imageMessage, []provideriface.LLMSelection{devinMember}, synthMember)
+	if err == nil || !strings.Contains(err.Error(), "every model is out of quota") || p.count("devin") != 0 {
+		t.Fatalf("err = %v, devin calls %d; want the incident path and no image to a text-only model", err, p.count("devin"))
 	}
 	if r.phases["provider_quota_incident"] == 0 {
 		t.Fatalf("phases = %v, want an incident", r.phases)

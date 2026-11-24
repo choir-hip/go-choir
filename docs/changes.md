@@ -10,6 +10,13 @@ backfilled from the commit and nobody re-read the evidence for this page.
 Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 169 docs-only and 72 that change behavior.
 
+## 2026-11-24: the Z.AI model provider is gone (red; lane `drop-zai`)
+
+What: the gateway no longer has a Z.AI provider. Deleted: `ZAIProvider` and its config, `ProviderConfig.ZAIModels`, `GATEWAY_ZAI_MODELS`, the gateway's fallback that sent any `glm-*` model to Z.AI, the catalog's `glm-5.2`, `glm-5.1` and `glm-5-turbo`, and the Z.AI lines in `nix/deploy-provider-creds.sh`. `glm-5.3-flash` through OpenCode Go is a different route and stays. Tests that only tested Z.AI are deleted; the two that were the only tool-use tests of the shared Anthropic-wire parsers (`parseAnthropicResponse`, `parseSSEStream`) now call the parsers directly.
+Why: owner, 2026-11-24: "get rid of the zai connection in the code. havent used that for months". The gateway journal on Node B (back to 2026-11-23) has no `provider=zai` call; the new privacy policy's review found Z.AI missing from its provider list, and the fix is to stop having it.
+Proof: `go test -count=1` on provider, gateway, modelcatalog, types, choir, modelpolicy, vmmanager and toolregistry; the edited agentcore and textureowner tests by name. Deployed: the gateway's start log no longer says `resolved zai` (not yet checked).
+Replaced: Z.AI as a configurable provider. Undo: revert the commit; the key is still in the host's `gateway-provider.env` until it is removed there.
+
 ## 2026-11-24: the privacy policy and terms load again on choir.news
 
 What: the web build's nix source filter now keeps every file under `frontend/public/`. It kept only listed suffixes (.js, .ts, .svelte, .css, .html and a few named files), so `public/legal/privacy-policy.md`, `public/legal/terms-of-service.md` and the reader's sample PDF never reached the deployed site, and `/legal/*.md` answered with the app's HTML shell. The Privacy and Terms pages (and the app's links to them) showed that HTML as text.

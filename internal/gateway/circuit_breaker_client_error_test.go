@@ -20,7 +20,7 @@ func TestCircuitBreakingProviderCountsOnlyProviderSideFailures(t *testing.T) {
 		wantOpen bool
 	}{
 		{name: "400 request rejected", err: errors.New("opencode-go: status 400 Bad Request (sanitized)"), wantOpen: false},
-		{name: "413 request too large", err: errors.New("zai: status 413 Payload Too Large (sanitized)"), wantOpen: false},
+		{name: "413 request too large", err: errors.New("opencode-go: status 413 Payload Too Large (sanitized)"), wantOpen: false},
 		{name: "caller cancelled", err: context.Canceled, cancel: true, wantOpen: false},
 		{name: "500 provider error", err: errors.New("opencode-go: status 500 Internal Server Error (sanitized)"), wantOpen: true},
 		{name: "503 unavailable", err: errors.New("bedrock: status 503 Service Unavailable (sanitized)"), wantOpen: true},

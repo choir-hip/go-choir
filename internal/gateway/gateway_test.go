@@ -853,19 +853,6 @@ func setupMultiProviderHandler(t *testing.T) (*Handler, *IdentityRegistry) {
 		},
 	}
 
-	zaiProvider := &mockProvider{
-		name: "zai",
-		real: true,
-		response: &provider.LLMResponse{
-			ID:           "zai-resp-001",
-			Text:         "Hello from Z.AI!",
-			Model:        "glm-5-turbo",
-			StopReason:   "end_turn",
-			ProviderName: "zai",
-			Usage:        provider.Usage{InputTokens: 6, OutputTokens: 10},
-		},
-	}
-
 	bedrockProvider := &mockProvider{
 		name: "bedrock",
 		real: true,
@@ -894,7 +881,6 @@ func setupMultiProviderHandler(t *testing.T) (*Handler, *IdentityRegistry) {
 
 	mp := provider.NewMultiProvider()
 	mp.Register("fireworks", fireworksProvider)
-	mp.Register("zai", zaiProvider)
 	mp.Register("bedrock", bedrockProvider)
 	mp.Register("chatgpt", chatgptProvider)
 
@@ -941,74 +927,6 @@ func TestMultiProvider_RoutesToFireworksByProviderField(t *testing.T) {
 	}
 	if resp.Usage.InputTokens == 0 || resp.Usage.OutputTokens == 0 {
 		t.Errorf("Usage should have non-zero tokens, got: %+v", resp.Usage)
-	}
-}
-
-func TestMultiProvider_RoutesToZAIByProviderField(t *testing.T) {
-	// VAL-LLM-006: Request with provider=zai routes to Z.AI provider.
-	h, reg := setupMultiProviderHandler(t)
-
-	result, _ := reg.IssueCredential("autoputer-zai")
-
-	payload := ProviderRequest{
-		Provider:  "zai",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
-		MaxTokens: 100,
-	}
-	body, _ := json.Marshal(payload)
-
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+result.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp ProviderResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	if resp.ProviderName != "zai" {
-		t.Errorf("ProviderName = %q, want %q", resp.ProviderName, "zai")
-	}
-}
-
-func TestMultiProvider_RoutesToZAIByModel(t *testing.T) {
-	// Model-based routing: glm-5-turbo → zai.
-	h, reg := setupMultiProviderHandler(t)
-
-	result, _ := reg.IssueCredential("autoputer-zai-model")
-
-	payload := ProviderRequest{
-		Model:     "glm-5-turbo",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
-		MaxTokens: 100,
-	}
-	body, _ := json.Marshal(payload)
-
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+result.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp ProviderResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	if resp.ProviderName != "zai" {
-		t.Errorf("ProviderName = %q, want %q (routed by model)", resp.ProviderName, "zai")
 	}
 }
 
@@ -1226,67 +1144,6 @@ func TestMultiProvider_FireworksToolCalls(t *testing.T) {
 }
 
 // --- Gateway Streaming Tests (VAL-LLM-002, VAL-LLM-004) ---
-
-func TestHandleInference_StreamingZAI(t *testing.T) {
-	// VAL-LLM-004: Gateway routes streaming request to Z.AI provider.
-	reg := NewIdentityRegistry(1 * time.Hour)
-
-	zaiProvider := &mockProvider{
-		name: "zai",
-		real: true,
-		response: &provider.LLMResponse{
-			ID:           "zai-stream-001",
-			Text:         "Hello from Z.AI streaming!",
-			Model:        "glm-5-turbo",
-			StopReason:   "end_turn",
-			ProviderName: "zai",
-			Usage:        provider.Usage{InputTokens: 10, OutputTokens: 8},
-		},
-	}
-
-	mp := provider.NewMultiProvider()
-	mp.Register("zai", zaiProvider)
-
-	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
-
-	result, _ := reg.IssueCredential("autoputer-zai-stream")
-
-	payload := ProviderRequest{
-		Provider:  "zai",
-		Model:     "glm-5-turbo",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
-		MaxTokens: 100,
-		Stream:    true,
-	}
-	body, _ := json.Marshal(payload)
-
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+result.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-
-	// Verify SSE response headers.
-	ct := w.Header().Get("Content-Type")
-	if ct != "text/event-stream" {
-		t.Errorf("Content-Type = %q, want text/event-stream", ct)
-	}
-
-	// Verify SSE body contains data lines.
-	respBody := w.Body.String()
-	if !strings.Contains(respBody, "data: ") {
-		t.Errorf("expected SSE data lines in response, got: %s", respBody)
-	}
-	if !strings.Contains(respBody, "[DONE]") {
-		t.Errorf("expected [DONE] marker in SSE stream, got: %s", respBody)
-	}
-
-	// Verify the response contains the expected text delta.
-	if !strings.Contains(respBody, "Hello from Z.AI streaming!") {
-		t.Errorf("expected streaming text in SSE response, got: %s", respBody)
-	}
-}
 
 func TestHandleInference_StreamingFireworks(t *testing.T) {
 	// VAL-LLM-003: Gateway routes streaming request to Fireworks provider.
@@ -1583,21 +1440,21 @@ func TestHandleInference_StreamingRequiresAuth(t *testing.T) {
 	// Streaming requests still require valid auth.
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	zaiProvider := &mockProvider{
-		name: "zai",
+	fireworksProvider := &mockProvider{
+		name: "fireworks",
 		real: true,
 		response: &provider.LLMResponse{
 			Text:         "test",
-			ProviderName: "zai",
+			ProviderName: "fireworks",
 		},
 	}
 
 	mp := provider.NewMultiProvider()
-	mp.Register("zai", zaiProvider)
+	mp.Register("fireworks", fireworksProvider)
 	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 
 	payload := ProviderRequest{
-		Provider: "zai",
+		Provider: "fireworks",
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
 		Stream:   true,
 	}
@@ -1619,21 +1476,21 @@ func TestHandleInference_StreamingProviderError(t *testing.T) {
 	// Verify that streaming provider errors are handled gracefully.
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	zaiProvider := &mockProvider{
-		name: "zai",
+	fireworksProvider := &mockProvider{
+		name: "fireworks",
 		real: true,
-		err:  fmt.Errorf("zai: status 503 Service Unavailable (sanitized)"),
+		err:  fmt.Errorf("fireworks: status 503 Service Unavailable (sanitized)"),
 	}
 
 	mp := provider.NewMultiProvider()
-	mp.Register("zai", zaiProvider)
+	mp.Register("fireworks", fireworksProvider)
 
 	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 
-	result, _ := reg.IssueCredential("autoputer-zai-stream-err")
+	result, _ := reg.IssueCredential("autoputer-fw-stream-err")
 
 	payload := ProviderRequest{
-		Provider: "zai",
+		Provider: "fireworks",
 		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
 		Stream:   true,
 	}
@@ -1677,15 +1534,15 @@ func TestProviderRouting(t *testing.T) {
 		},
 	}
 
-	zaiProvider := &mockProvider{
-		name: "zai",
+	openCodeProvider := &mockProvider{
+		name: "opencode-go",
 		real: true,
 		response: &provider.LLMResponse{
-			ID:           "zai-resp-routing",
-			Text:         "Z.AI response",
-			Model:        "glm-5-turbo",
+			ID:           "oc-resp-routing",
+			Text:         "OpenCode response",
+			Model:        "deepseek-v4.1-flash",
 			StopReason:   "end_turn",
-			ProviderName: "zai",
+			ProviderName: "opencode-go",
 			Usage:        provider.Usage{InputTokens: 5, OutputTokens: 5},
 		},
 	}
@@ -1705,7 +1562,7 @@ func TestProviderRouting(t *testing.T) {
 
 	mp := provider.NewMultiProvider()
 	mp.Register("fireworks", fireworksProvider)
-	mp.Register("zai", zaiProvider)
+	mp.Register("opencode-go", openCodeProvider)
 	mp.Register("bedrock", bedrockProvider)
 
 	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
@@ -1727,38 +1584,6 @@ func TestProviderRouting(t *testing.T) {
 			provider:         "fireworks",
 			wantStatus:       http.StatusOK,
 			wantProviderName: "fireworks",
-		},
-
-		// VAL-LLM-006: Gateway routes Z.AI model to Z.AI provider.
-		{
-			name:             "explicit_provider_zai",
-			provider:         "zai",
-			wantStatus:       http.StatusOK,
-			wantProviderName: "zai",
-		},
-		{
-			name:             "model_glm5_turbo",
-			model:            "glm-5-turbo",
-			wantStatus:       http.StatusOK,
-			wantProviderName: "zai",
-		},
-		{
-			name:             "model_glm5_2",
-			model:            "glm-5.2",
-			wantStatus:       http.StatusOK,
-			wantProviderName: "zai",
-		},
-		{
-			name:             "model_glm5_1",
-			model:            "glm-5.1",
-			wantStatus:       http.StatusOK,
-			wantProviderName: "zai",
-		},
-		{
-			name:             "model_glm_prefix",
-			model:            "glm-4-plus",
-			wantStatus:       http.StatusOK,
-			wantProviderName: "zai",
 		},
 
 		// Bedrock routing.
@@ -1802,25 +1627,32 @@ func TestProviderRouting(t *testing.T) {
 			wantErrorContain: "provider or model is required",
 		},
 
-		// Explicit provider takes precedence over model.
+		// A model-only request goes to the provider the catalog names.
 		{
-			name:             "explicit_provider_overrides_model",
-			provider:         "zai",
-			model:            "glm-5.1",
+			name:             "model_glm53_routes_opencode",
+			model:            "glm-5.3-flash",
 			wantStatus:       http.StatusOK,
-			wantProviderName: "zai",
+			wantProviderName: "opencode-go",
+		},
+		// An explicit provider that serves the model.
+		{
+			name:             "explicit_provider_serves_model",
+			provider:         "opencode-go",
+			model:            "deepseek-v4.1-flash",
+			wantStatus:       http.StatusOK,
+			wantProviderName: "opencode-go",
 		},
 		// The host catalog decides which models a catalogued provider serves.
 		{
 			name:             "catalogued_provider_refuses_uncatalogued_model",
-			provider:         "zai",
-			model:            "glm-4-plus",
+			provider:         "opencode-go",
+			model:            "not-a-catalogued-model",
 			wantStatus:       http.StatusBadRequest,
 			wantErrorContain: "not in the catalog",
 		},
 		{
 			name:             "catalogued_provider_refuses_model_of_another_provider",
-			provider:         "zai",
+			provider:         "opencode-go",
 			model:            "accounts/fireworks/models/deepseek-v4-flash",
 			wantStatus:       http.StatusBadRequest,
 			wantErrorContain: "not in the catalog",
@@ -1880,16 +1712,16 @@ func TestProviderRouting(t *testing.T) {
 func TestProviderRouting_InvalidProviderDoesNotLeakCredentials(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
 
-	zaiProvider := &mockProvider{
-		name: "zai", real: true,
+	fireworksProvider := &mockProvider{
+		name: "fireworks", real: true,
 		response: &provider.LLMResponse{
-			Text: "ok", ProviderName: "zai",
+			Text: "ok", ProviderName: "fireworks",
 			Usage: provider.Usage{InputTokens: 1, OutputTokens: 1},
 		},
 	}
 
 	mp := provider.NewMultiProvider()
-	mp.Register("zai", zaiProvider)
+	mp.Register("fireworks", fireworksProvider)
 
 	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 	cred, _ := reg.IssueCredential("autoputer-cred-leak")
@@ -1923,38 +1755,5 @@ func TestProviderRouting_InvalidProviderDoesNotLeakCredentials(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestHandleInference_StreamingModelRoutingToZAI(t *testing.T) {
-	// VAL-LLM-006: Streaming request with glm-5-turbo model routes to Z.AI.
-	h, reg := setupMultiProviderHandler(t)
-
-	result, _ := reg.IssueCredential("autoputer-zai-stream-model")
-
-	payload := ProviderRequest{
-		Model:     "glm-5-turbo",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hello"}}}},
-		MaxTokens: 100,
-		Stream:    true,
-	}
-	body, _ := json.Marshal(payload)
-
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Bearer "+result.RawToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	h.HandleInference(w, req)
-
-	// Verify SSE response.
-	ct := w.Header().Get("Content-Type")
-	if ct != "text/event-stream" {
-		t.Errorf("Content-Type = %q, want text/event-stream", ct)
-	}
-
-	respBody := w.Body.String()
-	if !strings.Contains(respBody, "Hello from Z.AI!") {
-		t.Errorf("expected Z.AI streaming response, got: %s", respBody)
 	}
 }

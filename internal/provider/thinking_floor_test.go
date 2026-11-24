@@ -3,7 +3,7 @@ package provider
 // Thinking is never turned off (owner 2026-11-09). Ways this could fail:
 //  - Bedrock Haiku 5.5 omits thinking, or sends enabled+budget_tokens (400)
 //    or disabled (drops the prompt cache);
-//  - an older Bedrock model, Z.AI or OpenCode messages body gains a thinking
+//  - an older Bedrock model or OpenCode messages body gains a thinking
 //    field it never had;
 //  - an unset, none, minimal, off, disabled or false effort still reaches the
 //    wire as an off shape: OpenRouter DeepSeek "none", Synthetic "none"
@@ -56,13 +56,11 @@ func TestNoBuilderEmitsThinkingOff(t *testing.T) {
 }
 
 func TestAnthropicWireBodiesNeverCarryThinkingOff(t *testing.T) {
-	z := &ZAIProvider{}
 	oc := &OpenCodeProvider{}
 	b, _ := NewBedrockProvider(BedrockConfig{Region: "us-east-1", ModelID: "us.anthropic.claude-haiku-5-5", AuthToken: "tok"})
 	for _, e := range []string{"", "low", "none", "off"} {
 		req := LLMRequest{ReasoningEffort: e}
 		bodies := map[string]any{
-			"zai":      z.buildRequestBody(req, "glm"),
 			"opencode": oc.buildMessagesRequestBody(req, "m"),
 			"bedrock":  b.buildRequestBody(req),
 		}

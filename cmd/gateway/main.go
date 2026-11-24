@@ -181,7 +181,6 @@ func loadProviderConfig() provider.ProviderConfig {
 			"us.anthropic.claude-sonnet-4-6",
 			"us.anthropic.claude-opus-4-6-v1",
 		},
-		ZAIModels:              []string{"glm-5.2", "glm-5.1", "glm-5-turbo"},
 		ChatGPTModels:          []string{"gpt-6-luna"},
 		ChatGPTReasoningEffort: "low",
 		OpenCodeGoModels: []string{
@@ -206,9 +205,6 @@ func loadProviderConfig() provider.ProviderConfig {
 	// Allow overrides for non-default setups.
 	if v := os.Getenv("GATEWAY_BEDROCK_MODELS"); v != "" {
 		cfg.BedrockModels = strings.Split(v, ",")
-	}
-	if v := os.Getenv("GATEWAY_ZAI_MODELS"); v != "" {
-		cfg.ZAIModels = strings.Split(v, ",")
 	}
 	if v := os.Getenv("GATEWAY_CHATGPT_MODELS"); v != "" {
 		cfg.ChatGPTModels = strings.Split(v, ",")

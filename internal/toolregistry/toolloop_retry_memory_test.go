@@ -141,7 +141,7 @@ func TestHardFailureHoldIsLongDoublesAndEndsOnSuccess(t *testing.T) {
 
 func TestIsHardProviderFailureNamesBadKeysAndGoneModelsOnly(t *testing.T) {
 	for _, hard := range []string{
-		"gateway client: provider zai model glm: status 401 Unauthorized",
+		"gateway client: provider opencode-go model deepseek-v4.1-flash: status 401 Unauthorized",
 		"gateway client: model_not_found: the model gpt-x does not exist",
 	} {
 		if !IsHardProviderFailure(fmt.Errorf("%s", hard)) {
