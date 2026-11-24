@@ -34,6 +34,7 @@ component TexturesPage
     editAsk: action
     newDocument: action
     tnewMessage: string
+    tnewBusy: bool
   props
     address: string
     title: string
@@ -48,7 +49,7 @@ component TexturesPage
       row align-items="baseline" justify-content="space-between" width="100%" gap=12
         text "Textures" role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 testId="page-title" color=th.fg
         button press=newDocument testId="textures-new" appearance="none"
-          Btn(label="New document", primary=false, wide=false)
+          Btn(label=(tnewBusy ? "Making..." : "New document"), primary=false, wide=false)
       if tnewMessage != ""
         text tnewMessage testId="textures-new-message" role="alert" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
       input type="search" value=q input=editQ placeholder="Search your documents" aria-label="Search your documents" testId="textures-search"

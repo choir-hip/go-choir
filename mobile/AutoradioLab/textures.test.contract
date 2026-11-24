@@ -7,10 +7,10 @@ test "with no Textures page on top the list is answered by app.ts and says idle 
   expect state tlist.rows.length == 0
   expect state tlist.hasEdition == false
 
-// The Textures page is mounted from the launcher (the deck shows a placard until it is the page in front). The web host holds no key, so the create cannot succeed here: what this proves is that the button
-// is on the page, is pressed, asks for the create, and that the failure is words on the page and the deck stays on Textures (nothing opened). That a made document opens (and the editor with it) is proven by
-// textures.test.ts N1 for the create and by the phone for the opening (members-reader.contract textureMade).
-test "New document: pressed with no sign-in, it opens nothing and the page says why"
+// The Textures page is mounted from the launcher (the deck shows a placard until it is the page in front). The web host holds no key, so the create cannot succeed here. What this proves: the button is on the
+// page and is pressed; the failure comes back as words on the page, the busy state clears, nothing is opened (Textures is still the page
+// in front, the editor is not on), and leaving Textures clears the words. NOT proved here: the busy state while a create is out (the web host answers within the press, so the test cannot read it in flight),  a made document opening in the editor (needs a key; the phone shows it) and the account moving mid-create.
+test "New document: pressed with no sign-in, it says why, opens nothing, and the words go when Textures is left"
   clock data
   tap "bar-mark"
   clock settle
@@ -18,8 +18,12 @@ test "New document: pressed with no sign-in, it opens nothing and the page says 
   clock settle
   clock data
   expect tree has "textures-new"
+  expect state tnewBusy == false
   expect state tnewMessage == ""
   tap "textures-new"
   clock data
+  expect state tnewBusy == false
   expect state tnewMessage == "Sign in to make a document."
   expect text "textures-new-message" == "Sign in to make a document."
+  expect state pg.top == "textures:"
+  expect state edOn == false

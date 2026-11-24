@@ -17,22 +17,45 @@ members Autoradio
     after(5, rbump)
   // The Textures place reloads each time it is the page in front (textures.ts, shared code: both platforms), and again when a document was stopped, restored or reloaded (`rack` refreshes it) and when the account state changes (sign-in from the banner).
   resource tlist = texturesList(pg.top, acs.state) as shape TextureList else empty()
-  // "New document" on the Textures page (textures.ts createTexture): the computer makes the document, then the deck opens it (the reader, and its editor for your own document); the list is asked again.
-  // A failure opens nothing and the page says why (tnewMessage). Defined here, in the root, so the page reads it as `tnewMessage` and presses `newDocument`.
-  mutation tnew as shape TextureMade refreshes tlist then textureMade
+  // "New document" on the Textures page (textures.ts createTexture): the computer makes the document, then the deck opens it straight in the editor (the same state `edBegin` sets for a document
+  // already open: edOn, edFor, ctlOpen, ctlFor; the draft is empty). The list is not refreshed here: `tlist` is asked again whenever Textures is the page in front (its input is pg.top), so it is right on return.
+  // tnewBusy is set from the press to the answer: a second press while one create is out does nothing (the create route has no idempotency key, so two presses would make two documents) and the control says "Making...".
+  // A failure opens nothing; its words are tnewErr, shown on the page and cleared by the next press and when Textures is left. If the listener has left Textures before the answer, nothing is opened under them:
+  // the document is in the list when they come back.
+  state tnewBusy = false
+  state tnewErr = ""
+  mutation tnew as shape TextureMade then textureMade
   derive tnewTarget = match tnew { case some(r) => r.address, case none => "" }
   derive tnewTitle = match tnew { case some(r) => r.title, case none => "" }
-  derive tnewMessage = match tnew { case some(r) => r.message, case none => "" }
+  derive tnewFail = match tnew { case some(r) => r.message, case none => "" }
+  derive tnewMessage = tnewErr
   action newDocument
-    send tnew = textureCreate()
+    if tnewBusy == false
+      tnewBusy = true
+      tnewErr = ""
+      send tnew = textureCreate()
   action textureMade
-    if tnewTarget != ""
+    tnewBusy = false
+    if tnewTarget == ""
+      tnewErr = tnewFail
+    else if pg.top == "textures:"
       order = [tnewTarget].concat(order.filter(a => a != tnewTarget))
       px = 0
       pdrag = false
       flying = false
       send pms = pagesOpen(tnewTarget, tnewTitle)
       layer = ""
+      edOn = true
+      edFor = tnewTarget
+      edDraft = ""
+      edFormats = ""
+      ctlOpen = true
+      ctlFor = tnewTarget
+      ctlPanel = ""
+  task tnewClear when tnewErr != "" and pg.top != "textures:" key=pg.top
+    after(1, tnewClearNow)
+  action tnewClearNow
+    tnewErr = ""
   // The block and sentence the radio is reading (set by the radio); what the bar's prompt is aimed at.
   resource rfollow = readerFollow() as shape ReaderFollowInfo else empty()
   resource raim = readerAim() as shape ReaderAimInfo else empty()

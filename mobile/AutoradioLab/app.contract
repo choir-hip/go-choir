@@ -71,6 +71,7 @@ component Autoradio
     sendAsk
     newDocument
     tnewMessage
+    tnewBusy
     // ---- integrator (Choir sign-in, player) ----
     au
     pl
