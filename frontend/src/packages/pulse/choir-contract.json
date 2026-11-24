@@ -19,7 +19,7 @@
   "expect": [
     { "selector": "[data-pulse-summary]", "text": "Public aggregate health" },
     { "selector": "[data-pulse-metrics]", "text": "REAL USERS" },
-    { "selector": "[data-pulse-capacity]", "text": "sign-up open" },
+    { "selector": "[data-pulse-capacity]", "text": "SIGN-UP OPEN" },
     { "selector": "[data-pulse-privacy]" }
   ],
   "steps": [
