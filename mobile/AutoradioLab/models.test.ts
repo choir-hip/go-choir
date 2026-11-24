@@ -17,7 +17,7 @@
 //  M13 No word on the page sends the person to another page for a download or for its size.
 //  M14 The first run's lines are the recommended option of each job, the total counts each file once; a withheld option is not the first run's.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { modelsAct, modelsView, firstRunLines } from './models.ts';
+import { modelsAct, modelsView, firstRunLines, forgetModelTests } from './models.ts';
 import { onKickSearch, onTestSearch } from './search-kick.ts';
 import { consentPicks, forgetConsent, modelsAgreement, CONSENT_FILE } from './consent.ts';
 import { noVoice, type VoiceFacts } from './onboarding.ts';
@@ -99,7 +99,7 @@ describe('what is listed', () => {
 describe('Download', () => {
   test('M4 on Wi-Fi it records the agreement for that model only and starts exactly that model', async () => {
     await modelsAct('download', 'voice', 'zeta', f, storage);
-    expect(begins()).toEqual([{ op: 'obSetupBegin', only: true, stages: ['voice'], picks: { voice: 'zeta' }, speaker: false }]);
+    expect(begins()).toEqual([{ op: 'obSetupBegin', only: true, stages: ['voice'], picks: { voice: 'zeta' }, speaker: false, row: true }]);
     expect(await modelsAgreement(storage, 'zeta')).toEqual({ ok: true, mobile: false });
     expect((await modelsAgreement(storage, 'zeta-lite')).ok).toBe(false); expect((await modelsAgreement(storage, 'voice')).ok).toBe(false); expect((await modelsAgreement(storage, 'search')).ok).toBe(false);
   });
@@ -131,7 +131,7 @@ describe('Download', () => {
   });
   test('M7 the voice-print model starts alone: no stage, the speaker flag', async () => {
     await modelsAct('download', 'speaker', 'print', f, storage);
-    expect(begins()).toEqual([{ op: 'obSetupBegin', only: true, stages: [], picks: {}, speaker: true }]); expect(await modelsAgreement(storage, 'print')).toEqual({ ok: true, mobile: false });
+    expect(begins()).toEqual([{ op: 'obSetupBegin', only: true, stages: [], picks: {}, speaker: true, row: true }]); expect(await modelsAgreement(storage, 'print')).toEqual({ ok: true, mobile: false });
   });
   test('M11 a press reads the live facts: the phone is on mobile data now, so the Wi-Fi press starts nothing', async () => {
     live = { ...f, onWiFi: false };
@@ -141,6 +141,21 @@ describe('Download', () => {
   test('M12 nothing starts when the agreement could not be recorded', async () => {
     files.set(CONSENT_FILE, new TextEncoder().encode('{}')); const bad = { fs: { ...(storage as { fs: Record<string, unknown> }).fs, readFile: async () => { throw new Error('EIO'); } } } as never;
     await modelsAct('download', 'voice', 'zeta', f, bad); expect(begins().length).toBe(0);
+  });
+});
+
+describe('a row that failed', () => {
+  test('M3c a failed row keeps its reason and can be pressed again, and it does not hold the other rows (the run is over)', () => {
+    const g: VoiceFacts = { ...f, setupStarted: true, setupFinished: true, modelRuns: [{ id: 'gate', state: 'failed', progress: 0, line: 'The download failed (offline).' }] };
+    const v = view(g);
+    expect(row(v, 'bounds', 'gate')).toMatchObject({ state: 'failed', line: 'The download failed (offline).', canDownload: true });
+    expect(row(v, 'voice', 'zeta')).toMatchObject({ canDownload: true, line: 'Not downloaded' });
+  });
+  test('M13b a sign-out forgets the test lines (they belong to the account that ran them)', async () => {
+    embedPresent = true; const was = onTestSearch(async () => 'It found 1 story or document on this phone for: x');
+    const g: VoiceFacts = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (o.id === 'embedder' ? { ...o, ready: true } : o)) })) };
+    try { await modelsAct('test', 'search', 'embedder', g, storage); expect(row(view(g, true), 'search', 'embedder').testLine).toContain('It found 1 story'); forgetModelTests(); expect(row(view(g, true), 'search', 'embedder').testLine).toBe(''); }
+    finally { if (was) onTestSearch(was); }
   });
 });
 

@@ -124,7 +124,7 @@ export function forgetOnboarding(): void { mem = null; }
 
 export type Env = { storage: Storage | undefined; device: Device | null; get: Get; agree?: (mobile: boolean, ids?: string[]) => Promise<boolean | void>; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void> };
 export const liveEnv = (storage: Storage | undefined): Env => ({ storage, device: nativeDevice(), get: seamGet,
-  agree: async (mobile, ids = []) => { for (const id of ids) if (!(await consentAgree(id, mobile, storage))) return false; return ids.length > 0; },   // one agreement per model shown: the key Voice and models uses
+  agree: async (mobile, ids = []) => { for (const id of ids) if (!(await consentAgree(id, mobile, storage))) return false; return true; },   // one agreement per model shown: the key Voice and models uses
   closePage: async (a) => { await pages.pagesClose(storage, a); }, openPage: async (a, t) => { await pages.pagesOpen(storage, a, t); } });
 
 /** The progress, read once per account generation. THE CAUSE of the flip (found by reading, 2026-11-22): `loaded` used to be set BEFORE the file was read and a failed read counted as "no file", so a second

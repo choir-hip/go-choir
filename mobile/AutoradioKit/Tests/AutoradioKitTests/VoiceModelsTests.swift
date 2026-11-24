@@ -53,9 +53,8 @@ final class VoiceModelsTests: XCTestCase {
         for st in SetupStage.allCases {
             for c in SetupCatalog.ladder(st) where !c.isFloor {
                 let spec = KnownModels.managed.first { $0.id == c.id }
-                // a row that downloads a companion model with it (the live words beside the final transcript) promises the two together
-                let with = ListenerPipeline.companions(of: c.id).reduce(0) { n, id in n + (KnownModels.managed.first { $0.id == id }?.approxBytes ?? 0) }
-                XCTAssertEqual(c.bytes, spec.map { $0.approxBytes + with }, "\(c.id): the size setup promises is the catalog's")
+                // a row is its own model: no companion is fetched with it (the press on a row is the agreement to that model's files only)
+                XCTAssertEqual(c.bytes, spec?.approxBytes, "\(c.id): the size setup promises is the catalog's")
             }
         }
     }
@@ -171,26 +170,23 @@ final class VoiceModelsTests: XCTestCase {
         let plan = SetupCatalog.plan(for: tight)
         XCTAssertEqual(plan[.responder]!.first?.id, "qwen3-0.6b-q4_k_m", "600 MB fits in 1200 minus headroom")
         XCTAssertFalse(plan[.responder]!.contains { $0.id == "lfm3-1.7b-qad-q4_0" }, "1.5 GB does not")
-        XCTAssertEqual(plan[.transcriber]!.first?.id, "parakeet-eou-120m", "Fluid Speech Mini with its live words (550 + 250 MB) does not fit 600 MB; the small listener does")
+        XCTAssertEqual(plan[.transcriber]!.first?.id, "fluid-speech-mini", "Fluid Speech Mini (550 MB) fits 600 MB; Pro (900 MB) does not")
         var fits = device(8); fits.availableMemoryMB = 1400            // 800 MB left after the headroom
         let fitPlan = SetupCatalog.plan(for: fits)[.transcriber]!
-        XCTAssertEqual(fitPlan.first?.id, "fluid-speech-mini", "the pair of 800 MB fits; Pro with its live words (900 + 250 MB) does not")
+        XCTAssertEqual(fitPlan.first?.id, "fluid-speech-mini", "Mini (550 MB) fits 800 MB; Pro (900 MB) does not")
         XCTAssertFalse(fitPlan.contains { $0.id == "fluid-speech-pro" })
-        XCTAssertFalse(fitPlan.contains { $0.id == "parakeet-tdt-0.6b-v2" }, "Parakeet TDT with its live words (700 + 250 MB) does not")
+        XCTAssertTrue(fitPlan.contains { $0.id == "parakeet-tdt-0.6b-v2" }, "Parakeet TDT (700 MB) fits 800 MB on its own")
         var roomy = device(8); roomy.availableMemoryMB = 4000
         XCTAssertEqual(SetupCatalog.plan(for: roomy)[.transcriber]!.first?.id, "fluid-speech-pro")
         XCTAssertEqual(DeviceProfile.current().availableMemoryMB == nil, true, "on the Mac there is no such reading (iOS only)")
     }
 
-    // SF1: the ladder asks for the memory of the whole pair, the same as the configurator's estimate.
-    func testALadderRowThatBringsLiveWordsNeedsTheirMemoryToo() throws {
-        let eou = try XCTUnwrap(CandidateTable.candidate("parakeet-eou-120m", .transcriber))
-        for (id, base) in [("fluid-speech-mini", 550.0), ("parakeet-tdt-0.6b-v2", 700.0)] {
+    // SF1: a ladder row asks for its own model's memory and no other's (the live-words model has its own row).
+    func testALadderRowNeedsItsOwnMemoryOnly() throws {
+        for (id, base) in [("fluid-speech-mini", 550.0), ("fluid-speech-pro", 900.0), ("parakeet-tdt-0.6b-v2", 700.0)] {
             let row = try XCTUnwrap(SetupCatalog.ladder(.transcriber).first { $0.id == id })
-            XCTAssertEqual(row.needsMB, base + eou.residentMB, id)
+            XCTAssertEqual(row.needsMB, base, id)
         }
-        var tighter = device(8); tighter.availableMemoryMB = 1300     // 700 MB left after the headroom: the pair of 800 MB does not fit
-        XCTAssertEqual(SetupCatalog.plan(for: tighter)[.transcriber]!.first?.id, "parakeet-eou-120m")
     }
 
     func testTooSlowOrTooLittleMemoryLeftIsAFailedCheckSetupMovesOn() async throws {

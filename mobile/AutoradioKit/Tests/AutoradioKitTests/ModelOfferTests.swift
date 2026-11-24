@@ -112,4 +112,22 @@ final class ModelOfferTests: XCTestCase {
         XCTAssertEqual(t.options.first { $0.id == "fluid-speech-mini" }?.dict["inUse"] as? Bool, true)
         XCTAssertEqual(t.options.first { $0.id == "parakeet-eou-120m" }?.dict["streams"] as? Bool, true)
     }
+
+    //  V4 (review 2026-11-24) "In use" is the model the phone uses for THAT job: the decision model is its own choice (not the Qwen3 file the decision stage always lists), a downloaded model that is not chosen is not "in use" and can be removed.
+    //  V5 a row is sized as its own model: no companion's bytes are in a recogniser's size.
+    func testV4InUseIsThePhonesChoiceForEachJob() throws {
+        let protected: Set<String> = ["qwen3-0.6b-q8_0", "lfm2.5-350m-q4_k_m"]          // files a stage loads: never removable
+        let jobs = ModelOffer.jobs(profile: phone, inUse: protected, chosen: ["decision": "lfm2.5-350m-q4_k_m", "responder": "qwen3-0.6b-q8_0"], isReady: { _ in true }, onDisk: { _ in true })
+        let d = try XCTUnwrap(jobs.first { $0.job == "decision" })
+        XCTAssertEqual(d.options.filter(\.inUse).map(\.id), ["lfm2.5-350m-q4_k_m"], "only the chosen decision model is in use")
+        XCTAssertEqual(d.options.first { $0.id == "qwen3-0.6b-q8_0" }?.removable, false, "protected files stay protected")
+        let r = try XCTUnwrap(jobs.first { $0.job == "responder" })
+        XCTAssertEqual(r.options.filter(\.inUse).map(\.id), ["qwen3-0.6b-q8_0"])
+        XCTAssertEqual(r.options.first { $0.id == "lfm3-1.7b-q5_k_m" }?.inUse, false, "an option that is not the answering model chosen is not in use")
+    }
+    func testV5ARecogniserIsSizedAsItsOwnModel() throws {
+        let t = try XCTUnwrap(ModelOffer.jobs(profile: phone).first { $0.job == "transcriber" })
+        XCTAssertEqual(t.options.first { $0.id == "fluid-speech-mini" }?.bytes, KnownModels.fluidSpeechMini.totalBytes)
+        XCTAssertEqual(t.options.first { $0.id == "fluid-speech-pro" }?.bytes, KnownModels.fluidSpeechPro.totalBytes)
+    }
 }

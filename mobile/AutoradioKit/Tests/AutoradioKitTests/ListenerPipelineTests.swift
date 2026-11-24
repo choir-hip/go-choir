@@ -81,8 +81,8 @@ final class ListenerPipelineTests: XCTestCase {
         XCTAssertTrue(ListenerPipeline.summary(of: all).contains("parakeet-eou") && ListenerPipeline.summary(of: all).contains("fluid-speech-mini"))
     }
 
-    // Setup downloads the live words beside a batch model; the list says which.
-    func testSetupFetchesTheLiveWordsBesideTheFinalModel() {
+    // The list says which batch model the live words go with (the configurator uses it); setup itself fetches only the model it is asked for, the live words are their own row.
+    func testTheListNamesTheLiveWordsThatGoWithABatchModelAndSetupSizesEachRowAlone() {
         XCTAssertEqual(ListenerPipeline.companions(of: fluid), [eou])
         XCTAssertEqual(ListenerPipeline.companions(of: tdt), [eou])
         XCTAssertEqual(ListenerPipeline.companions(of: eou), [])
@@ -90,10 +90,10 @@ final class ListenerPipelineTests: XCTestCase {
         let pro = SetupCatalog.ladder(.transcriber).first!                    // the first row is Fluid Speech Pro; the plan drops it on a phone under 7 GB
         XCTAssertEqual(pro.id, "fluid-speech-pro")
         XCTAssertEqual(ListenerPipeline.companions(of: pro.id), [eou])
-        XCTAssertEqual(pro.bytes, KnownModels.fluidSpeechPro.totalBytes + 250_000_000, "Pro's size includes the live words too")
+        XCTAssertEqual(pro.bytes, KnownModels.fluidSpeechPro.totalBytes, "Pro is its own size: the live words have their own row")
         let row = SetupCatalog.ladder(.transcriber).first { $0.id == fluid }!
         XCTAssertEqual(row.kitStageID, "live-then-final")
-        XCTAssertEqual(row.bytes, KnownModels.fluidSpeechMini.totalBytes + 250_000_000, "the size the person is asked about includes the live words")
+        XCTAssertEqual(row.bytes, KnownModels.fluidSpeechMini.totalBytes, "the size the person is asked about is the model's own")
         XCTAssertTrue(SetupCatalog.ladder(.transcriber).last!.isFloor)
     }
 

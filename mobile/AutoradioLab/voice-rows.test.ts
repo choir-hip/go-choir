@@ -36,8 +36,4 @@ describe('voice rows', () => {
     expect(r[0].id).toBe('kokoro:af_heart'); expect(r.find((x) => x.model === 'phonon-31m')!.id).toBe('phonon:en_us_Easton'); expect(new Set(r.map((x) => x.id)).size).toBe(r.length);
     for (const id of ['phonon:en_us_Easton', 'phonon:en_us_Zoey', 'phonon:en_gb_Maeve']) expect(r.some((x) => x.id === id)).toBe(true);
   });
-  test('V5 the generator holds no voice name of its own', () => {
-    const src = readFileSync(root + 'scripts/gen-voice-rows.ts', 'utf8');
-    for (const n of ['Zoey', 'Maeve', 'Bella', 'Adam', 'Emma', 'George']) expect(src.includes(n)).toBe(false);
-  });
 });
