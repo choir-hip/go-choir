@@ -137,7 +137,16 @@ var catalogue = map[string]grantSpec{
 	"texture.turn":            {Verbs: []string{"Wait", "Reject"}, Privileged: true},
 
 	// Research's world authority.
-	"world.read":     {Verbs: []string{"SearchStart", "Search", "SearchAll", "Searches", "SearchWait", "Read", "ReadAll", "Reads", "Captures", "Cut", "Outlet", "SearchWireCorpus"}, Privileged: true},
+	"world.read": {Verbs: []string{"SearchStart", "Search", "SearchAll", "Searches", "SearchWait", "Read", "ReadAll", "Reads", "Captures", "Cut", "Outlet", "SearchWireCorpus"}, Privileged: true},
+	// The corpus as values (owner, 2026-11-24): pages of captures, many texts,
+	// the nearest by meaning and the edges around one, over the desk's own
+	// computer's shareable captures and the published stories. Read-only world
+	// evidence, no generative call (a text query is one embedding). Held by research
+	// only: its web child reads pages that can steer it, and Read reaches any host.
+	// A desk row holds it by listing G("corpus.read");
+	// nothing else changes (the host serves each verb for the run's own owner
+	// and computer whatever the desk).
+	"corpus.read":    {Verbs: []string{"CorpusCaptures", "CorpusTexts", "CorpusNear", "CorpusEdges"}, Privileged: true},
 	"source.poll":    {Verbs: []string{"PollSource", "SourceAPI"}, Privileged: true},
 	"evidence.write": {Verbs: []string{"SaveEvidence"}, Privileged: true},
 	"evidence.read":  {Verbs: []string{"ReadEvidence", "ListEvidence"}},

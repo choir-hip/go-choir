@@ -208,6 +208,7 @@ var actionPayloads = map[BrokerAction]any{
 	ActionGetRunMemoryEntry: GetRunMemoryEntryPayload{}, ActionProductAPI: ProductAPIPayload{}, ActionStories: StoriesPayload{}, ActionShotStart: ShotStartPayload{}, ActionShotWait: ShotWaitPayload{}, ActionScreens: ScreensPayload{}, ActionInstallPacket: InstallPacketPayload{},
 	ActionSystem1: System1Payload{}, ActionRelateStories: RelateStoriesPayload{}, ActionRelate: RelatePayload{},
 	ActionRequestLease: RequestLeasePayload{}, ActionObjectGet: ObjectGetPayload{}, ActionObjectList: ObjectListPayload{}, ActionReadMail: ReadMailPayload{},
+	ActionCorpusCaptures: CorpusCapturesPayload{}, ActionCorpusTexts: CorpusTextsPayload{}, ActionCorpusNear: CorpusNearPayload{}, ActionCorpusEdges: CorpusEdgesPayload{},
 }
 
 // boundElsewhere names the payload fields whose bound is not in the

@@ -199,6 +199,12 @@ atomically. A failed cell commits nothing. Texture alone advances a
 revision head (`store.ApplyTextureTurn`). Each data kind has one custodian,
 checked at load (`internal/objectgraph/custody.go`).
 
+A research cell holds the corpus as values (2026-11-24, lane `corpus-repl`, not
+yet deployed): `choir.CorpusCaptures`, `CorpusTexts`, `CorpusNear` and
+`CorpusEdges` under grant `corpus.read` (research only, not its web child), no
+generative call (a text query is one embedding); see
+`docs/reference/CORPUS-REPL.md`.
+
 Key paths: `internal/deskmanifest/manifest.go`, `internal/actor/`,
 `internal/actorruntime/handler.go`, `internal/agentcore/tool_profiles.go`,
 `internal/agentcore/rlm_reduce.go`, `internal/yaegikernel/`,

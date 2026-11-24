@@ -81,9 +81,10 @@ var verbDispatch = map[string]BrokerAction{
 	"ReadCapture": ActionReadCapture, "SearchWireCorpus": ActionSearchWireCorpus, "SaveEvidence": ActionSaveEvidence,
 	"ReadEvidence": ActionReadEvidence, "ListEvidence": ActionListEvidence, "RunMemoryEntry": ActionGetRunMemoryEntry,
 	"ProductAPI": ActionProductAPI, "Stories": ActionStories, "ShotStart": ActionShotStart, "ShotWait": ActionShotWait, "Screens": ActionScreens, "InstallPacket": ActionInstallPacket, "Research": ActionResearch, "System1": ActionSystem1,
-	"RelateStories": ActionRelateStories,
-	"Relate":        ActionRelate,
-	"SearchTexture": ActionTextureSearch,
+	"RelateStories":  ActionRelateStories,
+	"Relate":         ActionRelate,
+	"SearchTexture":  ActionTextureSearch,
+	"CorpusCaptures": ActionCorpusCaptures, "CorpusTexts": ActionCorpusTexts, "CorpusNear": ActionCorpusNear, "CorpusEdges": ActionCorpusEdges,
 }
 
 // The table forgot nothing a desk's verbs dispatch (failure mode F8: a real

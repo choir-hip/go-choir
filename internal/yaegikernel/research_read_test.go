@@ -408,7 +408,7 @@ func TestResearchRoleAndOverlayStayUnderTheirBound(t *testing.T) {
 	// prompt is to be rewritten as an explanation of the system rather than
 	// rules (owner, 2026-11-16), and a longer explanation must not be refused
 	// by a bound written for the dedupe.
-	if len(overlay) > 12000 || len(raw) > 9000 || len(overlay)+len(raw) > 19000 {
-		t.Fatalf("research overlay %d + role %d chars: past the sanity bounds (12000, 9000, 19000 together)", len(overlay), len(raw))
+	if len(overlay) > 12000 || len(raw) > 9000 || len(overlay)+len(raw) > 19500 {
+		t.Fatalf("research overlay %d + role %d chars: past the sanity bounds (12000, 9000, 19500 together)", len(overlay), len(raw))
 	}
 }

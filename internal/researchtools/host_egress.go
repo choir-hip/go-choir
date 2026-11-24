@@ -70,6 +70,10 @@ func (d *Dependencies) egressToolTable() map[string]toolregistry.ToolFunc {
 		newPollSourceTool(*d),
 		newReadCaptureTool(*d),
 		newSourceAPITool(*d),
+		newCorpusCapturesTool(*d),
+		newCorpusTextsTool(*d),
+		newCorpusNearTool(*d),
+		newCorpusEdgesTool(*d),
 	} {
 		if tool.Func == nil {
 			continue

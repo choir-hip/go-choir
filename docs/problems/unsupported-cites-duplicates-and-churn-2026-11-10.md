@@ -1,3 +1,5 @@
+> 2026-11-24: `internal/fanout` and `fanout.Do`, named below, were deleted (the owner ruled the generic fan-out helper deprecated in favour of the RLM pattern).
+
 # Why unsupported citations publish, why duplicates open, why stories are revised so often (2026-11-10)
 
 Mutation class: green (docs). Read-only investigation at `b316350d1`.

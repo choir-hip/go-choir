@@ -34,7 +34,7 @@ import (
 //     a view of it, flushed at each reducer commit): every host-mediated choir.* call of a desk cell that
 //     returns outside content (Read, PollSource, SourceAPI, SearchStart,
 //     SearchWireCorpus, SearchTexture, Research, ReadCapture, ReadEvidence, ListEvidence,
-//     ProductAPI, Stories);
+//     ProductAPI, Stories, CorpusTexts as ReadCapture, the other Corpus verbs);
 //   - the records a cell was shown through choir.Records(), by the labels
 //     their provenance carries (cellRecords.labelsThrough);
 //   - the Texture document a Texture cell's frame showed.
@@ -242,6 +242,15 @@ func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawM
 				return captureReadLabels.Union(worldReadLabels), true
 			}
 		}
+		return worldReadLabels, true
+	case yaegikernel.ActionCorpusTexts:
+		// Text of the owner's stored captures: the floor ReadCapture carries,
+		// plus every label a capture record itself carries (corpusd serves no
+		// owner-private capture in bulk).
+		return captureReadLabels.Union(worldReadLabels, types.NewLabelSet(researchtools.CorpusTextLabels(result)...)), true
+	case yaegikernel.ActionCorpusCaptures, yaegikernel.ActionCorpusNear, yaegikernel.ActionCorpusEdges:
+		// Titles, URLs and ids of captures and published stories: web text, the
+		// world's; no passage of a stored page.
 		return worldReadLabels, true
 	case yaegikernel.ActionRead, yaegikernel.ActionPollSource, yaegikernel.ActionSourceAPI,
 		yaegikernel.ActionSearchStart:

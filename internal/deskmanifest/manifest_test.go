@@ -72,7 +72,7 @@ func TestOnlyEngineeringHoldsExecAndWriteFile(t *testing.T) {
 var pinnedFrame = map[string][]string{
 	Management:      {"product_api", "read_capture", "stories", "shot_start", "shot_wait", "screens", "install_packet"},
 	Texture:         {"read_capture"},
-	Research:        {"search_start", "read", "search_wire_corpus", "save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry", "research", "poll_source", "read_capture", "system1", "relate_stories", "relate", "source_api", "texture_search"},
+	Research:        {"search_start", "read", "search_wire_corpus", "save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry", "research", "poll_source", "read_capture", "system1", "relate_stories", "relate", "source_api", "texture_search", "corpus_captures", "corpus_texts", "corpus_near", "corpus_edges"},
 	ResearchWeb:     {"search_start", "read", "read_capture", "search_wire_corpus", "read_evidence", "list_evidence"},
 	ResearchTexture: {"texture_search"},
 	ManagementTask:  {"read_capture", "stories"},

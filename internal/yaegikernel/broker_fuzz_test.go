@@ -56,6 +56,7 @@ var allActions = []BrokerAction{
 	ActionSourceAPI, ActionReadCapture, ActionSearchWireCorpus, ActionResearch, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket, ActionSystem1, ActionRelateStories,
 	ActionRelate, ActionRequestLease, ActionTextureSearch, ActionObjectGet, ActionObjectList, ActionReadMail,
+	ActionCorpusCaptures, ActionCorpusTexts, ActionCorpusNear, ActionCorpusEdges,
 }
 
 func seedRequests(f *testing.F) {
@@ -108,7 +109,8 @@ func decodePayloads(raw json.RawMessage) {
 		&ProductAPIPayload{}, &StoriesPayload{}, &ReadPayload{}, &PollSourcePayload{}, &SourceAPIPayload{}, &RequestLeasePayload{},
 		&ReadCapturePayload{}, &SearchWireCorpusPayload{}, &SaveEvidencePayload{}, &ReadEvidencePayload{}, &ListEvidencePayload{},
 		&GetRunMemoryEntryPayload{}, &SearchStartPayload{}, &System1Payload{}, &RelatePayload{}, &RelateStoriesPayload{},
-		&ObjectGetPayload{}, &ObjectListPayload{}, &TextureSearchPayload{}} {
+		&ObjectGetPayload{}, &ObjectListPayload{}, &TextureSearchPayload{},
+		&CorpusCapturesPayload{}, &CorpusTextsPayload{}, &CorpusNearPayload{}, &CorpusEdgesPayload{}} {
 		_ = json.Unmarshal(raw, dst)
 	}
 }
