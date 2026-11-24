@@ -379,6 +379,7 @@ component AccountScreen
 
 // The words are the whole of what the server does (internal/auth/deletion_*.go, internal/accountpurge): takes removed; published stories kept with the author detached; access
 // revoked at once; the irreversible purge after 72 hours; signing in with the passkey in that time offers Cancel deletion; a receipt and 30 days of abuse logs kept.
+// LEAD: the words below say "kept for a limited time" because nothing enforces 30 days yet (docs/ship/data-inventory.md section 7). Say "30 days" when the log retention is enforced.
 component DeleteScreen
   inject
     th: Theme
@@ -396,9 +397,9 @@ component DeleteScreen
         text delv.message testId="settings-delete-done" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
       if delv.phase != "done"
         SectionLabel(label="What is removed")
-        text "Your account, your computer and everything on it: your edition, notes, documents, files, mail and its address, your listening history, and any takes you published. Your passkey is removed from your account." testId="settings-delete-removed" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+        text "Your account and your passkey. Your computer, with its disk and its stored history: your edition, notes, documents, files, mail and its address, and your listening history. Your synced documents. Any takes you published, their words and their audio." testId="settings-delete-removed" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
         SectionLabel(label="What stays")
-        text "Stories you published stay public, with your name taken off. A short receipt that the deletion happened, with no personal details, and server logs for 30 days. Outside AI providers may keep copies of requests you made; we ask them to delete them where their terms allow." testId="settings-delete-stays" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+        text "Stories you published stay public, with your name taken off. A short receipt that the deletion happened, with no personal details, and server logs, which are kept for a limited time. Mail you sent or received stays with the people on the other end and with our mail provider. Outside AI providers may keep copies of requests you made; we ask them to delete them where their terms allow." testId="settings-delete-stays" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
         SectionLabel(label="When")
         text "Your access ends the moment you confirm, on every device. The removal itself waits 72 hours. If you change your mind, sign in with your passkey in that time and choose Cancel deletion; nothing will have been removed. After 72 hours it cannot be undone." testId="settings-delete-when" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
         if delv.message != ""

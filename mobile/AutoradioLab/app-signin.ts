@@ -17,6 +17,7 @@ import { plainDate } from './account-delete.ts';
 /** The server answers a passkey sign-in of an account whose deletion is pending with 403 `account_deletion_pending` and a one-use cancel token (internal/auth/deletion_handlers.go); no key is made. */
 export const CANCEL_DELETION_PATH = '/auth/account/delete/cancel';
 class DeletionPending extends Error { constructor(readonly token: string, readonly purgeOn: string) { super('account_deletion_pending'); } }
+class DeletionPurging extends Error { constructor() { super('account_deletion_purging'); } }
 let offer: { token: string; purgeOn: string } | null = null;
 
 export type Mode = 'create' | 'signin';
@@ -113,6 +114,8 @@ async function finish(env: SignInEnv, mode: Mode, credential: unknown): Promise<
   if (r.status === 403 && str(r.body, 'error') === 'account_deletion_pending' && str(r.body, 'cancel_token') !== '') {
     throw new DeletionPending(str(r.body, 'cancel_token'), plainDate(str(r.body, 'purge_after')));
   }
+  // The 72 hours are over and the removal has begun: no key, no cancel, and the words say so.
+  if (r.status === 403 && str(r.body, 'error') === 'account_deletion_purging') throw new DeletionPurging();
   if (r.status !== 200) throw refusal(r);
   const key = str(r.body, 'api_key'), keyId = str(r.body, 'key_id');
   if (!key.startsWith('choir_sk_') || keyId === '') throw new CeremonyError('failed', 'the server sent no key');
@@ -157,11 +160,12 @@ export async function signInRun(env: SignInEnv, mode: Mode, email = '', code = '
   } catch (e) {
     if (minted) await env.revoke(minted.key, minted.keyId).catch(() => undefined);       // minted and not kept (the store refused): revoked
     let message = ceremonyMessage(e, mode);
+    if (e instanceof DeletionPurging) message = 'This account is being removed now. The removal has begun and cannot be cancelled.';
     if (e instanceof DeletionPending) {
       if (live(id)) offer = { token: e.token, purgeOn: e.purgeOn };
       message = `This account is scheduled for deletion${e.purgeOn ? ` on ${e.purgeOn}` : ''}. Cancel the deletion to keep it.`;
     }
-    env.log(`signin: attempt ${id.slice(0, 6)} ${mode} ended: ${e instanceof DeletionPending ? 'deletion-pending' : e instanceof CeremonyError ? e.kind : 'error'}`);
+    env.log(`signin: attempt ${id.slice(0, 6)} ${mode} ended: ${e instanceof DeletionPending ? 'deletion-pending' : e instanceof DeletionPurging ? 'deletion-purging' : e instanceof CeremonyError ? e.kind : 'error'}`);
     dispatch(env, { t: 'failed', id, message });
   }
   return left(id);

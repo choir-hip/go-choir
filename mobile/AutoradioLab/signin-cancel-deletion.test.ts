@@ -73,6 +73,19 @@ describe('a pending account signs in', () => {
   });
 });
 
+describe('a purging account signs in', () => {
+  test('V3: the words say the removal began; no offer, no key, nothing sent', async () => {
+    const h = harness({ login: () => json(403, { error: 'account_deletion_purging' }) });
+    const r = await signInRun(h.env, 'signin');
+    expect(r.phase).toBe('failed');
+    expect(h.kept).toEqual([]);
+    const v = signInView();
+    expect(v.offer).toBe(false);
+    expect(v.message).toContain('cannot be cancelled');
+    expect(h.posts.filter((p) => p.path === '/auth/account/delete/cancel')).toEqual([]);
+  });
+});
+
 describe('cancel deletion', () => {
   test('C3: the token and the app id go once; the key is kept; the offer is gone; nothing secret in view or log', async () => {
     const h = harness();
