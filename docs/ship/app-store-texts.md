@@ -7,7 +7,6 @@ Still open for the owner:
 - Territories and price: the owner left this to the lead (2026-11-24). TestFlight needs neither. For the App Store release the default is free, United States only at first, widened later; the owner confirms before release.
 - Secondary category: none or Reference.
 - Whether the model files move to our own host before release.
-- If sign-up is turned off at the host limit during review, whether to give Apple a demo account.
 
 Rulings applied (owner, 2026-11-23): minimum age 16 (age rating 16+); one app; passkey accounts made and deleted inside the app; downloads only after agreement; during the beta every account is free tier and providers may train on what is sent.
 

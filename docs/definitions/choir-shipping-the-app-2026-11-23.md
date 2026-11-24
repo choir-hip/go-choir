@@ -140,6 +140,18 @@ boundaries:
   - decision: one current privacy policy; older copies removed and links point to it
     said: the older ones should be removed so its only one current one and they link to it appropriately
     'on': '2026-11-24'
+  - decision: no separate consent screen before the first request; the agreement is at account creation
+    said: we dont need such a before the radio answers consent screen. thats not industry standard
+    'on': '2026-11-24'
+  - decision: 'the policy''s contact address is the 000 mailbox on choir.news; territories, price and the server log period are left to the lead (defaults: free, United States first; 30 days)'
+    said: for these, idk
+    'on': '2026-11-24'
+  - decision: the policy does not name Apple's recogniser; its use today is a bug and the downloaded speech models are meant to run; the server is in the United States; the owner is the sole operator of the server
+    said: we are only using that currently because of a coding bug. (we shuold be using fluid speech mini etc) ... the ovh server is in the us ... i am sole operator of server
+    'on': '2026-11-24'
+  - decision: a demo account is made for Apple's reviewers
+    said: yes, we should make a demo account as well
+    'on': '2026-11-24'
   must_preserve:
   - sending a build to testers and submitting to Apple are the owner's acts until the owner delegates them in words
   - signing keys and API keys never enter the repo or an agent's output; key files are passed by path
@@ -246,6 +258,14 @@ stations:
   class: orange
   review: one seat each
   depends_on: []
+  status: working
+- id: P12
+  name: A demo account for Apple's reviewers
+  scope: one designated account, a user name and password exchanged for a narrow key for that account only, a "Reviewer sign-in" link on the sign-in screen, a runbook. Lane demo-account, on top of native-passkey
+  class: red (auth)
+  review: two seats
+  depends_on:
+  - P3
   status: working
 decisions_for_the_owner:
 - id: Q4

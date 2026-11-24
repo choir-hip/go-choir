@@ -10,7 +10,6 @@ Contact: 000@choir.news
 Still open for the owner (delete this list before publishing):
 
 - Where past versions of this policy are kept (POLICY_ARCHIVE_URL, section 13).
-- Who has operator access to the server (section 12).
 
 Tags in this draft: [CHECK] marks a sentence a lawyer or the owner should verify. [WHEN-BUILT] marks a sentence that is true only after a feature that does not exist in the code today is built. Remove every tag before publishing. Sources for each statement are in data-inventory.md. Rulings applied: the owner's of 2026-11-23 (docs/definitions/choir-shipping-the-app-2026-11-23.md).
 
@@ -179,7 +178,7 @@ Autoradio 1 is for people 16 and older. Do not make an account if you are under 
 - The app talks to our server over HTTPS.
 - Your sign-in key on the phone is in the iPhone Keychain, on this device only.
 - The event log of your computer is sealed under a key that belongs to the computer. [CHECK]
-- Each account's computer is a separate virtual machine with its own disk. Provider keys are held by our gateway and are not given to computers. We operate the server, so people who run the service can reach the data it holds. [CHECK: owner to state who has operator access.]
+- Each account's computer is a separate virtual machine with its own disk. Provider keys are held by our gateway and are not given to computers. We operate the server, so the operator can reach the data it holds. Today one person operates it: the founder of Choir Harmonic Intelligence Platform, Inc.
 - We do not claim any security certification. No system is perfectly secure.
 
 Cookies at choir.news: the sign-in service sets cookies for sign-in only. They are choir_access (5 minutes), choir_refresh (up to 30 days), choir_accounts (up to 30 days, for switching accounts) and choir_signin_attempt (10 minutes, for email sign-in). They are secure, HttpOnly and SameSite=Lax. We set no advertising or tracking cookies.

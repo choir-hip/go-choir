@@ -6,7 +6,6 @@ Still open for the owner:
 
 - The contact email, the contact name and the phone number Apple may call (placeholders below).
 - The final privacy policy URL.
-- Whether to give Apple a demo account if sign-up is turned off at the host limit (see the review notes).
 - Whether model files move to our own host (the review notes name huggingface.co until then).
 
 Rulings applied (owner, 2026-11-23): one app with every page; passkey account creation and sign-in inside the app, no codes; minimum age 16; model downloads only after agreement, with sizes; the microphone asked for only when voice or a take is turned on; the publisher is Choir Harmonic Intelligence Platform, Inc.
@@ -88,7 +87,7 @@ CONTACT
 CONTACT_EMAIL, and a phone number that is answered: PHONE_NUMBER_PLACEHOLDER.
 ```
 
-[CHECK: if sign-up is turned off at the host limit while Apple reviews, a reviewer cannot make an account. Then give Apple a demo account in the username and password fields. Leave the notes as written while sign-up is open.]
+A demo account is also provided in the user name and password fields (owner, 2026-11-24): on the sign-in screen tap "Reviewer sign-in". It works even if sign-up is closed. [WHEN-BUILT: lane demo-account; runbook docs/ship/demo-account.md]
 
 ## 4. Feedback email and other TestFlight fields
 
