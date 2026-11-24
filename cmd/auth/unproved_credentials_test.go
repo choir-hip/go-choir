@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -107,6 +108,21 @@ func newUnprovedEnv(t *testing.T) *unprovedEnv {
 	}}
 }
 
+// footprint is what the account holds, counted: a route driven with its credential must leave it as it was.
+func (e *unprovedEnv) footprint(t *testing.T) string {
+	t.Helper()
+	var out []string
+	for _, q := range []string{"refresh_sessions", "api_keys", "desktop_exchange_codes", "device_authorizations", "credentials", "account_set_member"} {
+		col := "user_id"
+		var n int
+		if err := e.store.DB().QueryRow("SELECT COUNT(*) FROM "+q+" WHERE "+col+" = ?", e.userID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, fmt.Sprintf("%s=%d", q, n))
+	}
+	return strings.Join(out, " ")
+}
+
 func call(h http.HandlerFunc, method, path string, mut func(*http.Request), body string) (int, string) {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -128,6 +144,19 @@ func TestAnUnprovedAccountActsThroughNoRoute(t *testing.T) {
 		}
 		method, path := rt.pattern[:i], rt.pattern[i+1:]
 		path = strings.ReplaceAll(path, "{id}", "x")
+		// A route with a switch in its query is driven both ways: logging out of every device identifies the account and acts on it.
+		for _, suffix := range append([]string{""}, routeVariants[strings.SplitN(path, "?", 2)[0]]...) {
+			e.driveRoute(t, rt, method, path+suffix)
+		}
+	}
+}
+
+// routeVariants are the query strings a route is also driven with.
+var routeVariants = map[string][]string{"/auth/logout": {"?all=true"}}
+
+func (e *unprovedEnv) driveRoute(t *testing.T, rt authRoute, method, path string) {
+	t.Helper()
+	{
 		anonCode, _ := call(rt.handler, method, path, nil, "")
 		// What a credential that is simply not valid gets: some routes answer by the shape
 		// of the credential (a bearer header is refused by routes that are cookie-only).
@@ -174,7 +203,11 @@ func TestAnUnprovedAccountActsThroughNoRoute(t *testing.T) {
 				}
 				continue
 			}
+			before := e.footprint(t)
 			code, got := call(rt.handler, method, path, mut, body)
+			if after := e.footprint(t); after != before {
+				t.Errorf("%s with an unproved account's %s changed its rows: %s, then %s", rt.pattern+strings.TrimPrefix(path, strings.SplitN(path, "?", 2)[0]), kind, before, after)
+			}
 			if strings.Contains(got, "choir_sk_") || strings.Contains(got, `"authenticated":true`) || strings.Contains(got, "unproved@example.com") {
 				t.Errorf("%s with an unproved account's %s answered with the account: %d %.120s", rt.pattern, kind, code, got)
 				continue

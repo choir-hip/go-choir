@@ -648,3 +648,37 @@ func TestRecoveryRequestAndLoginBeginTrimTheAddress(t *testing.T) {
 		t.Fatal("login/begin did not find the account of a padded address")
 	}
 }
+
+// An account whose address is not proved cannot be switched to: the answer is "signed out", not an
+// error, and nothing is issued.
+func TestSwitchingToAnUnprovedAccountIsRefusedAsSignedOut(t *testing.T) {
+	h := appEnv(t)
+	u, err := h.store.CreateUser("u-switch", "switch@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := h.store.CreateRefreshSession(&RefreshSession{ID: "rs-switch", UserID: u.ID, TokenHash: sha256SumHex("switch-refresh"), CreatedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	handle := "switch-handle-switch-handle-switch-handle"
+	if _, _, err := h.store.AddAccountToSet("", sha256SumHex(handle), u.ID, "rs-switch"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.DB().Exec(`UPDATE users SET email_verified_at = NULL WHERE id = ?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/auth/accounts/switch", strings.NewReader(`{"user_id":"u-switch"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: AccountsCookieName, Value: handle})
+	rec := httptest.NewRecorder()
+	h.HandleAccountSwitch(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("switch to an unproved account = %d %s, want 409 (signed out)", rec.Code, rec.Body.String())
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == AccessTokenCookieName && c.Value != "" {
+			t.Fatal("an access token was issued for an unproved account")
+		}
+	}
+}
