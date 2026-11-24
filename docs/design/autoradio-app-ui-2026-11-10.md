@@ -1449,7 +1449,7 @@ Short paths: `AP` = `frontend/src/packages/autopaper`, `TX` =
 | Open source: Texture span, Web Lens, media, Source Viewer | `/api/content/import-url`, `/api/content/items` | `L/source-contract.ts:100-165` | design: the source panel; "Open original" goes to the system browser; a stored reader snapshot shows in the panel (signed in) |
 | Texture-to-Texture transclusion `texture:<doc>@<rev>` with version pin and "newer version" | none | `L/texture-source-renderer.ts` (`renderInlineTextureRef`) | design: an inline chip; tap pushes that document at the pinned version |
 | Embeds: image, file, video, audio, capsule_evidence (private only) | `GET /api/assets/sha256/<digest>` | `TX/texture-embeds.ts:1-60` | design: image inline; file and media open in Quick Look (a package view); capsule evidence as a card |
-| Recent documents, New document | `GET`, `POST /api/texture/documents` | `TX/texture.js:41,73` | design (the Textures place); New document is a prompt, not an empty editor |
+| Recent documents, New document | `GET`, `POST /api/texture/documents` | `TX/texture.js:41,73` | design (the Textures place); New document is the button at the top right of the page: the server's create route makes an empty document and it opens in the editor (owner, 2026-11-24; was a prompt before) |
 | Open a private document, its revisions, a revision | `GET /api/texture/documents/{id}`, `…/revisions`, `GET /api/texture/revisions/{id}` | `TX/texture.js:85,168,185` | design |
 | Version history (no diff anywhere on the web) | revisions | `TX/texture-editor-state.ts:23,80-90` | design: the versions layer; a diff is not designed (the web has none) |
 | Restore a version as latest | `POST …/{id}/restore` | `TX/texture.js:197` | design |

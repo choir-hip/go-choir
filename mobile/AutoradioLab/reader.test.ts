@@ -71,6 +71,11 @@ describe('a story', () => {
 });
 
 describe('a document', () => {
+  test('R4b a document with no revision yet (a new one) opens ready, empty, and editable', async () => {
+    const f = fake({ authed: (path) => (path.endsWith('/revisions') ? { revisions: [] } : { doc_id: 'new1', title: 'Untitled Texture', current_revision_id: '' }) });
+    const d = await R.loadReader('texture:new1', f.net);
+    expect(d.status).toBe('ready'); expect(d.editable).toBe(true); expect(d.source).toBe(''); expect(d.docId).toBe('new1');
+  });
   test('R4 the head is editable and carries its text; versions and the trajectory', async () => {
     const f = fake();
     const d = await R.loadReader('texture:d1', f.net);

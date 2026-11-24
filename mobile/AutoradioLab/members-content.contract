@@ -9,6 +9,7 @@
 // (8 + the "On:" line + the controls + the row), 168 while a line shows above the controls (now playing, heard, holding, error).
 use readerOpenExternal from "@choir/autoradio"
 use TextureEditInfo from "./textedit-types.contract"
+use TextureMade from "./textures-types.contract"
 
 members Autoradio
   state ctlOpen = false
@@ -41,11 +42,14 @@ members Autoradio
   state edUnavail = ""
   state edCurLink = ""
   state edUrl = ""
-  // A document that opened (rdoc is ready: the computer was found by that very request) while the editor still answers "not writable": ask again, a few times, never in a loop.
+  // Signed in and the editor still answers "not writable" (the account's computer is not known yet: a discovery by any request, on any page, changes that without this page moving; the answer is local, no
+  // network): ask again, every 2 s five times, then every 30 s. api.ts's discovery cannot re-key a resource, so this is how the editor learns it.
   action edAsk
     edAskTick = edAskTick + 1
-  task edKnow when topAddr.startsWith("texture:") and rdoc.address == topAddr and rdoc.status == "ready" and not edInfo.writable and edAskTick < 5 key=edAskTick
-    after(500, edAsk)
+  task edKnow when acs.state == "signedIn" and not edInfo.writable and edAskTick < 5 key=edAskTick
+    after(2000, edAsk)
+  task edKnowSlow when acs.state == "signedIn" and not edInfo.writable and edAskTick >= 5 key=edAskTick
+    after(30000, edAsk)
   derive edReady = topAddr.startsWith("texture:") and rdoc.address == topAddr and rdoc.status == "ready" and rdoc.editable and edInfo.writable
 
   derive ctlMode = qv.webUrl != "" ? "barweb" : ((webUrl != "" and webFor == topAddr) ? "web" : ((topAddr.startsWith("doc:") and ldInfo.address == topAddr and ldInfo.status == "ready") ? "doc" : (edReady ? "texture" : "")))
@@ -127,6 +131,39 @@ members Autoradio
     ctlOpen = true
     ctlFor = topAddr
     ctlPanel = ""
+  // ---- "New document" (the Textures page's top-right button): the server makes an empty document (textures.ts createTexture), it is opened as a page, and when that page has loaded and the editor is writable
+  // it is put in the editor with the cursor in the body. Nothing is typed or posted until the listener types: the first revision is the editor's first save.
+  mutation ndm as shape TextureMade then ndMade
+  state ndPending = ""
+  state ndFocus = false
+  derive ndBusy = pending(ndm)
+  derive ndOk = match ndm { case some(a) => (a.status == "ok" ? a.address : ""), case none => "" }
+  derive ndMsg = match ndm { case some(a) => (a.status == "failed" ? a.message : ""), case none => "" }
+  action ndNew
+    send ndm = textureCreate()
+  action ndMade
+    if ndOk != ""
+      ndPending = ndOk
+      send pms = pagesOpen(ndOk, "Untitled Texture")
+  task ndStart when ndPending != "" and topAddr == ndPending and edReady key=ndPending
+    after(1, ndGo)
+  action ndGo
+    ndPending = ""
+    edOn = true
+    edFor = topAddr
+    edDraft = ""
+    edUntouched = true
+    send edo = textureEditOpen(topAddr)
+    edFormats = ""
+    ctlOpen = true
+    ctlFor = topAddr
+    ctlPanel = ""
+    ndFocus = true
+  task ndFocusTask when ndFocus and edOn key=ndFocus
+    after(150, ndFocusGo)
+  action ndFocusGo
+    ndFocus = false
+    focus("texture-editor")
   action edDone
     edOn = false
     ctlOpen = false

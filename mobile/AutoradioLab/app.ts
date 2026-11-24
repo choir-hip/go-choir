@@ -18,7 +18,7 @@ import { accountState } from './account-state.ts';
 import { APP_ID } from './app-id.ts';
 import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
-import { texturesListShared } from './textures.ts';
+import { texturesListShared, createTexture } from './textures.ts';
 import * as themes from './themes.ts';
 import { notebookShared } from './notebook-run.ts';
 import { syncContent } from './content-run.ts';
@@ -167,6 +167,7 @@ const sources: Sources = {
   // The Autoradio page (radio-page.ts): the native facts, the bar's facts and the entries in; the page out.
   radioPage: ([facts, bar, entries]) => radioPage(facts, bar, entries),
   texturesList: ([at]) => texturesListShared(at),
+  textureCreate: () => createTexture(),
   // Editing your own Texture document (texture-edit.ts): one editor per signed-in account; what it says, the opening, the typed text, the save, and the listener's choice after the head moved. The waits are the contract's.
   textureEditInfo: ([address, _account], _s, storage) => textureEditInfo(address, storage),
   textureEditOpen: ([address], _s, storage) => textureEditOpen(address, storage),

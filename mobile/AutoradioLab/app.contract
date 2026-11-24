@@ -244,6 +244,9 @@ component Autoradio
     edCurLink
     edUrl
     edBegin
+    ndNew
+    ndBusy
+    ndMsg
     edDone
     edInput
     edSelected

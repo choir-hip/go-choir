@@ -500,6 +500,18 @@ describe('the review of 2026-11-24 (seat 1, exact-editor)', () => {
     await p.catch(() => undefined); await tick(120);                                             // whatever was in flight has landed by now
     expect([...files.keys()].filter((k) => k.startsWith(PENDING_DIR))).toEqual([]);
   });
+  test('R2b the wipe waits for the set-aside copy of an unreadable file that a killed instance was writing', async () => {
+    forgetTextureEdit(); session('key-1-not-real', 'c1'); await textureEdit(A, 'Hello world. a', 'Hello world.', storage);
+    const file = [...files.keys()].find((k) => k.startsWith(PENDING_DIR))!;
+    files.set(file, new TextEncoder().encode('not json at all'));
+    forgetTextureEdit();
+    writeHook = async () => { await tick(80); };
+    const p = textureEditInfo(A, storage); await tick(30);                                       // load() is writing the .bad copy
+    await beginSignOut(); nextGeneration();
+    await wipeTextureEdit(storage);
+    await p.catch(() => undefined); await tick(120);
+    expect([...files.keys()].filter((k) => k.startsWith(PENDING_DIR))).toEqual([]);
+  });
   test('R5 two calls meeting an account change do not undo each other: the new account keeps what it writes', async () => {
     forgetTextureEdit(); session('key-1-not-real', 'c1'); await textureEdit(A, 'old account text', 'Hello world.', storage);
     session('key-2-not-real', 'c2'); rmHook = async () => { await tick(30); };

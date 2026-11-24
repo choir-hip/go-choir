@@ -78,7 +78,7 @@
 //  T17   saving             DISCARD queued behind the post runs after the post (door order); see T25                                                             see T25                    see T25
 //  T18   saving             FLUSH again                    queued behind the post; nothing to send when the entry is gone                                      none                       saved
 //  T19   offline/failed     FLUSH (retry)                  as T08..T13                                                                                          entry t / none             as T08..T13
-//  T20   offline/failed     KEY(t2,f2)                     as T07; last unchanged until the next attempt                                                       entry t2                   offline/failed; kept=t2
+//  T20   offline/failed     KEY(t2,f2)                     as T07; last is forgotten: the text is a draft again, the idle pause saves it                         entry t2                   dirty; kept=t2
 //  T21   conflict           KEY(t2,f2)                     entry t2 (base/from inherited); conflictAt stays                                                    entry t2                   conflict (the listener has not chosen)
 //  T22   conflict           FLUSH                          nothing is sent; no retry; `waiting` does not count it                                              entry t                    conflict
 //  T23   conflict           OVERWRITE                      read head h; base := h.id, from := h.content; conflictAt none; then FLUSH as T08                    entry t, then none         saving, then saved
@@ -161,14 +161,14 @@ export class Editor {
   private journal: Record<string, Entry> = {};               // the entries: the file's content, one per document (a keystroke writes it; a run op only rewrites base/from and deletes by text)
   private heads = new Map<string, Head>(); private inFlight = new Set<string>(); private conflictAt = new Map<string, string>(); private last = new Map<string, Last>();
   private chain = new Map<string, Promise<unknown>>(); private stamp = 0; private notice = '';
-  private loaded = false; private loading: Promise<void> | undefined; private diskPending = false; private pDirty = false; private pRun: Promise<void> | undefined;
+  private badRun: Promise<void> | undefined; private loaded = false; private loading: Promise<void> | undefined; private diskPending = false; private pDirty = false; private pRun: Promise<void> | undefined;
   constructor(d: Deps) { this.net = d.net; this.storage = d.storage; this.account = d.account; this.timeoutMs = d.timeoutMs ?? NET_TIMEOUT_MS; }
   private file(): string { return `${PENDING_DIR}/${this.account}.json`; }
   private bump(): void { this.stamp += 1; }
   /** Sign-out began, or another account: this instance does nothing more. One flag, read at the door (`run`), the network (`json`) and the file writer (`writeFile`). */
   kill(): void { this.dead = true; }
   /** For the wipe: waits for a write that is in flight to end (the writer starts no new one once dead). */
-  async settleWrites(): Promise<void> { while (this.pRun) await this.pRun; }
+  async settleWrites(): Promise<void> { while (this.pRun || this.badRun) await (this.pRun ?? this.badRun); }
 
   // ----------------------------------------------------------------------------------------------------------------- the door
   private run<T>(doc: string, fn: () => Promise<T>, empty: () => Promise<T>): Promise<T> {
@@ -201,7 +201,11 @@ export class Editor {
       for (const [d, v] of Object.entries(o.docs)) if (obj(v) && typeof v.text === 'string' && typeof v.base === 'string') docs[d] = { text: v.text, from: typeof v.from === 'string' ? v.from : null, base: v.base, key: str(v.key) || uuid() };
     } catch {
       docs = {};                                                                              // corrupt: set aside as the ONE .bad (replaced), and say so
-      try { await this.storage.fs.atomicWriteFile(`${PENDING_DIR}/${this.account}.bad`, bytes); await this.storage.fs.rm(this.file()); } catch { /* the notice is still given */ }
+      if (!this.dead) {                                                                       // a killed instance writes nothing more, and the wipe waits for one that is writing (settleWrites)
+        const st = this.storage;
+        this.badRun = (async () => { try { await st.fs.atomicWriteFile(`${PENDING_DIR}/${this.account}.bad`, bytes); if (!this.dead) await st.fs.rm(this.file()); } catch { /* the notice is still given */ } })();
+        try { await this.badRun; } finally { this.badRun = undefined; }
+      }
       this.notice = LABELS.bad;
     }
     for (const [d, e] of Object.entries(docs)) if (!this.journal[d]) { this.journal[d] = e; this.last.set(d, { kind: 'offline', label: LABELS.launch }); }
