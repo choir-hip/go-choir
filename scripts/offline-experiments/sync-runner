@@ -6,4 +6,4 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 runner="${RUNNER:-choir-agents}"
 tar c go.mod go.sum internal/outlet internal/entitytext internal/normtext internal/types internal/deskmanifest scripts/offline-experiments |
-  ssh "$runner" 'rm -rf ~/offline-experiments-src && mkdir -p ~/offline-experiments-src && tar x -C ~/offline-experiments-src && echo synced'
+  ssh "$runner" 'rm -rf ~/offline-experiments-src && mkdir -p ~/offline-experiments-src && tar x -C ~/offline-experiments-src && cp ~/offline-experiments-src/scripts/offline-experiments/e5-run.py ~/offline-experiments-src/e5-run.py && echo synced'

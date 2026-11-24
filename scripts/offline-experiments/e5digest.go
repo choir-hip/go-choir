@@ -50,8 +50,21 @@ func firstSentence(text, title string) string {
 	return string(r[:end])
 }
 
-func runE5Digest(dir, out string) {
-	must(os.MkdirAll(out, 0o755))
+type digestData struct {
+	arr           []capture
+	kept          [][]string
+	order         []*dstory
+	vtitle, vtext map[string]string
+	ename         map[string]string
+	links         map[string][]dlink
+}
+
+type dlink struct {
+	ent     string
+	created time.Time
+}
+
+func loadDigestData(dir string) *digestData {
 	arr, _ := loadArrivals(dir)
 	kept := keptSubjects(arr)
 	// stories and versions
@@ -107,16 +120,19 @@ func runE5Digest(dir, out string) {
 			ename[r[0]] = m.Name
 		}
 	})
-	type link struct {
-		ent     string
-		created time.Time
-	}
-	links := map[string][]link{}
+	links := map[string][]dlink{}
 	readCSV(filepath.Join(dir, "digest-story-entities.csv"), func(r []string) {
 		if len(r) >= 4 && r[2] == "central" {
-			links[r[0]] = append(links[r[0]], link{r[1], parseTime(r[3])})
+			links[r[0]] = append(links[r[0]], dlink{r[1], parseTime(r[3])})
 		}
 	})
+	return &digestData{arr: arr, kept: kept, order: order, vtitle: vtitle, vtext: vtext, ename: ename, links: links}
+}
+
+func runE5Digest(dir, out string) {
+	must(os.MkdirAll(out, 0o755))
+	dd := loadDigestData(dir)
+	arr, kept, order, vtitle, vtext, ename, links := dd.arr, dd.kept, dd.order, dd.vtitle, dd.vtext, dd.ename, dd.links
 	digests := map[string]string{}
 	var sizes []int
 	for h := 0; h < 24; h++ {

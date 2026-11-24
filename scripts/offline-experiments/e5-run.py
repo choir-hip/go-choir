@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """E5 (ledger C232): the batch model pass. Calls are strictly one after another.
   e5-run.py ARM INPUT OUT [--sample SAMPLE] [--digests FILE] [--limit N]
-ARM: A (25 to a call, no retrieval), B (25 to a call, with neighbours' names and nearest stories),
+ARM: E (the grouped fan-out: one call per group of the hour, with context chosen for the group; --calls and --dstruct),
+     A (25 to a call, no retrieval), B (25 to a call, with neighbours' names and nearest stories),
      D (B plus a digest of the paper, the same text for every call of a clock hour, first in the prompt),
      A5 (the sample at 5 to a call, arm A's prompt), A2 (the sample at 25 to a call in other batches).
 The key comes from the environment (RIVER_API_KEY) and goes only in the request header; it is never printed or stored.
@@ -24,6 +25,50 @@ subjects - 5 to 12 subjects the item is about: people, organisations, places, ev
 asserts - one short clause (at most 20 words) saying what the item asserts happened or is claimed.
 Each item may come with "Known names" (subject names of its most similar earlier items) and "Nearby stories" (titles). Judge only from what is shown; look nothing up. Answer with a JSON array only, one object per item in the order given:
 [{"id": "<item id>", "subjects": [{"name": "...", "e": true}], "asserts": "..."}]"""
+
+SYS_E = SYS_B.replace("Each item may come with \"Known names\" (subject names of its most similar earlier items) and \"Nearby stories\" (titles).", "The items of one call come with a CONTEXT block that applies to all of them: \"Nearby stories\" (titles and one-line points), \"Known names\" (subject names of the most similar earlier items) and \"From the paper's digest\" (the part of the paper's record that matches their subjects: front-page lines, source counts, earlier stories).")
+
+def norm(s):
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", s.lower())).strip()
+
+def slice_digest(call, names_known, ds):
+    terms = [norm(t) for t in call["terms"]] + [norm(n) for n in names_known]
+    terms = [t for t in dict.fromkeys(terms) if len(t) >= 4]
+    out = []
+    front = [l for l in ds["front"] if any(t in norm(l) for t in terms)][:8]
+    if front:
+        out.append("Front page now: " + " || ".join(front))
+    counts = [(t, ds["subj"][t]) for t in terms if t in ds["subj"]]
+    counts.sort(key=lambda x: -x[1])
+    if counts:
+        out.append("Sources in the last 24 hours: " + "; ".join("%s (%d)" % c for c in counts[:8]))
+    for month in ("2026-11", "2026-10"):
+        hit = [t for t in ds["month_stories"].get(month, []) if any(x in norm(t) for x in terms)][:5]
+        if hit:
+            out.append("Earlier stories, " + month + ": " + " || ".join(hit))
+    return "\n".join(out)
+
+def render_e(items, call, names, ds):
+    known = []
+    for it in items:
+        for nid in it["neighbors"]:
+            for n in names.get(nid, [])[:10]:
+                if n not in known:
+                    known.append(n)
+    known = known[:40]
+    ctx = []
+    if call["stories"]:
+        ctx.append("Nearby stories: " + " || ".join(call["stories"]))
+    if known:
+        ctx.append("Known names: " + "; ".join(known))
+    sl = slice_digest(call, known, ds)
+    if sl:
+        ctx.append("From the paper's digest:\n" + sl)
+    parts = []
+    for it in items:
+        head = "[%s] %s | %s" % (it["id"], it["origin"], it["time"][11:16] + " UTC")
+        parts.append(head + "\n" + (("Title: " + it["title"] + "\n") if it["title"] else "") + it["text"])
+    return "CONTEXT\n" + "\n".join(ctx) + "\n\nITEMS TO COMPRESS\n\n" + "\n\n".join(parts)
 
 def key():
     k = os.environ.get("RIVER_API_KEY")
@@ -101,7 +146,12 @@ def main():
     digests = None
     if "--digests" in sys.argv:
         digests = json.load(open(sys.argv[sys.argv.index("--digests") + 1]))
-    if arm in ("A", "B", "D"):
+    calls = None
+    if arm == "E":
+        calls = [json.loads(l) for l in open(sys.argv[sys.argv.index("--calls") + 1])]
+        dstruct = json.load(open(sys.argv[sys.argv.index("--dstruct") + 1]))
+        order, per = None, None
+    elif arm in ("A", "B", "D"):
         order = [it["id"] for it in items]
         per = 25
     elif arm == "A5":
@@ -112,10 +162,13 @@ def main():
         per = 25
     else:
         sys.exit("arm")
-    batches = [order[i:i + per] for i in range(0, len(order), per)]
+    if arm == "E":
+        batches = [c["ids"] for c in calls]
+    else:
+        batches = [order[i:i + per] for i in range(0, len(order), per)]
     if limit:
         batches = batches[:limit]
-    system = SYS_B if arm in ("B", "D") else SYS_A
+    system = SYS_E if arm == "E" else (SYS_B if arm in ("B", "D") else SYS_A)
     k = key()
     done = {}
     names = {}
@@ -138,7 +191,10 @@ def main():
         dg = None
         if arm == "D":
             dg = digests[its[0]["time"][:13]]
-        content = render(its, arm, names, dg)
+        if arm == "E":
+            content = render_e(its, calls[bi], names, dstruct[calls[bi]["at"][:13]] if calls[bi]["at"][:13] in dstruct else dstruct[sorted(dstruct)[0]])
+        else:
+            content = render(its, arm, names, dg)
         eff = "low"
         dt, resp, err = call(k, system, content, eff)
         retried = False
