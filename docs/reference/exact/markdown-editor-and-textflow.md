@@ -381,7 +381,7 @@ blocks). They do not make the editor flow around shapes [inferred].
 - Patch: `mobile/exact-patches/0001` (hides syntax on iOS).
 - Behind it (since 2026-11-24, lane `exact-rest`): `mobile/AutoradioLab/texture-edit.ts` is the editor and `texture-body.ts` the body merge, both shared code; the Swift editor (`TextureEditor.swift`,
   `AutoradioModule+TextureEdit.swift`) is deleted. The state model is written at the top of `texture-edit.ts`: one head (as last read), one kept text with the revision it was typed over (or, offline,
-  the seed the field showed), no three-way merge: a head that moved under an unsent text is a conflict the listener resolves. Tests: `texture-edit.test.ts` E1 to E20.
+  the seed the field showed), no three-way merge: a head that moved under an unsent text is a conflict the listener resolves. Tests: `texture-edit.test.ts` E1 to E35 (six invariants listed at the head of the file).
 - The shared-code attempt (lane `exact-convo-edit`, `mobile/AutoradioLab/texture-edit.ts`,
   421 lines, not on main): states `ref`, `base`, `draft`, kept set, kept conflicts; invariants
   I1 to I4 in its header; a three-way merge of lines, a 409 retry [src, lane file head].

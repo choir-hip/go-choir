@@ -431,6 +431,7 @@ export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
       if (from === '') { state.done[folder] = true; break; }
       first = false;
       const l = M.parseList(await call('/api/email/messages', { query: { folder, limit: LIST_LIMIT, cursor: from } }));
+      await live(env);
       page = l.rows; nextCursor = l.next;
       if (page.length === 0) { state.done[folder] = true; break; }
     }

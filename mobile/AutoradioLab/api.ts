@@ -176,18 +176,16 @@ export async function refreshSignOutBlock(): Promise<void> {
 /** Who an UNSENT text belongs to, in three answers (never one that can mean two things): `known` (the account's id: a digest of its computer id, or of the key when the key has no computer), `none` (the key store
  * says no key is stored) and `unknown` (it could not be read: no native handle yet, a locked Keychain, a bridge error). A store deletes another account's data only on `known` with a different id; on
  * `unknown` and `none` it keeps what it has and writes nothing over it. A key rotated for the SAME account keeps its computer id, so it is the same id. */
-export type Identity = { kind: 'known'; id: string } | { kind: 'none' } | { kind: 'unknown' };
+export type Identity = { kind: 'known'; id: string; keyId: string } | { kind: 'none' } | { kind: 'unknown' };
 export async function accountIdentity(): Promise<Identity> {
-  try { const s = await keptSession(); if (s) return { kind: 'known', id: (await digestOf(s.computerId !== '' ? `c:${s.computerId}` : `k:${s.key}`)).slice(0, 24) }; } catch { return { kind: 'unknown' }; }
+  try { const s = await keptSession(); if (s) { const keyId = (await digestOf(`k:${s.key}`)).slice(0, 24); return { kind: 'known', keyId, id: s.computerId !== '' ? (await digestOf(`c:${s.computerId}`)).slice(0, 24) : keyId }; } } catch { return { kind: 'unknown' }; }
   const k = await keyState();
   return k.state === 'absent' ? { kind: 'none' } : { kind: 'unknown' };
 }
 
-/** WHO the phone is signed in as, read fresh from the key store each time (never cached: a key replaced with no sign-out, as a re-sign-in after a 401 does, is another account at once): a digest
- * of the sign-in key (never the key). Null when no key is stored. The one name stores use to keep one account's files from the next account. */
-export async function keyOwner(): Promise<string | null> {
-  try { const s = await keptSession(); return s ? (await digestOf(s.key)).slice(0, 24) : null; } catch { return null; }
-}
+/** The KEY's digest from the one identity helper below, read fresh each time (never cached: a key replaced with no sign-out, as a re-sign-in after a 401 does, is another key at once). Null unless known.
+ * Mail names its files by it; the editor uses the account id (`Identity.id`), which a rotated key of the same account keeps. */
+export async function keyOwner(): Promise<string | null> { const i = await accountIdentity(); return i.kind === 'known' ? i.keyId : null; }
 
 /** ONE rule for every moved store's file write (review 2026-11-19): `gen` is the account generation the SOURCE started under (`accountGeneration()` before its request). The write is
  * refused if a sign-out has moved the generation, and a file that lands after the generation moved is removed again. True when the file is there. */

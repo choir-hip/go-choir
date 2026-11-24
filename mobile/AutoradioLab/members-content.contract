@@ -27,9 +27,9 @@ members Autoradio
   mutation edo as shape TextureEditInfo then edOpened
   // The field is replaced by what the open found only while the listener has typed nothing (`edUntouched`). The answer names its document: another page's answer is not used.
   state edUntouched = true
-  derive edKeptHere = edInfo.address == topAddr ? edInfo.kept : ""
-  derive edOpenGot = match edo { case some(a) => (a.address == edFor and (a.opened or a.kept != "")), case none => false }
-  derive edOpenText = match edo { case some(a) => (a.address == edFor ? (a.kept != "" ? a.kept : a.head) : ""), case none => "" }
+  derive edHasKeptHere = edInfo.address == topAddr and edInfo.hasKept
+  derive edOpenGot = match edo { case some(a) => (a.address == edFor and (a.opened or a.hasKept)), case none => false }
+  derive edOpenText = match edo { case some(a) => (a.address == edFor ? (a.hasKept ? a.kept : a.head) : ""), case none => "" }
   derive edStatus = edInfo.status
   state edOn = false
   state edFor = ""
@@ -112,7 +112,7 @@ members Autoradio
   action edBegin
     edOn = true
     edFor = topAddr
-    edDraft = edKeptHere != "" ? edKeptHere : rdoc.source
+    edDraft = edHasKeptHere ? edInfo.kept : rdoc.source
     edUntouched = true
     send edo = textureEditOpen(topAddr)
     edFormats = ""

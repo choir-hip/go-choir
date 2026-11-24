@@ -1,6 +1,6 @@
 # The Autoradio native-boundary ceiling: non-voice native code that may exist. It only falls.
 # Lower it with `scripts/check-autoradio-native-boundary --update` in the change that deletes the code.
-# 2026-11-24 (exact-rest, round 2 of review): 34 files, 3460 lines, 19 names. Down 72 lines: the dead Edition, EditionWriter, LocalEditionWriter and EditionCompletion of EditionSetup.swift (the shared edition-writer.ts replaces them; no caller).
+# 2026-11-24 (exact-rest, round 3): 34 files, 3452 lines, 19 names. Down 8 lines: `flushNotes` in +Platform.swift had no caller.
 files 34
-lines 3460
+lines 3452
 names 19

@@ -16,6 +16,9 @@
 //  E25 calls queued or begun across a sign-out leave nothing; a kept file written under another key is not the next account's.
 //  E26 a key that cannot be read (no handle yet, a locked Keychain) or is absent keeps the unsent file, loads nothing, and writes nothing over it; it is loaded when the key can be read; a key rotated for the same account (same computer) keeps it.
 //  E27 the latest keystroke is on disk BEFORE it waits: during a save in flight, during a hung link (the editor's own short timeout), and after a kill.   E28 two documents written at once leave both in the file.   E29 a let-go answer is not "offline".
+//  E30 the token carries the ACCOUNT: a re-sign-in as another account with no generation change shows, keeps and posts nothing of the first.   E31 a write that stalls for the old account never removes the new account's file.
+//  E32 an empty kept text is a kept text (`hasKept`).   E33 a document with NO revision yet is a head: another writer's first revision is a conflict, not an overwrite.
+//  E34 the automatic writer is one call inside the queue: it never replaces, and never discards, a listener's text.   E35 nothing is posted once a sign-out has begun, even after the last fetch.
 //  E13 discard drops the kept text; overwrite is the listener's act: it re-bases on the head and posts.   E14 `waiting` counts the documents with kept text.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Editor, editableDoc, PENDING_FILE, CONFLICT_WORDS, type Net } from './texture-edit.ts';
@@ -49,9 +52,9 @@ const net: Net = { json: async (path, opts) => {
   m = path.match(/^\/api\/texture\/documents\/([^/]+)\/revisions$/);
   if (m && method === 'POST') {
     const b = opts!.body as Record<string, unknown>;
-    if (b.parent_revision_id !== head[m[1]]) throw new HTTPError(409, 'HTTP 409: document head changed');
+    if ((b.parent_revision_id ?? '') !== head[m[1]]) throw new HTTPError(409, 'HTTP 409: document head changed');
     seq += 1; const id = `rev-new-${seq}`;
-    revs.set(id, { id, content: String(b.content), body: b.body_doc, n: revs.get(head[m[1]])!.n + 1 }); head[m[1]] = id;
+    revs.set(id, { id, content: String(b.content), body: b.body_doc, n: (revs.get(head[m[1]])?.n ?? -1) + 1 }); head[m[1]] = id;
     return { body: { revision: { revision_id: id, version_number: revs.get(id)!.n } }, serverTime: null, raw: '' };
   }
   throw new Error('unexpected ' + method + ' ' + path);
@@ -124,7 +127,7 @@ describe('offline and relaunch', () => {
     expect(j.kept).toBe('Hello world. offline'); expect(j.waiting).toBe(1);
     const k = await e2.flush('');                     // retry whatever is waiting, on any page
     expect(k.waiting).toBe(0); expect(kept()).toEqual({});
-    await e2.flush(''); expect(posts().filter((p) => p.body && !p.body.__x).length).toBe(2);   // the failed attempt and the one that landed; nothing after
+    await e2.flush(''); expect(posts().length).toBe(2);   // the failed attempt and the one that landed; nothing after
   });
   test('E9 reopening shows the kept text, not the head', async () => {
     const e = mk(); await e.edit(A, 'Hello world. unsent'); failNext = () => new TypeError('down'); await e.flush(A);
@@ -418,5 +421,67 @@ describe('what a person typed is never lost to a key that cannot be read, or to 
     failNext = () => new Error('the answer was let go before this fetch');
     const i = await e.flush(A);
     expect(i.status).toBe('dirty'); expect(kept().d1.text).toBe('Hello world. x');
+  });
+});
+
+describe('the token carries the account, the empty text is a text, the writer never takes another\'s text', () => {
+  test('E30 a re-sign-in as another account with NO generation change: the first account\'s text is not shown, not kept, not posted; the file is the second account\'s', async () => {
+    const e = mk(); await e.edit(A, 'first account text', 'Hello world.');
+    signedKey = 'key-b-not-real'; signedComputer = 'c2';                              // another account signs in over the refused key: nothing called a sign-out
+    const i = await e.info(A);
+    expect(i.kept).toBe(''); expect(i.hasKept).toBe(false);
+    await e.flush(A); expect(posts().length).toBe(0);
+    await e.edit(A, 'second account text', 'Hello world.');
+    const raw = new TextDecoder().decode(files.get(PENDING_FILE)!);
+    expect(raw).toContain('second account text'); expect(raw).not.toContain('first account text');
+  });
+  test('E31 a write that stalls for the old account does not remove the new account\'s file', async () => {
+    slowFirstWrite = true;
+    const e = mk(); const first = e.edit(A, 'old account text', 'Hello world.');
+    await new Promise((r) => setTimeout(r, 10));                                       // its write is on the way, slowly
+    signedKey = 'key-b-not-real'; signedComputer = 'c2'; nextGeneration(); await e.wipe();
+    await e.edit(A, 'new account text', 'Hello world.'); await first;
+    await new Promise((r) => setTimeout(r, 60));
+    expect(kept().d1.text).toBe('new account text');
+  });
+  test('E32 an EMPTY kept text is a kept text: the page can tell it from none, and a reopened field shows it', async () => {
+    failGets = true;
+    const e = mk(); await e.edit(A, '', 'Hello world.');                                // everything deleted, offline
+    const i = await e.info(A);
+    expect(i.hasKept).toBe(true); expect(i.kept).toBe('');
+    expect((await mk().info(A)).hasKept).toBe(true);
+    expect((await mk().info('texture:d2')).hasKept).toBe(false);
+  });
+  test('E33 a document with no revision yet: another writer\'s first revision is a conflict, never overwritten', async () => {
+    head.d1 = '';                                                                       // created, nothing saved yet
+    const e = mk(); await e.edit(A, 'Mine', '');
+    revs.set('r1', { id: 'r1', content: 'Theirs', body: body('t'), n: 0 }); head.d1 = 'r1';
+    const i = await e.flush(A);
+    expect(i.status).toBe('conflict'); expect(posts().length).toBe(0); expect(kept().d1.text).toBe('Mine');
+  });
+  test('E33 ... and with nobody else, the first save has no parent', async () => {
+    head.d1 = '';
+    const e = mk(); await e.edit(A, 'Mine', ''); const i = await e.flush(A);
+    expect(i.status).toBe('saved'); expect(posts()[0].body!.parent_revision_id).toBeUndefined();
+  });
+  test('E34 the automatic writer is busy when the listener has text, and never discards text typed behind it', async () => {
+    const e = mk(); await e.edit(A, 'listener text', 'Hello world.');
+    expect(await e.writeAutomatic(A, 'automatic text', 'Hello world.')).toBe('busy'); expect(kept().d1.text).toBe('listener text');
+    await e.discard(A);
+    let release: () => void = () => undefined; getGate = new Promise<void>((r) => { release = r; });
+    failNext = () => new HTTPError(403, '403');
+    const auto = e.writeAutomatic(A, 'automatic text', 'Hello world.');
+    await new Promise((r) => setTimeout(r, 5));
+    const typed = e.edit(A, 'listener typed meanwhile', 'automatic text');           // queued behind the automatic write
+    release(); expect(await auto).toBe('failed'); await typed;
+    expect(kept().d1.text).toBe('listener typed meanwhile');
+  });
+  test('E35 once a sign-out has begun nothing is posted, even when the last fetch before the post was slow', async () => {
+    traj.d1 = 't1';
+    const e = mk(); await e.edit(A, 'Hello world. y');
+    let release: () => void = () => undefined; getGate = new Promise<void>((r) => { release = r; });
+    const saving = e.flush(A); await new Promise((r) => setTimeout(r, 10));
+    await beginSignOut(); release(); await saving;
+    expect(posts().length).toBe(0);
   });
 });

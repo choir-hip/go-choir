@@ -797,3 +797,24 @@ describe('R12 the original and the request are bound to the account that asked',
     expect((await mail.mailFrame('mailbox:inbox', env())).rows.length).toBe(0);
   });
 });
+
+describe('R13 the owner is inside the file as well as in its name; a purge asks again who is signed in', () => {
+  const swapKey = (): void => bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: true, value: 'another-key-0002-not-real', computerId: 'comp-2' } : r.op === 'keystate' ? { state: 'present' } : { found: true, value: 'another-key-0002-not-real' }) } as never);
+  test('R13a a file of another account copied to this account\'s name is refused and removed', async () => {
+    computer(); await mail.mailBox('mailbox:inbox', env());
+    const F = await accessor(); const mine = F.pathOfRows('inbox');
+    const body = JSON.parse(new TextDecoder().decode(files.get(mine)!));
+    files.set(mine, new TextEncoder().encode(JSON.stringify({ ...body, owner: 'someone-elses-digest' })));       // same name, another owner inside
+    expect(await C.loadFolder(env(), 'inbox')).toBeNull(); expect(files.has(mine)).toBe(false);
+  });
+  test('R13b a purge started for one account removes nothing once another account is signed in', async () => {
+    computer(); await mail.mailBox('mailbox:inbox', env());
+    const F = await accessor();
+    swapKey();
+    const second = `${C.DIR}/msg-bbbb.${(await (await import('./api.ts')).keyOwner())}.json`;     // the new account's file
+    files.set(second, new TextEncoder().encode('{}'));
+    files.set(`${C.DIR}/msg-aaaa.0123456789abcdef01234567.json`, new TextEncoder().encode('{}'));       // a foreign file the old accessor would have removed
+    await F.purgeForeign();
+    expect(files.has(second)).toBe(true);
+  });
+});

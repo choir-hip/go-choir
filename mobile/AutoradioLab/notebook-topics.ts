@@ -58,10 +58,9 @@ async function writeNow(storage: Storage | undefined, d: Deps): Promise<boolean>
   if (gen !== accountGeneration()) return false;
   const merged = merging(topics, current);
   if (merged !== current) {
-    if ((await d.editor.info(address)).kept !== '') return false;               // the listener's own unsent text on the notebook is not ours to replace: try again when it is gone
-    await d.editor.edit(address, merged, current);                              // null (no notebook read): no claim about what it descends from
-    const info = await d.editor.flush(address);
-    if (info.status !== 'saved' || gen !== accountGeneration()) { if (gen === accountGeneration()) await d.editor.discard(address); return false; }      // an automated text is never left as the listener's unsent one; and never touched under another account
+    // ONE call inside the editor's queue (a listener's unsent text there makes it 'busy': ours to leave alone; a failed write drops only OUR text, never one typed behind it).
+    const r = await d.editor.writeAutomatic(address, merged, current);
+    if (r !== 'saved' || gen !== accountGeneration()) return false;
   }
   return writeCurrent(gen, storage, MARKER, new TextEncoder().encode(key));
 }

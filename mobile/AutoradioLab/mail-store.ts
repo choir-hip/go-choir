@@ -17,7 +17,9 @@ import type { Storage } from './app.contract.d.ts';
 import { accountGeneration, signOutBlocked, refreshSignOutBlock, keyOwner } from './api.ts';
 import type { AttachmentMeta, Summary } from './mail-model.ts';
 
-// THE INVARIANT (written after two reviews found the owner check missing from `holds` and cached across a key change): every file of the mail copy is reached through ONE accessor, `Files`, and a
+// INVARIANT (one sentence, tests R11 to R13): every mail file is reached through the one accessor `Files`, which is made only for the account signed in now (read fresh), names every file by that account, writes its owner INSIDE the
+// file too, refuses a file whose owner is another's, and asks again who is signed in before it removes anything.
+// THE INVARIANT (the owner is in the NAME and inside the FILE, and every removal of another's files asks again who is signed in; written after two reviews found the owner check missing from `holds` and cached across a key change): every file of the mail copy is reached through ONE accessor, `Files`, and a
 // `Files` exists only for the account signed in RIGHT NOW (the key's digest is read fresh at `open`, never cached). Its paths carry that digest (`msg-<id>.<owner>.json`), so a file written under
 // another key is not a path this accessor can name: `read`, `holds`, `count`, `trim` and every write see only their own account's files, and `open` removes the others once. There is no other way
 // to read or write a mail file in this module: the path builders and the raw read and write are private to the class, and the exported functions below only open one and call it.
@@ -31,9 +33,10 @@ export const MAX_FILES = 6000;
 /** `owner`: who the request began as (the key's digest, `identity()` in mail.ts): an accessor for any other key is refused, so a reply that comes back after a key changed (a re-sign-in with no sign-out) writes nothing for the new account. */
 export type Env = { storage?: Storage; gen?: number; owner?: string | null };
 const stale = (env: Env): boolean => env.gen !== undefined && env.gen !== accountGeneration();
-export type FolderCopy = { folder: string; rows: Summary[]; total: number; unread: number; savedAt: number };
-export type MessageCopy = { id: string; folder: string; summary: Summary; text: string; to: string[]; cc: string[]; replyTo: string; attachments: AttachmentMeta[]; savedAt: number };
-export type StateCopy = { done: Record<string, boolean>; syncedAt: Record<string, number>; cursor: Record<string, string> };
+/** `owner` is also INSIDE every file (the name carries it too): a file copied or renamed to this account's name is still refused when its own owner is another's. */
+export type FolderCopy = { owner?: string; folder: string; rows: Summary[]; total: number; unread: number; savedAt: number };
+export type MessageCopy = { owner?: string; id: string; folder: string; summary: Summary; text: string; to: string[]; cc: string[]; replyTo: string; attachments: AttachmentMeta[]; savedAt: number };
+export type StateCopy = { owner?: string; done: Record<string, boolean>; syncedAt: Record<string, number>; cursor: Record<string, string> };
 
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', data as unknown as BufferSource));
@@ -81,7 +84,7 @@ export class Files {
     if (stale(this.env)) return false;
     try {
       await this.fs.mkdir(DIR).catch(() => undefined);
-      await this.fs.atomicWriteFile(path, enc(value));
+      await this.fs.atomicWriteFile(path, enc({ ...(value as object), owner: this.owner }));
       if (stale(this.env)) { try { await this.fs.rm(path); await this.fs.rm(DIR); } catch { /* the wipe will; the folder goes only when empty */ } return false; }
       return true;
     } catch { return false; }
@@ -89,8 +92,11 @@ export class Files {
   private async get<T>(path: string): Promise<T | null> {
     let bytes: Uint8Array;
     try { bytes = new Uint8Array(await this.fs.readFile(path)); } catch { return null; }
-    try { return JSON.parse(new TextDecoder().decode(bytes)) as T; }
+    let v: T & { owner?: string };
+    try { v = JSON.parse(new TextDecoder().decode(bytes)) as T & { owner?: string }; }
     catch { try { await this.fs.rm(path); } catch { /* already gone */ } return null; }      // half written: the server's copy replaces it
+    if (v === null || typeof v !== 'object' || v.owner !== this.owner) { try { await this.fs.rm(path); } catch { /* already gone */ } return null; }      // another account's content under this account's name
+    return v;
   }
 
   saveFolder(c: FolderCopy): Promise<boolean> { return this.put(this.rowsPath(c.folder), c); }
@@ -138,12 +144,14 @@ export class Files {
   }
   /** Every file of the folder that is not this account's (another key's, or an earlier format without an owner in its name) is removed. */
   async purgeForeign(): Promise<void> {
+    // Each removal asks again whether this accessor still is the account signed in: a key that changed (or a sign-out) between the listing and a removal must not make this purge delete the NEW account's files.
+    const mine = async (): Promise<boolean> => !stale(this.env) && (await keyOwner()) === this.owner;
     let names: string[] = [];
     try { names = await this.fs.readdir(DIR); } catch { return; }
-    for (const n of names) if (!n.endsWith(this.tail())) { try { await this.fs.rm(`${DIR}/${n}`); } catch { /* kept */ } }
+    for (const n of names) if (!n.endsWith(this.tail())) { if (!(await mine())) return; try { await this.fs.rm(`${DIR}/${n}`); } catch { /* kept */ } }
     let cached: string[] = [];
     try { cached = await this.fs.readdir(CACHE); } catch { return; }
-    for (const n of cached) if (n.startsWith('mail-') && n.endsWith('.html') && !n.endsWith(`.${this.owner}.html`)) { try { await this.fs.rm(`${CACHE}/${n}`); } catch { /* kept */ } }      // another key's originals
+    for (const n of cached) if (n.startsWith('mail-') && n.endsWith('.html') && !n.endsWith(`.${this.owner}.html`)) { if (!(await mine())) return; try { await this.fs.rm(`${CACHE}/${n}`); } catch { /* kept */ } }      // another key's originals
   }
 }
 
