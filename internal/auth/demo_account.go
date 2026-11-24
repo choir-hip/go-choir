@@ -162,8 +162,8 @@ type demoHash struct {
 // FormatDemoCredential makes the contents of the credential file for a user
 // name and a password. The generating command (cmd/demo-account) uses it.
 func FormatDemoCredential(username, password string) (string, error) {
-	if username == "" || len(username) > demoMaxField || strings.ContainsAny(username, "\r\n") {
-		return "", errors.New("user name must be one short line")
+	if username == "" || len(username) > demoMaxField || strings.ContainsAny(username, "\r\n@") {
+		return "", errors.New("user name must be one short line with no @ (the app takes a name with an @ for an email address)")
 	}
 	if len(password) < demoMinPassword || len(password) > demoMaxField {
 		return "", fmt.Errorf("password must be %d to %d characters", demoMinPassword, demoMaxField)

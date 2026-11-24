@@ -546,3 +546,14 @@ func TestADeviceApprovalThatCannotBeTakenBackFailsLoudly(t *testing.T) {
 		t.Fatalf("an approval that could not be taken back must answer 500, got %d %s", rec.Code, rec.Body)
 	}
 }
+
+// The app routes by the field: a user name with an "@" would be taken for an address, so the
+// credential cannot be made with one.
+func TestACredentialNameWithAnAtSignIsRefused(t *testing.T) {
+	if _, err := FormatDemoCredential("reviewer@example.com", demoTestPass); err == nil {
+		t.Fatal("a user name with an @ was accepted")
+	}
+	if _, err := FormatDemoCredential(demoTestUser, demoTestPass); err != nil {
+		t.Fatal(err)
+	}
+}

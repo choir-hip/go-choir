@@ -1054,8 +1054,6 @@ in
         "AUTH_ROOM_OWNERS_PATH=${roomOwnersPath}"
         # Reviewer sign-in (docs/ship/demo-account.md, internal/auth/demo_account.go):
         # two host files, outside the repo. Absent, the route answers "not available".
-        "AUTH_DEMO_ACCOUNT_ID_FILE=${authSigningDir}/demo-account-id"
-        "AUTH_DEMO_CREDENTIAL_FILE=${authSigningDir}/demo-credential"
         "AUTH_DEMO_ACCOUNT_ID_FILE=${authSigningDir}/demo/demo-account-id"
         "AUTH_DEMO_CREDENTIAL_FILE=${authSigningDir}/demo/demo-credential"
         internalAuthEnv
