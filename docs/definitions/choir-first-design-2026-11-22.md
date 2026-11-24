@@ -135,6 +135,22 @@ boundaries:
     said: jensen huang shouldnt be the only subject. captures should have many subjects. basically, we want a symbolic compression of each capture. not bucketing captures. hmm, have to think about this. what about the hybrid path? do we need to pass every story (in batches) through an llm first? maybe thats actually efficient
     'on': '2026-11-24'
     reading: 'lead''s reading: the owner is still thinking, so this is a direction and not a settled design. Experiment E1''s second form used one top subject per arrival, which this corrects. Novelty can then be read symbolically: a symbol, or a pairing of symbols, not seen before among the capture''s subjects'
+  - decision: the root wakes on events, never a clock
+    said: 8. yes, root wakes on events.
+    'on': '2026-11-24'
+    reading: 'lead''s reading: the owner did not answer whether a root edit to the index needs a second look; until ruled, each edit is a visible, revertible revision scored as a forecast, with no prior review'
+  - decision: a story's point has turned when arrivals on its subjects are novel relative to the story itself, not to the whole corpus (tentative)
+    said: 9. i think so
+    'on': '2026-11-24'
+  - decision: 'research is a service to the root and to stories: graph first, web second, asked for a named gap, reporting what it added and what was missing; it does not open or shape stories'
+    said: 10. yes
+    'on': '2026-11-24'
+  - decision: 'when the listener speaks the local model answers at once and keeps talking until the Autoradio desk interrupts it, and the desk leads off with a transition. Note for later, not now: a separate voice for the local model'
+    said: 11. yes, local model answers at once, and keeps talking until interrupted by autoradio desk, which leads off with a transition. we should think about using a separate voice for the local model actually. but save that as a note for later, not now
+    'on': '2026-11-24'
+  - decision: the personal root learns from everything on the person's computer; that learning is added gradually, and Autoradio comes first
+    said: 12. yes, personal root learns from everything. but we can add more learning gradually. autoradio is most important now
+    'on': '2026-11-24'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
