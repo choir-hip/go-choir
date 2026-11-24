@@ -47,6 +47,9 @@ type whoamiResponse struct {
 	// ComputerID is the one computer the key is bound to; empty means an
 	// owner-wide key, whose computers the app finds as it does today.
 	ComputerID string `json:"computer_id"`
+	// Reviewer is true for the reviewer account (demo_account.go): the
+	// app's delete page says the account cannot be deleted from the app.
+	Reviewer bool `json:"reviewer"`
 }
 
 // HandleWhoami handles GET /auth/whoami for a Bearer API key.
@@ -82,5 +85,6 @@ func (h *Handler) HandleWhoami(w http.ResponseWriter, r *http.Request) {
 		KeyLabel:   key.Label,
 		Scopes:     scopes,
 		ComputerID: key.ComputerID,
+		Reviewer:   h.IsDemoAccount(key.UserID),
 	})
 }

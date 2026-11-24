@@ -278,3 +278,23 @@ func TestDemoPasswordFormatRoundTripsAndRefusesHeavyParameters(t *testing.T) {
 		t.Fatal("weak parameters must be refused")
 	}
 }
+
+func TestWhoamiSaysReviewerOnlyForTheReviewerAccount(t *testing.T) {
+	e := demoEnv(t)
+	w := e.post(t, "198.51.100.1", good())
+	var k appKeyResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &k)
+	other, _ := e.h.store.CreateUser("other-user-id", "other@example.invalid")
+	_, otherSecret, _ := e.h.store.CreateAPIKey(context.Background(), other.ID, "x", []string{"read:runtime"}, nil)
+	for secret, want := range map[string]bool{k.APIKey: true, otherSecret: false} {
+		r := httptest.NewRequest(http.MethodGet, "/auth/whoami", nil)
+		r.Header.Set("Authorization", "Bearer "+secret)
+		rec := httptest.NewRecorder()
+		e.h.HandleWhoami(rec, r)
+		var got struct{ Reviewer bool }
+		_ = json.Unmarshal(rec.Body.Bytes(), &got)
+		if rec.Code != 200 || got.Reviewer != want {
+			t.Fatalf("want reviewer=%v got %d %s", want, rec.Code, rec.Body)
+		}
+	}
+}
