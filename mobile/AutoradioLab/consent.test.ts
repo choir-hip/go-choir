@@ -73,17 +73,16 @@ describe('the radio\'s mode', () => {
 });
 
 describe('the words', () => {
-  test('C6 the sign-in prompt gives one sentence of why, and strings/en.json holds the same text', async () => {
+  test('C6 the sign-in prompt gives one sentence of why, and strings/en.json holds only the purpose strings', async () => {
     const t = await consentView(storage);
     expect(t.signWhy).toMatch(/Listening needs no account; asking does/); expect(t.signTitle).toBe('Sign in to ask the radio');
-    for (const [k, v] of Object.entries(ASK_TEXT)) expect((en as Record<string, string>)[k]).toBe(v);
+    for (const k of Object.keys(ASK_TEXT)) expect((en as Record<string, string>)[k]).toBeUndefined();   // store-build D7: en.json is the two purpose strings
     expect(Object.keys(en).filter((k) => k.startsWith('onboarding.consent'))).toEqual([]);          // no consent screen before the radio answers
   });
   test('C6 the microphone purpose names voice, takes, and what a published take does', () => {
     const m = (en as Record<string, string>)['purpose.microphone'];
-    expect(m).toMatch(/Voice/); expect(m).toMatch(/take/); expect(m).toMatch(/publish/); expect(m).toMatch(/not uploaded/);
+    expect(m).toMatch(/Voice/); expect(m).toMatch(/take/); expect(m).toMatch(/publish/); expect(m).toMatch(/uploaded only if you publish/);
     expect(m).toMatch(/teach it your voice/);          // learning the voice is a use the string names (review round 4)
-    expect((en as Record<string, string>)['purpose.recordingInBackground']).toMatch(/stops listening when the screen locks/);
   });
 });
 

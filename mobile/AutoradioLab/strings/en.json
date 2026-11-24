@@ -1,9 +1,4 @@
 {
   "purpose.microphone": "Autoradio hears you when Voice is on, so you can talk to the radio, and records your voice when you tap Take or teach it your voice. Speech becomes text on this phone. A take is uploaded only if you publish it.",
-  "purpose.speech": "Autoradio turns what you say into text on this phone, to understand your request.",
-  "onboarding.askSignIn.title": "Sign in to ask the radio",
-  "onboarding.askSignIn.why": "Listening needs no account; asking does, so the radio has a computer of yours to keep your questions on.",
-  "onboarding.askSignIn.signIn": "Sign in",
-  "onboarding.askSignIn.make": "Make an account",
-  "onboarding.askSignIn.later": "Not now"
+  "purpose.speech": "Autoradio turns what you say into text on this phone, to understand your request."
 }
