@@ -161,9 +161,19 @@ type demoHash struct {
 
 // FormatDemoCredential makes the contents of the credential file for a user
 // name and a password. The generating command (cmd/demo-account) uses it.
+// validDemoName is the one rule for the reviewer's user name, shared by the command that makes the
+// credential and the service that reads it: one short line, no "@" (the app takes a name with an
+// "@" for an email address), no space at either end.
+func validDemoName(name string) error {
+	if name == "" || len(name) > demoMaxField || strings.ContainsAny(name, "\r\n@") || name != strings.TrimSpace(name) {
+		return errors.New("user name must be one short line with no @ and no space at either end (the app takes a name with an @ for an email address)")
+	}
+	return nil
+}
+
 func FormatDemoCredential(username, password string) (string, error) {
-	if username == "" || len(username) > demoMaxField || strings.ContainsAny(username, "\r\n@") {
-		return "", errors.New("user name must be one short line with no @ (the app takes a name with an @ for an email address)")
+	if err := validDemoName(username); err != nil {
+		return "", err
 	}
 	if len(password) < demoMinPassword || len(password) > demoMaxField {
 		return "", fmt.Errorf("password must be %d to %d characters", demoMinPassword, demoMaxField)
@@ -179,14 +189,17 @@ func FormatDemoCredential(username, password string) (string, error) {
 }
 
 func parseDemoCredential(data []byte) (string, *demoHash, error) {
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	lines := strings.Split(strings.TrimRight(string(data), "\r\n"), "\n") // the name keeps its spaces, so the shared rule can refuse them
 	if len(lines) != 2 {
 		return "", nil, errors.New("credential file: want a user name line and a hash line")
 	}
-	user := strings.TrimSpace(lines[0])
+	user := lines[0]
+	if err := validDemoName(user); err != nil {
+		return "", nil, fmt.Errorf("credential file: %w", err)
+	}
 	f := strings.Split(strings.TrimSpace(lines[1]), "$")
 	// "", argon2id, v=19, m=..,t=..,p=.., salt, hash
-	if user == "" || len(f) != 6 || f[0] != "" || f[1] != "argon2id" || f[2] != "v="+strconv.Itoa(argon2.Version) {
+	if len(f) != 6 || f[0] != "" || f[1] != "argon2id" || f[2] != "v="+strconv.Itoa(argon2.Version) {
 		return "", nil, errors.New("credential file: not an argon2id hash")
 	}
 	h := &demoHash{}
@@ -234,6 +247,14 @@ func (h *Handler) IsDemoAccount(userID string) bool {
 	return userID != "" && h.demoAccountID() == userID
 }
 
+// The host files of the reviewer account. One copy: the host command (cmd/demo-account) imports
+// these, and a test holds them equal to what nix/node-b.nix gives the auth service.
+const (
+	DemoCredentialPath      = "/var/lib/go-choir/auth-signing/demo/demo-credential"
+	DemoAccountIDPath       = "/var/lib/go-choir/auth-signing/demo/demo-account-id"
+	StaleDemoCredentialPath = "/var/lib/go-choir/auth-signing/demo-credential" // before the move into demo/
+)
+
 // ErrAccountOff: the reviewer account is turned off, so nothing mints for it.
 var ErrAccountOff = errors.New("this account is turned off")
 
@@ -244,6 +265,20 @@ func writeAccountOff(w http.ResponseWriter) {
 		Error string `json:"error"`
 		Code  string `json:"code"`
 	}{ErrAccountOff.Error(), "account_off"})
+}
+
+// refuseIfAccountOff answers a sign-in step that failed because the reviewer account is turned
+// off: the one refusal, 403 account_off, for every route that issues a session, a token or a
+// key. It reports whether it answered. Every caller of issueAccessJWT, issueSession*,
+// signInSession, rotateRefreshSession, rotateLocked and mintAppKey must pass its error here
+// (TestEveryIssuerCallerAnswersAnOffAccountAsTheRefusal holds that).
+func refuseIfAccountOff(w http.ResponseWriter, err error, op, userID string) bool {
+	if !errors.Is(err, ErrAccountOff) {
+		return false
+	}
+	log.Printf("[auth] operation=%s user_id=%s result=refused reason=account_off", op, userID)
+	writeAccountOff(w)
+	return true
 }
 
 // demoOff says whether userID is the reviewer account while it is off: the

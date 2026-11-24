@@ -475,6 +475,9 @@ func (h *Handler) HandleEmailVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	info, ierr := h.signInSession(w, r, user, method)
+	if refuseIfAccountOff(w, ierr, "email_verify", user.ID) {
+		return
+	}
 	if ierr != nil {
 		log.Printf("[auth] operation=email_verify user_id=%s method=%s result=error step=issue_session error=%q", user.ID, method, ierr)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})

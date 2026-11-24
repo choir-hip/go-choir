@@ -6,6 +6,9 @@ import (
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -587,5 +590,122 @@ func TestAnAppLoginThatFinishesWhileTheAccountIsOffIsRefusedNotA500(t *testing.T
 	}
 	if countKeys(t, h, user.ID) != n {
 		t.Fatal("a key was minted for an off account")
+	}
+}
+
+// The class: an account that is off is refused the same way at every route that would issue a
+// session, a token or a key. Routes that can be driven here are driven; the guard below holds
+// the rest (account switch, email verify, register finish, the web login finish).
+func TestOffAccountIsRefusedAtEveryDrivableIssuer(t *testing.T) {
+	e := demoEnv(t)
+	user, _ := e.h.store.GetUserByID(e.uid)
+	expect403 := func(name string, rec *httptest.ResponseRecorder) {
+		t.Helper()
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s: got %d %s, want 403", name, rec.Code, rec.Body)
+			return
+		}
+		if m := decodeMap(t, rec); m["code"] != "account_off" {
+			t.Errorf("%s: refusal code %v", name, m["code"])
+		}
+	}
+	// Made while on: a refresh session and a desktop exchange code.
+	setup := httptest.NewRecorder()
+	if _, err := e.h.issueSession(setup, httptest.NewRequest(http.MethodPost, "/x", nil), user, AuthMethodPasskey); err != nil {
+		t.Fatal(err)
+	}
+	var refresh *http.Cookie
+	for _, c := range setup.Result().Cookies() {
+		if c.Name == RefreshTokenCookieName {
+			refresh = c
+		}
+	}
+	now := time.Now().UTC()
+	if err := e.h.store.CreateDesktopExchangeCode(&DesktopExchangeCode{Code: "exch-code-for-test", UserID: e.uid, CreatedAt: now, ExpiresAt: now.Add(time.Minute), AuthMethod: AuthMethodPasskey}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(e.file); err != nil { // off
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	e.h.HandleDesktopRedeem(rec, jsonReq(http.MethodPost, "/auth/desktop/redeem", map[string]string{"code": "exch-code-for-test"}, ""))
+	expect403("desktop_redeem", rec)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+	req.AddCookie(refresh)
+	rec = httptest.NewRecorder()
+	e.h.HandleSession(rec, req)
+	expect403("session_refresh", rec)
+}
+
+// The guard for the rest: every function that calls an issuer must pass its error to
+// refuseIfAccountOff, or be part of the issuer chain itself (which returns the error upward).
+func TestEveryIssuerCallerAnswersAnOffAccountAsTheRefusal(t *testing.T) {
+	issuers := map[string]bool{"signInSession": true, "issueSession": true, "issueSessionExpiring": true, "issueSessionRow": true, "issueAccessJWT": true, "mintAppKey": true, "rotateRefreshSession": true, "rotateLocked": true}
+	chain := map[string]bool{"signInSession": true, "issueSession": true, "issueSessionExpiring": true, "issueSessionRow": true, "issueAccessJWT": true, "mintAppKey": true, "rotateRefreshSession": true, "rotateLocked": true}
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callers := 0
+	for _, pkg := range pkgs {
+		for fname, f := range pkg.Files {
+			for _, d := range f.Decls {
+				fd, ok := d.(*ast.FuncDecl)
+				if !ok || fd.Body == nil || chain[fd.Name.Name] {
+					continue
+				}
+				calls, refuses := []string{}, false
+				ast.Inspect(fd.Body, func(n ast.Node) bool {
+					if c, ok := n.(*ast.CallExpr); ok {
+						name := ""
+						switch fn := c.Fun.(type) {
+						case *ast.SelectorExpr:
+							name = fn.Sel.Name
+						case *ast.Ident:
+							name = fn.Name
+						}
+						if issuers[name] {
+							calls = append(calls, name)
+						}
+						if name == "refuseIfAccountOff" {
+							refuses = true
+						}
+					}
+					return true
+				})
+				if len(calls) > 0 {
+					callers++
+					if !refuses {
+						t.Errorf("%s: %s calls %v and does not answer an off account with refuseIfAccountOff", fname, fd.Name.Name, calls)
+					}
+				}
+			}
+		}
+	}
+	if callers < 8 {
+		t.Fatalf("found only %d issuer callers; the guard has lost its sight", callers)
+	}
+}
+
+// One rule for the name, in the command that makes the credential and the service that reads it.
+func TestTheServiceRefusesWhatTheCommandRefuses(t *testing.T) {
+	line, err := FormatDemoCredential(demoTestUser, demoTestPass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, hashLine, _ := strings.Cut(line, "\n")
+	for _, name := range []string{"foo@bar", " padded", "padded ", "two\nlines"} {
+		if _, err := FormatDemoCredential(name, demoTestPass); err == nil {
+			t.Errorf("the command accepted %q", name)
+		}
+		if ValidDemoCredential([]byte(name + "\n" + hashLine)) {
+			t.Errorf("the service accepted a credential file with the name %q", name)
+		}
+	}
+	if !ValidDemoCredential([]byte(line)) {
+		t.Error("a well-formed credential was refused")
 	}
 }

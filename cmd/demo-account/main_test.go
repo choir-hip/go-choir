@@ -368,24 +368,36 @@ func TestResetNeverSendsTheTokenToAnotherPortOrThroughARedirect(t *testing.T) {
 	}
 }
 
-// D1: the constant the command removes must be the path nix gives the auth service.
-func TestTheCredentialPathIsTheOneNixConfiguresForAuth(t *testing.T) {
+// One source of truth: the paths the command acts on are auth's constants, and auth's constants
+// are what nix/node-b.nix gives the service (both host files).
+func TestTheHostPathsAreTheOnesNixConfiguresForAuth(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "nix", "node-b.nix"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	src := string(raw)
 	dir := regexp.MustCompile(`(?m)^\s*authSigningDir\s*=\s*"([^"]+)";`).FindStringSubmatch(src)
-	set := regexp.MustCompile(`"AUTH_DEMO_CREDENTIAL_FILE=([^"]+)"`).FindStringSubmatch(src)
-	if dir == nil || set == nil {
-		t.Fatal("nix/node-b.nix no longer sets AUTH_DEMO_CREDENTIAL_FILE from authSigningDir; update this test with it")
+	if dir == nil {
+		t.Fatal("nix/node-b.nix no longer sets authSigningDir; update this test with it")
 	}
-	got := strings.ReplaceAll(set[1], "${authSigningDir}", dir[1])
-	if strings.Contains(got, "${") {
-		t.Fatalf("the nix value %q uses a variable this test does not resolve", set[1])
+	for env, want := range map[string]string{
+		"AUTH_DEMO_CREDENTIAL_FILE": auth.DemoCredentialPath,
+		"AUTH_DEMO_ACCOUNT_ID_FILE": auth.DemoAccountIDPath,
+	} {
+		set := regexp.MustCompile(`"` + env + `=([^"]+)"`).FindStringSubmatch(src)
+		if set == nil {
+			t.Fatalf("nix/node-b.nix no longer sets %s; update this test with it", env)
+		}
+		got := strings.ReplaceAll(set[1], "${authSigningDir}", dir[1])
+		if strings.Contains(got, "${") {
+			t.Fatalf("the nix value %q uses a variable this test does not resolve", set[1])
+		}
+		if got != want {
+			t.Fatalf("nix configures %s=%s but the command acts on %s", env, got, want)
+		}
 	}
-	if defaultCredentialPath != got {
-		t.Fatalf("demo-account off removes %s but nix configures auth to read %s", defaultCredentialPath, got)
+	if credentialPath != auth.DemoCredentialPath || idFilePath != auth.DemoAccountIDPath {
+		t.Fatal("the command keeps its own copy of a host path")
 	}
 }
 

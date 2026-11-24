@@ -366,6 +366,9 @@ func (h *Handler) HandleAccountSwitch(w http.ResponseWriter, r *http.Request) {
 	if set.ActiveUserID == user.ID {
 		if grace, gok := h.graceLeadingTo(rs.TokenHash); gok {
 			jwtTok, jerr := h.issueAccessJWT(user, method)
+			if refuseIfAccountOff(w, jerr, "account_switch", user.ID) {
+				return
+			}
 			if jerr != nil {
 				writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to switch account"})
 				return
@@ -379,6 +382,9 @@ func (h *Handler) HandleAccountSwitch(w http.ResponseWriter, r *http.Request) {
 	if _, _, rerr := h.rotateLocked(w, r, rs, user, set.ID); rerr != nil {
 		if errors.Is(rerr, ErrRotationLost) {
 			writeJSON(w, http.StatusConflict, sessionResponse{Authenticated: false, Error: "that account is signed out", Reason: ReasonMemberSignedOut})
+			return
+		}
+		if refuseIfAccountOff(w, rerr, "account_switch", user.ID) {
 			return
 		}
 		log.Printf("[auth] operation=account_switch user_id=%s result=error step=rotate error=%q", user.ID, rerr)

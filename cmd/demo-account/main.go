@@ -58,15 +58,13 @@ var tokenPorts = map[string]bool{"8083": true}
 var offSettle = 2 * time.Second
 
 // credentialPath is the file the auth service reads (nix/node-b.nix AUTH_DEMO_CREDENTIAL_FILE).
-const defaultCredentialPath = "/var/lib/go-choir/auth-signing/demo/demo-credential"
-
-var credentialPath = defaultCredentialPath
+var credentialPath = auth.DemoCredentialPath
 
 // idFilePath is the host file naming the reviewer account (nix: AUTH_DEMO_ACCOUNT_ID_FILE).
-var idFilePath = "/var/lib/go-choir/auth-signing/demo/demo-account-id"
+var idFilePath = auth.DemoAccountIDPath
 
 // staleCredentialPath is where it lived before the move into demo/.
-var staleCredentialPath = "/var/lib/go-choir/auth-signing/demo-credential"
+var staleCredentialPath = auth.StaleDemoCredentialPath
 
 const defaultTokenFile = "/var/lib/go-choir/secrets/internal-service-token"
 

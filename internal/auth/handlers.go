@@ -774,6 +774,9 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 
 	// Issue cookie-backed auth state.
 	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
+	if refuseIfAccountOff(w, err, "register_finish", user.ID) {
+		return
+	}
 	if err != nil {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=issue_session error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
@@ -1063,9 +1066,7 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeUnproved(w)
 		return
 	}
-	if errors.Is(err, ErrAccountOff) {
-		log.Printf("[auth] operation=login_finish user_id=%s result=refused reason=account_off", user.ID)
-		writeAccountOff(w)
+	if refuseIfAccountOff(w, err, "login_finish", user.ID) {
 		return
 	}
 	if err != nil {
@@ -1322,6 +1323,9 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 		var switched *accountSwitchedError
 		if errors.As(err, &switched) {
 			writeAccountSwitched(w, switched.ActiveUserID)
+			return
+		}
+		if refuseIfAccountOff(w, err, "session_refresh", user.ID) {
 			return
 		}
 		log.Printf("[auth] operation=session_refresh user_id=%s result=error step=rotate_refresh error=%q", user.ID, err)
@@ -1632,6 +1636,9 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userState, err := h.issueSessionExpiring(w, r, user, exchange.AuthMethod, exchange.NotAfter)
+	if refuseIfAccountOff(w, err, "desktop_redeem", exchange.UserID) {
+		return
+	}
 	if err != nil {
 		log.Printf("[auth] operation=desktop_redeem user_id=%s result=error step=issue_session error=%q", exchange.UserID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create desktop session"})

@@ -249,9 +249,7 @@ func (h *Handler) HandleAppRegisterFinish(w http.ResponseWriter, r *http.Request
 		return
 	}
 	key, err := h.mintAppKey(r.Context(), user, app)
-	if errors.Is(err, ErrAccountOff) {
-		log.Printf("[auth] operation=app_register_finish user_id=%s result=refused reason=account_off", user.ID)
-		writeAccountOff(w)
+	if refuseIfAccountOff(w, err, "app_register_finish", user.ID) {
 		return
 	}
 	if err != nil {
@@ -317,9 +315,7 @@ func (h *Handler) HandleAppLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeUnproved(w)
 		return
 	}
-	if errors.Is(err, ErrAccountOff) {
-		log.Printf("[auth] operation=app_login_finish user_id=%s result=refused reason=account_off", user.ID)
-		writeAccountOff(w)
+	if refuseIfAccountOff(w, err, "app_login_finish", user.ID) {
 		return
 	}
 	if err != nil {
