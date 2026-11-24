@@ -129,6 +129,10 @@ boundaries:
   - decision: 'where two designs conflict, the newer one supersedes the older. Order, newest first: the ideal-form draft and design session of 2026-11-23 with the rulings since; the first design, draft 4 (2026-11-22/23); the semantic layer design of 2026-11-20. In particular management does not decide captures in the redesign'
     said: you should think that everything where designs conflict, the new design superceded ... remember, in the redesign management doesnt decide captures. mgmt is currently overloaded and thats the problem
     'on': '2026-11-24'
+  - decision: everything that can be converted to Exact is converted, the Swift tests with the logic they test; this is essential, not optional
+    said: yes, we need to convert everything to exact that can be converted. im adamant about this. its essential.
+    'on': '2026-11-24'
+    reading: 'lead''s reading: this includes the conversation logic now in Swift beside the voice (turn policy, the talk state machine, the local acknowledgement, hands-free state, turn context, the programme player), leaving Swift only the audio session, the microphone, speech and the on-device models. Tests are rewritten from the behaviour, failure list first, not translated line by line'
   must_preserve:
   - no secrets, tokens or the owner's email in the repo or in output; .env, .env.bak-bedrock-20261109124037 and stash devin-provider-wip hold secrets and are left alone
   - the owner's iPhone credential is never changed, moved or re-keyed
