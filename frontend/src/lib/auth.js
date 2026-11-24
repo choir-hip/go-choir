@@ -450,7 +450,9 @@ export async function loginPasskey(email) {
   if (finishRes.status === 429) throw new RateLimitError(await retryAfterSeconds(finishRes));
   if (!finishRes.ok) {
     const err = await finishRes.json().catch(() => ({}));
-    throw new Error(err.error || `Login finish failed (${finishRes.status})`);
+    const failure = new Error(err.error || `Login finish failed (${finishRes.status})`);
+    failure.code = err.code || ''; // e.g. address_unproved: the sheet words it
+    throw failure;
   }
 
   return finishRes.json();
@@ -726,6 +728,9 @@ export function passkeyErrorMessage(err, authType = 'login') {
   if (err instanceof RateLimitError) return err.message;
   const message = String(err?.message || '');
   const normalized = message.toLowerCase();
+  if (err?.code === 'address_unproved') {
+    return 'This account\u2019s address was never verified. Use Lost your passkey? to recover it by mail.';
+  }
   if (err?.name === 'NotAllowedError') {
     return 'Passkey prompt was cancelled. Nothing changed—try again when you’re ready.';
   }

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"database/sql"
@@ -176,20 +177,59 @@ func (h *Handler) HandleRegisterMail(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
 		return
 	}
+	// Both branches send one mail, here, and answer an error when it could not be sent: a person
+	// is never told "we mailed a code" when nothing went out, and both branches wait on the same
+	// kind of call, so the time says nothing either.
+	ctx, cancel := context.WithTimeout(r.Context(), registerMailTimeout)
+	defer cancel()
+	var sendErr error
 	if known {
-		// The holder proves the address by the recovery mail. Its own limits are
-		// not shown to the caller: past them no mail goes out and the answer is the same.
-		if status, _ := h.startRecovery(r, email); status != http.StatusOK {
-			log.Printf("[auth] operation=register_mail email_hash=%s result=recovery_not_sent status=%d", emailHash, status)
-		}
+		sendErr = h.sendRecoveryForRegister(ctx, r, existing)
 	} else {
-		// The mail says "verify your address": maild has the two purposes it has.
-		mailed := *a
-		mailed.Purpose = EmailAttemptPurposeVerifyAddress
-		h.sendSignInMail(r, &mailed, email, code, "")
+		mail := SignInMail{
+			To: email, Purpose: EmailAttemptPurposeVerifyAddress, Code: code, Device: a.UserAgentSummary,
+			Place: summarizePlace(clientIP(r)), ExpiresMinutes: int(EmailAttemptTTL / time.Minute),
+		}
+		if sendErr = h.signInMailer.SendSignInCode(ctx, mail); sendErr == nil {
+			if err := h.store.MarkEmailAttemptSent(ctx, attemptID); err != nil {
+				log.Printf("[auth] operation=register_mail attempt=%s result=warning step=mark_sent error=%q", shortHash(attemptID), err)
+			}
+		}
+	}
+	if sendErr != nil {
+		log.Printf("[auth] operation=register_mail attempt=%s email_hash=%s result=send_failed known=%t error=%q", shortHash(attemptID), emailHash, known, sendErr)
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "we could not send the email just now; try again in a moment"})
+		return
 	}
 	log.Printf("[auth] operation=register_mail attempt=%s email_hash=%s result=created", shortHash(attemptID), emailHash)
 	writeJSON(w, http.StatusOK, emailBeginResponse{AttemptID: attemptID})
+}
+
+// registerMailTimeout bounds the one mail call register/mail makes.
+const registerMailTimeout = 10 * time.Second
+
+// sendRecoveryForRegister mails the holder of an address that has an account its recovery link, from
+// this route's own budget: a link already in the inbox is left live (it is not superseded, so a
+// stranger cannot invalidate it), and the token is counted under keys of its own, so the route spends
+// nothing of /auth/recovery/request's per-address and per-IP budgets (the email-attempt row of the
+// caller bounds it). An error is a mail that could not be sent.
+func (h *Handler) sendRecoveryForRegister(ctx context.Context, r *http.Request, user *User) error {
+	if h.recoveryMailer == nil {
+		return errors.New("recovery mailer is not configured")
+	}
+	live, err := h.store.HasLiveRecoveryToken(user.ID, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if live {
+		return nil // the link in the inbox still works
+	}
+	token, err := h.store.CreateRecoveryToken(ctx, user.ID, user.Email,
+		hashEmail("register-mail:"+normalizeEmailAddress(user.Email)), hashIP("register-mail:"+clientIP(r)))
+	if err != nil {
+		return err
+	}
+	return h.recoveryMailer.SendRecoveryLink(ctx, user.Email, h.recoveryLink(token), RecoveryTokenTTL)
 }
 
 func randomHex(n int) (string, error) {

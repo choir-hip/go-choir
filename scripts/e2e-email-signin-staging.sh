@@ -6,7 +6,11 @@
 #
 #   scripts/e2e-email-signin-staging.sh [--dry-run] [--bootstrap-only] [out-dir]
 #
-# Env: CHOIR_BACKEND (default https://choir.news), CHOIR_E2E_STATE (default
+# Env: E2E_DRILL_OWNER and E2E_DRILL_KEY for the bootstrap only (an existing account, d@e, and its
+# read:runtime key): an account is made only after a code mailed to its address, so the number is bound to
+# that account first, the code is read from its inbox, and after the new account exists the number is
+# bound to it (docs/problems/passkey-claims-an-unproved-address-2026-11-24.md; not run).
+#       CHOIR_BACKEND (default https://choir.news), CHOIR_E2E_STATE (default
 # ~/.config/choir-e2e/email-signin.json; mode 0600, outside the repo),
 # E2E_NODE_B_SSH (default node-b, used once by the bootstrap).
 #
@@ -104,6 +108,7 @@ if [[ "$stage" != done ]]; then
     | python3 -c 'import json,sys;print(json.load(sys.stdin)["address"])')" \
     || { echo "FAIL could not reserve a test number on $node_b"; exit 1; }
   [[ "$address" =~ ^[0-9]{8}@choir\.news$ ]] || { echo "FAIL reserve-test-number answered an unexpected address shape"; exit 1; }
+  [[ -n "${E2E_DRILL_OWNER:-}" && -n "${E2E_DRILL_KEY:-}" ]] || { echo "FAIL the bootstrap needs E2E_DRILL_OWNER and E2E_DRILL_KEY: an account is made only after a code mailed to its address, so an existing account's inbox must receive it"; exit 2; }
   echo "bootstrap: reserved a test number; registering the test account (address and ids go to the state file only)"
   set +e
   (cd "$repo/frontend" && E2E_ADDRESS="$address" E2E_STATE_FILE="$state" BASE_URL="$backend" \

@@ -36,11 +36,9 @@ public final class ChoirSignIn: @unchecked Sendable {
 
     private func client() -> ChoirClient { env.client(baseURL: baseURL) }
 
-    /// Revoke the key on the server first; only once the server has answered do the local key go and the account wipe run. A sign-out with no connection leaves the key and the person
-    /// signed in (the screen says sign-out did not finish), never a live full-access key with no copy on the phone to revoke later.
+    /// Clear the phone at once: the key, then the account's state (AccountWipe). The server revoke is shared code's (AutoradioLab/account.ts `revokeHeldKey`, run while the key is still here, with a retry file when the
+    /// phone is offline), so nothing here waits on a network.
     public func signOut() async {
-        let id = env.keys.get(KeyAccount.keyID), key = env.keys.get(KeyAccount.apiKey)
-        if let id, let key, !(await revokeNow(keyID: id, key: key)) { env.log?.emit(.note("choir: sign-out needs a connection to revoke the key; nothing was signed out")); return }
         env.keys.delete(KeyAccount.apiKey); env.keys.delete(KeyAccount.keyID); env.keys.delete(KeyAccount.computerID)
         await onSignOut?()           // everything of the account on the phone goes (AccountWipe)
         env.log?.emit(.note("choir: signed out"))

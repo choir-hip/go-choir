@@ -212,7 +212,7 @@ func (s *Store) ListAccountSet(set *AccountSet) ([]AccountListing, error) {
 	rows, err := s.db.Query(`SELECT m.user_id, u.email,
 		EXISTS(SELECT 1 FROM refresh_sessions r WHERE r.id = m.refresh_session_id AND r.expires_at > ?)
 		FROM account_set_member m JOIN users u ON u.id = m.user_id
-		WHERE m.set_id = ? ORDER BY m.added_at, m.user_id`, time.Now().UTC(), set.ID)
+		WHERE m.set_id = ? AND `+provedUserSQL("m.user_id")+` ORDER BY m.added_at, m.user_id`, time.Now().UTC(), set.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list account set: %w", err)
 	}

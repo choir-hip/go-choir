@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"net/http"
@@ -575,5 +576,75 @@ func TestAccessTokenWithoutTheProofClaimIsRefused(t *testing.T) {
 	unproved, _ := h.store.GetUserByID(u.ID)
 	if _, err := h.issueAccessJWT(unproved, AuthMethodPasskey); err == nil {
 		t.Fatal("a token was made for an unproved account")
+	}
+}
+
+// register/mail for an address that has an account neither replaces a recovery link already in the
+// inbox nor spends what /auth/recovery/request allows that address and that IP.
+func TestRegisterMailForAKnownAddressLeavesTheRecoveryLinkAndBudgetAlone(t *testing.T) {
+	h, rm := recoveryMailTestEnv(t)
+	h.config.RPID, h.config.RPOrigins = testRP, []string{testOrigin}
+	if _, err := h.store.CreateUser("holder", "holder@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	// A link the person asked for is in the inbox.
+	if rec := postRecoveryRequest(t, h, "holder@example.com", "203.0.113.9:1"); rec.Code != 200 || len(rm.mails()) != 1 {
+		t.Fatalf("setup: %d, %d mails", rec.Code, len(rm.mails()))
+	}
+	link := rm.mails()[0].link
+	token := link[strings.Index(link, "#")+1:]
+	token = strings.TrimPrefix(token, "token=")
+	for i := 0; i < 4; i++ {
+		if rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": "holder@example.com", "binding": newBinding(t)}); rec.Code != 200 {
+			t.Fatalf("register/mail %d = %d %s", i, rec.Code, rec.Body.String())
+		}
+	}
+	if len(rm.mails()) != 1 {
+		t.Fatalf("register/mail mailed another link over the one in the inbox: %d mails", len(rm.mails()))
+	}
+	// The link in the inbox still works.
+	if _, err := h.store.ConsumeRecoveryToken(context.Background(), token); err != nil {
+		t.Fatalf("the link in the inbox was invalidated: %v", err)
+	}
+	// And when there is none, register/mail sends one, counted outside /auth/recovery/request's budget.
+	if rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": "holder@example.com", "binding": newBinding(t)}); rec.Code != 200 || len(rm.mails()) != 2 {
+		t.Fatalf("no live link: register/mail = %d, %d mails", rec.Code, len(rm.mails()))
+	}
+	for i := 0; i < RecoveryMaxPerEmail; i++ {
+		if rec := postRecoveryRequest(t, h, "holder@example.com", fmt.Sprintf("203.0.113.%d:1", 20+i)); rec.Code != 200 {
+			t.Fatalf("recovery/request %d was refused (%d) after register/mail calls: its budget was spent", i, rec.Code)
+		}
+	}
+}
+
+// A mail that could not be sent is an error the page shows, for a new address and a known one.
+func TestRegisterMailSendFailureIsAnErrorNotACodeThatNeverComes(t *testing.T) {
+	h, rm := recoveryMailTestEnv(t)
+	h.config.RPID, h.config.RPOrigins = testRP, []string{testOrigin}
+	h.signInMailer = &fakeSignInMailer{err: errors.New("maild down")}
+	if _, err := h.store.CreateUser("held2", "held2@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	rm.err = errors.New("maild down")
+	for _, email := range []string{"fresh2@example.com", "held2@example.com"} {
+		rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": email, "binding": newBinding(t)})
+		if rec.Code != http.StatusServiceUnavailable || strings.Contains(rec.Body.String(), "attempt_id") {
+			t.Fatalf("%s: send failure answered %d %s", email, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// An address pasted with spaces finds its account on the recovery and login routes.
+func TestRecoveryRequestAndLoginBeginTrimTheAddress(t *testing.T) {
+	h, rm := recoveryMailTestEnv(t)
+	if _, err := h.store.CreateUser("trim", "trim@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if rec := postRecoveryRequest(t, h, "  trim@example.com ", "203.0.113.30:1"); rec.Code != 200 || len(rm.mails()) != 1 {
+		t.Fatalf("recovery with a padded address: %d, %d mails", rec.Code, len(rm.mails()))
+	}
+	rec := postJSONFrom(h.HandleLoginBegin, nextTestIP(), map[string]string{"email": "  trim@example.com "})
+	if rec.Code == http.StatusNotFound && strings.Contains(rec.Body.String(), "user not found") {
+		t.Fatal("login/begin did not find the account of a padded address")
 	}
 }

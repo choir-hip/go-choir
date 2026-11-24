@@ -210,7 +210,7 @@ public final class ChoirApp: @unchecked Sendable {
     /// Sign-out, in this order: playback stops (shared code reports the entry on air as `left`); the run sheet gets up to five seconds to post its
     /// pending ops with the old key still held, and it says when it is done (`RadioBridge.waitSignedOut`: shared code's `radioSet` with `signedOut`), so the wait is for the
     /// answer and not a guess; what is not answered by then is dropped, never sent under a later account; then the local key goes and the account wipe runs (ChoirSignIn.signOut);
-    /// the revoke follows in the background.
+    /// the server revoke was shared code's (account.ts), made before this.
     public func signOut() async {
         await MainActor.run { TakeSession.live?.discard() }      // a take in hand is the old account's: dropped first (its give-back is a queued task that may land after the pause; the queue is cleared, so it plays nothing)
         lock.lock(); loading = false; lock.unlock()

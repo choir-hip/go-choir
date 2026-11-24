@@ -713,6 +713,15 @@ func (s *Store) ConsumePendingRegistration(challenge string, now time.Time) (*Pe
 	return p, nil
 }
 
+// HasLiveRecoveryToken: the account has a recovery link in an inbox that still works.
+func (s *Store) HasLiveRecoveryToken(userID string, now time.Time) (bool, error) {
+	var n int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM recovery_tokens WHERE user_id = ? AND used_at IS NULL AND expires_at > ?", userID, now).Scan(&n); err != nil {
+		return false, fmt.Errorf("live recovery token: %w", err)
+	}
+	return n > 0, nil
+}
+
 // CleanExpiredPendingRegistrations deletes the pending registrations nobody finished.
 func (s *Store) CleanExpiredPendingRegistrations() (int64, error) {
 	res, err := s.db.Exec("DELETE FROM pending_registrations WHERE expires_at < ?", time.Now().UTC())
@@ -1863,7 +1872,7 @@ func (s *Store) GetRefreshSessionByID(id string) (*RefreshSession, error) {
 		lastUsedAt  sql.NullTime
 	)
 	err := s.db.QueryRow(
-		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at, auth_method FROM refresh_sessions WHERE id = ?",
+		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at, auth_method FROM refresh_sessions WHERE id = ? AND "+provedUserSQL("refresh_sessions.user_id"),
 		id,
 	).Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rotatedFrom, &deviceInfo, &lastUsedAt, &rs.AuthMethod)
 	if err != nil {

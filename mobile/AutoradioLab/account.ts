@@ -37,9 +37,9 @@ import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
 import { wipeSteer, STEER_FILE } from './steer.ts';
 import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { accountGeneration, announceGeneration, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
+import { accountGeneration, announceGeneration, authedJSON, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, HTTPError, SignedOutError, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
-import { keepKey } from './app-signin.ts';
+import { keepKey, KEY_ID_NAME } from './app-signin.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
 import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
 import { wipeConsent, CONSENT_FILE } from './consent.ts';
@@ -50,6 +50,8 @@ import { wipeLearn } from './voicelearn.ts';
 export const PENDING_FILE = 'app:/data/signout-pending';
 /** The SHA-256 of the key of the account whose data the shared stores hold. A different account seen at launch wipes them first. */
 export const STAMP_FILE = 'app:/data/account-stamp';
+/** The id (never the key) of a key whose revoke could not be sent when the person signed out; retried at the next launch and the next sign-in, and kept through the sign-out wipe on purpose. */
+export const PENDING_REVOKE_FILE = 'app:/data/pending-revoke';
 
 export type Wipe = { name: string; run(storage: Storage | undefined, store: Store | undefined): Promise<unknown> };
 
@@ -89,7 +91,7 @@ export const WIPES: Wipe[] = [
  * The paths the wipes above cover (account.test.ts S4 compares them with every `app:/` literal in the shared modules). `app:/tmp/picked` is files'. */
 export const wipedPaths = (): string[] => [
   podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', IMPORTED_PLACES, PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE, SHEET_FILE, ONBOARDING_FILE, CONSENT_FILE,
-  VECTORS_DIR, CONTENT_DB, PAGES_FILE, TOLD_FILE, RECENT_FILE, STEER_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
+  VECTORS_DIR, CONTENT_DB, PAGES_FILE, TOLD_FILE, RECENT_FILE, STEER_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE, PENDING_REVOKE_FILE,
 ];
 
 /** Run each wipe; the names of the ones that threw. Logs ids, never content. The signed-in seam is reset first: a new account generation (a reply
@@ -177,7 +179,7 @@ async function leftovers(storage: Storage | undefined): Promise<string[]> {
   if (!storage) return [];
   const out: string[] = [];
   // The paper's cache is the PUBLIC front page: a signed-out phone shows the paper and caches it again within seconds, so a copy that is back after the wipe is not the old account's (the drill showed "could not be cleared yet: paper-front.json").
-  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && p !== PAPER_FRONT && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
+  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && p !== PENDING_REVOKE_FILE && p !== PAPER_FRONT && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
   return out;
 }
 
@@ -236,10 +238,51 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
 
 // ---- sign-out
 
+/** What revoking the held key came to: `pendingId` is the key id to retry later (never the key); `blocked` is a key whose id cannot be found with no connection, which sign-out will not drop silently. */
+export type RevokeOutcome = { pendingId: string; blocked: boolean };
+export type RevokeHeld = (store: Store | undefined) => Promise<RevokeOutcome>;
+const REVOKE_DEADLINE_MS = 8000;
+export const REVOKE_PENDING_NOTE = 'Signed out on this phone; the key will be revoked when you\u2019re online.';
+const idOf = (body: unknown): string => (body && typeof body === 'object' && typeof (body as Record<string, unknown>).key_id === 'string' ? (body as { key_id: string }).key_id : '');
+
+/** Revoke, on the server, the key this phone holds, before the phone lets it go. A key with no stored id is looked up (GET /auth/whoami names the key that asks). A server that cannot be reached
+ * leaves the id to retry; an id that cannot be found offline blocks the sign-out (the one case where the key stays) instead of dropping a live full-access key unrevoked. */
+export const revokeHeldKey: RevokeHeld = async (store) => {
+  if (!store) return { pendingId: '', blocked: false };
+  const kept = store.get(KEY_ID_NAME) ?? '';
+  let id = kept;
+  const attempt = async (): Promise<RevokeOutcome> => {
+    try {
+      if (!id) id = idOf((await authedJSON('/auth/whoami')).body);
+      if (!id) return { pendingId: '', blocked: false };
+      await authedJSON(`/auth/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      return { pendingId: '', blocked: false };
+    } catch (e) {
+      if (e instanceof SignedOutError) return { pendingId: '', blocked: false };                       // the server already refuses the key: nothing to revoke
+      if (e instanceof HTTPError && (e.status === 404 || e.status === 403)) return { pendingId: '', blocked: false };   // not a key of this account, or gone
+      return id ? { pendingId: id, blocked: false } : { pendingId: '', blocked: true };
+    }
+  };
+  const r = await Promise.race([attempt(), timeout(REVOKE_DEADLINE_MS)]);
+  if (r === 'timeout') return id ? { pendingId: id, blocked: false } : { pendingId: '', blocked: true };
+  return r;
+};
+
+/** Retry the revoke that could not be sent at a sign-out: signed in now (at launch, or after a sign-in), the key of the file is revoked with the key held, and the file goes when the server answers.
+ * A key of another account answers 404: the retry can never succeed, so the file goes. */
+export async function retryPendingRevoke(storage: Storage | undefined, store: Store | undefined): Promise<void> {
+  if (!storage || !store) return;
+  const id = ((await readText(storage, PENDING_REVOKE_FILE)) ?? '').trim();
+  if (!id || (await keyState()).state !== 'present') return;
+  try { await authedJSON(`/auth/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+  catch (e) { if (!(e instanceof HTTPError && (e.status === 404 || e.status === 403))) return; }       // offline or refused: kept for the next time
+  await removeFile(storage, PENDING_REVOKE_FILE);
+}
+
 /** The sign-out: the result carries the wipe counter (a monotonic value the contract passes on to the sources that keep state in memory). */
 export async function accountSignOut(
   storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
-  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
+  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void; revoke?: RevokeHeld } = {},
 ): Promise<SignOutResult> {
   const r = await signOutInner(storage, store, native, opts);
   return { ...r, epoch: wipes };
@@ -247,7 +290,7 @@ export async function accountSignOut(
 
 async function signOutInner(
   storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
-  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
+  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void; revoke?: RevokeHeld } = {},
 ): Promise<Omit<SignOutResult, 'epoch'>> {
   if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };
   const step = opts.crash ?? ((): void => undefined);
@@ -255,6 +298,10 @@ async function signOutInner(
   const token = signoutToken();
   if (!(await mark(storage, PENDING_FILE, token))) return { done: false, failed: '', message: 'Sign-out did not start. Try again.' };
   step('marker');
+  // The key is revoked on the server first, while the phone still holds it. Offline, sign-out still clears the phone at once; only the id is kept, to retry.
+  const outcome = await (opts.revoke ?? revokeHeldKey)(store);
+  if (outcome.blocked) { await removeFile(storage, PENDING_FILE); return { done: false, failed: '', message: 'Signing out needs a connection once: this key has no id on the phone to revoke later. Nothing was changed.' }; }
+  step('revoke');
   // The generation moves and sealing stops BEFORE the native call: a write in flight that would land after the key is gone refuses itself.
   await beginSignOut();
   step('begun');
@@ -283,15 +330,16 @@ async function signOutInner(
   const run = wipes.map((w) => ({ ...w, run: async (s: Storage | undefined, st: Store | undefined) => { step('wipe:' + w.name); return w.run(s, st); } }));
   const failed = [...(await wipeAll(storage, store, run)), ...(opts.wipes ? [] : await leftovers(storage))];
   step('wiped');
-  if (failed.length === 0) { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); return { done: true, failed: '', message: '' }; }
+  const note = outcome.pendingId && (await mark(storage, PENDING_REVOKE_FILE, outcome.pendingId)) ? REVOKE_PENDING_NOTE : '';
+  if (failed.length === 0) { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); return { done: true, failed: '', message: note }; }
   // Signed out, but not everything could be cleared: the marker and the stamp stay, the next launch tries again, and the page says which stores.
-  return { done: true, failed: failed.join(','), message: `Signed out, but these could not be cleared yet: ${failed.join(', ')}. They will be cleared the next time the app starts.` };
+  return { done: true, failed: failed.join(','), message: `Signed out, but these could not be cleared yet: ${failed.join(', ')}. They will be cleared the next time the app starts.${note ? ' ' + note : ''}` };
 }
 
 let settled: Promise<Reconciled> | null = null;
 /** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops. */
 export function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
-  if (!settled) settled = (async () => { await forgetOldCopy(storage); return reconcile(storage, store, native); })();
+  if (!settled) settled = (async () => { await forgetOldCopy(storage); const r = await reconcile(storage, store, native); void retryPendingRevoke(storage, store).catch(() => undefined); return r; })();
   return settled;
 }
 /** For tests. */

@@ -101,6 +101,7 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	req.Email = strings.TrimSpace(req.Email)
 	if req.Email == "" {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "email is required"})
 		return

@@ -4,6 +4,13 @@
  * "Automated test (no person)"). Run once; the script skips it when the state
  * file says it ran.
  *
+ * (Changed with the proof rule, docs/problems/passkey-claims-an-unproved-address-2026-11-24.md: an
+ * account exists only after the mailed code and the passkey, so the account's own inbox cannot
+ * receive its first code. The reserved number is bound to an EXISTING drill account first
+ * (E2E_DRILL_OWNER, whose read:runtime key E2E_DRILL_KEY reads that inbox), the code is read there,
+ * and after the account exists the number is bound to it. NOT RUN: the bind-number move and its race
+ * with the number reconciler are unproved.)
+ *
  * Registers a dedicated test account whose address is a reserved numbered
  * TEST address (E2E_ADDRESS, from maildctl reserve-test-number; 10,000,000..
  * 99,999,999) on the public receive policy, which needs no sender trust. The
@@ -28,7 +35,7 @@
  */
 import { expect, request as pwRequest } from '@playwright/test';
 import { test } from './helpers/fixtures.js';
-import { registerPasskey, getSession } from './helpers/auth.js';
+import { registerAccount, getSession } from './helpers/auth.js';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -43,6 +50,12 @@ const KEY_SCOPES = (process.env.E2E_KEY_SCOPES || 'read:runtime')
   .filter(Boolean);
 const KEY_LABEL = process.env.E2E_KEY_LABEL || 'e2e-email-signin inbox reader';
 const KEY_FIELD = process.env.E2E_KEY_FIELD || 'inbox_key';
+const DRILL_KEY = process.env.E2E_DRILL_KEY || '';
+const DRILL_OWNER = process.env.E2E_DRILL_OWNER || '';
+
+function bindNumber(owner) {
+  execFileSync('ssh', ['-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', NODE_B, `maildctl bind-number --address ${ADDRESS} --owner ${owner}`], { stdio: 'pipe', timeout: 60_000 });
+}
 
 function readState() {
   try {
@@ -109,7 +122,6 @@ async function inboxIds(api) {
   return ids;
 }
 
-let pendingUserID = '';
 let bindError = '';
 
 test('bootstrap the email sign-in test account', async ({ page, authenticator }) => {
@@ -129,7 +141,6 @@ test('bootstrap the email sign-in test account', async ({ page, authenticator })
 
   // 1. Register the passkey. Between register/begin and register/finish the
   // reserved number is bound to the new user (id from the begin response).
-  let boundID = '';
   // The auth limiter (internal/auth/rate_limit.go, 10 requests per IP per
   // minute) answers 429 before the handler runs, so replaying the same request
   // after the window is safe; back-to-back test computers hit it.
@@ -145,36 +156,28 @@ test('bootstrap the email sign-in test account', async ({ page, authenticator })
     }
   };
   await page.route('**/auth/**', continueRetrying429);
-  await page.route('**/auth/register/finish', async (route) => {
-    if (!boundID) {
-      try {
-        execFileSync(
-          'ssh',
-          ['-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', NODE_B, `maildctl bind-number --address ${ADDRESS} --owner ${pendingUserID}`],
-          { stdio: 'pipe', timeout: 60_000 },
-        );
-        boundID = pendingUserID;
-      } catch (e) {
-        bindError = String((e.stderr || e.message || e)).split(ADDRESS).join('<address>').slice(0, 300);
-      }
-    }
-    await continueRetrying429(route);
-  });
-  page.on('response', async (res) => {
-    if (!res.url().endsWith('/auth/register/begin')) return;
-    try {
-      const j = await res.json();
-      const idb64 = (j.publicKey || j).user.id;
-      pendingUserID = Buffer.from(idb64, 'base64url').toString('utf8');
-    } catch (_e) {
-      /* surfaced by the bind check below */
-    }
-  });
   // A cap or waitlist answers 403 registration_waitlist.
   await page.goto(BASE_URL);
+  expect(DRILL_KEY && DRILL_OWNER, 'E2E_DRILL_KEY and E2E_DRILL_OWNER (an existing account and its read:runtime key) are required: the first code is mailed before the account exists').toBeTruthy();
+  try {
+    bindNumber(DRILL_OWNER);
+  } catch (e) {
+    throw new Error(`bind-number to the drill account failed: ${String((e.stderr || e.message || e)).split(ADDRESS).join('<address>').slice(0, 300)}`);
+  }
+  const drillApi = await pwRequest.newContext({ baseURL: BASE_URL, extraHTTPHeaders: { Authorization: `Bearer ${DRILL_KEY}` } });
+  const drillSeen = await inboxIds(drillApi);
   let reg;
   try {
-    reg = await registerPasskey(page, ADDRESS, BASE_URL);
+    reg = await registerAccount(page, ADDRESS, BASE_URL, async () => {
+      let found = null;
+      const until = Date.now() + 240_000;
+      while (Date.now() < until && !found) {
+        found = await newestCode(drillApi, 'Verify your email address', drillSeen);
+        if (!found) await page.waitForTimeout(5000);
+      }
+      expect(found, 'the registration code never reached the drill account\'s inbox').toBeTruthy();
+      return found.code;
+    });
   } catch (e) {
     const msg = String(e.message || e);
     if (msg.includes('registration_waitlist')) {
@@ -189,8 +192,13 @@ test('bootstrap the email sign-in test account', async ({ page, authenticator })
   writeState({ stage: 'registered', account_id: userID, address: ADDRESS, backend: BASE_URL });
   console.log('registered the test account (id and address in the state file)');
 
-  // 2. The bind ran in the finish hook; refuse to go on without it.
-  expect(boundID && boundID === userID && !bindError, `bind-number did not complete: ${bindError || 'user id mismatch'}`).toBeTruthy();
+  // 2. The account exists now: move the number to it.
+  try {
+    bindNumber(userID);
+  } catch (e) {
+    bindError = String((e.stderr || e.message || e)).split(ADDRESS).join('<address>').slice(0, 300);
+  }
+  expect(!bindError, `bind-number to the new account did not complete: ${bindError}`).toBeTruthy();
   writeState({ stage: 'aliased' });
   console.log('numbered address bound to the account');
 

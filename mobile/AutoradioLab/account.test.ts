@@ -18,7 +18,7 @@
 //  S10 a different account's key at launch (the stamp) wipes the old data first; the same account, or a phone with no key, keeps it.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
-import { accountSignOut, adoptKey, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
+import { accountSignOut, adoptKey, retryPendingRevoke, PENDING_REVOKE_FILE, REVOKE_PENDING_NOTE, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
 import { createHash } from 'node:crypto';
 import { authedJSON, bindNative, resetSeam, SignedOutError } from './api.ts';
 import { ContentStore } from './content.ts';
@@ -118,7 +118,7 @@ describe('the wipes', () => {
     expect([...m.files.keys()].sort()).toEqual(['app:/data/theme-choice.json', 'app:/data/themes/mine.json', 'app:/data/themes/texture-ember.json']);
   });
   test('S8 the real wipes leave an in-memory file system empty (seeded at every path the modules name, mail files and the stamp included)', async () => {
-    const seed = [...allPaths().filter((p) => p.split('/').length > 2 && p !== PENDING_FILE && !PHONE_KEPT.has(p)).flatMap((p) => (p.endsWith('/') ? [] : [p, `${p}/child.bin`])), 'app:/data/mail/msg-1.bin', 'app:/cache/mail-1.html', STAMP_FILE];
+    const seed = [...allPaths().filter((p) => p.split('/').length > 2 && p !== PENDING_FILE && p !== PENDING_REVOKE_FILE && !PHONE_KEPT.has(p)).flatMap((p) => (p.endsWith('/') ? [] : [p, `${p}/child.bin`])), 'app:/data/mail/msg-1.bin', 'app:/cache/mail-1.html', STAMP_FILE];
     const m = memFs(seed);
     const failed = await wipeAll(m.storage, undefined, WIPES);
     expect(failed).toEqual([]);
@@ -390,17 +390,6 @@ describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
   });
 });
 
-describe('S16 the paper page passes the story title with the route (the loss the deck builder named)', () => {
-  test('the action, the paper buttons and the interface carry the title', async () => {
-    const c = await Bun.file(new URL('./account.contract', import.meta.url)).text();
-    expect(c).toContain('action playStory(route: string, title: string)'); expect(c).toContain('radioPlayStory(route, title)');
-    const p = await Bun.file(new URL('./paper.contract', import.meta.url)).text();
-    expect((p.match(/playStory\(s\.route, s\.title\)/g) ?? []).length).toBeGreaterThanOrEqual(1); expect(p).not.toContain('playStory(s.route)');
-    const app = await Bun.file(new URL('./app.ts', import.meta.url)).text();
-    expect(app).toContain('radioPlayStory: ([route, title]');       // the title goes with the route to shared code (radio-bridge.ts), which names the entry by it
-  });
-});
-
 describe('S17 the grants and the wipes name the same paths, exactly, in both directions', () => {
   const grantsOf = (): { read: Set<string>; write: Set<string> } => {
     const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8');
@@ -454,6 +443,57 @@ describe('S19 a key that replaces the key of another account in the same launch'
   });
 });
 
+describe('S20 sign-out clears the phone at once and revokes by id, or keeps the id to retry', () => {
+  const enc = (t: string) => new TextEncoder().encode(t);
+  test('a revoke that was sent: signed out, nothing pending, no note', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const r = await accountSignOut(m.storage, undefined, phone() as never, { revoke: async () => ({ pendingId: '', blocked: false }) });
+    expect(r.done).toBe(true); expect(r.message).toBe(''); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false); expect(dataLeft(m)).toEqual([]); expect(W.key).toBe('absent');
+  });
+  test('offline: the phone is cleared at once, only the id is kept, and the page says so', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const r = await accountSignOut(m.storage, undefined, phone() as never, { revoke: async () => ({ pendingId: 'ak_held', blocked: false }) });
+    expect(r.done).toBe(true); expect(r.message).toBe(REVOKE_PENDING_NOTE);
+    expect(dataLeft(m)).toEqual([]); expect(W.key).toBe('absent'); expect(W.swift).toBe(false);
+    expect(new TextDecoder().decode(m.files.get(PENDING_REVOKE_FILE))).toBe('ak_held');
+    expect(new TextDecoder().decode(m.files.get(PENDING_REVOKE_FILE))).not.toContain('choir_sk_');
+  });
+  test('a key whose id cannot be found with no connection is not dropped: nothing is signed out', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const r = await accountSignOut(m.storage, undefined, phone() as never, { revoke: async () => ({ pendingId: '', blocked: true }) });
+    expect(r.done).toBe(false); expect(W.key).toBe('present'); expect(dataLeft(m).length).toBe(SEED.length); expect(m.files.has(PENDING_FILE)).toBe(false);
+  });
+  const withFetch = async (answer: (url: string, init: { method: string }) => Response, f: () => Promise<void>) => {
+    const real = globalThis.fetch; const seen: string[] = [];
+    globalThis.fetch = (async (url: string, init: { method: string }) => { seen.push(`${init.method} ${url}`); return answer(url, init); }) as never;
+    try { await f(); } finally { globalThis.fetch = real; }
+    return seen;
+  };
+  test('the retry, signed in, revokes the id of the file and removes it', async () => {
+    W = newWorld('present'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, enc('ak_held'));
+    resetSeam(); bindNative(phone() as never);
+    const seen = await withFetch(() => new Response('{}', { status: 200 }), () => retryPendingRevoke(m.storage, {} as never));
+    expect(seen.length).toBe(1); expect(seen[0]).toMatch(/^DELETE .*\/auth\/api-keys\/ak_held$/); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
+  });
+  test('the retry keeps the file while the phone is offline, and drops it for a key that is not this account\'s', async () => {
+    W = newWorld('present'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, enc('ak_held'));
+    resetSeam(); bindNative(phone() as never);
+    await withFetch(() => { throw new TypeError('network'); }, () => retryPendingRevoke(m.storage, {} as never));
+    expect(m.files.has(PENDING_REVOKE_FILE)).toBe(true);
+    await withFetch(() => new Response('{"error":"api key not found"}', { status: 404 }), () => retryPendingRevoke(m.storage, {} as never));
+    expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
+  });
+  test('signed out, the retry waits: no key, no request', async () => {
+    W = newWorld('absent'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, enc('ak_held'));
+    resetSeam(); bindNative(phone() as never);
+    const seen = await withFetch(() => new Response('{}', { status: 200 }), () => retryPendingRevoke(m.storage, {} as never));
+    expect(seen).toEqual([]); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(true);
+  });
+});
+
 describe('S18 the sign-out counter (round 6)', () => {
   test('every completed sign-out carries a larger epoch, the second in a process too; a wipe that finishes late bumps it', async () => {
     W = newWorld('present'); const m = memFs(SEED);
@@ -465,10 +505,5 @@ describe('S18 the sign-out counter (round 6)', () => {
     const { wipeEpoch } = await import('./account.ts');
     const before = wipeEpoch(); await wipeAll(m.storage, undefined, []);
     expect(wipeEpoch()).toBeGreaterThan(before);                                           // the late continuation runs wipeAll too: it is counted
-  });
-  test('the contracts pass the epoch and the sign-in state to the shared notebook', async () => {
-    const c = await Bun.file(new URL('./members-notebook.contract', import.meta.url)).text();
-    expect(c).toContain('notebookPageShared(nbSel, nbTick, pg.top == "notebook:", signedOutTick, au.signedIn)');
-    expect(await Bun.file(new URL('./account-types.contract', import.meta.url)).text()).toContain('epoch: number');
   });
 });

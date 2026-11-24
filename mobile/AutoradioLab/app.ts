@@ -77,6 +77,8 @@ fs.read app:/data/signout-pending
 fs.write app:/data/signout-pending
 fs.read app:/data/account-stamp
 fs.write app:/data/account-stamp
+fs.read app:/data/pending-revoke
+fs.write app:/data/pending-revoke
 fs.read app:/data/what-i-told-the-paper.json
 fs.write app:/data/what-i-told-the-paper.json
 fs.read app:/data/recent-pages.json

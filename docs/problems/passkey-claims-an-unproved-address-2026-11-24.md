@@ -62,14 +62,16 @@ holder can exist, so nothing needs taking back.
   that already has an account it mails the recovery link instead (the existing
   `recovery/request`) and answers the same.
 - `POST /auth/register/begin {email, attempt_id, code, binding}` consumes the
-  code (one conditional update, 5 wrong tries, 10 minutes) and returns creation
+  code (the wrong-try count is one committed update, the code is compared in Go, and the
+  consumption is a second conditional update, so single use holds; 5 wrong tries, 10 minutes) and returns creation
   options for a user id minted now; it writes one `pending_registrations` row
   (challenge, address, new user id, session data, 5 minutes) and no user.
 - `register/finish` and `app/register/finish` consume the pending row with one
   `DELETE ... RETURNING`, verify the passkey, and then in one transaction insert
   the user (`email_verified_at` = now), the credential and nothing else. The
-  address's unique index decides a race: of any number of finishes for one proof
-  exactly one account exists.
+  address decides a race: a case-folded count inside the transaction (the store runs on one
+  connection, so two creations serialize) refuses the second, with the case-sensitive unique
+  index as a backstop, so of any number of finishes for one proof exactly one account exists.
 - Recovery finish is the only way a passkey is added to an existing account. In
   one transaction it sets `email_verified_at`, and if that statement changed a
   row (the address had never been proved) it first deletes the account's old
@@ -105,11 +107,11 @@ Handler checks escaped by other handlers twice, so the rule lives at the few
 functions every request's authority passes through:
 
 - **access token:** `issueAccessJWT` makes none for an unproved account and
-  puts the proof's time in an `ev` claim; `validateAccessTokenMethod` (the only
-  token validator in the auth service, used by `requireAuthUser*`,
-  `requirePasskeySession`, `/auth/session`, the desktop exchange and the access
-  log) requires `ev` and re-reads the account; the **proxy's `validateAccessJWT`
-  requires the `ev` claim too** (it cannot read the user row; every token the
+  puts the proof's time in an `ev` claim; `validateAccessTokenMethod` (the one
+  token validator in the auth service: every authority decision goes through it, `requireAuthUser*`,
+  `requirePasskeySession`, `/auth/session`, the desktop exchange, the access log, and the
+  logout's choice of whose sessions to delete) requires `ev` and re-reads the account; the **proxy's `validateAccessJWT`
+  requires the `ev` claim too** (the proxy opens the auth store and could read the user row, but does not on this path: the claim keeps the check cheap; every token the
   auth service now makes carries it and none is made for an unproved account,
   and a token **without** `ev` is rejected from the deploy on, so tokens made
   before it stop working at once; a signed-in browser reads `/auth/session`,
@@ -118,7 +120,7 @@ functions every request's authority passes through:
   and the proxy's `validateAPIKey` both go through it), and
   `CreateComputerScopedAPIKey` inserts only for a proved account;
 - **refresh rotation:** `GetRefreshSessionByTokenHash` joins the account's proof
-  (session reads, rotation, account switch, the passkey gate);
+  (session reads, rotation, the passkey gate); `GetRefreshSessionByID` and `ListAccountSet` (account switch) join it too;
 - **grants:** `PollDeviceAuthorization` and `ConsumeDesktopExchangeCode` do not
   see a grant of an unproved account.
 
@@ -142,6 +144,26 @@ its passkeys with the recovering one in the same transaction. A legitimate old
 account therefore costs its owner one recovery by mail; a squatter's holdings
 are gone before the owner arrives, and cannot come back, because nothing an
 unproved account can reach mints.
+
+## What is still not uniform, and what mail now carries
+
+- **Mail is the root of sign-up.** `register/mail` answers an error when the mail could not be sent
+  (503, shown on the page), for a new and a known address alike, and never "we mailed a code" when
+  nothing went out. New sign-ups stop while mail is down, and the 27 unproved passkey holders have no
+  fallback: the operator's escape hatch is the bootstrap Bearer key (the proof checks and the key join
+  exempt it).
+- **`/auth/login/begin` still answers 404 for an unknown address**: account existence is not hidden
+  there; the same-answer work covers `register/mail` only.
+- **Case folding is ASCII** (SQLite `lower()`); two rows that differ by case can exist only from before
+  this change, the oldest wins the lookup and recovery mails that row's stored address (the same
+  mailbox), so there is no hijack.
+- **The PRF owner root of an unproved account is deleted when it recovers.** Nothing ships encrypted under
+  that root today, so no data is lost; if the root is ever wired to user data before the 27 recover,
+  their data would become unreadable. State this before wiring it.
+- **Limits are shared**: five `register/mail` requests for one address stop that address's sign-up for
+  an hour (it supersedes the live register attempt), and a known address's request spends the
+  email-attempt budget; it no longer spends `/auth/recovery/request`'s or supersedes a recovery link
+  already in the inbox.
 
 ## Remaining error
 

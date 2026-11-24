@@ -628,6 +628,7 @@ func (h *Handler) HandleLoginBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.Email = strings.TrimSpace(req.Email)
 	if req.Email == "" {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "email is required"})
 		return
@@ -1401,20 +1402,11 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 // provides a valid user ID. This is used by logout to identify which user's
 // refresh sessions to delete.
 func (h *Handler) extractUserIDFromAuthCookies(r *http.Request) string {
-	// Try the access JWT first.
+	// Try the access JWT first, through the one validator: a token that would not
+	// act (no proof claim, an unproved account) names no one here either.
 	if cookie, err := r.Cookie(AccessTokenCookieName); err == nil && cookie.Value != "" {
-		token, err := jwt.Parse(cookie.Value, func(t *jwt.Token) (interface{}, error) {
-			if t.Method != jwt.SigningMethodEdDSA {
-				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-			}
-			return h.signer.Public(), nil
-		})
-		if err == nil {
-			if claims, ok := token.Claims.(jwt.MapClaims); ok {
-				if sub, ok := claims["sub"].(string); ok && sub != "" {
-					return sub
-				}
-			}
+		if sub, err := h.ValidateAccessToken(cookie.Value); err == nil && sub != "" {
+			return sub
 		}
 	}
 
