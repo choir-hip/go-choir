@@ -174,6 +174,12 @@ if env.get("LOGROTATE_STATUS") != "/var/lib/logrotate.status": bad.append("L5 th
 u = ini(c["ageUnit"], "Unit")
 for k in ("After", "Wants"):
     if "logrotate.service" not in " ".join(u.get(k, [])).split(): bad.append("L5 the age job does not run logrotate first (%s=logrotate.service): it would judge a stale rotation record" % k)
+# The defaults in the job are what the dry run lists for the owner: they must be the values of the unit.
+job = open("scripts/node-b-log-age").read()
+defaults = dict(re.findall(r"^([A-Z_]+)=\"\$\{\1-([^}]*)\}\"$", job, re.M))
+for k in ("LOG_MAX_DAYS", "JOURNAL_DIR", "CADDY_LOG_DIR", "LOGIN_RECORD_FILES", "LOGROTATE_STATUS", "LOGIN_LAST_FILES", "DEAD_LOG_FILES"):
+    if defaults.get(k) is None or defaults.get(k) != env.get(k): bad.append("L5 %s: the default in the job %r is not the value in the unit %r, so a dry run would not list what the deploy deletes" % (k, defaults.get(k), env.get(k)))
+if "LOG_AGE_DRY_RUN" in env: bad.append("L5 the unit sets LOG_AGE_DRY_RUN: the daily job would delete nothing")
 last = env.get("LOGIN_LAST_FILES", "").split()
 for f in ("/var/log/lastlog", "/var/log/lastlog.migrated", "/var/lib/lastlog/lastlog2.db", "/var/lib/lastlog/lastlog2.db-wal", "/var/lib/lastlog/lastlog2.db-shm"):
     if f not in last: bad.append("L5 the age job, as systemd reads it, does not remove %s" % f)
@@ -213,7 +219,9 @@ for ln in c["logrotate"].splitlines():
     if ln.rstrip().endswith("{"): cur = ln.rsplit("{", 1)[0].strip().strip("\""); blocks[cur] = {}; continue
     if w[0] == "}": cur = None; continue
     if w[0] not in KNOWN: bad.append("L6 logrotate.conf has a word logrotate does not know: %r (it stops every rotation)" % ln.strip())
-    if cur is not None: blocks[cur][w[0]] = " ".join(w[1:])
+    if cur is not None:
+        blocks[cur][w[0]] = " ".join(w[1:])
+        if w[0] in ("olddir", "dateformat", "extension", "addextension", "compressext") and ("btmp" in cur or "wtmp" in cur): bad.append("L6 %s has %r: its rotated files would be named or placed where the age job does not look" % (cur, w[0]))
     elif w[0] in ("dateext", "olddir", "compress"): bad.append("L6 logrotate.conf has a global %r: rotated login files would be named or placed where the age job was not tested" % w[0])
 for f in ("/var/log/btmp", "/var/log/wtmp"):
     r = blocks.get(f)

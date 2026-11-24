@@ -38,6 +38,17 @@
 #  A20 the dry run deletes something or calls journalctl, or does not list
 #     what a real run would delete.
 #  A21 with a second journal folder the closed-file check is skipped.
+#  A22 run with no settings at all, the job does not use the production
+#     paths and limit (the dry run the owner approves would list nothing).
+#  A23 LOG_AGE_DRY_RUN set to anything but 1 is taken as a dry run, or the
+#     dry run's count line reads like a real run's.
+#  A24 before logrotate's first run the dry run fails on the stale rotation
+#     record instead of reporting it; or it does not list what the journal
+#     trim would delete.
+#  A25 a file under a login record's name that is not a rotation (a lock, a
+#     backup) is deleted as one; or it, a folder or a link passes unseen.
+#  A26 another login store (wtmpdb, faillog, tallylog) passes unseen.
+#  A27 an access-log file a process still holds open is unlinked.
 #  A14 any failure is not printed at error priority (the "<3>" prefix the
 #     journal reads), so `journalctl -p err` does not show it.
 set -u
@@ -56,6 +67,7 @@ line() { printf '{"level":"info","ts":%s.123,"logger":"http.log.access","msg":"h
 run() { env PATH="$root/bin:$PATH" LOG_MAX_DAYS="${DAYS-21}" CADDY_LOG_DIR="$root/caddy" JOURNAL_DIR="$root/journal" \
   LOGIN_LAST_FILES="$root/var/lastlog $root/var/lastlog2.db $root/var/absent" DEAD_LOG_FILES="$root/dead/a.log $root/dead/gone.log" \
   LOGIN_RECORD_FILES="$root/var/btmp $root/var/wtmp" LOGROTATE_STATUS="$root/var/logrotate.status" LOG_AGE_DRY_RUN="${DRY-}" \
+  LOGIN_OTHER_STORES="$root/var/wtmpdb $root/var/faillog" PROC_DIR="$root/proc" \
   bash "$job" >"$root/out" 2>&1; echo $? >"$root/rc"; }
 ymd() { date -u -d "@$1" +%Y-%-m-%-d 2>/dev/null || date -u -r "$1" +%Y-%-m-%-d; }
 status() { printf 'logrotate state -- version 2\n"%s" %s-5:0:1\n"%s" %s-5:0:1\n' "$root/var/btmp" "$(ymd "$1")" "$root/var/wtmp" "$(ymd "$2")" >"$root/var/logrotate.status"; }
@@ -156,5 +168,40 @@ grep -q "^<3>log age: .*journal folders" "$root/out" && grep -q "^<3>log age: .*
 # The slack is one day (a file's span): a closed file whose first entry is 21.5 days old is not a failure.
 rm -f "$old"; rmdir "$root/journal/fedcba9876543210fedcba9876543210.audit"; : >"$jdir/$(jname $((now - 21 * 86400 - 43200)) 4)"; run
 [ "$(cat "$root/rc")" = 0 ] && ok || bad "a closed journal file half a day past the limit fails the job (the slack is a day): $(cat "$root/out")"
+rm -f "$jdir"/*.journal "$jdir"/*.journal~; : >"$jdir/system.journal"; run; [ "$(cat "$root/rc")" = 0 ] && ok || bad "the baseline before A22 fails: $(cat "$root/out")"
+# A22
+env -i PATH="$root/bin:$PATH" LOG_AGE_DRY_RUN=1 bash "$job" >"$root/out" 2>&1; rc=$?
+[ "$rc" != 2 ] && grep -q "max_days=21 " "$root/out" && grep -q "journal folders under '/var/log/journal'" "$root/out" && ok || bad "A22 with no settings the job does not use the production limit and paths (rc=$rc): $(cat "$root/out")"
+for v in LOGIN_RECORD_FILES LOGROTATE_STATUS LOGIN_LAST_FILES DEAD_LOG_FILES CADDY_LOG_DIR LOGIN_OTHER_STORES; do
+  grep -q "^$v=\"\${$v-/" "$job" && ok || bad "A22 the job has no production default for $v"
+done
+# A23
+DRY=0 run; [ "$(cat "$root/rc")" = 2 ] && grep -q "^<3>log age: LOG_AGE_DRY_RUN" "$root/out" && ok || bad "A23 LOG_AGE_DRY_RUN=0 was accepted: $(cat "$root/out")"
+DRY=yes run; [ "$(cat "$root/rc")" = 2 ] && ok || bad "A23 LOG_AGE_DRY_RUN=yes was accepted"
+echo '{"ts":1.0}' >"$root/caddy/access-old.log"
+DRY=1 run; grep -q "^log age: dry_run=1 .*would_access_deleted=1 " "$root/out" && ! grep -q " access_deleted=" "$root/out" && [ -e "$root/caddy/access-old.log" ] && ok || bad "A23 the dry run's count line reads like a real run's: $(cat "$root/out")"
+run; grep -q "^log age: max_days=21 .* access_deleted=1 " "$root/out" && ! grep -q "dry_run" "$root/out" && ok || bad "A23 a real run's count line: $(cat "$root/out")"
+# A24
+status $((now - 20 * 86400)) $((now - 20 * 86400)); old="$jdir/$(jname $((now - 30 * 86400)) 7)"; : >"$old"
+DRY=1 run
+[ "$(cat "$root/rc")" = 0 ] && grep -q "^note: .*btmp was last rotated" "$root/out" && ! grep -q "^<3>.*last rotated" "$root/out" && ok || bad "A24 the dry run fails on a rotation record logrotate would fix first: $(cat "$root/out")"
+grep -q "^the journal trim would delete $old$" "$root/out" && grep -q "^logrotate would rotate $root/var/btmp$" "$root/out" && ok || bad "A24 the dry run does not list what the journal trim and logrotate would do: $(cat "$root/out")"
+rm -f "$old"; status "$now" "$now"
+# A25
+for n in btmp.lock btmp.1.bak wtmp.db; do echo r >"$root/var/$n"; aged "$root/var/$n" 60; done
+echo r >"$root/var/btmp.7.gz"; aged "$root/var/btmp.7.gz" 60; echo r >"$root/var/wtmp-20260101"; aged "$root/var/wtmp-20260101" 60
+mkdir "$root/var/btmp.d"; ln -s "$root/var/target" "$root/var/wtmp.2"; run
+[ -e "$root/var/btmp.lock" ] && [ -e "$root/var/btmp.1.bak" ] && [ -e "$root/var/wtmp.db" ] && [ -d "$root/var/btmp.d" ] && [ -L "$root/var/wtmp.2" ] && [ -e "$root/var/target" ] && ok || bad "A25 a file that is not a rotation, a folder or a link was deleted"
+[ ! -e "$root/var/btmp.7.gz" ] && [ ! -e "$root/var/wtmp-20260101" ] && ok || bad "A25 a real old rotation stayed"
+[ "$(cat "$root/rc")" != 0 ] && [ "$(grep -c "^<3>log age: .* is under a login record's name and is not a rotation" "$root/out")" = 5 ] && ok || bad "A25 five strays under the login records' names did not each fail the job: $(cat "$root/out")"
+rm -rf "$root/var/btmp.lock" "$root/var/btmp.1.bak" "$root/var/wtmp.db" "$root/var/btmp.d" "$root/var/wtmp.2"
+# A26
+: >"$root/var/wtmpdb"; run
+[ "$(cat "$root/rc")" != 0 ] && grep -q "^<3>log age: .*wtmpdb is a login store this job does not age" "$root/out" && ok || bad "A26 another login store passed unseen: $(cat "$root/out")"
+rm -f "$root/var/wtmpdb"
+# A27
+echo '{"ts":1.0}' >"$root/caddy/access-held.log"; mkdir -p "$root/proc/4242/fd"; ln -s "$root/caddy/access-held.log" "$root/proc/4242/fd/7"; run
+[ -e "$root/caddy/access-held.log" ] && [ "$(cat "$root/rc")" != 0 ] && grep -q "^<3>log age: .*access-held.log is still open in process 4242" "$root/out" && ok || bad "A27 an access-log file a process holds open was deleted or passed: $(cat "$root/out")"
+rm -rf "$root/proc" "$root/caddy/access-held.log"; run; [ "$(cat "$root/rc")" = 0 ] && ok || bad "the final baseline fails: $(cat "$root/out")"
 echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]

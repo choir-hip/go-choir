@@ -34,18 +34,46 @@
 # Any failure exits non-zero (the unit shows in `systemctl --failed`) and is
 # printed at error priority ("<3>": `journalctl -u go-choir-log-age -p err`).
 #
-# LOG_AGE_DRY_RUN=1 deletes nothing and does not call journalctl: it prints
-# "would delete <path>" for each file a real run would delete now, runs the
-# checks, and exits as a real run would.
+# THE DRY RUN. Run this script directly, never the unit (the unit starts
+# logrotate first, which rotates and deletes):
 #
-# Environment: LOG_MAX_DAYS (7 to 28), JOURNAL_DIR, CADDY_LOG_DIR,
-# LOGIN_RECORD_FILES, LOGROTATE_STATUS, LOGIN_LAST_FILES, DEAD_LOG_FILES
-# (lists: paths separated by spaces). Tested by scripts/test-node-b-log-age.sh.
+#     sudo LOG_AGE_DRY_RUN=1 bash node-b-log-age
+#
+# With nothing else set it uses the production paths and limit below, so its
+# list is what the deploy's first run deletes. It deletes nothing and does
+# not call journalctl. It prints three things, kept apart:
+#   "would delete <path>"                  this job's own deletions, now;
+#   "the journal trim would delete <path>" closed journal files past the limit;
+#   "logrotate would rotate <path>"        login-record files logrotate, which
+#                                          the unit runs first, puts into a
+#                                          dated file (it deletes nothing that
+#                                          this job's list does not show).
+# A stale rotation record is a "note:" in the dry run, not a failure,
+# because on the host logrotate runs before the job. Every other check runs
+# and fails as in a real run. Its count line starts "log age: dry_run=1" and
+# uses would_ names; only LOG_AGE_DRY_RUN=1 is accepted (any other value is
+# refused, so a stray setting cannot make the daily job a silent no-op).
+#
+# Settings, each with its production default (lists: paths separated by
+# spaces). The unit in nix/node-b.nix sets the same values, and
+# scripts/test-node-b-log-retention.sh fails if the two differ. Tested by
+# scripts/test-node-b-log-age.sh.
 set -u
-days="${LOG_MAX_DAYS:-}"
+LOG_MAX_DAYS="${LOG_MAX_DAYS-21}"
+JOURNAL_DIR="${JOURNAL_DIR-/var/log/journal}"
+CADDY_LOG_DIR="${CADDY_LOG_DIR-/var/log/caddy}"
+LOGIN_RECORD_FILES="${LOGIN_RECORD_FILES-/var/log/btmp /var/log/wtmp}"
+LOGROTATE_STATUS="${LOGROTATE_STATUS-/var/lib/logrotate.status}"
+LOGIN_LAST_FILES="${LOGIN_LAST_FILES-/var/log/lastlog /var/log/lastlog.migrated /var/lib/lastlog/lastlog2.db /var/lib/lastlog/lastlog2.db-wal /var/lib/lastlog/lastlog2.db-shm /var/lib/lastlog/lastlog2.db-journal}"
+DEAD_LOG_FILES="${DEAD_LOG_FILES-/var/lib/go-choir/rebuild-0333528.log /var/lib/go-choir/rebuild-near-head-20260909.log /var/lib/go-choir/paper-repair-20261029T223916Z.log}"
+# Login stores nothing here ages: one appearing fails the job.
+LOGIN_OTHER_STORES="${LOGIN_OTHER_STORES-/var/log/wtmpdb /var/lib/wtmpdb/wtmp.db /var/log/faillog /var/log/tallylog}"
+PROC_DIR="${PROC_DIR-/proc}"
+days="$LOG_MAX_DAYS"
 case "$days" in ''|*[!0-9]*) echo "<3>log age: LOG_MAX_DAYS is not a number of days" >&2; exit 2 ;; esac
 if [ "$days" -lt 7 ] || [ "$days" -gt 28 ]; then echo "<3>log age: LOG_MAX_DAYS=$days is outside 7 to 28" >&2; exit 2; fi
 dry="${LOG_AGE_DRY_RUN:-}"
+case "$dry" in ''|1) ;; *) echo "<3>log age: LOG_AGE_DRY_RUN is '$dry': only 1 is a dry run; unset it for a real run" >&2; exit 2 ;; esac
 failed=0
 err() { failed=$((failed + 1)); echo "<3>log age: $*"; }
 now=$(date +%s)
@@ -55,6 +83,14 @@ remove() { # one regular file; counts it in $went or as a failure
   [ -f "$1" ] && [ ! -L "$1" ] || return 0
   if [ -n "$dry" ]; then echo "would delete $1"; went=$((went + 1)); return 0; fi
   if rm -f -- "$1" 2>/dev/null && [ ! -e "$1" ]; then went=$((went + 1)); else err "could not delete $1"; fi
+}
+holder() { # the process id that has this file open, if any
+  local l
+  for l in "$PROC_DIR"/[0-9]*/fd/*; do
+    [ -L "$l" ] || continue
+    if [ "$(readlink "$l" 2>/dev/null)" = "$1" ]; then l="${l#"$PROC_DIR"/}"; echo "${l%%/*}"; return 0; fi
+  done
+  return 0
 }
 ymd() { date -u -d "@$1" +%Y-%-m-%-d 2>/dev/null || date -u -r "$1" +%Y-%-m-%-d; }
 
@@ -70,7 +106,7 @@ fi
 # <who>@<id>-<sequence>-<first entry, microseconds, hex>.journal; one set
 # aside as damaged is <who>@<when set aside, hex>-<random>.journal~ (the
 # last two fields before the suffix, as journal-vacuum.c reads them).
-jroot="${JOURNAL_DIR:-}"
+jroot="$JOURNAL_DIR"
 folders=0; damaged=0
 if [ -n "$jroot" ] && [ -d "$jroot" ]; then
   for d in "$jroot"/*/; do [ -d "$d" ] && folders=$((folders + 1)); done
@@ -87,6 +123,8 @@ if [ -n "$jroot" ] && [ -d "$jroot" ]; then
     at=$(( 16#$hex / 1000000 ))
     if [ "$kind" = damaged ]; then
       if [ "$at" -lt "$cutoff" ]; then went=0; remove "$f"; damaged=$((damaged + went)); fi
+    elif [ -n "$dry" ]; then
+      if [ "$at" -lt "$cutoff" ]; then echo "the journal trim would delete $f"; fi
     elif [ "$at" -lt $(( cutoff - 86400 )) ]; then
       err "journal file $b is still there and its first entry is past $days days"
     fi
@@ -95,7 +133,7 @@ fi
 if [ "$folders" != 1 ]; then err "$folders journal folders under '${jroot}', expected 1: the trim reaches only this machine's own"; fi
 
 went=0; kept=0; other=0
-dir="${CADDY_LOG_DIR:-}"
+dir="$CADDY_LOG_DIR"
 if [ -n "$dir" ] && [ -d "$dir" ]; then
   if [ ! -r "$dir" ] || [ ! -x "$dir" ]; then
     err "the access-log folder $dir cannot be read"
@@ -110,36 +148,52 @@ if [ -n "$dir" ] && [ -d "$dir" ]; then
       # held those characters is written with escaped quotes).
       first="$(gzip -cdf -- "$f" 2>/dev/null | head -n 1 | grep -o '"ts":[0-9][0-9]*' | head -n 1 | cut -d: -f2)"
       if [ -n "$first" ] && [ "$first" -ge "$cutoff" ] && [ "$first" -le $(( now + 86400 )) ]; then kept=$((kept + 1)); continue; fi
+      pid="$(holder "$f")"
+      if [ -n "$pid" ]; then err "$f is still open in process $pid and its first entry is past $days days: not deleted under its writer"; continue; fi
       remove "$f"
     done
   fi
 fi
 deleted=$went
 
-# Login records. A rotated file is <live>.<n>, <live>-<date>, with or
-# without a compression suffix; its last write is its newest record.
+# Login records. A rotation is <live>.<n> or <live>-<8 digits>, with or
+# without .gz (logrotate's two naming schemes); its last write is its newest
+# record. Anything else under the name is not ours to delete and nothing
+# ages it: it fails the job.
 went=0
-status="${LOGROTATE_STATUS:-}"
-for live in ${LOGIN_RECORD_FILES:-}; do
+status="$LOGROTATE_STATUS"
+for live in $LOGIN_RECORD_FILES; do
   for f in "$live".* "$live"-*; do
-    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    if [ -L "$f" ] || [ ! -f "$f" ] || ! printf '%s' "${f#"$live"}" | grep -Eq '^(\.[0-9]+|-[0-9]{8})(\.gz)?$'; then
+      err "$f is under a login record's name and is not a rotation: nothing ages it"; continue
+    fi
     if [ -n "$(find "$f" -maxdepth 0 -mmin +$(( days * 1440 )) 2>/dev/null)" ]; then remove "$f"; fi
   done
   [ -s "$live" ] || continue # absent or empty: nothing to age
   last="$(grep -F "\"$live\" " "$status" 2>/dev/null | head -n 1 | awk '{print $2}' | cut -d- -f1-3)"
-  if [ -z "$last" ]; then err "$live has never been rotated, by logrotate's record ($status)"; continue; fi
   recent=
-  for back in -1 0 1 2; do [ "$last" = "$(ymd $(( now - back * 86400 )))" ] && recent=1; done
-  [ -n "$recent" ] || err "$live was last rotated on $last, over two days ago: logrotate is not putting it in daily files"
+  for back in -1 0 1 2; do [ -n "$last" ] && [ "$last" = "$(ymd $(( now - back * 86400 )))" ] && recent=1; done
+  [ -n "$recent" ] && continue
+  if [ -z "$last" ]; then why="$live has never been rotated, by logrotate's record ($status)"
+  else why="$live was last rotated on $last, over two days ago: logrotate is not putting it in daily files"; fi
+  if [ -n "$dry" ]; then
+    # On the host the unit runs logrotate before this job.
+    echo "note: $why"; echo "logrotate would rotate $live"
+  else err "$why"; fi
+done
+for f in $LOGIN_OTHER_STORES; do
+  if [ -e "$f" ] || [ -L "$f" ]; then err "$f is a login store this job does not age"; fi
 done
 rotated=$went
 
 went=0
-for f in ${LOGIN_LAST_FILES:-}; do remove "$f"; done
+for f in $LOGIN_LAST_FILES; do remove "$f"; done
 login=$went
 went=0
-for f in ${DEAD_LOG_FILES:-}; do remove "$f"; done
+for f in $DEAD_LOG_FILES; do remove "$f"; done
 dead=$went
 
-echo "log age: max_days=$days journal_folders=$folders access_deleted=$deleted access_kept=$kept access_other=$other login_rotated_deleted=$rotated login_last_removed=$login dead_removed=$dead journal_damaged_deleted=$damaged failed=$failed"
+w=; [ -n "$dry" ] && w=would_
+echo "log age: ${dry:+dry_run=1 }max_days=$days journal_folders=$folders ${w}access_deleted=$deleted access_kept=$kept access_other=$other ${w}login_rotated_deleted=$rotated ${w}login_last_removed=$login ${w}dead_removed=$dead ${w}journal_damaged_deleted=$damaged failed=$failed"
 [ "$failed" = 0 ]

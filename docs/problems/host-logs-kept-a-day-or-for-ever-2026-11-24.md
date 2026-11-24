@@ -41,7 +41,7 @@ gate reading option lists could not see (below).
    nearly full disk may delete sooner (the deploy preflight trims the journal
    to 2 GiB as an announced last resort, and may still refuse the deploy
    afterwards; journald's keep-free default also trims).
-2. **Limits of 21 days, so the worst case has margin.**
+2. **Limits of 21 days, so the worst case (24 days) has a margin of 6.**
 3. **Deletion goes by a file's oldest entry**, and files are closed on a
    schedule that does not depend on traffic.
 4. **One mechanism for request and service logs.** Caddy's access log goes to
@@ -59,9 +59,33 @@ gate reading option lists could not see (below).
 **One job's success means the whole bound.** `go-choir-log-age` deletes or
 checks every log in the table, including the login records logrotate
 rotates. It deletes what is known to be safe, checks the rest, and fails at
-the end if any check failed. `LOG_AGE_DRY_RUN=1` deletes nothing, does not
-touch the journal, and prints `would delete <path>` for each file a real run
-would delete now: its output on Node B is the list the owner approves.
+the end if any check failed. That holds **for the file classes the job
+knows**: the journal's folders, `access-*` files in Caddy's log folder,
+`btmp` and `wtmp` with logrotate's two rotation names, the last-login files
+and the named dead files. Anything else it can see in those places (a stray
+file, folder or link, another login store such as `wtmpdb`, `faillog` or
+`tallylog`, a per-user journal, a second journal folder) fails the job
+instead of passing. A log somewhere the job does not look is not covered.
+
+**The dry run, which is what the owner approves.** One command, with nothing
+else set, run from a copy of the script on Node B. Never start the unit for
+this: the unit runs logrotate first, which rotates and deletes.
+
+    sudo LOG_AGE_DRY_RUN=1 bash node-b-log-age
+
+The script's own defaults are the production paths and the 21-day limit (the
+gate fails if they differ from the unit's), so the list is the deploy's. It
+deletes nothing and does not call journalctl. It prints, kept apart: `would
+delete <path>` for this job's own deletions (old access-log files, rotated
+login files past the limit such as `btmp.1`, damaged journal files past the
+limit, the last-login files, the dead files); `the journal trim would delete
+<path>` for closed journal files past the limit; and `logrotate would rotate
+<path>` for a login file logrotate will put into a dated file before the job
+runs (that deletes nothing the first list does not show). A rotation record
+that is stale before logrotate's first run is a `note:`, not a failure. The
+count line starts `log age: dry_run=1` and uses `would_` names. Only the
+value 1 is a dry run; any other value is refused, and the gate fails if the
+unit ever sets it.
 
 **Running and failing.** Both the job and logrotate run on their mark (daily,
 hourly), make up a missed mark (Persistent), and run two minutes after every
@@ -126,7 +150,8 @@ call.**
 | last-login records | 3 files | `lastlog` (292 bytes), `lastlog.migrated` and `lastlog2.db` (empty) |
 | dead operator outputs | 3 files, 29 kB | `rebuild-0333528.log`, `rebuild-near-head-20260909.log`, `paper-repair-20261029T223916Z.log`, directly under `/var/lib/go-choir`; no program or document names them; contents not read |
 | by logrotate at its next run | `btmp.1` (19 MB, 2026-10-31) deleted; `btmp` and `wtmp` start daily files | |
-| journal | nothing | its oldest entry is a day old |
+| journal | nothing | its oldest entry is a day old; no damaged (`.journal~`) file was present. One older than 21 days would be deleted and would show in the dry list |
+| an access-log file a process still has open | 0 expected | the job does not unlink it; it fails and names the process |
 
 Journal folders: 1. User journals: none.
 
@@ -177,16 +202,17 @@ build's own `logrotate --debug` check stays on.
 - Caddy's configuration is not parsed in the gate (no Caddy on the Mac); the
   log block was parsed by the host's Caddy by hand.
 - Not yet proved on Node B. Before the landing, the lead runs the dry run
-  there (read-only) and the owner approves its list. The deployed proof,
+  there (the one command above, read-only) and the owner approves its list. The deployed proof,
   read-only, after the deploy (make one request to the site first):
   `ssh node-b 'sudo systemd-analyze cat-config systemd/journald.conf | grep -E "MaxRetentionSec|MaxFileSec|SystemMaxUse"; sudo grep -c "output file" /etc/caddy/caddy_config; systemctl is-active caddy; sudo journalctl -u caddy -o cat -n 200 | grep -c http.log.access; sudo logrotate -d /etc/logrotate.conf 2>&1 | grep -c -i "error"'`
   expects the three journal lines (21day, 1day, 12G), 0, active, a count
   above 0, and 0. After the job's first run,
   `sudo journalctl -u go-choir-log-age -o cat -n 20` shows the count line.
   **Asserted:** `failed=0`, `journal_folders=1`, `access_other=0`;
-  `sudo ls /var/log/lastlog /var/lib/lastlog/lastlog2.db /var/lib/go-choir/rebuild-0333528.log /var/lib/go-choir/rebuild-near-head-20260909.log /var/lib/go-choir/paper-repair-20261029T223916Z.log 2>&1 | grep -c "No such"`
-  is 5; `systemctl --failed | grep -c log-age` is 0; the `su` check above
-  prints 0. **Recorded as data, not asserted:** the other counts on the line
+  `sudo ls /var/log/lastlog /var/log/lastlog.migrated /var/lib/lastlog/lastlog2.db /var/lib/go-choir/rebuild-0333528.log /var/lib/go-choir/rebuild-near-head-20260909.log /var/lib/go-choir/paper-repair-20261029T223916Z.log 2>&1 | grep -c "No such"`
+  is 6; the count line has no `dry_run=` in it; `systemctl --failed | grep -c
+  log-age` is 0; and then, AFTER the `ls` (the `su` makes a new
+  `lastlog2.db`), the `su` check above prints 0. **Recorded as data, not asserted:** the other counts on the line
   (the dry listing of 2026-11-24 gave 5 access-log files, 3 last-login
   files, 3 dead files). After 2026-12-18 the oldest journal entry
   (`sudo journalctl -o short-iso | head -1`) is under 25 days old.
