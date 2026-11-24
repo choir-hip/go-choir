@@ -168,7 +168,7 @@ const sources: Sources = {
   radioPage: ([facts, bar, entries]) => radioPage(facts, bar, entries),
   texturesList: ([at]) => texturesListShared(at),
   // Editing your own Texture document (texture-edit.ts): one editor per signed-in account; what it says, the opening, the typed text, the save, and the listener's choice after the head moved. The waits are the contract's.
-  textureEditInfo: ([address], _s, storage) => textureEditInfo(address, storage),
+  textureEditInfo: ([address, _account], _s, storage) => textureEditInfo(address, storage),
   textureEditOpen: ([address], _s, storage) => textureEditOpen(address, storage),
   textureEdit: ([address, markdown, from], _s, storage) => textureEdit(address, markdown, from, storage),
   textureFlush: ([address], _s, storage) => textureFlush(address, storage),

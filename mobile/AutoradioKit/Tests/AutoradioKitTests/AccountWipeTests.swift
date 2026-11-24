@@ -104,7 +104,7 @@ final class AccountWipeTests: XCTestCase {
         for f in oldTakeFiles { write(f.lastPathComponent, m) }
         let tmp = root.appendingPathComponent("tmp"); write("tmp/takes/rec.m4a", m); write("tmp/take-play-\(m).m4a", m)
         let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
-        write("texture-pending.json", "{\"d1\":{\"text\":\"\(m)\"}}")      // the unsent text the Swift editor kept: shared code keeps its own now (app:/data/texture-pending.json), and this file is only removed
+        write("texture-pending.json", "{\"d1\":{\"text\":\"\(m)\"}}")      // the unsent text the Swift editor kept: shared code keeps its own now (app:/data/texture-pending/<account>.json), and this file is only removed
         let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
 
         // What the second review found: the spoken words and the files of the app target.
