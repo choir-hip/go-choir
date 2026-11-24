@@ -8,3 +8,4 @@ shape AccountView
 shape HostPage
   visibilityState: string
   hasFocus: bool
+  platform: string

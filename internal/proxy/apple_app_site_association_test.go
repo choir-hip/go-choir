@@ -94,7 +94,7 @@ func TestAppleAppSiteAssociationThroughRealChain(t *testing.T) {
 }
 
 // Every app the manifest produces is in the list, except the first development app
-// (".lab"), which is left out on purpose (see appleWebCredentialsApps).
+// (".lab"), which is left out on purpose (see internal/appids).
 func TestAppleWebCredentialsListCoversTheAppManifest(t *testing.T) {
 	raw, err := os.ReadFile("../../mobile/AutoradioLab/app.json")
 	if err != nil {

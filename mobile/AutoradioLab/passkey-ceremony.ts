@@ -1,5 +1,5 @@
 // The passkey ceremony, in one small module: the server's options in, the platform's passkey screen (Exact's `@exact/passkeys`), the credential out.
-// It is shared: sign-in and account creation (app-signin.ts) use it, and so does account deletion (a fresh assertion). It holds no key and
+// It is shared: sign-in and account creation (app-signin.ts) use it, and account deletion will use `getCeremony` for a fresh assertion (no caller yet). It holds no key and
 // makes no key: the credential it returns goes to a finish route the caller names, and the caller keeps what that route answers.
 //
 // `create` is the web's own register/begin (an email, then creation options); `get` is a discoverable assertion with no email

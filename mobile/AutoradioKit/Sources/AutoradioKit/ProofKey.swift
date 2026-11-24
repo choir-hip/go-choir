@@ -1,6 +1,6 @@
 import Foundation
 
-// Simulator-only sign-in for the real-data proof (`mobile/scripts/proof-real.sh`). The real sign-in is a browser device flow a script
+// Simulator-only sign-in for the real-data proof (`mobile/scripts/proof-real.sh`). The real sign-in is a passkey screen a script
 // cannot approve, so the proof copies a key file named `proof-key` into the app's Documents directory (path from
 // `simctl get_app_container <udid> <bundle> data`); at launch the app reads it into the key store and deletes it.
 // The whole type exists only for the simulator (and macOS, where `swift test` runs): on a device build the symbol, the file

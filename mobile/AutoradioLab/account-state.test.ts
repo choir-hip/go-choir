@@ -21,6 +21,19 @@ const realFetch = globalThis.fetch;
 beforeEach(() => { resetSeam(); resetHost(); reply = { state: 'absent' }; adoptNative(handle(), 'x'); });
 afterEach(() => { globalThis.fetch = realFetch; });
 
+describe('accountState on a build that cannot make passkeys', () => {
+  test('the free-team lab app says so plainly and offers no sign-in; Android likewise; the paid apps and the web are unchanged', async () => {
+    const lab = await accountState('', '', 'native', 'ios', 'news.choir.autoradio.lab');
+    expect(lab).toMatchObject({ state: 'noPasskey', action: '' }); expect(lab.message).toBe(WORDS.noPasskeyApp);
+    const droid = await accountState('', '', 'native', 'android', 'news.choir.autoradio');
+    expect(droid).toMatchObject({ state: 'noPasskey', action: '' }); expect(droid.message).toBe(WORDS.noPasskeyAndroid);
+    expect(await accountState('', '', 'native', 'ios', 'news.choir.autoradio.lab.one')).toMatchObject({ state: 'signedOut', action: 'signIn' });
+    expect(await accountState('', '', 'native', 'web', 'news.choir.autoradio.lab')).toMatchObject({ state: 'signedOut', action: 'signIn' });
+    reply = { state: 'present' };                                                       // a key already here is still a signed-in app
+    expect((await accountState('', '', 'native', 'ios', 'news.choir.autoradio.lab')).state).toBe('signedIn');
+  });
+});
+
 describe('accountState', () => {
   test('X1 no key: signedOut with the action and a sentence; no handle: noSignIn', async () => {
     const s = await accountState('');

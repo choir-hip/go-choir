@@ -15,6 +15,7 @@ import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
+import { APP_ID } from './app-id.ts';
 import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
@@ -34,7 +35,7 @@ import { micPermission } from './micask.ts';
 import { downloadsPage, downloadsAct } from './downloads.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
-import { COMPUTER_ID_NAME, KEY_ID_NAME, KEY_NAME, signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
+import { keepKey, signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -45,8 +46,7 @@ import { COMPUTER_ID_NAME, KEY_ID_NAME, KEY_NAME, signInCancel, signInReset, sig
 export const ORIGIN = 'https://choir.news';
 // Sign-in and account creation use the platform's passkey screen (`@exact/passkeys`, app-signin.ts): `auth.passkey choir.news` names the relying party, the same one the web site uses (the build derives
 // the Associated Domains entitlement `webcredentials:choir.news` from it; choir.news serves the apple-app-site-association file for the app ids). The app's own id is what the server's finish route is told
-// (one of its fixed list); each install has its own (app.json: the production app's literal here, each variant's `env.APP_ID`).
-const APP_ID = import.meta.env.APP_ID ?? 'news.choir.autoradio';
+// (one of its fixed list); each install has its own (app.json: the production app's literal in app-id.ts, each variant's `env.APP_ID`).
 // The key is kept as three Exact secrets (the Keychain on Apple); the voice code in Swift reads the same items. Names: app-signin.ts KEY_NAME, KEY_ID_NAME, COMPUTER_ID_NAME (the literals here are what the build reads).
 export const grants = `auth.passkey choir.news
 secret.keep choir.key
@@ -113,10 +113,7 @@ sqlite.open app:/data/content.db`;
 const signInEnv = (store: Store): SignInEnv => ({
   ceremony: { origin: ORIGIN, passkeys: credentials as never },
   appId: APP_ID,
-  keep: (key, keyId) => {
-    try { store.set(KEY_NAME, key); store.set(KEY_ID_NAME, keyId); store.forget(COMPUTER_ID_NAME); }
-    catch (e) { for (const n of [KEY_NAME, KEY_ID_NAME]) { try { store.forget(n); } catch { /* absent */ } } throw e; }
-  },
+  keep: (key, keyId) => keepKey(store, key, keyId),
   revoke: async (key, keyId) => { await fetch(`${ORIGIN}/auth/api-keys/${segment(keyId)}`, { method: 'DELETE', headers: { authorization: `Bearer ${key}` }, redirect: 'manual', exactTimeout: 8000 } as RequestInit); },
   newId: () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''),
   log: (l) => console.log(l),
@@ -182,7 +179,7 @@ const sources: Sources = {
   // My notebook (notebook-run.ts): the selected line, the Refresh count, whether the page is on top and the sign-out tick in; the page out. The content store's sync (content-run.ts) is started by a task.
   notebookPageShared: ([selected, tick, active, signedOutTick, _signedIn], _store, storage) => notebookShared({ selected, tick, active, signedOutTick }, storage),
   contentSync: ([key], _store, storage) => syncContent(key, storage),
-  accountState: ([tick, top, host]) => accountState(tick, top, host),
+  accountState: ([tick, top, host, platform]) => accountState(tick, top, host, platform),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),
   // The story cards and the launcher (cards.ts): the places, recent pages and local hits; "more of this" and the steering tap; what the paper has learned.
   launcherData: ([q, _pages, now], _s, storage) => cards.launcherData({ q, now }, storage),

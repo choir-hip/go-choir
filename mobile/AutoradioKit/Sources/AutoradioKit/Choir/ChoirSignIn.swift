@@ -46,6 +46,12 @@ public final class ChoirSignIn: @unchecked Sendable {
         update { $0.status = "idle"; $0.message = "signed out" }
         if let id, let key { revoke(keyID: id, key: key) }
     }
+    /// Revoke one key on the server, holding it only for the one call (best effort).
+    func revokeNow(keyID id: String, key: String) async {
+        let held = ChoirClient(baseURL: baseURL, keys: InMemoryKeyStore([KeyAccount.apiKey: key]), session: env.session, log: nil, trustedOrigin: URL(string: env.configuredBaseURL))
+        do { try await held.send("DELETE", "/auth/api-keys/\(PathSegment.encode(id))", route: "/auth/api-keys/{id}", timeout: 8); env.log?.emit(.note("choir: a legacy key was revoked")) }
+        catch { env.log?.emit(.note("choir: a legacy key was not revoked on the server (\(error))")) }
+    }
     private func revoke(keyID id: String, key: String) {
         let held = ChoirClient(baseURL: baseURL, keys: InMemoryKeyStore([KeyAccount.apiKey: key]), session: env.session, log: nil, trustedOrigin: URL(string: env.configuredBaseURL))
         let enc = PathSegment.encode(id), log = env.log

@@ -56,6 +56,11 @@ public final class ChoirApp: @unchecked Sendable {
         ChoirEnvironment.shared.log = runtime.log
         signIn = ChoirSignIn(baseURL: baseURL)
         registerAccountWipe()
+        #if canImport(Security)
+        // The key the old Swift sign-in kept is revoked and deleted, once (LegacyKey); nothing of it is carried over.
+        let legacySignIn = signIn
+        Task.detached { await LegacyKey.retire(store: KeychainKeyStore(service: LegacyKey.service)) { id, key in await legacySignIn.revokeNow(keyID: id, key: key) } }
+        #endif
         signIn.onChange = { [weak self] in self?.onChange?() }
         // The deck is told what its engine says (it journals it; shared code reads the journal): a document that ran out of blocks, an engine lost mid-entry.
         runtime.player.onRanDry = { id, played in Task { @MainActor in Deck.shared.documentEnded(id: id, anyPlayed: played) } }

@@ -23,13 +23,13 @@ Part of [EXACT.md](../EXACT.md). Read against the pinned checkout `f53347503` (`
 - What it needs outside the code [src, `docs/contract-for-agents.md:1862-1882`, `host/apple/presence.mjs:294-297`, `packages/passkeys/test/checklist.md`]:
   1. the Associated Domains entitlement `webcredentials:choir.news`, which the bake derives from the `auth.passkey` grant (a development build asks `webcredentials:choir.news?mode=developer`);
   2. `https://choir.news/.well-known/apple-app-site-association`, served as JSON, 200, no redirect, no sign-in, naming each app: `webcredentials.apps` = `S47GERGJZ3.news.choir.autoradio`,
-     `...autoradio.lab`, `...autoradio.lab.one` (built: `internal/proxy/apple_app_site_association.go`, one list in `internal/appids`);
-  3. **a provisioning profile that carries Associated Domains**: "the team's wildcard profile cannot carry Associated Domains" (`checklist.md`, iPhone step 1): each of the three App IDs needs the
+     `...autoradio.lab.one` (the release app and the second development app; built: `internal/proxy/apple_app_site_association.go` serves `internal/appids`, the one list the finish routes also accept). The first development app, `news.choir.autoradio.lab`, is on a free team that cannot carry Associated Domains: it is on neither list, and the app says so (`account-state.ts`, `passkeySupport`);
+  3. **a provisioning profile that carries Associated Domains**: "the team's wildcard profile cannot carry Associated Domains" (`checklist.md`, iPhone step 1): each App ID on the list needs the
      capability enabled in the Apple Developer account and a development (and later a distribution) profile that names it;
   4. on a development build, Settings > Developer > Associated Domains Development turned on, or the phone reads the file through Apple's CDN, which can lag a deploy by hours.
 - The simulator drives no passkey sheet; `getClientCapabilities` there answers by the host's default. **The sheet is seen only on a device** [unrun].
 - Android (`packages/passkeys/android/Passkeys.kt`) exists and takes `assetlinks.json` and the app's certificate fingerprints. **Not wired for Autoradio**: the server accepts no `android:apk-key-hash:`
-  origin yet, and the shared sign-in code runs there with no other change needed once it does [unrun].
+  origin yet, so the app offers no sign-in on `exactPage().platform == 'android'` (`passkeySupport`) and says so; the shared sign-in code needs no other change once the origin is accepted [unrun].
 
 ## The secret store (where the app's key lives)
 
@@ -56,3 +56,9 @@ Part of [EXACT.md](../EXACT.md). Read against the pinned checkout `f53347503` (`
 - [run] The Go side with a software authenticator: creation, discoverable sign-in, replay, wrong origins, fixed app list, cap (`internal/auth/app_ceremony_test.go`).
 - [unrun] On a device: the passkey sheet itself, the origin AuthenticationServices writes, Associated Domains with the explicit profile, the Keychain item shared between Exact's store and the voice code,
   the same passkey in Safari at choir.news.
+
+## What the server's `app` field is, and is not
+
+- `app` in the two finish bodies is a **label**, not an authorization: a bundle id from `internal/appids`, client-claimed, not bound to the request. All apps get the same full-scope key (`AllScopes()`, the device approval's grant, which includes `owner:acts`; `HandleCreateAPIKey` refuses to grant that scope from a key, the device approval does not). Do not "tighten" the label into a check: what proves the app is the passkey itself (the platform makes it only for an app the association file names).
+- Residuals: platform passkeys report a sign counter of 0, so the counter gives no clone detection on the web or the app, and the server ignores `CloneWarning` as the web does. Cancelling during a create can leave an orphan passkey on the phone for choir.news (made, never finished). A register finish for an account that already has a passkey is refused (409) unless the challenge came from the recovery flow.
+- The app-login challenge table is in memory, 5 minutes, used once, at most 8 live per address and no global ceiling; a restart makes the app begin again.

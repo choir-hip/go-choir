@@ -79,7 +79,7 @@ public final class KeychainKeyStore: KeyStore, @unchecked Sendable {
     let service: String
     /// Exact's secret store keeps its items under the app's bundle id (ibex2 `app_identity`), account = the secret's name, AfterFirstUnlockThisDeviceOnly. The sign-in key is written by that store (shared
     /// code), and this reads and deletes the very items, so the voice code needs no copy and no hand-over. Native reads it here because the voice stages call the server themselves.
-    public static var defaultService: String { Bundle.main.bundleIdentifier ?? "news.choir.autoradio.choir" }
+    public static var defaultService: String { Bundle.main.bundleIdentifier ?? "unbundled-host" }
     /// After a sign-out: is the bearer key still stored?
     public static func keyRemains() -> Bool { !(KeychainKeyStore().get(KeyAccount.apiKey) ?? "").isEmpty }
     public init(service: String = KeychainKeyStore.defaultService) { self.service = service }

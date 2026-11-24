@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { begin, resetAttempt, signInCancel, signInReset, signInRun, signInView, step, type SignInEnv, type View } from './app-signin.ts';
+import { begin, keepKey, KEY_ID_NAME, KEY_NAME, COMPUTER_ID_NAME, passkeySupport, resetAttempt, signInCancel, signInReset, signInRun, signInView, step, type SignInEnv, type View } from './app-signin.ts';
 
 const ORIGIN = 'https://choir.news';
 const KEY_A = 'choir_sk_test-key-a-not-real', KEY_B = 'choir_sk_test-key-b-not-real';
@@ -70,6 +70,16 @@ describe('create account', () => {
     expect(signInView()).toMatchObject({ phase: 'failed' });
     expect(signInView().message).toContain('full for now');
     expect(h.kept).toEqual([]);
+    expect(h.posts.filter((p) => p.path === '/auth/app/register/finish').length).toBe(1);     // final: nothing is sent again
+    expect(h.revoked).toEqual([]);
+  });
+  test('sign-up closed at the begin is final too: the passkey screen never opens', async () => {
+    let opened = 0;
+    const base = harness({ create: async () => { opened++; return {}; } });
+    const env = { ...base.env, ceremony: { ...base.env.ceremony, fetch: (async () => json(403, { code: 'registration_waitlist', error: 'Choir is full' })) as unknown as typeof fetch } };
+    await signInRun(env, 'create', 'a@b.example');
+    expect(opened).toBe(0);
+    expect(signInView().message).toContain('full for now');
   });
 });
 
@@ -178,5 +188,48 @@ describe('what is published and logged', () => {
     expect(everything).not.toContain('choir_sk_');
     expect(everything).not.toContain('ak_1');
     expect(everything).not.toContain('a@b.example');
+  });
+});
+
+describe('keeping the key', () => {
+  const fake = (over: { forgetThrows?: string[]; setThrows?: string } = {}) => {
+    const items = new Map<string, string>();
+    return { items, store: {
+      get: (n: string) => items.get(n) ?? null,
+      set: (n: string, v: string) => { if (over.setThrows === n) throw new Error('keychain refused'); items.set(n, v); },
+      forget: (n: string) => { if (over.forgetThrows?.includes(n)) throw new Error('item not found'); items.delete(n); },
+    } };
+  };
+  test('a forget of the absent computer id that throws does not undo the key', () => {
+    const f = fake({ forgetThrows: [COMPUTER_ID_NAME] });
+    keepKey(f.store, KEY_A, 'ak_1');
+    expect(f.items.get(KEY_NAME)).toBe(KEY_A);
+    expect(f.items.get(KEY_ID_NAME)).toBe('ak_1');
+  });
+  test('the old computer id is forgotten when there is one', () => {
+    const f = fake();
+    f.items.set(COMPUTER_ID_NAME, 'old');
+    keepKey(f.store, KEY_A, 'ak_1');
+    expect(f.items.has(COMPUTER_ID_NAME)).toBe(false);
+  });
+  test('a store that refuses the key id leaves neither item, and throws', () => {
+    const f = fake({ setThrows: KEY_ID_NAME });
+    expect(() => keepKey(f.store, KEY_A, 'ak_1')).toThrow();
+    expect(f.items.has(KEY_NAME)).toBe(false);
+    expect(f.items.has(KEY_ID_NAME)).toBe(false);
+  });
+});
+
+describe('where passkeys can work', () => {
+  test('the paid-team apps on Apple can; the free-team lab app and Android cannot, each for its own reason', () => {
+    expect(passkeySupport('news.choir.autoradio', 'ios')).toBe('');
+    expect(passkeySupport('news.choir.autoradio.lab.one', 'ios')).toBe('');
+    expect(passkeySupport('news.choir.autoradio.lab', 'ios')).toBe('app');
+    expect(passkeySupport('news.choir.autoradio.lab', 'macos')).toBe('app');
+    expect(passkeySupport('news.choir.autoradio', 'android')).toBe('android');
+  });
+  test('the web build and an undecided host are not gated by the app id', () => {
+    expect(passkeySupport('news.choir.autoradio.lab', 'web')).toBe('');
+    expect(passkeySupport('news.choir.autoradio.lab', '')).toBe('');
   });
 });

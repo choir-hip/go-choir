@@ -21,6 +21,24 @@ export const KEY_NAME = 'choir.key';
 export const KEY_ID_NAME = 'choir.key-id';
 export const COMPUTER_ID_NAME = 'choir.computer-id';
 
+/** The apps that can make passkeys for choir.news: the ones the server accepts and its association file names (internal/appids, one list). The first lab app, `news.choir.autoradio.lab`, is signed by a
+ * free developer team, which cannot carry Associated Domains, so no passkey can be made in it. */
+export const PASSKEY_APP_IDS = ['news.choir.autoradio', 'news.choir.autoradio.lab.one'];
+/** '' when this app on this host can sign in with a passkey; 'app' for a build that cannot (its id is not on the list; judged only on Apple hosts, where the id is signed in); 'android' where the server
+ * accepts no origin yet. `platform` is `exactPage().platform`; the web build and an undecided host are not gated here. */
+export function passkeySupport(appId: string, platform: string): '' | 'app' | 'android' {
+  if (platform === 'android') return 'android';
+  if ((platform === 'ios' || platform === 'macos') && !PASSKEY_APP_IDS.includes(appId)) return 'app';
+  return '';
+}
+
+/** Write the key and its id to the secret store; a refusal leaves neither. Forgetting the old computer id is bookkeeping outside that scope: a store that throws on an absent item must not undo the key. */
+export function keepKey(store: { set(n: string, v: string): void; forget(n: string): void }, key: string, keyId: string): void {
+  try { store.set(KEY_NAME, key); store.set(KEY_ID_NAME, keyId); }
+  catch (e) { for (const n of [KEY_NAME, KEY_ID_NAME]) { try { store.forget(n); } catch { /* absent */ } } throw e; }
+  try { store.forget(COMPUTER_ID_NAME); } catch { /* absent: nothing to forget */ }
+}
+
 export const isTerminal = (p: Phase): boolean => p === 'done' || p === 'failed' || p === 'cancelled';
 export const begin = (id: string, mode: Mode): Attempt => ({ id, mode, phase: 'working', message: '' });
 
