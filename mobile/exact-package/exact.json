@@ -24,8 +24,6 @@
       "signedIn": "bool",
       "baseURL": "string",
       "status": "string",
-      "userCode": "string",
-      "verificationURL": "string",
       "message": "string"
     },
     "ChoirPlayer": {
@@ -622,8 +620,6 @@
           "signedIn": false,
           "baseURL": "",
           "status": "idle",
-          "userCode": "",
-          "verificationURL": "",
           "message": ""
         }
       }
