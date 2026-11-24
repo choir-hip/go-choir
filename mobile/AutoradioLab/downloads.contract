@@ -27,11 +27,11 @@ component DownloadCard
           if g.ready == false and g.busy == false
             if g.onWiFi
               button press=dlStart(g.id) testId=`dl-${g.id}-start` appearance="none"
-                Btn(label=g.startLabel, primary=true, wide=true)
+                Btn(label=g.startLabel, primary=false, wide=true)
             if g.onWiFi == false
               text g.mobileLine testId=`dl-${g.id}-mobile` font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.danger
               button press=dlStartMobile(g.id) testId=`dl-${g.id}-mobile-start` appearance="none"
-                Btn(label=g.mobileLabel, primary=true, wide=true)
+                Btn(label=g.mobileLabel, primary=false, wide=true)
 
 // The files of a group, listed with their sizes and the host, with no button: where another button (voice setup's) is the agreement. testIds: dl-<group>-lines, dl-<group>-host.
 component DownloadLines

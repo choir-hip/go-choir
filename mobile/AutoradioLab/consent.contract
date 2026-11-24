@@ -22,7 +22,7 @@ component GateSheet
           text cons.signTitle testId="gate-signin-title" role="heading" aria-level=2 font-family=th.fontHead font-size="-exact-title3" font-weight=700 color=th.fg
           text cons.signWhy testId="gate-signin-why" font-family=th.fontText font-size="-exact-body" line-height=1.4 color=th.fg
           button press=gateSignIn testId="gate-signin" appearance="none"
-            Btn(label=cons.signIn, primary=true, wide=true)
+            Btn(label=cons.signIn, primary=false, wide=true)
           button press=gateMakeAccount testId="gate-make" appearance="none"
             Btn(label=cons.make, primary=false, wide=true)
           button press=hideGate testId="gate-later" appearance="none"
