@@ -190,7 +190,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 describe('R5 the embedding pass', () => {
   test('downloads once on Wi-Fi, embeds everything, saves, and retrieval fuses', async () => {
     const dev = new FakeDevice(); const files = new Map<string, Uint8Array>();
-    const r = new Retrieval({ storage: fakeStorage(files), native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D });
+    const r = new Retrieval({ storage: fakeStorage(files), native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D, mayDownload: async () => ({ ok: true, mobile: false }) });
     r.setDocSource('t', six);
     r.kick(); await r.waitIdle();
     expect(dev.downloads).toBe(1);
@@ -214,9 +214,24 @@ describe('R5 the embedding pass', () => {
     expect(c.items[0].id).toBe('v1');
     expect(r.line()).not.toContain('vec=0');
   });
+  test('no download before the person agrees: the model is "needs", nothing is fetched, retrieval is BM25 alone', async () => {
+    const dev = new FakeDevice();                                                            // on Wi-Fi, model absent, no agreement
+    const r = new Retrieval({ native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D });
+    r.setDocSource('t', six); r.kick(); await r.waitIdle();
+    expect(dev.downloads).toBe(0); expect(r.modelState).toBe('needs'); expect(r.usesVectors()).toBe(false);
+    expect((await r.serve(ask('bridges story number'))).items.length).toBeGreaterThan(0);
+  });
+  test('agreed on Wi-Fi: not fetched over mobile data; agreed on mobile data: fetched there', async () => {
+    const wifi = new FakeDevice(); wifi.state.onWiFi = false;
+    const a = new Retrieval({ native: wifi, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D, mayDownload: async () => ({ ok: true, mobile: false }) });
+    a.setDocSource('t', six); a.kick(); await a.waitIdle(); expect(wifi.downloads).toBe(0); expect(a.modelState).toBe('absent');
+    const mob = new FakeDevice(); mob.state.onWiFi = false;
+    const b = new Retrieval({ native: mob, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D, mayDownload: async () => ({ ok: true, mobile: true }) });
+    b.setDocSource('t', six); b.kick(); await b.waitIdle(); expect(mob.downloads).toBe(1);
+  });
   test('no download off Wi-Fi: the model stays absent and retrieval is BM25 alone', async () => {
     const dev = new FakeDevice(); dev.state.onWiFi = false;
-    const r = new Retrieval({ native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D });
+    const r = new Retrieval({ native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D, mayDownload: async () => ({ ok: true, mobile: false }) });
     r.setDocSource('t', six); r.kick(); await r.waitIdle();
     expect(dev.downloads).toBe(0); expect(r.modelState).toBe('absent'); expect(r.progress.done).toBe(0);
     expect((await r.serve(ask('bridges story number'))).items.length).toBeGreaterThan(0);

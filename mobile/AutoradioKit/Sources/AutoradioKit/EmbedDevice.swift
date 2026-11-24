@@ -53,7 +53,7 @@ public final class EmbedDevice: @unchecked Sendable {
     public func state() async -> [String: Any] {
         let present = await ModelStore.shared.localFileIfPresent(KnownModels.embeddingGemma2.id) != nil
         let p = ProcessInfo.processInfo
-        return ["present": present, "loaded": current != nil, "onWiFi": WiFiMonitor.shared.onWiFi, "lowPower": p.isLowPowerModeEnabled,
+        return ["id": KnownModels.embeddingGemma2.id, "bytes": KnownModels.embeddingGemma2.bytes, "present": present, "loaded": current != nil, "onWiFi": WiFiMonitor.shared.onWiFi, "lowPower": p.isLowPowerModeEnabled,
                 "thermal": p.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue, "radioBusy": RadioDemand.shared.busy]
     }
     /// One load at a time: a second caller that arrives while the first is loading waits for the same load (two llama loads at once would hold twice the memory).

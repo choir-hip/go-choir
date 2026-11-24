@@ -3,6 +3,7 @@
 //   settings:appearance           themes as preview cards, light/dark/system, a theme from a Texture, the type and depth specimens
 //   settings:account              who am I, the device's key label, sign out
 //   settings:voice                voice and models: Components, and the voice setup card (lane 8)
+//   settings:downloads            the model files voice needs, with sizes, the host and one press each (downloads.ts)
 //   settings:computer             status, Wake, Restart to update
 //   settings:learned              what the paper has learned, with Reset
 //   settings:about                app and server builds (commit rows: about.ts)
@@ -17,6 +18,7 @@ use SettingsAccount, AboutBuild, SettingsComputer, AboutInfo from "./settings-ty
 use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
+use DownloadCard from "./downloads.contract"
 use SkeletonLine from "./transitions.contract"
 
 component SettingsPage
@@ -31,13 +33,15 @@ component SettingsPage
       AccountScreen()
     if screen == "voice"
       VoiceScreen()
+    if screen == "downloads"
+      DownloadsScreen()
     if screen == "computer"
       ComputerScreen()
     if screen == "learned"
       LearnedScreen()
     if screen == "about"
       AboutScreen()
-    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "computer" and screen != "learned" and screen != "about"
+    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "downloads" and screen != "computer" and screen != "learned" and screen != "about"
       RootScreen()
 
 // ---------------------------------------------------------------- shared pieces
@@ -227,6 +231,8 @@ component RootScreen
       PlainList(testId="settings-card-listening")
         NavRow(address="onboarding:setup", title="Voice setup", subtitle="Download the voice models and check the microphone", testId="settings-setup-voice")
         Hairline()
+        NavRow(address="settings:downloads", title="Downloads", subtitle="The voice and search files, with their sizes", testId="settings-nav-downloads")
+        Hairline()
         NavRow(address="settings:voice", title="Voice and models", subtitle="The voice, and the models that hear you", testId="settings-nav-voice")
         Hairline()
         // Lane autoradio-talk: the reader's voice, learned on this phone so the radio can tell you from a TV.
@@ -370,6 +376,22 @@ component VoiceScreen
       text "The voice that reads the paper, and the models that hear you, run on this phone." font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
       VoiceCardsList()
       text "Voice setup, with the model downloads and the checks for this device, opens from here once first run has it." testId="settings-voice-note" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
+
+// ---------------------------------------------------------------- downloads
+
+component DownloadsScreen
+  inject
+    th: Theme
+    tx: ThemeExtras
+  view
+    ToolScroll(id="settings")
+      ScreenTitle(label="Downloads", back=true)
+      text "Voice needs these files on the phone. Each one is fetched only when you press its button, and the sizes are the real files." testId="settings-downloads-note" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      DownloadCard(group="voice")
+      Hairline()
+      DownloadCard(group="voice-rest")
+      Hairline()
+      DownloadCard(group="search")
 
 // ---------------------------------------------------------------- computer
 

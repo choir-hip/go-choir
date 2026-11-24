@@ -32,7 +32,7 @@ export function defaultTitle(address: string): string {
   const rest = address.includes(':') ? address.slice(address.indexOf(':') + 1) : '';
   switch (address) {
     case 'radio:': return 'Autoradio'; case 'notebook:': return 'My notebook'; case 'paper:front': return 'Paper'; case 'textures:': return 'Textures'; case 'activity:': return 'Activity';
-    case 'settings:': case 'settings:root': return 'Settings'; case 'lab:components': return 'Components'; case 'lab:trace': return 'Trace'; case 'conversation:': return 'Conversation';
+    case 'settings:': case 'settings:root': return 'Settings'; case 'settings:downloads': return 'Downloads'; case 'lab:components': return 'Components'; case 'lab:trace': return 'Trace'; case 'conversation:': return 'Conversation';
     case 'onboarding:setup': return 'Make it yours'; case 'onboarding:edit': return 'My edition'; case 'mailbox:inbox': return 'Mail'; case 'podcasts:': return 'Podcasts';
     case 'file:/': case 'file:': return 'Files'; case 'imported:': return 'Imported documents';
   }

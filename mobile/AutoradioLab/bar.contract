@@ -250,7 +250,7 @@ component BarShell
             ::placeholder
               color=th.muted
           if typing
-            button testId="bar-send" press=sendAsk appearance="none" width=52 height=48 aria-label="Send"
+            button testId="bar-send" press=sendAsk retainFocus=true appearance="none" width=52 height=48 aria-label="Send"
               BarGlyph(glyph="send", caption="Send", on=true)
           else
             button testId="bar-mic" press=micTap appearance="none" width=52 height=48 aria-label=(micOn ? "Hands-free on. Turn it off" : "Hands-free off. Turn it on")

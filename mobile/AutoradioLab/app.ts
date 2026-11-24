@@ -30,6 +30,8 @@ import * as imported from './imported.ts';
 import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveEnv as takesEnv } from './take-session.ts';
 import * as picks from './edition-picks.ts';
 import { signInSheet, liveSheetEnv } from './signin-sheet.ts';
+import { consentView, consentAct } from './consent.ts';
+import { downloadsPage, downloadsAct } from './downloads.ts';
 import { signInRun, signInCancel, signInReopen, signInView, type AttemptEnv } from './signin-attempt.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -98,6 +100,8 @@ fs.read app:/data/edition-topics.json
 fs.write app:/data/edition-topics.json
 fs.read app:/data/onboarding.json
 fs.write app:/data/onboarding.json
+fs.read app:/data/consent.json
+fs.write app:/data/consent.json
 sqlite.open app:/data/content.db`;
 
 const attemptEnv = (): AttemptEnv => {
@@ -187,6 +191,12 @@ const sources: Sources = {
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
   pagesPin: ([address], _store, storage) => pages.pagesPin(storage, address),
   pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
+  // What the person agreed to (consent.ts): the model-download agreement and the sign-in prompt's words, and the three presses.
+  consentView: ([_tick], _s, storage) => consentView(storage),
+  consentAct: ([op], _s, storage) => consentAct(op, storage),
+  // The model files voice needs, with their sizes (downloads.ts): the view, and one group's press.
+  downloadsPage: ([facts, _rev], _s, storage) => downloadsPage(facts as never, storage),
+  downloadsAct: ([op, group, facts], _s, storage) => downloadsAct(op, group, facts as never, storage),
   // Sign-in (signin-attempt.ts): one attempt, one state machine with an id, owned here. The sheet (signin-sheet.ts) is how the approval page opens; native keeps the device code, one poll request and the Keychain write.
   signInRun: () => signInRun(attemptEnv()),
   signInCancel: () => signInCancel(attemptEnv()),

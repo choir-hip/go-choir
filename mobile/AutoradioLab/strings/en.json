@@ -1,5 +1,10 @@
 {
-  "purpose.microphone": "Hears you when you talk to the radio.",
-  "purpose.recordingInBackground": "Keeps the radio able to hear you with the screen locked.",
-  "purpose.speech": "Turns what you say into text on this phone."
+  "purpose.microphone": "Autoradio listens when you turn Voice on, so you can ask about a story or tell the radio what to do, and when you record a take. Speech is turned into text on this phone and the audio is not uploaded, except a take you choose to publish.",
+  "purpose.recordingInBackground": "Voice stops listening when the screen locks; the radio keeps playing.",
+  "purpose.speech": "Autoradio turns what you say into text on this phone so it can understand your request.",
+  "onboarding.askSignIn.title": "Sign in to ask the radio",
+  "onboarding.askSignIn.why": "Listening needs no account; asking does, so the radio has a computer of yours to keep your questions on.",
+  "onboarding.askSignIn.signIn": "Sign in",
+  "onboarding.askSignIn.make": "Make an account",
+  "onboarding.askSignIn.later": "Not now"
 }

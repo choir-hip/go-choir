@@ -23,6 +23,8 @@ final class OnboardingController: @unchecked Sendable {
     let support: URL
     private let lock = NSLock()
     private var setup: VoiceSetup?
+    /// The stages the running setup was asked to do (empty: all of them).
+    private var runStages: [String] = []
     /// The first run is over (done or skipped): the station may start by itself. Told by shared code (obMirror).
     private var over = false
     var finished: Bool { lock.lock(); defer { lock.unlock() }; return over }
@@ -47,34 +49,42 @@ final class OnboardingController: @unchecked Sendable {
 
     // MARK: Voice setup
 
-    func begin() {
+    /// `stages` empty: the whole voice setup (the configurator plans the pipeline together). `["voice"]`: only the radio's speaking voice, asked for first and alone (owner, 2026-11-23); the hearing models come when voice is turned on.
+    func begin(stages: [String] = []) {
         lock.lock()
         if let s = setup, s.isStarted, !s.isFinished { lock.unlock(); return }
         lock.unlock()
+        let only = Set(stages.compactMap { SetupStage(rawValue: $0) })
         // The one shared store, with the whole catalog in it from the start.
         let backend: SetupBackend = LiveSetupBackend(store: .shared)
         let profile = DeviceProfile.current()
         let stall = 20.0, patience = 45.0
         // The configurator picks one model per role for THIS phone, the whole pipeline resident together, by measuring it.
-        let configurator: ConfigBackend? = LiveConfigBackend()
+        let configurator: ConfigBackend? = only.isEmpty ? LiveConfigBackend() : nil
         var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, configBackend: configurator)
         if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
         s.onChange = { [weak self] in self?.changed() }
-        set { setup = s }
+        set { setup = s; runStages = stages }
         let gen = AccountWipe.generation
         Task { [weak self, s] in
-            await s.run()
-            self?.setupFinished(s, gen: gen)
+            await s.run(only: only.isEmpty ? nil : only)
+            self?.setupFinished(s, gen: gen, merging: !only.isEmpty)
         }
     }
 
-    private func setupFinished(_ s: VoiceSetup, gen: Int) {
-        guard gen == AccountWipe.generation else { return }        // the account changed while the voice was being set up: its outcome is not the next account's
-        if let d = try? JSONEncoder().encode(s.record) {
+    private func setupFinished(_ s: VoiceSetup, gen: Int, merging: Bool = false) {
+        // (The models are on the phone, not in the account: a sign-out while they download does not undo them, so the record is kept whatever the generation says; the choices below are applied only for the account that began it.)
+        var record = s.record
+        if merging, let old = ModelOffer.readRecord(recordFile) {          // a voice-only run keeps what an earlier full run recorded for the other stages
+            record.items = old.items.filter { o in !record.items.contains { $0.stage == o.stage } } + record.items
+        }
+        if let d = try? JSONEncoder().encode(record) {
             try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
             try? d.write(to: recordFile, options: .atomic)
         }
-        // The listener's configuration: select what passed, where the kit has that stage registered.
+        // The listener's configuration: select what passed, where the kit has that stage registered; the hearing stages are kept so that the downloaded models are in use at every launch, not only until the app is closed.
+        module.runtime.picksStore.save(s.choices)
+        guard gen == AccountWipe.generation else { changed(); return }
         // Speech detection and recognition come from the model list as it stands now that the models are ready, with the composite's parameters
         // and applied to the running listener (a bare stage id would drop them, and a configuration set at launch would stay until the next launch).
         for (kind, id) in s.choices where kind != .speechBounds && kind != .transcriber && module.runtime.registry.stages(kind).contains(where: { $0.id == id }) {
@@ -206,10 +216,14 @@ final class OnboardingController: @unchecked Sendable {
              "isFallback": r.isFallback, "canRetry": r.canRetry, "canFallback": r.canFallback, "numbers": r.numbers]
         }
         let profile = setup?.profile ?? DeviceProfile.current()
+        // What voice needs from the network, read from the model lists (ModelOffer): per file, its name and size, and whether it is on this phone. Shared code states the sizes and the host; no string has a model's name or size in it.
+        let ready = ModelOffer.readyStages(record: ModelOffer.readRecord(recordFile))
+        let plan = ModelOffer.rows(profile: profile, smaller: false, ready: ready).map { $0.dict }
         var device = ""
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
         return ["rows": rows, "summary": setup?.summary ?? [],
                 "totalLabel": setup?.totalLabel ?? SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(SetupCatalog.plan(for: profile)), onWiFi: profile.onWiFi),
+                "plan": plan, "runStages": runStages, "voiceReady": ready.contains("voice"), "hearingReady": ready.contains("transcriber") && ready.contains("bounds"),
                 "device": device, "onWiFi": profile.onWiFi, "setupStarted": setup?.isStarted ?? false, "setupFinished": setup?.isFinished ?? false,
                 "mic": mic, "level": level, "heard": heard, "route": route, "talking": talking, "voicePicked": picked, "finishAsked": finishAsked]
     }
@@ -232,6 +246,7 @@ extension AutoradioModule {
         pageSources.register(OnboardingPageSource())
         choir.accountWipe.register("onboarding") { [weak c] in c?.reset() }
         handle("voiceSetupFacts") { _, reply in reply(c.facts()) }
+        runtime.applyKeptPicks()      // the hearing models setup passed on an earlier launch are the ones in use (LabRuntime.applyKeptPicks)
     }
 
     /// The narrow calls shared code (onboarding.ts) makes; see the header of this file for each one's reason.
@@ -239,7 +254,7 @@ extension AutoradioModule {
         guard let c = OnboardingController.shared else { return [:] }
         switch r["op"] as? String ?? "" {
         case "obFacts": return c.facts()
-        case "obSetupBegin": c.begin()
+        case "obSetupBegin": c.begin(stages: (r["stages"] as? [String]) ?? [])
         case "obSetupRetry": c.retry(r["stage"] as? String ?? "")
         case "obSetupFallback": c.fallback(r["stage"] as? String ?? "")
         case "obMicStart": c.askMicrophone()

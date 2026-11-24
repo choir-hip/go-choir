@@ -7,6 +7,7 @@ use BarShell from "./bar.contract"
 use SignInScreen from "./onboarding.contract"
 use SignedOutBanner from "./signedout.contract"
 use BarWebLayer from "./queue.contract"
+use GateSheet from "./consent.contract"
 
 component Autoradio
   members "./spine.contract"
@@ -31,6 +32,7 @@ component Autoradio
   members "./members-content.contract"        // the content row above the bar (owner, 2026-11-16)
   members "./members-talk.contract"
   members "./members-retrieval.contract"     // lane exact-retrieval: the voice turn's ask, the launcher's paper search
+  members "./members-consent.contract"       // lane onboard-consent: what was agreed, the sheets in front of an ask
   // ---- lane autoradio-podcasts ----
   members "./members-podcasts.contract"
   // ---- lane autoradio-joins ----
@@ -40,6 +42,18 @@ component Autoradio
   // What child components may `inject`. Bare names of this component's states, derives, resources and actions.
   // A lane adds the names it needs inside its own band, one name per line, and touches nothing outside it.
   provide
+    // ---- lane onboard-consent ----
+    gate
+    cons
+    hideGate
+    agreeModels
+    agreeModelsMobile
+    dl
+    dlStart
+    dlStartMobile
+    declineModels
+    gateSignIn
+    gateMakeAccount
     // ---- lane autoradio-joins ----
     shClips
     hearClips
@@ -464,6 +478,8 @@ component Autoradio
         box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=(max(th.behindDim3, 0.4)) press=hideLayer
       // elevation 2: the glass bar, always on top, with the launcher and the player rising from it
       BarShell()
+      // The sheet in front of a signed-out ask (consent.contract).
+      GateSheet()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
       // Settings, Account): the code screen then covers the app until it is approved or cancelled.
       if siv.pending

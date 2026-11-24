@@ -5,6 +5,8 @@
 //   paperSearch     the launcher's paper-wide search (the server's public route), merged after the local rows.
 import type { Storage } from './app.contract.d.ts';
 import { getJSON, nativeLater, accountGeneration } from './api.ts';
+import { modelsAgreement } from './consent.ts';
+import { onKickSearch } from './search-kick.ts';
 import { Retrieval, nativeEmbedder, parseAsk, launcherSearch, registerSearchProvider, type Found } from './retrieval-run.ts';
 import { onSignOut, type Row } from './search.ts';
 import { contentDocs } from './content-run.ts';
@@ -12,7 +14,8 @@ import { importedDocs } from './imported-search.ts';
 import { ImportedSource } from './imported-source.ts';
 
 /** The one runtime of the process. Document sources register here (`live.setDocSource`: the content store and the imported documents, both wired just below). */
-export const live = new Retrieval();
+export const live = new Retrieval({ mayDownload: () => modelsAgreement(live.storage) });
+onKickSearch(() => live.kick());
 let warmed = false;
 
 // The document sources: the phone's content store (content-run.ts) and the imported documents the phone holds the text of (imported-search.ts). Both read through the runtime's storage.

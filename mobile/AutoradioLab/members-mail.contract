@@ -103,7 +103,10 @@ members Autoradio
   action askMail(q: string)
     mailNoteFor = pg.top
     send mak = mailAsk(pg.top, q)
-    send acct = choirAsk(text=q, aim=pg.top)
+    if au.signedIn == false
+      gate = "signin"
+    if au.signedIn
+      send acct = choirAsk(text=q, aim=pg.top)
   // Tap a tab: synchronous. The direction is the new tab's side of the old one; the outgoing content leaves at once.
   action mailTab(name: string)
     mboxDir = (["inbox", "drafts", "sent", "quarantine"].indexOf(name) > ["inbox", "drafts", "sent", "quarantine"].indexOf(mboxName)) ? 1 : -1

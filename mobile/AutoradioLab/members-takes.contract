@@ -13,7 +13,11 @@ members Autoradio
 
   // record | stop | preview | rerecord | discard | publish | delete | mute | unmute | refresh; arg is a take id or a publisher handle
   action takesDo(op: string, arg: string)
-    send tpm = takesAct(op, arg)
+    // A take needs the microphone, and the microphone is asked only of a signed-in person (owner, 2026-11-23): signed out, recording opens the sign-in sheet and starts nothing.
+    if op == "record" and au.signedIn == false
+      gate = "signin"
+    if op != "record" or au.signedIn
+      send tpm = takesAct(op, arg)
   // The listener's takes and record are read when the phone is signed in (take-session.ts refresh: the programme copy is pushed first; nothing is carried from the pre-release build's files).
   action takesLoad
     send tpm = takesAct("refresh", "")
