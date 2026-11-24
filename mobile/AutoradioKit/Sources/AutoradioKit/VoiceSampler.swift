@@ -143,7 +143,7 @@ public final class VoiceSampler: @unchecked Sendable {
                     try await self.fetch(model) { n in self.st.write { $0.bytes[model] = n }; self.onChange?() }
                     if !(await self.verify(model)) { failure = "That voice did not work on this phone. The radio will use the phone's voice." }
                 } catch let r as DownloadDoor.Refusal {
-                    if case .notOffered = r { failure = "This voice is not offered for download." } else { failure = "Download this voice from Settings, Downloads first: that is where you agree to it and see its size." }
+                    failure = r.person
                 } catch is CancellationError { failure = "The download was stopped. Tap to try again." }
                 catch { failure = "The download did not finish. Check the connection and tap to try again." }   // failure 4
                 self.st.write { s in s.downloads.remove(model); if let f = failure { s.failed[model] = f } }

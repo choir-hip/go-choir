@@ -45,7 +45,7 @@ public final class WiFiMonitor: @unchecked Sendable {
     public static func classify(satisfied: Bool, wifi: Bool, wired: Bool, expensive: Bool) -> Bool { satisfied && (wifi || wired) && !expensive }
     func report(wifi w: Bool) {
         lock.lock(); let changed = wifi != w; wifi = w; let cb = onChange; lock.unlock()
-        if changed { cb?() }
+        if changed { cb?(); if self === WiFiMonitor.shared { DownloadDoor.shared.pathChanged(onWiFi: w) } }
     }
     public var onWiFi: Bool { lock.lock(); defer { lock.unlock() }; return testOverride ?? wifi }
 }

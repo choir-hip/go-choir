@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import MediaPlayer
+import Speech
 
 /// Converts any PCM buffer to mono Float32 at a fixed rate.
 final class Resampler {
@@ -186,6 +187,10 @@ public final class LiveAudio: @unchecked Sendable {
     /// Whether the microphone is already allowed (no prompt).
     public static func micPermissionGranted() -> Bool { AVAudioApplication.shared.recordPermission == .granted }
 
+    /// The one place speech recognition's permission is asked, beside the microphone's (the plain line names both).
+    public static func requestSpeechPermission() async -> SFSpeechRecognizerAuthorizationStatus {
+        await withCheckedContinuation { c in SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) } }
+    }
     public static func requestMicPermission() async -> Bool {
         await withCheckedContinuation { c in AVAudioApplication.requestRecordPermission { c.resume(returning: $0) } }
     }

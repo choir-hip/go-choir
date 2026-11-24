@@ -38,7 +38,7 @@ describe('the sentences and the pre-prompt', () => {
   test('Y2 nothing opens the microphone before a press; the pre-prompt line shows only while the microphone is unasked', async () => {
     const asked = await view(F({}, 'unasked')); expect(asked).toMatchObject({ step: 'intro', primary: 'Continue', primaryOp: 'start' }); expect(asked.line).toContain(MIC_PRE_LINE);
     expect((await view(F({}, 'heard'))).line).not.toContain(MIC_PRE_LINE);
-    expect(MIC_PRE_LINE).toBe('To talk to the radio or record a take, Autoradio 1 needs your microphone and speech recognition.');
+    expect(MIC_PRE_LINE).toBe('To talk to the radio, record a take or learn your voice, Autoradio 1 needs your microphone and speech recognition.');
     expect(calls).toEqual([]);                                                                       // looking at the page calls nothing
     await press('start'); expect(calls).toEqual(['obEnrolDiscard', 'obEnrolBegin']);
   });

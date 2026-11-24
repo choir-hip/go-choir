@@ -18,9 +18,12 @@ import AutoradioKit
 public final class HubModelProvider: ModelProvider, @unchecked Sendable {
     public static let shared = HubModelProvider()
 
+    /// The door's window around every library fetch: consent for the model's group, a path the agreement covers, the libraries' registry open only inside it and the transfer cut when the path stops being covered (DownloadDoor.libraryWindow).
     public func fetch(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         guard KnownModels.contains(id) else { throw LabError.badInput("setup asked for \(id), which is not in the model catalog") }
-        try DownloadDoor.shared.authorizeLibrary(model: id)       // the door: no consent, no start; a Wi-Fi agreement does not start on mobile data (the libraries' own sessions cannot be configured)
+        try await DownloadDoor.shared.libraryWindow(model: id) { try await self.fetchInsideTheWindow(id, role: role, onBytes: onBytes) }
+    }
+    private func fetchInsideTheWindow(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         // The libraries do not report bytes in one shape, so the bytes on disk are watched while the load runs.
         let spec = KnownModels.managed.first { $0.id == id }
         let root = spec?.cachePath
@@ -35,8 +38,8 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         switch id {
         // Fetching never marks a model ready: voice setup does, after its check on this phone passed (VoiceSetup.runStage); the listening pipeline uses only ready models.
         case "silero-vad-v6.2.1": _ = try await SileroVAD.probabilities([Float](repeating: 0, count: 4096))
-        case "parakeet-eou-120m": let s = try await ParakeetEOUTranscriber(StageParams()).begin(); s.cancel()
-        case "parakeet-tdt-0.6b-v2": let s = try await ParakeetTDTTranscriber(StageParams()).begin(); s.cancel()      // ready once its companions are in (below)
+        case "parakeet-eou-120m": try await ParakeetEOUTranscriber.fetchModels()
+        case "parakeet-tdt-0.6b-v2": try await ParakeetTDTTranscriber.fetchModels()
         case "fluid-speech-mini":
             // Only here, after voice setup's consent, is the folder fetched; the stage itself never downloads. Its files are checked one by
             // one against the SHA-256 pinned in KnownModels, then the model is loaded and run once (warm).

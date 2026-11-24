@@ -82,6 +82,7 @@ describe('the words', () => {
   test('C6 the microphone purpose names voice, takes, and what a published take does', () => {
     const m = (en as Record<string, string>)['purpose.microphone'];
     expect(m).toMatch(/Voice/); expect(m).toMatch(/take/); expect(m).toMatch(/publish/); expect(m).toMatch(/not uploaded/);
+    expect(m).toMatch(/teach it your voice/);          // learning the voice is a use the string names (review round 4)
     expect((en as Record<string, string>)['purpose.recordingInBackground']).toMatch(/stops listening when the screen locks/);
   });
 });
@@ -105,5 +106,8 @@ describe('the door is told what was agreed', () => {
     expect(await consentAgree('voice', false, bad)).toBe(false);
     expect(sent.some((r) => r.agreed?.voice)).toBe(false);
   });
+  test('C8 an agreement that is unchanged is pushed again: the door may have lost it (a native that restarted), and a push is cheap', async () => {
+    await consentAgree('voice', false, storage); sent = []; await consentAgree('voice', false, storage);
+    expect(sent.at(-1)?.agreed).toEqual({ voice: 'agreed' });
+  });
 });
-

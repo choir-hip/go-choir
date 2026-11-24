@@ -13,6 +13,7 @@ import AutoradioModels
 // `--ids` prints the setup ladders' ids and whether each is in the catalog, in the store, and its stage registered (no network).
 
 var args = Array(CommandLine.arguments.dropFirst())
+DownloadDoor.shared.sync(agreed: ["voice": "agreed-mobile", "voice-rest": "agreed-mobile", "search": "agreed-mobile"])      // the person running this Mac command is the consent: without it the one download door refuses every fetch
 func take(_ f: String) -> String? {
     guard let i = args.firstIndex(of: f), i + 1 < args.count else { return nil }
     let v = args[i + 1]; args.removeSubrange(i...i + 1); return v

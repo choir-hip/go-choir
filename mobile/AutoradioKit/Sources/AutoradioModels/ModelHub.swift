@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import AutoradioKit
+import FluidAudio
 
 /// The on-device models of the lab. Nothing is bundled in the app: every model is fetched on first use (FluidAudio
 /// fetches its own Core ML bundles from Hugging Face; the llama.cpp GGUF goes through the ModelStore, pinned by SHA-256),
@@ -16,6 +17,8 @@ public enum ModelHub {
 
     /// Register every model stage into `registry` and the catalog into the store.
     public static func register(into registry: StageRegistry) {
+        // No library is left able to fetch: FluidAudio's registry points nowhere until the door opens a window (DownloadDoor.libraryWindow). FluidAudio ModelRegistry.swift:32 `baseURL`.
+        DownloadDoor.shared.installLibraryGuard { ModelRegistry.baseURL = $0 }
         registry.register(.speechBounds, SileroVAD.self) { SileroVAD($0) }
         registry.register(.transcriber, ParakeetEOUTranscriber.self) { ParakeetEOUTranscriber($0) }
         registry.register(.transcriber, ParakeetTDTTranscriber.self) { ParakeetTDTTranscriber($0) }

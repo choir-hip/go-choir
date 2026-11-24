@@ -27,11 +27,19 @@ public final class ParakeetEOUTranscriber: Transcriber, @unchecked Sendable {
         variant = chunk == "160" ? .parakeetEou160ms : chunk == "1280" ? .parakeetEou1280ms : .parakeetEou320ms
     }
 
+    static func repo(_ chunk: String) -> Repo { chunk == "160" ? .parakeetEou160 : chunk == "1280" ? .parakeetEou1280 : .parakeetEou320 }
+    /// The ONLY place this model is fetched: FluidAudio's download-and-load (StreamingEouAsrManager.swift:379 `loadModels(to:)`), called by the provider inside the door's window.
+    static func fetchModels() async throws {
+        guard let m = ParakeetEOUTranscriber(StageParams()).variant.createManager() as? StreamingEouAsrManager else { throw LabError.unavailable("the streaming recogniser is not the EOU manager in this FluidAudio") }
+        try await m.loadModels(to: KnownModels.fluidRoot, configuration: nil, progressHandler: nil)
+        await m.cleanup()
+    }
     public func begin() async throws -> TranscriptionSession {
-        let v = variant
+        let v = variant, repo = Self.repo(chunk)
         let mgr = try await Self.slots[chunk]!.get {
-            let m = v.createManager()
-            try await m.loadModels()
+            guard let m = v.createManager() as? StreamingEouAsrManager else { throw LabError.unavailable("the streaming recogniser is not the EOU manager in this FluidAudio") }
+            // Loaded from the folder on the phone, never fetched here: FluidAudio StreamingEouAsrManager.swift:330 `loadModels(from:)` (the download is `fetchModels`, inside the door's window).
+            try await m.loadModels(from: KnownModels.fluidRoot.appendingPathComponent(repo.folderName, isDirectory: true))
             return (m, { await m.cleanup() })
         }
         try await mgr.reset()
@@ -90,11 +98,13 @@ public final class ParakeetTDTTranscriber: Transcriber, @unchecked Sendable {
     public init(_ p: StageParams) {
         switch p.string("model", "v2") { case "v3": version = .v3; case "ultra": version = .ultra; case "redux": version = .redux; default: version = .v2 }
     }
+    /// The ONLY place this model is fetched: FluidAudio AsrModels.swift:733 `download(version:)`, called by the provider inside the door's window.
+    static func fetchModels(version: AsrModelVersion = .v2) async throws { _ = try await AsrModels.download(version: version) }
     public func begin() async throws -> TranscriptionSession {
         let v = version
         let m = try await Self.slot.get {
-            try DownloadDoor.shared.authorizeLibrary(model: "parakeet-tdt-0.6b-v2")       // the door: this call downloads when the files are missing
-            let models = try await AsrModels.downloadAndLoad(version: v)
+            // Loaded from the folder on the phone, never fetched here: FluidAudio AsrModels.swift:383 `loadLocal(from:version:)` ("without downloading or resolving a repository"); the folder is `defaultCacheDirectory(for:)` (:942).
+            let models = try AsrModels.loadLocal(from: AsrModels.defaultCacheDirectory(for: v), version: v)
             let mgr = AsrManager(config: .default)
             try await mgr.loadModels(models)
             return (mgr, { await mgr.cleanup() })
