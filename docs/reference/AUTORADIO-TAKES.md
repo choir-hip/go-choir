@@ -118,10 +118,11 @@ A take of an account that asked to be deleted moves from `live` to `suspended` (
 
 The take row stays, with its id, handle, times, size, hash and state
 (`deleted` or `yanked`); its transcript and the story it answered are blanked.
-The audio object is deleted, but a body of 1 KB or more is externalised, and
-those bytes stay on disk until the artifact GC pass removes them. That holds
-for the take row too: the pre-blank body, transcript included (a transcript
-over about 1 KB), survives in the artifact store until the same GC pass. The outcome
+The audio object is deleted, and a body of 1 KB or more is externalised: the
+bytes the take row and the audio row had in the artifact store are unlinked in
+the same step when no other row names them (`releaseBodyRefs`, `removeTake`),
+so the transcript and the voice do not wait for the artifact GC's seven day
+grace; the GC remains the backstop if the unlink fails. The outcome
 rows stay as counts: a yanked take keeps its prior counts in the publisher's
 record (a decision for the owner, not made here).
 
