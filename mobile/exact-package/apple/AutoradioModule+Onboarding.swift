@@ -269,7 +269,7 @@ final class OnboardingController: @unchecked Sendable {
 
     /// Sign-out: nothing of the voice side's first run reaches the next account.
     func reset() {
-        stop(); DownloadDoor.shared.reset(); module.runtime.setHandsFree(false)           // sign-out: the microphone is closed and the switch stays off for the next person
+        stop(); DownloadDoor.shared.reset(); SpeakerGate.shared.forget(); module.runtime.setHandsFree(false)           // sign-out: the microphone is closed and the switch stays off for the next person
         set { setup = nil; mic = "unasked"; level = 0; heard = ""; route = ""; talking = false; over = false; picked = 0; finishAsked = 0 }
     }
 

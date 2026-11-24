@@ -117,15 +117,6 @@ final class DownloadDoorTests: XCTestCase {
         do { try await d.libraryWindow(model: "fluid-speech-mini") { throw Boom() } as Void } catch {}
         XCTAssertEqual(r.now, DownloadDoor.closedRegistry, "closed after a throw too")
     }
-    func testA4ANestedWindowKeepsItOpenUntilTheLastEnds() async throws {
-        let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
-        let seen: [String] = try await d.libraryWindow(model: "fluid-speech-mini") {
-            let a = r.now
-            let b: String = try await d.libraryWindow(model: "parakeet-eou-120m") { r.now }
-            return [a, b, r.now]
-        }
-        XCTAssertEqual(seen, [DownloadDoor.openRegistry, DownloadDoor.openRegistry, DownloadDoor.openRegistry]); XCTAssertEqual(r.now, DownloadDoor.closedRegistry)
-    }
     func testA4NoConsentOpensNothingAndRunsNothing() async {
         let r = Registry(); let d = door(); d.installLibraryGuard { r.set($0) }
         final class Ran: @unchecked Sendable { var v = false }; let ran = Ran()
@@ -166,5 +157,65 @@ final class DownloadDoorTests: XCTestCase {
         let d = door(); d.sync(agreed: ["voice-rest": "agreed"]); XCTAssertNoThrow(try d.authorize(model: responder))
         d.sync(agreed: [:]); XCTAssertThrowsError(try d.authorize(model: responder))
         d.sync(agreed: ["voice-rest": "maybe"]); XCTAssertThrowsError(try d.authorize(model: responder), "an unknown word is no agreement")
+    }
+
+    // ---- Round 5: the window's edges. Consent and path are checked INSIDE the lock that opens the registry; a path change, a reset or a withdrawn agreement CLOSES it at once; windows are one at a time.
+    final class Flip: @unchecked Sendable { let lock = NSLock(); var calls = 0; var after: Int; init(after: Int) { self.after = after }
+        func wifi() -> Bool { lock.lock(); defer { lock.unlock() }; calls += 1; return calls <= after } }
+    func testW1OffWifiBetweenTheCheckAndTheOpenOpensNothing() async {
+        let r = Registry(); let f = Flip(after: 1)                                      // Wi-Fi at the first look, gone at the second
+        let d = DownloadDoor(onWiFi: { f.wifi() }); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        final class Ran: @unchecked Sendable { var v = false }; let ran = Ran()
+        do { try await d.libraryWindow(model: "fluid-speech-mini") { ran.v = true } as Void; XCTFail("opened") } catch { XCTAssertEqual(error as? DownloadDoor.Refusal, .pathNotAgreed(group: "voice-rest")) }
+        XCTAssertFalse(ran.v); XCTAssertEqual(r.log, [DownloadDoor.closedRegistry], "the registry was never opened"); XCTAssertEqual(d.openWindowCount, 0)
+    }
+    func testW2AResetDuringAFetchClosesTheRegistryAtOnceAndACancelFollows() async throws {
+        let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed-mobile"]); d.installLibraryGuard { r.set($0) }
+        final class S: @unchecked Sendable { var started = false, cancelled = false }; let st = S()
+        let t = Task { try await d.libraryWindow(model: "fluid-speech-mini") { st.started = true; for _ in 0..<400 { if Task.isCancelled { st.cancelled = true; throw CancellationError() }; try? await Task.sleep(nanoseconds: 5_000_000) } } as Void }
+        for _ in 0..<200 where !st.started { try? await Task.sleep(nanoseconds: 5_000_000) }
+        XCTAssertEqual(r.now, DownloadDoor.openRegistry)
+        d.reset()                                                                         // sign-out
+        XCTAssertEqual(r.now, DownloadDoor.closedRegistry, "closed the instant the account changed, not when the transfer happens to end")
+        do { try await t.value; XCTFail("ran on") } catch {}
+        XCTAssertTrue(st.cancelled); XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0, "and the count did not underflow")
+    }
+    func testW3AWithdrawnAgreementKillsTheWindow() async throws {
+        let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed-mobile"]); d.installLibraryGuard { r.set($0) }
+        final class S: @unchecked Sendable { var started = false }; let st = S()
+        let t = Task { try await d.libraryWindow(model: "fluid-speech-mini") { st.started = true; for _ in 0..<400 { try Task.checkCancellation(); try? await Task.sleep(nanoseconds: 5_000_000) } } as Void }
+        for _ in 0..<200 where !st.started { try? await Task.sleep(nanoseconds: 5_000_000) }
+        d.sync(agreed: [:]); XCTAssertEqual(r.now, DownloadDoor.closedRegistry)
+        do { try await t.value; XCTFail("ran on") } catch {}
+    }
+    func testW4ABodyThatIgnoresCancellationStillHasTheRegistryClosedAtOnce() async throws {
+        let r = Registry(); let d = door(wifi: true); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        final class S: @unchecked Sendable { var started = false; var done = false }; let st = S()
+        let t = Task { try await d.libraryWindow(model: "fluid-speech-mini") { st.started = true; try? await Task.sleep(nanoseconds: 150_000_000); st.done = true } as Void }
+        for _ in 0..<200 where !st.started { try? await Task.sleep(nanoseconds: 5_000_000) }
+        d.pathChanged(onWiFi: false)
+        XCTAssertEqual(r.now, DownloadDoor.closedRegistry, "the library that does not honour cancellation has nowhere to send its next request")
+        _ = try? await t.value; XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0)
+    }
+    func testW5ErrorAndCancellationLeaveTheRegistryClosedAndTheCountAtZero() async {
+        let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed"]); d.installLibraryGuard { r.set($0) }
+        struct Boom: Error {}
+        do { try await d.libraryWindow(model: "fluid-speech-mini") { throw Boom() } as Void } catch {}
+        XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0)
+        let t = Task { try await d.libraryWindow(model: "fluid-speech-mini") { try await Task.sleep(nanoseconds: 2_000_000_000) } as Void }
+        try? await Task.sleep(nanoseconds: 30_000_000); t.cancel(); _ = try? await t.value
+        XCTAssertEqual(r.now, DownloadDoor.closedRegistry); XCTAssertEqual(d.openWindowCount, 0)
+        let ok: Int = (try? await d.libraryWindow(model: "fluid-speech-mini") { 7 }) ?? 0; XCTAssertEqual(ok, 7, "and the door still works afterwards")
+    }
+    // A window is one group at a time: a fetch for another group waits for it; the other group's models never run inside it.
+    func testW6AFetchForAnotherGroupWaitsForTheOpenWindow() async throws {
+        let r = Registry(); let d = door(); d.sync(agreed: ["voice-rest": "agreed", "voice": "agreed"]); d.installLibraryGuard { r.set($0) }
+        final class L: @unchecked Sendable { let lock = NSLock(); var log: [String] = []; func add(_ s: String) { lock.lock(); log.append(s); lock.unlock() } }; let l = L()
+        let a = Task { try await d.libraryWindow(model: "fluid-speech-mini") { l.add("A+"); try? await Task.sleep(nanoseconds: 100_000_000); l.add("A-") } as Void }
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        let b = Task { try await d.libraryWindow(model: VoiceCatalog.kokoroModel) { l.add("B+"); l.add("B-") } as Void }
+        _ = try await a.value; _ = try await b.value
+        XCTAssertEqual(l.log, ["A+", "A-", "B+", "B-"], "B's body ran only after A's window closed")
+        XCTAssertEqual(r.now, DownloadDoor.closedRegistry)
     }
 }

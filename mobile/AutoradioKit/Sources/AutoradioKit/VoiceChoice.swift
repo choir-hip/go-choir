@@ -138,18 +138,18 @@ public protocol VoiceReadinessRecord: VoiceReadiness {
 /// WAYS THIS CAN GO WRONG (tests in ReadinessVerifierTests):
 ///  W1 A model whose check fails is not ready, and one that was marked before is demoted.
 ///  W2 A model whose check throws is not ready.
-///  W3 A pass marks the model and its companions (the live-words model comes with a batch recogniser) and returns the measurement.
+///  W3 A pass marks the model and returns the measurement; a companion is checked itself (VoiceSetup), never marked on its primary's pass.
 public final class ReadinessVerifier: @unchecked Sendable {
     private let record: VoiceReadinessRecord
     public init(record: VoiceReadinessRecord) { self.record = record }
     /// What everything else reads.
     public var reading: VoiceReadiness { record }
     /// Run the check; mark on a pass only. Returns the measurement (a thrown check is a failed one).
-    public func verify(model id: String, companions: [String] = [], check: () async throws -> SetupCheck) async -> SetupCheck {
+    public func verify(model id: String, check: () async throws -> SetupCheck) async -> SetupCheck {
         let result: SetupCheck
         do { result = try await check() }
         catch { result = SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "\(error)") }
-        if result.outputOK { record.markReady(model: id); for c in companions { record.markReady(model: c) } }
+        if result.outputOK { record.markReady(model: id) }
         else { record.markNotReady(model: id) }
         return result
     }
@@ -186,8 +186,17 @@ public final class FileVoiceReadiness: VoiceReadinessRecord, @unchecked Sendable
         guard let passed, let p = pins(model), p.pin == passed else { return false }
         return p.present()
     }
-    public func markReady(model: String) { lock.lock(); defer { lock.unlock() }; guard let p = pins(model) else { return }; var s = read(); if s[model] != p.pin { s[model] = p.pin; write(s) } }
-    public func markNotReady(model: String) { lock.lock(); defer { lock.unlock() }; var s = read(); if s.removeValue(forKey: model) != nil { write(s) } }
+    public func markReady(model: String) {
+        lock.lock(); defer { lock.unlock() }
+        guard let p = pins(model) else { return }
+        if let seal = p.seal, !seal() { return }                       // a library-managed model is sealed in its manifest (every file, exact length and digest) at the pass; nothing to seal, not ready
+        var s = read(); if s[model] != p.pin { s[model] = p.pin; write(s) }
+    }
+    public func markNotReady(model: String) {
+        lock.lock(); defer { lock.unlock() }
+        pins(model)?.unseal?()                                         // a fetch or a failed check deletes the manifest: the files that are still there are not ready
+        var s = read(); if s.removeValue(forKey: model) != nil { write(s) }
+    }
 }
 
 public enum Voices {

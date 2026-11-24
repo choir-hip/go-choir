@@ -60,6 +60,7 @@ public final class DownloadDoor: @unchecked Sendable {
         var next: [String: Agreement] = [:]
         for (g, v) in record { if v == "agreed" { next[g] = .wifi } else if v == "agreed-mobile" { next[g] = .mobile } }
         lock.lock(); agreed = next; lock.unlock()
+        enforce()                                                       // an agreement withdrawn or lowered cuts the window it covered
     }
 
     public func group(ofModel id: String) -> String? { groups[id] }
@@ -92,42 +93,83 @@ public final class DownloadDoor: @unchecked Sendable {
 
     // MARK: Libraries that download by themselves (FluidAudio)
     // A library's own downloader runs on a session we cannot configure and finds its files by name. So it is never left able to fetch: its registry (`ModelRegistry.baseURL`) points nowhere (`closedRegistry`) from the start, and is repointed at the real host only inside a
-    // window, which exists only with consent for the model's group and, under a Wi-Fi agreement, only on Wi-Fi, and which is CANCELLED the moment the path leaves Wi-Fi (the library's transfer sees its Task cancelled and drops the connection).
-    // Everything else the library does (load from the folder, synthesise, transcribe) is local: with the registry closed a library asked to initialise for files that are not there fails; it never fetches.
+    // WINDOW. A window is one model group at a time (a fetch for another group waits for the open one), it is opened only after consent and the path are checked INSIDE the lock that opens the registry, and it is KILLED (the registry closed at once, whatever the library
+    // does about cancellation, and the transfer's Task cancelled) the moment the path stops being covered, the agreement is withdrawn or lowered, or the account changes.
+    // A library that is initialised outside a window finds the registry closed: with files missing it fails; it never fetches (and the stages initialise only for a model that is ready by manifest or being checked: `LibraryScope`).
     public static let closedRegistry = "https://models.invalid"
     public static let openRegistry = "https://huggingface.co"
     private var registryHook: (@Sendable (String) -> Void)?
-    private var windows = 0
+    private struct Window { let group: String; let agreement: Agreement; let cancel: () -> Void }
+    private var live: [UUID: Window] = [:]
+    private var slotBusy = false
+    private var slotWaiters: [CheckedContinuation<Void, Never>] = []
+    public var openWindowCount: Int { lock.lock(); defer { lock.unlock() }; return live.count }
 
-    /// The models module installs the way to point the library's registry; it is closed at once.
+    /// The models module installs the way to point the library's registry; it is closed at once (and stays closed while a window is open: installing again must not cut or reopen one).
     public func installLibraryGuard(_ setRegistry: @escaping @Sendable (String) -> Void) {
-        lock.lock(); registryHook = setRegistry; lock.unlock()
-        setRegistry(Self.closedRegistry)
+        lock.lock(); registryHook = setRegistry; let none = live.isEmpty; lock.unlock()
+        if none { setRegistry(Self.closedRegistry) }
+    }
+
+    private final class CancelBox: @unchecked Sendable { let lock = NSLock(); var cancel: (@Sendable () -> Void)?; var killed = false
+        func kill() { lock.lock(); killed = true; let c = cancel; lock.unlock(); c?() }
+        func set(_ c: @escaping @Sendable () -> Void) { lock.lock(); cancel = c; let k = killed; lock.unlock(); if k { c() } } }
+
+    private func acquireSlot() async {
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if !slotBusy { slotBusy = true; lock.unlock(); c.resume() } else { slotWaiters.append(c); lock.unlock() }
+        }
+    }
+    private func releaseSlot() {
+        lock.lock()
+        if slotWaiters.isEmpty { slotBusy = false; lock.unlock() } else { let c = slotWaiters.removeFirst(); lock.unlock(); c.resume() }
     }
 
     public func libraryWindow<T: Sendable>(model id: String, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
-        let a = try authorize(model: id)
-        if a == .wifi, !allowAll, !onWiFi() { throw Refusal.pathNotAgreed(group: groups[id] ?? "") }
-        let key = UUID()
-        let task = Task { try await body() }
-        enterWindow(key, a, { task.cancel() })
+        _ = try authorize(model: id)                                     // an early, cheap refusal
+        await acquireSlot(); defer { releaseSlot() }
+        let key = UUID(), box = CancelBox()
+        try enterWindow(key, model: id, box)                            // the authoritative check, under the lock that opens the registry
         defer { leaveWindow(key) }
-        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+        let result = Task<T, Error> { if box.killed { throw CancellationError() }; return try await body() }
+        box.set { result.cancel() }                                      // killing cancels the transfer's Task
+        return try await withTaskCancellationHandler { try await result.value } onCancel: { result.cancel(); box.kill() }
     }
-    private func enterWindow(_ key: UUID, _ a: Agreement, _ cancel: @escaping () -> Void) {
-        lock.lock(); windows += 1; let first = windows == 1; let hook = registryHook; cancels[key] = (a, cancel); lock.unlock()
-        if first { hook?(Self.openRegistry) }
+
+    private func enterWindow(_ key: UUID, model id: String, _ box: CancelBox) throws {
+        lock.lock()
+        let a: Agreement, g: String
+        if allowAll { a = .mobile; g = groups[id] ?? "" }
+        else {
+            guard let grp = groups[id] else { lock.unlock(); throw Refusal.notOffered(model: id) }
+            guard let ag = agreed[grp] else { lock.unlock(); throw Refusal.noConsent(group: grp) }
+            if ag == .wifi, !onWiFi() { lock.unlock(); throw Refusal.pathNotAgreed(group: grp) }
+            a = ag; g = grp
+        }
+        live[key] = Window(group: g, agreement: a, cancel: { box.kill() })
+        let hook = registryHook
+        hook?(Self.openRegistry)                                         // under the lock: nothing can slip between the check and the open
+        lock.unlock()
     }
     private func leaveWindow(_ key: UUID) {
-        lock.lock(); cancels[key] = nil; windows -= 1; let last = windows == 0; let hook = registryHook; lock.unlock()
-        if last { hook?(Self.closedRegistry) }
+        lock.lock(); live[key] = nil; let none = live.isEmpty; let hook = registryHook; lock.unlock()
+        if none { hook?(Self.closedRegistry) }                           // idempotent: a killed window already closed it
     }
-    private var cancels: [UUID: (Agreement, () -> Void)] = [:]
 
-    /// The phone's path changed (WiFiMonitor). Off Wi-Fi, every library transfer running under a Wi-Fi agreement is cut.
-    public func pathChanged(onWiFi now: Bool) {
-        guard !now else { return }
-        lock.lock(); let cut = cancels.values.filter { $0.0 == .wifi }.map { $0.1 }; lock.unlock()
-        for c in cut { c() }
+    /// Kill every window the present facts no longer cover: close the registry NOW (whatever the library does about cancellation), then cancel the transfers. Called by the path monitor, by `sync` and by `reset`.
+    private func enforce(wifi known: Bool? = nil) {
+        lock.lock()
+        let wifi = known ?? onWiFi()
+        let doomed = live.values.filter { w in
+            guard let now = agreed[w.group] else { return true }                                  // withdrawn
+            return now == .wifi && !wifi                                                          // off Wi-Fi under a Wi-Fi agreement (a mobile agreement is not cut by a path)
+        }
+        let hook = registryHook; let kill = doomed.map { $0.cancel }
+        if !kill.isEmpty { hook?(Self.closedRegistry) }
+        lock.unlock()
+        for k in kill { k() }
     }
+    /// The phone's path changed (WiFiMonitor).
+    public func pathChanged(onWiFi now: Bool) { enforce(wifi: now) }
 }

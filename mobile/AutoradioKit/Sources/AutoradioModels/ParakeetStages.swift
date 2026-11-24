@@ -37,6 +37,7 @@ public final class ParakeetEOUTranscriber: Transcriber, @unchecked Sendable {
     public func begin() async throws -> TranscriptionSession {
         let v = variant, repo = Self.repo(chunk)
         let mgr = try await Self.slots[chunk]!.get {
+            try LibraryScope.require("parakeet-eou-120m")
             guard let m = v.createManager() as? StreamingEouAsrManager else { throw LabError.unavailable("the streaming recogniser is not the EOU manager in this FluidAudio") }
             // Loaded from the folder on the phone, never fetched here: FluidAudio StreamingEouAsrManager.swift:330 `loadModels(from:)` (the download is `fetchModels`, inside the door's window).
             try await m.loadModels(from: KnownModels.fluidRoot.appendingPathComponent(repo.folderName, isDirectory: true))
@@ -104,6 +105,7 @@ public final class ParakeetTDTTranscriber: Transcriber, @unchecked Sendable {
         let v = version
         let m = try await Self.slot.get {
             // Loaded from the folder on the phone, never fetched here: FluidAudio AsrModels.swift:383 `loadLocal(from:version:)` ("without downloading or resolving a repository"); the folder is `defaultCacheDirectory(for:)` (:942).
+            try LibraryScope.require("parakeet-tdt-0.6b-v2")
             let models = try AsrModels.loadLocal(from: AsrModels.defaultCacheDirectory(for: v), version: v)
             let mgr = AsrManager(config: .default)
             try await mgr.loadModels(models)

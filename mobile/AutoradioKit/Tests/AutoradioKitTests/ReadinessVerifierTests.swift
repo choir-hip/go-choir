@@ -16,11 +16,11 @@ final class ReadinessVerifierTests: XCTestCase {
         let r = await v.verify(model: "m", check: { throw Boom() })
         XCTAssertFalse(r.outputOK); XCTAssertFalse(v.reading.isReady(model: "m"))
     }
-    func testW3APassMarksTheModelAndItsCompanionsAndNothingBefore() async {
+    func testW3APassMarksTheModelAndNothingElse() async {
         let v = ReadinessVerifier(record: MemoryVoiceReadiness())
         XCTAssertFalse(v.reading.isReady(model: "m")); XCTAssertFalse(v.reading.isReady(model: "live"))
-        _ = await v.verify(model: "m", companions: ["live"], check: { ok(true) })
-        XCTAssertTrue(v.reading.isReady(model: "m")); XCTAssertTrue(v.reading.isReady(model: "live"))
+        _ = await v.verify(model: "m", check: { ok(true) })
+        XCTAssertTrue(v.reading.isReady(model: "m")); XCTAssertFalse(v.reading.isReady(model: "live"), "a companion is never marked on the primary's pass")
     }
     // The escape of round 3: the voice cards fetched and marked ready with no check. A fetch that succeeds and a check that fails must leave the voice not ready, and the card says so.
     func testW4TheVoiceCardPathFetchesThenVerifiesAndAFailedVerifyIsNotReady() async {

@@ -110,4 +110,13 @@ final class EnrolCaptureTests: XCTestCase {
         for i in 0..<3 { await g.learn([Float](repeating: 0.4, count: 32_000 + i * 160), generation: AccountWipe.generation) }
         XCTAssertTrue(g.learned, "the same speech under the current generation is learned")
     }
+    // Round 5: a build that was running when the enrolment was discarded must not put its candidate back.
+    func testV10ABuildThatFinishesAfterADiscardInstallsNothing() async {
+        let (c, g) = make(); for _ in 1...3 { say(c, 1); c.keep() }
+        let t = Task { await c.build() }
+        c.discard()                                                         // the page was left while it built
+        _ = await t.value
+        say(c, 1); _ = await c.check(); XCTAssertFalse(c.store(), "no candidate survived the discard"); XCTAssertFalse(g.learned)
+        XCTAssertEqual(c.facts()["built"] as? Bool, false)
+    }
 }
