@@ -239,6 +239,9 @@ CREATE INDEX IF NOT EXISTS idx_account_set_member_user ON account_set_member(use
 // the main DDL and are safe to repeat (they silently no-op if the column
 // already exists due to the OR IGNORE / error-handling approach).
 var schemaMigrations = []string{
+	// Which route made a recovery link: '' is /auth/recovery/request, 'register' is /auth/register/mail. Each route
+	// supersedes and looks for only its own links, so one cannot invalidate or suppress the other's.
+	`ALTER TABLE recovery_tokens ADD COLUMN source TEXT NOT NULL DEFAULT ''`,
 	// Added webauthn_session_data column for storing serialized SessionData
 	// needed by the finish handlers.
 	`ALTER TABLE challenge_state ADD COLUMN webauthn_session_data TEXT`,
@@ -713,10 +716,20 @@ func (s *Store) ConsumePendingRegistration(challenge string, now time.Time) (*Pe
 	return p, nil
 }
 
+// DiscardRecoveryToken kills a link that was made and could not be mailed, so a retry is not suppressed by a
+// live link nobody received. The row stays (it is rate-limit history); only its use is spent.
+func (s *Store) DiscardRecoveryToken(ctx context.Context, token string) error {
+	h := sha256.Sum256([]byte(token))
+	if _, err := s.db.ExecContext(ctx, "UPDATE recovery_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL", time.Now().UTC(), fmt.Sprintf("%x", h)); err != nil {
+		return fmt.Errorf("discard recovery token: %w", err)
+	}
+	return nil
+}
+
 // HasLiveRecoveryToken: the account has a recovery link in an inbox that still works.
-func (s *Store) HasLiveRecoveryToken(userID string, now time.Time) (bool, error) {
+func (s *Store) HasLiveRecoveryToken(userID, source string, now time.Time) (bool, error) {
 	var n int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM recovery_tokens WHERE user_id = ? AND used_at IS NULL AND expires_at > ?", userID, now).Scan(&n); err != nil {
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM recovery_tokens WHERE user_id = ? AND used_at IS NULL AND source = ? AND expires_at > ?", userID, source, now).Scan(&n); err != nil {
 		return false, fmt.Errorf("live recovery token: %w", err)
 	}
 	return n > 0, nil
@@ -1601,6 +1614,12 @@ func generateRecoveryTokenSecret() (token, tokenHash string, err error) {
 // empty for anti-enumeration dummy records (when the email doesn't match a
 // real user). The raw token is only returned once and never stored in plaintext.
 func (s *Store) CreateRecoveryToken(ctx context.Context, userID, email, emailHash, ipHash string) (token string, err error) {
+	return s.CreateRecoveryTokenFrom(ctx, "", userID, email, emailHash, ipHash)
+}
+
+// CreateRecoveryTokenFrom is CreateRecoveryToken for a named route: the link supersedes only the account's
+// older unused links of the same source.
+func (s *Store) CreateRecoveryTokenFrom(ctx context.Context, source, userID, email, emailHash, ipHash string) (token string, err error) {
 	token, tokenHash, err := generateRecoveryTokenSecret()
 	if err != nil {
 		return "", err
@@ -1630,16 +1649,16 @@ func (s *Store) CreateRecoveryToken(ctx context.Context, userID, email, emailHas
 	// created_at, keep seeing them.
 	if userID != "" {
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE recovery_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL",
-			now, userID,
+			"UPDATE recovery_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL AND source = ?",
+			now, userID, source,
 		); err != nil {
 			return "", fmt.Errorf("create recovery token: supersede older tokens: %w", err)
 		}
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		"INSERT INTO recovery_tokens (id, user_id, email, email_hash, ip_hash, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		rt.ID, rt.UserID, rt.Email, rt.EmailHash, rt.IPHash, rt.TokenHash, rt.CreatedAt, rt.ExpiresAt,
+		"INSERT INTO recovery_tokens (id, user_id, email, email_hash, ip_hash, token_hash, created_at, expires_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		rt.ID, rt.UserID, rt.Email, rt.EmailHash, rt.IPHash, rt.TokenHash, rt.CreatedAt, rt.ExpiresAt, source,
 	); err != nil {
 		return "", fmt.Errorf("create recovery token: %w", err)
 	}

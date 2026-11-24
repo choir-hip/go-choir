@@ -1,6 +1,6 @@
 import Foundation
 
-// What is left of the Choir sign-in in Swift: the local sign-out and its revoke. Signing in and creating an account are shared code (AutoradioLab/app-signin.ts): the platform's passkey screen
+// What is left of the Choir sign-in in Swift: the local sign-out (the server revoke is shared code's, account.ts, made after this) and `revokeNow`, which only LegacyKey uses. Signing in and creating an account are shared code (AutoradioLab/app-signin.ts): the platform's passkey screen
 // through Exact's @exact/passkeys, the finish request, and the key kept as the Exact secrets `choir.key`, `choir.key-id` and `choir.computer-id` (the Keychain, service = the bundle id). This type
 // reads and deletes those same Keychain items for the voice code and for sign-out (KeychainKeyStore, KeyAccount); it writes the key at no time. The key goes to the KeyStore and nowhere else.
 
@@ -46,7 +46,7 @@ public final class ChoirSignIn: @unchecked Sendable {
     }
     func revokeNow(keyID id: String, key: String) async -> Bool {
         let held = ChoirClient(baseURL: baseURL, keys: InMemoryKeyStore([KeyAccount.apiKey: key]), session: env.session, log: nil, trustedOrigin: URL(string: env.configuredBaseURL))
-        if id.isEmpty { env.log?.emit(.note("choir: a legacy key has no id, so it cannot be revoked here; revoke it in Settings")); return true }
+        if id.isEmpty { env.log?.emit(.note("choir: a legacy key has no id; the server revokes by id, so it is deleted here unrevoked: revoke it in Settings on the web")); return true }
         do { try await held.send("DELETE", "/auth/api-keys/\(PathSegment.encode(id))", route: "/auth/api-keys/{id}", timeout: 8, okStatuses: [401, 404]); env.log?.emit(.note("choir: a key was revoked")); return true }
         catch { env.log?.emit(.note("choir: a key was not revoked on the server; it is kept and retried (\(error))")); return false }
     }

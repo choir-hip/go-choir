@@ -1,6 +1,6 @@
 // Sign-out orchestrated from shared code (account.ts). Failure list, each line a test below:
-//  S1 the native sign-out (key delete, Swift stores, revoke) runs FIRST and the shared wipes only after it answered: the old key is
-//     still held while the native side settles what it posts; pending shared work is never sent under a later account.
+//  S1 the native sign-out (run sheet flush, key delete, Swift stores) runs FIRST and the shared wipes only after it answered: the old key is
+//     still held while the native side settles what it posts, and the server revoke is made after it, with the key shared code read before; pending shared work is never sent under a later account.
 //  S2 when the native sign-out fails or is missing in a native build, nothing shared is wiped and the answer says so (retry is safe).
 //  S3 one wipe that throws does not stop the others; the answer names what failed, never why in the listener's words.
 //  S4 every path the shared modules keep under app:/data or app:/cache is removed by some wipe (a new store without a wipe fails here).
@@ -18,7 +18,7 @@
 //  S10 a different account's key at launch (the stamp) wipes the old data first; the same account, or a phone with no key, keeps it.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
-import { accountSignOut, adoptKey, retryPendingRevoke, PENDING_REVOKE_FILE, REVOKE_PENDING_NOTE, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
+import { accountSignOut, adoptKey, retryPendingRevoke, PENDING_REVOKE_FILE, REVOKE_PENDING_NOTE, REVOKE_NOID_NOTE, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
 import { createHash } from 'node:crypto';
 import { authedJSON, bindNative, resetSeam, SignedOutError } from './api.ts';
 import { ContentStore } from './content.ts';
@@ -443,28 +443,49 @@ describe('S19 a key that replaces the key of another account in the same launch'
   });
 });
 
-describe('S20 sign-out clears the phone at once and revokes by id, or keeps the id to retry', () => {
+describe('S20 sign-out clears the phone at once and revokes with the key it held', () => {
   const enc = (t: string) => new TextEncoder().encode(t);
+  const pendingId = (m: ReturnType<typeof memFs>): string | null => { const b = m.files.get(PENDING_REVOKE_FILE); return b ? JSON.parse(new TextDecoder().decode(b)).id : null; };
+  const HELD = { key: 'choir_sk_test-held-not-real', id: 'ak_held' };
   test('a revoke that was sent: signed out, nothing pending, no note', async () => {
     W = newWorld('present'); const m = memFs(SEED);
     await launch(m); resetSettled();
-    const r = await accountSignOut(m.storage, undefined, phone() as never, { revoke: async () => ({ pendingId: '', blocked: false }) });
+    const r = await accountSignOut(m.storage, undefined, phone() as never, { held: HELD, revoke: async () => 'revoked' });
     expect(r.done).toBe(true); expect(r.message).toBe(''); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false); expect(dataLeft(m)).toEqual([]); expect(W.key).toBe('absent');
   });
-  test('offline: the phone is cleared at once, only the id is kept, and the page says so', async () => {
+  test('the revoke is made after native has flushed and cleared the phone, with the key that was held', async () => {
     W = newWorld('present'); const m = memFs(SEED);
-    await launch(m); resetSettled();
-    const r = await accountSignOut(m.storage, undefined, phone() as never, { revoke: async () => ({ pendingId: 'ak_held', blocked: false }) });
-    expect(r.done).toBe(true); expect(r.message).toBe(REVOKE_PENDING_NOTE);
-    expect(dataLeft(m)).toEqual([]); expect(W.key).toBe('absent'); expect(W.swift).toBe(false);
-    expect(new TextDecoder().decode(m.files.get(PENDING_REVOKE_FILE))).toBe('ak_held');
-    expect(new TextDecoder().decode(m.files.get(PENDING_REVOKE_FILE))).not.toContain('choir_sk_');
+    await launch(m); resetSettled(); W.native = [];
+    let nativeBefore: string[] = [], keyBefore = '';
+    await accountSignOut(m.storage, undefined, phone() as never, { held: HELD, revoke: async (h) => { nativeBefore = [...W.native]; keyBefore = h.key; return 'revoked'; } });
+    expect(nativeBefore).toEqual(['signOut']); expect(keyBefore).toBe(HELD.key);
   });
-  test('a key whose id cannot be found with no connection is not dropped: nothing is signed out', async () => {
+  test('the id is on disk before native clears anything, so a kill or a timeout later loses nothing', async () => {
     W = newWorld('present'); const m = memFs(SEED);
     await launch(m); resetSettled();
-    const r = await accountSignOut(m.storage, undefined, phone() as never, { revoke: async () => ({ pendingId: '', blocked: true }) });
-    expect(r.done).toBe(false); expect(W.key).toBe('present'); expect(dataLeft(m).length).toBe(SEED.length); expect(m.files.has(PENDING_FILE)).toBe(false);
+    await accountSignOut(m.storage, undefined, phone() as never, { held: HELD, crash: (s) => { if (s === 'begun') throw new Error('killed'); } }).catch(() => undefined);
+    expect(pendingId(m)).toBe('ak_held'); expect(W.key).toBe('present');
+  });
+  test('offline: the phone is cleared at once, only the id is kept, and the note does not promise what cannot happen', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const r = await accountSignOut(m.storage, undefined, phone() as never, { held: HELD, revoke: async () => 'pending' });
+    expect(r.done).toBe(true); expect(r.message).toBe(REVOKE_PENDING_NOTE); expect(r.message).not.toContain('online');
+    expect(dataLeft(m)).toEqual([]); expect(W.key).toBe('absent'); expect(W.swift).toBe(false);
+    expect(pendingId(m)).toBe('ak_held'); expect(new TextDecoder().decode(m.files.get(PENDING_REVOKE_FILE))).not.toContain('choir_sk_');
+  });
+  test('a key with no id that cannot be looked up: the phone is cleared, the person is told to revoke from the web, nothing is refused', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const r = await accountSignOut(m.storage, undefined, phone() as never, { held: { key: 'choir_sk_test-held-not-real', id: '' }, revoke: async () => 'noid' });
+    expect(r.done).toBe(true); expect(r.message).toBe(REVOKE_NOID_NOTE); expect(W.key).toBe('absent'); expect(dataLeft(m)).toEqual([]); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
+  });
+  test('a sign-out that native did not finish forgets the id: the key is still the phone\'s', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const refusing = { available: true, later: async () => ({ done: false }) };
+    const r = await accountSignOut(m.storage, undefined, refusing as never, { held: HELD, revoke: async () => 'revoked' });
+    expect(r.done).toBe(false); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
   });
   const withFetch = async (answer: (url: string, init: { method: string }) => Response, f: () => Promise<void>) => {
     const real = globalThis.fetch; const seen: string[] = [];
@@ -472,24 +493,34 @@ describe('S20 sign-out clears the phone at once and revokes by id, or keeps the 
     try { await f(); } finally { globalThis.fetch = real; }
     return seen;
   };
+  const file = (id: string, at = Date.now()) => enc(JSON.stringify({ id, at }));
   test('the retry, signed in, revokes the id of the file and removes it', async () => {
-    W = newWorld('present'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, enc('ak_held'));
+    W = newWorld('present'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, file('ak_old'));
     resetSeam(); bindNative(phone() as never);
-    const seen = await withFetch(() => new Response('{}', { status: 200 }), () => retryPendingRevoke(m.storage, {} as never));
-    expect(seen.length).toBe(1); expect(seen[0]).toMatch(/^DELETE .*\/auth\/api-keys\/ak_held$/); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
+    const seen = await withFetch(() => new Response('{}', { status: 200 }), () => retryPendingRevoke(m.storage, { get: () => null } as never));
+    expect(seen.length).toBe(1); expect(seen[0]).toMatch(/^DELETE .*\/auth\/api-keys\/ak_old$/); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
   });
-  test('the retry keeps the file while the phone is offline, and drops it for a key that is not this account\'s', async () => {
-    W = newWorld('present'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, enc('ak_held'));
+  test('the retry keeps the file while offline, and keeps it for a key that cannot revoke it (another account may sign in later) until 30 days', async () => {
+    W = newWorld('present'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, file('ak_old'));
     resetSeam(); bindNative(phone() as never);
-    await withFetch(() => { throw new TypeError('network'); }, () => retryPendingRevoke(m.storage, {} as never));
+    await withFetch(() => { throw new TypeError('network'); }, () => retryPendingRevoke(m.storage, { get: () => null } as never));
     expect(m.files.has(PENDING_REVOKE_FILE)).toBe(true);
-    await withFetch(() => new Response('{"error":"api key not found"}', { status: 404 }), () => retryPendingRevoke(m.storage, {} as never));
+    await withFetch(() => new Response('{"error":"api key not found"}', { status: 404 }), () => retryPendingRevoke(m.storage, { get: () => null } as never));
+    expect(m.files.has(PENDING_REVOKE_FILE)).toBe(true);
+    m.files.set(PENDING_REVOKE_FILE, file('ak_old', Date.now() - 31 * 24 * 3600 * 1000));
+    await withFetch(() => new Response('{"error":"api key not found"}', { status: 404 }), () => retryPendingRevoke(m.storage, { get: () => null } as never));
     expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
   });
-  test('signed out, the retry waits: no key, no request', async () => {
-    W = newWorld('absent'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, enc('ak_held'));
+  test('the retry never revokes the key the phone is signed in with', async () => {
+    W = newWorld('present'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, file('ak_current'));
     resetSeam(); bindNative(phone() as never);
-    const seen = await withFetch(() => new Response('{}', { status: 200 }), () => retryPendingRevoke(m.storage, {} as never));
+    const seen = await withFetch(() => new Response('{}', { status: 200 }), () => retryPendingRevoke(m.storage, { get: (n: string) => (n === 'choir.key-id' ? 'ak_current' : null) } as never));
+    expect(seen).toEqual([]); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(false);
+  });
+  test('signed out, the retry waits: no key, no request', async () => {
+    W = newWorld('absent'); const m = memFs([]); m.files.set(PENDING_REVOKE_FILE, file('ak_old'));
+    resetSeam(); bindNative(phone() as never);
+    const seen = await withFetch(() => new Response('{}', { status: 200 }), () => retryPendingRevoke(m.storage, { get: () => null } as never));
     expect(seen).toEqual([]); expect(m.files.has(PENDING_REVOKE_FILE)).toBe(true);
   });
 });

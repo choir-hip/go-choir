@@ -208,6 +208,10 @@ func (h *Handler) HandleRegisterMail(w http.ResponseWriter, r *http.Request) {
 // registerMailTimeout bounds the one mail call register/mail makes.
 const registerMailTimeout = 10 * time.Second
 
+// recoverySourceRegister marks recovery links made by register/mail: they neither supersede nor are suppressed by
+// the links /auth/recovery/request made, and the other way round.
+const recoverySourceRegister = "register"
+
 // sendRecoveryForRegister mails the holder of an address that has an account its recovery link, from
 // this route's own budget: a link already in the inbox is left live (it is not superseded, so a
 // stranger cannot invalidate it), and the token is counted under keys of its own, so the route spends
@@ -217,19 +221,24 @@ func (h *Handler) sendRecoveryForRegister(ctx context.Context, r *http.Request, 
 	if h.recoveryMailer == nil {
 		return errors.New("recovery mailer is not configured")
 	}
-	live, err := h.store.HasLiveRecoveryToken(user.ID, time.Now().UTC())
+	live, err := h.store.HasLiveRecoveryToken(user.ID, recoverySourceRegister, time.Now().UTC())
 	if err != nil {
 		return err
 	}
 	if live {
 		return nil // the link in the inbox still works
 	}
-	token, err := h.store.CreateRecoveryToken(ctx, user.ID, user.Email,
+	token, err := h.store.CreateRecoveryTokenFrom(ctx, recoverySourceRegister, user.ID, user.Email,
 		hashEmail("register-mail:"+normalizeEmailAddress(user.Email)), hashIP("register-mail:"+clientIP(r)))
 	if err != nil {
 		return err
 	}
-	return h.recoveryMailer.SendRecoveryLink(ctx, user.Email, h.recoveryLink(token), RecoveryTokenTTL)
+	if err := h.recoveryMailer.SendRecoveryLink(ctx, user.Email, h.recoveryLink(token), RecoveryTokenTTL); err != nil {
+		// A link nobody received must not stand in for the retry.
+		_ = h.store.DiscardRecoveryToken(context.WithoutCancel(ctx), token)
+		return err
+	}
+	return nil
 }
 
 func randomHex(n int) (string, error) {

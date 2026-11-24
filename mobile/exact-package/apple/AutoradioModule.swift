@@ -108,7 +108,7 @@ public final class AutoradioModule: ExactPackage {
     nonisolated(unsafe) public static weak var current: AutoradioModule?
 
     /// The native half of sign-out: playback stops, the Swift run sheet posts what it holds under the old key, the key goes, the Swift
-    /// stores are wiped, the server revoke was shared code's, made before this (account.ts `revokeHeldKey`). Answers when that has finished.
+    /// stores are wiped, the server revoke is shared code's, made after this with the key it read before (account.ts `revokeDirect`). Answers when that has finished.
     /// `keepKey`: the account CHANGED (a different key is stored): only the old account's Swift stores go, the key stays. Otherwise the whole sign-out.
     public func signOutForShared(keepKey: Bool = false) async { if keepKey { await choir?.accountWipe.run() } else { await choir?.signOut() } }
 

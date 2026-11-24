@@ -579,8 +579,8 @@ func TestAccessTokenWithoutTheProofClaimIsRefused(t *testing.T) {
 	}
 }
 
-// register/mail for an address that has an account neither replaces a recovery link already in the
-// inbox nor spends what /auth/recovery/request allows that address and that IP.
+// register/mail for an address that has an account makes a link of its own: it neither replaces the link
+// /auth/recovery/request made nor spends that route's budget.
 func TestRegisterMailForAKnownAddressLeavesTheRecoveryLinkAndBudgetAlone(t *testing.T) {
 	h, rm := recoveryMailTestEnv(t)
 	h.config.RPID, h.config.RPOrigins = testRP, []string{testOrigin}
@@ -592,28 +592,64 @@ func TestRegisterMailForAKnownAddressLeavesTheRecoveryLinkAndBudgetAlone(t *test
 		t.Fatalf("setup: %d, %d mails", rec.Code, len(rm.mails()))
 	}
 	link := rm.mails()[0].link
-	token := link[strings.Index(link, "#")+1:]
-	token = strings.TrimPrefix(token, "token=")
+	token := strings.TrimPrefix(link[strings.Index(link, "#")+1:], "token=")
 	for i := 0; i < 4; i++ {
 		if rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": "holder@example.com", "binding": newBinding(t)}); rec.Code != 200 {
 			t.Fatalf("register/mail %d = %d %s", i, rec.Code, rec.Body.String())
 		}
 	}
-	if len(rm.mails()) != 1 {
-		t.Fatalf("register/mail mailed another link over the one in the inbox: %d mails", len(rm.mails()))
+	if len(rm.mails()) != 2 {
+		t.Fatalf("%d mails in all: want the direct link and one link of register/mail's own", len(rm.mails()))
 	}
-	// The link in the inbox still works.
 	if _, err := h.store.ConsumeRecoveryToken(context.Background(), token); err != nil {
 		t.Fatalf("the link in the inbox was invalidated: %v", err)
-	}
-	// And when there is none, register/mail sends one, counted outside /auth/recovery/request's budget.
-	if rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": "holder@example.com", "binding": newBinding(t)}); rec.Code != 200 || len(rm.mails()) != 2 {
-		t.Fatalf("no live link: register/mail = %d, %d mails", rec.Code, len(rm.mails()))
 	}
 	for i := 0; i < RecoveryMaxPerEmail-1; i++ { // the setup request already spent one
 		if rec := postRecoveryRequest(t, h, "holder@example.com", fmt.Sprintf("203.0.113.%d:1", 20+i)); rec.Code != 200 {
 			t.Fatalf("recovery/request %d was refused (%d) after register/mail calls: its budget was spent", i, rec.Code)
 		}
+	}
+}
+
+// A recovery link that could not be mailed does not stand in for the retry: the next request mails again.
+func TestAFailedRecoveryMailLeavesNoLiveLinkToSuppressTheRetry(t *testing.T) {
+	h, rm := recoveryMailTestEnv(t)
+	h.config.RPID, h.config.RPOrigins = testRP, []string{testOrigin}
+	h.signInMailer = &fakeSignInMailer{}
+	if _, err := h.store.CreateUser("held3", "held3@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	rm.err = errors.New("maild down")
+	if rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": "held3@example.com", "binding": newBinding(t)}); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("first try = %d, want 503", rec.Code)
+	}
+	rm.err = nil
+	before := len(rm.mails())
+	if rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": "held3@example.com", "binding": newBinding(t)}); rec.Code != http.StatusOK || len(rm.mails()) != before+1 {
+		t.Fatalf("retry = %d with %d new mails: a link nobody received suppressed it", rec.Code, len(rm.mails())-before)
+	}
+}
+
+// A link register/mail made neither replaces nor is suppressed by the link /auth/recovery/request made.
+func TestTheTwoRecoveryRoutesDoNotTouchEachOthersLinks(t *testing.T) {
+	h, rm := recoveryMailTestEnv(t)
+	h.config.RPID, h.config.RPOrigins = testRP, []string{testOrigin}
+	if _, err := h.store.CreateUser("held4", "held4@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if rec := postJSONFrom(h.HandleRegisterMail, nextTestIP(), map[string]string{"email": "held4@example.com", "binding": newBinding(t)}); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	regLink := rm.mails()[0].link
+	regToken := strings.TrimPrefix(regLink[strings.Index(regLink, "#")+1:], "token=")
+	if rec := postRecoveryRequest(t, h, "held4@example.com", "203.0.113.50:1"); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	if len(rm.mails()) != 2 {
+		t.Fatalf("the direct route was suppressed by the other's live link: %d mails", len(rm.mails()))
+	}
+	if _, err := h.store.ConsumeRecoveryToken(context.Background(), regToken); err != nil {
+		t.Fatalf("the direct route replaced the link register/mail made: %v", err)
 	}
 }
 

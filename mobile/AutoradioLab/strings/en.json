@@ -10,7 +10,7 @@
   "app.signin.terms": "Terms",
   "app.signin.create": "Create account",
   "app.signin.code": "8-digit code",
-  "app.signin.codesent": "We emailed you an 8-digit code. Type it here and tap Create account. If this email already has an account, we emailed a recovery link instead.",
+  "app.signin.codesent": "We emailed you an 8-digit code. Type it here and tap Create account. If this email already has an account, no code will come: we emailed a recovery link instead. Open it on choir.news to add a passkey, then sign in here with the passkey.",
   "app.signin.notnow": "Not now",
   "app.signin.waiting": "Waiting for the passkey screen.",
   "app.signin.cancel": "Cancel"

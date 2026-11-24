@@ -6,7 +6,7 @@
 #
 #   scripts/e2e-email-signin-staging.sh [--dry-run] [--bootstrap-only] [out-dir]
 #
-# Env: E2E_DRILL_OWNER and E2E_DRILL_KEY for the bootstrap only (an existing account, d@e, and its
+# Env: E2E_DRILL_OWNER and E2E_DRILL_KEY for the bootstrap only (the USER ID of an existing account, d@e's, as maildctl bind-number --owner takes it, and that account's
 # read:runtime key): an account is made only after a code mailed to its address, so the number is bound to
 # that account first, the code is read from its inbox, and after the new account exists the number is
 # bound to it (docs/problems/passkey-claims-an-unproved-address-2026-11-24.md; not run).
@@ -18,8 +18,10 @@
 #   frontend/tests/email-signin-bootstrap-deployed.spec.js registers the test
 #   account at a reserved numbered test address (ssh node-b maildctl
 #   reserve-test-number) with a virtual WebAuthn passkey, binds the number to
-#   the account (maildctl bind-number, between register/begin and finish; the
-#   public receive policy quarantines, the key reads the quarantine folder),
+#   the drill account first (maildctl bind-number --owner <its user id>), reads the
+#   registration code from the drill account's inbox, makes the account, and then binds
+#   the number to the new account (the public receive policy quarantines, the key
+#   reads the quarantine folder),
 #   mints a read:runtime
 #   key from the passkey session, completes verify-address, and waits for the
 #   account's computer. Needs: ssh access to node-b, chromium for Playwright

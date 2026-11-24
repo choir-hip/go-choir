@@ -216,7 +216,7 @@
             required
           />
           {#if codeSent}
-            <p class="fine-print" data-register-code-sent>We mailed a code to this address. If you already have an account, we mailed a recovery link instead.</p>
+            <p class="fine-print" data-register-code-sent>We mailed a code to this address. If you already have an account, no code will come: we mailed a recovery link instead. Open it on choir.news to add a passkey, or use Lost your passkey?.</p>
             <label for="register-code">Code from the email</label>
             <input
               id="register-code"
