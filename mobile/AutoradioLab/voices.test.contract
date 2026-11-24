@@ -9,14 +9,16 @@ test "Settings, Voice and models: the voices are listed under their model, each 
   clock settle
   tap "settings-nav-voice"
   clock settle
+  tap "mv-tab-voice"
+  clock settle
   expect tree has "voice-group-kokoro-82m-ane"
   expect text "voice-group-name-kokoro-82m-ane" == "Kokoro 82M"
   expect text "voice-credit-kokoro-82m-ane" == "Kokoro 82M voice by hexgrad, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
-  expect tree has "voice-card-kokoro:af_heart"
-  expect tree has "voice-card-kokoro:am_adam"
+  expect tree has "mv-voice-kokoro:af_heart"
+  expect tree has "mv-voice-kokoro:am_adam"
   expect tree has "voice-group-phonon-31m"
   expect text "voice-credit-phonon-31m" == "Phonon 31M voice by Gradium, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
-  expect tree has "voice-card-phonon:en_us_Zoey"
+  expect tree has "mv-voice-phonon:en_us_Zoey"
 
 test "Settings, Voice and models: the phone's own voice is a card with no model group and no credit"
   clock data
@@ -26,6 +28,30 @@ test "Settings, Voice and models: the phone's own voice is a card with no model 
   clock settle
   tap "settings-nav-voice"
   clock settle
-  expect tree has "voice-card-system"
+  tap "mv-tab-voice"
+  clock settle
+  expect tree has "mv-voice-system"
   expect tree missing "voice-credit-system"
   expect tree missing "voice-group-system"
+
+test "Settings, Voice and models: one tab per kind of model, and a voice is a row with Test and Use like every other row"
+  clock data
+  tap "bar-mark"
+  clock settle
+  tap "place-settings"
+  clock settle
+  tap "settings-nav-voice"
+  clock settle
+  expect tree has "mv-tabs"
+  expect tree has "mv-tab-hearing"
+  expect tree has "mv-tab-voice"
+  expect tree missing "mv-tab-answering"
+  expect tree has "mv-body-hearing"
+  expect tree missing "mv-voice-kokoro:af_heart"
+  tap "mv-tab-voice"
+  clock settle
+  expect tree has "mv-body-voice"
+  expect tree has "md-voice-sample-voice"
+  expect tree has "mv-voice-kokoro:af_heart"
+  expect tree has "mv-voice-test-kokoro:af_heart"
+  expect text "mv-voice-name-kokoro:af_heart" == "Heart"

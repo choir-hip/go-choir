@@ -23,6 +23,19 @@ public enum KnownModels {
             .appendingPathComponent("FluidAudio/Models", isDirectory: true)
     }
 
+    /// Where FluidAudio keeps its TEXT-TO-SPEECH models (Kokoro, Pocket TTS, Phonon): `TtsCacheDirectory` + `Models`, which is `Application Support/fluidaudio/Models` on iOS (lower case: the volume is case-sensitive) and `~/.cache/fluidaudio/Models`
+    /// on the Mac. The app module hands the library's own answer to `ttsRootProvider` when it registers (ModelHub.register); this default spells the same path for code that runs without the library (the tests of the Kit).
+    /// Every voice model's folders are looked up under THIS root (the seal, present, size, progress, Remove): a hand-written other spelling is a folder that does not exist on a phone.
+    public static var ttsRoot: URL { ttsRootProvider() }
+    public static let defaultTtsRoot: @Sendable () -> URL = {
+        #if os(macOS)
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache/fluidaudio/Models", isDirectory: true)
+        #else
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("fluidaudio/Models", isDirectory: true)
+        #endif
+    }
+    nonisolated(unsafe) public static var ttsRootProvider: @Sendable () -> URL = defaultTtsRoot
+
     /// The small language model: quick decisions and the spoken acknowledgement. Qwen3-0.6B Q8_0 from the official GGUF repo.
     public static let qwen3 = ModelSpec(
         id: "qwen3-0.6b-q8_0",
@@ -195,7 +208,7 @@ public enum KnownModels {
         return base + extraGGUF.map { ManagedModelSpec(id: $0.spec.id, label: $0.spec.fileName, source: "hf:" + $0.repo, approxBytes: $0.spec.bytes, license: $0.license, cachePath: storeRoot) }
     }
     private static var base: [ManagedModelSpec] {
-        let c = fluidRoot
+        let c = fluidRoot, t = ttsRoot
         return [
             ManagedModelSpec(id: "silero-vad-v6.2.1", label: "Silero VAD v6.2.1 (256 ms, Core ML)", source: "hf:FluidInference/silero-vad-coreml",
                              approxBytes: 2_000_000, license: "MIT (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["silero-vad"]),
@@ -211,16 +224,16 @@ public enum KnownModels {
                              approxBytes: fluidSpeechMini.totalBytes, license: fluidSpeechMini.license + " (FluidVoice model); FluidAudio Apache-2.0",
                              cachePath: storeRoot, cacheFolders: [fluidSpeechMini.folder], loadsWithoutFetching: true),
             ManagedModelSpec(id: "kokoro-82m-ane", label: "Kokoro 82M ANE v3 (Core ML)", source: "hf:FluidInference/kokoro-82m-coreml",
-                             approxBytes: kokoroBytes, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["kokoro-82m-coreml", "kokoro"],
+                             approxBytes: kokoroBytes, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: t, cacheFolders: ["kokoro-82m-coreml", "kokoro"],
                              credit: VoiceRows.credit(model: "kokoro-82m-ane")),
             ManagedModelSpec(id: "pocket-tts", label: "PocketTTS 100M (Kyutai, Core ML)", source: "hf:FluidInference/pocket-tts-coreml",
-                             approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts"],
+                             approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: t, cacheFolders: ["pocket-tts"],
                              credit: "PocketTTS by Kyutai, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the files are modified Core ML conversions."),
             // Phonon 31M: the pack `pocket-tts-coreml/phonon/phonon-31m-en` (Apache-2.0, its own LICENSE; the repo's other folders are CC-BY-4.0).
             // FluidAudio's `PocketTtsSmallDownloader` keeps 126 of its files: the MLState model, the fp32 Mimi decoder, the constants and all 103
-            // voices, 173,136,428 bytes by the Hugging Face API listing of 2026-11-15. It is asked to put the pack in `fluidRoot` (see PhononVoice).
+            // voices, 173,136,428 bytes by the Hugging Face API listing of 2026-11-15. It lands where the library puts every voice model (`ttsRoot`: `<root>/pocket-tts/phonon/phonon-31m-en`, see PhononVoice).
             ManagedModelSpec(id: "phonon-31m", label: "Phonon 31M (Gradium, Core ML)", source: "hf:FluidInference/pocket-tts-coreml/phonon/phonon-31m-en",
-                             approxBytes: 173_000_000, license: "Apache-2.0 (Gradium model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts-coreml/phonon"],
+                             approxBytes: 173_000_000, license: "Apache-2.0 (Gradium model); FluidAudio Apache-2.0", cachePath: t, cacheFolders: ["pocket-tts/phonon"],
                              credit: VoiceRows.credit(model: "phonon-31m")),
             ManagedModelSpec(id: "lfm3-audio-2b", label: "LFM3-Audio-2B (Core ML, ASR + TTS)", source: "hf:FluidInference/lfm3-audio-2b-coreml",
                              approxBytes: 2_900_000_000, license: "LFM Open License (read it: commercial use limited by revenue)", cachePath: c),

@@ -53,6 +53,8 @@ component Autoradio
     mdUse
     mdRemove
     mdTest
+    mdTab
+    mdTabTo
     lrn
     lrnPress
     lrnLeaveFlow
@@ -408,6 +410,7 @@ component Autoradio
     // ---- the voice cards ----
     vc
     vcPick
+    vcHear
     vcStop
     vcContinue
     // ---- lane 9: motion and the mark ----

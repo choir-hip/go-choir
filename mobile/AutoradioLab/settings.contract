@@ -16,8 +16,7 @@ use Theme, ThemeList, ThemeCard, ThemeExtras, LearnedInfo, ThemeCards, ChoirAuth
 use SettingsAccount, AboutBuild, SettingsComputer, AboutInfo from "./settings-types.contract"
 use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
-use VoiceCardsList from "./voice.contract"
-use ModelsSection from "./models.contract"
+use ModelsTabBar, ModelsTabBody from "./models.contract"
 use LearnCard from "./learn.contract"
 use SkeletonLine from "./transitions.contract"
 
@@ -371,24 +370,9 @@ component VoiceScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Voice and models", back=true)
-      text "Every model the radio can use, on this phone. Each row says what it is, its size and who made it. A model is fetched only when you press Download on its row; then you can try it with Test, make it the one in use, or remove it." testId="settings-voice-note" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
-      ModelsSection(section="transcriber")
-      Hairline()
-      ModelsSection(section="live")
-      Hairline()
-      ModelsSection(section="bounds")
-      Hairline()
-      ModelsSection(section="voice")
-      SectionLabel(label="The voices")
-      VoiceCardsList()
-      Hairline()
-      ModelsSection(section="responder")
-      Hairline()
-      ModelsSection(section="decision")
-      Hairline()
-      ModelsSection(section="speaker")
-      Hairline()
-      ModelsSection(section="search")
+      text "One tab for each kind of model, the same row on every tab: what it is, its size, who made it, and where it stands. A model is fetched only when you press Download on its row; then Test it, make it the one in Use, or Remove it." testId="settings-voice-note" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      ModelsTabBar()
+      ModelsTabBody()
 
 // ---------------------------------------------------------------- your voice
 

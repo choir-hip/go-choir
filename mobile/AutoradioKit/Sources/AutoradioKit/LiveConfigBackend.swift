@@ -14,8 +14,8 @@ public final class LiveConfigBackend: ConfigBackend, @unchecked Sendable {
     }
     /// The Core ML folders a managed (non-pinned) candidate owns on the phone.
     func managedFolders(_ c: ModelCandidate) -> [URL] {
-        guard !KnownModels.isPinned(c.id), let spec = KnownModels.managed.first(where: { $0.id == c.id }), spec.cachePath == KnownModels.fluidRoot else { return [] }
-        return (spec.cacheFolders ?? []).filter { !$0.isEmpty && !$0.contains("..") && !$0.hasPrefix("/") }.map { managedRoot.appendingPathComponent($0, isDirectory: true) }
+        guard !KnownModels.isPinned(c.id), let spec = KnownModels.managed.first(where: { $0.id == c.id }), let root = spec.cachePath, root == KnownModels.fluidRoot || root == KnownModels.ttsRoot else { return [] }
+        return (spec.cacheFolders ?? []).filter { !$0.isEmpty && !$0.contains("..") && !$0.hasPrefix("/") }.map { (root == KnownModels.ttsRoot ? root : managedRoot).appendingPathComponent($0, isDirectory: true) }
     }
     public func probe() -> DeviceProbe { probeFn() }
     public func isOnDisk(_ c: ModelCandidate) async -> Bool {

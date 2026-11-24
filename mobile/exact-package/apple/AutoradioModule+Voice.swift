@@ -102,6 +102,8 @@ extension AutoradioModule {
         VoiceController.shared = c
         handle("voiceCards") { _, reply in reply(c.view()) }
         handle("voicePick") { args, reply in c.sampler.pick(args["id"] as? String ?? ""); reply(c.view()) }
+        // Test on a voice (Voice and models): its sample plays, nothing is chosen. Native because the audio engine plays it.
+        handle("voiceHear") { args, reply in c.sampler.hear(args["id"] as? String ?? ""); reply(c.view()) }
         handle("voiceStop") { _, reply in c.sampler.stop(); reply(c.view()) }
         // First-run: the voice stays as chosen, the sample stops, the interview is next.
         handle("voiceContinue") { _, reply in

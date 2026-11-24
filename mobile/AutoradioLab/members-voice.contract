@@ -1,6 +1,6 @@
 // Members file (the voice cards). The state is the voice controller's in the module (AutoradioModule+Voice.swift); every button is a
 // send that answers the same shape the cards read.
-use voiceCards, voicePick, voiceStop, voiceContinue from "@choir/autoradio"
+use voiceCards, voicePick, voiceHear, voiceStop, voiceContinue from "@choir/autoradio"
 use VoiceCards from "@choir/autoradio"
 
 members Autoradio
@@ -9,6 +9,9 @@ members Autoradio
 
   action vcPick(id: string)
     send vcm = voicePick(id=id)
+  // Test on a voice: its sample plays and nothing is chosen (Use is vcPick).
+  action vcHear(id: string)
+    send vcm = voiceHear(id=id)
   action vcStop
     send vcm = voiceStop()
   // First-run: the chosen voice stays; on to the interview.

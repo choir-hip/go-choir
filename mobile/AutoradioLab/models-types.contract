@@ -21,8 +21,13 @@ shape ModelRow
   testing: bool
   testLine: string
 
+shape ModelTab
+  id: string
+  title: string
+
 shape ModelSection
   section: string
+  tab: string
   job: string
   title: string
   why: string
@@ -34,6 +39,7 @@ shape FirstLine
   credit: string
 
 shape ModelsView
+  tabs: ModelTab[]
   jobs: ModelSection[]
   rev: number
   voiceReady: bool

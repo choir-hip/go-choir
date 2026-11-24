@@ -91,7 +91,7 @@ public final class KokoroVoice: Voice, @unchecked Sendable {
 
 /// Gradium's Phonon 31M English voice through FluidAudio's `PocketTtsSmallManager(model: .phonon31m)` (FluidAudio 0.18.0 and later; the
 /// 0.18.3 we link has it). Autoregressive like Pocket, so audio frames (80 ms, 24 kHz) stream out while it generates. The pack is
-/// `FluidInference/pocket-tts-coreml`, folder `phonon/phonon-31m-en` (Apache-2.0), fetched by FluidAudio itself into `KnownModels.fluidRoot`.
+/// `FluidInference/pocket-tts-coreml`, folder `phonon/phonon-31m-en` (Apache-2.0), fetched by FluidAudio itself into its TTS cache (`KnownModels.ttsRoot`).
 /// Voice ids are the pack's own (`en_us_Easton`, `en_us_Zoey`, `en_gb_Maeve`, `default`, ...). NOT the Hugging Face repository
 /// `FluidInference/phonon-2-coreml`: that is Fermion Research's Phonon-2 speech recogniser, a different model with the same word in its name.
 public final class PhononVoice: Voice, @unchecked Sendable {
@@ -107,12 +107,11 @@ public final class PhononVoice: Voice, @unchecked Sendable {
     let voice: String
     public init(_ p: StageParams) { voice = p.string("voice", "en_us_Easton") }
 
-    /// FluidAudio puts a small-model pack at `<directory>/Models/pocket-tts-coreml/phonon/phonon-31m-en`; with the directory one above
-    /// `fluidRoot` (`.../FluidAudio/Models`) that is the folder the catalog's `cacheFolders` names, the one the progress bar watches.
+    /// FluidAudio puts a small-model pack at `<TtsCacheDirectory>/Models/<pocket repo folder>/phonon/phonon-31m-en`: the folder the catalog's `cacheFolders` names under `ttsRoot`, the one the progress bar watches.
     static func load(preferring voice: String) async throws -> (PocketTtsSmallManager, @Sendable () async -> Void) {
         try LibraryScope.require("phonon-31m")
         let m = PocketTtsSmallManager(model: .phonon31m, defaultVoice: voice)
-        try await m.initialize(directory: KnownModels.fluidRoot.deletingLastPathComponent())
+        try await m.initialize()                  // the library's own directory (`TtsCacheDirectory`): the folder `KnownModels.ttsRoot` names
         return (m, {})                       // the manager has no cleanup: its Core ML models go when the last reference does
     }
 
