@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/json"
 	"net/http"
 )
 
@@ -18,7 +19,14 @@ var appleWebCredentialsApps = []string{
 	"S47GERGJZ3.news.choir.autoradio.lab.one",
 }
 
-const appleAppSiteAssociationBody = `{"webcredentials":{"apps":["S47GERGJZ3.news.choir.autoradio","S47GERGJZ3.news.choir.autoradio.lab","S47GERGJZ3.news.choir.autoradio.lab.one"]}}` + "\n"
+// appleAppSiteAssociationBody is the served file, built once from the list.
+var appleAppSiteAssociationBody = func() []byte {
+	b, err := json.Marshal(map[string]any{"webcredentials": map[string]any{"apps": appleWebCredentialsApps}})
+	if err != nil {
+		panic(err)
+	}
+	return append(b, '\n')
+}()
 
 // HandleAppleAppSiteAssociation serves the file. It is registered at the exact
 // path, ahead of the catch-all computer-surface route, so no sign-in check,
@@ -33,6 +41,6 @@ func (h *Handler) HandleAppleAppSiteAssociation(w http.ResponseWriter, r *http.R
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodGet {
-		_, _ = w.Write([]byte(appleAppSiteAssociationBody))
+		_, _ = w.Write(appleAppSiteAssociationBody)
 	}
 }

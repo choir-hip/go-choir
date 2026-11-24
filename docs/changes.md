@@ -38,6 +38,14 @@ Counted 2026-11-23: 520 lane branches on the remote; 468 are landed, 13
 superseded, 11 evidence only, 26 are distinct live work (the rows above and
 the first table's). Seven designs exist only on lanes.
 
+## choir.news serves the app association file for passkeys (2026-11-24)
+
+- **What:** `GET /.well-known/apple-app-site-association` on choir.news answers 200 with JSON naming three app ids of team S47GERGJZ3 (`news.choir.autoradio`, `.lab`, `.lab.one`) under `webcredentials`. It is a public route with no sign-in, served by the proxy (`internal/proxy/apple_app_site_association.go`).
+- **Why:** iOS lets an app create or use a site's passkeys only if the site names the app in this file. It is the first piece of passkey account creation and sign-in inside the phone app (owner, 2026-11-23), landed ahead of the rest because Apple's servers fetch and cache it.
+- **Proof:** the Go test drives the real route table and handler chain (200, content type, no body on HEAD, 405 for other methods, a neighbouring path does not serve it). After deploy: `curl -sS -D- https://choir.news/.well-known/apple-app-site-association`. Not proved: that a phone accepts it; the app's entitlement is not on main yet, and the `.lab` id matches only a paid-team build with its own App ID (the first app on the owner's phone is a free-team build and will not match).
+- **Replaced:** nothing; the path used to fall to the computer-surface catch-all.
+- **Undo:** revert the commit.
+
 ## 2026-11-23
 
 ### A voice ask searches the paper (`2d44744e0`, `95ce70334`, `42fa0d9f4`, orange)

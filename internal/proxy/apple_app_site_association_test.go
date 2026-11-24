@@ -28,7 +28,13 @@ func TestAppleAppSiteAssociationThroughRealChain(t *testing.T) {
 		if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
 			t.Fatalf("%s content type = %q, want application/json", method, ct)
 		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "public, max-age=300" {
+			t.Fatalf("%s cache control = %q", method, cc)
+		}
 		if method == http.MethodHead {
+			if rec.Body.Len() != 0 {
+				t.Fatalf("HEAD wrote a body of %d bytes", rec.Body.Len())
+			}
 			continue
 		}
 		var body struct {
@@ -47,9 +53,6 @@ func TestAppleAppSiteAssociationThroughRealChain(t *testing.T) {
 		if !reflect.DeepEqual(body.WebCredentials.Apps, want) {
 			t.Fatalf("webcredentials.apps = %v, want %v", body.WebCredentials.Apps, want)
 		}
-		if !reflect.DeepEqual(appleWebCredentialsApps, want) {
-			t.Fatalf("list constant drifted from the served body: %v", appleWebCredentialsApps)
-		}
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/.well-known/apple-app-site-association", nil)
@@ -57,5 +60,16 @@ func TestAppleAppSiteAssociationThroughRealChain(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status = %d, want 405", rec.Code)
+	}
+	if allow := rec.Header().Get("Allow"); allow != "GET, HEAD" {
+		t.Fatalf("POST Allow = %q", allow)
+	}
+
+	// Only the exact path serves the file: a neighbour falls to the catch-all.
+	req = httptest.NewRequest(http.MethodGet, "https://choir.news/.well-known/other", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Header().Get("Content-Type") == "application/json" && rec.Code == http.StatusOK && rec.Body.String() == string(appleAppSiteAssociationBody) {
+		t.Fatalf("a neighbouring path served the association file")
 	}
 }
