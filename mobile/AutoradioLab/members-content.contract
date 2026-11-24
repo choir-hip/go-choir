@@ -7,8 +7,8 @@
 // document in front when it is open and ready (doc). Everything else has no row and no clearance.
 // `ctlClear` is how far the content's frame stops above the bottom edge (the bar's lens plus this row): 124 with the bar idle
 // (8 + the "On:" line + the controls + the row), 168 while a line shows above the controls (now playing, heard, holding, error).
-use readerOpenExternal, textureEditInfo, textureEdit, textureFlush from "@choir/autoradio"
-use TextureEditInfo from "@choir/autoradio"
+use readerOpenExternal from "@choir/autoradio"
+use TextureEditInfo from "./textedit-types.contract"
 
 members Autoradio
   state ctlOpen = false
@@ -17,9 +17,20 @@ members Autoradio
   // What the expanded row shows under its actions: "" | "contents" | "find".
   state ctlPanel = ""
 
-  // ---- your own Texture document: edited in rich text with Exact's Markdown editor (Kit/TextureEditor.swift)
-  resource edInfo = textureEditInfo(address=pg.top) as shape TextureEditInfo else empty()
-  mutation edm as shape TextureEditInfo
+  // ---- your own Texture document: edited in rich text with Exact's Markdown editor (texture-edit.ts, shared code; its state model is at the head of that file)
+  resource edInfo = textureEditInfo(pg.top) as shape TextureEditInfo else empty()
+  // Three mutations so one never lets another go (answers-let-go.md): the typed text, the saves (Done, the idle pause, leaving the page, the listener's choice after a conflict) and the retry.
+  mutation edm as shape TextureEditInfo refreshes edInfo
+  mutation edf as shape TextureEditInfo refreshes edInfo
+  mutation edr as shape TextureEditInfo refreshes edInfo
+  // The editor opens on the head the server holds NOW: the field first shows the reader's copy (or the kept text), and the answer of `textureEditOpen` replaces it while the listener has typed nothing.
+  mutation edo as shape TextureEditInfo then edOpened
+  // The field is replaced by what the open found only while the listener has typed nothing (`edUntouched`). The answer names its document: another page's answer is not used.
+  state edUntouched = true
+  derive edHasKeptHere = edInfo.address == topAddr and edInfo.hasKept
+  derive edOpenGot = match edo { case some(a) => (a.address == edFor and (a.opened or a.hasKept)), case none => false }
+  derive edOpenText = match edo { case some(a) => (a.address == edFor ? (a.hasKept ? a.kept : a.head) : ""), case none => "" }
+  derive edStatus = edInfo.status
   state edOn = false
   state edFor = ""
   state edDraft = ""
@@ -27,7 +38,7 @@ members Autoradio
   state edUnavail = ""
   state edCurLink = ""
   state edUrl = ""
-  derive edReady = topAddr.startsWith("texture:") and rdoc.address == topAddr and rdoc.status == "ready" and rdoc.editable
+  derive edReady = topAddr.startsWith("texture:") and rdoc.address == topAddr and rdoc.status == "ready" and rdoc.editable and edInfo.writable
 
   derive ctlMode = qv.webUrl != "" ? "barweb" : ((webUrl != "" and webFor == topAddr) ? "web" : ((topAddr.startsWith("doc:") and ldInfo.address == topAddr and ldInfo.status == "ready") ? "doc" : (edReady ? "texture" : "")))
   derive ctlKey = ctlMode == "barweb" ? qv.webUrl : (ctlMode == "web" ? webUrl : topAddr)
@@ -35,7 +46,7 @@ members Autoradio
   derive ctlClear = ctlMode == "" ? 0 : (bi.state == "idle" ? 124 : 168)
   derive ctlTitle = ctlMode == "barweb" ? qv.webHost : (ctlMode == "web" ? webHost : (ctlMode == "texture" ? rdoc.title : ldInfo.title))
   derive ctlBusy = (ctlMode == "barweb" or ctlMode == "web") and webBusy
-  derive ctlPos = (ctlMode == "doc" and ldInfo.sections.length > 0) ? `${(ldSec + 1).toFixed(0)} of ${ldInfo.sections.length.toFixed(0)}` : (ctlMode == "texture" ? edInfo.label : "")
+  derive ctlPos = (ctlMode == "doc" and ldInfo.sections.length > 0) ? `${(ldSec + 1).toFixed(0)} of ${ldInfo.sections.length.toFixed(0)}` : (ctlMode == "texture" ? (edInfo.notice != "" ? edInfo.notice : edInfo.label) : "")
 
   action ctlToggle
     ctlOpen = ctlUp == false
@@ -101,7 +112,9 @@ members Autoradio
   action edBegin
     edOn = true
     edFor = topAddr
-    edDraft = rdoc.source
+    edDraft = edHasKeptHere ? edInfo.kept : rdoc.source
+    edUntouched = true
+    send edo = textureEditOpen(topAddr)
     edFormats = ""
     ctlOpen = true
     ctlFor = topAddr
@@ -110,10 +123,46 @@ members Autoradio
     edOn = false
     ctlOpen = false
     ctlPanel = ""
-    send edm = textureFlush(address=pg.top)
+    send edf = textureFlush(edFor)
+  action edOpened
+    if edOn and edUntouched and edOpenGot
+      edDraft = edOpenText
+  // Every keystroke names what the field showed BEFORE it (an action reads the state as it was at its start): the editor posts over the head only when that was the head's text.
   action edInput(value: string)
+    edUntouched = false
     edDraft = value
-    send edm = textureEdit(address=pg.top, markdown=value)
+    send edm = textureEdit(edFor, value, edDraft)
+  // The pause in typing: 2 s after the last keystroke (the key is the draft, so each keystroke restarts the wait) the text is posted. A source cannot sleep between answers, so the wait is here.
+  action edSave
+    send edf = textureFlush(edFor)
+  task edIdle when edOn and edFor != "" and edInfo.status == "dirty" key=edDraft
+    after(2000, edSave)
+  // Leaving the page with the editor open posts what was typed.
+  action edLeft
+    edOn = false
+    ctlOpen = false
+    ctlPanel = ""
+    send edf = textureFlush(edFor)
+  task edLeave when edOn and edFor != "" and topAddr != edFor key=edFor
+    after(1, edLeft)
+  // What an offline or refused save kept: tried again 2 s after launch, then every 30 s while anything is waiting and the key is good, on any page.
+  state edRetryTick = 0
+  action edRetryGo
+    edRetryTick = edRetryTick + 1
+    send edr = textureFlush("")
+  task edRetryFirst when edInfo.waiting > 0 and edRetryTick == 0 and acs.state == "signedIn" key=edRetryTick
+    after(2000, edRetryGo)
+  task edRetry when edInfo.waiting > 0 and edRetryTick > 0 and acs.state == "signedIn" key=edRetryTick
+    after(30000, edRetryGo)
+  // The head moved under an unsent text: nothing was posted or merged. The listener chooses: their text over the new version, or the new version.
+  action edKeepMine
+    send edf = textureOverwrite(edFor)
+  action edUseTheirs
+    edOn = false
+    ctlOpen = false
+    ctlPanel = ""
+    rtick = rtick + 1
+    send edf = textureDiscard(edFor)
   action edSelected(s)
     edFormats = s.formats
     edUnavail = s.unavailable

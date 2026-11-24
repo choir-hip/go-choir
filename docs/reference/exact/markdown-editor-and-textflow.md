@@ -380,16 +380,7 @@ blocks). They do not make the editor flow around shapes [inferred].
   (and would on web and macOS); on Android `format` is refused and `select`'s payload
   is a plain-field `InputEvent` or absent [src for refusal; payload [unrun]].
 - Patch: `mobile/exact-patches/0001` (hides syntax on iOS).
-- Swift behind it: `mobile/AutoradioKit/Sources/AutoradioKit/TextureEditor.swift` (261
-  lines) holds a session per document with `base` (the head as read), `draft`, a
-  2-second pause then POST of the whole text, offline copy in Application Support
-  (`pending`), a 30-second retry, and "the newest text wins; the parent is the head at
-  that moment". It does no merge of text: it posts `parent_revision_id` and
-  `TextureBodyMerge.merge(original, originalMarkdown, newMarkdown)` for the body
-  document [src, `TextureEditor.swift:66-69`, `:121-150`, `:166-176`].
-  `mobile/exact-package/apple/AutoradioModule+TextureEdit.swift` (40 lines) is the
-  bridge: `textureEditInfo`, `textureEdit`, `textureFlush`, and a background
-  notification flush [src, ours].
+- Behind it (since 2026-11-24, lane `exact-editor`): `mobile/AutoradioLab/texture-edit.ts` is the editor and `texture-body.ts` the body merge, both shared code; the Swift editor (`TextureEditor.swift`, `AutoradioModule+TextureEdit.swift`) is deleted. The state model is a table at the head of `texture-edit.ts` (three decisions: one instance per account, every mutation through one door with a separate journal for typing, status derived never assigned); `texture-edit.test.ts` has one test per row and per kill.
 - The shared-code attempt (lane `exact-convo-edit`, `mobile/AutoradioLab/texture-edit.ts`,
   421 lines, not on main): states `ref`, `base`, `draft`, kept set, kept conflicts; invariants
   I1 to I4 in its header; a three-way merge of lines, a 409 retry [src, lane file head].

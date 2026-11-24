@@ -63,28 +63,4 @@ final class EditionSetupTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: f, encoding: .utf8), "{\"topics\":[\"Space\"]}", "left where it is, unread")
     }
 
-    @MainActor func testTheNotebookWriteRefusesTopicsReadUnderAnEarlierAccount() async {
-        let store = NotebookStore(); var asked = 0
-        store.lookupEdition = { asked += 1; return nil }
-        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("topics-marker-\(UUID().uuidString)")
-        let stale = AccountWipe.generation
-        _ = AccountWipe.bumpGeneration()                      // the account changed after the topics were read
-        let wrote = await store.writeTopics(["Space"], marker: marker, generation: stale)
-        XCTAssertFalse(wrote); XCTAssertEqual(asked, 0, "the server is not even asked")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
-    }
-
-}
-
-// The edition's address (owner finding: "Open edition" showed "Could not open this page. HTTP 404: document not found").
-// Cause: obOpenEdition (members-onboarding.contract) and OnboardingController.editionReady opened "texture:my-edition", which the
-// reader fetched as a document id; the writer is local, so the server never had that document.
-final class EditionAddressTests: XCTestCase {
-    func testTheEditionAddressResolvesToTheLocalPage() {
-        XCTAssertEqual(PageAddress.canonical("texture:my-edition"), "onboarding:edit")
-        XCTAssertEqual(PageAddress.canonical(" Texture:My-Edition "), "onboarding:edit")
-        XCTAssertEqual(PageAddress.canonical("texture:abc123"), "texture:abc123", "a real document is left alone")
-        XCTAssertEqual(PageAddress.kind(of: PageAddress.edition), "onboarding", "a page the onboarding source serves, not the reader")
-        XCTAssertEqual(PageAddress.defaultTitle("onboarding:edit"), "My edition")
-    }
 }

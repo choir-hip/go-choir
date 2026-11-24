@@ -37,6 +37,7 @@ import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
 import { signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
 import { radioPlayClip } from './clip-play.ts';
+import { textureEditInfo, textureEditOpen, textureEdit, textureFlush, textureDiscard, textureOverwrite } from './texture-edit.ts';
 import { podcastNow } from './podcast-now.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -105,6 +106,10 @@ fs.read app:/data/theme-choice.json
 fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
 fs.write app:/data/themes
+fs.read app:/data/texture-pending
+fs.write app:/data/texture-pending
+fs.read app:/data/notebook-topics-written
+fs.write app:/data/notebook-topics-written
 fs.read app:/data/edition-topics.json
 fs.write app:/data/edition-topics.json
 fs.read app:/data/onboarding.json
@@ -162,6 +167,13 @@ const sources: Sources = {
   // The Autoradio page (radio-page.ts): the native facts, the bar's facts and the entries in; the page out.
   radioPage: ([facts, bar, entries]) => radioPage(facts, bar, entries),
   texturesList: ([at]) => texturesListShared(at),
+  // Editing your own Texture document (texture-edit.ts): one editor per signed-in account; what it says, the opening, the typed text, the save, and the listener's choice after the head moved. The waits are the contract's.
+  textureEditInfo: ([address], _s, storage) => textureEditInfo(address, storage),
+  textureEditOpen: ([address], _s, storage) => textureEditOpen(address, storage),
+  textureEdit: ([address, markdown, from], _s, storage) => textureEdit(address, markdown, from, storage),
+  textureFlush: ([address], _s, storage) => textureFlush(address, storage),
+  textureDiscard: ([address], _s, storage) => textureDiscard(address, storage),
+  textureOverwrite: ([address], _s, storage) => textureOverwrite(address, storage),
   // The themes (themes.ts): the system's scheme and Reduce Motion come from `exactViewport()` (the first two arguments); the choice and the user's themes are kept under app:/data.
   theme: ([scheme, reduce], _s, storage) => themes.themeShared(scheme, reduce, storage),
   themeList: ([scheme, reduce], _s, storage) => themes.themeListShared(scheme, reduce, storage),
