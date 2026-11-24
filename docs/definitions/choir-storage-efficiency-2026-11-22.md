@@ -76,6 +76,10 @@ boundaries:
   - decision: the paper's snapshot budget stays at 90 minutes
     said: 2) yes,delete tape of deleted computer. otherwise i agree with recommendations
     'on': '2026-11-24'
+  - decision: 'self-development leftovers: measure first; the collector does not run at boot, it waits some time after boot; the other options (quarantine retention, patch-not-copy, the ceiling alarm) agreed in the order given'
+    said: i like measuring. i dont like running the collector at boot. should wait some time after boot. ottherwise i agree with storage options
+    'on': '2026-11-24'
+    reading: 'lead''s reading: the collector runs once the computer has been up and idle for a set time, never in the boot path, so a boot is never slowed or failed by it; quarantine deletion still shows the owner real numbers before anything is removed'
   must_preserve:
   - the paper publishes throughout; nothing changes on the paper or another user's computer except by deploy; drills run on d@e only
   - snapshotDue, the capture floor, the backoff and the 540,000-event ceiling are not touched (three review rounds failed there on 2026-11-15)

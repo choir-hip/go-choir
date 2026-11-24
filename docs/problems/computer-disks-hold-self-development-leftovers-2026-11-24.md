@@ -302,3 +302,8 @@ Class and proof use the repo's table. Frees are for the drill unless said.
   at most 9 GiB within 3 hours of the boot; p = 0.55; test: the growth meter.
 - C-new-c: a new 2 GiB tester after a week of ordinary use holds at most
   3 GiB; p = 0.7; test: the growth meter for the first tester.
+
+
+## Owner ruling, 2026-11-24
+
+"i like measuring. i dont like running the collector at boot. should wait some time after boot." Option 2 is therefore not a boot-time collector: it runs after the computer has been up and idle for a set time, never in the boot path. The other options are agreed in the order given.
