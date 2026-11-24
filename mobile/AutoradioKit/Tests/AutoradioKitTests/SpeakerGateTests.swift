@@ -161,6 +161,20 @@ final class SpeakerGateTests: XCTestCase {
         try await talk(e, speaker: 1, words: "what is on today")
         XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "what is on today")
     }
+    // A screen that listens for a check (the first run's "can I hear you") holds turns back: what is said there is never sent (review round 2).
+    func testAHeldGateSendsNoTurnUntilItIsReleased() async throws {
+        TurnGate.shared.hold(); defer { TurnGate.shared.release() }
+        let e = try engine(SpeakerGate(url: nil, embedder: nil))
+        try await talk(e, speaker: 1, words: "testing one two three")
+        XCTAssertTrue(RecordingDesk.turns.isEmpty)
+        TurnGate.shared.release(); TurnGate.shared.hold()      // balanced: still held
+        XCTAssertFalse(TurnGate.shared.allowed)
+        TurnGate.shared.release()
+        XCTAssertTrue(TurnGate.shared.allowed)
+        try await talk(e, speaker: 1, words: "now it is sent")
+        XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "now it is sent")
+        TurnGate.shared.hold()
+    }
     // Signed out the radio only listens (review 4): a hands-free switch left on sends nothing without a key.
     func testNoKeyNoTurnWhateverTheSwitchSays() async throws {
         TurnGate.shared.allowed = false; defer { TurnGate.shared.allowed = true }

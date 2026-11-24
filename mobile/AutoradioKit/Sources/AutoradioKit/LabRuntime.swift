@@ -55,8 +55,6 @@ public final class LabRuntime: @unchecked Sendable {
     public let configs: ConfigStore
     /// The voice choice that survives a relaunch.
     public let voiceStore: VoiceChoiceStore
-    /// The recogniser and speech-bounds stages setup chose, kept across launches (StagePicksStore).
-    public let picksStore: StagePicksStore
     public let session: AudioSessionOwner
     public let coordinator: SessionCoordinator
     public var onChange: (@Sendable () -> Void)?
@@ -79,7 +77,6 @@ public final class LabRuntime: @unchecked Sendable {
         self.log = log
         let voiceStore = VoiceChoiceStore(file: supportDir.appendingPathComponent("voice-choice.json"))
         self.voiceStore = voiceStore
-        self.picksStore = StagePicksStore(file: supportDir.appendingPathComponent("stage-picks.json"))
         // The saved voice, or on a fresh install the neural default. The model stages register after this runs, so the stage is not checked
         // here: `makeSpeaker` falls back to the system voice for a stage that is not registered.
         let cfg = StageRegistry.listenerConfiguration(voice: voiceStore.current(), registry: registry, readiness: readiness)
@@ -377,17 +374,6 @@ public final class LabRuntime: @unchecked Sendable {
         c.set(.speechBounds, heard.bounds); c.set(.transcriber, heard.transcriber)
         setConfiguration(c)
         log.emit(.note(heard.summary))
-    }
-    /// The downloaded hearing models are the ones in use once setup has passed them (owner, 2026-11-23: Apple's recogniser is not good enough): the picks setup kept are applied where their stage is registered in this build.
-    /// Called once, after the stages register (the configuration is built before they do). A pick whose stage is not in this build is left alone and Apple's recogniser stays.
-    public func applyKeptPicks() {
-        for (k, id) in picksStore.load() {
-            guard let kind = StageKind(rawValue: k), StagePicksStore.kinds.contains(kind), registry.stages(kind).contains(where: { $0.id == id }) else { continue }
-            // The launch configuration already chose a model that is ready (`ListenerPipeline.choose`, with its parameters): a bare stage id must not replace it. Only a listener still on the built-in floor takes the kept pick.
-            let floor = kind == .speechBounds ? ListenerPipeline.floorBounds : ListenerPipeline.floorTranscriber
-            if let now = configuration.setting(kind)?.id, now != floor { continue }
-            setStage(kind, id: id)
-        }
     }
     public func setStage(_ kind: StageKind, id: String) {
         var c = configuration

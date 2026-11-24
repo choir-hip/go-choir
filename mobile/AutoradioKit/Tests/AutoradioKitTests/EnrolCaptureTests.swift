@@ -40,7 +40,7 @@ final class EnrolCaptureTests: XCTestCase {
         let (c, _) = make()
         for _ in 0..<50 { c.feed(frame(1)) }; XCTAssertEqual(c.state, .idle); XCTAssertEqual(c.keep(), 0)
         say(c, 1); XCTAssertEqual(c.state, .done); XCTAssertEqual(c.keep(), 1)
-        for _ in 0..<200 { c.feed(frame(2)) }; XCTAssertEqual(c.keep(), 2, "frames after the end do not extend the take; keep is the page's call")
+        for _ in 0..<200 { c.feed(frame(2)) }; XCTAssertEqual(c.keep(), 1, "frames after the end do not extend the take, and a take is kept once: a second keep adds nothing")
         c.discard(); XCTAssertEqual(c.state, .idle); XCTAssertEqual(c.facts()["kept"] as? Int, 0)
     }
     func testV2ExpireEndsATakeNothingEnded() {
@@ -70,5 +70,34 @@ final class EnrolCaptureTests: XCTestCase {
     }
     func testV6NoModelCapturesNothing() {
         let (c, _) = make(nil); XCTAssertFalse(c.begin()); XCTAssertEqual(c.state, .error); c.feed(frame(1)); XCTAssertEqual(c.keep(), 0); XCTAssertEqual(c.facts()["ready"] as? Bool, false)
+    }
+    // B6 (review round 2): every write of a voice profile carries the account generation and is refused if it changed.
+    func testV7ASignOutBetweenTheMatchAndTheStoreWritesNothing() async {
+        let url = tmp(); let (c, g) = make(url: url)
+        for _ in 1...3 { say(c, 1); c.keep() }; _ = await c.build(); say(c, 1); let call = await c.check(); XCTAssertEqual(call, "match")
+        _ = AccountWipe.bumpGeneration()                                   // the sign-out began
+        XCTAssertFalse(c.store(), "the old account's voice is not stored under the next one")
+        XCTAssertFalse(g.learned); XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+    func testV7ASignOutDuringTheBuildDropsTheCandidate() async {
+        let (c, _) = make(); for _ in 1...3 { say(c, 1); c.keep() }
+        let t = Task { await c.build() }
+        _ = AccountWipe.bumpGeneration()
+        _ = await t.value
+        say(c, 1); _ = await c.check(); XCTAssertFalse(c.store())
+    }
+    func testV7TheGateRefusesAStaleWriteAndForgetAndAdoptKeepOneOrder() async {
+        let url = tmp(); let g = SpeakerGate(url: url, embedder: Fake())
+        var p = SpeakerProfile(); for i in 0..<3 { _ = p.learn([.wespeaker: { var v = [Float](repeating: 0, count: 256); v[1] = 1; return v }()], audioMs: 2000 + i, rule: SpeakerRule()) }
+        let old = AccountWipe.generation
+        _ = AccountWipe.bumpGeneration()
+        XCTAssertFalse(g.adopt(p, generation: old), "a profile built before the wipe is refused"); XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertTrue(g.adopt(p, generation: AccountWipe.generation)); XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        g.forget(); XCTAssertFalse(g.learned); XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+    func testV8AFileThatCannotBeWrittenIsNotStored() async {
+        let (c, g) = make(url: URL(fileURLWithPath: "/dev/null/nope/speaker.json"))
+        for _ in 1...3 { say(c, 1); c.keep() }; _ = await c.build(); say(c, 1); _ = await c.check()
+        XCTAssertFalse(c.store(), "the page must not say stored when nothing was written"); XCTAssertFalse(g.learned)
     }
 }

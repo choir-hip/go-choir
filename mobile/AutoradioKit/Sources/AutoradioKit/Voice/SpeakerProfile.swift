@@ -272,18 +272,23 @@ enum SpeakerStore {
         return profile
     }
 
-    static func save(_ profile: SpeakerProfile, to url: URL = url) {
-        guard let data = try? JSONEncoder().encode(profile) else { return }
+    /// True when the file is on disk (a write that failed is not a store: the page must not say "stored").
+    @discardableResult
+    static func save(_ profile: SpeakerProfile, to url: URL = url) -> Bool {
+        guard let data = try? JSONEncoder().encode(profile) else { return false }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        #if os(iOS)
-        try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        #else
-        try? data.write(to: url, options: .atomic)
-        #endif
+        do {
+            #if os(iOS)
+            try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            #else
+            try data.write(to: url, options: .atomic)
+            #endif
+        } catch { return false }
         var excluded = url
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try? excluded.setResourceValues(values)
+        return true
     }
 
     static func remove(at url: URL = url) {
