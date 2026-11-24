@@ -523,8 +523,10 @@ func TestManagementTaskDeadlineAndCancelReturnResiduals(t *testing.T) {
 	if o := f.closingReport(waiting).TaskOutcome; o == nil || len(o.Residuals) != 1 || o.Residuals[0].CaptureID != "cap-d2" {
 		t.Fatalf("cancel outcome = %+v", o)
 	}
-	// The parent's next turn reads both residual Reports and delegates
-	// their captures again by the Reports' ids, in one task.
+	// The deadline is a cause the host can see: it re-queued cap-d1 itself
+	// (requeueLeftCaptures). The cancel was the parent's act: cap-d2 waits
+	// for the parent. Its next turn reads both residual Reports and
+	// delegates them by the Reports' ids; only cap-d2 is free to lease.
 	next := managementCell(t, f.rt, f.owner, f.computer, "run-redelegate")
 	out := next(`var reports []string
 for _, r := range choir.Records() { if r.TaskOutcome != nil { fmt.Println(r.Kind, len(r.TaskOutcome.Residuals)); reports = append(reports, r.RecordID) } }
@@ -532,11 +534,21 @@ choir.Delegate("intake", reports, []any{reports})`)
 	if strings.Count(out, "task_report 1") != 2 || strings.Count(out, "rlm:delegate:") != 1 {
 		t.Fatalf("re-delegation: %s", out)
 	}
-	again := f.tasks(types.ManagementTaskQueued)
-	if len(again) != 1 || strings.Join(again[0].LeasedCaptures, ",") != "cap-d1,cap-d2" || len(again[0].DelegatedRecordIDs) != 2 {
-		t.Fatalf("re-delegated tasks = %+v", again)
+	var host, again []types.ManagementTask
+	for _, task := range f.tasks(types.ManagementTaskQueued) {
+		switch strings.Join(task.LeasedCaptures, ",") {
+		case "cap-d1":
+			host = append(host, task)
+		case "cap-d2":
+			again = append(again, task)
+		default:
+			t.Fatalf("an unexpected queued task: %+v", task)
+		}
 	}
-	// The new task is shown both captures records, cut to its lease.
+	if len(host) != 1 || len(again) != 1 || len(again[0].DelegatedRecordIDs) != 1 {
+		t.Fatalf("queued after the re-queue and the re-delegation: host %+v, delegated %+v", host, again)
+	}
+	// The new task is shown its captures record, cut to its lease.
 	view, err := f.rt.loadCellRecords(ctx, f.owner, f.computer, again[0].TaskInbox, "")
 	if err != nil {
 		t.Fatal(err)
@@ -547,7 +559,7 @@ choir.Delegate("intake", reports, []any{reports})`)
 			shown += len(r.Captures.Items)
 		}
 	}
-	if shown != 2 {
+	if shown != 1 {
 		t.Fatalf("the re-delegated task is shown %d captures: %+v", shown, view.view)
 	}
 }
