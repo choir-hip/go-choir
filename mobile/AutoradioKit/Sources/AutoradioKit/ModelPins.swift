@@ -101,6 +101,6 @@ public enum LibraryScope {
     @TaskLocal public static var checking: String?
     public static func require(_ id: String, readiness: VoiceReadiness = Voices.readiness) throws {
         if checking == id || readiness.isReady(model: id) { return }
-        throw LabError.unavailable("\(id) is not on this phone (not ready): loading it would be a download, and downloads are the door's")
+        throw LabError.unavailable("\(id) is not on this phone (not ready): starting it would be a download, and downloads are the door's")
     }
 }
