@@ -1,9 +1,9 @@
-import type { Answer, Sources } from './app.contract.d.ts';
+import type { Answer, Sources, Store } from './app.contract.d.ts';
 import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
-import { adoptNative, nativeLater } from './api.ts';
+import { adoptNative, bindStore, nativeLater, segment } from './api.ts';
 import { settingsAccount, aboutPage } from './settings.ts';
 import { settingsComputer, computerAct } from './computer.ts';
 import { activityPage } from './activity.ts';
@@ -29,12 +29,12 @@ import { retrievalServe, paperSearch } from './retrieval-live.ts';
 import * as imported from './imported.ts';
 import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveEnv as takesEnv } from './take-session.ts';
 import * as picks from './edition-picks.ts';
-import { signInSheet, liveSheetEnv } from './signin-sheet.ts';
 import { consentView } from './consent.ts';
 import { micPermission } from './micask.ts';
 import { downloadsPage, downloadsAct } from './downloads.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
-import { signInRun, signInCancel, signInReopen, signInView, type AttemptEnv } from './signin-attempt.ts';
+import { credentials } from '@exact/passkeys';
+import { COMPUTER_ID_NAME, KEY_ID_NAME, KEY_NAME, signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -43,11 +43,15 @@ import { signInRun, signInCancel, signInReopen, signInView, type AttemptEnv } fr
 // this one constant (api.ts imports it), and the offline copy's path is the literal in the grant (paper.ts CACHE_FILE
 // must equal it; paper.test.ts checks).
 export const ORIGIN = 'https://choir.news';
-// The sign-in sheet (signin-sheet.ts): the approval page opens in the system sign-in sheet and returns by this app's own callback scheme. The scheme is the app's id, so each
-// install has its own (app.json: the production app's literal here, each lab variant's `env.SIGNIN_SCHEME`); two installs never share one. The path is the one the server builds (/signed-in).
-const SIGNIN_SCHEME = import.meta.env.SIGNIN_SCHEME ?? 'news.choir.autoradio';
-export const grants = `auth.session ${ORIGIN}
-auth.callback ${SIGNIN_SCHEME}:/signed-in
+// Sign-in and account creation use the platform's passkey screen (`@exact/passkeys`, app-signin.ts): `auth.passkey choir.news` names the relying party, the same one the web site uses (the build derives
+// the Associated Domains entitlement `webcredentials:choir.news` from it; choir.news serves the apple-app-site-association file for the app ids). The app's own id is what the server's finish route is told
+// (one of its fixed list); each install has its own (app.json: the production app's literal here, each variant's `env.APP_ID`).
+const APP_ID = import.meta.env.APP_ID ?? 'news.choir.autoradio';
+// The key is kept as three Exact secrets (the Keychain on Apple); the voice code in Swift reads the same items. Names: app-signin.ts KEY_NAME, KEY_ID_NAME, COMPUTER_ID_NAME (the literals here are what the build reads).
+export const grants = `auth.passkey choir.news
+secret.keep choir.key
+secret.keep choir.key-id
+secret.keep choir.computer-id
 device.microphone purpose.microphone
 device.speech-recognition purpose.speech
 fs.read app:/data/exports
@@ -105,17 +109,18 @@ fs.read app:/data/consent.json
 fs.write app:/data/consent.json
 sqlite.open app:/data/content.db`;
 
-const attemptEnv = (): AttemptEnv => {
-  const later = nativeLater();
-  return {
-    origin: ORIGIN,
-    later: (r) => (later ? later(r) : Promise.reject(new Error('no native module'))),
-    sheet: (link) => signInSheet(link, liveSheetEnv(ORIGIN)),
-    sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
-    newId: () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''),
-    log: (l) => console.log(l),
-  };
-};
+// The sign-in's environment: the platform's passkey screen, the secret store of this answer, and a revoke for a key that is minted and not kept. The key passes through this data layer only.
+const signInEnv = (store: Store): SignInEnv => ({
+  ceremony: { origin: ORIGIN, passkeys: credentials as never },
+  appId: APP_ID,
+  keep: (key, keyId) => {
+    try { store.set(KEY_NAME, key); store.set(KEY_ID_NAME, keyId); store.forget(COMPUTER_ID_NAME); }
+    catch (e) { for (const n of [KEY_NAME, KEY_ID_NAME]) { try { store.forget(n); } catch { /* absent */ } } throw e; }
+  },
+  revoke: async (key, keyId) => { await fetch(`${ORIGIN}/auth/api-keys/${segment(keyId)}`, { method: 'DELETE', headers: { authorization: `Bearer ${key}` }, redirect: 'manual', exactTimeout: 8000 } as RequestInit); },
+  newId: () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''),
+  log: (l) => console.log(l),
+});
 let takesOverlay: ReturnType<typeof newTakes> | undefined;
 const takes = (): ReturnType<typeof newTakes> => (takesOverlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
 const sources: Sources = {
@@ -202,11 +207,11 @@ const sources: Sources = {
   // Learning the person's voice (voicelearn.ts): the page from the voice side's facts, and one press.
   learnPage: ([facts]) => learnPage(facts as never),
   learnAct: ([op, facts]) => learnAct(op, facts as never, nativeLater() as never),
-  // Sign-in (signin-attempt.ts): one attempt, one state machine with an id, owned here. The sheet (signin-sheet.ts) is how the approval page opens; native keeps the device code, one poll request and the Keychain write.
-  signInRun: () => signInRun(attemptEnv()),
-  signInCancel: () => signInCancel(attemptEnv()),
-  signInReopen: () => signInReopen(attemptEnv()),
-  signInView: ([_tick]) => signInView(ORIGIN),
+  // Sign-in and account creation (app-signin.ts): one attempt, one state machine with an id, owned there. The passkey screen is the platform's; the key is kept as Exact secrets. No native code is involved.
+  signInRun: ([mode, email], store) => signInRun(signInEnv(store), (mode === 'create' ? 'create' : 'signin') as Mode, String(email ?? '')),
+  signInCancel: (_a, store) => signInCancel(signInEnv(store)),
+  signInOpen: (_a, store) => signInReset(signInEnv(store)),
+  signInView: ([_tick]) => signInView(),
   accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
@@ -259,9 +264,10 @@ const sources: Sources = {
   paperSearch: ([q, local]) => paperSearch(q, local),
   mailAsk: ([address, question]) => mail.mailAsk(address, question),
 };
-// `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
+// `bindStore` hands the signed-in seam (api.ts) the secret store of this answer, where the key is kept; it reads nothing here.
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
+  bindStore(store as never);
   // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
   if (source !== 'accountSignOut') await settleAccount(storage, store);
   // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, finished before the first source runs, so the

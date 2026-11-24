@@ -37,7 +37,7 @@ import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
 import { wipeSteer, STEER_FILE } from './steer.ts';
 import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { accountGeneration, announceGeneration, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
+import { accountGeneration, announceGeneration, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
 import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
@@ -211,6 +211,7 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
       // The shared wipe does not DEPEND on the native answer: the key is gone, so the previous account's shared stores must not stay readable because the native half failed or hung.
       // (It starts after the native call has answered or passed its deadline, at most NATIVE_DEADLINE_MS later; only the stamp and marker wait for both results.)
       shared = sharedWipeThen(storage, store, nativeOk ? done : async () => undefined);
+      if (nativeOk) forgetCredentials();
       const failed = [...(await shared)];       // a copy: the late continuation reads the wipe's own result
       if (!nativeOk) failed.push('native');
       console.log(`account: finished an interrupted sign-out, ${failed.length} failed`);
@@ -277,6 +278,7 @@ async function signOutInner(
     return { done: false, failed: '', message: 'Sign-out did not finish. Try again.' };
   }
   step('native');
+  forgetCredentials();                                                          // the native half deleted the Keychain items; the store's own state agrees
   const run = wipes.map((w) => ({ ...w, run: async (s: Storage | undefined, st: Store | undefined) => { step('wipe:' + w.name); return w.run(s, st); } }));
   const failed = [...(await wipeAll(storage, store, run)), ...(opts.wipes ? [] : await leftovers(storage))];
   step('wiped');

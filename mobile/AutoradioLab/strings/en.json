@@ -1,4 +1,15 @@
 {
   "purpose.microphone": "Autoradio hears you when Voice is on, so you can talk to the radio, and records your voice when you tap Take, or when you teach it your voice. Speech becomes text on this phone. A take is uploaded only if you publish it.",
-  "purpose.speech": "Autoradio turns what you say into text on this phone, to understand your request."
+  "purpose.speech": "Autoradio turns what you say into text on this phone, to understand your request.",
+  "app.signin.intro": "Sign in with a passkey, or create an account. There is no password and no code.",
+  "app.signin.signin": "Sign in with a passkey",
+  "app.signin.or": "New here?",
+  "app.signin.email": "Your email address",
+  "app.signin.consent": "By creating an account you confirm you are 16 or older and agree to the Privacy Policy and Terms. What you ask the radio is sent to outside AI companies, which during the beta may use it to train their models.",
+  "app.signin.privacy": "Privacy Policy",
+  "app.signin.terms": "Terms",
+  "app.signin.create": "Create account",
+  "app.signin.notnow": "Not now",
+  "app.signin.waiting": "Waiting for the passkey screen.",
+  "app.signin.cancel": "Cancel"
 }

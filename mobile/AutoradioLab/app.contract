@@ -93,7 +93,12 @@ component Autoradio
     pl
     signIn
     cancelSignIn
-    openApproval
+    closeAuth
+    createAccount
+    signInPasskey
+    editAuthEmail
+    authEmail
+    authOpen
     siv
     signOut
     signOutNote
@@ -487,7 +492,7 @@ component Autoradio
       // The sheet in front of a signed-out ask (consent.contract).
       GateSheet()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
-      // Settings, Account): the code screen then covers the app until it is approved or cancelled.
-      if siv.pending
+      // Settings, Account): the sign-in screen (the platform's passkey screen, no code) then covers the app until it is done or put away.
+      if authOpen
         column position="absolute" inset=0 background-color=th.paper z-index=50
           SignInScreen()

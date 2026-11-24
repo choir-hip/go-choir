@@ -171,9 +171,9 @@ in parallel with System 1 and the desk; System 1's answers select only what foll
 
 The app is called Autoradio and opens to the radio. No stage names, ids or jargon on this path; the Lab and Trace live behind the last tab, "Lab".
 
-1. Opens the app. Not signed in: a plain screen, "Sign in to hear the paper and talk to your computer", and one button, Sign in.
-2. Taps Sign in. The browser opens the approval page (device flow); the app shows the short code in large type and "Approve this sign-in in your browser". If the browser did not open, an "Open the approval page" button. The code and a Cancel are the only other controls.
-3. Approves in the browser (passkey) and comes back. The app has stored the key (Keychain), found the listener's computer, and shows the Player.
+1. Opens the app. Not signed in: the paper plays; a Sign in action opens a screen: "Sign in with a passkey", or an email field and "Create account" (the consent line above it, with the Privacy Policy and Terms).
+2. Taps one of them. The system's passkey screen appears over the app (no code, no browser; `@exact/passkeys`, docs/reference/exact/passkeys.md).
+3. Confirms with Face ID. The app has kept the key (an Exact secret in the Keychain), found the listener's computer, and shows the Player.
 4. The Player has loaded the newest story from choir.news. It shows the story title, the passage being read, "3 of 12", a large Play button, and below it a list of stories.
 5. Taps Play. The first tap starts audio (the microphone permission prompt appears here, once). The passage is read aloud, block by block.
 6. Taps a story in the list: it loads and plays from its start.
@@ -392,7 +392,7 @@ Paid team, 2026-11-23: the owner renewed the developer account and signed in to 
 
 ## The apps: production, and the two development apps on the phone
 
-One `AutoradioLab/app.json`, three identities (owner, 2026-11-23: the name is "Autoradio 1"; ids are in the `news.choir` family). **The production id is `app.id` in `app.json`, one value in one place** (also `id`, which Exact wants equal); everything else reads it through `scripts/app-identity.sh`. If the owner registered another id, change `app.id`, `id`, the default in `app.ts` (`SIGNIN_SCHEME ?? '...'`) and the lab variants' `env.SIGNIN_SCHEME`, then the server's list (below): `store-build.test.ts` (which reads the Go list) and the Go test `TestDeviceReturnSchemesAreTheAppsInAppJSON` fail until they agree.
+One `AutoradioLab/app.json`, three identities (owner, 2026-11-23: the name is "Autoradio 1"; ids are in the `news.choir` family). **The production id is `app.id` in `app.json`, one value in one place** (also `id`, which Exact wants equal); everything else reads it through `scripts/app-identity.sh`. If the owner registered another id, change `app.id`, `id`, the default in `app.ts` (`APP_ID ?? '...'`) and the lab variants' `env.APP_ID`, then the server's list (below): `store-build.test.ts` (which reads the Go list) and the Go test `TestDeviceReturnSchemesAreTheAppsInAppJSON` fail until they agree.
 
 | Choice | Id | Name | Sign-in scheme |
 | --- | --- | --- | --- |
@@ -400,7 +400,7 @@ One `AutoradioLab/app.json`, three identities (owner, 2026-11-23: the name is "A
 | `AR_VARIANT=lab` (or `AR_APP_ID=news.choir.autoradio.lab`) | `news.choir.autoradio.lab` | Autoradio | same |
 | `AR_VARIANT=lab-one` (or `AR_APP_ID=news.choir.autoradio.lab.one`) | `news.choir.autoradio.lab.one` | Autoradio 1 Dev | same |
 
-The lab apps are Exact **variants** (`variants` in `app.json`: id = `app.id` + `idSuffix`, its own name, `env.SIGNIN_SCHEME`; Exact's reference, "Install a development build beside the release one (variants)"). The lab ids are exactly the ones on the owner's phone, so they stay installable side by side with each other and with the production app. `lab-one` was named "Autoradio 1" until the production app took that name: Exact refuses two apps of one installed name (`scripts/variants.mjs`), so its home-screen name becomes "Autoradio 1 Dev" at its next install (the id, and so its data, is unchanged). `AR_VARIANT=one` is retired and refused (the message lists what is declared). Nothing in the app branches on the identity, and the tracked `app.json` is never rewritten by a build. `AR_APP_NAME` is accepted only as a check. `app-identity.sh id|name|variant|version` reads and checks the choice, `exact.sh` passes it to Exact as `EXACT_VARIANT` and the id as `SIGNIN_SCHEME`, and `proof-common.sh`, `sim-launch.sh` and `make-profile.sh` take their bundle id from it.
+The lab apps are Exact **variants** (`variants` in `app.json`: id = `app.id` + `idSuffix`, its own name, `env.APP_ID`; Exact's reference, "Install a development build beside the release one (variants)"). The lab ids are exactly the ones on the owner's phone, so they stay installable side by side with each other and with the production app. `lab-one` was named "Autoradio 1" until the production app took that name: Exact refuses two apps of one installed name (`scripts/variants.mjs`), so its home-screen name becomes "Autoradio 1 Dev" at its next install (the id, and so its data, is unchanged). `AR_VARIANT=one` is retired and refused (the message lists what is declared). Nothing in the app branches on the identity, and the tracked `app.json` is never rewritten by a build. `AR_APP_NAME` is accepted only as a check. `app-identity.sh id|name|variant|version` reads and checks the choice, `exact.sh` passes it to Exact as `EXACT_VARIANT` and the id as `APP_ID`, and `proof-common.sh`, `sim-launch.sh` and `make-profile.sh` take their bundle id from it.
 
 **No choice is now the production id, not the lab app.** A build for a phone (`--device`, not `--archive`) must name its development app (`exact.sh`, and so `build-lab.sh`, refuses otherwise; `make-profile.sh` too): the production id reaches phones through TestFlight. Simulator builds and the proofs with no choice run the production id on the simulator. The lead's queue scripts outside the repo (`~/.local/state/choir-buildq/device-install.sh`, `side-by-side.sh`, `run-one.sh`) must set `AR_VARIANT=lab` (device-install: the first app) or `AR_VARIANT=lab-one` before they build for the phone.
 
@@ -773,7 +773,7 @@ Decisions made at the seams:
 data (paper, two stories in the reader with "More on this", a played story, Textures list and documents, the edition state, Files, Mail, Settings
 account / computer / appearance, a theme loaded from a Texture, the largest document). It asserts real conditions (a title is not empty, no error
 banner), not fixture text. `REAL_PROMPT=1` adds one typed question in the bar (a model call on the test computer); it is off by default.
-- **Sign-in.** The real sign-in is a browser device flow a script cannot approve. The proof copies a key file (`REAL_KEY_FILE`, default the QA key of the
+- **Sign-in.** The real sign-in is a passkey sheet a script cannot approve. The proof copies a key file (`REAL_KEY_FILE`, default the QA key of the
   test account) with `cp` into the app's `Documents/proof-key`; the simulator build reads it into the Keychain at launch and deletes it
   (`AutoradioKit/ProofKey.swift`, called under `#if targetEnvironment(simulator)` only). The key is never printed; the script fails if a `choir_sk_`
   string appears in the drive output.

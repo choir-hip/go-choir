@@ -112,16 +112,6 @@ public final class AutoradioModule: ExactPackage {
     /// `keepKey`: the account CHANGED (a different key is stored): only the old account's Swift stores go, the key stays. Otherwise the whole sign-out.
     public func signOutForShared(keepKey: Bool = false) async { if keepKey { await choir?.accountWipe.run() } else { await choir?.signOut() } }
 
-    /// The sign-in's three native calls (shared code's attempt machine, AutoradioLab/signin-attempt.ts, names the attempt in each): the device code, one poll request and the Keychain write are native; nothing else is.
-    public func signInOp(_ r: [String: Any]) async -> [String: Any] {
-        let id = r["attempt"] as? String ?? ""
-        switch r["op"] as? String {
-        case "signInBegin": return await choir.signIn.begin(attempt: id)
-        case "signInPoll": return ["answer": await choir.signIn.pollOnce(attempt: id)]
-        default: choir.signIn.forget(attempt: id); return ["ok": true]
-        }
-    }
-
     public init(context: ExactPackageContext) {
         self.context = context
         Self.current = self

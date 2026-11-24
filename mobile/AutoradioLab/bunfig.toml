@@ -1,3 +1,3 @@
 # build-info.gen.ts is generated (gitignored); a bare `bun test` in a fresh lane makes it first.
 [test]
-preload = ["./gen-build-info-preload.ts"]
+preload = ["./gen-build-info-preload.ts", "./exact-stubs-preload.ts"]

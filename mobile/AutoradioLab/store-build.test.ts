@@ -114,11 +114,11 @@ describe('the build identity (app-identity.sh over the real app.json)', () => {
   });
   test('I4 the sign-in scheme is the app id for all three apps (the server\'s list is the Go test\'s: TestDeviceReturnSchemesAreTheAppsInAppJSON)', () => {
     const app = readFileSync(join(MOBILE, 'AutoradioLab', 'app.ts'), 'utf8');
-    expect(/SIGNIN_SCHEME \?\? '([^']+)'/.exec(app)![1]).toBe(PROD);
+    expect(/APP_ID \?\? '([^']+)'/.exec(app)![1]).toBe(PROD);
     const schemes = [PROD];
-    for (const v of Object.values(APP_JSON.variants) as { idSuffix: string; env: { SIGNIN_SCHEME: string } }[]) {
-      expect(v.env.SIGNIN_SCHEME).toBe(PROD + v.idSuffix);
-      schemes.push(v.env.SIGNIN_SCHEME);
+    for (const v of Object.values(APP_JSON.variants) as { idSuffix: string; env: { APP_ID: string } }[]) {
+      expect(v.env.APP_ID).toBe(PROD + v.idSuffix);
+      schemes.push(v.env.APP_ID);
     }
     expect(schemes.sort()).toEqual([LAB, LABONE, PROD].sort());
   });
@@ -182,7 +182,7 @@ function tree(opts: TreeOpts = {}): Tree {
 D="${bin}"
 [ "\${1:-}" = install ] && exit 0
 printf 'exact\\n' >> "${t}/order.log"
-{ printf 'staged=[%s]\\n' "$(ls modules/apple 2>/dev/null | tr '\\n' ' ')"; printf 'args=[%s]\\n' "$*"; for v in EXACT_VARIANT SIGNIN_SCHEME EXACT_VERSION EXACT_BUILD_NUMBER EXACT_NON_EXEMPT_ENCRYPTION EXACT_DEV_MENU EXACT_IDENTITY EXACT_PROFILE EXACT_FEEDBACK EXACT_SIM; do eval "x=\\\${$v-unset}"; printf '%s=[%s]\\n' "$v" "$x"; done; } > "$D/bun.last"
+{ printf 'staged=[%s]\\n' "$(ls modules/apple 2>/dev/null | tr '\\n' ' ')"; printf 'args=[%s]\\n' "$*"; for v in EXACT_VARIANT APP_ID EXACT_VERSION EXACT_BUILD_NUMBER EXACT_NON_EXEMPT_ENCRYPTION EXACT_DEV_MENU EXACT_IDENTITY EXACT_PROFILE EXACT_FEEDBACK EXACT_SIM; do eval "x=\\\${$v-unset}"; printf '%s=[%s]\\n' "$v" "$x"; done; } > "$D/bun.last"
 out=""; prev=""; for a in "$@"; do [ "$prev" = --archive ] && out="$a"; prev="$a"; done
 [ -n "$out" ] || exit 0
 mode="$(cat "$D/mode" 2>/dev/null || echo ok)"
@@ -399,7 +399,7 @@ describe.skipIf(!MAC)('archive-store.sh builds and reads the ipa back', () => {
       const seen = readFileSync(join(tr.bin, 'bun.last'), 'utf8');
       expect(seen).toMatch(/args=\[exact\.mjs ios --device --archive \S+\.ipa --json\]/);
       expect(seen).toContain('EXACT_VARIANT=[unset]');
-      expect(seen).toContain(`SIGNIN_SCHEME=[${PROD}]`);
+      expect(seen).toContain(`APP_ID=[${PROD}]`);
       expect(seen).toContain('EXACT_VERSION=[1.0]');
       expect(seen).toMatch(/EXACT_BUILD_NUMBER=\[[1-9][0-9]{0,8}\]/);
       expect(seen).toContain('EXACT_NON_EXEMPT_ENCRYPTION=[false]');
@@ -690,7 +690,7 @@ describe('exact.sh runs only what is on its list (A1, A3, A4, G1, G2)', () => {
       refused(tr, ['ios'], { EXACT_VARIANT: 'lab-one' }, 'AR_VARIANT');
       allowed(tr, ['ios'], { EXACT_VARIANT: '' });                                         // an empty value names nothing
       allowed(tr, ['ios'], { AR_VARIANT: 'lab-one' });
-      expect(seen(tr)).toContain('EXACT_VARIANT=[lab-one]'); expect(seen(tr)).toContain(`SIGNIN_SCHEME=[${LABONE}]`);
+      expect(seen(tr)).toContain('EXACT_VARIANT=[lab-one]'); expect(seen(tr)).toContain(`APP_ID=[${LABONE}]`);
     } finally { tr.cleanup(); }
   });
   test('A4 EXACT_DEV_MENU=0 reaches Exact for every build; a caller\'s other value is refused; nothing else of the caller\'s environment does', () => {

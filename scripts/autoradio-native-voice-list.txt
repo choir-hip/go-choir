@@ -87,7 +87,7 @@ name deck* the deck: play, hold, pause, seek, acknowledge, and the state and jou
 # --- NOT on this list, so COUNTED against the ceiling (non-voice native code: debt, or a platform seam). Only the audio session, the microphone, speech and the on-device models are voice
 # (owner, CLAUDE.md: "only voice is native"). Each of these has its reason, and none of them is voice:
 #   Choir/MailSeal.swift            a platform cipher (CryptoKit AES-GCM; Exact's crypto.subtle refuses AES), key kept natively in the Keychain. Android owes it in Kotlin. Was on this list as an exception.
-#   Choir/CredentialReader.swift    reads the Keychain item today's sign-in wrote, in place (Exact's secret store uses another service); goes when sign-in moves to Exact's own secret store.
+#   Choir/ChoirSignIn.swift         only sign-out now (the local key goes, the revoke is sent); signing in is shared code (app-signin.ts, @exact/passkeys). The voice stages above read the key Exact's secret store keeps in the Keychain (KeychainKeyStore).
 #   AutoradioModule+Mail.swift      an in-app web view for the approval page, and mailRead (hands text to the radio's voice).
 #   AutoradioModule+Platform.swift  the platform seam: the audio session owner (voice), the console log file the proof reads, the system's background time. The session owner is voice and could be split out.
 #   ProofKey.swift                  the simulator-only proof key (a test seam, compiled out of device builds).

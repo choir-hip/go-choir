@@ -5,6 +5,7 @@
     "build": "bun exact.mjs web-build --out dist"
   },
   "dependencies": {
-    "@choir/autoradio": "file:../exact-package"
+    "@choir/autoradio": "file:../exact-package",
+    "@exact/passkeys": "file:../.exact-src/packages/passkeys"
   }
 }

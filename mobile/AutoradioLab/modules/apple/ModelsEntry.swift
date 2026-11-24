@@ -6,11 +6,8 @@ import Foundation
 import ExactPkg_autoradio
 import Security
 
-// The one native call the signed-in seam (api.ts) makes, with the reason only native code can meet: it reads the Keychain item today's
-// sign-in wrote (service news.choir.autoradio.choir), in place. Exact's own secret store keeps items under this app's id, so shared code
-// cannot see that item; the owner's phone stays signed in because nothing is moved. Read only: `{op: "get", account}` for the three
-// accounts CredentialReader allows, answering `{found, value}`. It logs nothing. It goes when sign-in itself is moved and the key is
-// kept by Exact's store.
+// `keystate` (read only, no data returned): present | absent | unreadable for the sign-in key. Shared code (host.ts) uses it as the probe "is the app module here", and the sign-out reconcile does not (it reads the Exact
+// secret store). The key itself is kept by shared code as the Exact secrets choir.key, choir.key-id and choir.computer-id (AutoradioLab/app-signin.ts); the voice code reads the same Keychain items (KeychainKeyStore).
 //
 // The mail cipher (Choir/MailSeal.swift): `mailSeal`, `mailOpen`, `mailForget`, a platform cipher shared code has none of; the key never leaves the Keychain.
 //
@@ -43,7 +40,7 @@ final class ModelsModule: ExactModule {
         return ["found": !theme.isEmpty || !mode.isEmpty || !files.isEmpty || !skipped.isEmpty, "theme": theme, "mode": mode, "files": files, "skipped": skipped]
     }
     static func keyState() -> String {
-        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "news.choir.autoradio.choir", kSecAttrAccount as String: KeyAccount.apiKey, kSecMatchLimit as String: kSecMatchLimitOne]
+        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: KeychainKeyStore.defaultService, kSecAttrAccount as String: KeyAccount.apiKey, kSecMatchLimit as String: kSecMatchLimitOne]
         switch SecItemCopyMatching(q as CFDictionary, nil) { case errSecSuccess: return "present"; case errSecItemNotFound: return "absent"; default: return "unreadable" }
     }
     override func call(_ request: [String: Any]) -> [String: Any] {
@@ -55,7 +52,7 @@ final class ModelsModule: ExactModule {
         #endif
         if (request["op"] as? String) == "keystate" { return ["state": Self.keyState()] }
         if (request["op"] as? String) == "themeLegacy" { return Self.legacyThemes() }
-        return MailSeal().reply(request) ?? CredentialReader().reply(request)
+        return MailSeal().reply(request) ?? [:]
     }
     override func later(_ request: [String: Any], reply: ExactReply) {
         let op = request["op"] as? String
@@ -72,7 +69,7 @@ final class ModelsModule: ExactModule {
                 MailSeal().forget()      // the mail copy's key goes with the account, whatever shared code does next
                 // Truthful: the Keychain delete ignores its status (ChoirClient.swift), so read the item again. Still there: not done. The Account screen's sign-out then wipes
                 // nothing shared (the key remains: the marker goes); at a launch (account.ts reconcile) the shared stores of the account being left are wiped regardless of this answer and the marker stays. Idempotent: with the key already gone it only runs the Swift wipe again.
-                reply.send(["done": op == "wipe" || !CredentialReader().keyRemains()])
+                reply.send(["done": op == "wipe" || !KeychainKeyStore.keyRemains()])
             }
             return
         }
@@ -118,10 +115,6 @@ final class ModelsModule: ExactModule {
         }
         if let op = op, op.hasPrefix("take") {
             Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
-            return
-        }
-        if let op = op, op.hasPrefix("signIn") {      // the sign-in attempt's three native calls (AutoradioModule.signInOp)
-            Task { @MainActor in reply.send(await AutoradioModule.current?.signInOp(request) ?? [:]) }
             return
         }
         if op == "pagesMirror" {

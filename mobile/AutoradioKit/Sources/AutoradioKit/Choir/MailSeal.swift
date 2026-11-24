@@ -15,7 +15,7 @@ public struct MailSeal: Sendable {
     public static let service = "news.choir.autoradio.mailseal"
     private let service: String
     private let signedIn: @Sendable () -> Bool
-    public init(service: String = MailSeal.service, signedIn: @escaping @Sendable () -> Bool = { CredentialReader().keyRemains() }) { self.service = service; self.signedIn = signedIn }
+    public init(service: String = MailSeal.service, signedIn: @escaping @Sendable () -> Bool = { KeychainKeyStore.keyRemains() }) { self.service = service; self.signedIn = signedIn }
 
     private func query() -> [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "key"] }
 

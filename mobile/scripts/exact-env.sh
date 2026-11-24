@@ -3,7 +3,7 @@
 # Needs HERE (the mobile directory).
 #
 # The app is the production app unless AR_VARIANT / AR_APP_ID chose a development app (app-identity.sh); Exact reads the choice as EXACT_VARIANT, which `env -i` would drop.
-# The sign-in callback scheme is the app's id (app.ts SIGNIN_SCHEME, grant auth.callback): given to Exact explicitly for every identity, so the default never rests on a literal
+# The app's id (app.ts APP_ID, named to the server's passkey finish route): given to Exact explicitly for every identity, so the default never rests on a literal
 # fallback and an empty value in the caller's environment cannot make a dead grant (app.ts reads it with `??`; the build refuses `||`).
 # What `env -i` would drop and Exact reads from its environment (build-and-ship.md, "Archive, TestFlight, CI"): the signing pair, the version and build number and the
 # export-compliance answer: passed only when set, so a development build is exactly as it was. EXACT_DEV_MENU=0 is given to every build: Exact's developer menu is off in every
@@ -24,7 +24,7 @@ exact_run() {
   while [ "$_n" -gt 0 ]; do _a="$1"; shift; set -- "$@" "$_a"; _n=$((_n - 1)); done   # the assignments first, then the command
   "$HERE/scripts/gen-build-info.sh" || return 1     # About names the commit: never build from the previous commit's build-info.gen.ts
   ( cd "$HERE/AutoradioLab" || exit 1
-    exec env -i HOME="$HOME" USER="${USER:-$(id -un)}" TMPDIR="${TMPDIR:-/tmp}" BUN="$_bun" SIGNIN_SCHEME="$_scheme" \
+    exec env -i HOME="$HOME" USER="${USER:-$(id -un)}" TMPDIR="${TMPDIR:-/tmp}" BUN="$_bun" APP_ID="$_scheme" \
       PATH="$(dirname "$_bun"):$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin" \
       DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer EXACT2="$HERE/.exact-src" EXACT_FEEDBACK=0 EXACT_DEV_MENU=0 \
       "$@" )

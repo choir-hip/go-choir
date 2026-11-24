@@ -6,10 +6,13 @@
       "name": "autoradiolab",
       "dependencies": {
         "@choir/autoradio": "file:../exact-package",
+        "@exact/passkeys": "file:../.exact-src/packages/passkeys",
       },
     },
   },
   "packages": {
     "@choir/autoradio": ["@choir/autoradio@file:../exact-package", {}],
+
+    "@exact/passkeys": ["@exact/passkeys@file:../.exact-src/packages/passkeys", {}],
   }
 }

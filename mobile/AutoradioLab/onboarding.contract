@@ -8,7 +8,7 @@
 //
 // The mark: the TetraMark and the alive wait are lane 9's. `ob-mark-slot` and `ob-wait-slot` hold the spine's Mark glyph.
 //
-// testIds: signin, signin-intro, signin-code, signin-open, signin-cancel, signin-message (unchanged);
+// testIds: signin, signin-intro, signin-waiting, signin-or, signin-cancel, signin-close, signin-message, signup-email, signup-consent, signup-privacy, signup-terms, signup-create;
 //   ob-steps, ob-mark-slot, ob-begin, ob-begin-mobile, ob-skip, ob-row-<stage>, ob-retry-<stage>, ob-fallback-<stage>,
 //   ob-summary, ob-mic-ask, ob-mic-level, ob-heard, ob-mic-next, ob-route, ob-hearing-yes, ob-hearing-no, ob-topics-start,
 //   ob-topics, ob-explainer, edit-edition, edit-edition-done, edit-edition-link, edit-edition-retry, edit-edition-leave, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-wait-slot, ob-writing-line,
@@ -38,36 +38,46 @@ component SignInScreen
   inject
     th: Theme
     siv: SignInView
-    acs: AccountView
-    signIn: action
+    authEmail: string
+    editAuthEmail: action
+    createAccount: action
+    signInPasskey: action
     cancelSignIn: action
-    openApproval: action
+    closeAuth: action
   view
-    column position="absolute" inset=0 padding=24 gap=20 align-items="center" justify-content="center"
+    column position="absolute" inset=0 padding=24 gap=20 align-items="center" justify-content="center" overflow-y="auto"
       box testId="ob-mark-slot" width=72 height=72 align-items="center" justify-content="center"
         Mark(state="idle")
       column gap=8 align-items="center"
         text "Autoradio" font-size="-exact-large-title" font-weight=700 role="heading" aria-level=2 font-family=th.fontHead color=th.fg
-        text "Sign in to hear the paper and talk to your computer." testId="signin-intro" text-align="center" font-size="-exact-body" line-height=1.45 font-family=th.fontText color=th.muted
+        text t("app.signin.intro") testId="signin-intro" text-align="center" font-size="-exact-body" line-height=1.45 font-family=th.fontText color=th.muted
       if siv.pending
-        Card(level=2, testId="signin-card", minHeight=0)
-          column padding=20 gap=12 align-items="center"
-            text "Your code" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-            text siv.userCode testId="signin-code" font-size="-exact-large-title" font-weight=600 font-family=th.fontMono color=th.fg
-            text "Approve this sign-in in the window that opened." font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted text-align="center"
-            if siv.note != ""
-              text siv.note testId="signin-sheet-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
-            // No path is only the sheet: the same link, in the system browser (Exact: an absolute https href leaves the app and opens there), only when the view validated it. The attempt's poll goes on as before.
-            if siv.browserLink != ""
-              text "Open it in your browser" href=siv.browserLink testId="signin-browser" font-family=th.fontLabel font-size="-exact-subheadline" color=th.fg text-align="center"
-            button press=openApproval testId="signin-open" appearance="none"
-              Btn(label="Open the approval page", primary=true, wide=false)
-            button press=cancelSignIn testId="signin-cancel" appearance="none"
-              Btn(label="Cancel", primary=false, wide=false)
-      if not siv.pending and acs.action == "signIn"
-        button press=signIn testId="signin" appearance="none"
-          Btn(label="Sign in", primary=true, wide=true)
-      text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
+        column gap=12 align-items="center" width="100%" max-width=420
+          text t("app.signin.waiting") testId="signin-waiting" text-align="center" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
+          button press=cancelSignIn testId="signin-cancel" appearance="none"
+            Btn(label=t("app.signin.cancel"), primary=false, wide=false)
+      if not siv.pending
+        column gap=16 align-items="center" width="100%" max-width=420
+          button press=signInPasskey testId="signin" appearance="none" width="100%"
+            Btn(label=t("app.signin.signin"), primary=true, wide=true)
+          text t("app.signin.or") testId="signin-or" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
+          column width="100%"
+            input type="email" value=authEmail input=editAuthEmail submit=createAccount placeholder=t("app.signin.email") aria-label=t("app.signin.email") testId="signup-email" enterkeyhint="go" min-height=44
+              font-family=th.fontText font-size=17 color=th.fg padding="8px 0px" border-width=0 background-color="transparent"
+              ::placeholder
+                color=th.muted
+            RowRule(indent=0)
+          // The one place a person agrees (owner, 2026-11-23): readable, above the button, in the page's own text colour. Tapping "Create account" is the agreement.
+          text t("app.signin.consent") testId="signup-consent" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.fg text-align="center"
+          row gap=24 justify-content="center"
+            text t("app.signin.privacy") href="https://choir.news/privacy" testId="signup-privacy" font-family=th.fontLabel font-size="-exact-footnote" color=th.accent
+            text t("app.signin.terms") href="https://choir.news/terms" testId="signup-terms" font-family=th.fontLabel font-size="-exact-footnote" color=th.accent
+          button press=createAccount testId="signup-create" appearance="none" width="100%"
+            Btn(label=t("app.signin.create"), primary=true, wide=true)
+          button press=closeAuth testId="signin-close" appearance="none"
+            Btn(label=t("app.signin.notnow"), primary=false, wide=false)
+      if siv.message != ""
+        text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
 
 // ---------------------------------------------------------------- the page
 

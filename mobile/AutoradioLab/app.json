@@ -34,10 +34,10 @@
       "web": "0"
     }
   },
-  "env": ["SIGNIN_SCHEME"],
+  "env": ["APP_ID"],
   "variants": {
-    "lab": { "idSuffix": ".lab", "name": "Autoradio", "env": { "SIGNIN_SCHEME": "news.choir.autoradio.lab" } },
-    "lab-one": { "idSuffix": ".lab.one", "name": "Autoradio 1 Dev", "env": { "SIGNIN_SCHEME": "news.choir.autoradio.lab.one" } }
+    "lab": { "idSuffix": ".lab", "name": "Autoradio", "env": { "APP_ID": "news.choir.autoradio.lab" } },
+    "lab-one": { "idSuffix": ".lab.one", "name": "Autoradio 1 Dev", "env": { "APP_ID": "news.choir.autoradio.lab.one" } }
   },
   "audio_session": "playback",
   "typescript": { "sources": { "fixtures": "../fixtures", "layouts": "../layouts", "themes": "../themes" } }

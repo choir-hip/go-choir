@@ -15,11 +15,12 @@ public protocol KeyStore: AnyObject, Sendable {
 }
 
 public enum KeyAccount {
-    public static let apiKey = "api-key"
+    // The names are the Exact secrets shared code keeps the sign-in under (app.ts `secret.keep`, AutoradioLab/app-signin.ts): the Keychain items are shared, written by Exact's store at sign-in.
+    public static let apiKey = "choir.key"
     /// The key's server-side id (not a secret): lets Sign out revoke it.
-    public static let keyID = "key-id"
-    /// The listener's computer id (not a secret). The device-flow key is owner-wide, so every request must name it.
-    public static let computerID = "computer-id"
+    public static let keyID = "choir.key-id"
+    /// The listener's computer id (not a secret). The app's key is owner-wide, so every request must name it.
+    public static let computerID = "choir.computer-id"
 }
 
 /// Tests and one-shot commands.
@@ -76,7 +77,12 @@ public final class OverlayKeyStore: KeyStore, @unchecked Sendable {
 /// The iOS (and macOS) Keychain. Device-only, available after first unlock so audio can run with the screen locked.
 public final class KeychainKeyStore: KeyStore, @unchecked Sendable {
     let service: String
-    public init(service: String = "news.choir.autoradio.choir") { self.service = service }
+    /// Exact's secret store keeps its items under the app's bundle id (ibex2 `app_identity`), account = the secret's name, AfterFirstUnlockThisDeviceOnly. The sign-in key is written by that store (shared
+    /// code), and this reads and deletes the very items, so the voice code needs no copy and no hand-over. Native reads it here because the voice stages call the server themselves.
+    public static var defaultService: String { Bundle.main.bundleIdentifier ?? "news.choir.autoradio.choir" }
+    /// After a sign-out: is the bearer key still stored?
+    public static func keyRemains() -> Bool { !(KeychainKeyStore().get(KeyAccount.apiKey) ?? "").isEmpty }
+    public init(service: String = KeychainKeyStore.defaultService) { self.service = service }
     private func base(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
     }

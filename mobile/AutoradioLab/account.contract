@@ -43,7 +43,7 @@ members Autoradio
     after(100, bumpLock)
   // The card is the first thing in the bar's own column (bar.contract), so it sits whole above the bar at every bar height (the "On:" line, the now-playing strip, the answer card). Not over the code screen, a
   // sheet, the launcher, the bar's field or any keyboard (exactViewport: the one general keyboard fact), the content controls, the reader's aim row or a web layer.
-  derive bannerOn = acs.message != "" and not siv.pending and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
+  derive bannerOn = acs.message != "" and not authOpen and not siv.pending and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
   resource acs = accountState(`${au.signedIn}|${siv.phase}|${siv.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}`, pg.top, hc.mode) as shape AccountView else empty()
   mutation acct as shape LabState
   mutation racct as shape SettingsAck refreshes rpulse
@@ -57,31 +57,54 @@ members Autoradio
   mutation down as shape LabState
   mutation up as shape LabState
 
-  // SIGN-IN is one attempt with an id, a state machine owned in one place (signin-attempt.ts; the transition table is in docs/reference/exact/auth-session.md). Native keeps only the device
-  // code, the poll request and the Keychain write. This file only renders the machine's view and sends the owner's three presses; it keeps no copy of its state.
-  // Each press answers with the machine's `rev` after its last change, and settling bumps the tick (`then`): the view is always read once more after the attempt's LAST transition.
+  // SIGN-IN and ACCOUNT CREATION are one attempt with an id, a state machine owned in one place (app-signin.ts): the platform's passkey screen (Exact's @exact/passkeys), no code, no browser sheet.
+  // This file only renders the machine's view and sends the person's presses; it keeps no copy of its state. Each press answers with the machine's `rev` after its last change, and settling
+  // bumps the tick (`then`): the view is always read once more after the attempt's LAST transition.
   mutation signedRun as shape SignInEnd then bumpSiv
   mutation signedCancel as shape SignInEnd then bumpSiv
-  mutation signedReopen as shape SignInEnd then bumpSiv
+  mutation signedOpen as shape SignInEnd then bumpSiv
+  // The sign-in screen is up (the card, Settings and the first-run page open it through `signIn`) and the email typed for a new account.
+  state authOpen = false
+  state authEmail = ""
   state sivTick = 0
   action bumpSiv
     sivTick = sivTick + 1
-  derive sivKey = `${sivTick}|${match signedRun { case some(r) => r.rev, case none => 0 }}|${match signedCancel { case some(r) => r.rev, case none => 0 }}|${match signedReopen { case some(r) => r.rev, case none => 0 }}`
+  derive sivKey = `${sivTick}|${match signedRun { case some(r) => r.rev, case none => 0 }}|${match signedCancel { case some(r) => r.rev, case none => 0 }}|${match signedOpen { case some(r) => r.rev, case none => 0 }}`
   resource siv = signInView(sivKey) as shape SignInView else empty()
   // The view is asked again twice a second while an attempt runs (the machine changes under a running answer, with no event to carry it), and not at all otherwise.
   task sivWatch when pending(signedRun) key=sivTick
     after(500, bumpSiv)
+  // Opening the screen starts clean: an old failure is not shown again (a running attempt is left alone).
   action signIn
-    send signedRun = signInRun()
+    authOpen = true
+    send signedOpen = signInOpen()
     sivTick = sivTick + 1
-  // The card's Cancel: the machine moves first (every later answer is ignored), then native forgets the code: no key REMAINS after it.
+  action editAuthEmail(v: string)
+    authEmail = v
+  // "Create account": the email typed, the consent line above the button read, the passkey screen. Tapping it is the agreement (owner, 2026-11-23).
+  action createAccount
+    send signedRun = signInRun("create", authEmail)
+    sivTick = sivTick + 1
+  // "Sign in": the passkey screen with no email typed (a discoverable credential).
+  action signInPasskey
+    send signedRun = signInRun("signin", "")
+    sivTick = sivTick + 1
+  // The screen's Cancel while the passkey screen is up: the machine moves first (every later answer is ignored), so no key is kept after it.
   action cancelSignIn
     send signedCancel = signInCancel()
     sivTick = sivTick + 1
-  // "Open the approval page": the sheet again, and a close the owner made is forgotten.
-  action openApproval
-    send signedReopen = signInReopen()
+  // "Not now": the screen goes away and a running attempt ends.
+  action closeAuth
+    authOpen = false
+    send signedCancel = signInCancel()
     sivTick = sivTick + 1
+  // A finished sign-in puts the screen away by itself (the paper is then signed in).
+  action finishAuth
+    authOpen = false
+    authEmail = ""
+    send acct = choirRefresh()
+  task authDone when siv.phase == "done" and authOpen key=sivTick
+    after(400, finishAuth)
   action signOut
     // The unsent text of a message being written belongs to the account that is leaving (it may quote that account's mail).
     mailFor = ""

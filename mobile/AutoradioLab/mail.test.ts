@@ -570,7 +570,7 @@ describe('W1 L1 D1 A1', () => {
     const g = app.grants.split('\n');
     expect(g).toContain(`fs.read ${C.DIR}`); expect(g).toContain(`fs.write ${C.DIR}`);
     expect(g).toContain(`fs.read ${C.CACHE}`); expect(g).toContain(`fs.write ${C.CACHE}`);
-    expect(g.some((l) => l.startsWith('secret.'))).toBe(false);          // no secret in Exact's store: the key is the platform's
+    expect(g.filter((l) => l.startsWith('secret.')).sort()).toEqual(['secret.keep choir.computer-id', 'secret.keep choir.key', 'secret.keep choir.key-id']);          // only the sign-in's three; the mail cipher's key is the platform's, in no Exact secret
     expect(g.some((l) => l.startsWith('net.fetch'))).toBe(true);
   });
 });
