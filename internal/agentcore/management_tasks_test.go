@@ -417,10 +417,12 @@ func TestManagementDelegatesIntakeToTasks(t *testing.T) {
 	if f.outboxWakes(taskB.TaskInbox, "start_after") != 1 || f.outboxWakes(taskC.TaskInbox, "start_after") != 0 {
 		t.Fatal("task A's closure did not start the oldest queued task B ahead of C")
 	}
-	// Management cancels C, still queued; B's start stands.
+	// Management cancels C, still queued. Its closure names the oldest
+	// queued task too, which is still B: a second start for B, keyed by C's
+	// closing record. B starts once (the claim is the guard); C gets none.
 	f.rt.closeManagementTask(ctx, taskC, types.TaskClosureCancelled, "", "cancelled by the test", "")
-	if f.outboxWakes(taskB.TaskInbox, "start_after") != 1 {
-		t.Fatal("task B's start did not stand after C was cancelled")
+	if got := f.outboxWakes(taskB.TaskInbox, "start_after"); got != 2 || f.outboxWakes(taskC.TaskInbox, "start_after") != 0 {
+		t.Fatalf("after C was cancelled: %d starts for B, want 2 (one per closure), and none for C", got)
 	}
 
 	// Task B leaves one capture: its Report wakes the parent once.
