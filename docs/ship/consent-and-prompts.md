@@ -43,7 +43,7 @@ One button: Open Settings. Do not ask again until the listener turns Voice or a 
 
 ## 3. Model download prompt
 
-Nothing downloads until the listener taps Download. This includes the embedding model, which today downloads without a prompt (data-inventory.md F8). In onboarding the prompt comes after the consent screen and after the listener has chosen to set up voice. Sizes come from the setup plan (KIT/VoiceSetup.swift:109-123, :179-182) and the pinned files (KIT/KnownModels.swift).
+Nothing downloads until the listener taps Download on that model's own row in Settings > Voice and models (2026-11-24: the Downloads page is gone; the press on a row is the agreement to that model's files only, and nothing else downloads with it). The first run's one press agrees to the files it lists, model by model. This includes the embedding model, which today downloads without a prompt (data-inventory.md F8). In onboarding the prompt comes after the consent screen and after the listener has chosen to set up voice. Sizes come from the setup plan (KIT/VoiceSetup.swift:109-123, :179-182) and the pinned files (KIT/KnownModels.swift).
 
 Title:
 
