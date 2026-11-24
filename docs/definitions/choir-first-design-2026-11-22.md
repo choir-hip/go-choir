@@ -155,6 +155,10 @@ boundaries:
     said: the model calls need a digest of the current paper in addition to the captures so they are up to date. and not just current events but it should have highly compressed info for the last n months since training data cutoff
     'on': '2026-11-24'
     reading: 'lead''s reading: the digest is one text, the same for every call in a period, so it is a cached prefix and costs little per call. The root is its natural author (its Texture already holds the index, the page plan and the paper''s own numbers), and plain code can render the counted parts. It has two layers: now (the front, the subjects bursting) and since the cutoff (the subjects and turns that mattered, by month, most compressed for the oldest)'
+  - decision: the digest goes only to the capture path. Research and the other desks that have a REPL get their context by a different path. Whether the capture path is a single model call that outputs text, a new desk, or research reused, the owner asked and has not ruled
+    said: digest only goes to capture path. should be a different context engineering path for  research and other desks which have a repl. the capture path is just a single model call that outputs text, right? or should we make a whole new desk for it? or just reuse research for it?
+    'on': '2026-11-24'
+    reading: 'lead''s recommendation, not a ruling: a single model call run by the graph custodian host service, no desk and not research, because no capture reaches a desk (ruled) and research has read-only world-evidence authority'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
