@@ -12,14 +12,6 @@
     "url": "string"
    },
    "answers": "MailAck"
-  },
-  {
-   "send": "mailRead",
-   "options": {
-    "address": "string",
-    "text": "string"
-   },
-   "answers": "MailAck"
   }
  ]
 }

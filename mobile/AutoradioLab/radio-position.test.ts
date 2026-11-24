@@ -15,8 +15,9 @@ import { readFileSync } from 'node:fs';
 import { adoptNative } from './api.ts';
 import { forgetOnboarding } from './onboarding.ts';
 import { radioPage } from './radio-page.ts';
+import { airAddressOf, respondsOf } from './voice-facts.ts';
 import type { Entry } from './runsheet-model.ts';
-import { barRun, getRadio, radioHold, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPulse, wipeRadio } from './radio-bridge.ts';
+import { barRun, getRadio, radioHold, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPlayStory, radioPulse, wipeRadio } from './radio-bridge.ts';
 
 type Call = { op: string; name?: string; peek?: boolean };
 let calls: Call[] = [];
@@ -302,6 +303,31 @@ describe('P11 a pulse begun before sign-out and delivered after it changes nothi
     expect(sets).toEqual([]);                                              // nothing of the old account was stored
     expect(seenGen).toBe(gen0);                                            // and the call said which account it was computed for
     expect(gen1).toBeGreaterThan(gen0);
+  });
+  test('V5 radioSet hands the voice and the take recorder what they read: the facts of the entries on air and ahead, and what a take responds to; no run sheet', async () => {
+    const pushed: Record<string, unknown>[] = [];
+    const spy = { available: true, later: async (r: { op: string }) => { if (r.op === 'radioSet') pushed.push(r as never); return native.later(r as never); } };
+    adoptNative(spy as never, 'test');
+    await play();
+    await radioPulse(undefined, spy as never);
+    const set = pushed.find((p) => Array.isArray(p.facts));
+    expect(set).toBeDefined();
+    const facts = set!.facts as { id: string; state: string }[];
+    expect(facts.some((x) => x.state === 'on_air')).toBe(true);
+    expect(set!.airAddress).toBe('');                                              // an episode on air is no page: an empty address, not a made-up one
+    expect(typeof set!.airAddress).toBe('string'); expect(typeof set!.respondsRoute).toBe('string'); expect(typeof set!.respondsTitle).toBe('string');
+    expect(set!.sheet).toBeUndefined(); expect(set!.onAir).toBeUndefined();
+  });
+  test('V5b a story on air: radioSet names its page (the reader\'s follow-along) and what a take responds to', async () => {
+    const pushed: Record<string, unknown>[] = [];
+    const spy = { available: true, later: async (r: { op: string }) => { if (r.op === 'radioSet') pushed.push(r as never); return native.later(r as never); } };
+    adoptNative(spy as never, 'test');
+    await radioPlayStory(undefined, spy as never, 'harbor-fees', 'Harbor fees rise');
+    await radioPulse(undefined, spy as never);
+    const set = pushed.filter((p) => Array.isArray(p.facts)).pop();
+    const r = await getRadio(undefined, spy as never);
+    const air = r.rt.store.onAir();                                                   // whatever is on air, the push names ITS page and ITS story (voice-facts.test.ts V3, V6 hold the rules)
+    expect(set!.airAddress).toBe(airAddressOf(air)); expect(set!.respondsRoute).toBe(respondsOf(air)?.route ?? '');
   });
   test('the stamped calls: radioSet, editionMirror and the sign-out calls carry gen', () => {
     const c = (f: string): string => readFileSync(new URL(f, import.meta.url), 'utf8');

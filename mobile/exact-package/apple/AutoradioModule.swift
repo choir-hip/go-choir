@@ -171,8 +171,6 @@ public final class AutoradioModule: ExactPackage {
         registerTalk()
         registerRetrieval()     // the voice turn's ask for passages (shared code answers) and the embedding model's ops
         registerTextureEdit()   // your own Texture documents in rich text
-        registerPodcasts()      // lane autoradio-podcasts
-        registerJoins()         // lane autoradio-joins
         Task { [choir] in await choir?.refresh() }
     }
 

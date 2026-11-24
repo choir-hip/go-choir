@@ -13,18 +13,7 @@ public struct TakeResponds: Codable, Equatable, Sendable {
     var json: [String: Any] { ["route": route, "title": title] }
     static func parse(_ v: Any?) -> TakeResponds? {
         guard let o = v as? [String: Any], let r = o["route"] as? String, !r.isEmpty else { return nil }
-        return TakeResponds(route: PodcastClip.bare(r), title: (o["title"] as? String) ?? "")
-    }
-
-    /// The story an entry on air is about: its page, else the first story it cites. Nil for an entry with none (an opening, an answer, a take).
-    @MainActor public static func from(entry e: RunSheetEntry?) -> TakeResponds? {
-        guard let e, e.kind != .take, e.kind != .transition else { return nil }
-        var route = ""
-        let addr = RadioPage.openAddress(e)
-        if addr.hasPrefix("pub:") { route = String(addr.dropFirst(4)) }
-        if route.isEmpty, let c = RadioPage.builtOn(e).first(where: { $0.address.hasPrefix("pub:") }) { route = String(c.address.dropFirst(4)); return TakeResponds(route: route, title: c.title) }
-        guard !route.isEmpty else { return nil }
-        return TakeResponds(route: route, title: e.displayTitle)
+        return TakeResponds(route: r.hasPrefix("/") ? String(r.dropFirst()) : r, title: (o["title"] as? String) ?? "")
     }
 }
 

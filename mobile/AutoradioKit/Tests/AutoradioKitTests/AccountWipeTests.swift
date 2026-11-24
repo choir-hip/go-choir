@@ -120,7 +120,6 @@ final class AccountWipeTests: XCTestCase {
         let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
 
         // What the second review found: the spoken words and the files of the app target.
-        let mailReading = MailReading(); mailReading.request(address: m, text: m)
         let conversation = Conversation(); conversation.begin(id: "q1", question: m)
         let acks = AckHistory(); acks.add(m, page: m)
         SharedGeneration.resetForTest(); let reader = HeldPages(limit: 4); reader.hold(gen: 0, HeldPage(address: "pub:x", title: m, blocks: [HeldBlock(id: "b1", kind: "p", text: m)]))
@@ -140,7 +139,7 @@ final class AccountWipeTests: XCTestCase {
         wipe.registerStandard(turnHistory: turns, legacyNotebookCache: legacyCache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook,
                               legacyTakeFiles: oldTakeFiles, tempDirectory: tmp, clips: clips,
                               texture: texture, environment: env,
-                              mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
+                              conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
                               deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
 
@@ -151,7 +150,7 @@ final class AccountWipeTests: XCTestCase {
         // (b) every in-memory store answers empty
         XCTAssertTrue(turns.snapshot().isEmpty)
         XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1"))
-        XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
+        XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned)
         XCTAssertTrue(openPages.list().isEmpty); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertFalse(EditionPicksMirror.shared.known, "and it is forgotten"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
 

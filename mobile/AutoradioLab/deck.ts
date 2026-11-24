@@ -58,8 +58,8 @@ export type DeckState = {
   journal: DeckEvent[];
 };
 
-/** `deckAct` operations. `value` is the seconds for `seekTo` and `seekBy`, and for `trim` how many held items to keep (the rest are dropped). */
-export type DeckOp = 'pause' | 'resume' | 'stop' | 'skip' | 'seekTo' | 'seekBy' | 'trim';
+/** `deckAct` operations. `clearEnd`: the clip playing no longer ends (the episode goes on from where it is). `value` is the seconds for `seekTo` and `seekBy`, and for `trim` how many held items to keep (the rest are dropped). */
+export type DeckOp = 'pause' | 'resume' | 'stop' | 'skip' | 'seekTo' | 'seekBy' | 'trim' | 'clearEnd';
 
 /** The deck's names (interface/deck.json). `deckState` is a live source; the rest answer the new state. */
 export const DECK_NAMES = ['deckState', 'deckPlay', 'deckEnqueue', 'deckAct', 'deckAck'] as const;

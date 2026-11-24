@@ -11,16 +11,18 @@ extension AutoradioModule {
         handle("radioNote") { _, reply in tick += 1; reply(["tick": tick]) }
     }
 
-    /// shared code -> native: the turn route's queue snapshot (the voice turn carries it) and the entry on air and the sheet as shared code last made them.
+    /// shared code -> native: the turn route's queue snapshot (the voice turn carries it), the facts of the entries on air and ahead (the voice's retrieval) and the story on air (a take's provenance), as shared code last made them (voice-facts.ts).
     public func radioSet(_ r: [String: Any]) -> [String: Any] {
         if r["signedOut"] as? Bool == true { RadioBridge.shared.markSignedOut(); return ["ok": true] }
         let snap = (r["snapshot"] as? String)?.data(using: .utf8)
-        let onAir = (r["onAir"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
-        let sheet = (r["sheet"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+        let facts = (r["facts"] as? [[String: Any]]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+        let route = r["respondsRoute"] as? String ?? ""
+        let responds = route.isEmpty ? nil : TakeResponds(route: route, title: r["respondsTitle"] as? String ?? "")
         let candidates = (r["candidates"] as? [[String: Any]] ?? []).compactMap { c -> (route: String, title: String)? in
             guard let route = c["route"] as? String, !route.isEmpty else { return nil }
             return (route: route, title: c["title"] as? String ?? "")
         }
-        return ["ok": RadioBridge.shared.set(gen: (r["gen"] as? NSNumber)?.intValue ?? 0, snapshot: snap, onAir: onAir, sheet: sheet, candidates: candidates)]
+        let onAir = (r["facts"] as? [[String: Any]])?.contains { $0["state"] as? String == "on_air" } ?? false
+        return ["ok": RadioBridge.shared.set(gen: (r["gen"] as? NSNumber)?.intValue ?? 0, snapshot: snap, facts: facts, responds: responds, onAir: onAir, airAddress: r["airAddress"] as? String ?? "", candidates: candidates)]
     }
 }

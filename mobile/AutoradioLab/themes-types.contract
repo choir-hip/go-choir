@@ -1,4 +1,0 @@
-// The themes' one-time carry-over (themes.ts `themeMigrate`): `rev` moves each time the carry-over changed what the themes show, so the theme sources are asked again.
-
-shape ThemeRev
-  rev: number

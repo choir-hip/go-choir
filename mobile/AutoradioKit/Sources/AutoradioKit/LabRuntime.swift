@@ -134,15 +134,6 @@ public final class LabRuntime: @unchecked Sendable {
         let pl = player
         BarTracker.shared.positionSource = { [weak pl] in pl?.renderPosition() }
         BarTracker.shared.speedSink = { [weak pl] v in pl?.setRate(v) }
-        // Mail's "Read it to me" is a play: it goes on the run sheet as `place now`, with the message's words held for the entry.
-        MailReading.shared.handler = { address, text in
-            Task { @MainActor in
-                let paras = ChoirText.paragraphs(text, maxChars: ChoirText.speechChars)
-                guard !paras.isEmpty else { return }
-                let title = paras[0].split(separator: " ").prefix(6).joined(separator: " ")
-                RadioBridge.shared.place(.readAloud(address: address, title: title), mode: "now", words: (title, paras))
-            }
-        }
         coord.onChange = { [weak self] in self?.refresh() }
         eventTask = Task { [weak self] in
             guard let self else { return }

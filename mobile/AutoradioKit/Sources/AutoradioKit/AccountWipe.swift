@@ -48,14 +48,12 @@ public final class AccountWipe: @unchecked Sendable {
         clips: ClipLocator = .shared,
         texture: TextureEditor = .shared,
         environment: ChoirEnvironment = .shared,
-        mailReading: MailReading = .shared,
         conversation: Conversation = .shared,
         acks: AckHistory = .shared,
         bar: BarTracker = .shared,
         reader: HeldPages = .shared,
         keptTurns: KeptTurnStore? = nil,
         voice: SpeakerGate = .shared,
-        heldRest: HeldRest = .shared,
         deck: Deck = .shared,
         oldBuildFiles: [URL] = AccountWipe.oldBuildFiles()
     ) {
@@ -77,15 +75,13 @@ public final class AccountWipe: @unchecked Sendable {
         // "podcasts": the library and cached feeds are files of shared code now; podcast.ts `wipe(storage)` is what sign-out must call (left to the lead).
         register("texture") { await MainActor.run { texture.wipe() } }
         register("playing") { environment.wipePlaying() }
-        register("mail-reading") { mailReading.wipe() }
         register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe() }
         // The native copy of the edition picks and the words waiting for shared code (the file itself is shared code's, wiped by account.ts).
         register("edition-picks") { EditionPicksMirror.shared.reset(); EditionTalk.shared.clear() }
-        register("reader") { reader.wipe() }
+        register("reader") { reader.wipe(); ReaderFollow.shared.clear(); ReaderAim.shared.clear() }      // the pages handed to the voice, the sentence being followed and what the bar's prompt is aimed at
         // The enrolled voice is app-private (Application Support/MikeVoice, not a system setting) and the listener's own: it goes at sign-out.
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
-        register("held-rest") { heldRest.wipe() }
         register("old-build-files") { AccountWipe.removeFiles(oldBuildFiles) }      // a phone upgraded from the Swift run sheet may still hold them (removed at boot too)
         register("retrieval-bridge") { RetrievalBridge.shared.clear() }     // the last turn's record and a pending ask belong to the account that left
     }

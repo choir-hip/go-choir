@@ -1,10 +1,8 @@
 // Members file (podcasts): the Podcasts app's states, resources, mutations and actions, as if written in the root.
 // The data and the acts run in app.ts (podcast.ts; shapes in podcast-types.contract). Only what needs the platform is the Swift package's, and it is
-// named in interface/podcasts.json: `podcastNow` (what the player is playing and where: only the player knows) and `podcastPlayAudio` (hands one
-// audio address to the player; the lane's deck send replaces it). Every name a child component injects is in the podcasts band of the `provide`
-// list in app.contract.
-use podcastNow, podcastPlayAudio, PodNow, PodDone from "@choir/autoradio"
-use PodHomeView, PodShowView, PodEpisodeView, PodAck, PodHead from "./podcast-types.contract"
+// Nothing here is native: what the player is playing is shared code (podcast-now.ts, over the run sheet and the deck's state) and a play, a queue and a keep are the radio's (radio-bridge.ts
+// `radioPlayAudio`). Every name a child component injects is in the podcasts band of the `provide` list in app.contract.
+use PodHomeView, PodShowView, PodEpisodeView, PodAck, PodHead, PodNow, PodDone from "./podcast-types.contract"
 
 members Autoradio
   state podQ = ""
@@ -14,8 +12,8 @@ members Autoradio
   // The address a note belongs to ("" none), so one page's note never shows on another.
   state podNoteFor = ""
 
-  // What the player is playing: asked again by the package while a podcast plays.
-  resource podNow = podcastNow() as shape PodNow else empty()
+  // What the player is playing: asked again with the radio's pulse, which moves once a second while something sounds in front.
+  resource podNow = podcastNow(rpulse.tick, posKey) as shape PodNow else empty()
   // Its playhead, kept every 5 s of progress; `rev` changes when positions did, so the pages below read them again.
   resource podHead = podcastPlayhead(podNow.episodeId, podNow.clip, podNow.elapsed, podNow.duration) as shape PodHead else empty()
   // Arguments are positional (named ones belong to a package's sources).
@@ -56,9 +54,6 @@ members Autoradio
     refresh podShow
     refresh podEp
     if podPlayOp != "" and (podPlayUrl != "" or podPlayOp == "keep")
-      if podPlayOp == "keep"
-        send podHanded = podcastPlayAudio(op=podPlayOp, id=podPlayId, url=podPlayUrl, title=podPlayTitle, show=podPlayShow, start=podPlayStart)
-      else
-        send podHanded = radioPlayAudio(podPlayOp, podPlayId, podPlayUrl, podPlayTitle, podPlayShow, podPlayStart)
+      send podHanded = radioPlayAudio(podPlayOp, podPlayId, podPlayUrl, podPlayTitle, podPlayShow, podPlayStart)
   action retryPodcasts
     podTick = podTick + 1

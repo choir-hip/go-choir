@@ -108,5 +108,17 @@ shape PodAck
 shape PodHead
   rev: number
 
+// What the player is playing when it is a podcast (podcast-now.ts); the answer to a play, a queue or a keep (radio-bridge.ts `radioPlayAudio`, clip-play.ts `radioPlayClip`).
+shape PodNow
+  episodeId: string
+  clip: bool
+  start: number
+  elapsed: number
+  duration: number
+
+shape PodDone
+  status: string
+  message: string
+
 shape ClipRows
   rows: HearItRow[]

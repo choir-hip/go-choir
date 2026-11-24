@@ -435,6 +435,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
         case "seekTo": engine?.seekRemote(to: value)
         case "seekBy": engine?.seekRemote(by: value)
         case "trim": trim(keeping: Int(value))
+        case "clearEnd": engine?.clearRemoteEnd()          // "Keep listening" to a clip: it no longer ends, the episode goes on from where it is
         default: break
         }
     }
