@@ -274,7 +274,7 @@ export const revokeDirect: RevokeHeld = async (held) => {
 const idOf = (body: unknown): string => (body && typeof body === 'object' && typeof (body as Record<string, unknown>).key_id === 'string' ? (body as { key_id: string }).key_id : '');
 
 /** The pending-revoke file: a list (at most 8) of {id, tries}: the ids of keys the phone has let go of and the server has not yet revoked, each with how many retries answered "not this key's". An id is written (atomically) BEFORE the key is
- * deleted, so a kill or a timeout at any later step leaves it; a later sign-out adds its id and never replaces one that is unresolved. When the list is full the entry that has answered "not yours" most goes (it is the likeliest to be stale). */
+ * deleted, so a kill or a timeout at any later step leaves it; a later sign-out adds its id and never replaces one that is unresolved. When the list is full the entry that has answered "not yours" most goes (a tie drops the oldest). */
 export type PendingEntry = { id: string; tries: number };
 const PENDING_REVOKE_MAX = 8;
 const parsePending = (text: string | null): PendingEntry[] => {
