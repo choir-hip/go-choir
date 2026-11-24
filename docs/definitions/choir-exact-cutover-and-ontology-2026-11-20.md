@@ -126,6 +126,9 @@ boundaries:
   - decision: the no-spend and offline experiments run before the semantic layer's design is decided; the lead walks the owner through the semantic layer design once more on the night of 2026-11-24 before the owner sleeps
     said: 8) yes, we can do the experiments first. but i do want you to walk me through the semantic layer design once more before i go to bed (2-4 hours from now)
     'on': '2026-11-24'
+  - decision: 'where two designs conflict, the newer one supersedes the older. Order, newest first: the ideal-form draft and design session of 2026-11-23 with the rulings since; the first design, draft 4 (2026-11-22/23); the semantic layer design of 2026-11-20. In particular management does not decide captures in the redesign'
+    said: you should think that everything where designs conflict, the new design superceded ... remember, in the redesign management doesnt decide captures. mgmt is currently overloaded and thats the problem
+    'on': '2026-11-24'
   must_preserve:
   - no secrets, tokens or the owner's email in the repo or in output; .env, .env.bak-bedrock-20261109124037 and stash devin-provider-wip hold secrets and are left alone
   - the owner's iPhone credential is never changed, moved or re-keyed

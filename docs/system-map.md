@@ -345,6 +345,8 @@ Not true, though a reader would assume it:
 
 ## 10. Where the maps disagree with the docs or each other
 
+- **Design documents: the newer supersedes the older where they conflict** (owner, 2026-11-24). Newest first: `docs/design/ideal-form-draft-2026-11-23.md`; `docs/design/first-design-2026-11-22.md`; `docs/design/semantic-layer-2026-11-20.md`. Each older file says at its top what of it is superseded.
+
 Each is open. Both readings are given.
 1. Off-host backup. [1] saw a daily encrypted `offhost-backup` timer that
    ran at 02:34Z on 11-23, and read no restore-drill result. [2] says tape

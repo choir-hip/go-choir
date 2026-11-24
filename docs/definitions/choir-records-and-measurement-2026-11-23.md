@@ -74,6 +74,9 @@ boundaries:
   - decision: 'groups and origin counts: host code as a named graph custodian, run as a host service'
     said: 2) yes, can run this as a host service
     'on': '2026-11-24'
+  - decision: 'where two designs conflict, the newer one supersedes the older. Order, newest first: the ideal-form draft and design session of 2026-11-23 with the rulings since; the first design, draft 4 (2026-11-22/23); the semantic layer design of 2026-11-20. In particular management does not decide captures in the redesign'
+    said: you should think that everything where designs conflict, the new design superceded ... remember, in the redesign management doesnt decide captures. mgmt is currently overloaded and thats the problem
+    'on': '2026-11-24'
   must_preserve:
   - records hold ids, choices, counts and probabilities, never a user's private content beyond what the tape already holds
   - 'one custodian per data kind: the record''s custodian is named before it is built'

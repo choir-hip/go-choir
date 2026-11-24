@@ -101,6 +101,9 @@ boundaries:
   - decision: the offline experiments may spend on model calls
     said: 5) yes, offline may spend on model calls
     'on': '2026-11-24'
+  - decision: 'where two designs conflict, the newer one supersedes the older. Order, newest first: the ideal-form draft and design session of 2026-11-23 with the rulings since; the first design, draft 4 (2026-11-22/23); the semantic layer design of 2026-11-20. In particular management does not decide captures in the redesign'
+    said: you should think that everything where designs conflict, the new design superceded ... remember, in the redesign management doesnt decide captures. mgmt is currently overloaded and thats the problem
+    'on': '2026-11-24'
   must_preserve:
   - the paper publishes throughout; a mechanism is retired only after its replacement is proved on staging
   - no switches; no limits on our own model calls; one System 1 call a flush with every question in it
