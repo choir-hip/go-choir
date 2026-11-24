@@ -110,6 +110,8 @@ func (h *Handler) sendRecoveryMail(toAddress, emailHash, userID, token string) {
 		defer cancel()
 		if err := mailer.SendRecoveryLink(ctx, toAddress, link, RecoveryTokenTTL); err != nil {
 			log.Printf("[auth] operation=recovery_mail email_hash=%s user_id=%s result=error error=%q", emailHash, userID, err)
+			// A link nobody received must not stand in for the retry (the live-link rule would send nothing for its life).
+			_ = h.store.DiscardRecoveryToken(context.WithoutCancel(ctx), token)
 			return
 		}
 		log.Printf("[auth] operation=recovery_mail email_hash=%s user_id=%s result=sent", emailHash, userID)

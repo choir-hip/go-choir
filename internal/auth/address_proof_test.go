@@ -762,3 +762,20 @@ func TestRecoveryRequestAnswersAKnownAndAnUnknownAddressAlike(t *testing.T) {
 		}
 	}
 }
+
+// A direct recovery request whose mail could not be sent leaves no live link to suppress the retry.
+func TestAFailedDirectRecoveryMailLeavesNoLiveLinkToSuppressTheRetry(t *testing.T) {
+	h, rm := recoveryMailTestEnv(t)
+	if _, err := h.store.CreateUser("held7", "held7@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	rm.err = errors.New("maild down")
+	if rec := postRecoveryRequest(t, h, "held7@example.com", "203.0.113.150:1"); rec.Code != http.StatusOK {
+		t.Fatalf("first try = %d, want the same 200", rec.Code)
+	}
+	rm.err = nil
+	before := len(rm.mails())
+	if rec := postRecoveryRequest(t, h, "held7@example.com", "203.0.113.151:1"); rec.Code != http.StatusOK || len(rm.mails()) != before+1 {
+		t.Fatalf("retry = %d with %d new mails: a link nobody received suppressed it", rec.Code, len(rm.mails())-before)
+	}
+}

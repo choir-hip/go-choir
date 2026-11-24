@@ -570,6 +570,20 @@ describe('S21 sign-out late, twice, and across a sign-in', () => {
     expect(r.done).toBe(false); expect(W.key).toBe('present'); expect(dataLeft(m).length).toBe(SEED.length); expect(W.swift).toBe(true);
     expect(list(m).map((e) => e.id)).toEqual(['ak_held']);
   });
+  test('a launch retry that is slow does not drop the id a sign-out wrote meanwhile', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    m.files.set(PENDING_REVOKE_FILE, new TextEncoder().encode(JSON.stringify([{ id: 'ak_x', tries: 0 }])));
+    await launch(m); resetSettled();
+    const real = globalThis.fetch; let release!: () => void;
+    globalThis.fetch = (async () => { await new Promise<void>((r) => { release = r; }); return new Response('{"error":"x"}', { status: 404 }); }) as never;
+    try {
+      const retry = retryPendingRevoke(m.storage, { get: () => 'ak_current' } as never);
+      for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 2));      // the retry is waiting on the network
+      await accountSignOut(m.storage, undefined, phone() as never, { held: { key: 'k', id: 'ak_new' }, revoke: async () => 'pending' });
+      release(); await retry;
+    } finally { globalThis.fetch = real; }
+    expect(list(m).map((e) => e.id).sort()).toEqual(['ak_new', 'ak_x']);
+  });
   test('the retry of each entry: one revoked, one kept', async () => {
     W = newWorld('present'); const m = memFs([]);
     m.files.set(PENDING_REVOKE_FILE, new TextEncoder().encode(JSON.stringify([{ id: 'ak_a', tries: 0 }, { id: 'ak_b', tries: 0 }])));

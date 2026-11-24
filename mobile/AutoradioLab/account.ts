@@ -286,37 +286,50 @@ const parsePending = (text: string | null): PendingEntry[] => {
 };
 const readPending = async (storage: Storage | undefined): Promise<PendingEntry[]> => (storage ? parsePending(await readText(storage, PENDING_REVOKE_FILE)) : []);
 const writePending = async (storage: Storage | undefined, list: PendingEntry[]): Promise<boolean> => (list.length === 0 ? removeFile(storage, PENDING_REVOKE_FILE) : mark(storage, PENDING_REVOKE_FILE, JSON.stringify(list)));
-const addPending = async (storage: Storage | undefined, id: string): Promise<boolean> => {
+// Every change to the file is one read-modify-write inside this queue (one promise chain): the retry's network calls run outside it, and its result is applied inside it against a fresh read.
+let pendingQueue: Promise<unknown> = Promise.resolve();
+const serialPending = <T>(f: () => Promise<T>): Promise<T> => { const r = pendingQueue.then(f, f); pendingQueue = r.then(() => undefined, () => undefined); return r; };
+const addPending = (storage: Storage | undefined, id: string): Promise<boolean> => serialPending(async () => {
   const list = await readPending(storage);
   if (list.some((e) => e.id === id)) return true;
   if (list.length >= PENDING_REVOKE_MAX) {
     let worst = 0;
-    list.forEach((e, i) => { if (e.tries > list[worst].tries) worst = i; });
+    list.forEach((e, i) => { if (e.tries > list[worst].tries) worst = i; });      // the most-answered "not yours"; a tie drops the oldest
     list.splice(worst, 1);
   }
   list.push({ id, tries: 0 });
   return writePending(storage, list);
-};
-const dropPending = async (storage: Storage | undefined, id: string): Promise<void> => { await writePending(storage, (await readPending(storage)).filter((e) => e.id !== id)); };
+});
+const dropPending = (storage: Storage | undefined, id: string): Promise<void> => serialPending(async () => { await writePending(storage, (await readPending(storage)).filter((e) => e.id !== id)); });
 
 /** Retry the revokes of the list, signed in (at launch, and after a sign-in): with the key held now, each entry in turn. 2xx: done, the entry goes. 404 or 403: this key cannot revoke it (another account's key, or a narrower one): the entry stays,
- * since the account it belongs to may sign in later, and goes after 60 such answers. A phone that cannot reach the server stops and keeps what is left. An entry that is the key the phone holds is stale (the sign-out did not happen) and goes. */
+ * since the account it belongs to may sign in later, and goes after 60 such answers. A phone that cannot reach the server stops and keeps what is left. An entry that is the key the phone holds is stale (the sign-out did not happen) and goes.
+ * The answers are applied to a fresh read inside the queue, so an id a sign-out added while this waited on the network is kept. */
 export async function retryPendingRevoke(storage: Storage | undefined, store: Store | undefined): Promise<void> {
   if (!storage || !store) return;
   const list = await readPending(storage);
   if (list.length === 0 || (await keyState()).state !== 'present') return;
-  const keep: PendingEntry[] = [];
+  const gone = new Set<string>(); const answered = new Set<string>();
   let reachable = true;
   for (const p of list) {
-    if (!reachable) { keep.push(p); continue; }
-    if ((store.get(KEY_ID_NAME) ?? '') === p.id) continue;                              // the key is still this phone's: the sign-out did not happen, and this must not end it
-    try { await authedJSON(`/auth/api-keys/${encodeURIComponent(p.id)}`, { method: 'DELETE' }); }
+    if (!reachable) break;
+    if ((store.get(KEY_ID_NAME) ?? '') === p.id) { gone.add(p.id); continue; }          // the key is still this phone's: the sign-out did not happen, and this must not end it
+    try { await authedJSON(`/auth/api-keys/${encodeURIComponent(p.id)}`, { method: 'DELETE' }); gone.add(p.id); }
     catch (e) {
-      if (e instanceof HTTPError && (e.status === 404 || e.status === 403)) { if (p.tries + 1 < PENDING_REVOKE_KEEP_TRIES) keep.push({ id: p.id, tries: p.tries + 1 }); }
-      else { reachable = false; keep.push(p); }
+      if (e instanceof HTTPError && (e.status === 404 || e.status === 403)) answered.add(p.id);
+      else reachable = false;
     }
   }
-  await writePending(storage, keep);
+  await serialPending(async () => {
+    const now = await readPending(storage);
+    const next: PendingEntry[] = [];
+    for (const e of now) {
+      if (gone.has(e.id)) continue;
+      if (answered.has(e.id)) { if (e.tries + 1 < PENDING_REVOKE_KEEP_TRIES) next.push({ id: e.id, tries: e.tries + 1 }); continue; }
+      next.push(e);
+    }
+    await writePending(storage, next);
+  });
 }
 
 /** The sign-out: the result carries the wipe counter (a monotonic value the contract passes on to the sources that keep state in memory). */
@@ -362,7 +375,7 @@ async function signOutInner(
     if (held && (await (opts.revoke ?? revokeDirect)(held)) === 'revoked' && held.id) await dropPending(storage, held.id);
   }, () => undefined);
   const r = await Promise.race([nativeDone.then((x) => x, () => ({ done: false, threw: true })), timeout(opts.deadlineMs ?? NATIVE_DEADLINE_MS)]);
-  if (r === 'timeout') { late = true; return { done: false, failed: '', message: 'Sign-out is taking long. It will finish by itself; nothing more to do.' }; }   // the marker stays; sealing stays off
+  if (r === 'timeout') { late = true; return { done: false, failed: '', message: 'Sign-out is taking long. The phone finishes clearing by itself; if the key was already let go of, the server revokes it the next time you sign in to this account, or revoke it now from Settings on the web.' }; }   // the marker stays; sealing stays off
   const ans = r as { done?: unknown; threw?: boolean };
   if (ans.done !== true) {
     // Not signed out (the key may still be there). An explicit "not done" means the key remains: the marker goes. A throw is unknown: the marker stays and the next
