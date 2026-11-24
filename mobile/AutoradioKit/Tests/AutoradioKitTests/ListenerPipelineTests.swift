@@ -87,8 +87,11 @@ final class ListenerPipelineTests: XCTestCase {
         XCTAssertEqual(ListenerPipeline.companions(of: tdt), [eou])
         XCTAssertEqual(ListenerPipeline.companions(of: eou), [])
         XCTAssertEqual(ListenerPipeline.companions(of: "apple-speech"), [])
-        let row = SetupCatalog.ladder(.transcriber).first!
-        XCTAssertEqual(row.id, fluid)
+        let pro = SetupCatalog.ladder(.transcriber).first!                    // the first row is Fluid Speech Pro; the plan drops it on a phone under 7 GB
+        XCTAssertEqual(pro.id, "fluid-speech-pro")
+        XCTAssertEqual(ListenerPipeline.companions(of: pro.id), [eou])
+        XCTAssertEqual(pro.bytes, KnownModels.fluidSpeechPro.totalBytes + 250_000_000, "Pro's size includes the live words too")
+        let row = SetupCatalog.ladder(.transcriber).first { $0.id == fluid }!
         XCTAssertEqual(row.kitStageID, "live-then-final")
         XCTAssertEqual(row.bytes, KnownModels.fluidSpeechMini.totalBytes + 250_000_000, "the size the person is asked about includes the live words")
         XCTAssertTrue(SetupCatalog.ladder(.transcriber).last!.isFloor)
