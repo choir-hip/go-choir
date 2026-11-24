@@ -77,9 +77,10 @@ public actor SetupMicLease {
         let take = Take()
         let out = await begin(wanted: { take.open }, onFrame: { take.add($0.samples) })
         guard out == .open else { _ = take.finish(); return nil }                      // refused (begin released) or overtaken (whoever overtook it owns the lease)
+        let mine = token
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9))                      // a cancelled sleep ends early and falls through to the release
         let samples = take.finish()
-        await release()
+        if token == mine { await release() }                                            // only while this recording still holds the lease: a newer take's microphone is not ours to close
         return samples.isEmpty ? nil : samples
     }
     /// A begin that was overtaken or no longer wanted: if it is still the newest, the lease is given back; otherwise whoever overtook it owns the lease.

@@ -29,8 +29,8 @@ final class OnboardingController: @unchecked Sendable {
     private var runModels: [String: String] = [:]
     /// The voice-print model's own fetch is running (it is not a setup stage).
     private var speakerFetching = false
-    /// `<job>:<id>` -> the Test button's state for that row (ModelTrial): state, line, ms. Native because the model itself runs.
-    private var tests: [String: (state: String, line: String, ms: Double)] = [:]
+    /// The Test lines (per account) and the last failure of each model's download (`ModelRunBook`). Native because the runs are.
+    private let book = ModelRunBook()
     /// Learning the person's voice (voice onboarding; Voice/VoiceEnrolment.swift): the sentences, the profile, the check.
     let capture = EnrolCapture(gate: .shared)
     /// The ONE owner of the microphone for enrolment (AutoradioKit Voice/SetupMicLease.swift): every open has its close on every exit, and between sentences the microphone is off and the engine's frames go to the tap alone.
@@ -112,7 +112,7 @@ final class OnboardingController: @unchecked Sendable {
     /// The voice-print model (WeSpeaker, about 8 MB) is fetched only after the person agreed on the download step; once loaded the gate can listen.
     func fetchSpeakerModel() {
         set { speakerFetching = true }
-        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e }; self.set { self.speakerFetching = false } }
+        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e } else { self.book.speakerFailed("The voice-print model could not be fetched. Press Download to try again.") }; self.set { self.speakerFetching = false } }
     }
 
     private func setupFinished(_ s: VoiceSetup, gen: Int, merging: Bool = false) {
@@ -128,16 +128,10 @@ final class OnboardingController: @unchecked Sendable {
         }
         // Readiness was written by setup itself, after each check passed (VoiceSetup.runStage); the launch choice and this one both read it.
         guard gen == AccountWipe.generation else { changed(); return }
-        // Speech detection and recognition come from the model list as it stands now that the models are ready, with the composite's parameters
-        // and applied to the running listener (a bare stage id would drop them, and a configuration set at launch would stay until the next launch).
-        for (kind, id) in s.choices where kind != .speechBounds && kind != .transcriber && module.runtime.registry.stages(kind).contains(where: { $0.id == id }) {
-            module.runtime.setStage(kind, id: id)
-        }
-        module.runtime.applyListenerChoice()
-        // The responder model setup chose is the one the phone talks with (read again at every start).
-        if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }) { ResponderChoice.adopt(r.chosen) }      // a download never replaces what the person uses: only Use does (it fills a choice never made)
-        // The quick-decision model setup chose is the one that scores what the listener said (read again at every start; Qwen3-0.6B when the choice is not a file on the phone). Native: it is the voice runtime's choice of weights.
-        if let d = s.record.items.first(where: { $0.stage == SetupStage.decision.rawValue }) { DecisionChoice.adopt(d.chosen) }
+        // The first run's choices become the running ones; a row's Download applies none (Download only fetches and verifies, only Use changes what is in use): `LabRuntime.applySetupChoices`.
+        module.runtime.applySetupChoices(s)
+        // A row that failed keeps its reason on its row until it is pressed again (`ModelRunBook`).
+        for r in s.rows where r.state == "failed" { lock.lock(); let id = runModels[r.stage]; lock.unlock(); if let id { book.failed(id, r.statusLine) } }
         changed()
     }
 
@@ -284,6 +278,7 @@ final class OnboardingController: @unchecked Sendable {
     /// Sign-out: nothing of the voice side's first run reaches the next account.
     func reset() {
         stop(); DownloadDoor.shared.reset(); SpeakerGate.shared.forget(); module.runtime.setHandsFree(false)           // sign-out: the microphone is closed and the switch stays off for the next person
+        book.reset()
         set { setup = nil; mic = "unasked"; level = 0; heard = ""; route = ""; talking = false; over = false; picked = 0; finishAsked = 0 }
     }
 
@@ -298,29 +293,21 @@ final class OnboardingController: @unchecked Sendable {
         return ["downloading", "waiting", "preparing", "stalled"].contains(row.state) ? row.progress : nil
     }
 
-    /// Make a model on the phone the one in use for its job. A model that is not on the phone is refused here as well as on the page.
+    /// Make a model on the phone the one in use for its job (`LabRuntime.useModel`): the choice is kept and the stage that runs it is set. A model that is not on the phone changes nothing.
     func use(job: String, id: String, live: Bool) {
-        guard Voices.readiness.isReady(model: id) else { return }
-        switch job {
-        case "responder": if KnownModels.isPinned(id) { ResponderChoice.current = id }
-        case "decision": if DecisionChoice.resolve(saved: id) == id { DecisionChoice.current = id }
-        case "voice": if let o = VoiceCatalog.options.first(where: { $0.modelID == id }) { module.runtime.setVoice(o); VoiceController.shared?.sampler.syncSelected(o.id) }
-        case "transcriber": ModelUse.standard.set(live ? "live" : "final", id); module.runtime.applyListenerChoice()
-        case "bounds": ModelUse.standard.set("bounds", id); module.runtime.applyListenerChoice()
-        default: return
-        }
+        if module.runtime.useModel(job: job, id: id, live: live), job == "voice", let o = VoiceCatalog.options.first(where: { $0.modelID == id }) { VoiceController.shared?.sampler.syncSelected(o.id) }
         changed()
     }
 
-    /// The Test button: one run, reported through the facts. A second press while it runs does nothing.
+    /// The Test button: one run, reported through the facts. A second press while it runs does nothing; a report from before a sign-out is dropped (`ModelRunBook`).
     func test(job: String, id: String) {
         let key = "\(job):\(id)"
-        lock.lock()
-        if let t = tests[key], ["recording", "working"].contains(t.state) { lock.unlock(); return }
-        tests[key] = (state: "working", line: "", ms: 0); lock.unlock(); changed()
+        if book.isRunning(key) { return }
+        let gen = AccountWipe.generation
+        book.test(key, state: "working", line: "", ms: 0, generation: gen); changed()
         Task { [weak self] in
             guard let self else { return }
-            await ModelTrial.run(job: job, id: id, backend: LiveTrialBackend(controller: self), report: { state, line, ms in self.set { self.tests[key] = (state: state, line: line, ms: ms) } })
+            await ModelTrial.run(job: job, id: id, backend: LiveTrialBackend(controller: self), report: { state, line, ms in self.book.test(key, state: state, line: line, ms: ms, generation: gen); self.changed() })
         }
     }
 
@@ -351,7 +338,8 @@ final class OnboardingController: @unchecked Sendable {
             return ["id": id, "state": r.state == "stalled" ? "downloading" : r.state, "progress": r.progress, "line": r.statusLine]
         }
         if speakerFetching { runs.append(["id": ModelOffer.speakerID, "state": "downloading", "progress": 0.0, "line": ""]) }
-        let trials: [[String: Any]] = tests.map { ["key": $0.key, "state": $0.value.state, "line": $0.value.line, "ms": $0.value.ms] }
+        runs = book.runs(current: runs, isReady: { $0 == ModelOffer.speakerID ? WeSpeakerEmbedder.standard().onDisk : Voices.readiness.isReady(model: $0) })
+        let trials: [[String: Any]] = book.tests().map { ["key": $0.key, "state": $0.state, "line": $0.line, "ms": $0.ms] }
         var device = ""
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
         return ["rows": rows, "summary": setup?.summary ?? [],

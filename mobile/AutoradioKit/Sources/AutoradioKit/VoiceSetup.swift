@@ -286,7 +286,7 @@ public final class VoiceSetup: @unchecked Sendable {
     public private(set) var configurationRecord: ConfigurationRecord?
 
     /// A person's press on ONE model's row (Settings > Voice and models): it fails as itself, at once. No wait for a choice, no fallback to the built-in floor marked ready in its place, no record item: the row says it failed and its own Download is the retry.
-    let rowDownload: Bool
+    public let rowDownload: Bool
 
     public init(backend: SetupBackend, profile: DeviceProfile, smaller: Bool = false, stallSeconds: Double = 20, patience: Double = 45, maxTries: Int = 3, rowDownload: Bool = false,
                 configBackend: ConfigBackend? = nil, verifier: ReadinessVerifier = Voices.verifier, now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) {

@@ -130,4 +130,17 @@ final class SetupMicLeaseTests: XCTestCase {
         let silent = await l2.record(seconds: 0.1); XCTAssertNil(silent, "no frames is no recording")
         XCTAssertEqual(Array(r2.all.suffix(2)), ["tap:nil", "restore"])
     }
+
+    // L10 (review round 2): a recording that was overtaken (another begin took the microphone) must not release the newer take's lease.
+    func testL10AnOvertakenRecordingDoesNotReleaseTheNewerTake() async {
+        let r = Rec(); let l = make(r)
+        let t = Task { await l.record(seconds: 0.4) }
+        await waitFor(r, "mic:on")
+        let newer = await l.begin(wanted: { true }, onFrame: { _ in })                  // another take (voice learning, another Test) overtakes it
+        XCTAssertEqual(newer, .open)
+        _ = await t.value
+        let held = await l.isHeld
+        XCTAssertTrue(held, "the overtaken recording's end did not give the newer take's microphone back: \(r.all)")
+        XCTAssertEqual(r.all.filter { $0 == "restore" }.count, 0, "hands-free was not restored under the newer take")
+    }
 }
