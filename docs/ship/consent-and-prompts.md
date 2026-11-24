@@ -82,7 +82,7 @@ Progress text, always real: "Downloading 214 MB of 1.8 GB." Resumable. If it sta
 Notes for the builder:
 
 - The plan's first-choice sizes are 480 MB (Parakeet, the larger listener), 350 MB (Kokoro voice), 639 MB (Qwen3-0.6B) and 2 MB (Silero), about 1.47 GB; the smaller set is 250 MB, 300 MB, 639 MB and 2 MB, about 1.2 GB. The embedding model is 310 MB, so the prompt totals are about 1.8 GB and 1.5 GB. Read the sizes from the plan at run time; do not hard-code the text.
-- Speech recognition by default is Apple's on-device recogniser, which needs no download. The hearing file is optional.
+- The hearing and speaking models are needed, not optional (owner, 2026-11-24): Apple's built-in recogniser and voice are not good enough, and the models are replaced as better ones appear. Names and sizes in the prompt come from the app's model list, not from this text.
 - If the files move to our own host, change "Hugging Face" in the text.
 
 ## 4. What a signed-out listener sees when they try to ask

@@ -11,7 +11,6 @@ Still open for the owner (delete this list before publishing):
 
 - Where past versions of this policy are kept (POLICY_ARCHIVE_URL, section 13).
 - Who has operator access to the server (section 12).
-- The country of the OVH server (section 5).
 
 Tags in this draft: [CHECK] marks a sentence a lawyer or the owner should verify. [WHEN-BUILT] marks a sentence that is true only after a feature that does not exist in the code today is built. Remove every tag before publishing. Sources for each statement are in data-inventory.md. Rulings applied: the owner's of 2026-11-23 (docs/definitions/choir-shipping-the-app-2026-11-23.md).
 
@@ -65,7 +64,7 @@ We do not use advertising, tracking or analytics software in the app or on the w
 
 ## 3. What stays on your phone
 
-Speech recognition runs on your phone with Apple's on-device recogniser. The app is set to refuse to recognise speech if on-device recognition is not available, so your audio is not sent to Apple or to us for recognition.
+Speech recognition runs on your phone, with speech models the app downloads. Your audio is not sent to us, to Apple or to anyone else to be recognised.
 
 Your sign-in key is in the iPhone Keychain, on this device only. If the app keeps a copy of your mail on the phone, it is encrypted with a key in the Keychain. [CHECK: the mail copy on the phone may stop being stored; the sentence is true either way.] The paper's cached front page, your edition topics, your taps, your podcast library and your settings are kept in the app's own files.
 
@@ -107,7 +106,7 @@ These are the categories, and the providers found in our code on DATE_OF_PUBLICA
 | Email delivery | Your email address and the body of messages we send for recovery, web sign-in and the Mail feature | Resend |
 | Model file hosting | Your phone's IP address and which model file you asked for | Hugging Face |
 | Podcast search and charts | The search text you type | Apple |
-| Hosting | Everything stored on our server | OVH (bare-metal server) [CHECK: country] |
+| Hosting | Everything stored on our server | OVH (bare-metal server, in the United States) |
 
 You agree to this when you create an account: the create-account screen says it above the button, with a link to this policy. Listening to the paper needs no account and sends none of your content to a model. If you no longer agree, delete your account (section 9).
 

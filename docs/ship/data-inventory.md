@@ -10,7 +10,7 @@ A policy already exists for the web: frontend/public/legal/privacy-policy.md (ef
 
 | Fact | Where | Status |
 |---|---|---|
-| Speech recognition by default is Apple's recogniser with on-device recognition required. The request sets requiresOnDeviceRecognition = true, and the stage refuses to start if the device does not support on-device recognition. There is no fallback to Apple's servers. | KIT/AppleStages.swift:43, :60; default stage chosen at KIT/Choir/ChoirApp.swift:18 | confirmed |
+| (Owner, 2026-11-24: this default is a coding bug, not the design; the downloaded speech models are meant to be in use. Being fixed in lane onboard-consent; the policy does not name Apple's recogniser.) Speech recognition by default is Apple's recogniser with on-device recognition required. The request sets requiresOnDeviceRecognition = true, and the stage refuses to start if the device does not support on-device recognition. There is no fallback to Apple's servers. | KIT/AppleStages.swift:43, :60; default stage chosen at KIT/Choir/ChoirApp.swift:18 | confirmed |
 | Setup may switch the recogniser to Parakeet (480 MB or 250 MB), also on the phone. Still no audio leaves the phone. | KIT/VoiceSetup.swift:112-114 | confirmed |
 | A second Apple path (SpeechAnalyzer, iOS 26) is registered but is not the default. It may download an Apple language asset. | KIT/AppleStages.swift:10, :104-117 | confirmed |
 | Microphone audio is not sent to our servers by the voice turn. The turn request carries text only (words, page, history, queue, candidates). | KIT/Choir/AutoradioDesk.swift:102-123 | confirmed |
@@ -52,7 +52,7 @@ A policy already exists for the web: frontend/public/legal/privacy-policy.md (ef
 
 | Fact | Where | Status |
 |---|---|---|
-| Servers: one host ("Node B") on OVH bare metal. The datacentre country is not stated in the repo. The web policy says United States. | nix/node-b.nix:1; docs/system-map.md:10-23; frontend/public/legal/privacy-policy.md:394 | confirmed that it is OVH bare metal; location inferred |
+| Servers: one host ("Node B") on OVH bare metal. The datacentre country is not stated in the repo. The web policy says United States. | nix/node-b.nix:1; docs/system-map.md:10-23; frontend/public/legal/privacy-policy.md:394 | confirmed that it is OVH bare metal; location: the United States (owner, 2026-11-24) |
 | Account row: an email address is required, plus a user id and created time. | internal/auth/store.go:29-33 | confirmed. The research doc says the email is "only if the account keeps one"; the code says NOT NULL UNIQUE. The code wins: declare Email Address. |
 | Passkey: the public key, attestation type, transport, sign count, authenticator id, name and timestamps. The private key never leaves the person's device. There are no passwords. | internal/auth/store.go:35-49 | confirmed |
 | Sessions: refresh sessions are stored hashed with device_info; API keys (the phone's key) are stored hashed with a label. | internal/auth/store.go:63-73, :94-105 | confirmed |
