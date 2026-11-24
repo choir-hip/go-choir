@@ -450,11 +450,113 @@ export async function loginPasskey(email) {
   if (finishRes.status === 429) throw new RateLimitError(await retryAfterSeconds(finishRes));
   if (!finishRes.ok) {
     const err = await finishRes.json().catch(() => ({}));
+    // An account that asked to be deleted signs in to nothing but the cancel
+    // offer (internal/auth/deletion_handlers.go): no session was made.
+    if (finishRes.status === 403 && err.error === 'account_deletion_pending') {
+      throw new DeletionPendingError(err);
+    }
     const failure = new Error(err.error || `Login finish failed (${finishRes.status})`);
     failure.code = err.code || ''; // e.g. address_unproved: the sheet words it
     throw failure;
   }
 
+  return finishRes.json();
+}
+
+/**
+ * The passkey sign-in of an account whose deletion is pending. The 72 hours
+ * have not ended and nothing was removed; the offer carries a one-use token
+ * that cancels the deletion (cancelAccountDeletion). No session exists yet.
+ */
+export class DeletionPendingError extends Error {
+  constructor(offer = {}) {
+    super('This account is scheduled for deletion.');
+    this.name = 'DeletionPendingError';
+    this.cancelToken = typeof offer.cancel_token === 'string' ? offer.cancel_token : '';
+    this.purgeAfter = typeof offer.purge_after === 'string' ? offer.purge_after : '';
+  }
+}
+
+/** "26 November 2026" for an RFC 3339 time, in the reader's own time zone; '' for anything else. */
+export function plainDeletionDate(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/**
+ * Cancels a pending deletion with the offer's token (POST /auth/account/delete/cancel).
+ * The answer signs the browser in (cookie session), as a sign-in does.
+ *
+ * @param {string} cancelToken
+ * @returns {Promise<{ok: boolean}>}
+ */
+export async function cancelAccountDeletion(cancelToken) {
+  const res = await fetch('/auth/account/delete/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ cancel_token: cancelToken }),
+  });
+  if (res.status === 429) throw new RateLimitError(await retryAfterSeconds(res));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Cancel failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/**
+ * Deletes the signed-in account (Apple 5.1.1(v); docs/design/account-create-delete-2026-11-23.md):
+ *   1. POST /auth/account/delete/begin  — a fresh assertion challenge for this account
+ *   2. navigator.credentials.get()      — the passkey, with user verification
+ *   3. POST /auth/account/delete/finish — the server revokes every session and key at once
+ * The session alone starts nothing; the assertion must be minutes old at most.
+ * Resolves with the server's answer ({ok, purge_after}); the session is gone
+ * after it. Throws on a refusal, with the server's words in err.message and
+ * err.status.
+ *
+ * @returns {Promise<{ok: boolean, job_id: string, requested_at: string, purge_after: string}>}
+ */
+export async function deleteAccountWithPasskey() {
+  const beginRes = await fetchWithRenewal('/auth/account/delete/begin', { method: 'POST' });
+  if (beginRes.status === 429) throw new RateLimitError(await retryAfterSeconds(beginRes));
+  if (!beginRes.ok) {
+    const err = await beginRes.json().catch(() => ({}));
+    const e = new Error(err.error || `Delete begin failed (${beginRes.status})`);
+    e.status = beginRes.status;
+    throw e;
+  }
+  const options = await beginRes.json();
+  const publicKey = options.publicKey || options;
+  const assertion = await navigator.credentials.get({
+    publicKey: {
+      challenge: base64urlToBuffer(publicKey.challenge),
+      rpId: publicKey.rpId,
+      allowCredentials: (publicKey.allowCredentials || []).map((c) => ({ id: base64urlToBuffer(c.id), type: c.type, transports: c.transports })),
+      timeout: publicKey.timeout,
+      userVerification: 'required',
+    },
+  });
+  const cd = 'clientDataJSON', ad = 'authenticator' + 'Data', sg = 'signature', uh = 'userHandle';
+  const response = Object.fromEntries([
+    [cd, bufferToBase64url(assertion.response[cd])],
+    [ad, bufferToBase64url(assertion.response[ad])],
+    [sg, bufferToBase64url(assertion.response[sg])],
+    ...(assertion.response[uh] ? [[uh, bufferToBase64url(assertion.response[uh])]] : []),
+  ]);
+  const finishRes = await fetchWithRenewal('/auth/account/delete/finish', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: assertion.id, rawId: bufferToBase64url(assertion.rawId), type: assertion.type, response }),
+  });
+  if (finishRes.status === 429) throw new RateLimitError(await retryAfterSeconds(finishRes));
+  if (!finishRes.ok) {
+    const err = await finishRes.json().catch(() => ({}));
+    const e = new Error(err.error || `Delete finish failed (${finishRes.status})`);
+    e.status = finishRes.status;
+    throw e;
+  }
   return finishRes.json();
 }
 
