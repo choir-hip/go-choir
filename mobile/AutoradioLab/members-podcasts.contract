@@ -19,8 +19,14 @@ members Autoradio
   // Its playhead, kept every 5 s of progress; `rev` changes when positions did, so the pages below read them again.
   resource podHead = podcastPlayhead(podNow.episodeId, podNow.clip, podNow.elapsed, podNow.duration) as shape PodHead else empty()
   // Arguments are positional (named ones belong to a package's sources).
-  resource podHome = podcastHome(podQ, pg.top, podTick) as shape PodHomeView else empty()
-  resource podShow = podcastShow(pg.top, podTick, podNow.episodeId, podHead.rev) as shape PodShowView else empty()
+  resource podHomeNow = podcastHome(podQ, pg.top, podTick) as shape PodHomeView else empty()
+  resource podShowNow = podcastShow(pg.top, podTick, podNow.episodeId, podHead.rev) as shape PodShowView else empty()
+  // Stale, then fresh: the shows and episodes the phone kept (the library and the feeds on disk), at once, while the sources above are out on the network (podcast.ts `podcastHomeSaved`, `podcastShowSaved`).
+  // The page reads the fresh answer as soon as there is one; a search typed, or nothing kept, answers nothing here.
+  resource podHomeKept = podcastHomeSaved(podQ, pg.top) as shape PodHomeView else empty()
+  resource podShowKept = podcastShowSaved(pg.top, podNow.episodeId) as shape PodShowView else empty()
+  derive podHome = podHomeNow.status != "" ? podHomeNow : podHomeKept
+  derive podShow = podShowNow.status != "" ? podShowNow : podShowKept
   resource podEp = podcastEpisode(pg.top, podFind, podTick, podNow.episodeId, podNow.clip, podNow.start, podNow.elapsed, podNow.duration, podHead.rev) as shape PodEpisodeView else empty()
   mutation pak as shape PodAck then afterPod
   mutation podHanded as shape PodDone refreshes rpulse
@@ -52,8 +58,8 @@ members Autoradio
     send pak = podcastQueue(address)
   // After a write: the pages read again; a play answers the audio to play as data, and the player is handed it.
   action afterPod
-    refresh podHome
-    refresh podShow
+    refresh podHomeNow
+    refresh podShowNow
     refresh podEp
     if podPlayOp != "" and (podPlayUrl != "" or podPlayOp == "keep")
       if podPlayOp == "keep"

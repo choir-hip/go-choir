@@ -362,22 +362,28 @@ function tzOffset(): number {
 
 export type HomeArgs = { q: string; address: string; tick: number };
 
-export async function podcastHome(a: HomeArgs, storage: Storage | undefined): Promise<HomeView> {
+export async function podcastHome(a: HomeArgs, storage: Storage | undefined, saved = false): Promise<HomeView> {
   const v: HomeView = { status: 'ready', message: '', query: '', searchNote: '', syncNote: '', searching: false, hasQuery: false, shows: [], results: [], suggestions: [] };
-  if (a.address !== HOME) { v.status = 'idle'; return v; }
-  resetFor(a.tick);
-  const l = await loadLibrary(storage);
+  if (a.address !== HOME) { v.status = saved ? '' : 'idle'; return v; }
   const q = normalize(a.q);
+  if (saved && q !== '') { v.status = ''; return v; }                       // a search is the network's: nothing to show from the phone's copy
+  const gen = accountGeneration();
+  if (!saved) resetFor(a.tick);
+  const l = await loadLibrary(storage);
   v.query = q; v.hasQuery = q !== '';
-  latestQuery = q;
-  // The computer's list first (it may add shows), then everything the page needs together: one fetch per feed, and the suggestions or the search.
-  await Promise.all([syncIfDue(storage, l), q === '' ? loadSuggestions() : runSearch(q)]);
-  await Promise.all(l.subscriptions.map((s) => ensureFeed(s.show.feedURL, storage)));
+  if (!saved) {
+    latestQuery = q;
+    // The computer's list first (it may add shows), then everything the page needs together: one fetch per feed, and the suggestions or the search.
+    await Promise.all([syncIfDue(storage, l), q === '' ? loadSuggestions() : runSearch(q)]);
+    await Promise.all(l.subscriptions.map((s) => ensureFeed(s.show.feedURL, storage)));
+  } else await Promise.all(l.subscriptions.map((s) => cachedFeed(s.show.feedURL, storage)));      // only what the phone kept: no sync, no suggestions, no request
+  if (saved && (gen !== accountGeneration() || l.subscriptions.length === 0)) { v.status = ''; return v; }
   const subs = l.subscriptions.map((s) => s.show);                         // read after the feeds: a feed's own title replaces the address
-  if (!reportedFeeds) { reportedFeeds = true; await reportFeeds(l); }
+  if (!saved && !reportedFeeds) { reportedFeeds = true; await reportFeeds(l); }
   const shows = subs.map((s, i) => ({ r: row(l, s, true), i, t: feeds.get(feedKey(s.feedURL))?.episodes[0]?.published ?? 0 }));
   shows.sort((x, y) => (x.t !== y.t ? y.t - x.t : x.i - y.i));
   v.shows = shows.map((x) => x.r);
+  if (saved) return v;
   v.syncNote = syncNote;
   if (q === '') {
     v.suggestions = suggestions.filter((s) => !isSubscribed(l, s.feedURL)).map((s) => row(l, s, false));
@@ -393,6 +399,8 @@ export async function podcastHome(a: HomeArgs, storage: Storage | undefined): Pr
   v.message = subs.length === 0 ? 'You have not subscribed to any podcasts yet. Search for a show above, subscribe, and its episodes will be here.' : '';
   return v;
 }
+/** The home from what the phone kept (the library and the feeds on disk), at once, while `podcastHome` is out (stale, then fresh). Status "" when there is nothing kept, a search is typed or the account changed. */
+export const podcastHomeSaved = (a: HomeArgs, storage: Storage | undefined): Promise<HomeView> => podcastHome(a, storage, true);
 
 function episodeRow(l: Library, e: Episode, feed: string, nowId: string): EpisodeRow {
   const key = episodeKey(feedKey(feed), e.id);
@@ -413,13 +421,15 @@ function episodeRow(l: Library, e: Episode, feed: string, nowId: string): Episod
 
 export type ShowArgs = { address: string; tick: number; nowId: string; rev: number };
 
-export async function podcastShow(a: ShowArgs, storage: Storage | undefined): Promise<ShowView> {
+export async function podcastShow(a: ShowArgs, storage: Storage | undefined, saved = false): Promise<ShowView> {
   const v: ShowView = { status: 'loading', message: '', feedURL: '', title: '', author: '', artwork: '', summary: '', unplayedLine: '', subscribed: false, refreshing: false, episodes: [] };
   const feed = parseShow(a.address);
-  if (!feed) { if (a.address.startsWith('podcast:show/')) { v.status = 'error'; v.message = "This show's address is not one the app can open."; } else v.status = ''; return v; }
-  resetFor(a.tick);
+  if (!feed) { if (a.address.startsWith('podcast:show/')) { v.status = saved ? '' : 'error'; v.message = saved ? '' : "This show's address is not one the app can open."; } else v.status = ''; return v; }
+  const gen = accountGeneration();
+  if (!saved) resetFor(a.tick);
   const l = await loadLibrary(storage);
-  const f = await ensureFeed(feed, storage);
+  const f = saved ? await cachedFeed(feed, storage) : await ensureFeed(feed, storage);
+  if (saved && (!f || gen !== accountGeneration())) { v.status = ''; return v; }          // nothing kept for this show (or the account changed): the page's own loading
   const k = known.get(feedKey(feed));
   v.feedURL = feed; v.subscribed = isSubscribed(l, feed);
   v.title = k?.title ?? ''; v.author = k?.author ?? ''; v.artwork = https(k?.artworkURL ?? ''); v.summary = k?.summary ?? '';
@@ -438,6 +448,8 @@ export async function podcastShow(a: ShowArgs, storage: Storage | undefined): Pr
   }
   return v;
 }
+/** The show from the feed the phone kept, at once, while `podcastShow` is out (stale, then fresh). Status "" when none is kept. */
+export const podcastShowSaved = (a: ShowArgs, storage: Storage | undefined): Promise<ShowView> => podcastShow(a, storage, true);
 
 export type EpisodeArgs = { address: string; find: string; tick: number; nowId: string; nowClip: boolean; nowStart: number; nowElapsed: number; nowDuration: number; rev: number };
 

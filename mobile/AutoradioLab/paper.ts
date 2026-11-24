@@ -17,6 +17,7 @@ import {
   type LiveSection, type Section, type Story,
 } from './paper-model.ts';
 import { getJSON, writeCurrent, accountGeneration } from './api.ts';
+import { clock } from './clock.ts';
 
 export const FRONT_PATH = '/api/platform/publications/front';
 /** The last good front list, kept for an offline start. */
@@ -128,6 +129,12 @@ export function composeFront(stories: Story[], o: {
   };
 }
 
+/** What `empty()` gives before the first answer: status "" is "loading" to the page. */
+export const blankFront = (): PaperFront => ({
+  status: '', message: '', layout: '', composition: '', dateLine: '', updated: '', sectionId: '', sectionLabel: '', viewId: '', viewLabel: '', mineState: '', mineFrom: '', note: '', count: 0,
+  sections: [], bands: [], routes: [], titles: [],
+});
+
 // The page asks again as each of its arguments settles (the width the page reports, the focus when the deck catches up, the picks a moment after): what the answer is built from is the list, the view, the width and,
 // for My edition only, the picks and the focus. The last composition is kept with the key it was built from, so an ask that changes nothing the page is built from answers the same page without composing it again.
 let composed: { key: string; r: Listing; c: Listing | null; out: PaperFront } | null = null;
@@ -150,6 +157,23 @@ export async function paperFront(a: PaperArgs, storage?: Storage): Promise<Paper
   const out = composeFront(r.stories, { view, picks, category, live: r.sections, width, now: r.serverTime, status: r.status, message: r.message });
   composed = { key, r, c, out };
   return out;
+}
+
+/** The page from the list the phone saved, at once, while the fetch is out (stale, then fresh: the page shows `paperSaved` until `paperFront` answers). It composes only what the saved list can say alone:
+ * the front page and a category, not My edition (its picks come a moment later and would show its "choose your topics" line first), and not before the page has a width. It reads only the file, never the network;
+ * an account change during the read drops it. No saved list, or a failed read, is an empty answer: the page's own loading, never an invented page. Status "ready" with no message: the offline line is the fetch's to
+ * say if it fails. */
+export async function paperSaved(a: PaperArgs, storage?: Storage): Promise<PaperFront> {
+  const view = a.view === '' ? FRONT : a.view;
+  if (view === MINE || a.width < 200) return blankFront();
+  const gen = accountGeneration();
+  const body = await readCache(storage);
+  if (body === null || gen !== accountGeneration()) return blankFront();
+  try {
+    const stories = parseList(body);
+    if (stories.length === 0) return blankFront();
+    return composeFront(stories, { view, picks: [], category: null, live: parseLiveSections(body), width: a.width, now: clock.ms > 0 ? clock.ms : null, status: 'ready', message: '' });
+  } catch { return blankFront(); }
 }
 
 /** Forget the kept lists (tests). */

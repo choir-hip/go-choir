@@ -1,6 +1,6 @@
 import type { Answer, Sources } from './app.contract.d.ts';
-import { paperFront } from './paper.ts';
-import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
+import { paperFront, paperSaved } from './paper.ts';
+import { podcastEpisode, podcastHome, podcastHomeSaved, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastShowSaved, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { adoptNative, nativeLater } from './api.ts';
@@ -20,7 +20,7 @@ import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerSto
 import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
 import * as themes from './themes.ts';
-import { notebookShared } from './notebook-run.ts';
+import { notebookShared, notebookSaved } from './notebook-run.ts';
 import { syncContent } from './content-run.ts';
 import * as mail from './mail.ts';
 import { barInfo, dismissAnswer } from './bar.ts';
@@ -196,6 +196,10 @@ const sources: Sources = {
   accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
+  // Stale, then fresh (podcast.ts, notebook-run.ts): the same page from what the phone kept, at once, while the fresh source is out.
+  podcastHomeSaved: ([q, address], _store, storage) => podcastHomeSaved({ q, address, tick: 0 }, storage),
+  podcastShowSaved: ([address, nowId], _store, storage) => podcastShowSaved({ address, tick: 0, nowId, rev: 0 }, storage),
+  notebookSaved: ([selected, active], _store, storage) => notebookSaved({ selected, active }, storage),
   podcastEpisode: ([address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev], _store, storage) =>
     podcastEpisode({ address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev }, storage),
   podcastSubscribe: ([feed], _store, storage) => podcastSubscribe(feed, storage),
@@ -231,6 +235,7 @@ const sources: Sources = {
   importedQueue: ([address, section, block], _s, storage) => imported.importedQueue({ address, section, block }, storage),
   importedAdd: ([from, name], _s, storage) => imported.importedAdd({ from, name }, storage),
   paperFront: ([view, width, tick, focus, picks], _store, storage) => paperFront({ view, width, tick, focus, picks }, storage),
+  paperSaved: ([view, width, _acct], _store, storage) => paperSaved({ view, width, tick: 0, focus: '', picks: '' }, storage),
   // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
   mailBox: ([address, _acct], _store, storage) => mail.mailBox(address, { storage }),
   mailFrame: ([address], _store, storage) => mail.mailFrame(address, { storage }),
@@ -250,10 +255,10 @@ const sources: Sources = {
 // page the source answers for (an argument of the source where it has one). A source not named here (the radio's pulse, the bar, the themes) is not a page's first draw and writes nothing.
 const str0 = (v: unknown): string => (typeof v === 'string' ? v : '');
 export const PAGE_ADDRESS: Record<string, (args: unknown[]) => string> = {
-  paperFront: ([view]) => `paper:${str0(view) || 'front'}`,
+  paperFront: ([view]) => `paper:${str0(view) || 'front'}`, paperSaved: ([view]) => `paper:${str0(view) || 'front'}`,
   readerDocShared: ([address]) => str0(address), mailBox: ([address]) => str0(address), mailMessage: ([address]) => str0(address),
   fileList: ([path]) => `file:${str0(path)}`, fileOpen: ([address]) => str0(address),
-  podcastHome: ([, address]) => str0(address) || 'podcasts:', podcastShow: ([address]) => str0(address), podcastEpisode: ([address]) => str0(address),
+  podcastHome: ([, address]) => str0(address) || 'podcasts:', podcastHomeSaved: ([, address]) => str0(address) || 'podcasts:', podcastShowSaved: ([address]) => str0(address), notebookSaved: () => 'notebook:', podcastShow: ([address]) => str0(address), podcastEpisode: ([address]) => str0(address),
   takesPage: () => 'takes:', notebookPageShared: () => 'notebook:', texturesList: ([at]) => str0(at) || 'textures:',
   settingsAccount: () => 'settings:account', settingsComputer: () => 'settings:computer', aboutPage: () => 'settings:about', aboutBuild: () => 'settings:about', activityPage: () => 'activity:',
   importedList: () => 'imported:', importedDoc: ([address]) => str0(address), onboardingPage: () => 'onboarding:', radioPage: () => 'radio:', conversationInfo: () => 'conversation:',

@@ -9,7 +9,7 @@ import type { Storage } from './app.contract.d.ts';
 import { accountGeneration, nativeLater } from './api.ts';
 import { picksText } from './edition-picks.ts';
 import { queued as steerQueued } from './steer.ts';
-import { loadDoc, readLearning, page, seamGet, type Get, type PageInfo } from './notebook.ts';
+import { loadDoc, loadCache, parse, readLearning, page, seamGet, type Get, type PageInfo } from './notebook.ts';
 
 export interface Device { state(): Promise<void>; }
 export type Env = { get: Get; device: Device | null; deviceDeadlineMs?: number };
@@ -57,4 +57,14 @@ export async function notebookShared(a: { selected: string; tick: number | strin
   const r = await mine.read;
   if (gen !== accountGeneration()) return idle();                                  // the account moved while this read was out: none of it is shown
   return page({ doc: r.doc, learning: r.learning, selected: a.selected, steerQueued: r.steer });
+}
+
+/** The page from the notebook text the phone kept (notebook.ts CACHE_FILE), at once, while `notebookShared` is out (stale, then fresh): the lines, with the scorecard still loading. Reads only that file, never the computer;
+ * nothing kept, the page not on top, or an account change during the read: the page's own loading (`idle`), never an invented notebook. */
+export async function notebookSaved(a: { selected: string; active: boolean }, storage: Storage | undefined): Promise<PageInfo> {
+  if (!a.active) return idle();
+  const gen = accountGeneration();
+  const cached = await loadCache(storage);
+  if (cached === null || gen !== accountGeneration()) return idle();
+  return page({ doc: { state: 'found', address: '', notebook: parse(cached) }, learning: null, selected: a.selected, steerQueued: 0 });
 }

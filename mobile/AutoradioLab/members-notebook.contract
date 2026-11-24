@@ -8,7 +8,10 @@ members Autoradio
   state nbSel = ""
   state nbTick = 0
   // Arguments are positional (app.ts answers it). On top of the deck it reads; otherwise it answers the idle page and holds nothing.
-  resource nb = notebookPageShared(nbSel, nbTick, pg.top == "notebook:", signedOutTick, au.signedIn) as shape NotebookPageInfo else empty()
+  resource nbNow = notebookPageShared(nbSel, nbTick, pg.top == "notebook:", signedOutTick, au.signedIn) as shape NotebookPageInfo else empty()
+  // Stale, then fresh: the notebook text the phone kept, at once, while the computer is asked (notebook-run.ts `notebookSaved`); the scorecard reads "loading" until the fresh page answers.
+  resource nbKept = notebookSaved(nbSel, pg.top == "notebook:") as shape NotebookPageInfo else empty()
+  derive nb = nbNow.docState != "" ? nbNow : nbKept
 
   // refresh | select (arg is a line id; the same again clears it)
   action notebookDo(op: string, arg: string)
