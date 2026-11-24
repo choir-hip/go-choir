@@ -30,7 +30,7 @@ import (
 //	    TestNamedApplyMustRepeatTheExactList
 //	N4  A computer gains an owner between the dry run and the apply and is
 //	    deleted anyway, or the apply reports success while skipping it.
-//	    TestNamedApplySkipsAndFailsOnAComputerThatGainedAnOwner
+//	    TestNamedApplyFailsAndDeletesNothingWhenAComputerGainedAnOwner
 //	N5  (moved to tape_sweep_closed_test.go: a shared digest now refuses.)
 //	N6  The dry run does not say, per computer, what it would delete, when the
 //	    computer last wrote, and what the ownership lookup answered; and the
@@ -154,25 +154,21 @@ func TestNamedApplyMustRepeatTheExactList(t *testing.T) {
 	}
 }
 
-func TestNamedApplySkipsAndFailsOnAComputerThatGainedAnOwner(t *testing.T) {
+func TestNamedApplyFailsAndDeletesNothingWhenAComputerGainedAnOwner(t *testing.T) {
 	f := newTapeFixture(t)
 	f.fullComputer("dead-1", 1)
 	f.fullComputer("dead-2", 1)
 	dry := f.dryRun(namedReq("dead-1", "dead-2"))
 	f.reg.owned["dead-2"] = true
-	before := f.treeFiles("dead-2")
+	before1, before2 := f.snapshotOf("dead-1"), f.snapshotOf("dead-2")
 	report, err := f.apply(dry, namedReq("dead-1", "dead-2"))
 	if err == nil || !strings.Contains(err.Error(), "dead-2") {
-		t.Fatalf("apply reported success (%v) while skipping dead-2: %+v", err, report.Apply)
+		t.Fatalf("apply reported success (%v) while dead-2 gained an owner: %+v", err, report.Apply)
 	}
-	if got := f.treeFiles("dead-2"); strings.Join(got, ",") != strings.Join(before, ",") {
-		t.Fatalf("a computer that gained an owner lost files: %v", got)
-	}
-	if f.rowCount("computer_key_escrows", "dead-2") != 1 {
-		t.Fatal("a computer that gained an owner lost its escrow row")
-	}
-	if len(f.treeFiles("dead-1")) != 0 {
-		t.Fatal("the other named computer was not deleted")
+	// All or nothing: the other named computer is not deleted either, so a
+	// payload they share is never taken from the one that survived.
+	if !before1.equal(f.snapshotOf("dead-1")) || !before2.equal(f.snapshotOf("dead-2")) {
+		t.Fatal("a refused run changed files or rows")
 	}
 }
 

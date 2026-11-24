@@ -506,8 +506,8 @@ func TestTapeSweepArchivesBeforeDelete(t *testing.T) {
 		f.svc.SetTapeSweepPolicy(TapeSweepPolicy{Mode: ArtifactGCModeActive, ArchiveDir: blocker})
 		dry := f.dryRun(TapeSweepRequest{AcceptUnrecordedForkLineage: true, Sweeps: []string{TapeSweepDestroyed}})
 		report, err := f.apply(dry, TapeSweepRequest{AcceptUnrecordedForkLineage: true, Sweeps: []string{TapeSweepDestroyed}})
-		if err != nil {
-			t.Fatal(err)
+		if err == nil {
+			t.Fatal("a failed archive left the apply successful")
 		}
 		if report.Apply.Deleted != 0 || report.Apply.Errors == 0 {
 			t.Fatalf("apply counts = %+v", report.Apply)

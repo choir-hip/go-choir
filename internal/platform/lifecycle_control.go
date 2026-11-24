@@ -92,6 +92,14 @@ func (s *Service) PrepareLifecycleControl(ctx context.Context, request Lifecycle
 	if !errors.Is(err, sql.ErrNoRows) {
 		return LifecycleControlResult{}, err
 	}
+	// A restore or resume adds a reference to the computer's tape. The tape
+	// sweep holds this gate exclusive while it proves and tombstones, so a
+	// prepare either lands before (the sweep sees it pending) or is refused.
+	s.store.tombstones.gate.RLock()
+	defer s.store.tombstones.gate.RUnlock()
+	if err := s.store.refuseTombstonedTape(ctx, request.ComputerID); err != nil {
+		return LifecycleControlResult{}, err
+	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	if _, err = s.store.db.ExecContext(ctx, `INSERT INTO computer_lifecycle_operations (computer_id,idempotency_key,request_commitment,action,prior_lifecycle_state,prior_realization_epoch,status,created_at) VALUES (?,?,?,?,?,?,?,?)`,
 		request.ComputerID, request.IdempotencyKey, request.RequestCommitment, request.Action, request.PriorState, request.PriorEpoch, "pending", now); err != nil {

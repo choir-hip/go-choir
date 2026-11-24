@@ -260,8 +260,10 @@ type TapeSweepReport struct {
 	ManifestPath                string   `json:"manifest_path,omitempty"`
 	ManifestSHA256              string   `json:"manifest_sha256,omitempty"`
 	ReportPath                  string   `json:"report_path,omitempty"`
-	Computers                   int      `json:"computers"`
-	ChainEvents                 uint64   `json:"chain_events"`
+	// Failure is why an apply stopped; what it deleted before is in Apply.
+	Failure     string `json:"failure,omitempty"`
+	Computers   int    `json:"computers"`
+	ChainEvents uint64 `json:"chain_events"`
 	// ChainEventsResumed are chain rows whose references came from stored
 	// progress; ChainEventsWalked are rows read from the chain this run.
 	ChainEventsResumed        uint64                              `json:"chain_events_resumed"`
@@ -1248,7 +1250,11 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 		}
 		// A tombstoned computer's event files may be gone: its payload refs
 		// are unknown, so an unfinished one refuses the payload sweep.
-		readEvents := !hasTomb
+		// A computer this run does not delete is read as a living one even
+		// when it has a tombstone: its event files are read, and an event
+		// that cannot be read refuses the destroyed sweep. A cached reference
+		// chunk counts only when it was made with event reads.
+		readEvents := !hasTomb || !deletable(id)
 		purged := false
 		if hasTomb {
 			tombstoned++

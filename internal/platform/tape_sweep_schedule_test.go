@@ -425,8 +425,10 @@ func TestTapeSweepCapReachedSkipsLaterComputersArchive(t *testing.T) {
 		t.Fatalf("pass = %+v", res)
 	}
 	f.allExist(dead2, true)
-	if _, ok, _ := f.store.TapeTombstone(f.ctx, "dead-2"); ok {
-		t.Fatal("dead-2 was tombstoned with the cap already spent")
+	// dead-2 is tombstoned in the proof phase (nothing may add a reference to
+	// a computer a run will delete) but is neither archived nor touched.
+	if tomb, ok, _ := f.store.TapeTombstone(f.ctx, "dead-2"); !ok || tomb.ArchivePath != "" || tomb.FilesDeleted != 0 || tomb.Status == tapeTombstoneDeleted {
+		t.Fatalf("dead-2 with the cap already spent = %+v", tomb)
 	}
 }
 

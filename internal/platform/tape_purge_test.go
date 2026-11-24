@@ -479,8 +479,8 @@ func TestPurgePartialApplyKeepsRowsAndEscrow(t *testing.T) {
 		}
 	}
 	report, err := f.apply(dry, destroyedReq(true))
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("a run that kept a listed file reported success")
 	}
 	if touched == "" || report.Apply.KeptRefreshed == 0 {
 		t.Fatalf("hook did not fire: %+v", report.Apply)
@@ -549,8 +549,8 @@ func TestPurgeCrashBetweenFilesAndRows(t *testing.T) {
 		dry := f.dryRun(destroyedReq(true))
 		f.svc.tapeSweep.beforeRowsDelete = func(string) error { return errors.New("simulated crash before the rows transaction") }
 		report, err := f.apply(dry, destroyedReq(true))
-		if err != nil {
-			t.Fatal(err)
+		if err == nil {
+			t.Fatal("a rows failure left the apply successful")
 		}
 		if report.Apply.Errors == 0 {
 			t.Fatalf("no error counted: %+v", report.Apply)
@@ -584,8 +584,8 @@ func TestPurgeApplyRemovesExactlyTheManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 		report, err := f.apply(dry, destroyedReq(true))
-		if err != nil {
-			t.Fatal(err)
+		if err == nil {
+			t.Fatal("a count mismatch left the apply successful")
 		}
 		if report.Apply.Errors == 0 {
 			t.Fatalf("count mismatch not reported: %+v", report.Apply)
@@ -607,8 +607,8 @@ func TestPurgeApplyRemovesExactlyTheManifest(t *testing.T) {
 		}
 		old := time.Now().Add(-tapeAged)
 		_ = os.Chtimes(f.path(late), old, old)
-		if _, err := f.apply(dry, destroyedReq(true)); err != nil {
-			t.Fatal(err)
+		if _, err := f.apply(dry, destroyedReq(true)); err == nil {
+			t.Fatal("a computer whose directory could not be removed was reported deleted")
 		}
 		if _, err := os.Stat(f.path(late)); err != nil {
 			t.Fatal("an unlisted file was deleted")

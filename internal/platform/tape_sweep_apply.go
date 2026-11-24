@@ -99,7 +99,13 @@ type tapeSweepApplyRun struct {
 	destroyErr string
 	// skipped is the ids of computers apply left alone (a failed re-proof or
 	// a spent cap), for a named apply to fail on.
-	skipped  []string
+	skipped []string
+	pending map[string]bool
+	groups  []*applyGroup
+	// strict is set for the destroyed deletes: each batch of unlinks runs
+	// under the tombstone gate and any outcome but deleted or gone stops the
+	// run before the next delete.
+	strict   bool
 	nowHeads map[string]tapeHead
 	delta    map[string]bool
 	deltaOK  bool
@@ -153,21 +159,13 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 	}
 	report.ManifestPath, report.ManifestSHA256 = manifestPath, digest
 
-	mf, err := os.Open(manifestPath)
+	headerFile, err := os.Open(manifestPath)
 	if err != nil {
 		return report, err
 	}
-	defer mf.Close()
-	reader := bufio.NewReaderSize(mf, 1<<20)
-	readLine := func() ([]byte, error) {
-		line, err := reader.ReadBytes('\n')
-		if err == io.EOF && len(line) > 0 {
-			return line, nil
-		}
-		return line, err
-	}
-	first, err := readLine()
-	if err != nil {
+	first, err := bufio.NewReaderSize(headerFile, 1<<20).ReadBytes('\n')
+	headerFile.Close()
+	if err != nil && !(errors.Is(err, io.EOF) && len(first) > 0) {
 		return report, fmt.Errorf("tape sweep: manifest header: %w", err)
 	}
 	run := &tapeSweepApplyRun{p: p, manifestSH: digest, started: started, archiveDir: policy.ArchiveDir, registry: registry, counts: counts}
@@ -209,6 +207,23 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 
 	// Delta references: rows appended since the snapshot heads, and the
 	// extra records re-read now. A failure here refuses the whole apply.
+	// A destroyed apply holds the tombstone gate (exclusive) from here to the
+	// end of the proof and the tombstones: every path that adds a reference to
+	// a computer (head CAS, snapshot-root registration, a lifecycle prepare)
+	// takes it shared, so what is read here cannot change before the
+	// tombstones refuse them.
+	gateHeld := false
+	unlockGate := func() {
+		if gateHeld {
+			gateHeld = false
+			s.store.tombstones.gate.Unlock()
+		}
+	}
+	if p.destroyed {
+		s.store.tombstones.gate.Lock()
+		gateHeld = true
+		defer unlockGate()
+	}
 	s.setTapeSweepPhase(jobID, "delta-references")
 	if err := s.tapeSweepDelta(ctx, run); err != nil {
 		return report, err
@@ -231,6 +246,9 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 				run.destroyErr = reason
 			}
 			if run.routed, err = s.tapeRoutedComputers(ctx); err != nil {
+				run.destroyErr = err.Error()
+			}
+			if run.pending, err = s.computersWithPendingLifecycleOps(ctx); err != nil {
 				run.destroyErr = err.Error()
 			}
 		}
@@ -256,7 +274,153 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 		return report, fmt.Errorf("tape sweep: deletion log unavailable, nothing deleted: %w", err)
 	}
 
-	// Stream the manifest: one destroyed computer at a time, then orphans.
+	finish := func(failure error) (TapeSweepReport, error) {
+		unlockGate()
+		report.ReportPath = filepath.Join(s.tapeSweepLogDir(), "tape-sweep-"+p.runID+".apply-"+started.UTC().Format("20060102T150405Z")+".report.json")
+		report.DurationMs = time.Since(started).Milliseconds()
+		if failure != nil {
+			report.Failure = failure.Error()
+			tlog.record(tapeSweepLogRecord{Op: "apply_failed", Error: failure.Error(), Count: counts.Deleted, Bytes: counts.BytesDeleted})
+		} else {
+			tlog.record(tapeSweepLogRecord{Op: "apply_finished", Count: counts.Deleted, Bytes: counts.BytesDeleted})
+		}
+		_ = tlog.flush()
+		if err := writeJSONFileSync(report.ReportPath, report); err != nil && failure == nil {
+			return report, err
+		}
+		log.Printf("tape sweep: apply run=%s deleted=%d bytes=%d gone=%d kept_refreshed=%d kept_referenced=%d kept_not_destroyed=%d kept_unverified=%d deferred=%d errors=%d computers_deleted=%d computers_skipped=%d archives=%d failure=%v",
+			p.runID, counts.Deleted, counts.BytesDeleted, counts.Gone, counts.KeptRefreshed, counts.KeptReferenced, counts.KeptNotDestroyed, counts.KeptUnverified, counts.DeferredByCap, counts.Errors, counts.ComputersDeleted, counts.ComputersSkipped, len(counts.Archives), failure)
+		if failure != nil {
+			return report, fmt.Errorf("%w (see the receipt %s)", failure, report.ReportPath)
+		}
+		return report, nil
+	}
+
+	// Pass 1: read the manifest's destroyed groups. Nothing is deleted yet.
+	var orphans []tapeSweepItem
+	if p.destroyed {
+		_, err := s.walkApplyManifest(run, manifestPath, func(proof TapeSweepComputerProof, items []tapeSweepItem, dirs []string, rows map[string]int64) error {
+			g := &applyGroup{proof: proof}
+			for _, it := range items {
+				if it.Namespace == tapeNSFileCASChunks {
+					g.chunks = append(g.chunks, it.Digest)
+				}
+				if !isPurgeNamespace(it.Namespace) && run.delta[it.Digest] {
+					continue
+				}
+				g.items++
+				g.bytes += it.Size
+			}
+			g.onDisk = s.anyTapeItemOnDisk(items)
+			run.groups = append(run.groups, g)
+			return nil
+		})
+		if err != nil {
+			return finish(err)
+		}
+		// Phase one, under the gate: prove every computer, then tombstone
+		// every computer. One failure refuses the whole run.
+		s.setTapeSweepPhase(jobID, "destroyed-proof")
+		refusal, perr := s.proveDestroyedRun(ctx, run)
+		unlockGate()
+		if perr != nil {
+			return finish(perr)
+		}
+		if refusal != "" {
+			ids := make([]string, 0, len(run.groups))
+			for _, g := range run.groups {
+				ids = append(ids, g.proof.ComputerID)
+				counts.KeptNotDestroyed += g.items
+			}
+			counts.ComputersSkipped += len(run.groups)
+			report.Warnings = append(report.Warnings, "destroyed apply refused, nothing deleted: "+refusal)
+			tlog.record(tapeSweepLogRecord{Op: "kept_not_destroyed", Sweep: TapeSweepDestroyed, Reason: refusal, Count: len(run.groups)})
+			if len(p.named) > 0 {
+				return finish(fmt.Errorf("tape sweep: apply refused, nothing deleted: %s", refusal))
+			}
+			log.Printf("tape sweep: destroyed apply refused for %v: %s", ids, refusal)
+			run.groups = nil
+		}
+	}
+	if len(run.groups) > 0 {
+		// Phase two: archive and delete one computer at a time, stopping at
+		// the first thing that is not a delete. A cap reached leaves the later
+		// computers tombstoned and untouched; the named apply fails on them.
+		run.strict = true
+		if _, err := s.walkApplyManifest(run, manifestPath, func(proof TapeSweepComputerProof, items []tapeSweepItem, dirs []string, rows map[string]int64) error {
+			return s.applyDestroyedComputer(ctx, jobID, run, proof, items, dirs, rows)
+		}); err != nil {
+			run.strict = false
+			if run.counts.Deleted == 0 {
+				// Nothing was unlinked anywhere: a tombstone this run wrote
+				// and that never reached deleting is dropped.
+				s.dropCreatedTombstones(ctx, run)
+			}
+			return finish(err)
+		}
+		run.strict = false
+		if len(p.named) > 0 && len(run.skipped) > 0 {
+			return finish(fmt.Errorf("tape sweep: named computers not deleted: %v", run.skipped))
+		}
+	}
+	if p.orphans {
+		var err error
+		orphans, err = s.walkApplyManifest(run, manifestPath, func(TapeSweepComputerProof, []tapeSweepItem, []string, map[string]int64) error { return nil })
+		if err != nil {
+			return finish(err)
+		}
+	}
+	if len(orphans) > 0 {
+		if err := s.applyOrphans(ctx, jobID, run, orphans); err != nil {
+			return finish(err)
+		}
+	}
+	return finish(nil)
+}
+
+// applyGroup is one destroyed computer of the manifest as the apply holds it
+// between its passes: the proof, what it will delete, and its tombstone.
+type applyGroup struct {
+	proof   TapeSweepComputerProof
+	items   int
+	bytes   int64
+	chunks  []string
+	onDisk  bool
+	tomb    TapeTombstone
+	hadTomb bool
+	created bool
+}
+
+func (run *tapeSweepApplyRun) group(id string) *applyGroup {
+	for _, g := range run.groups {
+		if g.proof.ComputerID == id {
+			return g
+		}
+	}
+	return nil
+}
+
+// walkApplyManifest streams the manifest after its header, calling onGroup for
+// each destroyed computer's items, directories and row counts, and returns
+// the orphan items when the run asked for them. It validates every line.
+func (s *Service) walkApplyManifest(run *tapeSweepApplyRun, manifestPath string, onGroup func(TapeSweepComputerProof, []tapeSweepItem, []string, map[string]int64) error) ([]tapeSweepItem, error) {
+	p := run.p
+	mf, err := os.Open(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	defer mf.Close()
+	reader := bufio.NewReaderSize(mf, 1<<20)
+	readLine := func() ([]byte, error) {
+		line, err := reader.ReadBytes('\n')
+		if err == io.EOF && len(line) > 0 {
+			return line, nil
+		}
+		return line, err
+	}
+	if _, err := readLine(); err != nil {
+		return nil, fmt.Errorf("tape sweep: manifest header: %w", err)
+	}
 	var proof *TapeSweepComputerProof
 	var group, orphans []tapeSweepItem
 	var groupDirs []string
@@ -265,7 +429,7 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 		if proof == nil {
 			return nil
 		}
-		err := s.applyDestroyedComputer(ctx, jobID, run, *proof, group, groupDirs, groupRows)
+		err := onGroup(*proof, group, groupDirs, groupRows)
 		proof, group, groupDirs, groupRows = nil, nil, nil, nil
 		return err
 	}
@@ -275,89 +439,70 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 			break
 		}
 		if err != nil {
-			return report, fmt.Errorf("tape sweep: read manifest: %w", err)
+			return nil, fmt.Errorf("tape sweep: read manifest: %w", err)
 		}
 		var kind struct {
 			Kind string `json:"kind"`
 		}
 		if err := json.Unmarshal(line, &kind); err != nil {
-			return report, fmt.Errorf("tape sweep: manifest line invalid: %w", err)
+			return nil, fmt.Errorf("tape sweep: manifest line invalid: %w", err)
 		}
 		switch kind.Kind {
 		case "computer":
 			if err := flushGroup(); err != nil {
-				return report, err
+				return nil, err
 			}
 			var c tapeSweepManifestComputer
 			if err := json.Unmarshal(line, &c); err != nil {
-				return report, fmt.Errorf("tape sweep: manifest computer invalid: %w", err)
+				return nil, fmt.Errorf("tape sweep: manifest computer invalid: %w", err)
 			}
 			if len(p.named) > 0 && !slices.Contains(p.named, c.Proof.ComputerID) {
-				return report, fmt.Errorf("tape sweep: manifest lists computer %s, which this named apply does not name; nothing further deleted", c.Proof.ComputerID)
+				return nil, fmt.Errorf("tape sweep: manifest lists computer %s, which this named apply does not name; nothing further deleted", c.Proof.ComputerID)
 			}
 			proof = &c.Proof
 			groupRows = map[string]int64{}
 		case "dir":
 			var d tapeSweepDirLine
 			if err := json.Unmarshal(line, &d); err != nil || proof == nil || proof.ComputerID != d.Computer || !validPurgeDir(d.Computer, d.Path) {
-				return report, fmt.Errorf("tape sweep: manifest dir line invalid")
+				return nil, fmt.Errorf("tape sweep: manifest dir line invalid")
 			}
 			groupDirs = append(groupDirs, d.Path)
 		case "rows":
 			var r tapeSweepRowsLine
 			if err := json.Unmarshal(line, &r); err != nil || proof == nil || proof.ComputerID != r.Computer || !tapePurgeTableKnown(r.Table) || r.Count <= 0 {
-				return report, fmt.Errorf("tape sweep: manifest rows line invalid")
+				return nil, fmt.Errorf("tape sweep: manifest rows line invalid")
 			}
 			groupRows[r.Table] = r.Count
 		case "item":
 			var it tapeSweepItem
 			if err := json.Unmarshal(line, &it); err != nil {
-				return report, fmt.Errorf("tape sweep: manifest item invalid: %w", err)
+				return nil, fmt.Errorf("tape sweep: manifest item invalid: %w", err)
 			}
 			if !validTapeSweepItem(it) {
-				return report, fmt.Errorf("tape sweep: manifest item %q invalid", it.Path)
+				return nil, fmt.Errorf("tape sweep: manifest item %q invalid", it.Path)
 			}
 			switch it.Sweep {
 			case TapeSweepDestroyed:
 				if proof == nil || proof.ComputerID != it.Computer {
-					return report, fmt.Errorf("tape sweep: manifest item %s outside its computer group", it.Path)
+					return nil, fmt.Errorf("tape sweep: manifest item %s outside its computer group", it.Path)
 				}
 				group = append(group, it)
 			case TapeSweepOrphans:
 				if err := flushGroup(); err != nil {
-					return report, err
+					return nil, err
 				}
 				if p.orphans {
 					orphans = append(orphans, it)
 				}
 			}
 		default:
-			return report, fmt.Errorf("tape sweep: manifest line kind %q unknown", kind.Kind)
+			return nil, fmt.Errorf("tape sweep: manifest line kind %q unknown", kind.Kind)
 		}
 	}
 	if err := flushGroup(); err != nil {
-		return report, err
+		return nil, err
 	}
-	if len(orphans) > 0 {
-		if err := s.applyOrphans(ctx, jobID, run, orphans); err != nil {
-			return report, err
-		}
-	}
-	report.ReportPath = filepath.Join(s.tapeSweepLogDir(), "tape-sweep-"+p.runID+".apply-"+started.UTC().Format("20060102T150405Z")+".report.json")
-	report.DurationMs = time.Since(started).Milliseconds()
-	tlog.record(tapeSweepLogRecord{Op: "apply_finished", Count: counts.Deleted, Bytes: counts.BytesDeleted})
-	_ = tlog.flush()
-	if err := writeJSONFileSync(report.ReportPath, report); err != nil {
-		return report, err
-	}
-	log.Printf("tape sweep: apply run=%s deleted=%d bytes=%d gone=%d kept_refreshed=%d kept_referenced=%d kept_not_destroyed=%d kept_unverified=%d deferred=%d errors=%d computers_deleted=%d computers_skipped=%d archives=%d",
-		p.runID, counts.Deleted, counts.BytesDeleted, counts.Gone, counts.KeptRefreshed, counts.KeptReferenced, counts.KeptNotDestroyed, counts.KeptUnverified, counts.DeferredByCap, counts.Errors, counts.ComputersDeleted, counts.ComputersSkipped, len(counts.Archives))
-	// A named apply that skipped a computer it was told to delete did not do
-	// what was asked: it says so with a failure, after the receipt is written.
-	if len(p.named) > 0 && len(run.skipped) > 0 {
-		return report, fmt.Errorf("tape sweep: named computers not deleted: %v (see the receipt %s)", run.skipped, report.ReportPath)
-	}
-	return report, nil
+	return orphans, nil
 }
 
 func validTapeSweepItem(it tapeSweepItem) bool {
@@ -415,15 +560,6 @@ func (s *Service) tapeSweepDelta(ctx context.Context, run *tapeSweepApplyRun) er
 	})
 }
 
-func (s *Service) tapeSweepSkipComputer(run *tapeSweepApplyRun, proof TapeSweepComputerProof, items []tapeSweepItem, reason string) {
-	run.counts.ComputersSkipped++
-	run.skipped = append(run.skipped, proof.ComputerID)
-	run.counts.KeptNotDestroyed += len(items)
-	run.log.record(tapeSweepLogRecord{Op: "kept_not_destroyed", Sweep: TapeSweepDestroyed, Computer: proof.ComputerID, Reason: reason, Count: len(items)})
-	_ = run.log.flush()
-	log.Printf("tape sweep: computer=%s skipped (%s) items=%d", proof.ComputerID, reason, len(items))
-}
-
 // reproveDestroyed re-checks the destroyed proof at delete time.
 func (s *Service) reproveDestroyed(ctx context.Context, run *tapeSweepApplyRun, proof TapeSweepComputerProof) string {
 	id := proof.ComputerID
@@ -441,6 +577,9 @@ func (s *Service) reproveDestroyed(ctx context.Context, run *tapeSweepApplyRun, 
 	}
 	if run.routed[id] {
 		return "now has a route slot"
+	}
+	if run.pending[id] {
+		return "a lifecycle operation is pending"
 	}
 	found, err := run.registry.LookupComputer(ctx, id)
 	if err != nil {
@@ -465,120 +604,122 @@ func (s *Service) reproveDestroyed(ctx context.Context, run *tapeSweepApplyRun, 
 	return ""
 }
 
-// reproveChunks re-checks the computer's snapshot chunk digests against what
-// is living now: the computers a named apply deletes are excluded, any other
-// computer's roots, in-flight registrations and file roots are not.
-func (s *Service) reproveChunks(ctx context.Context, run *tapeSweepApplyRun, id string, items []tapeSweepItem) (string, error) {
-	var digests []string
-	for _, it := range items {
-		if it.Namespace == tapeNSFileCASChunks {
-			digests = append(digests, it.Digest)
-		}
-	}
-	if len(digests) == 0 {
+// proveDestroyedRun is phase one of a destroyed apply, run under the exclusive
+// tombstone gate. It deletes nothing. Every computer of the manifest is
+// re-proved; the chunk digests of all of them are checked against every
+// computer outside the manifest; the caps are checked against the manifest's
+// totals; then every tombstone is written and every head re-read. A non-empty
+// refusal (or an error) means no computer is deleted, and the tombstones this
+// run wrote are dropped.
+func (s *Service) proveDestroyedRun(ctx context.Context, run *tapeSweepApplyRun) (string, error) {
+	if len(run.groups) == 0 {
 		return "", nil
 	}
-	doomed := []string{id}
-	if len(run.p.named) > 0 {
-		doomed = run.p.named
+	refuse := func(reason string) (string, error) {
+		s.dropCreatedTombstones(ctx, run)
+		return reason, nil
 	}
-	living, err := s.livingChunkDigests(ctx, doomed)
-	if err != nil {
-		return "", err
-	}
-	n := 0
-	for _, d := range digests {
-		if living[d] {
-			n++
+	doomed := make([]string, 0, len(run.groups))
+	for _, g := range run.groups {
+		id := g.proof.ComputerID
+		doomed = append(doomed, id)
+		if reason := s.reproveDestroyed(ctx, run, g.proof); reason != "" {
+			return refuse(id + ": " + reason)
+		}
+		tomb, has, err := s.store.TapeTombstone(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		g.tomb, g.hadTomb = tomb, has
+		if has && tomb.Status == tapeTombstoneDeleted && g.onDisk {
+			return refuse(id + ": tombstone already deleted; files remain")
 		}
 	}
-	if n > 0 {
-		return fmt.Sprintf("%d snapshot chunk digests are named by a snapshot, an in-flight registration or a file root of a computer this run does not delete", n), nil
+	// Chunks: a digest any computer outside this run names (a snapshot root,
+	// a registration in flight, a file root) is not deleted; an unreadable
+	// answer fails the run.
+	var anyChunks bool
+	for _, g := range run.groups {
+		anyChunks = anyChunks || len(g.chunks) > 0
 	}
-	return "", nil
-}
-
-// applyDestroyedComputer re-proves, tombstones, archives and deletes one
-// destroyed computer's tape.
-func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run *tapeSweepApplyRun, proof TapeSweepComputerProof, items []tapeSweepItem, dirs []string, rows map[string]int64) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if !run.p.destroyed {
-		return nil
-	}
-	// A cap already spent: do not tombstone or archive a computer nothing can
-	// be deleted from this run. The next dry run lists it again.
-	if len(items) > 0 && (run.deletes >= run.p.maxDeletes || run.bytes >= run.p.maxBytes) {
-		run.counts.DeferredByCap += len(items)
-		run.counts.ComputersSkipped++
-		run.skipped = append(run.skipped, proof.ComputerID)
-		return nil
-	}
-	id := proof.ComputerID
-	existing, hasTomb, err := s.store.TapeTombstone(ctx, id)
-	if err != nil {
-		return err
-	}
-	dropTomb := func() {
-		if t, ok, _ := s.store.TapeTombstone(ctx, id); ok && t.FilesDeleted == 0 && t.Status != tapeTombstoneDeleted {
-			if err := s.store.removeTapeTombstone(ctx, id); err != nil {
-				log.Printf("tape sweep: computer=%s remove tombstone: %v", id, err)
+	if anyChunks {
+		living, err := s.livingChunkDigests(ctx, doomed)
+		if err != nil {
+			return "", fmt.Errorf("tape sweep: snapshot chunk check failed, nothing deleted: %w", err)
+		}
+		for _, g := range run.groups {
+			n := 0
+			for _, d := range g.chunks {
+				if living[d] {
+					n++
+				}
+			}
+			if n > 0 {
+				return refuse(fmt.Sprintf("%s: %d snapshot chunk digests are named by a snapshot, an in-flight registration or a file root of a computer this run does not delete", g.proof.ComputerID, n))
 			}
 		}
 	}
-	if reason := s.reproveDestroyed(ctx, run, proof); reason != "" {
-		dropTomb()
-		s.tapeSweepSkipComputer(run, proof, items, reason)
-		return nil
+	// Every tombstone, then every head again: no append can land after this.
+	for _, g := range run.groups {
+		id, proof := g.proof.ComputerID, g.proof
+		tomb := TapeTombstone{ComputerID: id, Status: tapeTombstoneArchiving, HeadSequence: proof.HeadSequence, CanonicalEventHead: proof.CanonicalEventHead, ManifestRun: run.p.runID, ManifestSHA256: run.manifestSH}
+		if g.hadTomb {
+			tomb = g.tomb
+			tomb.ManifestRun, tomb.ManifestSHA256 = run.p.runID, run.manifestSH
+		}
+		proofJSON, _ := json.Marshal(proof)
+		tomb.ProofJSON = string(proofJSON)
+		if err := s.store.writeTapeTombstone(ctx, tomb); err != nil {
+			run.counts.Errors++
+			s.dropCreatedTombstones(ctx, run)
+			return "", err
+		}
+		g.tomb = tomb
+		if !g.hadTomb {
+			g.created = true
+			run.counts.ComputersTombstoned++
+		}
+		head, herr := readComputerEventHead(ctx, s.store.db, id, false)
+		if herr != nil || head == nil || head.Sequence != proof.HeadSequence || head.CanonicalEventHead != proof.CanonicalEventHead {
+			return refuse(id + ": head changed at tombstone")
+		}
+		run.log.record(tapeSweepLogRecord{Op: "tombstone", Sweep: TapeSweepDestroyed, Computer: id, Reason: tomb.Status, Count: g.items})
 	}
-	if reason, err := s.reproveChunks(ctx, run, id, items); err != nil {
-		dropTomb()
-		s.tapeSweepSkipComputer(run, proof, items, "snapshot chunk check failed: "+err.Error())
-		return nil
-	} else if reason != "" {
-		dropTomb()
-		s.tapeSweepSkipComputer(run, proof, items, reason)
-		return nil
-	}
-	// A computer already recorded as deleted whose files are on disk again
-	// is not archived a second time, and its archive record is not
-	// overwritten: it is skipped and reported for a person to look at.
-	if hasTomb && existing.Status == tapeTombstoneDeleted && s.anyTapeItemOnDisk(items) {
-		s.tapeSweepSkipComputer(run, proof, items, "tombstone already deleted; files remain")
-		return nil
-	}
-	s.setTapeSweepPhase(jobID, "destroyed "+id)
+	_ = run.log.flush()
+	return "", nil
+}
 
-	// Tombstone under the CAS gate, then re-read the head: no append can
-	// land after this check.
-	tomb := TapeTombstone{ComputerID: id, Status: tapeTombstoneArchiving, HeadSequence: proof.HeadSequence, CanonicalEventHead: proof.CanonicalEventHead, ManifestRun: run.p.runID, ManifestSHA256: run.manifestSH}
-	if hasTomb {
-		tomb = existing
-		tomb.ManifestRun, tomb.ManifestSHA256 = run.p.runID, run.manifestSH
+// dropCreatedTombstones removes the tombstones this run created, when no file
+// of theirs was touched. A tombstone that already existed, or that reached
+// deleting, is never dropped.
+func (s *Service) dropCreatedTombstones(ctx context.Context, run *tapeSweepApplyRun) {
+	for _, g := range run.groups {
+		if !g.created {
+			continue
+		}
+		if t, ok, _ := s.store.TapeTombstone(ctx, g.proof.ComputerID); ok && t.FilesDeleted == 0 && t.Status != tapeTombstoneDeleted && t.Status != tapeTombstoneDeleting {
+			if err := s.store.removeTapeTombstone(ctx, g.proof.ComputerID); err != nil {
+				log.Printf("tape sweep: computer=%s remove tombstone: %v", g.proof.ComputerID, err)
+				continue
+			}
+			g.created = false
+		}
 	}
-	proofJSON, _ := json.Marshal(proof)
-	tomb.ProofJSON = string(proofJSON)
-	s.store.tombstones.gate.Lock()
-	werr := s.store.writeTapeTombstone(ctx, tomb)
-	head, herr := readComputerEventHead(ctx, s.store.db, id, false)
-	s.store.tombstones.gate.Unlock()
-	if werr != nil {
-		run.counts.Errors++
-		return werr
-	}
-	if herr != nil || head == nil || head.Sequence != proof.HeadSequence || head.CanonicalEventHead != proof.CanonicalEventHead {
-		dropTomb()
-		s.tapeSweepSkipComputer(run, proof, items, "head changed at tombstone")
-		return nil
-	}
-	if !hasTomb {
-		run.counts.ComputersTombstoned++
-	}
-	run.log.record(tapeSweepLogRecord{Op: "tombstone", Sweep: TapeSweepDestroyed, Computer: id, Reason: tomb.Status, Count: len(items)})
+}
 
-	// Archive before any unlink (unless the request said no_archive).
-	archivePath := "none (no_archive)"
+// archiveDestroyedComputer archives one computer before any computer is
+// deleted (unless the request said no_archive), and moves its tombstone to
+// archived.
+func (s *Service) archiveDestroyedComputer(ctx context.Context, run *tapeSweepApplyRun, proof TapeSweepComputerProof, items []tapeSweepItem) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	id := proof.ComputerID
+	g := run.group(id)
+	if g == nil {
+		return fmt.Errorf("tape sweep: computer %s is not in the proved run", id)
+	}
+	tomb := g.tomb
 	if !run.p.noArchive {
 		extras, err := s.tapePurgeRowsDump(ctx, id)
 		var archive TapeArchiveSidecar
@@ -587,18 +728,14 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 		}
 		if err != nil {
 			run.counts.Errors++
-			dropTomb()
 			run.log.record(tapeSweepLogRecord{Op: "error", Sweep: TapeSweepDestroyed, Computer: id, Error: "archive: " + err.Error()})
 			_ = run.log.flush()
-			log.Printf("tape sweep: computer=%s archive failed, nothing deleted: %v", id, err)
-			run.skipped = append(run.skipped, id)
-			return nil
+			return fmt.Errorf("tape sweep: computer %s: archive failed, nothing deleted: %w", id, err)
 		}
 		run.counts.Archives = append(run.counts.Archives, archive.Archive)
-		archivePath = archive.Archive
 		tomb.ArchivePath, tomb.ArchiveSHA256, tomb.ArchiveManifestSHA256 = archive.Archive, archive.ArchiveSHA256, archive.ManifestSHA256
 	} else if tomb.ArchivePath == "" {
-		tomb.ArchivePath = archivePath
+		tomb.ArchivePath = "none (no_archive)"
 	}
 	if tomb.Status == tapeTombstoneArchiving {
 		tomb.Status = tapeTombstoneArchived
@@ -606,7 +743,40 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	if err := s.store.putTapeTombstone(ctx, tomb); err != nil {
 		return err
 	}
+	g.tomb = tomb
+	return nil
+}
 
+// applyDestroyedComputer deletes one proved, tombstoned and archived
+// computer. The first thing that is not a delete stops the run with an error.
+func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run *tapeSweepApplyRun, proof TapeSweepComputerProof, items []tapeSweepItem, dirs []string, rows map[string]int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	id := proof.ComputerID
+	g := run.group(id)
+	if g == nil {
+		return fmt.Errorf("tape sweep: computer %s is not in the proved run", id)
+	}
+	// A cap already spent: nothing of this computer is archived or deleted
+	// (its tombstone stays, so no reference can be added to it).
+	if g.items > 0 && (run.deletes >= run.p.maxDeletes || run.bytes >= run.p.maxBytes) {
+		run.counts.DeferredByCap += g.items
+		run.counts.ComputersSkipped++
+		run.skipped = append(run.skipped, id)
+		return nil
+	}
+	if err := s.archiveDestroyedComputer(ctx, run, proof, items); err != nil {
+		return err
+	}
+	s.setTapeSweepPhase(jobID, "destroyed "+id)
+	tomb := g.tomb
+	// deleting is durable before the first unlink: a tombstone in this state
+	// is never removed, whatever its counts say.
+	tomb.Status = tapeTombstoneDeleting
+	if err := s.store.putTapeTombstone(ctx, tomb); err != nil {
+		return err
+	}
 	baseFiles, baseBytes, batchFiles, batchBytes := tomb.FilesDeleted, tomb.BytesDeleted, int64(0), int64(0)
 	run.onBatch = func(n int, b int64) {
 		batchFiles += int64(n)
@@ -619,21 +789,25 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	deleted, bytesDeleted, complete, err := s.deleteTapeItems(ctx, run, items)
 	run.onBatch = nil
 	tomb.FilesDeleted, tomb.BytesDeleted = baseFiles+int64(deleted), baseBytes+bytesDeleted
-	// Directories, then every row (escrow last, in the same transaction):
-	// only when every listed file is gone.
-	if complete && err == nil {
-		if !s.removePurgeDirs(run, id, dirs) {
-			complete = false
-		}
+	if err == nil && !complete {
+		// A cap bit mid computer: its rows and directories stay for the next run.
+		run.skipped = append(run.skipped, id)
+		run.counts.ComputersSkipped++
+		tomb.Status = tapeTombstoneArchived
+		g.tomb = tomb
+		_ = s.store.putTapeTombstone(context.WithoutCancel(ctx), tomb)
+		return nil
 	}
-	if complete && err == nil {
+	if err == nil && !s.removePurgeDirs(run, id, dirs) {
+		err = fmt.Errorf("a directory of the computer could not be removed")
+	}
+	if err == nil {
 		removed, rerr := s.purgeComputerRows(ctx, run, id, rows)
 		if rerr != nil {
 			run.counts.Errors++
-			complete = false
 			run.log.record(tapeSweepLogRecord{Op: "error", Sweep: TapeSweepDestroyed, Computer: id, Error: "rows: " + rerr.Error()})
 			_ = run.log.flush()
-			log.Printf("tape sweep: computer=%s rows not purged: %v", id, rerr)
+			err = fmt.Errorf("rows not purged: %w", rerr)
 		} else {
 			for table, n := range removed {
 				run.counts.Classes = addClass(run.counts.Classes, "rows:"+table, 0, 0, n)
@@ -642,19 +816,20 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 			_ = run.log.flush()
 		}
 	}
-	if complete {
+	if err == nil {
 		tomb.Status = tapeTombstoneDeleted
 		run.counts.ComputersDeleted++
-	} else {
-		// Not fully deleted (a cap, a failed unlink, directory or rows step):
-		// a named apply fails on it.
-		run.skipped = append(run.skipped, id)
 	}
+	g.tomb = tomb
 	if perr := s.store.putTapeTombstone(context.WithoutCancel(ctx), tomb); perr != nil && err == nil {
 		err = perr
 	}
-	log.Printf("tape sweep: computer=%s deleted=%d bytes=%d complete=%v archive=%s", id, deleted, bytesDeleted, complete, archivePath)
-	return err
+	log.Printf("tape sweep: computer=%s deleted=%d bytes=%d complete=%v", id, deleted, bytesDeleted, err == nil)
+	if err != nil {
+		run.skipped = append(run.skipped, id)
+		return fmt.Errorf("tape sweep: computer %s not fully deleted, run stopped: %w", id, err)
+	}
+	return nil
 }
 
 // applyOrphans archives and deletes the orphan items still unreferenced.
@@ -735,6 +910,13 @@ func (s *Service) deleteTapeItems(ctx context.Context, run *tapeSweepApplyRun, i
 			return deleted, bytesDeleted, false, fmt.Errorf("tape sweep: deletion log write failed, batch not deleted: %w", err)
 		}
 		batchDeleted, batchBytesDeleted := deleted, bytesDeleted
+		// A destroyed delete holds the tombstone gate for the batch: nothing
+		// that adds a reference to a computer runs between its re-check and
+		// its unlink.
+		if run.strict {
+			s.store.tombstones.gate.Lock()
+		}
+		var stop error
 		for _, it := range batch {
 			if hook := s.tapeSweep.beforeDelete; hook != nil {
 				hook(it)
@@ -761,9 +943,26 @@ func (s *Service) deleteTapeItems(ctx context.Context, run *tapeSweepApplyRun, i
 				}
 			}
 			run.log.item(op, it, size, errText)
+			if run.strict && op != "deleted" && op != "gone" {
+				stop = fmt.Errorf("%s was not deleted (%s%s); the run stops before the next delete", it.Path, op, func() string {
+					if errText != "" {
+						return ": " + errText
+					}
+					return ""
+				}())
+				run.log.record(tapeSweepLogRecord{Op: "aborted", Computer: it.Computer, Error: stop.Error()})
+				break
+			}
+		}
+		if run.strict {
+			s.store.tombstones.gate.Unlock()
 		}
 		if run.onBatch != nil && deleted > batchDeleted {
 			run.onBatch(deleted-batchDeleted, bytesDeleted-batchBytesDeleted)
+		}
+		if stop != nil {
+			_ = run.log.flush()
+			return deleted, bytesDeleted, false, stop
 		}
 		if err := run.log.flush(); err != nil {
 			return deleted, bytesDeleted, false, fmt.Errorf("tape sweep: deletion log write failed: %w", err)

@@ -21,6 +21,9 @@ const (
 	tapeTombstoneArchiving = "archiving"
 	tapeTombstoneArchived  = "archived"
 	tapeTombstoneDeleted   = "deleted"
+	// tapeTombstoneDeleting is written before the first unlink: files may be
+	// gone while the counts still read zero, so the tombstone is never removed.
+	tapeTombstoneDeleting = "deleting"
 )
 
 const tapeTombstoneSchemaDDL = `
@@ -201,7 +204,7 @@ func (s *Store) removeTapeTombstone(ctx context.Context, computerID string) erro
 	if err != nil || !ok {
 		return err
 	}
-	if t.Status == tapeTombstoneDeleted || t.FilesDeleted > 0 {
+	if t.Status == tapeTombstoneDeleted || t.Status == tapeTombstoneDeleting || t.FilesDeleted > 0 {
 		return fmt.Errorf("tape tombstones: %s has deleted files; restore from %s before removing its tombstone", computerID, t.ArchivePath)
 	}
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM computer_tape_tombstones WHERE computer_id=?`, computerID); err != nil {
