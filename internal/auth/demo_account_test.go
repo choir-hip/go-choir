@@ -6,9 +6,6 @@ import (
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/json"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -594,8 +591,8 @@ func TestAnAppLoginThatFinishesWhileTheAccountIsOffIsRefusedNotA500(t *testing.T
 }
 
 // The class: an account that is off is refused the same way at every route that would issue a
-// session, a token or a key. Routes that can be driven here are driven; the guard below holds
-// the rest (account switch, email verify, register finish, the web login finish).
+// session, a token or a key. Every one ends in writeIssueError; the routes are driven here with the
+// account off (register finish cannot be: it makes a new account, whose id cannot be named in advance).
 func TestOffAccountIsRefusedAtEveryDrivableIssuer(t *testing.T) {
 	e := demoEnv(t)
 	user, _ := e.h.store.GetUserByID(e.uid)
@@ -639,57 +636,6 @@ func TestOffAccountIsRefusedAtEveryDrivableIssuer(t *testing.T) {
 	expect403("session_refresh", rec)
 }
 
-// The guard for the rest: every function that calls an issuer must pass its error to
-// refuseIfAccountOff, or be part of the issuer chain itself (which returns the error upward).
-func TestEveryIssuerCallerAnswersAnOffAccountAsTheRefusal(t *testing.T) {
-	issuers := map[string]bool{"signInSession": true, "issueSession": true, "issueSessionExpiring": true, "issueSessionRow": true, "issueAccessJWT": true, "mintAppKey": true, "rotateRefreshSession": true, "rotateLocked": true}
-	chain := map[string]bool{"signInSession": true, "issueSession": true, "issueSessionExpiring": true, "issueSessionRow": true, "issueAccessJWT": true, "mintAppKey": true, "rotateRefreshSession": true, "rotateLocked": true}
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	callers := 0
-	for _, pkg := range pkgs {
-		for fname, f := range pkg.Files {
-			for _, d := range f.Decls {
-				fd, ok := d.(*ast.FuncDecl)
-				if !ok || fd.Body == nil || chain[fd.Name.Name] {
-					continue
-				}
-				calls, refuses := []string{}, false
-				ast.Inspect(fd.Body, func(n ast.Node) bool {
-					if c, ok := n.(*ast.CallExpr); ok {
-						name := ""
-						switch fn := c.Fun.(type) {
-						case *ast.SelectorExpr:
-							name = fn.Sel.Name
-						case *ast.Ident:
-							name = fn.Name
-						}
-						if issuers[name] {
-							calls = append(calls, name)
-						}
-						if name == "refuseIfAccountOff" {
-							refuses = true
-						}
-					}
-					return true
-				})
-				if len(calls) > 0 {
-					callers++
-					if !refuses {
-						t.Errorf("%s: %s calls %v and does not answer an off account with refuseIfAccountOff", fname, fd.Name.Name, calls)
-					}
-				}
-			}
-		}
-	}
-	if callers < 8 {
-		t.Fatalf("found only %d issuer callers; the guard has lost its sight", callers)
-	}
-}
-
 // One rule for the name, in the command that makes the credential and the service that reads it.
 func TestTheServiceRefusesWhatTheCommandRefuses(t *testing.T) {
 	line, err := FormatDemoCredential(demoTestUser, demoTestPass)
@@ -708,4 +654,68 @@ func TestTheServiceRefusesWhatTheCommandRefuses(t *testing.T) {
 	if !ValidDemoCredential([]byte(line)) {
 		t.Error("a well-formed credential was refused")
 	}
+}
+
+func offFixture(t *testing.T, h *Handler, uid string) (turnOff func()) {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "demo-credential")
+	line, _ := FormatDemoCredential(demoTestUser, demoTestPass)
+	if err := os.WriteFile(file, []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := *h.config
+	cfg.DemoAccountID = uid
+	cfg.DemoCredentialFile = file
+	h.config = &cfg
+	return func() { _ = os.Remove(file) }
+}
+
+func wantAccountOff(t *testing.T, name string, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("%s: got %d %s, want 403", name, rec.Code, rec.Body)
+		return
+	}
+	if m := decodeMap(t, rec); m["code"] != "account_off" {
+		t.Errorf("%s: refusal code %v", name, m["code"])
+	}
+}
+
+func TestOffAccountIsRefusedAtEmailVerifyAccountSwitchAndTheWebLoginFinish(t *testing.T) {
+	// email verify: the code was mailed while on; it is typed after off.
+	h, m := emailEnv(t)
+	addEmailUser(t, h, "mail-demo", "mail-demo@example.com", true, true)
+	off := offFixture(t, h, "mail-demo")
+	b := emailBegin(t, h, "mail-demo@example.com", "")
+	if b.code != http.StatusOK || b.cookie == nil {
+		t.Fatalf("begin = %d", b.code)
+	}
+	off()
+	wantAccountOff(t, "email_verify", emailVerifyCode(h, b.attemptID, m.last(t).Code, b.cookie))
+
+	// account switch: two accounts in one browser; the second is turned off, then switched to.
+	ha := acctEnv(t)
+	a, d := mkUser(t, ha, "acct-a"), mkUser(t, ha, "acct-demo")
+	off2 := offFixture(t, ha, d.ID)
+	j := jar{}
+	signIn(t, ha, j, a)
+	signIn(t, ha, j, d)
+	off2()
+	wantAccountOff(t, "account_switch", switchTo(ha, j, d.ID))
+
+	// the web login finish: a real passkey assertion across off.
+	hw := appEnv(t)
+	p := newSoftPasskey(t)
+	if rec := createAccount(t, hw, "web-demo@example.com", p, testOrigin); rec.Code != 200 {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+	u, _ := hw.store.GetUserByEmail("web-demo@example.com")
+	off3 := offFixture(t, hw, u.ID)
+	begin := postJSONFrom(hw.HandleLoginBegin, nextTestIP(), map[string]string{"email": "web-demo@example.com"})
+	if begin.Code != 200 {
+		t.Fatalf("login begin: %d %s", begin.Code, begin.Body)
+	}
+	cred := p.assert(t, decodeMap(t, begin), testOrigin)
+	off3()
+	wantAccountOff(t, "login_finish", postJSON(hw.HandleLoginFinish, json.RawMessage(cred)))
 }

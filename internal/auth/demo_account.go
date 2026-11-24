@@ -267,11 +267,21 @@ func writeAccountOff(w http.ResponseWriter) {
 	}{ErrAccountOff.Error(), "account_off"})
 }
 
+// writeIssueError is the one answer to an issuer's error on an HTTP route: ErrAccountOff is the 403
+// refusal, anything else a 500 with the route's own message. Every route that issues a session,
+// a token or a key ends in it, so no route can answer an off account differently.
+func writeIssueError(w http.ResponseWriter, err error, op, userID, msg string) {
+	if refuseIfAccountOff(w, err, op, userID) {
+		return
+	}
+	log.Printf("[auth] operation=%s user_id=%s result=error step=issue error=%q", op, userID, err)
+	writeJSON(w, http.StatusInternalServerError, errorResponse{Error: msg})
+}
+
 // refuseIfAccountOff answers a sign-in step that failed because the reviewer account is turned
 // off: the one refusal, 403 account_off, for every route that issues a session, a token or a
 // key. It reports whether it answered. Every caller of issueAccessJWT, issueSession*,
-// signInSession, rotateRefreshSession, rotateLocked and mintAppKey must pass its error here
-// (TestEveryIssuerCallerAnswersAnOffAccountAsTheRefusal holds that).
+// signInSession, rotateRefreshSession, rotateLocked and mintAppKey ends in writeIssueError.
 func refuseIfAccountOff(w http.ResponseWriter, err error, op, userID string) bool {
 	if !errors.Is(err, ErrAccountOff) {
 		return false

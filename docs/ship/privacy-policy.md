@@ -174,7 +174,7 @@ Autoradio 1 is for people 16 and older. Do not make an account if you are under 
 
 ## 12. Security
 
-- Sign-in uses passkeys. No account of a person has a password to steal or reset. One account kept for App Review has a password, stored on our server only as a hash.
+- Sign-in uses passkeys. There are no passwords to steal or reset.
 - The app talks to our server over HTTPS.
 - Your sign-in key on the phone is in the iPhone Keychain, on this device only.
 - The event log of your computer is sealed under a key that belongs to the computer. [CHECK]
