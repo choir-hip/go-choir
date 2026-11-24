@@ -24,6 +24,7 @@ import { notebookShared } from './notebook-run.ts';
 import { syncContent } from './content-run.ts';
 import * as mail from './mail.ts';
 import { barInfo, dismissAnswer } from './bar.ts';
+import { heartbeat } from './heartbeat.ts';
 import * as radioBridge from './radio-bridge.ts';
 import { radioPage } from './radio-page.ts';
 import { retrievalServe, paperSearch } from './retrieval-live.ts';
@@ -148,6 +149,7 @@ const sources: Sources = {
   // The bar (bar.ts): the native facts and the conversation's entries in, the bar's state out; the tick (a timed state's end, a sign-out) asks again.
   barInfo: ([facts, run, entries, _tick]) => barInfo({ ...(facts as object), ...(run as object) }, entries),
   // The radio (radio-bridge.ts over radio-runtime.ts): the run sheet, its writer and the deck's journal are shared code; the deck is native (the one `deck` op).
+  heartbeat: ([_tick]) => heartbeat(),
   radioPulse: ([_deck, _note, _tick], _s, storage, native) => radioBridge.radioPulse(storage as never, native as never),
   radioWrite: ([_tick], _s, storage, native) => radioBridge.radioWrite(storage as never, native as never),
   radioHold: ([_tick], _s, storage, native) => radioBridge.radioHold(storage as never, native as never),

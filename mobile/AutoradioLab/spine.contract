@@ -3,7 +3,7 @@
 // pager) is in members-stack.contract.
 use pageRequest, barFacts, deckState, radioNote from "@choir/autoradio"
 use PageList, PageRequest, Theme, ThemeList, SettingsAck, BarFacts, DeckState, RadioNote from "@choir/autoradio"
-use RadioTick from "./radio-types.contract"
+use RadioTick, Heartbeat from "./radio-types.contract"
 use BarInfo, BarRun from "./bar-types.contract"
 use HostCaps from "./host-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
@@ -32,6 +32,13 @@ members Autoradio
     barTick = barTick + 1
   task barTimed when bi.until > 0 key=barTick
     after(250, barBump)
+  // The heartbeat (heartbeat.ts): one log line every five seconds, so a runtime that stopped running turns shows as a gap (docs/problems/phone-pages-stall-placard-2026-11-24.md).
+  state hbTick = 0
+  action hbBump
+    hbTick = hbTick + 1
+  resource hb = heartbeat(hbTick) as shape Heartbeat else empty()
+  task hbTimer when hb.n >= 0 key=hbTick
+    after(5000, hbBump)
   // The radio (radio-bridge.ts): the pump reads the deck's journal and what native handed over, applies them, keeps the desk writing, and answers a number the screens ask again on. It runs when the deck changes
   // (`ds.seq`), when native says something did (`rnote`), and every second (the position labels, the writer's clock).
   state radioTick = 0
