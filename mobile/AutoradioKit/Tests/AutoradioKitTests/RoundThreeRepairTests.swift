@@ -173,7 +173,9 @@ final class ManagedModelCleanupTests: XCTestCase {
     func testARejectedCoreMLModelIsFoundOnDiskAndDeletedAndOtherFoldersStay() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("fluid-\(UUID().uuidString)", isDirectory: true)
         let fm = FileManager.default
-        for d in ["parakeet-tdt-0.6b-v2", "kokoro-82m-coreml", "someone-elses"] { try fm.createDirectory(at: root.appendingPathComponent(d), withIntermediateDirectories: true) }
+        KnownModels.ttsRootProvider = { root.appendingPathComponent("fluidaudio-tts", isDirectory: true) }          // the voice models live under the library's TTS root, not the recogniser's
+        defer { KnownModels.ttsRootProvider = KnownModels.defaultTtsRoot }
+        for d in ["parakeet-tdt-0.6b-v2", "someone-elses", "fluidaudio-tts/kokoro-82m-coreml"] { try fm.createDirectory(at: root.appendingPathComponent(d), withIntermediateDirectories: true) }
         let backend = LiveConfigBackend(store: ModelStore(root: root.appendingPathComponent("gguf")), managedRoot: root)
         let parakeet = try XCTUnwrap(CandidateTable.all.first { $0.id == "parakeet-tdt-0.6b-v2" })
         let kokoro = try XCTUnwrap(CandidateTable.all.first { $0.id == "kokoro-82m-ane" })
@@ -183,11 +185,11 @@ final class ManagedModelCleanupTests: XCTestCase {
         await backend.delete(parakeet)
         onDisk = await backend.isOnDisk(parakeet); XCTAssertFalse(onDisk)
         XCTAssertFalse(fm.fileExists(atPath: root.appendingPathComponent("parakeet-tdt-0.6b-v2").path))
-        XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("kokoro-82m-coreml").path), "another model's folder stays")
+        XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("fluidaudio-tts/kokoro-82m-coreml").path), "another model's folder stays")
         XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("someone-elses").path))
         onDisk = await backend.isOnDisk(kokoro); XCTAssertTrue(onDisk)
         await backend.delete(kokoro)
-        XCTAssertFalse(fm.fileExists(atPath: root.appendingPathComponent("kokoro-82m-coreml").path))
+        XCTAssertFalse(fm.fileExists(atPath: root.appendingPathComponent("fluidaudio-tts/kokoro-82m-coreml").path))
     }
 
     func testEveryManagedCoreMLCandidateNamesItsFolders() {

@@ -75,7 +75,7 @@ public actor SetupMicLease {
             var open: Bool { l.lock(); defer { l.unlock() }; return !done }
         }
         let take = Take()
-        let out = await begin(wanted: { take.open }, onFrame: { take.add($0.samples) })
+        let out = await begin(wanted: { take.open && !Task.isCancelled }, onFrame: { take.add($0.samples) })      // a cancelled recording (the account left) asks for nothing and opens nothing
         guard out == .open else { _ = take.finish(); return nil }                      // refused (begin released) or overtaken (whoever overtook it owns the lease)
         let mine = token
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9))                      // a cancelled sleep ends early and falls through to the release

@@ -115,7 +115,7 @@ final class OnboardingController: @unchecked Sendable {
     func fetchSpeakerModel() {
         set { speakerFetching = true }
         let gen = AccountWipe.generation
-        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e } else { self.book.speakerFailed("The voice-print model could not be fetched. Press Download to try again.", generation: gen) }; self.set { self.speakerFetching = false } }
+        Task { let e = WeSpeakerEmbedder.standard(); if await e.ensureReady() { SpeakerGate.shared.embedder = e } else if gen == AccountWipe.generation { self.book.speakerFailed("The voice-print model could not be fetched. Press Download to try again.", generation: gen) }; self.set { self.speakerFetching = false } }
     }
 
     private func setupFinished(_ s: VoiceSetup, gen: Int, merging: Bool = false) {
@@ -312,8 +312,10 @@ final class OnboardingController: @unchecked Sendable {
         let task = Task { [weak self] in
             guard let self else { return }
             await ModelTrial.run(job: job, id: id, backend: LiveTrialBackend(controller: self), report: { state, line, ms in self.book.test(key, state: state, line: line, ms: ms, generation: gen); self.changed() })
+            self.lock.lock(); self.trialTasks[key] = nil; self.lock.unlock()
         }
         lock.lock(); trialTasks[key] = task; lock.unlock()
+        if gen != AccountWipe.generation { task.cancel() }                  // the account left between the press and here
     }
 
     /// The microphone for `seconds`, through the same lease the voice learning uses (`SetupMicLease.record`: the frames go to this recording alone, and the lease is given back whole on every exit). nil when the microphone is refused.
@@ -435,7 +437,9 @@ struct LiveTrialBackend: TrialBackend {
     func speak(_ id: String, _ sentence: String) async throws -> Double {
         guard let option = VoiceCatalog.options.first(where: { $0.modelID == id }) else { throw LabError.badInput("this model has no voice to speak with") }
         var o = option; o.sample = sentence
-        return try await VoiceController.play(o, on: controller.module.runtime)
+        let rt = controller.module.runtime!
+        // A cancelled Test (the account left) stops the sound at once: the audio engine's own cancel only lets go of the waiter, so the voice is stopped here.
+        return try await withTaskCancellationHandler { try await VoiceController.play(o, on: rt) } onCancel: { rt.audio.stopVoice() }
     }
     func voiceprint(_ audio: [Float]) async throws -> String {
         let gate = SpeakerGate.shared

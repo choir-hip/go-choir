@@ -17,10 +17,17 @@ public final class LiveConfigBackend: ConfigBackend, @unchecked Sendable {
         guard !KnownModels.isPinned(c.id), let spec = KnownModels.managed.first(where: { $0.id == c.id }), let root = spec.cachePath, root == KnownModels.fluidRoot || root == KnownModels.ttsRoot else { return [] }
         return (spec.cacheFolders ?? []).filter { !$0.isEmpty && !$0.contains("..") && !$0.hasPrefix("/") }.map { (root == KnownModels.ttsRoot ? root : managedRoot).appendingPathComponent($0, isDirectory: true) }
     }
+    /// On the phone: a folder of this model holds something of ITS own (Pocket's folder holding only Phonon's pack is not Pocket on the phone).
+    func managedOnDisk(_ c: ModelCandidate) -> Bool {
+        guard let spec = KnownModels.managed.first(where: { $0.id == c.id }), let root = spec.cachePath else { return false }
+        let base = root == KnownModels.ttsRoot ? root : managedRoot
+        let excl = spec.excludedFolders ?? []
+        return (spec.cacheFolders ?? []).contains { excl.isEmpty ? FileManager.default.fileExists(atPath: base.appendingPathComponent($0, isDirectory: true).path) : ModelFolders.holds($0, base: base, excluding: excl) }
+    }
     public func probe() -> DeviceProbe { probeFn() }
     public func isOnDisk(_ c: ModelCandidate) async -> Bool {
         if let b = KnownModels.bundles.first(where: { $0.id == c.id }) { return await store.bundleFolderExists(b) }      // a folder of files in the store's own root
-        guard KnownModels.isPinned(c.id) else { return managedFolders(c).contains { FileManager.default.fileExists(atPath: $0.path) } }
+        guard KnownModels.isPinned(c.id) else { return managedOnDisk(c) }
         let f = await store.localFileIfPresent(c.id)
         return f != nil
     }

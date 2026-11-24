@@ -230,6 +230,22 @@ describe('the search test across a sign-out', () => {
   });
 });
 
+describe('two accounts and the search test', () => {
+  test('M13d account A\'s late search result does not erase account B\'s line', async () => {
+    embedPresent = true; const gate: { open: () => void } = { open: () => {} };
+    let calls = 0;
+    const was = onTestSearch(async () => { calls += 1; if (calls === 1) { await new Promise<void>((r) => { gate.open = r; }); return 'A late'; } return 'B result'; });
+    const g: VoiceFacts = { ...f, offers: offers().map((j) => ({ ...j, options: j.options.map((o) => (o.id === 'embedder' ? { ...o, ready: true } : o)) })) };
+    try {
+      const a = modelsAct('test', 'search', 'embedder', g, storage);                    // account A starts a search test and waits
+      await new Promise((r) => setTimeout(r, 5)); nextGeneration(); forgetModelTests();         // A leaves; B signs in
+      await modelsAct('test', 'search', 'embedder', g, storage);                         // B runs and finishes
+      gate.open(); await a;                                                              // A's result arrives late
+      expect(row(view(g, true), 'search', 'embedder').testLine).toBe('B result');
+    } finally { if (was) onTestSearch(was); }
+  });
+});
+
 describe('the first run', () => {
   test('M14 the lines are the recommended option of each job, the total counts a file once; a withheld option is not shown', () => {
     const l = firstRunLines({ ...f }, {});

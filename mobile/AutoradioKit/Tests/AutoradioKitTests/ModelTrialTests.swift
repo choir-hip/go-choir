@@ -9,7 +9,7 @@ import XCTest
 //  T5 knowing your voice: records and shows the backend's verdict.
 //  T6 search runs a fixed query on the phone's own stories and shows what it found.
 //  T7 every failure (no microphone, a model that throws, a model not on the phone) is a plain line and a finished state; a test never leaves "testing" behind.
-//  T8 the states reported are in order, ending in done or failed, and a second run of the same row starts fresh.
+//  T8 the states reported are in order, ending in done or failed (a cancelled run ends silently), and a second run of the same row starts fresh.
 final class ModelTrialTests: XCTestCase {
     final class Fake: TrialBackend, @unchecked Sendable {
         private let lock = NSLock()
@@ -81,20 +81,33 @@ final class ModelTrialTests: XCTestCase {
         let b = Fake(); let a = await run("voice", "kokoro-82m-ane", b); let c = await run("voice", "kokoro-82m-ane", b)
         XCTAssertEqual(a.states, c.states); XCTAssertFalse(["recording", "working", "testing"].contains(a.states.last!))
     }
-    // Review round 3: a Test that was cancelled (the account left) says nothing more: no "done" line, no sound after the cancel.
-    func testT9ACancelledTestReportsNothingFurther() async {
-        final class Slow: TrialBackend, @unchecked Sendable {
-            func record(seconds: Double) async -> [Float]? { try? await Task.sleep(nanoseconds: 300_000_000); return [0.1] }
-            func transcribe(_ id: String, _ audio: [Float]) async throws -> String { "words" }
-            func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) { (0, 1) }
-            func speak(_ id: String, _ sentence: String) async throws -> Double { 1 }
-            func answer(_ id: String, job: String, prompt: String) async throws -> String { "a" }
-            func voiceprint(_ audio: [Float]) async throws -> String { "v" }
-            func search(_ query: String) async throws -> String { "s" }
+    // Review round 4: a cancelled Test (the account left) neither records nor speaks: cancellation is checked before every backend call, and the backend is not called after it.
+    final class Spy: TrialBackend, @unchecked Sendable {
+        let l = NSLock(); var calls: [String] = []; var recordDelay: UInt64 = 0
+        func log(_ s: String) { l.lock(); calls.append(s); l.unlock() }
+        func record(seconds: Double) async -> [Float]? { log("record"); if recordDelay > 0 { try? await Task.sleep(nanoseconds: recordDelay) }; return [0.1] }
+        func transcribe(_ id: String, _ audio: [Float]) async throws -> String { log("transcribe"); return "words" }
+        func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) { log("span"); return (0, 1) }
+        func speak(_ id: String, _ sentence: String) async throws -> Double { log("speak"); return 1 }
+        func answer(_ id: String, job: String, prompt: String) async throws -> String { log("answer"); return "a" }
+        func voiceprint(_ audio: [Float]) async throws -> String { log("voiceprint"); return "v" }
+        func search(_ query: String) async throws -> String { log("search"); return "s" }
+    }
+    func testT9ATestCancelledBeforeItStartsCallsNoBackendAndReportsNothing() async {
+        for job in ["transcriber", "live", "bounds", "voice", "responder", "decision", "speaker", "search"] {
+            let spy = Spy(), k = Sink()
+            let t = Task { try? await Task.sleep(nanoseconds: 100_000_000); await ModelTrial.run(job: job, id: "m", backend: spy, report: { k.put($0, $1, $2) }) }
+            t.cancel(); await t.value
+            XCTAssertEqual(spy.calls, [], "\(job): the microphone, the speaker and the model were not touched after the cancel")
+            XCTAssertEqual(k.states, [], job)
         }
-        let k = Sink()
-        let t = Task { await ModelTrial.run(job: "transcriber", id: "m", backend: Slow(), report: { k.put($0, $1, $2) }) }
-        try? await Task.sleep(nanoseconds: 50_000_000); t.cancel(); await t.value
-        XCTAssertEqual(k.states, ["recording"], "nothing after the cancel: \(k.states)")
+    }
+    func testT9ATestCancelledDuringTheRecordingGoesNoFurther() async {
+        let spy = Spy(); spy.recordDelay = 300_000_000; let k = Sink()
+        let t = Task { await ModelTrial.run(job: "transcriber", id: "m", backend: spy, report: { k.put($0, $1, $2) }) }
+        while !spy.calls.contains("record") { try? await Task.sleep(nanoseconds: 5_000_000) }       // wait for it to be recording, then the account leaves
+        t.cancel(); await t.value
+        XCTAssertEqual(spy.calls, ["record"], "the recording is not transcribed: \(spy.calls)")
+        XCTAssertEqual(k.states, ["recording"])
     }
 }

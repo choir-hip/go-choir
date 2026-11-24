@@ -54,7 +54,8 @@ export const VOICE_NOTE = "The radio uses the iPhone's voice for now. A better v
 /** The tests Exact runs itself (search: the index is shared code); native's are in the facts. */
 const local = new Map<string, ModelTest>();
 /** Sign-out (account.ts WIPES): the test lines belong to the account that ran them. */
-export const forgetModelTests = (): void => { local.clear(); };
+export const forgetModelTests = (): void => { local.clear(); stamps.clear(); };
+const stamps = new Map<string, number>(); let stampN = 0;
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
 function row(f: VoiceFacts, j: OfferJob, o: Option, section: string, blocked: boolean): ModelRow {
@@ -161,10 +162,10 @@ export async function modelsAct(op: string, section: string, id: string, facts: 
   } else if (op === 'test') {
     // The run needs the model itself (it loads it, listens, speaks, answers): native does it and reports through the facts (modelTests).
     if (r.canTest && job === 'search') {                                                       // search is shared code: Exact runs it (retrieval-live.ts)
-      const key = `${job}:${id}`; const t0 = clock.ms; const gen = accountGeneration();
+      const key = `${job}:${id}`; const t0 = clock.ms; const gen = accountGeneration(); const mine = ++stampN; stamps.set(key, mine);
       local.set(key, { key, state: 'working', line: 'Searching your stories on this phone.', ms: 0 });
       let line: string | undefined; try { line = await testSearch('what is in my stories today'); } catch { line = undefined; }
-      if (gen !== accountGeneration()) { local.delete(key); return modelsPage(f, storage); }                         // the account left while it ran: its line is not the next account's
+      if (gen !== accountGeneration()) { if (stamps.get(key) === mine) { local.delete(key); stamps.delete(key); } return modelsPage(f, storage); }       // only this call's own line: the next account's is not ours to erase                         // the account left while it ran: its line is not the next account's
       local.set(key, line === undefined ? { key, state: 'failed', line: 'It did not work on this phone: the search index is not available.', ms: 0 } : { key, state: 'done', line, ms: Math.max(0, clock.ms - t0) });
     } else if (r.canTest) { try { await later?.({ op: 'obModelTest', job, id }); } catch { /* the facts say it did not run */ } }
   }

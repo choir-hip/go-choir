@@ -85,7 +85,33 @@ final class TtsRootTests: XCTestCase {
         XCTAssertFalse(man.files.contains { $0.path.contains("phonon") }); XCTAssertTrue(man.files.contains { $0.path == "pocket-tts/constants.bin" })
         a.pocket.purge?()
         XCTAssertTrue(a.phonon.present(), "a killed Pocket fetch's clean-up leaves Phonon alone")
-        let c = bothInstalled(); _ = c.pocket.retire?()
-        XCTAssertTrue(c.phonon.present())
+        let c = bothInstalled()
+        let old = ModelManifest(pin: "fluidaudio-0.0.1|pocket-tts", files: [.init(path: "pocket-tts/v2/en/model.bin", bytes: 1, sha256: "00")])
+        XCTAssertTrue(ModelManifests.write(old, id: "pocket-tts", root: c.manifests), "an older version's record exists, so retire has something to retire")
+        XCTAssertTrue(c.pocket.retire?() ?? false)
+        XCTAssertTrue(c.phonon.present(), "another version's clean-up of Pocket spares Phonon")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: c.root.appendingPathComponent("pocket-tts/v2").path))
+    }
+
+    // The configurator's delete path (a rejected configuration's models) for the voice models under the TTS root.
+    func testR7TheConfiguratorsDeleteOfPocketSparesPhononAndTheOtherWayRound() async {
+        let b = bothInstalled()
+        let backend = LiveConfigBackend(store: ModelStore(root: tmp(), registerKnown: true, session: nil, door: .open), managedRoot: tmp())
+        let pocket = try! XCTUnwrap(CandidateTable.candidate("pocket-tts", .voice)), phonon = try! XCTUnwrap(CandidateTable.candidate("phonon-31m", .voice))
+        await backend.delete(pocket)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: b.root.appendingPathComponent("pocket-tts/v2").path), "Pocket's own files went")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: b.root.appendingPathComponent("pocket-tts/phonon/phonon-31m-en/model.bin").path), "Phonon's did not")
+        let c = bothInstalled()
+        await backend.delete(phonon)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: c.root.appendingPathComponent("pocket-tts/v2/en/model.bin").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: c.root.appendingPathComponent("pocket-tts/phonon").path))
+    }
+    func testR8WithOnlyPhononInstalledPocketIsNotOnDisk() async {
+        let base = tmp()
+        KnownModels.ttsRootProvider = { base.appendingPathComponent("fluidaudio/Models", isDirectory: true) }
+        write(KnownModels.ttsRoot, "pocket-tts/phonon/phonon-31m-en/model.bin")
+        let backend = LiveConfigBackend(store: ModelStore(root: tmp(), registerKnown: true, session: nil, door: .open), managedRoot: tmp())
+        let onDisk = await backend.isOnDisk(try! XCTUnwrap(CandidateTable.candidate("pocket-tts", .voice)))
+        XCTAssertFalse(onDisk, "Phonon's folder is not Pocket's")
     }
 }

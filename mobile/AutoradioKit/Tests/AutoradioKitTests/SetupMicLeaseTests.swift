@@ -143,4 +143,14 @@ final class SetupMicLeaseTests: XCTestCase {
         XCTAssertTrue(held, "the overtaken recording's end did not give the newer take's microphone back: \(r.all)")
         XCTAssertEqual(r.all.filter { $0 == "restore" }.count, 0, "hands-free was not restored under the newer take")
     }
+
+    // L11 (review round 4): a recording asked for by a Test that is already cancelled (the account left) asks for no permission, opens no engine and no microphone.
+    func testL11ACancelledRecordingOpensNothing() async {
+        let r = Rec(); let l = make(r)
+        let t = Task { () -> [Float]? in try? await Task.sleep(nanoseconds: 100_000_000); return await l.record(seconds: 5) }
+        t.cancel()
+        let got = await t.value
+        XCTAssertNil(got)
+        XCTAssertFalse(r.all.contains("ask") || r.all.contains("engine") || r.all.contains("mic:on") || r.all.contains("tap:set"), "nothing was opened: \(r.all)")
+    }
 }

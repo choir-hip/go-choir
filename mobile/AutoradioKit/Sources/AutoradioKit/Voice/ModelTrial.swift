@@ -19,7 +19,8 @@ public protocol TrialBackend: Sendable {
     func search(_ query: String) async throws -> String
 }
 
-/// The Test button of Settings > Voice and models: one run of one model, reported as it goes (`report(state, line, ms)`; state is recording | working | done | failed). Every path ends in done or failed.
+/// The Test button of Settings > Voice and models: one run of one model, reported as it goes (`report(state, line, ms)`; state is recording | working | done | failed). Every path ends in done or failed, except a CANCELLED run (the account left): it
+/// stops at once and says nothing, and touches neither the microphone nor the speaker nor a model after the cancel (every backend call is behind `live`).
 public enum ModelTrial {
     public static let prompt = "What is the capital of France? Answer in one short sentence."
     public static let searchQuery = "what is in my stories today"
@@ -29,6 +30,8 @@ public enum ModelTrial {
     public static func run(job: String, id: String, backend b: TrialBackend, report rawReport: Report) async {
         // A cancelled test (the account left) says nothing more.
         func report(_ state: String, _ line: String, _ ms: Double) { if !Task.isCancelled { rawReport(state, line, ms) } }
+        var live: Bool { !Task.isCancelled }
+        guard live else { return }
         func ms(_ since: DispatchTime) -> Double { Double(DispatchTime.now().uptimeNanoseconds - since.uptimeNanoseconds) / 1e6 }
         func s1(_ x: Double) -> String { String(format: "%.1f", x) }
         func failed(_ why: String) { report("failed", why, 0) }
@@ -36,7 +39,8 @@ public enum ModelTrial {
         switch job {
         case "transcriber", "live":
             report("recording", "Say something now. Recording for 5 seconds.", 0)
-            guard let audio = await b.record(seconds: 5) else { return failed("The microphone is not available. Allow it in Settings and try again.") }
+            guard live, let audio = await b.record(seconds: 5) else { return live ? failed("The microphone is not available. Allow it in Settings and try again.") : () }
+            guard live else { return }
             report("working", "Listening to what you said.", 0)
             let t0 = DispatchTime.now()
             do {
@@ -45,7 +49,8 @@ public enum ModelTrial {
             } catch { broke(error) }
         case "bounds":
             report("recording", "Say a sentence, then stop. Recording for 5 seconds.", 0)
-            guard let audio = await b.record(seconds: 5) else { return failed("The microphone is not available. Allow it in Settings and try again.") }
+            guard live, let audio = await b.record(seconds: 5) else { return live ? failed("The microphone is not available. Allow it in Settings and try again.") : () }
+            guard live else { return }
             report("working", "Looking for where you spoke.", 0)
             let t0 = DispatchTime.now()
             do {
@@ -56,6 +61,7 @@ public enum ModelTrial {
             } catch { broke(error) }
         case "voice":
             report("working", "Speaking.", 0)
+            guard live else { return }
             do { let first = try await b.speak(id, sentence); report("done", "It spoke a sentence. First sound after \(Int(first)) ms.", first) } catch { broke(error) }
         case "responder", "decision":
             report("working", "Asking: \(prompt)", 0)
@@ -67,7 +73,8 @@ public enum ModelTrial {
             } catch { broke(error) }
         case "speaker":
             report("recording", "Say a sentence. Recording for 4 seconds.", 0)
-            guard let audio = await b.record(seconds: 4) else { return failed("The microphone is not available. Allow it in Settings and try again.") }
+            guard live, let audio = await b.record(seconds: 4) else { return live ? failed("The microphone is not available. Allow it in Settings and try again.") : () }
+            guard live else { return }
             report("working", "Checking your voice.", 0)
             let t0 = DispatchTime.now()
             do { report("done", try await b.voiceprint(audio), ms(t0)) } catch { broke(error) }
