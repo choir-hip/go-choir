@@ -44,7 +44,7 @@ Podcast search and the charts go from your phone to Apple's podcast services, no
 
 ### Takes
 
-A take is a short recording of your voice, up to 60 seconds. It is uploaded only when you press Publish. After that it is offered to other Autoradio listeners. You can delete it at any time. A take that contains music or another person's recording will be removed. The microphone is asked for only when you turn on a take.
+A take is a short recording of your voice, up to 60 seconds. It is uploaded only when you press Publish. After that it is offered to other Autoradio listeners. You can delete it at any time. A take that contains music or another person's recording will be removed. The microphone is asked for when you set up voice, turn on Voice, or record a take (section 7).
 
 ### Logs
 
@@ -102,7 +102,7 @@ These are the categories, and the providers in our code on 2026-11-24.
 
 You agree to this when you create an account: the create-account screen says it above the button, with a link to this policy. Listening to the paper needs no account and sends none of your content to a model. If you no longer agree, ask us to delete your account (section 9).
 
-We do not sell your data. We do not share it for advertising. Apart from the YouTube player below, we share it only with the providers above, to run the product, and where the law requires it. Some pages on choir.news that show a source show a video player from YouTube; when you open such a page, YouTube receives your IP address and may set its own cookies.
+We do not sell your data. We do not share it for advertising. Apart from YouTube, as follows, we share it only with the providers above, to run the product, and where the law requires it. Some pages on choir.news that show a source show a video player from YouTube; when you open such a page, YouTube receives your IP address and may set its own cookies.
 
 ## 6. AI-written content and its sources
 
@@ -120,7 +120,7 @@ Plainly:
 - The text of your request goes to your computer and to the AI models in section 5, as described in section 2.
 - Your computer writes the text of your request and the answer on its event log. The log is kept for the life of the computer (see section 8).
 - The app keeps a short record of your recent voice turns on your phone, without the sound, as described in section 3.
-- The app asks for the microphone and speech recognition permission when you set up voice (the first-run hearing check or learning your voice), turn on Voice, or record a take. If you say no, the radio, paper, reader and podcasts still work.
+- The app asks for the microphone and speech recognition permission when you set up voice (the first-run microphone check or learning your voice), turn on Voice, or record a take. If you say no, the radio, paper, reader and podcasts still work.
 
 The app downloads voice and language model files to your phone. They are data files, not programs. The app downloads them only after you agree, and it shows the size first. The files come from Hugging Face today.
 
@@ -128,7 +128,7 @@ The app downloads voice and language model files to your phone. They are data fi
 
 - Email address and passkey public key: until your account is deleted (section 9).
 - Sign-in sessions: until they expire (up to 30 days for the refresh session) or you sign out.
-- Email codes (the code we mail to create an account, and email sign-in on choir.news): codes expire in 10 minutes, and the attempt records are removed after 24 hours. Recovery links expire in 15 minutes; the record of each link, with your email address, stays in the sign-in database until your account is deleted.
+- Email codes (the code we mail to create an account, and email sign-in on choir.news): codes expire in 10 minutes, and the attempt records are removed after 24 hours. Recovery links expire in 15 minutes. The record of each link, with the email address it was sent to, stays in the sign-in database; we do not yet delete these records on a schedule.
 - Your computer's working data (documents, files, mail, notes, play history): until your account is deleted.
 - The event log of your computer, including the text of your requests and answers: for the life of the computer. It is sealed under a key that belongs to the computer. We do not edit it. It is removed when your computer is destroyed, as in section 9.
 - Server logs (our host's request, service and sign-in logs): deleted after 21 days by a daily job. If the disk is nearly full they can be deleted sooner; if the job fails or the server is off for some days, later. A person's own computer and the logs on it follow the computer (above).
