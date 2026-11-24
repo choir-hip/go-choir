@@ -243,7 +243,7 @@ func (h *Handler) HandleAppRegisterFinish(w http.ResponseWriter, r *http.Request
 	}
 	key, err := h.mintAppKey(r.Context(), user, app)
 	if errors.Is(err, ErrDeletionPending) {
-		writeDeletionPending(w)
+		writeDeletionState(w, h.store, user.ID)
 		return
 	}
 	if err != nil {

@@ -466,23 +466,23 @@ func TestPendingAccountSignInOffersCancelOnly(t *testing.T) {
 	}
 }
 
-// A failed restore keeps the record and the offer.
-func TestCancelWithFailedRestoreKeepsTheRecord(t *testing.T) {
+// A failed restore does not undo the cancel: the person is signed in, the
+// record is a tombstone that answers as no record, and the runner (not the
+// handler) serves the takes again on its next pass.
+func TestCancelWithFailedRestoreStillCancelsAndLeavesATombstone(t *testing.T) {
 	e := newDelEnv(t, "u7b")
 	deleteAccount(t, e)
 	var offer deletionOffer
 	_ = json.Unmarshal(e.passkeySignIn(t).Body.Bytes(), &offer)
 	e.h.SetDeletionHost(&failingRestoreHost{})
 	body, _ := json.Marshal(cancelRequest{CancelToken: offer.CancelToken})
-	if rec := e.call(e.h.HandleDeleteCancel, "/auth/account/delete/cancel", body, nil, ""); rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("failed restore: %d %s", rec.Code, rec.Body)
-	}
-	if d, _ := e.h.store.AccountDeletionFor(e.user.ID); d == nil {
-		t.Fatal("the record was cancelled though the restore failed")
-	}
-	e.h.SetDeletionHost(e.host)
 	if rec := e.call(e.h.HandleDeleteCancel, "/auth/account/delete/cancel", body, nil, ""); rec.Code != http.StatusOK {
-		t.Fatalf("retry: %d %s", rec.Code, rec.Body)
+		t.Fatalf("a failed restore must not fail the cancel: %d %s", rec.Code, rec.Body)
+	}
+	e.noRecord(t)
+	open, _ := e.h.store.OpenAccountDeletions(0)
+	if len(open) != 1 || open[0].State != DeletionCancelled {
+		t.Fatalf("the runner has no tombstone to finish: %+v", open)
 	}
 }
 

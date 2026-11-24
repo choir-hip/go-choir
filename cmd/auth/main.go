@@ -75,6 +75,13 @@ func main() {
 	// every minute; a boot only closes an attempt a crash left open.
 	purge := accountpurge.New(store, accountpurge.NewHost(cfg.VMCTLURL, cfg.CorpusdURL, cfg.MaildURL, cfg.GatewayURL))
 	handler.SetDeletionHost(purge)
+	// The reviewer account (lane demo-account) may not be deleted by anyone:
+	// when that lane lands, its Handler.IsDemoAccount goes here, as
+	//
+	//	handler.SetDeletionRefuser(handler.IsDemoAccount)
+	//
+	// (TestTheReviewerAccountCannotBeDeleted proves the hook; nothing refuses
+	// until it is set.)
 	purge.Start(context.Background())
 	handler.StartDeviceSweeper(context.Background(), 0)
 

@@ -3,12 +3,15 @@
 // record, and the record is at least GracePeriod old.
 //
 // The auth service owns the record (table account_deletions in auth.db) and
-// the runner that executes a purge. The same rule is read by the services
-// that hold the data (vmctl reads the table read-only; corpusd and maild
-// receive the record's times in the request and apply CheckClaim), so a
-// destructive call that names no old enough record is refused where the data
-// lives, not only where the call is made. The package imports nothing from
-// the repo so every service can take it.
+// the runner that executes a purge. The same rule is applied where the data
+// lives, in two strengths. vmctl and the retention sweeper read the table
+// itself (read-only), so they refuse whatever a caller says. corpusd, maild
+// and the gateway cannot open auth.db: they are handed the record's request
+// time by the host-internal caller and apply CheckClaim to it, so for them the
+// boundary is the host-only route and a caller that names an old enough time;
+// a caller on the host that lies about the time is not caught there (a signed,
+// single-use capability would close it). The package imports nothing from the
+// repo so every service can take it.
 package purgeguard
 
 import (
@@ -55,7 +58,9 @@ func Eligible(db *sql.DB, userID string, now time.Time) error {
 		return ErrNoRecord
 	}
 	var requested time.Time
-	err := db.QueryRow(`SELECT requested_at FROM `+Table+` WHERE user_id = ?`, userID).Scan(&requested)
+	// A cancelled record (the tombstone a cancel leaves until the takes are
+	// served again) is no record: it never makes a purge eligible.
+	err := db.QueryRow(`SELECT requested_at FROM `+Table+` WHERE user_id = ? AND state IN ('pending', 'purging')`, userID).Scan(&requested)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNoRecord
 	}
@@ -70,13 +75,40 @@ func Eligible(db *sql.DB, userID string, now time.Time) error {
 	return CheckClaim(requested, now)
 }
 
+// PendingUsers is the set of accounts that have a live deletion record
+// (pending or purging). Another destroyer of an account's data, such as the
+// retention sweeper, asks it and keeps what it names: nothing destroys a
+// pending account's data before the purge. A table that does not exist is an
+// empty set; any other failure is returned and the caller fails closed.
+func PendingUsers(db *sql.DB) (map[string]bool, error) {
+	rows, err := db.Query(`SELECT user_id FROM ` + Table + ` WHERE state IN ('pending', 'purging')`)
+	if err != nil {
+		if strings.Contains(err.Error(), "no such table") {
+			return map[string]bool{}, nil
+		}
+		return nil, fmt.Errorf("purgeguard: read deletion records: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[strings.TrimSpace(id)] = true
+	}
+	return out, rows.Err()
+}
+
 // OpenReadOnly opens auth.db at path for reading only.
 func OpenReadOnly(path string) (*sql.DB, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, errors.New("purgeguard: no auth db path configured")
 	}
-	return sql.Open("sqlite", "file:"+path+"?mode=ro")
+	// A busy timeout: the auth service writes the same file, and a reader that
+	// meets a writer waits a moment instead of failing the destroy it guards.
+	return sql.Open("sqlite", "file:"+path+"?mode=ro&_pragma=busy_timeout(5000)")
 }
 
 // Protected computer classes: a computer in one of them is never deleted by

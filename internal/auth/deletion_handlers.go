@@ -74,8 +74,32 @@ func (h *Handler) SetDeletionHost(host DeletionHost) { h.deletionHost = host }
 // ErrDeletionRefused is a Precheck refusal the person is told about.
 var ErrDeletionRefused = errors.New("this account cannot be deleted here")
 
+// SetDeletionRefuser names the accounts a person may not delete (the reviewer
+// account: the reviewer-account lane passes Handler.IsDemoAccount here, in
+// cmd/auth). nil refuses nothing.
+func (h *Handler) SetDeletionRefuser(f func(userID string) bool) { h.deletionRefuser = f }
+
+func (h *Handler) deletionRefused(userID string) bool {
+	return h.deletionRefuser != nil && h.deletionRefuser(userID)
+}
+
 func writeDeletionPending(w http.ResponseWriter) {
 	writeJSON(w, http.StatusForbidden, deletionPendingResponse{Error: "account_deletion_pending"})
+}
+
+// writeDeletionPurging answers a sign-in or a registration of an account whose
+// purge has begun: nothing can be cancelled and nothing is offered.
+func writeDeletionPurging(w http.ResponseWriter) {
+	writeJSON(w, http.StatusForbidden, deletionPendingResponse{Error: "account_deletion_purging"})
+}
+
+// writeDeletionState answers with the state the account is really in.
+func writeDeletionState(w http.ResponseWriter, store *Store, userID string) {
+	if d, err := store.AccountDeletionFor(userID); err == nil && d != nil && d.State == DeletionPurging {
+		writeDeletionPurging(w)
+		return
+	}
+	writeDeletionPending(w)
 }
 
 type deletionPendingResponse struct {
@@ -103,8 +127,9 @@ func (h *Handler) offerDeletionCancel(w http.ResponseWriter, userID string) bool
 		return false
 	}
 	if d.State != DeletionPending {
-		// The purge has begun; there is nothing to cancel and no session.
-		writeDeletionPending(w)
+		// The purge has begun; there is nothing to cancel and no session, and
+		// the person is told so (never offered a cancel that cannot work).
+		writeDeletionPurging(w)
 		return true
 	}
 	token, err := h.store.OfferDeletionCancel(userID, time.Now().UTC())
@@ -144,6 +169,11 @@ func (h *Handler) HandleDeleteBegin(w http.ResponseWriter, r *http.Request) {
 	}
 	user := h.deletionCaller(w, r)
 	if user == nil {
+		return
+	}
+	if h.deletionRefused(user.ID) {
+		log.Printf("[auth] operation=delete_begin user_id=%s result=refused reason=reviewer_account", user.ID)
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: ErrDeletionRefused.Error()})
 		return
 	}
 	if h.deletionHost != nil {
@@ -209,6 +239,11 @@ func (h *Handler) HandleDeleteFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	caller := h.deletionCaller(w, r)
 	if caller == nil {
+		return
+	}
+	if h.deletionRefused(caller.ID) {
+		log.Printf("[auth] operation=delete_finish user_id=%s result=refused reason=reviewer_account", caller.ID)
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: ErrDeletionRefused.Error()})
 		return
 	}
 	body, err := readBody(r)
@@ -318,35 +353,50 @@ func (h *Handler) HandleDeleteCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
+	// Validate everything that can refuse before anything is cancelled: a
+	// refused request must leave the deletion and the offer as they were.
+	if req.App != "" && !appids.Known(req.App) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "unknown app"})
+		return
+	}
 	peek, err := h.store.PeekCancelOffer(req.CancelToken, now)
 	switch {
 	case errors.Is(err, ErrDeletionNotCancellable):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "the deletion has begun and cannot be cancelled"})
 		return
-	case err != nil:
+	case err != nil || peek == nil:
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "the cancel offer is invalid or expired; sign in again"})
 		return
 	}
-	// Takes are served again before the record goes: if the platform is
-	// unreachable the record stays and the offer is still good.
-	if h.deletionHost != nil {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 20*time.Second)
-		err := h.deletionHost.Restore(ctx, peek.UserID)
-		cancel()
-		if err != nil {
-			log.Printf("[auth] operation=delete_cancel user_id=%s result=restore_failed error=%q", peek.UserID, err)
-			writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "could not restore the account just now; try again in a minute"})
-			return
-		}
-	}
+	// The cancel is the one durable act and comes first: it leaves a tombstone
+	// the runner finishes. The takes are served again after it, never before,
+	// so a pass that was holding them back cannot undo the restore (it finds
+	// the tombstone and restores them itself).
 	d, err := h.store.CancelAccountDeletion(req.CancelToken, now)
 	switch {
 	case errors.Is(err, ErrDeletionNotCancellable):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "the deletion has begun and cannot be cancelled"})
 		return
-	case err != nil:
+	case err != nil || d == nil:
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "the cancel offer is invalid or expired; sign in again"})
 		return
+	}
+	restored := true
+	if h.deletionHost != nil {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 20*time.Second)
+		err := h.deletionHost.Restore(ctx, d.UserID)
+		cancel()
+		if err != nil {
+			// Not fatal: the tombstone stays and the runner serves the takes
+			// again on its next pass. The person is signed in either way.
+			log.Printf("[auth] operation=delete_cancel user_id=%s job_id=%s result=restore_deferred error=%q", d.UserID, d.JobID, err)
+			restored = false
+		}
+	}
+	if restored {
+		if err := h.store.FinishCancelledDeletion(d.UserID); err != nil {
+			log.Printf("[auth] operation=delete_cancel user_id=%s job_id=%s result=warning step=finish_tombstone error=%q", d.UserID, d.JobID, err)
+		}
 	}
 	user, err := h.store.GetUserByID(d.UserID)
 	if err != nil {
@@ -354,10 +404,6 @@ func (h *Handler) HandleDeleteCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.App != "" {
-		if !appids.Known(req.App) {
-			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "unknown app"})
-			return
-		}
 		key, err := h.mintAppKey(r.Context(), user, req.App)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create the key"})

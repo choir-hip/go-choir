@@ -476,7 +476,7 @@ func (h *Handler) HandleEmailVerify(w http.ResponseWriter, r *http.Request) {
 
 	info, ierr := h.signInSession(w, r, user, method)
 	if errors.Is(ierr, ErrDeletionPending) {
-		writeDeletionPending(w)
+		writeDeletionState(w, h.store, user.ID)
 		return
 	}
 	if ierr != nil {

@@ -83,6 +83,11 @@ type Handler struct {
 	// (stop the computer, suspend takes, refuse a protected account). nil in
 	// tests that do not exercise it.
 	deletionHost DeletionHost
+
+	// deletionRefuser names an account that may never be deleted by a person
+	// (the reviewer account: the reviewer-account lane fills it with
+	// IsDemoAccount). nil refuses nothing.
+	deletionRefuser func(userID string) bool
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -780,7 +785,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	// Issue cookie-backed auth state.
 	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
 	if errors.Is(err, ErrDeletionPending) {
-		writeDeletionPending(w)
+		writeDeletionState(w, h.store, user.ID)
 		return
 	}
 	if err != nil {
@@ -853,6 +858,15 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "user not found"})
 			return nil, nil, false
 		}
+		// An account that asked to be deleted takes no new passkey, by any route
+		// (registration, recovery, the phone's ceremony): a passkey added during
+		// the 72 hours could cancel the deletion. Refused before anything is
+		// written; the store refuses again in the insert itself.
+		if h.store.AccountAccessRevoked(user.ID) {
+			log.Printf("[auth] operation=register_finish user_id=%s result=refused reason=deletion_pending", user.ID)
+			writeDeletionState(w, h.store, user.ID)
+			return nil, nil, false
+		}
 		// Fail closed: an unreadable account is not an account with no passkeys.
 		creds, err = h.store.GetCredentialsByUserID(user.ID)
 		if err != nil {
@@ -916,6 +930,10 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, body []byte) (*User,
 			return nil, nil, false
 		}
 	} else if err := h.store.AddRecoveryCredential(dbCred); err != nil {
+		if errors.Is(err, ErrDeletionPending) {
+			writeDeletionState(w, h.store, user.ID)
+			return nil, nil, false
+		}
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=store_credential error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to store credential"})
 		return nil, nil, false
@@ -1241,6 +1259,13 @@ func (h *Handler) HandleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// An account that asked to be deleted is signed out from that moment, not
+	// when the access token it holds runs out.
+	if h.store.AccountAccessRevoked(userID) {
+		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+		return
+	}
+
 	// Look up the user to return non-secret info.
 	user, err := h.store.GetUserByID(userID)
 	if err != nil {
@@ -1282,7 +1307,7 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if this token was recently rotated within the grace window (e.g. concurrent request).
-	if grace, ok := h.getRotatedGrace(hashHex); ok {
+	if grace, ok := h.getRotatedGrace(hashHex); ok && !h.store.AccountAccessRevoked(grace.user.ID) {
 		log.Printf("[auth] operation=session_refresh user_id=%s result=success step=grace_window_hit", grace.user.ID)
 		h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
 		writeJSON(w, http.StatusOK, sessionResponse{
@@ -1299,7 +1324,7 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	rs, user, err := h.validateRefreshCookie(r)
 	if err != nil {
 		// Check grace window once more in case of a race where another concurrent request rotated it while validating.
-		if grace, ok := h.getRotatedGrace(hashHex); ok {
+		if grace, ok := h.getRotatedGrace(hashHex); ok && !h.store.AccountAccessRevoked(grace.user.ID) {
 			log.Printf("[auth] operation=session_refresh user_id=%s result=success step=grace_window_race_hit", grace.user.ID)
 			h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
 			writeJSON(w, http.StatusOK, sessionResponse{
@@ -1638,7 +1663,7 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 	}
 	userState, err := h.issueSessionExpiring(w, r, user, exchange.AuthMethod, exchange.NotAfter)
 	if errors.Is(err, ErrDeletionPending) {
-		writeDeletionPending(w)
+		writeDeletionState(w, h.store, user.ID)
 		return
 	}
 	if err != nil {

@@ -11,13 +11,16 @@ package auth
 // cancel path and nothing else; the purge itself (internal/accountpurge) is a
 // loop that re-reads this table, never a memory of a boot.
 //
-// States: pending (access revoked, nothing destroyed, cancellable) and
-// purging (the destructive steps have begun; cancel is refused). The row and
-// the account's user row go in one transaction at the end, which also writes
-// the receipt.
+// States: pending (access revoked, nothing destroyed, cancellable), purging
+// (the destructive steps have begun; cancel is refused) and cancelled. A
+// cancel does not delete the row: it leaves this tombstone, which answers as
+// no record to every check (AccountDeletionFor, AccountAccessRevoked,
+// purgeguard) and tells the runner that the account's takes must be served
+// again; the runner deletes the row once they are. The row and the account's
+// user row go in one transaction at the end of a purge, which also writes the
+// receipt.
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -38,10 +41,11 @@ const deletionSchemaDDL = `
 CREATE TABLE IF NOT EXISTS account_deletions (
 	user_id              TEXT PRIMARY KEY,
 	job_id               TEXT NOT NULL UNIQUE,
-	state                TEXT NOT NULL CHECK(state IN ('pending', 'purging')),
+	state                TEXT NOT NULL CHECK(state IN ('pending', 'purging', 'cancelled')),
 	requested_at         DATETIME NOT NULL,
 	purge_after          DATETIME NOT NULL,
 	computers            TEXT NOT NULL DEFAULT '[]',
+	vm_ids               TEXT NOT NULL DEFAULT '[]',
 	steps                TEXT NOT NULL DEFAULT '{}',
 	cancel_token_hash    TEXT NOT NULL DEFAULT '',
 	cancel_token_expires DATETIME,
@@ -78,9 +82,13 @@ CREATE TABLE IF NOT EXISTS account_deletion_receipts (
 
 // Deletion states.
 const (
-	DeletionPending = "pending"
-	DeletionPurging = "purging"
+	DeletionPending   = "pending"
+	DeletionPurging   = "purging"
+	DeletionCancelled = "cancelled"
 )
+
+// liveDeletion is the SQL for a record that counts: pending or purging.
+const liveDeletion = "state IN ('pending', 'purging')"
 
 // Errors of the deletion store.
 var (
@@ -108,6 +116,9 @@ type AccountDeletion struct {
 	RequestedAt  time.Time
 	PurgeAfter   time.Time
 	Computers    []string
+	// VMIDs are the VM ids of those computers: the gateway keys a credential by
+	// the VM it authenticates, not by the product computer.
+	VMIDs        []string
 	Steps        map[string]DeletionStep
 	AttemptStart *time.Time
 	Attempts     int
@@ -138,17 +149,20 @@ func (s *Store) migrateDeletion() error {
 	return nil
 }
 
-const deletionColumns = `user_id, job_id, state, requested_at, purge_after, computers, steps, attempt_started_at, attempts, last_error, updated_at`
+const deletionColumns = `user_id, job_id, state, requested_at, purge_after, computers, vm_ids, steps, attempt_started_at, attempts, last_error, updated_at`
 
 func scanDeletion(row interface{ Scan(...any) error }) (*AccountDeletion, error) {
 	d := &AccountDeletion{}
-	var computers, steps string
+	var computers, vmIDs, steps string
 	var attempt sql.NullTime
-	if err := row.Scan(&d.UserID, &d.JobID, &d.State, &d.RequestedAt, &d.PurgeAfter, &computers, &steps, &attempt, &d.Attempts, &d.LastError, &d.UpdatedAt); err != nil {
+	if err := row.Scan(&d.UserID, &d.JobID, &d.State, &d.RequestedAt, &d.PurgeAfter, &computers, &vmIDs, &steps, &attempt, &d.Attempts, &d.LastError, &d.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(computers), &d.Computers); err != nil {
 		return nil, fmt.Errorf("deletion computers: %w", err)
+	}
+	if err := json.Unmarshal([]byte(vmIDs), &d.VMIDs); err != nil {
+		return nil, fmt.Errorf("deletion vm ids: %w", err)
 	}
 	d.Steps = map[string]DeletionStep{}
 	if err := json.Unmarshal([]byte(steps), &d.Steps); err != nil {
@@ -161,9 +175,10 @@ func scanDeletion(row interface{ Scan(...any) error }) (*AccountDeletion, error)
 	return d, nil
 }
 
-// AccountDeletionFor returns the account's deletion record, or nil.
+// AccountDeletionFor returns the account's live deletion record (pending or
+// purging), or nil. A cancelled tombstone is no record.
 func (s *Store) AccountDeletionFor(userID string) (*AccountDeletion, error) {
-	d, err := scanDeletion(s.db.QueryRow(`SELECT `+deletionColumns+` FROM account_deletions WHERE user_id = ?`, userID))
+	d, err := scanDeletion(s.db.QueryRow(`SELECT `+deletionColumns+` FROM account_deletions WHERE user_id = ? AND `+liveDeletion, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -178,7 +193,7 @@ func (s *Store) AccountAccessRevoked(userID string) bool {
 		return false
 	}
 	var n int
-	if err := s.db.QueryRow(`SELECT 1 FROM account_deletions WHERE user_id = ?`, userID).Scan(&n); err != nil {
+	if err := s.db.QueryRow(`SELECT 1 FROM account_deletions WHERE user_id = ? AND `+liveDeletion, userID).Scan(&n); err != nil {
 		return !errors.Is(err, sql.ErrNoRows)
 	}
 	return true
@@ -205,19 +220,38 @@ func (s *Store) RequestAccountDeletion(userID string, now time.Time) (*AccountDe
 	if err := tx.QueryRow(`SELECT 1 FROM users WHERE id = ?`, userID).Scan(&exists); err != nil {
 		return nil, false, fmt.Errorf("auth: deletion: user: %w", err)
 	}
-	if d, err := scanDeletion(tx.QueryRow(`SELECT `+deletionColumns+` FROM account_deletions WHERE user_id = ?`, userID)); err == nil {
+	if d, err := scanDeletion(tx.QueryRow(`SELECT `+deletionColumns+` FROM account_deletions WHERE user_id = ? AND `+liveDeletion, userID)); err == nil {
 		return d, false, nil
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, false, err
 	}
+	// A tombstone of an earlier cancel is replaced: the new request is the
+	// account's only record, and it suspends the takes itself.
+	if _, err := tx.Exec(`DELETE FROM account_deletions WHERE user_id = ? AND state = ?`, userID, DeletionCancelled); err != nil {
+		return nil, false, fmt.Errorf("auth: deletion: replace tombstone: %w", err)
+	}
 	d := &AccountDeletion{
 		UserID: userID, JobID: "del-" + uuid.NewString(), State: DeletionPending,
 		RequestedAt: now, PurgeAfter: now.Add(purgeguard.GracePeriod),
-		Computers: []string{}, Steps: map[string]DeletionStep{}, UpdatedAt: now,
+		Computers: []string{}, VMIDs: []string{}, Steps: map[string]DeletionStep{}, UpdatedAt: now,
 	}
 	if _, err := tx.Exec(`INSERT INTO account_deletions (user_id, job_id, state, requested_at, purge_after, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		d.UserID, d.JobID, d.State, d.RequestedAt, d.PurgeAfter, d.UpdatedAt); err != nil {
 		return nil, false, fmt.Errorf("auth: deletion: insert: %w", err)
+	}
+	// The browsers' account switchers: remember which sets the account was in,
+	// so the set's active account is repaired after the membership goes.
+	var sets []string
+	if rows, err := tx.Query(`SELECT set_id FROM account_set_member WHERE user_id = ?`, userID); err != nil {
+		return nil, false, fmt.Errorf("auth: deletion: sets: %w", err)
+	} else {
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err == nil {
+				sets = append(sets, id)
+			}
+		}
+		_ = rows.Close()
 	}
 	for _, stmt := range []string{
 		`DELETE FROM refresh_sessions WHERE user_id = ?`,
@@ -235,6 +269,11 @@ func (s *Store) RequestAccountDeletion(userID string, now time.Time) (*AccountDe
 	}
 	if _, err := tx.Exec(`UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, now, userID); err != nil {
 		return nil, false, fmt.Errorf("auth: deletion: revoke keys: %w", err)
+	}
+	for _, setID := range sets {
+		if err := repairSetTx(tx, setID); err != nil {
+			return nil, false, fmt.Errorf("auth: deletion: repair account set: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, false, err
@@ -280,15 +319,17 @@ func hashCancelToken(token string) string {
 }
 
 // OfferDeletionCancel stores a one-use cancel token for a pending deletion
-// and returns it. Only a successful passkey assertion may call it.
+// and returns it. Only a successful passkey assertion may call it, and only
+// before the purge time: the app says "after 72 hours it cannot be undone",
+// and the offer, the peek and the cancel each check it.
 func (s *Store) OfferDeletionCancel(userID string, now time.Time) (token string, err error) {
 	buf := make([]byte, 24)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
 	token = base64.RawURLEncoding.EncodeToString(buf)
-	res, err := s.db.Exec(`UPDATE account_deletions SET cancel_token_hash = ?, cancel_token_expires = ?, updated_at = ? WHERE user_id = ? AND state = ?`,
-		hashCancelToken(token), now.UTC().Add(DeletionCancelTokenTTL), now.UTC(), userID, DeletionPending)
+	res, err := s.db.Exec(`UPDATE account_deletions SET cancel_token_hash = ?, cancel_token_expires = ?, updated_at = ? WHERE user_id = ? AND state = ? AND purge_after > ?`,
+		hashCancelToken(token), now.UTC().Add(DeletionCancelTokenTTL), now.UTC(), userID, DeletionPending, now.UTC())
 	if err != nil {
 		return "", err
 	}
@@ -298,18 +339,18 @@ func (s *Store) OfferDeletionCancel(userID string, now time.Time) (token string,
 	return token, nil
 }
 
-// PeekCancelOffer checks a cancel token without consuming it and returns the
-// pending record it belongs to. The cancel handler restores the account's
-// takes between the peek and the cancel, so a failed restore leaves the
-// record, and the person can try again, instead of a cancelled record with
-// takes still held back.
-func (s *Store) PeekCancelOffer(token string, now time.Time) (*AccountDeletion, error) {
+// cancellableByToken reads the pending record a token belongs to and applies
+// the three rules of a cancel: the token is unexpired, the record is pending,
+// and the purge time has not come.
+func cancellableByToken(q interface {
+	QueryRow(string, ...any) *sql.Row
+}, token string, now time.Time) (*AccountDeletion, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, ErrNoDeletion
 	}
 	var exp sql.NullTime
 	var userID, state string
-	err := s.db.QueryRow(`SELECT user_id, state, cancel_token_expires FROM account_deletions WHERE cancel_token_hash = ? AND cancel_token_hash != ''`, hashCancelToken(token)).
+	err := q.QueryRow(`SELECT user_id, state, cancel_token_expires FROM account_deletions WHERE cancel_token_hash = ? AND cancel_token_hash != '' AND `+liveDeletion, hashCancelToken(token)).
 		Scan(&userID, &state, &exp)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoDeletion
@@ -323,44 +364,51 @@ func (s *Store) PeekCancelOffer(token string, now time.Time) (*AccountDeletion, 
 	if state != DeletionPending {
 		return nil, ErrDeletionNotCancellable
 	}
-	return s.AccountDeletionFor(userID)
+	d, err := scanDeletion(q.QueryRow(`SELECT `+deletionColumns+` FROM account_deletions WHERE user_id = ? AND `+liveDeletion, userID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNoDeletion // a concurrent cancel took it
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !now.UTC().Before(d.PurgeAfter) {
+		return nil, ErrDeletionNotCancellable
+	}
+	return d, nil
 }
 
-// CancelAccountDeletion consumes a cancel token and removes the pending
-// record. Nothing was purged, so nothing is restored here: the account's
-// passkeys and rows are as they were; its sessions and keys stay revoked and
-// the caller signs in again. It returns the user id.
+// PeekCancelOffer checks a cancel token without consuming it and returns the
+// pending record it belongs to; never (nil, nil).
+func (s *Store) PeekCancelOffer(token string, now time.Time) (*AccountDeletion, error) {
+	return cancellableByToken(s.db, token, now)
+}
+
+// CancelAccountDeletion consumes a cancel token. It does not delete the
+// record: it moves it to cancelled, a tombstone that answers as no record
+// everywhere (the account is signed in again at once) and that the purge
+// runner finishes by serving the account's takes again and then deleting the
+// row (FinishCancelledDeletion). A pass that was holding the takes back when
+// the cancel landed therefore always finds the tombstone and undoes itself.
+// Nothing was purged, so nothing else is restored: the account's sessions and
+// keys stay revoked and the caller signs in again. It returns the record as
+// it was.
 func (s *Store) CancelAccountDeletion(token string, now time.Time) (*AccountDeletion, error) {
-	if strings.TrimSpace(token) == "" {
-		return nil, ErrNoDeletion
-	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var exp sql.NullTime
-	var userID, state string
-	err = tx.QueryRow(`SELECT user_id, state, cancel_token_expires FROM account_deletions WHERE cancel_token_hash = ? AND cancel_token_hash != ''`, hashCancelToken(token)).
-		Scan(&userID, &state, &exp)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNoDeletion
-	}
+	d, err := cancellableByToken(tx, token, now)
 	if err != nil {
 		return nil, err
 	}
-	if !exp.Valid || now.UTC().After(exp.Time) {
-		return nil, ErrNoDeletion
-	}
-	if state != DeletionPending {
-		return nil, ErrDeletionNotCancellable
-	}
-	d, err := scanDeletion(tx.QueryRow(`SELECT `+deletionColumns+` FROM account_deletions WHERE user_id = ?`, userID))
+	res, err := tx.Exec(`UPDATE account_deletions SET state = ?, cancel_token_hash = '', cancel_token_expires = NULL, updated_at = ? WHERE user_id = ? AND state = ?`,
+		DeletionCancelled, now.UTC(), d.UserID, DeletionPending)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(`DELETE FROM account_deletions WHERE user_id = ? AND state = ?`, userID, DeletionPending); err != nil {
-		return nil, err
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrNoDeletion
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -368,12 +416,19 @@ func (s *Store) CancelAccountDeletion(token string, now time.Time) (*AccountDele
 	return d, nil
 }
 
+// FinishCancelledDeletion deletes the tombstone of a cancelled deletion once
+// the account's takes are served again.
+func (s *Store) FinishCancelledDeletion(userID string) error {
+	_, err := s.db.Exec(`DELETE FROM account_deletions WHERE user_id = ? AND state = ?`, userID, DeletionCancelled)
+	return err
+}
+
 // DueAccountDeletions lists records whose grace period has ended.
 func (s *Store) DueAccountDeletions(now time.Time, limit int) ([]*AccountDeletion, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := s.db.Query(`SELECT `+deletionColumns+` FROM account_deletions WHERE purge_after <= ? ORDER BY purge_after ASC LIMIT ?`, now.UTC(), limit)
+	rows, err := s.db.Query(`SELECT `+deletionColumns+` FROM account_deletions WHERE purge_after <= ? AND `+liveDeletion+` ORDER BY purge_after ASC LIMIT ?`, now.UTC(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -389,11 +444,13 @@ func (s *Store) DueAccountDeletions(now time.Time, limit int) ([]*AccountDeletio
 	return out, rows.Err()
 }
 
-// OpenAccountDeletions lists every record, due or not (the at-once steps
-// retry until they are recorded).
+// OpenAccountDeletions lists every record, due or not, tombstones included
+// (the at-once steps retry until they are recorded). A limit of zero is no
+// limit: a fixed batch would let a stuck record at the front starve every
+// record behind it.
 func (s *Store) OpenAccountDeletions(limit int) ([]*AccountDeletion, error) {
 	if limit <= 0 {
-		limit = 200
+		limit = -1 // SQLite: no limit
 	}
 	rows, err := s.db.Query(`SELECT `+deletionColumns+` FROM account_deletions ORDER BY requested_at ASC LIMIT ?`, limit)
 	if err != nil {
@@ -425,7 +482,7 @@ func (s *Store) BeginPurge(userID string, now time.Time) (*AccountDeletion, erro
 	if err := s.PurgeEligible(userID, now); err != nil {
 		return nil, err
 	}
-	res, err := s.db.Exec(`UPDATE account_deletions SET state = ?, cancel_token_hash = '', cancel_token_expires = NULL, attempt_started_at = ?, attempts = attempts + 1, updated_at = ? WHERE user_id = ? AND purge_after <= ?`,
+	res, err := s.db.Exec(`UPDATE account_deletions SET state = ?, cancel_token_hash = '', cancel_token_expires = NULL, attempt_started_at = ?, attempts = attempts + 1, updated_at = ? WHERE user_id = ? AND purge_after <= ? AND `+liveDeletion,
 		DeletionPurging, now.UTC(), now.UTC(), userID, now.UTC())
 	if err != nil {
 		return nil, err
@@ -445,10 +502,18 @@ func (s *Store) EndAttempt(userID string, lastErr string, now time.Time) error {
 	return err
 }
 
-// RecordDeletionComputers stores the computers found for the account.
-func (s *Store) RecordDeletionComputers(userID string, computers []string, now time.Time) error {
+// RecordDeletionComputers stores the computers (and their VM ids) found for
+// the account.
+func (s *Store) RecordDeletionComputers(userID string, computers, vmIDs []string, now time.Time) error {
+	if computers == nil {
+		computers = []string{}
+	}
+	if vmIDs == nil {
+		vmIDs = []string{}
+	}
 	raw, _ := json.Marshal(computers)
-	_, err := s.db.Exec(`UPDATE account_deletions SET computers = ?, updated_at = ? WHERE user_id = ?`, string(raw), now.UTC(), userID)
+	rawVM, _ := json.Marshal(vmIDs)
+	_, err := s.db.Exec(`UPDATE account_deletions SET computers = ?, vm_ids = ?, updated_at = ? WHERE user_id = ? AND `+liveDeletion, string(raw), string(rawVM), now.UTC(), userID)
 	return err
 }
 
@@ -460,7 +525,7 @@ func (s *Store) RecordDeletionStep(userID, step string, rec DeletionStep) error 
 	}
 	defer func() { _ = tx.Rollback() }()
 	var raw string
-	if err := tx.QueryRow(`SELECT steps FROM account_deletions WHERE user_id = ?`, userID).Scan(&raw); err != nil {
+	if err := tx.QueryRow(`SELECT steps FROM account_deletions WHERE user_id = ? AND `+liveDeletion, userID).Scan(&raw); err != nil {
 		return err
 	}
 	steps := map[string]DeletionStep{}
@@ -490,7 +555,7 @@ func (s *Store) FinalizeAccountDeletion(userID, summary string, now time.Time) (
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	d, err := scanDeletion(tx.QueryRow(`SELECT `+deletionColumns+` FROM account_deletions WHERE user_id = ?`, userID))
+	d, err := scanDeletion(tx.QueryRow(`SELECT `+deletionColumns+` FROM account_deletions WHERE user_id = ? AND `+liveDeletion, userID))
 	if err != nil {
 		return nil, err
 	}
@@ -542,11 +607,4 @@ func (s *Store) DeletionReceiptByJob(jobID string) (*DeletionReceipt, error) {
 		return nil, nil
 	}
 	return r, err
-}
-
-// UserCredentialIDs is a convenience for tests and the finish handler.
-func (s *Store) deletionCredentialCount(ctx context.Context, userID string) (int, error) {
-	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM credentials WHERE user_id = ?`, userID).Scan(&n)
-	return n, err
 }
