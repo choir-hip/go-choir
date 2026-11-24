@@ -9,9 +9,11 @@ package vmmanager
 //   - btrfs_extents: the file's extent items read with
 //     BTRFS_IOC_TREE_SEARCH, as compsize does: each distinct extent's
 //     disk_num_bytes counts once, inline extents their inline length, holes
-//     zero. Exact, but the ioctl needs CAP_SYS_ADMIN, which vmctl's unit
-//     does not have (its bounding set is CAP_NET_ADMIN CAP_SYS_PTRACE;
-//     docs/problems/snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md).
+//     zero. Exact. The ioctl needs CAP_SYS_ADMIN, which vmctl's unit holds
+//     (nix/node-b.nix CapabilityBoundingSet, since the jailer change
+//     10e9f18e1; before that the bound was CAP_NET_ADMIN CAP_SYS_PTRACE and
+//     this fell back, docs/problems/snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md).
+//     The reading on Node B is disk_bytes_method=btrfs_extents (RES-14).
 //   - fiemap_bound: FIEMAP, which needs no privilege. It reports logical
 //     lengths and flags compressed extents ENCODED without their compressed
 //     length. Extents never overlap on disk, so an encoded extent occupies at
@@ -67,6 +69,17 @@ const (
 // fileDiskBytes reports the bytes a regular file occupies on disk and the
 // method used. Tests replace it.
 var fileDiskBytes = measureFileDiskBytes
+
+// DiskMethodBtrfsExtents names the exact measure (the file's btrfs extent
+// items): the only one a caller that must not over-count may rely on.
+const DiskMethodBtrfsExtents = diskBytesMethodBtrfs
+
+// FileDiskBytes is the bytes a regular file occupies on disk and the method
+// that measured it (btrfs extents, else the FIEMAP bound, else st_blocks): the
+// measure the snapshot budget uses, exported so the sign-up room counts a
+// computer's disk the same way (st_blocks alone counts compressed extents at
+// their uncompressed size).
+func FileDiskBytes(path string) (int64, string, error) { return fileDiskBytes(path) }
 
 func stBlocksBytes(info os.FileInfo) int64 {
 	if st, ok := info.Sys().(*syscall.Stat_t); ok {
@@ -303,7 +316,7 @@ func noteDiskMeasureFallback(failed, using string, err error) {
 	}
 	hint := ""
 	if failed == diskBytesMethodBtrfs && errors.Is(err, syscall.EPERM) {
-		hint = " (BTRFS_IOC_TREE_SEARCH needs CAP_SYS_ADMIN, which is outside vmctl's capability bounding set)"
+		hint = " (BTRFS_IOC_TREE_SEARCH needs CAP_SYS_ADMIN: this process lacks it, which vmctl's unit does not on Node B; check the capability bounding set)"
 	}
 	log.Printf("vmmanager: snapshot disk measure %s unavailable: %s%s; using %s", failed, reason, hint, using)
 }

@@ -314,6 +314,10 @@ func writeComputerWakeFailure(w http.ResponseWriter, err error) bool {
 	body := computerWakeFailureResponse{Error: "computer_waking_failed", State: wake.State, Cause: wake.Cause}
 	if refusal := recoveryRefusalFromError(wake.Err); refusal != nil {
 		body.Reason, body.Kind = refusal.Reason, refusal.Kind
+		if hostFullRefusal(refusal) {
+			// The host's figures are not a stranger's to read.
+			body.Reason, body.Cause = "", hostBusyMessage
+		}
 		if refusal.RetryAfterSeconds > 0 {
 			retry = refusal.RetryAfterSeconds
 		}
@@ -450,6 +454,10 @@ func (h *Handler) rejoinAPIKeyComputer(ctx context.Context, prior resolvedComput
 // wakeCause classifies a vmctl resolve failure into text safe to show a client.
 func wakeCause(err error) string {
 	if refusal := recoveryRefusalFromError(err); refusal != nil {
+		if hostFullRefusal(refusal) {
+			// The host's figures are not a stranger's to read.
+			return hostBusyMessage
+		}
 		if refusal.Kind == string(vmctl.RecoveryRefusalCrashLoop) {
 			return "the computer is held after a crash loop (" + strings.TrimSpace(refusal.Reason) + "); `choir computer start` clears it"
 		}

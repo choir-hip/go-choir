@@ -181,7 +181,7 @@ test('bootstrap the email sign-in test account', async ({ page, authenticator })
   } catch (e) {
     const msg = String(e.message || e);
     if (msg.includes('registration_waitlist')) {
-      throw new Error('registration is capped (AUTH_REGISTRATION_CAP reached, registration_waitlist): the operator must raise or unset the cap in nix/node-b.nix, deploy, and run again. This attempt put the test address on the waitlist.');
+      throw new Error('registration is closed (the host has no room for another computer, registration_waitlist): free disk or wait, then run again. This attempt put the test address on the waitlist.');
     }
     throw new Error(`register failed: ${msg.split(ADDRESS).join('<address>')}`);
   }

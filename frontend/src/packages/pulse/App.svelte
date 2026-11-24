@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchPulseSummary } from './pulse.js';
+  import { fetchPulseSummary, fetchOperatorCapacity } from './pulse.js';
 
   let summary: any = null;
+  // The host's live figures: only the platform operator can read them.
+  let operatorCapacity: any = null;
   let loading = false;
   let error = '';
 
@@ -10,11 +12,18 @@
   $: accountClasses = accounts?.by_class || {};
   $: activity = summary?.activity || {};
   $: computers = summary?.computers || {};
-  $: storage = summary?.storage || {};
+  // Storage figures are the owner's: the public summary carries none.
+  $: storage = operatorCapacity?.storage || {};
   $: reliability = summary?.reliability || {};
   $: privacy = summary?.privacy || {};
   $: freshness = summary?.freshness || {};
   $: classifier = summary?.classifier || {};
+  $: publicRoom = summary?.capacity?.room || {};
+  $: capacity = operatorCapacity || {};
+  $: capMemory = capacity?.memory || {};
+  $: capDisk = capacity?.disk || {};
+  $: capComputers = capacity?.computers || {};
+  $: capRoom = capacity?.room || {};
   $: realComputerStates = computers?.real_primary_by_state || {};
   $: realComputerTotal = Number(computers?.real_primary_total || 0);
   $: realComputerUsable = Number(computers?.real_primary_usable || 0);
@@ -34,6 +43,7 @@
     error = '';
     try {
       summary = await fetchPulseSummary();
+      operatorCapacity = await fetchOperatorCapacity();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Could not load Pulse';
     } finally {
@@ -121,12 +131,14 @@
       <div class="meter compute"><span style="width:{barWidth(realComputerHealth)}"></span></div>
       <small>{realComputerHealth}% usable</small>
     </article>
+    {#if operatorCapacity}
     <article class="metric-card">
       <span class="metric-label">VM state</span>
       <strong>{formatBytes(storage?.vm_state_bytes_total)}</strong>
       <div class="meter storage"><span style="width:{barWidth(storage?.vm_state_filesystem?.used_percent)}"></span></div>
       <small>{formatPercent(storage?.vm_state_filesystem?.used_percent)} filesystem used</small>
     </article>
+    {/if}
     <article class="metric-card" class:warn-card={reliability?.real_primary_failed || reliability?.real_primary_booting || reliability?.real_primary_inaccessible}>
       <span class="metric-label">Reliability</span>
       <strong>{formatNumber((reliability?.real_primary_failed || 0) + (reliability?.real_primary_booting || 0) + (reliability?.real_primary_inaccessible || 0))}</strong>
@@ -172,6 +184,30 @@
       </div>
     </section>
 
+    <section class="panel" data-pulse-capacity>
+      <div class="panel-heading">
+        <h2>Capacity</h2>
+        <span class="chip">{publicRoom?.available ? (publicRoom.open ? 'sign-up open' : 'sign-up closed') : 'no reading'}</span>
+      </div>
+      {#if operatorCapacity}
+      <dl class="facts">
+        <div><dt>Memory free</dt><dd>{capMemory?.available ? `${formatBytes(capMemory.available_bytes)} of ${formatBytes(capMemory.total_bytes)}` : 'no reading'}</dd></div>
+        <div><dt>Memory floor</dt><dd>{capMemory?.available ? formatBytes(capMemory.floor_bytes) : 'no reading'}</dd></div>
+        <div><dt>Disk free</dt><dd>{capDisk?.available ? formatBytes(capDisk.available_bytes) : 'no reading'}</dd></div>
+        <div><dt>Disk floor (starts refused under it)</dt><dd>{capDisk?.available ? formatBytes(capDisk.floor_bytes) : 'no reading'}</dd></div>
+        <div><dt>Sign-up reserve (deploy floor and paper)</dt><dd>{capRoom?.available ? formatBytes(capRoom.reserve_bytes) : 'no reading'}</dd></div>
+        <div><dt>Running</dt><dd>{formatNumber(capComputers?.running)}</dd></div>
+        <div><dt>Hibernated</dt><dd>{formatNumber(capComputers?.hibernated)}</dd></div>
+        <div><dt>Accounts with a passkey</dt><dd>{capRoom?.available ? formatNumber(capRoom.accounts) : 'no reading'}</dd></div>
+        <div><dt>Promised a computer, none yet</dt><dd>{capRoom?.available ? formatNumber(capRoom.promised) : 'no reading'}</dd></div>
+        <div><dt>One computer's footprint</dt><dd>{capRoom?.available ? formatBytes(capRoom.footprint_bytes) : 'no reading'}</dd></div>
+        <div><dt>Places left</dt><dd>{capRoom?.available ? formatNumber(capRoom.places) : 'no reading'}</dd></div>
+        <div><dt>Sign-ups, 24h</dt><dd>{capRoom?.available ? formatNumber(capRoom.sign_ups_last_24h) : 'no reading'}</dd></div>
+      </dl>
+      {/if}
+    </section>
+
+    {#if operatorCapacity}
     <section class="panel wide" data-pulse-storage>
       <div class="panel-heading">
         <h2>Storage</h2>
@@ -208,6 +244,7 @@
         </div>
       </div>
     </section>
+    {/if}
 
     <section class="panel" data-pulse-privacy>
       <div class="panel-heading">

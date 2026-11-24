@@ -38,6 +38,9 @@ type WarmnessPolicyConfig struct {
 	// (internal/computertiers test_computers). A platform computer or a
 	// paid account's computer listed here keeps its own class.
 	TestComputerIDs map[string]bool
+	// OperatorProofComputerIDs names the operator proof computers
+	// (computertiers operator_proof_computers).
+	OperatorProofComputerIDs map[string]bool
 }
 
 type WarmnessPolicyConfigSummary struct {
@@ -82,6 +85,7 @@ func normalizeWarmnessPolicyConfig(cfg WarmnessPolicyConfig) WarmnessPolicyConfi
 	cfg.PlatformComputerIDs = normalizedIDSet(cfg.PlatformComputerIDs)
 	cfg.TestUserIDs = normalizedIDSet(cfg.TestUserIDs)
 	cfg.TestComputerIDs = normalizedIDSet(cfg.TestComputerIDs)
+	cfg.OperatorProofComputerIDs = normalizedIDSet(cfg.OperatorProofComputerIDs)
 	return cfg
 }
 

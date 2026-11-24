@@ -46,6 +46,7 @@ type snapshotMockVMManager struct {
 	snapshotResp    *VMInstanceInfo
 	snapshotErr     error
 	hibernateHook   func(vmID string)
+	resumeHook      func(vmID string)
 	hibernateRecord json.RawMessage
 	// callIssuer makes the mock mint the resume credential the way the
 	// manager does after validating a snapshot.
@@ -63,6 +64,9 @@ func (m *snapshotMockVMManager) HibernateVM(vmID string) error {
 }
 
 func (m *snapshotMockVMManager) ResumeVMFromSnapshot(vmID string, cfg VMManagerConfig, issue func() (string, error)) (*VMInstanceInfo, error) {
+	if m.resumeHook != nil {
+		m.resumeHook(vmID)
+	}
 	m.snapMu.Lock()
 	m.snapshotCalls = append(m.snapshotCalls, cfg)
 	m.issuers = append(m.issuers, issue)

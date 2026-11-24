@@ -643,7 +643,11 @@ func (r *OwnershipRegistry) destroyTestIdleCandidate(candidate RetentionPruneCan
 		log.Printf("vmctl: retention test_class_idle kept %s: manifest: %v", snapshot.VMID, err)
 		return false
 	}
-	if err := mgr.DestroyVMState(snapshot.VMID); err != nil {
+	// The owners file stops counting the computer's disk before it goes.
+	endRelease := r.beginDiskRelease(snapshot.VMID, diskReleaseWhole)
+	err := mgr.DestroyVMState(snapshot.VMID)
+	endRelease()
+	if err != nil {
 		line.Event, line.Error = "failed", err.Error()
 		_ = appendRetentionManifest(cfg, line)
 		log.Printf("vmctl: retention test_class_idle skipped %s: %v", snapshot.VMID, err)

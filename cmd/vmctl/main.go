@@ -19,6 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/dbcred"
 	"github.com/yusefmosiah/go-choir/internal/dbx"
+	"github.com/yusefmosiah/go-choir/internal/hostroom"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -107,6 +108,14 @@ func main() {
 		idleSweeperEnabled = true
 		log.Printf("vmctl: pressure reclaim mode=%s signal=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.Signal, cfg.MinIdle, cfg.MaxCandidates)
 	}
+	roomPlan, ownersPath, roomErr := roomConfigFromEnv()
+	if roomErr != nil {
+		// Without a plan nothing is published, so the auth service closes
+		// sign-up and Pulse shows no reading: never an open guess.
+		log.Printf("vmctl: sign-up room plan unreadable (%v); sign-up stays closed", roomErr)
+	}
+	registry.SetRoomPlan(roomPlan)
+	registry.SetRoomOwnersPath(ownersPath)
 	admission := hostAdmissionConfigFromEnv()
 	registry.SetHostAdmissionConfig(admission)
 	log.Printf("vmctl: host admission mode=%s default_need_mib=%d min_need_mib=%d headroom_mib=%d settle=%s make_room=%s make_room_max_victims=%d make_room_settle=%s",
@@ -276,6 +285,11 @@ func main() {
 	// stopped computer cold boots) and interrupted captures, before any
 	// computer is started or woken.
 	registry.SweepOrphanSnapshots()
+	// The owners file is first written after that sweep, so it never counts a
+	// leftover snapshot the sweep is about to delete.
+	if ownersPath != "" {
+		registry.StartComputerOwnersPublisher(context.Background(), ownersPath, vmctl.ComputerOwnersInterval, log.Printf)
+	}
 	// Density D1: make-room's hibernates take the idle sweep's route guard.
 	registry.SetMakeRoomRouteGuard(handler.AuthorizeComputerVersionRoute)
 	if reattached := registry.ReattachManagedVMs(context.Background(), handler.AuthorizeComputerVersionRoute); reattached > 0 {
@@ -923,6 +937,32 @@ func retentionRulesFromEnv(cfg *vmctl.RetentionPruneConfig, prefix string) {
 	cfg.SelectorNamed = vmctl.RetentionSelectorNamedFromEnviron(os.Environ())
 }
 
+// roomConfigFromEnv reads the sign-up room plan (nix/node-b.nix sets the same
+// reserve and footprint on the auth service): the disk reserve, one computer's
+// footprint and where the accounts that have a computer are published. All
+// three or none; a partial or malformed plan is an error and the plan is
+// empty.
+func roomConfigFromEnv() (hostroom.Plan, string, error) {
+	reserve := strings.TrimSpace(os.Getenv("VMCTL_ROOM_RESERVE_GIB"))
+	footprint := strings.TrimSpace(os.Getenv("VMCTL_ROOM_FOOTPRINT_GIB"))
+	owners := strings.TrimSpace(os.Getenv("VMCTL_ROOM_OWNERS_PATH"))
+	if reserve == "" && footprint == "" && owners == "" {
+		return hostroom.Plan{}, "", nil
+	}
+	if reserve == "" || footprint == "" || owners == "" {
+		return hostroom.Plan{}, "", fmt.Errorf("VMCTL_ROOM_RESERVE_GIB, VMCTL_ROOM_FOOTPRINT_GIB and VMCTL_ROOM_OWNERS_PATH are set together or not at all")
+	}
+	r, err := strconv.ParseUint(reserve, 10, 32)
+	if err != nil || r < hostroom.MinReserveGiB {
+		return hostroom.Plan{}, "", fmt.Errorf("VMCTL_ROOM_RESERVE_GIB %q is not a whole number of GiB, at least %d", reserve, hostroom.MinReserveGiB)
+	}
+	f, err := strconv.ParseUint(footprint, 10, 32)
+	if err != nil || f < hostroom.MinFootprintGiB {
+		return hostroom.Plan{}, "", fmt.Errorf("VMCTL_ROOM_FOOTPRINT_GIB %q is not a whole number of GiB, at least %d", footprint, hostroom.MinFootprintGiB)
+	}
+	return hostroom.Plan{ReserveBytes: r << 30, FootprintBytes: f << 30}, owners, nil
+}
+
 func splitEnvList(raw string) []string {
 	parts := strings.Split(raw, ",")
 	out := make([]string, 0, len(parts))
@@ -955,6 +995,10 @@ func warmnessPolicyConfigFromEnv() (vmctl.WarmnessPolicyConfig, error) {
 	cfg.TestComputerIDs = map[string]bool{}
 	for _, id := range tiers.TestComputerIDs() {
 		cfg.TestComputerIDs[id] = true
+	}
+	cfg.OperatorProofComputerIDs = map[string]bool{}
+	for _, id := range tiers.OperatorProofComputerIDs() {
+		cfg.OperatorProofComputerIDs[id] = true
 	}
 	return cfg, nil
 }

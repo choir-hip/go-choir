@@ -48,11 +48,11 @@ func measureFileDiskBytes(path string) (int64, string, error) {
 		return fallback, diskBytesMethodStBlocks, nil
 	}
 	n, err := btrfsFileDiskBytes(int(f.Fd()), uint64(st.Ino))
-	if err == nil && !(n == 0 && info.Size() > 0) {
+	if btrfsReadingTrusted(n, err, fallback) {
 		return n, diskBytesMethodBtrfs, nil
 	}
 	// The extent search failed (EPERM without CAP_SYS_ADMIN), or read no
-	// extents for a non-empty file.
+	// extents for a file st_blocks says holds blocks.
 	noteDiskMeasureFallback(diskBytesMethodBtrfs, diskBytesMethodFiemapBound, err)
 	exts, ferr := fiemapFileExtents(int(f.Fd()))
 	if ferr == nil {
@@ -66,6 +66,16 @@ func measureFileDiskBytes(path string) (int64, string, error) {
 	// otherwise).
 	noteDiskMeasureFallback(diskBytesMethodFiemapBound, diskBytesMethodStBlocks, ferr)
 	return fallback, diskBytesMethodStBlocks, nil
+}
+
+// btrfsReadingTrusted reports whether the extent search's answer is the
+// file's disk. A failed search is not. A reading of zero extents is, when the
+// file has no allocated block either (st_blocks is 0): a fully sparse file,
+// such as a data image between its truncate and its mkfs, holds exactly 0, and
+// calling that a fallback would log a note for a healthy file. A reading of
+// zero for a file st_blocks says holds blocks is not trusted.
+func btrfsReadingTrusted(n int64, err error, allocated int64) bool {
+	return err == nil && !(n == 0 && allocated > 0)
 }
 
 // fsIocFiemap is _IOWR('f', 11, struct fiemap); struct fiemap is 32 bytes.

@@ -459,7 +459,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 		case <-op.done:
 			recovery, current, runtimeStatus, runErr, _ := h.recoveries.snapshotOperation(op)
 			if runErr != nil {
-				writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to recover current computer"})
+				writeComputeRecoveryFailure(w, runErr)
 				return
 			}
 			writeJSON(w, http.StatusOK, computeRecoveryResponse{
@@ -756,4 +756,11 @@ func protectionText(class string) string {
 
 func reclaimableWarmness(string) bool {
 	return false
+}
+
+// writeComputeRecoveryFailure answers a wake or resume that failed. A host too
+// full to start the computer is the plain busy answer (503, Retry-After), not
+// a 502, which the person reads as a broken computer.
+func writeComputeRecoveryFailure(w http.ResponseWriter, err error) {
+	writeAutoputerResolveFailure(w, http.StatusBadGateway, "failed to recover current computer", err)
 }

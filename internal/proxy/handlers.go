@@ -1078,6 +1078,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == platformOperatorYankPath:
 		h.HandlePlatformOperatorYank(w, r)
 		return
+	case path == platformOperatorCapacityPath:
+		h.HandlePlatformOperatorCapacity(w, r)
+		return
 	case isPlatformOperatorComputersPath(path):
 		h.HandlePlatformOperatorComputers(w, r)
 		return
@@ -1115,7 +1118,10 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 
 // HandlePulseSummary returns public-safe aggregate launch usage and health
 // facts. It is intentionally unauthenticated and must not expose raw user IDs,
-// email lists, content, IPs, devices, referrers, or per-user timelines.
+// email lists, content, IPs, devices, referrers, or per-user timelines, nor
+// the host's live memory, disk or sign-up room (only whether sign-up is open;
+// those figures are on platformOperatorCapacityPath). The aggregate account
+// and computer counts it already served remain.
 func (h *Handler) HandlePulseSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -1131,7 +1137,32 @@ func (h *Handler) HandlePulseSummary(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load pulse summary"})
 		return
 	}
-	writeJSON(w, http.StatusOK, summary)
+	// A stranger reads whether sign-up is open, not the host's live figures.
+	writeJSON(w, http.StatusOK, summary.Public())
+}
+
+// HandlePlatformOperatorCapacity returns the full capacity reading to the
+// platform operator, passkey-signed-in (the same gate as the operator's other
+// acts). It is read-only.
+func (h *Handler) HandlePlatformOperatorCapacity(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	if _, ok := h.authorizePlatformOperator(w, r); !ok {
+		return
+	}
+	if h.vmctlClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "capacity requires vmctl routing"})
+		return
+	}
+	summary, err := h.vmctlClient.PulseSummaryContext(r.Context())
+	if err != nil {
+		log.Printf("proxy: capacity reading: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to load the capacity reading"})
+		return
+	}
+	writeJSON(w, http.StatusOK, summary.Operator())
 }
 
 // HandleWS handles GET /api/ws. It validates the access JWT cookie, denies
@@ -1516,6 +1547,16 @@ func recoveryRefusalFromError(err error) *vmctl.RecoveryRefusalError {
 	return nil
 }
 
+// hostBusyMessage is what a person is told when the host cannot hold their
+// computer's wake: busy, with no figures.
+const hostBusyMessage = "Choir is busy right now. Please try again in a minute."
+
+// hostFullRefusal is a refusal because the host has no memory or disk to start
+// the computer: the person is told it is busy, not why.
+func hostFullRefusal(refusal *vmctl.RecoveryRefusalError) bool {
+	return refusal != nil && (refusal.Kind == string(vmctl.RecoveryRefusalHostMemoryPressure) || refusal.Kind == string(vmctl.RecoveryRefusalHostDiskPressure))
+}
+
 // writeRecoveryRefusalResponse renders the durable recovery condition as the
 // product-visible structured 503: reason, kind, and
 // Retry-After. It is deterministic; callers must not retry it as transient.
@@ -1528,6 +1569,17 @@ func writeRecoveryRefusalResponse(w http.ResponseWriter, refusal *vmctl.Recovery
 		retryAfter = 60
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+	if hostFullRefusal(refusal) {
+		// The host is full: say so plainly, promptly, with a retry hint, and
+		// keep the host's figures out of a stranger's answer. The kind stays
+		// for the client.
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{
+			Error:             hostBusyMessage,
+			Kind:              refusal.Kind,
+			RetryAfterSeconds: retryAfter,
+		})
+		return
+	}
 	writeJSON(w, http.StatusServiceUnavailable, errorResponse{
 		Error:             "computer recovery blocked",
 		Reason:            refusal.Reason,

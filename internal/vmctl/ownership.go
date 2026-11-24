@@ -43,6 +43,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
+	"github.com/yusefmosiah/go-choir/internal/hostroom"
 )
 
 // VMState represents the lifecycle state of a VM.
@@ -103,6 +104,14 @@ type VMOwnership struct {
 
 	// Kind identifies the interactive computer implementation.
 	Kind VMKind `json:"kind,omitempty"`
+
+	// MemSizeMib is the guest memory the computer was created with, recorded
+	// once at creation (newComputerMemSizeMib). Zero is a computer made
+	// before the record existed, or a platform computer: it takes the
+	// host's interactive shape (platform: its own), exactly as before. A
+	// computer's snapshot is only valid at the size it was made with, so
+	// the value never changes after creation.
+	MemSizeMib int `json:"mem_size_mib,omitempty"`
 
 	// WarmnessClass is the typed lifecycle policy class for keepalive and
 	// reclaim decisions. Public health exposes only aggregate counts.
@@ -647,6 +656,24 @@ type OwnershipRegistry struct {
 	// VM state until a later mission explicitly enables active reclaim.
 	pressureReclaim PressureReclaimConfig
 	pressureSampler hostPressureSampler
+	// roomPlan is the sign-up bound shown on the capacity reading and used to
+	// publish the accounts that have a computer (internal/hostroom).
+	roomPlan hostroom.Plan
+	// roomOwnersPath is where the owners file is published.
+	roomOwnersPath string
+	// ownersChanged wakes the owners-file publisher when the registry is
+	// saved. diskMeasure measures a file's bytes on disk (nil: vmmanager.
+	// FileDiskBytes; tests replace it).
+	ownersChanged chan struct{}
+	diskMeasure   func(path string) (int64, string, error)
+	// ownersPublishPath is where the publisher writes; ownersWriteMu
+	// serialises its writes. diskMu guards the per-VM disk cache and the
+	// releases in progress (pulse.go).
+	ownersPublishPath string
+	ownersWriteMu     sync.Mutex
+	diskMu            sync.Mutex
+	diskCache         map[string]diskCacheEntry
+	diskReleasing     map[string]int
 	// pressureWin is the pressure monitor's sustained-signal window and
 	// the hibernate in-flight/cool-down bookkeeping (pressure_sustained.go).
 	pressureWin pressureWindow
@@ -741,6 +768,7 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 		autoputerURLBase = "http://127.0.0.1:8085"
 	}
 	return &OwnershipRegistry{
+		ownersChanged:              make(chan struct{}, 1),
 		ownerships:                 make(map[string]*VMOwnership),
 		unmanagedSince:             make(map[string]time.Time),
 		networkDeadSince:           make(map[string]time.Time),
@@ -868,6 +896,9 @@ func (r *OwnershipRegistry) saveLocked() {
 }
 
 func (r *OwnershipRegistry) writePersistenceLocked() error {
+	// Every persistence write, from whichever path, tells the owners-file
+	// publisher (nothing sleeps or wakes, is made or removed without one).
+	r.noteOwnersChanged()
 	if r.persistencePath == "" {
 		return nil
 	}
@@ -1403,7 +1434,52 @@ func machineShapeForOwnership(own *VMOwnership) (int, int) {
 	if own != nil && isPlatformOwnership(own) {
 		return platformVMCPUCount, platformVMMemSizeMib
 	}
-	return interactiveMachineShape()
+	cpu, mem := interactiveMachineShape()
+	if own != nil && own.MemSizeMib > 0 {
+		mem = own.MemSizeMib
+	}
+	return cpu, mem
+}
+
+// newAccountVMMemSizeMib is the memory of a computer made for a new account:
+// 4 GiB, the size the platform's computers already run (owner, 2026-11-24:
+// "we may not need to cut computers from 4gb ram to 2gb since ram isnt the
+// limit, disk is"). A 4 GiB guest holds an engineering capsule: the capsule
+// budget is 3/4 of guest memory (3 GiB) and a capsule asks 2 GiB. It is
+// recorded on the ownership at creation; computers made before it, the
+// paper and the owner's among them, keep the interactive size they have.
+const newAccountVMMemSizeMib = 4096
+
+// newComputerMemSizeMib is the size to record for a computer created now
+// with warmness class class, or 0 to record none (the host's interactive
+// shape, or the platform shape, applies). A protected platform computer is
+// never made small, so the paper cannot come back at 4 GiB if its ownership
+// is ever recreated; neither is the owner's paid always-on computer, and
+// exempt marks a computer that keeps the interactive size when its ownership
+// is made afresh (the operator proof computer, a test computer). The
+// size never exceeds the host's interactive setting.
+func newComputerMemSizeMib(class WarmnessClass, exempt bool) int {
+	if exempt {
+		return 0
+	}
+	switch class {
+	case WarmnessClassCriticalProtected, WarmnessClassPublicPlatform, WarmnessClassPremiumAlwaysOn:
+		return 0
+	}
+	_, interactive := interactiveMachineShape()
+	if interactive < newAccountVMMemSizeMib {
+		return interactive
+	}
+	return newAccountVMMemSizeMib
+}
+
+// newComputerMemSizeMibLocked is the size to record for the computer being
+// created for userID. Callers hold r.mu.
+func (r *OwnershipRegistry) newComputerMemSizeMibLocked(userID, desktopID string) int {
+	computerID := stableComputerID(userID, desktopID, "")
+	class := warmnessClassForOwnership(&VMOwnership{UserID: userID, DesktopID: desktopID, ComputerID: computerID}, r.warmnessPolicy)
+	exempt := r.warmnessPolicy.OperatorProofComputerIDs[computerID] || r.warmnessPolicy.TestComputerIDs[computerID]
+	return newComputerMemSizeMib(class, exempt)
 }
 
 // interactiveMachineShape returns the interactive guest CPU/memory shape,
@@ -1751,6 +1827,9 @@ func (r *OwnershipRegistry) resumeFromSnapshot(own *VMOwnership, mgr VMManager) 
 		return nil, false
 	}
 	resumeCfg := vmManagerConfigForOwnership(own, "")
+	// The resume consumes the snapshot: the owners file says so before it does.
+	endRelease := r.beginDiskRelease(own.VMID, diskReleaseSnapshot)
+	defer endRelease()
 	info, err := r.spawnClaimed(own.VMID, bootClaimResume, own.Epoch, func() (*VMInstanceInfo, error) {
 		return resumer.ResumeVMFromSnapshot(own.VMID, resumeCfg, r.resumeCredentialIssuer(own))
 	})
@@ -2488,9 +2567,10 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 	// host would fall below its memory floor, counting the starts already in
 	// flight (host_admission.go). The reservation ends with this boot.
 	booted := false
+	newMemMib := r.newComputerMemSizeMibLocked(userID, desktopID)
 	if r.vmManager != nil {
 		candidate := &VMOwnership{VMID: vmID, UserID: userID, DesktopID: desktopID, Kind: VMKindInteractive,
-			ComputerID: stableComputerID(userID, desktopID, "")}
+			ComputerID: stableComputerID(userID, desktopID, ""), MemSizeMib: newMemMib}
 		class := warmnessClassForOwnership(candidate, r.warmnessPolicy)
 		ticket, err := r.admitHostMemoryLocked(candidate, class)
 		if err != nil && makeRoomRefusal(err) && r.makeRoomEnabledLocked() {
@@ -2535,6 +2615,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		DesktopID:    desktopID,
 		ComputerID:   stableComputerID(userID, desktopID, ""),
 		Kind:         VMKindInteractive,
+		MemSizeMib:   newMemMib,
 		ComputerURL:  r.autoputerURLForVM(vmID),
 		State:        VMStateBooting,
 		CreatedAt:    time.Now(),
@@ -2614,7 +2695,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		if credentialEnvelope == "" && corpusdConfigured {
 			err = fmt.Errorf("realization credential unavailable")
 		} else {
-			shapeCPU, shapeMem := interactiveMachineShape()
+			shapeCPU, shapeMem := machineShapeForOwnership(own)
 			warmness := r.bootWarmnessClass(own)
 			info, err = mgr.BootVM(VMManagerConfig{
 				VMID:                       vmID,

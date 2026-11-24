@@ -718,7 +718,11 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	r.lifecycle[key] = lifecycleRetention
 	r.mu.Unlock()
 	defer r.releaseLifecycle(key, lifecycleRetention)
-	if err := mgr.DestroyVMState(candidate.VMID); err != nil {
+	// The state is destroyed: the owners file stops counting its disk first.
+	endRelease := r.beginDiskRelease(candidate.VMID, diskReleaseWhole)
+	err := mgr.DestroyVMState(candidate.VMID)
+	endRelease()
+	if err != nil {
 		log.Printf("vmctl: retention prune skipped %s: %v", candidate.VMID, err)
 		return false
 	}

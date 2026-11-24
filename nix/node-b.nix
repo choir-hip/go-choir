@@ -15,6 +15,44 @@
 #   access JWTs remain valid after auth restarts (VAL-CROSS-118)
 { config, lib, pkgs, goChoirPackages, choirGo, guestImage ? null, guestImageLayered ? null, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 let
+  # Sign-up room (owner, 2026-11-23: "we will monitor usage and turn off
+  # signup once we hit limits. then i will get more infra"; 2026-11-24: "i dont
+  # think we have a 40 account cap"). Sign-up is bounded by what the host can
+  # hold, not by a count of accounts: it is open when the free disk, less the
+  # reserve below, less what the admitted accounts will still take (a footprint
+  # for each account with a proved passkey and no computer yet; for each
+  # computer, the gap between a footprint and the disk its data image holds
+  # now, so opening one never makes room), is at least one footprint
+  # (internal/hostroom). The auth service decides this inside the transaction
+  # that makes the account, reading the free disk itself and the file vmctl
+  # writes every half minute naming the accounts that have a computer and the
+  # disk each holds; a missing or stale reading, or a plan that is not set,
+  # closes sign-up. The Pulse capacity reading shows the same number. No
+  # constant bounds accounts, so there is no cap to raise and no exemption for
+  # anyone: the operator's accounts take places like everyone's.
+  #   reserve    100 GiB: the 60 GiB deploy floor (scripts/node-b-deploy-disk-
+  #              preflight) and 40 GiB for the paper's growth (about 2 GiB a
+  #              day on a 51 GiB store, docs/system-map.md).
+  #   footprint   15 GiB: the largest measured total disk of one computer,
+  #              rounded up: drill holds 13,297 MB of data image (13.6 GB
+  #              re-read after a wake) plus a 1.5 GB memory snapshot while
+  #              hibernated, about 14 GiB; b@c holds 8.9 GB
+  #              (docs/problems/computer-disks-hold-self-development-
+  #              leftovers-2026-11-24.md). A computer's disk counts its data
+  #              image and its snapshot, each file measured by the snapshot
+  #              budget's measure (vmmanager.FileDiskBytes: bytes on disk as
+  #              btrfs holds them, seeing compress=zstd; st_blocks would count
+  #              a compressed 4 GiB memory file at 4 GiB), so a wake or a
+  #              hibernate does not move the room. A fresh computer is far smaller (0.5 to 0.7 GiB
+  #              plus the snapshot of the memory it has touched), but there is
+  #              no measurement of a tester's computer after weeks of use yet,
+  #              so the bound uses the worst measured. Replace it with the
+  #              measured footprint of the testers' computers when the
+  #              owner's capacity reading shows them.
+  # Hibernation frees memory, not disk. Both numbers are in whole GiB.
+  roomReserveGiB = 100;
+  roomFootprintGiB = 15;
+  roomOwnersPath = "/var/lib/go-choir/host-room/computer-owners.json";
   # Host fetch route (SDC NET-01; internal/hostfetch,
   # docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md). One
   # list, read by vmctl (writes the grant on the credential disk at cold
@@ -1003,9 +1041,13 @@ in
         # unconsumed attempts and email sessions at boot.
         "AUTH_EMAIL_SIGN_IN=on"
         "AUTH_EMAIL_CODE_KEY_FILE=${authSigningDir}/email-code-key"
-        # Sign-up cap with a waitlist (L4-03, internal/auth/registration_cap.go):
-        # unset is no cap. FP0 sets "AUTH_REGISTRATION_CAP=<n>" after reading
-        # the count of users holding a passkey (FP8 station, L4-03).
+        # Sign-up is bounded by the host's room (internal/auth/host_room.go,
+        # internal/hostroom); the numbers are at the top of this file. The
+        # owners file is written by vmctl; if it cannot be read here, sign-up
+        # is closed (never open).
+        "AUTH_ROOM_RESERVE_GIB=${toString roomReserveGiB}"
+        "AUTH_ROOM_FOOTPRINT_GIB=${toString roomFootprintGiB}"
+        "AUTH_ROOM_OWNERS_PATH=${roomOwnersPath}"
         internalAuthEnv
       ];
     };
@@ -1620,6 +1662,13 @@ in
       # 2026-10-13). The old vmctl-priority.env always-on list is retired.
       Environment = [
         "VMCTL_PORT=8083"
+        # The capacity reading on /api/pulse/summary shows the sign-up room
+        # the auth service decides on (the same values, at the top of this
+        # file), and vmctl publishes the accounts that have a computer where
+        # the auth service reads them.
+        "VMCTL_ROOM_RESERVE_GIB=${toString roomReserveGiB}"
+        "VMCTL_ROOM_FOOTPRINT_GIB=${toString roomFootprintGiB}"
+        "VMCTL_ROOM_OWNERS_PATH=${roomOwnersPath}"
         "VMCTL_GUEST_DNS_PORT=${toString guestDnsPort}"
         # SEC-10 guest side (internal/vmmanager/guest_dns.go): the computers
         # named here boot with choir.dns=<their tap host address> and resolve
@@ -1727,6 +1776,12 @@ in
         "VM_HOST_BASE_PORT=9000"
         "VM_CPU_COUNT=2"
         "VM_MEM_MIB=4096"
+        # A computer made for a new account is 4 GiB (owner, 2026-11-24); the
+        # size is recorded on its ownership at creation (ownership.mem_size_mib,
+        # internal/vmctl; newAccountVMMemSizeMib, capped by the interactive
+        # setting VM_INTERACTIVE_MEM_MIB below). This setting is the manager's
+        # default; computers made before that run the interactive shape below,
+        # the paper's and the owner's included.
         # Interactive guest shape: 4 CPU / 8 GiB. A 4 GiB trial on the
         # compacted owner store thrashed (3.67 GB RSS at the cap, 78 ms guest
         # RTT, health unreachable) and was rolled back per the owner-approved

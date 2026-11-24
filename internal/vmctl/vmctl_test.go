@@ -1991,6 +1991,7 @@ type mockVMManager struct {
 	bootHook           func(VMManagerConfig)
 	stopError          error
 	destroyError       error
+	destroyHook        func(vmID string)
 	resumeResponse     *VMInstanceInfo
 	resumeError        error
 	reattachResponse   *VMInstanceInfo
@@ -2166,6 +2167,9 @@ func (m *mockVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstance
 }
 
 func (m *mockVMManager) DestroyVMState(vmID string) error {
+	if m.destroyHook != nil {
+		m.destroyHook(vmID)
+	}
 	m.destroys = append(m.destroys, vmID)
 	return m.destroyError
 }

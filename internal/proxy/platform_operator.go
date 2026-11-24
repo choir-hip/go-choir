@@ -24,6 +24,11 @@ import (
 // writes; the proxy holds no copy of the roster.
 const platformOperatorYankPath = "/api/platform/operator/packages/yank"
 
+// platformOperatorCapacityPath is the owner's reading of the host's capacity:
+// live memory, disk, computers and the sign-up room. The public Pulse summary
+// says only whether sign-up is open.
+const platformOperatorCapacityPath = "/api/platform/operator/capacity"
+
 // HandlePlatformOperatorYank serves the operator account's yank.
 func (h *Handler) HandlePlatformOperatorYank(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

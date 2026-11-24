@@ -10,6 +10,7 @@
       "json": {
         "accounts": { "total": 3, "by_class": { "real": 2, "internal": 1 }, "new_real_last_24h": 1 },
         "computers": { "real_primary_total": 2, "real_primary_usable": 2, "real_primary_by_state": { "running": 2 } },
+        "capacity": { "room": { "available": true, "open": true } },
         "privacy": { "data_mode": "aggregate-only", "surface": "public-readonly" },
         "freshness": { "generated_by": "vmctl" }
       }
@@ -18,6 +19,7 @@
   "expect": [
     { "selector": "[data-pulse-summary]", "text": "Public aggregate health" },
     { "selector": "[data-pulse-metrics]", "text": "REAL USERS" },
+    { "selector": "[data-pulse-capacity]", "text": "sign-up open" },
     { "selector": "[data-pulse-privacy]" }
   ],
   "steps": [
