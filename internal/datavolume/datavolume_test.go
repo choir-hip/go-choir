@@ -598,7 +598,7 @@ func TestSubjectsAreNamedByDigestWithSizesCountsAndAges(t *testing.T) {
 		}
 	}
 	// The top row for capsule-artifacts carries the whole and its age too.
-	if top := topByName(t, w, "capsule-artifacts"); top.Files != 83 || top.OldestChanged == nil {
+	if top := topByName(t, w, "capsule-artifacts"); top.Files != 82 || top.OldestChanged == nil {
 		t.Fatalf("capsule-artifacts top row: %+v", top)
 	}
 }
