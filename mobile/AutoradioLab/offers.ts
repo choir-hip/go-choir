@@ -26,3 +26,16 @@ export function picksFor(offers: OfferJob[], groups: string[], picks: Record<str
   for (const j of offers) if (groups.includes(j.group) && STAGE_JOBS.includes(j.job)) { const c = chosen(j, picks); if (c) out[j.job] = c.id; }
   return out;
 }
+
+/** What the first-run press fetches, in bytes: the chosen option of every job of the two voice groups, each file once (the decision and the responder may be one file), the voice-print model among them. The welcome and the setup page show this one number. */
+export function setupBytes(offers: OfferJob[], picks: Record<string, string>): number {
+  const seen = new Set<string>(); let total = 0;
+  for (const j of offers) if (j.group !== 'search') { const o = needs(j, picks); if (o && !seen.has(o.id)) { seen.add(o.id); total += o.bytes; } }
+  return total;
+}
+/** The setup page's total line, in the words the native side writes (SetupCatalog.totalLabel), for this number. */
+export function totalWords(bytes: number, onWiFi: boolean): string {
+  if (!(bytes > 0)) return 'Nothing to download. The radio will use what is already on this phone.';
+  const size = bytes >= 1_000_000_000 ? `About ${(bytes / 1e9).toFixed(1)} GB.` : `About ${Math.max(1, Math.round(bytes / 1e7)) * 10} MB.`;
+  return onWiFi ? `${size} On Wi-Fi this takes a few minutes.` : `${size} You are on mobile data, so I will ask before I start.`;
+}

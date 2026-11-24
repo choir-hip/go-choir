@@ -35,7 +35,7 @@ import { lookupEdition, seamGet, type Get } from './notebook.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
 import * as pages from './pages.ts';
 import { consentAgree, consentPicks } from './consent.ts';
-import { picksFor, STAGE_JOBS, type OfferJob } from './offers.ts';
+import { picksFor, setupBytes, totalWords, STAGE_JOBS, type OfferJob } from './offers.ts';
 import { noEnrol, type Enrol } from './voicelearn.ts';
 import { keyState } from './api.ts';
 
@@ -193,13 +193,13 @@ function cardFor(m: Mem, v: VoiceFacts): { card: string; cardBody: string } {
   return { card: 'Make your edition', cardBody: 'Pick the topics you care about, then your paper is yours.' };
 }
 
-function view(m: Mem, v: VoiceFacts, top: string): Onboarding {
+function view(m: Mem, v: VoiceFacts, top: string, picks: Record<string, string>): Onboarding {
   let message = m.message;
   if (m.step === 'mic') { if (v.mic === 'refused') message = MIC_REFUSED_LINE; else if (v.mic === 'silent') message = MIC_SILENT_LINE; }
   const heard = v.mic === 'heard' ? (v.heard === '' ? 'Your microphone is working.' : v.heard) : '';
   const { card, cardBody } = cardFor(m, v);
   return {
-    step: m.step, title: TITLES[m.step] ?? 'Make it yours', message, totalLabel: v.totalLabel, device: v.device, mic: v.mic, heard, route: v.route, editionStatus: m.status, writingLine: m.writingLine, editionError: m.error,
+    step: m.step, title: TITLES[m.step] ?? 'Make it yours', message, totalLabel: v.offers.length > 0 ? totalWords(setupBytes(v.offers, picks), v.onWiFi) : v.totalLabel, device: v.device, mic: v.mic, heard, route: v.route, editionStatus: m.status, writingLine: m.writingLine, editionError: m.error,
     editionTitle: m.edition?.title ?? 'My edition', editionIntro: m.edition?.intro ?? '', editionAddress: EDIT, card, cardBody, aim: m.p.editionDone ? '' : 'Make it yours',
     askMobile: m.askMobile, setupFinished: v.setupFinished, setupStarted: v.setupStarted, hearingOK: m.hearingOK, skipped: m.p.skipped, editionDone: m.p.editionDone, level: v.level, rows: v.rows, summary: v.summary,
     editionLines: m.edition ? editionLines(m.edition) : [], talking: v.talking, editing: top === EDIT,
@@ -212,7 +212,7 @@ export async function onboardingPage(voice: VoiceFacts | null | undefined, _tick
   const v = { ...noVoice(), ...(voice ?? {}) };
   await reconcile(env, m, v);
   await mirror(env, m);
-  return view(m, v, top);
+  return view(m, v, top, await consentPicks(env.storage));
 }
 
 async function facts(env: Env): Promise<VoiceFacts> { return { ...noVoice(), ...((await env.device?.facts().catch(() => null)) ?? {}) }; }
@@ -244,7 +244,7 @@ export type Op = 'begin' | 'retry' | 'fallback' | 'mic' | 'micNext' | 'hearing' 
 export async function onboardingAct(op: string, arg: string, topics: string, top: string, env: Env): Promise<Onboarding> {
   const m = await load(env);
   // A step must never be taken on progress that was not read (it could not be saved, and the person's input would be dropped): say so, change nothing, and the next press reads again.
-  if (!m.loaded) { const f = await facts(env); return { ...view(m, f, top), message: 'Your progress could not be read just now. Try again.' }; }
+  if (!m.loaded) { const f = await facts(env); return { ...view(m, f, top, await consentPicks(env.storage)), message: 'Your progress could not be read just now. Try again.' }; }
   // The page sends the done ops only once its picks are loaded (`if ep.loaded`), so an empty text is an empty list: the general edition (E4).
   const picks = topics.split('\n').map((t) => t.trim()).filter((t) => t !== '');
   switch (op as Op) {
@@ -275,7 +275,7 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
       if (arg === 'true') { m.hearingOK = true; m.step = 'learn'; m.p.setupDone = true; m.message = ''; await save(env, m); }                // O5
       else { m.message = HEARING_AGAIN_LINE; await dev(env, 'obHearingPlay'); }
       break;
-    case 'learnDone': if (m.step === 'learn') { await dev(env, 'obVoiceStop'); m.step = 'voice'; m.message = ''; await save(env, m); } break;                      // learned, or not now: either way on
+    case 'learnDone': if (m.step === 'learn') { await dev(env, 'obEnrolDiscard'); m.step = 'voice'; m.message = ''; await save(env, m); } break;                      // learned, or not now: either way on
     case 'micSkip': if (m.step === 'mic') { await dev(env, 'obMicStop'); m.step = 'voice'; m.p.setupDone = true; m.message = ''; await save(env, m); } break;       // Not now at the microphone: nothing is asked, the tap path stays
     case 'topics': m.step = 'topics'; m.p.topicsStarted = true; m.p.skipped = false; m.message = ''; await save(env, m); break;
     case 'talk': {
@@ -303,7 +303,7 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
   const f = await facts(env);
   await reconcile(env, m, f);
   await mirror(env, m);
-  return view(m, f, top);
+  return view(m, f, top, await consentPicks(env.storage));
 }
 
 /** O11: a fresh install, signed in: ask the computer first, then offer the path once as an open page. */
