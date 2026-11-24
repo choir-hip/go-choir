@@ -14,7 +14,13 @@ component VoiceCardsList
     vcPick: action
   view
     column testId="voice-cards" gap=10 width="100%"
-      for c in vc.cards key=c.id
+      for c, i in vc.cards key=c.id
+        // A model's name and its credit are shown once, above its first voice (the cards of one model are together).
+        if c.group != "" and (i == 0 or match vc.cards.at(i - 1) { case some(p) => p.model != c.model, case none => true })
+          column gap=2 padding="8px 2px 0px" testId=`voice-group-${c.model}`
+            text c.group testId=`voice-group-name-${c.model}` role="heading" aria-level=3 font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg
+            if c.credit != ""
+              text c.credit testId=`voice-credit-${c.model}` font-family=th.fontLabel font-size="-exact-caption2" line-height=1.35 color=th.muted
         button press=vcPick(c.id) testId=`voice-card-${c.id}` appearance="none" width="100%" role="radio" aria-checked=c.selected
           Card(level=(c.selected ? 2 : 1), testId=`voice-card-box-${c.id}`, minHeight=0)
             column padding=14 gap=8

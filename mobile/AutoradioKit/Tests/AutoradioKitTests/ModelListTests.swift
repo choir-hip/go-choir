@@ -96,4 +96,41 @@ final class ModelListTests: XCTestCase {
         let search = ModelOffer.jobs(profile: phone).first { $0.job == "search" }!.options[0]
         XCTAssertTrue(search.note.contains("Gemma") && search.note.contains("Prohibited Use Policy"), search.note)
     }
+
+    // VOICES (owner, 2026-11-24: more voices in Voice and models). The rows are generated from the packs' metadata (scripts/gen-voice-rows.ts); the list carries them with their credits.
+    //  W1 the built-in list carries every generated voice row, English only, with the credit of its model, and survives JSON.
+    //  W2 a voice row with no credit is not offered (dropped on decode), and a row with no name, voice or model likewise.
+    //  W3 every voice row names a model the catalog knows, and its stage is one the voice runtime makes.
+    //  W4 the catalog's cards are the list's rows, with the default (Heart) first and the system voice last.
+    func testTheListCarriesTheVoiceRowsWithTheirCredits() throws {                                   // W1
+        let l = ModelList.builtIn()
+        XCTAssertEqual(l.voices.map(\.id), VoiceRows.all.map(\.id))
+        XCTAssertEqual(l.voices.filter { $0.modelID == "kokoro-82m-ane" }.count, 28)
+        XCTAssertEqual(l.voices.filter { $0.modelID == "phonon-31m" }.count, 25)
+        for v in l.voices { XCTAssertFalse(v.credit.isEmpty, "\(v.id) is offered with no credit"); XCTAssertTrue(v.credit.contains("Apache-2.0"), v.id) }
+        XCTAssertEqual(try ModelList.decode(l.encoded()), l)
+    }
+    func testAVoiceRowWithNoCreditIsNotOffered() throws {                                            // W2
+        func row(_ id: String, credit: String, name: String = "N", model: String = "kokoro-82m-ane") -> String {
+            #"{"id":"\#(id)","stageID":"kokoro","voice":"af_x","modelID":"\#(model)","group":"G","name":"\#(name)","blurb":"b","sample":"s","license":"Apache-2.0","credit":"\#(credit)","bytes":0}"#
+        }
+        let json = #"{"version":1,"models":[],"voices":[\#(row("kokoro:ok", credit: "Credit")),\#(row("kokoro:nocredit", credit: "")),\#(row("kokoro:noname", credit: "C", name: "")),\#(row("kokoro:nomodel", credit: "C", model: ""))]}"#
+        XCTAssertEqual(try ModelList.decode(Data(json.utf8)).voices.map(\.id), ["kokoro:ok"])
+        XCTAssertEqual(try ModelList.decode(Data(#"{"version":1,"models":[]}"#.utf8)).voices.count, 0, "an older list with no voices still decodes")
+    }
+    func testEveryVoiceRowNamesAModelAndAStageTheRuntimeMakes() {                                   // W3
+        for v in ModelList.builtIn().voices {
+            XCTAssertTrue(KnownModels.contains(v.modelID), "\(v.id) names a model the catalog lacks")
+            XCTAssertTrue(VoiceCatalog.neuralStageIDs.contains(v.stageID), "\(v.id): stage \(v.stageID)")
+        }
+    }
+    func testTheCatalogsCardsAreTheListsRows() {                                                     // W4
+        let ids = VoiceCatalog.options.map(\.id)
+        XCTAssertEqual(Array(ids.prefix(VoiceRows.all.count)), VoiceRows.all.map(\.id))
+        XCTAssertEqual(VoiceCatalog.defaultOption.id, "kokoro:af_heart")
+        XCTAssertEqual(VoiceCatalog.options.last?.id, "system")
+        XCTAssertTrue(ids.contains("pocket-tts:alba"))
+        for r in VoiceRows.all { XCTAssertEqual(VoiceCatalog.option(id: r.id)?.setting, StageSetting(id: r.stageID, params: ["voice": .string(r.voice)]), "\(r.id): the voice id reaches the stage as its \"voice\" parameter") }
+        XCTAssertEqual(Set(ids).count, ids.count)
+    }
 }

@@ -1,0 +1,31 @@
+// Settings, Voice and models, on the real plan and the web host. The web host has no phone behind it: its voice cards are the interface's stand-in (exact-package/interface/voice.json, `substitute`):
+// two Kokoro voices, one Phonon voice and the phone's own voice, each carrying its model's name and the credit its licence asks for. What is proved here is the page: voices are shown under
+// their model with that model's credit once, every voice keeps its name and blurb, the phone's own voice (nothing downloaded, no credit) shows no credit, and a card with no credit is a failure.
+test "Settings, Voice and models: the voices are listed under their model, each model with its credit"
+  clock data
+  tap "bar-mark"
+  clock settle
+  tap "place-settings"
+  clock settle
+  tap "settings-nav-voice"
+  clock settle
+  expect tree has "voice-group-kokoro-82m-ane"
+  expect text "voice-group-name-kokoro-82m-ane" == "Kokoro 82M"
+  expect text "voice-credit-kokoro-82m-ane" == "Kokoro 82M voice by hexgrad, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+  expect tree has "voice-card-kokoro:af_heart"
+  expect tree has "voice-card-kokoro:am_adam"
+  expect tree has "voice-group-phonon-31m"
+  expect text "voice-credit-phonon-31m" == "Phonon 31M voice by Gradium, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+  expect tree has "voice-card-phonon:en_us_Zoey"
+
+test "Settings, Voice and models: the phone's own voice is a card with no model group and no credit"
+  clock data
+  tap "bar-mark"
+  clock settle
+  tap "place-settings"
+  clock settle
+  tap "settings-nav-voice"
+  clock settle
+  expect tree has "voice-card-system"
+  expect tree missing "voice-credit-system"
+  expect tree missing "voice-group-system"

@@ -1,0 +1,222 @@
+{
+ "repo": "FluidInference/kokoro-82m-coreml",
+ "commit": "51c072023b254cd02368102ab88bcfbff6cad4cd",
+ "files": [
+  {
+   "path": "voices/af_alloy.json",
+   "bytes": 2668823
+  },
+  {
+   "path": "voices/af_aoede.json",
+   "bytes": 2675629
+  },
+  {
+   "path": "voices/af_bella.json",
+   "bytes": 2678538
+  },
+  {
+   "path": "voices/af_heart.json",
+   "bytes": 2813032
+  },
+  {
+   "path": "voices/af_jessica.json",
+   "bytes": 2667415
+  },
+  {
+   "path": "voices/af_kore.json",
+   "bytes": 2677872
+  },
+  {
+   "path": "voices/af_nicole.json",
+   "bytes": 2680162
+  },
+  {
+   "path": "voices/af_nova.json",
+   "bytes": 2677525
+  },
+  {
+   "path": "voices/af_river.json",
+   "bytes": 2672330
+  },
+  {
+   "path": "voices/af_sarah.json",
+   "bytes": 2672574
+  },
+  {
+   "path": "voices/af_sky.json",
+   "bytes": 2677239
+  },
+  {
+   "path": "voices/am_adam.json",
+   "bytes": 2675095
+  },
+  {
+   "path": "voices/am_echo.json",
+   "bytes": 2674446
+  },
+  {
+   "path": "voices/am_eric.json",
+   "bytes": 2661872
+  },
+  {
+   "path": "voices/am_fenrir.json",
+   "bytes": 2678091
+  },
+  {
+   "path": "voices/am_liam.json",
+   "bytes": 2672109
+  },
+  {
+   "path": "voices/am_michael.json",
+   "bytes": 2667552
+  },
+  {
+   "path": "voices/am_onyx.json",
+   "bytes": 2668384
+  },
+  {
+   "path": "voices/am_puck.json",
+   "bytes": 2671969
+  },
+  {
+   "path": "voices/am_santa.json",
+   "bytes": 2679608
+  },
+  {
+   "path": "voices/bf_alice.json",
+   "bytes": 2661239
+  },
+  {
+   "path": "voices/bf_emma.json",
+   "bytes": 2679667
+  },
+  {
+   "path": "voices/bf_isabella.json",
+   "bytes": 2675405
+  },
+  {
+   "path": "voices/bf_lily.json",
+   "bytes": 2663734
+  },
+  {
+   "path": "voices/bm_daniel.json",
+   "bytes": 2672663
+  },
+  {
+   "path": "voices/bm_fable.json",
+   "bytes": 2656216
+  },
+  {
+   "path": "voices/bm_george.json",
+   "bytes": 2669308
+  },
+  {
+   "path": "voices/bm_lewis.json",
+   "bytes": 2668483
+  },
+  {
+   "path": "voices/ef_dora.json",
+   "bytes": 2686508
+  },
+  {
+   "path": "voices/em_alex.json",
+   "bytes": 2686460
+  },
+  {
+   "path": "voices/em_santa.json",
+   "bytes": 2682626
+  },
+  {
+   "path": "voices/ff_siwis.json",
+   "bytes": 2672012
+  },
+  {
+   "path": "voices/hf_alpha.json",
+   "bytes": 2675304
+  },
+  {
+   "path": "voices/hf_beta.json",
+   "bytes": 2670179
+  },
+  {
+   "path": "voices/hm_omega.json",
+   "bytes": 2677201
+  },
+  {
+   "path": "voices/hm_psi.json",
+   "bytes": 2667766
+  },
+  {
+   "path": "voices/if_sara.json",
+   "bytes": 2668488
+  },
+  {
+   "path": "voices/im_nicola.json",
+   "bytes": 2652608
+  },
+  {
+   "path": "voices/jf_alpha.json",
+   "bytes": 2668652
+  },
+  {
+   "path": "voices/jf_gongitsune.json",
+   "bytes": 2666403
+  },
+  {
+   "path": "voices/jf_nezumi.json",
+   "bytes": 2669419
+  },
+  {
+   "path": "voices/jf_tebukuro.json",
+   "bytes": 2656119
+  },
+  {
+   "path": "voices/jm_kumo.json",
+   "bytes": 2670045
+  },
+  {
+   "path": "voices/pf_dora.json",
+   "bytes": 2688823
+  },
+  {
+   "path": "voices/pm_alex.json",
+   "bytes": 2685661
+  },
+  {
+   "path": "voices/pm_santa.json",
+   "bytes": 2681608
+  },
+  {
+   "path": "voices/zf_xiaobei.json",
+   "bytes": 2665260
+  },
+  {
+   "path": "voices/zf_xiaoni.json",
+   "bytes": 2665177
+  },
+  {
+   "path": "voices/zf_xiaoxiao.json",
+   "bytes": 2667942
+  },
+  {
+   "path": "voices/zf_xiaoyi.json",
+   "bytes": 2670364
+  },
+  {
+   "path": "voices/zm_yunjian.json",
+   "bytes": 2668065
+  },
+  {
+   "path": "voices/zm_yunxi.json",
+   "bytes": 2674889
+  },
+  {
+   "path": "voices/zm_yunxia.json",
+   "bytes": 2665973
+  },
+  {
+   "path": "voices/zm_yunyang.json",
+   "bytes": 2666163
+  }
+ ]
+}

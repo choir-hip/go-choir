@@ -39,6 +39,10 @@ public struct VoiceOption: Codable, Equatable, Sendable, Identifiable {
     public var setting: StageSetting {
         voice.isEmpty ? StageSetting(id: stageID) : StageSetting(id: stageID, params: ["voice": .string(voice)])
     }
+    /// The model this voice is one of, by its name ("Kokoro 82M"); "" for the system voice. The settings page groups the cards under it.
+    public var group: String { VoiceRows.all.first { $0.id == id }?.group ?? (modelID == VoiceCatalog.pocketModel ? "PocketTTS 100M" : "") }
+    /// The credit its model's licence asks the app to show: the generated row's, else the catalog's own for the model; "" when the licence asks for none (the system voice).
+    public var credit: String { VoiceRows.all.first { $0.id == id }?.credit ?? KnownModels.managed.first { $0.id == modelID }?.credit ?? "" }
     /// "About 350 MB" for a download, "Built in" for the system voice.
     public var sizeLabel: String {
         guard !modelID.isEmpty, let m = KnownModels.managed.first(where: { $0.id == modelID }) else { return "Built in" }
@@ -56,30 +60,13 @@ public enum VoiceCatalog {
     /// Stages that need a model on the phone; only these get the readiness check and the fall back.
     public static let neuralStageIDs: Set<String> = ["kokoro", "phonon", "pocket-tts"]
 
-    /// Kokoro 82M voices that FluidInference/kokoro-82m-coreml publishes (`voices/<id>.json`, listed by the Hugging Face API on 2026-11-15)
-    /// and the American and British English ones to start with. Pocket's one voice is the stage's own default. The first is the default.
-    /// Phonon (an alternative to Kokoro, to be heard beside it) sits right after Kokoro's cards: three of its 103 voices, the ones the pack
-    /// ships as ready-made states, so they start without a prefill (names are the pack's own: `<locale>_<Name>`, `voices/` and `voices_catalog.jsonl`,
-    /// listed by the Hugging Face API on 2026-11-15). The system voice stays last.
     /// The cards the person is shown: a voice whose model no download group contains is not offered (it could never be fetched).
     public static func offered(by door: DownloadDoor = .shared) -> [VoiceOption] { options.filter { $0.modelID.isEmpty || door.group(ofModel: $0.modelID) != nil } }
-    public static let options: [VoiceOption] = [
-        VoiceOption(id: "kokoro:af_heart", stageID: "kokoro", voice: "af_heart", name: "Heart", blurb: "Warm and clear",
-                    sample: "Hello, I'm Heart. I'll read you the paper.", modelID: kokoroModel),
-        VoiceOption(id: "kokoro:af_bella", stageID: "kokoro", voice: "af_bella", name: "Bella", blurb: "Bright and quick",
-                    sample: "Hi, I'm Bella. Shall we see what's new today?", modelID: kokoroModel),
-        VoiceOption(id: "kokoro:am_adam", stageID: "kokoro", voice: "am_adam", name: "Adam", blurb: "Steady and calm",
-                    sample: "Good morning, I'm Adam. Here is your radio.", modelID: kokoroModel),
-        VoiceOption(id: "kokoro:bf_emma", stageID: "kokoro", voice: "bf_emma", name: "Emma", blurb: "British, friendly",
-                    sample: "Hello, I'm Emma. Lovely to meet you.", modelID: kokoroModel),
-        VoiceOption(id: "kokoro:bm_george", stageID: "kokoro", voice: "bm_george", name: "George", blurb: "British, deep",
-                    sample: "Good day, I'm George. Let's begin.", modelID: kokoroModel),
-        VoiceOption(id: "phonon:en_us_Easton", stageID: "phonon", voice: "en_us_Easton", name: "Easton (Phonon)", blurb: "Young, punchy, American",
-                    sample: "Hi, I'm Easton. This is Phonon, a small voice that runs on your phone.", modelID: phononModel),
-        VoiceOption(id: "phonon:en_us_Zoey", stageID: "phonon", voice: "en_us_Zoey", name: "Zoey (Phonon)", blurb: "Playful and upbeat, American",
-                    sample: "Hi, I'm Zoey. This is Phonon. Shall we see what's new today?", modelID: phononModel),
-        VoiceOption(id: "phonon:en_gb_Maeve", stageID: "phonon", voice: "en_gb_Maeve", name: "Maeve (Phonon)", blurb: "Sparky and attentive, British",
-                    sample: "Hello, I'm Maeve. This is Phonon. Lovely to meet you.", modelID: phononModel),
+    /// Every voice of the voice models (Kokoro's and Phonon's English ones) is a row of `VoiceRows`, made from the packs' own metadata and carried by the model list; `stageID` and
+    /// `voice` are how a voice id reaches the native stage (its `voice` parameter). Pocket's one voice is the stage's own default; the system voice is last.
+    public static let options: [VoiceOption] = VoiceRows.all.map {
+        VoiceOption(id: $0.id, stageID: $0.stageID, voice: $0.voice, name: $0.name, blurb: $0.blurb, sample: $0.sample, modelID: $0.modelID)
+    } + [
         VoiceOption(id: "pocket-tts:alba", stageID: "pocket-tts", voice: "alba", name: "Alba", blurb: "Light and quick to start",
                     sample: "Hello, I'm Alba. I start talking quickly.", modelID: pocketModel),
         VoiceOption(id: "system", stageID: fallbackStageID, voice: "", name: "This phone's voice", blurb: "Built in, no download",

@@ -608,7 +608,10 @@
       "note": "string",
       "progress": "number",
       "selected": "bool",
-      "playing": "bool"
+      "playing": "bool",
+      "model": "string",
+      "group": "string",
+      "credit": "string"
     },
     "VoiceCards": {
       "selected": "string",
@@ -1130,9 +1133,66 @@
       "answers": "VoiceCards",
       "substitute": {
         "default": {
-          "selected": "",
+          "selected": "kokoro:af_heart",
           "message": "",
-          "cards": []
+          "cards": [
+            {
+              "id": "kokoro:af_heart",
+              "name": "Heart",
+              "blurb": "American, female voice",
+              "sizeLabel": "About 350 MB",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": true,
+              "playing": false,
+              "model": "kokoro-82m-ane",
+              "group": "Kokoro 82M",
+              "credit": "Kokoro 82M voice by hexgrad, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+            },
+            {
+              "id": "kokoro:am_adam",
+              "name": "Adam",
+              "blurb": "American, male voice",
+              "sizeLabel": "About 350 MB",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": false,
+              "playing": false,
+              "model": "kokoro-82m-ane",
+              "group": "Kokoro 82M",
+              "credit": "Kokoro 82M voice by hexgrad, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+            },
+            {
+              "id": "phonon:en_us_Zoey",
+              "name": "Zoey (Phonon)",
+              "blurb": "Playful, upbeat and Gen Z energy voice with a standard American accent.",
+              "sizeLabel": "About 350 MB",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": false,
+              "playing": false,
+              "model": "phonon-31m",
+              "group": "Phonon 31M",
+              "credit": "Phonon 31M voice by Gradium, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+            },
+            {
+              "id": "system",
+              "name": "This phone's voice",
+              "blurb": "Built in, no download",
+              "sizeLabel": "Built in",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": false,
+              "playing": false,
+              "model": "",
+              "group": "",
+              "credit": ""
+            }
+          ]
         }
       }
     },
