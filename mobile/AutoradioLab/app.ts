@@ -35,7 +35,7 @@ import { micPermission } from './micask.ts';
 import { downloadsPage, downloadsAct } from './downloads.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
-import { COMPUTER_ID_NAME, KEY_ID_NAME, KEY_NAME, reviewerRun, signInCancel, signInReset, signInRun, signInView, type Mode, type SignInEnv } from './app-signin.ts';
+import { reviewerRun, signInCancel, signInReset, signInRun, signInView, type SignInEnv } from './app-signin.ts';
 import { radioPlayClip } from './clip-play.ts';
 import { podcastNow } from './podcast-now.ts';
 
