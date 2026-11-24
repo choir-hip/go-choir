@@ -235,7 +235,13 @@ func (s *twoFacedStub) IsReal() bool { return true }
 func (s *twoFacedStub) Call(ctx context.Context, req provider.LLMRequest) (*provider.LLMResponse, error) {
 	if s.calls.Add(1) == 1 {
 		s.inFlight <- struct{}{}
-		<-s.release
+		select {
+		case <-s.release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(30 * time.Second):
+			return nil, errors.New("twoFacedStub: release never came")
+		}
 		return nil, errors.New("synthetic: status 429 Too Many Requests (sanitized)")
 	}
 	return nil, &provider.QuotaExhaustedError{Provider: "synthetic", Status: "429 Too Many Requests"}
