@@ -1,6 +1,6 @@
 // Sign-in and account creation on the real plan and the web host: the screen the app opens when a signed-out person asks to sign in. The ceremony itself (the platform's passkey screen, the
 // finish routes, the key) is proven by app-signin.test.ts and the Go tests; the passkey screen is only seen on a device, so this proves what the person reads before it.
-test "Sign in opens the passkey screen: sign in, an email field, the consent line above Create account, no code"
+test "Sign in opens the passkey screen: sign in, an email field, the consent line above Create account"
   clock data
   expect state authOpen == false
   tap "signedout-signin"

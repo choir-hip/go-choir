@@ -1,7 +1,7 @@
 {
   "purpose.microphone": "Autoradio hears you when Voice is on, so you can talk to the radio, and records your voice when you tap Take, or when you teach it your voice. Speech becomes text on this phone. A take is uploaded only if you publish it.",
   "purpose.speech": "Autoradio turns what you say into text on this phone, to understand your request.",
-  "app.signin.intro": "Sign in with a passkey, or create an account. There is no password and no code.",
+  "app.signin.intro": "Sign in with a passkey, or create an account. There is no password. A new account first checks your email address with a code we send.",
   "app.signin.signin": "Sign in with a passkey",
   "app.signin.or": "New here?",
   "app.signin.email": "Your email address",
@@ -9,6 +9,8 @@
   "app.signin.privacy": "Privacy Policy",
   "app.signin.terms": "Terms",
   "app.signin.create": "Create account",
+  "app.signin.code": "8-digit code",
+  "app.signin.codesent": "We emailed you an 8-digit code. Type it here and tap Create account. If this email already has an account, we emailed a recovery link instead.",
   "app.signin.notnow": "Not now",
   "app.signin.waiting": "Waiting for the passkey screen.",
   "app.signin.cancel": "Cancel"

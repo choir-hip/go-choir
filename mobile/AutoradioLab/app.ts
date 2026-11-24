@@ -206,7 +206,7 @@ const sources: Sources = {
   learnPage: ([facts]) => learnPage(facts as never),
   learnAct: ([op, facts]) => learnAct(op, facts as never, nativeLater() as never),
   // Sign-in and account creation (app-signin.ts): one attempt, one state machine with an id, owned there. The passkey screen is the platform's; the key is kept as Exact secrets. No native code is involved.
-  signInRun: ([mode, email], store) => signInRun(signInEnv(store), (mode === 'create' ? 'create' : 'signin') as Mode, String(email ?? '')),
+  signInRun: ([mode, email, code], store) => signInRun(signInEnv(store), (mode === 'create' ? 'create' : 'signin') as Mode, String(email ?? ''), String(code ?? '')),
   signInCancel: (_a, store) => signInCancel(signInEnv(store)),
   signInOpen: (_a, store) => signInReset(signInEnv(store)),
   signInView: ([_tick]) => signInView(),

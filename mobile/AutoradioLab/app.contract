@@ -98,6 +98,8 @@ component Autoradio
     signInPasskey
     editAuthEmail
     authEmail
+    editAuthCode
+    authCode
     authOpen
     siv
     signOut

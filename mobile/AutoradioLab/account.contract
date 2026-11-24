@@ -66,6 +66,8 @@ members Autoradio
   // The sign-in screen is up (the card, Settings and the first-run page open it through `signIn`) and the email typed for a new account.
   state authOpen = false
   state authEmail = ""
+  // The 8-digit code from the email that proves the address of a new account (the server mails it before any account exists).
+  state authCode = ""
   state sivTick = 0
   action bumpSiv
     sivTick = sivTick + 1
@@ -81,9 +83,12 @@ members Autoradio
     sivTick = sivTick + 1
   action editAuthEmail(v: string)
     authEmail = v
+  action editAuthCode(v: string)
+    authCode = v
   // "Create account": the email typed, the consent line above the button read, the passkey screen. Tapping it is the agreement (owner, 2026-11-23).
+  // With no code typed it mails one (the screen then asks for it); with the code it makes the passkey.
   action createAccount
-    send signedRun = signInRun("create", authEmail)
+    send signedRun = signInRun("create", authEmail, authCode)
     sivTick = sivTick + 1
   // "Sign in": the passkey screen with no email typed (a discoverable credential).
   action signInPasskey
@@ -102,6 +107,7 @@ members Autoradio
   action finishAuth
     authOpen = false
     authEmail = ""
+    authCode = ""
     send acct = choirRefresh()
   task authDone when siv.phase == "done" and authOpen key=sivTick
     after(400, finishAuth)

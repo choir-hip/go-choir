@@ -40,6 +40,8 @@ component SignInScreen
     siv: SignInView
     authEmail: string
     editAuthEmail: action
+    authCode: string
+    editAuthCode: action
     createAccount: action
     signInPasskey: action
     cancelSignIn: action
@@ -67,6 +69,15 @@ component SignInScreen
               ::placeholder
                 color=th.muted
             RowRule(indent=0)
+          // A new account proves its address first: the email was sent, and the code from it is typed here.
+          if siv.phase == "code"
+            column width="100%" gap=8
+              text t("app.signin.codesent") testId="signup-code-sent" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
+              input type="text" value=authCode input=editAuthCode submit=createAccount placeholder=t("app.signin.code") aria-label=t("app.signin.code") testId="signup-code" enterkeyhint="go" min-height=44
+                font-family=th.fontText font-size=17 color=th.fg padding="8px 0px" border-width=0 background-color="transparent"
+                ::placeholder
+                  color=th.muted
+              RowRule(indent=0)
           // The one place a person agrees (owner, 2026-11-23): readable, above the button, in the page's own text colour. Tapping "Create account" is the agreement.
           text t("app.signin.consent") testId="signup-consent" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.fg text-align="center"
           row gap=24 justify-content="center"

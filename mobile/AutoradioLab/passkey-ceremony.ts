@@ -2,7 +2,7 @@
 // It is shared: sign-in and account creation (app-signin.ts) use it, and account deletion will use `getCeremony` for a fresh assertion (no caller yet). It holds no key and
 // makes no key: the credential it returns goes to a finish route the caller names, and the caller keeps what that route answers.
 //
-// `create` is the web's own register/begin (an email, then creation options); `get` is a discoverable assertion with no email
+// `create` is the web's own register/begin (an email and the mailed code, then creation options); `get` is a discoverable assertion with no email
 // (`/auth/app/login/begin`, internal/auth/app_ceremony.go). The relying party is choir.news, the same one the web site uses, so a passkey made here
 // signs in at choir.news and the reverse. A grant `auth.passkey choir.news` and the Associated Domains entitlement (the build derives it) let
 // the platform accept the app for that site.
@@ -10,7 +10,7 @@
 // Plain errors, each one a `kind` the screen words (`ceremonyMessage`): the person cancelled, there is no passkey for this site on this phone,
 // the passkey exists already, sign-up is closed (the server's waitlist answer), the phone is offline. Nothing here logs a challenge or a credential.
 
-export type CeremonyKind = 'cancelled' | 'exists' | 'closed' | 'offline' | 'unsupported' | 'busy' | 'refused' | 'email' | 'failed';
+export type CeremonyKind = 'cancelled' | 'exists' | 'closed' | 'offline' | 'unsupported' | 'busy' | 'refused' | 'email' | 'code' | 'unproved' | 'failed';
 
 export class CeremonyError extends Error {
   kind: CeremonyKind;
@@ -29,6 +29,10 @@ export type CeremonyEnv = { origin: string; passkeys: Passkeys; fetch?: typeof f
 export const CEREMONY_TIMEOUT_MS = 15000;
 export const LOGIN_BEGIN_PATH = '/auth/app/login/begin';
 export const REGISTER_BEGIN_PATH = '/auth/register/begin';
+export const REGISTER_MAIL_PATH = '/auth/register/mail';
+
+/** What proves the address before an account is made: the mailed code, the attempt it belongs to, and the secret this client made when it asked (a code works only for the client that asked). */
+export type Proof = { attemptId: string; code: string; binding: string };
 
 export type Reply = { status: number; body: unknown };
 
@@ -53,6 +57,8 @@ const field = (o: unknown, name: string): unknown => (o && typeof o === 'object'
 export function refusal(reply: Reply): CeremonyError {
   const code = field(reply.body, 'code'), text = String(field(reply.body, 'error') ?? '').slice(0, 200);
   if (reply.status === 403 && code === 'registration_waitlist') return new CeremonyError('closed', text);
+  if (reply.status === 403 && code === 'address_unproved') return new CeremonyError('unproved', text);
+  if (reply.status === 400 && (code === 'proof_required' || /invalid or expired code/i.test(text))) return new CeremonyError('code', text);
   if (reply.status === 409) return new CeremonyError('exists', text);
   if (reply.status === 429) return new CeremonyError('busy', text);
   if (reply.status === 400 && /valid email|email is required/i.test(text)) return new CeremonyError('email', text);
@@ -76,9 +82,18 @@ function publicKeyOf(body: unknown): unknown {
   return pk;
 }
 
-/** Create a passkey for `email`: the server's creation options, the platform's screen. Answers the credential the finish route takes. */
-export async function createCeremony(env: CeremonyEnv, email: string): Promise<unknown> {
-  const begin = await postPublic(env, REGISTER_BEGIN_PATH, { email });
+/** Ask the server to mail a code to `email`. No account exists afterwards; an address that has one is mailed its recovery link instead, and the answer is the same. Answers the attempt's id. */
+export async function sendRegisterCode(env: CeremonyEnv, email: string, binding: string): Promise<string> {
+  const reply = await postPublic(env, REGISTER_MAIL_PATH, { email, binding });
+  if (reply.status !== 200) throw refusal(reply);
+  const id = field(reply.body, 'attempt_id');
+  if (typeof id !== 'string' || id === '') throw new CeremonyError('failed', 'the server sent no attempt');
+  return id;
+}
+
+/** Create a passkey for `email`, whose address `proof` proves: the server's creation options, the platform's screen. Answers the credential the finish route takes. */
+export async function createCeremony(env: CeremonyEnv, email: string, proof: Proof): Promise<unknown> {
+  const begin = await postPublic(env, REGISTER_BEGIN_PATH, { email, attempt_id: proof.attemptId, code: proof.code, binding: proof.binding });
   if (begin.status !== 200) throw refusal(begin);
   const publicKey = publicKeyOf(begin.body);
   try { return await env.passkeys.create({ publicKey }); } catch (e) { throw platformError(e); }
@@ -97,13 +112,15 @@ export function ceremonyMessage(e: unknown, mode: 'create' | 'signin'): string {
   const kind: CeremonyKind = e instanceof CeremonyError ? e.kind : 'failed';
   switch (kind) {
     case 'cancelled': return mode === 'create' ? 'No passkey was made.' : 'No passkey was used. If this phone has none for Choir, create an account first.';
-    case 'exists': return mode === 'create' ? 'That email already has an account, or this phone already has its passkey. Sign in instead.' : 'This phone has no passkey that works here. Create an account first.';
+    case 'exists': return mode === 'create' ? 'This phone already has this passkey, or the email already has an account (we mailed it a recovery link). Sign in instead.' : 'This phone has no passkey that works here. Create an account first.';
     case 'closed': return 'Choir is full for now. You are on the waiting list, and we will email you when there is room.';
     case 'offline': return 'No connection. Check the network and try again.';
     case 'unsupported': return 'This phone cannot make passkeys here. Check that iCloud Keychain is on.';
     case 'refused': return 'The app could not be verified for choir.news. Try again later.';
     case 'busy': return 'Choir is busy. Try again in a moment.';
     case 'email': return 'Enter a valid email address.';
+    case 'code': return 'That code did not work. Check the code in the email, or ask for a new one.';
+    case 'unproved': return "This account's email address has not been verified. Recover the account by email at choir.news, then sign in.";
     default: return 'Something went wrong. Try again.';
   }
 }

@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { CeremonyError, ceremonyMessage, createCeremony, getCeremony, type CeremonyEnv } from './passkey-ceremony.ts';
+import { CeremonyError, ceremonyMessage, createCeremony, getCeremony, sendRegisterCode, type CeremonyEnv, type Proof } from './passkey-ceremony.ts';
+
+const PROOF: Proof = { attemptId: 'att', code: '12345678', binding: 'b'.repeat(32) };
 
 const ORIGIN = 'https://choir.news';
 const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
@@ -27,33 +29,33 @@ describe('create', () => {
     let seen: unknown;
     const { e, calls } = env({ '/auth/register/begin': () => reply(200, { publicKey: { challenge: 'ch', rp: { id: 'choir.news' } } }) },
       { create: async (o) => { seen = o; return { id: 'made' }; } });
-    expect(await createCeremony(e, 'a@b.example')).toEqual({ id: 'made' });
-    expect(calls).toEqual([{ path: '/auth/register/begin', body: { email: 'a@b.example' } }]);
+    expect(await createCeremony(e, 'a@b.example', PROOF)).toEqual({ id: 'made' });
+    expect(calls).toEqual([{ path: '/auth/register/begin', body: { email: 'a@b.example', attempt_id: 'att', code: '12345678', binding: 'b'.repeat(32) } }]);
     expect(seen).toEqual({ publicKey: { challenge: 'ch', rp: { id: 'choir.news' } } });
   });
   test('sign-up closed, existing email, bad email, busy and offline are their own kinds, and the screen never opens', async () => {
     let opened = 0;
     const pk = { create: async () => { opened++; return {}; } };
-    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(403, { code: 'registration_waitlist', error: 'Choir is full' }) }, pk).e, 'a@b.c'))).toBe('closed');
-    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(409, { error: 'email already registered' }) }, pk).e, 'a@b.c'))).toBe('exists');
-    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(400, { error: 'please enter a valid email address' }) }, pk).e, 'x'))).toBe('email');
-    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(429, {}) }, pk).e, 'a@b.c'))).toBe('busy');
-    expect(await kindOf(createCeremony(env({}, pk).e, 'a@b.c'))).toBe('offline');
-    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(500, {}) }, pk).e, 'a@b.c'))).toBe('failed');
+    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(403, { code: 'registration_waitlist', error: 'Choir is full' }) }, pk).e, 'a@b.c', PROOF))).toBe('closed');
+    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(409, { error: 'email already registered' }) }, pk).e, 'a@b.c', PROOF))).toBe('exists');
+    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(400, { error: 'please enter a valid email address' }) }, pk).e, 'x', PROOF))).toBe('email');
+    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(429, {}) }, pk).e, 'a@b.c', PROOF))).toBe('busy');
+    expect(await kindOf(createCeremony(env({}, pk).e, 'a@b.c', PROOF))).toBe('offline');
+    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(500, {}) }, pk).e, 'a@b.c', PROOF))).toBe('failed');
     expect(opened).toBe(0);
   });
   test('the platform rejections: cancel, an excluded credential, no support, a refused association, anything else', async () => {
     const begin = { '/auth/register/begin': () => reply(200, { publicKey: {} }) };
     const rejecting = (name: string) => env(begin, { create: async () => { throw Object.assign(new Error('x'), { name }); } }).e;
-    expect(await kindOf(createCeremony(rejecting('NotAllowedError'), 'a@b.c'))).toBe('cancelled');
-    expect(await kindOf(createCeremony(rejecting('AbortError'), 'a@b.c'))).toBe('cancelled');
-    expect(await kindOf(createCeremony(rejecting('InvalidStateError'), 'a@b.c'))).toBe('exists');
-    expect(await kindOf(createCeremony(rejecting('NotSupportedError'), 'a@b.c'))).toBe('unsupported');
-    expect(await kindOf(createCeremony(rejecting('SecurityError'), 'a@b.c'))).toBe('refused');
-    expect(await kindOf(createCeremony(rejecting('Weird'), 'a@b.c'))).toBe('failed');
+    expect(await kindOf(createCeremony(rejecting('NotAllowedError'), 'a@b.c', PROOF))).toBe('cancelled');
+    expect(await kindOf(createCeremony(rejecting('AbortError'), 'a@b.c', PROOF))).toBe('cancelled');
+    expect(await kindOf(createCeremony(rejecting('InvalidStateError'), 'a@b.c', PROOF))).toBe('exists');
+    expect(await kindOf(createCeremony(rejecting('NotSupportedError'), 'a@b.c', PROOF))).toBe('unsupported');
+    expect(await kindOf(createCeremony(rejecting('SecurityError'), 'a@b.c', PROOF))).toBe('refused');
+    expect(await kindOf(createCeremony(rejecting('Weird'), 'a@b.c', PROOF))).toBe('failed');
   });
   test('a begin with no options is a failure, not a crash', async () => {
-    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(200, {}) }).e, 'a@b.c'))).toBe('failed');
+    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(200, {}) }).e, 'a@b.c', PROOF))).toBe('failed');
   });
 });
 
@@ -89,5 +91,25 @@ describe('the words', () => {
     expect(ceremonyMessage(new Error('x'), 'create')).toBe('Something went wrong. Try again.');
     expect(ceremonyMessage(new CeremonyError('closed'), 'create')).toContain('full');
     expect(ceremonyMessage(new CeremonyError('offline'), 'signin')).toContain('connection');
+  });
+});
+
+describe('the mailed code', () => {
+  test('asks for the code with the address and the binding, answers the attempt id', async () => {
+    const { e, calls } = env({ '/auth/register/mail': () => reply(200, { attempt_id: 'att-9' }) });
+    expect(await sendRegisterCode(e, 'a@b.example', 'b'.repeat(32))).toBe('att-9');
+    expect(calls).toEqual([{ path: '/auth/register/mail', body: { email: 'a@b.example', binding: 'b'.repeat(32) } }]);
+  });
+  test('a refused or empty answer is a failure, a closed sign-up is its own kind', async () => {
+    expect(await kindOf(sendRegisterCode(env({ '/auth/register/mail': () => reply(403, { code: 'registration_waitlist' }) }).e, 'a@b.c', 'x'))).toBe('closed');
+    expect(await kindOf(sendRegisterCode(env({ '/auth/register/mail': () => reply(200, {}) }).e, 'a@b.c', 'x'))).toBe('failed');
+    expect(await kindOf(sendRegisterCode(env({ '/auth/register/mail': () => reply(429, {}) }).e, 'a@b.c', 'x'))).toBe('busy');
+  });
+  test('a wrong, spent or missing code is the code kind; an unproved account is its own kind', async () => {
+    const pk = {};
+    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(400, { error: 'invalid or expired code' }) }, pk).e, 'a@b.c', PROOF))).toBe('code');
+    expect(await kindOf(createCeremony(env({ '/auth/register/begin': () => reply(400, { code: 'proof_required', error: 'verify your address first' }) }, pk).e, 'a@b.c', PROOF))).toBe('code');
+    expect(await kindOf(getCeremony(env({ '/auth/app/login/begin': () => reply(403, { code: 'address_unproved', error: 'x' }) }, pk).e))).toBe('unproved');
+    expect(ceremonyMessage(new CeremonyError('code'), 'create')).toContain('code did not work');
   });
 });

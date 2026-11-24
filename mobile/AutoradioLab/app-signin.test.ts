@@ -8,12 +8,14 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 type Deferred<T> = { promise: Promise<T>; resolve(v: T): void; reject(e: unknown): void };
 const deferred = <T>(): Deferred<T> => { let resolve!: (v: T) => void, reject!: (e: unknown) => void; const promise = new Promise<T>((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 
-function harness(opts: { create?: () => Promise<unknown>; get?: () => Promise<unknown>; finish?: (path: string, body: any) => Promise<Response> | Response; keepThrows?: boolean } = {}) {
+function harness(opts: { create?: () => Promise<unknown>; get?: () => Promise<unknown>; finish?: (path: string, body: any) => Promise<Response> | Response; keepThrows?: boolean; beginRefusal?: unknown } = {}) {
   const kept: { key: string; keyId: string }[] = [], revoked: { key: string; keyId: string }[] = [], logs: string[] = [], views: View[] = [], posts: { path: string; body: any }[] = [];
   let n = 0;
   const fetcher = (async (url: string, init: { body: string }) => {
     const path = url.slice(ORIGIN.length), body = JSON.parse(init.body);
     posts.push({ path, body });
+    if (path === '/auth/register/mail') return json(200, { attempt_id: 'att-1' });
+    if (path === '/auth/register/begin' && opts.beginRefusal) return json(400, opts.beginRefusal);
     if (path === '/auth/register/begin' || path === '/auth/app/login/begin') return json(200, { publicKey: { challenge: 'c' } });
     return opts.finish ? opts.finish(path, body) : json(200, { api_key: KEY_A, key_id: 'ak_1' });
   }) as unknown as typeof fetch;
@@ -31,6 +33,10 @@ function harness(opts: { create?: () => Promise<unknown>; get?: () => Promise<un
 
 beforeEach(() => resetAttempt());
 
+/** Account creation is two presses: the first mails the code, the second spends the typed one. */
+const CODE = '12345678';
+const create = async (env: SignInEnv, email: string) => { await signInRun(env, 'create', email); return signInRun(env, 'create', email, CODE); };
+
 describe('the table', () => {
   test('an event of another attempt, or after an end, changes nothing', () => {
     const a = begin('x', 'signin');
@@ -47,11 +53,12 @@ describe('the table', () => {
 describe('create account', () => {
   test('the email goes to the server, the credential to the create finish, and the key is kept once', async () => {
     const h = harness();
-    const r = await signInRun(h.env, 'create', ' a@b.example ');
+    const r = await create(h.env, ' a@b.example ');
     expect(r.phase).toBe('done');
-    expect(h.posts.map((p) => p.path)).toEqual(['/auth/register/begin', '/auth/app/register/finish']);
-    expect(h.posts[0].body).toEqual({ email: 'a@b.example' });
-    expect(h.posts[1].body).toEqual({ app: 'news.choir.autoradio.lab', credential: { id: 'made' } });
+    expect(h.posts.map((p) => p.path)).toEqual(['/auth/register/mail', '/auth/register/begin', '/auth/app/register/finish']);
+    expect(h.posts[0].body).toEqual({ email: 'a@b.example', binding: h.posts[1].body.binding });
+    expect(h.posts[1].body).toEqual({ email: 'a@b.example', attempt_id: 'att-1', code: CODE, binding: h.posts[0].body.binding });
+    expect(h.posts[2].body).toEqual({ app: 'news.choir.autoradio.lab', credential: { id: 'made' } });
     expect(h.kept).toEqual([{ key: KEY_A, keyId: 'ak_1' }]);
     expect(signInView()).toMatchObject({ phase: 'done', pending: false, message: '' });
   });
@@ -66,7 +73,7 @@ describe('create account', () => {
   });
   test('sign-up closed says the waiting list and keeps nothing', async () => {
     const h = harness({ finish: () => json(403, { code: 'registration_waitlist', error: 'Choir is full' }) });
-    await signInRun(h.env, 'create', 'a@b.example');
+    await create(h.env, 'a@b.example');
     expect(signInView()).toMatchObject({ phase: 'failed' });
     expect(signInView().message).toContain('full for now');
     expect(h.kept).toEqual([]);
@@ -77,9 +84,53 @@ describe('create account', () => {
     let opened = 0;
     const base = harness({ create: async () => { opened++; return {}; } });
     const env = { ...base.env, ceremony: { ...base.env.ceremony, fetch: (async () => json(403, { code: 'registration_waitlist', error: 'Choir is full' })) as unknown as typeof fetch } };
-    await signInRun(env, 'create', 'a@b.example');
+    await signInRun(env, 'create', 'a@b.example');   // refused at the mail: no code, no screen
     expect(opened).toBe(0);
     expect(signInView().message).toContain('full for now');
+  });
+});
+
+describe('proving the address before the account', () => {
+  test('the first press only mails a code: no passkey screen, nothing finished, the screen waits for the code', async () => {
+    let opened = 0;
+    const h = harness({ create: async () => { opened++; return {}; } });
+    const r = await signInRun(h.env, 'create', 'a@b.example');
+    expect(r.phase).toBe('code');
+    expect(h.posts.map((p) => p.path)).toEqual(['/auth/register/mail']);
+    expect(opened).toBe(0);
+    expect(signInView()).toMatchObject({ phase: 'code', pending: false });
+  });
+  test('a code typed without one being asked for mails a new one instead of guessing', async () => {
+    const h = harness();
+    const r = await signInRun(h.env, 'create', 'a@b.example', CODE);
+    expect(r.phase).toBe('code');
+    expect(h.posts.map((p) => p.path)).toEqual(['/auth/register/mail']);
+  });
+  test('a wrong or expired code says so, keeps nothing, and the next press asks for a new code', async () => {
+    const h = harness({ beginRefusal: { error: 'invalid or expired code' } });
+    await signInRun(h.env, 'create', 'a@b.example');
+    await signInRun(h.env, 'create', 'a@b.example', CODE);
+    expect(signInView()).toMatchObject({ phase: 'failed' });
+    expect(signInView().message).toContain('code did not work');
+    expect(h.kept).toEqual([]);
+    const again = await signInRun(h.env, 'create', 'a@b.example', CODE);
+    expect(again.phase).toBe('code');
+    expect(h.posts.filter((p) => p.path === '/auth/register/mail').length).toBe(2);
+  });
+  test('a cancelled passkey screen spends the code: the next press asks for a new one', async () => {
+    const h = harness({ create: async () => { throw Object.assign(new Error('x'), { name: 'NotAllowedError' }); } });
+    await signInRun(h.env, 'create', 'a@b.example');
+    await signInRun(h.env, 'create', 'a@b.example', CODE);
+    expect(signInView().message).toContain('No passkey was made');
+    const again = await signInRun(h.env, 'create', 'a@b.example', CODE);
+    expect(again.phase).toBe('code');
+  });
+  test('a code asked for one address is not spent for another', async () => {
+    const h = harness();
+    await signInRun(h.env, 'create', 'a@b.example');
+    const r = await signInRun(h.env, 'create', 'other@b.example', CODE);
+    expect(r.phase).toBe('code');
+    expect(h.posts.filter((p) => p.path === '/auth/register/begin')).toEqual([]);
   });
 });
 
@@ -181,9 +232,9 @@ describe('one owner, the newest wins', () => {
 describe('what is published and logged', () => {
   test('every change publishes a view with a rising rev; the last one is the end; no key anywhere', async () => {
     const h = harness();
-    await signInRun(h.env, 'create', 'a@b.example');
-    expect(h.views.map((v) => v.phase)).toEqual(['working', 'done']);
-    expect(h.views[1].rev).toBeGreaterThan(h.views[0].rev);
+    await create(h.env, 'a@b.example');
+    expect(h.views.map((v) => v.phase)).toEqual(['working', 'code', 'working', 'done']);
+    expect(h.views[3].rev).toBeGreaterThan(h.views[0].rev);
     const everything = JSON.stringify([h.views, h.logs, signInView()]);
     expect(everything).not.toContain('choir_sk_');
     expect(everything).not.toContain('ak_1');

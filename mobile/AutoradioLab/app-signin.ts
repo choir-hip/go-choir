@@ -1,8 +1,9 @@
-// Sign-in and account creation with the platform's passkey screen, inside the app (owner, 2026-11-23: "native passkey account creation and sign in. no 'code'").
+// Sign-in and account creation with the platform's passkey screen, inside the app (owner, 2026-11-23: "native passkey account creation and sign in"; a new account first proves its email address with a mailed code, docs/problems/passkey-claims-an-unproved-address-2026-11-24.md).
 // One attempt is one small state machine with one owner (this file). Every event names its attempt; an event of another attempt, or after an end, changes nothing; a new
 // press while one is running makes the newest win; and a late answer of an old attempt never writes a key (a key it minted is revoked).
 //
-//   create:  POST /auth/register/begin {email} -> the passkey screen (passkey-ceremony.ts) -> POST /auth/app/register/finish {app, credential} -> a key
+//   create:  POST /auth/register/mail {email, binding} -> (the person types the 8-digit code from the email) -> POST /auth/register/begin {email, attempt_id, code, binding}
+//            -> the passkey screen (passkey-ceremony.ts) -> POST /auth/app/register/finish {app, credential} -> an account, its passkey and a key, made together
 //   sign in: POST /auth/app/login/begin        -> the passkey screen, no email typed    -> POST /auth/app/login/finish    {app, credential} -> a key
 //
 // The key: the finish route answers a bearer key with the grant a device approval gives. It is kept as the Exact secrets `choir.key` and `choir.key-id` (grant `secret.keep`,
@@ -10,12 +11,13 @@
 // is `{phase, rev}` and the view is `{phase, pending, mode, message, rev}`; no word of either can hold a key. The native voice code reads the same Keychain items (they are
 // the one place the key lives) and writes none of them at sign-in.
 import passkeyApps from './passkey-apps.json';
-import { CeremonyError, ceremonyMessage, createCeremony, getCeremony, postPublic, refusal, type CeremonyEnv } from './passkey-ceremony.ts';
+import { CeremonyError, ceremonyMessage, createCeremony, getCeremony, postPublic, refusal, sendRegisterCode, type CeremonyEnv, type Proof } from './passkey-ceremony.ts';
 
 export type Mode = 'create' | 'signin';
-export type Phase = 'idle' | 'working' | 'done' | 'failed' | 'cancelled';
+/** `code`: the mail was sent and the screen waits for the code the person types (a resting phase, not an end). */
+export type Phase = 'idle' | 'working' | 'code' | 'done' | 'failed' | 'cancelled';
 export type Attempt = { id: string; mode: Mode; phase: Phase; message: string };
-export type Event = { t: 'done'; id: string } | { t: 'failed'; id: string; message: string } | { t: 'cancel'; id: string };
+export type Event = { t: 'code'; id: string } | { t: 'done'; id: string } | { t: 'failed'; id: string; message: string } | { t: 'cancel'; id: string };
 
 /** The names the app's key is kept under (grants `secret.keep <name>` in app.ts). The computer id is not a secret, kept beside the key so the voice code and shared code read one place. */
 export const KEY_NAME = 'choir.key';
@@ -47,6 +49,7 @@ export const begin = (id: string, mode: Mode): Attempt => ({ id, mode, phase: 'w
 export function step(a: Attempt, e: Event): Attempt {
   if (e.id !== a.id || a.phase !== 'working') return a;
   switch (e.t) {
+    case 'code': return { ...a, phase: 'code' };
     case 'done': return { ...a, phase: 'done' };
     case 'failed': return { ...a, phase: 'failed', message: e.message };
     case 'cancel': return { ...a, phase: 'cancelled' };
@@ -73,9 +76,11 @@ export type SignInEnv = {
   publish?(view: View): void;
 };
 
+/** The code asked for an address, and the secret this client made when asking: memory only, gone with the process. */
+let pendingProof: { email: string; proof: Proof; } | null = null;
 let cur: Attempt | null = null;
 let rev = 0;
-export const resetAttempt = (): void => { cur = null; rev = 0; };
+export const resetAttempt = (): void => { cur = null; rev = 0; pendingProof = null; };
 export const signInView = (): View => view(cur, rev);
 const left = (id: string): { phase: Phase; rev: number } => ({ phase: cur && cur.id === id ? cur.phase : 'cancelled', rev });
 const live = (id: string): boolean => cur !== null && cur.id === id && cur.phase === 'working';
@@ -106,14 +111,33 @@ async function finish(env: SignInEnv, mode: Mode, credential: unknown): Promise<
 }
 
 /** Start an attempt and run it to its end. A running attempt is superseded (the newest wins; its late answer is ignored, and a key it mints is revoked, never kept). Returns the phase it ended in. */
-export async function signInRun(env: SignInEnv, mode: Mode, email = ''): Promise<{ phase: Phase; rev: number }> {
+export async function signInRun(env: SignInEnv, mode: Mode, email = '', code = ''): Promise<{ phase: Phase; rev: number }> {
   if (cur && cur.phase === 'working') dispatch(env, { t: 'cancel', id: cur.id });
   const id = env.newId();
   adopt(env, begin(id, mode));
   let minted: Minted | null = null;
   try {
     if (mode === 'create' && email.trim() === '') throw new CeremonyError('email');
-    const credential = mode === 'create' ? await createCeremony(env.ceremony, email.trim()) : await getCeremony(env.ceremony);
+    let credential: unknown;
+    if (mode === 'create') {
+      const address = email.trim();
+      const held = pendingProof && pendingProof.email === address ? pendingProof : null;
+      if (!held || code.trim() === '') {
+        // No code asked for this address yet, or none typed: mail one, and wait for it. No account is made, and nothing is stored on the server for the address.
+        const binding = env.newId();
+        const attemptId = await sendRegisterCode(env.ceremony, address, binding);
+        pendingProof = { email: address, proof: { attemptId, code: '', binding } };
+        if (!live(id)) return left(id);
+        dispatch(env, { t: 'code', id });
+        return left(id);
+      }
+      // The code is spent by this call whether or not the passkey screen then finishes: a second try asks for a new one.
+      const proof: Proof = { ...held.proof, code: code.trim() };
+      pendingProof = null;
+      credential = await createCeremony(env.ceremony, address, proof);
+    } else {
+      credential = await getCeremony(env.ceremony);
+    }
     if (!live(id)) return left(id);                          // replaced or cancelled while the passkey screen was up: nothing is sent
     minted = await finish(env, mode, credential);
     if (!live(id)) { await env.revoke(minted.key, minted.keyId).catch(() => undefined); return left(id); }     // a late answer of an old attempt: never written, revoked
