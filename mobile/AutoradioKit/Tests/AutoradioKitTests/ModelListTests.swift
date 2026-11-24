@@ -37,6 +37,18 @@ final class ModelListTests: XCTestCase {
         XCTAssertEqual(b.totalBytes, KnownModels.fluidSpeechMini.totalBytes)
         XCTAssertEqual(e.credit, KnownModels.fluidSpeechMini.credit)
     }
+    func testProIsRecommendedFromTheEightGigabyteClassAndMiniBelow() throws {                         // the owner's per-device rule
+        let l = ModelList.builtIn()
+        let pro = try XCTUnwrap(l.models.first { $0.id == KnownModels.fluidSpeechPro.id })
+        XCTAssertEqual(pro.bundleSpec(folder: KnownModels.fluidSpeechPro.folder, copies: KnownModels.fluidSpeechPro.copies)?.files, KnownModels.fluidSpeechPro.files)
+        XCTAssertEqual(pro.credit, KnownModels.fluidSpeechPro.credit)
+        XCTAssertTrue(pro.isRecommended(machine: "iPhone17,1", memoryGB: 7.4))                         // an 8 GB iPhone
+        XCTAssertTrue(pro.isRecommended(machine: "iPhone18,1", memoryGB: 11.4))
+        XCTAssertFalse(pro.isRecommended(machine: "iPhone15,3", memoryGB: 5.6), "the owner's 14 Pro Max (6 GB) gets Mini")
+        func order(_ machine: String, _ gb: Double) -> [String] { l.entries(job: .transcriber, machine: machine, memoryGB: gb).map(\.id).filter { $0.hasPrefix("fluid-speech") } }
+        XCTAssertEqual(order("iPhone15,3", 5.6), ["fluid-speech-mini", "fluid-speech-pro"], "not recommended is still listed, after")
+        XCTAssertEqual(order("iPhone17,1", 7.4), ["fluid-speech-pro", "fluid-speech-mini"])
+    }
     func testBuiltInHasEveryCandidate() {                                                             // L6
         let ids = Set(ModelList.builtIn().models.map(\.id))
         for c in CandidateTable.all where !c.isFloor { XCTAssertTrue(ids.contains(c.id), "\(c.id) is in the table but not the built-in list") }

@@ -137,6 +137,9 @@ public enum CandidateTable {
         // Fluid Speech Mini (FluidVoice, CC BY 4.0): the recogniser the owner chose and built in Mike (2026-11-24). Ranked above Parakeet TDT on Mike's own numbers
         // (1.51% against 1.92% word error on isolated clips; relayed, ON-DEVICE-MODELS.md section 11); the Mac numbers of ours are in the same section. Re-rank it when
         // a phone run says otherwise. Resident: Mike's 277 MB per 15 s window plus the loaded models.
+        // Fluid Speech Pro (FluidVoice, CC BY 4.0): the larger sibling, the owner's pick for bigger phones (2026-11-24). Ranked above Mini; recommended from the
+        // 8 GB class up (the rule is `minTier`, read into the model list), Mini below it. Numbers: ON-DEVICE-MODELS.md section 11.
+        audio("fluid-speech-pro", .transcriber, "Fluid Speech Pro", rank: 95, basis: "owner's choice for 8 GB phones and up; Mac word error and memory in ON-DEVICE-MODELS.md section 11; unmeasured on a phone", bytes: KnownModels.fluidSpeechPro.totalBytes, mb: 650, tier: .tier8, stage: "fluid-speech-pro", license: "CC BY 4.0", measured: false)
         audio("fluid-speech-mini", .transcriber, "Fluid Speech Mini", rank: 90, basis: "owner's choice; 1.51% word error on isolated clips (Mike's spike, relayed); ours on the Mac in ON-DEVICE-MODELS.md section 11", bytes: KnownModels.fluidSpeechMini.totalBytes, mb: 550, tier: .tier6, stage: "fluid-speech-mini", license: "CC BY 4.0", measured: false)
         t.append(ModelCandidate(id: "apple-speech", role: .transcriber, family: "Apple", quant: "", label: "Apple's recogniser", bytes: 0, qualityRank: 20, qualityBasis: "the floor",
                                 license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: true, source: "built in", kitStageID: "apple-speech", streamsWords: true))

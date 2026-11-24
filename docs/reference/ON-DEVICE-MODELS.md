@@ -565,6 +565,69 @@ embedding models (WeSpeaker, CAM++) and the fusion file, behind the existing `Sp
 600 lines, two days, and it needs the models' pins read.
 
 
+## 12. Fluid Speech Pro, the larger recogniser (2026-11-24)
+
+Owner, 2026-11-24: "for voice models, fluid speech pro is better than parakeet. so fluid speech mini or pro is the way to go rn"; "the
+recognizers should be part of the onboarding, with the recommended one (eg fluid speech mini vs pro) depending on device size". Each claim in the
+survey notes (652 MB; built on Parakeet v3; "tested on Mac only"; "needs a fork of the library we pin") was checked against the primary source.
+
+**What exists (verified, `GET https://huggingface.co/api/models/FluidVoice-Labs/<name>`, no credentials, 2026-11-24).** One model, five builds:
+`fluid-speech-pro` (NeMo + Transformers, 2.6 GB, the reference), `-onnx`, `-gguf`, `-mlx` and `-coreml`. The Core ML build is
+`FluidVoice-Labs/fluid-speech-pro-coreml`, commit `3b9d38a93d606f84011e5a0a669b7ea146375a22` (last modified 2026-11-13), CC BY 4.0, not gated.
+The loader reads 23 files, 652,324,639 bytes in all (**652 MB: true**): encoder weights 613,088,448 (8-bit, one scale per output channel),
+decoder 23,604,992, joint 12,642,764, preprocessor 2,150,580, vocabulary 151,122; every size and SHA-256 is in `KnownModels.fluidSpeechPro` (the LFS
+digests re-checked against the API, the small files hashed on the bytes at that commit; the store checks all of them on download). Languages: 25
+European (English included), detected automatically, with punctuation; the base is NVIDIA Parakeet TDT 0.6B v3 plus Moondream Parakeet Ultra
+(**built on Parakeet v3: true**), with one extra block between the encoder's subsampling and its first Conformer layer, already inside the
+compiled encoder. `config.json`: minimum iOS 18 and macOS 15, 15 s windows, blank 8192. Credit, from `NOTICE`: "Fluid Speech Pro by FluidVoice.
+Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra." with LICENSE and NOTICE kept beside the files; the store fetches both.
+The card says "Clean mode" (dropping fillers) is not in this build yet.
+
+**The loader (verified, FluidAudio source).** The vendor's example calls `AsrModels.load(from:, version: .fluidParakeetPro)`, a case that exists only in
+the `altic-dev/FluidAudio` fork (commit `9e15ef9`, 2026-10-24). That commit only adds the enum case and routes it to the same v3 decoder; Pro has the v3
+contract (Preprocessor, Encoder, Decoder, JointDecision, 8192 plus blank, 15 s window). **"Needs a fork of the library we pin": false for us.** Upstream
+0.18.3, the pin, loads it as `AsrModels.loadLocal(from: dir, version: .ultra)` (the v3 family with one encoder build), exactly as Mini does, once the
+joint network is copied to `JointDecisionv3.mlmodelc` (`ModelBundleSpec.copies`). The pin did not change. The fork stays unused (its long-audio stitching
+dropped spans, section 11). **"Tested on Mac only": true** (the card: "Tested on Mac only so far"); the model's own numbers are an M5 Max; no iPhone
+figure exists from the vendor or from us.
+
+**Built.** `FluidSpeechProTranscriber` (stage `fluid-speech-pro`, `AutoradioModels/FluidSpeechPro.swift`: Mini's stage and session with Pro's files and its own
+slot), the pin, the candidate row (rank 95, above Mini's 90), the setup ladder row, the fetch and check in `HubModelProvider`, a case in `ModelProof`.
+
+**The per-device rule.** Pro is the first recogniser in the ladder for a phone whose physical memory reads 7 GB or more, and Mini for every other
+phone that can hold it (4 GB or more); the model list's entry says the same (`recommendedFor` minimum 7 GB). A phone reads a little under its nominal
+memory (about 5.6 GB for a 6 GB phone, about 7.4 GB for an 8 GB one), so the line at 7 puts these iPhones on **Pro**: iPhone 15 Pro, 15 Pro Max, 16, 16e,
+16 Plus, 16 Pro, 16 Pro Max, 17, 17 Pro and later 8 GB and 12 GB models, Air; and on **Mini**: iPhone 13 Pro, 14 Pro, 14 Pro Max (the owner's, 6 GB), 15 and
+15 Plus, and anything older that is supported. Setup's plan now also passes over a model whose `minMemoryGB` the phone does not meet even when
+free memory is large (before, only the free-memory test applied when the phone reported it). Pro's row asks for 900 MB (its 652 MB of weights
+mapped, plus the live-words model's 250 MB; Mini's row asks 550), kept with the 600 MB headroom. **These memory figures are not measured on a phone:
+the recommendation by size is a rule from file sizes and the vendor's "about 250 MB" Mac figure, and the first phone run decides it.** Not built: the
+person's choice of the other recogniser in onboarding (the ladder offers the recommended one and, on "smaller", the next).
+
+**Measured on the Mac, 2026-11-24 (M-series Mac, not a phone; FluidAudio 0.18.3; one model per process, through the stages the app runs; `AUTORADIO_REAL_SPEECH=<folder> AUTORADIO_REAL_MODEL=pro|mini|tdt-v2 swift test --filter testMeasureOneModelOnRealSpeech`).**
+Corpus word error (reference lower-cased, punctuation dropped; no filler removal), time per second of audio, as before:
+
+| Set | Fluid Speech Pro | Fluid Speech Mini | Parakeet TDT 0.6B v2 |
+| --- | --- | --- | --- |
+| LibriSpeech clean validation, 73 clips, 8.0 min, 1,169 words | 3.76% (0.024) | 3.93% (0.020) | 2.57% (0.018) |
+| LibriSpeech other validation, 100 clips, 10.0 min, 1,828 words (harder readers) | 3.39% (0.028) | 3.56% (0.020) | 3.06% (0.024) |
+| AMI single distant microphone, test, 47 clips of 4 words or more, 2.6 min, 581 words (far-field meeting speech, `edinburghcstr/ami` `sdm`, CC BY 4.0) | 35.80% (0.031) | 40.79% (0.028) | 38.04% (0.036) |
+
+Read: Pro is better than Mini on all three sets (by 0.2 to 5 points) and slower by about a quarter to a half, on the Mac. It is **not** better than
+Parakeet TDT v2 on read English (clean 3.76 against 2.57, other 3.39 against 3.06); it is better on the far-field set (35.8 against 38.0). The AMI figures
+are high for all three because the references are the meeting transcript with spoken fillers ("um") and no normalisation, and the audio is a
+distant microphone; compare the three with each other, not with a published figure. The owner's "better than parakeet" holds against the v3 Parakeet the vendor
+compares with and on noisy speech; our English v2 stage is not that model. Pro's rank (95) follows the owner's choice and these numbers' order against Mini.
+
+Load: first load on the Mac, with Core ML specialising for the Neural Engine, 19.9 s (a cold first run through the stage); every later load in these
+runs 0.2 to 0.5 s (the vendor says 8 s then 0.2 s on an M5 Max). Memory: the kernel's physical-footprint peak of the process was 150 to 174 MB for Pro and
+138 to 172 MB for Mini on the first two sets; **this ledger does not count the weights Core ML maps for the Neural Engine, so it cannot tell the two
+apart and is not a figure for a phone** (Parakeet v2: 98 to 111 MB by the same ledger). The vendor's "about 250 MB peak" is the card's number, not ours.
+Re-run by the taking-over builder on the clean set, one model per process under `/usr/bin/time -l` (same test, 2026-11-24): Pro 3.76%, 0.018 s per s of audio, load 0.6 s warm, peak footprint 200 MB;
+Mini 3.93%, 0.020, 0.4 s, 196 MB; Parakeet v2 2.57%, 0.017, 0.5 s, 136 MB; maximum resident set 216 to 219 MB for all three (the test harness dominates). The word errors reproduce the table to the digit; the memory
+counters still cannot separate Pro from Mini on a Mac, because the Neural Engine's weights are not in either.
+A phone's available memory after a load is the figure that decides the rule above (`DeviceReading.availableMemoryMB`, recorded by setup's check).
+
 ## 13. LFM3-Omni-2B as a larger responder for newer phones (2026-11-24)
 
 Owner, 2026-11-24: "lfm3 is actually running on device in both apps now. and we should also have a bigger model available for newer phones. can use lfm3 omni".

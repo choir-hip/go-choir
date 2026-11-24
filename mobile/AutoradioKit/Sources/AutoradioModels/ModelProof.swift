@@ -89,6 +89,7 @@ public enum ModelProof {
             Case(kind: .transcriber, id: "parakeet-eou", model: "parakeet-eou-120m") { try await transcribe("parakeet-eou", label: "streaming, chunk 320 ms") },
             Case(kind: .transcriber, id: "parakeet-tdt", model: "parakeet-tdt-0.6b-v2") { try await transcribe("parakeet-tdt", label: "batch") },
             Case(kind: .transcriber, id: "fluid-speech-mini", model: "fluid-speech-mini") { try await transcribe("fluid-speech-mini", label: "batch") },
+            Case(kind: .transcriber, id: "fluid-speech-pro", model: "fluid-speech-pro") { try await transcribe("fluid-speech-pro", label: "batch") },
             Case(kind: .system1, id: "llama-qwen3-0.6b", model: "qwen3-0.6b-q8_0") {
                 let s = try make(.system1, "llama-qwen3-0.6b", System1.self)
                 let ans = try await s.answer(System1Input(context: ctx.position.context, listenerWords: words, questions: ctx.position.questions))

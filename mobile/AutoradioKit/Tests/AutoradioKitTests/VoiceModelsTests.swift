@@ -171,10 +171,10 @@ final class VoiceModelsTests: XCTestCase {
         let plan = SetupCatalog.plan(for: tight)
         XCTAssertEqual(plan[.responder]!.first?.id, "qwen3-0.6b-q4_k_m", "600 MB fits in 1200 minus headroom")
         XCTAssertFalse(plan[.responder]!.contains { $0.id == "lfm3-1.7b-qad-q4_0" }, "1.5 GB does not")
-        XCTAssertEqual(plan[.transcriber]!.first?.id, "fluid-speech-mini", "Fluid Speech Mini with its live words (550 MB) fits what is left; Parakeet TDT (700 MB) does not")
+        XCTAssertEqual(plan[.transcriber]!.first?.id, "fluid-speech-mini", "Fluid Speech Mini with its live words (550 MB) fits what is left; Pro (900 MB) and Parakeet TDT (700 MB) does not")
         XCTAssertFalse(plan[.transcriber]!.contains { $0.id == "parakeet-tdt-0.6b-v2" })
         var roomy = device(8); roomy.availableMemoryMB = 4000
-        XCTAssertEqual(SetupCatalog.plan(for: roomy)[.transcriber]!.first?.id, "fluid-speech-mini")
+        XCTAssertEqual(SetupCatalog.plan(for: roomy)[.transcriber]!.first?.id, "fluid-speech-pro")
         XCTAssertEqual(DeviceProfile.current().availableMemoryMB == nil, true, "on the Mac there is no such reading (iOS only)")
     }
 
