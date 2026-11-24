@@ -5,7 +5,9 @@
 set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TEAM="${TEAM:-QSGU6VRJL6}"
-[ -n "$("$HERE/app-identity.sh" variant)" ] || { echo "make-profile: name the development app: AR_VARIANT=lab or AR_VARIANT=lab-one (the production id gets no development profile)" >&2; exit 1; }
+case "$("$HERE/app-identity.sh" variant)" in
+  ''|dev) echo "make-profile: name the development app: AR_VARIANT=lab or AR_VARIANT=lab-one (the production id, which AR_VARIANT=dev is, gets no development profile from here: it is made through the App Store Connect API, docs/reference/exact/build-and-ship.md)" >&2; exit 1 ;;
+esac
 ID="$("$HERE/app-identity.sh" id)"   # AR_VARIANT / AR_APP_ID choose the app
 W="$(mktemp -d)"
 cat >"$W/main.swift" <<'EOS'

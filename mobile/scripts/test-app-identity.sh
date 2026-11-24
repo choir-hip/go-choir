@@ -106,6 +106,13 @@ for v in "" lab lab-one; do
   fi
 done
 
+# 4b. AR_VARIANT=dev is the production id: make-profile.sh refuses it and makes nothing, and the dev version check holds
+rm -f "$T/project.yml.seen"
+env AR_VARIANT=dev HOME="$T/home" PATH="$T/bin:$PATH" "$M/scripts/make-profile.sh" >"$T/mp.out" 2>&1; mprc=$?
+[ "$mprc" -ne 0 ] && [ ! -e "$T/project.yml.seen" ] && grep -q "make-profile:" "$T/mp.out" && ok "make-profile.sh with AR_VARIANT=dev refuses and makes nothing" || no "make-profile.sh with AR_VARIANT=dev (rc $mprc, stub seen: $([ -e "$T/project.yml.seen" ] && echo yes || echo no))"
+echo '{"app":{"id":"news.choir.autoradio","name":"Autoradio 1"}}' > "$T/nover.json"
+if env AR_VARIANT=dev AR_APP_JSON="$T/nover.json" "$M/scripts/app-identity.sh" version >/dev/null 2>&1; then no "dev version with no version in app.json passed"; else ok "dev version with no version in app.json fails"; fi
+
 # 5. the tracked app.json is never touched
 : > "$T/bin/fail"; run_build env AR_VARIANT=lab-one "$M/scripts/build-lab.sh" ios; rc=$?; rm -f "$T/bin/fail"
 [ "$rc" -ne 0 ] && ok "a failing Exact command fails the build (rc $rc)" || no "a failing Exact command passed"
