@@ -19,11 +19,11 @@ for platform in ios sim macos; do
   work="$OUT/dizione-$platform"
   mkdir -p "$work/include"
   cp "$SRC"/*.h "$work/include/"
+  cp "$ROOT/scripts/tiny-voca/dizione_abi.h" "$work/include/"
   # A Swift module for Exact's app module: `-I Headers` finds this map.
   cat > "$work/include/module.modulemap" <<'EOF'
 module dizione {
-  requires cplusplus
-  header "dizione.h"
+  header "dizione_abi.h"
   link "c++"
   export *
 }

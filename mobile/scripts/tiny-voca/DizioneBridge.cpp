@@ -7,6 +7,7 @@
 //   U, n0, ids0[n0], stress0[n0], n1, ids1[n1], stress1[n1], ...
 // One entry per utterance: a sentence, or a sentence cut at a word boundary
 // when it would exceed the runner's token bucket.
+#include "dizione_abi.h"
 #include "dizione.h"
 
 #include <cstdint>
