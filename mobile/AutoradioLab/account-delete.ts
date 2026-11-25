@@ -75,6 +75,11 @@ export const SCHEDULED = (on: string): string =>
   `Your account is scheduled for deletion. Your access ended now. The removal begins after ${on || '72 hours'}; until it begins, ` +
   'nothing is removed, and you can change your mind: sign in with your passkey and choose Cancel deletion.';
 
+/** The Delete page of the App Review account (whoami `reviewer`), in place of the confirmation: the server refuses its deletion (owner, 2026-11-25). */
+export const REVIEWER_DELETE_WORDS =
+  'This account is kept for App Review and cannot be deleted from the app. To try account deletion, sign out, create a new account with a passkey ' +
+  '(Create account, your email, the 8-digit code we send, then the passkey), and delete that account here.';
+
 /** The words for a refusal, an outage or a failure of the first two steps (D7). */
 export function failureWords(status: number, step: 'begin' | 'finish'): string {
   if (status === 0) return 'No connection. Nothing was deleted. Check the network and try again.';

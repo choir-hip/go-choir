@@ -199,3 +199,23 @@ describe('D8 and the page reopening', () => {
     expect(deleteReset().phase).toBe('done');
   });
 });
+
+import { REVIEWER_DELETE_WORDS } from './account-delete.ts';
+describe('the App Review account', () => {
+  test('its page says it cannot be deleted here and how to try deletion with a new passkey account', () => {
+    expect(REVIEWER_DELETE_WORDS).toContain('kept for App Review and cannot be deleted from the app');
+    expect(REVIEWER_DELETE_WORDS).toContain('create a new account with a passkey');
+    expect(REVIEWER_DELETE_WORDS).toContain('8-digit code');
+    expect(REVIEWER_DELETE_WORDS).toContain('delete that account here');
+  });
+});
+
+import { readFileSync } from 'node:fs';
+describe('the App Review account page', () => {
+  test('the Delete page shows the reviewer words verbatim, and its confirmation only for anyone else', () => {
+    const page = readFileSync(new URL('./settings.contract', import.meta.url), 'utf8');
+    expect(page).toContain(`text "${REVIEWER_DELETE_WORDS}" testId="settings-delete-reviewer"`);
+    expect(page).toContain('if acctInfo.reviewer');
+    expect(page).toContain('if delv.phase != "done" and not acctInfo.reviewer');
+  });
+});

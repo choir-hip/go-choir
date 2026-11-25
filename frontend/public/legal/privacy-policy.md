@@ -24,7 +24,7 @@ Signed out, the app is listening only. It asks our server for the public front p
 
 ### Creating an account
 
-You make an account inside the app. We email you an 8-digit code and you type it in, to prove the address is yours; then the phone's own passkey screen makes a passkey. We collect your email address and the passkey. The passkey gives us a public key and some details about it, such as when it was made. The private key stays on your device. No person's account has a password, so we never see or store one. The one exception is an account we keep for Apple's App Review, which signs in with a user name and password; we store that password only as a hash. We use the email address to identify your account and for recovery. It is the same account on choir.news.
+You make an account inside the app. We email you an 8-digit code and you type it in, to prove the address is yours; then the phone's own passkey screen makes a passkey. We collect your email address and the passkey. The passkey gives us a public key and some details about it, such as when it was made. The private key stays on your device. No person's account has a password, so we never see or store one. The one exception is an account we keep for Apple's App Review, which signs in with a user name and password; we store that password only as a hash. That account cannot be deleted in the app; we delete it ourselves when App Review asks or no longer needs it (section 9). We use the email address to identify your account and for recovery. It is the same account on choir.news.
 
 ### Your computer
 
@@ -137,7 +137,7 @@ The app downloads voice and language model files to your phone. They are data fi
 
 ## 9. Deleting your account
 
-You can delete your account yourself, in the Autoradio app (Settings, Account, Delete account) or at https://choir.news/account/delete. You confirm with your passkey. If you cannot sign in, write to 000@choir.news from the email address of the account and we will help you get back in, so that you can delete it. The one account we keep for App Review (section 12) cannot be deleted this way: it signs in with a password, not a passkey, and we delete it ourselves when it is no longer needed.
+You can delete your account yourself, in the Autoradio app (Settings, Account, Delete account) or at https://choir.news/account/delete. You confirm with your passkey. If you cannot sign in, write to 000@choir.news from the email address of the account and we will help you get back in, so that you can delete it. Everyone else deletes their account this way. The one account we keep for App Review (section 2) cannot be deleted in the app or on the web: its Delete page says so and explains how to try deletion with a new account. We delete that account ourselves, on request or when it is no longer needed.
 
 When you confirm:
 
@@ -174,7 +174,7 @@ Autoradio 1 is for people 16 and older. Do not make an account if you are under 
 
 ## 12. Security
 
-- Sign-in uses passkeys. No person's account has a password to steal or reset. One account kept for App Review has a password, stored on our server only as a hash.
+- Sign-in uses passkeys. No person's account has a password to steal or reset. One account kept for App Review has a password, stored on our server only as a hash; we can switch its sign-in off at any time, and we delete that account ourselves (section 9).
 - The app talks to our server over HTTPS.
 - Your sign-in key on the phone is in the iPhone Keychain, on this device only.
 - The event log of your computer is sealed under a key that belongs to the computer.

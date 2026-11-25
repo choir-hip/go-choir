@@ -385,6 +385,7 @@ component DeleteScreen
     th: Theme
     tx: ThemeExtras
     au: ChoirAuth
+    acctInfo: SettingsAccount
     delv: DeleteView
     delAsk: bool
     askDelete: action
@@ -395,7 +396,11 @@ component DeleteScreen
       ScreenTitle(label="Delete your account", back=true)
       if delv.phase == "done"
         text delv.message testId="settings-delete-done" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
-      if delv.phase != "done"
+      // The App Review account cannot be deleted in the app (owner, 2026-11-25; the server refuses it): no confirmation, the way to try deletion instead.
+      // The words are REVIEWER_DELETE_WORDS in account-delete.ts, verbatim (account-delete.test.ts holds them equal).
+      if acctInfo.reviewer
+        text "This account is kept for App Review and cannot be deleted from the app. To try account deletion, sign out, create a new account with a passkey (Create account, your email, the 8-digit code we send, then the passkey), and delete that account here." testId="settings-delete-reviewer" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      if delv.phase != "done" and not acctInfo.reviewer
         SectionLabel(label="What is removed")
         text "Your account and your passkey. Your computer, with its disk, its stored history and the key that seals it: your edition, notes, documents, files, mail and its address, and your listening history. Your synced documents. Any takes you published, their words and their audio." testId="settings-delete-removed" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
         SectionLabel(label="What stays")
