@@ -22,6 +22,7 @@ for platform in ios sim macos; do
   # A Swift module for Exact's app module: `-I Headers` finds this map.
   cat > "$work/include/module.modulemap" <<'EOF'
 module dizione {
+  requires cplusplus
   header "dizione.h"
   link "c++"
   export *
