@@ -121,6 +121,9 @@ component TextureExpanded
     th: Theme
     ctlPanel: string
     edOn: bool
+    edStatus: string
+    edKeepMine: action
+    edUseTheirs: action
     edFormats: string
     edUnavail: string
     edUrl: string
@@ -156,6 +159,14 @@ component TextureExpanded
             ChipFace(label="Code", selected=(` ${edFormats} `.includes(" code ")))
           button press=edOpenLink retainFocus=true testId="format-link" appearance="none" aria-label="Link"
             ChipFace(label="Link", selected=(ctlPanel == "link"))
+      // The document changed somewhere else while this text was unsent: it is kept, nothing was posted over the new version.
+      if edOn and edStatus == "conflict"
+        row gap=8 align-items="center" width="100%" testId="texture-conflict"
+          text "Changed somewhere else. Your text is kept." testId="texture-conflict-words" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted flex=1 min-width=0
+          button press=edKeepMine retainFocus=true testId="texture-keep-mine" appearance="none" aria-label="Save my text over the new version"
+            ChipFace(label="Keep mine", selected=false)
+          button press=edUseTheirs retainFocus=true testId="texture-use-theirs" appearance="none" aria-label="Drop my text and use the new version"
+            ChipFace(label="Use theirs", selected=false)
       // The caret is in a link (the editor shows its text only): its address, with Edit and Open.
       if edOn and edCurLink != ""
         row gap=8 align-items="center" width="100%" testId="texture-link-row"

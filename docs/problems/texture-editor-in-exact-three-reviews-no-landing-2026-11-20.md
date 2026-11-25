@@ -55,3 +55,7 @@ recommendation), or the phone's editor stays in Swift for now and the other
 pages move first.
 
 Default taken while the owner sleeps: nothing lands; the lane is kept.
+
+## Update 2026-11-24 (lane `exact-editor`): the model first, then the code
+
+An editor built over the earlier design was sent back four more times (lane `exact-rest`, rounds 1 to 4): each fix opened a new defect because the state had no written model and its mutations had several doors. The contract's rule 7 changed the approach. The state model is now a table at the head of `mobile/AutoradioLab/texture-edit.ts`, read and amended by the lead before any code: one `Editor` per signed-in account (the computer id), every mutation through one per-document queue, typing kept in a journal with its own single writer and deleted only when the server holds that exact text, status derived and never assigned, the flush rule in one place. The tests are one per table row and per kill (60). Not proved: a native build, a device, two real writers.

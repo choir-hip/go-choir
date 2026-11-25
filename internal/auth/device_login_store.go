@@ -234,10 +234,16 @@ func (s *Store) PollDeviceAuthorization(ctx context.Context, deviceCodeHash stri
 	if err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx,
-		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, computer_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)",
-		keyID, a.UserID, keyHash, label, string(scopesJSON), now); err != nil {
+	ins, err := tx.ExecContext(ctx,
+		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, computer_id, created_at, expires_at) SELECT ?, ?, ?, ?, ?, NULL, ?, NULL WHERE NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id = ? AND "+liveDeletion+")",
+		keyID, a.UserID, keyHash, label, string(scopesJSON), now, a.UserID)
+	if err != nil {
 		return nil, fmt.Errorf("poll device authorization: insert key: %w", err)
+	}
+	if n, _ := ins.RowsAffected(); n == 0 {
+		// The account asked to be deleted: no key, and the row stays consumed
+		// with nothing to collect.
+		return &DevicePollResult{Status: DeviceStatusDenied}, nil
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("poll device authorization: commit: %w", err)

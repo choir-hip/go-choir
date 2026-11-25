@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/purgeguard"
 )
 
 const inferenceTimeout = 10 * time.Minute
@@ -755,6 +756,78 @@ func (h *Handler) HandleIssueCredential(w http.ResponseWriter, r *http.Request) 
 	log.Printf("gateway: issued credential for autoputer %s (computer=%q, expires=%s)", req.ComputerID, product, result.ExpiresAt)
 
 	writeGatewayJSON(w, http.StatusCreated, result)
+}
+
+// HandleForgetCredential handles POST /provider/v1/credentials/forget: an
+// account deletion removes the destroyed computer's identity. Host-internal
+// only, and it needs the deletion record's request time: a request that does
+// not carry a time at least 72 hours old is refused here, whatever the
+// caller is (docs/design/account-create-delete-2026-11-23.md).
+//
+// One exception, "at_once": the request stage of a deletion forgets the
+// computer's identity so its provider key ends with the person's access. That
+// removes only a record the host gives back by importing the computer's own
+// token again (vmctl does, on the next resolve after a cancel), so it needs no
+// old record; the host-only gate and the hard list apply to it unchanged.
+func (h *Handler) HandleForgetCredential(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isAuthorizedCredentialCaller(r) {
+		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied"})
+		return
+	}
+	var req struct {
+		ComputerID  string `json:"computer_id"`
+		RequestedAt string `json:"deletion_requested_at"`
+		AtOnce      bool   `json:"at_once"`
+	}
+	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, ErrorResponse{Error: err.Error()})
+			return
+		}
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
+		return
+	}
+	if strings.TrimSpace(req.ComputerID) == "" {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "computer_id is required"})
+		return
+	}
+	if !req.AtOnce {
+		requested, perr := time.Parse(time.RFC3339, req.RequestedAt)
+		if perr != nil {
+			requested = time.Time{}
+		}
+		if err := purgeguard.CheckClaim(requested, time.Now().UTC()); err != nil {
+			writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: err.Error()})
+			return
+		}
+	}
+	// The id may be a VM id or a product computer id, and the registry matches
+	// either: the hard list is applied to the id named AND to every identity it
+	// would remove (its key and its product computer id), so naming the paper's
+	// or the owner's VM id is refused as the product id is.
+	if what, protected := purgeguard.ProtectedComputer(req.ComputerID); protected {
+		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "refused: " + what})
+		return
+	}
+	for _, pair := range h.registry.IdentitiesNamed(req.ComputerID) {
+		for _, id := range pair {
+			if what, protected := purgeguard.ProtectedComputer(id); protected {
+				writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "refused: " + what})
+				return
+			}
+		}
+	}
+	existed, err := h.registry.ForgetIdentity(strings.TrimSpace(req.ComputerID))
+	if err != nil {
+		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to remove identity"})
+		return
+	}
+	log.Printf("gateway: account deletion removed identity of %s (existed=%v)", req.ComputerID, existed)
+	writeGatewayJSON(w, http.StatusOK, map[string]bool{"existed": existed})
 }
 
 // HandleEnsureCredential handles POST /provider/v1/credentials/ensure.

@@ -26,66 +26,60 @@ public struct VoiceCardState: Codable, Equatable, Sendable {
     public var selected: Bool
     public var playing: Bool
     public var note: String
+    /// The model it is a voice of: its id (for a stable name in the page), its name, and the credit its licence asks for. All empty for the system voice.
+    public var model: String = ""
+    public var group: String = ""
+    public var credit: String = ""
 }
 
 public final class VoiceSampler: @unchecked Sendable {
-    /// Fetch and load the model; `onBytes` receives bytes on disk so far.
-    public typealias Fetch = @Sendable (_ modelID: String, _ onBytes: @escaping @Sendable (Int64) -> Void) async throws -> Void
     /// Make the sample line in this voice and play it; returns when it has been heard, throws when the voice could not speak.
-    /// Run the check on the fetched model and say whether it works on this phone. The host's one verifier (`ReadinessVerifier`) writes readiness inside it; the sampler can only read it.
-    public typealias Verify = @Sendable (_ modelID: String) async -> String?
     public typealias Say = @Sendable (_ option: VoiceOption) async throws -> Void
 
     public let options: [VoiceOption]
     private let readiness: VoiceReadiness
-    private let fetch: Fetch
-    private let verify: Verify
+    /// model id -> progress (0...1) of the download its own row is running, or nil.
+    private let running: @Sendable (String) -> Double?
     private let say: Say
     private let halt: @Sendable () -> Void
     private let choose: @Sendable (VoiceOption) -> Void
-    private let approxBytes: @Sendable (String) -> Int64
 
     private struct State {
         var selected: String
         var generation = 0
         var playing: String?
         var sample: Task<Void, Never>?
-        var downloads = Set<String>()                // models being fetched
-        var bytes: [String: Int64] = [:]
-        var failed: [String: String] = [:]      // model id -> words
         var sampleFailed: [String: String] = [:] // option id -> words
     }
     private let st: Locked<State>
     public var onChange: (@Sendable () -> Void)?
 
-    public init(options: [VoiceOption] = VoiceCatalog.options, selected: String, readiness: VoiceReadiness, fetch: @escaping Fetch, verify: @escaping Verify, say: @escaping Say,
+    public init(options: [VoiceOption] = VoiceCatalog.options, selected: String, readiness: VoiceReadiness, say: @escaping Say,
                 halt: @escaping @Sendable () -> Void, choose: @escaping @Sendable (VoiceOption) -> Void,
-                approxBytes: @escaping @Sendable (String) -> Int64 = { id in KnownModels.managed.first { $0.id == id }?.approxBytes ?? 0 }) {
-        self.options = options; self.readiness = readiness; self.fetch = fetch; self.verify = verify; self.say = say; self.halt = halt; self.choose = choose
-        self.approxBytes = approxBytes
+                running: @escaping @Sendable (String) -> Double? = { _ in nil }) {
+        self.options = options; self.readiness = readiness; self.running = running; self.say = say; self.halt = halt; self.choose = choose
         st = Locked(State(selected: selected))
     }
 
     public var selectedID: String { st.value.selected }
     /// The choice was changed elsewhere (the Components page): the cards show it. Plays nothing.
-    public func syncSelected(_ id: String) { if options.contains(where: { $0.id == id }) { st.write { $0.selected = id } } }
+    public func syncSelected(_ id: String) {
+        guard options.contains(where: { $0.id == id }) else { return }
+        let moved = st.write { s -> Bool in let was = s.selected != id; s.selected = id; return was }
+        if moved { onChange?() }
+    }
 
     public func cards() -> [VoiceCardState] {
         let s = st.value
         return options.map { o in
             var state = "ready", progress = 1.0, note = ""
             if !o.modelID.isEmpty, !readiness.isReady(model: o.modelID) {
-                if s.downloads.contains(o.modelID) {
-                    state = "downloading"
-                    let total = max(1, approxBytes(o.modelID))
-                    progress = min(0.99, Double(s.bytes[o.modelID] ?? 0) / Double(total))
-                    note = "Downloading \(o.sizeLabel)"
-                } else if let f = s.failed[o.modelID] { state = "failed"; progress = 0; note = f }
-                else { state = "needs"; progress = 0; note = "\(o.sizeLabel) to download" }
+                if let p = running(o.modelID) { state = "downloading"; progress = min(0.99, max(0, p)); note = "Downloading \(o.sizeLabel)" }
+                else { state = "needs"; progress = 0; note = "Download \(o.group.isEmpty ? "its model" : o.group) (\(o.sizeLabel)) above to hear this voice." }
             }
             if let f = s.sampleFailed[o.id], state == "ready" { note = f }
             return VoiceCardState(id: o.id, name: o.name, blurb: o.blurb, sizeLabel: o.sizeLabel, state: state, progress: progress,
-                                  selected: s.selected == o.id, playing: s.playing == o.id, note: note)
+                                  selected: s.selected == o.id, playing: s.playing == o.id, note: note, model: o.modelID, group: o.group, credit: o.credit)
         }
     }
 
@@ -100,7 +94,18 @@ public final class VoiceSampler: @unchecked Sendable {
         oldSample?.cancel(); halt()                                                 // failure 1
         choose(o)
         if o.modelID.isEmpty || readiness.isReady(model: o.modelID) { startSample(o, gen) }
-        else { startDownload(o, gen) }
+        onChange?()
+    }
+
+    /// The listener pressed Test on a voice: its sample plays and nothing is chosen (Use is `pick`). A voice whose model is not on the phone plays nothing: its row says to download the model.
+    public func hear(_ id: String) {
+        guard let o = options.first(where: { $0.id == id }), o.modelID.isEmpty || readiness.isReady(model: o.modelID) else { return }
+        let (oldSample, gen): (Task<Void, Never>?, Int) = st.write { s in
+            let t = s.sample; s.sample = nil; s.generation += 1; s.playing = nil; s.sampleFailed[o.id] = nil
+            return (t, s.generation)
+        }
+        oldSample?.cancel(); halt()
+        startSample(o, gen)
         onChange?()
     }
 
@@ -125,40 +130,5 @@ public final class VoiceSampler: @unchecked Sendable {
         }
         let keep = st.write { s -> Bool in if s.generation == gen { s.sample = task; return true }; return false }
         if !keep { task.cancel() }
-    }
-
-    private func startDownload(_ o: VoiceOption, _ gen: Int) {
-        let model = o.modelID
-        let started = st.write { s -> Bool in
-            s.failed[model] = nil
-            if !s.downloads.insert(model).inserted { return false }                 // failure 3: one download per model
-            s.bytes[model] = 0
-            return true
-        }
-        if started {
-            Task { [weak self] in
-                guard let self else { return }
-                var failure: String?
-                do {
-                    try await self.fetch(model) { n in self.st.write { $0.bytes[model] = n }; self.onChange?() }
-                    if let why = await self.verify(model) { failure = why }                      // the verifier's own words: why it did not load, and what was done about the files
-                } catch let r as DownloadDoor.Refusal {
-                    failure = r.person
-                } catch is CancellationError { failure = "The download was stopped. Tap to try again." }
-                catch { failure = "The download did not finish. Check the connection and tap to try again." }   // failure 4
-                self.st.write { s in s.downloads.remove(model); if let f = failure { s.failed[model] = f } }
-                // The sample plays when the download ends, unless the listener has tapped something else since.
-                // The one wanted now (it may be another voice of the same model than the first tap), unless the listener moved on to a voice of
-                // another model.
-                if failure == nil {
-                    let want = self.st.write { s -> (VoiceOption, Int)? in
-                        guard let cur = self.options.first(where: { $0.id == s.selected }), cur.modelID == model else { return nil }
-                        return (cur, s.generation)
-                    }
-                    if let (cur, again) = want { self.startSample(cur, again) }
-                }
-                self.onChange?()
-            }
-        }
     }
 }

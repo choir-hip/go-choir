@@ -196,6 +196,7 @@
       {/if}
       <div class="account-actions">
         <button type="button" class="plain-row" data-desk-account-add on:click={addAccount}>Add another account</button>
+        <button type="button" class="plain-row" data-desk-account-delete on:click={() => window.location.assign('/account/delete')}>Delete account</button>
         {#if accounts.length > 1}
           <button type="button" class="plain-row" data-desk-account-signout-all disabled={accountsBusy} on:click={signOutOfAll}>Sign out of all accounts</button>
         {/if}
@@ -208,6 +209,7 @@
     {#if authenticated}
       <span data-prompt-surface-user>{currentUser?.email || 'signed in'}</span>
       <button type="button" data-prompt-surface-logout on:click={() => { close(false); logout(); }}>Sign out</button>
+      <button type="button" data-desk-account-delete on:click={() => window.location.assign('/account/delete')}>Delete account</button>
     {:else}
       <span data-prompt-surface-user>Public preview</span>
       <button type="button" data-prompt-surface-login on:click={() => { close(false); requireAuth({ kind: 'sign_in' }); }}>Sign in</button>

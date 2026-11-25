@@ -2,7 +2,7 @@ import Foundation
 
 // The page in front, as the shared reader hands it to the voice (AutoradioLab/reader.ts `hand`, the app module's `pageText` op): the native voice cannot ask the shared module what is on the page,
 // and matches what the radio says against it, so the shared page hands over its blocks with their sentences.
-// This holds them (at most `limit`, least recently used first, forgotten at sign-out) for the native readers: the page text a turn reads (HeldPageSource) and the follow-along
+// This holds them (at most `limit`, least recently used first, forgotten at sign-out) for the native readers: the page text a turn reads (`HeldPages.page`, `pageTextProvider`) and the follow-along
 // (ReaderFollow.locate). Nothing here parses a document.
 
 public struct HeldBlock: Sendable, Equatable {
@@ -79,15 +79,4 @@ public final class HeldPages: @unchecked Sendable {
     }
     /// Sign-out: every page held (the previous account's).
     public func wipe() { lock.lock(); pages = [:]; recency = []; lock.unlock() }
-}
-
-/// `pub:` and `texture:` as pages for the voice: the lines are the plain text of the page the shared reader handed over; before it has, the page is "loading".
-public struct HeldPageSource: PageSource {
-    public let held: HeldPages
-    public init(held: HeldPages = .shared) { self.held = held }
-    public func handles(_ address: String) -> Bool { address.hasPrefix("pub:") || address.hasPrefix("texture:") }
-    public func load(_ address: String) async throws -> PageModel {
-        guard let p = held.page(address) else { return PageModel(address: address, kind: "reader", title: PageAddress.defaultTitle(address), status: "loading") }
-        return PageModel(address: address, kind: "reader", title: p.title.isEmpty ? PageAddress.defaultTitle(address) : p.title, status: "ready", lines: p.lines)
-    }
 }

@@ -24,6 +24,33 @@ final class CountingProtocol: URLProtocol, @unchecked Sendable {
     static var requests: Int { lock.lock(); defer { lock.unlock() }; return count }
 }
 
+final class DownloadDoorPerModelTests: XCTestCase {
+    // A6 (owner, 2026-11-24: the press on a model's row is the agreement for that model's files): an agreement under a model's id covers that model only.
+    func testA6AnAgreementForOneModelCoversThatModelAndNoOther() throws {
+        let d = DownloadDoor(onWiFi: { true })
+        d.sync(agreed: ["lfm3-1.7b-q5_k_m": "agreed"])
+        XCTAssertEqual(try d.authorize(model: "lfm3-1.7b-q5_k_m"), .wifi)
+        XCTAssertThrowsError(try d.authorize(model: "lfm3-1.7b-q8_0"), "a model of the same job has not been agreed to") { XCTAssertEqual($0 as? DownloadDoor.Refusal, .noConsent(group: "voice-rest")) }
+        XCTAssertThrowsError(try d.authorize(model: KnownModels.embeddingGemma2.id))
+        XCTAssertThrowsError(try d.authorize(model: ModelOffer.speakerID), "the voice-print model is its own agreement")
+    }
+    func testA6AMobileAgreementForOneModelIsNotWifiOnlyForIt() throws {
+        let d = DownloadDoor(onWiFi: { true })
+        d.sync(agreed: ["lfm3-1.7b-q5_k_m": "agreed-mobile"])
+        XCTAssertEqual(try d.authorize(model: "lfm3-1.7b-q5_k_m"), .mobile)
+    }
+    func testA6TheSearchAgreementKeepsItsGroupKey() throws {
+        let d = DownloadDoor(onWiFi: { true })
+        d.sync(agreed: ["search": "agreed"])
+        XCTAssertEqual(try d.authorize(model: KnownModels.embeddingGemma2.id), .wifi)
+    }
+    func testA6AgreementForAModelThatIsNotOfferedStillRefuses() {
+        let d = DownloadDoor(onWiFi: { true })
+        d.sync(agreed: ["nope": "agreed"])
+        XCTAssertThrowsError(try d.authorize(model: "nope")) { XCTAssertEqual($0 as? DownloadDoor.Refusal, .notOffered(model: "nope")) }
+    }
+}
+
 final class DownloadDoorTests: XCTestCase {
     func counting() -> URLSession { let c = URLSessionConfiguration.ephemeral; c.protocolClasses = [CountingProtocol.self]; return URLSession(configuration: c) }
     func tmp() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("door-\(UUID().uuidString)", isDirectory: true) }
@@ -68,7 +95,7 @@ final class DownloadDoorTests: XCTestCase {
     }
     func testA1TheLibraryPathsAreRefusedWithoutConsent() async {
         let d = door()
-        for id in ["parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "fluid-speech-mini", VoiceCatalog.kokoroModel, VoiceCatalog.pocketModel, "lfm3-audio-2b"] {
+        for id in ["parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "fluid-speech-mini", VoiceCatalog.kokoroModel, VoiceCatalog.pocketModel, VoiceCatalog.phononModel, "lfm3-audio-2b"] {
             do { try await d.libraryWindow(model: id) { } as Void; XCTFail("\(id) opened a window with no consent") } catch {}
         }
     }
@@ -95,13 +122,14 @@ final class DownloadDoorTests: XCTestCase {
     func testA3NoVoiceCardIsOfferedForAModelNoGroupContains() {
         let d = door()
         let offered = VoiceCatalog.offered(by: d)
-        XCTAssertFalse(offered.isEmpty); XCTAssertFalse(offered.contains { $0.modelID == VoiceCatalog.phononModel }, "the Phonon cards are not offered while no group contains Phonon")
+        XCTAssertFalse(offered.isEmpty); XCTAssertTrue(offered.contains { $0.modelID == VoiceCatalog.phononModel }, "the Phonon cards are offered because the voice group contains Phonon (VoiceOffersTests P1): it is fetched from Settings > Downloads after the person agrees to that group, and whether its pack is on the phone is the manifest's question (withheld until sealed), not the door's")
         for o in offered where !o.modelID.isEmpty { XCTAssertNotNil(d.group(ofModel: o.modelID), "\(o.id) is offered with no group to agree to") }
-        XCTAssertTrue(VoiceCatalog.options.contains { $0.modelID == VoiceCatalog.phononModel }, "(it is in the catalog)")
+        XCTAssertEqual(d.group(ofModel: VoiceCatalog.phononModel), "voice")
     }
     func testA3APathRefusalSaysItNeedsWifiNotAgreeInSettings() {
         XCTAssertTrue(DownloadDoor.Refusal.pathNotAgreed(group: "voice").person.contains("Wi-Fi"))
-        XCTAssertTrue(DownloadDoor.Refusal.noConsent(group: "voice").person.contains("Settings"))
+        XCTAssertTrue(DownloadDoor.Refusal.noConsent(group: "voice").person.contains("Press Download on this model's own row"), "the refusal points at the model's own row, never at another page")
+        XCTAssertFalse(DownloadDoor.Refusal.noConsent(group: "voice").person.contains("Settings"))
         XCTAssertTrue(DownloadDoor.Refusal.notOffered(model: "x").person.contains("not offered"))
     }
     func testA3TheNativeResetClosesTheDoor() throws {

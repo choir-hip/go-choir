@@ -25,6 +25,8 @@ import { wipeFiles } from './files.ts';
 import { wipeImported, PLACES_FILE as IMPORTED_PLACES } from './imported.ts';
 import { wipePaper, CACHE_FILE as PAPER_FRONT } from './paper.ts';
 import { wipeKept, KEPT_FILE } from './takes.ts';
+import { wipeTextureEdit, PENDING_DIR as TEXTURE_PENDING } from './texture-edit.ts';
+import { MARKER as TOPICS_MARKER, forgetTopicsWrite } from './notebook-topics.ts';
 import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
 import { VECTORS_DIR, wipeLiveVectors } from './search.ts';
 import { CONTENT_DB, wipeLiveContent } from './content.ts';
@@ -35,7 +37,7 @@ import { wipePages, PAGES_FILE } from './pages.ts';
 import { wipeTold, TOLD_FILE } from './cards.ts';
 import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
 import { wipeSteer, STEER_FILE } from './steer.ts';
-import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
+import { wipeRadio, SHEET_FILE, SHEET_BAD_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
 import { accountGeneration, announceGeneration, authedJSON, authedURL, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, HTTPError, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
@@ -43,6 +45,7 @@ import { keepKey, KEY_ID_NAME, KEY_NAME } from './app-signin.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
 import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
 import { wipeConsent, CONSENT_FILE } from './consent.ts';
+import { forgetModelTests } from './models.ts';
 import { wipeLearn } from './voicelearn.ts';
 
 /** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
@@ -69,10 +72,13 @@ export const WIPES: Wipe[] = [
   { name: 'paper-front', run: (s) => wipePaper(s) },
   { name: 'takes', run: (s) => wipeKept(s) },
   { name: 'notebook', run: (s) => wipeNotebook(s) },
+  { name: 'notebook-topics', run: async (s) => { forgetTopicsWrite(); await rmAll(s, [TOPICS_MARKER]); } },                // the marker that says the topics are in the notebook
+  { name: 'texture-edit', run: (s) => wipeTextureEdit(s) },                                                        // the unsent text of the Texture editor (texture-edit.ts): memory and the kept file
   { name: 'notebook-page', run: async () => forgetNotebook() },                                                       // the page's memo and the pushed text, in memory only
   { name: 'edition-picks', run: (s) => wipePicks(s) },                                                            // the listener's topics (edition-picks.ts): memory, the file, and the native copy
   { name: 'onboarding', run: (s) => wipeOnboarding(s) },                                                           // the first run's progress (onboarding.ts): memory, the file, and the voice side
   { name: 'learn-voice', run: () => wipeLearn() },                                                                  // the learn-your-voice page's state, and native's takes in memory (voicelearn.ts)
+  { name: 'model-tests', run: async () => { forgetModelTests(); } },                                                   // the test lines on Voice and models (models.ts)
   { name: 'consent', run: (s) => wipeConsent(s) },                                                                 // what the person agreed to (consent.ts): memory, the file, and native's copy
   { name: 'vectors', run: async (s) => { await wipeLiveVectors(s); await rmAll(s, [VECTORS_DIR]); } },       // the live in-memory store first, then the files
   { name: 'content', run: async (s) => { await wipeLiveContent(); await rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]); } },  // stops a running sync (generation), empties the open db
@@ -90,8 +96,8 @@ export const WIPES: Wipe[] = [
 /** (A function, not a constant: api.ts imports app.ts, which imports this, so a constant read at load can meet a module not yet initialised.)
  * The paths the wipes above cover (account.test.ts S4 compares them with every `app:/` literal in the shared modules). `app:/tmp/picked` is files'. */
 export const wipedPaths = (): string[] => [
-  podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', IMPORTED_PLACES, PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE, SHEET_FILE, ONBOARDING_FILE, CONSENT_FILE,
-  VECTORS_DIR, CONTENT_DB, PAGES_FILE, TOLD_FILE, RECENT_FILE, STEER_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE, PENDING_REVOKE_FILE,
+  podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', IMPORTED_PLACES, PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE, SHEET_FILE, SHEET_BAD_FILE, ONBOARDING_FILE, CONSENT_FILE,
+  VECTORS_DIR, CONTENT_DB, PAGES_FILE, TOLD_FILE, RECENT_FILE, STEER_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE, PENDING_REVOKE_FILE, TEXTURE_PENDING, TOPICS_MARKER,
 ];
 
 /** Run each wipe; the names of the ones that threw. Logs ids, never content. The signed-in seam is reset first: a new account generation (a reply
@@ -191,10 +197,11 @@ async function sharedWipeThen(storage: Storage | undefined, store: Store | undef
 }
 
 /** The one function: read the three facts, decide, act. Run at launch (`settleAccount`) and at the end of every sign-out attempt. */
-export async function reconcile(storage: Storage | undefined, store: Store | undefined, native: Native): Promise<Reconciled> {
+export async function reconcile(storage: Storage | undefined, store: Store | undefined, native: Native, seen?: { keyError: boolean }): Promise<Reconciled> {
   if (!storage) return { action: 'nothing', failed: [] };
   for (let round = 0; round < 2; round++) {
     const k = await keyState();
+    if (k.error && seen) seen.keyError = true;          // the native read threw (a let-go answer's call is refused so): the caller does not take "nothing" as this launch's answer
     const marker: MarkerFact = (await exists(storage, PENDING_FILE)) ? 'pending' : 'none';
     const stamp: StampFact = k.state === 'present' ? await stampFact(storage, k.digest) : (await exists(storage, STAMP_FILE)) ? 'other' : 'none';
     const action = decide({ key: k.state, stamp, marker });
@@ -305,16 +312,18 @@ const dropPending = (storage: Storage | undefined, id: string): Promise<void> =>
 /** Retry the revokes of the list, signed in (at launch, and after a sign-in): with the key held now, each entry in turn. 2xx: done, the entry goes. 404 or 403: this key cannot revoke it (another account's key, or a narrower one): the entry stays,
  * since the account it belongs to may sign in later, and goes after 60 such answers. A phone that cannot reach the server stops and keeps what is left. An entry that is the key the phone holds is stale (the sign-out did not happen) and goes.
  * The answers are applied to a fresh read inside the queue, so an id a sign-out added while this waited on the network is kept. */
-export async function retryPendingRevoke(storage: Storage | undefined, store: Store | undefined): Promise<void> {
+export async function retryPendingRevoke(storage: Storage | undefined, store: Store | undefined, opts: { budgetMs?: number } = {}): Promise<void> {
   if (!storage || !store) return;
   const list = await readPending(storage);
   if (list.length === 0 || (await keyState()).state !== 'present') return;
+  // A budget is split among the requests as their own deadlines (a timer here would belong to whichever answer started the launch's settle); a request that runs out counts as not reachable.
+  const timeoutMs = opts.budgetMs ? Math.max(1, Math.floor(opts.budgetMs / list.length)) : undefined;
   const gone = new Set<string>(); const answered = new Set<string>();
   let reachable = true;
   for (const p of list) {
     if (!reachable) break;
     if ((store.get(KEY_ID_NAME) ?? '') === p.id) { gone.add(p.id); continue; }          // the key is still this phone's: the sign-out did not happen, and this must not end it
-    try { await authedJSON(`/auth/api-keys/${encodeURIComponent(p.id)}`, { method: 'DELETE' }); gone.add(p.id); }
+    try { await authedJSON(`/auth/api-keys/${encodeURIComponent(p.id)}`, { method: 'DELETE', timeoutMs }); gone.add(p.id); }
     catch (e) {
       if (e instanceof HTTPError && (e.status === 404 || e.status === 403)) answered.add(p.id);
       else reachable = false;
@@ -399,14 +408,50 @@ async function signOutInner(
   return { done: true, failed: failed.join(','), message: `Signed out, but these could not be cleared yet: ${failed.join(', ')}. They will be cleared the next time the app starts.${note ? ' ' + note : ''}` };
 }
 
-let settled: Promise<Reconciled> | null = null;
-/** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops. */
-export function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
-  if (!settled) settled = (async () => { await forgetOldCopy(storage); const r = await reconcile(storage, store, native); await Promise.race([retryPendingRevoke(storage, store).catch(() => undefined), timeout(3000)]); return r; })();
-  return settled;
+// The launch's settle is shared as a VALUE, never as a kept promise (docs/problems/shared-settle-promise-fails-every-request-2026-11-25.md). Exact resumes every step of an async function under the answer that
+// called it, and refuses a timer, a fetch or a native call once that answer is let go (asked again with new arguments): a run another answer started can end refused, and a kept promise would carry
+// that refusal to every later answer for the life of the process. So: a run that rejects is not kept, a run whose key read threw is not taken by another answer as the launch's answer, and the run
+// arms no timer of its own (the pending-revoke retry is bounded by its requests' `exactTimeout`). While a run is in flight a later answer waits on it (one reconcile at a time: the wipes run once).
+type SettleRun = { result: Reconciled; sure: boolean; counted?: boolean };
+let settledValue: Reconciled | null = null;
+let settling: Promise<SettleRun> | null = null;
+let settleEpoch = 0;
+let unsureRuns = 0;
+/** A run whose key read threw is taken as the launch's answer after this many (a bridge that always throws: the launch then does nothing, as an unreadable key does). */
+const UNSURE_RUNS_KEPT = 3;
+/** The pending-revoke retry at launch: its requests share this deadline (each its share, as `exactTimeout`), so the first answer is never held longer by it. */
+export const LAUNCH_REVOKE_BUDGET_MS = 3000;
+
+async function settleRun(storage: Storage | undefined, store: Store | undefined, native: Native): Promise<SettleRun> {
+  await forgetOldCopy(storage);
+  const seen = { keyError: false };
+  const result = await reconcile(storage, store, native, seen);
+  await retryPendingRevoke(storage, store, { budgetMs: LAUNCH_REVOKE_BUDGET_MS }).catch(() => undefined);
+  return { result, sure: !seen.keyError };
+}
+
+/** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops, once per launch (and again after `adoptKey`). */
+export async function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
+  for (;;) {
+    if (settledValue) return settledValue;
+    const epoch = settleEpoch;
+    const mine = !settling;
+    const run = settling ?? (settling = settleRun(storage, store, native));
+    let out: SettleRun;
+    try { out = await run; } catch (e) {
+      if (settling === run) settling = null;                                    // not kept: the next answer reconciles again
+      if (mine) throw e;
+      continue;                                                                  // another answer's run failed: this answer runs its own
+    }
+    if (settling === run) settling = null;
+    if (epoch !== settleEpoch) return out.result;                               // a sign-in reset it meanwhile: this answer goes on with what it saw, the next one reconciles the new key
+    if (!out.sure && !out.counted) { out.counted = true; unsureRuns += 1; }
+    if (out.sure || unsureRuns >= UNSURE_RUNS_KEPT) { settledValue = out.result; unsureRuns = 0; return out.result; }
+    if (mine) return out.result;                                                 // its own run, as before; not kept for the others
+  }
 }
 /** For tests. */
-export function resetSettled(): void { settled = null; }
+export function resetSettled(): void { settledValue = null; settling = null; unsureRuns = 0; settleEpoch += 1; }
 
 /** Keep the key a sign-in made and have the account reconciled again at the next answer: the new key may be another account's (the old one was refused), and `settleAccount` runs once per launch otherwise, so the old account's stored data would be read under the new key. `reconcile` then sees a stamp that is not this key's and wipes. */
 export function adoptKey(store: { set(n: string, v: string): void; forget(n: string): void }, key: string, keyId: string): void {

@@ -1,0 +1,1260 @@
+{
+  "comment": "Shared by internal/texturedoc/phone_projection_test.go (the server) and mobile/AutoradioLab/texture-body-projection.test.ts (the phone). `content` is written by the Go test from the server's Project; the rest by the phone test (UPDATE_PHONE_BODIES=1). Do not edit by hand.",
+  "merge": [
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-24ddd9ff"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "paragraph-0d53875e"
+              },
+              "content": [
+                {
+                  "text": "Hello",
+                  "type": "text"
+                },
+                {
+                  "type": "hard_break"
+                },
+                {
+                  "text": "This is my first time using texture editing on autoradio 1",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Hello\nThis is my first time using texture editing on autoradio 1",
+      "head_body": null,
+      "head_content": "",
+      "name": "the owner's text on a new document (no revision)",
+      "text": "Hello\nThis is my first time using texture editing on autoradio 1"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "paragraph-bf1fa27d"
+              },
+              "content": [
+                {
+                  "text": "Hello",
+                  "type": "text"
+                },
+                {
+                  "type": "hard_break"
+                },
+                {
+                  "text": "This is my first time using texture editing on autoradio 1",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Hello\nThis is my first time using texture editing on autoradio 1",
+      "head_body": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p0"
+              },
+              "content": [],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "head_content": "",
+      "name": "the same text on an empty body",
+      "text": "Hello\nThis is my first time using texture editing on autoradio 1"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-2f264e85"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "paragraph-2716b12c"
+              },
+              "content": [
+                {
+                  "text": "One.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "paragraph-62dbea0b"
+              },
+              "content": [
+                {
+                  "text": "Two.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "One.\n\nTwo.",
+      "head_body": null,
+      "head_content": "",
+      "name": "two paragraphs",
+      "text": "One.\n\nTwo."
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-a65bd5c6"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "paragraph-9c53ed21"
+              },
+              "content": [
+                {
+                  "text": "a",
+                  "type": "text"
+                },
+                {
+                  "type": "hard_break"
+                },
+                {
+                  "text": "b",
+                  "type": "text"
+                },
+                {
+                  "type": "hard_break"
+                },
+                {
+                  "text": "c",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "paragraph-8219ea25"
+              },
+              "content": [
+                {
+                  "text": "d",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "a\nb\nc\n\nd",
+      "head_body": null,
+      "head_content": "",
+      "name": "three lines and a paragraph",
+      "text": "a\nb\nc\n\nd"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-b468251b"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "paragraph-1b37a088"
+              },
+              "content": [
+                {
+                  "text": "Hello",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Hello",
+      "head_body": null,
+      "head_content": "",
+      "name": "a trailing newline (Enter at the end)",
+      "text": "Hello\n"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-63d34f89"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "heading-484094e6",
+                "level": 1
+              },
+              "content": [
+                {
+                  "text": "Title",
+                  "type": "text"
+                }
+              ],
+              "type": "heading"
+            },
+            {
+              "attrs": {
+                "id": "list-71c25c9c"
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "id": "list-item-15a54c95"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "paragraph-20398ef9"
+                      },
+                      "content": [
+                        {
+                          "text": "a",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                },
+                {
+                  "attrs": {
+                    "id": "list-item-80ccd974"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "paragraph-79436bff"
+                      },
+                      "content": [
+                        {
+                          "text": "b",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                }
+              ],
+              "type": "bullet_list"
+            },
+            {
+              "attrs": {
+                "id": "list-5ee622ec",
+                "start": 1
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "id": "list-item-5de309e6"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "paragraph-e47bb293"
+                      },
+                      "content": [
+                        {
+                          "text": "x",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                },
+                {
+                  "attrs": {
+                    "id": "list-item-cb49337b"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "paragraph-43540d61"
+                      },
+                      "content": [
+                        {
+                          "text": "y",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                }
+              ],
+              "type": "ordered_list"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "# Title\n\n- a\n- b\n\n1. x\n2. y",
+      "head_body": null,
+      "head_content": "",
+      "name": "a heading and a list",
+      "text": "# Title\n\n- a\n- b\n\n1. x\n2. y"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-4fd85f65"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "blockquote-a4fad2bb"
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "id": "paragraph-c2c975b9"
+                  },
+                  "content": [
+                    {
+                      "text": "q1",
+                      "type": "text"
+                    },
+                    {
+                      "type": "hard_break"
+                    },
+                    {
+                      "text": "q2",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                }
+              ],
+              "type": "blockquote"
+            },
+            {
+              "attrs": {
+                "id": "code-block-6384711c",
+                "language": "go"
+              },
+              "content": [
+                {
+                  "text": "a := 1\nb := 2",
+                  "type": "text"
+                }
+              ],
+              "type": "code_block"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "\u003e q1\n\u003e q2\n\n```go\na := 1\nb := 2\n```",
+      "head_body": null,
+      "head_content": "",
+      "name": "a quote and a code block",
+      "text": "\u003e q1\n\u003e q2\n\n```go\na := 1\nb := 2\n```"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-58085f54"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "paragraph-ea67a3ad"
+              },
+              "content": [
+                {
+                  "text": "A.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "hr-edb255e7"
+              },
+              "type": "horizontal_rule"
+            },
+            {
+              "attrs": {
+                "id": "paragraph-43a0892a"
+              },
+              "content": [
+                {
+                  "text": "B.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "A.\n\n---\n\nB.",
+      "head_body": null,
+      "head_content": "",
+      "name": "a rule",
+      "text": "A.\n\n---\n\nB."
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "First.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "Second, edited.",
+                  "type": "text"
+                },
+                {
+                  "type": "hard_break"
+                },
+                {
+                  "text": "A new line.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "First.\n\nSecond, edited.\nA new line.",
+      "head_body": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "First.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "Second.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "head_content": "First.\n\nSecond.",
+      "name": "an edit of the second paragraph",
+      "text": "First.\n\nSecond, edited.\nA new line."
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "First.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "Second.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "First.\n\nSecond.",
+      "head_body": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "First.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "Second.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "head_content": "First.\n\nSecond.",
+      "name": "an unchanged text",
+      "text": "First.\n\nSecond."
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-0410ba10"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "paragraph-f180bfbe"
+              },
+              "content": [
+                {
+                  "text": "some ",
+                  "type": "text"
+                },
+                {
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ],
+                  "text": "bold",
+                  "type": "text"
+                },
+                {
+                  "text": " and ",
+                  "type": "text"
+                },
+                {
+                  "marks": [
+                    {
+                      "type": "emphasis"
+                    }
+                  ],
+                  "text": "em",
+                  "type": "text"
+                },
+                {
+                  "text": " and ",
+                  "type": "text"
+                },
+                {
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ],
+                  "text": "code",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "some bold and em and code",
+      "head_body": null,
+      "head_content": "",
+      "name": "markup is not in the text",
+      "text": "some **bold** and *em* and `code`"
+    }
+  ],
+  "projection": [
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Hello world.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Hello world.",
+      "name": "one paragraph"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "One.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "Two.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "One.\n\nTwo.",
+      "name": "two paragraphs are a blank line apart"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Hello",
+                  "type": "text"
+                },
+                {
+                  "type": "hard_break"
+                },
+                {
+                  "text": "This is my first time using texture editing on autoradio 1",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "Hello\nThis is my first time using texture editing on autoradio 1",
+      "name": "a hard break is one newline"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "",
+      "name": "an empty paragraph"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "A.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "A.",
+      "name": "a trailing empty paragraph is trimmed"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "h1",
+                "level": 2
+              },
+              "content": [
+                {
+                  "text": "Title",
+                  "type": "text"
+                }
+              ],
+              "type": "heading"
+            },
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "Body.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "## Title\n\nBody.",
+      "name": "a heading"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ],
+                  "text": "bold",
+                  "type": "text"
+                },
+                {
+                  "text": " and ",
+                  "type": "text"
+                },
+                {
+                  "marks": [
+                    {
+                      "type": "emphasis"
+                    }
+                  ],
+                  "text": "em",
+                  "type": "text"
+                },
+                {
+                  "text": " and ",
+                  "type": "text"
+                },
+                {
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ],
+                  "text": "code",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "bold and em and code",
+      "name": "marks are not in the text"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "l1"
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "id": "i1"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "p1"
+                      },
+                      "content": [
+                        {
+                          "text": "a",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                },
+                {
+                  "attrs": {
+                    "id": "i2"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "p2"
+                      },
+                      "content": [
+                        {
+                          "text": "b",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                }
+              ],
+              "type": "bullet_list"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "- a\n- b",
+      "name": "a bullet list"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "l1",
+                "start": 3
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "id": "i1"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "p1"
+                      },
+                      "content": [
+                        {
+                          "text": "a",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                },
+                {
+                  "attrs": {
+                    "id": "i2"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "p2"
+                      },
+                      "content": [
+                        {
+                          "text": "b",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "list_item"
+                }
+              ],
+              "type": "ordered_list"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "3. a\n4. b",
+      "name": "an ordered list from 3"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "l1"
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "id": "i1"
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "id": "p1"
+                      },
+                      "content": [
+                        {
+                          "text": "a",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    },
+                    {
+                      "attrs": {
+                        "id": "l2"
+                      },
+                      "content": [
+                        {
+                          "attrs": {
+                            "id": "i2"
+                          },
+                          "content": [
+                            {
+                              "attrs": {
+                                "id": "p2"
+                              },
+                              "content": [
+                                {
+                                  "text": "b",
+                                  "type": "text"
+                                }
+                              ],
+                              "type": "paragraph"
+                            }
+                          ],
+                          "type": "list_item"
+                        }
+                      ],
+                      "type": "bullet_list"
+                    }
+                  ],
+                  "type": "list_item"
+                }
+              ],
+              "type": "bullet_list"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "- a\n    - b",
+      "name": "a nested list"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "q1"
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "id": "p1"
+                  },
+                  "content": [
+                    {
+                      "text": "one",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                },
+                {
+                  "attrs": {
+                    "id": "p2"
+                  },
+                  "content": [
+                    {
+                      "text": "two",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                }
+              ],
+              "type": "blockquote"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "\u003e one\n\u003e \n\u003e two",
+      "name": "a quote of two paragraphs"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "c1",
+                "language": "go"
+              },
+              "content": [
+                {
+                  "text": "a := 1",
+                  "type": "text"
+                },
+                {
+                  "text": "b := 2",
+                  "type": "text"
+                }
+              ],
+              "type": "code_block"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "```go\na := 1\nb := 2\n```",
+      "name": "a code block with a language"
+    },
+    {
+      "body_doc": {
+        "doc": {
+          "attrs": {
+            "id": "doc-1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "id": "p1"
+              },
+              "content": [
+                {
+                  "text": "A.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "id": "r1"
+              },
+              "type": "horizontal_rule"
+            },
+            {
+              "attrs": {
+                "id": "p2"
+              },
+              "content": [
+                {
+                  "text": "B.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "schema": "choir.texture_doc.v1"
+      },
+      "content": "A.\n\n---\n\nB.",
+      "name": "a rule between paragraphs"
+    }
+  ]
+}

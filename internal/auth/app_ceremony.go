@@ -203,6 +203,10 @@ func (h *Handler) mintAppKey(ctx context.Context, user *User, app string) (*appK
 	if h.demoOff(user.ID) {
 		return nil, ErrAccountOff
 	}
+	// No key is minted for an account that asked to be deleted.
+	if h.store.AccountAccessRevoked(user.ID) {
+		return nil, ErrDeletionPending
+	}
 	scopes := AllScopes()
 	label := appKeyLabel + app
 	if h.demoMintHook != nil {
@@ -249,6 +253,10 @@ func (h *Handler) HandleAppRegisterFinish(w http.ResponseWriter, r *http.Request
 		return
 	}
 	key, err := h.mintAppKey(r.Context(), user, app)
+	if errors.Is(err, ErrDeletionPending) {
+		writeDeletionState(w, h.store, user.ID)
+		return
+	}
 	if err != nil {
 		writeIssueError(w, err, "app_register_finish", user.ID, "failed to create the key")
 		return
@@ -304,6 +312,11 @@ func (h *Handler) HandleAppLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.store.TouchCredentialLastUsed(string(cred.ID)); err != nil {
 		log.Printf("[auth] operation=app_login_finish user_id=%s result=warning step=touch_last_used error=%q", user.ID, err)
+	}
+	// A verified passkey of an account that asked to be deleted gets the
+	// cancel offer and no key (deletion_handlers.go).
+	if h.offerDeletionCancel(w, user.ID) {
+		return
 	}
 	key, err := h.mintAppKey(r.Context(), user, app)
 	if errors.Is(err, ErrAddressUnproved) {

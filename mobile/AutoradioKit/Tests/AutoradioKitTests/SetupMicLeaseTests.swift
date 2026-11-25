@@ -98,4 +98,49 @@ final class SetupMicLeaseTests: XCTestCase {
         XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"]); let held = await l.isHeld; XCTAssertFalse(held)
         SetupMicLease.live = nil
     }
+
+    // L9 (review 2026-11-24, Test recordings): a recording made for the Test button gives the microphone back WHOLE: the tap cleared and the stored switch restored, on every exit, a cancelled one too.
+    //  Only endTake would leave the tap installed on a dead closure and the engine's hands-free broken afterwards.
+    func testL9ARecordingReleasesTheLeaseAndReturnsWhatItHeard() async {
+        let r = Rec()
+        final class Tap: @unchecked Sendable { let l = NSLock(); var f: (@Sendable (AudioFrame) -> Void)?; func set(_ x: (@Sendable (AudioFrame) -> Void)?) { l.lock(); f = x; l.unlock() }; func feed(_ a: AudioFrame) { l.lock(); let g = f; l.unlock(); g?(a) } }
+        let tap = Tap()
+        let l = SetupMicLease(.init(ask: { true }, openEngine: { r.add("engine") },
+                                    setTap: { t in r.add(t == nil ? "tap:nil" : "tap:set"); tap.set(t) }, micOn: { on in r.add(on ? "mic:on" : "mic:off") }, restore: { r.add("restore") }))
+        let t = Task { await l.record(seconds: 0.3) }
+        await waitFor(r, "mic:on")
+        tap.feed(AudioFrame(samples: [0.5, 0.25], sampleRate: 16000, t: 0))
+        let got = await t.value
+        XCTAssertEqual(got, [0.5, 0.25])
+        XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"], "released, not just ended: \(r.all)")
+        let held = await l.isHeld; XCTAssertFalse(held)
+    }
+    func testL9ACancelledRecordingStillReleases() async {
+        let r = Rec(); let l = make(r)
+        let t = Task { await l.record(seconds: 30) }
+        await waitFor(r, "mic:on"); t.cancel()
+        _ = await t.value
+        XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"], "\(r.all)")
+    }
+    func testL9ARefusedOrSilentRecordingIsNilAndReleased() async {
+        let r = Rec(); r.granted = false; let l = make(r)
+        let none = await l.record(seconds: 0.1); XCTAssertNil(none)
+        XCTAssertEqual(Array(r.all.suffix(2)), ["tap:nil", "restore"])
+        let r2 = Rec(); let l2 = make(r2)
+        let silent = await l2.record(seconds: 0.1); XCTAssertNil(silent, "no frames is no recording")
+        XCTAssertEqual(Array(r2.all.suffix(2)), ["tap:nil", "restore"])
+    }
+
+    // L10 (review round 2): a recording that was overtaken (another begin took the microphone) must not release the newer take's lease.
+    func testL10AnOvertakenRecordingDoesNotReleaseTheNewerTake() async {
+        let r = Rec(); let l = make(r)
+        let t = Task { await l.record(seconds: 0.4) }
+        await waitFor(r, "mic:on")
+        let newer = await l.begin(wanted: { true }, onFrame: { _ in })                  // another take (voice learning, another Test) overtakes it
+        XCTAssertEqual(newer, .open)
+        _ = await t.value
+        let held = await l.isHeld
+        XCTAssertTrue(held, "the overtaken recording's end did not give the newer take's microphone back: \(r.all)")
+        XCTAssertEqual(r.all.filter { $0 == "restore" }.count, 0, "hands-free was not restored under the newer take")
+    }
 }

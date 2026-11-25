@@ -1,0 +1,57 @@
+// Settings, Voice and models, on the real plan and the web host. The web host has no phone behind it: its voice cards are the interface's stand-in (exact-package/interface/voice.json, `substitute`):
+// two Kokoro voices, one Phonon voice and the phone's own voice, each carrying its model's name and the credit its licence asks for. What is proved here is the page: voices are shown under
+// their model with that model's credit once, every voice keeps its name and blurb, the phone's own voice (nothing downloaded, no credit) shows no credit, and a card with no credit is a failure.
+test "Settings, Voice and models: the voices are listed under their model, each model with its credit"
+  clock data
+  tap "bar-mark"
+  clock settle
+  tap "place-settings"
+  clock settle
+  tap "settings-nav-voice"
+  clock settle
+  tap "mv-tab-voice"
+  clock settle
+  expect tree has "voice-group-kokoro-82m-ane"
+  expect text "voice-group-name-kokoro-82m-ane" == "Kokoro 82M"
+  expect text "voice-credit-kokoro-82m-ane" == "Kokoro 82M voice by hexgrad, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+  expect tree has "mv-voice-kokoro:af_heart"
+  expect tree has "mv-voice-kokoro:am_adam"
+  expect tree has "voice-group-phonon-31m"
+  expect text "voice-credit-phonon-31m" == "Phonon 31M voice by Gradium, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+  expect tree has "mv-voice-phonon:en_us_Zoey"
+
+test "Settings, Voice and models: bundled Tiny Voca is visible and the Apple voice is absent"
+  clock data
+  tap "bar-mark"
+  clock settle
+  tap "place-settings"
+  clock settle
+  tap "settings-nav-voice"
+  clock settle
+  tap "mv-tab-voice"
+  clock settle
+  expect tree has "mv-voice-tiny-voca:F2"
+  expect tree has "mv-voice-tiny-voca:M2"
+  expect tree missing "mv-voice-system"
+
+test "Settings, Voice and models: one tab per kind of model, and a voice is a row with Test and Use like every other row"
+  clock data
+  tap "bar-mark"
+  clock settle
+  tap "place-settings"
+  clock settle
+  tap "settings-nav-voice"
+  clock settle
+  expect tree has "mv-tabs"
+  expect tree has "mv-tab-hearing"
+  expect tree has "mv-tab-voice"
+  expect tree missing "mv-tab-answering"
+  expect tree has "mv-body-hearing"
+  expect tree missing "mv-voice-kokoro:af_heart"
+  tap "mv-tab-voice"
+  clock settle
+  expect tree has "mv-body-voice"
+  expect tree has "md-voice-sample-voice"
+  expect tree has "mv-voice-kokoro:af_heart"
+  expect tree has "mv-voice-test-kokoro:af_heart"
+  expect text "mv-voice-name-kokoro:af_heart" == "Heart"

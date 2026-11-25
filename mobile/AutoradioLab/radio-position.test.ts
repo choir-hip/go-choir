@@ -65,7 +65,8 @@ type Shown = { elapsed: number; label: string; fraction: number; barFraction: nu
 const screens = { last: '', shown: undefined as Shown | undefined, reasks: 0 };
 async function ask(seconds: number, visible: boolean): Promise<{ pulse: Awaited<ReturnType<typeof radioPulse>>; reasked: boolean }> {
   nowS += seconds;
-  const pulse = await radioPulse(undefined, native as never);
+  const ds = await native.later({ op: 'deck', name: 'deckState' });     // spine.contract: the package source `ds`, read once per radio tick and handed to the pulse
+  const pulse = await radioPulse(undefined, native as never, ds);
   const posKey = pulse.live && visible ? pulse.beat : 0;                 // spine.contract: derive posKey
   const key = `${pulse.tick}|${posKey}`;
   let reasked = false;
@@ -76,6 +77,8 @@ async function ask(seconds: number, visible: boolean): Promise<{ pulse: Awaited<
   }
   return { pulse, reasked };
 }
+/** The pulse as the contract asks it: with the deck's state the package source `ds` just read. */
+const pulseRead = async (): ReturnType<typeof radioPulse> => radioPulse(undefined, native as never, await native.later({ op: 'deck', name: 'deckState' }));
 const fresh = (): void => { screens.last = ''; screens.shown = undefined; screens.reasks = 0; };
 
 describe('P1 the position moves while the audio plays and no event comes', () => {
@@ -126,7 +129,7 @@ describe('P4 native asks per second', () => {
     const peeks = calls.filter((c) => c.op === 'radioFacts' && c.peek === true).length;
     expect(peeks).toBe(10);                                                   // one per second
     const perPulse = (n: string): number => calls.filter((c) => (c.op === n) || c.name === n).length;
-    expect(perPulse('deckState')).toBe(10);                                   // the pulse's own deck read, as before this change
+    expect(perPulse('deckState')).toBe(10);                                   // the contract's `ds` read, once a tick (the pulse makes none of its own)
     expect(calls.filter((c) => c.op === 'deck' && c.name !== 'deckState' && c.name !== 'deckAck').length).toBe(0);
     await queueAct(undefined, native as never, 'toggle', '');
     await ask(0, true);
@@ -139,15 +142,15 @@ describe('P4 native asks per second', () => {
 describe('P5 a seek, Next and a new entry re-anchor at once', () => {
   test('the mutation moves the tick, so the next key re-asks without waiting a second; the contract also refreshes the pulse', async () => {
     fresh(); await play(); await ask(0, true); await ask(2, true);
-    const t0 = (await radioPulse(undefined, native as never)).tick;
+    const t0 = (await pulseRead()).tick;
     await queueAct(undefined, native as never, 'seek', '0.5');
-    const p = await radioPulse(undefined, native as never);
+    const p = await pulseRead();
     expect(p.tick).toBeGreaterThan(t0);
     fresh(); await ask(0, true);
     expect((screens.shown as Shown).elapsed).toBe(120);
-    const t1 = (await radioPulse(undefined, native as never)).tick;
+    const t1 = (await pulseRead()).tick;
     await play('ep2');
-    expect((await radioPulse(undefined, native as never)).tick).toBeGreaterThan(t1);
+    expect((await pulseRead()).tick).toBeGreaterThan(t1);
     await ask(0, true);
     expect((screens.shown as Shown).elapsed).toBe(0);
     await ask(2, true);
@@ -206,7 +209,7 @@ describe('P8 one second of the position, on a large run sheet', () => {
     fresh(); await big(); await ask(0, true);
     const wire = (await radioPageFacts(undefined, native as never)).sheet;
     const reps = 40; const t0 = performance.now();
-    for (let i = 0; i < reps; i++) { nowS += 1; await radioPulse(undefined, native as never); const f = await radioPageFacts(undefined, native as never); radioPage(f, {}, { entries: [] }, 0); }
+    for (let i = 0; i < reps; i++) { nowS += 1; await pulseRead(); const f = await radioPageFacts(undefined, native as never); radioPage(f, {}, { entries: [] }, 0); }
     const perSecond = (performance.now() - t0) / reps;
     console.log(`P8: sheet ${(wire.length / 1024).toFixed(0)} KiB; per second (pulse + page facts + page) ${perSecond.toFixed(2)} ms`);
     expect(wire.length).toBeGreaterThan(1_000_000);
@@ -218,7 +221,7 @@ describe('P8 one second of the position, on a large run sheet', () => {
     JSON.stringify = ((v: unknown, ...rest: unknown[]) => { if (v && typeof v === 'object' && Array.isArray((v as { entries?: unknown[] }).entries) && (v as { entries: unknown[] }).entries.length >= 150) out++; return (realStringify as (...a: unknown[]) => string)(v, ...rest); }) as typeof JSON.stringify;
     JSON.parse = ((t: string, ...rest: unknown[]) => { if (typeof t === 'string' && t.length > 1_000_000) back++; return (realParse as (...a: unknown[]) => unknown)(t, ...rest); }) as typeof JSON.parse;
     try {
-      for (let i = 0; i < 6; i++) { nowS += 1; await radioPulse(undefined, native as never); radioPage(await radioPageFacts(undefined, native as never), {}, { entries: [] }, 0); }
+      for (let i = 0; i < 6; i++) { nowS += 1; await pulseRead(); radioPage(await radioPageFacts(undefined, native as never), {}, { entries: [] }, 0); }
       expect(out).toBeLessThanOrEqual(1); expect(back).toBeLessThanOrEqual(1);
       const r = await getRadio(undefined, native as never);
       r.rt.store.sheet = { ...r.rt.store.sheet, version: r.rt.store.sheet.version + 1, entries: r.rt.store.sheet.entries.slice(1) };      // the sheet moved (a skip, an op)
@@ -262,14 +265,14 @@ describe('P10 the spoken entry\'s own clock: an entry with no estimate still cou
     r.rt.play({ id: 'sp-1', kind: 'story', placed_by: 'phone', state: 'ahead', title: 'Played from the paper', est_seconds: 0, revision: 0, text: 'Words of a story.', source: { ref: 'pub:/pub/x', label: 'x' } } as Entry);
     await r.rt.pump();
     dk.item = 'sp-1'; dk.why = 'playing'; dk.base = 0; dk.t0 = nowS; dk.seq += 1;
-    await radioPulse(undefined, native as never);
-    for (let i = 0; i < 5; i++) { nowS += 1; await radioPulse(undefined, native as never); }
+    await pulseRead();
+    for (let i = 0; i < 5; i++) { nowS += 1; await pulseRead(); }
     expect((await radioPageFacts(undefined, native as never)).spokenElapsed).toBe(5);
-    dk.why = 'paused_listener'; nowS += 1; await radioPulse(undefined, native as never);
-    for (let i = 0; i < 4; i++) { nowS += 1; await radioPulse(undefined, native as never); }
+    dk.why = 'paused_listener'; nowS += 1; await pulseRead();
+    for (let i = 0; i < 4; i++) { nowS += 1; await pulseRead(); }
     expect((await radioPageFacts(undefined, native as never)).spokenElapsed).toBe(5);
-    dk.why = 'playing'; await radioPulse(undefined, native as never);
-    for (let i = 0; i < 3; i++) { nowS += 1; await radioPulse(undefined, native as never); }
+    dk.why = 'playing'; await pulseRead();
+    for (let i = 0; i < 3; i++) { nowS += 1; await pulseRead(); }
     expect((await radioPageFacts(undefined, native as never)).spokenElapsed).toBe(8);
   });
   test('the contract draws a progress value the dump can read, and the proof reads it', () => {
@@ -361,10 +364,10 @@ describe('P12 native calls per second', () => {
     report('backgrounded, audio sounding', background);
     front = true;
     // the clock asks again every five seconds, not one, when nothing sounds in front and nothing is due: 0.4 native calls a second in those three (the fake has no server, so its pending ops are cleared: they would be "due")
-    const quiet = async (): Promise<boolean> => { (await getRadio(undefined, native as never)).rt.store.pending.length = 0; return (await radioPulse(undefined, native as never)).slow; };
+    const quiet = async (): Promise<boolean> => { (await getRadio(undefined, native as never)).rt.store.pending.length = 0; return (await pulseRead()).slow; };
     await perSecond(async () => { await play(); await queueAct(undefined, native as never, 'toggle', ''); }); expect(await quiet()).toBe(true);     // paused
     front = false; await perSecond(async () => { await play(); }); expect(await quiet()).toBe(true); front = true;                              // locked, sounding: the deck holds the next entries; a refill shows as `hold` or `write`
-    await perSecond(async () => { await play(); }); expect((await radioPulse(undefined, native as never)).slow).toBe(false);
+    await perSecond(async () => { await play(); }); expect((await pulseRead()).slow).toBe(false);
     expect(playing.byOp.radioSet ?? 0).toBeLessThanOrEqual(1);                      // the sheet is sent when it changed, not each second
     expect(idle.total).toBeLessThanOrEqual(2); expect(paused.total).toBeLessThanOrEqual(2);
     expect(background.total).toBeLessThanOrEqual(3);
@@ -419,7 +422,7 @@ describe('P16 what was lost offline reaches the log line the status reads (seat 
   test('the pulse line carries lost=N', async () => {
     const r = await getRadio(undefined, native as never); r.rt.store.lostPending = 7;
     const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
-    try { await radioPulse(undefined, native as never); r.rt.store.lostPending = 8; await radioPulse(undefined, native as never); } finally { console.log = log; }
+    try { await pulseRead(); r.rt.store.lostPending = 8; await pulseRead(); } finally { console.log = log; }
     expect(logs.some((l) => l.includes('pulse') && /lost=8/.test(l))).toBe(true);
   });
 });

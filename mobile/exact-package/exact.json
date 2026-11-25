@@ -24,8 +24,6 @@
       "signedIn": "bool",
       "baseURL": "string",
       "status": "string",
-      "userCode": "string",
-      "verificationURL": "string",
       "message": "string"
     },
     "ChoirPlayer": {
@@ -218,7 +216,9 @@
       "voiceReady": "bool",
       "hearingReady": "bool",
       "runStages": "string[]",
-      "enrol": "EnrolView"
+      "enrol": "EnrolView",
+      "modelRuns": "ModelRunView[]",
+      "modelTests": "ModelTestView[]"
     },
     "OfferJobView": {
       "job": "string",
@@ -236,7 +236,9 @@
       "credit": "string",
       "withheld": "bool",
       "removable": "bool",
-      "ready": "bool"
+      "ready": "bool",
+      "inUse": "bool",
+      "streams": "bool"
     },
     "EnrolView": {
       "state": "string",
@@ -246,6 +248,18 @@
       "built": "bool",
       "ready": "bool",
       "reason": "string"
+    },
+    "ModelRunView": {
+      "id": "string",
+      "state": "string",
+      "progress": "number",
+      "line": "string"
+    },
+    "ModelTestView": {
+      "key": "string",
+      "state": "string",
+      "line": "string",
+      "ms": "number"
     },
     "ReaderRun": {
       "id": "string",
@@ -468,14 +482,6 @@
       "topTitle": "string",
       "count": "number"
     },
-    "PageModel": {
-      "address": "string",
-      "kind": "string",
-      "title": "string",
-      "status": "string",
-      "lines": "string[]",
-      "message": "string"
-    },
     "Theme": {
       "id": "string",
       "name": "string",
@@ -593,12 +599,6 @@
       "line": "string",
       "credit": "string"
     },
-    "TextureEditInfo": {
-      "status": "string",
-      "label": "string",
-      "address": "string",
-      "editable": "bool"
-    },
     "VoiceCard": {
       "id": "string",
       "name": "string",
@@ -608,7 +608,10 @@
       "note": "string",
       "progress": "number",
       "selected": "bool",
-      "playing": "bool"
+      "playing": "bool",
+      "model": "string",
+      "group": "string",
+      "credit": "string"
     },
     "VoiceCards": {
       "selected": "string",
@@ -636,8 +639,6 @@
           "signedIn": false,
           "baseURL": "",
           "status": "idle",
-          "userCode": "",
-          "verificationURL": "",
           "message": ""
         }
       }
@@ -779,61 +780,10 @@
           "acked": 0,
           "journal": []
         }
+      },
+      "options": {
+        "tick": "number"
       }
-    },
-    {
-      "send": "deckPlay",
-      "options": {
-        "id": "string",
-        "kind": "string",
-        "title": "string",
-        "show": "string",
-        "document": "string",
-        "paragraphs": "string",
-        "url": "string",
-        "start": "number",
-        "end": "number",
-        "block": "number",
-        "seconds": "number",
-        "requiresPreviousHeard": "bool",
-        "segment": "string"
-      },
-      "answers": "DeckState"
-    },
-    {
-      "send": "deckEnqueue",
-      "options": {
-        "id": "string",
-        "kind": "string",
-        "title": "string",
-        "show": "string",
-        "document": "string",
-        "paragraphs": "string",
-        "url": "string",
-        "start": "number",
-        "end": "number",
-        "block": "number",
-        "seconds": "number",
-        "requiresPreviousHeard": "bool",
-        "segment": "string",
-        "at": "number"
-      },
-      "answers": "DeckState"
-    },
-    {
-      "send": "deckAct",
-      "options": {
-        "op": "string",
-        "value": "number"
-      },
-      "answers": "DeckState"
-    },
-    {
-      "send": "deckAck",
-      "options": {
-        "through": "number"
-      },
-      "answers": "DeckState"
     },
     {
       "source": "importedFollow",
@@ -889,7 +839,9 @@
                   "credit": "",
                   "ready": false,
                   "withheld": false,
-                  "removable": false
+                  "removable": false,
+                  "inUse": false,
+                  "streams": false
                 }
               ]
             },
@@ -908,7 +860,9 @@
                   "credit": "Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).",
                   "ready": false,
                   "withheld": false,
-                  "removable": false
+                  "removable": false,
+                  "inUse": false,
+                  "streams": false
                 }
               ]
             }
@@ -924,7 +878,9 @@
             "built": false,
             "ready": true,
             "reason": ""
-          }
+          },
+          "modelRuns": [],
+          "modelTests": []
         }
       }
     },
@@ -1004,24 +960,6 @@
       }
     },
     {
-      "source": "pageModel",
-      "live": true,
-      "answers": "PageModel",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "address": "",
-          "kind": "",
-          "title": "",
-          "status": "loading",
-          "lines": [],
-          "message": ""
-        }
-      }
-    },
-    {
       "source": "pageRequest",
       "live": true,
       "answers": "PageRequest",
@@ -1094,50 +1032,69 @@
       "answers": "SettingsAck"
     },
     {
-      "source": "textureEditInfo",
-      "live": true,
-      "answers": "TextureEditInfo",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "idle",
-          "label": "",
-          "address": "",
-          "editable": false
-        }
-      }
-    },
-    {
-      "send": "textureEdit",
-      "options": {
-        "address": "string",
-        "markdown": "string"
-      },
-      "answers": "TextureEditInfo"
-    },
-    {
-      "send": "textureFlush",
-      "options": {
-        "address": "string"
-      },
-      "answers": "TextureEditInfo"
-    },
-    {
       "source": "voiceCards",
       "live": true,
       "answers": "VoiceCards",
       "substitute": {
         "default": {
-          "selected": "",
+          "selected": "tiny-voca:F2",
           "message": "",
-          "cards": []
+          "cards": [
+            {
+              "id": "tiny-voca:F2",
+              "name": "Tiny Voca F2",
+              "blurb": "American English \u00b7 included with Autoradio",
+              "sizeLabel": "Built in",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": true,
+              "playing": false,
+              "model": "",
+              "group": "Tiny Voca",
+              "credit": "Tiny Voca by Muhammed Nazeem, Core ML port by razorback16. Apache-2.0."
+            },
+            {
+              "id": "tiny-voca:M2",
+              "name": "Tiny Voca M2",
+              "blurb": "American English \u00b7 included with Autoradio",
+              "sizeLabel": "Built in",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": false,
+              "playing": false,
+              "model": "",
+              "group": "Tiny Voca",
+              "credit": "Tiny Voca by Muhammed Nazeem, Core ML port by razorback16. Apache-2.0."
+            },
+            {
+              "id": "phonon:en_us_Zoey",
+              "name": "Zoey (Phonon)",
+              "blurb": "Playful, upbeat and Gen Z energy voice with a standard American accent.",
+              "sizeLabel": "About 350 MB",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": false,
+              "playing": false,
+              "model": "phonon-31m",
+              "group": "Phonon 31M",
+              "credit": "Phonon 31M voice by Gradium, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+            }
+          ]
         }
       }
     },
     {
       "send": "voicePick",
+      "options": {
+        "id": "string"
+      },
+      "answers": "VoiceCards"
+    },
+    {
+      "send": "voiceHear",
       "options": {
         "id": "string"
       },

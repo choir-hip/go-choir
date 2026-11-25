@@ -11,6 +11,8 @@ shape SettingsAccount
   computerID: string
   message: string
   baseURL: string
+  // The key's account is the App Review account (whoami `reviewer`): the Delete page explains it cannot be deleted in the app.
+  reviewer: bool
 
 shape AboutBuild
   build: string

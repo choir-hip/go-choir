@@ -61,7 +61,8 @@ export type DeckState = {
 /** `deckAct` operations. `clearEnd`: the clip playing no longer ends (the episode goes on from where it is). `value` is the seconds for `seekTo` and `seekBy`, and for `trim` how many held items to keep (the rest are dropped). */
 export type DeckOp = 'pause' | 'resume' | 'stop' | 'skip' | 'seekTo' | 'seekBy' | 'trim' | 'clearEnd';
 
-/** The deck's names (interface/deck.json). `deckState` is a live source; the rest answer the new state. */
+/** The deck's names, over the app module's one `deck` op (deck-native.ts); each answers the deck's state. Only `deckState` is also a package name (interface/deck.json): the live source the contract reads
+ *  and hands to the pulse. */
 export const DECK_NAMES = ['deckState', 'deckPlay', 'deckEnqueue', 'deckAct', 'deckAck'] as const;
 
 /** How many items after the one playing the deck holds, so it plays on while shared code is not running. It is every entry the sheet can have ahead (the phone's MAX_AHEAD, 100):

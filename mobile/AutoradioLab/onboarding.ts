@@ -33,9 +33,10 @@ import type { Storage } from './app.contract.d.ts';
 import { complete, generalEdition, localWriter, FAILED_LINE, TIMED_OUT_LINE, type Edition, type Writer, editionLines } from './edition-writer.ts';
 import { lookupEdition, seamGet, type Get } from './notebook.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
+import { writeTopicsOf } from './notebook-topics.ts';
 import * as pages from './pages.ts';
 import { consentAgree, consentPicks } from './consent.ts';
-import { picksFor, setupBytes, totalWords, forFirstRun, STAGE_JOBS, type OfferJob } from './offers.ts';
+import { picksFor, setupBytes, totalWords, forFirstRun, needs, STAGE_JOBS, type OfferJob } from './offers.ts';
 import { noEnrol, type Enrol } from './voicelearn.ts';
 import { keyState } from './api.ts';
 
@@ -50,7 +51,13 @@ export type VoiceFacts = {
   rows: Row[]; summary: string[]; totalLabel: string; device: string; onWiFi: boolean; setupStarted: boolean; setupFinished: boolean;
   mic: string; level: number; heard: string; route: string; talking: boolean; voicePicked: number; finishAsked: number;
   offers: OfferJob[]; runStages: string[]; voiceReady: boolean; hearingReady: boolean; enrol: Enrol;
+  /** Per model id: the state of the download the person pressed on its row (native: the setup row of its stage). */
+  modelRuns?: ModelRun[];
+  /** Per `<job>:<id>`: the test the person pressed on a row (native runs it: the model itself is needed). */
+  modelTests?: ModelTest[];
 };
+export type ModelRun = { id: string; state: string; progress: number; line: string };
+export type ModelTest = { key: string; state: string; line: string; ms: number };
 export const noVoice = (): VoiceFacts => ({ rows: [], summary: [], totalLabel: '', device: '', onWiFi: true, setupStarted: false, setupFinished: false, mic: 'unasked', level: 0, heard: '', route: '', talking: false, voicePicked: 0, finishAsked: 0, offers: [], runStages: [], voiceReady: false, hearingReady: false, enrol: noEnrol() });
 
 export type Onboarding = {
@@ -116,10 +123,11 @@ const blank = (): Mem => ({ gen: launchGen === undefined ? (launchGen = accountG
 /** For tests: a new process. */
 export function forgetOnboarding(): void { mem = null; }
 
-export type Env = { storage: Storage | undefined; device: Device | null; get: Get; agree?: (mobile: boolean) => Promise<boolean | void>; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void> };
+export type Env = { storage: Storage | undefined; device: Device | null; get: Get; agree?: (mobile: boolean, ids?: string[]) => Promise<boolean | void>; deadlineSeconds?: number; writer?: Writer; closePage?: (address: string) => Promise<void>; openPage?: (address: string, title: string) => Promise<void>; notebook?: (topics: string[]) => Promise<boolean>; kickSearch?: (storage: Storage | undefined) => Promise<void> | void };
 export const liveEnv = (storage: Storage | undefined): Env => ({ storage, device: nativeDevice(), get: seamGet,
-  agree: async (mobile) => (await consentAgree('voice', mobile, storage)) && (await consentAgree('voice-rest', mobile, storage)),
-  closePage: async (a) => { await pages.pagesClose(storage, a); }, openPage: async (a, t) => { await pages.pagesOpen(storage, a, t); } });
+  agree: async (mobile, ids = []) => { for (const id of ids) if (!(await consentAgree(id, mobile, storage))) return false; return true; },   // one agreement per model shown: the key Voice and models uses
+  closePage: async (a) => { await pages.pagesClose(storage, a); }, openPage: async (a, t) => { await pages.pagesOpen(storage, a, t); },
+  kickSearch: (s) => kickSearch(s) });
 
 /** The progress, read once per account generation. THE CAUSE of the flip (found by reading, 2026-11-22): `loaded` used to be set BEFORE the file was read and a failed read counted as "no file", so a second
  *  caller met a memory that said loaded with the default progress (step `welcome`: not over) while the first was still reading, and a read that failed (an answer let go while it waited, `the proof's plain
@@ -226,7 +234,7 @@ async function writeEdition(env: Env, m: Mem, topics: string[], edit: boolean): 
   if (m.gen !== accountGeneration()) return;                                                                                // another account now: nothing of this edition is theirs
   if (out.kind === 'written') {
     await ready(env, m, out.edition, edit);
-    await dev(env, 'obNotebookTopics', { topics });                                                                        // the first lines of the notebook (native: Notebook.swift writes it)
+    await (env.notebook ?? ((t: string[]) => writeTopicsOf(env.storage, t)))(topics).catch(() => false);      // the first lines of the notebook (notebook-topics.ts: a quiet failure; the notebook page asks again)
   } else { m.status = 'failed'; m.error = out.kind === 'timedOut' ? TIMED_OUT_LINE : FAILED_LINE; }
 }
 
@@ -256,15 +264,18 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
       if (shown.length === 0) { m.message = NO_OFFERS_LINE; break; }                                                       // O19: nothing was shown, so nothing is fetched
       if (!f.onWiFi && arg !== 'true') { m.step = 'setup'; m.askMobile = true; m.message = ''; break; }                      // O2
       // What was shown is what is fetched (O18, O19): the chosen option of every job of the two voice groups (the person's pick, else the one recommended for this phone), each as the one stage it runs in, and the voice-print model beside them. Never the configurator, never a stage that was not shown.
+      const kept = await consentPicks(env.storage);
       let agreed = true;
-      try { agreed = (await env.agree?.(!f.onWiFi)) !== false; } catch { agreed = false; }
+      try { agreed = (await env.agree?.(!f.onWiFi, shown.map((j) => needs(j, kept)?.id).filter((x): x is string => !!x))) !== false; } catch { agreed = false; }
       if (!agreed) { m.message = NOT_RECORDED_LINE; break; }                                                                   // the agreement is on disk before anything is fetched
       m.askMobile = false; m.step = 'setup'; m.message = ''; m.p.skipped = false;
       await save(env, m);
-      const picks = picksFor(shown, ['voice', 'voice-rest'], await consentPicks(env.storage));
+      const picks = picksFor(shown, ['voice', 'voice-rest', 'search'], await consentPicks(env.storage));
       const stages = STAGE_JOBS.filter((j) => j in picks);
       const speaker = shown.some((j) => j.job === 'speaker' && j.options.some((o) => !o.ready));
       await dev(env, 'obSetupBegin', { only: true, stages, picks, speaker });
+      // The search embedding model is not a voice-setup stage: its own pass fetches it, after the agreement above.
+      if (shown.some((j) => j.group === 'search')) await env.kickSearch?.(env.storage);
       break;
     }
     case 'retry': if (m.step === 'setup') await dev(env, 'obSetupRetry', { stage: arg }); break;

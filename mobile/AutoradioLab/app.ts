@@ -1,9 +1,9 @@
-import type { Answer, Sources, Store } from './app.contract.d.ts';
+import type { Answer, Sources, Storage, Store } from './app.contract.d.ts';
 import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
-import { adoptNative, bindStore, nativeLater, segment } from './api.ts';
+import { adoptNative, authedJSON, bindStore, HTTPError, keyState, nativeLater, segment, SignedOutError } from './api.ts';
 import { settingsAccount, aboutPage } from './settings.ts';
 import { settingsComputer, computerAct } from './computer.ts';
 import { activityPage } from './activity.ts';
@@ -18,12 +18,13 @@ import { accountState } from './account-state.ts';
 import { APP_ID } from './app-id.ts';
 import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
-import { texturesListShared } from './textures.ts';
+import { texturesListShared, createTexture } from './textures.ts';
 import * as themes from './themes.ts';
 import { notebookShared } from './notebook-run.ts';
 import { syncContent } from './content-run.ts';
 import * as mail from './mail.ts';
 import { barInfo, dismissAnswer } from './bar.ts';
+import { heartbeat } from './heartbeat.ts';
 import * as radioBridge from './radio-bridge.ts';
 import { radioPage } from './radio-page.ts';
 import { retrievalServe, paperSearch } from './retrieval-live.ts';
@@ -32,11 +33,13 @@ import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveE
 import * as picks from './edition-picks.ts';
 import { consentView } from './consent.ts';
 import { micPermission } from './micask.ts';
-import { downloadsPage, downloadsAct } from './downloads.ts';
+import { modelsPage, modelsAct } from './models.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
-import { reviewerRun, signInCancel, signInReset, signInRun, signInView, type SignInEnv } from './app-signin.ts';
+import { deleteReset, deleteRun, deleteView, type DeleteEnv } from './account-delete.ts';
+import { reviewerRun, signInCancel, signInCancelDeletion, signInReset, signInRun, signInView, type SignInEnv } from './app-signin.ts';
 import { radioPlayClip } from './clip-play.ts';
+import { textureEditInfo, textureEditOpen, textureEdit, textureFlush, textureDiscard, textureOverwrite } from './texture-edit.ts';
 import { podcastNow } from './podcast-now.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -97,6 +100,8 @@ fs.read app:/data/takes.json
 fs.write app:/data/takes.json
 fs.read app:/data/runsheet.json
 fs.write app:/data/runsheet.json
+fs.read app:/data/runsheet.bad.json
+fs.write app:/data/runsheet.bad.json
 fs.read app:/data/vectors
 fs.write app:/data/vectors
 fs.read app:/data/imported-places.json
@@ -105,6 +110,10 @@ fs.read app:/data/theme-choice.json
 fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
 fs.write app:/data/themes
+fs.read app:/data/texture-pending
+fs.write app:/data/texture-pending
+fs.read app:/data/notebook-topics-written
+fs.write app:/data/notebook-topics-written
 fs.read app:/data/edition-topics.json
 fs.write app:/data/edition-topics.json
 fs.read app:/data/onboarding.json
@@ -121,6 +130,22 @@ const signInEnv = (store: Store): SignInEnv => ({
   keep: (key, keyId) => adoptKey(store, key, keyId),
   revoke: async (key, keyId) => { await fetch(`${ORIGIN}/auth/api-keys/${segment(keyId)}`, { method: 'DELETE', headers: { authorization: `Bearer ${key}` }, redirect: 'manual', exactTimeout: 8000 } as RequestInit); },
   newId: () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''),
+  log: (l) => console.log(l),
+});
+// Delete account (account-delete.ts): the same passkey screen, a POST with the app's key (api.ts), and the Account page's own sign-out once the server has accepted. A request that fails answers its
+// status (0 for no answer), never a body or a key.
+const deleteEnv = (store: Store, storage: Storage | undefined, native: unknown): DeleteEnv => ({
+  passkeys: credentials as never,
+  post: async (path, body) => {
+    try { const r = await authedJSON(path, { method: 'POST', ...(body === undefined ? {} : { body }) }); return { status: 200, body: r.body }; }
+    catch (e) {
+      if (e instanceof SignedOutError) return { status: 401, body: null };
+      if (e instanceof HTTPError) return { status: e.status, body: null };
+      return { status: 0, body: null };
+    }
+  },
+  hasKey: async () => (await keyState()).state === 'present',
+  signOut: () => accountSignOut(storage, store as never, native as never),
   log: (l) => console.log(l),
 });
 let takesOverlay: ReturnType<typeof newTakes> | undefined;
@@ -143,7 +168,8 @@ const sources: Sources = {
   // The bar (bar.ts): the native facts and the conversation's entries in, the bar's state out; the tick (a timed state's end, a sign-out) asks again.
   barInfo: ([facts, run, entries, _tick]) => barInfo({ ...(facts as object), ...(run as object) }, entries),
   // The radio (radio-bridge.ts over radio-runtime.ts): the run sheet, its writer and the deck's journal are shared code; the deck is native (the one `deck` op).
-  radioPulse: ([_deck, _note, _tick], _s, storage, native) => radioBridge.radioPulse(storage as never, native as never),
+  heartbeat: ([_tick]) => heartbeat(),
+  radioPulse: ([deck, _note, _tick], _s, storage, native) => radioBridge.radioPulse(storage as never, native as never, deck),
   radioWrite: ([_tick], _s, storage, native) => radioBridge.radioWrite(storage as never, native as never),
   radioHold: ([_tick], _s, storage, native) => radioBridge.radioHold(storage as never, native as never),
   queueView: ([_t, _pos], _s, storage, native) => radioBridge.queueView(storage as never, native as never),
@@ -162,6 +188,14 @@ const sources: Sources = {
   // The Autoradio page (radio-page.ts): the native facts, the bar's facts and the entries in; the page out.
   radioPage: ([facts, bar, entries]) => radioPage(facts, bar, entries),
   texturesList: ([at]) => texturesListShared(at),
+  textureCreate: () => createTexture(),
+  // Editing your own Texture document (texture-edit.ts): one editor per signed-in account; what it says, the opening, the typed text, the save, and the listener's choice after the head moved. The waits are the contract's.
+  textureEditInfo: ([address, _account], _s, storage) => textureEditInfo(address, storage),
+  textureEditOpen: ([address], _s, storage) => textureEditOpen(address, storage),
+  textureEdit: ([address, markdown, from], _s, storage) => textureEdit(address, markdown, from, storage),
+  textureFlush: ([address], _s, storage) => textureFlush(address, storage),
+  textureDiscard: ([address], _s, storage) => textureDiscard(address, storage),
+  textureOverwrite: ([address], _s, storage) => textureOverwrite(address, storage),
   // The themes (themes.ts): the system's scheme and Reduce Motion come from `exactViewport()` (the first two arguments); the choice and the user's themes are kept under app:/data.
   theme: ([scheme, reduce], _s, storage) => themes.themeShared(scheme, reduce, storage),
   themeList: ([scheme, reduce], _s, storage) => themes.themeListShared(scheme, reduce, storage),
@@ -198,13 +232,13 @@ const sources: Sources = {
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
   pagesPin: ([address], _store, storage) => pages.pagesPin(storage, address),
   pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
-  // What the person agreed to (consent.ts): the sign-in prompt's words and the revision of the per-group download agreements (a group's press is `downloadsAct`).
+  // What the person agreed to (consent.ts): the sign-in prompt's words and the revision of the per-model download agreements (a row's press is `modelsAct`).
   consentView: ([_tick], _s, storage) => consentView(storage),
   // The system's microphone permission (micask.ts): the plain line before the prompt for the bar's voice and for a take.
   micPermission: ([tick]) => micPermission(String(tick)),
-  // The model files voice needs, with their sizes (downloads.ts): the view, and one group's press.
-  downloadsPage: ([facts, _rev], _s, storage) => downloadsPage(facts as never, storage),
-  downloadsAct: ([op, group, facts, arg], _s, storage) => downloadsAct(op, group, facts as never, storage, arg ?? ''),
+  // Settings > Voice and models (models.ts): the view of every model of every job, and one row's press.
+  modelsPage: ([facts, _rev], _s, storage) => modelsPage(facts as never, storage),
+  modelsAct: ([op, section, id, facts], _s, storage) => modelsAct(op, section, id, facts as never, storage),
   // Learning the person's voice (voicelearn.ts): the page from the voice side's facts, and one press.
   learnPage: ([facts]) => learnPage(facts as never),
   learnAct: ([op, facts]) => learnAct(op, facts as never, nativeLater() as never),
@@ -212,9 +246,14 @@ const sources: Sources = {
   signInRun: ([mode, email, code], store) => signInRun(signInEnv(store), (mode === 'create' ? 'create' : 'signin') as 'create' | 'signin', String(email ?? ''), String(code ?? '')),
   reviewerRun: ([username, password], store) => reviewerRun(signInEnv(store), String(username ?? ''), String(password ?? '')),
   signInCancel: (_a, store) => signInCancel(signInEnv(store)),
+  signInCancelDeletion: (_a, store) => signInCancelDeletion(signInEnv(store)),
   signInOpen: (_a, store) => signInReset(signInEnv(store)),
   signInView: ([_tick]) => signInView(),
   accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
+  // Delete account (account-delete.ts): one run; the view is read again while it is working.
+  accountDeleteRun: async (_a, store, storage, native) => { const v = await deleteRun(deleteEnv(store, storage, native)); return { phase: v.phase, rev: v.rev }; },
+  accountDeleteOpen: () => { const v = deleteReset(); return { phase: v.phase, rev: v.rev }; },
+  accountDeleteView: ([_key]) => deleteView(),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
   podcastEpisode: ([address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev], _store, storage) =>

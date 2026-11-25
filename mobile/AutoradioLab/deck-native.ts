@@ -33,6 +33,12 @@ export function readState(raw: unknown): DeckState {
   };
 }
 
+/** The deck's state as the contract read it (the package source `deckState`, spine.contract `ds`, handed to the pulse). The contract's placeholder before the first answer (`empty()`: no `why`) is
+ *  undefined: not read is not an empty deck. */
+export function contractDeck(raw: unknown): DeckState | undefined {
+  return WHYS.includes(str(obj(raw).why)) ? readState(raw) : undefined;
+}
+
 /** The deck port over the app module. `later` is read at each call (the module can bind late): `nativeLater` by default. */
 export function nativeDeck(later: () => Later | null = nativeLater as () => Later | null): DeckPort {
   const call = async (name: string, args: Record<string, unknown> = {}): Promise<DeckState> => {

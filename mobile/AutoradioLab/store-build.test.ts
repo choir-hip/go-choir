@@ -144,12 +144,26 @@ function pinnedExact() {                                                        
 }
 // ---- a copy of the tree over stubs ----------------------------------------------------------------------------------------------------------------------
 type Tree = { t: string; m: string; bin: string; env: (extra?: Record<string, string>) => Record<string, string>; cleanup: () => void };
-type TreeOpts = { realStage?: boolean; systemTools?: boolean };   // systemTools: the two checkers are the real ones with no tools argument (the system's own tools, not this tree's stubs)
+type TreeOpts = { realStage?: boolean; systemTools?: boolean };
+// The Tiny Voca tree the store check requires (scripts/check-tiny-voca-assets.py): fake compiled
+// models and data, recorded into its own manifest here so the real checker accepts the fixture.
+const tinyVocaFiles = [
+  ...['Encoder', 'Decoder', 'Vocoder'].flatMap((n) => ['model.mil', 'coremldata.bin', 'weights/weight.bin'].map((f) => `${n}.mlmodelc/${f}`)),
+  ...['lexicon.tsv', 'align.json', 'g2p.json', 'g2p.npz', 'homographs.json'].map((f) => `phonemizer/${f}`),
+  'tiny-voca-coreml.json', 'Licenses/LICENSE.apache-2.0', 'Licenses/LICENSE.cmudict',
+  'Licenses/LICENSE.homograph-data', 'Licenses/NOTICE', 'Licenses/phonemizer-sources.json',
+];   // systemTools: the two checkers are the real ones with no tools argument (the system's own tools, not this tree's stubs)
 function tree(opts: TreeOpts = {}): Tree {
   const t = mkdtempSync(join(tmpdir(), 'store-build-'));
   const m = join(t, 'mobile'), bin = join(t, 'bin'), home = join(t, 'home');
   for (const d of [join(m, 'AutoradioLab'), bin, join(home, 'Library')]) mkdirSync(d, { recursive: true });
   cpSync(join(MOBILE, 'scripts'), join(m, 'scripts'), { recursive: true });
+  {
+    const voice = join(bin, 'TinyVoca');
+    for (const f of tinyVocaFiles) { mkdirSync(dirname(join(voice, f)), { recursive: true }); writeFileSync(join(voice, f), 'fixture: ' + f); }
+    const recorded = run(['/usr/bin/python3', '-I', join(m, 'scripts', 'check-tiny-voca-assets.py'), voice, 'ios', '--record'], BASE);
+    expect(recorded.code, recorded.err).toBe(0);
+  }
   if (!opts.systemTools) {
     // The checkers find codesign, ditto and security in /usr/bin and nowhere else; a test's stubs reach them through their own `--tools <dir>` argument, which archive-store.sh and
     // upload-store.sh never pass. In THIS copy of the tree only, each checker is a two-line shim that hands its real self that argument; the real files are what runs.
@@ -213,6 +227,12 @@ with zipfile.ZipFile(out, "w") as z:
     if os.path.exists(sys.argv[4] + "/exe-extra"): exe += open(sys.argv[4] + "/exe-extra", "rb").read()
     z.writestr("Payload/Autoradio 1.app/Autoradio1", exe)
     if os.path.exists(sys.argv[4] + "/framework-extra"): z.writestr("Payload/Autoradio 1.app/Frameworks/ExactModules.framework/ExactModules", b"\\xcf\\xfa\\xed\\xfe\\x0c\\x00\\x00\\x01" + open(sys.argv[4] + "/framework-extra", "rb").read())
+    if mode != "no-voice":
+        voice = sys.argv[4] + "/TinyVoca"
+        for folder, _, files in os.walk(voice):
+            for name in files:
+                local = os.path.join(folder, name)
+                z.write(local, "Payload/Autoradio 1.app/ExactResources/Resources/TinyVoca/" + os.path.relpath(local, voice))
     if mode != "no-profile": z.writestr("Payload/Autoradio 1.app/embedded.mobileprovision", b"x")
 print("null" if mode == "json-null" else json.dumps({"path": out, "target": "ios", "trust": "production", "signing": os.environ.get("EXACT_IDENTITY", "ad-hoc")}))
 PY
@@ -282,7 +302,19 @@ function makeIpa(tr: Tree, name: string, o: { id?: string; info?: Record<string,
   const r = run(['/usr/bin/python3', '-I', '-c', 'import json,plistlib,sys,zipfile\nz=zipfile.ZipFile(sys.argv[1],"w")\nz.writestr("Payload/A.app/Info.plist",b"not a plist" if sys.argv[3]=="1" else plistlib.dumps(json.loads(sys.argv[2])))\nif sys.argv[5]=="1": z.writestr("Payload/A.app/embedded.mobileprovision",b"x")\nif sys.argv[4]!="-": z.writestr("Payload/A.app/A",sys.argv[4].encode())\nz.close()',
     p, JSON.stringify(info), o.corrupt ? '1' : '0', o.exe === null ? '-' : (o.exe ?? 'a fixture executable'), o.profile === false ? '0' : '1'], BASE);
   expect(r.code, r.err).toBe(0);
-  return p;
+  // Every ipa these tests build carries the voice tree, where Exact stages it; a test that
+  // wants it absent removes it by name in its own copy.
+  const voice = join(tr.bin, 'TinyVoca');
+  const files: Record<string, string> = {};
+  for (const f of [...tinyVocaFiles, 'asset-manifest.json']) files[`Payload/A.app/ExactResources/Resources/TinyVoca/${f}`] = readFileSync(join(voice, f), 'utf8');
+  return filesIn(p, files);
+}
+/** Adds files to an ipa already written (a store ipa often grows after the fixture). */
+function filesIn(ipa: string, files: Record<string, Buffer | string>) {
+  const spec = JSON.stringify(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, Buffer.from(v).toString('base64')])));
+  const r = run(['/usr/bin/python3', '-I', '-c', 'import json,sys,base64,zipfile\nz=zipfile.ZipFile(sys.argv[1],"a")\nfor k,v in json.loads(sys.argv[2]).items(): z.writestr(k,base64.b64decode(v))\nz.close()', ipa, spec], BASE);
+  expect(r.code, r.err).toBe(0);
+  return ipa;
 }
 const archive = (tr: Tree, extra: Record<string, string> = {}, cwd?: string) => {
   const e = tr.env(extra);

@@ -40,18 +40,32 @@ public final class LlamaSystem1: System1, @unchecked Sendable {
                      .number("contextTokens", "Context tokens", 1024, 512, 8192)],
             needsModels: [LlamaCatalog.qwen3.id])
     }
-    static let slot = ModelSlot<LlamaEngine>(LlamaCatalog.qwen3.id)
+    // One decision engine per model that has been loaded (setup checks the person's pick before it is the saved choice), the way the responder's engines are kept.
+    private static let slotLock = NSLock()
+    nonisolated(unsafe) private static var slots: [String: ModelSlot<LlamaEngine>] = [:]
+    static func slot(for id: String) -> ModelSlot<LlamaEngine> {
+        slotLock.lock(); defer { slotLock.unlock() }
+        if let s = slots[id] { return s }
+        let s = ModelSlot<LlamaEngine>(id); slots[id] = s; return s
+    }
+    /// The slot of the saved decision model.
+    static var slot: ModelSlot<LlamaEngine> { slot(for: DecisionChoice.current) }
     let threads: Int32, gpu: Bool, ctx: UInt32
-    public init(_ p: StageParams) { threads = Int32(p.int("threads", 4)); gpu = p.bool("gpu", true); ctx = UInt32(p.int("contextTokens", 1024)) }
-
-    func engine() async throws -> LlamaEngine {
-        try await Self.loadEngine(threads: threads, gpu: gpu, ctx: ctx, download: true)
+    /// The model this stage scores with: the `model` parameter (setup's check of a pick) or the saved choice (`DecisionChoice`, Qwen3-0.6B unless the person picked another that is pinned).
+    let modelID: String
+    public init(_ p: StageParams) {
+        threads = Int32(p.int("threads", 4)); gpu = p.bool("gpu", true); ctx = UInt32(p.int("contextTokens", 1024))
+        modelID = DecisionChoice.resolve(saved: p.string("model", DecisionChoice.current))
     }
 
-    /// The decision engine of the process. `download: false` loads only a file that is already on the phone.
-    static func loadEngine(threads: Int32 = 4, gpu: Bool = true, ctx: UInt32 = 1024, download: Bool) async throws -> LlamaEngine {
-        try await slot.get {
-            let url = try await LlamaFiles.url(LlamaCatalog.qwen3.id, download: download)
+    func engine() async throws -> LlamaEngine {
+        try await Self.loadEngine(model: modelID, threads: threads, gpu: gpu, ctx: ctx, download: true)
+    }
+
+    /// The decision engine of the process for one model. `download: false` loads only a file that is already on the phone.
+    static func loadEngine(model: String = DecisionChoice.current, threads: Int32 = 4, gpu: Bool = true, ctx: UInt32 = 1024, download: Bool) async throws -> LlamaEngine {
+        try await slot(for: model).get {
+            let url = try await LlamaFiles.url(model, download: download)
             let e = try LlamaEngine(weights: try LlamaWeights.shared(path: url.path, gpu: gpu), threads: threads, contextTokens: ctx)
             return (e, {})
         }
@@ -64,21 +78,16 @@ public final class LlamaSystem1: System1, @unchecked Sendable {
         return try input.questions.map { q in
             let t0 = nowMs()
             let letters = (0..<min(q.options.count, 26)).map { String(UnicodeScalar(UInt8(65 + $0))) }
-            let prompt = Self.prompt(input, q, letters)
+            let prompt = self.prompt(input, q, letters)
             let probs = try e.scoreLetters(prompt: prompt, letters: letters)
             let best = probs.indices.max { probs[$0] < probs[$1] } ?? 0
             return System1Answer(questionID: q.id, option: q.options[best], score: Double(probs[best]), ms: nowMs() - t0)
         }
     }
 
-    /// Qwen3 chat format with thinking switched off (the empty think block), ending where the letter goes.
-    static func prompt(_ i: System1Input, _ q: Question, _ letters: [String]) -> String {
-        var s = "<|im_start|>system\nYou classify what a radio listener said. Reply with the letter of the best option only.<|im_end|>\n<|im_start|>user\n"
-        if !i.context.isEmpty { s += "Context: \(i.context)\n" }
-        s += "Listener said: \"\(i.listenerWords)\"\nQuestion: \(q.text)\n"
-        for (l, o) in zip(letters, q.options) { s += "\(l). \(o)\n" }
-        s += "Answer with the letter only.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
-        return s
+    /// The model's own chat layout, ending where the letter goes (`DecisionPrompt`, in the kit, where it is tested).
+    func prompt(_ i: System1Input, _ q: Question, _ letters: [String]) -> String {
+        DecisionPrompt.text(modelID: modelID, context: i.context, listenerWords: i.listenerWords, question: q.text, options: q.options, letters: letters)
     }
 
     /// Everything the proof wants to know about the engine, without a question.

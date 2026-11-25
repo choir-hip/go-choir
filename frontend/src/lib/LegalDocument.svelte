@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  export let kind: 'privacy' | 'terms' = 'privacy';
+  export let kind: 'privacy' | 'terms' | 'support' = 'privacy';
 
   type MarkdownBlock = {
     type: 'h1' | 'h2' | 'h3' | 'p' | 'li';
@@ -11,8 +11,14 @@
   let status: 'loading' | 'ready' | 'error' = 'loading';
   let blocks: MarkdownBlock[] = [];
 
-  $: documentTitle = kind === 'privacy' ? 'Privacy Policy' : 'Terms of Service';
-  $: assetPath = kind === 'privacy' ? '/legal/privacy-policy.md' : '/legal/terms-of-service.md';
+  const documents = {
+    privacy: { title: 'Privacy Policy', path: '/legal/privacy-policy.md' },
+    terms: { title: 'Terms of Service', path: '/legal/terms-of-service.md' },
+    support: { title: 'Support', path: '/legal/support.md' },
+  };
+
+  $: documentTitle = documents[kind].title;
+  $: assetPath = documents[kind].path;
 
   function stripMarkdown(value: string) {
     return value.replace(/\*\*/g, '').replace(/\[(.*?)\]\((.*?)\)/g, '$1');
@@ -89,6 +95,7 @@
     <nav aria-label="Legal documents">
       <a href="/privacy" aria-current={kind === 'privacy' ? 'page' : undefined}>Privacy</a>
       <a href="/terms" aria-current={kind === 'terms' ? 'page' : undefined}>Terms</a>
+      <a href="/support" aria-current={kind === 'support' ? 'page' : undefined}>Support</a>
     </nav>
   </header>
 
@@ -97,7 +104,11 @@
       <p data-legal-status>Loading {documentTitle}...</p>
     {:else if status === 'error'}
       <h1>{documentTitle}</h1>
-      <p data-legal-error>Could not load this document. Contact privacy@choir.news or legal@choir.news.</p>
+      {#if kind === 'support'}
+        <p data-legal-error>Could not load this page. Write to 000@choir.news.</p>
+      {:else}
+        <p data-legal-error>Could not load this document. Contact privacy@choir.news or legal@choir.news.</p>
+      {/if}
     {:else}
       {#each blocks as block}
         {#if block.type === 'h1'}

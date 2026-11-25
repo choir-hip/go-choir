@@ -57,6 +57,7 @@ func IsEphemeralEmailDomain(email string) bool {
 
 const numberCandidatesQuery = `SELECT u.id, u.email FROM users u
 	WHERE EXISTS (SELECT 1 FROM credentials c WHERE c.user_id = u.id)
+	  AND NOT EXISTS (SELECT 1 FROM account_deletions d WHERE d.user_id = u.id)
 	ORDER BY u.created_at ASC, u.id ASC`
 
 func scanNumberCandidates(rows *sql.Rows) ([]string, error) {

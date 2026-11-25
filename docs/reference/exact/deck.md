@@ -32,15 +32,21 @@ cannot do alone: an entry whose sound is not in the entry (a paper story, a page
 entry before this one (the sheet's heard list), and anything that needs the desk. When the held list runs dry in the background the deck writes a
 `system` line `held-dry`, so the gap is on the record.
 
-## Names (all in `interface/deck.json`; shapes in `mobile/AutoradioLab/deck-types.contract`; types in `deck.ts`)
+## Names (shapes in `mobile/AutoradioLab/deck-types.contract`; types in `deck.ts`)
+
+Shared code reaches all five through the app module's one `deck` op (`{op: "deck", name, args}`, `deck-native.ts` → `ModelsEntry.swift` →
+`AutoradioModule+Deck.swift` `deckCall`). Only `deckState` is also a package name (`interface/deck.json`): the live source the contract reads
+once per radio tick (`deckState(tick=radioTick)`, spine.contract `ds`) and hands whole to the radio's pulse, which makes no deck call of its own
+(2026-11-25, `docs/problems/radio-restore-empty-after-let-go-2026-11-25.md`). The four sends were package names too until then; no contract
+called them, and they were deleted.
 
 | Name | Kind | Does |
 |---|---|---|
-| `deckState` | source, live | `DeckState`: `why`, `item`, `block`, `seconds`, `duration`, `held` (ids), `seq`, `acked`, `journal` (the lines not yet acknowledged) |
-| `deckPlay` | send | play this item now; what was playing ends `replaced` |
-| `deckEnqueue` | send | hold this item after the playing one at place `at` (0 is next; -1 or absent is the end); the held items from `at` on are dropped first; an id already held is removed first; at most 100 are held (the sheet's bound) |
-| `deckAct` | send | `op` is `pause`, `resume`, `stop`, `skip`, `seekTo`, `seekBy`, `trim` or `clearEnd` (a clip no longer ends: the episode goes on from where it is); `value` as the op needs |
-| `deckAck` | send | the journal lines up to `through` are posted; the deck forgets them |
+| `deckState` | source, live (and an op name) | `DeckState`: `why`, `item`, `block`, `seconds`, `duration`, `held` (ids), `seq`, `acked`, `journal` (the lines not yet acknowledged). A read also writes the `sounding` line when sound has begun |
+| `deckPlay` | op name | play this item now; what was playing ends `replaced` |
+| `deckEnqueue` | op name | hold this item after the playing one at place `at` (0 is next; -1 or absent is the end); the held items from `at` on are dropped first; an id already held is removed first; at most 100 are held (the sheet's bound) |
+| `deckAct` | op name | `op` is `pause`, `resume`, `stop`, `skip`, `seekTo`, `seekBy`, `trim` or `clearEnd` (a clip no longer ends: the episode goes on from where it is); `value` as the op needs |
+| `deckAck` | op name | the journal lines up to `through` are posted; the deck forgets them |
 
 An item is scalars only (the gate refuses a name that takes an opaque payload): `id`, `kind` (`speech` or `audio`), `title`, `show`,
 `document`, `paragraphs` (the text, a blank line between paragraphs), `url`, `start`, `end` (0: to the end), `block`, `seconds`
