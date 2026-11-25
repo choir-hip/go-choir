@@ -196,3 +196,63 @@ signed-in warm computer with cached candidates and no ready Desk buffer, aim
 to send the initial request within two seconds of readiness and air the new
 segment at the first eligible boundary. Prove lock-screen continuation as
 well as the transition from fallback to Desk.
+
+## Next: depth and offline readiness
+
+Owner direction, 2026-11-25: the station usually has 3–4 segments coming
+up. Show about twice that (**6–8** upcoming segments in the normal view),
+while keeping about ten times the current amount (**30–40** upcoming
+segments) genuinely ready on the deck. Show the total and let the listener
+expand the rest. Count the current item separately, don't pad the count with
+transitions, and track minutes of playable material as well as item count.
+
+**One run sheet, two horizons.** The next one or two slots are where the
+Desk regularly edits the programme as news or the listener's interests
+change. The deep tail is the reserve. For example, with A on air and B, C,
+D next, the Desk can put a relevant new segment X ahead of B or between B
+and C. A finishes, an explicit listener priority wins, and the rest of the
+queue survives. Give the Desk stable entry IDs to anchor edits; revalidate
+them against the current sheet before applying. Rewrite or drop a transition
+when its pair of neighbours changes. Server placement is append-only today
+on the programme route (`api_autoradio_programme_place.go`); the existing
+run-sheet reducer is the basis for placing and moving items, with the server
+and phone agreeing on each resulting order.
+
+**Ready means the phone can air it offline.** The sheet and native deck
+allow 100 ahead, but the runtime caps deck handoff at 12 and stops at the
+first entry whose media or text isn't ready. The cap was introduced when
+packing deep queues exceeded Exact's turn budget. `syncHeld` also drops
+and resends the suffix after the first changed slot, one native call per
+item. For a 30–40-item reserve with frequent front edits, build the reserve
+incrementally and apply a small, atomic deck edit, preserving the unchanged
+tail. Keep the selection and ordering in Exact. A 40-line list of remote
+links doesn't count; cache the text or media for every item counted as
+ready. Replenish from held paper between Desk edits. On a real phone, prove
+that inserting in slot one and then slot two doesn't interrupt the current
+item, drain the reserve, or play a transition for the wrong neighbours.
+
+**Download the paper as an edition.** The existing story sync starts from
+a public front list of up to 100 rows, fetches missing bodies one at a time,
+and keeps at most 40 MB of stories under its default budget (`content.ts`).
+It can stop when the radio is busy. Prioritize the next playable entries,
+then keep a larger rolling cache of recent coverage and the listener's
+topics, including story bodies, citations, and edition timestamps. Measure
+hours of playable coverage and bytes per fresh edition before choosing the
+cache target. Use Wi-Fi by default for bulk refresh; resume interrupted
+downloads, fetch only new or changed revisions, and protect material the
+deck needs from eviction. The shared public edition is a good fit for
+cacheable snapshots or deltas, including for signed-out listeners. Prove a
+fresh sync followed by an airplane-mode relaunch and locked playback well
+beyond the visible queue; show when the saved edition was updated.
+
+**Later: the on-device Desk.** The current listening-only writer selects
+paper stories deterministically; the on-device answer path is not the
+programme editor. Let the local model use validated Exact tools to read
+the held paper and the queue, place or move a segment, and write a short
+transition between named entries. It uses the same run-sheet rules as the
+cloud Desk, and playback can keep using the prepared reserve while the
+model is unavailable. Offline proof: with no account or network, the model
+changes the order and writes a transition that the phone actually speaks.
+This is agenda work, after resume, queue depth, early Desk handoff and
+offline paper downloads. The free, paid and organization offering is in
+the [roadmap](../roadmap-2026-10-31.md#autoradio-product-direction-owner-2026-11-25).
