@@ -55,11 +55,49 @@ func TestAuthSignInMailSendsFixedTemplate(t *testing.T) {
 			t.Errorf("text missing %q: %q", want, p.Text)
 		}
 	}
-	if p.Subject != "Your Choir sign-in code" || p.Headers["X-Choir-Maild"] != "v0-auth-signin-code" {
+	if p.Subject != "Your Autoradio by choir sign-in code" || p.Headers["X-Choir-Maild"] != "v0-auth-signin-code" {
 		t.Fatalf("subject/headers = %q %v", p.Subject, p.Headers)
 	}
 	if strings.Contains(w.Body.String(), "choir_st_") {
 		t.Fatalf("response leaked token: %s", w.Body.String())
+	}
+}
+
+// The code mail names the product to the reader as "Autoradio by choir" and
+// never the bare product name it used before (owner, 2026-11-25). The domain,
+// token prefix and header names keep the old spelling: they are functional.
+func TestAuthSignInMailNamesAutoradioByChoir(t *testing.T) {
+	defer hostauth.SetForTesting(hostauth.ModeEnforce, signInGateToken)()
+	cases := []struct {
+		name    string
+		purpose string
+		link    string
+	}{
+		{"sign-in", "sign_in", testSignInLink},
+		{"verify address", "verify_address", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, fake := newAuthMailTestHandler(t)
+			w := serveSignIn(t, h, signInRequest(signInBody("owner@example.com", tc.purpose, "01234567", tc.link)))
+			if w.Code != http.StatusAccepted || fake.count() != 1 {
+				t.Fatalf("status=%d sends=%d body=%s", w.Code, fake.count(), w.Body.String())
+			}
+			p := fake.payloads[0]
+			if !strings.HasPrefix(p.From, "Autoradio by choir <") {
+				t.Errorf("From = %q, want an Autoradio by choir display name", p.From)
+			}
+			for label, body := range map[string]string{"subject": p.Subject, "text": p.Text, "html": p.HTML} {
+				if !strings.Contains(body, "Autoradio by choir") {
+					t.Errorf("%s does not name Autoradio by choir: %q", label, body)
+				}
+				// Every other capital-C "Choir" was a product mention; the
+				// domain (choir.news) and token (choir_st_) are lower case.
+				if strings.Contains(body, "Choir") {
+					t.Errorf("%s still names the bare product: %q", label, body)
+				}
+			}
+		})
 	}
 }
 

@@ -84,7 +84,7 @@ func TestAuthRecoveryLinkSendsOneFixedTemplateMail(t *testing.T) {
 	if len(p.To) != 1 || p.To[0] != "owner@example.com" {
 		t.Fatalf("to = %v", p.To)
 	}
-	if p.From != "Choir <updates@choir.news>" || p.Subject != "Recover your Choir account" {
+	if p.From != "Autoradio by choir <updates@choir.news>" || p.Subject != "Recover your Autoradio by choir account" {
 		t.Fatalf("from/subject = %q / %q", p.From, p.Subject)
 	}
 	if !strings.Contains(p.Text, testRecoveryLink) || !strings.Contains(p.Text, "expires in 15 minutes") {
@@ -98,6 +98,29 @@ func TestAuthRecoveryLinkSendsOneFixedTemplateMail(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "choir_rt_") {
 		t.Fatalf("response leaked token: %s", w.Body.String())
+	}
+}
+
+// The recovery mail, the other user-facing message the auth service sends,
+// names the product the same way (owner, 2026-11-25).
+func TestAuthRecoveryMailNamesAutoradioByChoir(t *testing.T) {
+	h, fake := newAuthMailTestHandler(t)
+	w := httptest.NewRecorder()
+	h.HandleAuthRecoveryLink(w, authRecoveryRequest(recoveryBody("owner@example.com", testRecoveryLink, 15)))
+	if w.Code != http.StatusAccepted || fake.count() != 1 {
+		t.Fatalf("status = %d sends = %d", w.Code, fake.count())
+	}
+	p := fake.payloads[0]
+	if !strings.HasPrefix(p.From, "Autoradio by choir <") {
+		t.Errorf("From = %q, want an Autoradio by choir display name", p.From)
+	}
+	for label, body := range map[string]string{"subject": p.Subject, "text": p.Text, "html": p.HTML} {
+		if !strings.Contains(body, "Autoradio by choir") {
+			t.Errorf("%s does not name Autoradio by choir: %q", label, body)
+		}
+		if strings.Contains(body, "Choir") {
+			t.Errorf("%s still names the bare product: %q", label, body)
+		}
 	}
 }
 

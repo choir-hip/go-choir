@@ -205,20 +205,28 @@ func renderPlainTextEmailHTML(text string) string {
 	return `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;"><main style="max-width:640px;margin:0 auto;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;color:#111827;">` + body.String() + choirAutomatedHTMLSignature() + `</main></body></html>`
 }
 
-func appendChoirAutomatedTextSignature(text string) string {
+func appendAutomatedTextSignature(text, signature string) string {
 	text = strings.TrimSpace(text)
-	if text == "" || strings.Contains(text, choirAutomatedEmailSignature) {
+	if text == "" || strings.Contains(text, signature) {
 		return text
 	}
-	return text + "\n\n--\n" + choirAutomatedEmailSignature
+	return text + "\n\n--\n" + signature
+}
+
+func appendChoirAutomatedTextSignature(text string) string {
+	return appendAutomatedTextSignature(text, choirAutomatedEmailSignature)
 }
 
 func appendChoirAutomatedHTMLSignature(htmlBody string) string {
+	return appendAutomatedHTMLSignature(htmlBody, choirAutomatedEmailSignature)
+}
+
+func appendAutomatedHTMLSignature(htmlBody, signature string) string {
 	htmlBody = strings.TrimSpace(htmlBody)
-	if htmlBody == "" || strings.Contains(htmlBody, choirAutomatedEmailSignature) {
+	if htmlBody == "" || strings.Contains(htmlBody, signature) {
 		return htmlBody
 	}
-	footer := choirAutomatedHTMLSignature()
+	footer := automatedHTMLSignature(signature)
 	lower := strings.ToLower(htmlBody)
 	if idx := strings.LastIndex(lower, "</body>"); idx >= 0 {
 		return htmlBody[:idx] + footer + htmlBody[idx:]
@@ -226,8 +234,12 @@ func appendChoirAutomatedHTMLSignature(htmlBody string) string {
 	return htmlBody + footer
 }
 
+func automatedHTMLSignature(signature string) string {
+	return `<footer style="margin-top:28px;padding-top:14px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:13px;line-height:1.45;"><em>` + html.EscapeString(signature) + `</em></footer>`
+}
+
 func choirAutomatedHTMLSignature() string {
-	return `<footer style="margin-top:28px;padding-top:14px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:13px;line-height:1.45;"><em>` + html.EscapeString(choirAutomatedEmailSignature) + `</em></footer>`
+	return automatedHTMLSignature(choirAutomatedEmailSignature)
 }
 
 func markdownHeading(line string) (string, int, bool) {

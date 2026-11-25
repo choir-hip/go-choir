@@ -53,6 +53,13 @@ Why: on the owner's phone (2026-11-24 log, 116 such failures: `hc`, `preqd`, `pg
 Proof: `mobile/AutoradioLab/settle-once.test.ts` (Exact's answer ownership modelled with AsyncLocalStorage) F1 to F5 failed before and pass after; whole `bun test` 1593 pass, 0 fail; `bun exact.mjs test web` 26 passed, 0 failed. Not proved on a device.
 Replaced: the module-level `settled` promise and the `timeout(3000)` race in the launch settle; the shared failed probe in `host.ts`.
 Undo: revert the commit.
+## 2026-11-25: the sign-up code and recovery mail say "Autoradio by choir" (orange; lane `signup-email`)
+
+What: the code mail (sign-in and verify-address) and the recovery mail in `internal/maild` name the product "Autoradio by choir" to the reader. The subjects are "Your Autoradio by choir sign-in code", "Verify your email address for Autoradio by choir" and "Recover your Autoradio by choir account"; the intro lines, the "will never ask you for it" warning, the From display name and the signature say the same. The auth service's device summary for a `Choir-Desktop` user agent now says "the Autoradio app". The old subject had leaked into the desktop staging e2e search, which now looks for the new one.
+Why: owner, 2026-11-25: the sign-up/sign-in email never says "Autoradio".
+Proof: `TestAuthSignInMailNamesAutoradioByChoir` and `TestAuthRecoveryMailNamesAutoradioByChoir` (written first and red: subject, text and HTML named the old product) and `TestSummarizeUserAgentNamesAutoradio`; `go test -count=1 ./internal/auth/...` and `./internal/maild/...` pass, `go build ./...` passes, `scripts/gates` prints ALL GATES PASS. Not proved: no message was sent through Resend or seen in an inbox.
+Kept unchanged: the domain and links (`choir.news`), the code format, the expiry wording, `X-Choir-Maild` and the token strings, and the shared "Sent by Choir, the automatic computer." signature used by digests, drafts and risk alerts (their copy is a separate change).
+Replaced: the old "Choir" copy in the two auth messages. Undo: revert the commit; no data is migrated.
 
 ## 2026-11-24: the Z.AI model provider is gone (red; lane `drop-zai`)
 

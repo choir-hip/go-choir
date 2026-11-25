@@ -540,6 +540,17 @@ func TestF10MailTextHasNeitherAttemptIDNorTokenHash(t *testing.T) {
 	}
 }
 
+// The device line the code mail carries names the app Autoradio, not the old
+// product name.
+func TestSummarizeUserAgentNamesAutoradio(t *testing.T) {
+	if got := summarizeUserAgent("Choir-Desktop/1.0"); got != "the Autoradio app" {
+		t.Fatalf("desktop: got %q, want the Autoradio app", got)
+	}
+	if got := summarizeUserAgent("Choir-Desktop/1.0 (iPhone)"); got != "the Autoradio app on iPhone" {
+		t.Fatalf("phone: got %q, want the Autoradio app on iPhone", got)
+	}
+}
+
 func TestF11AuthNeverLogsCodeTokenOrAddress(t *testing.T) {
 	h, m := emailEnv(t)
 	addEmailUser(t, h, "u1", "secret.person@example.com", true, true)

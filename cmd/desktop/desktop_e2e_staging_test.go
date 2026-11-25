@@ -132,7 +132,7 @@ func TestE2EEmailSignInStaging(t *testing.T) {
 	var signinCode string
 	deadline := time.Now().Add(4 * time.Minute)
 	for time.Now().Before(deadline) {
-		if c, err := mail.newestCode("Your Choir sign-in code", seen); err == nil && c != "" {
+		if c, err := mail.newestCode("Your Autoradio by choir sign-in code", seen); err == nil && c != "" {
 			signinCode = c
 			break
 		}

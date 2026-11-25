@@ -31,6 +31,11 @@ const (
 	authSignInPurposeVerifyAddress = "verify_address"
 )
 
+// authAutomatedEmailSignature signs the account mail the auth service sends.
+// The other maild mail (digests, drafts, risk alerts) keeps the shared Choir
+// signature until its copy is changed too.
+const authAutomatedEmailSignature = "Sent by Autoradio by choir, the automatic computer."
+
 type authSignInRequest struct {
 	ToAddress      string `json:"to_address"`
 	Purpose        string `json:"purpose"`
@@ -193,11 +198,11 @@ func (h *Handler) buildAuthSignInMail(to, purpose, code, link, device, place str
 	if h != nil && h.cfg != nil && strings.TrimSpace(h.cfg.PrimaryDomain) != "" {
 		domain = strings.ToLower(strings.TrimSpace(h.cfg.PrimaryDomain))
 	}
-	subject := "Your Choir sign-in code"
-	intro := "Someone asked to sign in to the Choir account for this email address."
+	subject := "Your Autoradio by choir sign-in code"
+	intro := "Someone asked to sign in to the Autoradio by choir account for this email address."
 	if purpose == authSignInPurposeVerifyAddress {
-		subject = "Verify your email address for Choir"
-		intro = "Someone signed in to Choir and asked to verify this email address."
+		subject = "Verify your email address for Autoradio by choir"
+		intro = "Someone signed in to Autoradio by choir and asked to verify this email address."
 	}
 	origin := fmt.Sprintf("Requested from %s, on %s.", device, place)
 	if device == "" || place == "" {
@@ -208,7 +213,7 @@ func (h *Handler) buildAuthSignInMail(to, purpose, code, link, device, place str
 		text += fmt.Sprintf("Or open this link on the same device:\n%s\n\n", link)
 	}
 	text += fmt.Sprintf("The code works once and expires in %d minutes.\n%s\n\n"+
-		"Never give this code to anyone. Choir will never ask you for it.\n\n"+
+		"Never give this code to anyone. Autoradio by choir will never ask you for it.\n\n"+
 		"If you did not ask for this, ignore this email. Your account has not changed.", expiresMinutes, origin)
 
 	htmlBody := `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;">` +
@@ -221,15 +226,15 @@ func (h *Handler) buildAuthSignInMail(to, purpose, code, link, device, place str
 			`<p style="margin:0 0 16px;">If the button does not work, open this address on the same device:<br><span style="word-break:break-all;color:#374151;">` + escaped + `</span></p>`
 	}
 	htmlBody += `<p style="margin:0 0 16px;">The code works once and expires in ` + fmt.Sprint(expiresMinutes) + ` minutes. ` + html.EscapeString(origin) + `</p>` +
-		`<p style="margin:0 0 16px;font-weight:700;">Never give this code to anyone. Choir will never ask you for it.</p>` +
+		`<p style="margin:0 0 16px;font-weight:700;">Never give this code to anyone. Autoradio by choir will never ask you for it.</p>` +
 		`<p style="margin:0 0 16px;color:#4b5563;">If you did not ask for this, ignore this email. Your account has not changed.</p>` +
-		choirAutomatedHTMLSignature() +
+		automatedHTMLSignature(authAutomatedEmailSignature) +
 		`</main></body></html>`
 	return resendSendRequest{
-		From:    "Choir <updates@" + domain + ">",
+		From:    "Autoradio by choir <updates@" + domain + ">",
 		To:      []string{to},
 		Subject: subject,
-		Text:    appendChoirAutomatedTextSignature(text),
+		Text:    appendAutomatedTextSignature(text, authAutomatedEmailSignature),
 		HTML:    htmlBody,
 		Headers: map[string]any{
 			"X-Choir-Maild": "v0-auth-signin-code",
