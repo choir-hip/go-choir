@@ -33,7 +33,7 @@ The lead sent the draft to App Store Connect: listing texts, category, age ratin
 | Subtitle | "News read aloud, with sources", `app-store-texts.md` | ready (send) |
 | Promotional text, Description, Keywords | `app-store-texts.md` | ready (send) |
 | What's New | not required for 1.0 | n/a |
-| Support URL | no page exists; proposal in `app-store-texts.md` "URLs" | **blocked on the lead adding `/support`** |
+| Support URL | https://choir.news/support; the page exists in lane `support-page` (`frontend/public/legal/support.md`), not yet landed or deployed | **blocked on landing `support-page` and seeing the page on choir.news** |
 | Marketing URL | https://choir.news | ready |
 | Privacy policy URL | https://choir.news/privacy; the page serves the old policy | **blocked on the owner's read of `privacy-policy.md` and publishing it** |
 | Copyright | 2026 Choir Harmonic Intelligence Platform, Inc. | ready |
@@ -100,5 +100,5 @@ Auth: `Authorization: Bearer <ES256 JWT>`, kid 52R8S94U54, aud `appstoreconnect-
 ## Open fields and whose
 
 - Owner: reviewer user name and password; review contact name and phone; the read and publication of the new privacy policy; the App Privacy web form; price and availability; DSA trader status; content-rights affirmation; the unrestricted-web-access and violence answers; the 1.2 decision on takes (report action, cut, or accept); upload the build; press Submit.
-- Lead: `/support` page (frontend, orange); the store build with the final lanes; every screenshot; seeing on the build the "Written by AI" label, lock-screen play, Voice and models, and the deletion path; confirming the review account's delete page; keeping sign-up open or telling Apple during review; Node B steps of the demo-account runbook.
-- Blocked: support URL (the page); privacy policy URL (publication); any build field (no build).
+- Lead: land lane `support-page` (the `/support` page, orange) and check it on choir.news; the store build with the final lanes; every screenshot; seeing on the build the "Written by AI" label, lock-screen play, Voice and models, and the deletion path; confirming the review account's delete page; keeping sign-up open or telling Apple during review; Node B steps of the demo-account runbook.
+- Blocked: support URL (lane `support-page` until it lands); privacy policy URL (publication); any build field (no build).
