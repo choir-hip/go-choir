@@ -737,7 +737,7 @@ func summarizeUserAgent(ua string) string {
 	browser := "a browser"
 	switch {
 	case strings.Contains(l, "choir"):
-		browser = "the Choir app"
+		browser = "the Autoradio app"
 	case strings.Contains(l, "edg/"):
 		browser = "Edge"
 	case strings.Contains(l, "firefox"):

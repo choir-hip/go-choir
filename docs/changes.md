@@ -10,6 +10,14 @@ backfilled from the commit and nobody re-read the evidence for this page.
 Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 169 docs-only and 72 that change behavior.
 
+## 2026-11-25: the sign-up code and recovery mail say "Autoradio by choir" (orange; lane `signup-email`)
+
+What: the code mail (sign-in and verify-address) and the recovery mail in `internal/maild` name the product "Autoradio by choir" to the reader. The subjects are "Your Autoradio by choir sign-in code", "Verify your email address for Autoradio by choir" and "Recover your Autoradio by choir account"; the intro lines, the "will never ask you for it" warning, the From display name and the signature say the same. The auth service's device summary for a `Choir-Desktop` user agent now says "the Autoradio app". The old subject had leaked into the desktop staging e2e search, which now looks for the new one.
+Why: owner, 2026-11-25: the sign-up/sign-in email never says "Autoradio".
+Proof: `TestAuthSignInMailNamesAutoradioByChoir` and `TestAuthRecoveryMailNamesAutoradioByChoir` (written first and red: subject, text and HTML named the old product) and `TestSummarizeUserAgentNamesAutoradio`; `go test -count=1 ./internal/auth/...` and `./internal/maild/...` pass, `go build ./...` passes, `scripts/gates` prints ALL GATES PASS. Not proved: no message was sent through Resend or seen in an inbox.
+Kept unchanged: the domain and links (`choir.news`), the code format, the expiry wording, `X-Choir-Maild` and the token strings, and the shared "Sent by Choir, the automatic computer." signature used by digests, drafts and risk alerts (their copy is a separate change).
+Replaced: the old "Choir" copy in the two auth messages. Undo: revert the commit; no data is migrated.
+
 ## 2026-11-24: the Z.AI model provider is gone (red; lane `drop-zai`)
 
 What: the gateway no longer has a Z.AI provider. Deleted: `ZAIProvider` and its config, `ProviderConfig.ZAIModels`, `GATEWAY_ZAI_MODELS`, the gateway's fallback that sent any `glm-*` model to Z.AI, the catalog's `glm-5.2`, `glm-5.1` and `glm-5-turbo`, and the Z.AI lines in `nix/deploy-provider-creds.sh`. `glm-5.3-flash` through OpenCode Go is a different route and stays. Tests that only tested Z.AI are deleted; the two that were the only tool-use tests of the shared Anthropic-wire parsers (`parseAnthropicResponse`, `parseSSEStream`) now call the parsers directly.

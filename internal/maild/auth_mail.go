@@ -154,24 +154,24 @@ func (h *Handler) buildAuthRecoveryMail(to, link string, expiresMinutes int) res
 	if h != nil && h.cfg != nil && strings.TrimSpace(h.cfg.PrimaryDomain) != "" {
 		domain = strings.ToLower(strings.TrimSpace(h.cfg.PrimaryDomain))
 	}
-	text := fmt.Sprintf("Someone asked to recover the Choir account for this email address.\n\n"+
+	text := fmt.Sprintf("Someone asked to recover the Autoradio by choir account for this email address.\n\n"+
 		"Open this link to add a new passkey and sign in:\n%s\n\n"+
 		"The link works once and expires in %d minutes.\n\n"+
 		"If you did not ask for this, ignore this email. Your account has not changed.", link, expiresMinutes)
 	escaped := html.EscapeString(link)
 	htmlBody := `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;">` +
 		`<main style="max-width:560px;margin:0 auto;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;color:#111827;">` +
-		`<p style="margin:0 0 16px;">Someone asked to recover the Choir account for this email address.</p>` +
+		`<p style="margin:0 0 16px;">Someone asked to recover the Autoradio by choir account for this email address.</p>` +
 		`<p style="margin:0 0 20px;"><a href="` + escaped + `" style="display:inline-block;padding:12px 18px;border-radius:12px;background:#111827;color:#ffffff;font-weight:700;text-decoration:none;">Add a new passkey</a></p>` +
 		`<p style="margin:0 0 16px;">The link works once and expires in ` + fmt.Sprint(expiresMinutes) + ` minutes. If the button does not work, open this address:<br><span style="word-break:break-all;color:#374151;">` + escaped + `</span></p>` +
 		`<p style="margin:0 0 16px;color:#4b5563;">If you did not ask for this, ignore this email. Your account has not changed.</p>` +
-		choirAutomatedHTMLSignature() +
+		automatedHTMLSignature(authAutomatedEmailSignature) +
 		`</main></body></html>`
 	return resendSendRequest{
-		From:    "Choir <updates@" + domain + ">",
+		From:    "Autoradio by choir <updates@" + domain + ">",
 		To:      []string{to},
-		Subject: "Recover your Choir account",
-		Text:    appendChoirAutomatedTextSignature(text),
+		Subject: "Recover your Autoradio by choir account",
+		Text:    appendAutomatedTextSignature(text, authAutomatedEmailSignature),
 		HTML:    htmlBody,
 		Headers: map[string]any{
 			"X-Choir-Maild": "v0-auth-recovery-link",

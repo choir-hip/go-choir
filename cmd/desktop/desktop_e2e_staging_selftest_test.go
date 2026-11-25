@@ -21,12 +21,12 @@ func TestE2EInboxNewestCode(t *testing.T) {
 		switch {
 		case r.URL.Path == "/api/email/messages" && r.URL.Query().Get("folder") == "inbox":
 			json.NewEncoder(w).Encode(map[string]any{"messages": []map[string]string{
-				{"id": "old", "subject": "Your Choir sign-in code", "created_at": "2026-10-31T01:00:00Z"},
-				{"id": "seen", "subject": "Your Choir sign-in code", "created_at": "2026-10-31T03:00:00Z"},
+				{"id": "old", "subject": "Your Autoradio by choir sign-in code", "created_at": "2026-10-31T01:00:00Z"},
+				{"id": "seen", "subject": "Your Autoradio by choir sign-in code", "created_at": "2026-10-31T03:00:00Z"},
 			}})
 		case r.URL.Path == "/api/email/messages":
 			json.NewEncoder(w).Encode(map[string]any{"messages": []map[string]string{
-				{"id": "new", "subject": "Your Choir sign-in code", "created_at": "2026-10-31T02:00:00Z"},
+				{"id": "new", "subject": "Your Autoradio by choir sign-in code", "created_at": "2026-10-31T02:00:00Z"},
 				{"id": "other", "subject": "hello", "created_at": "2026-10-31T09:00:00Z"},
 			}})
 		case r.URL.Path == "/api/email/messages/new":
@@ -39,14 +39,14 @@ func TestE2EInboxNewestCode(t *testing.T) {
 	}))
 	defer srv.Close()
 	m := &e2eInbox{backend: srv.URL, key: "k-1", http: srv.Client()}
-	code, err := m.newestCode("Your Choir sign-in code", map[string]bool{"seen": true})
+	code, err := m.newestCode("Your Autoradio by choir sign-in code", map[string]bool{"seen": true})
 	if err != nil || code != "12345678" {
 		t.Fatalf("newestCode = %q, %v; want 12345678 (the newest unseen is the quarantine one)", code, err)
 	}
 	if !sawAuth || sawCookie {
 		t.Fatalf("inbox reader must send only the Bearer key (auth=%v cookie=%v)", sawAuth, sawCookie)
 	}
-	if code, _ := m.newestCode("Your Choir sign-in code", map[string]bool{"seen": true, "new": true, "old": true}); code != "" {
+	if code, _ := m.newestCode("Your Autoradio by choir sign-in code", map[string]bool{"seen": true, "new": true, "old": true}); code != "" {
 		t.Fatalf("all seen: code = %q, want none", code)
 	}
 }
