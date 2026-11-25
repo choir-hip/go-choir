@@ -26,9 +26,9 @@ answer that called it (`prelude.js:230-241`, `__exact_async_context`), so
 every step of the shared chain runs as the FIRST answer that called
 `settleAccount`. When that answer is let go before `reconcile` finishes:
 
-1. its native `keystate` call (a fetch to `exact-native:`) is refused
-   (`prelude.js:997-1002`, `__exact_forget`), `keyState` answers
-   `unreadable` with `error`, and `reconcile` answers "nothing";
+1. its native calls are refused (`prelude.js:997-1002`, `__exact_forget`);
+   on the phone the key itself is read from Exact's secret store, so the
+   reconcile may well finish;
 2. `timeout(3000)` then throws "setTimeout() is unavailable here ...";
 3. `settled` holds that rejected promise for the life of the process, and
    every later answer awaits it and fails with the same message.
@@ -41,8 +41,10 @@ pinned Exact), so pages stay on their placard: `pgs` (`pagesView`) fails,
 The same shape is in `host.ts` (`inflight`, lines 9-45): a shared probe
 loop whose `setTimeout`s (`:16`, `:33`, `:37`) belong to the answer that
 started it. If that answer is let go, the loop's next timer throws, the
-promise rejects, and every answer waiting on it fails (the rejection is not
-kept: `.finally` clears `inflight`). `demo-leftovers.ts:66-71` shares
+promise rejects, and every answer waiting on it fails; if the answer is let
+go while the loop sleeps, its timers are dropped and the promise never
+settles, so every later answer fails "pending on nothing" (seat 2, round 1
+review, A1). `demo-leftovers.ts:66-71` shares
 `attempt` the same way but arms no timer, does no fetch and catches every
 error, so it cannot reject.
 
@@ -90,49 +92,133 @@ rather than waits. The log shows no recovery within its process.
   not observed; the log covers one process.
 - The let-go timing is inferred from the contract and the prelude; no log
   line names which answer started the chain.
-- After the fix, a later answer still waits on a run another answer started
-  while it is in flight (Exact supports waiting on another answer's work,
-  `prelude.js:720-726`); if that run ever waits on nothing but its owner's
-  timer, the waiter would fail "pending on nothing" for that one answer. No
-  step of the new run waits on a timer alone.
+- The residual sites at the end of this record.
 
-## Failure list (tests in `mobile/AutoradioLab/settle-once.test.ts`)
+## Round 1 and why it was sent back (2026-11-25)
 
-- F1 the answer that starts the launch settle is let go before `reconcile`
-  answers: a later answer (`answerDismissShared`, `pagesView`) still
-  answers.
-- F2 after F1 the launch's account work still happens: a sign-out the last
-  launch left unfinished is finished by a live answer, not skipped because
-  the let-go run's `keystate` was refused.
-- F3 a settle that rejects is not kept: the next call reconciles again and
-  answers.
-- F4 no timer is armed in the settle chain at launch (the pending-revoke
-  retry is bounded by each request's own `exactTimeout`).
-- F5 `hostMode`: the answer that starts the probe is let go; another answer
-  waiting on it still gets "native" or "none", not the let-go answer's
-  error.
+The first fix (`74f41b48b`) kept the settle as a value but still let the
+answer that asked first own the run, and kept `host.ts`'s shared probe.
+Seat 2 sent it back (review in the lane's session): (A1) a shared probe
+whose answer is let go while it sleeps has its timers DROPPED
+(`timers.drop`, `prelude.js:1041`, `time.js:234-238`): nothing settles
+it, and every answer awaiting it fails "the answer is pending on nothing"
+(`prelude.js:719-752`); (A2) a run whose owner is let go during the native
+wipe turns the refused call into `false` and was kept as a finished run
+with `failed:['native']`, the same poisoning carried by a value; the
+comment "the run arms no timer of its own" was false (`nativeOf`,
+`announceGeneration`, the picks mirror's delay and the run sheet's
+`settlePending` all arm timers in the wipe path); the Bun model lacked the
+dropped timer and "pending on nothing", so the tests could not see A1 or
+A2. The lead's call: this is a class, work shared between answers by
+sharing a pending promise; fix the class.
 
-The tests model Exact's ownership in Bun: `AsyncLocalStorage` stands for
-the answer each async step resumes under, `setTimeout` throws for a let-go
-answer, and letting an answer go clears its timers and rejects its native
-calls. Run on the code before the fix (`bun test settle-once.test.ts`,
-Bun 1.4.2): F1 to F5 failed, F1 and F2 with the device's message
-("setTimeout() is unavailable here ...", thrown at `account.ts:119` from the
-settle chain at `:405`), F3 with the first call's error returned again to
-the second, F4 with one timer armed by the answer, F5 with the let-go
-answer's setTimeout error handed to the waiting answer. The control (two
-live answers share one reconcile, the native sign-out runs once) passed.
+## The class
 
-## Fix (same lane)
+Exact runs each step of an async function as the answer that called it
+(`prelude.js:230-241`). Once that answer is let go (asked again with new
+arguments, a mutation sent again, a `refresh`) its fetches and native calls
+are refused or rejected (`prelude.js:997-1034`, `fetch.js:207-212`), new
+timers throw (`prelude.js:1352-1366`) and its armed timers are dropped
+(`prelude.js:1041`). So a promise one answer started and others await can
+reject for all of them, or never settle; an answer whose only wait is such
+a promise fails "pending on nothing" (`prelude.js:741-752`), unless it has
+a timer of its own armed (then the runner asks it again at that timer,
+`prelude.js:719-726`). Exact's own guidance at that line: share the
+resolved value, not the promise.
 
-- `account.ts`: the settle is shared as a value (`settledValue`). A run in
-  flight is waited on by later answers, but a run that rejects is dropped
-  (the next answer reconciles again), and a run whose key read threw is not
-  taken by another answer as the launch's answer (after three such runs it
-  is, as an unreadable key is today). The pending-revoke retry is no longer
-  raced against `timeout(3000)`: its requests share a 3 s budget as their
-  own `exactTimeout` (`api.ts` `Authed.timeoutMs`).
-- `host.ts`: an answer that waited on a probe another answer started and saw
-  it fail probes again as itself; only the decision is shared.
-- `demo-leftovers.ts` is left as it is: its shared run arms no timer, makes
-  no fetch or native call, and catches every error, so it cannot reject.
+## Fix (round 2)
+
+The mechanism, chosen from the pinned Exact:
+
+- **One answer owns once-per-launch work, and nothing lets it go.** The
+  account settle is the `accountSettle` resource (`account.contract`
+  `acctSettle`), with constant arguments, so the runner never asks it again
+  with new ones; it is `transient` (each launch settles). It is asked again
+  only when it failed (`task settleAgain when failed(acctSettle)`, a second
+  later) and after a sign-in (`mutation signedRun ... refreshes
+  acctSettle`; `adoptKey` resets the value). The demo-leftovers pass runs
+  inside it, before the value is published.
+- **Every other answer waits for the VALUE with a timer of its own.**
+  `app.ts` `answer` calls `awaitSettled()` (`account.ts`): it reads the
+  published value; if there is none it races a resolve-only wake against a
+  timer it arms itself (250 ms), and looks again. It never depends on
+  another answer's promise, and Exact always has its own timer to wake it
+  by. (A contract `when` on every resource would also work, `resource r =
+  s(args) when cond`, "idle while cond is false, asked again, forced, when
+  it turns true", `contract-for-agents.md:1084`; it needs an edit to some
+  sixty resources and does not reach mutations or resources inside
+  components, so it is not used.)
+- **A run publishes only if it was neither refused nor superseded.** A
+  native call refused because the run's answer was let go marks the run
+  (`api.ts` `isRefusal`), and each run has a number: an older run that
+  finishes after a newer one started does not publish.
+- **`host.ts`**: no shared probe; each answer probes for itself with its
+  own timers and native calls, and only the decision is shared.
+- **`notebook-run.ts`**: the read is kept as a value per key; an answer
+  with no value reads for itself; a read with a refused request is not
+  kept.
+- **Reads shared by several answers** (`paper.ts` front list,
+  `reader.ts` story fetch, `api.ts` computer discovery): a refusal is
+  rethrown, not turned into an error state, and an answer that joined a
+  read another answer started reads for itself when that read was refused
+  (`api.ts` `joinOrRedo`). Reads only: a write is never repeated.
+- **A refusal is not a fact**: `mail-seal.ts` no longer keeps "no cipher"
+  for the session from a probe that threw or was refused; `api.ts` sends
+  the boot announcement again when it was refused; `clips.ts` asks the clip
+  set again; `consent.ts` pushes the agreement again; the picks mirror
+  reports a refused push as not sent, so it is pushed at the next open.
+- **The gate**: `mobile/AutoradioLab/shared-promise-gate.test.ts` fails
+  for any module-level binding, class field or type member of the shared
+  modules that holds a Promise (or a Map or Set of them) and is not on its
+  allow-list, by file, line and name; each entry carries its kind
+  (`storage`, `unawaited`, `value`, `redo`, `residual`) and a one-line
+  reason, and an entry whose site is gone fails too.
+
+## Tests (`settle-once.test.ts`, model `testkit/exact-answers.ts`)
+
+The model now has the two missing rules: a let-go answer's timers are
+dropped and what awaits them stays pending, and an answer awaiting work it
+does not own fails "pending on nothing" when it has no timer of its own and
+nothing is in flight (another answer's timer does not count,
+`prelude.js:719-752`). A native call held back by the test and then let go
+is withdrawn (never reaches native, `prelude.js:1017`).
+
+Before round 2 (the round-1 code, Bun 1.4.2): 1 pass, 9 fail. Behaviour:
+W1 (A2: the waiting answer answered on the run whose native wipe was
+refused), A1 (the waiter failed "the answer is pending on nothing"), N1
+(the next answer got the let-go read: `offline`), M1 (the probe's refusal
+was kept as "no cipher"), B1 (the refused boot announcement was never sent
+again). F1, F2, F4 and C1 failed for want of the `accountSettle` source.
+F3 passed. After: 10 pass. The gate on the round-1 code listed
+`account.ts settling`, `demo-leftovers.ts attempt`, `notebook-run.ts`
+(the memo's `read`) and `host.ts inflight`.
+
+## Residuals (on the gate's allow-list as `residual`; one failed attempt at worst, not kept)
+
+- `content-run.ts` `running`: the content sync; an answer that joined a
+  run refused by its let-go owner sees "offline" for that key once.
+- `files.ts` `resolved`: opening a file as Texture is a POST; it is not
+  repeated for the joining answer, which gets one failure.
+- `podcast.ts` `inflight`: a feed load; the joining answer sees the feed it
+  had. (`attempted` also keeps the feed from being asked again this
+  session after a refused load: not fixed.)
+- `retrieval-run.ts` `answered`: an ask answered once; a joining answer
+  gets `ok:false` once. Separately (not the class): the indexing loop's
+  sleeps are armed under the answer that kicked it, so once that answer
+  replies the loop's next sleep is refused and the loop ends.
+- `steer.ts` `flushing`: the steer POSTs; a joining answer sees "offline"
+  once; the next flush retries.
+- `clips.ts` `asking`: a joining answer sees no clips once.
+- `reader.ts` `decoding`: one decode at a time; a link run as an answer
+  that was let go fails that decode once.
+- The radio (`radio-bridge.ts` `restored`, `radio-runtime.ts` `chain`,
+  `radio-writer.ts` `task`, `runsheet-store.ts` `flushTask`): governed by
+  `radio-pulse-rule.test.ts` (pulses read, mutations work); not changed
+  here.
+- `edition-writer.ts`: a let-go `obm` answer could leave `status
+  'writing'` only with a writer that waits on the network; the production
+  writer (`localWriter`) answers within the turn. Not changed.
+- Concurrent settle runs: an older run whose answer was let go still runs
+  its storage steps (the wipes) beside the newer one; it never publishes,
+  and the stamp and marker are written only when its native step
+  succeeded, which a refused one does not.
