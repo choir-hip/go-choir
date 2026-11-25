@@ -22,6 +22,7 @@ public enum ModelHub {
         KnownModels.ttsRootProvider = { ttsRoot }
         // No library is left able to fetch: FluidAudio's registry points nowhere until the door opens a window (DownloadDoor.libraryWindow). FluidAudio ModelRegistry.swift:32 `baseURL`.
         DownloadDoor.shared.installLibraryGuard { ModelRegistry.baseURL = $0 }
+        registry.register(.voice, TinyVocaVoice.self) { TinyVocaVoice($0) }
         registry.register(.speechBounds, SileroVAD.self) { SileroVAD($0) }
         registry.register(.transcriber, ParakeetEOUTranscriber.self) { ParakeetEOUTranscriber($0) }
         registry.register(.transcriber, ParakeetTDTTranscriber.self) { ParakeetTDTTranscriber($0) }

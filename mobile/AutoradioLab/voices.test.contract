@@ -20,7 +20,7 @@ test "Settings, Voice and models: the voices are listed under their model, each 
   expect text "voice-credit-phonon-31m" == "Phonon 31M voice by Gradium, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
   expect tree has "mv-voice-phonon:en_us_Zoey"
 
-test "Settings, Voice and models: the phone's own voice is a card with no model group and no credit"
+test "Settings, Voice and models: bundled Tiny Voca is visible and the Apple voice is absent"
   clock data
   tap "bar-mark"
   clock settle
@@ -30,9 +30,9 @@ test "Settings, Voice and models: the phone's own voice is a card with no model 
   clock settle
   tap "mv-tab-voice"
   clock settle
-  expect tree has "mv-voice-system"
-  expect tree missing "voice-credit-system"
-  expect tree missing "voice-group-system"
+  expect tree has "mv-voice-tiny-voca:F2"
+  expect tree has "mv-voice-tiny-voca:M2"
+  expect tree missing "mv-voice-system"
 
 test "Settings, Voice and models: one tab per kind of model, and a voice is a row with Test and Use like every other row"
   clock data

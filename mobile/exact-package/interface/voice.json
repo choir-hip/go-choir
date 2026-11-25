@@ -27,36 +27,36 @@
       "answers": "VoiceCards",
       "substitute": {
         "default": {
-          "selected": "kokoro:af_heart",
+          "selected": "tiny-voca:F2",
           "message": "",
           "cards": [
             {
-              "id": "kokoro:af_heart",
-              "name": "Heart",
-              "blurb": "American, female voice",
-              "sizeLabel": "About 350 MB",
+              "id": "tiny-voca:F2",
+              "name": "Tiny Voca F2",
+              "blurb": "American English · included with Autoradio",
+              "sizeLabel": "Built in",
               "state": "ready",
               "note": "",
               "progress": 1,
               "selected": true,
               "playing": false,
-              "model": "kokoro-82m-ane",
-              "group": "Kokoro 82M",
-              "credit": "Kokoro 82M voice by hexgrad, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+              "model": "",
+              "group": "Tiny Voca",
+              "credit": "Tiny Voca by Muhammed Nazeem, Core ML port by razorback16. Apache-2.0."
             },
             {
-              "id": "kokoro:am_adam",
-              "name": "Adam",
-              "blurb": "American, male voice",
-              "sizeLabel": "About 350 MB",
+              "id": "tiny-voca:M2",
+              "name": "Tiny Voca M2",
+              "blurb": "American English · included with Autoradio",
+              "sizeLabel": "Built in",
               "state": "ready",
               "note": "",
               "progress": 1,
               "selected": false,
               "playing": false,
-              "model": "kokoro-82m-ane",
-              "group": "Kokoro 82M",
-              "credit": "Kokoro 82M voice by hexgrad, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+              "model": "",
+              "group": "Tiny Voca",
+              "credit": "Tiny Voca by Muhammed Nazeem, Core ML port by razorback16. Apache-2.0."
             },
             {
               "id": "phonon:en_us_Zoey",
@@ -71,20 +71,6 @@
               "model": "phonon-31m",
               "group": "Phonon 31M",
               "credit": "Phonon 31M voice by Gradium, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
-            },
-            {
-              "id": "system",
-              "name": "This phone's voice",
-              "blurb": "Built in, no download",
-              "sizeLabel": "Built in",
-              "state": "ready",
-              "note": "",
-              "progress": 1,
-              "selected": false,
-              "playing": false,
-              "model": "",
-              "group": "",
-              "credit": ""
             }
           ]
         }

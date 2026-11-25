@@ -361,12 +361,11 @@ component OnboardingPage
       StepDots(n=n)
 
       // ---- welcome (and skipped): what is about to happen, plainly
-      // Signed out the first run is only the radio's voice: the one download a listener needs, with its size, its host and one press (models.ts); the radio plays the paper meanwhile, in the iPhone's voice.
+      // Signed out, radio playback needs no setup. The built-in voice is native Tiny Voca; no fallback to Apple's speech synthesizer.
       if (ob.step == "welcome" or ob.step == "skipped") and au.signedIn == false
         Card(level=1, testId="ob-welcome-voice", minHeight=0)
           column padding=18 gap=12
-            text "The radio reads the paper to you. Until its own voice is on this phone it uses the iPhone's built-in voice." font-size="-exact-body" line-height=1.45 font-family=th.fontText
-            ModelsVoiceOffer()
+            text "The radio reads the paper to you. Tiny Voca, included with Autoradio, is its voice. It reads on this phone even offline." font-size="-exact-body" line-height=1.45 font-family=th.fontText
             if dl.voiceReady
               text "The radio's voice is on this phone." testId="ob-voice-ready" font-family=th.fontLabel font-size="-exact-footnote" color=th.success
             text "To ask the radio, or to make your edition, sign in or make an account." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted

@@ -12,6 +12,9 @@
 set -eu
 PLATFORM="${1:-ios}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
+# The caller already holds the Exact build lock. Stage Tiny Voca's precompiled assets
+# (models, phonemizer data, Dizione XCFramework) before the larger libraries.
+"$HERE/scripts/prepare-tiny-voca.sh" --stage "$PLATFORM" "$HERE/AutoradioLab"
 OUT="$HERE/.deps/xcframeworks"
 CACHE="${AUTORADIO_DEPS_CACHE:-$HOME/.cache/autoradio-deps}/xcframeworks"
 # Whether xcframework $1 has a slice for $PLATFORM (the LibraryIdentifier starts with the platform: ios-arm64, macos-arm64).

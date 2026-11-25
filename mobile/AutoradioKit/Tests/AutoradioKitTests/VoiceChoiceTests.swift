@@ -67,11 +67,14 @@ final class VoiceChoiceTests: XCTestCase {
     func notes(_ l: EventLog) -> [String] { l.events.compactMap { if case .note(let n) = $0.event { return n } else { return nil } } }
 
     // 1, 2: the choice
-    func testFreshInstallDefaultsToTheFirstNeuralVoice() {
+    func testFreshInstallDefaultsToBundledTinyVocaAndIgnoresAnOldAppleSelection() {
         let s = VoiceChoiceStore(file: tmp().appendingPathComponent("v.json"))
-        XCTAssertEqual(s.current().id, "kokoro")
-        XCTAssertEqual(VoiceCatalog.option(matching: s.current())?.id, "kokoro:af_heart")
-        XCTAssertEqual(StageRegistry.listenerConfiguration().setting(.voice)?.id, "kokoro", "the shipped listener configuration does not name the system voice")
+        XCTAssertEqual(s.current().id, "tiny-voca")
+        XCTAssertEqual(VoiceCatalog.option(matching: s.current())?.id, "tiny-voca:F2")
+        XCTAssertEqual(StageRegistry.listenerConfiguration().setting(.voice)?.id, "tiny-voca")
+        s.save(StageSetting(id: "avspeech"))
+        XCTAssertEqual(s.current(), StageRegistry.listenerConfiguration().setting(.voice))
+        XCTAssertFalse(StageRegistry.builtIn().stages(.voice).contains { $0.id == "avspeech" })
     }
     func testASavedChoiceSurvivesAndGarbageDoesNot() throws {
         let f = tmp().appendingPathComponent("v.json")

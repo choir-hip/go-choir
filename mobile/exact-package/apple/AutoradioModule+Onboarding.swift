@@ -16,7 +16,6 @@ import Foundation
 
 final class OnboardingController: @unchecked Sendable {
     static var shared: OnboardingController?
-    private static let synth = AVSpeechSynthesizer()
 
     unowned let module: AutoradioModule
     let support: URL
@@ -223,16 +222,15 @@ final class OnboardingController: @unchecked Sendable {
 
     func stopMicrophone() { lock.lock(); micActive = false; lock.unlock() }
 
-    /// The hearing check: the route it plays on, and the sentence, in the voice that was just set up. The radio's engine is running after the microphone check; if it is not,
-    /// the phone's own voice says it (the check is about the speaker, and it must not stay silent).
+    /// The hearing check uses the same engine and selected voice as radio playback.
     func playHearing() {
         stopMicrophone()
         set { route = "Playing on " + Platform.outputName() }
-        if !module.virtualEngine {
-            if module.runtime.snapshot().running, let v = VoiceController.shared {
-                Task { await v.speak("Can you hear this?") }
-            } else {
-                DispatchQueue.main.async { Self.synth.speak(AVSpeechUtterance(string: "Can you hear this?")) }
+        if !module.virtualEngine, let v = VoiceController.shared {
+            let rt = module.runtime!
+            Task {
+                await rt.start(virtual: false)
+                await v.speak("Can you hear this?")
             }
         }
     }

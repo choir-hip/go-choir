@@ -155,8 +155,8 @@ public enum CandidateTable {
         audio("phonon-31m", .voice, "Phonon voice, the small one that streams", rank: 70, basis: "UNMEASURED by us on a phone; the maker says about 20 times real time on an M5 Pro", bytes: 173_000_000, mb: 300, tier: .tier6, stage: "phonon", license: "Apache-2.0", measured: false, streams: false)
         audio("pocket-tts", .voice, "Pocket voice, the lighter one", rank: 65, basis: "first frame 98 ms on the Mac, streams frames", bytes: 300_000_000, mb: 500, tier: .tier6, stage: "pocket-tts", license: "CC-BY-4.0",
               credit: "Pocket TTS by Kyutai, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).")
-        t.append(ModelCandidate(id: "system-voice", role: .voice, family: "Apple", quant: "", label: "The system voice", bytes: 0, qualityRank: 20, qualityBasis: "the floor",
-                                license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: true, source: "built in", kitStageID: "avspeech"))
+        t.append(ModelCandidate(id: VoiceCatalog.bundledStageID, role: .voice, family: "Tiny Voca", quant: "", label: "Tiny Voca (built in)", bytes: 0, qualityRank: 100, qualityBasis: "bundled default",
+                                license: "Apache-2.0", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: false, source: "built in", kitStageID: VoiceCatalog.bundledStageID))
         return t
     }()
 

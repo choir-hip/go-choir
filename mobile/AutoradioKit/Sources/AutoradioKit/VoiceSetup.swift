@@ -121,7 +121,7 @@ public enum SetupCatalog {
         case .voice:
             return [SetupCandidate(id: "kokoro-82m-ane", label: "Kokoro voice", bytes: KnownModels.kokoroBytes, minMemoryGB: 4, kitStageID: "kokoro", needsMB: 750),
                     SetupCandidate(id: "pocket-tts", label: "Pocket voice, the lighter one", bytes: 300_000_000, minMemoryGB: 3, kitStageID: "pocket-tts", needsMB: 500),
-                    SetupCandidate(id: "system-voice", label: "The system voice", bytes: 0, minMemoryGB: 0, kitStageID: "avspeech")]
+                    SetupCandidate(id: VoiceCatalog.bundledStageID, label: "Tiny Voca (built in)", bytes: 0, minMemoryGB: 0, kitStageID: VoiceCatalog.bundledStageID)]
         case .decision:
             // The small language model on the phone first; System 1 through the listener's computer is the floor.
             return [SetupCandidate(id: "qwen3-0.6b-q8_0", label: "A small language model on this phone", bytes: 639_446_688, minMemoryGB: 4,
