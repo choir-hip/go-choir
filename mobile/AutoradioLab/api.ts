@@ -141,7 +141,10 @@ export function nativeLater(): ((request: { op: string; account?: Account; b64?:
   // goes over: native adopts a boot even when it is below the newest generation it saw in an earlier context, so a restart at 0 is not refused for the life of the process (AutoradioKit `SharedGeneration.boot`).
   // Sent first, not waited for: native takes its calls in the order they arrive, and a native that never answers the announcement must not stop every call behind it.
   return (r) => {
-    if (r.op !== 'generation' && !bootSent) bootSent = Promise.resolve(native.later({ op: 'generation', gen: generation, boot: true })).then(() => undefined, (e: unknown) => { console.log(`api: the boot announcement failed (${e instanceof Error ? e.message : 'threw'}): native keeps the generation it last saw`); if (isRefusal(e)) bootSent = null; });       // refused because its answer was let go: never reached native, so the next call sends it
+    if (r.op !== 'generation' && !bootSent) {
+      const mine: Promise<void> = Promise.resolve(native.later({ op: 'generation', gen: generation, boot: true })).then(() => undefined, (e: unknown) => { console.log(`api: the boot announcement failed (${e instanceof Error ? e.message : 'threw'}): native keeps the generation it last saw`); if (isRefusal(e) && bootSent === mine) bootSent = null; });       // refused because its answer was let go: never reached native, so the next call sends it
+      bootSent = mine;
+    }
     return native.later(r);
   };
 }

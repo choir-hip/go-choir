@@ -191,10 +191,11 @@ async function sharedWipeThen(storage: Storage | undefined, store: Store | undef
 }
 
 /** The one function: read the three facts, decide, act. Run at launch (`settleAccount`) and at the end of every sign-out attempt. */
-export async function reconcile(storage: Storage | undefined, store: Store | undefined, native: Native): Promise<Reconciled> {
+export async function reconcile(storage: Storage | undefined, store: Store | undefined, native: Native, seen?: { keyError: boolean }): Promise<Reconciled> {
   if (!storage) return { action: 'nothing', failed: [] };
   for (let round = 0; round < 2; round++) {
     const k = await keyState();
+    if (k.error && seen) seen.keyError = true;          // the key read threw (a bridge error), which is not "locked": the settle does not publish this run (settleAccount)
     const marker: MarkerFact = (await exists(storage, PENDING_FILE)) ? 'pending' : 'none';
     const stamp: StampFact = k.state === 'present' ? await stampFact(storage, k.digest) : (await exists(storage, STAMP_FILE)) ? 'other' : 'none';
     const action = decide({ key: k.state, stamp, marker });
@@ -418,14 +419,19 @@ let wake: Wake = newWake();
 export const SETTLE_POLL_MS = 250;
 /** The pending-revoke retry at launch: its requests share this deadline (each its share, as `exactTimeout`). */
 export const LAUNCH_REVOKE_BUDGET_MS = 3000;
+/** A run whose key read threw is not published (the contract asks again a second later); after this many in a row its "nothing" is published, as for a key that cannot be read (logged). */
+export const KEY_ERROR_RUNS = 3;
+let keyErrorRuns = 0;
+/** How long an answer waits for the settle before it goes on with "nothing" (never wipes, never adopts), logged: a settle that is never asked or never publishes must not hold every source forever. */
+export const SETTLE_DEADLINE_MS = 10000;
 
 /** The settled value of this epoch, or null. */
 export const settledNow = (): Reconciled | null => (settledValue !== null && settledValue.epoch === settleEpoch ? settledValue.result : null);
 export const settledTimes = (): number => settledCount;
 
-async function settleRun(storage: Storage | undefined, store: Store | undefined, native: Native): Promise<Reconciled> {
+async function settleRun(storage: Storage | undefined, store: Store | undefined, native: Native, seen: { keyError: boolean }): Promise<Reconciled> {
   await forgetOldCopy(storage);
-  const result = await reconcile(storage, store, native);
+  const result = await reconcile(storage, store, native, seen);
   await retryPendingRevoke(storage, store, { budgetMs: LAUNCH_REVOKE_BUDGET_MS }).catch(() => undefined);
   await clearDemoLeftovers(storage);                     // what demo mode left in the shared files, once per process, before any other source answers (demo-leftovers.ts)
   return result;
@@ -436,28 +442,36 @@ async function settleRun(storage: Storage | undefined, store: Store | undefined,
 export async function settleAccount(storage: Storage | undefined, store: Store | undefined, native?: Native): Promise<Reconciled> {
   const now = settledNow(); if (now) return now;
   const epoch = settleEpoch, run = ++runs;
-  const seen = { refused: false };
+  const seen = { refused: false, keyError: false };
   const later = nativeLater();
   const watched = later ? (r: { op: string; gen?: number }) => later(r).catch((e: unknown) => { if (isRefusal(e)) seen.refused = true; throw e; }) : null;
-  const result = await settleRun(storage, store, native ?? nativeOf(watched));
+  const result = await settleRun(storage, store, native ?? nativeOf(watched), seen);
   if (seen.refused) throw new Error('the account settle was refused (its answer was let go): it is asked again');
   if (run !== runs || epoch !== settleEpoch) return result;                          // superseded or reset meanwhile: not published
+  if (seen.keyError) {
+    keyErrorRuns += 1;
+    if (keyErrorRuns < KEY_ERROR_RUNS) throw new Error(`the account settle could not read the key (${keyErrorRuns} of ${KEY_ERROR_RUNS}): it is asked again`);
+    console.log(`account: the key could not be read in ${keyErrorRuns} settles: this launch does nothing to the account's data`);
+  }
+  keyErrorRuns = 0;
   settledValue = { epoch, result }; settledCount += 1;
   const w = wake; wake = newWake(); w.resolve();
   return result;
 }
 
 /** Every answer but the settle's own and sign-out's: wait for the settled value. Each look is this answer's own (a timer it arms), never another answer's promise alone. */
-export async function awaitSettled(pollMs = SETTLE_POLL_MS): Promise<Reconciled> {
+export async function awaitSettled(pollMs = SETTLE_POLL_MS, deadlineMs = SETTLE_DEADLINE_MS): Promise<Reconciled> {
+  let waited = 0;                                                                     // the time this answer's own timers ran (a data source has no clock)
   for (;;) {
     const v = settledNow(); if (v) return v;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([wake.p, new Promise<void>((r) => { timer = setTimeout(r, pollMs); })]);
-    if (timer !== undefined) clearTimeout(timer);
+    if (waited >= deadlineMs) { console.log(`account: no settle in ${deadlineMs} ms: this answer goes on with "nothing" (the account's data is neither wiped nor adopted)`); return { action: 'nothing', failed: [] }; }
+    let timer: ReturnType<typeof setTimeout> | undefined; let fired = false;
+    await Promise.race([wake.p, new Promise<void>((r) => { timer = setTimeout(() => { fired = true; r(); }, pollMs); })]);
+    if (fired) waited += pollMs; else if (timer !== undefined) clearTimeout(timer);
   }
 }
 /** A sign-in (adoptKey) and tests: the next settle reconciles again; the answers wait for it. */
-export function resetSettled(): void { settledValue = null; settleEpoch += 1; runs += 1; }
+export function resetSettled(): void { settledValue = null; settleEpoch += 1; runs += 1; keyErrorRuns = 0; }
 
 /** Keep the key a sign-in made and have the account reconciled again at the next answer: the new key may be another account's (the old one was refused), and `settleAccount` runs once per launch otherwise, so the old account's stored data would be read under the new key. `reconcile` then sees a stamp that is not this key's and wipes. */
 export function adoptKey(store: { set(n: string, v: string): void; forget(n: string): void }, key: string, keyId: string): void {

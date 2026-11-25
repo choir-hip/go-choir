@@ -193,7 +193,11 @@ F3 passed. After: 10 pass. The gate on the round-1 code listed
 `account.ts settling`, `demo-leftovers.ts attempt`, `notebook-run.ts`
 (the memo's `read`) and `host.ts inflight`.
 
-## Residuals (on the gate's allow-list as `residual`; one failed attempt at worst, not kept)
+## Residuals (on the gate's allow-list as `residual` or `radio`; not proven safe)
+
+For each non-radio entry, what an answer that joined the work sees was
+checked by reading the code, not by a test. The radio entries were not
+examined (lane move-a replaces the radio).
 
 - `content-run.ts` `running`: the content sync; an answer that joined a
   run refused by its let-go owner sees "offline" for that key once.
@@ -222,3 +226,20 @@ F3 passed. After: 10 pass. The gate on the round-1 code listed
   its storage steps (the wipes) beside the newer one; it never publishes,
   and the stamp and marker are written only when its native step
   succeeded, which a refused one does not.
+
+## Round 2 review and what changed (2026-11-25)
+
+Seat 2 (round 2) found the round-1 defects fixed, and one regression:
+a key read that THREW (`api.ts` `keyState` answers `{state:'unreadable',
+error:true}`) went through `decide` as "nothing" and was published for the
+process, so the one-second retry never ran. Now a settle whose key read
+threw does not publish (it fails; the contract asks again a second later),
+and only after `KEY_ERROR_RUNS` (3) such settles in a row is "nothing"
+published, logged (tests K1, K2: both failed on the round-2 code, pass
+now). Also: `awaitSettled` has a deadline (10 s of its own timers; then it
+answers "nothing", which never wipes or adopts, and logs; test D1 timed out
+before, passes now); a test (D2) fails if the contract stops asking the
+settle; the gate's header and the reference page now say exactly what the
+scan sees; the radio entries are marked `radio`, not examined; `isRefusal`
+is pinned to the runtime's refusal messages (R1, R2); a refused boot
+announcement clears `bootSent` only if it is still its own.

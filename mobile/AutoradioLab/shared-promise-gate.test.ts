@@ -1,13 +1,16 @@
-// The gate for one class of defect (docs/problems/shared-settle-promise-fails-every-request-2026-11-25.md): work shared between Exact answers by keeping a PROMISE where more than one answer can await it.
+// A tripwire for one class of defect (docs/problems/shared-settle-promise-fails-every-request-2026-11-25.md): work shared between Exact answers by keeping a PROMISE where more than one answer can await it.
 // Exact runs each step as the answer that started the work, refuses that answer's fetches, native calls and timers once it is let go, and drops its timers (what awaits them stays pending): one answer let
 // go then fails or hangs every answer that awaits the kept promise. Share the resolved VALUE instead.
-// Failure list: G1 every module-level binding, class field or type member of the shared modules that holds a Promise (or a Map or Set of them) is in ALLOWED below, with the kind of reason it is allowed;
-// a new one fails here, by file, line and name. G2 every entry of ALLOWED still exists (a fixed site leaves the list).
+// What it reads (and only this; it is a scan of the text, not a proof): in the shared modules (*.ts beside it, not tests), a module-level binding whose declared type names Promise or whose initializer is
+// `Promise.…`, `new Promise`, a `new Map`/`new Set` of promises, or ends in `.then(`/`.catch(`/`.finally(`; a class field or a member of a type or interface (one line or several) whose type names Promise
+// or whose initializer is one of those. It does NOT see an untyped binding given an async call's result (`let x = load()`), a promise stored in an object literal, or an untyped Map filled later.
+// Failure list: G1 every site it finds is in ALLOWED below, with the kind of reason it is allowed; a new one fails here, by file, line and name. G2 every entry of ALLOWED still exists.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 
 // Kinds: `storage` (only storage steps: a let-go answer's storage steps run on, prelude.js `__exact_forget` "storage"), `unawaited` (no answer awaits it), `value` (resolve-only and raced with the
-// waiter's own timer), `redo` (a read: a waiter whose shared read was refused reads itself, api.ts joinOrRedo), `residual` (NOT proven safe: named in the problem record, one failed attempt at worst).
+// waiter's own timer), `redo` (a read: a waiter whose shared read was refused reads itself, api.ts joinOrRedo), `residual` (NOT proven safe: named in the problem record; for each non-radio residual the
+// reason says what a joining answer sees, checked by reading the code, not by a test), `radio` (NOT proven safe and not examined here: lane move-a replaces the radio).
 const ALLOWED: Record<string, string> = {
   'account.ts:pendingQueue': 'storage: the pending-revoke file read-modify-writes',
   'account.ts:p': 'value: the settle wake, resolve-only, raced with the waiter\'s own timer (awaitSettled)',
@@ -29,9 +32,9 @@ const ALLOWED: Record<string, string> = {
   'pages.ts:saving': 'storage: the open pages file writes',
   'paper.ts:kept': 'redo: the front list GET; a waiter whose shared list was refused asks itself',
   'podcast.ts:inflight': 'residual: a feed GET; a waiter on a refused load sees the feed it had (not kept)',
-  'radio-bridge.ts:restored': 'residual: the radio (radio-pulse-rule.test.ts governs which radio sources may do work)',
-  'radio-runtime.ts:chain': 'residual: the radio deck acts, run in the pumping answer (radio-pulse-rule.test.ts)',
-  'radio-writer.ts:task': 'residual: the desk flight, awaited by the writing mutation only',
+  'radio-bridge.ts:restored': 'radio: not examined; lane move-a replaces the radio',
+  'radio-runtime.ts:chain': 'radio: not examined; lane move-a replaces the radio',
+  'radio-writer.ts:task': 'radio: not examined; lane move-a replaces the radio',
   'reader.ts:decoding': 'residual: one decode at a time; a link run by an answer let go fails that decode once',
   'reader.ts:inflight': 'redo: the story GET; a waiter whose shared fetch was refused fetches itself',
   'recent-pages.ts:loading': 'storage: the recent pages file read',
@@ -40,7 +43,7 @@ const ALLOWED: Record<string, string> = {
   'retrieval-run.ts:running': 'unawaited: the indexing loops (awaited by tests only, waitIdle)',
   'retrieval-run.ts:answered': 'residual: one ask answered once; a waiter on a refused answer gets ok:false once (not kept)',
   'retrieval-run.ts:cold': 'value: raced with the waiter\'s own sleep (COLD_WAIT_MS)',
-  'runsheet-store.ts:flushTask': 'residual: the run sheet post loop (radio)',
+  'runsheet-store.ts:flushTask': 'radio: not examined; lane move-a replaces the radio',
   'runsheet-store.ts:saving': 'storage: the run sheet file writes',
   'steer.ts:loading': 'storage: the steer file read',
   'steer.ts:flushing': 'residual: the steer POSTs; a waiter on a refused flush sees "offline" once, the next flush retries',
@@ -86,7 +89,7 @@ function scan(): Hit[] {
           const eq = d.indexOf('=');
           const typePart = eq >= 0 ? d.slice(0, eq) : d, init = eq >= 0 ? d.slice(eq + 1) : '';
           if (isFunctionValue(init)) continue;
-          if (holdsPromise(typePart) || /^\s*Promise\./.test(init) || makesPromises(init)) {
+          if (holdsPromise(typePart) || /^\s*Promise\./.test(init) || makesPromises(init) || /\.(then|catch|finally)\(/.test(init)) {
             // a record type holding a promise: name the member too
             const member = /([A-Za-z_$][\w$]*)\??\s*:\s*Promise\b/.exec(typePart);
             hits.push({ key: `${f}:${member && member[1] !== name ? member[1] : name}`, where });
@@ -100,7 +103,7 @@ function scan(): Hit[] {
         return;
       }
       // class fields and members of multi-line types
-      const field = /^\s+(?:(?:private|public|protected|readonly|static|declare)\s+)*([A-Za-z_$][\w$]*)\??!?\s*(?::\s*([^=;(]*?))?\s*(?:=\s*(.*))?;\s*$/.exec(code);
+      const field = /^\s+(?:(?:private|public|protected|readonly|static|declare)\s+)*([A-Za-z_$][\w$]*)\??!?\s*(?::\s*([^=;(]*?))?\s*(?:=\s*(.*?))?[;,]?\s*$/.exec(code);
       if (field && !/^\s*(return|throw|await|yield|break|continue)\b/.test(code)) {
         const [, name, type = '', init = ''] = field;
         if (holdsPromise(type) || makesPromises(init) || (holdsPromise(init) && /Promise\.resolve\(\)\s*$/.test(init) && /^\s+(private|public|protected|readonly)/.test(code))) hits.push({ key: `${f}:${name}`, where });

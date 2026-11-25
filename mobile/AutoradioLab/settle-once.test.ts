@@ -10,10 +10,15 @@
 //  M1 mail's cipher probe: a probe refused because its answer was let go is not kept as "no cipher" for the session.
 //  B1 the boot announcement refused because its answer was let go is sent again by the next native call.
 //  C1 (control) two answers at launch: one reconcile, the native sign-out once.
+//  K1 a key read that THREW (a bridge error, not a locked key) is not published as the launch's answer: the settle fails, the waiting answer keeps waiting, the settle asked again publishes.
+//  K2 a key read that throws every time: after KEY_ERROR_RUNS settles "nothing" is published (logged), so the app is not held forever.
+//  D1 an answer waiting for a settle that never comes goes on after its deadline with "nothing" (never a wipe), counting only its own timers.
+//  D2 the contract always asks the settle: a root resource with constant arguments, read by the page set (spine.contract pgs) and the account card.
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { answer } from './app.ts';
-import { resetSettled, settleAccount, PENDING_FILE, STAMP_FILE } from './account.ts';
+import { awaitSettled, resetSettled, settleAccount, KEY_ERROR_RUNS, PENDING_FILE, STAMP_FILE } from './account.ts';
+import { readFileSync } from 'node:fs';
 import { resetDemoLeftovers } from './demo-leftovers.ts';
 import { hostMode, resetHost } from './host.ts';
 import { adoptNative, nativeLater, resetSeam } from './api.ts';
@@ -27,7 +32,7 @@ import { armedBy, ask, current, hostOp, install, letGo, newCall, tick, uninstall
 beforeEach(() => { install(); resetRadio(); resetSeam(); resetSettled(); resetHost(); resetDemoLeftovers(); forgetNotebook(); steerForget(); forgetProbe(); });
 afterEach(() => { uninstall(); });
 
-type World = { key: 'present' | 'absent'; ops: string[]; hold: Set<string>; open: () => void; gate: Promise<void> };
+type World = { key: 'present' | 'absent'; ops: string[]; hold: Set<string>; open: () => void; gate: Promise<void>; keyThrows?: number };
 const KEY = 'test-key-A-not-real';
 function world(key: World['key'], hold: string[] = []): World {
   let open!: () => void; const gate = new Promise<void>((r) => { open = r; });
@@ -37,7 +42,7 @@ function world(key: World['key'], hold: string[] = []): World {
 const phone = (w: World) => ({ available: true, later: (r: { op: string; boot?: boolean }) => { const c = current(); return hostOp(async () => {
   if (w.hold.has(r.op)) { w.hold.delete(r.op); await w.gate; if (c?.letGo) throw new Error('withdrawn: its answer was let go before it was sent'); }      // a held call is one not yet sent: letting its answer go withdraws it (prelude.js:1017)
   w.ops.push(r.op + (r.boot ? ':boot' : ''));
-  if (r.op === 'keystate') return { state: w.key };
+  if (r.op === 'keystate') { if (w.keyThrows && w.keyThrows > 0) { w.keyThrows -= 1; throw new Error('the Keychain bridge failed'); } return { state: w.key }; }
   if (r.op === 'signOut') { w.key = 'absent'; return { done: true }; }
   if (r.op === 'wipe') return { done: true };
   if (r.op === 'mailCan') return { ok: true };
@@ -185,5 +190,65 @@ describe('other work shared between answers', () => {
     letGo(a); w.open(); await first;
     await ask(newCall('B'), async () => { await nativeLater()!({ op: 'keystate' }); });
     expect(w.ops).toContain('generation:boot');
+  });
+});
+
+describe('the settle when the key cannot be read, and when no settle comes', () => {
+  const noStore = (id: string, source: string, w: World, m: ReturnType<typeof memFs>, args: unknown[] = ['x']) =>
+    ask(newCall(id), () => answer(source as never, args as never, undefined as never, m.storage, phone(w) as never));     // no secret store: the key is read through the app module, as a bridge
+  test('K1 a key read that threw is not published: the settle fails, the waiter waits, the settle asked again publishes', async () => {
+    const w = world('absent'); w.keyThrows = 1; const m = memFs([TAKES, PENDING_FILE]);
+    await expect(noStore('S1', 'accountSettle', w, m, [])).rejects.toThrow('could not read the key');
+    const b = outcome(noStore('B', 'answerDismissShared', w, m));
+    await tick(10);
+    expect(b.done).toBe(false);
+    await noStore('S2', 'accountSettle', w, m, []); await tick(10);
+    expect(b.done).toBe(true); expect(b.error).toBe('');
+    expect(w.ops).toContain('signOut'); expect(m.files.has(PENDING_FILE)).toBe(false);         // the unfinished sign-out was finished once the key could be read
+  });
+  test('K2 a key read that always throws: after KEY_ERROR_RUNS settles "nothing" is published and nothing is wiped', async () => {
+    const w = world('absent'); w.keyThrows = 100; const m = memFs([TAKES, PENDING_FILE]);
+    for (let i = 1; i < KEY_ERROR_RUNS; i++) await expect(noStore(`S${i}`, 'accountSettle', w, m, [])).rejects.toThrow('could not read the key');
+    const r = await noStore('S', 'accountSettle', w, m, []) as { action: string };
+    expect(r.action).toBe('nothing'); expect(m.files.has(TAKES)).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(true);
+    expect((await noStore('B', 'answerDismissShared', w, m) as { ok: boolean }).ok).toBe(true);
+  });
+  test('D1 no settle comes: the waiting answer goes on after its own deadline with "nothing"', async () => {
+    const r = await ask(newCall('B'), () => awaitSettled(5, 30));
+    expect(r).toEqual({ action: 'nothing', failed: [] });
+  });
+  test('D2 the contract always asks the settle', () => {
+    const read = (f: string) => readFileSync(new URL(`./${f}`, import.meta.url), 'utf8');
+    expect(read('app.contract')).toContain('members "./account.contract"');
+    expect(read('app.contract')).toContain('members "./spine.contract"');
+    expect(read('account.contract')).toMatch(/^\s*resource acctSettle = accountSettle\(\) as shape AccountSettle else empty\(\) transient$/m);       // constant arguments: nothing lets it go
+    expect(read('spine.contract')).toMatch(/^\s*resource pgs = pagesView\([^)]*acctSettle\.epoch[^)]*\)/m);                                       // the page set (always read: every page) reads it, so it is asked
+    expect(read('spine.contract')).toMatch(/^\s*derive pg = pgs$/m);
+    expect(read('account.contract')).toMatch(/^\s*task settleAgain when failed\(acctSettle\)/m);
+  });
+});
+
+// R1 Exact's refusals of a let-go answer's work, as the pinned runtime words them (each beside its file and line at f53347503); isRefusal must know every one, and must not take a real failure for one.
+describe('isRefusal knows the pinned runtime\'s refusals', () => {
+  const PINNED: [string, string][] = [
+    ['js/src/fetch.js', 'the answer was let go before this fetch'],                                   // :212
+    ['js/src/fetch.js', 'fetch() called from background work: it was never run. Fetch inside an answer'],   // :207
+    ['js/src/prelude.js', 'the answer was let go before this reply; the request may already have been sent'],   // :1033, a fetch in flight when its answer is let go
+    ['js/src/prelude.js', 'the answer was let go'],                                                    // :345, :1007, :1038 (a yield or a secret lease)
+    ['js/src/prelude.js', 'native.call() called from background work: it was never run. Call it inside an answer'],   // :777
+    ['js/src/prelude.js', 'native call outside an answer'],                                            // :779
+    ['js/src/prelude.js', ' is unavailable here: a timer belongs to the answer that arms it'],         // :1364 (timerOwner, prefixed by the API's name)
+  ];
+  test('R1 every pinned refusal is a refusal; a network or server failure is not', async () => {
+    const { isRefusal } = await import('./api.ts');
+    for (const [, m] of PINNED) expect(isRefusal(new Error(m.startsWith(' ') ? 'setTimeout()' + m : m))).toBe(true);
+    expect(isRefusal(new Error('network: the answer was let go before this fetch'))).toBe(true);          // api.ts send() wraps a fetch failure's message
+    for (const m of ['network: The Internet connection appears to be offline.', 'timeout: request timed out', 'HTTP 500', 'the Keychain bridge failed']) expect(isRefusal(new Error(m))).toBe(false);
+  });
+  test('R2 the messages are still the pinned runtime\'s (when its source is beside the app)', () => {
+    const root = new URL('../.exact-src/', import.meta.url);
+    let src: Record<string, string>;
+    try { src = Object.fromEntries(['js/src/fetch.js', 'js/src/prelude.js'].map((f) => [f, readFileSync(new URL(f, root), 'utf8')])); } catch { return; }   // no Exact checkout here (CI): R1 still holds the words
+    for (const [f, m] of PINNED) expect(src[f]).toContain(m.trim());
   });
 });
