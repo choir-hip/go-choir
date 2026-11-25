@@ -93,6 +93,7 @@ component Autoradio
     pl
     signIn
     cancelSignIn
+    cancelDeletion
     closeAuth
     createAccount
     signInPasskey
@@ -374,6 +375,12 @@ component Autoradio
     updateComputer
     resetLearned
     refreshActivity
+    // Delete account (account-delete.ts)
+    delv
+    delAsk
+    askDelete
+    keepAccount
+    confirmDelete
     // ---- lane autoradio-talk: the conversation and the answer card ----
     cv
     answerRetry

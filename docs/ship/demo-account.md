@@ -54,6 +54,6 @@ Run it as root on Node B. It revokes every key and deletes every session of the 
 
 ## Residuals
 
-- The account-deletion route is on `lane/account-delete`, not in this lane's base. It must refuse `Handler.IsDemoAccount(userID)` and the app's delete page must show the reviewer text when `whoami` says `reviewer`; both are one line each and are named in the hand-off to that lane. Until they land, the reviewer holds no passkey session, which the delete route requires.
+- The account-deletion routes refuse `Handler.IsDemoAccount(userID)` (begin and finish, whether the sign-in is on or off; `TestTheReviewerAccountCannotBeDeleted`), and the privacy policy's section 9 says the App Review account is deleted by us, not in the app. **Not built:** the app's delete page does not yet read `whoami`'s `reviewer` flag, so the reviewer sees the page and is refused (403) on pressing Delete. The purge runner does not refuse the reviewer account by itself: a deletion record for its id made before it was named (none can be made after) would be carried out.
 - The reviewer account holds a passkey of whoever created it (step 1). That person can sign in to it on the web; they hold nothing else. The passkey routes (`/auth/credentials`) need a session, never this key.
 - Nothing here was run against Node B.

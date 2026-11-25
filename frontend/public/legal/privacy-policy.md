@@ -1,6 +1,6 @@
 # Privacy Policy for Autoradio 1 and choir.news
 
-Effective date: 2026-11-24
+Effective date: 2026-11-25
 
 Published by: Choir Harmonic Intelligence Platform, Inc. ("we", "us")
 
@@ -100,7 +100,7 @@ These are the categories, and the providers in our code on 2026-11-24.
 - Podcast search and charts. They get the search text you type. Provider today: Apple.
 - Hosting. It holds everything stored on our server. Provider today: OVH (bare-metal server, in the United States).
 
-You agree to this when you create an account: the create-account screen says it above the button, with a link to this policy. Listening to the paper needs no account and sends none of your content to a model. If you no longer agree, ask us to delete your account (section 9).
+You agree to this when you create an account: the create-account screen says it above the button, with a link to this policy. Listening to the paper needs no account and sends none of your content to a model. If you no longer agree, delete your account (section 9).
 
 We do not sell your data. We do not share it for advertising. Apart from YouTube, described next, and the public search engines that SearXNG passes queries to, we share it only with the providers above, to run the product, and where the law requires it. Some pages on choir.news that show a source show a video player from YouTube; when you open such a page, YouTube receives your IP address and may set its own cookies.
 
@@ -137,23 +137,34 @@ The app downloads voice and language model files to your phone. They are data fi
 
 ## 9. Deleting your account
 
-To delete your account, write to 000@choir.news from the email address of the account. We confirm by email before we delete anything.
+You can delete your account yourself, in the Autoradio app (Settings, Account, Delete account) or at https://choir.news/account/delete. You confirm with your passkey. If you cannot sign in, write to 000@choir.news from the email address of the account and we will help you get back in, so that you can delete it. The one account we keep for App Review (section 12) cannot be deleted this way: it signs in with a password, not a passkey, and we delete it ourselves when it is no longer needed.
 
-When we delete an account:
+When you confirm:
 
-- Every sign-in and key for the account stops working, and it is signed out on every device.
-- We remove from our servers your account, your email address and your passkeys; your computer with its disk, its stored history (including the log of your requests and answers) and the key that seals it, and everything on it (documents, files, mail, notes and play history); your mail and its address; and your takes, their words and their audio.
-- Stories that Autopaper already published stay public.
-- We keep our server logs for as long as section 8 says. Mail you sent or received stays with the people on the other end and with our mail provider.
-- Our encrypted off-site backups can hold a copy of your account for up to about ten days, and it is deleted with them.
-- Deletion cannot be undone.
+- You are signed out on every device at once, and every session and key for the account stops working. From then on your passkey only lets you cancel the deletion.
+- Your computer is stopped and can no longer reach AI models, and your published takes are no longer played.
+- For 72 hours nothing is removed. After that the removal begins as soon as our systems can start it; if your computer is in the middle of maintenance or of work on its own software, it waits until that has ended.
+- Until the removal begins, you can keep your account: sign in with your passkey and choose Cancel deletion. Once the removal has begun it cannot be undone.
+
+The removal deletes from our servers: your account, your email address and your passkeys; your computer with its disk, its stored history (including the log of your requests and answers) and the key that seals it, and everything on it (documents, files, mail, notes and play history), with no archive kept; your mail and its address; your synced documents and the record of the web pages your computer saved; and your takes, their words and their audio.
+
+What stays:
+
+- Stories that Autopaper already published stay public, including any of your words they quote. They never carry your name or email address, and the pen name that pointed to your account is taken off the story as it is shown.
+- For each take you published, a bare record that it existed, without its words or its audio.
+- Copies of web pages your computer read can stay in our shared store, no longer linked to your account.
+- A short receipt that the deletion happened: a job number, dates and counts, and a one-way code made from the random number that identified your account. It holds no name or email address.
+- Some internal records keep that random number, with no name or email address: records of updates to your computer's software, and the stories you proposed for publication, with their titles and sources.
+- Our server logs, for as long as section 8 says.
+- Mail you sent or received stays with the people on the other end and with our mail provider.
+- Our encrypted off-site backups can hold a copy of your account for about ten days, longer if the clean-up of old backups fails, and it is deleted with them. We keep a list of deletions that have begun or finished, under one-way codes rather than names or addresses, and each backup run copies it (a run that cannot is reported as not a good backup). If we ever restore a backup, we carry out those deletions again before the restored server is used. If our server were lost entirely, a deletion that began after the last backup would not be on the copied list, and you would need to delete the account again.
 - Deletion does not remove data already sent to outside AI model providers. Section 5 says why.
 
 You can also sign out at any time. Signing out removes the key and your local data from the phone.
 
 ## 10. Your choices and rights
 
-You can see, change and delete much of your data in the app. You can ask us for a copy of the data we hold about you, to correct it, or to delete it, by writing to 000@choir.news. You can withdraw your agreement to AI processing by having your account deleted (section 9), and you can turn the microphone off in iPhone Settings.
+You can see, change and delete much of your data in the app. You can ask us for a copy of the data we hold about you, to correct it, or to delete it, by writing to 000@choir.news. You can withdraw your agreement to AI processing by deleting your account (section 9), and you can turn the microphone off in iPhone Settings.
 
 If you live in the European Economic Area, the United Kingdom, California or another place whose law gives you rights over your personal data, you have the rights that law gives you. These usually include access, correction, deletion, a portable copy, objection to some processing, and a complaint to your data protection authority. We do not use your data for advertising and we do not sell it. We reply within the time the law sets. We make no claim of certification.
 

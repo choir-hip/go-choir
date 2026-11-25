@@ -64,7 +64,7 @@ func (h *Handler) HandleWhoami(w http.ResponseWriter, r *http.Request) {
 		if token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")); token != "" {
 			ak, err := h.store.GetAPIKeyByHash(r.Context(), hashAPIKeySecret(token))
 			if err == nil && ak != nil && ak.RevokedAt == nil && (ak.ExpiresAt == nil || ak.ExpiresAt.After(time.Now())) {
-				if _, err := h.store.GetUserByID(ak.UserID); err == nil {
+				if _, err := h.store.GetUserByID(ak.UserID); err == nil && !h.store.AccountAccessRevoked(ak.UserID) {
 					key = ak
 				}
 			}

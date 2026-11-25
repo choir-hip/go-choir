@@ -46,6 +46,7 @@ component SignInScreen
     createAccount: action
     signInPasskey: action
     cancelSignIn: action
+    cancelDeletion: action
     closeAuth: action
     nameLogin: bool
     namePass: string
@@ -110,6 +111,9 @@ component SignInScreen
       // A failure line belongs to the flow that made it: the name's under the name form, the sign-up's under the address form, the passkey's always.
       if siv.message != "" and not siv.pending and not signRunning and (siv.mode == "signin" or (siv.mode == "reviewer" and nameLogin) or (siv.mode == "create" and not nameLogin))
         text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
+      if siv.offer
+        button press=cancelDeletion testId="signin-cancel-deletion" appearance="none"
+          Btn(label="Cancel deletion", primary=true, wide=false)
 
 // ---------------------------------------------------------------- the page
 

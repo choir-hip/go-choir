@@ -1,0 +1,9 @@
+// Delete account on the real plan and the web host: the run's view is answered by app.ts (account-delete.ts) and starts idle with nothing asked of the server. The page itself is mounted by the
+// native page list, which the web host has not, and the passkey screen is only seen on a device; what a run does at each step is proven by account-delete.test.ts (bun test) and the Go tests of the server.
+test "the delete run is idle, not pending, and the confirmation is not showing"
+  clock data
+  expect state delv.phase == "idle"
+  expect state delv.pending == false
+  expect state delv.message == ""
+  expect state delv.signedOut == false
+  expect state delAsk == false

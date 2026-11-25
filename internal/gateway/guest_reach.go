@@ -138,6 +138,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc(hostfetch.Path, h.HandleHostFetch)
 	s.HandleFunc("/provider/v1/credentials/issue", h.HandleIssueCredential)
 	s.HandleFunc("/provider/v1/credentials/ensure", h.HandleEnsureCredential)
+	s.HandleFunc("/provider/v1/credentials/forget", h.HandleForgetCredential)
 	s.HandleFunc("/provider/v1/spend", h.HandlePaidSpend)
 	s.HandleFunc("/provider/v1/breakers", h.HandleProviderBreakers)
 	s.HandleFunc("/provider/v1/breakers/reset", h.HandleProviderBreakerReset)

@@ -111,7 +111,7 @@ After Not now, nothing is asked again until the listener tries the same thing.
 
 ## 5. Account deletion confirmation
 
-Reached from Settings, Account, Delete account (or from choir.news).
+**Built 2026-11-24 (not deployed), with the owner's rulings of 2026-11-23 settling the decisions below:** the words in the app (`mobile/AutoradioLab/settings.contract`, `DeleteScreen`) and on the web (`frontend/src/lib/DeleteAccountRoute.svelte`) are what the build says, and they differ from this draft: published stories stay with the author detached; access ends at once and the removal takes 72 hours, which signing in cancels; a receipt and server logs stay. The sentence about the final screen is `SCHEDULED` in `account-delete.ts`, which says "scheduled for deletion", not "deleted". Edit this section to match the built words before the store texts quote it.
 
 Screen title:
 
@@ -119,13 +119,13 @@ Screen title:
 
 Body:
 
-> This removes your account, your computer and everything on it: your edition, notes, documents, files, mail, listening history and your takes.
+> **What is removed.** Your account and your passkey. Your computer, with its disk, its stored history and the key that seals it: your edition, notes, documents, files, mail and its address, and your listening history. Your synced documents. Any takes you published, their words and their audio.
 >
-> Stories the paper already published stay public, with your name taken off.
+> **What stays.** Stories you published stay public, with your name taken off. A short receipt that the deletion happened, with no personal details, and server logs, which are kept for a limited time. Mail you sent or received stays with the people on the other end and with our mail provider. Our encrypted backups still hold a copy of the account for about ten days, longer if a clean-up fails, and it is deleted with them; if a backup is ever restored, the deletion is carried out again. Outside AI providers keep what they already hold under their own terms; we cannot promise they delete it.
 >
-> Your access ends now, on every device. Everything is permanently removed after 72 hours. If you sign in before then, the deletion is cancelled.
->
-> Outside AI companies may keep what you sent them. We cannot delete it for you.
+> **When.** Your access ends the moment you confirm, on every device. The removal waits at least 72 hours. Until it begins you can change your mind: sign in with your passkey and choose Cancel deletion; nothing will have been removed. Once the removal has begun it cannot be undone.
+
+(These are the words of the app's page, `DeleteScreen`, and of `DeleteAccountRoute.svelte`; the policy's section 9 says the same.)
 
 Buttons:
 
