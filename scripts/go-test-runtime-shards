@@ -7,7 +7,7 @@ if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-# SHARD_PACKAGES narrows the set (scripts/land shards only the heavy packages a
+# SHARD_PACKAGES narrows the set (the landing script shards only the heavy packages a
 # change selects); CI leaves it unset and gets both.
 read -r -a packages <<<"${SHARD_PACKAGES:-./internal/agentcore ./internal/textureowner}"
 for package in "${packages[@]}"; do
