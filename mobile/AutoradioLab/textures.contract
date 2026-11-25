@@ -1,6 +1,6 @@
 // Textures: the listener's documents (a place in the launcher). Lane 3 owns this file.
 // The edition is pinned first; "Make your edition" is a card when there is none; the rest are recent, newest first, and a
-// search field filters them. A document opens in the reader (`texture:<doc>`). "New document" is a prompt, not an empty editor.
+// search field filters them. A document opens in the reader (`texture:<doc>`). "New document" is the button at the top right: the server makes an empty document and it opens in the editor (owner, 2026-11-24; members-content.contract `ndNew`).
 // testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
 use Theme, Onboarding from "@choir/autoradio"
 use TextureList, TextureRow from "./textures-types.contract"
@@ -31,6 +31,9 @@ component TexturesPage
     ob: Onboarding
     openPage: action
     editAsk: action
+    ndNew: action
+    ndBusy: bool
+    ndMsg: string
   props
     address: string
     title: string
@@ -42,7 +45,12 @@ component TexturesPage
     q = v
   view
     PageScroll(id="textures")
-      text "Textures" role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 testId="page-title" color=th.fg
+      row align-items="center" gap=8 width="100%"
+        text "Textures" role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 testId="page-title" color=th.fg flex=1 min-width=0
+        button press=ndNew disabled=ndBusy testId="textures-new" appearance="none" aria-label="New document"
+          Btn(label="New document", primary=false, wide=false)
+      if ndMsg != ""
+        text ndMsg testId="textures-new-message" font-family=th.fontLabel color=th.muted
       input type="search" value=q input=editQ placeholder="Search your documents" aria-label="Search your documents" testId="textures-search"
         font-family=th.fontText font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
         ::placeholder
@@ -72,5 +80,3 @@ component TexturesPage
         TextureRowView(r=r, pinned=false)
       if tlist.status == "ready" and shown.length == 0 and q != ""
         text "No documents match." font-family=th.fontLabel color=th.muted testId="textures-none"
-      button press=editAsk("New document: ") testId="textures-new" appearance="none"
-        Btn(label="New document", primary=false, wide=false)

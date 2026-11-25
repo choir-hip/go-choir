@@ -22,16 +22,13 @@ final class ReadinessVerifierTests: XCTestCase {
         _ = await v.verify(model: "m", check: { ok(true) })
         XCTAssertTrue(v.reading.isReady(model: "m")); XCTAssertFalse(v.reading.isReady(model: "live"), "a companion is never marked on the primary's pass")
     }
-    // The escape of round 3: the voice cards fetched and marked ready with no check. A fetch that succeeds and a check that fails must leave the voice not ready, and the card says so.
-    func testW4TheVoiceCardPathFetchesThenVerifiesAndAFailedVerifyIsNotReady() async {
-        let h = VoiceSamplerTests.Host(); h.failVerify = true
+    // The escape of round 3 (the voice cards fetched and marked ready with no check) is closed by there being no path left: a card's tap fetches nothing and writes no readiness; only a row's download and its check do.
+    func testW4ATapOnAVoiceCardNeverMarksAModelReady() async {
+        let h = VoiceSamplerTests.Host()
         let t = VoiceSamplerTests(); let (s, r) = t.make(h)
-        s.pick("pocket-tts:alba"); await t.settle(300)
-        XCTAssertEqual(h.fetched, [VoiceCatalog.pocketModel], "it was fetched")
-        XCTAssertFalse(r.isReady(model: VoiceCatalog.pocketModel), "but it never passed a check, so it is not ready")
-        let card = s.cards().first { $0.id == "pocket-tts:alba" }
-        XCTAssertEqual(card?.state, "failed"); XCTAssertTrue(h.said.isEmpty, "and no sample is played from it")
-        XCTAssertTrue(card?.note.contains("did not load from this phone's files") == true, "the card carries the verifier's own words: \(card?.note ?? "")")
+        s.pick("pocket-tts:alba"); await t.settle(100)
+        XCTAssertFalse(r.isReady(model: VoiceCatalog.pocketModel), "a tap is not a check")
+        XCTAssertTrue(h.said.isEmpty, "and no sample is played from a model that is not on the phone")
     }
 
     // Round 4: readiness is DERIVED. Ready iff the model's files are present AND a check passed for that exact pin; a changed pin or a missing file makes it not ready with no writer involved.
@@ -71,7 +68,7 @@ final class ReadinessVerifierTests: XCTestCase {
             func check(_ c: SetupCandidate) async throws -> SetupCheck { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: c.id != "parakeet-eou-120m", note: "") }
         }
         let rec = MemoryVoiceReadiness()
-        let s = VoiceSetup(backend: Backend(), profile: DeviceProfile(chip: "t", memoryGB: 8, freeDiskGB: 40, onWiFi: true), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: rec))
+        let s = VoiceSetup(backend: Backend(), profile: DeviceProfile(chip: "t", memoryGB: 5.6, freeDiskGB: 40, onWiFi: true), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: rec))   // a 6 GB phone: Mini is first
         await s.run(only: [.transcriber])
         XCTAssertTrue(rec.isReady(model: "fluid-speech-mini"))
         XCTAssertFalse(rec.isReady(model: "parakeet-eou-120m"), "its own check failed: it is not marked on the primary's pass")

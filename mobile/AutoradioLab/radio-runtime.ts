@@ -16,6 +16,7 @@ import { clock } from './clock.ts';
 import { item as deckItem, DECK_HELD_MAX, type DeckEvent, type DeckItem, type DeckPort, type DeckState } from './deck.ts';
 import { syncHeld } from './deck-ops.ts';
 import { parseEpisodeKey } from './podcast-model.ts';
+import { refusedHere } from './refused.ts';
 import type { Entry } from './runsheet-model.ts';
 
 /** How many next entries the deck is kept holding: a dozen is minutes of speech, and building (and handing over) a hundred in one turn went over Exact's 100 ms of CPU (`radioHold` took 145-169 ms in the proof). */
@@ -351,10 +352,12 @@ export class RadioRuntime {
   deckLine(): { held: number; item: string } { return { held: this.deckState?.held.length ?? 0, item: this.deckState?.item ?? '' }; }
   /** The app is in front, as of the last read of the native facts. */
   inFront = (): boolean => this.facts.foreground;
-  /** One read of the deck and the native facts, no more (what the pulse does): the pump is `radioHold`'s. */
   /** The native facts a caller has just read (the bridge's `getRadio`): kept as `refreshFacts` would keep them. */
   useFacts(f: NativeFacts): void { this.facts = f; }
-  async peek(factsFresh = false): Promise<void> { if (!factsFresh) await this.refreshFacts(); try { this.deckState = await this.deck.state(); } catch { /* the next pulse reads again */ } this.countSpoken(); }
+  /** One read of the deck and the native facts, no more (a mutation's last look, `radioHold`): the pump is `radioHold`'s. */
+  async peek(): Promise<void> { await this.refreshFacts(); try { this.deckState = await this.deck.state(); } catch { /* the next pulse reads again */ } this.countSpoken(); }
+  /** The deck's state as the contract read it (the package source `deckState`, handed to the pulse): the pulse makes no deck call of its own. */
+  seeDeck(st: DeckState): void { this.deckState = st; this.countSpoken(); }
   private countSpoken(): void {
     const air = this.store.onAir(), st = this.deckState, now = clock.ms;
     if (!air || audioSpec(air)) { this.spoken = { id: '', ms: 0, last: -1 }; return; }
@@ -385,11 +388,23 @@ export class RadioRuntime {
 
   // ---- restart and sign-out ----
 
-  /** The sheet from the runtime's own file. Nothing plays. */
+  /** The sheet has been read from its file (or there was none): kept as a value, never as a promise another answer awaits (docs/problems/radio-restore-empty-after-let-go-2026-11-25.md). */
+  get restored(): boolean { return this.isRestored; }
+  private isRestored = false;
+  /** Restored with nothing read (the bridge removed a sheet file a sign-out left behind). */
+  markRestored(): void { this.isRestored = true; }
+  /** The sheet from the runtime's own file. Nothing plays. A read Exact refused THROWS and leaves it not restored (the caller restores again later): it is never taken as an empty sheet.
+   *  Two restores may overlap (two mutations): each reads, and only the first to finish takes what it read. A sign-out while it read (`epoch` moved) drops what it read: the old account's sheet is
+   *  never taken, nor written back after the wipe removed its file. */
   async restore(): Promise<void> {
+    if (this.isRestored) return;
+    const epoch = this.epoch;
     let st: DeckState | undefined;
-    try { st = await this.deck.state(); } catch { /* no deck yet: the entry on air is closed as interrupted */ }
-    await this.store.restore((store) => { if (st) this.recover(store, st); });
+    try { st = await this.deck.state(); } catch (e) { if (refusedHere(e)) throw e; /* no deck: the entry on air is closed as interrupted */ }
+    const text = await this.store.readSaved();
+    if (this.isRestored || epoch !== this.epoch) return;
+    this.isRestored = true;
+    this.store.restoreFrom(text, (store) => { if (st) this.recover(store, st); });
     if (st && this.lastSeq > st.acked) { try { await this.deck.ack(this.lastSeq); } catch { /* acknowledged at the next pump */ } }
   }
 

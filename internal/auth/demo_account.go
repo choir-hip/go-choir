@@ -244,7 +244,8 @@ func verifyDemoPassword(h *demoHash, password string) bool {
 // depend on the credential file: the account stays protected (not deletable,
 // credentials not changeable) while sign-in is off.
 func (h *Handler) IsDemoAccount(userID string) bool {
-	return userID != "" && h.demoAccountID() == userID
+	id, _ := h.demoAccountID()
+	return userID != "" && id == userID
 }
 
 // The host files of the reviewer account. One copy: the host command (cmd/demo-account) imports
@@ -299,9 +300,11 @@ func refuseIfAccountOff(w http.ResponseWriter, err error, op, userID string) boo
 // before lives at most AUTH_ACCESS_TOKEN_TTL (5 minutes) at the proxy, which does not
 // ask this service.
 func (h *Handler) demoOff(userID string) bool {
-	if !h.IsDemoAccount(userID) {
-		return false
-	}
+	id, err := h.demoAccountID()
+	return userID != "" && id == userID && (err != nil || h.demoCredentialOff())
+}
+
+func (h *Handler) demoCredentialOff() bool {
 	if h.config == nil || h.config.DemoCredentialFile == "" {
 		return true
 	}
@@ -320,28 +323,39 @@ func ValidDemoCredential(data []byte) bool {
 	return err == nil
 }
 
-// demoAccountID is the configured account: the host file's first line (read
-// each time, so a change needs no restart), or the test-only field.
-func (h *Handler) demoAccountID() string {
+// demoAccountID returns the current identity, or the last observed identity
+// AND an error. The cached value keeps a known reviewer off during a file
+// outage; it never authorizes deletion or password sign-in. An explicit
+// host marker ("none") distinguishes no reviewer from a lost identity file.
+func (h *Handler) demoAccountID() (string, error) {
 	if h.config == nil {
-		return ""
+		return "", nil
 	}
 	if h.config.DemoAccountID != "" {
-		return h.config.DemoAccountID
+		return h.config.DemoAccountID, nil
 	}
 	if h.config.DemoAccountIDFile == "" {
-		return ""
+		return "", nil
 	}
+	h.demoIdentityMu.Lock()
+	defer h.demoIdentityMu.Unlock()
 	data, err := os.ReadFile(h.config.DemoAccountIDFile)
 	if err != nil {
-		return ""
+		return h.lastDemoAccountID, fmt.Errorf("reviewer identity unavailable: %w", err)
 	}
-	return strings.TrimSpace(strings.SplitN(string(data), "\n", 2)[0])
+	id := strings.TrimSpace(string(data))
+	if id == "none" {
+		id = ""
+	} else if id == "" || strings.ContainsAny(id, " \t\r\n\x00") {
+		return h.lastDemoAccountID, errors.New("reviewer identity file is invalid")
+	}
+	h.lastDemoAccountID = id
+	return id, nil
 }
 
 func (h *Handler) loadDemo() (string, *demoHash, *User) {
-	id := h.demoAccountID()
-	if id == "" || h.config.DemoCredentialFile == "" {
+	id, err := h.demoAccountID()
+	if err != nil || id == "" || h.config.DemoCredentialFile == "" {
 		return "", nil, nil
 	}
 	data, err := os.ReadFile(h.config.DemoCredentialFile)

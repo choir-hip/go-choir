@@ -404,6 +404,8 @@ The lab apps are Exact **variants** (`variants` in `app.json`: id = `app.id` + `
 
 **No choice is now the production id, not the lab app.** A build for a phone (`--device`, not `--archive`) must name its development app (`exact.sh`, and so `build-lab.sh`, refuses otherwise; `make-profile.sh` too): the production id reaches phones through TestFlight. Simulator builds and the proofs with no choice run the production id on the simulator. The lead's queue scripts outside the repo (`~/.local/state/choir-buildq/device-install.sh`, `side-by-side.sh`, `run-one.sh`) must set `AR_VARIANT=lab` (device-install: the first app) or `AR_VARIANT=lab-one` before they build for the phone.
 
+**Phone setup for passkey sign-in on a development build:** turn on Settings › Developer › Associated Domains Development. A development build signs `webcredentials:choir.news?mode=developer`; with the switch off, sign-in fails with "The app could not be verified for choir.news" even though the server answers 200 (docs/reference/exact/passkeys.md).
+
 The lead, through the Mac build queue, in the build tree, the phone connected, unlocked, Developer Mode on:
 
 ```sh
@@ -757,7 +759,7 @@ Decisions made at the seams:
 - **One owner per thing.** Talk mode: Settings (`AppSettings` `talkMode`); the bar and the topics step read the engine's addressing stage that Settings
   applies (the setup no longer forces "open"). Gesture meanings: Settings' `swipeLeft`/`swipeRight`, handed to lane 4's `Preferences`
   (`syncGestureMeanings`), and lane 4's own buttons write back to Settings. "What the paper has learned": `PreferencesLearned`, over lane 4's acts.
-- **Signed out** the paper is the root; sign-in is a code screen over the app that appears when `au.status == "pending"` (the paper's Sign in button).
+- **Signed out** the paper is the root; sign-in is the passkey screen the paper's Sign in button opens (`app-signin.ts`; the old device-code screen and `au.status == "pending"` are gone, and `ChoirAuth` has no `userCode` or `verificationURL`).
 - **Bar**: a page-colour backing under the glass (`th.paper`, 0.82), the aim reads `readerAim` (a block of the open document) and `ob.aim` before setup;
   the mic level (`RadioInfo.micLevel`, from the audio bus) reaches `MarkAt(level=)`; lane 1 feeds `ReaderFollow` with the sentence being spoken.
 - **Proof state.** `defaults write` from `simctl spawn` does not override what the app itself has written (theme, mode, talk mode, gestures live in

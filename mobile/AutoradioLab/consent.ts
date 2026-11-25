@@ -1,6 +1,6 @@
 // What the person has agreed to on this phone, kept per account (app:/data/consent.json, wiped at sign-out with the rest, account.ts WIPES). The agreement here is to downloading model files from a third-party host (Hugging Face), asked for
-// with the sizes before any byte is fetched (owner, 2026-11-23), and it is PER GROUP of the download step (the radio's voice, hearing you and the rest, search on this phone): a press on one group agrees to that group's files only, so the voice press
-// can never unlock the search model's download (review, 2026-11-24). The agreement to outside AI companies handling a request is NOT here: it is given once, at account creation, on the create-account screen (lane native-passkey), and asking the radio needs an
+// with the sizes before any byte is fetched (owner, 2026-11-23), and it is PER MODEL (2026-11-24: the press on a model's row in Settings > Voice and models is the agreement to that model's files only; the key is the model's id, and the search model keeps the key "search" for the background search pass),
+// so no press can unlock another model's download (review, 2026-11-24). The agreement to outside AI companies handling a request is NOT here: it is given once, at account creation, on the create-account screen (lane native-passkey), and asking the radio needs an
 // account (owner, 2026-11-23: "we dont need such a before the radio answers consent screen. thats not industry standard").
 //   agreed  group -> 'agreed' (Wi-Fi only) or 'agreed-mobile' (the person pressed Download on mobile data, having been told the size). A Wi-Fi press never lowers a mobile agreement.
 //   picks   job -> the model id the person chose for that job in the download step (absent: the list's recommendation for this phone).

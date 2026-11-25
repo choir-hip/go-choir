@@ -1722,6 +1722,15 @@ func (m *Manager) DestroyVMState(vmID string) error {
 		}
 		m.removeCgroupLeaf(vmID)
 	}
+	// A hibernated computer's snapshot (the guest's memory) can be in the
+	// snapshot vault or in a vault root recorded earlier, outside the state
+	// directory: it goes with the state, or it would outlive the account.
+	for _, dir := range m.snapshotAnyDirs(vmID) {
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("destroy snapshot dir %s of VM %s: %w", dir, vmID, err)
+		}
+	}
+	m.removeVaultVMDir(vmID)
 	stateRoot := filepath.Clean(m.cfg.StateDir)
 	stateDir := filepath.Clean(filepath.Join(stateRoot, vmID))
 	if stateDir == stateRoot || !strings.HasPrefix(stateDir, stateRoot+string(os.PathSeparator)) {

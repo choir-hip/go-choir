@@ -50,13 +50,13 @@ describe('stale transitions', () => {
 describe('pending ops and posting', () => {
   test('11: pending ops survive a relaunch and go when the route answers; an entry left on air is closed failed, not resumed', async () => {
     const mem = memory();
-    const s = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
+    const s = new RunSheetStore({ storage: mem });
     const p = new FakePoster(); s.poster = p;
     const a = paperStory('a', 'A');
     s.place(a, 'now'); await s.flushTask;
     expect(s.pending.length).toBe(1);                      // the route said not yet: the op stays, with its op_id
     const opId = s.pending[0].op_id;
-    const s2 = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
+    const s2 = new RunSheetStore({ storage: mem });
     const p2 = new FakePoster(); s2.poster = p2;
     await s2.restore(); await s2.flushTask;
     expect(s2.pending[0].op_id).toBe(opId);                // the same op, in order
@@ -67,7 +67,7 @@ describe('pending ops and posting', () => {
     expect(p2.posts.at(-1)?.[0]).toBe(s2.sheet.applied_ops[0]);   // the first op sent is the first applied
   });
   test('11: offline leaves the op pending', async () => {
-    const s = new RunSheetStore({ retryAfterMs: 3_600_000 });
+    const s = new RunSheetStore({});
     const p = new FakePoster(); p.answer = { kind: 'offline' }; s.poster = p;
     s.place(paperStory('a', 'A'), 'end'); await s.flushTask;
     expect(s.pending.length).toBe(1);
@@ -120,7 +120,7 @@ describe('pending ops and posting', () => {
   });
   test('sign-out wipes the sheet and the pending ops and posts nothing afterwards', async () => {
     const mem = memory();
-    const s = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
+    const s = new RunSheetStore({ storage: mem });
     const p = new FakePoster(); s.poster = p;
     s.place(paperStory('a', 'A'), 'end'); await s.flushTask;
     await s.wipe();
@@ -417,7 +417,7 @@ describe('the deck\'s own time and ids', () => {
 // and keeps the rest.
 describe('posting backs off and the pending list is bounded', () => {
   const at = { t: Date.parse('2023-11-14T22:00:00Z') };
-  const mk = (extra: Partial<ConstructorParameters<typeof RunSheetStore>[0]> = {}) => { const p = new FakePoster(); const s = new RunSheetStore({ poster: p, now: () => new Date(at.t), retryAfterMs: 3_600_000, ...extra }); return { p, s }; };
+  const mk = (extra: Partial<ConstructorParameters<typeof RunSheetStore>[0]> = {}) => { const p = new FakePoster(); const s = new RunSheetStore({ poster: p, now: () => new Date(at.t), ...extra }); return { p, s }; };
   test('B1-3 a notYet with a Retry-After holds the next post until then; with none the wait doubles from 30 s to 5 min', async () => {
     const { p, s } = mk(); at.t = Date.parse('2023-11-14T22:00:00Z');
     p.answer = { kind: 'notYet', retryAfterMs: 120_000 };
@@ -460,10 +460,10 @@ describe('posting backs off and the pending list is bounded', () => {
   });
   test('B1-8 a restore that cannot read one pending op keeps the sheet and the other ops, and says how many it lost', async () => {
     const mem = memory();
-    const a = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 }); a.place(story('l-1', { placed_by: 'listener' }), 'end', { by: 'listener' }); await a.save();
+    const a = new RunSheetStore({ storage: mem }); a.place(story('l-1', { placed_by: 'listener' }), 'end', { by: 'listener' }); await a.save();
     const saved = JSON.parse(mem.text as string); saved.pending.push({ nonsense: true }, saved.pending[0]); mem.text = JSON.stringify(saved);
     const logs: string[] = []; const log = console.log; console.log = (...x: unknown[]) => { logs.push(x.join(' ')); };
-    const b = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
+    const b = new RunSheetStore({ storage: mem });
     try { await b.restore(); } finally { console.log = log; }
     expect(b.entry('l-1')).toBeDefined(); expect(b.pending.length).toBeGreaterThanOrEqual(1);
     expect(logs.some((l) => /could not be read/.test(l) && /1/.test(l))).toBe(true);
@@ -480,7 +480,7 @@ describe('the pending bound drops whole chains and says so (seat 2, item 6)', ()
     ];
   };
   test('B1-3b a long offline stretch of place, air and end ops is bounded by whole entries: no entry keeps its end without its place', () => {
-    const s = new RunSheetStore({ retryAfterMs: 3_600_000 });
+    const s = new RunSheetStore({});
     const logs: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
     try { for (let i = 0; i < 720; i++) s.pending.push(...chain(i)); s.place(story('l-last', { placed_by: 'listener' }), 'end', { by: 'listener' }); } finally { console.log = log; }
     expect(s.pending.length).toBeLessThanOrEqual(2000);
@@ -492,10 +492,10 @@ describe('the pending bound drops whole chains and says so (seat 2, item 6)', ()
   });
   test('B1-3c a restore trims a list that is over the bound', async () => {
     const mem = memory();
-    const a = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
+    const a = new RunSheetStore({ storage: mem });
     for (let i = 0; i < 720; i++) a.pending.push(...chain(i));
     await a.save();
-    const b = new RunSheetStore({ storage: mem, retryAfterMs: 3_600_000 });
+    const b = new RunSheetStore({ storage: mem });
     const log = console.log; console.log = () => undefined; try { await b.restore(); } finally { console.log = log; }
     expect(b.pending.length).toBeLessThanOrEqual(2000);
   });
@@ -505,7 +505,7 @@ describe('the pending bound keeps the listener\'s acts (gen review)', () => {
   const rm = (i: number, id: string): Op => ({ op_id: `p-${i}-r`, by: 'listener', op: 'remove', id, base_version: 0 } as Op);
   const report = (i: number, id: string): Op => ({ op_id: `p-${i}-a`, by: 'phone', op: 'aired', id, state: 'on_air', position_seconds: 0, base_version: 0 } as Op);
   test('B1-3d acts (remove, move, skip) outlive reports; a skip counts as an end', () => {
-    const s = new RunSheetStore({ retryAfterMs: 3_600_000 });
+    const s = new RunSheetStore({});
     const log = console.log; console.log = () => undefined;
     try {
       s.pending.push(rm(0, 'x-act'));                                                // the oldest op is a listener act with no place in the list
@@ -514,7 +514,7 @@ describe('the pending bound keeps the listener\'s acts (gen review)', () => {
     } finally { console.log = log; }
     expect(s.pending.length).toBeLessThanOrEqual(2000);
     expect(s.pending.some((o) => o.op === 'remove' && o.id === 'x-act')).toBe(true);
-    const t = new RunSheetStore({ retryAfterMs: 3_600_000 });
+    const t = new RunSheetStore({});
     const log2 = console.log; console.log = () => undefined;
     try {
       t.pending.push({ op_id: 'p-sk', by: 'listener', op: 'skip', id: 'z-skipped', ended: { outcome: 'skipped', at: '2023-11-14T22:00:00Z', last_block: 0 }, base_version: 0 } as Op);
@@ -525,7 +525,7 @@ describe('the pending bound keeps the listener\'s acts (gen review)', () => {
     expect(t.pending.filter((o) => o.op === 'place').length).toBeGreaterThan(1990);
   });
   test('B1-3e the bound holds even when one chain is the whole excess', () => {
-    const s = new RunSheetStore({ retryAfterMs: 3_600_000 });
+    const s = new RunSheetStore({});
     const log = console.log; console.log = () => undefined;
     try { for (let i = 0; i < 2100; i++) s.pending.push(report(i, 'only')); s.place(story('l-last', { placed_by: 'listener' }), 'end', { by: 'listener' }); } finally { console.log = log; }
     expect(s.pending.length).toBeLessThanOrEqual(2000);

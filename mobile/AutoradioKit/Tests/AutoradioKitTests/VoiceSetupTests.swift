@@ -13,7 +13,13 @@ final class VoiceSetupTests: XCTestCase {
     func testPlanStartsWhereThePhoneFitsAndEndsOnAFloor() {
         // failure 1
         let big = SetupCatalog.plan(for: device(8))
-        XCTAssertEqual(big[.transcriber]!.map(\.id), ["fluid-speech-mini", "parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "apple-speech"])
+        XCTAssertEqual(big[.transcriber]!.map(\.id), ["fluid-speech-pro", "fluid-speech-mini", "parakeet-tdt-0.6b-v2", "parakeet-eou-120m", "apple-speech"])
+        let six = SetupCatalog.plan(for: device(5.6))       // an iPhone 14 Pro Max or 15 reads about 5.6 GB: Mini, not Pro
+        XCTAssertEqual(six[.transcriber]!.first?.id, "fluid-speech-mini", "Pro is recommended from the 8 GB class (about 7.4 GB read) up")
+        XCTAssertEqual(SetupCatalog.plan(for: device(7.4))[.transcriber]!.first?.id, "fluid-speech-pro")
+        XCTAssertEqual(SetupCatalog.plan(for: device(11.4))[.transcriber]!.first?.id, "fluid-speech-pro")
+        var sixFree = device(5.6); sixFree.availableMemoryMB = 4000      // plenty free, still not Pro: the phone is too small for it
+        XCTAssertEqual(SetupCatalog.plan(for: sixFree)[.transcriber]!.first?.id, "fluid-speech-mini")
         let mid = SetupCatalog.plan(for: device(4))
         XCTAssertEqual(mid[.transcriber]!.first?.id, "fluid-speech-mini")
         XCTAssertEqual(SetupCatalog.plan(for: device(3))[.transcriber]!.first?.id, "parakeet-eou-120m", "a 3 GB phone starts at the smaller listener")
@@ -22,13 +28,13 @@ final class VoiceSetupTests: XCTestCase {
         XCTAssertEqual(small[.transcriber]!.map(\.id), ["apple-speech"])
         XCTAssertEqual(small[.voice]!.map(\.id), ["system-voice"])
         for s in SetupStage.allCases { XCTAssertTrue(SetupCatalog.plan(for: device(0.5))[s]!.last!.isFloor, "every ladder ends in something that exists") }
-        XCTAssertEqual(SetupCatalog.plan(for: device(8), smaller: true)[.transcriber]!.first?.id, "parakeet-tdt-0.6b-v2")
+        XCTAssertEqual(SetupCatalog.plan(for: device(8), smaller: true)[.transcriber]!.first?.id, "fluid-speech-mini")
     }
 
     func testTotalIsSaidPlainly() {
         let big = SetupCatalog.plan(for: device(8))
-        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + KnownModels.fluidSpeechMini.totalBytes + 250_000_000 + 350_000_000 + 639_446_688, "the decision and the responder share one file: counted once")
-        XCTAssertEqual(SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(big), onWiFi: true), "About 1.5 GB. On Wi-Fi this takes a few minutes.")
+        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + KnownModels.fluidSpeechPro.totalBytes + KnownModels.kokoroBytes + 639_446_688, "the decision and the responder share one file: counted once")
+        XCTAssertEqual(SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(big), onWiFi: true), "About 1.7 GB. On Wi-Fi this takes a few minutes.")
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("1.4 GB"))
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("mobile data"), "failure 7")
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 0, onWiFi: true).hasPrefix("Nothing to download"))
@@ -52,7 +58,7 @@ final class VoiceSetupTests: XCTestCase {
     func testStallIsReportedAndFallbackOnRequest() async throws {
         // failure 2
         let m = ScriptedSetupBackend.Model(chunks: 10, stallAt: 3, checkOK: nil, checkNote: nil, checkMs: nil)
-        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(8), stallSeconds: 0.4, patience: 30, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["fluid-speech-mini": m])), profile: device(5.6), stallSeconds: 0.4, patience: 30, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))   // a 6 GB phone: Mini is first
         let run = Task { await s.run() }
         var stalled = false
         for _ in 0..<100 {
@@ -182,7 +188,7 @@ final class SetupReadinessTests: XCTestCase {
     }
     func testR1AModelTheCheckRejectedIsNotReady_AndTheOneThatPassedIs() async {
         let ready = MemoryVoiceReadiness(); ready.markReady(model: "fluid-speech-mini")           // a leftover mark (an older build)
-        let s = VoiceSetup(backend: Backend(rejects: ["fluid-speech-mini"]), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: ready))
+        let s = VoiceSetup(backend: Backend(rejects: ["fluid-speech-mini"]), profile: device(5.6), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: ready))
         await s.run(only: [.transcriber])
         XCTAssertFalse(ready.isReady(model: "fluid-speech-mini"), "it failed its check on this phone: the listener must not choose it")
         let chosen = s.record.items.first { $0.stage == "transcriber" }?.chosen
@@ -190,11 +196,11 @@ final class SetupReadinessTests: XCTestCase {
     }
     func testR2APassingModelAndItsCompanionsAreReadyOnlyAfterTheCheck() async {
         let ready = MemoryVoiceReadiness()
-        let s = VoiceSetup(backend: Backend(rejects: []), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: ready))
+        let s = VoiceSetup(backend: Backend(rejects: []), profile: device(5.6), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: ready))
         XCTAssertFalse(ready.isReady(model: "fluid-speech-mini"), "nothing is ready before setup ran")
         await s.run(only: [.transcriber])
         XCTAssertTrue(ready.isReady(model: "fluid-speech-mini"))
-        for c in ListenerPipeline.companions(of: "fluid-speech-mini") { XCTAssertTrue(ready.isReady(model: c), "the live-words model comes with it") }
+        for c in ListenerPipeline.companions(of: "fluid-speech-mini") { XCTAssertFalse(ready.isReady(model: c), "the live-words model has its own row, its own press and its own agreement: a row's Download fetches and verifies only that model") }
     }
     func testR3ThePageReadsTheSameRecord() {
         let ready = MemoryVoiceReadiness(); ready.markReady(model: "fluid-speech-mini")
@@ -220,5 +226,49 @@ final class QueuedRowTests: XCTestCase {
         await t.value
         XCTAssertEqual(s.rows.first { $0.stage == "bounds" }?.state, "ready", "queued heartbeats kept the stall watchdog quiet")
     }
-}
 
+    // Review 2026-11-24 (seat 1): a press on a row is the agreement for THAT model's files, so setup fetches, verifies and sizes only the model it was asked for; and a row's download that fails fails AS ITSELF.
+    //  C1 a batch recogniser's ladder row is its own size, and its check is the only check that runs (no companion is verified or marked).
+    //  C2 a row download (`rowDownload`) that fails ends the run at once: the row says failed, nothing is waited for, the floor is not marked ready in its place, no record item is written, and the run is finished (other rows are free).
+    //  C3 a row download whose check fails ends the same way.
+    private var phone56: DeviceProfile { DeviceProfile(chip: "test", memoryGB: 5.6, freeDiskGB: 40, onWiFi: true) }
+    func testC1ASetupRowIsItsOwnSizeAndItsOwnCheck() async {
+        for id in ["fluid-speech-pro", "fluid-speech-mini"] {
+            let want = id == "fluid-speech-pro" ? KnownModels.fluidSpeechPro.totalBytes : KnownModels.fluidSpeechMini.totalBytes
+            XCTAssertEqual(SetupCatalog.ladder(.transcriber).first { $0.id == id }?.bytes, want, "\(id): no companion's bytes are added")
+        }
+        XCTAssertEqual(SetupCatalog.ladder(.transcriber).first { $0.id == "parakeet-tdt-0.6b-v2" }?.bytes, 480_000_000)
+        final class Checked: @unchecked Sendable { let l = NSLock(); var ids: [String] = []; func add(_ i: String) { l.lock(); ids.append(i); l.unlock() } }
+        let seen = Checked()
+        struct B: SetupBackend { let seen: Checked
+            func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws { seen.add("download " + c.id) }
+            func check(_ c: SetupCandidate) async throws -> SetupCheck { seen.add("check " + c.id); return SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: true, note: "") } }
+        let s = VoiceSetup(backend: B(seen: seen), profile: phone56, stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
+        await s.run(only: [.transcriber])
+        XCTAssertEqual(seen.ids, ["download fluid-speech-mini", "check fluid-speech-mini"], "nothing else is fetched or checked")
+    }
+    func testC2ARowDownloadThatFailsFailsAtOnceAndLeavesTheOtherRowsFree() async {
+        struct Down: Error {}
+        struct B: SetupBackend {
+            func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws { throw Down() }
+            func check(_ c: SetupCandidate) async throws -> SetupCheck { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: true, note: "") } }
+        let rec = MemoryVoiceReadiness()
+        let s = VoiceSetup(backend: B(), profile: phone56, stallSeconds: 5, patience: 60, maxTries: 3, rowDownload: true, verifier: ReadinessVerifier(record: rec))
+        let t0 = Date()
+        await s.run(only: [.transcriber])
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 5, "it did not wait the patience out")
+        let row = s.rows.first { $0.stage == "transcriber" }!
+        XCTAssertEqual(row.state, "failed"); XCTAssertTrue(row.statusLine.contains("The download failed"), row.statusLine)
+        XCTAssertFalse(rec.isReady(model: "apple-speech")); XCTAssertNil(s.record.items.first { $0.stage == "transcriber" }, "no floor was recorded as the choice in its place")
+        XCTAssertTrue(s.isFinished, "the run is over: the other rows may start")
+    }
+    func testC3ARowDownloadWhoseCheckFailsEndsTheSameWay() async {
+        struct B: SetupBackend {
+            func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws {}
+            func check(_ c: SetupCandidate) async throws -> SetupCheck { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: false, note: "It did not load.") } }
+        let s = VoiceSetup(backend: B(), profile: phone56, stallSeconds: 5, patience: 60, maxTries: 1, rowDownload: true, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
+        await s.run(only: [.transcriber])
+        let row = s.rows.first { $0.stage == "transcriber" }!
+        XCTAssertEqual(row.state, "failed"); XCTAssertTrue(row.statusLine.contains("It did not load."), row.statusLine); XCTAssertNil(s.record.items.first { $0.stage == "transcriber" })
+    }
+}

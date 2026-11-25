@@ -1,8 +1,13 @@
 # App Privacy label answers for Autoradio 1
 
-Still open for the owner:
+Checked 2026-11-24 against data-inventory.md (read 2026-11-23, at account-delete's edits) and the code of origin/main plus the lanes of 2026-11-24. This file is the answer sheet for App Store Connect, App Privacy. **Typing it is the owner's act in the web form**: the App Store Connect API has no App Privacy resource (`GET /v1/apps/6838500877/appPrivacy` answers 404 "The relationship 'appPrivacy' does not exist", 2026-11-24), so no key can fill it. Apple's "Publish" on that page is also the owner's.
 
-- Whether a provider's training on request text counts as a further purpose on the label beyond App Functionality (see the note under the table). The owner picks the conservative answer.
+Decisions made here, with the conservative option taken as the standing rule says (owner may reverse each):
+
+- Provider training: declare **Other Purposes** in addition to App Functionality on the three types whose text can reach a model provider (Other User Content, Emails or Text Messages, Search History). Reason: the beta ruling says some providers may train on what is sent; the label should not say less than the policy.
+- Time zone and local time sent with the programme request are not Location. Answer No.
+- Server log lines (truncated IP, eight characters of the user id) are declared as Other Diagnostic Data, App Functionality.
+- Account deletion landing (lane account-delete) changes no answer.
 
 Rulings applied (owner, 2026-11-23): one app, so mail and takes ship and their rows are Yes; during the beta every account is free tier and providers may train on what is sent; minimum age 16; account created with an email address and a passkey inside the app. The publisher is Choir Harmonic Intelligence Platform, Inc.
 
@@ -12,7 +17,46 @@ Tracking: No. No data is used to track people across other companies' apps or si
 
 Third-party partners: the AI model and search providers in the policy process data for us as service providers. Apple asks that data collected by third-party partners in your app be declared as collected. The types below already include it.
 
-## Answers, type by type
+## The exact answers to type (2026-11-24)
+
+Screen 1, "Do you or your third-party partners collect data from this app?": **Yes, we collect data.**
+
+Screen 2, data types. Tick exactly these eight, nothing else:
+
+| Section | Type | Linked to the user | Used to track | Purposes to tick |
+|---|---|---|---|---|
+| Contact Info | Email Address | Yes | No | App Functionality |
+| Identifiers | User ID | Yes | No | App Functionality |
+| User Content | Emails or Text Messages | Yes | No | App Functionality; Other Purposes |
+| User Content | Audio Data | Yes | No | App Functionality |
+| User Content | Other User Content | Yes | No | App Functionality; Other Purposes |
+| Search History | Search History | Yes | No | App Functionality; Other Purposes |
+| Usage Data | Product Interaction | Yes | No | App Functionality; Product Personalization |
+| Diagnostics | Other Diagnostic Data | Yes | No | App Functionality |
+
+Screen 3, tracking: **No** for every type ("Do you use data for tracking": No). Do not add tracking domains.
+
+Not ticked (answered No by omission): Name, Phone Number, Physical Address, Other Contact Info; Health; Fitness; Payment Info; Credit Info; Other Financial Info; Precise Location; Coarse Location; Sensitive Info; Contacts; Photos or Videos; Gameplay Content; Customer Support; Browsing History; Device ID; Purchase History; Advertising Data; Other Usage Data; Crash Data; Performance Data; Other Data Types.
+
+Privacy Choices URL: leave empty. Privacy Policy URL: `https://choir.news/privacy` (field of the app info, not of this form). After typing, press Publish in the form.
+
+Each tick against the code:
+
+- Email Address: required for an account, `internal/auth/store.go:29-33`; the create-account screen takes it (`onboarding.contract` signup-email).
+- User ID: account id and the key id, `internal/auth/store.go`.
+- Emails or Text Messages: Mail page reads and writes the listener's mail on their computer (`mail.contract`, `mail.ts`).
+- Audio Data: a take uploads recorded voice only when Publish is pressed (`takes.ts`, 3 to 60 s). Voice turns send text, not audio (data-inventory section 1).
+- Other User Content: spoken and typed request text, notebook, documents, imported files, files; the computer holds them.
+- Search History: searches of the paper reach the server; podcast searches go straight to Apple and are Apple's.
+- Product Interaction: run sheet operations, more and less taps, edition topics, podcast subscriptions.
+- Other Diagnostic Data: server access logs, conservative.
+- Not collected, verified: no analytics, advertising or crash SDK (data-inventory section 1); no IDFA, IDFV or hardware id; the app asks for no location permission. A "report a story" action does not exist, so nothing is collected by it.
+
+Third-party partners: the model and search providers process request text for us; their handling is inside the Other Purposes tick. Hugging Face and Apple's podcast search see the phone's address; the form has no type for an IP address in transit, and the policy says so (privacy-policy.md section 5).
+
+Re-check at upload time: if lane voice-models changes what a model download sends, or lane account-delete's receipt changes the logs, re-read this sheet.
+
+## Answers, type by type (the reasoning and the evidence)
 
 "Linked to the user" = yes for every type collected, because it lives on the account's computer or is tied to the account. "Used for tracking" = no for every type.
 
@@ -67,4 +111,4 @@ Age: the minimum age is 16 and the age-rating answers give 16+. The app has no a
 
 ## Privacy manifest
 
-LAB/PrivacyInfo.xcprivacy declares tracking false and four required-reason API categories. It declares no collected data types. Add NSPrivacyCollectedDataTypes to match the table above so Xcode's privacy report agrees with the label. The research doc marks this as not enforced for an app's own manifest and worth doing for honesty.
+LAB/PrivacyInfo.xcprivacy declares tracking false and four required-reason API categories. It declares no collected data types. Add NSPrivacyCollectedDataTypes to match the table above so Xcode's privacy report agrees with the label. The research doc marks this as not enforced for an app's own manifest and worth doing for honesty. Not required for the first upload; the owner may defer it.

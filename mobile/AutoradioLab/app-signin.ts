@@ -12,6 +12,13 @@
 // the one place the key lives) and writes none of them at sign-in.
 import passkeyApps from './passkey-apps.json';
 import { CeremonyError, ceremonyMessage, createCeremony, getCeremony, postPublic, refusal, sendRegisterCode, type CeremonyEnv, type Proof } from './passkey-ceremony.ts';
+import { plainDate } from './account-delete.ts';
+
+/** The server answers a passkey sign-in of an account whose deletion is pending with 403 `account_deletion_pending` and a one-use cancel token (internal/auth/deletion_handlers.go); no key is made. */
+export const CANCEL_DELETION_PATH = '/auth/account/delete/cancel';
+class DeletionPending extends Error { constructor(readonly token: string, readonly purgeOn: string) { super('account_deletion_pending'); } }
+class DeletionPurging extends Error { constructor() { super('account_deletion_purging'); } }
+let offer: { token: string; purgeOn: string } | null = null;
 
 export type Mode = 'create' | 'signin' | 'reviewer';
 type CeremonyMode = Exclude<Mode, 'reviewer'>;
@@ -57,10 +64,10 @@ export function step(a: Attempt, e: Event): Attempt {
   }
 }
 
-export type View = { phase: Phase; pending: boolean; mode: string; message: string; rev: number };
+export type View = { phase: Phase; pending: boolean; mode: string; message: string; /** Cancel deletion is on offer (the account was found pending). Never the token. */ offer: boolean; rev: number };
 export function view(a: Attempt | null, rev = 0): View {
-  if (!a) return { phase: 'idle', pending: false, mode: '', message: '', rev };
-  return { phase: a.phase, pending: a.phase === 'working', mode: a.mode, message: a.phase === 'failed' ? a.message : '', rev };
+  if (!a) return { phase: 'idle', pending: false, mode: '', message: '', offer: false, rev };
+  return { phase: a.phase, pending: a.phase === 'working', mode: a.mode, message: a.phase === 'failed' ? a.message : '', offer: offer !== null && a.phase !== 'working', rev };
 }
 
 export type SignInEnv = {
@@ -81,7 +88,7 @@ export type SignInEnv = {
 let pendingProof: { email: string; proof: Proof; } | null = null;
 let cur: Attempt | null = null;
 let rev = 0;
-export const resetAttempt = (): void => { cur = null; rev = 0; pendingProof = null; };
+export const resetAttempt = (): void => { cur = null; rev = 0; pendingProof = null; offer = null; };
 export const signInView = (): View => view(cur, rev);
 const left = (id: string): { phase: Phase; rev: number } => ({ phase: cur && cur.id === id ? cur.phase : 'cancelled', rev });
 const live = (id: string): boolean => cur !== null && cur.id === id && cur.phase === 'working';
@@ -105,6 +112,11 @@ const str = (o: unknown, k: string): string => (o && typeof o === 'object' && ty
 async function finish(env: SignInEnv, mode: CeremonyMode, credential: unknown): Promise<Minted> {
   const path = mode === 'create' ? '/auth/app/register/finish' : '/auth/app/login/finish';
   const r = await postPublic(env.ceremony, path, { app: env.appId, credential });
+  if (r.status === 403 && str(r.body, 'error') === 'account_deletion_pending' && str(r.body, 'cancel_token') !== '') {
+    throw new DeletionPending(str(r.body, 'cancel_token'), plainDate(str(r.body, 'purge_after')));
+  }
+  // The 72 hours are over and the removal has begun: no key, no cancel, and the words say so.
+  if (r.status === 403 && str(r.body, 'error') === 'account_deletion_purging') throw new DeletionPurging();
   if (r.status !== 200) throw refusal(r);
   const key = str(r.body, 'api_key'), keyId = str(r.body, 'key_id');
   if (!key.startsWith('choir_sk_') || keyId === '') throw new CeremonyError('failed', 'the server sent no key');
@@ -115,6 +127,7 @@ async function finish(env: SignInEnv, mode: CeremonyMode, credential: unknown): 
 export async function signInRun(env: SignInEnv, mode: CeremonyMode, email = '', code = ''): Promise<{ phase: Phase; rev: number }> {
   if (cur && cur.phase === 'working') dispatch(env, { t: 'cancel', id: cur.id });
   const id = env.newId();
+  offer = null;
   adopt(env, begin(id, mode));
   let minted: Minted | null = null;
   try {
@@ -147,8 +160,46 @@ export async function signInRun(env: SignInEnv, mode: CeremonyMode, email = '', 
     dispatch(env, { t: 'done', id });
   } catch (e) {
     if (minted) await env.revoke(minted.key, minted.keyId).catch(() => undefined);       // minted and not kept (the store refused): revoked
-    const message = ceremonyMessage(e, mode);
-    env.log(`signin: attempt ${id.slice(0, 6)} ${mode} ended: ${e instanceof CeremonyError ? e.kind : 'error'}`);
+    let message = ceremonyMessage(e, mode);
+    if (e instanceof DeletionPurging) message = 'This account is being removed now. The removal has begun and cannot be cancelled.';
+    if (e instanceof DeletionPending) {
+      if (live(id)) offer = { token: e.token, purgeOn: e.purgeOn };
+      message = `This account is scheduled for deletion${e.purgeOn ? `; the removal begins after ${e.purgeOn}` : ''}. It has not begun. Cancel the deletion to keep it.`;
+    }
+    env.log(`signin: attempt ${id.slice(0, 6)} ${mode} ended: ${e instanceof DeletionPending ? 'deletion-pending' : e instanceof DeletionPurging ? 'deletion-purging' : e instanceof CeremonyError ? e.kind : 'error'}`);
+    dispatch(env, { t: 'failed', id, message });
+  }
+  return left(id);
+}
+
+/** "Cancel deletion", pressed on the offer a sign-in of a pending account left. The token is one-use and goes once; the answer is the app's key, kept like a sign-in's. */
+export async function signInCancelDeletion(env: SignInEnv): Promise<{ phase: Phase; rev: number }> {
+  if (!offer || (cur && cur.phase === 'working')) return { phase: cur ? cur.phase : 'idle', rev };
+  const { token, purgeOn } = offer;
+  offer = null;                                                     // spent on this press, whatever the answer
+  const id = env.newId();
+  adopt(env, begin(id, 'signin'));
+  let minted: Minted | null = null;
+  try {
+    const r = await postPublic(env.ceremony, CANCEL_DELETION_PATH, { cancel_token: token, app: env.appId });
+    if (r.status === 409) throw new CeremonyError('failed', 'begun');
+    if (r.status === 503 || r.status === 0) { offer = { token, purgeOn }; throw refusal(r); }       // nothing happened server-side: the offer stays
+    if (r.status !== 200) throw new CeremonyError('failed', 'expired');
+    const key = str(r.body, 'api_key'), keyId = str(r.body, 'key_id');
+    if (!key.startsWith('choir_sk_') || keyId === '') throw new CeremonyError('failed', 'the server sent no key');
+    minted = { key, keyId };
+    if (!live(id)) { await env.revoke(key, keyId).catch(() => undefined); return left(id); }
+    env.keep(key, keyId);
+    minted = null;
+    dispatch(env, { t: 'done', id });
+  } catch (e) {
+    if (minted) await env.revoke(minted.key, minted.keyId).catch(() => undefined);
+    if (e instanceof CeremonyError && e.kind === 'offline' && !offer) offer = { token, purgeOn };   // no answer came: the token may be unspent
+    const why = e instanceof CeremonyError ? e.message : '';
+    const message = why === 'begun' ? 'The removal has begun and cannot be undone.'
+      : why === 'expired' ? 'The offer to cancel ran out. Please sign in again.'
+      : ceremonyMessage(e, 'signin');
+    env.log(`signin: cancel deletion ended: ${why === 'begun' ? 'begun' : why === 'expired' ? 'expired' : e instanceof CeremonyError ? e.kind : 'error'}`);
     dispatch(env, { t: 'failed', id, message });
   }
   return left(id);
@@ -172,6 +223,7 @@ const REVIEWER_WORDS: Record<number, string> = {
  * passkey flow; the server answers a key for one account with a narrow grant. Nothing here logs the user name or the password, and neither is kept: they live in this call's arguments only. */
 export async function reviewerRun(env: SignInEnv, username: string, password: string): Promise<{ phase: Phase; rev: number }> {
   if (cur && cur.phase === 'working') dispatch(env, { t: 'cancel', id: cur.id });
+  offer = null;
   const id = env.newId();
   adopt(env, begin(id, 'reviewer'));
   let minted: Minted | null = null;
@@ -197,6 +249,6 @@ export async function reviewerRun(env: SignInEnv, username: string, password: st
 /** Opening the screen again after an end starts clean: an old "failed" or "done" is not shown to the next person. */
 export function signInReset(env: SignInEnv): { phase: Phase; rev: number } {
   if (cur && cur.phase === 'working') return { phase: cur.phase, rev };
-  if (cur) { cur = null; rev += 1; env.publish?.(view(null, rev)); }
+  if (cur) { cur = null; offer = null; rev += 1; env.publish?.(view(null, rev)); }
   return { phase: 'idle', rev };
 }

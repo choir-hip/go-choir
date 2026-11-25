@@ -516,7 +516,13 @@ word error on a 31-minute stream) where upstream gave 2.05%.
 
 **Licence and credit (verified, `LICENSE` and `NOTICE`).** CC BY 4.0. It asks for the credit "Fluid Speech Mini by FluidVoice. Built on
 NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra.", a link to the licence, and that LICENSE and NOTICE stay with the files (the
-store fetches both into the model's folder). The credit text is `KnownModels.fluidSpeechMini.credit`. The credit is shown beside the option on Settings > Downloads and the first-run welcome (section 12); the About page still shows only the build and server commits.
+store fetches both into the model's folder). The credit text is `KnownModels.fluidSpeechMini.credit`. The credit is shown beside the option on Settings > Voice and models and the first-run welcome (section 12); the About page still shows only the build and server commits.
+
+**Credits are data on the model row** (2026-11-24). `ModelCandidate.credit` carries the text an attribution licence asks for; a row with
+pinned files takes it from its bundle. Besides the two Fluid Speech models, two CC BY 4.0 rows carry one: Parakeet TDT 0.6B v2 (NVIDIA;
+`license: cc-by-4.0` on `nvidia/parakeet-tdt-0.6b-v2` and on `FluidInference/parakeet-tdt-0.6b-v2-coreml`, read 2026-11-24) and Pocket TTS
+(Kyutai; `license: cc-by-4.0` on `FluidInference/pocket-tts-coreml`). Their wording is ours: neither repository was checked for a NOTICE
+file that asks for a particular sentence. `ModelListTests` L8 fails when a CC BY row has no credit. No page shows credits yet.
 
 **How the app fetches it.** Through the model store (`ModelStore.ensureBundle`), file by file, resumable, each file checked against its
 SHA-256 before it is moved into place, only from voice setup's fetch after the person has agreed (the lane `onboard-consent` owns the
@@ -565,6 +571,112 @@ embedding models (WeSpeaker, CAM++) and the fusion file, behind the existing `Sp
 ## 12. How a model reaches the phone, and when it is ready (onboard-consent, 2026-11-24)
 
 - **One door.** `DownloadDoor` is the only way a model file is fetched: `ModelStore.ensure` and `ensureBundle`, the voice print (`WeSpeakerEmbedder`), the provider's library downloads (`HubModelProvider.fetch`, the Parakeet stage) all ask it. It refuses a model whose group (the voice, hearing you and the rest, search) the person has not agreed to; shared code pushes its consent record to it (`obConsent`). A Wi-Fi agreement gets a URLSession with cellular, expensive and constrained access off; only "agreed-mobile" leaves them on. A model that is in no group is refused. FluidAudio downloads on its own session, which cannot be configured, so its registry is CLOSED (`ModelRegistry.baseURL` = `https://models.invalid`) from the registration on and repointed at the real host only inside `DownloadDoor.libraryWindow` (consent, a covered path, and the transfer cancelled when the path leaves Wi-Fi under a Wi-Fi agreement). Local entry points used: `AsrModels.loadLocal` (AsrModels.swift:383), `StreamingEouAsrManager.loadModels(from:)` (:330). Without one (Silero `VadManager.swift:110`, Kokoro, Pocket, Phonon): wrapped by the closed registry only.
-- **Readiness is derived.** A model is ready when a check passed for the pin it has now (`ModelPins`: a bundle's commit and digests, a GGUF's SHA-256, or for a library-managed model the library version and the id) and its files are present by exact length. A library-managed model's files are listed in a MANIFEST (path, length, SHA-256) written at the pass (trust on the first consented fetch); the digests are recorded at the pass and compared when a later check fails (a model whose files changed is deleted, one whose files are intact is kept and the failure is said); lengths at every launch; the check that grants readiness is a cold load with the registry closed, under the door's exclusive slot; a fetch or a failed check deletes the manifest first. A bundle's and a GGUF's digests were checked by the store at the fetch; presence afterwards is by length. A companion is checked itself. Library models with no local-only load (Kokoro, Pocket, Phonon, Silero) are offered only once their manifest exists, from Settings > Downloads.
+- **Readiness is derived.** A model is ready when a check passed for the pin it has now (`ModelPins`: a bundle's commit and digests, a GGUF's SHA-256, or for a library-managed model the library version and the id) and its files are present by exact length. A library-managed model's files are listed in a MANIFEST (path, length, SHA-256) written at the pass (trust on the first consented fetch); the digests are recorded at the pass and compared when a later check fails (a model whose files changed is deleted, one whose files are intact is kept and the failure is said); lengths at every launch; the check that grants readiness is a cold load with the registry closed, under the door's exclusive slot; a fetch or a failed check deletes the manifest first. A bundle's and a GGUF's digests were checked by the store at the fetch; presence afterwards is by length. A companion is checked itself. Library models with no local-only load (Kokoro, Pocket, Phonon, Silero) are offered only once their manifest exists, from Settings > Voice and models.
 - **One readiness record, one writer.** `Voices.readiness` is read-only for everything; `ReadinessVerifier` marks a model ready only after the check on this phone passed (setup's check, or the same check after a voice card's fetch) and demotes it on a failed one. Fetching marks nothing. The engine's listener choice and the Downloads page read the same record.
-- **The credit.** A licence that asks for one (CC BY 4.0) has its credit on the list entry (`ModelListEntry.credit`), shown beside the option on Settings > Downloads and the first-run welcome; a test fails for a CC model without one.
+- **The credit.** A licence that asks for one (CC BY 4.0) has its credit on the list entry (`ModelListEntry.credit`), shown beside the option on Settings > Voice and models and the first-run welcome; a test fails for a CC model without one.
+
+## 12. Fluid Speech Pro, the larger recogniser (2026-11-24)
+
+Owner, 2026-11-24: "for voice models, fluid speech pro is better than parakeet. so fluid speech mini or pro is the way to go rn"; "the
+recognizers should be part of the onboarding, with the recommended one (eg fluid speech mini vs pro) depending on device size". Each claim in the
+survey notes (652 MB; built on Parakeet v3; "tested on Mac only"; "needs a fork of the library we pin") was checked against the primary source.
+
+**What exists (verified, `GET https://huggingface.co/api/models/FluidVoice-Labs/<name>`, no credentials, 2026-11-24).** One model, five builds:
+`fluid-speech-pro` (NeMo + Transformers, 2.6 GB, the reference), `-onnx`, `-gguf`, `-mlx` and `-coreml`. The Core ML build is
+`FluidVoice-Labs/fluid-speech-pro-coreml`, commit `3b9d38a93d606f84011e5a0a669b7ea146375a22` (last modified 2026-11-13), CC BY 4.0, not gated.
+The loader reads 23 files, 652,324,639 bytes in all (**652 MB: true**): encoder weights 613,088,448 (8-bit, one scale per output channel),
+decoder 23,604,992, joint 12,642,764, preprocessor 2,150,580, vocabulary 151,122; every size and SHA-256 is in `KnownModels.fluidSpeechPro` (the LFS
+digests re-checked against the API, the small files hashed on the bytes at that commit; the store checks all of them on download). Languages: 25
+European (English included), detected automatically, with punctuation; the base is NVIDIA Parakeet TDT 0.6B v3 plus Moondream Parakeet Ultra
+(**built on Parakeet v3: true**), with one extra block between the encoder's subsampling and its first Conformer layer, already inside the
+compiled encoder. `config.json`: minimum iOS 18 and macOS 15, 15 s windows, blank 8192. Credit, from `NOTICE`: "Fluid Speech Pro by FluidVoice.
+Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra." with LICENSE and NOTICE kept beside the files; the store fetches both.
+The card says "Clean mode" (dropping fillers) is not in this build yet.
+
+**The loader (verified, FluidAudio source).** The vendor's example calls `AsrModels.load(from:, version: .fluidParakeetPro)`, a case that exists only in
+the `altic-dev/FluidAudio` fork (commit `9e15ef9`, 2026-10-24). That commit only adds the enum case and routes it to the same v3 decoder; Pro has the v3
+contract (Preprocessor, Encoder, Decoder, JointDecision, 8192 plus blank, 15 s window). **"Needs a fork of the library we pin": false for us.** Upstream
+0.18.3, the pin, loads it as `AsrModels.loadLocal(from: dir, version: .ultra)` (the v3 family with one encoder build), exactly as Mini does, once the
+joint network is copied to `JointDecisionv3.mlmodelc` (`ModelBundleSpec.copies`). The pin did not change. The fork stays unused (its long-audio stitching
+dropped spans, section 11). **"Tested on Mac only": true** (the card: "Tested on Mac only so far"); the model's own numbers are an M5 Max; no iPhone
+figure exists from the vendor or from us.
+
+**Built.** `FluidSpeechProTranscriber` (stage `fluid-speech-pro`, `AutoradioModels/FluidSpeechPro.swift`: Mini's stage and session with Pro's files and its own
+slot), the pin, the candidate row (rank 95, above Mini's 90), the setup ladder row, the fetch and check in `HubModelProvider`, a case in `ModelProof`.
+
+**The per-device rule.** Pro is the first recogniser in the ladder for a phone whose physical memory reads 7 GB or more, and Mini for every other
+phone that can hold it (4 GB or more); the model list's entry says the same (`recommendedFor` minimum 7 GB). A phone reads a little under its nominal
+memory (about 5.6 GB for a 6 GB phone, about 7.4 GB for an 8 GB one), so the line at 7 puts these iPhones on **Pro**: iPhone 15 Pro, 15 Pro Max, 16, 16e,
+16 Plus, 16 Pro, 16 Pro Max, 17, 17 Pro and later 8 GB and 12 GB models, Air; and on **Mini**: iPhone 13 Pro, 14 Pro, 14 Pro Max (the owner's, 6 GB), 15 and
+15 Plus, and anything older that is supported. Setup's plan now also passes over a model whose `minMemoryGB` the phone does not meet even when
+free memory is large (before, only the free-memory test applied when the phone reported it). Pro's row asks for 900 MB (its 652 MB of weights
+mapped, plus the live-words model's 250 MB; Mini's row asks 550), kept with the 600 MB headroom. **These memory figures are not measured on a phone:
+the recommendation by size is a rule from file sizes and the vendor's "about 250 MB" Mac figure, and the first phone run decides it.** Not built: the
+person's choice of the other recogniser in onboarding (the ladder offers the recommended one and, on "smaller", the next).
+
+**Measured on the Mac, 2026-11-24 (M-series Mac, not a phone; FluidAudio 0.18.3; one model per process, through the stages the app runs; `AUTORADIO_REAL_SPEECH=<folder> AUTORADIO_REAL_MODEL=pro|mini|tdt-v2 swift test --filter testMeasureOneModelOnRealSpeech`).**
+Corpus word error (reference lower-cased, punctuation dropped; no filler removal), time per second of audio, as before:
+
+| Set | Fluid Speech Pro | Fluid Speech Mini | Parakeet TDT 0.6B v2 |
+| --- | --- | --- | --- |
+| LibriSpeech clean validation, 73 clips, 8.0 min, 1,169 words | 3.76% (0.024) | 3.93% (0.020) | 2.57% (0.018) |
+| LibriSpeech other validation, 100 clips, 10.0 min, 1,828 words (harder readers) | 3.39% (0.028) | 3.56% (0.020) | 3.06% (0.024) |
+| AMI single distant microphone, test, 47 clips of 4 words or more, 2.6 min, 581 words (far-field meeting speech, `edinburghcstr/ami` `sdm`, CC BY 4.0) | 35.80% (0.031) | 40.79% (0.028) | 38.04% (0.036) |
+
+Read: Pro is better than Mini on all three sets (by 0.2 to 5 points) and slower by about a quarter to a half, on the Mac. It is **not** better than
+Parakeet TDT v2 on read English (clean 3.76 against 2.57, other 3.39 against 3.06); it is better on the far-field set (35.8 against 38.0). The AMI figures
+are high for all three because the references are the meeting transcript with spoken fillers ("um") and no normalisation, and the audio is a
+distant microphone; compare the three with each other, not with a published figure. The owner's "better than parakeet" holds against the v3 Parakeet the vendor
+compares with and on noisy speech; our English v2 stage is not that model. Pro's rank (95) follows the owner's choice and these numbers' order against Mini.
+
+Load: first load on the Mac, with Core ML specialising for the Neural Engine, 19.9 s (a cold first run through the stage); every later load in these
+runs 0.2 to 0.5 s (the vendor says 8 s then 0.2 s on an M5 Max). Memory: the kernel's physical-footprint peak of the process was 150 to 174 MB for Pro and
+138 to 172 MB for Mini on the first two sets; **this ledger does not count the weights Core ML maps for the Neural Engine, so it cannot tell the two
+apart and is not a figure for a phone** (Parakeet v2: 98 to 111 MB by the same ledger). The vendor's "about 250 MB peak" is the card's number, not ours.
+Re-run by the taking-over builder on the clean set, one model per process under `/usr/bin/time -l` (same test, 2026-11-24): Pro 3.76%, 0.018 s per s of audio, load 0.6 s warm, peak footprint 200 MB;
+Mini 3.93%, 0.020, 0.4 s, 196 MB; Parakeet v2 2.57%, 0.017, 0.5 s, 136 MB; maximum resident set 216 to 219 MB for all three (the test harness dominates). The word errors reproduce the table to the digit; the memory
+counters still cannot separate Pro from Mini on a Mac, because the Neural Engine's weights are not in either.
+A phone's available memory after a load is the figure that decides the rule above (`DeviceReading.availableMemoryMB`, recorded by setup's check).
+
+## 13. LFM3-Omni-2B as a larger responder for newer phones (2026-11-24)
+
+Owner, 2026-11-24: "lfm3 is actually running on device in both apps now. and we should also have a bigger model available for newer phones. can use lfm3 omni".
+Fetched from the hub on 2026-11-24 (`GET /api/models/<repo>` and `/tree/<commit>`, no credentials) and marked: **verified** = read there.
+
+**What it is (verified, model card).** `LiquidAI/LFM3-Omni-2B`: 2.17B parameters in all, "LFM3 backbone, LFM3 vision encoder, LFM3 causal audio encoder, LiquidCodec
+audio tokenizer"; in its architecture figure the language model is the LFM3-1.7B; inputs text, image, video, 16 kHz audio, outputs text or 24 kHz speech; 32K context;
+**non-reasoning** (`enable_thinking=True` unsupported; the chat template ends `<|im_start|>assistant\n<think></think>`, the same layout as LFM3-1.7B with thinking off);
+licence LFM Open License v1.0. So the "bigger" is in what the whole model can do (the vision, audio and speech-out parts live in the `mmproj` file); the text path this row
+loads is the same size on disk as LFM3-1.7B (Q8_0 1,846,240,768 bytes against 1,846,238,496).
+
+**Builds (verified).** `LiquidAI/LFM3-Omni-2B-GGUF` (commit `d508b88f08a5b4286f2d2805a6a8d69a0ff44c72`, 558,694 downloads, not gated): Q4_0 1,049,617,920, Q4_K_M 1,099,630,080, Q8_0 1,846,240,768,
+F16 and BF16 3,466,628,608 bytes, and an `mmproj` for each (270 to 950 MB). `ggml-org/LFM3-Omni-2B-GGUF` is the community copy (BF16, Q4_K_M, Q8_0, mmproj Q8_0 and BF16); the vendor's
+repository has more quantisations, so the vendor's is pinned. The card needs llama.cpp b11960 (v0.8.0) or newer: the pinned runtime is b12259, which loaded and ran it (below).
+LiquidAI also publishes MLX and ONNX builds; `litert-community` a LiteRT build for the Android phone later; none is used here.
+
+**Built.** One row, `lfm3-omni-2b-q8_0`, job responder, from the vendor GGUF at that commit (file size and SHA-256 `59118f66...` in `KnownModels`; the download url names the
+commit, not `main`), **the `mmproj` is not fetched: text in, text out only**. Offered from the 8 GB class up (`minTier` 8 GB, the same line as the LFM3 Q8_0 and Q6_K rows), rank 89,
+below every LFM3-1.7B quant (90 to 98), so LFM3 QAD-Q4_0 stays the first fitting row on a 6 GB iPhone and LFM3 stays first on an 8 GB one: nothing we ran shows Omni answers better
+as the voice that talks while the desk works, and the on-device check decides it on a phone. The model list carries the repository, commit, file, licence and the credit the licence
+asks for. A 1.05 GB Q4_0 of Omni exists; it is not listed (the 6 GB row is LFM3's own).
+
+**Measured on this Mac (2026-11-24; M-series, not a phone).** `autoradio-models --bench-responder id=path`, one model per process under `/usr/bin/time -l`, the app's own
+llama.cpp path (b12259 release xcframework; Swift wrapper in a debug build), 4 threads, 2,048-token context, GPU on, greedy, 48 tokens, the page read cold for each of the ten asks
+(the four sample asks and the six the repository's LocalAck tests use as listener words, `HubModelProvider.benchAsks`). Another builder's Swift jobs shared the Mac, so
+speeds are noisy; compare the rows with each other.
+
+| Model | File | Load | Memory after load / process maximum | First token (mean of 10) | Reads | Writes |
+| --- | --- | --- | --- | --- | --- | --- |
+| LFM3-1.7B QAD-Q4_0 (the current responder) | 1,050 MB | 1.0 s | 1,112 MB / 1,182 MB | 701 ms | 933 tok/s | 36.0 tok/s |
+| LFM3-1.7B Q8_0 (same size as Omni) | 1,846 MB | 1.8 s | 1,854 MB / 1,962 MB | 712 ms | 920 tok/s | 23.7 tok/s |
+| LFM3-Omni-2B Q8_0 | 1,846 MB | 1.4 s | 1,845 MB / 1,952 MB | 697 ms | 950 tok/s | 19.4 tok/s (14 to 24) |
+
+Loads are from a warm file cache (the weights are mapped), so a first load on a phone will be longer. The kernel's physical-footprint ledger read 156 to 166 MB for all three and is
+not used: it does not count mapped weights. What the three said (first sentence, greedy): on the page, all three are grounded ("The council is going to build a tide barrier across the east
+channel" from Omni against "The harbor council voted to approve a tide barrier..." from LFM3); on the empty-page ask, LFM3 says "I don't have any information about a 'Mail' page"
+and Omni "The listener asked why the park closed." (it restates the ask and does not say the page has nothing); on bare asks ("what next") Omni answers "I understood you asked 'what next'"
+and stops. A ten-ask read by eye is not a score: it is the reason for rank 89 and not above LFM3.
+
+**Not proved until a phone.** That the static iOS build of llama.cpp loads it (the Mac used the dynamic release framework of the same tag); the peak memory beside the recogniser, the voice
+and the app on an 8 GB phone (about 2 GB on the Mac for this one model, plus its context); speed and heat on an A18; whether 8 GB is the right line (a starting guess from file size, to be set
+from the phone's measured peak).

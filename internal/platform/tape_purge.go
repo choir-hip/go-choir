@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computertiers"
+	"github.com/yusefmosiah/go-choir/internal/purgeguard"
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
@@ -51,13 +52,11 @@ const (
 )
 
 // tapeSweepProtectedComputers is the hard refusal list: the paper and the
-// owner's computer. The platform computers and the operator proof computer
-// that computer-tiers.json names are protected too (tapeSweepProtected). No
-// request field, proof, manifest or flag overrides it.
-var tapeSweepProtectedComputers = map[string]string{
-	"computer-1355b83bced1613eb048ee28d66688a8": "the paper computer",
-	"computer-03335285269bdba4f94377e56879f9e6": "the owner computer",
-}
+// owner's computer (purgeguard.ProtectedComputers, the list every step of an
+// account deletion reads). The platform computers and the operator proof
+// computer that computer-tiers.json names are protected too
+// (tapeSweepProtected). No request field, proof, manifest or flag overrides it.
+var tapeSweepProtectedComputers = purgeguard.ProtectedComputers
 
 var tapeSweepTiers = sync.OnceValues(computertiers.Load)
 

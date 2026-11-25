@@ -77,7 +77,7 @@ not released [6][CH].
    an on-device voice, and keeps playing while shared code is frozen [6].
 10. A hands-free voice turn: mic, voice-activity check, recogniser (the
     best listening models on the phone from the model list, Silero and
-    Fluid Speech Mini with Parakeet live words; Apple's recogniser and the
+    Fluid Speech Pro (8 GB phones and up) or Mini with Parakeet live words; Apple's recogniser and the
     energy detector until they are downloaded), turn policy, then plain-word queue commands (no model) or a first answer
     from an on-device model and a streamed `POST /api/autoradio/turns`
     (queue plus 40 candidate stories), spoken sentence by sentence [6].
@@ -138,6 +138,15 @@ user's computer takes (owner: 0.5 to 2 GB; the owner's own are 12 to 87 GB). No 
 
 Key paths: `internal/vmctl/`, `internal/vmmanager/`, `internal/proxy/`,
 `internal/auth/`, `nix/node-b.nix`, `.github/scripts/node-b-ci-deploy`.
+
+Account deletion (built on `lane/account-delete`, not deployed, 2026-11-24): the
+auth service holds a `account_deletions` record per account that asked, and a
+loop in the auth process (`internal/accountpurge`) holds its computer stopped
+and, after 72 hours, purges through vmctl, corpusd, maild and the gateway. Read
+`docs/changes.md` (2026-11-24) before saying what a deleted account leaves.
+The App Review account is protected at request and purge time; a bad configured
+reviewer identity pauses deletion (`docs/ship/demo-account.md`). An ordinary
+account does not need to have created a computer to use deletion.
 
 Numbers: ring-walk history has 380 walks started, 292 complete, 2 rolled
 back; 294 `expedited` events (77%) [1]. 267 files in `deploy-failures/`,

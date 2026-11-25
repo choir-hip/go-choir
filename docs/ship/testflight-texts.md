@@ -41,7 +41,7 @@ Lock the screen with Voice on and say something. Tell us what happened.
 
 Try mail, files, the reader, podcasts, a take and the notebook. Tell us what you could not do.
 
-When you have finished, delete your account in Settings, Account. Your access ends at once and everything is removed after 72 hours. Tell us if anything was unclear.
+When you have finished, delete your account in Settings, Account. Your access ends at once and the removal itself waits 72 hours (signing in during that time cancels it). Tell us if anything was unclear.
 
 Please report crashes, silence, wrong stories and anything you could not understand.
 ```

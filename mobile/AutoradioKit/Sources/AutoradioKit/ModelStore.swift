@@ -87,14 +87,16 @@ public struct ManagedModelSpec: Codable, Sendable {
     /// The folders under `cachePath` that belong to this model alone (FluidAudio names them by its own rules). Deleting a rejected
     /// configuration's model removes exactly these, never `cachePath` itself, which other models share. nil: the kit does not delete it.
     public var cacheFolders: [String]?
+    /// Folders of ANOTHER model that sit inside this model's folders (Pocket TTS's `pocket-tts` holds Phonon's `pocket-tts/phonon`): never sealed with this model, never deleted with it.
+    public var excludedFolders: [String]? = nil
     /// The credit its licence asks the app to show (CC BY 4.0 and the like); nil when the licence asks for none.
     public var credit: String?
     /// The library has an entry point that loads these files from a folder without being able to fetch (FluidAudio's `loadLocal` / `loadModels(from:)`). false: it can only initialise by being able to download, so it is offered only when its manifest exists.
     public var loadsWithoutFetching: Bool
-    public init(id: String, label: String, source: String, approxBytes: Int64, license: String, cachePath: URL? = nil, cacheFolders: [String]? = nil, credit: String? = nil, loadsWithoutFetching: Bool = false) {
+    public init(id: String, label: String, source: String, approxBytes: Int64, license: String, cachePath: URL? = nil, cacheFolders: [String]? = nil, excludedFolders: [String]? = nil, credit: String? = nil, loadsWithoutFetching: Bool = false) {
         self.credit = credit; self.loadsWithoutFetching = loadsWithoutFetching
         self.id = id; self.label = label; self.source = source; self.approxBytes = approxBytes; self.license = license; self.cachePath = cachePath
-        self.cacheFolders = cacheFolders
+        self.cacheFolders = cacheFolders; self.excludedFolders = excludedFolders
     }
 }
 public struct ModelLoadReport: Codable, Sendable {

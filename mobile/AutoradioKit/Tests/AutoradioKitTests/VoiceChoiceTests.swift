@@ -67,11 +67,14 @@ final class VoiceChoiceTests: XCTestCase {
     func notes(_ l: EventLog) -> [String] { l.events.compactMap { if case .note(let n) = $0.event { return n } else { return nil } } }
 
     // 1, 2: the choice
-    func testFreshInstallDefaultsToTheFirstNeuralVoice() {
+    func testFreshInstallDefaultsToBundledTinyVocaAndIgnoresAnOldAppleSelection() {
         let s = VoiceChoiceStore(file: tmp().appendingPathComponent("v.json"))
-        XCTAssertEqual(s.current().id, "kokoro")
-        XCTAssertEqual(VoiceCatalog.option(matching: s.current())?.id, "kokoro:af_heart")
-        XCTAssertEqual(StageRegistry.listenerConfiguration().setting(.voice)?.id, "kokoro", "the shipped listener configuration does not name the system voice")
+        XCTAssertEqual(s.current().id, "tiny-voca")
+        XCTAssertEqual(VoiceCatalog.option(matching: s.current())?.id, "tiny-voca:F2")
+        XCTAssertEqual(StageRegistry.listenerConfiguration().setting(.voice)?.id, "tiny-voca")
+        s.save(StageSetting(id: "avspeech"))
+        XCTAssertEqual(s.current(), StageRegistry.listenerConfiguration().setting(.voice))
+        XCTAssertFalse(StageRegistry.builtIn().stages(.voice).contains { $0.id == "avspeech" })
     }
     func testASavedChoiceSurvivesAndGarbageDoesNot() throws {
         let f = tmp().appendingPathComponent("v.json")
@@ -245,33 +248,43 @@ final class VoiceSamplerTests: XCTestCase {
     /// Records what the sampler asked of its host.
     final class Host: @unchecked Sendable {
         private let lock = NSLock()
-        var said: [String] = [], chosen: [String] = [], halts = 0, fetched: [String] = []
-        var failFetch = false, failVerify = false, failSay = false, sayDelay: UInt64 = 0, fetchDelay: UInt64 = 0
+        var said: [String] = [], chosen: [String] = [], halts = 0
+        var failSay = false, sayDelay: UInt64 = 0
+        /// model id -> the progress of the download its own row is running (Voice and models owns every download; the card only shows it).
+        var running: [String: Double] = [:]
         func record(_ f: () -> Void) { lock.lock(); f(); lock.unlock() }
         func read<T>(_ f: () -> T) -> T { lock.lock(); defer { lock.unlock() }; return f() }
     }
     struct Down: Error {}
     func make(_ host: Host, ready: Set<String> = [], selected: String = "kokoro:af_heart") -> (VoiceSampler, MemoryReadiness) {
         let r = MemoryReadiness(ready)
-        let verifier = ReadinessVerifier(record: r)
         let s = VoiceSampler(selected: selected, readiness: r,
-            fetch: { m, onBytes in
-                host.record { host.fetched.append(m) }
-                if host.fetchDelay > 0 { try await Task.sleep(nanoseconds: host.fetchDelay) }
-                onBytes(1_000_000)
-                if host.read({ host.failFetch }) { throw Down() }
-            },
-            verify: { m in let r = await verifier.verify(model: m, check: { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: !host.read({ host.failVerify }), note: host.read({ host.failVerify }) ? "It did not load from this phone's files." : "") }); return r.outputOK ? nil : r.note },
             say: { o in
                 host.record { host.said.append(o.id) }
                 if host.sayDelay > 0 { try await Task.sleep(nanoseconds: host.sayDelay) }
                 if host.read({ host.failSay }) { throw Down() }
             },
             halt: { host.record { host.halts += 1 } },
-            choose: { o in host.record { host.chosen.append(o.id) } })
+            choose: { o in host.record { host.chosen.append(o.id) } },
+            running: { m in host.read { host.running[m] } })
         return (s, r)
     }
     func settle(_ ms: UInt64 = 150) async { try? await Task.sleep(nanoseconds: ms * 1_000_000) }
+
+    // Every card says which model it is a voice of and carries the credit that model's licence asks for (settings.contract shows both, once per model). A card that needs a credit and has none fails.
+    func testEveryCardNamesItsModelAndCarriesItsCredit() {
+        let (s, _) = make(Host(), ready: [])
+        let cards = s.cards()
+        XCTAssertGreaterThan(cards.count, 50)
+        for c in cards {
+            if c.id == "system" { XCTAssertEqual(c.credit, ""); XCTAssertEqual(c.model, ""); continue }
+            XCTAssertFalse(c.model.isEmpty, "\(c.id) names no model"); XCTAssertFalse(c.group.isEmpty, "\(c.id) has no model name to group under")
+            XCTAssertFalse(c.credit.isEmpty, "\(c.id) is offered with no credit")
+        }
+        XCTAssertEqual(cards.first { $0.id == "kokoro:af_heart" }?.group, "Kokoro 82M")
+        XCTAssertEqual(cards.first { $0.id == "phonon:en_us_Zoey" }?.group, "Phonon 31M")
+        XCTAssertTrue(cards.first { $0.id == "pocket-tts:alba" }?.credit.contains("Kyutai") ?? false, "Pocket's CC BY credit comes from the catalog's own credit")
+    }
 
     func testTappingAReadyVoiceChoosesItAndPlaysItAtOnce() async {
         let h = Host()
@@ -288,7 +301,7 @@ final class VoiceSamplerTests: XCTestCase {
         let (s, _) = make(h)
         XCTAssertEqual(s.cards().first { $0.id == "system" }?.state, "ready")
         s.pick("system"); await settle()
-        XCTAssertEqual(h.said, ["system"]); XCTAssertTrue(h.fetched.isEmpty)
+        XCTAssertEqual(h.said, ["system"])
     }
     func testAnotherTapStopsThePreviousSampleAndOnlyTheNewestPlays() async {
         let h = Host(); h.sayDelay = 400_000_000
@@ -303,37 +316,46 @@ final class VoiceSamplerTests: XCTestCase {
         XCTAssertFalse(s.cards().contains { $0.playing })
         XCTAssertEqual(s.selectedID, "kokoro:am_adam")
     }
-    func testAVoiceWithoutItsModelDownloadsThenPlaysAndTheChoiceIsMadeAtOnce() async {
-        let h = Host(); h.fetchDelay = 150_000_000
-        let (s, r) = make(h)
-        s.pick("kokoro:af_bella"); await settle(50)
-        XCTAssertEqual(h.chosen, ["kokoro:af_bella"], "chosen at once; the radio speaks with the phone's voice until the model is ready")
-        XCTAssertEqual(s.cards().first { $0.id == "kokoro:af_bella" }?.state, "downloading")
-        XCTAssertEqual(s.cards().first { $0.id == "kokoro:af_heart" }?.state, "downloading", "all Kokoro voices share the one download")
-        XCTAssertTrue(h.said.isEmpty)
-        await settle(500)
-        XCTAssertTrue(r.isReady(model: VoiceCatalog.kokoroModel))
-        XCTAssertEqual(h.said, ["kokoro:af_bella"])
-        XCTAssertEqual(s.cards().first { $0.id == "kokoro:af_heart" }?.state, "ready")
-    }
-    func testOneDownloadPerModelEvenWhenTwoVoicesAreTapped() async {
-        let h = Host(); h.fetchDelay = 200_000_000
+    // Voice and models owns every download (owner, 2026-11-24: "the press on that row is the agreement"): tapping a voice whose model is not on the phone chooses it and fetches nothing.
+    //  S1 the tap chooses the voice at once and plays nothing; the card says which model to download and its size, and the sampler asked its host to fetch nothing (it has no way to).
+    //  S2 while that model's own row downloads, the card shows the row's progress; every voice of the model shows it.
+    //  S3 once the model is ready the same tap plays the sample.
+    func testAVoiceWithoutItsModelIsChosenAndFetchesNothing() async {
+        let h = Host()
         let (s, _) = make(h)
-        s.pick("kokoro:af_bella"); s.pick("kokoro:am_adam"); await settle(500)
-        XCTAssertEqual(h.fetched, [VoiceCatalog.kokoroModel])
-        XCTAssertEqual(h.said, ["kokoro:am_adam"], "the sample that plays is the one tapped last")
-    }
-    func testAFailedDownloadSaysSoAndCanBeTriedAgain() async {
-        let h = Host(); h.failFetch = true
-        let (s, r) = make(h)
-        s.pick("pocket-tts:alba"); await settle()
-        let c = s.cards().first { $0.id == "pocket-tts:alba" }!
-        XCTAssertEqual(c.state, "failed"); XCTAssertFalse(c.note.isEmpty)
-        XCTAssertFalse(r.isReady(model: VoiceCatalog.pocketModel))
+        s.pick("kokoro:af_bella"); await settle(100)
+        XCTAssertEqual(h.chosen, ["kokoro:af_bella"], "chosen at once; the radio speaks with the phone's voice until the model is ready")
+        let c = s.cards().first { $0.id == "kokoro:af_bella" }!
+        XCTAssertEqual(c.state, "needs"); XCTAssertTrue(c.note.contains("Download") && c.note.contains("above"), c.note); XCTAssertFalse(c.note.contains("Settings"))
         XCTAssertTrue(h.said.isEmpty)
-        h.record { h.failFetch = false }
-        s.pick("pocket-tts:alba"); await settle()
-        XCTAssertTrue(r.isReady(model: VoiceCatalog.pocketModel)); XCTAssertEqual(h.said, ["pocket-tts:alba"])
+    }
+    func testACardShowsTheProgressOfItsModelsOwnRow() async {
+        let h = Host(); h.record { h.running[VoiceCatalog.kokoroModel] = 0.4 }
+        let (s, _) = make(h)
+        for id in ["kokoro:af_bella", "kokoro:af_heart"] { let c = s.cards().first { $0.id == id }!; XCTAssertEqual(c.state, "downloading"); XCTAssertEqual(c.progress, 0.4, accuracy: 0.001) }
+        XCTAssertEqual(s.cards().first { $0.id == "pocket-tts:alba" }?.state, "needs", "another model's card is unaffected")
+    }
+    func testOnceTheModelIsReadyTheSameTapPlaysTheSample() async {
+        let h = Host()
+        let (s, r) = make(h)
+        s.pick("kokoro:af_bella"); await settle(50); XCTAssertTrue(h.said.isEmpty)
+        r.markReady(model: VoiceCatalog.kokoroModel)
+        s.pick("kokoro:af_bella"); await settle(100)
+        XCTAssertEqual(h.said, ["kokoro:af_bella"]); XCTAssertEqual(s.cards().first { $0.id == "kokoro:af_bella" }?.state, "ready")
+    }
+    // Voice and models gives every voice a Test and a Use of its own (owner, 2026-11-24: testing and selecting unified): Test hears the voice and chooses nothing.
+    //  S4 `hear` plays that voice's sample and never chooses it; a voice whose model is not on the phone plays nothing and chooses nothing; Use (`pick`) is the choosing.
+    func testS4HearPlaysTheSampleAndChoosesNothing() async {
+        let h = Host()
+        let (s, _) = make(h, ready: [VoiceCatalog.kokoroModel])
+        s.hear("kokoro:am_adam"); await settle(100)
+        XCTAssertEqual(h.said, ["kokoro:am_adam"]); XCTAssertTrue(h.chosen.isEmpty, "Test is not Use")
+        XCTAssertEqual(s.selectedID, "kokoro:af_heart", "the voice in use did not move")
+        s.hear("pocket-tts:alba"); await settle(50)
+        XCTAssertEqual(h.said, ["kokoro:am_adam"], "its model is not on the phone: nothing plays"); XCTAssertTrue(h.chosen.isEmpty)
+        s.hear("no-such-voice"); await settle(20); XCTAssertEqual(h.said.count, 1)
+        s.pick("kokoro:am_adam"); await settle(100)
+        XCTAssertEqual(h.chosen, ["kokoro:am_adam"]); XCTAssertEqual(s.selectedID, "kokoro:am_adam")
     }
     func testASampleThatCannotPlaySaysSoAndTheChoiceStands() async {
         let h = Host(); h.failSay = true
@@ -358,7 +380,9 @@ final class VoiceSamplerTests: XCTestCase {
         let ids = VoiceCatalog.options.map(\.id)
         XCTAssertEqual(VoiceCatalog.defaultOption.id, "kokoro:af_heart", "the default does not change")
         let phonon = VoiceCatalog.options.filter { $0.stageID == "phonon" }
-        XCTAssertEqual(phonon.map(\.id), ["phonon:en_us_Easton", "phonon:en_us_Zoey", "phonon:en_gb_Maeve"])
+        XCTAssertEqual(phonon.count, 25, "every English Phonon voice of the pack's catalog")
+        XCTAssertEqual(phonon.first?.id, "phonon:en_us_Easton", "the stage's own default voice first")
+        XCTAssertTrue(["phonon:en_us_Zoey", "phonon:en_gb_Maeve"].allSatisfy { id in phonon.contains { $0.id == id } })
         for o in phonon {
             XCTAssertEqual(o.modelID, VoiceCatalog.phononModel, "all Phonon voices share one download")
             XCTAssertEqual(o.setting.params["voice"], .string(o.voice))
@@ -375,22 +399,15 @@ final class VoiceSamplerTests: XCTestCase {
         XCTAssertTrue(m.source.contains("FluidInference/pocket-tts-coreml/phonon/phonon-31m-en"), "the pack's repository and folder, not the speech recogniser's repository")
         XCTAssertFalse(m.source.contains("phonon-2"), "FluidInference/phonon-2-coreml is a speech recogniser, not a voice")
         XCTAssertTrue(m.license.contains("Apache-2.0"))
-        XCTAssertEqual(m.cachePath, KnownModels.fluidRoot)
-        XCTAssertEqual(m.cacheFolders, ["pocket-tts-coreml/phonon"])
+        XCTAssertEqual(m.cachePath, KnownModels.ttsRoot, "the library keeps voice models in its own TTS tree (TtsRootTests)")
+        XCTAssertEqual(m.cacheFolders, ["pocket-tts/phonon"])
         XCTAssertGreaterThan(m.approxBytes, 150_000_000); XCTAssertLessThan(m.approxBytes, 200_000_000)
     }
-    func testAPhononCardDownloadsTheSharedModelOnceThenPlaysOnlyThatVoice() async {
-        let h = Host(); h.fetchDelay = 150_000_000
-        let (s, r) = make(h, ready: [VoiceCatalog.kokoroModel])
-        s.pick("phonon:en_us_Zoey"); s.pick("phonon:en_gb_Maeve"); await settle(50)
-        XCTAssertEqual(s.cards().first { $0.id == "phonon:en_us_Easton" }?.state, "downloading", "the three Phonon voices share the one download")
-        XCTAssertEqual(s.cards().first { $0.id == "kokoro:af_heart" }?.state, "ready", "Kokoro's cards are unaffected")
-        await settle(500)
-        XCTAssertEqual(h.fetched, [VoiceCatalog.phononModel])
-        XCTAssertTrue(r.isReady(model: VoiceCatalog.phononModel)); XCTAssertEqual(h.said, ["phonon:en_gb_Maeve"])
+    func testAPhononCardOfAReadyModelPlaysOnlyThatVoiceBackToBack() async {
+        let h = Host()
+        let (s, _) = make(h, ready: [VoiceCatalog.kokoroModel, VoiceCatalog.phononModel])
         s.pick("kokoro:af_heart"); await settle(100)
         s.pick("phonon:en_us_Easton"); await settle(100)
-        XCTAssertEqual(h.fetched, [VoiceCatalog.phononModel], "a ready model is not fetched again")
-        XCTAssertEqual(h.said.suffix(2), ["kokoro:af_heart", "phonon:en_us_Easton"], "back to back")
+        XCTAssertEqual(h.said, ["kokoro:af_heart", "phonon:en_us_Easton"], "back to back")
     }
 }

@@ -33,11 +33,6 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
                 try await self.fetchBody(id, role: role, onBytes: onBytes)
             }
         }
-        // The pipeline needs the live words beside a batch recogniser: the model the list names for that job comes with it (one row for the person, two fetches), progress continuing from where this model ended.
-        let own: Int64 = KnownModels.managed.first { $0.id == id }?.approxBytes ?? 0
-        for companion in ListenerPipeline.companions(of: id) where !Voices.readiness.isReady(model: companion) {
-            try await fetch(companion, role: role, onBytes: { onBytes(own + $0) })
-        }
     }
     private func fetchBody(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         // The libraries do not report bytes in one shape, so the bytes on disk are watched while the load runs.
@@ -61,7 +56,11 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             // Only here, after voice setup's consent, is the folder fetched; the stage itself never downloads. Its files are checked one by
             // one against the SHA-256 pinned in KnownModels, then the model is loaded and run once (warm).
             _ = try await ModelStore.shared.ensureBundle(KnownModels.fluidSpeechMini) { done, _ in onBytes(done) }
-            _ = try await FluidSpeechMiniTranscriber(StageParams()).manager()      // ready once its companions are in (below)
+            _ = try await FluidSpeechMiniTranscriber(StageParams()).manager()
+        case "fluid-speech-pro":
+            // The same as Mini: fetched here only, after consent, every file checked against its pinned SHA-256, then loaded and run once.
+            _ = try await ModelStore.shared.ensureBundle(KnownModels.fluidSpeechPro) { done, _ in onBytes(done) }
+            _ = try await FluidSpeechProTranscriber(StageParams()).manager()
         case "kokoro-82m-ane":
             _ = try await KokoroVoice.synthesizeOnce("Ready.")
         case "pocket-tts":
@@ -73,7 +72,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             #if canImport(llama)
             _ = try await ModelStore.shared.ensure(id) { done, _ in onBytes(done) }
             if role == "responder" { _ = try await LlamaLocalModel.engine(id, download: false) }
-            else { _ = try await LlamaSystem1.loadEngine(download: false) }
+            else { _ = try await LlamaSystem1.loadEngine(model: id, download: false) }
             #else
             throw LabError.unavailable("this build has no llama.cpp framework, so the small language model cannot load")
             #endif
@@ -86,6 +85,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         switch id {
         case "parakeet-eou-120m": return ParakeetEOUTranscriber(StageParams())
         case "fluid-speech-mini": return FluidSpeechMiniTranscriber(StageParams())
+        case "fluid-speech-pro": return FluidSpeechProTranscriber(StageParams())
         default: return ParakeetTDTTranscriber(StageParams())
         }
     }
@@ -124,7 +124,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             let top = p.probs.max() ?? 0
             return await finish(top > 0.5, speed: p.inferenceMs / (seconds * 1000), unit: "of real time",
                                 note: "The speech detector found no speech in the bundled utterance (highest \(Int(top * 100))%).")
-        case "parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "fluid-speech-mini":
+        case "parakeet-eou-120m", "parakeet-tdt-0.6b-v2", "fluid-speech-mini", "fluid-speech-pro":
             let stage: Transcriber = Self.transcriberStage(id)
             let s = try await stage.begin()
             let t0 = nowMs()
@@ -152,7 +152,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             }
             #if canImport(llama)
             if role == "responder" { return try await Self.checkResponder(id, finish: finish) }
-            return try await Self.checkDecision(finish: finish)
+            return try await Self.checkDecision(id, finish: finish)
             #else
             return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "This build has no llama.cpp framework, so the small language model cannot run.")
             #endif
@@ -162,7 +162,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
     public func unload(_ id: String, role: String) async {
         if KnownModels.isPinned(id) {
             #if canImport(llama)
-            if role == "responder" { LlamaLocalModel.slot(for: id).drop() } else { LlamaSystem1.slot.drop() }
+            if role == "responder" { LlamaLocalModel.slot(for: id).drop() } else { LlamaSystem1.slot(for: id).drop() }
             #endif
         } else {
             await ModelStore.shared.unload(id)        // the audio stages' slots drop through the unloader the load registered
@@ -183,7 +183,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             if picks["vad"] == "silero-vad-v6.2.1" {
                 do { let p = try await SileroVAD.probabilities(audio); vad.append(p.inferenceMs / (seconds * 1000)) } catch { m.failedRoles["vad"] = "\(error)" }
             }
-            if let a = picks["transcriber"], a == "parakeet-eou-120m" || a == "parakeet-tdt-0.6b-v2" || a == "fluid-speech-mini" {
+            if let a = picks["transcriber"], a == "parakeet-eou-120m" || a == "parakeet-tdt-0.6b-v2" || a == "fluid-speech-mini" || a == "fluid-speech-pro" {
                 do {
                     let stage: Transcriber = Self.transcriberStage(a)
                     let s = try await stage.begin()
@@ -204,7 +204,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
             #if canImport(llama)
             if let d = picks["decision"], KnownModels.isPinned(d) {
                 do {
-                    let sys = LlamaSystem1(StageParams())
+                    let sys = LlamaSystem1(StageParams(["model": .string(d)]))
                     let q = Question(id: "asks_for_something", text: "Does the listener ask for something to be done or looked up?", options: ["yes", "no"])
                     let t0 = nowMs()
                     let ans = try await sys.answer(System1Input(context: "A story about a new park.", listenerWords: "Tell me more about the park", questions: [q]))
@@ -275,8 +275,8 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
 
     #if canImport(llama)
     /// The decision model must score a clear request as "yes".
-    static func checkDecision(finish: Finish) async throws -> SetupCheck {
-        let sys = LlamaSystem1(StageParams())
+    static func checkDecision(_ id: String, finish: Finish) async throws -> SetupCheck {
+        let sys = LlamaSystem1(StageParams(["model": .string(id)]))          // the model asked about, not the saved one: a pick is checked before it is the choice
         let q = Question(id: "asks_for_something", text: "Does the listener ask for something to be done or looked up?", options: ["yes", "no"])
         let input = System1Input(context: "A story about a new park.", listenerWords: "Tell me more about the park", questions: [q])
         _ = try await sys.answer(input)                 // the first decode after a load is slower than the rest
@@ -361,6 +361,56 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         #endif
     }
 
+    /// Ten asks over the sample pages (the four sample asks, and six more the repo's LocalAck tests use as listener words), for comparing responders.
+    public static let benchAsks: [(ask: String, page: Int)] = [
+        ("What is the council actually going to build?", 0), ("Tell me more about the battery", 1), ("What's on the front page?", 2), ("Why did the park close?", 3),
+        ("what next", 0), ("who did it", 0), ("what did the council decide", 0), ("what next", 1), ("what did the council decide", 2), ("play the news", 2),
+    ]
+
+    /// Responders compared on the same ten asks, one line each, straight from a GGUF path (`id=path`): load time and the process's resident memory after the load
+    /// and at its peak, then per ask the page read cold (nothing cached): time to the first token, tokens per second writing (greedy, 48 tokens: a measurement, not
+    /// speech), and the first sentence the voice would say. Mac numbers, not a phone's.
+    public static func benchResponders(_ models: [(id: String, path: String)]) async -> [String] {
+        #if canImport(llama)
+        var out: [String] = []
+        for (id, path) in models {
+            let t0 = nowMs()
+            guard let w = try? LlamaWeights.shared(path: path, gpu: true), let e = try? LlamaEngine(weights: w, threads: 4, contextTokens: 2048) else { out.append("\(id) | load FAILED"); continue }
+            let loadMs = nowMs() - t0
+            let layout = ChatLayout.forModel(id)
+            out.append(String(format: "== %@ | load %.0f ms | resident after load %.0f MB", id, loadMs, benchResidentBytes() / 1_048_576))
+            var firsts: [Double] = [], rates: [Double] = [], reads: [Double] = []
+            for (n, a) in benchAsks.enumerated() {
+                let p = samplePages[a.page]
+                var text = "", st = LlamaStats()
+                e.resetCache()
+                do {
+                    try e.generate(system: AckPrompt.system(), userPrefix: AckPrompt.userPrefix(pageTitle: p.title, pageKind: p.kind, pageText: p.text), userSuffix: AckPrompt.userSuffix(listener: a.ask, previous: []),
+                                   layout: layout, temperature: 0, stopAtSentence: false, measureTokens: 48, onPiece: { text += $0 }, onStats: { st = $0 })
+                } catch { out.append("  ask \(n + 1) failed: \(error)"); continue }
+                firsts.append(st.firstTokenMs); rates.append(st.decodeTokensPerSecond); reads.append(st.promptTokensPerSecond)
+                out.append(String(format: "  ask %2d | first token %5.0f ms | reads %5.0f tok/s (%d tokens) | writes %4.1f tok/s | \"%@\"", n + 1, st.firstTokenMs, st.promptTokensPerSecond, st.promptTokens, st.decodeTokensPerSecond,
+                                  AckPrompt.firstSentence(text) ?? text.prefix(90).replacingOccurrences(of: "\n", with: " ")))
+            }
+            func mean(_ x: [Double]) -> Double { x.isEmpty ? 0 : x.reduce(0, +) / Double(x.count) }
+            out.append(String(format: "  MEAN %@ | first token %.0f ms | reads %.0f tok/s | writes %.1f tok/s | resident at the end %.0f MB | peak footprint %.0f MB", id, mean(firsts), mean(reads), mean(rates), benchResidentBytes() / 1_048_576, peakFootprintBytes() / 1_048_576))
+        }
+        return out
+        #else
+        return ["no llama.cpp in this build"]
+        #endif
+    }
+    static func benchResidentBytes() -> Double {
+        var info = mach_task_basic_info(); var n = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<integer_t>.size)
+        let r = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(n)) { task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &n) } }
+        return r == KERN_SUCCESS ? Double(info.resident_size) : 0
+    }
+    static func peakFootprintBytes() -> Double {
+        var info = task_vm_info_data_t(); var n = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let r = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(n)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &n) } }
+        return r == KERN_SUCCESS ? Double(info.ledger_phys_footprint_peak) : 0
+    }
+
     /// An acknowledgement and a decision asked at the same moment on separate contexts: how long each takes together.
     public static func contention(modelID: String) async -> String {
         #if canImport(llama)
@@ -391,6 +441,39 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
                       aloneAck, ackT, aloneDecision, decT)
         #else
         return "contention: no llama.cpp in this build"
+        #endif
+    }
+}
+
+// The Test button on a model's row (ModelTrial, Settings > Voice and models): each run needs the model itself, so it is here. Each is a model that is ON the phone: a test never downloads
+// (a library is initialised only for a model that is ready or being checked: `LibraryScope`, the same scope the check uses), and none writes readiness.
+extension HubModelProvider {
+    public func transcribe(_ id: String, _ audio: [Float]) async throws -> String {
+        try await LibraryScope.$checking.withValue(id) {
+            let s = try await Self.transcriberStage(id).begin()
+            for f in ModelProof.frames(audio) { s.append(f) }
+            return try await s.finish()
+        }
+    }
+
+    /// Where Silero finds speech in this audio: the first and the last chunk it calls speech (probability over one half), in seconds.
+    public func speechSpan(_ id: String, _ audio: [Float]) async throws -> (start: Double?, end: Double?) {
+        try await LibraryScope.$checking.withValue(id) {
+            let p = try await SileroVAD.probabilities(audio)
+            guard !p.probs.isEmpty else { return (nil, nil) }
+            let chunk = Double(audio.count) / 16_000 / Double(p.probs.count)
+            guard let first = p.probs.firstIndex(where: { $0 > 0.5 }), let last = p.probs.lastIndex(where: { $0 > 0.5 }) else { return (nil, nil) }
+            return (Double(first) * chunk, last == p.probs.count - 1 ? nil : Double(last + 1) * chunk)
+        }
+    }
+
+    /// The model's answer to a fixed prompt, in one sentence (the answering and the quick-decision models are both GGUFs run through llama.cpp).
+    public func answer(_ id: String, job: String, prompt: String) async throws -> String {
+        #if canImport(llama)
+        guard KnownModels.isPinned(id) else { throw LabError.unavailable("\(id) is not a model this phone runs as a language model") }
+        return try await LlamaLocalModel(modelID: id).generate(system: "You are a radio host. Answer in one short sentence.", user: prompt, temperature: 0)
+        #else
+        throw LabError.unavailable("This build has no llama.cpp framework, so the language model cannot run.")
         #endif
     }
 }

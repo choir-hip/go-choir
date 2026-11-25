@@ -12,8 +12,6 @@ extension AutoradioModule {
         #endif
     }
 
-    /// The shared open-page set's hand-over (AutoradioLab/pages.ts `mirror`, the app module's `pagesMirror` op, ModelsEntry.swift): the pages as facts, most recent first. Only native code
-    /// can use them: the voice names the page in front, warms the local model on it, and a leaving page posts what was typed on it (TextureEditor, a canonical write that stays native).
     /// A native module asks for a page to be opened (an episode from the playing bar). Native holds no set: the request is a source (`pageRequest`) that shared code
     /// answers by opening the page (pages.ts `pageRequested`), once per id.
     public func requestPage(_ address: String, title: String) {
@@ -29,7 +27,6 @@ extension AutoradioModule {
         let before = OpenPageFacts.shared.list().first?.address
         guard OpenPageFacts.shared.replace(gen: (r["gen"] as? NSNumber)?.intValue ?? 0, rows) else { return false }
         if before != rows.first?.address {
-            await TextureEditor.shared.flushAll()                  // leaving a page posts what was typed on it
             runtime.warmResponder(address: rows.first?.address)
         }
         return true
@@ -38,27 +35,13 @@ extension AutoradioModule {
     func registerSpine() {
         // Sources
         handle("pageRequest") { [unowned self] _, reply in reply(["id": pageRequestState.id, "address": pageRequestState.address, "title": pageRequestState.title]) }
-        handle("pageModel") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? ""
-            if address.isEmpty { return reply(json(PageModel(address: "", kind: "", title: "", status: "loading"))) }
-            Task { [pageSources, weak self] in
-                let m = await pageSources.model(for: address)
-                if m.status == "ready", !m.lines.isEmpty { self?.runtime.pageTextReady(address: address, text: m.lines.joined(separator: " ")) }   // the text may arrive after the page is in front
-                DispatchQueue.main.async { reply(self?.json(m) ?? [:]) }
-            }
-        }
 
         // The radio's buttons start the engine on first use; under the simulator's agent that engine must be the virtual one
         // (no microphone: proof runs), as `labStart` already does. Start it virtually, then run the original action.
-        // Mail's "Read it to me" speaks through LabRuntime.speakText; from nothing it must start the engine the same way.
         // The acknowledgement names the page in front: title and kind of the page at an address (nil: the front one).
         runtime.frontPageResolver = { address in OpenPageFacts.shared.front(address) }
-        // The text of that page, as far as the phone has it: the local stream may say something relevant from it.
-        runtime.pageTextProvider = { [weak self] address in
-            guard let self, !address.isEmpty else { return "" }
-            let m = await self.pageSources.model(for: address)
-            return m.status == "ready" ? m.lines.joined(separator: " ") : ""
-        }
+        // The text of that page, as far as the phone has it (the page the shared reader handed over): the local stream may say something relevant from it.
+        runtime.pageTextProvider = { address in address.isEmpty ? "" : (HeldPages.shared.page(address)?.lines.joined(separator: " ") ?? "") }
         runtime.startRequest = { [weak self] in
             guard let self else { return }
             await self.runtime.start(virtual: self.virtualEngine)

@@ -108,3 +108,23 @@ describe('the source', () => {
     expect(n).toBe(2);
   });
 });
+
+describe('a new document (the top-right button)', () => {
+  const made = (body: unknown, calls: { path: string; opts?: unknown }[] = []): T.CreateNet => ({ post: async (path, opts) => { calls.push({ path, opts }); if (body instanceof Error) throw body; return reply(body); } });
+  test('N1 it posts the server\'s one create route with a title, and answers the new document\'s address', async () => {
+    const calls: { path: string; opts?: unknown }[] = [];
+    const r = await T.createTexture(made({ doc_id: 'new1', title: 'Untitled Texture' }, calls));
+    expect(r).toEqual({ status: 'ok', address: 'texture:new1', title: 'Untitled Texture', message: '' });
+    expect(calls).toEqual([{ path: '/api/texture/documents', opts: { title: 'Untitled Texture' } }]);
+  });
+  test('N2 a refusal or an answer with no id makes nothing and says why in the app\'s words', async () => {
+    const e = await T.createTexture(made(new HTTPError(403, 'HTTP 403')));
+    expect(e.status).toBe('failed'); expect(e.address).toBe(''); expect(e.message).not.toBe('');
+    const n = await T.createTexture(made({ nothing: true }));
+    expect(n.status).toBe('failed'); expect(n.address).toBe('');
+  });
+  test('N3 signed out: no request is made as another account\'s, and the answer is failed', async () => {
+    const r = await T.createTexture(made(new SignedOutError()));
+    expect(r.status).toBe('failed'); expect(r.address).toBe('');
+  });
+});

@@ -1,7 +1,7 @@
 // The model offers, as pure data: what the native side reads from the model list (ModelList.swift, ModelOffer.jobs) for this phone, and what the person has picked. This file writes no model's name or size: an option's name and
 // size are the list's own, and which option is "recommended for this phone" is the list's answer for this phone (the first entry that fits it), so a newer model or a different phone is a different offer with no change here.
 // Each job (hearing you, knowing when you speak, the voice, the answering model, knowing your voice, search) has its options; the person's pick for a job is kept (consent.ts `picks`); no pick is the recommended one.
-export type Option = { id: string; model: string; bytes: number; sizeLabel: string; recommended: boolean; ready: boolean; note?: string; credit?: string; withheld?: boolean; removable?: boolean };
+export type Option = { id: string; model: string; bytes: number; sizeLabel: string; recommended: boolean; ready: boolean; note?: string; credit?: string; withheld?: boolean; removable?: boolean; inUse?: boolean; streams?: boolean };
 export type OfferJob = { job: string; group: string; host: string; options: Option[] };
 
 /** The size words, as the native side writes them (SetupCatalog.sizeLabel). */
@@ -27,7 +27,7 @@ export function picksFor(offers: OfferJob[], groups: string[], picks: Record<str
   return out;
 }
 
-/** The offers as the FIRST RUN sees them: a withheld option (a library model with no local-only load and no manifest yet) is not offered there at all: Settings > Downloads is where it is fetched first. A job with nothing left is gone. */
+/** The offers as the FIRST RUN sees them: a withheld option (a library model with no local-only load and no manifest yet) is not offered there at all: Settings > Voice and models is where it is fetched first. A job with nothing left is gone. */
 export const forFirstRun = (offers: OfferJob[]): OfferJob[] => offers.map((j) => ({ ...j, options: j.options.filter((o) => !o.withheld) })).filter((j) => j.options.length > 0);
 
 /** What the first-run press fetches, in bytes: the chosen option of every job of the two voice groups, each file once (the decision and the responder may be one file), the voice-print model among them. The welcome and the setup page show this one number. */

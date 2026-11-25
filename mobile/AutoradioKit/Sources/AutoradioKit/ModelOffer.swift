@@ -14,8 +14,12 @@ public struct OfferOption: Sendable, Equatable {
     public var withheld: Bool = false
     /// It is on this phone, it is not what the radio is using, and the person may remove it.
     public var removable: Bool = false
+    /// It is what the radio is using for its job right now.
+    public var inUse: Bool = false
+    /// A recogniser that gives words while the person is still speaking (the page lists these as the live-words job).
+    public var streams: Bool = false
     public var sizeLabel: String { SetupCatalog.sizeLabel(bytes) }
-    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready, "note": note, "credit": credit, "withheld": withheld, "removable": removable] }
+    public var dict: [String: Any] { ["id": id, "model": model, "bytes": bytes, "sizeLabel": sizeLabel, "recommended": recommended, "ready": ready, "note": note, "credit": credit, "withheld": withheld, "removable": removable, "inUse": inUse, "streams": streams] }
 }
 public struct OfferJob: Sendable, Equatable {
     public var job: String, group: String, host: String
@@ -41,16 +45,20 @@ public enum ModelOffer {
 
     /// What the list's entry weighs: its pinned files when it has them, else the candidate table's size (FluidAudio fetches those itself).
     static func bytes(_ e: ModelListEntry, role: ConfigRole) -> Int64 {
-        if let l = SetupCatalog.ladder(role.stage).first(where: { $0.id == e.id }), l.bytes > 0 { return l.bytes }       // what setup downloads for it, with its companions
+        if let l = SetupCatalog.ladder(role.stage).first(where: { $0.id == e.id }), l.bytes > 0 { return l.bytes }       // what setup downloads for it: its own files
         return e.totalBytes > 0 ? e.totalBytes : (CandidateTable.candidate(e.id, role)?.bytes ?? 0)
     }
 
     /// The jobs, each with every option the list holds for it (best-ranked first) and the one marked recommended for this phone: the first entry whose device rule fits it (`ModelListEntry.isRecommended`, the machine
     /// identifier and the memory). A row added to the list (a newer model, another recogniser) is an option here with no change to this code. The floors are not in the list. A job whose entries fit no rule lists them and recommends none.
     /// `ready`: job -> the id on the phone and passed its check. Every voice-setup stage that downloads is a job here, the quick-decision model too: what the first-run press fetches is exactly these jobs' chosen options and nothing else.
-    public static func jobs(profile: DeviceProfile, list: ModelList = .builtIn(), ready: [String: String] = [:], inUse: Set<String> = [], onDisk: (String) -> Bool = { ModelPins.current($0)?.onDisk?() ?? false }) -> [OfferJob] {
+    public static func jobs(profile: DeviceProfile, list: ModelList = .builtIn(), ready: [String: String] = [:], inUse: Set<String> = [], chosen: [String: String] = [:], isReady: (String) -> Bool = { _ in false }, onDisk: (String) -> Bool = { ModelPins.current($0)?.onDisk?() ?? false }) -> [OfferJob] {
         var out: [OfferJob] = []
         for j in jobIDs {
+            /// "In use" is the model the phone uses for THIS job: for the answering and decision jobs its own saved choice (the stage lists Qwen3 whatever was chosen), else what the radio is configured with.
+            func isInUse(_ job: String, _ id: String) -> Bool { job == "responder" || job == "decision" ? chosen[job] == id && isOn(id) : inUse.contains(id) }
+            func isOn(_ id: String) -> Bool { ready[j] == id || isReady(id) }          // every option on the phone, not only the best one: the page lists them all
+            func streams(_ id: String) -> Bool { ConfigRole.allCases.first { $0.stage.rawValue == j }.flatMap { CandidateTable.candidate(id, $0) }?.streamsWords ?? false }   // a recogniser that gives words while you speak
             var opts: [(id: String, label: String, bytes: Int64, fits: Bool, note: String, credit: String)] = []
             if let role = ConfigRole.allCases.first(where: { $0.stage.rawValue == j }) {
                 let all = list.models.filter { $0.job == role.rawValue }.sorted { $0.rank > $1.rank }
@@ -62,9 +70,9 @@ public enum ModelOffer {
             }
             let opts2 = opts.filter { $0.bytes > 0 }
             if opts2.isEmpty { continue }
-            let rec = opts2.first { $0.fits && !isWithheld(id: $0.id, ready: ready[j] == $0.id) }?.id
+            let rec = opts2.first { $0.fits && !isWithheld(id: $0.id, ready: isOn($0.id)) }?.id
             out.append(OfferJob(job: j, group: group(j), host: host,
-                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: ready[j] == $0.id, note: $0.note, credit: $0.credit, withheld: isWithheld(id: $0.id, ready: ready[j] == $0.id), removable: onDisk($0.id) && !inUse.contains($0.id) && j != "speaker") }))
+                                options: opts2.map { OfferOption(id: $0.id, model: $0.label, bytes: $0.bytes, recommended: $0.id == rec, ready: isOn($0.id), note: $0.note, credit: $0.credit, withheld: isWithheld(id: $0.id, ready: isOn($0.id)), removable: onDisk($0.id) && !inUse.contains($0.id) && j != "speaker", inUse: isInUse(j, $0.id), streams: streams($0.id)) }))
         }
         return out
     }

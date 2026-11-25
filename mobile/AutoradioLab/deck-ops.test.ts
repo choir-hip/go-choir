@@ -23,8 +23,8 @@ describe('D16b the generated interface agrees', () => {
     const j = JSON.parse(readFileSync(join(import.meta.dir, '..', 'exact-package', 'exact.json'), 'utf8'));
     expect(JSON.stringify(j.shapes.DeckState ?? {})).not.toContain('rate');
     expect(JSON.stringify(j)).not.toMatch(/"level":\s*"string"[^}]*deck/i);
-    const act = (j.names as { send?: string; options?: Record<string, string> }[]).find((n) => n.send === 'deckAct');
-    expect(act).toBeDefined();
+    const deck = (j.names as { source?: string; send?: string }[]).map((n) => n.source ?? n.send ?? '').filter((n) => n.startsWith('deck'));
+    expect(deck).toEqual(['deckState']);                    // the sends go through the app module's one `deck` op; no contract called the package's
   });
 });
 
@@ -84,7 +84,9 @@ describe('D13 one list of names', () => {
   const contract = readFileSync(join(import.meta.dir, 'deck-types.contract'), 'utf8');
   test('names', () => {
     const names = iface.names.map((n: { source?: string; send?: string }) => n.source ?? n.send).sort();
-    expect(names).toEqual([...DECK_NAMES].sort());
+    expect(names).toEqual(['deckState']);
+    expect(DECK_NAMES[0]).toBe('deckState');
+    expect(iface.names[0].options).toEqual({ tick: 'number' });                   // read once per radio tick by the contract (spine.contract `ds`)
   });
   test('shape fields match in the interface and the contract', () => {
     for (const shape of ['DeckEvent', 'DeckState']) {
@@ -94,13 +96,12 @@ describe('D13 one list of names', () => {
       expect(have).toEqual(fields);
     }
     const itemFields = contract.split('shape DeckItem\n')[1].split(/\n\n|\n\/\/|\nshape /)[0].split('\n').map((l) => l.trim().split(':')[0]).filter(Boolean);
-    const send = iface.names.find((n: { send?: string }) => n.send === 'deckPlay');
-    expect(Object.keys(send.options)).toEqual(itemFields);
-  });
-  test('deckEnqueue is deckPlay with a place', () => {
-    const play = iface.names.find((n: { send?: string }) => n.send === 'deckPlay');
-    const enq = iface.names.find((n: { send?: string }) => n.send === 'deckEnqueue');
-    expect(Object.keys(enq.options)).toEqual([...Object.keys(play.options), 'at']);
+    // The item crosses as the `deck` op's args: the Swift that reads them (AutoradioModule+Deck.swift `deckItem`) reads every field of the shape, and no other.
+    const swift = readFileSync(join(import.meta.dir, '..', 'exact-package', 'apple', 'AutoradioModule+Deck.swift'), 'utf8');
+    const reader = swift.slice(swift.indexOf('private func deckItem('), swift.indexOf('func playableAudioAddress('));
+    const read = [...reader.matchAll(/a\["(\w+)"\]|num\(a, "(\w+)"\)|DeckItem\(id: a\["(\w+)"\]/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+    expect([...new Set(read)].sort()).toEqual([...itemFields].sort());
+    expect(swift).toContain('args["at"]');                                          // deckEnqueue is deckPlay with a place
   });
 });
 

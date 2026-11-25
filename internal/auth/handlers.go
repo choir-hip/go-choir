@@ -80,10 +80,17 @@ type Handler struct {
 	device deviceState
 
 	// The phone app's sign-in challenges (app_ceremony.go), held in memory.
-	appChallenges appChallenges
-	demoGate      *demoGate // the reviewer sign-in's bounds (demo_account.go)
+	appChallenges     appChallenges
+	demoGate          *demoGate // the reviewer sign-in's bounds (demo_account.go)
+	demoIdentityMu    sync.Mutex
+	lastDemoAccountID string
 	// demoMintHook runs between the off check and the key insert; tests only (nil in service).
 	demoMintHook func()
+
+	// Account deletion (deletion_handlers.go): the host side of a request
+	// (stop the computer, suspend takes, refuse a protected account). nil in
+	// tests that do not exercise it.
+	deletionHost DeletionHost
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -194,6 +201,14 @@ type userInfo struct {
 	ID        string `json:"id"`
 	Email     string `json:"email"`
 	CreatedAt string `json:"created_at"`
+	Reviewer  bool   `json:"reviewer"`
+}
+
+func (h *Handler) browserUserInfo(user *User) *userInfo {
+	return &userInfo{
+		ID: user.ID, Email: user.Email, CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		Reviewer: h.IsDemoAccount(user.ID),
+	}
 }
 
 // errorResponse is a generic JSON error envelope.
@@ -416,6 +431,12 @@ func (h *Handler) buildRefreshSession(user *User, deviceInfo, method string, exp
 }
 
 func (h *Handler) createRefreshSessionRow(user *User, deviceInfo, method string, expiresAt *time.Time) (string, *RefreshSession, error) {
+	// No session is ever made for an account that asked to be deleted: the
+	// one place every sign-in path (passkey, email, desktop handoff,
+	// registration of a recovery passkey) passes through.
+	if h.store.AccountAccessRevoked(user.ID) {
+		return "", nil, ErrDeletionPending
+	}
 	raw, rs := h.buildRefreshSession(user, deviceInfo, method, expiresAt)
 	if err := h.store.CreateRefreshSession(rs); err != nil {
 		return "", nil, fmt.Errorf("create refresh session: %w", err)
@@ -469,6 +490,9 @@ func (h *Handler) issueSessionExpiring(w http.ResponseWriter, r *http.Request, u
 
 func (h *Handler) issueSessionRow(w http.ResponseWriter, r *http.Request, user *User, method string, expiresAt *time.Time) (*userInfo, *RefreshSession, error) {
 	method = normalizeAuthMethod(method)
+	if h.store.AccountAccessRevoked(user.ID) {
+		return nil, nil, ErrDeletionPending
+	}
 	accessToken, err := h.issueAccessJWT(user, method)
 	if err != nil {
 		return nil, nil, fmt.Errorf("issue access JWT: %w", err)
@@ -482,11 +506,7 @@ func (h *Handler) issueSessionRow(w http.ResponseWriter, r *http.Request, user *
 
 	h.setAuthCookiesFor(w, accessToken, refreshToken, h.refreshCookieTTL(method, expiresAt))
 
-	return &userInfo{
-		ID:        user.ID,
-		Email:     user.Email,
-		CreatedAt: user.CreatedAt.Format(time.RFC3339),
-	}, rs, nil
+	return h.browserUserInfo(user), rs, nil
 }
 
 // signInSession is the sign-in endpoints' session issuer: issueSession plus
@@ -528,6 +548,10 @@ func (h *Handler) validateRefreshCookie(r *http.Request) (*RefreshSession, *User
 	// Update last_used_at (non-fatal).
 	_ = h.store.TouchRefreshSessionLastUsed(rs.ID)
 
+	if h.store.AccountAccessRevoked(rs.UserID) {
+		_ = h.store.DeleteRefreshSessionByID(rs.ID)
+		return nil, nil, ErrDeletionPending
+	}
 	user, err := h.store.GetUserByID(rs.UserID)
 	if err != nil {
 		return nil, nil, errors.New("user not found for refresh session")
@@ -774,6 +798,10 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 
 	// Issue cookie-backed auth state.
 	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
+	if errors.Is(err, ErrDeletionPending) {
+		writeDeletionState(w, h.store, user.ID)
+		return
+	}
 	if err != nil {
 		writeIssueError(w, err, "register_finish", user.ID, "failed to create session")
 		return
@@ -837,6 +865,15 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, r *http.Request, bod
 		user, err = h.store.GetUserByID(cs.UserID)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "user not found"})
+			return nil, nil, false
+		}
+		// An account that asked to be deleted takes no new passkey, by any route
+		// (registration, recovery, the phone's ceremony): a passkey added during
+		// the 72 hours could cancel the deletion. Refused before anything is
+		// written; the store refuses again in the insert itself.
+		if h.store.AccountAccessRevoked(user.ID) {
+			log.Printf("[auth] operation=register_finish user_id=%s result=refused reason=deletion_pending", user.ID)
+			writeDeletionState(w, h.store, user.ID)
 			return nil, nil, false
 		}
 		// Fail closed: an unreadable account is not an account with no passkeys.
@@ -913,6 +950,10 @@ func (h *Handler) verifyRegistration(w http.ResponseWriter, r *http.Request, bod
 			return nil, nil, false
 		}
 	} else if err := h.store.AddRecoveryCredential(dbCred); err != nil {
+		if errors.Is(err, ErrDeletionPending) {
+			writeDeletionState(w, h.store, user.ID)
+			return nil, nil, false
+		}
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=store_credential error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to store credential"})
 		return nil, nil, false
@@ -1053,6 +1094,13 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 	// Update last_used_at for the credential (non-fatal).
 	if err := h.store.TouchCredentialLastUsed(string(credential.ID)); err != nil {
 		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=warning step=touch_last_used error=%q", user.ID, string(credential.ID), err)
+	}
+
+	// An account that asked to be deleted signs in to nothing but the
+	// cancel path: the assertion proved the person, so offer that and issue
+	// no session (deletion_handlers.go).
+	if h.offerDeletionCancel(w, user.ID) {
+		return
 	}
 
 	// Issue cookie-backed auth state.
@@ -1230,6 +1278,13 @@ func (h *Handler) HandleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// An account that asked to be deleted is signed out from that moment, not
+	// when the access token it holds runs out.
+	if h.store.AccountAccessRevoked(userID) {
+		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+		return
+	}
+
 	// Look up the user to return non-secret info.
 	user, err := h.store.GetUserByID(userID)
 	if err != nil {
@@ -1240,11 +1295,7 @@ func (h *Handler) HandleSession(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, sessionResponse{
 		Authenticated: true,
-		User: &userInfo{
-			ID:        user.ID,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt.Format(time.RFC3339),
-		},
+		User:          h.browserUserInfo(user),
 	})
 }
 
@@ -1271,16 +1322,12 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if this token was recently rotated within the grace window (e.g. concurrent request).
-	if grace, ok := h.getRotatedGrace(hashHex); ok {
+	if grace, ok := h.getRotatedGrace(hashHex); ok && !h.store.AccountAccessRevoked(grace.user.ID) && !h.demoOff(grace.user.ID) {
 		log.Printf("[auth] operation=session_refresh user_id=%s result=success step=grace_window_hit", grace.user.ID)
 		h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
 		writeJSON(w, http.StatusOK, sessionResponse{
 			Authenticated: true,
-			User: &userInfo{
-				ID:        grace.user.ID,
-				Email:     grace.user.Email,
-				CreatedAt: grace.user.CreatedAt.Format(time.RFC3339),
-			},
+			User:          h.browserUserInfo(grace.user),
 		})
 		return
 	}
@@ -1288,16 +1335,12 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	rs, user, err := h.validateRefreshCookie(r)
 	if err != nil {
 		// Check grace window once more in case of a race where another concurrent request rotated it while validating.
-		if grace, ok := h.getRotatedGrace(hashHex); ok {
+		if grace, ok := h.getRotatedGrace(hashHex); ok && !h.store.AccountAccessRevoked(grace.user.ID) && !h.demoOff(grace.user.ID) {
 			log.Printf("[auth] operation=session_refresh user_id=%s result=success step=grace_window_race_hit", grace.user.ID)
 			h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
 			writeJSON(w, http.StatusOK, sessionResponse{
 				Authenticated: true,
-				User: &userInfo{
-					ID:        grace.user.ID,
-					Email:     grace.user.Email,
-					CreatedAt: grace.user.CreatedAt.Format(time.RFC3339),
-				},
+				User:          h.browserUserInfo(grace.user),
 			})
 			return
 		}
@@ -1325,11 +1368,7 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, sessionResponse{
 		Authenticated: true,
-		User: &userInfo{
-			ID:        user.ID,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt.Format(time.RFC3339),
-		},
+		User:          h.browserUserInfo(user),
 	})
 }
 
@@ -1455,6 +1494,11 @@ func transportListToJSON(transports []protocol.AuthenticatorTransport) string {
 // This is used by the proxy to verify auth state.
 func (h *Handler) ValidateAccessToken(tokenStr string) (string, error) {
 	userID, _, err := h.validateAccessTokenMethod(tokenStr)
+	if err == nil && h.store.AccountAccessRevoked(userID) {
+		// A token signed before the deletion request is still inside its
+		// five minutes; the record, not the signature, decides.
+		return "", ErrDeletionPending
+	}
 	return userID, err
 }
 
@@ -1624,6 +1668,10 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userState, err := h.issueSessionExpiring(w, r, user, exchange.AuthMethod, exchange.NotAfter)
+	if errors.Is(err, ErrDeletionPending) {
+		writeDeletionState(w, h.store, user.ID)
+		return
+	}
 	if err != nil {
 		writeIssueError(w, err, "desktop_redeem", exchange.UserID, "failed to create desktop session")
 		return
@@ -1819,7 +1867,7 @@ func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) (*U
 			if err == nil && ak != nil && ak.RevokedAt == nil &&
 				(ak.ExpiresAt == nil || ak.ExpiresAt.After(time.Now())) {
 				user, err := h.store.GetUserByID(ak.UserID)
-				if err == nil {
+				if err == nil && !h.store.AccountAccessRevoked(ak.UserID) && !h.demoOff(ak.UserID) {
 					// Update last_used_at (best-effort, ignore errors).
 					_ = h.store.TouchAPIKeyLastUsed(r.Context(), ak.ID)
 					return user, ak

@@ -52,20 +52,22 @@ public enum ListenerPipeline {
     }
 
     /// `isReady(modelID)`: on the phone and heard to work. `hasStage(kind, stageID)`: this build registered it.
+    /// `preferred`: the person's Use for a job ("bounds", "live", "final"; `ModelUse`). A preferred model that is on the phone and registered is that job's model ahead of the list's rank; one that is not changes nothing.
     public static func choose(table: [ModelCandidate] = CandidateTable.all,
-                              isReady: (String) -> Bool, hasStage: (StageKind, String) -> Bool) -> Choice {
-        func best(_ role: ConfigRole, _ kind: StageKind, where ok: (ModelCandidate) -> Bool = { _ in true }) -> ModelCandidate? {
-            CandidateTable.candidates(role, in: table).first { !$0.isFloor && ok($0) && isReady($0.id) && hasStage(kind, $0.kitStageID) }
+                              isReady: (String) -> Bool, hasStage: (StageKind, String) -> Bool, preferred: [String: String] = [:]) -> Choice {
+        func best(_ role: ConfigRole, _ kind: StageKind, job: String, where ok: (ModelCandidate) -> Bool = { _ in true }) -> ModelCandidate? {
+            let all = CandidateTable.candidates(role, in: table).filter { !$0.isFloor && ok($0) && isReady($0.id) && hasStage(kind, $0.kitStageID) }
+            return all.first { $0.id == preferred[job] } ?? all.first
         }
         var models: [String: String] = [:]
         // Speech detection.
-        let vad = best(.vad, .speechBounds)
+        let vad = best(.vad, .speechBounds, job: "bounds")
         let boundsID = vad?.kitStageID ?? floorBounds
         if let vad { models["bounds"] = vad.id }
         let bounds = StageSetting(id: boundsID, params: boundsParams[boundsID] ?? [:])
         // Recognition.
-        let final = best(.transcriber, .transcriber)
-        let live = best(.transcriber, .transcriber) { $0.streamsWords }
+        let final = best(.transcriber, .transcriber, job: "final")
+        let live = best(.transcriber, .transcriber, job: "live") { $0.streamsWords }
         var transcriber = StageSetting(id: floorTranscriber)
         var said = "Apple's recogniser (no listening model is on this phone yet)"
         if let final {
@@ -89,7 +91,7 @@ public enum ListenerPipeline {
 
     /// The choice for a running app: what is ready on the phone (`readiness`) and registered in this build's `registry`.
     public static func choose(registry: StageRegistry?, readiness: VoiceReadiness) -> Choice {
-        choose(isReady: { readiness.isReady(model: $0) }, hasStage: { kind, id in registry?.stages(kind).contains { $0.id == id } ?? false })
+        choose(isReady: { readiness.isReady(model: $0) }, hasStage: { kind, id in registry?.stages(kind).contains { $0.id == id } ?? false }, preferred: ModelUse.standard.all)
     }
 
     /// What a configuration's listening stages are, in plain words (written to the trace when a voice session starts, so a run says which recogniser it used).

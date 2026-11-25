@@ -44,6 +44,10 @@ shape RadioTick
   // Moves once per pulse while `live`, and not otherwise.
   beat: number
 
+// The heartbeat's count (heartbeat.ts).
+shape Heartbeat
+  n: number
+
 shape RadioBuiltOn
   n: number
   title: string

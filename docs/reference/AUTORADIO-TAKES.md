@@ -110,14 +110,19 @@ commits' `Security-Effect` text says the length is 3 to 60 s; publish already
 stored the header's 2.5 to 62.0 s, and the third commit's wording is the
 statement that counts.
 
+## While the publisher's account deletion is pending
+
+A take of an account that asked to be deleted moves from `live` to `suspended` (`SetAccountTakesState`, corpusd `POST /internal/platform/account/suspend`), re-asserted by the purge runner every minute, so no read serves it (every read lists or serves only `live` takes). A cancelled deletion puts the state back; the transcript and audio are untouched in between. After 72 hours the purge deletes it as the publisher's own delete does (`deleted`, audio object gone, transcript blanked) and the row stays. See `docs/design/account-create-delete-2026-11-23.md` and `docs/changes.md` 2026-11-24.
+
 ## After a delete or a yank
 
 The take row stays, with its id, handle, times, size, hash and state
 (`deleted` or `yanked`); its transcript and the story it answered are blanked.
-The audio object is deleted, but a body of 1 KB or more is externalised, and
-those bytes stay on disk until the artifact GC pass removes them. That holds
-for the take row too: the pre-blank body, transcript included (a transcript
-over about 1 KB), survives in the artifact store until the same GC pass. The outcome
+The audio object is deleted, and a body of 1 KB or more is externalised: the
+bytes the take row and the audio row had in the artifact store are unlinked in
+the same step when no other row names them (`releaseBodyRefs`, `removeTake`),
+so the transcript and the voice do not wait for the artifact GC's seven day
+grace; the GC remains the backstop if the unlink fails. The outcome
 rows stay as counts: a yanked take keeps its prior counts in the publisher's
 record (a decision for the owner, not made here).
 

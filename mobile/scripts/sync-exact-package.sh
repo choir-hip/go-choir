@@ -20,6 +20,14 @@ KIT="$HERE/AutoradioKit/Sources/AutoradioKit"
 MODELS="$HERE/AutoradioKit/Sources/AutoradioModels"
 OUT="$HERE/exact-package/apple"
 APPMOD="$HERE/AutoradioLab/modules/apple"
+# AutoradioLab/package.json takes @exact/passkeys from ../.exact-src, a path bun cannot read from EXACT2. A lane has no checkout there, so it gets a link to
+# the lead's (no copy); without it bun install skips the package, the bundle cannot resolve app.ts, and contract build refuses with a misleading
+# "import.meta.env.APP_ID ... read it nowhere".
+if [ -n "${EXACT2:-}" ] && [ ! -e "$HERE/.exact-src" ] && [ ! -L "$HERE/.exact-src" ]; then
+  [ -f "$EXACT2/scripts/app-cli.mjs" ] || { echo "sync-exact-package: EXACT2=$EXACT2 is not an Exact checkout" >&2; exit 1; }
+  ln -s "$EXACT2" "$HERE/.exact-src"
+  echo "mobile/.exact-src: linked to $EXACT2"
+fi
 "$HERE/scripts/gen-build-info.sh"                        # the commit -> AutoradioLab/build-info.gen.ts (About)
 rm -rf "$OUT/Kit"; mkdir -p "$OUT/Kit"
 find "$KIT" -name '*.swift' -exec cp {} "$OUT/Kit/" \;   # flat: Choir/ and other sub-directories are copied in; names are unique

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/yusefmosiah/go-choir/internal/purgeguard"
 )
 
 const (
@@ -47,6 +49,12 @@ type RetentionPruneConfig struct {
 	SelectorNamed []string
 	// ManifestPath is the removal manifest; default <StateDir>/retention-manifest.jsonl.
 	ManifestPath string
+
+	// deletionUsers are the accounts with a live deletion record, read from
+	// the auth database for one pass (withDeletionRecords); deletionUnreadable
+	// says the records could not be read. Neither is configuration.
+	deletionUsers      map[string]bool
+	deletionUnreadable bool
 }
 
 type RetentionPruneConfigSummary struct {
@@ -291,6 +299,7 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessP
 		emails[k] = v
 	}
 	plan.Warnings = append(plan.Warnings, warnings...)
+	cfg = withDeletionRecords(cfg)
 	ownedVMs := make(map[string]bool, len(ownerships)+len(detached))
 	for _, own := range ownerships {
 		if own != nil && strings.TrimSpace(own.VMID) != "" {
@@ -531,6 +540,11 @@ func retentionOwnershipReclaimable(own *VMOwnership, email string, cfg Retention
 	if own == nil || strings.TrimSpace(own.VMID) == "" || own.LastActiveAt.IsZero() {
 		return false
 	}
+	if cfg.accountDeleting(own.UserID) {
+		// An account that asked to be deleted keeps its computer until the
+		// purge (72 hours): nothing else destroys it first.
+		return false
+	}
 	if own.IsHeld() {
 		// A held computer is never reclaimable/prunable.
 		return false
@@ -705,6 +719,7 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	r.mu.Lock()
 	cur := r.vmByID[candidate.VMID]
 	warmness := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
+	cfg = withDeletionRecords(cfg)
 	if cur == nil || !retentionOwnershipReclaimable(cur, email, cfg, now) || retentionOwnershipProtected(cur, warmness) ||
 		len(vmDirRecoveryKeepReasons(cfg.StateDir, cur.VMID, now, cfg.QuarantineMinAge)) > 0 {
 		r.mu.Unlock()
@@ -765,6 +780,34 @@ func loadRetentionEmailsFromAuthDB(path string) (map[string]string, []string) {
 		return emails, []string{fmt.Sprintf("iterate auth users: %v", err)}
 	}
 	return emails, nil
+}
+
+// withDeletionRecords returns cfg with the accounts that have a live deletion
+// record read from the auth database (read-only). When the records cannot be
+// read the copy says every account might be deleting, and every rule keeps
+// everything: a destroyer of user data fails closed.
+func withDeletionRecords(cfg RetentionPruneConfig) RetentionPruneConfig {
+	cfg.deletionUsers, cfg.deletionUnreadable = nil, false
+	path := strings.TrimSpace(cfg.AuthDBPath)
+	if path == "" {
+		return cfg
+	}
+	db, err := purgeguard.OpenReadOnly(path)
+	if err == nil {
+		defer db.Close()
+		cfg.deletionUsers, err = purgeguard.PendingUsers(db)
+	}
+	if err != nil {
+		log.Printf("vmctl: retention keeps everything: cannot read the deletion records: %v", err)
+		cfg.deletionUsers, cfg.deletionUnreadable = nil, true
+	}
+	return cfg
+}
+
+// accountDeleting reports whether the account has a live deletion record (or
+// the records could not be read).
+func (c RetentionPruneConfig) accountDeleting(userID string) bool {
+	return c.deletionUnreadable || c.deletionUsers[strings.TrimSpace(userID)]
 }
 
 func emailDomain(email string) string {
