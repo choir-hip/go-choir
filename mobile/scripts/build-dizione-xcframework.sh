@@ -35,32 +35,11 @@ module dizione {
 }
 EOF
 done
-cat > "$OUT/dizione.xcframework/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>AvailableLibraries</key><array>
-    <dict><key>LibraryIdentifier</key><string>ios-arm64</string>
-      <key>LibraryPath</key><string>libdizione.a</string>
-      <key>SupportedArchitectures</key><array><string>arm64</string></array>
-      <key>SupportedPlatform</key><string>ios</string></dict>
-    <dict><key>LibraryIdentifier</key><string>ios-arm64-simulator</string>
-      <key>LibraryPath</key><string>libdizione.a</string>
-      <key>SupportedArchitectures</key><array><string>arm64</string></array>
-      <key>SupportedPlatform</key><string>ios</string>
-      <key>SupportedPlatformVariant</key><string>simulator</string></dict>
-    <dict><key>LibraryIdentifier</key><string>macos-arm64</string>
-      <key>LibraryPath</key><string>libdizione.a</string>
-      <key>SupportedArchitectures</key><array><string>arm64</string></array>
-      <key>SupportedPlatform</key><string>macos</string></dict>
-  </array>
-  <key>CFBundlePackageType</key><string>XFWK</string>
-  <key>XCFrameworkFormatVersion</key><string>1.0</string>
-</dict></plist>
-PLIST
-cat > "$OUT/dizione-module.modulemap" <<'EOF'
-module dizione {
-  header "dizione.h"
-  export *
-}
-EOF
+# Create it the way scripts/build-llama-xcframework.sh makes llama's: a static
+# library plus Headers per slice, which Exact turns into a Swift module.
+rm -rf "$OUT/dizione.xcframework"
+xcrun xcodebuild -create-xcframework \
+  -library "$OUT/dizione-sim/libdizione.a" -headers "$OUT/dizione-sim/include" \
+  -library "$OUT/dizione-ios/libdizione.a" -headers "$OUT/dizione-ios/include" \
+  -library "$OUT/dizione-macos/libdizione.a" -headers "$OUT/dizione-macos/include" \
+  -output "$OUT/dizione.xcframework" >/dev/null
