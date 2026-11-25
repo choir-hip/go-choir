@@ -10,6 +10,14 @@ backfilled from the commit and nobody re-read the evidence for this page.
 Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 169 docs-only and 72 that change behavior.
 
+## 2026-11-25: one let-go answer no longer fails every phone page until a restart (orange; lane `settle-once`)
+
+What: the phone's shared code settles the account once per launch before any source answers (`account.ts` `settleAccount`). It kept that run as one promise for the life of the process, and the run raced the pending-revoke retry against a `setTimeout`. Exact runs every step of the run as the answer that started it and refuses a timer once that answer is let go, so when the first answer was asked again with new arguments before the settle finished, the run rejected and every later answer failed with "setTimeout() is unavailable here". Now the result is shared as a value: a rejected run is not kept (the next answer reconciles again), a run whose key read threw is not taken by another answer as the launch's answer, and the retry has no timer of its own (its requests share a 3 s budget as their `exactTimeout`, `api.ts` `Authed.timeoutMs`). `host.ts` `hostMode` likewise: an answer that waited on another answer's probe and saw it fail probes again as itself.
+Why: on the owner's phone (2026-11-24 log, 116 such failures: `hc`, `preqd`, `pgs`, `th` and the rest) pages stayed on their placard at random launches until a relaunch. Record: `docs/problems/shared-settle-promise-fails-every-request-2026-11-25.md`.
+Proof: `mobile/AutoradioLab/settle-once.test.ts` (Exact's answer ownership modelled with AsyncLocalStorage) F1 to F5 failed before and pass after; whole `bun test` 1593 pass, 0 fail; `bun exact.mjs test web` 26 passed, 0 failed. Not proved on a device.
+Replaced: the module-level `settled` promise and the `timeout(3000)` race in the launch settle; the shared failed probe in `host.ts`.
+Undo: revert the commit.
+
 ## 2026-11-24: the privacy policy and terms load again on choir.news
 
 What: the web build's nix source filter now keeps every file under `frontend/public/`. It kept only listed suffixes (.js, .ts, .svelte, .css, .html and a few named files), so `public/legal/privacy-policy.md`, `public/legal/terms-of-service.md` and the reader's sample PDF never reached the deployed site, and `/legal/*.md` answered with the app's HTML shell. The Privacy and Terms pages (and the app's links to them) showed that HTML as text.
