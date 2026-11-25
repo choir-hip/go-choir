@@ -228,7 +228,7 @@
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
-        vendorHash = "sha256-13m8lw0Oj0gGecosk+rIOR4Cu+Uv+lq675txXyo5iEE=";
+        vendorHash = "sha256-T3uFl2Vz3lMzzZ+f6vI5Q5An9n1Dv+0del+qIMMsumU=";
         nativeBuildInputs = [ pkgs.pkg-config ];
         ldflags = [
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Version=${goModuleVersion}"
@@ -272,7 +272,12 @@
               ((pkgs.lib.hasSuffix ".json" path) &&
                 ((pkgs.lib.hasInfix "/frontend/src/" path) || (pkgs.lib.hasInfix "/frontend/scripts/" path))) ||
               base == "svelte.config.js" ||
-              base == "vite.config.js";
+              base == "vite.config.js" ||
+              # Everything under public/ is copied as served: the privacy
+              # policy and terms (.md, fetched by LegalDocument.svelte) and the
+              # reader's sample PDF. A suffix list here served the SPA shell in
+              # their place (2026-11-24).
+              (pkgs.lib.hasInfix "/frontend/public/" path);
         };
         npmDepsHash = "sha256-oA1Qf3x5Ff2kHBLJwhcVvy/d0n5GWlOXrXbue/HJ5UQ=";
         npmBuildScript = "build";
@@ -319,7 +324,7 @@
       # one build cache. mkGoService copies one binary out and keeps the
       # per-service identity the deploy verifies (build.json, skills, frontend).
       goServiceSubPackages = [
-        "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/vmctl"
+        "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/demo-account" "cmd/vmctl"
         "cmd/gateway" "cmd/corpusd" "cmd/checkpointd"
         "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
         "cmd/autoputer" "cmd/choir-builder" "cmd/goproxy"
@@ -336,6 +341,8 @@
         "cmd/escrowkey" "cmd/taperepack"
         # computer bundle export/verify/import (S3/S4); beside corpusd
         "cmd/choir-bundle"
+        # the operator's one-off deletion of unproved accounts (docs/ship/purge-unproved.md); installed beside auth (extraBins), run by hand
+        "cmd/purge-unproved"
       ];
       # Keep source selection structural. Go owns the package dependency graph;
       # repeating it here as per-service internalDirs caused fallback builds to
@@ -406,6 +413,8 @@
         auth = mkGoService {
           pname = "auth";
           subPackage = "cmd/auth";
+          # operator tool: on Node B /var/lib/go-choir/services/auth/bin/purge-unproved; no unit runs it
+          extraBins = [ "purge-unproved" ];
         };
         proxy = mkGoService {
           pname = "proxy";
@@ -418,6 +427,10 @@
         maildctl = mkGoService {
           pname = "maildctl";
           subPackage = "cmd/maildctl";
+        };
+        demo-account = mkGoService {
+          pname = "demo-account";
+          subPackage = "cmd/demo-account";
         };
         vmctl = mkGoService {
           pname = "vmctl";

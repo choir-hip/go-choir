@@ -13,10 +13,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/hostroom"
 )
 
-// The auth service decides sign-up on which accounts already have a computer
-// (their disk is in the free reading) and which are still promised one. vmctl
-// is the only one that knows, and tells it through a file, with the disk each
-// computer holds now. The file is SUBTRACTED from the footprint, so a figure
+// The auth service decides sign-up on the computers that exist and the disk
+// each holds now (an account with no computer holds nothing). vmctl is the
+// only one that knows, and tells it through a file. The file is SUBTRACTED from the footprint, so a figure
 // too high opens a place; the disk is therefore counted only as far as it is
 // measured exactly (the btrfs extent reading), and a file measured any other
 // way counts 0. Failure modes guarded:
@@ -174,7 +173,7 @@ func TestAFallbackMeasureCannotOpenAPlace(t *testing.T) {
 	plan := hostroom.Plan{ReserveBytes: 8 << 20, FootprintBytes: 16 << 20}
 	places := func(free uint64, reg *OwnershipRegistry) int {
 		owners := map[string]uint64{"u": ownerDisk(reg, "u", true)}
-		return plan.Places(free, plan.Held([]string{"u"}, owners))
+		return plan.Places(free, plan.Held(owners))
 	}
 	build := func(asleep bool, measure func(string) (int64, string, error), meta string) *OwnershipRegistry {
 		stateDir := t.TempDir()
@@ -192,7 +191,7 @@ func TestAFallbackMeasureCannotOpenAPlace(t *testing.T) {
 	const free0 = 97 << 20
 	awake, asleep := build(false, over, "fiemap_bound"), build(true, over, "fiemap_bound")
 	a, b := places(free0, awake), places(free0-2<<20, asleep) // the snapshot took 2 MiB of the real disk
-	zero := plan.Places(free0, plan.Held([]string{"u"}, map[string]uint64{"u": 0}))
+	zero := plan.Places(free0, plan.Held(map[string]uint64{"u": 0}))
 	if a != zero || b > a {
 		t.Fatalf("with a fallback measure the places went %d -> %d, want %d and no rise", a, b, zero)
 	}
@@ -217,7 +216,7 @@ func TestAHibernateDoesNotOpenAPlaceOnACompressingDisk(t *testing.T) {
 		return reg
 	}
 	places := func(free uint64, reg *OwnershipRegistry) int {
-		return plan.Places(free, plan.Held([]string{"u"}, map[string]uint64{"u": ownerDisk(reg, "u", true)}))
+		return plan.Places(free, plan.Held(map[string]uint64{"u": ownerDisk(reg, "u", true)}))
 	}
 	const free0 = 97 << 20
 	if a, b := places(free0, build(false)), places(free0-2<<20, build(true)); a != b {

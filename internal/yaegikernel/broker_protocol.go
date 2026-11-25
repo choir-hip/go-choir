@@ -29,6 +29,12 @@ const (
 	ActionSourceAPI        BrokerAction = "source_api"
 	ActionReadCapture      BrokerAction = "read_capture"
 	ActionSearchWireCorpus BrokerAction = "search_wire_corpus"
+	// The corpus as values for a desk cell (corpus_repl.go): a page of captures,
+	// the text of many, the nearest by meaning and the edges around one.
+	ActionCorpusCaptures BrokerAction = "corpus_captures"
+	ActionCorpusTexts    BrokerAction = "corpus_texts"
+	ActionCorpusNear     BrokerAction = "corpus_near"
+	ActionCorpusEdges    BrokerAction = "corpus_edges"
 	// ActionTextureSearch is the Texture custodian's guarded corpus search,
 	// served only under a texture.search lease: the research desk's Texture
 	// child's choir.SearchTexture (plan MA4.6, section 8.6).
@@ -501,7 +507,8 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionTextureSearch,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList, ActionReadMail:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList, ActionReadMail,
+		ActionCorpusCaptures, ActionCorpusTexts, ActionCorpusNear, ActionCorpusEdges:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

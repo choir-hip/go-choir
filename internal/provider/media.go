@@ -207,7 +207,7 @@ func IsMediaError(err error) bool {
 }
 
 // urlImageSourcesAllowed names the providers whose wire documents URL image
-// sources. Bedrock takes base64 only; OpenCode and Z.AI URL fetching is
+// sources. Bedrock takes base64 only; OpenCode URL fetching is
 // UNVERIFIED. Elsewhere a caller inlines the image or passes an
 // artifact_ref the computer resolves.
 func urlImageSourcesAllowed(providerName string) bool {

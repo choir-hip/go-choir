@@ -63,7 +63,12 @@ SEE IT WORK IN ONE MINUTE, NO ACCOUNT
 No model download is needed for this. The app plays with the system voice if no model file is present. If you ask the radio something while signed out, the app asks you to sign in or make an account.
 
 CREATE AN ACCOUNT AND DELETE IT [WHEN-BUILT]
-No review account or code is needed. Tap Make an account on any prompt that asks for one. The app shows the phone's own passkey screen, where you make an account with any email address and a passkey. There is no password and no code. To delete the account, open Settings, Account, Delete account, and confirm with the passkey. Access ends at once and everything is permanently removed after 72 hours; signing in again within 72 hours cancels it.
+Tap Make an account on any prompt that asks for one. The app shows the phone's own passkey screen, where you make an account with any email address and a passkey; a new account first checks the address with a code we send. To delete the account, open Settings, Account, Delete account, and confirm with the passkey. Access ends at once and everything is permanently removed after 72 hours; signing in again within 72 hours cancels it.
+
+REVIEW ACCOUNT
+If you cannot use a passkey, type the user name in the email field of the sign-in screen (a name has no "@"); a password field appears; type the password and tap Sign in. It opens a prepared account with an empty computer. That account cannot be deleted from the app.
+User name: REVIEW_USER_PLACEHOLDER
+Password: REVIEW_PASSWORD_PLACEHOLDER
 
 MICROPHONE AND SPEECH
 The microphone is used only for Voice and takes. Voice is off when the app opens and starts only when the listener taps the Voice control. The app asks for microphone and speech permission at the moment Voice or a take is first turned on, not before. Speech is recognised on the device, by speech models the app downloads, and audio is not sent to our servers, except in a take the listener publishes. Voice can stay on with the screen locked for up to three minutes after the listener last speaks. The iPhone shows its microphone indicator while it is on.
@@ -87,7 +92,7 @@ CONTACT
 CONTACT_EMAIL, and a phone number that is answered: PHONE_NUMBER_PLACEHOLDER.
 ```
 
-A demo account is also provided in the user name and password fields (owner, 2026-11-24): on the sign-in screen tap "Reviewer sign-in". It works even if sign-up is closed. [WHEN-BUILT: lane demo-account; runbook docs/ship/demo-account.md]
+A demo account is also provided in the user name and password fields (owner, 2026-11-24): type the user name in the email field on the sign-in screen; a password field appears. It works even if sign-up is closed. [WHEN-BUILT: lane demo-account; runbook docs/ship/demo-account.md]
 
 ## 4. Feedback email and other TestFlight fields
 

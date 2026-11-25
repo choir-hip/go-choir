@@ -16,7 +16,6 @@ func TestModelCostTable(t *testing.T) {
 		"bedrock/us.anthropic.claude-sonnet-4-6",
 		"bedrock/us.anthropic.claude-opus-4-6-v1",
 		"bedrock/us.anthropic.claude-haiku-5-5",
-		"zai/glm-5.2", "zai/glm-5.1", "zai/glm-5-turbo",
 		"opencode-go/glm-5.3-flash", "opencode-go/muse-spark-1.3-contributor", "opencode-go/hy3", "opencode-go/qwen3.7-max",
 		"chatgpt/gpt-6-luna", leadSynth, "river/deepseek-ai/DeepSeek-V4.1-Flash-1017",
 		"unknown/never-heard-of-it",

@@ -26,7 +26,7 @@ func fullCapacitySummary() vmctl.PulseSummary {
 			Memory:    vmctl.PulseCapacityMemory{Available: true, TotalBytes: 34359738368, AvailableBytes: 21474836480, FloorBytes: 5033164800},
 			Disk:      vmctl.PulseCapacityDisk{Available: true, AvailableBytes: 164595924992, FloorBytes: 34359738368},
 			Computers: vmctl.PulseCapacityComputers{Running: 7, Hibernated: 11, RunningGuestMemoryMiB: 28672},
-			Room:      vmctl.PulseCapacityRoom{Available: true, ReserveBytes: 107374182400, FootprintBytes: 9663676416, Accounts: 17, Promised: 3, HeldBytes: 31337, Places: 4, Open: true, SignUpsLast24h: 2},
+			Room:      vmctl.PulseCapacityRoom{Available: true, ReserveBytes: 107374182400, FootprintBytes: 9663676416, Accounts: 17, AccountsAvailable: true, HeldBytes: 31337, Places: 4, Open: true, SignUpsLast24h: 2},
 		},
 		Storage: vmctl.PulseStorageSummary{
 			VMStateBytesByClass:         map[string]int64{"real": 777000111},

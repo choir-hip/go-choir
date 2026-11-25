@@ -26,7 +26,6 @@ test.skip(
 );
 
 const ARMS = [
-  { id: 'sweep-glm-5-2-medium', provider: 'zai', model: 'glm-5.2', reasoning: 'medium' },
   { id: 'sweep-mimo-v2-5-medium', provider: 'xiaomi', model: 'mimo-v2.5', reasoning: 'medium' },
   { id: 'sweep-mimo-v2-5-pro-medium', provider: 'xiaomi', model: 'mimo-v2.5-pro', reasoning: 'medium' },
   { id: 'sweep-deepseek-v4-1-flash-high', provider: 'opencode-go', model: 'deepseek-v4.1-flash', reasoning: 'high' },

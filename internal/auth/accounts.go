@@ -367,7 +367,7 @@ func (h *Handler) HandleAccountSwitch(w http.ResponseWriter, r *http.Request) {
 		if grace, gok := h.graceLeadingTo(rs.TokenHash); gok {
 			jwtTok, jerr := h.issueAccessJWT(user, method)
 			if jerr != nil {
-				writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to switch account"})
+				writeIssueError(w, jerr, "account_switch", user.ID, "failed to switch account")
 				return
 			}
 			exp := rs.ExpiresAt
@@ -381,8 +381,7 @@ func (h *Handler) HandleAccountSwitch(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusConflict, sessionResponse{Authenticated: false, Error: "that account is signed out", Reason: ReasonMemberSignedOut})
 			return
 		}
-		log.Printf("[auth] operation=account_switch user_id=%s result=error step=rotate error=%q", user.ID, rerr)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to switch account"})
+		writeIssueError(w, rerr, "account_switch", user.ID, "failed to switch account")
 		return
 	}
 	log.Printf("[auth] operation=account_switch user_id=%s result=success", user.ID)

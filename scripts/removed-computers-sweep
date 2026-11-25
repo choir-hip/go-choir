@@ -1,0 +1,129 @@
+#!/bin/sh
+# removed-computers-sweep: delete the tape segments, snapshot chunks, file
+# roots and per-computer rows of an exact list of removed computers, through
+# corpusd's destroyed tape sweep (internal/platform/tape_sweep.go). Run as root
+# on Node B. The sweep proves each named id destroyed (no ownership record, not
+# in the registry, no route, quiet), refuses the whole request by name if any
+# named id fails, and lists nothing nobody named.
+#
+#   removed-computers-sweep dry-run --ids ID[,ID...] --accept-unrecorded-fork-lineage-for ID[,ID...] [--no-archive]
+#   removed-computers-sweep apply   --ids ID[,ID...] --accept-unrecorded-fork-lineage-for ID[,ID...] --run-id RUN --manifest-sha256 HASH [--no-archive] [--max-deletes N] [--max-bytes N]
+#
+# No fork-lineage record exists, so each computer's deletion needs the operator
+# to say so by name: --accept-unrecorded-fork-lineage-for must list exactly the
+# ids in --ids. The script never sends the global flag.
+#
+# dry-run writes nothing but a manifest and prints, per computer, its bytes by
+# class, its last head time, the ownership answer and how many chunk digests a
+# living computer's snapshot also names. apply deletes exactly that manifest
+# and needs the same ids, the run id and the manifest hash the dry run printed;
+# its receipt is the report file it prints. A computer that gained an owner in
+# between refuses the whole apply, nothing deleted, and the command exits 1.
+# Do not restore, rematerialize or import a named computer while the apply runs.
+# The apply refuses a manifest over its caps (default 2000000 files, 8 GiB)
+# before it tombstones anything: pass --max-deletes and --max-bytes at least the
+# dry run's files and bytes. If an apply stops after it began deleting (a file
+# refreshed, an unlink error), its tombstones stay in status "deleting" and the
+# files already gone are gone: fix the cause and run the same apply again, which
+# resumes from the same manifest. Without --no-archive each
+# computer's files are first archived under tape-sweep-archive (decision D1),
+# which keeps a compressed copy on the same disk.
+#
+# CORPUSD_URL defaults to http://127.0.0.1:8086.
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=lib/choir_internal.sh
+. "$here/lib/choir_internal.sh"
+CORPUSD_URL=${CORPUSD_URL:-http://127.0.0.1:8086}
+
+usage() {
+	sed -n "2,/^# CORPUSD_URL/p" "$0" | sed 's/^# \{0,1\}//' >&2
+	exit 2
+}
+
+[ $# -ge 1 ] || usage
+action=$1
+shift
+case $action in dry-run | apply) ;; *) usage ;; esac
+ids= ack= run= sha= noarchive=false maxdel= maxbytes=
+# value: a flag's value must exist and must not itself look like a flag.
+value() {
+	case ${2:-} in "" | --*) echo "removed-computers-sweep: $1 needs a value" >&2; exit 2 ;; esac
+}
+while [ $# -gt 0 ]; do
+	case $1 in
+	--ids) value "$1" "${2:-}"; ids=$2; shift 2 ;;
+	--accept-unrecorded-fork-lineage-for) value "$1" "${2:-}"; ack=$2; shift 2 ;;
+	--run-id) value "$1" "${2:-}"; run=$2; shift 2 ;;
+	--manifest-sha256) value "$1" "${2:-}"; sha=$2; shift 2 ;;
+	--max-deletes) value "$1" "${2:-}"; maxdel=$2; shift 2 ;;
+	--max-bytes) value "$1" "${2:-}"; maxbytes=$2; shift 2 ;;
+	--no-archive) noarchive=true; shift ;;
+	*) usage ;;
+	esac
+done
+sorted() { printf "%s" "$1" | tr "," "\n" | sort | tr "\n" ","; }
+[ -n "$ack" ] || { echo "removed-computers-sweep: --accept-unrecorded-fork-lineage-for is required: name each computer" >&2; exit 2; }
+[ "$(sorted "$ids")" = "$(sorted "$ack")" ] || { echo "removed-computers-sweep: --accept-unrecorded-fork-lineage-for must list exactly the computers in --ids" >&2; exit 2; }
+[ -n "$ids" ] || { echo "removed-computers-sweep: --ids is required: the exact list of removed computers" >&2; exit 2; }
+if [ "$action" = apply ]; then
+	[ -n "$run" ] && [ -n "$sha" ] || { echo "removed-computers-sweep: apply needs --run-id and --manifest-sha256 from the dry run" >&2; exit 2; }
+fi
+if [ "$action" = dry-run ] && { [ -n "$run" ] || [ -n "$sha" ]; }; then
+	echo "removed-computers-sweep: --run-id and --manifest-sha256 belong to apply" >&2
+	exit 2
+fi
+
+body=$(IDS=$ids ACK=$ack ACTION=$action RUN=$run SHA=$sha NOARCHIVE=$noarchive MAXDEL=$maxdel MAXBYTES=$maxbytes python3 -I -c '
+import json, os
+b = {"action": os.environ["ACTION"], "sweeps": ["destroyed"],
+     "accept_unrecorded_fork_lineage_for": os.environ["ACK"].split(","),
+     "computer_ids": os.environ["IDS"].split(","), "no_archive": os.environ["NOARCHIVE"] == "true"}
+if os.environ["ACTION"] == "apply":
+    b["run_id"], b["manifest_sha256"] = os.environ["RUN"], os.environ["SHA"]
+    if os.environ["MAXDEL"]: b["max_deletes"] = int(os.environ["MAXDEL"])
+    if os.environ["MAXBYTES"]: b["max_bytes"] = int(os.environ["MAXBYTES"])
+print(json.dumps(b))
+')
+start=$(choir_internal_curl "$CORPUSD_URL/internal/platform/artifact-gc/tape" -sS -X POST -H 'Content-Type: application/json' -d "$body")
+job=$(printf '%s' "$start" | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("job_id",""))' 2>/dev/null || true)
+[ -n "$job" ] || { echo "removed-computers-sweep: the sweep did not start: $start" >&2; exit 1; }
+echo "job $job started" >&2
+while :; do
+	sleep "${POLL_SECONDS:-5}"
+	status=$(choir_internal_curl "$CORPUSD_URL/internal/platform/artifact-gc/tape?job=$job" -sS 2>/dev/null || true)
+	# A restart of corpusd or a bad answer is not the end of the job: ask again.
+	state=$(printf '%s' "$status" | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("state",""))' 2>/dev/null || true)
+	case $state in done | failed) break ;; esac
+done
+printf '%s' "$status" | python3 -I -c '
+import json, sys
+job = json.load(sys.stdin)
+rep = job.get("report") or {}
+failed = job.get("state") != "done"
+if failed:
+    print("FAILED:", job.get("error", "unknown"))
+    print("If the apply had begun deleting, its tombstones read \"deleting\" and the files already gone are gone; the same apply (same run id, hash and ids) resumes it once the cause is fixed.")
+print("run_id", rep.get("run_id"), "action", rep.get("action"))
+print("manifest_sha256", rep.get("manifest_sha256", ""))
+print("ids", ",".join(rep.get("computer_ids") or []))
+for pr in rep.get("destroyed_proofs") or []:
+    cl = pr.get("classes") or {}
+    mib = lambda k: round((cl.get(k) or {}).get("bytes", 0) / 1048576, 1)
+    print(pr["computer_id"], "last_head", pr.get("head_updated_at"), "ownership", pr.get("ownership_lookup"),
+          "deletable", pr.get("deletable"), "tape-seg_MiB", mib("tape-seg"), "chunks_MiB", mib("file-cas-chunks"),
+          "chunk_files", pr.get("snapshot_chunk_files", 0), "digests_also_in_living_snapshots", pr.get("snapshot_chunks_shared_with_living", 0),
+          "rows", pr.get("rows", 0))
+print("listed", rep.get("destroyed_listed"), "files", rep.get("destroyed_files"), "bytes", rep.get("destroyed_bytes"))
+ap = rep.get("apply")
+if ap:
+    print("deleted", ap.get("deleted"), "bytes_deleted", ap.get("bytes_deleted"), "computers_deleted", ap.get("computers_deleted"),
+          "computers_skipped", ap.get("computers_skipped"), "deferred_by_cap", ap.get("deferred_by_cap"), "errors", ap.get("errors"))
+print("RULE: do not restore, rematerialize or import any of these computers from the dry run until the apply has ended.")
+print("report", rep.get("report_path", ""))
+for w in rep.get("warnings") or []:
+    print("warning:", w)
+if rep.get("destroyed_refused"):
+    print("refused:", rep["destroyed_refused"])
+sys.exit(1 if failed else 0)
+'

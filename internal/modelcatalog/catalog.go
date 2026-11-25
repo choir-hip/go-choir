@@ -19,7 +19,7 @@ type ModelInfo struct {
 	// DisplayName is a human-readable name for logging and UI.
 	DisplayName string `json:"display_name"`
 
-	// Provider is the provider name that serves this model (e.g., "zai",
+	// Provider is the provider name that serves this model (e.g.,
 	// "fireworks", "bedrock").
 	Provider string `json:"provider"`
 
@@ -60,12 +60,8 @@ const (
 // UNVERIFIED. Delete a line once scripts/vision_probe.py --model <id>
 // passes on staging (docs/archive/problems/models-configured-text-only-2026-10-15.md).
 func TextOnlyModels() map[string]string {
-	const zaiText = "believed text-only: Z.AI ships vision as separate GLM-*V models (UNVERIFIED for this version)"
 	const unverified = "UNVERIFIED: no doc or code confirms image input through OpenCode for this model"
 	return map[string]string{
-		"glm-5.2":                         zaiText,
-		"glm-5.1":                         zaiText,
-		"glm-5-turbo":                     zaiText,
 		"glm-5.3-flash":                   unverified,
 		"muse-spark-1.3-contributor":      unverified,
 		"muse-spark-1.3-contributor-free": unverified,
@@ -154,26 +150,6 @@ func SupportedModels() []ModelInfo {
 			DisplayName:     "Claude Opus 4.6",
 			Provider:        "bedrock",
 			MaxOutputTokens: 128000,
-		},
-		{
-			ID:                  "glm-5.2",
-			DisplayName:         "GLM-5.2",
-			Provider:            "zai",
-			MaxOutputTokens:     131072,
-			ContextWindowTokens: 1_000_000,
-			RecommendedFor:      []string{deskmanifest.AdmitterName(), deskmanifest.PerformerName(), "verifier"},
-		},
-		{
-			ID:              "glm-5.1",
-			DisplayName:     "GLM-5.1",
-			Provider:        "zai",
-			MaxOutputTokens: 131072,
-		},
-		{
-			ID:              "glm-5-turbo",
-			DisplayName:     "GLM-5-Turbo",
-			Provider:        "zai",
-			MaxOutputTokens: 131072,
 		},
 		{
 			ID:                  "deepseek-v4.1-flash",

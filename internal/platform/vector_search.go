@@ -19,7 +19,7 @@ import (
 
 const (
 	vectorSearchDefaultLimit = 20
-	vectorSearchMaxLimit     = 200
+	vectorSearchMaxLimit     = 500
 	// vectorEfSearch is the HNSW candidate list a search reads; it is raised
 	// from pgvector's 40 (docs/reference/EMBEDDINGGEMMA.md 0.11.2).
 	vectorEfSearch = 200

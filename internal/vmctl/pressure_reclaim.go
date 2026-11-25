@@ -83,11 +83,14 @@ type HostPressureSample struct {
 	MemorySomeAvg60        float64 `json:"memory_some_avg60,omitempty"`
 	// MemoryFloorBytes is the host memory floor this sample was judged
 	// against: max(MinMemoryAvailableBytes, MinMemoryAvailablePercent).
-	MemoryFloorBytes         uint64  `json:"memory_floor_bytes,omitempty"`
-	CPUSomeAvg10             float64 `json:"cpu_some_avg10,omitempty"`
-	CPUFullAvg10             float64 `json:"cpu_full_avg10,omitempty"`
-	IOSomeAvg10              float64 `json:"io_some_avg10,omitempty"`
-	IOFullAvg10              float64 `json:"io_full_avg10,omitempty"`
+	MemoryFloorBytes uint64  `json:"memory_floor_bytes,omitempty"`
+	CPUSomeAvg10     float64 `json:"cpu_some_avg10,omitempty"`
+	CPUFullAvg10     float64 `json:"cpu_full_avg10,omitempty"`
+	IOSomeAvg10      float64 `json:"io_some_avg10,omitempty"`
+	IOFullAvg10      float64 `json:"io_full_avg10,omitempty"`
+	// StateDirRead is true when statfs of the state directory succeeded: the
+	// reading sign-up's room is decided on, independent of the other probes.
+	StateDirRead             bool    `json:"state_dir_read,omitempty"`
 	StateDirAvailableBytes   uint64  `json:"state_dir_available_bytes,omitempty"`
 	StateDirAvailablePercent float64 `json:"state_dir_available_percent,omitempty"`
 	PIDCurrent               int     `json:"pid_current,omitempty"`
@@ -314,6 +317,7 @@ func sampleHostPressure(cfg PressureReclaimConfig) HostPressureSample {
 	if available, total, err := statfsAvailable(cfg.StateDir); err != nil {
 		errs = append(errs, err.Error())
 	} else {
+		sample.StateDirRead = true
 		sample.StateDirAvailableBytes = available
 		if total > 0 {
 			sample.StateDirAvailablePercent = (float64(available) / float64(total)) * 100

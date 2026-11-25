@@ -125,14 +125,3 @@ func TestBedrockMarksHistoryCacheBreakpoint(t *testing.T) {
 		t.Fatalf("breakpoint placement = %+v", messages[0].Content)
 	}
 }
-
-// Z.AI caches GLM prompts on its own; its request stays as it was.
-func TestZAIRequestCarriesNoCacheFields(t *testing.T) {
-	p := &ZAIProvider{modelID: "glm"}
-	raw, _ := json.Marshal(p.buildRequestBody(LLMRequest{System: "s", CacheKey: "k", Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "hi"}}}}}, "glm"))
-	for _, field := range []string{"cache_control", "prompt_cache_key", `"k"`} {
-		if strings.Contains(string(raw), field) {
-			t.Fatalf("zai body carries %s: %s", field, raw)
-		}
-	}
-}

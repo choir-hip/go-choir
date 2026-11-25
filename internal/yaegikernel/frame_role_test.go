@@ -24,7 +24,8 @@ var pinnedFrameActions = map[string][]BrokerAction{
 	"texture":    {ActionReadCapture},
 	"research": {ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence,
 		ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
-		ActionPollSource, ActionReadCapture, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionTextureSearch},
+		ActionPollSource, ActionReadCapture, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionTextureSearch,
+		ActionCorpusCaptures, ActionCorpusTexts, ActionCorpusNear, ActionCorpusEdges},
 	SessionRoleResearchWeb: {ActionSearchStart, ActionRead, ActionReadCapture, ActionSearchWireCorpus,
 		ActionReadEvidence, ActionListEvidence},
 	SessionRoleResearchTexture: {ActionTextureSearch},
@@ -37,7 +38,7 @@ var allBrokerActions = []BrokerAction{
 	ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionResearch, ActionPollSource,
 	ActionReadCapture, ActionStories, ActionShotStart, ActionShotWait, ActionScreens, ActionInstallPacket, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI, ActionRequestLease, ActionObjectGet, ActionObjectList, ActionReadMail,
-	ActionTextureSearch,
+	ActionTextureSearch, ActionCorpusCaptures, ActionCorpusTexts, ActionCorpusNear, ActionCorpusEdges,
 }
 
 const testSlotToken = "slot-token-0123456789abcdef0123456789abcdef"

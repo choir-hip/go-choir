@@ -302,6 +302,10 @@ var verbDispatch = map[string]dispatch{
 	"SourceAPI":        {"source_api", false},
 	"ReadCapture":      {"read_capture", false},
 	"SearchWireCorpus": {"search_wire_corpus", false},
+	"CorpusCaptures":   {"corpus_captures", false},
+	"CorpusTexts":      {"corpus_texts", false},
+	"CorpusNear":       {"corpus_near", false},
+	"CorpusEdges":      {"corpus_edges", false},
 	"SaveEvidence":     {"save_evidence", false},
 	"ReadEvidence":     {"read_evidence", false},
 	"ListEvidence":     {"list_evidence", false},
@@ -398,7 +402,7 @@ var system = []Desk{
 		Grants: []Grant{G("act.cast"), G("act.ask"), G("act.reply"), G("act.cancel"),
 			G("act.escalate"), G("act.precommit"), G("act.report"), G("act.report_packet"), G("act.resolve"), G("act.disagree"),
 			G("world.read"), G("texture.search"), G("captures.read"), G("source.poll"), G("evidence.write"), G("evidence.read"), G("run.memory"),
-			G("research.spawn"), G("system1.call"), G("story.relate"), G("capsule.read")},
+			G("research.spawn"), G("system1.call"), G("story.relate"), G("capsule.read"), G("corpus.read")},
 		Sandbox:    Sandbox{Profile: "desk_cell", UID: 61003},
 		Taint:      TaintUntrustedInput,
 		Memory:     Memory{WorkerMaxBytes: 768 * mib},
@@ -448,7 +452,11 @@ var system = []Desk{
 		// The research desk's web child (plan 8.6) reads the world and
 		// returns its findings to the parent as a Report. It holds no lease,
 		// so no owner-private Texture text reaches it, and it cannot message,
-		// write or fan out.
+		// write or fan out. It does NOT hold corpus.read (review, 2026-11-24):
+		// a page it reads can steer it, and with the corpus enumerable (a page
+		// of 5,000 rows, 200 texts a call) and Read open to any host, that is
+		// a way to carry the corpus out. The parent holds the verbs and
+		// passes a child the ids or texts it chooses.
 		Grants:    []Grant{G("world.read"), G("captures.read"), G("evidence.read")},
 		Sandbox:   Sandbox{Profile: "desk_cell", UID: 61003},
 		Taint:     TaintUntrustedInput,

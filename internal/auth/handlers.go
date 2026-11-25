@@ -81,6 +81,9 @@ type Handler struct {
 
 	// The phone app's sign-in challenges (app_ceremony.go), held in memory.
 	appChallenges appChallenges
+	demoGate      *demoGate // the reviewer sign-in's bounds (demo_account.go)
+	// demoMintHook runs between the off check and the key insert; tests only (nil in service).
+	demoMintHook func()
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -102,6 +105,7 @@ func NewHandler(store *Store, wa *webauthn.WebAuthn, cfg *Config, signer ed25519
 		h.room = newHostRoom(cfg.Room, cfg.DBPath)
 	}
 	h.numberNudge = make(chan struct{}, 1)
+	h.demoGate = newDemoGate(time.Now)
 	h.initEmailSignIn()
 	return h
 }
@@ -343,6 +347,9 @@ func (h *Handler) issueAccessJWT(user *User, method string) (string, error) {
 	// refuse a token without it, so a token made before this rule never works.
 	if !mayMint(user) {
 		return "", ErrAddressUnproved
+	}
+	if h.demoOff(user.ID) {
+		return "", ErrAccountOff
 	}
 	ev := int64(1)
 	if user.EmailVerifiedAt != nil {
@@ -768,8 +775,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	// Issue cookie-backed auth state.
 	userInfo, err := h.signInSession(w, r, user, AuthMethodPasskey)
 	if err != nil {
-		log.Printf("[auth] operation=register_finish user_id=%s result=error step=issue_session error=%q", user.ID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
+		writeIssueError(w, err, "register_finish", user.ID, "failed to create session")
 		return
 	}
 
@@ -1057,8 +1063,7 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=error step=issue_session error=%q", user.ID, string(credential.ID), err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
+		writeIssueError(w, err, "login_finish", user.ID, "failed to create session")
 		return
 	}
 	response := finishResponse{OK: true, User: userInfo}
@@ -1312,8 +1317,7 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 			writeAccountSwitched(w, switched.ActiveUserID)
 			return
 		}
-		log.Printf("[auth] operation=session_refresh user_id=%s result=error step=rotate_refresh error=%q", user.ID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to rotate session"})
+		writeIssueError(w, err, "session_refresh", user.ID, "failed to rotate session")
 		return
 	}
 
@@ -1500,6 +1504,10 @@ func (h *Handler) validateAccessTokenMethod(tokenStr string) (string, string, er
 	if !mayMint(user) {
 		return "", "", ErrAddressUnproved
 	}
+	// The reviewer account while it is off (demo_account.go): no token is read for it.
+	if h.demoOff(userID) {
+		return "", "", ErrAccountOff
+	}
 
 	method, _ := claims["am"].(string)
 	return userID, normalizeAuthMethod(method), nil
@@ -1617,8 +1625,7 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 	}
 	userState, err := h.issueSessionExpiring(w, r, user, exchange.AuthMethod, exchange.NotAfter)
 	if err != nil {
-		log.Printf("[auth] operation=desktop_redeem user_id=%s result=error step=issue_session error=%q", exchange.UserID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create desktop session"})
+		writeIssueError(w, err, "desktop_redeem", exchange.UserID, "failed to create desktop session")
 		return
 	}
 
@@ -1795,7 +1802,7 @@ func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) (*U
 	// 1. Try cookie-based JWT (browser sessions).
 	if cookie, err := r.Cookie(AccessTokenCookieName); err == nil && cookie.Value != "" {
 		userID, err := h.ValidateAccessToken(cookie.Value)
-		if err == nil {
+		if err == nil && !h.demoOff(userID) {
 			user, err := h.store.GetUserByID(userID)
 			if err == nil {
 				return user, nil

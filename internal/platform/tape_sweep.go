@@ -11,10 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -159,7 +161,23 @@ type TapeSweepRequest struct {
 	Pause          string `json:"pause,omitempty"`
 	ComputerID     string `json:"computer_id,omitempty"`
 	OlderThan      string `json:"older_than,omitempty"`
+	// ComputerIDs names the exact computers a destroyed sweep may delete (at
+	// most tapeSweepMaxNamed). With it the dry run refuses, loudly, any named
+	// computer it cannot delete (an ownership record, a registry entry, a
+	// route, the protected list, no head, a head inside the quiet window), and
+	// lists no computer nobody named. The list is in the manifest header, so
+	// the hash covers it, and apply must repeat it exactly. It needs
+	// sweeps=["destroyed"] and the fork-lineage acknowledgement.
+	ComputerIDs []string `json:"computer_ids,omitempty"`
+	// AcceptUnrecordedForkLineageFor is the fork-lineage acknowledgement of a
+	// named sweep, per computer: exactly the same ids as ComputerIDs. The
+	// global flag is refused for a named sweep, so no tool can hardcode it.
+	AcceptUnrecordedForkLineageFor []string `json:"accept_unrecorded_fork_lineage_for,omitempty"`
 }
+
+// tapeSweepMaxNamed bounds a named list: it is a hand-written list of
+// removed computers, never a way to name everything.
+const tapeSweepMaxNamed = 64
 
 type tapeSweepParams struct {
 	action      string
@@ -177,6 +195,9 @@ type tapeSweepParams struct {
 	pause       time.Duration
 	computerID  string
 	olderThan   time.Duration
+	// named is the sorted, unique ids of a named destroyed sweep; nil when
+	// the sweep takes every computer it proves destroyed.
+	named []string
 }
 
 // TapeSweepComputerProof is the destroyed proof recorded for one computer.
@@ -199,6 +220,18 @@ type TapeSweepComputerProof struct {
 	Files                       int    `json:"files"`
 	Bytes                       int64  `json:"bytes"`
 	SharedPayloadsKept          int    `json:"shared_payloads_kept,omitempty"`
+	// Classes is what apply would delete, by class (tape-seg, file-cas-chunks,
+	// file-cas-roots, and the loose tape namespaces), with bytes.
+	Classes map[string]TapeSweepClassCounts `json:"classes,omitempty"`
+	// SnapshotChunkFiles counts the files under the computer's own
+	// file-cas-chunks directory (its snapshot chunks are among them), and
+	// SnapshotChunksSharedWithLiving how many of those digests a living
+	// computer's snapshot root also names. A chunk file lives under one
+	// computer's directory (fileCASChunkRef), so the living computer's copy is
+	// a different file apply never lists; the count is the proof that shared
+	// content was met and left alone.
+	SnapshotChunkFiles             int `json:"snapshot_chunk_files,omitempty"`
+	SnapshotChunksSharedWithLiving int `json:"snapshot_chunks_shared_with_living,omitempty"`
 	// Rows is the computer's rows apply removes from the per-computer tables.
 	Rows      int64 `json:"rows,omitempty"`
 	NoArchive bool  `json:"no_archive,omitempty"`
@@ -227,8 +260,10 @@ type TapeSweepReport struct {
 	ManifestPath                string   `json:"manifest_path,omitempty"`
 	ManifestSHA256              string   `json:"manifest_sha256,omitempty"`
 	ReportPath                  string   `json:"report_path,omitempty"`
-	Computers                   int      `json:"computers"`
-	ChainEvents                 uint64   `json:"chain_events"`
+	// Failure is why an apply stopped; what it deleted before is in Apply.
+	Failure     string `json:"failure,omitempty"`
+	Computers   int    `json:"computers"`
+	ChainEvents uint64 `json:"chain_events"`
 	// ChainEventsResumed are chain rows whose references came from stored
 	// progress; ChainEventsWalked are rows read from the chain this run.
 	ChainEventsResumed        uint64                              `json:"chain_events_resumed"`
@@ -247,10 +282,18 @@ type TapeSweepReport struct {
 	DestroyedClasses          map[string]TapeSweepClassCounts     `json:"destroyed_classes,omitempty"`
 	NoArchive                 bool                                `json:"no_archive,omitempty"`
 	DestroyedProofs           []TapeSweepComputerProof            `json:"destroyed_proofs,omitempty"`
-	Apply                     *TapeSweepApplyCounts               `json:"apply,omitempty"`
-	Warnings                  []string                            `json:"warnings,omitempty"`
-	StartedAt                 time.Time                           `json:"started_at"`
-	DurationMs                int64                               `json:"duration_ms"`
+	// ComputerIDs is the exact list a named sweep was made for (dry run and
+	// apply alike): the receipt says which computers it concerned.
+	ComputerIDs []string `json:"computer_ids,omitempty"`
+	// ForkLineageAcknowledgedFor is whom the operator acknowledged unrecorded
+	// fork lineage for, by name; RegistryComputers is how many computers the
+	// ownership registry listed when the proof was made.
+	ForkLineageAcknowledgedFor []string              `json:"fork_lineage_acknowledged_for,omitempty"`
+	RegistryComputers          int                   `json:"registry_computers"`
+	Apply                      *TapeSweepApplyCounts `json:"apply,omitempty"`
+	Warnings                   []string              `json:"warnings,omitempty"`
+	StartedAt                  time.Time             `json:"started_at"`
+	DurationMs                 int64                 `json:"duration_ms"`
 }
 
 // TapeSweepApplyCounts are the apply outcomes, by the GC log's op names.
@@ -427,12 +470,16 @@ func (s *Service) clampTapeSweepRequest(req TapeSweepRequest) (tapeSweepParams, 
 	if p.batch <= 0 || p.batch > 4096 {
 		p.batch = DefaultTapeSweepBatch
 	}
+	// The defaults bound an unnamed run. A named run is the owner's exact list,
+	// checked whole against the caps in phase one, so an explicit cap above the
+	// default is honored (a larger list could never be applied otherwise).
+	named := len(req.ComputerIDs) > 0
 	p.maxDeletes = req.MaxDeletes
-	if p.maxDeletes <= 0 || p.maxDeletes > DefaultTapeSweepMaxDeletes {
+	if p.maxDeletes <= 0 || (p.maxDeletes > DefaultTapeSweepMaxDeletes && !named) {
 		p.maxDeletes = DefaultTapeSweepMaxDeletes
 	}
 	p.maxBytes = req.MaxBytes
-	if p.maxBytes <= 0 || p.maxBytes > DefaultTapeSweepMaxBytes {
+	if p.maxBytes <= 0 || (p.maxBytes > DefaultTapeSweepMaxBytes && !named) {
 		p.maxBytes = DefaultTapeSweepMaxBytes
 	}
 	if len(req.Sweeps) == 0 {
@@ -447,6 +494,14 @@ func (s *Service) clampTapeSweepRequest(req TapeSweepRequest) (tapeSweepParams, 
 		default:
 			return p, fmt.Errorf("tape sweep: unknown sweep %q", sw)
 		}
+	}
+	if len(req.ComputerIDs) > 0 {
+		if p.named, err = namedTapeSweepIDs(req, p); err != nil {
+			return p, err
+		}
+		// The acknowledgement was checked above, per computer; the rest of
+		// the sweep reads it as the one flag it always did.
+		p.forkAck = true
 	}
 	switch p.action {
 	case TapeSweepActionDryRun:
@@ -480,6 +535,55 @@ func (s *Service) clampTapeSweepRequest(req TapeSweepRequest) (tapeSweepParams, 
 	return p, nil
 }
 
+// namedTapeSweepIDs validates a named list: destroyed sweep only, the
+// acknowledgement given, plain ids, no duplicates, a bounded count.
+func namedTapeSweepIDs(req TapeSweepRequest, p tapeSweepParams) ([]string, error) {
+	if p.action != TapeSweepActionDryRun && p.action != TapeSweepActionApply {
+		return nil, fmt.Errorf("tape sweep: computer_ids belong to dry-run and apply, not %s", p.action)
+	}
+	if len(req.Sweeps) != 1 || strings.TrimSpace(req.Sweeps[0]) != TapeSweepDestroyed {
+		return nil, errors.New(`tape sweep: computer_ids need sweeps ["destroyed"] alone`)
+	}
+	if req.AcceptUnrecordedForkLineage {
+		return nil, errors.New("tape sweep: a named sweep takes accept_unrecorded_fork_lineage_for, per computer, not the global flag")
+	}
+	if len(req.ComputerIDs) > tapeSweepMaxNamed {
+		return nil, fmt.Errorf("tape sweep: computer_ids names %d computers, the most is %d", len(req.ComputerIDs), tapeSweepMaxNamed)
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(req.ComputerIDs))
+	for _, raw := range req.ComputerIDs {
+		id := strings.TrimSpace(raw)
+		if id == "" || id != raw || !purgeIDOK(id) {
+			return nil, fmt.Errorf("tape sweep: computer_ids holds %q, which is not a computer id", raw)
+		}
+		if seen[id] {
+			return nil, fmt.Errorf("tape sweep: computer_ids names %s twice", id)
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	acked := append([]string(nil), req.AcceptUnrecordedForkLineageFor...)
+	sort.Strings(acked)
+	if !sameStringList(acked, out) {
+		return nil, fmt.Errorf("tape sweep: accept_unrecorded_fork_lineage_for must name exactly the computers in computer_ids (%v), not %v", out, acked)
+	}
+	return out, nil
+}
+
+func sameStringList(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // StartTapeSweep validates the request and starts it in the background. One
 // run at a time; the job is read back with TapeSweepJobStatus.
 func (s *Service) StartTapeSweep(req TapeSweepRequest) (TapeSweepJob, error) {
@@ -489,6 +593,11 @@ func (s *Service) StartTapeSweep(req TapeSweepRequest) (TapeSweepJob, error) {
 	params, err := s.clampTapeSweepRequest(req)
 	if err != nil {
 		return TapeSweepJob{}, err
+	}
+	// The route deletes only an exact, named list: an unnamed destroyed apply
+	// would delete every computer the proof finds destroyed.
+	if params.action == TapeSweepActionApply && params.destroyed && len(params.named) == 0 {
+		return TapeSweepJob{}, errors.New("tape sweep: a destroyed apply needs computer_ids: it deletes only the computers named, never every destroyed computer")
 	}
 	s.tapeSweep.mu.Lock()
 	if s.tapeSweep.running {
@@ -966,15 +1075,20 @@ func tapeSweepRel(ns, digest string) string {
 // --- manifest ------------------------------------------------------------
 
 type tapeSweepManifestHeader struct {
-	Kind                        string              `json:"kind"` // header
-	RunID                       string              `json:"run_id"`
-	CreatedAt                   string              `json:"created_at"`
-	Grace                       string              `json:"grace"`
-	Quiet                       string              `json:"quiet"`
-	Sweeps                      []string            `json:"sweeps"`
-	AcceptUnrecordedForkLineage bool                `json:"accept_unrecorded_fork_lineage"`
-	NoArchive                   bool                `json:"no_archive,omitempty"`
-	Heads                       map[string]tapeHead `json:"heads"`
+	Kind                        string   `json:"kind"` // header
+	RunID                       string   `json:"run_id"`
+	CreatedAt                   string   `json:"created_at"`
+	Grace                       string   `json:"grace"`
+	Quiet                       string   `json:"quiet"`
+	Sweeps                      []string `json:"sweeps"`
+	AcceptUnrecordedForkLineage bool     `json:"accept_unrecorded_fork_lineage"`
+	NoArchive                   bool     `json:"no_archive,omitempty"`
+	// Computers is the named list, sorted; absent for an unnamed sweep.
+	Computers []string `json:"computers,omitempty"`
+	// ForkLineageAcknowledgedFor is whom the operator named for the fork
+	// lineage acknowledgement (always the same ids as Computers).
+	ForkLineageAcknowledgedFor []string            `json:"fork_lineage_acknowledged_for,omitempty"`
+	Heads                      map[string]tapeHead `json:"heads"`
 }
 
 type tapeSweepItem struct {
@@ -1074,7 +1188,7 @@ func writeJSONFileSync(path string, v any) error {
 func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweepParams) (TapeSweepReport, error) {
 	started := time.Now()
 	policy, registry := s.tapeSweepPolicy()
-	report := TapeSweepReport{RunID: jobID, Action: p.action, Mode: policy.Mode, Grace: p.grace.String(), Quiet: p.quiet.String(), AcceptUnrecordedForkLineage: p.forkAck, NoArchive: p.noArchive, Orphans: map[string]TapeSweepNamespaceCounts{}, StartedAt: started.UTC()}
+	report := TapeSweepReport{RunID: jobID, Action: p.action, Mode: policy.Mode, Grace: p.grace.String(), Quiet: p.quiet.String(), AcceptUnrecordedForkLineage: p.forkAck, NoArchive: p.noArchive, ComputerIDs: p.named, ForkLineageAcknowledgedFor: p.named, Orphans: map[string]TapeSweepNamespaceCounts{}, StartedAt: started.UTC()}
 	if p.orphans {
 		report.Sweeps = append(report.Sweeps, TapeSweepOrphans)
 	}
@@ -1101,7 +1215,7 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	proofs := map[string]*TapeSweepComputerProof{}
 	if p.destroyed {
 		s.setTapeSweepPhase(jobID, "destroyed-proof")
-		proofs, err = s.tapeDestroyedProofs(ctx, registry, heads, ids, started, p)
+		proofs, report.RegistryComputers, err = s.tapeDestroyedProofs(ctx, registry, heads, ids, started, p)
 		if err != nil {
 			report.DestroyedRefused = err.Error()
 			report.Warnings = append(report.Warnings, "destroyed sweep refused: "+err.Error())
@@ -1109,6 +1223,11 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 		}
 	}
 	deletable := func(id string) bool { pr := proofs[id]; return pr != nil && pr.Deletable }
+	// A named sweep fails loudly, before it reads any chain: every named
+	// computer must have a head here and a proof that says it can be deleted.
+	if err := namedTapeSweepRefusal(p.named, heads, proofs, report.DestroyedRefused); err != nil {
+		return report, err
+	}
 
 	// Reference sets. live holds every reference of every computer that is
 	// not deletable plus every extra record; doomed holds the deletable
@@ -1117,6 +1236,11 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	s.setTapeSweepPhase(jobID, "references")
 	var live, doomed digestPrefixSet
 	orphansIncomplete := ""
+	// livingUnreadable is the first thing about a computer that is not being
+	// deleted that the sweep could not read: its payload references are then
+	// missing from the live set, so no destroyed computer's payload is safe to
+	// delete (fail closed).
+	livingUnreadable := ""
 	walkedRows := map[string]uint64{}
 	tombstoned := 0
 	for _, id := range ids {
@@ -1135,7 +1259,11 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 		}
 		// A tombstoned computer's event files may be gone: its payload refs
 		// are unknown, so an unfinished one refuses the payload sweep.
-		readEvents := !hasTomb
+		// A computer this run does not delete is read as a living one even
+		// when it has a tombstone: its event files are read, and an event
+		// that cannot be read refuses the destroyed sweep. A cached reference
+		// chunk counts only when it was made with event reads.
+		readEvents := !hasTomb || !deletable(id)
 		purged := false
 		if hasTomb {
 			tombstoned++
@@ -1155,6 +1283,9 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 			if orphansIncomplete == "" {
 				orphansIncomplete = fmt.Sprintf("event %s (computer %s sequence %d) is unreadable; its payload references are unknown", row.EventDigest, id, row.Sequence)
 			}
+			if !deletable(id) && livingUnreadable == "" {
+				livingUnreadable = fmt.Sprintf("event %s (computer %s sequence %d) is unreadable; its payload references are unknown", row.EventDigest, id, row.Sequence)
+			}
 		})
 		walkedRows[id] = walk.Resumed + walk.Walked
 		report.ChainEventsResumed += walk.Resumed
@@ -1164,6 +1295,9 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 			return report, err
 		}
 		if err != nil {
+			if !deletable(id) && livingUnreadable == "" {
+				livingUnreadable = "computer " + id + " chain is unreadable: " + err.Error()
+			}
 			report.OrphansRefused = err.Error()
 			report.Warnings = append(report.Warnings, err.Error())
 			if pr := proofs[id]; pr != nil && pr.Deletable {
@@ -1178,8 +1312,16 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	// the counts differ.
 	if refusal, err := s.tapeReceiptsMatchSnapshot(ctx, heads, ids, walkedRows); err != nil {
 		report.OrphansRefused = "count append receipts: " + err.Error()
-	} else if refusal != "" && report.OrphansRefused == "" {
-		report.OrphansRefused = refusal
+		if livingUnreadable == "" {
+			livingUnreadable = "the append receipts could not be matched to the chains: unreadable: " + err.Error()
+		}
+	} else if refusal != "" {
+		if report.OrphansRefused == "" {
+			report.OrphansRefused = refusal
+		}
+		if livingUnreadable == "" {
+			livingUnreadable = "the append receipts do not match the chains (unreadable): " + refusal
+		}
 	}
 	extraErr := s.tapeExtraRefs(ctx, func(text string) { live.addAllHex(text) })
 	if extraErr != nil {
@@ -1190,6 +1332,18 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 				pr.Deletable = false
 			}
 		}
+	}
+	if p.destroyed && livingUnreadable != "" && report.DestroyedRefused == "" {
+		report.DestroyedRefused = livingUnreadable
+		report.Warnings = append(report.Warnings, "destroyed sweep refused: "+livingUnreadable)
+		for _, pr := range proofs {
+			pr.Deletable = false
+		}
+	}
+	// A named sweep that cannot do what it was told fails, before a manifest
+	// exists, never as an empty one with a hash.
+	if len(p.named) > 0 && report.DestroyedRefused != "" {
+		return report, fmt.Errorf("tape sweep: named sweep refused: %s", report.DestroyedRefused)
 	}
 	live.seal()
 	doomed.seal()
@@ -1203,7 +1357,7 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	if err != nil {
 		return report, fmt.Errorf("tape sweep: manifest: %w", err)
 	}
-	header := tapeSweepManifestHeader{Kind: "header", RunID: jobID, CreatedAt: started.UTC().Format(time.RFC3339Nano), Grace: p.grace.String(), Quiet: p.quiet.String(), Sweeps: report.Sweeps, AcceptUnrecordedForkLineage: p.forkAck, NoArchive: p.noArchive, Heads: heads}
+	header := tapeSweepManifestHeader{Kind: "header", RunID: jobID, CreatedAt: started.UTC().Format(time.RFC3339Nano), Grace: p.grace.String(), Quiet: p.quiet.String(), Sweeps: report.Sweeps, AcceptUnrecordedForkLineage: p.forkAck, NoArchive: p.noArchive, Computers: p.named, ForkLineageAcknowledgedFor: p.named, Heads: heads}
 	if err := mw.line(header); err != nil {
 		mw.close()
 		return report, err
@@ -1213,6 +1367,7 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	if p.destroyed && report.DestroyedRefused == "" {
 		s.setTapeSweepPhase(jobID, "destroyed-items")
 		listedPayloads := map[string]bool{}
+		chunkDigests := map[string][]string{} // each listed computer's file-cas-chunks digests
 		for _, id := range ids {
 			pr := proofs[id]
 			if pr == nil {
@@ -1249,7 +1404,12 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 			for _, it := range items {
 				pr.Files++
 				pr.Bytes += it.Size
+				pr.Classes = addClass(pr.Classes, it.Namespace, 1, it.Size, 0)
 				report.DestroyedClasses = addClass(report.DestroyedClasses, it.Namespace, 1, it.Size, 0)
+				if it.Namespace == tapeNSFileCASChunks {
+					pr.SnapshotChunkFiles++
+					chunkDigests[id] = append(chunkDigests[id], it.Digest)
+				}
 			}
 			tables := make([]string, 0, len(purgeRows))
 			for table, n := range purgeRows {
@@ -1286,8 +1446,47 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 			report.DestroyedRows += pr.Rows
 		}
 		for _, id := range ids {
-			if pr := proofs[id]; pr != nil && pr.Destroyed {
+			if pr := proofs[id]; pr != nil && pr.Destroyed && (len(p.named) == 0 || slices.Contains(p.named, id)) {
 				report.DestroyedProofs = append(report.DestroyedProofs, *pr)
+			}
+		}
+		// What the doomed computers' snapshot chunks may share with something
+		// that is not being deleted in this run: any such digest refuses the
+		// run (the files are per computer, but a refusal costs one more dry
+		// run and a miss costs a living computer's snapshot).
+		var listedIDs []string
+		for _, id := range ids {
+			if pr := proofs[id]; pr != nil && pr.Deletable {
+				listedIDs = append(listedIDs, id)
+			}
+		}
+		if len(chunkDigests) > 0 {
+			living, err := s.livingChunkDigests(ctx, listedIDs)
+			if err != nil {
+				mw.close()
+				return report, err
+			}
+			for _, id := range listedIDs {
+				n := 0
+				for _, d := range chunkDigests[id] {
+					if living[d] {
+						n++
+					}
+				}
+				proofs[id].SnapshotChunksSharedWithLiving = n
+				if n > 0 {
+					mw.close()
+					return report, fmt.Errorf("tape sweep: computer %s: %d snapshot chunk digests are also named by a snapshot, an in-flight snapshot registration or a file root of a computer this run does not delete; nothing was listed", id, n)
+				}
+			}
+		}
+		// A computer can stop being deletable while its files are listed (an
+		// unreadable chain, a stray entry): a named sweep does not go on
+		// without it. One already deleted is nothing left to do, not a refusal.
+		for _, id := range p.named {
+			if pr := proofs[id]; pr != nil && !pr.Deletable && pr.Reason != "already deleted" {
+				mw.close()
+				return report, fmt.Errorf("tape sweep: named computer %s cannot be deleted: %s", id, pr.Reason)
 			}
 		}
 	}
@@ -1337,16 +1536,127 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	return report, nil
 }
 
+// namedTapeSweepRefusal is the dry run's refusal of a named list: an id with
+// no head, or whose proof is not deletable, names itself and the reason.
+func namedTapeSweepRefusal(named []string, heads map[string]tapeHead, proofs map[string]*TapeSweepComputerProof, destroyedRefused string) error {
+	for _, id := range named {
+		if _, ok := heads[id]; !ok {
+			return fmt.Errorf("tape sweep: named computer %s has no head on this host; nothing was listed", id)
+		}
+		if destroyedRefused != "" {
+			return fmt.Errorf("tape sweep: named computer %s: the destroyed proof was refused: %s", id, destroyedRefused)
+		}
+		pr := proofs[id]
+		if pr == nil {
+			return fmt.Errorf("tape sweep: named computer %s has no destroyed proof", id)
+		}
+		if !pr.Deletable && pr.Reason != "already deleted" {
+			return fmt.Errorf("tape sweep: named computer %s cannot be deleted: %s", id, pr.Reason)
+		}
+	}
+	return nil
+}
+
+// livingChunkDigests is every chunk digest that something not deleted in this
+// run names: the snapshot roots of every computer outside doomed, the
+// registrations in flight (snapshotPending), and the file-root manifests of
+// every computer outside doomed (any 64-hex string in them counts). A failure
+// to read any of these is an error: the sweep does not guess.
+func (s *Service) livingChunkDigests(ctx context.Context, doomed []string) (map[string]bool, error) {
+	return s.livingChunkDigestsWith(ctx, doomed, true)
+}
+
+// livingChunkDigestsWith reads the snapshot-root rows and the registrations in
+// flight always, and the file-root manifests on disk only when withFiles: the
+// disk walk is slow and not behind the tombstone gate, so the apply does it
+// before taking the gate and repeats only the rows under it.
+func (s *Service) livingChunkDigestsWith(ctx context.Context, doomed []string, withFiles bool) (map[string]bool, error) {
+	gone := map[string]bool{}
+	for _, id := range doomed {
+		gone[id] = true
+	}
+	out := map[string]bool{}
+	rows, err := s.store.db.QueryContext(ctx, `SELECT computer_id, chunks FROM computer_snapshot_roots`)
+	if err != nil {
+		return nil, fmt.Errorf("tape sweep: snapshot roots: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, encoded string
+		if err := rows.Scan(&id, &encoded); err != nil {
+			return nil, err
+		}
+		if gone[id] {
+			continue
+		}
+		var chunks []string
+		if err := json.Unmarshal([]byte(encoded), &chunks); err != nil {
+			return nil, fmt.Errorf("tape sweep: snapshot root of %s is unreadable: %w", id, err)
+		}
+		for _, c := range chunks {
+			out[c] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, key := range s.store.snapshotPending.keys() {
+		if id, digest, ok := strings.Cut(key, "/"); ok && !gone[id] {
+			out[digest] = true
+		}
+	}
+	if !withFiles {
+		return out, nil
+	}
+	rootsDir := filepath.Join(s.artifactsRoot, "sha256", tapeNSFileCASRoots)
+	computers, err := os.ReadDir(rootsDir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("tape sweep: file roots: %w", err)
+	}
+	for _, c := range computers {
+		if !c.IsDir() || gone[c.Name()] {
+			continue
+		}
+		err := filepath.WalkDir(filepath.Join(rootsDir, c.Name()), func(p string, d fs.DirEntry, werr error) error {
+			if werr != nil {
+				return werr
+			}
+			if d.IsDir() {
+				return nil
+			}
+			body, rerr := os.ReadFile(p)
+			if rerr != nil {
+				return rerr
+			}
+			for _, h := range tapeHexRefs(string(body)) {
+				out[h] = true
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("tape sweep: file roots of %s: %w", c.Name(), err)
+		}
+	}
+	return out, nil
+}
+
 // tapeDestroyedProofs evaluates the destroyed proof for every head. It fails
 // (refusing the destroyed sweep) when the registry is missing or any registry
 // or route query fails.
-func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegistry, heads map[string]tapeHead, ids []string, now time.Time, p tapeSweepParams) (map[string]*TapeSweepComputerProof, error) {
+func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegistry, heads map[string]tapeHead, ids []string, now time.Time, p tapeSweepParams) (map[string]*TapeSweepComputerProof, int, error) {
 	if registry == nil {
-		return nil, errors.New("computer registry (vmctl) is not configured")
+		return nil, 0, errors.New("computer registry (vmctl) is not configured")
 	}
 	listed, err := registry.ListComputerIDs(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("registry list: %w", err)
+		return nil, 0, fmt.Errorf("registry list: %w", err)
+	}
+	if reason := registryRefusal(listed, heads); reason != "" {
+		return nil, len(listed), errors.New(reason)
+	}
+	pendingOps, err := s.computersWithPendingLifecycleOps(ctx)
+	if err != nil {
+		return nil, len(listed), err
 	}
 	inList := map[string]bool{}
 	for _, id := range listed {
@@ -1354,7 +1664,7 @@ func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegi
 	}
 	routed, err := s.tapeRoutedComputers(ctx)
 	if err != nil {
-		return nil, err
+		return nil, len(listed), err
 	}
 	out := map[string]*TapeSweepComputerProof{}
 	for _, id := range ids {
@@ -1362,7 +1672,7 @@ func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegi
 		pr := &TapeSweepComputerProof{ComputerID: id, HeadSequence: h.Sequence, CanonicalEventHead: h.Canonical, HeadUpdatedAt: h.UpdatedAt.UTC().Format(time.RFC3339Nano), InRegistryList: inList[id], HasRoute: routed[id], ForkLineage: "unrecorded", AcceptUnrecordedForkLineage: p.forkAck}
 		pr.Quiet = !h.UpdatedAt.IsZero() && now.Sub(h.UpdatedAt) >= p.quiet
 		if t, ok, err := s.store.TapeTombstone(ctx, id); err != nil {
-			return nil, err
+			return nil, len(listed), err
 		} else if ok {
 			pr.Tombstone = t.Status
 		}
@@ -1377,10 +1687,13 @@ func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegi
 		case pr.HasRoute:
 			pr.Reason = "has route slot"
 			continue
+		case pendingOps[id]:
+			pr.Reason = "a lifecycle operation is pending"
+			continue
 		}
 		found, err := registry.LookupComputer(ctx, id)
 		if err != nil {
-			return nil, fmt.Errorf("registry lookup %s: %w", id, err)
+			return nil, len(listed), fmt.Errorf("registry lookup %s: %w", id, err)
 		}
 		if found {
 			pr.OwnershipLookup, pr.Reason = "found", "ownership record exists"
@@ -1404,6 +1717,39 @@ func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegi
 		// listing stage decides, and reports "already deleted" when nothing
 		// remains.
 		pr.Deletable, pr.Reason = true, "destroyed: no ownership, not listed, no route, quiet; fork lineage unrecorded (acknowledged)"
+		if len(p.named) > 0 && !slices.Contains(p.named, id) {
+			pr.Deletable, pr.Reason = false, "not named in this run"
+		}
+	}
+	return out, len(listed), nil
+}
+
+// registryRefusal is the fail-closed reading of the ownership registry: a
+// registry that lists nobody while event heads exist, or that does not list a
+// protected computer that has a head, is missing, empty or stale, and "not in
+// the registry" then proves nothing.
+func registryRefusal(listed []string, heads map[string]tapeHead) string {
+	if len(heads) > 0 && len(listed) == 0 {
+		return "the ownership registry lists no computer while event heads exist; it is missing, empty or stale, so no computer is proven unowned"
+	}
+	in := map[string]bool{}
+	for _, id := range listed {
+		in[strings.TrimSpace(id)] = true
+	}
+	for id := range heads {
+		if tapeSweepProtected(id) != nil && !in[id] {
+			return fmt.Sprintf("the ownership registry does not list protected computer %s, which has a head; it is stale or incomplete", id)
+		}
+	}
+	return ""
+}
+
+// computersWithPendingLifecycleOps is the computers with an open lifecycle
+// operation (a restore, resume or replace in flight): never deletable.
+func (s *Service) computersWithPendingLifecycleOps(ctx context.Context) (map[string]bool, error) {
+	out := map[string]bool{}
+	if err := scanStrings(ctx, s.store.db, `SELECT DISTINCT computer_id FROM computer_lifecycle_operations WHERE status='pending'`, func(id string) { out[strings.TrimSpace(id)] = true }); err != nil {
+		return nil, fmt.Errorf("pending lifecycle operations: %w", err)
 	}
 	return out, nil
 }

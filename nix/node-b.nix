@@ -19,39 +19,39 @@ let
   # signup once we hit limits. then i will get more infra"; 2026-11-24: "i dont
   # think we have a 40 account cap"). Sign-up is bounded by what the host can
   # hold, not by a count of accounts: it is open when the free disk, less the
-  # reserve below, less what the admitted accounts will still take (a footprint
-  # for each account with a proved passkey and no computer yet; for each
-  # computer, the gap between a footprint and the disk its data image holds
-  # now, so opening one never makes room), is at least one footprint
-  # (internal/hostroom). The auth service decides this inside the transaction
-  # that makes the account, reading the free disk itself and the file vmctl
-  # writes every half minute naming the accounts that have a computer and the
-  # disk each holds; a missing or stale reading, or a plan that is not set,
-  # closes sign-up. The Pulse capacity reading shows the same number. No
-  # constant bounds accounts, so there is no cap to raise and no exemption for
-  # anyone: the operator's accounts take places like everyone's.
+  # reserve below, less what the computers that exist will still take (for
+  # each, the gap between a footprint and the disk it holds now, so opening one
+  # never makes room), is at least one footprint (internal/hostroom). An
+  # account with no computer holds nothing (owner, 2026-11-24: "dont count any
+  # account without a computer. all real accounts have a computer. we just have
+  # records of email adddresses where we deleted the computers for testing");
+  # sign-ups that finish before their computers exist are bounded only by the
+  # free reading (a named residual). The auth service decides this at sign-up,
+  # reading the free disk itself and the
+  # file vmctl writes every half minute naming the accounts that have a
+  # computer and the disk each holds; a missing or stale reading, or a plan
+  # that is not set, closes sign-up. The Pulse capacity reading shows the same
+  # number. No constant bounds accounts, so there is no cap to raise and no
+  # exemption for anyone: the operator's accounts take places like everyone's.
   #   reserve    100 GiB: the 60 GiB deploy floor (scripts/node-b-deploy-disk-
   #              preflight) and 40 GiB for the paper's growth (about 2 GiB a
   #              day on a 51 GiB store, docs/system-map.md).
-  #   footprint   15 GiB: the largest measured total disk of one computer,
-  #              rounded up: drill holds 13,297 MB of data image (13.6 GB
-  #              re-read after a wake) plus a 1.5 GB memory snapshot while
-  #              hibernated, about 14 GiB; b@c holds 8.9 GB
-  #              (docs/problems/computer-disks-hold-self-development-
-  #              leftovers-2026-11-24.md). A computer's disk counts its data
-  #              image and its snapshot, each file measured by the snapshot
-  #              budget's measure (vmmanager.FileDiskBytes: bytes on disk as
-  #              btrfs holds them, seeing compress=zstd; st_blocks would count
-  #              a compressed 4 GiB memory file at 4 GiB), so a wake or a
-  #              hibernate does not move the room. A fresh computer is far smaller (0.5 to 0.7 GiB
-  #              plus the snapshot of the memory it has touched), but there is
-  #              no measurement of a tester's computer after weeks of use yet,
-  #              so the bound uses the worst measured. Replace it with the
-  #              measured footprint of the testers' computers when the
-  #              owner's capacity reading shows them.
+  #   footprint    2 GiB: what a real user's computer takes (owner,
+  #              2026-11-24: "each account isnt 15gb..." and "real user
+  #              accounts use like 0.5 to 2GB unless they do heavy usage of
+  #              self-dev"). Measured on this host on 2026-11-24: the four
+  #              computers hold 2.8, 11.9, 18.4 and 86.6 GB; the large ones are
+  #              the owner's and heavy self-development. It is what
+  #              a new computer is expected to take. A computer that grows
+  #              past it is already counted at its real size (Plan.Held counts
+  #              the gap only while a computer is under a footprint, each file
+  #              measured by the snapshot budget's measure, vmmanager.
+  #              FileDiskBytes: bytes on disk as btrfs holds them, seeing
+  #              compress=zstd), and the free disk it takes falls out of the
+  #              room, so a wake or a hibernate does not move the room.
   # Hibernation frees memory, not disk. Both numbers are in whole GiB.
   roomReserveGiB = 100;
-  roomFootprintGiB = 15;
+  roomFootprintGiB = 2;
   roomOwnersPath = "/var/lib/go-choir/host-room/computer-owners.json";
   # Host fetch route (SDC NET-01; internal/hostfetch,
   # docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md). One
@@ -541,6 +541,10 @@ let
   hostSecretPaths = {
     jwtKey = "-${authSigningDir}/ed25519-key";
     emailCodeKey = "-${authSigningDir}/email-code-key";
+    # The whole directory, not one file: a bind mount over a file hides only that inode, so a
+    # credential made or rotated (a new file by rename) after a unit started would be
+    # visible to it. A directory hides what is made inside it later. Only auth keeps it.
+    demoDir = "${authSigningDir}/demo";
     providerEnv = "-/var/lib/go-choir/gateway-provider.env";
     codexAuth = "-/var/lib/go-choir/codex-auth.json";
     maildEnv = "-/var/lib/go-choir/maild.env";
@@ -1017,7 +1021,7 @@ in
       StateDirectory = "go-choir/auth";
       # Read-write paths for auth persistence and signing key.
       ReadWritePaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/auth-signing" ];
-      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" "emailCodeKey" ];
+      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" "emailCodeKey" "demoDir" ];
       # auth.db holds sessions and API-key records; it was 0644 in a 0755
       # directory, private only because /var/lib/go-choir is 0750.
       StateDirectoryMode = "0750";
@@ -1048,6 +1052,10 @@ in
         "AUTH_ROOM_RESERVE_GIB=${toString roomReserveGiB}"
         "AUTH_ROOM_FOOTPRINT_GIB=${toString roomFootprintGiB}"
         "AUTH_ROOM_OWNERS_PATH=${roomOwnersPath}"
+        # Reviewer sign-in (docs/ship/demo-account.md, internal/auth/demo_account.go):
+        # two host files, outside the repo. Absent, the route answers "not available".
+        "AUTH_DEMO_ACCOUNT_ID_FILE=${authSigningDir}/demo/demo-account-id"
+        "AUTH_DEMO_CREDENTIAL_FILE=${authSigningDir}/demo/demo-credential"
         internalAuthEnv
       ];
     };
@@ -2693,7 +2701,6 @@ in
       # The EnvironmentFile should contain:
       #   # LLM Provider Keys
       #   AWS_BEARER_TOKEN_BEDROCK=...
-      #   ZAI_API_KEY=...
       #   FIREWORKS_API_KEY=...
       #   CHATGPT_AUTH_PATH=/var/lib/go-choir/codex-auth.json
       #   # ChatGPT search reuses the same auth file; optional tuning:
@@ -3302,6 +3309,7 @@ in
     "d ${autoputerRuntimeDir} 0750 root root -"
     "d /var/lib/go-choir/auth 0750 root root -"
     "d /var/lib/go-choir/auth-signing 0750 root root -"
+    "d /var/lib/go-choir/auth-signing/demo 0700 root root -"
     "d ${mailDir} 0700 root root -"
     "d ${mailDir}/raw 0700 root root -"
     "d ${mailDir}/attachments 0700 root root -"
@@ -3480,6 +3488,7 @@ in
     python3
     pkg-config
     goChoirPackages.maildctl
+    goChoirPackages.demo-account
     # PostgreSQL client tools for operators (psql, pg_dump).
     postgresql_17
     procps

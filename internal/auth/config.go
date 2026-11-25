@@ -65,6 +65,14 @@ type Config struct {
 	// unbounded mode, development servers and tests give a plan.
 	Room *RoomConfig
 
+	// DemoAccountID names the one account the reviewer sign-in may open
+	// (AUTH_DEMO_ACCOUNT_ID_FILE: a host file holding the id), and DemoCredentialFile the host file that holds
+	// its user name and password hash (AUTH_DEMO_CREDENTIAL_FILE). Either
+	// absent, the route answers "not available" (demo_account.go).
+	DemoAccountID      string // tests; the host sets DemoAccountIDFile so no id is in the repo
+	DemoAccountIDFile  string
+	DemoCredentialFile string
+
 	// EmailSignIn is the auth.email_sign_in switch (AUTH_EMAIL_SIGN_IN: on,
 	// true, 1 or yes). Off, begin answers as if every address were unknown,
 	// verify refuses, and unconsumed attempts are deleted at startup.
@@ -140,6 +148,8 @@ func LoadConfig() (*Config, error) {
 
 	cfg.Room = roomConfigFromEnv()
 
+	cfg.DemoAccountIDFile = strings.TrimSpace(os.Getenv("AUTH_DEMO_ACCOUNT_ID_FILE"))
+	cfg.DemoCredentialFile = strings.TrimSpace(os.Getenv("AUTH_DEMO_CREDENTIAL_FILE"))
 	cfg.EmailSignIn = envOn("AUTH_EMAIL_SIGN_IN")
 	cfg.EmailSessionTTL = envDuration("AUTH_EMAIL_SESSION_TTL", DefaultEmailSessionTTL)
 	key := strings.TrimSpace(os.Getenv("AUTH_EMAIL_CODE_KEY"))
@@ -290,7 +300,7 @@ func roomConfigFromEnv() *RoomConfig {
 	}
 	f, err := strconv.ParseUint(footprint, 10, 32)
 	if err != nil || f < hostroom.MinFootprintGiB {
-		return &RoomConfig{Err: fmt.Sprintf("AUTH_ROOM_FOOTPRINT_GIB must be a whole number of GiB, at least %d (the largest computer measured), got %q", hostroom.MinFootprintGiB, footprint)}
+		return &RoomConfig{Err: fmt.Sprintf("AUTH_ROOM_FOOTPRINT_GIB must be a whole number of GiB, at least %d (what a real user's computer takes), got %q", hostroom.MinFootprintGiB, footprint)}
 	}
 	return &RoomConfig{ReserveGiB: r, FootprintGiB: f, OwnersPath: owners}
 }

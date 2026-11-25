@@ -285,7 +285,7 @@ stations:
   lane: lane/exact-rest
 - id: P12
   name: A demo account for Apple's reviewers
-  scope: one designated account, a user name and password exchanged for a narrow key for that account only, a "Reviewer sign-in" link on the sign-in screen, a runbook. Lane demo-account, on top of native-passkey
+  scope: one designated account, a user name and password exchanged for a narrow key for that account only, a user name typed in the sign-in screen's email field (a password field then appears; no separate link), a runbook. Lane demo-account, on top of native-passkey
   class: red (auth)
   review: two seats
   depends_on:

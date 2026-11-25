@@ -47,25 +47,25 @@ model = "gpt-5.6-luna"
 		t.Fatal(err)
 	}
 	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
-	if err := os.WriteFile(filepath.Join(overlayDir, "glm-medium.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(overlayDir, "deepseek-medium.toml"), []byte(`
 [overlay]
 expires_at = "`+future+`"
 
 [roles.texture]
-provider = "zai"
-model = "glm-5.2"
+provider = "opencode-go"
+model = "deepseek-v4.1-flash"
 reasoning = "medium"
 
 [roles.research]
-provider = "zai"
-model = "glm-5.2"
+provider = "opencode-go"
+model = "deepseek-v4.1-flash"
 reasoning = "medium"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	core, handler := promptEvalTestSetup(t, policyPath)
-	body := `{"text":"Write a briefing about new AI infra in 2026 with live evidence.","model_policy_overlay_id":"glm-medium"}`
+	body := `{"text":"Write a briefing about new AI infra in 2026 with live evidence.","model_policy_overlay_id":"deepseek-medium"}`
 	w := promptEvalHandlerRequest(handler.HandleTexturePromptEval, http.MethodPost, "/api/evals/texture-prompt", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202; body=%s", w.Code, w.Body.String())
@@ -77,7 +77,7 @@ reasoning = "medium"
 	if resp.SubmissionID == "" || resp.DocID == "" {
 		t.Fatalf("response handles = %+v", resp)
 	}
-	if resp.Provider != "zai" || resp.Model != "glm-5.2" || resp.ReasoningEffort != "medium" {
+	if resp.Provider != "opencode-go" || resp.Model != "deepseek-v4.1-flash" || resp.ReasoningEffort != "medium" {
 		t.Fatalf("texture arm resolution = %+v", resp)
 	}
 	if resp.StatusURL != "/api/prompt-bar/submissions/"+resp.SubmissionID {
@@ -88,7 +88,7 @@ reasoning = "medium"
 	if err != nil {
 		t.Fatalf("GetRun conductor: %v", err)
 	}
-	if got := promptEvalMetadataString(conductor.Metadata, modelpolicy.MetadataPolicyOverlayID); got != "glm-medium" {
+	if got := promptEvalMetadataString(conductor.Metadata, modelpolicy.MetadataPolicyOverlayID); got != "deepseek-medium" {
 		t.Fatalf("conductor overlay = %q; metadata=%+v", got, conductor.Metadata)
 	}
 
@@ -107,11 +107,11 @@ reasoning = "medium"
 	if textureRun == nil {
 		t.Fatalf("expected a texture run on doc channel %s; runs=%d", resp.DocID, len(runs))
 	}
-	if got := promptEvalMetadataString(textureRun.Metadata, modelpolicy.MetadataPolicyOverlayID); got != "glm-medium" {
+	if got := promptEvalMetadataString(textureRun.Metadata, modelpolicy.MetadataPolicyOverlayID); got != "deepseek-medium" {
 		t.Fatalf("texture run overlay = %q; metadata=%+v", got, textureRun.Metadata)
 	}
-	if got := promptEvalMetadataString(textureRun.Metadata, modelpolicy.MetadataModel); got != "glm-5.2" {
-		t.Fatalf("texture run model = %q, want glm-5.2; metadata=%+v", got, textureRun.Metadata)
+	if got := promptEvalMetadataString(textureRun.Metadata, modelpolicy.MetadataModel); got != "deepseek-v4.1-flash" {
+		t.Fatalf("texture run model = %q, want deepseek-v4.1-flash; metadata=%+v", got, textureRun.Metadata)
 	}
 }
 

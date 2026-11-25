@@ -187,12 +187,20 @@ func (s *ChoirScope) noteCaptureRead(out JSON) {
 	var r struct {
 		URL string `json:"url"`
 	}
-	if json.Unmarshal(out, &r) != nil || strings.TrimSpace(r.URL) == "" {
+	if json.Unmarshal(out, &r) != nil {
+		return
+	}
+	s.noteCaptureURL(r.URL)
+}
+
+// noteCaptureURL records the source URL of a capture the run read.
+func (s *ChoirScope) noteCaptureURL(url string) {
+	if strings.TrimSpace(url) == "" {
 		return
 	}
 	l := &s.ledger
 	l.mu.Lock()
-	l.captureURLs = append(l.captureURLs, strings.TrimSpace(r.URL))
+	l.captureURLs = append(l.captureURLs, strings.TrimSpace(url))
 	l.mu.Unlock()
 }
 

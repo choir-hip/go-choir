@@ -1,3 +1,5 @@
+> 2026-11-24: `internal/fanout`, named below, was deleted (the owner ruled the generic fan-out helper deprecated in favour of the RLM pattern).
+
 # Jev: many questions in one call, not many calls (design and evidence, 2026-11-10)
 
 Mutation class: green (design and evidence; no product code). Rollback: revert

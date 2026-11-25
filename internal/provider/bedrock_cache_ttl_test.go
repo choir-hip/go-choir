@@ -127,9 +127,9 @@ func TestBedrockHistoryDeskBodyUnchanged(t *testing.T) {
 // Other Anthropic-wire routes get no cache fields, whatever the request.
 func TestOtherRoutesGetNoMixedLifetimeFields(t *testing.T) {
 	for _, req := range []LLMRequest{ttlRequest("", "research-child:k"), ttlRequest("choir-texture-a-b", "run-1")} {
-		b, _ := json.Marshal((&ZAIProvider{modelID: "glm"}).buildRequestBody(req, "glm"))
+		b, _ := json.Marshal((&OpenCodeProvider{}).buildMessagesRequestBody(req, "m"))
 		if strings.Contains(string(b), "cache_control") || strings.Contains(string(b), `"ttl"`) {
-			t.Fatalf("zai body carries cache fields: %s", b)
+			t.Fatalf("opencode messages body carries cache fields: %s", b)
 		}
 	}
 }

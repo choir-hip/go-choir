@@ -101,6 +101,11 @@ component Autoradio
     closeAuth
     createAccount
     signInPasskey
+    nameLogin
+    namePass
+    editNamePass
+    nameSignIn
+    emailSubmit
     editAuthEmail
     authEmail
     editAuthCode
@@ -504,7 +509,7 @@ component Autoradio
       // The sheet in front of a signed-out ask (consent.contract).
       GateSheet()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
-      // Settings, Account): the sign-in screen (the platform's passkey screen, no code) then covers the app until it is done or put away.
+      // Settings, Account): the sign-in screen (the platform's passkey screen; a mailed code proves a new address; a user name with no "@" in the email field signs in the demo account) then covers the app until it is done or put away.
       if authOpen
         column position="absolute" inset=0 background-color=th.paper z-index=50
           SignInScreen()

@@ -3,6 +3,7 @@ package vmctl
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,16 +18,16 @@ import (
 // (internal/hostroom); Pulse shows the same reading the auth service decides
 // on. Failure modes, written before the code:
 //  1. the reading missing what the owner decides on: memory, disk free and the
-//     reserve, computers, accounts, accounts still promised a computer, the
-//     places left, sign-ups in the last day;
+//     reserve, computers, accounts, the room held for computers, the places
+//     left, sign-ups in the last day;
 //  2. an account that began a sign-up and holds no passkey counted;
-//  3. an account whose computer exists still counted as promised, or one
-//     without a computer not counted; a computer that has not yet grown to a
-//     footprint releasing the whole of its room (opening must not make room);
-//     an unproved passkey holder counted at all;
+//  3. an account with no computer holding room (owner, 2026-11-24); a
+//     computer that has not yet grown to a footprint releasing the whole of
+//     its room (opening must not make room);
 //  4. the place shown open with less than one footprint of room;
-//  5. any number shown when a reading is missing (the auth database, the
-//     memory or disk sample), or the plan is not configured;
+//  5. any number shown when a reading is missing (the owners file, the disk
+//     sample), or the plan is not configured; the room depending on the auth
+//     database, which gives only the account counts;
 //  6. any address or id in the output;
 //  7. the public summary carrying live host figures: it says only whether
 //     sign-up is open, closed or unreadable (the figures are the owner's).
@@ -51,7 +52,7 @@ func TestPulseCapacityReadsWhatTheOwnerDecidesOn(t *testing.T) {
 		{VMID: "vm-3", UserID: "paper", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive},
 	}
 	t.Setenv(interactiveVMMemSizeMibEnv, "8192")
-	sample := HostPressureSample{MemoryTotalBytes: 32 << 30, MemoryAvailableBytes: 20 << 30, MemoryFloorBytes: 4800 << 20, StateDirAvailableBytes: 154 << 30}
+	sample := HostPressureSample{MemoryTotalBytes: 32 << 30, MemoryAvailableBytes: 20 << 30, MemoryFloorBytes: 4800 << 20, StateDirRead: true, StateDirAvailableBytes: 154 << 30}
 	cfg := PressureReclaimConfig{MinStateDirAvailableBytes: 32 << 30}
 	plan := hostroom.Plan{ReserveBytes: 100 << 30, FootprintBytes: 9 << 30}
 
@@ -72,14 +73,24 @@ func TestPulseCapacityReadsWhatTheOwnerDecidesOn(t *testing.T) {
 		t.Fatalf("running guest memory = %d MiB", got.Computers.RunningGuestMemoryMiB)
 	}
 	r := got.Room
-	// u-old and u-new have computers; u-late holds a passkey and none yet.
-	if !r.Available || r.Accounts != 3 || r.Promised != 1 {
-		t.Fatalf("room = %+v, want available, 3 accounts, 1 promised", r)
+	// u-old and u-new have computers; u-late holds a passkey and none yet,
+	// and holds nothing (owner, 2026-11-24).
+	if !r.Available || r.Accounts != 3 {
+		t.Fatalf("room = %+v, want available, 3 accounts", r)
 	}
-	// 154 - 100 = 54 GiB; u-late holds 9, u-new's computer is 8.4 GiB short of
-	// a footprint, u-old's holds none back: 54 - 17.4 = 36.6; 36.6 / 9 = 4.
-	if r.Places != 4 || !r.Open || r.FootprintBytes != 9<<30 || r.ReserveBytes != 100<<30 {
+	// 154 - 100 = 54 GiB; u-new's computer is 8.4 GiB short of a footprint,
+	// u-old's holds none back: 54 - 8.4 = 45.6; 45.6 / 9 = 5.
+	if r.Places != 5 || r.HeldBytes != 9<<30-644245094 || !r.Open || r.FootprintBytes != 9<<30 || r.ReserveBytes != 100<<30 {
 		t.Fatalf("room = %+v, want 5 places, open, 9 GiB footprint, 100 GiB reserve", r)
+	}
+	// Hundreds more accounts with a passkey and no computer change nothing in
+	// what the room holds or the places it offers.
+	many := append([]pulseAccountRecord{}, users...)
+	for i := 0; i < 300; i++ {
+		many = append(many, pulseAccountRecord{UserID: fmt.Sprintf("u-rec-%d", i), Email: fmt.Sprintf("rec%d@mosiah.org", i), CreatedAt: now.Add(-90 * 24 * time.Hour), HasPasskey: true, Proved: true})
+	}
+	if m := pulseCapacity(now, many, true, ownerships, owners, true, sample, cfg, plan).Room; m.Places != r.Places || m.HeldBytes != r.HeldBytes || !m.Open {
+		t.Fatalf("300 accounts with no computer moved the room: %+v, was %+v", m, r)
 	}
 	if r.SignUpsLast24h != 2 {
 		t.Fatalf("sign-ups in the last day = %d, want 2 (u-new, and u-late by its passkey time; no abandoned begin)", r.SignUpsLast24h)
@@ -95,10 +106,10 @@ func TestPulseCapacityReadsWhatTheOwnerDecidesOn(t *testing.T) {
 	// No reading: no numbers and not open, never a guess.
 	bad := sample
 	bad.ObservationError = "statfs failed"
+	bad.StateDirRead = false
 	for name, room := range map[string]PulseCapacityRoom{
-		"auth data unavailable (partial list)": pulseCapacity(now, users, false, ownerships, owners, true, sample, cfg, plan).Room,
-		"the disk sample failed":               pulseCapacity(now, users, true, ownerships, owners, true, bad, cfg, plan).Room,
-		"no plan configured":                   pulseCapacity(now, users, true, ownerships, owners, true, sample, cfg, hostroom.Plan{}).Room,
+		"the disk sample failed": pulseCapacity(now, users, true, ownerships, owners, true, bad, cfg, plan).Room,
+		"no plan configured":     pulseCapacity(now, users, true, ownerships, owners, true, sample, cfg, hostroom.Plan{}).Room,
 		// The owners file the auth service reads is missing, torn or stale:
 		// auth closes sign-up, so Pulse says no reading, never open.
 		"the owners file is unreadable": pulseCapacity(now, users, true, ownerships, nil, false, sample, cfg, plan).Room,
@@ -106,6 +117,27 @@ func TestPulseCapacityReadsWhatTheOwnerDecidesOn(t *testing.T) {
 		if room != (PulseCapacityRoom{}) {
 			t.Fatalf("%s: %+v, want no numbers and not open", name, room)
 		}
+	}
+	// The auth database is read only for the account counts: without it the
+	// room still reads, and the counts are flagged unread, never a false 0.
+	if !r.AccountsAvailable {
+		t.Fatalf("room with the auth database = %+v, want accounts_available", r)
+	}
+	if noUsers := pulseCapacity(now, users, false, ownerships, owners, true, sample, cfg, plan).Room; !noUsers.Available || noUsers.Places != r.Places || noUsers.HeldBytes != r.HeldBytes || noUsers.AccountsAvailable || noUsers.Accounts != 0 || noUsers.SignUpsLast24h != 0 {
+		t.Fatalf("room without the auth database = %+v, want the same places and held as %+v and the account counts flagged unread", noUsers, r)
+	}
+	// The room depends on exactly what admit depends on: the disk read, the
+	// plan and the owners file. An unrelated probe failing (a pressure file)
+	// does not close it or hide the disk figure; a full disk is a real 0.
+	probe := sample
+	probe.ObservationError = "read /proc/pressure/io: no such file"
+	if p := pulseCapacity(now, users, true, ownerships, owners, true, probe, cfg, plan); !p.Room.Available || p.Room.Places != r.Places || !p.Room.Open || !p.Disk.Available || p.Memory.Available {
+		t.Fatalf("an unrelated probe failure: room %+v disk %+v memory %+v, want the room and disk read, memory hidden", p.Room, p.Disk, p.Memory)
+	}
+	full := sample
+	full.StateDirAvailableBytes = 0
+	if p := pulseCapacity(now, users, true, ownerships, owners, true, full, cfg, plan); !p.Room.Available || p.Room.Open || p.Room.Places != 0 || !p.Disk.Available || p.Disk.AvailableBytes != 0 {
+		t.Fatalf("a full disk: room %+v disk %+v, want a real 0 (available, closed)", p.Room, p.Disk)
 	}
 	// A failed memory or disk sample shows no figure (not "0 B").
 	if m := pulseCapacity(now, users, true, ownerships, owners, true, bad, cfg, plan); m.Disk.Available || m.Memory.Available || m.Disk.AvailableBytes != 0 {
@@ -197,9 +229,11 @@ func TestPulseAccountsFromARealAuthDB(t *testing.T) {
 		t.Fatalf("a database with no credentials table read as available: %+v", brokenUsers)
 	}
 	plan := hostroom.Plan{ReserveBytes: 100 << 30, FootprintBytes: 9 << 30}
-	sample := HostPressureSample{StateDirAvailableBytes: 154 << 30}
-	if got := pulseCapacity(time.Now(), brokenUsers, len(brokenWarnings) == 0, nil, nil, true, sample, PressureReclaimConfig{}, plan).Room; got != (PulseCapacityRoom{}) {
-		t.Fatalf("room = %+v, want no reading", got)
+	sample := HostPressureSample{StateDirRead: true, StateDirAvailableBytes: 154 << 30}
+	// The account counts are no reading; the room does not depend on them.
+	got := pulseCapacity(time.Now(), brokenUsers, len(brokenWarnings) == 0, nil, nil, true, sample, PressureReclaimConfig{}, plan).Room
+	if got.AccountsAvailable || got.Accounts != 0 || got.SignUpsLast24h != 0 {
+		t.Fatalf("room = %+v, want no account figures", got)
 	}
 }
 

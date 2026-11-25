@@ -230,19 +230,19 @@ func TestRoomConfigFromEnv(t *testing.T) {
 		t.Fatalf("unset = %+v %q %v, want no plan and no error", plan, path, err)
 	}
 	t.Setenv("VMCTL_ROOM_RESERVE_GIB", "100")
-	t.Setenv("VMCTL_ROOM_FOOTPRINT_GIB", "15")
+	t.Setenv("VMCTL_ROOM_FOOTPRINT_GIB", "2")
 	t.Setenv("VMCTL_ROOM_OWNERS_PATH", "/x/computer-owners.json")
 	plan, path, err := roomConfigFromEnv()
-	if err != nil || plan.ReserveBytes != 100<<30 || plan.FootprintBytes != 15<<30 || path != "/x/computer-owners.json" {
+	if err != nil || plan.ReserveBytes != 100<<30 || plan.FootprintBytes != 2<<30 || path != "/x/computer-owners.json" {
 		t.Fatalf("set = %+v %q %v", plan, path, err)
 	}
 	for name, env := range map[string][3]string{
-		"a part missing":                   {"100", "15", ""},
-		"a malformed number":               {"lots", "15", "/x"},
-		"a zero footprint":                 {"100", "0", "/x"},
-		"a footprint under the largest":    {"100", "14", "/x"},
-		"a reserve under the deploy floor": {"59", "15", "/x"},
-		"no reserve":                       {"0", "15", "/x"},
+		"a part missing":                    {"100", "2", ""},
+		"a malformed number":                {"lots", "2", "/x"},
+		"a zero footprint":                  {"100", "0", "/x"},
+		"a footprint under a real computer": {"100", "1", "/x"},
+		"a reserve under the deploy floor":  {"59", "2", "/x"},
+		"no reserve":                        {"0", "2", "/x"},
 	} {
 		t.Setenv("VMCTL_ROOM_RESERVE_GIB", env[0])
 		t.Setenv("VMCTL_ROOM_FOOTPRINT_GIB", env[1])

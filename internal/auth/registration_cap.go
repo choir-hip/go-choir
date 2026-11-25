@@ -13,8 +13,10 @@ import (
 // host's disk, never a count of accounts. An account that has a passkey is
 // never closed out of signing in; recovery adds a passkey to an account and
 // is not a sign-up. The decision at the mail and at the begin saves the
-// person a ceremony; the decision that counts is made inside the transaction
-// that makes the account, at the finish (Store.CreateAccountWithCredential).
+// person a ceremony; the decision at the finish (Store.CreateAccountWithCredential)
+// is the same reading taken again. Nothing serializes it, so finishes racing
+// for the last place are bounded only by the free reading (an account with no
+// computer holds nothing, owner 2026-11-24).
 //
 // A refused sign-up leaves its address on a waitlist for the owner: the
 // normalised address, the first and last time seen, how many times, and a
@@ -136,9 +138,9 @@ func (s *Store) ListRegistrationWaitlist() ([]WaitlistEntry, error) {
 
 // refuseIfRegistrationClosed answers the request and returns true when the
 // host has no room for another computer, or the reading that says so is
-// missing. It is the early check; the finish decides in its transaction.
+// missing. It is the early check; the finish decides again, on a newer reading.
 func (h *Handler) refuseIfRegistrationClosed(w http.ResponseWriter, r *http.Request, operation, emailHash, email string) bool {
-	return h.refuseRoomError(w, r, operation, emailHash, email, h.room.admit(h.store.db))
+	return h.refuseRoomError(w, r, operation, emailHash, email, h.room.admit())
 }
 
 // refuseRoomError answers a room decision: no error is no refusal.

@@ -123,6 +123,8 @@ func authRoutes(handler *auth.Handler) []authRoute {
 		{"POST /auth/app/login/begin", begin, handler.HandleAppLoginBegin},
 		{"POST /auth/app/register/finish", ceremony, handler.HandleAppRegisterFinish},
 		{"POST /auth/app/login/finish", ceremony, handler.HandleAppLoginFinish},
+		// The reviewer sign-in: one configured account, a host-file password (internal/auth/demo_account.go).
+		{"POST /auth/app/demo/login", sensitive, handler.HandleAppDemoLogin},
 
 		// choir login: device authorization (docs/design/cli-agent-onboarding-2026-11-03.md).
 		// Token polls get their own class: slow_down paces each request.

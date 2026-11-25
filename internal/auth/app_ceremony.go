@@ -200,11 +200,22 @@ func writeKeyJSON(w http.ResponseWriter, key *appKeyResponse) {
 // mintAppKey gives the app the grant a device approval gives: a full-access key
 // (every scope), owner-wide, until revoked.
 func (h *Handler) mintAppKey(ctx context.Context, user *User, app string) (*appKeyResponse, error) {
+	if h.demoOff(user.ID) {
+		return nil, ErrAccountOff
+	}
 	scopes := AllScopes()
 	label := appKeyLabel + app
+	if h.demoMintHook != nil {
+		h.demoMintHook()
+	}
 	id, secret, err := h.store.CreateAPIKey(ctx, user.ID, label, scopes, nil)
 	if err != nil {
 		return nil, err
+	}
+	// A mint that raced `off` (demo_account.go) is taken back.
+	if h.demoOff(user.ID) {
+		_ = h.store.RevokeAPIKey(ctx, user.ID, id)
+		return nil, ErrAccountOff
 	}
 	return &appKeyResponse{APIKey: secret, KeyID: id, Label: label, Scopes: scopes}, nil
 }
@@ -239,8 +250,7 @@ func (h *Handler) HandleAppRegisterFinish(w http.ResponseWriter, r *http.Request
 	}
 	key, err := h.mintAppKey(r.Context(), user, app)
 	if err != nil {
-		log.Printf("[auth] operation=app_register_finish user_id=%s result=error step=mint_key error=%q", user.ID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create the key"})
+		writeIssueError(w, err, "app_register_finish", user.ID, "failed to create the key")
 		return
 	}
 	log.Printf("[auth] operation=app_register_finish user_id=%s credential_id=%s key_id=%s app=%s result=success", user.ID, dbCred.ID, key.KeyID, app)
@@ -302,8 +312,7 @@ func (h *Handler) HandleAppLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("[auth] operation=app_login_finish user_id=%s result=error step=mint_key error=%q", user.ID, err)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create the key"})
+		writeIssueError(w, err, "app_login_finish", user.ID, "failed to create the key")
 		return
 	}
 	log.Printf("[auth] operation=app_login_finish user_id=%s credential_id=%s key_id=%s app=%s result=success", user.ID, string(cred.ID), key.KeyID, app)

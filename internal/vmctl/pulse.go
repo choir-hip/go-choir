@@ -134,7 +134,7 @@ type pulseAccountRecord struct {
 	HasPasskey bool
 	// Proved is true when the account's address was proved (users.
 	// email_verified_at): only such an account can sign in and open a
-	// computer, so only such an account holds a place in the room.
+	// computer. It is read for the account counts, not for the room.
 	Proved bool
 	// FirstPasskeyAt is when the first passkey was stored: the moment the
 	// sign-up finished (CreatedAt is when it began).
@@ -235,21 +235,25 @@ type PulseCapacityComputers struct {
 }
 
 // PulseCapacityRoom is the reading sign-up is decided on (internal/hostroom):
-// free disk over the reserve, less one footprint for each account that holds
-// a passkey and has no computer yet, in whole footprints. Available is false
-// when the auth database, the disk sample or the plan is missing: then no
-// number is shown and sign-up is not open.
+// free disk over the reserve, less the gap to a footprint for each computer
+// that has not grown to one, in whole footprints. An account with no computer
+// holds nothing. Available is false when the disk sample, the owners file or
+// the plan is missing: then no number is shown and sign-up is not open. The
+// auth database is read only for Accounts and SignUpsLast24h.
 type PulseCapacityRoom struct {
 	Available      bool   `json:"available"`
 	ReserveBytes   uint64 `json:"reserve_bytes"`
 	FootprintBytes uint64 `json:"footprint_bytes"`
-	// Accounts hold a proved passkey; Promised of them have no computer yet.
-	// HeldBytes is the disk those accounts will still take (a footprint for
-	// each unopened account, the gap to a footprint for each computer that
-	// has not grown to one), which the free reading does not show yet.
+	// Accounts hold a proved passkey (a count to read, not an input: an
+	// account with no computer holds no room, owner 2026-11-24). HeldBytes is
+	// the disk the computers that exist will still take (the gap to a
+	// footprint for each that has not grown to one), which the free reading
+	// does not show yet.
 	Accounts  int    `json:"accounts"`
-	Promised  int    `json:"promised"`
 	HeldBytes uint64 `json:"held_bytes"`
+	// AccountsAvailable is false when the auth database could not be read:
+	// Accounts and SignUpsLast24h are then unread, not 0.
+	AccountsAvailable bool `json:"accounts_available"`
 	// Places is how many more computers the host can hold; sign-up is open
 	// when it is at least one.
 	Places int  `json:"places"`
@@ -280,7 +284,9 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 	if sample.ObservationError == "" && sample.MemoryTotalBytes > 0 {
 		out.Memory = PulseCapacityMemory{Available: true, TotalBytes: sample.MemoryTotalBytes, AvailableBytes: sample.MemoryAvailableBytes, FloorBytes: sample.MemoryFloorBytes}
 	}
-	diskRead := sample.ObservationError == "" && sample.StateDirAvailableBytes > 0
+	// The disk figure and the room depend on the statfs alone, as auth's
+	// admit does, not on the other probes; a full disk is a real 0.
+	diskRead := sample.StateDirRead
 	if diskRead {
 		out.Disk = PulseCapacityDisk{Available: true, AvailableBytes: sample.StateDirAvailableBytes, FloorBytes: cfg.MinStateDirAvailableBytes}
 	}
@@ -301,13 +307,15 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 	}
 	// The same reading the auth service decides on: the owners file, and its
 	// age. A file auth cannot use closes sign-up there, so it is no reading here.
-	if !usersAvailable || !diskRead || !plan.Valid() || !ownersAvailable {
-		// No reading: no numbers and not open, never a guess from a partial list.
+	if !diskRead || !plan.Valid() || !ownersAvailable {
+		// No reading: no numbers and not open, never a guess.
 		return out
 	}
+	// The auth database gives only the account counts; the room does not
+	// depend on it.
 	var holders []string
 	for _, u := range users {
-		if !u.HasPasskey || !u.Proved {
+		if !usersAvailable || !u.HasPasskey || !u.Proved {
 			continue
 		}
 		holders = append(holders, u.UserID)
@@ -321,9 +329,9 @@ func pulseCapacity(now time.Time, users []pulseAccountRecord, usersAvailable boo
 	}
 	out.Room.Available = true
 	out.Room.ReserveBytes, out.Room.FootprintBytes = plan.ReserveBytes, plan.FootprintBytes
+	out.Room.AccountsAvailable = usersAvailable
 	out.Room.Accounts = len(holders)
-	out.Room.Promised = hostroom.Unopened(holders, owners)
-	out.Room.HeldBytes = plan.Held(holders, owners)
+	out.Room.HeldBytes = plan.Held(owners)
 	out.Room.Places = plan.Places(sample.StateDirAvailableBytes, out.Room.HeldBytes)
 	out.Room.Open = out.Room.Places >= 1
 	return out

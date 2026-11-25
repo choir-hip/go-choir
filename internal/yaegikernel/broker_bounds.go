@@ -38,6 +38,10 @@ const (
 	// not begin with a time.
 	MaxStoriesBeforeBytes = 128
 
+	// MaxCorpusCursorBytes bounds a corpus page cursor the host issued: nanoseconds
+	// since the epoch, a bar and a capture id (at most 256 bytes).
+	MaxCorpusCursorBytes = 320
+
 	// One research child's fields (MA6.3): the objective becomes a child's
 	// prompt, the model a catalog name, the role one of two words.
 	MaxResearchObjectiveBytes = 32 << 10
@@ -66,6 +70,10 @@ var payloadBounds = map[BrokerAction]map[string]payloadFieldBound{
 		"earlier": numRange(0, 1e6), "returned": numRange(0, 1e6), "tried": numRange(0, 1e6), "read": numRange(0, 1e6),
 		"outlets": numRange(0, 1e6)},
 	ActionSearchWireCorpus:  {"query": strMax(8192), "limit": numRange(0, 1000)},
+	ActionCorpusCaptures:    {"since": strMax(64), "until": strMax(64), "source_id": strMax(256), "kind": strMax(16), "cursor": strMax(MaxCorpusCursorBytes), "limit": numRange(0, 5000)},
+	ActionCorpusTexts:       {"max_chars": numRange(0, 200000)},
+	ActionCorpusNear:        {"of": strMax(8192), "k": numRange(0, 500), "since": strMax(64), "until": strMax(64)},
+	ActionCorpusEdges:       {"ref": strMax(256)},
 	ActionTextureSearch:     {"query": strMax(8192), "limit": numRange(0, 1000)},
 	ActionReadCapture:       {"capture_id": strMax(256), "from_block": numRange(0, 1_000_000), "max_chars": numRange(0, 1_000_000)},
 	ActionPollSource:        {"source_id": strMax(256), "max_items": numRange(0, 1000)},
@@ -93,6 +101,7 @@ var payloadBounds = map[BrokerAction]map[string]payloadFieldBound{
 // payloadListBounds limit the number of elements of a top-level array field
 // and the length of each string element.
 var payloadListBounds = map[BrokerAction]map[string]struct{ n, elemLen int }{
+	ActionCorpusTexts: {"ids": {200, 256}},
 	ActionRequestLease: {
 		"grants":         {maxLeaseListItems, 128},
 		"refs":           {maxLeaseListItems, 256},

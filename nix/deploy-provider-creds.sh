@@ -41,8 +41,6 @@ SETTINGS="${CHOIR_PROVIDER_SETTINGS:-${HOME}/.config/go-choir/provider-settings.
 CODEX_AUTH="${CODEX_AUTH_PATH:-${HOME}/.codex/auth.json}"
 REMOTE_ENV_FILE="/var/lib/go-choir/gateway-provider.env"
 REMOTE_CODEX_AUTH="/var/lib/go-choir/codex-auth.json"
-DEFAULT_GATEWAY_ZAI_MODELS="glm-5.2,glm-5.1,glm-5-turbo"
-DEFAULT_ZAI_CODING_BASE_URL="https://api.z.ai/api/anthropic"
 
 # Load local deployment credentials when present. This keeps the common
 # operator path safe: running this script from the repo should deploy the
@@ -120,14 +118,6 @@ if [ -f "$SETTINGS" ]; then
       continue
     fi
 
-    # Detect Z.AI keys (baseUrl contains z.ai)
-    if echo "$BASE_URL" | grep -q "z\.ai"; then
-      if ! printf '%s\n' "${ENVS[@]}" | grep -q "^ZAI_API_KEY="; then
-        ENVS+=("ZAI_API_KEY=${API_KEY}")
-      fi
-      continue
-    fi
-
     # Ignore unrecognized provider settings; only supported credential paths
     # below are deployed to the gateway.
     # Detect Bedrock keys (baseUrl contains bedrock or provider mentions bedrock)
@@ -147,7 +137,7 @@ if [ ${#ENVS[@]} -eq 0 ]; then
   echo "warning: no API-key provider credentials found in $SETTINGS" >&2
 fi
 
-for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION ZAI_API_KEY ZAI_BASE_URL OPENCODE_API_KEY OPENROUTER_API_KEY SYNTHETIC_API_KEY RIVER_API_KEY RIVER_BASE_URL DEVIN_API_KEY DEVIN_BASE_URL; do
+for key in AWS_BEARER_TOKEN_BEDROCK AWS_REGION OPENCODE_API_KEY OPENROUTER_API_KEY SYNTHETIC_API_KEY RIVER_API_KEY RIVER_BASE_URL DEVIN_API_KEY DEVIN_BASE_URL; do
   add_env_once "$key"
 done
 
@@ -163,13 +153,6 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || has_env_key "OPENROUTER_API_KEY"; then
   # (docs/problems/crouton-retired-inkling-gated-2026-11-09.md). The gateway
   # defaults to the same list.
   ENVS+=("GATEWAY_OPENROUTER_MODELS=${GATEWAY_OPENROUTER_MODELS:-recursive/flint-v1.0:free,nvidia/nemotron-3.5-super-vl:free,thinkingmachines/inkling-2-small:free}")
-fi
-
-if [ -n "${ZAI_API_KEY:-}" ] || has_env_key "ZAI_API_KEY"; then
-  ENVS+=("GATEWAY_ZAI_MODELS=${GATEWAY_ZAI_MODELS:-$DEFAULT_GATEWAY_ZAI_MODELS}")
-  if ! has_env_key "ZAI_BASE_URL"; then
-    ENVS+=("ZAI_BASE_URL=${DEFAULT_ZAI_CODING_BASE_URL}")
-  fi
 fi
 
 if [ -f "$CODEX_AUTH" ]; then

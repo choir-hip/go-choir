@@ -94,7 +94,7 @@ func TestQuotaLedgerHoldsSurviveARuntimeRestart(t *testing.T) {
 	member := provideriface.LLMSelection{Provider: "synthetic", Model: "m1"}
 	first := New(cfg, nil, nil, nil)
 	first.quotaLedger.Mark(member, time.Now().Add(time.Hour))
-	first.quotaLedger.DemoteHard(provideriface.LLMSelection{Provider: "zai", Model: "glm"}, time.Now())
+	first.quotaLedger.DemoteHard(provideriface.LLMSelection{Provider: "synthetic", Model: "m2"}, time.Now())
 
 	second := New(cfg, nil, nil, nil)
 	holds := second.quotaLedger.Holds(time.Now())

@@ -163,6 +163,7 @@ func (s *Store) DecideDeviceAuthorization(ctx context.Context, id, userID string
 // DeviceStatus values, or "slow_down" or "" (unknown device code). When the
 // poll collected the key, Secret and KeyID are set.
 type DevicePollResult struct {
+	UserID string // the account the key was made for (approved only)
 	Status string
 	Secret string
 	KeyID  string
@@ -241,7 +242,7 @@ func (s *Store) PollDeviceAuthorization(ctx context.Context, deviceCodeHash stri
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("poll device authorization: commit: %w", err)
 	}
-	return &DevicePollResult{Status: DeviceStatusApproved, Secret: secret, KeyID: keyID, Label: label, Scopes: scopes}, nil
+	return &DevicePollResult{UserID: a.UserID, Status: DeviceStatusApproved, Secret: secret, KeyID: keyID, Label: label, Scopes: scopes}, nil
 }
 
 // SweepDeviceAuthorizations deletes rows created before the cutoff.
