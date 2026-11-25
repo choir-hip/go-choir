@@ -115,14 +115,6 @@
       "acked": "number",
       "journal": "DeckEvent[]"
     },
-    "ImportedFollow": {
-      "address": "string",
-      "block": "number"
-    },
-    "ImportedHanded": {
-      "ok": "bool",
-      "message": "string"
-    },
     "HearItRow": {
       "clipID": "string",
       "show": "string",
@@ -131,10 +123,6 @@
       "quote": "string",
       "story": "string",
       "episodeOnly": "bool"
-    },
-    "MailAck": {
-      "status": "string",
-      "message": "string"
     },
     "SetupRowView": {
       "stage": "string",
@@ -352,11 +340,6 @@
       "address": "string",
       "blockId": "string",
       "sentence": "number"
-    },
-    "ReaderAimInfo": {
-      "address": "string",
-      "blockId": "string",
-      "label": "string"
     },
     "ReaderAck": {
       "ok": "bool"
@@ -731,78 +714,6 @@
       }
     },
     {
-      "send": "deckPlay",
-      "options": {
-        "id": "string",
-        "kind": "string",
-        "title": "string",
-        "show": "string",
-        "document": "string",
-        "paragraphs": "string",
-        "url": "string",
-        "start": "number",
-        "end": "number",
-        "block": "number",
-        "seconds": "number",
-        "requiresPreviousHeard": "bool",
-        "segment": "string"
-      },
-      "answers": "DeckState"
-    },
-    {
-      "send": "deckEnqueue",
-      "options": {
-        "id": "string",
-        "kind": "string",
-        "title": "string",
-        "show": "string",
-        "document": "string",
-        "paragraphs": "string",
-        "url": "string",
-        "start": "number",
-        "end": "number",
-        "block": "number",
-        "seconds": "number",
-        "requiresPreviousHeard": "bool",
-        "segment": "string",
-        "at": "number"
-      },
-      "answers": "DeckState"
-    },
-    {
-      "send": "deckAct",
-      "options": {
-        "op": "string",
-        "value": "number"
-      },
-      "answers": "DeckState"
-    },
-    {
-      "send": "deckAck",
-      "options": {
-        "through": "number"
-      },
-      "answers": "DeckState"
-    },
-    {
-      "source": "importedFollow",
-      "live": true,
-      "answers": "ImportedFollow",
-      "substitute": {
-        "default": {
-          "address": "",
-          "block": -1
-        }
-      }
-    },
-    {
-      "send": "mailOpenReview",
-      "options": {
-        "url": "string"
-      },
-      "answers": "MailAck"
-    },
-    {
       "source": "voiceSetupFacts",
       "live": true,
       "answers": "VoiceSetupFacts",
@@ -894,27 +805,6 @@
           "sentence": -1
         }
       }
-    },
-    {
-      "source": "readerAim",
-      "live": true,
-      "answers": "ReaderAimInfo",
-      "substitute": {
-        "default": {
-          "address": "",
-          "blockId": "",
-          "label": ""
-        }
-      }
-    },
-    {
-      "send": "readerAimSet",
-      "options": {
-        "address": "string",
-        "blockId": "string",
-        "label": "string"
-      },
-      "answers": "ReaderAimInfo"
     },
     {
       "send": "readerOpenExternal",

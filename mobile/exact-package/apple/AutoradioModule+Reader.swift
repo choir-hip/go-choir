@@ -2,7 +2,6 @@
 // (AutoradioLab/reader.ts, reader-parse.ts) and is not here. What stays native, and why:
 //   readerFollow                     the block and sentence the radio is reading: set by the bar's voice turn, matched against the page the shared reader handed over (HeldPages)
 //   holdPage (the `pageText` op)     the page in front, handed over by shared code (reader.ts `hand`): the voice turn reads its text and the follow-along matches against it
-//   readerAim / readerAimSet         what the bar's prompt is aimed at; the voice turn reads it
 //   readerOpenExternal               Platform.open (leaving the app: Safari, mail, phone)
 // View: web-page (WebPageView), the source page in place: a WKWebView, a platform view only native code can draw.
 import Foundation
@@ -92,19 +91,8 @@ extension AutoradioModule {
 
     func registerReader() {
         ReaderFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerFollow"]) } }
-        ReaderAim.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerAim"]) } }
 
         handle("readerFollow") { [unowned self] _, reply in reply(json(ReaderFollow.shared.info)) }
-        handle("readerAim") { [unowned self] _, reply in reply(json(ReaderAim.shared.info)) }
-
-        handle("readerAimSet") { [unowned self] args, reply in
-            let info = ReaderAimInfo(address: args["address"] as? String ?? "", blockId: args["blockId"] as? String ?? "", label: args["label"] as? String ?? "")
-            if info.address.isEmpty { ReaderAim.shared.clear() } else {
-                ReaderAim.shared.set(info)
-            }
-            touch(["readerAim"])
-            reply(json(ReaderAim.shared.info))
-        }
         // Leaving the app on purpose: "Open in Safari" for a web page, or a mail, phone or message link. Web pages are otherwise shown
         // in place by the contract (WebLayer); anything that is neither is refused.
         handle("readerOpenExternal") { args, reply in

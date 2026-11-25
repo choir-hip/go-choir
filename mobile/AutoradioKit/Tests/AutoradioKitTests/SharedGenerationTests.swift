@@ -3,8 +3,8 @@ import XCTest
 
 /// D-2 (cross-account write): what shared code pushes to a native mirror carries the account generation it was computed under, and a push from before a sign-out that lands after it changes nothing.
 final class SharedGenerationTests: XCTestCase {
-    override func setUp() { SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); EditionPicksMirror.shared.reset(); HeldPages.shared.wipe() }
-    override func tearDown() { SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); EditionPicksMirror.shared.reset(); HeldPages.shared.wipe() }
+    override func setUp() { SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); HeldPages.shared.wipe() }
+    override func tearDown() { SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); HeldPages.shared.wipe() }
 
     func testAPushOfTheOldAccountThatLandsAfterTheWipeIsDropped() {
         XCTAssertTrue(RadioBridge.shared.set(gen: 4, snapshot: Data("A".utf8), facts: nil, responds: nil))
@@ -19,14 +19,6 @@ final class SharedGenerationTests: XCTestCase {
         SharedGeneration.announce(1)                                  // nothing was pushed before the sign-out: the announcement alone closes the gap
         XCTAssertFalse(RadioBridge.shared.set(gen: 0, snapshot: Data("old".utf8), facts: nil, responds: nil))
         XCTAssertNil(RadioBridge.shared.snapshot)
-    }
-    func testALateEditionCopyIsNotKeptForTheNextAccount() {
-        XCTAssertTrue(EditionPicksMirror.shared.set(gen: 2, ["space", "chess"]))
-        SharedGeneration.announce(3); EditionPicksMirror.shared.reset()
-        XCTAssertFalse(EditionPicksMirror.shared.set(gen: 2, ["space", "chess"]), "account A's topics computed before the sign-out")
-        XCTAssertFalse(EditionPicksMirror.shared.known); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty)
-        XCTAssertTrue(EditionPicksMirror.shared.set(gen: 3, ["jazz"]))
-        XCTAssertEqual(EditionPicksMirror.shared.topics, ["jazz"])
     }
     func testALatePageTextIsNotHeldForTheNextAccount() {
         XCTAssertTrue(HeldPages.shared.hold(gen: 2, HeldPage(address: "pub:a", title: "A")))
@@ -64,13 +56,13 @@ final class SharedGenerationTests: XCTestCase {
     // D4: the check and the write are one step, so a push that passed the check cannot land after an announcement and the wipe that follows it.
     func testTheCheckAndTheWriteAreOneStep() async {
         for round in 0..<300 {
-            SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); EditionPicksMirror.shared.reset(); HeldPages.shared.wipe()
+            SharedGeneration.resetForTest(); RadioBridge.shared.wipe(); HeldPages.shared.wipe()
             await withTaskGroup(of: Void.self) { g in
-                for _ in 0..<3 { g.addTask { for _ in 0..<40 { RadioBridge.shared.set(gen: 1, snapshot: Data("old".utf8), facts: nil, responds: nil); EditionPicksMirror.shared.set(gen: 1, ["old"]); HeldPages.shared.hold(gen: 1, HeldPage(address: "a")) } } }
-                g.addTask { SharedGeneration.announce(2); RadioBridge.shared.wipe(); EditionPicksMirror.shared.reset(); HeldPages.shared.wipe() }
+                for _ in 0..<3 { g.addTask { for _ in 0..<40 { RadioBridge.shared.set(gen: 1, snapshot: Data("old".utf8), facts: nil, responds: nil); HeldPages.shared.hold(gen: 1, HeldPage(address: "a")) } } }
+                g.addTask { SharedGeneration.announce(2); RadioBridge.shared.wipe(); HeldPages.shared.wipe() }
             }
             // after the announcement and the wipe, nothing of generation 1 may be there, in whatever order the tasks ran (a push before the announcement is wiped by it; one after is refused)
-            XCTAssertNil(RadioBridge.shared.snapshot, "round \(round)"); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "round \(round)"); XCTAssertEqual(HeldPages.shared.count, 0, "round \(round)")
+            XCTAssertNil(RadioBridge.shared.snapshot, "round \(round)"); XCTAssertEqual(HeldPages.shared.count, 0, "round \(round)")
         }
     }
 }

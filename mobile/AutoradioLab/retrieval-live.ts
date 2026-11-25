@@ -1,6 +1,7 @@
 // The two live sources of the retrieval runtime (retrieval-run.ts), wired to the signed-in seam. Kept apart from retrieval-run.ts because api.ts
 // imports app.ts, which imports this file: the runtime and its tests must not sit in that cycle.
-//   retrievalServe  the voice turn's ask (native raises it: retrievalAsk, interface/retrieval.json) answered through the native op `retrievalAnswer`.
+//   retrievalServe  the voice turn's ask (native raises it: retrievalAsk, interface/retrieval.json) answered through the native op `retrievalAnswer`. The ask's facts carry only the run sheet;
+//                   the open pages, the topics and the page's text are shared code's own (`sharedFacts`).
 //                   With no ask (id "") it only starts the warm-up: the index is built and the vectors are kept up to date in the background.
 //   paperSearch     the launcher's paper-wide search (the server's public route), merged after the local rows.
 import type { Storage } from './app.contract.d.ts';
@@ -13,6 +14,10 @@ import { onSignOut, type Row } from './search.ts';
 import { contentDocs } from './content-run.ts';
 import { importedDocs } from './imported-search.ts';
 import { ImportedSource } from './imported-source.ts';
+import { pagesView } from './pages.ts';
+import { picksText } from './edition-picks.ts';
+import { heldText } from './reader.ts';
+import type { Facts } from './retrieval-run.ts';
 
 /** The one runtime of the process. Document sources register here (`live.setDocSource`: the content store and the imported documents, both wired just below). */
 export const live = new Retrieval({ mayDownload: () => modelsAgreement(live.storage, 'search') });
@@ -44,7 +49,16 @@ export async function retrievalServe(a: { id: string; words: string; pageTitle: 
   if (!warmed) { warmed = true; live.kick(true); }
   const ask = parseAsk(a.id, a.words, a.pageTitle, a.pageAddress, a.now, a.facts);
   if (!ask || !later) return { id: a.id, ok: false };
+  ask.facts = { ...ask.facts, ...(await sharedFacts(live.storage, ask.pageAddress)) };      // native's ask carries only the run sheet; the rest is shared code's own
   return live.answer(ask, later as never);
+}
+
+/** What the turn's retrieval takes from shared code itself, not from what native hands back in the ask (docs/problems/phone-native-round-trips-and-two-key-readers-2026-11-25.md): the open pages (pages.ts),
+ * the edition topics (edition-picks.ts, the one reader of their file) and the text of the page in front (reader.ts holds it). Each part that fails is empty: the turn goes on with what there is. */
+export async function sharedFacts(storage: Storage | undefined, pageAddress: string): Promise<Omit<Facts, 'runSheet'>> {
+  const pages = await pagesView(storage).then((v) => v.rows.map((p) => ({ address: p.address, title: p.title, kind: p.kind })), () => []);
+  const topics = await picksText(storage, { device: null, live: async () => [] }).then((p) => p.picks.split('\n').filter((t) => t !== ''), () => [] as string[]);
+  return { pages, topics, pageText: pageAddress === '' ? '' : heldText(pageAddress) };
 }
 
 const row = (o: unknown): Row | null => {

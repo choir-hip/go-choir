@@ -35,6 +35,15 @@ let inflight = new Map<string, Promise<ReaderDoc>>();
 let heldGen = -1;
 export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); unseen = new Set(); lastHanded = null; heldGen = -1; }
 export const heldCount = (): number => held.size;
+/** Test only: a document as if it had been read for this account. */
+export function holdForTest(d: ReaderDoc): void { current(); put(d); }
+/** The text of a page this module holds for this account (the voice turn's retrieval: retrieval-live.ts), at most `max` characters; "" when it holds none. */
+export function heldText(address: string, max = 20_000): string {
+  current();
+  const d = held.get(address);
+  if (!d || d.status !== 'ready') return '';
+  return d.blocks.map((b) => b.text).filter((t) => t !== '').join(' ').slice(0, max);
+}
 function current(): number {
   const g = accountGeneration();
   if (g !== heldGen) { held = new Map(); inflight = new Map(); unseen = new Set(); lastHanded = null; heldGen = g; }

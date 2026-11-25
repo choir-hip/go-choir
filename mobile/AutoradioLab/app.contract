@@ -142,7 +142,9 @@ component Autoradio
     rdoc
     tlist
     rfollow
-    raim
+    aimAddr
+    aimBlock
+    aimLabel
     bannerOn
     openCites
     sheet
@@ -204,8 +206,6 @@ component Autoradio
     ldInfo
     ldChap
     ldFound
-    ldFollow
-    ldFollowAt
     ldHanded
     ldAcked
     ldAck

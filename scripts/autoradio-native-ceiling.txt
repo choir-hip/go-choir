@@ -16,6 +16,8 @@
 # 2026-11-25 (move-b, on the phone-int train f7e16f502; set by hand to the measured count, as --update refuses a rise): the train itself measured 35 files, 3485 lines, 18 names, ABOVE the 34/3403/18 written here,
 # because the ceiling was not regenerated when the train merged its lanes (the merge of voice-models, native-op-log and exact-editor). Move B (one reader of "signed in"): choirAuth, choirPlayer and choirRefresh, the
 # Swift sign-in state behind them and the `keystate` op are deleted: 35 files, 3442 lines, 15 names.
-files 35
-lines 3442
-names 15
+# 2026-11-25 (move-b, move C; checked with --update): 34 files, 3370 lines, 12 names. The round trips through Swift are deleted: mailOpenReview (+Mail.swift), readerAim and readerAimSet,
+# the editionMirror copy, the facts the retrieval ask handed back (all but the run sheet), importedFollow (dead) and the four unused deck* package sends (the deck op stays).
+files 34
+lines 3370
+names 12

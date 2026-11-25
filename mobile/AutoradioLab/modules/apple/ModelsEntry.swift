@@ -10,7 +10,7 @@ import ExactPkg_autoradio
 //
 // The mail cipher (Choir/MailSeal.swift): `mailSeal`, `mailOpen`, `mailForget`, a platform cipher shared code has none of; the key never leaves the Keychain.
 //
-// The edition picks' calls (`editionMirror`, `editionMirrorReset`, `editionHeard`, `editionSaid`): the voice's in-memory copy of the picks, and the words the voice heard at the setup screen (docs/reference/AUTORADIO-EDITION-PICKS.md).
+// The edition picks' calls (`editionHeard`, `editionSaid`): the words the voice heard at the setup screen (docs/reference/AUTORADIO-EDITION-PICKS.md).
 //
 // The second native call, `{op: "signOut"}` (later only), answers `{done: Bool}` once the native half of sign-out has finished. Sign-out is led
 // by shared code (AutoradioLab/account.ts); the reason it is native is that the Swift stores

@@ -47,25 +47,6 @@ public final class ReaderFollow: @unchecked Sendable {
     }
 }
 
-public struct ReaderAimInfo: Codable, Sendable, Equatable {
-    public var address: String
-    public var blockId: String
-    public var label: String
-    public init(address: String = "", blockId: String = "", label: String = "") { self.address = address; self.blockId = blockId; self.label = label }
-}
-
-/// What the bar's prompt is aimed at: a document, or one block of it. Cleared when the listener leaves the document.
-public final class ReaderAim: @unchecked Sendable {
-    public static let shared = ReaderAim()
-    private let lock = NSLock()
-    private var _info = ReaderAimInfo()
-    public init() {}
-    public var onChange: (@Sendable () -> Void)?
-    public var info: ReaderAimInfo { lock.lock(); defer { lock.unlock() }; return _info }
-    public func set(_ i: ReaderAimInfo) { lock.lock(); _info = i; lock.unlock(); onChange?() }
-    public func clear() { set(ReaderAimInfo()) }
-}
-
 /// The sentence the radio is saying, by address, so the reader lights it (the app module's `radioView` feeds it). Only a CHANGE is passed on; when nothing plays the follow is cleared. A follow that was
 /// cleared (the sign-out wipe) is set again by the very next feed even when the address and the sentence are the same as before.
 public final class ReaderFeed: @unchecked Sendable {

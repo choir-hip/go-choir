@@ -64,7 +64,7 @@ public final class RadioBridge: @unchecked Sendable {
     public func wipe() { lock.lock(); inbox = []; queueJSON = nil; factsJSON = nil; respondsValue = nil; hasOnAirEntry = false; airAddressValue = ""; candidateList = []; lock.unlock() }
 }
 
-/// The account generation shared code stamps on what it pushes to a native mirror (`radioSet`, `editionMirror`, `pageText`): the `OpenPageFacts.replace(gen:)` pattern for the mirrors that had none. A push is kept when its generation
+/// The account generation shared code stamps on what it pushes to a native mirror (`radioSet`, `pageText`): the `OpenPageFacts.replace(gen:)` pattern for the mirrors that had none. A push is kept when its generation
 /// is at least the newest known, and refused below it. `announce` raises the floor: the `signOut` and `wipe` calls (the generation moved when the sign-out began) and the wipe's last act (a generation newer than anything computed
 /// before it), so a push in flight for the account being left lands nowhere. `boot` is the one place the newest may FALL: a JS context that starts again while this process lives (the module instance lives per session, a reload
 /// of the bundle does not restart it) begins at generation 0, and refusing it for the life of the process would silence every push; a boot is the new context speaking for itself, with nothing of the old one in flight.

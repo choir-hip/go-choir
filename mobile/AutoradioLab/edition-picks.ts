@@ -6,12 +6,10 @@
 //  - memory (`mem`) belongs to the account generation (api.ts `accountGeneration`): a moved generation starts a new, empty memory that reads the file again;
 //  - the file is written ONLY through `writeCurrent` with the generation the change began under, one change at a time (`mutate`'s queue), each change applied to the
 //    state as it is at write time (no lost update), and a change queued for an account that has moved on is skipped;
-//  - the native side keeps one in-memory copy (the DJ's edition text, the saved corpus and the edition writer read it): pushed after the file is written, emptied at a wipe;
 //  - the old Swift file (Application Support/Autoradio/edition-topics.json) is NEVER READ here and nothing deletes it here: it says nothing about whose it is, so an upgraded
 //    phone starts with no picks (the cost, in the reference page). The native sign-out wipe still removes it.
 //
-// Native calls, each with the reason only native code can meet (modules/apple/ModelsEntry.swift, `editionOp`): `editionMirror`/`editionMirrorReset` give the voice's native code
-// (the DJ request, the on-device retrieval) its copy; `editionHeard`/`editionSaid` carry the words the voice heard at the setup screen to shared code and its one-line answer back,
+// Native calls, each with the reason only native code can meet (modules/apple/ModelsEntry.swift, `editionOp`): `editionHeard`/`editionSaid` carry the words the voice heard at the setup screen to shared code and its one-line answer back,
 // because Exact has no call from native code into shared code (native-modules.md, "Out"): shared code asks, on the screen's own timer.
 import type { Storage } from './app.contract.d.ts';
 import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
@@ -19,20 +17,15 @@ import { Selection, suggestions, resolve, treeRows, key, tidy, EXPLAINER, VOICE_
 import { listing } from './paper.ts';
 
 export const PICKS_FILE = 'app:/data/edition-topics.json';
-export const MIRROR_DEADLINE_MS = 5000;
 const DUPLICATE = 'That one is already there.';
 
 /** The phone's native half (the app module), or null where there is none. */
 export interface Device {
-  /** `gen` is the generation the caller checked; native answers `ok: false` for a copy computed for an account that has since signed out (the result is false then, undefined or true otherwise). */
-  mirror(topics: string[], gen: number): Promise<boolean | void>;
-  /** The wipe: the native copy is emptied AND forgotten (an empty copy that was never pushed is not the listener's choice). */
-  forget(): Promise<void>;
   /** The words the voice heard at the setup screen since the last call, in order. */
   heard(): Promise<{ id: string; words: string }[]>;
   said(id: string, line: string, finish: boolean): Promise<void>;
 }
-export type Env = { device: Device | null; live: () => Promise<string[]>; mirrorDeadlineMs?: number };
+export type Env = { device: Device | null; live: () => Promise<string[]> };
 
 export function nativeDevice(): Device | null {
   const raw = nativeLater();
@@ -40,8 +33,6 @@ export function nativeDevice(): Device | null {
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   const o = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
   return {
-    async mirror(topics, gen) { return o(await later({ op: 'editionMirror', topics, gen })).ok !== false; },       // stamped with the generation the caller checked: native drops a copy computed for an account that has since signed out (a late copy would be written into the next account's notebook)
-    async forget() { await later({ op: 'editionMirrorReset' }); },
     async heard() {
       const items = o(await later({ op: 'editionHeard' })).items;
       return (Array.isArray(items) ? items : []).map(o).filter((i) => typeof i.id === 'string' && typeof i.words === 'string').map((i) => ({ id: i.id as string, words: i.words as string }));
@@ -68,17 +59,16 @@ export function parseStored(text: string | undefined): string[] {
   } catch { return []; }
 }
 
-type Mem = { gen: number; sel: Selection; own: string[]; expanded: Set<string>; live: string[]; loaded: Promise<void> | null; rev: number; message: string; mirrored: boolean };
+type Mem = { gen: number; sel: Selection; own: string[]; expanded: Set<string>; live: string[]; loaded: Promise<void> | null; rev: number; message: string };
 let mem: Mem | null = null;
 let tail: Promise<unknown> = Promise.resolve();
-let mirrorTail: Promise<unknown> = Promise.resolve();
 
 /** For tests: a new process. */
-export function forgetPicks(): void { mem = null; tail = Promise.resolve(); mirrorTail = Promise.resolve(); }
+export function forgetPicks(): void { mem = null; tail = Promise.resolve(); }
 /** The memory of the CURRENT account generation; a moved generation is a new, empty one (it reads the file again). */
 function memFor(): Mem {
   const gen = accountGeneration();
-  if (!mem || mem.gen !== gen) mem = { gen, sel: new Selection(), own: [], expanded: new Set(), live: [], loaded: null, rev: 0, message: '', mirrored: false };
+  if (!mem || mem.gen !== gen) mem = { gen, sel: new Selection(), own: [], expanded: new Set(), live: [], loaded: null, rev: 0, message: '' };
   return mem;
 }
 
@@ -103,7 +93,7 @@ async function ensure(storage: Storage | undefined, m: Mem): Promise<void> {
 const run = <T,>(fn: () => Promise<T>): Promise<T> => { const r = tail.then(fn, fn); tail = r.catch(() => undefined); return r; };
 
 /** Every change goes through here: one at a time, applied to the state as it is NOW, written through the generation-checked write; skipped when the account moved on
- * between asking and running; undefined when it moved on before the end. After the write the native copy follows (and only then). */
+ * between asking and running; undefined when it moved on before the end. */
 async function mutate<R>(storage: Storage | undefined, env: Env, change: (m: Mem) => R): Promise<{ value: R; wrote: boolean } | undefined> {
   const gen = accountGeneration();
   const out = await run(async () => {
@@ -113,23 +103,9 @@ async function mutate<R>(storage: Storage | undefined, env: Env, change: (m: Mem
     const value = change(m); m.rev += 1;
     const wrote = await writeCurrent(m.gen, storage, PICKS_FILE, new TextEncoder().encode(JSON.stringify({ topics: m.sel.topics })));
     if (gen !== accountGeneration()) return undefined;
-    return { value, wrote, topics: [...m.sel.topics] };
+    return { value, wrote };
   });
-  if (!out) return undefined;
-  if (out.wrote && !(await pushMirror(env, gen, out.topics)) && mem?.gen === gen) mem.mirrored = false;       // refused by native: sent again at the next open
-  return { value: out.value, wrote: out.wrote };
-}
-
-/** Give the native side its copy, in order, each push bounded by a deadline so a native call that never answers stops nothing. A push for an account that moved on is not sent. */
-function pushMirror(env: Env, gen: number, topics: string[] | null, force = false): Promise<boolean> {
-  const dev = env.device; if (!dev) return Promise.resolve(true);
-  const p = mirrorTail.then(async (): Promise<boolean> => {
-    if (!force && gen !== accountGeneration()) return true;                  // an account that moved on: nothing to send, nothing to resend
-    const r = await Promise.race([(topics === null ? dev.forget() : dev.mirror(topics, gen)).catch(() => undefined), delay(env.mirrorDeadlineMs ?? MIRROR_DEADLINE_MS, undefined)]);
-    return r !== false;                                                      // native's refusal is false: the copy is sent again (the next time the picks open or change)
-  });
-  mirrorTail = p.catch(() => undefined);
-  return p.catch(() => true);
+  return out;
 }
 
 // ---- the page
@@ -149,7 +125,6 @@ function build(m: Mem): PicksPage {
 }
 async function opened(storage: Storage | undefined, env: Env): Promise<Mem> {
   const m = memFor(); await ensure(storage, m);
-  if (!m.mirrored) { m.mirrored = true; if (!(await pushMirror(env, m.gen, [...m.sel.topics]))) m.mirrored = false; }
   return m;
 }
 
@@ -222,6 +197,5 @@ export async function wipePicks(storage: Storage | undefined, env: Env = liveEnv
       failed = await there();
     }
   }
-  await pushMirror(env, 0, null, true);          // the native wipe is the other path
   if (failed) throw new Error('the edition picks could not be cleared');
 }

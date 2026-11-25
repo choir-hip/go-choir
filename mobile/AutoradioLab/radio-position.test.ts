@@ -329,10 +329,10 @@ describe('P11 a pulse begun before sign-out and delivered after it changes nothi
     const air = r.rt.store.onAir();                                                   // whatever is on air, the push names ITS page and ITS story (voice-facts.test.ts V3, V6 hold the rules)
     expect(set!.airAddress).toBe(airAddressOf(air)); expect(set!.respondsRoute).toBe(respondsOf(air)?.route ?? '');
   });
-  test('the stamped calls: radioSet, editionMirror and the sign-out calls carry gen', () => {
+  test('the stamped calls: radioSet and the sign-out calls carry gen (the picks are no longer pushed: edition-picks.ts)', () => {
     const c = (f: string): string => readFileSync(new URL(f, import.meta.url), 'utf8');
     expect(c('radio-bridge.ts')).toMatch(/op: 'radioSet', gen,/);
-    expect(c('edition-picks.ts')).toMatch(/op: 'editionMirror', topics, gen/);
+    expect(c('edition-picks.ts')).not.toContain('editionMirror');
     expect(c('account.ts')).toMatch(/later\(\{ op, gen: accountGeneration\(\) \}\)/);
     expect(c('account.ts')).toMatch(/op: 'signOut', gen: accountGeneration\(\)/);
   });

@@ -1,28 +1,13 @@
 import Foundation
 
 // The native side of the edition picks. The topics themselves (tree, picks, saved file, spoken edits) are shared Exact code (AutoradioLab/edition-picks.ts).
-// The edition's writer and its deadline are shared code (AutoradioLab/edition-writer.ts); what stays here is the voice's side: the pushed copy of the picks and the words said at the setup screen.
+// The edition's writer and its deadline are shared code (AutoradioLab/edition-writer.ts); what stays here is the voice's side: the words said at the setup screen.
 
 // MARK: The native side of the edition picks
 
 // Nothing here stores a pick (docs/reference/AUTORADIO-EDITION-PICKS.md). What native code needs, and why:
-//  - EditionPicksMirror: the voice's native code (DJ request, on-device retrieval) reads the picks; an in-memory COPY pushed by shared code, no file.
 //  - EditionTalk: the voice hears words at the setup screen; Exact has no call from native into shared code, so they wait in a mailbox that shared code takes on the screen's timer and answers.
 // The old build's file (Application Support/Autoradio/edition-topics.json) is NEVER READ and NOT deleted here: it says nothing about whose it is, so an upgraded phone starts with no picks; only the account wipe removes it.
-
-public final class EditionPicksMirror: @unchecked Sendable {
-    public static let shared = EditionPicksMirror()
-    private let lock = NSLock()
-    private var list: [String] = []
-    private var pushed = false
-    public var topics: [String] { lock.lock(); defer { lock.unlock() }; return list }
-    /// True once shared code has pushed a copy since the launch or the last wipe: an empty copy never pushed is "not known", not "the listener chose nothing" (nothing writes it as a choice).
-    public var known: Bool { lock.lock(); defer { lock.unlock() }; return pushed }
-    /// Dropped (false) when `gen` is older than the newest account generation shared code has announced or pushed: a copy computed for an account that signed out meanwhile would be held for the next account's voice turn.
-    @discardableResult
-    public func set(gen: Int, _ t: [String]) -> Bool { SharedGeneration.admit(gen) { lock.lock(); list = t; pushed = true; lock.unlock() } }
-    public func reset() { lock.lock(); list = []; pushed = false; lock.unlock() }
-}
 
 public final class EditionTalk: @unchecked Sendable {
     public static let shared = EditionTalk()
@@ -62,8 +47,6 @@ public final class EditionTalk: @unchecked Sendable {
 public enum EditionNative {
     public static func op(_ r: [String: Any]) -> [String: Any] {
         switch r["op"] as? String ?? "" {
-        case "editionMirrorReset": EditionPicksMirror.shared.reset(); return [:]
-        case "editionMirror": return ["ok": EditionPicksMirror.shared.set(gen: (r["gen"] as? NSNumber)?.intValue ?? 0, (r["topics"] as? [String]) ?? [])]
         case "editionHeard": return ["items": EditionTalk.shared.take()]
         case "editionSaid": EditionTalk.shared.said(r["id"] as? String ?? "", line: r["line"] as? String ?? "", finish: (r["finish"] as? Bool) ?? false); return [:]
         default: return [:]

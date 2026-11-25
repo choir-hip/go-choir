@@ -42,17 +42,6 @@ final class EditionSetupTests: XCTestCase {
         XCTAssertEqual((EditionNative.op(["op": "editionHeard"])["items"] as? [[String: String]])?.count, 0, "clear() drops what was never taken")
     }
 
-    func testTheMirrorIsACopyInMemoryThatTheWipeEmptiesAndForgets() {
-        SharedGeneration.resetForTest(); EditionPicksMirror.shared.reset(); defer { EditionPicksMirror.shared.reset(); SharedGeneration.resetForTest() }
-        XCTAssertFalse(EditionPicksMirror.shared.known, "nothing pushed yet: an empty copy is not the listener's choice")
-        _ = EditionNative.op(["op": "editionMirror", "topics": ["Space", "Chess"], "gen": 1])
-        XCTAssertEqual(EditionPicksMirror.shared.topics, ["Space", "Chess"]); XCTAssertTrue(EditionPicksMirror.shared.known)
-        _ = EditionNative.op(["op": "editionMirror", "topics": [String](), "gen": 1])
-        XCTAssertEqual(EditionPicksMirror.shared.topics, []); XCTAssertTrue(EditionPicksMirror.shared.known, "pushed empty IS the listener's choice")
-        _ = EditionNative.op(["op": "editionMirrorReset"])
-        XCTAssertFalse(EditionPicksMirror.shared.known); XCTAssertEqual(EditionPicksMirror.shared.topics, [])
-    }
-
     func testTheOldFileIsNeitherReadNorDeletedByTheEditionCalls() throws {
         guard let f = TakeFiles.url("edition-topics.json") else { return XCTFail("no Application Support") }
         let had = try? Data(contentsOf: f); defer { if let had { try? had.write(to: f) } else { try? FileManager.default.removeItem(at: f) } }

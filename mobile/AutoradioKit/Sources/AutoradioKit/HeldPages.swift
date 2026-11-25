@@ -48,7 +48,7 @@ public final class HeldPages: @unchecked Sendable {
     public init(limit: Int = HeldPages.defaultLimit) { self.limit = max(1, limit) }
 
     // The page of an account that has since gone is dropped by AccountWipe's registration (sign-out). A hand-over still in flight across the change is refused here: it carries the account generation shared code
-    // read the page under, and one older than the newest known (`SharedGeneration`, the radioSet and editionMirror rule) is dropped, so the next account's voice never holds the old account's page.
+    // read the page under, and one older than the newest known (`SharedGeneration`, the radioSet rule) is dropped, so the next account's voice never holds the old account's page.
     @discardableResult
     public func hold(gen: Int, _ p: HeldPage) -> Bool {
         SharedGeneration.admit(gen) {

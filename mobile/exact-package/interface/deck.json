@@ -17,24 +17,6 @@
       "substitute": {
         "default": { "why": "empty", "item": "", "block": 0, "seconds": 0, "duration": 0, "held": [], "seq": 0, "acked": 0, "journal": [] }
       }
-    },
-    {
-      "send": "deckPlay",
-      "options": {
-        "id": "string", "kind": "string", "title": "string", "show": "string", "document": "string", "paragraphs": "string", "url": "string",
-        "start": "number", "end": "number", "block": "number", "seconds": "number", "requiresPreviousHeard": "bool", "segment": "string"
-      },
-      "answers": "DeckState"
-    },
-    {
-      "send": "deckEnqueue",
-      "options": {
-        "id": "string", "kind": "string", "title": "string", "show": "string", "document": "string", "paragraphs": "string", "url": "string",
-        "start": "number", "end": "number", "block": "number", "seconds": "number", "requiresPreviousHeard": "bool", "segment": "string", "at": "number"
-      },
-      "answers": "DeckState"
-    },
-    { "send": "deckAct", "options": { "op": "string", "value": "number" }, "answers": "DeckState" },
-    { "send": "deckAck", "options": { "through": "number" }, "answers": "DeckState" }
+    }
   ]
 }

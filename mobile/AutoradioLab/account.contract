@@ -38,7 +38,7 @@ members Autoradio
     after(100, bumpLock)
   // The card is the first thing in the bar's own column (bar.contract), so it sits whole above the bar at every bar height (the "On:" line, the now-playing strip, the answer card). Not over the code screen, a
   // sheet, the launcher, the bar's field or any keyboard (exactViewport: the one general keyboard fact), the content controls, the reader's aim row or a web layer.
-  derive bannerOn = acs.message != "" and not authOpen and not siv.pending and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
+  derive bannerOn = acs.message != "" and not authOpen and not siv.pending and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (aimAddr == "" or aimAddr != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
   resource acs = accountState(`${siv.phase}|${siv.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${hpg.platform}`, pg.top, hc.mode, hpg.platform) as shape AccountView else empty()
   // The one "signed in" (the key is stored and readable), read from shared code's account answer: no native reader (docs/problems/phone-native-round-trips-and-two-key-readers-2026-11-25.md).
   derive isSignedIn = acs.signedIn
@@ -125,6 +125,10 @@ members Autoradio
     edDraft = ""
     edUrl = ""
     edCurLink = ""
+    // What the bar was aimed at belongs to the account that is leaving too.
+    aimAddr = ""
+    aimBlock = ""
+    aimLabel = ""
     send so = accountSignOut()
     // A signed-out phone starts the next sign-in from idle: the last attempt's done is not carried across.
     send signedOpen = signInOpen()

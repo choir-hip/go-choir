@@ -32,7 +32,6 @@ path mobile/AutoradioKit/Sources/AutoradioKit/VoiceSetup.swift voice setup: the 
 path mobile/AutoradioKit/Sources/AutoradioKit/TurnTimeline.swift the timing trace of a voice turn
 path mobile/AutoradioKit/Sources/AutoradioKit/RetrievalFacts.swift the voice turn's one ask for passages: it raises the ask and waits for shared code's answer with a deadline (Exact has no call from native into shared code); decides nothing
 path mobile/AutoradioKit/Sources/AutoradioKit/EmbedDevice.swift the on-device embedding model, Wi-Fi, Low Power Mode, thermal state and what the radio holds the processor for: three answers to shared code
-path mobile/exact-package/apple/AutoradioModule+Imported.swift says which block the player is reading (importedFollow): audio only; the pages, the list, the import and the search are shared code
 path mobile/AutoradioKit/Sources/AutoradioKit/KeptTurns.swift kept microphone turns
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurn.swift generated microphone-turn fixture for voice setup and the model proof
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurnAudio.swift the fixture utterance read by voice setup and the model proof
@@ -80,7 +79,6 @@ name retrievalAsk the voice turn's ask for passages, raised by the native turn e
 name voice* the voice cards and the speaker profile
 name choirTalkCancel cancels the open microphone turn
 name choirHandsFreeToggle opens and closes the microphone
-name importedFollow the block the player is reading now: only the player knows
 name deck* the deck: play, hold, pause, seek, acknowledge, and the state and journal it keeps (the audio session and the lock screen are native)
 
 # --- NOT on this list, so COUNTED against the ceiling (non-voice native code: debt, or a platform seam). Only the audio session, the microphone, speech and the on-device models are voice

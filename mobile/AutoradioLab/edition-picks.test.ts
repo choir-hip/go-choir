@@ -51,13 +51,11 @@ const text = (p: string): string | undefined => { const b = files.get(p); return
 const stored = (): string[] | undefined => { const t = text(PICKS_FILE); return t === undefined ? undefined : (JSON.parse(t) as { topics: string[] }).topics; };
 const put = (p: string, t: string): void => { files.set(p, new TextEncoder().encode(t)); };
 
-// ---- a fake phone: the old file and the native mirror and mailbox are state the test can read back
-type Phone = { mirrored: string[][]; heard: { id: string; words: string }[]; said: { id: string; line: string; finish: boolean }[]; answers: boolean; mirrorHangs: boolean };
+// ---- a fake phone: the old file and the native mailbox are state the test can read back
+type Phone = { heard: { id: string; words: string }[]; said: { id: string; line: string; finish: boolean }[]; answers: boolean };
 let phone: Phone;
-const fresh = (): Phone => ({ mirrored: [], heard: [], said: [], answers: true, mirrorHangs: false });
+const fresh = (): Phone => ({ heard: [], said: [], answers: true });
 const device = (): Device => ({
-  mirror: async (t) => { if (phone.mirrorHangs) return new Promise<void>(() => undefined); phone.mirrored.push(t); },
-  forget: async () => { phone.mirrored.push([]); },
   heard: async () => phone.heard.splice(0),
   said: async (id, line, finish) => { phone.said.push({ id, line, finish }); },
 });
@@ -200,46 +198,28 @@ describe('P4 accounts', () => {
   });
 });
 
-describe('P5 the native copy', () => {
-  test('pushed only after the file was written, in the order written; emptied at the wipe', async () => {
-    await toggle(storage, 'Space', E()); await toggle(storage, 'Chess', E());
-    expect(phone.mirrored.at(-1)).toEqual(['Space', 'Chess']);
-    failWrites = true; const n = phone.mirrored.length;
-    await toggle(storage, 'Film', E());
-    expect(phone.mirrored.length).toBe(n);                     // not written, not pushed
-    failWrites = false;
-    nextGeneration(); await wipePicks(storage, E());
-    expect(phone.mirrored.at(-1)).toEqual([]);
-  });
-  test('a first read after a restart gives the native side its copy', async () => {
+describe('P5 no copy for native', () => {
+  test('a change, a first read and the wipe send native nothing (the voice reads no copy of the picks: the retrieval reads the file, retrieval-live.ts)', async () => {
+    const calls: string[] = [];
+    const dev: Device = { heard: async () => { calls.push('heard'); return []; }, said: async () => { calls.push('said'); } };
+    const e: Env = { device: dev, live: async () => live };
     put(PICKS_FILE, '{"topics":["Space"]}');
-    await picksText(storage, E());
-    expect(phone.mirrored.at(-1)).toEqual(['Space']);
-  });
-  test('a native call that never answers does not stop the next push; a write refused because the account moved is not pushed', async () => {
-    phone.mirrorHangs = true;
-    await toggle(storage, 'Space', { ...E(), mirrorDeadlineMs: 1 });          // the push hangs; its deadline lets the chain go on
-    phone.mirrorHangs = false;
-    await toggle(storage, 'Chess', { ...E(), mirrorDeadlineMs: 1 });
-    expect(phone.mirrored.at(-1)).toEqual(['Space', 'Chess']);
-    const g = accountGeneration();
-    const release = hold(); const p = toggle(storage, 'Film', E()); await release.entered;
-    nextGeneration(); release(); await p;
-    expect(accountGeneration()).toBeGreaterThan(g);
-    expect(phone.mirrored.some((t) => t.includes('Film'))).toBe(false);
+    await picksText(storage, e); await toggle(storage, 'Chess', e);
+    nextGeneration(); await wipePicks(storage, e);
+    expect(calls).toEqual([]);
   });
 });
 
 describe('P6 the old Swift file is never read', () => {
-  const ALLOWED = ['generation', 'editionMirror', 'editionMirrorReset', 'editionHeard', 'editionSaid'];      // 'generation': the boot announcement every JS context sends first (api.ts nativeLater)
-  test('the only native calls are the voice\'s and the mirror\'s: no read of the old file, no delete of it', async () => {
+  const ALLOWED = ['generation', 'editionHeard', 'editionSaid'];      // 'generation': the boot announcement every JS context sends first (api.ts nativeLater)
+  test('the only native calls are the voice\'s: no read of the old file, no delete of it', async () => {
     const ops: string[] = [];
     bindNative({ later: async (r: { op: string }) => { ops.push(r.op); return {}; } } as never);
     const dev = nativeDevice()!;
     const e: Env = { device: dev, live: async () => [] };
     await picksText(storage, e); await toggle(storage, 'Space', e); await hear(storage, 'add chess', e); await drainHeard(storage, e);
     nextGeneration(); await wipePicks(storage, e);
-    expect(ops.length).toBeGreaterThan(0);
+    expect(ops).toContain('editionHeard');
     expect(ops.filter((o) => !ALLOWED.includes(o))).toEqual([]);
   });
   test('an upgraded phone starts with no picks, whatever an old Swift file holds (it is not even asked about); nothing is seeded', async () => {
@@ -247,7 +227,6 @@ describe('P6 the old Swift file is never read', () => {
     put(oldPath, '{"topics":["Space","Chess"]}');               // the old build's file, on the same fake disk: this module has no way to reach it and never names it
     const page = await picksPage(storage, {}, E());
     expect(page.pickedCount).toBe(0); expect(page.picks).toBe(''); expect(stored()).toBeUndefined();
-    expect(phone.mirrored.at(-1)).toEqual([]);             // read, nothing there: the list IS empty, and the native copy is told
     expect(text(oldPath)).toBe('{"topics":["Space","Chess"]}');
   });
 });

@@ -1,17 +1,16 @@
-// The account generation shared code stamps on what it pushes to native (radioSet, editionMirror, pageText) and what native does with it (AutoradioKit SharedGeneration). The failure list, written first
+// The account generation shared code stamps on what it pushes to native (radioSet, pageText) and what native does with it (AutoradioKit SharedGeneration). The failure list, written first
 // (the second review of the account-generation commits, D1 to D4):
 //  G1 (D2) a JS context that boots BELOW the generation native last saw (a reload with the process alive: the native module instance lives per session, the JS `generation` starts at 0) announces its
 //     generation before its first call, native adopts it even though it lowers the newest, and its pushes are accepted: not silently refused until the process dies.
 //  G2 (D1) the wipe ends by announcing a generation newer than anything computed before it: a pulse that began after beginSignOut (it reads the announced generation, the store still holds the old
 //     account's sheet) is refused when it lands after the wipe, and a push computed after the wipe (the public paper, signed out) is accepted.
 //  G3 (D3) a radioSet native refused (ok: false) is not recorded as sent: the next pulse sends it again with a fresh stamp, once per pulse; an accepted one is not sent again.
-//  G4 (D3) editionMirror returns native's refusal, the mirror is not marked pushed, and the stamp the call carries is the one it checked.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { setAnnounceDeadlineForTest, abortSignOut, adoptNative, accountGeneration, beginSignOut, nextGeneration, nativeLater, resetBootForTest, resetSeam } from './api.ts';
 import { wipeAll } from './account.ts';
 import { sealingBlocked } from './api.ts';
 import { radioPulse, wipeRadio, getRadio, SHEET_FILE } from './radio-bridge.ts';
-import { nativeDevice, forgetPicks, picksPage, type Device } from './edition-picks.ts';
+import { forgetPicks } from './edition-picks.ts';
 
 type Call = { op: string; gen?: number; boot?: boolean; [k: string]: unknown };
 /** A native that keeps SharedGeneration's rule: a boot is adopted even when it lowers the newest, a push below the newest is refused, an announcement raises it. */
@@ -20,7 +19,7 @@ function fakeNative(initialNewest = 0) {
   const later = async (r: Call): Promise<unknown> => {
     s.calls.push(r);
     if (r.op === 'generation') { if (r.boot === true) s.newest = r.gen ?? 0; else s.newest = Math.max(s.newest, r.gen ?? 0); return { ok: true }; }
-    if (r.op === 'radioSet' || r.op === 'editionMirror') {
+    if (r.op === 'radioSet') {
       if (s.refuse > 0) { s.refuse -= 1; return { ok: false }; }
       const gen = r.gen ?? -1;
       if (gen < s.newest) return { ok: false };
@@ -39,10 +38,10 @@ describe('G1 a boot below the newest', () => {
     const f = fakeNative(1000);                                                    // native saw generation 1000 in an earlier JS context
     adoptNative(f.native as never, 'test');
     const later = nativeLater()!;
-    await later({ op: 'editionMirror', topics: ['x'], gen: accountGeneration() });
+    await later({ op: 'radioSet', gen: accountGeneration() });
     expect(f.s.calls[0]).toMatchObject({ op: 'generation', boot: true, gen: accountGeneration() });
     expect(f.s.pushed.length).toBe(1);                                            // not refused for being below 1000
-    await later({ op: 'editionMirror', topics: ['y'], gen: accountGeneration() });
+    await later({ op: 'radioSet', gen: accountGeneration() });
     expect(f.s.calls.filter((c) => c.op === 'generation').length).toBe(1);        // once per JS context
   });
 });
@@ -85,30 +84,6 @@ describe('G3 a refused radioSet is sent again, once per pulse', () => {
     expect(f.s.pushed.filter((c) => c.op === 'radioSet').length).toBe(1);
     await radioPulse(undefined, f.native as never);
     expect(f.s.calls.filter((c) => c.op === 'radioSet').length).toBe(3);           // accepted: not sent again while nothing changed
-  });
-});
-
-describe('G4 editionMirror', () => {
-  test('returns the refusal and carries the generation it checked', async () => {
-    const f = fakeNative(0); adoptNative(f.native as never, 'test');
-    const dev = nativeDevice()!;
-    const g = accountGeneration();
-    f.s.refuse = 1;
-    expect(await dev.mirror(['space'], g)).toBe(false);
-    expect(await dev.mirror(['space'], g)).not.toBe(false);
-    expect(f.s.calls.filter((c) => c.op === 'editionMirror').every((c) => c.gen === g)).toBe(true);
-  });
-});
-
-describe('G4b a refused copy is sent again at the next open', () => {
-  test('mirror refused once: the picks page asks again next time and the second copy is the one native keeps', async () => {
-    const sent: { topics: string[]; gen: number }[] = []; let refuse = true;
-    const dev: Device = { mirror: async (topics, gen) => { sent.push({ topics, gen }); if (refuse) { refuse = false; return false; } return true; }, forget: async () => undefined, heard: async () => [], said: async () => undefined };
-    const env = { device: dev, live: async () => [] as string[] };
-    await picksPage(undefined, {}, env);                                           // opens: first copy, refused
-    await picksPage(undefined, {}, env);                                           // opens again: sent again (once per open, no storm)
-    await picksPage(undefined, {}, env);                                           // accepted: not sent again
-    expect(sent.length).toBe(2); expect(sent.every((c) => c.gen === accountGeneration())).toBe(true);
   });
 });
 

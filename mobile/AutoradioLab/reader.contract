@@ -10,7 +10,7 @@
 //          reader-card-source-<anchor>, reader-card-open-<anchor>, reader-source-<n>, reader-sources, reader-related-<address>,
 //          reader-sheet(-layer, -scrim), reader-web(-view; the host, close, read, add and safari are in content.contract), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
 use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
-use ReaderFollowInfo, ReaderAimInfo from "@choir/autoradio"
+use ReaderFollowInfo from "@choir/autoradio"
 use PageScroll, Card, Layer, Btn, BarClear, RowRule from "./ui.contract"
 use ClipRow from "./clips.contract"   // lane autoradio-joins
 use ClipRows from "./podcast-types.contract"
@@ -133,7 +133,9 @@ component BlockView
     th: Theme
     rdoc: ReaderDoc
     rfollow: ReaderFollowInfo
-    raim: ReaderAimInfo
+    aimAddr: string
+    aimBlock: string
+    aimLabel: string
     openCites: string[]
     aimAt: action
     toggleCite: action
@@ -145,7 +147,7 @@ component BlockView
     sideOn: bool
   derive hi = rfollow.address == address and rfollow.blockId == b.id ? rfollow.sentence : -1
   derive following = rfollow.address == address and rfollow.blockId == b.id
-  derive aimed = raim.address == address and raim.blockId == b.id
+  derive aimed = aimAddr == address and aimBlock == b.id
   derive openHere = rdoc.cites.filter(c => c.blockId == b.id and openCites.includes(ckey(address, c.anchor)))
   derive noted = sideOn and b.kind == "p" and openHere.length > 0
   derive stacked = noted ? openHere.slice(1) : openHere
@@ -343,7 +345,9 @@ component ReaderBody
   inject
     th: Theme
     rdoc: ReaderDoc
-    raim: ReaderAimInfo
+    aimAddr: string
+    aimBlock: string
+    aimLabel: string
     openCites: string[]
     sheet: string
     sheetFor: string
@@ -468,11 +472,11 @@ component ReaderBody
           button press=stopRevision(address) testId="reader-stop" appearance="none"
             Btn(label="Stop", primary=false, wide=false)
       // the prompt is aimed at this document or one block of it
-      if raim.address == address
+      if aimAddr == address
         row testId="reader-aim" position="absolute" left=16 right=16 bottom="calc(env(safe-area-inset-bottom) + 8px + 56px + 10px)" z-index=6
           align-items="center" gap=8 padding="8px 8px 8px 14px" box-sizing="border-box" border-radius=th.radiusCard
           background-color=th.paper2 box-shadow=th.shadow2
-          text (raim.blockId == "" ? "Asking about this document" : `Asking about “${raim.label}”`) font-family=th.fontLabel font-size="-exact-footnote" color=th.fg flex=1 min-width=0 line-clamp=1
+          text (aimBlock == "" ? "Asking about this document" : `Asking about “${aimLabel}”`) font-family=th.fontLabel font-size="-exact-footnote" color=th.fg flex=1 min-width=0 line-clamp=1
           button press=clearAim testId="reader-aim-clear" appearance="none" aria-label="Clear" width=32 height=32
             image "symbol:close" color=th.muted
       // sheets

@@ -1,14 +1,8 @@
 import XCTest
 @testable import AutoradioKit
 
-/// The sign-out wipe reaches the LIVE sources of the reader's follow and aim, and a follow that was cleared is set again by the next identical feed.
+/// A follow that the sign-out wipe cleared is set again by the next identical feed. (What the bar is aimed at is the contract's own state now, members-reader.contract.)
 final class ReaderWipeTests: XCTestCase {
-    func testClearingTheAimTellsTheLiveSource() {
-        let aim = ReaderAim(); let told = Locked(0)
-        aim.onChange = { told.write { $0 += 1 } }
-        aim.set(ReaderAimInfo(address: "pub:x", blockId: "b1", label: "L")); aim.clear()
-        XCTAssertEqual(told.value, 2); XCTAssertEqual(aim.info, ReaderAimInfo())
-    }
     func testAFollowClearedByTheWipeIsSetAgainByTheSameFeed() {
         SharedGeneration.resetForTest()
         let follow = ReaderFollow(); let feed = ReaderFeed()

@@ -65,8 +65,8 @@ public final class AccountWipe: @unchecked Sendable {
         register("playing") { environment.wipePlaying() }
         register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe() }
         // The native copy of the edition picks and the words waiting for shared code (the file itself is shared code's, wiped by account.ts).
-        register("edition-picks") { EditionPicksMirror.shared.reset(); EditionTalk.shared.clear() }
-        register("reader") { reader.wipe(); ReaderFollow.shared.clear(); ReaderAim.shared.clear() }      // the pages handed to the voice, the sentence being followed and what the bar's prompt is aimed at
+        register("edition-picks") { EditionTalk.shared.clear() }
+        register("reader") { reader.wipe(); ReaderFollow.shared.clear() }      // the pages handed to the voice, the sentence being followed and what the bar's prompt is aimed at
         // The enrolled voice is app-private (Application Support/MikeVoice, not a system setting) and the listener's own: it goes at sign-out.
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
