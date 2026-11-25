@@ -34,13 +34,12 @@ EOF
   xcrun --sdk "$sdk" clang++ -target "$triple" -isysroot "$sysroot" -std=c++17 -O2 -fPIC \
     -I "$SRC" -I "$work/include" -c "$ROOT/scripts/tiny-voca/DizioneBridge.cpp" -o "$work/DizioneBridge.o"
   /usr/bin/libtool -static -o "$work/libdizione.a" "$work"/*.o
-  cp "$work/libdizione.a" "$OUT/dizione-$platform.a"
 done
 # Create it the way scripts/build-llama-xcframework.sh makes llama's: a static
 # library plus Headers per slice, which Exact turns into a Swift module.
 rm -rf "$OUT/dizione.xcframework"
 xcrun xcodebuild -create-xcframework \
-  -library "$OUT/dizione-sim.a" -headers "$OUT/dizione-sim/include" \
-  -library "$OUT/dizione-ios.a" -headers "$OUT/dizione-ios/include" \
-  -library "$OUT/dizione-macos.a" -headers "$OUT/dizione-macos/include" \
+  -library "$OUT/dizione-sim/libdizione.a" -headers "$OUT/dizione-sim/include" \
+  -library "$OUT/dizione-ios/libdizione.a" -headers "$OUT/dizione-ios/include" \
+  -library "$OUT/dizione-macos/libdizione.a" -headers "$OUT/dizione-macos/include" \
   -output "$OUT/dizione.xcframework" >/dev/null
