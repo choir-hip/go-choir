@@ -55,8 +55,8 @@ func TestScheduledTapeSweepReapsDestroyedAndLeavesProtected(t *testing.T) {
 	listed := f.chain("listed-1", 1, tapeAged)
 	f.reg.owned["owned-1"] = true
 	owned := f.chain("owned-1", 1, tapeAged)
-	routed := f.chain("routed-1", 1, tapeAged)
-	f.insertClosure("code-r", platformTestDigest('9'), "routed-1")
+	routed := f.chain(routedComputerID(), 1, tapeAged)
+	f.insertClosure("code-r", platformTestDigest('9'), true)
 	recent := f.chain("recent-1", 1, 2*24*time.Hour)
 	// The hard-protected paper. A registry that lacks it while it has a head is
 	// refused as stale, so the registry lists it, as the real one does.

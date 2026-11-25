@@ -20,9 +20,9 @@ use VoiceStep from "./voice.contract"
 use AccountView from "./account-state-types.contract"
 use SignInView from "./account-types.contract"
 use EditionPage from "./edition-types.contract"
-use DownloadCard, DownloadLines from "./downloads.contract"
+use ModelsFirstLines, ModelsVoiceOffer from "./models.contract"
 use LearnCard from "./learn.contract"
-use DownloadsView from "./downloads-types.contract"
+use ModelsView from "./models-types.contract"
 
 keyframes obBreathe
   from opacity=1 scale=1
@@ -46,6 +46,7 @@ component SignInScreen
     createAccount: action
     signInPasskey: action
     cancelSignIn: action
+    cancelDeletion: action
     closeAuth: action
     nameLogin: bool
     namePass: string
@@ -110,6 +111,9 @@ component SignInScreen
       // A failure line belongs to the flow that made it: the name's under the name form, the sign-up's under the address form, the passkey's always.
       if siv.message != "" and not siv.pending and not signRunning and (siv.mode == "signin" or (siv.mode == "reviewer" and nameLogin) or (siv.mode == "create" and not nameLogin))
         text siv.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.danger text-align="center"
+      if siv.offer
+        button press=cancelDeletion testId="signin-cancel-deletion" appearance="none"
+          Btn(label="Cancel deletion", primary=true, wide=false)
 
 // ---------------------------------------------------------------- the page
 
@@ -324,8 +328,9 @@ component OnboardingPage
   inject
     th: Theme
     au: ChoirAuth
-    dl: DownloadsView
+    dl: ModelsView
     ob: Onboarding
+    openPage: action
     obBegin: action
     obBeginMobile: action
     obMic: action
@@ -360,12 +365,11 @@ component OnboardingPage
       StepDots(n=n)
 
       // ---- welcome (and skipped): what is about to happen, plainly
-      // Signed out the first run is only the radio's voice: the one download a listener needs, with its size, its host and one press (downloads.ts); the radio plays the paper meanwhile, in the iPhone's voice.
+      // Signed out, radio playback needs no setup. The built-in voice is native Tiny Voca; no fallback to Apple's speech synthesizer.
       if (ob.step == "welcome" or ob.step == "skipped") and au.signedIn == false
         Card(level=1, testId="ob-welcome-voice", minHeight=0)
           column padding=18 gap=12
-            text "The radio reads the paper to you. Until its own voice is on this phone it uses the iPhone's built-in voice." font-size="-exact-body" line-height=1.45 font-family=th.fontText
-            DownloadCard(group="voice")
+            text "The radio reads the paper to you. Tiny Voca, included with Autoradio, is its voice. It reads on this phone even offline." font-size="-exact-body" line-height=1.45 font-family=th.fontText
             if dl.voiceReady
               text "The radio's voice is on this phone." testId="ob-voice-ready" font-family=th.fontLabel font-size="-exact-footnote" color=th.success
             text "To ask the radio, or to make your edition, sign in or make an account." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
@@ -378,9 +382,9 @@ component OnboardingPage
             text "First it sets up the voice on this phone: these files, and a check that each one works here." font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
             if dl.voiceNote != ""
               text dl.voiceNote testId="ob-voice-note" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted
-            DownloadLines(group="voice")
-            DownloadLines(group="voice-rest")
-            text `Everything above: ${dl.setupTotal}` testId="ob-welcome-total" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+            ModelsFirstLines()
+            button press=openPage("settings:voice", "Voice and models") testId="ob-choose-models" appearance="none" align-self="flex-start"
+              text "Choose other models" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
             if ob.message != ""
               text ob.message testId="ob-welcome-message" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.danger
             button press=obBegin testId="ob-begin" appearance="none"

@@ -6,8 +6,8 @@ import XCTest
 
 final class ListenerPipelineTests: XCTestCase {
     let everyStage: (StageKind, String) -> Bool = { _, _ in true }
-    func choose(ready: Set<String>, stages: @escaping (StageKind, String) -> Bool = { _, _ in true }, table: [ModelCandidate] = CandidateTable.all) -> ListenerPipeline.Choice {
-        ListenerPipeline.choose(table: table, isReady: { ready.contains($0) }, hasStage: stages)
+    func choose(ready: Set<String>, stages: @escaping (StageKind, String) -> Bool = { _, _ in true }, table: [ModelCandidate] = CandidateTable.all, preferred: [String: String] = [:]) -> ListenerPipeline.Choice {
+        ListenerPipeline.choose(table: table, isReady: { ready.contains($0) }, hasStage: stages, preferred: preferred)
     }
     let silero = "silero-vad-v6.2.1", eou = "parakeet-eou-120m", tdt = "parakeet-tdt-0.6b-v2", fluid = "fluid-speech-mini"
 
@@ -81,16 +81,19 @@ final class ListenerPipelineTests: XCTestCase {
         XCTAssertTrue(ListenerPipeline.summary(of: all).contains("parakeet-eou") && ListenerPipeline.summary(of: all).contains("fluid-speech-mini"))
     }
 
-    // Setup downloads the live words beside a batch model; the list says which.
-    func testSetupFetchesTheLiveWordsBesideTheFinalModel() {
+    // The list says which batch model the live words go with (the configurator uses it); setup itself fetches only the model it is asked for, the live words are their own row.
+    func testTheListNamesTheLiveWordsThatGoWithABatchModelAndSetupSizesEachRowAlone() {
         XCTAssertEqual(ListenerPipeline.companions(of: fluid), [eou])
         XCTAssertEqual(ListenerPipeline.companions(of: tdt), [eou])
         XCTAssertEqual(ListenerPipeline.companions(of: eou), [])
         XCTAssertEqual(ListenerPipeline.companions(of: "apple-speech"), [])
-        let row = SetupCatalog.ladder(.transcriber).first!
-        XCTAssertEqual(row.id, fluid)
+        let pro = SetupCatalog.ladder(.transcriber).first!                    // the first row is Fluid Speech Pro; the plan drops it on a phone under 7 GB
+        XCTAssertEqual(pro.id, "fluid-speech-pro")
+        XCTAssertEqual(ListenerPipeline.companions(of: pro.id), [eou])
+        XCTAssertEqual(pro.bytes, KnownModels.fluidSpeechPro.totalBytes, "Pro is its own size: the live words have their own row")
+        let row = SetupCatalog.ladder(.transcriber).first { $0.id == fluid }!
         XCTAssertEqual(row.kitStageID, "live-then-final")
-        XCTAssertEqual(row.bytes, KnownModels.fluidSpeechMini.totalBytes + 250_000_000, "the size the person is asked about includes the live words")
+        XCTAssertEqual(row.bytes, KnownModels.fluidSpeechMini.totalBytes, "the size the person is asked about is the model's own")
         XCTAssertTrue(SetupCatalog.ladder(.transcriber).last!.isFloor)
     }
 
@@ -280,5 +283,28 @@ final class ListenerPipelineTests: XCTestCase {
 
     func testTheStageIsRegisteredInTheBuiltInRegistry() {
         XCTAssertTrue(StageRegistry.builtIn().stages(.transcriber).contains { $0.id == "live-then-final" })
+    }
+
+    // The person's Use (Settings > Voice and models): a model on the phone that they chose for a job is that job's model, ahead of the list's rank.
+    //  U1 a preferred final recogniser that is ready replaces the best-ranked one; a preferred one that is not on the phone changes nothing.
+    //  U2 a preferred live-words model and a preferred speech detector the same way, each for its own job only.
+    func testU1APreferredReadyFinalRecogniserBeatsTheRank() {
+        let c = choose(ready: [silero, eou, fluid, tdt], preferred: ["final": tdt])
+        XCTAssertEqual(c.models["final"], tdt)
+        XCTAssertEqual(c.models["live"], eou, "the live words are another job")
+        XCTAssertEqual(choose(ready: [silero, eou, fluid], preferred: ["final": tdt]).models["final"], fluid, "a model that is not on the phone cannot be the choice")
+    }
+    func testU2APreferredLiveModelAndSpeechDetectorAreTheirOwnJobs() {
+        let c = choose(ready: [silero, eou, fluid], preferred: ["live": eou, "bounds": silero])
+        XCTAssertEqual(c.models, ["bounds": silero, "live": eou, "final": fluid])
+        XCTAssertEqual(choose(ready: [eou], preferred: ["final": fluid]).models["final"], eou, "a preference for a model that is not on the phone conjures nothing: what is ready decides")
+    }
+    func testUTheChoiceIsKeptAcrossARestartAndTheWrongJobIsRefused() {
+        let d = UserDefaults(suiteName: "modeluse-\(UUID().uuidString)")!
+        let u = ModelUse(defaults: d)
+        u.set("final", fluid); u.set("live", eou)
+        XCTAssertEqual(ModelUse(defaults: d).all, ["final": fluid, "live": eou])
+        u.set("nonsense", fluid); u.set("final", "")
+        XCTAssertEqual(ModelUse(defaults: d).all, ["live": eou], "an unknown job is not kept, and an empty id clears the job")
     }
 }

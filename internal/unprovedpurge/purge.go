@@ -95,6 +95,10 @@ var (
 		{Table: "pending_registrations", Column: "user_id", By: "id"},
 		{Table: "pending_registrations", Column: "email", By: "email"},
 		{Table: "registration_waitlist", Column: "email", By: "email"},
+		// An account deletion's record and its assertion challenges
+		// (internal/auth/deletion_store.go); the receipt is keyed by a hash.
+		{Table: "deletion_challenges", Column: "user_id", By: "id"},
+		{Table: "account_deletions", Column: "user_id", By: "id"},
 		{Table: "users", Column: "id", By: "id"},
 	}
 	// AuthSetColumn is account_set.active_user_id: repaired, not deleted (the set belongs to other accounts too).

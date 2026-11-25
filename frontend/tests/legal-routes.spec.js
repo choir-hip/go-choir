@@ -14,6 +14,16 @@ test('public legal routes render clean policy documents', async ({ page }) => {
   await expect(page.getByText('Conjecture Verdict')).toHaveCount(0);
 });
 
+test('public support route renders the support page', async ({ page }) => {
+  await page.goto('/support');
+  await expect(page.locator('[data-legal-reader][data-legal-kind="support"]')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Autoradio 1 Support' })).toBeVisible();
+  await expect(page.getByText('000@choir.news').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Deleting your account' })).toBeVisible();
+  await expect(page.getByText('Choir Harmonic Intelligence Platform, Inc.').first()).toBeVisible();
+  await expect(page.locator('[data-legal-reader] nav a[href="/support"]')).toHaveAttribute('aria-current', 'page');
+});
+
 test('auth entry exposes privacy and terms links before registration', async ({ page }) => {
   await page.route('**/auth/session', async (route) => {
     await route.fulfill({

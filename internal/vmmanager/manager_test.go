@@ -2016,3 +2016,52 @@ func TestRemoveVMRemovesStoppedJailKeepsHibernated(t *testing.T) {
 		}
 	}
 }
+
+// Round 2 (data inventory [CHECK]): a hibernated computer's snapshot, the
+// guest's memory, can sit in the snapshot vault, outside the state directory.
+// Destroying a computer's state for an account deletion must take it too, and a
+// recorded vault root that is no longer configured as well.
+func TestManagerDestroyVMStateAlsoRemovesTheSnapshotsOutsideTheStateDirectory(t *testing.T) {
+	stateDir, vault, oldVault := t.TempDir(), t.TempDir(), t.TempDir()
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = stateDir
+	cfg.SnapshotVaultDir = vault
+	mgr := NewManager(cfg)
+	vmID := "test-vm-destroy-vault"
+	if err := os.MkdirAll(filepath.Join(stateDir, vmID), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A committed snapshot and a partial one in the configured vault, and one in
+	// a vault root recorded earlier and no longer configured.
+	for _, dir := range []string{snapshotDirIn(vault, vmID), snapshotPartialDirIn(vault, vmID), snapshotDirIn(oldVault, vmID)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "mem"), []byte("guest memory"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mgr.writeVaultRoots([]string{oldVault}); err != nil {
+		t.Fatal(err)
+	}
+	// Another computer's snapshot is not touched.
+	other := snapshotDirIn(vault, "other-vm")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mgr.mu.Lock()
+	mgr.vms[vmID] = &VMInstance{Config: VMConfig{VMID: vmID}, State: StateStopped}
+	mgr.mu.Unlock()
+
+	if err := mgr.DestroyVMState(vmID); err != nil {
+		t.Fatalf("DestroyVMState: %v", err)
+	}
+	for _, dir := range []string{snapshotDirIn(vault, vmID), snapshotPartialDirIn(vault, vmID), snapshotDirIn(oldVault, vmID), filepath.Join(stateDir, vmID)} {
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Fatalf("%s survives the destroy of its computer's state (%v)", dir, err)
+		}
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Fatalf("another computer's snapshot was removed: %v", err)
+	}
+}

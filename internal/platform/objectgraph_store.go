@@ -96,6 +96,47 @@ func (o *ObjectGraphStore) hydrateBody(obj *objectgraph.Object, bodyRef string) 
 	return nil
 }
 
+// bodyRefOf is the artifact-store ref of an object's body ("" when the body
+// is inline or the object is absent).
+func (o *ObjectGraphStore) bodyRefOf(ctx context.Context, canonicalID string) string {
+	var ref sql.NullString
+	if err := o.store.corpus().QueryRowContext(ctx, `SELECT body_ref FROM og_objects WHERE canonical_id = ?`, canonicalID).Scan(&ref); err != nil {
+		return ""
+	}
+	return ref.String
+}
+
+// releaseBodyRefs unlinks the artifact-store bodies that no row names any
+// more (a body is content-addressed and shared by identical rows, so it is
+// kept while any row still names it). It takes the CAS reuse lock exclusively,
+// as the artifact GC does, so a body being reused is not unlinked under it.
+// A failure is logged; the GC remains the backstop.
+func (o *ObjectGraphStore) releaseBodyRefs(refs ...string) {
+	if o.store.artifactsRoot == "" {
+		return
+	}
+	for _, ref := range refs {
+		if ref == "" {
+			continue
+		}
+		cleaned := filepath.Clean(strings.TrimLeft(ref, string(filepath.Separator)))
+		path := filepath.Join(o.store.artifactsRoot, cleaned)
+		rel, err := filepath.Rel(o.store.artifactsRoot, path)
+		if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+			continue
+		}
+		o.store.casReuseMu.Lock()
+		var n int64
+		err = o.store.corpus().QueryRow(`SELECT COUNT(*) FROM og_objects WHERE body_ref = ?`, ref).Scan(&n)
+		if err == nil && n == 0 {
+			if rerr := os.Remove(path); rerr != nil && !errors.Is(rerr, os.ErrNotExist) {
+				fmt.Fprintf(os.Stderr, "platform objectgraph: release body %s: %v\n", ref, rerr)
+			}
+		}
+		o.store.casReuseMu.Unlock()
+	}
+}
+
 func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object) error {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")

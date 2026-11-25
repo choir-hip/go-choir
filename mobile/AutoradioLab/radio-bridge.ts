@@ -4,7 +4,8 @@
 // shelf is native until it moves) and the voice turn's queue snapshot and server ops (`radioSet`, and the inbox in `radioFacts`): the turn engine is native and Exact has no call from native into shared code,
 // so shared code PUSHES the snapshot and native hands back the server's `queue_ops` text, which the pump applies (the retrieval lane's pattern).
 import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, sealingBlocked, signOutUncertain, type NativeReader } from './api.ts';
-import { nativeDeck } from './deck-native.ts';
+import { contractDeck, nativeDeck } from './deck-native.ts';
+import { refusedHere } from './refused.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
 import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH, frontFill } from './radio-writer.ts';
 import { applyTurnOps, resetTurnLog, turnQueueJSON } from './voice-queue.ts';
@@ -31,8 +32,12 @@ import { decodeEntry, type Entry, type Sheet } from './runsheet-model.ts';
 import type { Storage as RunStorage } from './runsheet-store.ts';
 import type { RadioFacts } from './radio-page.ts';
 
-type Store = { fs: { readFile(p: string): Promise<Uint8Array>; atomicWriteFile(p: string, b: Uint8Array): Promise<void>; rm(p: string): Promise<void> } };
+type Store = { fs: { readFile(p: string): Promise<Uint8Array>; atomicWriteFile(p: string, b: Uint8Array): Promise<void>; rm(p: string): Promise<void>; rename?(from: string, to: string): Promise<void> } };
 export const SHEET_FILE = 'app:/data/runsheet.json';
+/** Where a sheet file that cannot be read is moved (kept, never deleted), so the radio can start with an empty sheet. */
+export const SHEET_BAD_FILE = 'app:/data/runsheet.bad.json';
+/** Failed reads of the sheet (not Exact's refusals: those are an answer let go, and pass) before the radio gives the file up and starts empty: one a second while the hold is due. */
+export const RESTORE_TRIES = 5;
 
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -40,29 +45,31 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
 
 /** A mutation in flight (or called for): `due` is a pulse that said the work is due and the mutation not started yet, `running` the mutation's body. Each goes stale (WORK_STALE_MS) so a continuation that never ends cannot stop the radio. */
 type Flag = { phase: 'due' | 'running'; at: number };
-type Radio = { writeFlag?: Flag; holdFlag?: Flag; pulses: number; beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[]; stories: { route: string; title: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
+type Radio = { writeFlag?: Flag; holdFlag?: Flag; restoreFails: number; restoreTold: boolean; pulses: number; beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[]; stories: { route: string; title: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
-let restored: Promise<void> | undefined;
 
 /** Fresh state (tests; a sign-out wipes through `wipeRadio`). */
-export function resetRadio(): void { radio = undefined; restored = undefined; }
+export function resetRadio(): void { radio = undefined; }
 export async function wipeRadio(storage: Store | undefined): Promise<void> {
-  const r = radio; radio = undefined; restored = undefined;
+  const r = radio; radio = undefined;
   resetTurnLog();                                                                            // the lists sent with the old account's turns and its turn ids
   forgetLongURLs();                                                                          // the long web addresses of this account's entries (runsheet-entries.ts)
   try { if (r) { r.writer.stop(); await r.rt.signOut(); } }
   finally {
     // The old account's sheet file goes whatever the wipe did (a throw above must not leave it for the next radio to restore); a removal that fails is remembered and tried again before any radio restores.
     if (storage) { try { await storage.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch (e) { if (!/ENOENT|no such file|not found/i.test(String((e as Error)?.message ?? e))) sheetFileStuck = true; } }
+    if (storage) { try { await storage.fs.rm(SHEET_BAD_FILE); } catch { /* absent; a set-aside sheet is the old account's too */ } }
   }
 }
 /** The sheet file could not be removed by the last wipe: the next radio removes it again and starts EMPTY (a sheet that outlived a sign-out is not the next account's). */
 let sheetFileStuck = false;
 
+const absent = (e: unknown): boolean => (e as { code?: unknown } | null)?.code === 'ENOENT' || /ENOENT|no such file|not found/i.test(String((e as Error)?.message ?? e));
 function runStorage(s: Store | undefined): RunStorage | undefined {
   if (!s) return undefined;
   return {
-    read: async () => { try { return new TextDecoder().decode(await s.fs.readFile(SHEET_FILE)); } catch { return undefined; } },
+    // Only an absent file is "no sheet". Any other failure (a read Exact refused because its answer was let go, a disk error) throws: the radio stays not restored and the next hold reads again.
+    read: async () => { try { return new TextDecoder().decode(await s.fs.readFile(SHEET_FILE)); } catch (e) { if (absent(e)) return undefined; throw e; } },
     write: async (t) => { await s.fs.atomicWriteFile(SHEET_FILE, new TextEncoder().encode(t)); },
     remove: async () => { try { await s.fs.rm(SHEET_FILE); } catch { /* absent */ } },
   };
@@ -118,7 +125,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  const state: Radio = { pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [], stories: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
+  const state: Radio = { restoreFails: 0, restoreTold: false, pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [], stories: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
     deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
@@ -126,6 +133,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
     onChange: () => { state.tick += 1; },
   });
   state.rt = rt;
+  if (!storage) rt.markRestored();                                // no storage (a host without app storage, a test): there is no file to read
   const front = async (): Promise<unknown> => {
     let body: unknown, stories: Story[];
     try { body = (await getJSON('/api/platform/publications/front', { limit: FRONT_LIMIT })).body; await yieldTurn('front list received'); stories = parseList(body); }
@@ -176,25 +184,55 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
   return state;
 }
 
-/** The radio of this process: made once, its sheet restored from its own file (nothing plays). */
 /** Ends the turn (Exact gives one about 100 ms of CPU; Bun has no scheduler). */
 const yieldTurn = (label: string): Promise<void> => lapYield(`bridge: ${label}`);
 
-/** `read` false: the screens' reads (the queue, the bar's run, the page's facts) need what the pulse just read, not their own native call for it. Mutations and the pulse read (the device's time first). */
+/** The radio of this process, made once. It is NOT restored here: a source (the pulse, the screens' reads) only reads, and an answer that is let go must not start the once-a-launch restore
+ *  (docs/problems/radio-restore-empty-after-let-go-2026-11-25.md). Mutations take it through `workRadio`, which restores first.
+ *  `read` false: the screens' reads (the queue, the bar's run, the page's facts) need what the pulse just read, not their own native call for it. Mutations and the pulse read (the device's time first). */
 export async function getRadio(storage: Store | undefined, native: NativeReader | undefined, read = true): Promise<Radio> {
   if (!radio) radio = await makeRadio(storage, native);
   const r = radio;                                          // held locally: a sign-out (`wipeRadio`) clears the module's variable at any await below
-  if (read) { const f = await readFacts(r); if (f !== NO_FACTS) r.rt.useFacts(f); }      // the device's time first: nothing below may run on a stale clock; the runtime keeps what was read (the pulse's peek does not read it again)
+  if (read) { const f = await readFacts(r); if (f !== NO_FACTS) r.rt.useFacts(f); }      // the device's time first: nothing below may run on a stale clock; the runtime keeps what was read
   if (radio !== r) {                                          // signed out meanwhile: this radio is the old account's. What native handed over in that read was drained from native: it goes to the radio that replaced this one, not into the one discarded (review B1-10)
     const next = await getRadio(storage, native, read); next.inbox.unshift(...r.inbox); r.inbox = []; return next;
   }
-  if (!restored) {
-    if (sheetFileStuck) { try { await storage?.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch { /* still there: not read either */ } restored = Promise.resolve(); }
-    else restored = r.rt.restore();
+  return r;
+}
+
+/** The sheet from its file, once per radio, in the mutation that asks (a mutation is not let go by the next pulse). The outcome is the runtime's value (`rt.restored`); a read that fails leaves it
+ *  false, and the pulse keeps saying `hold` until a hold restores it. Never a kept promise: another answer's refusal must not become this one's empty sheet. */
+async function restoreOf(r: Radio, storage: Store | undefined): Promise<boolean> {
+  if (r.rt.restored) return true;
+  if (sheetFileStuck) { try { await storage?.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch { /* still there: not read either */ } r.rt.markRestored(); return true; }
+  try { await r.rt.restore(); return true; }
+  catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    // A refusal is this answer let go, not the file: it passes, and is not counted. A read that fails as the disk's own failure is counted, and a refusal of the grant itself (`denied`, `unsupported`,
+    // `bake`: storage.js `storageError`) will not pass: then, or after RESTORE_TRIES failures, the file is moved aside (kept for a person to look at) and the radio starts with an empty sheet. One line
+    // when it first fails and one when it gives up, not one a second.
+    const permanent = !refusedHere(e) && ['denied', 'unsupported', 'bake'].includes(String((e as { code?: unknown } | null)?.code ?? ''));
+    if (!refusedHere(e)) r.restoreFails += 1;
+    if (!permanent && (refusedHere(e) || r.restoreFails < RESTORE_TRIES)) {
+      if (!r.restoreTold) { r.restoreTold = true; console.log(`radio: restore: the run sheet could not be read yet (${why}); the next hold reads it again`); }
+      return false;
+    }
+    let kept = 'it could not be moved aside, and the next save replaces it';
+    if (storage?.fs.rename) {
+      try { await storage.fs.rename(SHEET_FILE, SHEET_BAD_FILE); kept = `it is kept as ${SHEET_BAD_FILE}`; }
+      catch (m) { if (refusedHere(m)) return false; /* the next hold gives up again, as itself */ }
+    }
+    r.rt.markRestored();
+    console.log(`radio: restore: the run sheet could not be read (${why}; ${r.restoreFails} failed read${r.restoreFails === 1 ? '' : 's'}): ${kept}, and the radio starts with an empty sheet`);
+    return true;
   }
-  const done = restored;
-  await done;
-  return radio === r ? r : getRadio(storage, native, read);
+}
+
+/** The radio for a mutation that changes the sheet or acts on it: restored first, so an act never lands on an empty sheet the file then replaces. A sheet that cannot be read yet refuses the act. */
+async function workRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
+  const r = await getRadio(storage, native);
+  if (!(await restoreOf(r, storage))) throw new Error('The radio is still reading its list. Try again in a moment.');
+  return radio === r ? r : workRadio(storage, native);
 }
 
 // ---- the entries the screens ask for ----
@@ -234,27 +272,30 @@ export async function queueView(storage: Store | undefined, native: NativeReader
     message: v.message, notice: v.notice, writing: v.writing, dry: v.dry, webUrl: r.web.url, webHost: r.web.url === '' ? '' : host(r.web.url) };
 }
 
-/** What the screens ask again on, and WHICH WORK IS DUE. The pulse only reads (the deck's state, the facts) and says: it is asked again every second and an ask is let go when the next one comes
+/** What the screens ask again on, and WHICH WORK IS DUE. The pulse only reads (the facts; the deck's state is the contract's `ds`, handed in) and says: it is asked again every second and an ask is let go when the next one comes
  *  (Exact: js/src/fetch.js "the answer was let go before this fetch"; host/web-js/ts-fetch.js `letGo`), so a pulse that began work with several native calls or a fetch lost it half done.
- *  The work is in mutations, which stay until they are done: `radioHold` (what the voice handed over, the radio's start, the deck's journal and held list) and `radioWrite` (the desk's ask, the sheet's post).
+ *  The work is in mutations, which stay until they are done: `radioHold` (the sheet's restore from its file, what the voice handed over, the radio's start, the deck's journal and held list) and `radioWrite` (the desk's ask, the sheet's post).
  *  docs/reference/exact/answers-let-go.md; radio-pulse-rule.test.ts fails when this body fetches or pumps. */
 export type Pulse = { tick: number; write: boolean; hold: boolean; live: boolean; beat: number; slow: boolean };
-export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
+/** `deck`: the deck's state as the contract read it (spine.contract `ds`, the package source `deckState`, read once per radio tick): the pulse makes no deck call of its own. */
+export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined, deck?: unknown): Promise<Pulse> {
   const r = await getRadio(storage, native);
+  const st = contractDeck(deck);
+  if (st) r.rt.seeDeck(st);                                                // the contract's placeholder (not read yet) leaves what was last known
   // The generation this RADIO was made under, not the one the pulse happens to read: a pulse that begins after the sign-out began reads the new generation while the radio still holds the old account's sheet, and
   // would carry a stamp native takes. A sign-out under way keeps the radio's own; one that was given up (or never wiped this radio) leaves it the same account's, so it takes the current one.
   if (!sealingBlocked() && !signOutUncertain() && r.gen !== accountGeneration()) r.gen = accountGeneration();
   const gen = r.gen;
-  await r.rt.peek(true);                                                   // the facts were just read by getRadio: the deck's state is the one more read
-  if (!r.ready) r.ready = await firstRunOver(storage as never);          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after peek: reading the facts sets it from native)
-  if (!r.started && r.ready && !r.rt.store.onAir() && r.readySince === 0) r.readySince = clock.ms;
+  if (!r.ready) r.ready = await firstRunOver(storage as never);          // native's `ready` is only what a page's ask of `ob` told it: the start must not wait for that (set after getRadio: reading the facts sets it from native)
+  if (startDue(r) && r.readySince === 0) r.readySince = clock.ms;
+  const restored = r.rt.restored;                                          // until a hold has read the sheet, nothing is pushed or written from the empty one
   // the turn route's queue: pushed to native, which sends it with every turn (one call; the next pulse sets it again if this one is let go)
   const later = nativeLater();
   // Sent when it changed (the sheet's version, its length, what is on air): the whole sheet crossed the bridge every second, paused, idle or locked, for state that had not moved (review B2-1). A failed or let-go call leaves the key, so the next pulse sends again.
   const candidates = r.front.stories.slice(0, 40);                       // the paper's list the desk may add from (the turn's `candidates`: native sends it with every turn)
   const setKey = `${gen}|${r.rt.store.sheet.version}|${r.rt.store.sheet.entries.length}|${r.rt.store.onAir()?.id ?? ''}|${airAddressOf(r.rt.store.onAir())}|${candidates.length}:${candidates.map((c) => c.route).join(',')}`;
   const responds = respondsOf(r.rt.store.onAir());
-  if (later && setKey !== r.setKey) { try { const ans = await later({ op: 'radioSet', gen, snapshot: turnQueueJSON(r.rt, 0), facts: voiceFacts(r.rt.store.sheet.entries), respondsRoute: responds?.route ?? '', respondsTitle: responds?.title ?? '', airAddress: airAddressOf(r.rt.store.onAir()), candidates }); if ((ans as { ok?: unknown } | null)?.ok !== false) r.setKey = setKey; else console.log(`radio: native refused the radioSet push (stamped ${gen}, the account moved on); it is sent again with the next pulse's stamp`); } catch { /* the next pulse sets it */ } }       // a push native refused (ok: false: stamped for an account that moved on) is not recorded as sent: the next pulse sends it again with that pulse's stamp
+  if (later && restored && setKey !== r.setKey) { try { const ans = await later({ op: 'radioSet', gen, snapshot: turnQueueJSON(r.rt, 0), facts: voiceFacts(r.rt.store.sheet.entries), respondsRoute: responds?.route ?? '', respondsTitle: responds?.title ?? '', airAddress: airAddressOf(r.rt.store.onAir()), candidates }); if ((ans as { ok?: unknown } | null)?.ok !== false) r.setKey = setKey; else console.log(`radio: native refused the radioSet push (stamped ${gen}, the account moved on); it is sent again with the next pulse's stamp`); } catch { /* the next pulse sets it */ } }       // a push native refused (ok: false: stamped for an account that moved on) is not recorded as sent: the next pulse sends it again with that pulse's stamp
   const posting = r.rt.store.canPost;                                     // pending ops and not backing off (the route's Retry-After, or 30 s doubling): the pulse does not call for a post it would not make
   // `live`: something is sounding and the app is in front (native's `foreground`: with the screen off or the app away the audio plays on and nothing here asks again), so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:
   // the key is the beat, so the screens are asked after THIS pulse's read of the deck (they never read a position older than the pulse that said so), and a pause or a hidden page leaves the key still.
@@ -264,25 +305,29 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const second = Math.floor(clock.ms / 1000);
   if (live && (second !== r.beatSecond || clock.ms <= 0)) { r.beat += 1; r.beatSecond = second; }
   r.pulses += 1;
-  const writeDue = !flagBusy(r, r.writeFlag) && (r.writer.wouldAsk() || posting);
+  const writeDue = restored && !flagBusy(r, r.writeFlag) && (r.writer.wouldAsk() || posting);
   if (writeDue) r.writeFlag = { phase: 'due', at: flagNow(r) };            // marked by the pulse that calls for it: a pulse computed before the mutation's body starts cannot call for a second send (the gate closing cancels the first's pending `after`)
-  const out = { tick: r.tick, write: writeDue, live, beat: r.beat, hold: !flagBusy(r, r.holdFlag) && (r.rt.needsWork() || r.inbox.length > 0 || startDue(r)), slow: false };
+  const holdDue = !flagBusy(r, r.holdFlag, HOLD_DUE_STALE_MS) && (!restored || r.rt.needsWork() || r.inbox.length > 0 || startDue(r));
+  if (holdDue) r.holdFlag = { phase: 'due', at: flagNow(r) };              // marked like the write: a second hold sent before the first's body starts would replace it (the first let go mid-restore)
+  const out = { tick: r.tick, write: writeDue, live, beat: r.beat, hold: holdDue, slow: false };
   out.slow = !out.live && !out.write && !out.hold && !r.writer.inFlight;          // nothing sounds in front, nothing is due: the clock asks again in five seconds, not one (what native has to say wakes it at once: the deck's seq and the radio note are keys of the pulse)
-  const state = `ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold} ahead=${r.rt.store.ahead().length} inFlight=${r.writer.inFlight} lost=${r.rt.store.lostPending}`;
+  const state = `restored=${restored} ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold} ahead=${r.rt.store.ahead().length} inFlight=${r.writer.inFlight} lost=${r.rt.store.lostPending}`;
   if (state !== lastPulse) { lastPulse = state; console.log(`radio: pulse ${state}`); }
   return out;
 }
 
 /** The radio starts by itself when Autoradio opens (onboarding complete, no other audio on the phone), once a launch: it waits a moment for the front page it speaks from. */
-const startDue = (r: Radio): boolean => !r.started && r.ready && !r.rt.store.onAir();
+const startDue = (r: Radio): boolean => !r.started && r.ready && r.rt.restored && !r.rt.store.onAir();
 
 /** The work the pulse says is due: the voice's messages, the radio's start, the pump (starts, the journal, the held list). A mutation: it is not let go when the next pulse is asked. */
 let lastPulse = '';
 /** The flags are the RADIO's (a sign-out replaces the radio and its flags go with it), and they go stale: a body whose continuation never runs (an answer let go) must not stop the radio for good. `running` after 260 s (just over the
  *  240 s at which a writer abandons its ask), `due` (called for, the mutation not started: the gate closed, the send never came) after 5 s. Device time; with none known, one pulse counts as a second. */
 export const WORK_STALE_MS = 260_000, DUE_STALE_MS = 5_000;
+/** A hold called for and not begun goes stale sooner than a write: the pulse that marked it may itself be let go (launch re-asks it often), and the restore and the start wait on the hold. */
+export const HOLD_DUE_STALE_MS = 2_000;
 const flagNow = (r: Radio): number => (clock.ms > 0 ? clock.ms : r.pulses * 1000);
-const flagBusy = (r: Radio, f: Flag | undefined): boolean => f !== undefined && flagNow(r) - f.at < (f.phase === 'running' ? WORK_STALE_MS : DUE_STALE_MS);
+const flagBusy = (r: Radio, f: Flag | undefined, dueStale = DUE_STALE_MS): boolean => f !== undefined && flagNow(r) - f.at < (f.phase === 'running' ? WORK_STALE_MS : dueStale);
 // one radioHold at a time: a second send would take the first's place, and the first would be let go
 export async function radioHold(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   const r = await getRadio(storage, native);
@@ -291,6 +336,7 @@ export async function radioHold(storage: Store | undefined, native: NativeReader
 }
 async function holdInner(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   const r = await getRadio(storage, native);
+  if (!(await restoreOf(r, storage))) return { tick: r.tick, write: false, hold: false, live: false, beat: 0, slow: false };       // not read yet: the pulse says hold again
   await r.rt.pump();
   if (!r.ready) r.ready = await firstRunOver(storage as never);
   while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
@@ -315,7 +361,7 @@ export async function radioWrite(storage: Store | undefined, native: NativeReade
 }
 async function writeInner(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   lap('radioWrite: start');
-  const r = await getRadio(storage, native);
+  const r = await workRadio(storage, native);
   lap('radioWrite: radio ready');
   r.rt.store.flush();
   const asked = r.writer.checkAhead(), mine = r.writer.lastId;     // the ask THIS answer started: it waits for that one and abandons only that one
@@ -355,7 +401,7 @@ async function handle(r: Radio, text: string): Promise<void> {
 }
 
 export async function queueAdd(storage: Store | undefined, native: NativeReader | undefined, mode: string, kind: string, ref: string, title: string, local: string): Promise<QueueAnswer> {
-  const r = await getRadio(storage, native); r.writer.listenerActed();
+  const r = await workRadio(storage, native); r.writer.listenerActed();
   const e = requestEntry(kind, ref, title);
   if (e) { if (mode === 'now') r.rt.play(e); else if (mode === 'next') r.rt.playNext(e); else r.rt.queue(e); }
   await r.rt.pump();
@@ -363,7 +409,7 @@ export async function queueAdd(storage: Store | undefined, native: NativeReader 
 }
 
 export async function queueAct(storage: Store | undefined, native: NativeReader | undefined, op: string, arg: string): Promise<QueueAnswer> {
-  const r = await getRadio(storage, native); r.writer.listenerActed();
+  const r = await workRadio(storage, native); r.writer.listenerActed();
   const rt = r.rt;
   switch (op) {
     case 'toggle': await radioPlayPauseOf(r); break;
@@ -411,12 +457,12 @@ async function openRadioOf(r: Radio): Promise<void> {
 /** Play or queue one audio address (an episode, a clip's episode): the podcast page's Play and Add to queue. The audio is the deck's; the entry and the order are the sheet's. */
 export async function radioPlayAudio(storage: Store | undefined, native: NativeReader | undefined, op: string, id: string, url: string, title: string, show: string, start: number): Promise<{ status: string; message: string }> {
   if (op === 'keep') {                                  // "Keep listening" to a clip: the clip no longer ends, the episode goes on from where it is (the deck's act, the player's own rule)
-    const k = await getRadio(storage, native); k.writer.listenerActed();
+    const k = await workRadio(storage, native); k.writer.listenerActed();
     await k.rt.keepEnd(id);
     return { status: 'ok', message: '' };
   }
   if (url === '') return { status: 'error', message: 'This episode has no audio to play.' };
-  const r = await getRadio(storage, native); r.writer.listenerActed();
+  const r = await workRadio(storage, native); r.writer.listenerActed();
   const e = audioEntry({ url, title: title === '' ? 'Episode' : title, show, ...(start > 0 ? { start } : {}), ...(id !== '' ? { episode_id: id } : {}) });
   if (op === 'queue') r.rt.queue(e); else r.rt.play(e);
   await r.rt.pump();
@@ -425,7 +471,7 @@ export async function radioPlayAudio(storage: Store | undefined, native: NativeR
 
 /** Play or queue one entry that shared code made (a clip row's Play and Queue: clip-play.ts). */
 export async function radioPlayEntry(storage: Store | undefined, native: NativeReader | undefined, op: string, e: Entry): Promise<void> {
-  const r = await getRadio(storage, native); r.writer.listenerActed();
+  const r = await workRadio(storage, native); r.writer.listenerActed();
   if (op === 'queue') r.rt.queue(e); else r.rt.play(e);
   await r.rt.pump();
 }
@@ -434,7 +480,7 @@ export async function radioPlayEntry(storage: Store | undefined, native: NativeR
 export async function radioHandWords(storage: Store | undefined, native: NativeReader | undefined, op: string, id: string, title: string, at: number, text: string): Promise<{ ok: boolean; message: string }> {
   const paragraphs = text.split('\n').filter((p) => p !== '');
   if (id === '' || paragraphs.length === 0) return { ok: false, message: 'This document has nothing to read.' };
-  const r = await getRadio(storage, native); r.writer.listenerActed();
+  const r = await workRadio(storage, native); r.writer.listenerActed();
   const e = bookEntry(id, title, at), words = { title, paragraphs };
   if (op === 'queue') { r.rt.queue(e, words); await r.rt.pump(); return { ok: true, message: 'Added to the queue.' }; }
   r.rt.play(e, words);
@@ -442,10 +488,10 @@ export async function radioHandWords(storage: Store | undefined, native: NativeR
   return { ok: true, message: '' };
 }
 
-export async function radioPlayPause(storage: Store | undefined, native: NativeReader | undefined): Promise<Ack> { const r = await getRadio(storage, native); r.writer.listenerActed(); await radioPlayPauseOf(r); return ACK; }
-export async function radioStart(storage: Store | undefined, native: NativeReader | undefined): Promise<Ack> { const r = await getRadio(storage, native); r.writer.listenerActed(); await openRadioOf(r); return ACK; }
+export async function radioPlayPause(storage: Store | undefined, native: NativeReader | undefined): Promise<Ack> { const r = await workRadio(storage, native); r.writer.listenerActed(); await radioPlayPauseOf(r); return ACK; }
+export async function radioStart(storage: Store | undefined, native: NativeReader | undefined): Promise<Ack> { const r = await workRadio(storage, native); r.writer.listenerActed(); await openRadioOf(r); return ACK; }
 export async function radioPlayStory(storage: Store | undefined, native: NativeReader | undefined, route: string, title: string): Promise<Ack> {
-  const r = await getRadio(storage, native); r.writer.listenerActed();
+  const r = await workRadio(storage, native); r.writer.listenerActed();
   if (route !== '') r.rt.play(paperStory(route, title));
   await r.rt.pump();
   const air = r.rt.store.onAir();
@@ -453,20 +499,20 @@ export async function radioPlayStory(storage: Store | undefined, native: NativeR
   return ACK;
 }
 export async function radioListen(storage: Store | undefined, native: NativeReader | undefined, address: string, title: string, text: string): Promise<Ack> {
-  const r = await getRadio(storage, native); r.writer.listenerActed();
+  const r = await workRadio(storage, native); r.writer.listenerActed();
   const w = listenWords(title, text);
   if (w) { const e = readAloud(address, title); e.est_seconds = estimateSeconds(w.paragraphs.join(' ')); r.rt.play(e, w); }
   await r.rt.pump(); return ACK;
 }
 export async function radioMove(storage: Store | undefined, native: NativeReader | undefined, move: string): Promise<Ack> {
-  const r = await getRadio(storage, native); r.writer.listenerActed();
+  const r = await workRadio(storage, native); r.writer.listenerActed();
   if (move === 'previous') await r.rt.previous(); else r.rt.skip();
   await r.rt.pump(); return ACK;
 }
 
 /** The gestures on the Autoradio page: reorder (one `move`), remove (a swipe), play (a tap on a row), replay (a tap on Heard). */
 export async function radioPageAct(storage: Store | undefined, native: NativeReader | undefined, op: string, arg: string, to: string): Promise<Ack> {
-  const r = await getRadio(storage, native); r.writer.listenerActed();
+  const r = await workRadio(storage, native); r.writer.listenerActed();
   const g = op === 'reorder' ? { kind: 'reorder' as const, id: arg, before: to === '' ? undefined : to } : op === 'remove' ? { kind: 'remove' as const, id: arg } : op === 'play' ? { kind: 'playNow' as const, id: arg } : op === 'replay' ? { kind: 'replay' as const, id: arg } : undefined;
   if (g) {
     const a = perform(r.rt.store.sheet, g, r.rt.store.mintOpId());

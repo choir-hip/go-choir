@@ -3,17 +3,6 @@ import XCTest
 
 // Autoradio phone review slice (2026-11-15): the failure list, written before the code. Each fails on origin/main 62383b472.
 //
-// S2  The system voice ends a paragraph at the synthesizer's first empty buffer. AVSpeechSynthesizer.write sends empty buffers
-//     between phrases (Mike's speech README: it "cut every chunk off after about 13 seconds"). The end of an utterance is the
-//     delegate's didFinish (or didCancel) for that utterance; an empty buffer counts as the end only when nothing at all
-//     follows it for a quiet interval, for a system that never calls the delegate. UtteranceEnd is that rule. The 1 s
-//     interval is Mike's and is not verified on a device.
-//       S2a an empty buffer followed by more audio is not the end
-//       S2b didFinish is the end, at once
-//       S2c an empty buffer with nothing after it, for the quiet interval, is the end
-//       S2d the end is reported once
-//       S2e a line that yields no buffer at all ends after the start interval, not never
-//       S2f a buffer after arming keeps the line open
 // S3  Failures on the Play path leave no trace and no words on the Play control.
 //       S3a ProgrammePlayer.playBlock swallows a failure to make the voice (try?): it must emit an error event for stage "voice"
 //       S3b a start failure and a voice failure must reach the player's message (ChoirApp.plain, by stage "start" and "voice"),
@@ -26,58 +15,6 @@ final class SpeechFixesTests: XCTestCase {
         private let l = NSLock(); private var n = 0
         func bump() { l.lock(); n += 1; l.unlock() }
         var value: Int { l.lock(); defer { l.unlock() }; return n }
-    }
-
-    func testS2a_AnEmptyBufferFollowedByAudioIsNotTheEnd() async throws {
-        let ended = Count()
-        let u = UtteranceEnd(quiet: 1.0, startQuiet: 30) { ended.bump() }   // the next buffer comes after 10 ms, a hundredth of the quiet
-        u.buffer(empty: false); u.buffer(empty: true)
-        try await Task.sleep(nanoseconds: 10_000_000)
-        u.buffer(empty: false)
-        try await Task.sleep(nanoseconds: 1_500_000_000)
-        XCTAssertEqual(ended.value, 0)
-    }
-
-    func testS2b_DidFinishIsTheEnd() {
-        let ended = Count()
-        let u = UtteranceEnd(quiet: 5) { ended.bump() }
-        u.buffer(empty: false); u.buffer(empty: true)
-        XCTAssertEqual(ended.value, 0)
-        u.didFinish()
-        XCTAssertEqual(ended.value, 1)
-    }
-
-    func testS2c_AnEmptyBufferThenQuietIsTheEnd() async throws {
-        let ended = Count()
-        let u = UtteranceEnd(quiet: 0.05) { ended.bump() }
-        u.buffer(empty: false); u.buffer(empty: true)
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertEqual(ended.value, 1)
-    }
-
-    func testS2d_TheEndIsReportedOnce() async throws {
-        let ended = Count()
-        let u = UtteranceEnd(quiet: 0.05) { ended.bump() }
-        u.buffer(empty: true); u.didFinish(); u.didFinish()
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertEqual(ended.value, 1)
-    }
-
-    func testS2e_ALineThatYieldsNoBufferEndsAfterTheStartInterval() async throws {
-        let ended = Count()
-        let u = UtteranceEnd(quiet: 5, startQuiet: 0.05) { ended.bump() }
-        u.arm()
-        try await Task.sleep(nanoseconds: 400_000_000)
-        XCTAssertEqual(ended.value, 1)
-    }
-
-    func testS2f_ABufferAfterArmingKeepsTheLineOpen() async throws {
-        let ended = Count()
-        let u = UtteranceEnd(quiet: 5, startQuiet: 1.0) { ended.bump() }
-        u.arm()
-        u.buffer(empty: false)
-        try await Task.sleep(nanoseconds: 1_500_000_000)
-        XCTAssertEqual(ended.value, 0)
     }
 
     func testS3a_AVoiceThatCannotBeMadeIsAnErrorInTheTrace() async {

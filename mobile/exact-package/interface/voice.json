@@ -9,7 +9,10 @@
       "note": "string",
       "progress": "number",
       "selected": "bool",
-      "playing": "bool"
+      "playing": "bool",
+      "model": "string",
+      "group": "string",
+      "credit": "string"
     },
     "VoiceCards": {
       "selected": "string",
@@ -24,14 +27,64 @@
       "answers": "VoiceCards",
       "substitute": {
         "default": {
-          "selected": "",
+          "selected": "tiny-voca:F2",
           "message": "",
-          "cards": []
+          "cards": [
+            {
+              "id": "tiny-voca:F2",
+              "name": "Tiny Voca F2",
+              "blurb": "American English · included with Autoradio",
+              "sizeLabel": "Built in",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": true,
+              "playing": false,
+              "model": "",
+              "group": "Tiny Voca",
+              "credit": "Tiny Voca by Muhammed Nazeem, Core ML port by razorback16. Apache-2.0."
+            },
+            {
+              "id": "tiny-voca:M2",
+              "name": "Tiny Voca M2",
+              "blurb": "American English · included with Autoradio",
+              "sizeLabel": "Built in",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": false,
+              "playing": false,
+              "model": "",
+              "group": "Tiny Voca",
+              "credit": "Tiny Voca by Muhammed Nazeem, Core ML port by razorback16. Apache-2.0."
+            },
+            {
+              "id": "phonon:en_us_Zoey",
+              "name": "Zoey (Phonon)",
+              "blurb": "Playful, upbeat and Gen Z energy voice with a standard American accent.",
+              "sizeLabel": "About 350 MB",
+              "state": "ready",
+              "note": "",
+              "progress": 1,
+              "selected": false,
+              "playing": false,
+              "model": "phonon-31m",
+              "group": "Phonon 31M",
+              "credit": "Phonon 31M voice by Gradium, Core ML build by FluidInference. Licensed under Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)."
+            }
+          ]
         }
       }
     },
     {
       "send": "voicePick",
+      "options": {
+        "id": "string"
+      },
+      "answers": "VoiceCards"
+    },
+    {
+      "send": "voiceHear",
       "options": {
         "id": "string"
       },

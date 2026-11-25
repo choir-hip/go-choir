@@ -114,10 +114,13 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     /// the Voice control's, made with the engine stopped. (`alwaysListening` is the lab's own choice and stays what it says.)
     func target(for asked: AudioState) -> AudioState {
         if isRecordingTake, !isBackgrounded, !isInterrupted { return .listening }       // a take: capture and playback; given up with the microphone in the background or when another app has the session
-        guard voiceOn(), !isBackgrounded else { return .playing }       // in the background the microphone is given up and the radio plays on
+        guard voiceOn(), !isBackgrounded, !_paused else { return .playing }       // in the background or paused the microphone is given up
         return policy() == .alwaysListening ? .listening : .talking
     }
     private var _backgrounded = false, _interrupted = false
+    /// The radio is paused (the listener's pause or the system's). A paused radio keeps the claim, so the page
+    /// stays alive and shared code keeps writing ahead, but it gives the MICROPHONE up: another app may record.
+    private var _paused = false
     private var _recordingTake = false
     /// The last switch brought the engine up (or there was none to bring).
     var _engineOK = true
@@ -164,6 +167,17 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         await mutex.lock(); defer { mutex.unlock() }
         lock.lock(); _asked = asked; _awaitingPlay = false; lock.unlock()
         try await switchTo(target(for: asked), preferBuiltInMic: preferBuiltInMic, reason: reason)
+    }
+
+    /// The radio was paused or resumed. Paused: the claim is kept (the page and shared code live on it) and the
+    /// session becomes a plain playback one, so the microphone is free for another app. Resumed: whatever the
+    /// policy asks for now. Owner, 2026-11-25: "even if i pause playback, it still holds the audio session, and
+    /// disrupts other apps that would eg want to use the microphone".
+    public func setPaused(_ paused: Bool) async {
+        lock.lock(); let had = _current != nil; _paused = paused; let asked = _asked; lock.unlock()
+        guard had else { return }
+        await mutex.lock(); defer { mutex.unlock() }
+        try? await switchTo(paused ? .playing : target(for: asked), preferBuiltInMic: false, reason: paused ? "paused" : "resumed")
     }
 
     /// The policy or the voice switch changed: move to the state it now asks for.

@@ -61,6 +61,9 @@ public struct ModelCandidate: Codable, Equatable, Sendable {
     public var kitStageID: String
     /// Whether the model gives partial words while the listener speaks (a recogniser of the streaming kind). Only these can steer turn-taking live.
     public var streamsWords: Bool = false
+    /// The credit an attribution licence asks for (CC BY 4.0 section 3(a): who made it, the licence, its link), as data on the row; nil when the licence asks for none.
+    /// A page that lists the models shows this text. `ModelListTests` L8 fails when a CC BY row has none.
+    public var credit: String? = nil
     public var isFloor: Bool { bytes == 0 }
 }
 
@@ -96,6 +99,12 @@ public enum CandidateTable {
         lfm("lfm3-1.7b-q6_k", "Q6_K", 96, .tier8, measured: false)
         lfm("lfm3-1.7b-q8_0", "Q8_0", 98, .tier8, measured: false)
         lfm("lfm3-1.7b-nvfp4", "NVFP4", 90, .tier8, measured: false, note: "whether llama.cpp b12259 runs NVFP4 on iOS is unknown: the on-device check decides")
+        // LFM3-Omni-2B, text path only: its language backbone is the same 1.7B architecture and the same size on disk as LFM3-1.7B (the audio and vision
+        // parts are in a projector file we do not fetch), so it is "bigger" in what it can do, not in the weights this row loads. Offered to 8 GB phones and up.
+        // Ranked BELOW every LFM3-1.7B quant: LFM3-1.7B is the one our page-grounding sample runs chose, and nothing here shows Omni is better as an answering voice.
+        t.append(gguf("lfm3-omni-2b-q8_0", .responder, family: "LFM3 Omni 2B", quant: "Q8_0", label: "LFM3 Omni 2B", rank: 89,
+                      basis: "NOT RANKED BY A RUN OF OURS AS BETTER: offered for newer phones, not recommended ahead of LFM3 1.7B; see docs/reference/ON-DEVICE-MODELS.md",
+                      tier: .tier8, measured: false, license: KnownModels.lfmLicense, limit: lfmLimit, context: 260))
         t.append(gguf("qwen3-0.6b-q8_0", .responder, family: "Qwen3 0.6B", quant: "Q8_0", label: "Qwen3 0.6B", rank: 62, basis: sampleBasis, tier: .tier6, measured: true, context: 235))
         t.append(gguf("qwen3-0.6b-q4_k_m", .responder, family: "Qwen3 0.6B", quant: "Q4_K_M", label: "Qwen3 0.6B", rank: 52, basis: sampleBasis, tier: .tier6, measured: true, context: 235))
         t.append(gguf("qwen3.5-0.8b-q8_0", .responder, family: "Qwen3.5 0.8B", quant: "Q8_0", label: "Qwen3.5 0.8B", rank: 58, basis: sampleBasis + "; the Q4 was the one run", tier: .tier6, measured: false))
@@ -112,32 +121,42 @@ public enum CandidateTable {
         // --- decision: quick decisions (System 1). The Qwen3-0.6B Q8_0 file is also a responder candidate; when both pick it the weights are shared.
         t.append(gguf("qwen3-0.6b-q8_0", .decision, family: "Qwen3 0.6B", quant: "Q8_0", label: "A small language model on this phone", rank: 60,
                       basis: "58 ms per decision on the Mac, correct on the clear request (2026-11-11)", tier: .tier6, measured: true, context: 120))
+        // A smaller quick-decision model, offered beside Qwen3-0.6B (owner, 2026-11-24). Never run by us: ranked below Qwen3 so it is never the recommendation; the phone's own check ("a clear request scores yes") decides it.
+        t.append(gguf("lfm2.5-350m-q4_k_m", .decision, family: "LFM2.5 350M", quant: "Q4_K_M", label: "A smaller language model on this phone", rank: 55, basis: "UNMEASURED: never run by us; the file is 229 MB and the check on the phone decides it",
+                      tier: .tier6, measured: false, license: "LFM Open License v1.0", limit: lfmLimit, context: 80))
         t.append(ModelCandidate(id: "system1-computer", role: .decision, family: "computer", quant: "", label: "Your computer", bytes: 0, qualityRank: 40,
                                 qualityBasis: "needs the network; not measured by the configurator", license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0,
                                 measured: true, source: "your computer", kitStageID: "choir-system1"))
 
         // --- the audio models (fetched and compiled by FluidAudio from Hugging Face; the library checks them). Resident sizes are our Mac
         //     process growth on load; "first sound" on a phone is unmeasured (FluidAudio says Kokoro is unvalidated on iOS).
-        func audio(_ id: String, _ role: ConfigRole, _ label: String, rank: Int, basis: String, bytes: Int64, mb: Double, tier: DeviceClass, stage: String, license: String, measured: Bool = true, streams: Bool = false) {
+        func audio(_ id: String, _ role: ConfigRole, _ label: String, rank: Int, basis: String, bytes: Int64, mb: Double, tier: DeviceClass, stage: String, license: String, measured: Bool = true, streams: Bool = false, credit: String? = nil) {
             t.append(ModelCandidate(id: id, role: role, family: label, quant: "", label: label, bytes: bytes, qualityRank: rank, qualityBasis: basis, license: license, licenseLimit: nil,
                                     minTier: tier, residentMB: mb, contextMB: 0, measured: measured, source: KnownModels.managed.first { $0.id == id }?.source ?? "hf (FluidAudio)", kitStageID: stage,
-                                    streamsWords: streams))
+                                    streamsWords: streams, credit: credit ?? KnownModels.bundles.first { $0.id == id }?.credit))
         }
         audio("silero-vad-v6.2.1", .vad, "Silero speech detector", rank: 50, basis: "0.001 of real time on the Mac", bytes: 2_000_000, mb: 110, tier: .tier6, stage: "silero-vad", license: "MIT")
         t.append(ModelCandidate(id: "energy", role: .vad, family: "level detector", quant: "", label: "Level detector built in", bytes: 0, qualityRank: 10, qualityBasis: "the floor",
                                 license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: true, source: "built in", kitStageID: "energy-vad"))
-        audio("parakeet-tdt-0.6b-v2", .transcriber, "Parakeet, the larger listener", rank: 80, basis: "0.044 of real time on the Mac; more accurate than the streaming model, no partials", bytes: 480_000_000, mb: 700, tier: .tier6, stage: "parakeet-tdt", license: "CC-BY-4.0")
+        audio("parakeet-tdt-0.6b-v2", .transcriber, "Parakeet, the larger listener", rank: 80, basis: "0.044 of real time on the Mac; more accurate than the streaming model, no partials", bytes: 480_000_000, mb: 700, tier: .tier6, stage: "parakeet-tdt", license: "CC-BY-4.0",
+              credit: "Parakeet TDT 0.6B v2 by NVIDIA, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).")
         audio("parakeet-eou-120m", .transcriber, "Parakeet, the smaller listener", rank: 60, basis: "0.175 of real time on the Mac; streaming with end-of-utterance, partials while you speak", bytes: 250_000_000, mb: 250, tier: .tier6, stage: "parakeet-eou", license: "NVIDIA Open Model License", streams: true)
         // Fluid Speech Mini (FluidVoice, CC BY 4.0): the recogniser the owner chose and built in Mike (2026-11-24). Ranked above Parakeet TDT on Mike's own numbers
         // (1.51% against 1.92% word error on isolated clips; relayed, ON-DEVICE-MODELS.md section 11); the Mac numbers of ours are in the same section. Re-rank it when
         // a phone run says otherwise. Resident: Mike's 277 MB per 15 s window plus the loaded models.
+        // Fluid Speech Pro (FluidVoice, CC BY 4.0): the larger sibling, the owner's pick for bigger phones (2026-11-24). Ranked above Mini; recommended from the
+        // 8 GB class up (the rule is `minTier`, read into the model list), Mini below it. Numbers: ON-DEVICE-MODELS.md section 11.
+        audio("fluid-speech-pro", .transcriber, "Fluid Speech Pro", rank: 95, basis: "owner's choice for 8 GB phones and up; Mac word error and memory in ON-DEVICE-MODELS.md section 11; unmeasured on a phone", bytes: KnownModels.fluidSpeechPro.totalBytes, mb: 650, tier: .tier8, stage: "fluid-speech-pro", license: "CC BY 4.0", measured: false)
         audio("fluid-speech-mini", .transcriber, "Fluid Speech Mini", rank: 90, basis: "owner's choice; 1.51% word error on isolated clips (Mike's spike, relayed); ours on the Mac in ON-DEVICE-MODELS.md section 11", bytes: KnownModels.fluidSpeechMini.totalBytes, mb: 550, tier: .tier6, stage: "fluid-speech-mini", license: "CC BY 4.0", measured: false)
         t.append(ModelCandidate(id: "apple-speech", role: .transcriber, family: "Apple", quant: "", label: "Apple's recogniser", bytes: 0, qualityRank: 20, qualityBasis: "the floor",
                                 license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: true, source: "built in", kitStageID: "apple-speech", streamsWords: true))
-        audio("kokoro-82m-ane", .voice, "Kokoro voice", rank: 80, basis: "first sound 243 ms on the Mac (does not stream); unvalidated on a phone", bytes: 350_000_000, mb: 750, tier: .tier6, stage: "kokoro", license: "Apache-2.0")
-        audio("pocket-tts", .voice, "Pocket voice, the lighter one", rank: 65, basis: "first frame 98 ms on the Mac, streams frames", bytes: 300_000_000, mb: 500, tier: .tier6, stage: "pocket-tts", license: "CC-BY-4.0")
-        t.append(ModelCandidate(id: "system-voice", role: .voice, family: "Apple", quant: "", label: "The system voice", bytes: 0, qualityRank: 20, qualityBasis: "the floor",
-                                license: "", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: true, source: "built in", kitStageID: "avspeech"))
+        audio("kokoro-82m-ane", .voice, "Kokoro voice", rank: 80, basis: "first sound 243 ms on the Mac (does not stream); unvalidated on a phone", bytes: KnownModels.kokoroBytes, mb: 750, tier: .tier6, stage: "kokoro", license: "Apache-2.0")
+        // Phonon 31M (Gradium, Apache-2.0): an alternative voice, offered on Settings > Voice and models only (it is withheld until its pack is sealed, and ranked below Kokoro so it is never the recommendation or part of the first run).
+        audio("phonon-31m", .voice, "Phonon voice, the small one that streams", rank: 70, basis: "UNMEASURED by us on a phone; the maker says about 20 times real time on an M5 Pro", bytes: 173_000_000, mb: 300, tier: .tier6, stage: "phonon", license: "Apache-2.0", measured: false, streams: false)
+        audio("pocket-tts", .voice, "Pocket voice, the lighter one", rank: 65, basis: "first frame 98 ms on the Mac, streams frames", bytes: 300_000_000, mb: 500, tier: .tier6, stage: "pocket-tts", license: "CC-BY-4.0",
+              credit: "Pocket TTS by Kyutai, converted to Core ML by FluidInference. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).")
+        t.append(ModelCandidate(id: VoiceCatalog.bundledStageID, role: .voice, family: "Tiny Voca", quant: "", label: "Tiny Voca (built in)", bytes: 0, qualityRank: 100, qualityBasis: "bundled default",
+                                license: "Apache-2.0", licenseLimit: nil, minTier: .tier6, residentMB: 0, contextMB: 0, measured: false, source: "built in", kitStageID: VoiceCatalog.bundledStageID))
         return t
     }()
 

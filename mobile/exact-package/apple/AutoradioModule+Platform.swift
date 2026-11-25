@@ -31,15 +31,6 @@ enum Platform {
     static let willResign = NSApplication.willResignActiveNotification
     static let wentToBackground = NSApplication.didResignActiveNotification
     #endif
-    /// Notices after which unsaved work must be on disk: the app resigns, and on the Mac it quits (a quit gives no resign). The Swift Texture editor flushes on them (AutoradioModule+TextureEdit.swift).
-    static var flushNotes: [Notification.Name] {
-        #if os(iOS)
-        [willResign]
-        #else
-        [willResign, NSApplication.willTerminateNotification]
-        #endif
-    }
-
     /// Where the sound goes, for the setup screen ("Playing on ...").
     static func outputName() -> String {
         #if os(iOS)

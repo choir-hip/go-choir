@@ -341,7 +341,7 @@ func TestAnExtraRecordAddedAfterTheFirstDeltaKeepsItsPayload(t *testing.T) {
 	f.reg.onCall = func(kind string) {
 		n++
 		if n == 1 { // after the first delta, before the gate
-			f.insertClosure("code-late", c.seqs[0].payload, "")
+			f.insertClosure("code-late", c.seqs[0].payload, false)
 		}
 	}
 	if _, err := f.apply(dry, namedReq("dead-1")); err != nil {

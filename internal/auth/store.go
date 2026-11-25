@@ -397,6 +397,10 @@ func (s *Store) bootstrap() error {
 		}
 	}
 
+	if err := s.migrateDeletion(); err != nil {
+		return err
+	}
+
 	// Hard cutover: remove username column by recreating the users table.
 	// This is idempotent and safe to run multiple times.
 	if err := s.migrateDropUsernameColumn(); err != nil {
@@ -655,12 +659,18 @@ func (s *Store) SetEmailVerified(userID string) error {
 
 // CreateCredential inserts a WebAuthn credential (passkey) record.
 func (s *Store) CreateCredential(c *Credential) error {
-	_, err := s.db.Exec(
-		"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt,
+	// Never a passkey for an account that asked to be deleted: a passkey added
+	// during the 72 hours could cancel the deletion (the cancel offer is made
+	// to a passkey sign-in). Checked in the insert itself.
+	res, err := s.db.Exec(
+		"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id = ? AND "+liveDeletion+")",
+		c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt, c.UserID,
 	)
 	if err != nil {
 		return fmt.Errorf("create credential %q: %w", c.ID, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrDeletionPending
 	}
 	return nil
 }
@@ -851,11 +861,18 @@ func (s *Store) AddRecoveryCredential(c *Credential) error {
 			}
 		}
 	}
-	if _, err := tx.Exec(
-		"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt,
-	); err != nil {
+	// Never a passkey for an account that asked to be deleted: one added during
+	// the 72 hours could cancel the deletion. Checked in the insert itself; the
+	// rollback undoes the proof and the revocations above.
+	ins, err := tx.Exec(
+		"INSERT INTO credentials (id, user_id, public_key, attestation_type, transport, sign_count, aaguid, flags, name, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id = ? AND "+liveDeletion+")",
+		c.ID, c.UserID, c.PublicKey, c.AttestationType, c.Transport, c.SignCount, c.AAGUID, c.Flags, c.Name, c.CreatedAt, c.UserID,
+	)
+	if err != nil {
 		return fmt.Errorf("create credential %q: %w", c.ID, err)
+	}
+	if n, _ := ins.RowsAffected(); n == 0 {
+		return ErrDeletionPending
 	}
 	return tx.Commit()
 }
@@ -1157,12 +1174,18 @@ func (s *Store) CleanExpiredChallenges() (int64, error) {
 
 // CreateRefreshSession inserts a new refresh/session record.
 func (s *Store) CreateRefreshSession(rs *RefreshSession) error {
-	_, err := s.db.Exec(
-		"INSERT INTO refresh_sessions (id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, auth_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		rs.ID, rs.UserID, rs.TokenHash, rs.CreatedAt, rs.ExpiresAt, rs.RotatedFrom, rs.DeviceInfo, normalizeAuthMethod(rs.AuthMethod),
+	// The row is inserted only while the account has no live deletion record,
+	// in the same statement: a check made a moment before cannot lose a race
+	// with the deletion's revocation transaction.
+	res, err := s.db.Exec(
+		"INSERT INTO refresh_sessions (id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, auth_method) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id = ? AND "+liveDeletion+")",
+		rs.ID, rs.UserID, rs.TokenHash, rs.CreatedAt, rs.ExpiresAt, rs.RotatedFrom, rs.DeviceInfo, normalizeAuthMethod(rs.AuthMethod), rs.UserID,
 	)
 	if err != nil {
 		return fmt.Errorf("create refresh session %q: %w", rs.ID, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrDeletionPending
 	}
 	return nil
 }
@@ -1242,12 +1265,15 @@ func hashDesktopExchangeCode(code string) string {
 
 // CreateDesktopExchangeCode inserts a new one-time exchange code.
 func (s *Store) CreateDesktopExchangeCode(c *DesktopExchangeCode) error {
-	_, err := s.db.Exec(
-		"INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at, auth_method, not_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		hashDesktopExchangeCode(c.Code), c.UserID, "", "", c.CreatedAt, c.ExpiresAt, normalizeAuthMethod(c.AuthMethod), c.NotAfter,
+	res, err := s.db.Exec(
+		"INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at, auth_method, not_after) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id = ? AND "+liveDeletion+")",
+		hashDesktopExchangeCode(c.Code), c.UserID, "", "", c.CreatedAt, c.ExpiresAt, normalizeAuthMethod(c.AuthMethod), c.NotAfter, c.UserID,
 	)
 	if err != nil {
 		return fmt.Errorf("create desktop exchange code: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrDeletionPending
 	}
 	return nil
 }
@@ -1367,8 +1393,8 @@ func (s *Store) CreateComputerScopedAPIKey(ctx context.Context, userID, label st
 	id = "ak_" + uuid.NewString()
 	now := time.Now().UTC()
 	res, err := s.db.ExecContext(ctx,
-		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, computer_id, created_at, expires_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE "+provedUserSQL("?"),
-		id, userID, keyHash, label, string(scopesJSON), nullableAPIKeyComputerID(computerID), now, expiresAt, userID,
+		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, computer_id, created_at, expires_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE "+provedUserSQL("?")+" AND NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id = ? AND "+liveDeletion+")",
+		id, userID, keyHash, label, string(scopesJSON), nullableAPIKeyComputerID(computerID), now, expiresAt, userID, userID,
 	)
 	if err != nil {
 		return "", "", fmt.Errorf("create api key: %w", err)
@@ -1376,6 +1402,10 @@ func (s *Store) CreateComputerScopedAPIKey(ctx context.Context, userID, label st
 	if n, nerr := res.RowsAffected(); nerr != nil {
 		return "", "", fmt.Errorf("create api key: %w", nerr)
 	} else if n != 1 {
+		// A pending deletion refuses first (the person is told so); otherwise the address was never proved.
+		if s.AccountAccessRevoked(userID) {
+			return "", "", ErrDeletionPending
+		}
 		return "", "", ErrAddressUnproved
 	}
 	return id, secret, nil

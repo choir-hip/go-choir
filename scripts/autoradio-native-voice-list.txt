@@ -40,6 +40,7 @@ path mobile/AutoradioKit/Sources/AutoradioKit/FixtureClip.swift generated clip f
 path mobile/AutoradioKit/Sources/AutoradioKit/Voice/ speaker identity, the turn policy and voice preparation
 # --- the on-device models
 path mobile/AutoradioKit/Sources/AutoradioModels/ the on-device models (llama.cpp, FluidAudio, Core ML)
+path mobile/AutoradioKit/Sources/AutoradioKit/NativeOpLog.swift the ledger of native calls the voice makes: a reply that never comes is named from a background queue, which shared code cannot do while it waits behind that call
 path mobile/AutoradioKit/Sources/autoradio-models/ the Mac command that proves the on-device models
 path mobile/AutoradioKit/Sources/autoradio-replay/ the Mac command that replays recorded turns through the voice pipeline
 path mobile/AutoradioKit/Sources/AutoradioKit/Configurator.swift picks one on-device model per voice role for this device
@@ -91,6 +92,5 @@ name deck* the deck: play, hold, pause, seek, acknowledge, and the state and jou
 #   AutoradioModule+Platform.swift  the platform seam: the audio session owner (voice), the console log file the proof reads, the system's background time. The session owner is voice and could be split out.
 #   ProofKey.swift                  the simulator-only proof key (a test seam, compiled out of device builds).
 #   Conversation.swift              the turn engine's record of the question, the answers and their words (state of the voice turn; a candidate for the voice list when it is shown to be only that).
-#   TextureEditor.swift, TextureBody.swift, Notebook.swift   the Texture edit page and the notebook in Swift. Debt: they are Swift until those pages move to Exact; nothing about them is voice.
 #   RunSheetTypes.swift, RadioBridge.swift, BarState.swift, ChoirApp.swift, ChoirClient.swift, RadioProgramme.swift, the rest of the counted files: see the checker's list (scripts/check-autoradio-native-boundary).
 # AutoradioLab/modules/apple/ModelsEntry.swift (the app's own native module) is counted too since the checker reads that folder.

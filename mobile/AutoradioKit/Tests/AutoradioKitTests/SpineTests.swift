@@ -11,12 +11,5 @@ final class SpineTests: XCTestCase {
         f.wipe()
         XCTAssertNil(f.front(nil)); XCTAssertFalse(f.replace(gen: 2, [FrontPage(address: "pub:b", title: "B", kind: "reader")]), "after the wipe a push of a generation already seen is refused")
         XCTAssertTrue(f.replace(gen: 3, [FrontPage(address: "pub:b", title: "B", kind: "reader")]))
-        XCTAssertEqual(PageAddress.kind(of: "radio:"), "radio"); XCTAssertEqual(PageAddress.defaultTitle("radio:"), "Autoradio")
-    }
-
-    func testPageSourceFallsBackToNotYet() async {
-        let r = PageSources(); r.register(NotYetPageSource())
-        let m = await r.model(for: "mailbox:inbox")
-        XCTAssertEqual(m.status, "notyet"); XCTAssertEqual(m.kind, "mailbox")
     }
 }

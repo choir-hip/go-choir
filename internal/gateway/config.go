@@ -220,6 +220,10 @@ type IdentityRegistry struct {
 	tokenTTL        time.Duration
 	persistencePath string
 	renewals        int64 // host-attested renewals since start
+	// forgetUnsaved is set when a removal could not be written; the next
+	// ForgetIdentity writes the file again even if there is nothing to remove
+	// in memory, so a failed write is finished by the retry.
+	forgetUnsaved bool
 }
 
 // NewIdentityRegistry creates a new identity registry with the given
@@ -657,6 +661,61 @@ func (r *IdentityRegistry) RevokeCredential(computerID string) {
 		identity.Active = false
 		_ = r.persistLocked()
 	}
+}
+
+// IdentitiesNamed returns the key (the VM id) and product computer id of every
+// identity that ForgetIdentity would remove for this id: the ones whose key or
+// recorded product computer id equals it. A caller that must refuse some of
+// them asks first.
+func (r *IdentityRegistry) IdentitiesNamed(id string) [][2]string {
+	id = strings.TrimSpace(id)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out [][2]string
+	if id == "" {
+		return out
+	}
+	for key, identity := range r.identities {
+		if key == id || (identity != nil && identity.ProductComputerID == id) {
+			product := ""
+			if identity != nil {
+				product = identity.ProductComputerID
+			}
+			out = append(out, [2]string{key, product})
+		}
+	}
+	return out
+}
+
+// ForgetIdentity removes a computer's identity record entirely (an account
+// deletion; the computer is destroyed and never boots again). It reports
+// whether a record existed. Removal is persisted before it returns.
+//
+// The gateway keys an identity by the VM id its bearer authenticates as and
+// records the product computer id (computer-...) beside it; the id given may
+// be either, and every identity that matches is removed.
+func (r *IdentityRegistry) ForgetIdentity(computerID string) (bool, error) {
+	computerID = strings.TrimSpace(computerID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	removed := false
+	if computerID != "" {
+		for key, identity := range r.identities {
+			if key == computerID || (identity != nil && identity.ProductComputerID == computerID) {
+				delete(r.identities, key)
+				removed = true
+			}
+		}
+	}
+	if !removed && !r.forgetUnsaved {
+		return false, nil
+	}
+	if err := r.persistLocked(); err != nil {
+		r.forgetUnsaved = true
+		return removed, err
+	}
+	r.forgetUnsaved = false
+	return removed, nil
 }
 
 // RotateCredential revokes the existing credential and issues a new one.

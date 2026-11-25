@@ -48,10 +48,13 @@ component Autoradio
     cons
     hideGate
     dl
-    dlStart
-    dlStartMobile
-    dlPick
-    dlRemove
+    mdDownload
+    mdDownloadMobile
+    mdUse
+    mdRemove
+    mdTest
+    mdTab
+    mdTabTo
     lrn
     lrnPress
     lrnLeaveFlow
@@ -67,9 +70,11 @@ component Autoradio
     // ---- spine ----
     th
     pg
-    pmod
     bi
     thl
+    edStatus
+    edKeepMine
+    edUseTheirs
     layer
     ask
     openPage
@@ -93,6 +98,7 @@ component Autoradio
     pl
     signIn
     cancelSignIn
+    cancelDeletion
     closeAuth
     createAccount
     signInPasskey
@@ -244,6 +250,9 @@ component Autoradio
     edCurLink
     edUrl
     edBegin
+    ndNew
+    ndBusy
+    ndMsg
     edDone
     edInput
     edSelected
@@ -374,6 +383,12 @@ component Autoradio
     updateComputer
     resetLearned
     refreshActivity
+    // Delete account (account-delete.ts)
+    delv
+    delAsk
+    askDelete
+    keepAccount
+    confirmDelete
     // ---- lane autoradio-talk: the conversation and the answer card ----
     cv
     answerRetry
@@ -412,6 +427,7 @@ component Autoradio
     // ---- the voice cards ----
     vc
     vcPick
+    vcHear
     vcStop
     vcContinue
     // ---- lane 9: motion and the mark ----

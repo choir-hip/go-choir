@@ -140,6 +140,9 @@ func main() {
 		idleSweeperEnabled = true
 		log.Printf("vmctl: retention prune mode=%s ephemeral_domains=%s max_deletes=%d max_bytes=%d test_idle_mode=%s test_idle_min_age=%s quarantine_mode=%s quarantine_min_age=%s selector_named=%d", cfg.Mode, strings.Join(cfg.EphemeralEmailDomains, ","), cfg.MaxDeletes, cfg.MaxBytes, cfg.TestIdleMode, cfg.TestIdleMinAge, cfg.QuarantineMode, cfg.QuarantineMinAge, len(cfg.SelectorNamed))
 	}
+	// The account destroy route reads deletion records from the same auth
+	// database the retention rule reads emails from (account_deletion.go).
+	registry.SetAccountPurgeAuthDB(os.Getenv("VMCTL_RETENTION_AUTH_DB_PATH"))
 	warmnessPolicy, err := warmnessPolicyConfigFromEnv()
 	if err != nil {
 		log.Fatalf("vmctl: computer tiers: %v", err)

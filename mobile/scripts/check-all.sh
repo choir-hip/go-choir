@@ -46,6 +46,7 @@ if [ -z "${NOBUN:-}" ]; then
   [ -z "$(git status --porcelain -- "$C/bun.lock")" ] || fail "bun.lock" "AutoradioLab/bun.lock has an uncommitted change: commit or revert it, then run again (this check restores it after bun install)"
   ALLOW_NO_MODELS=1 "$HERE/sync-exact-package.sh" >"${TMPDIR:-/tmp}/check-all-sync.txt" 2>&1 || { tail -8 "${TMPDIR:-/tmp}/check-all-sync.txt"; fail "sync-exact-package"; }
   ( cd "$C" && bun install >/dev/null 2>&1 ) || fail "bun install"
+  [ -f "$C/node_modules/@exact/passkeys/package.json" ] || fail "bun install" "@exact/passkeys did not install (bun install exits 0 when a file: package is missing): mobile/.exact-src must reach EXACT2"
   [ -z "$(git status --porcelain -- "$C/bun.lock")" ] || git checkout -q -- "$C/bun.lock" || fail "bun.lock restore"
   ( cd "$C" && bun exact.mjs contract build app.contract >"${TMPDIR:-/tmp}/check-all-contract.txt" 2>&1 ) || { grep -i error "${TMPDIR:-/tmp}/check-all-contract.txt" | head -10; fail "contract build"; }
   ( cd "$C" && bun exact.mjs test web >"${TMPDIR:-/tmp}/check-all-web.txt" 2>&1 ); if grep -qE '[1-9][0-9]* failed' "${TMPDIR:-/tmp}/check-all-web.txt" || ! grep -q 'passed' "${TMPDIR:-/tmp}/check-all-web.txt"; then tail -8 "${TMPDIR:-/tmp}/check-all-web.txt"; fail "exact test web"; fi

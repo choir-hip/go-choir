@@ -22,7 +22,7 @@ describe('settingsAccount', () => {
   test('the real shape: handle, key label, scopes joined; the key never appears', async () => {
     const v = await settingsAccount({ signedIn: true, tick: 1 });
     expect(calls).toEqual([`${ORIGIN}/auth/whoami`]);
-    expect(v).toEqual({ status: 'ok', signedIn: true, handle: 'quiet-heron-41', keyID: 'key-live-0001', keyLabel: 'Autoradio on this phone', scopes: 'owner:acts, admin', computerID: 'comp-1', message: '', baseURL: ORIGIN });
+    expect(v).toEqual({ status: 'ok', signedIn: true, handle: 'quiet-heron-41', keyID: 'key-live-0001', keyLabel: 'Autoradio on this phone', scopes: 'owner:acts, admin', computerID: 'comp-1', message: '', baseURL: ORIGIN, reviewer: false });
     expect(JSON.stringify(v)).not.toContain(KEY);
   });
   test('A2 a refused key, a missing route, garbage and a dead network each say so', async () => {
@@ -54,5 +54,14 @@ describe('aboutPage', () => {
   test('the version is the platform fact, dev without one; the server is the one origin', () => {
     expect(aboutPage({ appVersion: '1.4' }, true)).toEqual({ app: '1.4', base: ORIGIN, signedIn: true });
     expect(aboutPage({ appVersion: '' }, false)).toEqual({ app: 'dev', base: ORIGIN, signedIn: false });
+  });
+});
+
+describe('the reviewer flag', () => {
+  test('whoami says whether the key is the App Review account; anything but true is not', () => {
+    expect(parseWhoami({ handle: 'a', reviewer: true })?.reviewer).toBe(true);
+    expect(parseWhoami({ handle: 'a', reviewer: false })?.reviewer).toBe(false);
+    expect(parseWhoami({ handle: 'a' })?.reviewer).toBe(false);
+    expect(parseWhoami({ handle: 'a', reviewer: 'true' })?.reviewer).toBe(false);
   });
 });

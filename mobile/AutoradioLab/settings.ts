@@ -14,12 +14,14 @@ import { authedJSON, HTTPError, keptComputerId, ORIGIN, SignedOutError } from '.
 
 export type SettingsAccount = {
   status: string; signedIn: boolean; handle: string; keyID: string; keyLabel: string; scopes: string; computerID: string; message: string; baseURL: string;
+  /** The key's account is the App Review account (whoami `reviewer`): it cannot be deleted in the app. */
+  reviewer: boolean;
 };
 export type AccountArgs = { signedIn: boolean; tick: number };
 
 export const WHOAMI_PATH = '/auth/whoami';
 
-const empty = (): SettingsAccount => ({ status: 'idle', signedIn: false, handle: '', keyID: '', keyLabel: '', scopes: '', computerID: '', message: '', baseURL: ORIGIN });
+const empty = (): SettingsAccount => ({ status: 'idle', signedIn: false, handle: '', keyID: '', keyLabel: '', scopes: '', computerID: '', message: '', baseURL: ORIGIN, reviewer: false });
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -30,7 +32,7 @@ export function parseWhoami(body: unknown): Omit<SettingsAccount, 'signedIn' | '
   const handle = str(o.handle);
   if (handle === '') return null;
   const scopes = Array.isArray(o.scopes) ? o.scopes.filter((s): s is string => typeof s === 'string') : [];
-  return { handle, keyID: str(o.key_id), keyLabel: str(o.key_label), scopes: scopes.join(', '), computerID: str(o.computer_id) };
+  return { handle, keyID: str(o.key_id), keyLabel: str(o.key_label), scopes: scopes.join(', '), computerID: str(o.computer_id), reviewer: o.reviewer === true };
 }
 
 /** What the page says for a failure, in plain words (A2). */

@@ -6,7 +6,8 @@
 import type { Storage } from './app.contract.d.ts';
 import { getJSON, nativeLater, accountGeneration } from './api.ts';
 import { modelsAgreement } from './consent.ts';
-import { onKickSearch } from './search-kick.ts';
+import { onKickSearch, onTestSearch } from './search-kick.ts';
+import { clock } from './clock.ts';
 import { Retrieval, nativeEmbedder, parseAsk, launcherSearch, registerSearchProvider, type Found } from './retrieval-run.ts';
 import { onSignOut, type Row } from './search.ts';
 import { contentDocs } from './content-run.ts';
@@ -15,8 +16,23 @@ import { ImportedSource } from './imported-source.ts';
 
 /** The one runtime of the process. Document sources register here (`live.setDocSource`: the content store and the imported documents, both wired just below). */
 export const live = new Retrieval({ mayDownload: () => modelsAgreement(live.storage, 'search') });
-onKickSearch((storage) => { live.storage = storage ?? live.storage; live.kick(); });
+// The press on Settings > Voice and models > Search: keep its storage (the pass reads the agreement from it), attach the
+// native embedder (a press can come before any voice turn, and the pass does nothing without one), and fetch the model
+// now: the press is the agreement and there may be nothing to index yet (owner, 2026-11-25).
+onKickSearch((storage) => {
+  live.storage = storage ?? live.storage;
+  const later = nativeLater();
+  if (later) live.native = nativeEmbedder(later as never);
+  live.fetchModel().catch(() => undefined);   // the press answers the page; the fetch reports through the facts (modelState)
+  live.kick();
+});
 let warmed = false;
+// The Test button of the search model (models.ts): the fixed query over the phone's own index, as an ask with no page and no run sheet. It reads what is on the phone and downloads nothing.
+onTestSearch(async (query) => {
+  const c = await live.serve({ id: 'trial', words: query, pageTitle: '', pageAddress: '', now: clock.ms, facts: { runSheet: [], pages: [], topics: [], pageText: '' } });
+  const n = c.items.length;
+  return n === 0 ? 'It found nothing yet: the index of your stories is still being built, or there is nothing to find.' : `It found ${n} ${n === 1 ? 'story or document' : 'stories and documents'} on this phone for: ${query}`;
+});
 
 // The document sources: the phone's content store (content-run.ts) and the imported documents the phone holds the text of (imported-search.ts). Both read through the runtime's storage.
 live.setDocSource('store', () => contentDocs(live.storage));

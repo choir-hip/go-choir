@@ -10,6 +10,14 @@
 # 21), so the Go limit is 8 GiB under the backup unit's own 10G and 12G
 # lines; never run it uncapped beside the guests. Everything lands under a scratch directory,
 # never a live path, and each piece deletes its restore before it exits.
+#
+# A restore for real (not this drill) brings back every account deleted since
+# the snapshot. Before the restored host serves anyone, run on the restored
+# auth.db: `auth deletion-restore-check -db <auth.db> -ledger <ledger> -reapply`
+# (the ledger is account-deletion-ledger.jsonl beside the live auth.db; each
+# backup run copies it off-host, and the NEWEST snapshot's copy is the one to
+# read: `bash scripts/off-host-restore-drill.sh <chosen snapshot> deletions`). Docs: docs/problems/no-off-host-backup-2026-10-20.md,
+# "Deleted accounts and a restore".
 #   tape:  200 random tape files compared byte for byte with live, and the
 #          two sqlite stores' integrity checks. Since the backup split the
 #          flat sha256/ directories into shard snapshots (status.json
@@ -41,7 +49,7 @@
 # Secrets are read from files and never printed. Each piece deletes its
 # restore before the next.
 set -euo pipefail
-SNAP="${1:?snapshot}"; PIECE="${2:?tape|dolt|image|snap|pg}"
+SNAP="${1:?snapshot}"; PIECE="${2:?tape|dolt|image|snap|pg|deletions}"
 A=/var/lib/go-choir/platform-artifacts/sha256
 S="${OFFHOST_SECRETS_DIR:-/var/lib/go-choir/secrets/offhost-backup}"
 D="${OFFHOST_DRILL_DIR:-/var/lib/go-choir-restore-drill}"
@@ -56,7 +64,7 @@ CTL="$D/ssh2.ctl"
 ssh -i "$S/ssh-key" -o IdentitiesOnly=yes -o BatchMode=yes -o UserKnownHostsFile="$S/known-hosts" \
   -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -o ControlMaster=yes -o ControlPath="$CTL" \
   -f -N -L 127.0.0.1:18002:127.0.0.1:8000 choir-backup@51.81.93.94
-trap 'ssh -O exit -o ControlPath="$CTL" choir-backup@51.81.93.94 >/dev/null 2>&1 || true; rm -rf "$D/r" "$D/r2" "$D/dolt-restored"' EXIT
+trap 'ssh -O exit -o ControlPath="$CTL" choir-backup@51.81.93.94 >/dev/null 2>&1 || true; rm -rf "$D/r" "$D/r2" "$D/rl" "$D/dolt-restored"' EXIT
 export RESTIC_PASSWORD_FILE="$S/restic-password" RESTIC_REST_USERNAME=nodeb
 RESTIC_REST_PASSWORD="$(cat "$S/rest-password")"; export RESTIC_REST_PASSWORD
 export RESTIC_REPOSITORY=rest:http://127.0.0.1:18002/nodeb/daily RESTIC_CACHE_DIR="$D/cache"
@@ -205,5 +213,28 @@ snap)
     rm -rf "$D/r2" "$D/dolt-restored"
   done
   ;;
-  *) echo "piece is tape, dolt, image, snap or pg" >&2; exit 2 ;;
+deletions)
+  # Round 3, B2: the accounts deleted since the chosen snapshot are found by the
+  # NEWEST ledger (an append-only file, so the newest holds every line of the
+  # older ones) read against the CHOSEN snapshot's auth.db. The ledger travels
+  # in each run (off-host-backup.sh, staging/sqlite); reading it from the chosen
+  # snapshot would find nothing newer than that snapshot, and reading auth.db
+  # from the newest would find nothing deleted. The drill only reports (exit 1
+  # when restored accounts are found); a real restore adds -reapply.
+  ST=/var/lib/go-choir/offhost-backup/staging/sqlite
+  AUTHBIN="${OFFHOST_AUTH_BIN:-auth}"
+  rm -rf "$D/r" "$D/rl"
+  restic --no-lock restore "$SNAP" --target "$D/r" --include "$ST/auth.db" >"$D/restore.log" 2>&1 \
+    || { echo "restore of auth.db from $SNAP failed: $(tail -c 400 "$D/restore.log")"; exit 1; }
+  restic --no-lock restore latest --target "$D/rl" --include "$ST/account-deletion-ledger.jsonl" >"$D/restore.log" 2>&1 \
+    || { echo "restore of the newest ledger failed: $(tail -c 400 "$D/restore.log")"; exit 1; }
+  [ -f "$D/r$ST/auth.db" ] || { echo "snapshot $SNAP holds no auth.db"; exit 1; }
+  [ -f "$D/rl$ST/account-deletion-ledger.jsonl" ] \
+    || { echo "no deletion ledger in the newest snapshot: a restore now would bring back every account deleted since $SNAP unnoticed"; exit 1; }
+  rc=0
+  "$AUTHBIN" deletion-restore-check -db "$D/r$ST/auth.db" -ledger "$D/rl$ST/account-deletion-ledger.jsonl" || rc=$?
+  rm -rf "$D/r" "$D/rl"
+  [ "$rc" = 0 ] || { echo "deletion-restore-check exited $rc (1: restored accounts whose deletion was finished; 2: unreadable)"; exit "$rc"; }
+  ;;
+  *) echo "piece is tape, dolt, image, snap, pg or deletions" >&2; exit 2 ;;
 esac

@@ -78,3 +78,28 @@ func TestGatewayEnsureImportNamesTheProductComputer(t *testing.T) {
 		t.Fatalf("imported identity = (%q, %q), want (%q, %q)", vm, computer, own.VMID, want)
 	}
 }
+
+// Round 3, S3: an account with a live deletion record has its computer's
+// gateway identity forgotten at the request; a resolve during the 72 hours (a
+// deploy refresh that wakes it) must not import the computer's own token again.
+// After a cancel the record is gone and the next resolve imports it.
+func TestGatewayEnsureDoesNotReimportTheIdentityOfAnAccountBeingDeleted(t *testing.T) {
+	srv, ids := realGateway(t)
+	reg, own := registryWithVM(t, srv.URL, "http://10.200.0.2:8085")
+	deleting := true
+	reg.accountDeleting = func(userID string) bool { return deleting && userID == own.UserID }
+
+	reg.ensureExistingGatewayCredential(own.VMID)
+	if _, _, err := ids.ValidateCredentialIdentity("vm-jev-peer:host-held-token"); err == nil {
+		t.Fatal("the identity of an account being deleted was imported again")
+	}
+	// The cancel removes the record: the next resolve imports it.
+	deleting = false
+	reg.mu.Lock()
+	delete(reg.gatewayCredentialNextCheck, own.VMID)
+	reg.mu.Unlock()
+	reg.ensureExistingGatewayCredential(own.VMID)
+	if _, _, err := ids.ValidateCredentialIdentity("vm-jev-peer:host-held-token"); err != nil {
+		t.Fatalf("after a cancel the identity was not imported: %v", err)
+	}
+}

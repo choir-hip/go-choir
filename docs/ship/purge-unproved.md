@@ -75,8 +75,9 @@ asks each database which tables have a user-keyed column, by name (`requested_by
 list was written is a refusal to run, not a table left behind.
 
 **auth (SQLite)**: `credentials`, `challenge_state`, `refresh_sessions`, `desktop_exchange_codes`, `api_keys`,
-`recovery_tokens`, `email_signin_attempts`, `device_authorizations`, `account_set_member`, `pending_registrations`
-(`user_id`); `owner_root_key_wraps`, `owner_root_keys` (`owner_id`); `pending_registrations.email` and
+`recovery_tokens`, `email_signin_attempts`, `device_authorizations`, `account_set_member`, `pending_registrations`,
+`deletion_challenges`, `account_deletions` (`user_id`; the last two are an in-app account deletion's challenge and
+record); `owner_root_key_wraps`, `owner_root_keys` (`owner_id`); `pending_registrations.email` and
 `registration_waitlist.email` (case-folded, **except an address a surviving account holds in any case**, which
 is left alone); `users.id`. `account_set` is **repaired**, not deleted: a set whose member goes keeps its other
 members and points `active_user_id` at the most recent survivor; a set left with none is deleted.

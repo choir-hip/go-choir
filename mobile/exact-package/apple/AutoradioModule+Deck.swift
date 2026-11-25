@@ -1,4 +1,5 @@
-// The deck's names (interface/deck.json): deckState (live), deckPlay, deckEnqueue, deckAct, deckAck. The deck itself is Deck.swift in the Kit; this
+// The deck's package name (interface/deck.json): deckState (live; the contract reads it once per radio tick and hands it to the pulse). Play, enqueue, act and ack come through the app module's one
+// `deck` op (ModelsEntry.swift -> `deckCall`), the same as a state read from shared code. The deck itself is Deck.swift in the Kit; this
 // file only reads the options and answers the state. Native because the audio session, the engine and the lock screen are native: shared code
 // (deck.ts) commands the deck and reads its journal; nothing here decides what plays next.
 import Foundation
@@ -46,8 +47,5 @@ extension AutoradioModule {
     func registerDeck() {
         onMainThread { Deck.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["deckState"]) } } }
         handle("deckState") { [unowned self] _, reply in reply(self.json(onMainThread { Deck.shared.snapshot() })) }
-        for name in ["deckPlay", "deckEnqueue", "deckAct", "deckAck"] {
-            handle(name) { [unowned self] args, reply in Task { @MainActor in reply(await self.deckCall(name: name, args: args)) } }
-        }
     }
 }

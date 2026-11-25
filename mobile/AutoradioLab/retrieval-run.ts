@@ -204,6 +204,24 @@ export class Retrieval {
 
   // ------------------------------------------------------------------------------------------------------------ the embedding pass
 
+  /** A press on Download: fetch the model now, whether or not there is work to index yet. The pass below only
+   *  fetches when it has documents to embed, so without this a person who presses Download before the index has
+   *  anything in it gets nothing (owner, 2026-11-25). It downloads only after the agreement, and on Wi-Fi unless
+   *  the agreement covers mobile data. */
+  async fetchModel(): Promise<void> {
+    const n = this.native;
+    if (!n) return;
+    try {
+      const st = await n.deviceState();
+      if (st.loaded || st.present) { this.modelState = 'ok'; return; }
+      const may = await this.mayDownload();
+      if (!may.ok) { this.modelState = 'needs'; return; }                        // nothing is fetched before the person agrees
+      if (!st.onWiFi && !may.mobile) { this.modelState = 'absent'; return; }     // agreed on Wi-Fi: not over mobile data
+      this.modelState = 'downloading';
+      this.modelState = (await n.ensure(true)) ? 'ok' : 'absent';
+    } catch { this.modelState = 'absent'; }
+  }
+
   /** Something changed (a store write, Wi-Fi came back): run a pass soon. Passes never overlap; the content lane calls this after a sync. */
   kick(first = false): void {
     this.wanted = true;

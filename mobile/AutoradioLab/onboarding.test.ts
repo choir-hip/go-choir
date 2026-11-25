@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { onboardingAct, onboardingPage, forgetOnboarding, wipeOnboarding, parseProgress, startStep, noVoice, PROGRESS_FILE, EDIT, SETUP,
   MIC_REFUSED_LINE, MIC_SILENT_LINE, TALK_REFUSED_LINE, HEARING_AGAIN_LINE, type Env, type VoiceFacts, type Device } from './onboarding.ts';
 import { resetSeam, nextGeneration, bindNative } from './api.ts';
-import { firstRunOver } from './onboarding.ts';
+import { firstRunOver, liveEnv, NOT_RECORDED_LINE } from './onboarding.ts';
 import type { OfferJob } from './offers.ts';
 import { consentPick, forgetConsent } from './consent.ts';
 import { FAILED_LINE, type Writer } from './edition-writer.ts';
@@ -17,12 +17,12 @@ const storage = { fs: {
 } } as never;
 const kept = (): Record<string, unknown> => JSON.parse(new TextDecoder().decode(files.get(PROGRESS_FILE)!));
 
-let v: VoiceFacts; let calls: { op: string; args?: Record<string, unknown> }[]; let closed: string[]; let opened: string[]; let edition: unknown;
+let v: VoiceFacts; let wrote: string[][] = []; let calls: { op: string; args?: Record<string, unknown> }[]; let closed: string[]; let opened: string[]; let edition: unknown;
 const device: Device = { facts: async () => ({ ...v }), op: async (op, args) => { calls.push({ op, args }); } };
-const env = (o: Partial<Env> = {}): Env => ({ storage, device, get: async () => edition, closePage: async (a) => { closed.push(a); }, openPage: async (a) => { opened.push(a); }, ...o });
+const env = (o: Partial<Env> = {}): Env => ({ storage, device, get: async () => edition, notebook: async (t) => { wrote.push(t); return true; }, closePage: async (a) => { closed.push(a); }, openPage: async (a) => { opened.push(a); }, ...o });
 const act = (op: string, arg = '', topics = '', top = SETUP, e: Env = env()) => onboardingAct(op, arg, topics, top, e);
 const ops = (): string[] => calls.map((c) => c.op);
-beforeEach(() => { files.clear(); forgetOnboarding(); forgetConsent(); resetSeam(); v = { ...noVoice(), offers: [{ job: 'voice', group: 'voice', host: 'Example Hub', options: [{ id: 'v', model: 'V', bytes: 1_000_000, sizeLabel: '1 MB', recommended: true, ready: false }] }] }; calls = []; closed = []; opened = []; edition = { found: false }; });
+beforeEach(() => { files.clear(); forgetOnboarding(); forgetConsent(); resetSeam(); wrote = []; v = { ...noVoice(), offers: [{ job: 'voice', group: 'voice', host: 'Example Hub', options: [{ id: 'v', model: 'V', bytes: 1_000_000, sizeLabel: '1 MB', recommended: true, ready: false }] }] }; calls = []; closed = []; opened = []; edition = { found: false }; });
 
 describe('the steps', () => {
   test('O1 the walk, in order, ends at done with the edition made and the station released', async () => {
@@ -40,7 +40,7 @@ describe('the steps', () => {
     const done = await act('topicsDone', '', 'Space\nChess');
     expect(done).toMatchObject({ step: 'done', editionStatus: 'ready', editionDone: true, editionLines: ['What I follow', 'Space', 'Chess'], card: '', aim: '' });
     expect(calls.filter((c) => c.op === 'obMirror').pop()?.args).toEqual({ finished: true });    // O14
-    expect(calls.find((c) => c.op === 'obNotebookTopics')?.args).toEqual({ topics: ['Space', 'Chess'] });
+    expect(wrote).toEqual([['Space', 'Chess']]);                                                   // the first lines of the notebook (notebook-topics.ts)
     expect(kept()).toMatchObject({ topicsStarted: true, editionDone: true });
   });
   test('O1 a button that does not belong to the step changes nothing', async () => {
@@ -132,10 +132,10 @@ describe('the edition', () => {
   test('O8 an empty list is the general edition; a failure and a deadline say so and keep the topics', async () => {
     await act('topics');
     const general = await act('topicsDone', ''); expect(general.editionLines).toEqual(['What I follow', 'The whole paper, until I say otherwise.']);
-    forgetOnboarding(); files.clear(); calls = []; await act('topics');
+    forgetOnboarding(); files.clear(); calls = []; wrote = []; await act('topics');
     const boom: Writer = async () => { throw new Error('no'); };
     const failed = await act('topicsDone', '', 'Space', SETUP, env({ writer: boom })); expect(failed).toMatchObject({ step: 'writing', editionStatus: 'failed', editionError: FAILED_LINE });
-    expect(ops()).not.toContain('obNotebookTopics');
+    expect(wrote).toEqual([]);
     const never: Writer = (_t, _p, signal) => new Promise((_r, rej) => { signal.addEventListener('abort', () => rej(new Error('aborted'))); });
     const slow = await act('editionRetry', '', 'Space', SETUP, env({ writer: never, deadlineSeconds: 0.05 })); expect(slow.editionStatus).toBe('failed'); expect(slow.editionError).toContain('too long');
     expect((await act('editionRetry', '', 'Space')).step).toBe('done');                              // Retry from the failed state succeeds
@@ -148,7 +148,7 @@ describe('the edition', () => {
     await new Promise((r) => setTimeout(r, 10));
     nextGeneration(); files.clear(); calls = [];
     release(); await pending;
-    expect(ops()).not.toContain('obNotebookTopics'); expect(files.has(PROGRESS_FILE)).toBe(false);
+    expect(wrote).toEqual([]); expect(files.has(PROGRESS_FILE)).toBe(false);
     expect((await onboardingPage(v, 0, SETUP, env())).step).toBe('welcome');
   });
   test('O9 a Continue while one is writing is ignored; Continue anyway is the general edition', async () => {
@@ -233,6 +233,7 @@ describe('the progress file is read once, and a failed read is not "no progress"
   });
 });
 
+const liveAgreeSpy = (asked: string[][]) => async (m: boolean, ids?: string[]): Promise<boolean> => { asked.push(ids ?? []); return (await liveEnv(storage).agree!(m, ids ?? [])) === true; };
 describe('first run without an account, and the agreement', () => {
   test('O15 with no key the first run is over for the station; with a locked key it is not', async () => {
     bindNative({ later: async (r) => (r.op === 'keystate' ? { state: 'absent' } : {}) });
@@ -247,6 +248,21 @@ describe('first run without an account, and the agreement', () => {
     forgetOnboarding(); files.clear(); calls = []; agreed.length = 0; v = { ...v, onWiFi: false };
     await act('begin', '', '', SETUP, e); expect(agreed).toEqual([]); expect(ops()).not.toContain('obSetupBegin');
     await act('begin', 'true', '', SETUP, e); expect(agreed).toEqual([true]); expect(ops()).toContain('obSetupBegin');
+  });
+  test('O16b the first run agrees to the files it shows, model by model (the same keys Voice and models uses), never to a model it did not show', async () => {
+    const asked: string[][] = [];
+    const o = (job: string, group: string, ids: string[]): OfferJob => ({ job, group, host: 'Example Hub', options: ids.map((id, i) => ({ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: i === 0, ready: false })) });
+    v = { ...v, offers: [o('voice', 'voice', ['a', 'b']), o('transcriber', 'voice-rest', ['c']), o('speaker', 'voice-rest', ['print']), o('search', 'search', ['e'])] };
+    await act('begin', '', '', SETUP, env({ agree: async (_m, ids) => { asked.push(ids ?? []); } }));
+    expect(asked).toEqual([['a', 'c', 'print', 'e']]);   // the search embedding model is essential, never optional (owner, 2026-11-25)
+  });
+  test('O16c every model shown is already on the phone (downloaded from Voice and models): the first run still begins, and agrees to nothing new', async () => {
+    const o = (job: string, group: string, id: string): OfferJob => ({ job, group, host: 'Example Hub', options: [{ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: true, ready: true }] });
+    v = { ...v, offers: [o('voice', 'voice', 'a'), o('transcriber', 'voice-rest', 'c')] };
+    expect(await liveEnv(storage).agree!(false, [])).toBe(true);                                  // nothing to agree to is not a failure to agree
+    const asked: string[][] = [];
+    const r = await act('begin', '', '', SETUP, env({ agree: liveAgreeSpy(asked) }));
+    expect(asked).toEqual([[]]); expect(r.message).not.toBe(NOT_RECORDED_LINE); expect(r.step).toBe('setup');
   });
 });
 

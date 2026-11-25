@@ -461,6 +461,24 @@ stage() {
       err "sqlite backup of $(basename "$src") failed"; ok=1
     fi
   done
+  # The account-deletion ledger (internal/accountpurge, beside auth.db): the
+  # hash of every account whose purge began or finished, no user id and no
+  # address. It is copied AFTER auth.db's snapshot, so it holds at least every
+  # deletion the snapshot's auth.db knows of, and it travels off-host because a
+  # restore after a total loss of this host has only what the repository holds:
+  # a ledger that stayed here would be lost with the host, and every account
+  # purged since the restored snapshot would come back unnoticed (privacy
+  # policy, "backups"; scripts/off-host-restore-drill.sh piece "deletions").
+  local ledger="$ROOT/auth/account-deletion-ledger.jsonl"
+  if [ -e "$ledger" ]; then
+    if cp "$ledger" "$STAGING/sqlite/account-deletion-ledger.jsonl" 2>/dev/null; then
+      log "deletion ledger copied: $(grep -c '' "$STAGING/sqlite/account-deletion-ledger.jsonl") lines"
+    else
+      err "the deletion ledger could not be copied; a restore could bring deleted accounts back unnoticed"; ok=1
+    fi
+  else
+    log "no deletion ledger yet (no account deletion has begun)"
+  fi
   # Reflink clones are atomic per file: a crash-consistent image. They pin
   # copy-on-write extents while they exist; the EXIT trap removes them.
   rm -rf "$STAGING/vm-images"; install -d -m 0700 "$STAGING/vm-images"
