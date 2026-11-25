@@ -40,13 +40,15 @@ members Autoradio
   task hbTimer when hb.n >= 0 key=hbTick
     after(5000, hbBump)
   // The radio (radio-bridge.ts): the pump reads the deck's journal and what native handed over, applies them, keeps the desk writing, and answers a number the screens ask again on. It runs when the deck changes
-  // (`ds.seq`), when native says something did (`rnote`), and every second (the position labels, the writer's clock).
+  // (`ds`), when native says something did (`rnote`), and every second (the position labels, the writer's clock).
+  // The deck's state is read HERE, once per radio tick (the position, and the deck's `sounding` line, which a read writes), and handed to the pulse whole: the pulse makes no deck call of its own
+  // (docs/problems/radio-restore-empty-after-let-go-2026-11-25.md).
   state radioTick = 0
   action radioBump
     radioTick = radioTick + 1
-  resource ds = deckState() as shape DeckState else empty()
+  resource ds = deckState(tick=radioTick) as shape DeckState else empty()
   resource rnote = radioNote() as shape RadioNote else empty()
-  resource rpulse = radioPulse(ds.seq, rnote.tick, radioTick) as shape RadioTick else empty()
+  resource rpulse = radioPulse(ds, rnote.tick, radioTick) as shape RadioTick else empty()
   // One second while something sounds in front or something is due; five when nothing is (the pulse says `slow`): an idle, paused or locked phone is not asked about once a second. What native has to say moves `ds.seq`
   // or `rnote.tick`, which ask the pulse at once, whatever the clock.
   task radioClock when rpulse.tick >= 0 and not rpulse.slow key=radioTick

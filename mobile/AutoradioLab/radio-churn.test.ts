@@ -48,11 +48,11 @@ async function simulate(seconds: number): Promise<{ asks: Record<string, number>
   const v = (n: string): any => res.find((r) => r.name === n)!.value ?? {};
   const posKey = (): number => (v('rpulse').live && front ? v('rpulse').beat : 0);
   const res: Res[] = [
-    { name: 'ds', native: true, args: () => 'ds', run: async () => ({ seq: dk.seq }), asks: 0 },
+    { name: 'ds', native: true, args: () => `ds${radioTick}`, run: () => native.later({ op: 'deck', name: 'deckState' }), asks: 0 },       // the package source, read once per radio tick (spine.contract)
     { name: 'rnote', native: true, args: () => `note${noteTick}`, run: async () => ({ tick: noteTick }), asks: 0 },
     { name: 'bf', native: true, args: () => `bf${barFactsRev}`, run: async () => (calls.barFacts = (calls.barFacts ?? 0) + 1, { at: (BASE + nowMs) / 1000, playing: dk.why === 'playing', title: 'Episode', running: true, blockCount: 4, blockIndex: Math.floor(nowMs / 7000) % 4, blockFraction: (nowMs % 7000) / 7000, onAir: true }), asks: 0 },
     { name: 'ri', native: true, args: () => `ri${viewRev}`, run: async () => (calls.radioView = (calls.radioView ?? 0) + 1, { rev: viewRev }), asks: 0 },
-    { name: 'rpulse', args: () => `${v('ds').seq}|${v('rnote').tick}|${radioTick}`, run: () => radioPulse(undefined, native as never), asks: 0 },
+    { name: 'rpulse', args: () => `${JSON.stringify(v('ds'))}|${v('rnote').tick}|${radioTick}`, run: () => radioPulse(undefined, native as never, v('ds')), asks: 0 },
     { name: 'brun', args: () => `${v('rpulse').tick}|${posKey()}`, run: () => barRun(undefined, native as never), asks: 0 },
     { name: 'qv', args: () => `${v('rpulse').tick}|${posKey()}`, run: () => queueView(undefined, native as never), asks: 0 },
     { name: 'rpfacts', args: () => `${v('rpulse').tick}|${posKey()}`, run: () => radioPageFacts(undefined, native as never), asks: 0 },
@@ -88,7 +88,8 @@ const playing = async (): Promise<void> => { await radioPlayAudio(undefined, nat
 describe('C1 the model is the contract', () => {
   test('each resource of the graph is declared with the arguments the model uses', () => {
     const declared = (name: string): string => (new RegExp(`resource ${name} = [a-zA-Z]+\\(([^)]*)\\)`).exec(contracts)?.[1] ?? 'MISSING').replace(/\s/g, '');
-    expect(declared('rpulse')).toBe('ds.seq,rnote.tick,radioTick');
+    expect(declared('rpulse')).toBe('ds,rnote.tick,radioTick');
+    expect(/resource ds = deckState\(tick=radioTick\)/.test(contracts)).toBe(true);
     expect(declared('brun')).toBe('rpulse.tick,posKey'); expect(declared('qv')).toBe('rpulse.tick,posKey'); expect(declared('rpfacts')).toBe('rpulse.tick,posKey');
     expect(declared('rp')).toBe('rpfacts,bf,cvraw'); expect(declared('lnc')).toBe('lq,pg.count,rpfacts.at');
     expect(declared('bi')).toContain('bf,brun,cvraw');

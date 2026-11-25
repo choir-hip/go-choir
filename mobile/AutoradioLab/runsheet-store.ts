@@ -18,6 +18,7 @@
 //  7. A transition whose neighbours changed is hidden or removed by the phone: it is shown stale (`isStale`), never changed by the phone.
 import { now as clockNow } from './clock.ts';
 import { boundedOp, mintId, refTooLong } from './runsheet-entries.ts';
+import { refusedHere } from './refused.ts';
 import {
   apply, decodeOp, decodeSheet, emptySheet, onAirEntry, ahead as aheadOf, heard as heardOf, entryById,
   type At, type By, type Entry, type Op, type Outcome, type Result, type Sheet, type State,
@@ -39,7 +40,8 @@ export type PostOutcome =
   | { kind: 'answered'; results: Result[] }          // the route answered 200: every op of the batch is now the server's
   | { kind: 'answeredEpoch'; results: Result[]; epoch: number }   // 200 with a `sheet_epoch`: the server's sheet was repaired; take it
   | { kind: 'notYet'; retryAfterMs?: number }       // 404, 501, 5xx, 429: the ops stay pending; `retryAfterMs` is the route's Retry-After when it sent one
-  | { kind: 'offline' };                             // no network or the computer did not answer: the ops stay pending
+  | { kind: 'offline' }                              // no network or the computer did not answer: the ops stay pending
+  | { kind: 'unsent' };                              // Exact refused the request (its answer was let go: refused.ts), so it was never made: no failure, nothing backs off, the ops stay pending
 
 export interface Poster {
   /** `world` is the account generation the batch was made under: a poster refuses (offline) when the account has moved on. */
@@ -72,6 +74,7 @@ export function routePoster(request: Requester, generation?: () => number): Post
       if (typeof b.sheet_epoch === 'number' && b.sheet_epoch > 0) return { kind: 'answeredEpoch', results, epoch: b.sheet_epoch };
       return { kind: 'answered', results };
     } catch (e) {
+      if (refusedHere(e)) return { kind: 'unsent' };
       const st = statusOf(e);
       if (st === 400 || st === 413 || st === 422) return { kind: 'refused', status: st };
       if (st !== undefined) { const ra = (e as { retryAfter?: unknown })?.retryAfter; return typeof ra === 'number' && ra > 0 ? { kind: 'notYet', retryAfterMs: Math.min(ra, 3600) * 1000 } : { kind: 'notYet' }; }     // 404, 5xx, 429, 403, 408, 409 and the rest: the route may take it later (its Retry-After, when it said)
@@ -88,7 +91,7 @@ export function routePoster(request: Requester, generation?: () => number): Post
       for (const op of ops) {
         const one = await send([op], epoch, world);
         if (one.kind === 'refused') { results.push({ op_id: op.op_id, applied: false, dropped: 'refused_' + one.status, version: 0 }); continue; }
-        if (one.kind === 'notYet' || one.kind === 'offline') return one;
+        if (one.kind === 'notYet' || one.kind === 'offline' || one.kind === 'unsent') return one;
         results.push(...one.results);
         if (one.kind === 'answeredEpoch') epochOut = one.epoch;
       }
@@ -110,8 +113,6 @@ export type StoreOptions = {
   storage?: Storage; poster?: Poster;
   /** The clock for `ended.at`. The reducer reads none. */
   now?: () => Date;
-  /** How long to wait before sending pending ops again after the route did not take them (ms). */
-  retryAfterMs?: number;
   /** Where the phone's home and temp folders are, so a path of the phone is never posted. */
   home?: string; tmp?: string;
   /** The account generation now; an op from the desk made under an older one is refused. */
@@ -127,7 +128,6 @@ export class RunSheetStore {
   onChange?: () => void;
   poster?: Poster;
   now: () => Date;
-  retryAfterMs: number;
   /** Tests wait on this. */
   flushTask?: Promise<void>;
   /** A post is in flight now. */
@@ -137,7 +137,6 @@ export class RunSheetStore {
   private holdUntil = 0; private postFails = 0;
   /** How many pending air reports the bound dropped (the phone was offline for days): for the log and the Account screen to say. */
   lostPending = 0;
-  private retry?: ReturnType<typeof setTimeout>;
   private home: string; private tmp: string;
   private generation: () => number;
   /** Moves at every wipe: an answer that was awaited across a wipe belongs to the account that left and is dropped. */
@@ -146,7 +145,7 @@ export class RunSheetStore {
   private writes = 0;
 
   constructor(o: StoreOptions = {}) {
-    this.storage = o.storage; this.poster = o.poster; this.now = o.now ?? clockNow; this.retryAfterMs = o.retryAfterMs ?? 30000;
+    this.storage = o.storage; this.poster = o.poster; this.now = o.now ?? clockNow;
     this.home = o.home ?? ''; this.tmp = o.tmp ?? ''; this.generation = o.generation ?? (() => 0);
   }
 
@@ -273,7 +272,8 @@ export class RunSheetStore {
 
   // ---- posting ----
 
-  /** Send what is pending. One post at a time; in order; the batch is at most 64 ops and 256 KB. */
+  /** Send what is pending. One post at a time; in order; the batch is at most 64 ops and 256 KB. No timer sends again: a timer belongs to the answer that arms it, and Exact refuses it once that answer is let go
+   *  or has replied (docs/problems/radio-restore-empty-after-let-go-2026-11-25.md). The radio's pulse says `write` while `canPost`, and `radioWrite` (a mutation) flushes. */
   flush(force = false): void {
     if (this.flushing || !this.poster || this.pending.length === 0) return;
     if (!force && this.held()) return;
@@ -291,7 +291,8 @@ export class RunSheetStore {
           else if (out.kind === 'answeredEpoch') {
             this.postFails = 0; this.holdUntil = 0; this.acknowledge(batch, out.results);
             if (out.epoch !== this.sheetEpoch) await this.takeServerSheet(poster, out.epoch);
-          } else { this.failedPost(out.kind === 'notYet' ? out.retryAfterMs : undefined); this.scheduleRetry(); return; }
+          } else if (out.kind === 'unsent') return;
+          else { this.failedPost(out.kind === 'notYet' ? out.retryAfterMs : undefined); return; }
         }
       } finally { this.flushing = false; }
     })();
@@ -361,10 +362,6 @@ export class RunSheetStore {
     const t = this.now().getTime();
     this.holdUntil = t > 0 ? t + wait : 0;
   }
-  private scheduleRetry(): void {
-    if (this.retry) clearTimeout(this.retry);
-    this.retry = setTimeout(() => this.flush(), Math.max(0, this.retryAfterMs));
-  }
 
   // ---- sign-out ----
 
@@ -377,8 +374,6 @@ export class RunSheetStore {
   /** Sign-out: the sheet, its heard tail, the pending ops and the epoch go, in memory and on disk; the poster goes too, so nothing of this
    *  account is posted afterwards. */
   async wipe(): Promise<void> {
-    if (this.retry) clearTimeout(this.retry);
-    this.retry = undefined;
     this.era += 1;
     this.sheet = emptySheet(); this.pending = []; this.sheetEpoch = 0; this.poster = undefined;
     const storage = this.storage;
@@ -409,8 +404,11 @@ export class RunSheetStore {
   /** The sheet and the pending ops from the last launch. Nothing plays. An entry that was on air when the app died is closed as `failed`, by
    *  the phone, with the reason "interrupted by a restart": a crash is not the listener leaving (`left` is sign-out) and not a choice, so it
    *  settles nothing (the server records no verdict for `failed`). A crash restart never resumes work. */
-  async restore(recover?: (store: RunSheetStore) => void): Promise<void> {
-    const text = await this.storage?.read();
+  async restore(recover?: (store: RunSheetStore) => void): Promise<void> { this.restoreFrom(await this.readSaved(), recover); }
+  /** The saved text, or undefined when there is none. A read that fails throws: a refused read is not an empty sheet, and the caller restores again later. */
+  readSaved(): Promise<string | undefined> { return this.storage ? this.storage.read() : Promise.resolve(undefined); }
+  /** The restore on text already read. Synchronous, so a caller decides after its reads whether to take it (radio-runtime.ts `restore`). It posts nothing: the pulse calls for the post. */
+  restoreFrom(text: string | undefined, recover?: (store: RunSheetStore) => void): void {
     if (!text) return;
     let saved: { sheet: unknown; pending: unknown[]; epoch?: number };
     let sheet: Sheet; const pending: Op[] = []; let lost = 0;
@@ -423,7 +421,6 @@ export class RunSheetStore {
     const e = onAirEntry(this.sheet);
     if (e) this.airedEnded(e.id, 'skipped', 'failed', NO_REPORT, 'interrupted by a restart'); else void this.save();
     this.onChange?.();
-    this.flush();
   }
 }
 

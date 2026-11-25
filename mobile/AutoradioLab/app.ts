@@ -150,7 +150,7 @@ const sources: Sources = {
   barInfo: ([facts, run, entries, _tick]) => barInfo({ ...(facts as object), ...(run as object) }, entries),
   // The radio (radio-bridge.ts over radio-runtime.ts): the run sheet, its writer and the deck's journal are shared code; the deck is native (the one `deck` op).
   heartbeat: ([_tick]) => heartbeat(),
-  radioPulse: ([_deck, _note, _tick], _s, storage, native) => radioBridge.radioPulse(storage as never, native as never),
+  radioPulse: ([deck, _note, _tick], _s, storage, native) => radioBridge.radioPulse(storage as never, native as never, deck),
   radioWrite: ([_tick], _s, storage, native) => radioBridge.radioWrite(storage as never, native as never),
   radioHold: ([_tick], _s, storage, native) => radioBridge.radioHold(storage as never, native as never),
   queueView: ([_t, _pos], _s, storage, native) => radioBridge.queueView(storage as never, native as never),

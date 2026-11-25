@@ -103,7 +103,7 @@ describe('keep listening', () => {
   test('P5b after Keep listening the clip is no longer a clip, on the run sheet\'s view and on the episode page, and the screens are told', async () => {
     const { native } = await setup();
     const r = await getRadio(undefined, native as never, false);
-    await r.rt.peek(true);
+    await r.rt.peek();
     expect(r.rt.view().clip).toBe(true); expect((await podcastNow(undefined, native as never)).clip).toBe(true);
     const tick = r.tick;
     await radioPlayAudio(undefined, native as never, 'keep', EP, '', '', '', 0);

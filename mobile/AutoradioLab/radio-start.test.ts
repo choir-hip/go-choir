@@ -23,6 +23,7 @@ describe('the radio starts in a launch nothing but the page drives', () => {
     forgetOnboarding();                        // nor the first run's memory of another test file
     await wipeRadio(undefined);                // another test file may have made the module's one radio
     adoptNative(native as never, 'test');
+    await radioHold(undefined, native as never);             // the sheet is read first (a hold): until then the pulse says hold for that alone
     const before = await radioPulse(undefined, native as never);
     expect(before.hold).toBe(false);
     ready = true;
@@ -41,6 +42,8 @@ describe('the first run is over in shared code before native has been told', () 
     ready = false; calls.length = 0;
     const store = { fs: { readFile: async (p: string) => { if (p.endsWith('onboarding.json')) return new TextEncoder().encode(JSON.stringify({ offered: true, skipped: false, setupDone: false, micRefused: false, topicsStarted: false, editionDone: true, voicePicked: 0 })); throw Object.assign(new Error('absent'), { code: 'ENOENT' }); }, atomicWriteFile: async () => undefined, rm: async () => undefined } };
     adoptNative(native as never, 'test');
+    await radioHold(undefined, native as never);             // the sheet is read first (a hold; no sheet here): until then the pulse says hold for that alone
+    forgetOnboarding(); calls.length = 0;                     // what that hold read of the first run is not what this test is about
     const due = await radioPulse(store as never, native as never);
     expect(due.hold).toBe(true);
     expect(calls.some((c) => c.op === 'obMirror')).toBe(true);             // native is told too
