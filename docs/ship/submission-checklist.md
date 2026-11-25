@@ -102,3 +102,16 @@ Auth: `Authorization: Bearer <ES256 JWT>`, kid 52R8S94U54, aud `appstoreconnect-
 - Owner: reviewer user name and password; review contact name and phone; the read and publication of the new privacy policy; the App Privacy web form; price and availability; DSA trader status; content-rights affirmation; the unrestricted-web-access and violence answers; the 1.2 decision on takes (report action, cut, or accept); upload the build; press Submit.
 - Lead: land lane `support-page` (the `/support` page, orange) and check it on choir.news; the store build with the final lanes; every screenshot; seeing on the build the "Written by AI" label, lock-screen play, Voice and models, and the deletion path; confirming the review account's delete page; keeping sign-up open or telling Apple during review; Node B steps of the demo-account runbook.
 - Blocked: support URL (lane `support-page` until it lands); privacy policy URL (publication); any build field (no build).
+# Submission checkpoint — 2026-11-25
+
+App Store Connect readback: Autoradio 1.0 was `WAITING_FOR_REVIEW` with build
+`473021` attached and `VALID`. This is the signed IPA from `16f04df4d`;
+the owner submitted it. The support URL `https://choir.news/support` and
+privacy policy `https://choir.news/privacy` are live. The original 30
+screenshots are processed across five iPhone sets. The 30 stylized replacements
+are in iCloud Drive → Choir Reports → `Autoradio Screenshots 2026-11-25-stylized`;
+Apple refused edits while the version was in review. Keep the original sets
+until the next editable opportunity. Verify the status again before acting.
+
+The planning and draft metadata below are a historical record, not the
+current submission state.

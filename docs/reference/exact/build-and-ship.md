@@ -6,6 +6,30 @@ Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against 
 **[src]**, **[doc]**, **[unrun]**. The runnable example is
 [`mobile/exact-spike/`](../../../mobile/exact-spike/README.md).
 
+## Which packages Autoradio actually builds (2026-11-25)
+
+`mobile/AutoradioLab` is the shipped app. Its `package.json` has exactly two
+Exact package dependencies:
+
+| Package or module | Role |
+|---|---|
+| `@choir/autoradio` (`mobile/exact-package`) | Live native bridge for the deck, voice, and remaining platform seams. `gen-exact-interface.py` generates the tracked top-level `exact.json` from the interface fragments; `sync-exact-package.sh` stages the Swift and generates `apple/exact.json`. Those manifests are two parts of one package. |
+| `@exact/passkeys` (pinned Exact checkout, `packages/passkeys`) | Live passkey implementation. The signed store IPA links it separately from the Autoradio bridge. |
+| `AutoradioLab/modules/apple` | The app's own native module and staged model sources/static libraries. Not a second Autoradio package. |
+| `mobile/AutoradioKit/Package.swift` | SwiftPM source and test harness. `AutoradioKit` and `AutoradioModels` supply the native Swift compiled in the Exact build and the local replay/model tools. They are targets of one Swift package, not extra Exact apps. |
+| `mobile/exact-spike` | The historical audio-seam example above. Its app and `spikepkg` are separate from the shipping dependency graph. No CI or staging command invokes it; archive the example or point the reference above at its historical revision when pruning it. |
+
+There are distinct test layers: Bun tests for shared logic; `.test.contract`
+flows for Exact UI and wiring; SwiftPM tests for native behavior; shared
+fixtures where Go and Exact have to agree on a wire contract; and real hosted
+proofs for signing, devices and audio. Start the prune with the standalone
+spike, then check each suspected native interface name against the generated
+manifest, Contracts, the `nativeLater`/operation dispatch and the build
+scripts. For a test, identify the live caller or invariant and the surviving
+test that actually proves it before deleting it. A Swift XCTest and an Exact
+test with similar names may exercise different seams. Run the affected
+suites and read back the store archive whenever pruning changes packaging.
+
 ## What each kind of edit costs to see
 
 Marks per cell: **D** documented by Exact (its words, not our run), **M**
