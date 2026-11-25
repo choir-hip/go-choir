@@ -164,12 +164,12 @@ members Autoradio
   state fvPaused = true
   state fvPos = 0
   state fvDur = 0
-  derive fvHold = fvPaused or pl.playing
+  derive fvHold = fvPaused or bi.playing
   // For the bar (lane 1): what the media is, while it plays, so the bar can show it and offer "Resume the radio".
   derive fvMediaTitle = (fvInfo.kind == "audio" or fvInfo.kind == "video") and not fvPaused ? fvInfo.name : ""
   action fvPlayed
     fvPaused = false
-    if pl.playing
+    if bi.playing
       send racct = radioPlayPause()
   action fvPausedEv
     fvPaused = true

@@ -122,9 +122,9 @@ public final class AutoradioModule: ExactPackage {
         owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s); ConsoleFile.write("AUTORADIO \(s)") }
         #endif
         runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barFacts", "radioView"]) } }
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barFacts"], now: true) } }
-        // The listener path: sign-in (Keychain), the front page, the real stages.
+        // The voice's key store: the Keychain items shared code keeps the sign-in under (app-signin.ts); the voice turn reads the key from here to call the server. "Signed in" is shared code's (account-state.ts).
         let appKeys: KeyStore = KeychainKeyStore()
         #if targetEnvironment(simulator)
         // Real-data proof only (compiled out of device builds): a `proof-key` file in Documents becomes the stored key, then is deleted.
@@ -133,7 +133,7 @@ public final class AutoradioModule: ExactPackage {
         }
         #endif
         choir = ChoirApp(runtime: runtime, keys: appKeys)
-        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barFacts", "radioView"]) } }
         // The spine's objects.
         // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
         Task { @MainActor in
@@ -166,7 +166,7 @@ public final class AutoradioModule: ExactPackage {
         registerImported()
         registerTalk()
         registerRetrieval()     // the voice turn's ask for passages (shared code answers) and the embedding model's ops
-        Task { [choir] in await choir?.refresh() }
+        Task { await ChoirEnvironment.shared.warm() }      // the voice turn's own client (it calls the server from native code): its computer id is asked once if a key is stored
     }
 
     /// Register a handler for a source or send name.
@@ -217,9 +217,6 @@ public final class AutoradioModule: ExactPackage {
         let state = { [unowned self] in self.json(self.runtime.snapshot()) }
         if let h = handlers[name] { h(args, reply); return }
         switch name {
-        case "choirAuth": reply(json(choir.authView()))
-        case "choirPlayer": reply(json(choir.playerView()))
-        case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
         case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing
         default: reply(["error": "NotSupportedError"])
         }

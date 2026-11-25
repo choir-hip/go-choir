@@ -47,9 +47,9 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
 //   the Exact secrets `choir.key` (the bearer key, a secret), `choir.key-id` (not a secret; revokes the key at sign-out) and `choir.computer-id`
 //   (not a secret; the listener's computer), granted `secret.keep` in app.ts. On Apple they are Keychain generic passwords, service = the app's
 //   bundle id, account = the name, AfterFirstUnlockThisDeviceOnly, not synchronizable (docs/reference/exact/passkeys.md).
-// They are read through the store an answer is handed (`bindStore`, called at every answer in app.ts). The key is read for
-// each request, held in no state, and is in no log, no error and no page. A key another account signs in with is simply read next time.
-// The reads go through one small interface (`get`, `session`, `keystate`: the credential source). Production's is `storeSource`; a test, or a host with no store,
+// They are read from the store an answer is handed ONCE, at the answer's start (`bindStore`, called at every answer in app.ts), and kept as a value the writers here keep true
+// (`noteKeptKey`, `forgetCredentials`); a read after an `await` never goes to a store. The key is in no log, no error and no page. A key another account signs in with is read by the next answer.
+// The reads go through one small interface (`get`, `session`, `keystate`: the credential source). Production's is `keptSource`; a test, or a host with no store,
 // binds the same interface with `bindNative`.
 // Where the key goes: only to ORIGIN (a path that is not a plain absolute path on it is refused before the key is read).
 // There is no refresh: the key is long-lived and the server answers 401 when it is revoked (the Swift client did the same).
@@ -79,39 +79,49 @@ const SECRET_OF: Record<Account, string> = { 'api-key': KEY_NAME, 'key-id': KEY_
 /** The secret store of an answer (`Store` in app.contract.d.ts), as far as the credentials use it. */
 export type SecretStore = { get(name: string): string | null; set(name: string, value: string): void; forget(name: string): void };
 let secrets: SecretStore | undefined;
-/** app.ts hands the store over at every answer. */
-export function bindStore(store: SecretStore | null | undefined): void { if (store) secrets = store; }
+/** What the store held when an answer last read it: the three items, or `null` when the read threw (a Keychain locked before the first unlock: unreadable, never "absent"). */
+export type Kept = { key: string | null; keyId: string | null; computerId: string | null } | null;
+let kept: Kept | undefined;
+/** Moves when shared code keeps a new key (adoptKey): a native answer about the key that began before it is not about this key. */
+let keyEpoch = 0;
+export const keptKeyEpoch = (): number => keyEpoch;
+const readKept = (store: SecretStore): Kept => {
+  const one = (name: string): string | null => { const v = store.get(name); return typeof v === 'string' && v !== '' ? v : null; };
+  try { return { key: one(KEY_NAME), keyId: one(KEY_ID_NAME), computerId: one(COMPUTER_ID_NAME) }; } catch { return null; }
+};
+/** app.ts hands the store over at the start of every answer, while it is that answer's own store: the three items are read ONCE, here, and every read after it (after an `await`, in a turn where Exact
+ * binds no store and `get` answers null) uses this value, never the store (docs/problems/phone-native-round-trips-and-two-key-readers-2026-11-25.md: a null read was "absent", which settles to a sign-out). */
+export function bindStore(store: SecretStore | null | undefined): void { if (store) { secrets = store; kept = readKept(store); } }
+/** The items as the last answer read them, kept true by the writers below; undefined when no store was ever bound. */
+export const keptItems = (): Kept | undefined => kept;
+/** Shared code kept a key (app-signin.ts keepKey, through adoptKey): the reads after it see it. */
+export function noteKeptKey(key: string, keyId: string): void { kept = { key, keyId, computerId: null }; keyEpoch += 1; }
 /** Remove the three items (sign-out and a refused key): the native half deletes the same Keychain items, and this makes the store's own state agree. */
 export function forgetCredentials(): void {
-  if (!secrets) return;
-  for (const name of [KEY_NAME, KEY_ID_NAME, COMPUTER_ID_NAME]) { try { secrets.forget(name); } catch { /* absent */ } }
+  if (secrets) for (const name of [KEY_NAME, KEY_ID_NAME, COMPUTER_ID_NAME]) { try { secrets.forget(name); } catch { /* absent, or no store in this turn: the native half deleted the item */ } }
+  if (kept !== undefined) kept = { key: null, keyId: null, computerId: null };
 }
 
-/** The credential source over the secret store: the three ops the readers below use. A read that throws (a Keychain that is locked before the first unlock) is `unreadable`, never "absent". */
-function storeSource(store: SecretStore): NativeReader {
-  const read = (name: string): string | null => { const v = store.get(name); return typeof v === 'string' && v !== '' ? v : null; };
+/** The credential source over what the answer read at its start: the three ops the readers below use. */
+function keptSource(k: Kept): NativeReader {
   return {
     available: true,
     later: async (r: { op: string; account?: Account }) => {
-      try {
-        if (r.op === 'keystate') return { state: read(KEY_NAME) === null ? 'absent' : 'present' };
-        if (r.op === 'session') { const k = read(KEY_NAME); return k === null ? { found: false } : { found: true, value: k, computerId: read(COMPUTER_ID_NAME) ?? '' }; }
-        if (r.op === 'get' && r.account && r.account in SECRET_OF) { const v = read(SECRET_OF[r.account]); return v === null ? { found: false } : { found: true, value: v }; }
-        return { found: false };
-      } catch { return r.op === 'keystate' ? { state: 'unreadable' } : { found: false }; }
+      if (k === null) return r.op === 'keystate' ? { state: 'unreadable' } : { found: false };
+      if (r.op === 'keystate') return { state: k.key === null ? 'absent' : 'present' };
+      if (r.op === 'session') return k.key === null ? { found: false } : { found: true, value: k.key, computerId: k.computerId ?? '' };
+      if (r.op === 'get' && r.account && r.account in SECRET_OF) { const v = r.account === 'api-key' ? k.key : r.account === 'key-id' ? k.keyId : k.computerId; return v === null ? { found: false } : { found: true, value: v }; }
+      return { found: false };
     },
   };
 }
-/** Where the key is read from: the store of the last answer, else what `bindNative` was given (tests). */
-const credentials = (): NativeReader | undefined => (secrets ? storeSource(secrets) : reader);
+/** Where the key is read from: what the last answer read from its store, else what `bindNative` was given (tests). */
+const credentials = (): NativeReader | undefined => (kept !== undefined ? keptSource(kept) : reader);
 
 /** The data module's one native module, as far as this file uses it. */
 export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }): Promise<unknown> };
 /** app.ts hands over the module's native handle at every answer (adoptNative). */
 let reader: NativeReader | undefined;
-/** True once ANY app-module op has answered (a key read, a key state): the native module is there, and the host decision (host.ts) can no longer say "no native". */
-let nativeAnswered = false;
-export const nativeHasAnswered = (): boolean => nativeAnswered;
 export function bindNative(native: NativeReader | null | undefined): void { reader = native ?? undefined; }
 let lastNative = '';
 /** What app.ts calls at every answer: a handle that is missing or not available NEVER replaces a usable one (the first real run showed Settings, Files and Mail signed out for a whole
@@ -173,7 +183,6 @@ async function keptSession(): Promise<{ key: string; computerId: string } | null
   const source = credentials();
   if (!source || source.available === false) return null;
   const r = (await source.later({ op: 'session' })) as { found?: boolean; value?: unknown; computerId?: unknown } | null;
-  if (r && typeof r === 'object' && typeof r.found === 'boolean') nativeAnswered = true;
   const flags = `found=${String(r?.found)} key=${typeof r?.value === 'string' && r.value !== ''} computer=${typeof r?.computerId === 'string' && r.computerId !== ''}`;   // flags only, never a value
   if (flags !== lastFlags) { lastFlags = flags; console.log(`api: session ${flags}`); }              // on change only: one line per request is volume
   if (!r || r.found !== true || typeof r.value !== 'string' || r.value === '') return null;
@@ -397,7 +406,6 @@ export async function keyState(): Promise<{ state: KeyState; digest: string; err
   if (!source || source.available === false) return none;
   try {
     const r = (await source.later({ op: 'keystate' })) as { state?: unknown; found?: unknown } | null;
-    if (r && typeof r.state === 'string') nativeAnswered = true;
     const st = r && (r.state === 'present' || r.state === 'absent' || r.state === 'unreadable') ? r.state : r && r.found === true ? 'present' : 'unreadable';
     if (st !== 'present') return { state: st, digest: '' };
     const sess = await keptSession();
@@ -408,7 +416,7 @@ export async function keyState(): Promise<{ state: KeyState; digest: string; err
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: the generation and the rest as a fresh process has them. */
-export function resetSeam(): void { resetSession(); bootSent = null; uncertainAbort = false; generation = 0; reader = undefined; secrets = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
+export function resetSeam(): void { resetSession(); bootSent = null; uncertainAbort = false; generation = 0; reader = undefined; secrets = undefined; kept = undefined; keyEpoch = 0; blockedDigest = null; lastNative = ''; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

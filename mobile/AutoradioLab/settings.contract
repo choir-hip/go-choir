@@ -12,7 +12,7 @@
 //   settings-choice-<setting>-<option>, settings-wake, settings-update, settings-computer-*, settings-learned-reset, settings-learned-row,
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
-use Theme, ThemeList, ThemeCard, ThemeExtras, LearnedInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
+use Theme, ThemeList, ThemeCard, ThemeExtras, LearnedInfo, ThemeCards, VoiceProfile from "@choir/autoradio"
 use SettingsAccount, AboutBuild, SettingsComputer, AboutInfo from "./settings-types.contract"
 use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
@@ -314,7 +314,7 @@ component AccountScreen
     th: Theme
     tx: ThemeExtras
     acctInfo: SettingsAccount
-    au: ChoirAuth
+    isSignedIn: bool
     signOutNote: string
     refreshAccount: action
     signOut: action
@@ -325,7 +325,7 @@ component AccountScreen
       ScreenTitle(label="Account and devices", back=true)
       PlainList(testId="settings-card-account")
         column width="100%" box-sizing="border-box" padding="6px 0"
-          FactRow(label="Signed in", value=(acs.state == "rejected" ? "No" : au.signedIn ? "Yes" : (acs.state == "locked" or acs.state == "unknown" ? "Not known" : "No")), mono=false, testId="settings-account-signed")
+          FactRow(label="Signed in", value=(acs.state == "rejected" ? "No" : isSignedIn ? "Yes" : (acs.state == "locked" or acs.state == "unknown" ? "Not known" : "No")), mono=false, testId="settings-account-signed")
           Hairline()
           FactRow(label="You are", value=(acctInfo.handle == "" ? "Not shown yet" : acctInfo.handle), mono=false, testId="settings-account-handle")
           Hairline()
@@ -357,7 +357,7 @@ component AccountScreen
           button press=signIn testId="settings-signin" appearance="none"
             ActionButton(label="Sign in", testId="settings-signin-box", primary=false, danger=false)
         // one Sign in and one Sign out, worded so they do not contradict: a refused phone signs in again, or clears its stored key (sign-out is local first: it removes the key and this phone's data)
-        if au.signedIn
+        if isSignedIn
           button press=signOut testId="settings-signout" appearance="none"
             ActionButton(label=(acs.state == "rejected" ? "Clear this phone" : "Sign out"), testId="settings-signout-box", primary=false, danger=true)
 

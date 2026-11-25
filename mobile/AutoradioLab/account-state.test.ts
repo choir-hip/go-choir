@@ -6,7 +6,7 @@
 //  X6 the words are the app's one list (the page words say "Sign in", not "Sign in again", unless the app knows a key existed).
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { accountState, WORDS } from './account-state.ts';
-import { resetHost, hostMode } from './host.ts';
+import { hostCaps } from './host.ts';
 import { adoptNative, resetSeam, authedJSON } from './api.ts';
 import { settleAccount, resetSettled, STAMP_FILE } from './account.ts';
 
@@ -18,7 +18,7 @@ const handle = () => ({ available: true, later: async (r: { op: string }) => {
   return { ok: true };
 } }) as never;
 const realFetch = globalThis.fetch;
-beforeEach(() => { resetSeam(); resetHost(); reply = { state: 'absent' }; adoptNative(handle(), 'x'); });
+beforeEach(() => { resetSeam(); reply = { state: 'absent' }; adoptNative(handle(), 'x'); });
 afterEach(() => { globalThis.fetch = realFetch; });
 
 describe('accountState on a build that cannot make passkeys', () => {
@@ -129,14 +129,12 @@ describe('round 8b (seat 2)', () => {
       for (const top of ['mail:', 'files:', 'radio:']) states.add((await accountState(tick, top, false, 'native')).state);
     expect([...states]).toEqual(['signedIn']);
   });
-  test('H1 a native handle that arrives after the host wait corrects the state with no navigation: noSignIn, then signedIn', async () => {
-    resetSeam(); resetHost();
-    expect(await hostMode(20, 10)).toBe('none');
+  test('H1 a host with no module and no store is noSignIn; a credential source bound later corrects the state with no navigation', async () => {
+    resetSeam();
+    expect(hostCaps(null).mode).toBe('none');
     expect((await accountState('', 'radio:', 'none')).state).toBe('noSignIn');
     reply = { state: 'present' }; adoptNative(handle(), 'late');
-    const m = await hostMode(20, 10);                                       // the contract asks the host fact again on its tick; a decided none re-checks without waiting
-    expect(m).toBe('native');
-    expect((await accountState('', 'radio:', m)).state).toBe('signedIn');
+    expect((await accountState('', 'radio:', 'none')).state).toBe('signedIn');
   });
   test('F1 a refusal seen by a page shows the card at once: the 401 is recorded, and the next answer of the card is rejected with the action', async () => {
     reply = { state: 'present' };
@@ -161,13 +159,6 @@ describe('round 8b (seat 2)', () => {
 });
 
 describe('follow-up 2 (seat 2 on d237ff989)', () => {
-  const lateHandle = (ms: number) => ({ available: true, later: async (r: { op: string }) => { await new Promise((res) => setTimeout(res, ms)); return r.op === 'keystate' ? { state: 'present' } : { ok: true }; } }) as never;
-  test('H2 a bridge that answers on a macrotask (a real round trip) still wins the re-probe after "none" was decided', async () => {
-    resetSeam(); resetHost();
-    expect(await hostMode(20, 10)).toBe('none');
-    adoptNative(lateHandle(30), 'slow');
-    expect(await hostMode(20, 400)).toBe('native');                 // the decided-none re-check has its own budget; it was 0 and lost to any real round trip
-  });
   test('Z1 the rejected digest is cleared by a later 200 with the same key, and the card is signedIn', async () => {
     reply = { state: 'present' };
     globalThis.fetch = (async () => new Response('no', { status: 401 })) as never;

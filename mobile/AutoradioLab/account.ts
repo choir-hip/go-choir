@@ -39,7 +39,7 @@ import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
 import { wipeSteer, STEER_FILE } from './steer.ts';
 import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { accountGeneration, announceGeneration, authedJSON, authedURL, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, HTTPError, type KeyState } from './api.ts';
+import { keptItems, keptKeyEpoch, noteKeptKey, accountGeneration, announceGeneration, authedJSON, authedURL, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, HTTPError, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
 import { keepKey, KEY_ID_NAME, KEY_NAME } from './app-signin.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
@@ -246,7 +246,12 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
 // ---- sign-out
 
 /** The key a sign-out is about to let go of, read before native clears it. */
-const heldKey = (store: Store | undefined): HeldKey | null => { const key = store?.get(KEY_NAME) ?? ''; return key ? { key, id: store?.get(KEY_ID_NAME) ?? '' } : null; };
+// Read from what the answer read at its start (api.ts keptItems), never from the store after an await; a test that binds no store reads the one it passes.
+const heldKey = (store: Store | undefined): HeldKey | null => {
+  const k = keptItems();
+  if (k !== undefined) return k && k.key ? { key: k.key, id: k.keyId ?? '' } : null;
+  const key = store?.get(KEY_NAME) ?? ''; return key ? { key, id: store?.get(KEY_ID_NAME) ?? '' } : null;
+};
 export type HeldKey = { key: string; id: string };
 /** How the server revoke ended: revoked (or the server says it is gone), not reached (the id is kept to retry), or no id could be found. */
 export type RevokeResult = 'revoked' | 'pending' | 'noid';
@@ -322,7 +327,8 @@ export async function retryPendingRevoke(storage: Storage | undefined, store: St
   let reachable = true;
   for (const p of list) {
     if (!reachable) break;
-    if ((store.get(KEY_ID_NAME) ?? '') === p.id) { gone.add(p.id); continue; }          // the key is still this phone's: the sign-out did not happen, and this must not end it
+    const k = keptItems();
+    if (((k !== undefined ? k?.keyId : store.get(KEY_ID_NAME)) ?? '') === p.id) { gone.add(p.id); continue; }          // the key is still this phone's: the sign-out did not happen, and this must not end it
     try { await authedJSON(`/auth/api-keys/${encodeURIComponent(p.id)}`, { method: 'DELETE', timeoutMs }); gone.add(p.id); }
     catch (e) {
       if (e instanceof HTTPError && (e.status === 404 || e.status === 403)) answered.add(p.id);
@@ -376,9 +382,12 @@ async function signOutInner(
   try { nativeDone = native.later({ op: 'signOut', gen: accountGeneration(), keyId: held?.id || undefined }); } catch { nativeDone = Promise.resolve({ done: false }); }
   const wipes = opts.wipes ?? DATA_WIPES;
   // A native call that outlives the deadline keeps its continuation: if it answers done:true later, the shared stores are wiped then and the marker goes.
+  const epoch = keptKeyEpoch();
   nativeDone.then(async (r) => {
     if (!late || !r || (r as { done?: unknown }).done !== true) return;
-    if ((await keyState()).state === 'present') return;                          // a sign-in finished inside the window: its key and stores are its own
+    if (keptKeyEpoch() !== epoch) return;                                        // a sign-in finished inside the window (adoptKey): its key and stores are its own
+    if (keptItems() === undefined && (await keyState()).state === 'present') return;   // no store bound (a host that reads the key through its module): ask it
+    forgetCredentials();                                                         // native deleted the Keychain items (done: the key does not remain): the reads here agree
     await sharedWipeThen(storage, store, async () => { if (storage && (await readText(storage, PENDING_FILE)) !== token) return; await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); });
     // The key was let go of late: the server revoke is made now, with the key that was held, and its id forgotten only when the server has answered.
     if (held && (await (opts.revoke ?? revokeDirect)(held)) === 'revoked' && held.id) await dropPending(storage, held.id);
@@ -456,5 +465,6 @@ export function resetSettled(): void { settledValue = null; settling = null; uns
 /** Keep the key a sign-in made and have the account reconciled again at the next answer: the new key may be another account's (the old one was refused), and `settleAccount` runs once per launch otherwise, so the old account's stored data would be read under the new key. `reconcile` then sees a stamp that is not this key's and wipes. */
 export function adoptKey(store: { set(n: string, v: string): void; forget(n: string): void }, key: string, keyId: string): void {
   keepKey(store, key, keyId);
+  noteKeptKey(key, keyId);
   resetSettled();
 }

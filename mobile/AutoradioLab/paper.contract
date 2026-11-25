@@ -5,7 +5,7 @@
 // items, faces, colours and depth come from the theme. The page has views (owner QA round 1, 2026-11-15): Front page, My edition, then one per category; `paperView` (state, kept for the session) says which, and
 // the article stack reads the answer's routes, so a story swipes through the list of the view it was opened from.
 // testIds: page-title, paper-section-front, paper-section-mine, paper-section-<id>, paper-mine-from, paper-edit-edition, paper-choose-topics, paper-mine-note, paper-band-<id>, paper-story-<route>, paper-play-<route>, paper-status.
-use Theme, ChoirAuth from "@choir/autoradio"
+use Theme from "@choir/autoradio"
 use PaperFront, PaperBand, PaperItem from "./paper-types.contract"
 use Card, CardFill, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge, dyn from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
@@ -183,7 +183,7 @@ component ViewChip
 component PaperPage
   inject
     th: Theme
-    au: ChoirAuth
+    isSignedIn: bool
     openPage: action
     pfront: PaperFront
     paperView: string
@@ -245,7 +245,7 @@ component PaperPage
           // Not set up yet: "Make it yours" (voice setup and the edition topics) until the listener has done it or skipped it. Not on My edition: that
           // view already says it in its own paragraph with its own action (two prompts for one thing was one too many).
           // one prompt line at most: the sign-in line first; the edition line once the reader is signed in or has put the sign-in line away
-          if pfront.viewId == "front" and au.signedIn
+          if pfront.viewId == "front" and isSignedIn
             FirstRunCard()
           // nothing to read, or it failed: a line of plain words and one action
           if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"

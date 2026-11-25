@@ -13,6 +13,9 @@
 # 2026-11-24 (native passkeys, on main's 5741): 48 files, 5648 lines, 26 names, -93 lines and -1 file: CredentialReader.swift deleted; ChoirSignIn.swift lost the device flow's begin, poll and forget; the sign-in ops left ModelsEntry.swift; the sign-out ops and the legacy-key retire were added. Signing in is shared code (AutoradioLab/app-signin.ts). Set by hand.
 # 2026-11-24 (exact-rest-a, rebased onto main's native passkeys; regenerated with --update): 39 files, 4564 lines, 22 names. Down 9 files, 1084 lines and 4 names from main's 48 files, 5648 lines, 26 names: the run sheet's Swift types (RunSheet, RunSheetEntries, RadioPage, StretchCandidates) replaced by what shared code pushes (voice-facts.ts), PodcastClips, DJQueueAdapter and the Joins/Podcasts modules, HeldRest, EmbeddedPage, MailReading (mail's "Read this to me" is the shared radio), the dead edition writer, flushNotes, the themes' carry-over read. The Swift Texture editor, notebook and mail seal are NOT moved by this change.
 # 2026-11-24 (exact-editor, on exact-rest-a; regenerated with --update): 34 files, 3403 lines, 18 names. Down 5 files, 1161 lines and 4 names from exact-rest-a's 39, 4564, 22: the Swift Texture editor, its body merge, the notebook store and the page-model source are deleted (the editor and the notebook's topics are shared code: texture-edit.ts, notebook-topics.ts); ReaderFollow.swift keeps what the voice still reads.
-files 34
-lines 3403
-names 18
+# 2026-11-25 (move-b, on the phone-int train f7e16f502; set by hand to the measured count, as --update refuses a rise): the train itself measured 35 files, 3485 lines, 18 names, ABOVE the 34/3403/18 written here,
+# because the ceiling was not regenerated when the train merged its lanes (the merge of voice-models, native-op-log and exact-editor). Move B (one reader of "signed in"): choirAuth, choirPlayer and choirRefresh, the
+# Swift sign-in state behind them and the `keystate` op are deleted: 35 files, 3442 lines, 15 names.
+files 35
+lines 3442
+names 15

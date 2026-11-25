@@ -8,17 +8,7 @@ S, N, B = "string", "number", "bool"
 shapes = {
     "LabState": {"running": B, "paused": B, "phase": S, "level": S, "addressing": S, "transcript": S, "configName": S,
                  "blockIndex": N, "blockCount": N, "blockText": S, "residentMB": N, "thermal": S, "message": S, "micActive": B},
-    # Listener path (Choir client)
-    "ChoirAuth": {"signedIn": B, "baseURL": S, "status": S, "message": S},
-    "ChoirPlayer": {"signedIn": B, "loading": B, "title": S, "passage": S, "playing": B, "talking": B,
-                    "heard": S, "message": S},
 }
-
-def src(n, ans, opts=None, default=None):
-    d = {"source": n, "live": True, "answers": ans}
-    if opts: d["options"] = opts
-    d["substitute"] = {"default": default}
-    return d
 
 def snd(n, opts=None):
     d = {"send": n}
@@ -30,10 +20,6 @@ empty_state = {"running": False, "paused": True, "phase": "playing", "level": "p
                "configName": "", "blockIndex": 0, "blockCount": 0, "blockText": "", "residentMB": 0, "thermal": "nominal",
                "message": "", "micActive": False}
 names = [
-    src("choirAuth", "ChoirAuth", default={"signedIn": False, "baseURL": "", "status": "idle", "message": ""}),
-    src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "",
-        "playing": False, "talking": False, "heard": "", "message": ""}),
-    snd("choirRefresh"),
     snd("choirTalkCancel"), snd("choirHandsFreeToggle"),
     snd("choirAsk", {"text": S, "aim": S}),
 ]

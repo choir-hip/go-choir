@@ -90,7 +90,7 @@ members Autoradio
   action obOffer
     send obm = onboardingAct("offer", acs.state, "", pg.top)
   // Also signed out: the voice setup does not need an account (the old first run opened on it either way); the edition lookup finds nothing and the page is offered once.
-  task obOfferTask when au.signedIn or acs.state == "signedOut" key=acs.state
+  task obOfferTask when isSignedIn or acs.state == "signedOut" key=acs.state
     after(10, obOffer)
   // The voice said "continue" or "done" at the topic screen (a native fact that counts): the same as the Continue button.
   action obFinishAsked

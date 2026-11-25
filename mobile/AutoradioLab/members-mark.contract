@@ -68,7 +68,7 @@ members Autoradio
   // Frames: per frame while the mark moves (any state but idle, a one-shot in its first second, a sign-in or onboarding screen, the
   // galleries), five a second for the idle breath, none under Reduce Motion once the 300 ms cross-fade is over. The mark is not
   // drawn off screen (the page deck) and a backgrounded app has no display link, so neither costs a frame.
-  derive mkHot = (th.reducedMotion == false and (bi.state != "idle" or au.signedIn == false or mkT - mkSince < 1000 or pg.top.startsWith("onboarding"))) or (th.reducedMotion and mkT - mkSince < 400)
+  derive mkHot = (th.reducedMotion == false and (bi.state != "idle" or isSignedIn == false or mkT - mkSince < 1000 or pg.top.startsWith("onboarding"))) or (th.reducedMotion and mkT - mkSince < 400)
   derive mkIdle = th.reducedMotion == false and mkHot == false
   action mkStep
     mkT = performanceNow()

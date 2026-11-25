@@ -94,8 +94,7 @@ component Autoradio
     editAsk
     sendAsk
     // ---- integrator (Choir sign-in, player) ----
-    au
-    pl
+    isSignedIn
     signIn
     cancelSignIn
     closeAuth
@@ -115,7 +114,6 @@ component Autoradio
     signedOutTick
     hc
     noNative
-    refreshRadio
     radioPlay
     playStory
     listen

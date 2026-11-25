@@ -116,9 +116,9 @@ members Autoradio
     mailNoteFor = pg.top
     mailNoteSrc = "ask"
     send mak = mailAsk(pg.top, q)
-    if au.signedIn == false
+    if isSignedIn == false
       gate = "signin"
-    if au.signedIn
+    if isSignedIn
       send acct = choirAsk(text=q, aim=pg.top)
   // Tap a tab: synchronous. The direction is the new tab's side of the old one; the outgoing content leaves at once.
   action mailTab(name: string)

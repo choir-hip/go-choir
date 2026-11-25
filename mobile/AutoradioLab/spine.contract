@@ -9,8 +9,8 @@ use HostCaps from "./host-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
 members Autoradio
-  // Is there a native package? (host.ts: decided once from the native handle, never from what the native set holds). "none" is Android; "" (not decided) and "native" are iOS.
-  resource hc = hostCaps(false, lockTick) as shape HostCaps else empty()
+  // Is there a native module? (host.ts: Exact's `native.available`, no call and no timer). "none" is Android and the web; "" (not answered yet) and "native" are iOS.
+  resource hc = hostCaps() as shape HostCaps else empty()
   derive noNative = hc.mode == "none"
   // The open pages are shared code's on every host (pages.ts, kept in storage.fs): the deck, the launcher and the voice's front page all read this one set. The voice is handed the pages as facts
   // (pages.ts `mirror`, the native op `pagesMirror`). A native request to open a page (an episode opened from the playing bar: `pageRequest`) is answered by `pageRequested`, which opens it here
@@ -94,11 +94,11 @@ members Autoradio
   // A typed ask is aimed at the page in front: its address goes with the turn (`aim`). The engine side reads `args["aim"]` of
   // choirAsk and puts the page's address, title and text in the Autoradio desk request.
   // An ask goes out only for a signed-in person (asking needs an account, and the account's creation carried the agreement to outside AI companies); otherwise the sign-in sheet opens and the text stays in the field.
-  derive askGate = au.signedIn ? "" : "signin"
+  derive askGate = isSignedIn ? "" : "signin"
   action sendAsk
-    if au.signedIn == false
+    if isSignedIn == false
       gate = "signin"
-    if au.signedIn
+    if isSignedIn
       send acct = choirAsk(text=ask, aim=pg.top)
       ask = ""
   // The microphone button is the hands-free switch (owner, 2026-11-15): ON, the microphone is open and turns open and close by

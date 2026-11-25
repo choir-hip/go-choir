@@ -20,22 +20,6 @@
       "message": "string",
       "micActive": "bool"
     },
-    "ChoirAuth": {
-      "signedIn": "bool",
-      "baseURL": "string",
-      "status": "string",
-      "message": "string"
-    },
-    "ChoirPlayer": {
-      "signedIn": "bool",
-      "loading": "bool",
-      "title": "string",
-      "passage": "string",
-      "playing": "bool",
-      "talking": "bool",
-      "heard": "string",
-      "message": "string"
-    },
     "RadioInfo": {
       "title": "string",
       "source": "string",
@@ -70,7 +54,6 @@
       "blockCount": "number",
       "blockFraction": "number",
       "running": "bool",
-      "signedIn": "bool",
       "playing": "bool",
       "title": "string",
       "message": "string",
@@ -631,40 +614,6 @@
   },
   "names": [
     {
-      "source": "choirAuth",
-      "live": true,
-      "answers": "ChoirAuth",
-      "substitute": {
-        "default": {
-          "signedIn": false,
-          "baseURL": "",
-          "status": "idle",
-          "message": ""
-        }
-      }
-    },
-    {
-      "source": "choirPlayer",
-      "live": true,
-      "answers": "ChoirPlayer",
-      "substitute": {
-        "default": {
-          "signedIn": false,
-          "loading": false,
-          "title": "",
-          "passage": "",
-          "playing": false,
-          "talking": false,
-          "heard": "",
-          "message": ""
-        }
-      }
-    },
-    {
-      "send": "choirRefresh",
-      "answers": "LabState"
-    },
-    {
       "send": "choirTalkCancel",
       "answers": "LabState"
     },
@@ -693,7 +642,6 @@
           "blockCount": 0,
           "blockFraction": 0,
           "running": false,
-          "signedIn": false,
           "playing": false,
           "title": "",
           "message": "",

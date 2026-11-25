@@ -3,7 +3,7 @@
 //  F2 after F1 the launch's account work still happens: a sign-out the last launch left unfinished is finished by a live answer (the let-go run's refused `keystate` is not taken as the answer).
 //  F3 a settle that rejects is not kept: the next call reconciles again and answers.
 //  F4 no timer is armed in the settle chain at launch (the pending-revoke retry is bounded by each request's own `exactTimeout`).
-//  F5 hostMode: the answer that starts the probe is let go; another answer waiting on it gets "native" or "none", not the let-go answer's error.
+//  F5 the host fact: decided in the answer from Exact's `native.available`, with no call and no timer, so an answer let go leaves nothing for another to wait on (host.ts; the probe it replaced is gone).
 //
 // The model of Exact (pinned prelude.js): every step of an async function resumes under the answer that called it (`__exact_async_context`, :230-241), which AsyncLocalStorage reproduces in Bun;
 // a timer armed by an answer that was let go throws (`timerOwner`, :1352-1366); letting an answer go clears its timers and rejects the fetches (here: native calls) it waits on (`__exact_forget`, :997-1002).
@@ -12,7 +12,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { answer } from './app.ts';
 import { resetSettled, settleAccount, PENDING_FILE, STAMP_FILE } from './account.ts';
 import { resetDemoLeftovers } from './demo-leftovers.ts';
-import { hostMode, resetHost } from './host.ts';
+import { hostCaps } from './host.ts';
 import { adoptNative, resetSeam } from './api.ts';
 
 type Call = { id: string; letGo: boolean; timers: Set<ReturnType<typeof setTimeout>>; waiting: Set<(e: Error) => void> };
@@ -33,7 +33,7 @@ beforeEach(() => {
     c?.timers.add(t);
     return t;
   }) as typeof setTimeout;
-  resetSeam(); resetSettled(); resetHost(); resetDemoLeftovers();
+  resetSeam(); resetSettled(); resetDemoLeftovers();
 });
 afterEach(() => { for (const c of made) { for (const t of c.timers) realClear(t); c.timers.clear(); } made = []; globalThis.setTimeout = realSet; });      // an answer's timers end with it
 
@@ -134,17 +134,16 @@ describe('the launch settle under answer ownership', () => {
   });
 });
 
-describe('the host probe under answer ownership', () => {
-  test('F5 the answer that starts the probe is let go: another answer waiting on it still gets a decision', async () => {
-    const hang = { available: true, later: () => { const c = calls.getStore(); return new Promise((_res, rej) => { c?.waiting.add(rej); }); } };
-    adoptNative(hang as never, 'x');
+describe('the host fact under answer ownership', () => {
+  test('F5 an answer let go mid-launch leaves no probe behind: every answer decides the host fact itself, with no call and no timer', async () => {
+    let asked = 0;
+    const hang = { available: true, later: () => { asked += 1; const c = calls.getStore(); return new Promise((_res, rej) => { c?.waiting.add(rej); }); } };
     const a = newCall('A'); const b = newCall('B');
-    const first = asCall(a, () => hostMode(120, 20)).catch((e: Error) => e.message);
-    await tick(2);
-    const second = asCall(b, () => hostMode(120, 20)).then((m) => m, (e: Error) => `error: ${e.message}`);
+    const first = asCall(a, async () => hostCaps(hang));
     letGo(a);
-    await first;
-    expect(await second).toBe('none');
+    expect(await first).toEqual({ mode: 'native' });
+    expect(await asCall(b, async () => hostCaps(hang))).toEqual({ mode: 'native' });
+    expect(asked).toBe(0); expect(armedBy).toEqual([]);
   });
 });
 

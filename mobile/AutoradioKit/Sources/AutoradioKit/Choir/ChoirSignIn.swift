@@ -1,47 +1,22 @@
 import Foundation
 
-// What is left of the Choir sign-in in Swift: the local sign-out (the server revoke is shared code's, account.ts, made after this) and `revokeNow`, which only LegacyKey uses. Signing in and creating an account are shared code (AutoradioLab/app-signin.ts): the platform's passkey screen
-// through Exact's @exact/passkeys, the finish request, and the key kept as the Exact secrets `choir.key`, `choir.key-id` and `choir.computer-id` (the Keychain, service = the bundle id). This type
-// reads and deletes those same Keychain items for the voice code and for sign-out (KeychainKeyStore, KeyAccount); it writes the key at no time. The key goes to the KeyStore and nowhere else.
-
-public struct ChoirAuthState: Codable, Sendable, Equatable {
-    public var signedIn = false
-    public var baseURL = ChoirEnvironment.defaultBaseURL
-    public var status = "idle"
-    public var message = ""
-    public init() {}
-}
-
+// What is left of the Choir sign-in in Swift: the native half of sign-out and `revokeNow`, which only LegacyKey uses. Signing in, creating an account and knowing whether the phone is signed in are
+// shared code (AutoradioLab/app-signin.ts, account-state.ts): the key is kept as the Exact secrets `choir.key`, `choir.key-id` and `choir.computer-id` (the Keychain, service = the bundle id).
+// This type deletes those same Keychain items at sign-out, natively, because the delete must happen whether or not the shared answer that asked still has its store bound when native answers
+// (account.ts `forgetCredentials` then makes Exact's store agree); it reads and writes the key at no time. The voice turn reads it through ChoirEnvironment.keys (it calls the server from native code).
 public final class ChoirSignIn: @unchecked Sendable {
-    private let lock = NSLock()
-    private var state = ChoirAuthState()
     private let env: ChoirEnvironment
     public var baseURL: String
-    public var onChange: (@Sendable () -> Void)?
 
     public init(env: ChoirEnvironment = .shared, baseURL: String = ChoirEnvironment.defaultBaseURL) {
         self.env = env; self.baseURL = baseURL
-        state.signedIn = env.keys.get(KeyAccount.apiKey) != nil
-        state.baseURL = baseURL
     }
-
-    public var current: ChoirAuthState {
-        lock.lock(); defer { lock.unlock() }
-        var s = state
-        s.signedIn = env.keys.get(KeyAccount.apiKey) != nil
-        s.baseURL = baseURL
-        return s
-    }
-    private func update(_ f: (inout ChoirAuthState) -> Void) { lock.lock(); f(&state); lock.unlock(); onChange?() }
-
-    private func client() -> ChoirClient { env.client(baseURL: baseURL) }
 
     /// Clear the phone at once: the key, then the account's state (AccountWipe); the server revoke is shared code's (account.ts `revokeDirect`, made after this with the key it read before).
     public func signOut() async {
         env.keys.delete(KeyAccount.apiKey); env.keys.delete(KeyAccount.keyID); env.keys.delete(KeyAccount.computerID)
         await onSignOut?()           // everything of the account on the phone goes (AccountWipe)
         env.log?.emit(.note("choir: signed out"))
-        update { $0.status = "idle"; $0.message = "signed out" }
     }
     func revokeNow(keyID id: String, key: String) async -> Bool {
         let held = ChoirClient(baseURL: baseURL, keys: InMemoryKeyStore([KeyAccount.apiKey: key]), session: env.session, log: nil, trustedOrigin: URL(string: env.configuredBaseURL))

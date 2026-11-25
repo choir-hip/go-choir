@@ -13,7 +13,7 @@
 //   ob-summary, ob-mic-ask, ob-mic-level, ob-heard, ob-mic-next, ob-route, ob-hearing-yes, ob-hearing-no, ob-topics-start,
 //   ob-topics, ob-explainer, edit-edition, edit-edition-done, edit-edition-link, edit-edition-retry, edit-edition-leave, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-wait-slot, ob-writing-line,
 //   ob-edition-retry, ob-continue-anyway, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
-use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
+use Theme, Onboarding from "@choir/autoradio"
 use Card, PaperCard, PageScroll, Btn, ListGroup, RowRule, SelectMark, PageHeader, dyn from "./ui.contract"
 use Mark from "./mark.contract"
 use VoiceStep from "./voice.contract"
@@ -303,7 +303,7 @@ component EditEditionLink
 component OnboardingPage
   inject
     th: Theme
-    au: ChoirAuth
+    isSignedIn: bool
     dl: ModelsView
     ob: Onboarding
     openPage: action
@@ -342,7 +342,7 @@ component OnboardingPage
 
       // ---- welcome (and skipped): what is about to happen, plainly
       // Signed out the first run is only the radio's voice: the one download a listener needs, with its size, its host and one press (models.ts); the radio plays the paper meanwhile, in the iPhone's voice.
-      if (ob.step == "welcome" or ob.step == "skipped") and au.signedIn == false
+      if (ob.step == "welcome" or ob.step == "skipped") and isSignedIn == false
         Card(level=1, testId="ob-welcome-voice", minHeight=0)
           column padding=18 gap=12
             text "The radio reads the paper to you. Until its own voice is on this phone it uses the iPhone's built-in voice." font-size="-exact-body" line-height=1.45 font-family=th.fontText
@@ -352,7 +352,7 @@ component OnboardingPage
             text "To ask the radio, or to make your edition, sign in or make an account." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         button press=obSkip testId="ob-skip" appearance="none" padding=10
           text "Not now" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
-      if (ob.step == "welcome" or ob.step == "skipped") and au.signedIn
+      if (ob.step == "welcome" or ob.step == "skipped") and isSignedIn
         Card(level=1, testId="ob-welcome", minHeight=0)
           column padding=18 gap=12
             text "Autoradio can arrange your paper around what you care about: you pick topics, or just tell it." font-size="-exact-body" line-height=1.45 font-family=th.fontText

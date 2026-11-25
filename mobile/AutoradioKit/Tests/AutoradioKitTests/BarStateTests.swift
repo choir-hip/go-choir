@@ -8,7 +8,7 @@ final class BarStateTests: XCTestCase {
         s.blockIndex = idx; s.blockCount = count; s.transcript = text; return s
     }
     private func player(playing: Bool, title: String = "T", message: String = "") -> ChoirPlayerView {
-        var p = ChoirPlayerView(); p.signedIn = true; p.playing = playing; p.title = title; p.message = message; return p
+        var p = ChoirPlayerView(); p.playing = playing; p.title = title; p.message = message; return p
     }
     private let t0 = Date(timeIntervalSince1970: 1000)
 

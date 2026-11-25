@@ -7,8 +7,9 @@ import { APP_ID } from './app-id.ts';
 import { passkeySupport } from './app-signin.ts';
 
 export { WORDS };
-export type AccountView = { state: string; message: string; action: string };
-const view = (state: string, message: string, action: string): AccountView => ({ state, message, action });
+/** `signedIn`: the key is stored and readable (a key the server refused is still stored). The ONE "signed in" the contracts read (account.contract `signedIn`); there is no native reader of it. */
+export type AccountView = { state: string; message: string; action: string; signedIn: boolean };
+const view = (state: string, message: string, action: string, signedIn = false): AccountView => ({ state, message, action, signedIn });
 
 /** `_tick`: changes when something that can change the answer happened (a sign-in or sign-out, a page change, the app returning to the front, a request the server refused). `host`: the host fact
  * the contract already holds (`hc.mode`, decided in host.ts after its bounded wait): "none" (no native package: no sign-in here), "native", or "" (not decided yet). This source never waits itself
@@ -22,6 +23,6 @@ export async function accountState(_tick: string, top = '', host = '', platform 
   const noPasskey = (): AccountView => view('noPasskey', support === 'android' ? WORDS.noPasskeyAndroid : WORDS.noPasskeyApp, '');
   if (k.state === 'absent') return support ? noPasskey() : view('signedOut', top === 'radio:' ? WORDS.radioSignedOut : WORDS.signedOut, 'signIn');
   if (k.state === 'unreadable') return view('locked', WORDS.locked, '');
-  if (rejectedDigest() !== '' && rejectedDigest() === k.digest) return support ? noPasskey() : view('rejected', WORDS.rejected, 'signIn');
-  return view('signedIn', '', '');
+  if (rejectedDigest() !== '' && rejectedDigest() === k.digest) return support ? { ...noPasskey(), signedIn: true } : view('rejected', WORDS.rejected, 'signIn', true);
+  return view('signedIn', '', '', true);
 }

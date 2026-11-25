@@ -1,15 +1,10 @@
-// The integrator's members of the root: the Choir sign-in and the player (the voice lab page, its stages, parameters, trace and
+// The integrator's members of the root: the Choir sign-in, the account and the radio's sends (the voice lab page, its stages, parameters, trace and
 // audio switch are gone: owner, 2026-11-19, "get rid of lab pages").
-use choirAuth, choirPlayer from "@choir/autoradio"
-use choirRefresh from "@choir/autoradio"
-use ChoirAuth, ChoirPlayer from "@choir/autoradio"
 use LabState, SettingsAck from "@choir/autoradio"
 use SignOutResult, SignInView, SignInEnd from "./account-types.contract"
 use AccountView, HostPage from "./account-state-types.contract"
 
 members Autoradio
-  resource au = choirAuth() as shape ChoirAuth else empty()
-  resource pl = choirPlayer() as shape ChoirPlayer else empty()
   // What the app says about the account (account-state.ts): asked again when anything that can change it happened: a sign-in or a sign-out, a page change, the app coming back to the front (the phone
   // unlocked: a key that could not be read yet is read again). An unreadable key is "locked", never "signed out".
   resource hpg = exactPage() as shape HostPage else empty()
@@ -17,10 +12,10 @@ members Autoradio
   state lockTick = 0
   action bumpLock
     lockTick = lockTick + 1
-  // Also re-asked (with the host fact, spine.contract hc) while the answer is open: an unreadable key, a handle not bound yet, a host with no sign-in: a native module that arrives late corrects the state without a page change.
+  // Also re-asked while the answer is open: an unreadable key (locked before the first unlock) or no store bound yet corrects itself without a page change.
   task rereadLocked when acs.state == "locked" or acs.state == "unknown" key=lockTick
     after(3000, bumpLock)
-  // A host with no native package: a module may still load late, so the re-probe runs a few times (15 s) and then stops; the decision is then final for this launch.
+  // A host with no sign-in (no secret store answered yet, no native module): asked again a few times (15 s), then left.
   state lateTicks = 0
   action bumpLate
     lateTicks = lateTicks + 1
@@ -35,7 +30,7 @@ members Autoradio
   task rereadRejected when acs.state == "rejected" and rejTicks < 5 key=rejTicks
     after(3000, bumpRej)
   // A page that hit a refusal (the server said 401 to this phone's key: api.ts records it) shows its error; the account sentence is asked again at that moment, not at the next tick, so the card
-  // appears when it happens. Any error asks again (the answer is the same when the error was only the network): one keystate read.
+  // appears when it happens. Any error asks again (the answer is the same when the error was only the network): no store read, the key the answer read at its start.
   task noteRefusal when mbx.status == "error" or fsList.status == "error" or acctInfo.status == "failed" or (pg.top == "notebook:" and nb.docState == "offline") key=pg.top
     after(100, bumpLock)
   // And the other way: a page that works again clears a stale "rejected" at once (api.ts clears the digest on any 200), not at the next 3 s read.
@@ -44,7 +39,9 @@ members Autoradio
   // The card is the first thing in the bar's own column (bar.contract), so it sits whole above the bar at every bar height (the "On:" line, the now-playing strip, the answer card). Not over the code screen, a
   // sheet, the launcher, the bar's field or any keyboard (exactViewport: the one general keyboard fact), the content controls, the reader's aim row or a web layer.
   derive bannerOn = acs.message != "" and not authOpen and not siv.pending and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
-  resource acs = accountState(`${au.signedIn}|${siv.phase}|${siv.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${hpg.platform}`, pg.top, hc.mode, hpg.platform) as shape AccountView else empty()
+  resource acs = accountState(`${siv.phase}|${siv.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${hpg.platform}`, pg.top, hc.mode, hpg.platform) as shape AccountView else empty()
+  // The one "signed in" (the key is stored and readable), read from shared code's account answer: no native reader (docs/problems/phone-native-round-trips-and-two-key-readers-2026-11-25.md).
+  derive isSignedIn = acs.signedIn
   mutation acct as shape LabState
   mutation racct as shape SettingsAck refreshes rpulse
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
@@ -113,7 +110,6 @@ members Autoradio
     authEmail = ""
     authCode = ""
     send signedOpen = signInOpen()
-    send acct = choirRefresh()
   // Only a finished attempt puts the screen away: not while any sign-in call is still answering (a stale "done" before a new attempt starts must not close the new screen).
   task authDone when siv.phase == "done" and authOpen and not pending(siv) and not pending(signedRun) and not pending(signedOpen) key=sivTick
     after(400, finishAuth)
@@ -133,8 +129,6 @@ members Autoradio
     // A signed-out phone starts the next sign-in from idle: the last attempt's done is not carried across.
     send signedOpen = signInOpen()
     sivTick = sivTick + 1
-  action refreshRadio
-    send acct = choirRefresh()
   action radioPlay
     send racct = radioPlayPause()
   // The page that names the story passes its title with the route: a story that is not in the radio's list still has a name on the lock screen.
