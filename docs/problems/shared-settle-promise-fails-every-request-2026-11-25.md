@@ -243,3 +243,62 @@ settle; the gate's header and the reference page now say exactly what the
 scan sees; the radio entries are marked `radio`, not examined; `isRefusal`
 is pinned to the runtime's refusal messages (R1, R2); a refused boot
 announcement clears `bootSent` only if it is still its own.
+
+## Structural assessment after three review rounds (2026-11-25)
+
+Three rounds without convergence (CLAUDE.md, "Before you change anything",
+7). What the rounds have in common: every new finding came from a deadline
+or a refusal path layered over a NATIVE step of the settle. Round 1: a
+timer raced against the pending-revoke retry, and the native `keystate`
+call refused under a let-go answer. Round 2: a native key read that threw
+was taken as "locked" and published. Round 3: the 10 s waiter deadline was
+shorter than the native step's own 30 s deadline, so it released sources
+into a settle still wiping; and a store read that threw went the same way
+as round 2's. The settle's correctness is spread over each native step's
+three outcomes (answered, refused, timed out) times what each answer does
+with them; each round closed one cell of that table and the next review
+found another. The fix is to have fewer native steps, not more handling of
+them.
+
+Lane move-b (in flight) replaces the native key read with one read of
+Exact's secret store per answer (a synchronous read of the snapshot the
+host takes before boot, pinned `docs/reference.md:6418-6436`), which has no
+deadline, no let-go refusal and one documented throw (`InvalidAccessError`
+for a presence-locked secret, `docs/contract-for-agents.md:1555`). That
+removes the key-read cell class. What the settle still does natively, and
+why:
+
+- `signOut` and `wipe` on the app module (`nativeOf`, 30 s deadline): only
+  native code can delete the Keychain items the Swift sign-in wrote and
+  clear the Swift stores (AccountWipe) that still hold the voice's and the
+  not-yet-moved pages' data. They go away as those stores move to shared
+  code (the Exact rule in CLAUDE.md, "Product").
+- `generation` (`announceGeneration`, 5 s deadline, inside `wipeAll`): the
+  floor that makes native refuse a write stamped before the wipe; needed
+  while native code writes account data.
+- The native halves of the shared wipes (the picks mirror, onboarding,
+  consent and learn-voice copies, mail's key, the radio deck stop and the
+  run sheet's `settlePending`): each mirrors shared state into a native copy
+  that the voice reads; they shrink with the same move.
+- The pending-revoke retry is network, not native (each request has its own
+  `exactTimeout`).
+
+The lead's round-3 decisions follow that frame: no waiter deadline (the
+wait is bounded by these steps' own deadlines and the contract's retry);
+every run that does not publish fails, so the contract asks again; a store
+read that throws other than `InvalidAccessError` is a key-read error.
+
+## Round 3 changes
+
+- `awaitSettled` has no deadline; `app.ts`'s "No source answers before the
+  launch's account settle" holds. D1 now shows a slow settle keeps sources
+  waiting and that they answer after it publishes, after its wipe.
+- A superseded or reset run fails instead of answering (S1: failed on
+  `678bc4b41`, passes).
+- `api.ts` `storeSource`: a `store.get` throw other than
+  `InvalidAccessError` is thrown on, so `keyState` reports an error and the
+  settle does not publish; `InvalidAccessError` stays "locked" (K3: failed
+  on `678bc4b41`, passes).
+- The key-error counter resets when a run fails for another reason.
+- R2 fails when `mobile/.exact-src` is missing, and is skipped by name in CI
+  (which has no Exact checkout).

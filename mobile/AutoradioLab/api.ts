@@ -97,18 +97,20 @@ export function forgetCredentials(): void {
   for (const name of [KEY_NAME, KEY_ID_NAME, COMPUTER_ID_NAME]) { try { secrets.forget(name); } catch { /* absent */ } }
 }
 
-/** The credential source over the secret store: the three ops the readers below use. A read that throws (a Keychain that is locked before the first unlock) is `unreadable`, never "absent". */
+/** The credential source over the secret store: the three ops the readers below use. A key read refused as locked (InvalidAccessError) is `unreadable`, never "absent"; any other throw is an error. */
 function storeSource(store: SecretStore): NativeReader {
   const read = (name: string): string | null => { const v = store.get(name); return typeof v === 'string' && v !== '' ? v : null; };
   return {
     available: true,
     later: async (r: { op: string; account?: Account }) => {
       try {
-        if (r.op === 'keystate') return { state: read(KEY_NAME) === null ? 'absent' : 'present' };
+        // The key's state. `store.get` throws InvalidAccessError only for a secret kept behind the person's presence while it is locked (pinned docs/contract-for-agents.md:1555), which is "locked".
+        // Any other throw (no store, a host error) is not a fact about the key: it is thrown on, and keyState answers it as an error (the settle then does not publish, account.ts).
+        if (r.op === 'keystate') { try { return { state: read(KEY_NAME) === null ? 'absent' : 'present' }; } catch (e) { if ((e as { name?: string } | null)?.name === 'InvalidAccessError') return { state: 'unreadable' }; throw e; } }
         if (r.op === 'session') { const k = read(KEY_NAME); return k === null ? { found: false } : { found: true, value: k, computerId: read(COMPUTER_ID_NAME) ?? '' }; }
         if (r.op === 'get' && r.account && r.account in SECRET_OF) { const v = read(SECRET_OF[r.account]); return v === null ? { found: false } : { found: true, value: v }; }
         return { found: false };
-      } catch { return r.op === 'keystate' ? { state: 'unreadable' } : { found: false }; }
+      } catch (e) { if (r.op === 'keystate') throw e; return { found: false }; }
     },
   };
 }
