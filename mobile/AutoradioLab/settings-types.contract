@@ -54,3 +54,7 @@ shape AboutInfo
   app: string
   base: string
   signedIn: bool
+
+// Exact's clock (`exactTime`): the date is epochAtZero plus performanceNow() (Activity's ages).
+shape SettingsTime
+  epochAtZero: number

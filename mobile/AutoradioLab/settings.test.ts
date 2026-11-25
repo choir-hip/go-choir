@@ -52,7 +52,7 @@ describe('settingsAccount', () => {
 import { aboutPage } from './settings.ts';
 describe('aboutPage', () => {
   test('the version is the platform fact, dev without one; the server is the one origin', () => {
-    expect(aboutPage({ appVersion: '1.4' }, true)).toEqual({ app: '1.4', base: ORIGIN, signedIn: true });
-    expect(aboutPage({ appVersion: '' }, false)).toEqual({ app: 'dev', base: ORIGIN, signedIn: false });
+    expect(aboutPage(true, '1.4')).toEqual({ app: '1.4', base: ORIGIN, signedIn: true });
+    expect(aboutPage(false, '')).toEqual({ app: 'dev', base: ORIGIN, signedIn: false });
   });
 });

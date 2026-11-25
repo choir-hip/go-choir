@@ -135,11 +135,11 @@ const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // The About page's build rows (about.ts): the app's baked-in commit and the server's, from /health.
   aboutBuild: ([tick]) => aboutBuild({ tick }),
-  // Settings: the Computer page (computer.ts), Activity (activity.ts) and About's app rows over the native facts (`settingsFacts`).
+  // Settings: the Computer page (computer.ts), Activity (activity.ts) over the native facts (`settingsFacts`: the voice's turns) and Exact's date, and About's app row (the build's version).
   settingsComputer: ([signedIn, tick]) => settingsComputer({ signedIn, tick }),
   computerAct: ([op, signedIn]) => computerAct(op, signedIn),
-  activityPage: ([facts, signedIn, tick, state, updateAvailable, checked]) => activityPage(facts, signedIn, tick, state, updateAvailable, checked),
-  aboutPage: ([facts, signedIn]) => aboutPage(facts, signedIn),
+  activityPage: ([facts, signedIn, tick, state, updateAvailable, checked, now]) => activityPage(facts, signedIn, tick, state, updateAvailable, checked, now),
+  aboutPage: ([signedIn]) => aboutPage(signedIn),
   // First run (onboarding.ts): the step machine over the voice side's facts (`voiceSetupFacts`); one send per button.
   onboardingPage: ([voice, tick, top], _s, storage) => onboardingPage(voice, tick, top, onboardingEnv(storage)),
   onboardingAct: ([op, arg, topics, top], _s, storage) => onboardingAct(op, arg, topics, top, onboardingEnv(storage)),

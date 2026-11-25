@@ -10,6 +10,7 @@
 //  A6 an owner-wide key answers `computer_id: ""`: the Keychain's stored computer id fills it (the computer the phone found); a bound id wins.
 // Dropped: the "loading" status and the generation guard (A3 in Swift): a source answers once per ask, so a late answer cannot land.
 
+import { BUILD_INFO } from './build-info.gen.ts';
 import { authedJSON, HTTPError, keptComputerId, ORIGIN, SignedOutError } from './api.ts';
 
 export type SettingsAccount = {
@@ -55,6 +56,6 @@ export async function settingsAccount(args: AccountArgs): Promise<SettingsAccoun
   }
 }
 
-/** The About page's app and server rows: the app's version is a platform fact (the bundle), the server is this build's one origin. */
-export const aboutPage = (f: { appVersion: string }, signedIn: boolean): { app: string; base: string; signedIn: boolean } =>
-  ({ app: f.appVersion === '' ? 'dev' : f.appVersion, base: ORIGIN, signedIn });
+/** The About page's app and server rows: the app's version is what the build wrote (build-info.gen.ts, the bundle's EXACT_VERSION; none is "dev"), the server is this build's one origin. */
+export const aboutPage = (signedIn: boolean, version: string = BUILD_INFO.version ?? ''): { app: string; base: string; signedIn: boolean } =>
+  ({ app: version === '' ? 'dev' : version, base: ORIGIN, signedIn });

@@ -18,6 +18,7 @@
 # Swift sign-in state behind them and the `keystate` op are deleted: 35 files, 3442 lines, 15 names.
 # 2026-11-25 (move-b, move C; checked with --update): 34 files, 3370 lines, 12 names. The round trips through Swift are deleted: mailOpenReview (+Mail.swift), readerAim and readerAimSet,
 # the editionMirror copy, the facts the retrieval ask handed back (all but the run sheet), importedFollow (dead) and the four unused deck* package sends (the deck op stays).
+# 2026-11-25 (move-b, move H): 34 files, 3369 lines, 12 names. settingsFacts no longer carries the clock (Exact's exactTime) or the app's version (the build's EXACT_VERSION, build-info.gen.ts).
 files 34
-lines 3370
+lines 3369
 names 12

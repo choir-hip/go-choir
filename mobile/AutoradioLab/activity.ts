@@ -82,9 +82,9 @@ export async function activityInfo(a: { now: number; signedIn: boolean; radio: I
 
 // ---- the rows the radio's engine and the computer give (native facts in, rows out): the Swift AutoradioModule+Settings `radioTurns` and `nowLines` ----
 
-/** What the native side reports for this page: the clock, the engine's phase and its kept turns (the voice: only native code holds them). */
-export type Facts = { now: number; appVersion: string; radio: { known: boolean; running: boolean; phase: string }; turns: { id: string; outcome: string; transcript: string; configName: string }[] };
-export const noFacts = (): Facts => ({ now: 0, appVersion: '', radio: { known: false, running: false, phase: '' }, turns: [] });
+/** What the native side reports for this page: the engine's phase and its kept turns (the voice: only native code holds them). The date is the contract's (Exact's `exactTime`). */
+export type Facts = { radio: { known: boolean; running: boolean; phase: string }; turns: { id: string; outcome: string; transcript: string; configName: string }[] };
+export const noFacts = (): Facts => ({ radio: { known: false, running: false, phase: '' }, turns: [] });
 
 const blank = (): Item => ({ id: '', kind: '', label: '', detail: '', group: '', ago: '', target: '', title: '', at: 0, unseen: false });
 
@@ -108,7 +108,7 @@ export function liveItems(f: Facts, computer: { state: string; updateAvailable: 
   return out;
 }
 
-/** The source the page binds: the native facts, the signed-in flag and the Refresh tick. */
-export async function activityPage(f: Facts, signedIn: boolean, _tick: number, state: string, updateAvailable: boolean, checked: boolean): Promise<View> {
-  return activityInfo({ now: f.now, signedIn, radio: radioItems(f), live: liveItems(f, checked || state !== '' ? { state, updateAvailable } : null) });
+/** The source the page binds: the native facts, the signed-in flag and the Refresh tick; `now` is the date the contract passes (`with`: Exact's epochAtZero plus performanceNow()). */
+export async function activityPage(f: Facts, signedIn: boolean, _tick: number, state: string, updateAvailable: boolean, checked: boolean, now: number): Promise<View> {
+  return activityInfo({ now, signedIn, radio: radioItems(f), live: liveItems(f, checked || state !== '' ? { state, updateAvailable } : null) });
 }
