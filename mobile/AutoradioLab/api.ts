@@ -69,7 +69,7 @@ export class HTTPError extends Error {
   constructor(status: number, message: string, retryAfter: number | null = null) { super(message); this.name = 'HTTPError'; this.status = status; this.retryAfter = retryAfter; }
 }
 
-export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string> };
+export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string>; timeoutMs?: number };
 
 /** The three accounts the sign-in keeps (their secret names are in app-signin.ts); the credential source answers no other name. */
 export const KEYCHAIN_ACCOUNTS = ['api-key', 'key-id', 'computer-id'] as const;
@@ -284,7 +284,7 @@ async function send(path: string, opts: Authed, accept: string, extra: Record<st
     try { headers['X-Choir-Computer'] = await computerId(key, sess.computerId); } catch (e) { console.log(`api: computer id failed: ${e instanceof Error ? e.name : 'error'}`); throw e; }
   }
   try {
-    return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS, redirect: 'manual', ...extra } as RequestInit), key };
+    return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: opts.timeoutMs ?? AUTHED_TIMEOUT_MS, redirect: 'manual', ...extra } as RequestInit), key };
   } catch (e) {
     const timed = (e as { kind?: string } | null)?.kind === 'Timeout' || (e as { name?: string } | null)?.name === 'TimeoutError';
     throw new Error(scrub(`${timed ? 'timeout' : 'network'}: ${e instanceof Error ? e.message : 'request failed'}`, key));
