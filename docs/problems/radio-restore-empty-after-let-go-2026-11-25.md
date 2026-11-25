@@ -83,9 +83,17 @@ empty sheet. Until it is restored the pulse says `hold` and never `write`
 (the desk is not asked to write onto a sheet not yet read), and a mutation
 that changes the sheet restores first. The pulse reads the deck from the
 contract's `ds` (passed as its argument) and makes no deck call of its own. A
-post Exact refused is not a failed post (no backoff), and the store arms no
+post Exact refused (before it was sent, or in flight: "the answer was let go
+before this reply") is not a failed post (no backoff), and the store arms no
 retry timer: the pulse says `write` while ops are pending and the store is
-not backing off, and `radioWrite` (a mutation) posts.
+not backing off, and `radioWrite` (a mutation) posts. The restore starts no
+post of its own, but an op it applies (the entry left on air closed as
+interrupted) posts as every applied op does, inside the hold. A read that
+keeps failing as the disk's failure is not retried for ever: after a bound
+the file is moved aside and the radio starts empty. One timer remains in the
+store, `settlePending`'s poll at sign-out, which is not safe if its answer is
+let go (the sign-out then rejects before the wipe); it is recorded, not fixed
+here.
 
 ## Remaining error
 

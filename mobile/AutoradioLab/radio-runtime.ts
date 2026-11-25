@@ -394,13 +394,15 @@ export class RadioRuntime {
   /** Restored with nothing read (the bridge removed a sheet file a sign-out left behind). */
   markRestored(): void { this.isRestored = true; }
   /** The sheet from the runtime's own file. Nothing plays. A read Exact refused THROWS and leaves it not restored (the caller restores again later): it is never taken as an empty sheet.
-   *  Two restores may overlap (two mutations): each reads, and only the first to finish takes what it read. */
+   *  Two restores may overlap (two mutations): each reads, and only the first to finish takes what it read. A sign-out while it read (`epoch` moved) drops what it read: the old account's sheet is
+   *  never taken, nor written back after the wipe removed its file. */
   async restore(): Promise<void> {
     if (this.isRestored) return;
+    const epoch = this.epoch;
     let st: DeckState | undefined;
     try { st = await this.deck.state(); } catch (e) { if (refusedHere(e)) throw e; /* no deck: the entry on air is closed as interrupted */ }
     const text = await this.store.readSaved();
-    if (this.isRestored) return;
+    if (this.isRestored || epoch !== this.epoch) return;
     this.isRestored = true;
     this.store.restoreFrom(text, (store) => { if (st) this.recover(store, st); });
     if (st && this.lastSeq > st.acked) { try { await this.deck.ack(this.lastSeq); } catch { /* acknowledged at the next pump */ } }

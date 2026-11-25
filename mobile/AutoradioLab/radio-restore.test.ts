@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { adoptNative, resetSeam } from './api.ts';
 import { forgetOnboarding } from './onboarding.ts';
-import { getRadio, queueAdd, radioHold, radioPulse, resetRadio, SHEET_FILE } from './radio-bridge.ts';
+import { getRadio, queueAdd, radioHold, radioPulse, resetRadio, wipeRadio, SHEET_FILE, SHEET_BAD_FILE, RESTORE_TRIES } from './radio-bridge.ts';
 import { paperStory } from './runsheet-entries.ts';
 import { RunSheetStore, routePoster, type Poster, type PostOutcome, type Storage as RunStorage } from './runsheet-store.ts';
 
@@ -56,10 +56,11 @@ function phone(world: { gate?: Promise<void>; ops: string[]; deck?: unknown }) {
   } };
 }
 
-/** app:/data as Exact gives it to an answer: an answer let go, or one that has replied, is refused. `refuse` refuses the next n sheet reads the same way (the answer's storage wait failed). */
+/** app:/data as Exact gives it to an answer: an answer let go, or one that has replied, is refused. `refuse` refuses the next n sheet reads the same way (the answer's storage wait failed);
+ *  `fail` fails the next n sheet reads as the disk would (not a refusal), with `failCode`; `gate`, when set, holds the next sheet read after its bytes were read (the read began before what the test does next). */
 function disk(seed: Record<string, string> = {}) {
   const files = new Map<string, Uint8Array>(Object.entries(seed).map(([k, v]) => [k, new TextEncoder().encode(v)]));
-  const st = { refuse: 0, reads: 0 };
+  const st = { refuse: 0, fail: 0, failCode: 'failed', reads: 0, gate: undefined as Promise<void> | undefined };
   const guard = (): void => {
     const c = calls.getStore();
     if (c && (c.letGo || c.replied)) throw Object.assign(new Error('storage.readFile() called outside an answer: it was never run. Start storage inside an answer'), { kind: 'Unavailable', code: 'failed' });
@@ -67,11 +68,18 @@ function disk(seed: Record<string, string> = {}) {
   const fs = {
     readFile: async (p: string) => {
       guard();
-      if (p === SHEET_FILE) { st.reads += 1; if (st.refuse > 0) { st.refuse -= 1; throw Object.assign(new Error("the answer's storage wait failed"), { kind: 'Unavailable', code: 'failed' }); } }
-      const b = files.get(p); if (!b) throw Object.assign(new Error('No such file or directory (os error 2)'), { kind: 'Unavailable', code: 'ENOENT' }); return b;
+      if (p === SHEET_FILE) {
+        st.reads += 1;
+        if (st.refuse > 0) { st.refuse -= 1; throw Object.assign(new Error("the answer's storage wait failed"), { kind: 'Unavailable', code: 'failed' }); }
+        if (st.fail > 0) { st.fail -= 1; throw Object.assign(new Error(st.failCode === 'denied' ? 'denied: app:/data/runsheet.json is not granted' : 'Input/output error (os error 5)'), { kind: 'Unavailable', code: st.failCode }); }
+      }
+      const b = files.get(p); if (!b) throw Object.assign(new Error('No such file or directory (os error 2)'), { kind: 'Unavailable', code: 'ENOENT' });
+      if (p === SHEET_FILE && st.gate) { const g = st.gate; st.gate = undefined; await g; guard(); }
+      return b;
     },
     atomicWriteFile: async (p: string, b: Uint8Array) => { guard(); files.set(p, b); },
     rm: async (p: string) => { guard(); files.delete(p); },
+    rename: async (from: string, to: string) => { guard(); const b = files.get(from); if (!b) throw Object.assign(new Error('No such file or directory (os error 2)'), { code: 'ENOENT' }); files.set(to, b); files.delete(from); },
   };
   return { files, st, storage: { fs } as never };
 }
@@ -101,7 +109,7 @@ afterEach(() => { globalThis.setTimeout = realSet; });
 const ahead = async (storage: never, native: never): Promise<number> => (await asCall(newCall(), () => getRadio(storage, native, false))).rt.store.ahead().length;
 
 describe('the run sheet is restored by a mutation, and kept as a value', () => {
-  test('R1 the first pulse is let go while its reads are out: the hold still restores the six entries', async () => {
+  test('R1 the first answer to ask for the radio is a pulse, let go before it answers: the hold still restores the six entries', async () => {
     let open!: () => void; const world = { gate: new Promise<void>((r) => { open = r; }), ops: [] as string[] };
     const native = phone(world); adoptNative(native as never, 'test');
     const d = disk({ [SHEET_FILE]: await sixAhead() });
@@ -189,11 +197,96 @@ describe('the sheet is read before it is changed or written to', () => {
     expect(await ahead(d.storage, native as never)).toBe(7);
   });
 
-  test('R8 no write is due while the sheet is not restored', async () => {
+  test('R8 no write is due while the sheet is not restored, though the writer would ask and ops are pending', async () => {
     const native = phone({ ops: [] }); adoptNative(native as never, 'test');
     const d = disk({ [SHEET_FILE]: await sixAhead() }); d.st.refuse = 1;
     await asCall(newCall(), () => radioHold(d.storage, native as never));
+    const r = await asCall(newCall(), () => getRadio(d.storage, native as never, false));
+    r.writer.openAhead(false);                                                             // the writer would ask the desk now
+    r.rt.store.pending.push({ op_id: 'p-x', by: 'phone', op: 'remove', id: 'x', base_version: 0 } as never);   // and a post would be made
+    expect(r.writer.wouldAsk() || r.rt.store.canPost).toBe(true);
     const p = await asCall(newCall(), () => radioPulse(d.storage, native as never, EMPTY_DS));
     expect(p.write).toBe(false);
+  });
+
+  test('R11 a hold replaced while it reads (a mutation sent again lets the first go): the next restores, and the file is whole', async () => {
+    const native = phone({ ops: [] }); adoptNative(native as never, 'test');
+    const six = await sixAhead();
+    const d = disk({ [SHEET_FILE]: six });
+    let open!: () => void; d.st.gate = new Promise<void>((res) => { open = res; });
+    const a = newCall('hold-A');
+    const first = asCall(a, () => radioHold(d.storage, native as never)).catch(() => undefined);
+    await tick(5);
+    letGo(a); open(); await first;
+    await asCall(newCall('hold-B'), () => radioHold(d.storage, native as never));
+    expect(await ahead(d.storage, native as never)).toBe(6);
+    expect(JSON.parse(new TextDecoder().decode(d.files.get(SHEET_FILE))).sheet.entries.length).toBe(6);
+  });
+});
+
+describe('a sheet that cannot be read does not hold the radio for ever', () => {
+  test('R9 a read that keeps failing (not a refusal): after RESTORE_TRIES holds the file is moved aside whole, the radio is restored empty, and it is said once', async () => {
+    const native = phone({ ops: [] }); adoptNative(native as never, 'test');
+    const six = await sixAhead();
+    const d = disk({ [SHEET_FILE]: six }); d.st.fail = 1000;
+    const lines: string[] = []; const log = console.log; console.log = (...a: unknown[]) => { lines.push(a.join(' ')); };
+    try {
+      for (let i = 0; i < RESTORE_TRIES - 1; i++) await asCall(newCall(), () => radioHold(d.storage, native as never));
+      expect((await asCall(newCall(), () => radioPulse(d.storage, native as never, EMPTY_DS))).hold).toBe(true);
+      await asCall(newCall(), () => radioHold(d.storage, native as never));
+      expect((await asCall(newCall(), () => radioPulse(d.storage, native as never, EMPTY_DS))).hold).toBe(false);
+      for (let i = 0; i < 3; i++) await asCall(newCall(), () => radioHold(d.storage, native as never));
+    } finally { console.log = log; }
+    expect(await ahead(d.storage, native as never)).toBe(0);
+    expect(d.files.has(SHEET_FILE)).toBe(false);
+    expect(new TextDecoder().decode(d.files.get(SHEET_BAD_FILE))).toBe(six);               // moved aside, not deleted
+    expect(d.st.reads).toBe(RESTORE_TRIES);
+    expect(lines.filter((l) => l.startsWith('radio: restore')).length).toBeLessThanOrEqual(2);   // the first failure and the giving up, not one a second
+  });
+
+  test('R9b a refusal that will not pass (denied) gives up at once', async () => {
+    const native = phone({ ops: [] }); adoptNative(native as never, 'test');
+    const d = disk({ [SHEET_FILE]: await sixAhead() }); d.st.fail = 1000; d.st.failCode = 'denied';
+    await asCall(newCall(), () => radioHold(d.storage, native as never));
+    expect((await asCall(newCall(), () => radioPulse(d.storage, native as never, EMPTY_DS))).hold).toBe(false);
+    expect(d.files.has(SHEET_BAD_FILE)).toBe(true);
+  });
+
+  test('R9c an answer let go is not a failed read: refusals do not count toward giving up', async () => {
+    const native = phone({ ops: [] }); adoptNative(native as never, 'test');
+    const d = disk({ [SHEET_FILE]: await sixAhead() }); d.st.refuse = RESTORE_TRIES + 2;
+    for (let i = 0; i < RESTORE_TRIES + 2; i++) await asCall(newCall(), () => radioHold(d.storage, native as never));
+    expect(d.files.has(SHEET_FILE)).toBe(true);
+    await asCall(newCall(), () => radioHold(d.storage, native as never));
+    expect(await ahead(d.storage, native as never)).toBe(6);
+  });
+});
+
+describe('a restore that finishes after a sign-out', () => {
+  test('R10 the launch restore read the old sheet, the sign-out wiped it meanwhile: nothing of it is taken or written back', async () => {
+    const native = phone({ ops: [] }); adoptNative(native as never, 'test');
+    const d = disk({ [SHEET_FILE]: await sixAhead() });
+    let open!: () => void; d.st.gate = new Promise<void>((res) => { open = res; });
+    const h = newCall('hold');
+    const hold = asCall(h, () => radioHold(d.storage, native as never)).catch(() => undefined);
+    await tick(5);
+    const old = await asCall(newCall(), () => getRadio(d.storage, native as never, false));
+    await asCall(newCall('signout'), () => wipeRadio(d.storage));
+    expect(d.files.has(SHEET_FILE)).toBe(false);
+    open(); await hold; await tick(5);
+    expect(old.rt.store.ahead().length).toBe(0);
+    expect(d.files.has(SHEET_FILE)).toBe(false);
+  });
+});
+
+describe('one hold at a time', () => {
+  test('R12 the pulse that calls for a hold marks it: the next pulse, before the hold starts, does not call again; an unsent mark goes stale', async () => {
+    const native = phone({ ops: [] }); adoptNative(native as never, 'test');
+    const d = disk({ [SHEET_FILE]: await sixAhead() });
+    expect((await asCall(newCall(), () => radioPulse(d.storage, native as never, EMPTY_DS))).hold).toBe(true);
+    expect((await asCall(newCall(), () => radioPulse(d.storage, native as never, EMPTY_DS))).hold).toBe(false);
+    const r = await asCall(newCall(), () => getRadio(d.storage, native as never, false));
+    r.holdFlag = { phase: 'due', at: -1_000_000 };                                         // the mark of a pulse long ago whose hold was never sent
+    expect((await asCall(newCall(), () => radioPulse(d.storage, native as never, EMPTY_DS))).hold).toBe(true);
   });
 });

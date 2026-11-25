@@ -53,7 +53,7 @@ describe('the first run is over in shared code before native has been told', () 
     const store2 = { fs: { readFile: async (p: string) => { if (fail) throw new Error('read failed'); return new TextEncoder().encode(JSON.stringify({ offered: true, skipped: false, setupDone: false, micRefused: false, topicsStarted: false, editionDone: true, voicePicked: 0 })); }, atomicWriteFile: async (p: string) => { written.push(p); }, rm: async () => undefined } };
     expect((await radioPulse(store2 as never, native as never)).hold).toBe(false);
     expect(written.filter((p) => p.endsWith('onboarding.json'))).toEqual([]);
-    fail = false;
+    fail = false; at += 3000;                    // the first pulse marked a hold due (no hold ran here): the mark goes stale
     expect((await radioPulse(store2 as never, native as never)).hold).toBe(true);
   });
 });

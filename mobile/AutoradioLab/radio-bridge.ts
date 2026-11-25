@@ -5,6 +5,7 @@
 // so shared code PUSHES the snapshot and native hands back the server's `queue_ops` text, which the pump applies (the retrieval lane's pattern).
 import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, sealingBlocked, signOutUncertain, type NativeReader } from './api.ts';
 import { contractDeck, nativeDeck } from './deck-native.ts';
+import { refusedHere } from './refused.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
 import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH, frontFill } from './radio-writer.ts';
 import { applyTurnOps, resetTurnLog, turnQueueJSON } from './voice-queue.ts';
@@ -31,8 +32,12 @@ import { decodeEntry, type Entry, type Sheet } from './runsheet-model.ts';
 import type { Storage as RunStorage } from './runsheet-store.ts';
 import type { RadioFacts } from './radio-page.ts';
 
-type Store = { fs: { readFile(p: string): Promise<Uint8Array>; atomicWriteFile(p: string, b: Uint8Array): Promise<void>; rm(p: string): Promise<void> } };
+type Store = { fs: { readFile(p: string): Promise<Uint8Array>; atomicWriteFile(p: string, b: Uint8Array): Promise<void>; rm(p: string): Promise<void>; rename?(from: string, to: string): Promise<void> } };
 export const SHEET_FILE = 'app:/data/runsheet.json';
+/** Where a sheet file that cannot be read is moved (kept, never deleted), so the radio can start with an empty sheet. */
+export const SHEET_BAD_FILE = 'app:/data/runsheet.bad.json';
+/** Failed reads of the sheet (not Exact's refusals: those are an answer let go, and pass) before the radio gives the file up and starts empty: one a second while the hold is due. */
+export const RESTORE_TRIES = 5;
 
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -40,7 +45,7 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
 
 /** A mutation in flight (or called for): `due` is a pulse that said the work is due and the mutation not started yet, `running` the mutation's body. Each goes stale (WORK_STALE_MS) so a continuation that never ends cannot stop the radio. */
 type Flag = { phase: 'due' | 'running'; at: number };
-type Radio = { writeFlag?: Flag; holdFlag?: Flag; pulses: number; beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[]; stories: { route: string; title: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
+type Radio = { writeFlag?: Flag; holdFlag?: Flag; restoreFails: number; restoreTold: boolean; pulses: number; beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[]; stories: { route: string; title: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
 
 /** Fresh state (tests; a sign-out wipes through `wipeRadio`). */
@@ -53,6 +58,7 @@ export async function wipeRadio(storage: Store | undefined): Promise<void> {
   finally {
     // The old account's sheet file goes whatever the wipe did (a throw above must not leave it for the next radio to restore); a removal that fails is remembered and tried again before any radio restores.
     if (storage) { try { await storage.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch (e) { if (!/ENOENT|no such file|not found/i.test(String((e as Error)?.message ?? e))) sheetFileStuck = true; } }
+    if (storage) { try { await storage.fs.rm(SHEET_BAD_FILE); } catch { /* absent; a set-aside sheet is the old account's too */ } }
   }
 }
 /** The sheet file could not be removed by the last wipe: the next radio removes it again and starts EMPTY (a sheet that outlived a sign-out is not the next account's). */
@@ -119,7 +125,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  const state: Radio = { pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [], stories: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
+  const state: Radio = { restoreFails: 0, restoreTold: false, pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [], stories: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
     deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
@@ -200,7 +206,26 @@ async function restoreOf(r: Radio, storage: Store | undefined): Promise<boolean>
   if (r.rt.restored) return true;
   if (sheetFileStuck) { try { await storage?.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch { /* still there: not read either */ } r.rt.markRestored(); return true; }
   try { await r.rt.restore(); return true; }
-  catch (e) { console.log(`radio: restore: the run sheet could not be read yet (${e instanceof Error ? e.message : String(e)}); the next hold reads it again`); return false; }
+  catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    // A refusal is this answer let go, not the file: it passes, and is not counted. A read that fails as the disk's own failure is counted, and a refusal of the grant itself (`denied`, `unsupported`,
+    // `bake`: storage.js `storageError`) will not pass: then, or after RESTORE_TRIES failures, the file is moved aside (kept for a person to look at) and the radio starts with an empty sheet. One line
+    // when it first fails and one when it gives up, not one a second.
+    const permanent = !refusedHere(e) && ['denied', 'unsupported', 'bake'].includes(String((e as { code?: unknown } | null)?.code ?? ''));
+    if (!refusedHere(e)) r.restoreFails += 1;
+    if (!permanent && (refusedHere(e) || r.restoreFails < RESTORE_TRIES)) {
+      if (!r.restoreTold) { r.restoreTold = true; console.log(`radio: restore: the run sheet could not be read yet (${why}); the next hold reads it again`); }
+      return false;
+    }
+    let kept = 'it could not be moved aside, and the next save replaces it';
+    if (storage?.fs.rename) {
+      try { await storage.fs.rename(SHEET_FILE, SHEET_BAD_FILE); kept = `it is kept as ${SHEET_BAD_FILE}`; }
+      catch (m) { if (refusedHere(m)) return false; /* the next hold gives up again, as itself */ }
+    }
+    r.rt.markRestored();
+    console.log(`radio: restore: the run sheet could not be read (${why}; ${r.restoreFails} failed read${r.restoreFails === 1 ? '' : 's'}): ${kept}, and the radio starts with an empty sheet`);
+    return true;
+  }
 }
 
 /** The radio for a mutation that changes the sheet or acts on it: restored first, so an act never lands on an empty sheet the file then replaces. A sheet that cannot be read yet refuses the act. */
@@ -282,7 +307,9 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   r.pulses += 1;
   const writeDue = restored && !flagBusy(r, r.writeFlag) && (r.writer.wouldAsk() || posting);
   if (writeDue) r.writeFlag = { phase: 'due', at: flagNow(r) };            // marked by the pulse that calls for it: a pulse computed before the mutation's body starts cannot call for a second send (the gate closing cancels the first's pending `after`)
-  const out = { tick: r.tick, write: writeDue, live, beat: r.beat, hold: !flagBusy(r, r.holdFlag) && (!restored || r.rt.needsWork() || r.inbox.length > 0 || startDue(r)), slow: false };
+  const holdDue = !flagBusy(r, r.holdFlag, HOLD_DUE_STALE_MS) && (!restored || r.rt.needsWork() || r.inbox.length > 0 || startDue(r));
+  if (holdDue) r.holdFlag = { phase: 'due', at: flagNow(r) };              // marked like the write: a second hold sent before the first's body starts would replace it (the first let go mid-restore)
+  const out = { tick: r.tick, write: writeDue, live, beat: r.beat, hold: holdDue, slow: false };
   out.slow = !out.live && !out.write && !out.hold && !r.writer.inFlight;          // nothing sounds in front, nothing is due: the clock asks again in five seconds, not one (what native has to say wakes it at once: the deck's seq and the radio note are keys of the pulse)
   const state = `restored=${restored} ready=${r.ready} started=${r.started} onAir=${r.rt.store.onAir() ? 'yes' : 'no'} write=${out.write} hold=${out.hold} ahead=${r.rt.store.ahead().length} inFlight=${r.writer.inFlight} lost=${r.rt.store.lostPending}`;
   if (state !== lastPulse) { lastPulse = state; console.log(`radio: pulse ${state}`); }
@@ -297,8 +324,10 @@ let lastPulse = '';
 /** The flags are the RADIO's (a sign-out replaces the radio and its flags go with it), and they go stale: a body whose continuation never runs (an answer let go) must not stop the radio for good. `running` after 260 s (just over the
  *  240 s at which a writer abandons its ask), `due` (called for, the mutation not started: the gate closed, the send never came) after 5 s. Device time; with none known, one pulse counts as a second. */
 export const WORK_STALE_MS = 260_000, DUE_STALE_MS = 5_000;
+/** A hold called for and not begun goes stale sooner than a write: the pulse that marked it may itself be let go (launch re-asks it often), and the restore and the start wait on the hold. */
+export const HOLD_DUE_STALE_MS = 2_000;
 const flagNow = (r: Radio): number => (clock.ms > 0 ? clock.ms : r.pulses * 1000);
-const flagBusy = (r: Radio, f: Flag | undefined): boolean => f !== undefined && flagNow(r) - f.at < (f.phase === 'running' ? WORK_STALE_MS : DUE_STALE_MS);
+const flagBusy = (r: Radio, f: Flag | undefined, dueStale = DUE_STALE_MS): boolean => f !== undefined && flagNow(r) - f.at < (f.phase === 'running' ? WORK_STALE_MS : dueStale);
 // one radioHold at a time: a second send would take the first's place, and the first would be let go
 export async function radioHold(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   const r = await getRadio(storage, native);

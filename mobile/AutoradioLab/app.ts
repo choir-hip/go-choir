@@ -99,6 +99,8 @@ fs.read app:/data/takes.json
 fs.write app:/data/takes.json
 fs.read app:/data/runsheet.json
 fs.write app:/data/runsheet.json
+fs.read app:/data/runsheet.bad.json
+fs.write app:/data/runsheet.bad.json
 fs.read app:/data/vectors
 fs.write app:/data/vectors
 fs.read app:/data/imported-places.json

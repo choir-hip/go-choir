@@ -367,6 +367,8 @@ export class RunSheetStore {
 
   /** Sign-out, after playback stopped: wait up to `timeoutMs` for the pending ops (the "left" report among them) to reach the computer while
    *  the old key is still held. What is not answered by then is dropped by `wipe()`: pending ops are never sent under a later account. */
+  // The one timer left in the store: a 50 ms poll, only at sign-out (rt.signOut, from wipeRadio or the hold's `stopAll`). Not safe if that answer is let go meanwhile: the next setTimeout throws, the
+  // sign-out rejects before `wipe()`, and in the `stopAll` path the sheet is not wiped in memory (wipeRadio still removes the file in its `finally`). Recorded, not changed here.
   async settlePending(timeoutMs: number): Promise<void> {
     this.flush(true);
     for (let waited = 0; this.pending.length > 0 && waited < timeoutMs; waited += 50) await new Promise((r) => setTimeout(r, 50));
@@ -407,12 +409,14 @@ export class RunSheetStore {
   async restore(recover?: (store: RunSheetStore) => void): Promise<void> { this.restoreFrom(await this.readSaved(), recover); }
   /** The saved text, or undefined when there is none. A read that fails throws: a refused read is not an empty sheet, and the caller restores again later. */
   readSaved(): Promise<string | undefined> { return this.storage ? this.storage.read() : Promise.resolve(undefined); }
-  /** The restore on text already read. Synchronous, so a caller decides after its reads whether to take it (radio-runtime.ts `restore`). It posts nothing: the pulse calls for the post. */
+  /** The restore on text already read. Synchronous, so a caller decides after its reads whether to take it (radio-runtime.ts `restore`). It starts no post of its own; an op it applies (the entry left on air closed as interrupted, a verdict the
+   *  deck journalled, applied by `recover`) starts one through `run`, as every applied op does, in the hold that restores. */
   restoreFrom(text: string | undefined, recover?: (store: RunSheetStore) => void): void {
     if (!text) return;
     let saved: { sheet: unknown; pending: unknown[]; epoch?: number };
     let sheet: Sheet; const pending: Op[] = []; let lost = 0;
-    try { saved = JSON.parse(text); sheet = decodeSheet(saved.sheet); } catch { return; }          // a sheet that cannot be read is not restored (nothing half-restored)
+    try { saved = JSON.parse(text); sheet = decodeSheet(saved.sheet); }
+    catch (e) { console.log(`runsheet: restore: the saved sheet could not be decoded (${e instanceof Error ? e.message : 'not JSON'}): the radio starts with an empty sheet and the next save replaces the file`); return; }          // nothing half-restored
     for (const raw of Array.isArray(saved.pending) ? saved.pending : []) { try { pending.push(decodeOp(raw)); } catch { lost += 1; } }
     if (lost > 0) console.log(`runsheet: restore: ${lost} pending op${lost === 1 ? '' : 's'} could not be read and ${lost === 1 ? 'was' : 'were'} dropped; ${pending.length} kept`);
     this.sheet = sheet; this.pending = pending; this.sheetEpoch = saved.epoch ?? 0;
