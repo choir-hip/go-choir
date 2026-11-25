@@ -202,9 +202,13 @@ with tempfile.TemporaryDirectory() as d:
     signed_team = [l[len("TeamIdentifier="):] for l in vlines if l.startswith("TeamIdentifier=")]
     if signed_team != [team]:
         no("its signature's team is not the team of its embedded profile")
-    voice = run_tool(["/usr/bin/python3", "-I", os.path.join(here, "check-tiny-voca-assets.py"), os.path.join(appdir, "TinyVoca"), "ios"])
-    if voice.returncode != 0:
-        no(voice.stderr.decode("utf8", "replace").strip() or "its signed app has no valid TinyVoca resource tree")
+    # Exact stages a declared resource tree under ExactResources/Resources; a flat bundle keeps it at the root.
+    voice = next((d for d in (os.path.join(appdir, "ExactResources", "Resources", "TinyVoca"), os.path.join(appdir, "TinyVoca")) if os.path.isdir(d)), None)
+    if voice is None:
+        no("its signed app has no TinyVoca resource tree (ExactResources/Resources/TinyVoca)")
+    check = run_tool(["/usr/bin/python3", "-I", os.path.join(here, "check-tiny-voca-assets.py"), voice, "ios"])
+    if check.returncode != 0:
+        no(check.stderr.decode("utf8", "replace").strip() or "its signed app has no valid TinyVoca resource tree")
 signed_id = ents.get("application-identifier")
 if ents.get("get-task-allow") is True:
     no("its signature carries get-task-allow (a development signature)")
@@ -217,7 +221,7 @@ print("bundle id: " + bid)
 print("version: " + ver)
 print("build number: " + build)
 print("ITSAppUsesNonExemptEncryption: false")
-print("Tiny Voca: compiled iOS models, offline frontend and notices verified in signed .app/TinyVoca")
+print("Tiny Voca: compiled iOS models, the Dizione phonemizer data and the notices are verified in the signed app")
 print("Mach-O files searched for developer-only names: %d (%s)" % (len(searched), ", ".join(sorted(searched))))
 if len(searched) < 2:
     print("WARNING: only one Mach-O file was searched; Exact puts the app module in libexact_modules.dylib or Frameworks/ExactModules.framework, so a layout with none is new: read the unpacked app before trusting this")

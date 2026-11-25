@@ -1,3 +1,31 @@
+## 2026-11-25: Tiny Voca is the radio's voice; the search model downloads
+
+**What.** The radio speaks with Tiny Voca, bundled in the app (Core ML; F2 and
+M2, chosen in Settings > Voice and models). Apple's speech synthesiser is
+deleted, not merely unused. EmbeddingGemma 2 is downloaded as part of the first
+run, and pressing Download on it in Settings now actually fetches it.
+
+**Why.** The owner (2026-11-25): "i hate hate hate the default apple voice...
+embed this voice model in the app... make it default. and never fallback to
+apple built-in voice"; and, on the models: "all of these model downloads arent
+really optional... make sure that embeddinggemma2 is included in it, not
+optional. since its essential for on-device rag."
+
+**Proof.** On this Mac, text through the native Dizione frontend and the Core ML
+models produced 4.53 s of 24 kHz audio; F2 and M2 give different audio for the
+same line. The app builds for the iOS simulator, loads the voice (the launch
+line read `AUTORADIO voice warm ok in 2248 ms`), and the owner switched F2 to
+M2 on a phone. The store check refuses an archive without the voice tree.
+`bun test` 1751 pass, 0 fail. Not proved: a first sound on a cold device, and
+the download on a phone.
+
+**What it replaced.** Kokoro as the default voice and the `avspeech` fallback
+stage, including its `UtteranceEnd` rule; the first-run voice download card.
+
+**How to undo it.** Revert the commit. The models are in
+`~/.cache/autoradio-tiny-voca/native-v1` and are rebuilt by
+`mobile/scripts/prepare-tiny-voca.sh`.
+
 # What changed
 
 One entry per thing built, newest first. This is the page to read to catch up

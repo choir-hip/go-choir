@@ -254,7 +254,7 @@ describe('first run without an account, and the agreement', () => {
     const o = (job: string, group: string, ids: string[]): OfferJob => ({ job, group, host: 'Example Hub', options: ids.map((id, i) => ({ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: i === 0, ready: false })) });
     v = { ...v, offers: [o('voice', 'voice', ['a', 'b']), o('transcriber', 'voice-rest', ['c']), o('speaker', 'voice-rest', ['print']), o('search', 'search', ['e'])] };
     await act('begin', '', '', SETUP, env({ agree: async (_m, ids) => { asked.push(ids ?? []); } }));
-    expect(asked).toEqual([['a', 'c', 'print']]);
+    expect(asked).toEqual([['a', 'c', 'print', 'e']]);   // the search embedding model is essential, never optional (owner, 2026-11-25)
   });
   test('O16c every model shown is already on the phone (downloaded from Voice and models): the first run still begins, and agrees to nothing new', async () => {
     const o = (job: string, group: string, id: string): OfferJob => ({ job, group, host: 'Example Hub', options: [{ id, model: id, bytes: 1_000_000, sizeLabel: '1 MB', recommended: true, ready: true }] });
