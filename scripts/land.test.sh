@@ -23,6 +23,15 @@
 #                           "main moves twice" (gives up, pushes nothing), via
 #                           LAND_HOOK_AFTER_VERIFY
 #   conflict                case "conflict": names the lane, exits 1
+#   two lanes' change-log   case "change-log union": both entries kept, in lane
+#     entries collide       order; a conflict anywhere else still stops (above)
+#   race run of a changed   case "race shards": the runner deals agentcore into
+#     agentcore in one      LAND_RACE_SHARDS shards side by side (default 4),
+#     process (65 min)      builds the binary once, runs the scale tests alone;
+#                           LAND_RACE_SHARDS=1 keeps the single process
+#   each lane waits for the case "queue": lane 2's push waits on lane 1's green
+#     last one's CI+deploy  (LAND_QUEUE_GREEN), both land; a red lane 1 stops
+#     before starting       lane 2 before its push, exit 1
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 LAND=$here/land
@@ -207,6 +216,73 @@ func C() int { return 11 }'
 out=$(cd "$W" && LAND_VM=nonexistent.invalid "$LAND" laneVM 2>&1); rc=$?
 expect "VM unreachable: exit 4" 4 $rc
 case "$out" in *"--local"*) ok "hint names --local";; *) bad "VM hint" "$out";; esac
+
+# change-log union: two lanes add their entry at the same place in docs/changes.md
+git fetch -q origin main
+printf '# What changed\n\nold\n' >"$T/cl0"
+git checkout -q -B clbase origin/main 2>/dev/null; mkdir -p docs; cp "$T/cl0" docs/changes.md; G add -A; G commit -q -m "change log"; git push -q origin HEAD:main
+lane laneL1 docs/changes.md '# What changed
+
+## one
+
+old'
+lane laneL2 docs/changes.md '# What changed
+
+## two
+
+old'
+git checkout -q --detach "$base"
+out=$(land --local laneL1 laneL2); rc=$?
+expect "change-log union: both lanes land" 0 $rc
+git fetch -q origin main
+got=$(git show origin/main:docs/changes.md | grep -c '^## \(one\|two\)$')
+expect "change-log union: both entries kept" 2 "$got"
+case "$(git show origin/main:docs/changes.md)" in *"<<<<<<<"*|*">>>>>>>"*) bad "markers left in the change log";; *) ok "no conflict markers";; esac
+
+# race shards: a changed agentcore is dealt into shards on the VM
+lane laneRT internal/agentcore/x.go 'package agentcore
+func X() int { return 1 }'
+git checkout -q --detach "$base"
+out=$(land --print-runner laneRT); rc=$?
+expect "print-runner exits 0" 0 $rc
+case "$out" in *'SHARD_PACKAGES="./internal/agentcore"'*"TOTAL_SHARDS=4 PARALLEL_SHARDS=1"*"go-test-runtime-shards -race"*) ok "agentcore race is sharded four ways";; *) bad "race shards" "$out";; esac
+case "$out" in *"go test -race -count=1 -c -o /dev/null ./internal/agentcore"*) ok "the race binary is built once first";; *) bad "warm build" "$out";; esac
+case "$out" in *"./internal/agentcore -race -count=1 -timeout 30m -run"*) ok "scale tests run alone with -race";; *) bad "scale tests" "$out";; esac
+case "$out" in *"-timeout 90m -p=1 ./internal/agentcore"*) bad "no single-process race run when sharded" "$out";; *) ok "no single-process race run";; esac
+out=$(cd "$W" && LAND_RACE_SHARDS=1 "$LAND" --print-runner laneRT 2>&1)
+case "$out" in *"go test -race -count=1 -timeout 90m -p=1 ./internal/agentcore"*) ok "LAND_RACE_SHARDS=1 keeps one process";; *) bad "one shard" "$out";; esac
+out=$(cd "$W" && LAND_RACE_SHARDS=x "$LAND" --print-runner laneRT 2>&1); rc=$?
+expect "a bad LAND_RACE_SHARDS is refused" 1 $rc
+
+# queue: lane 2 starts once lane 1 is on main; its push waits for lane 1's green
+QUEUE=$here/land-queue
+printf '%s\n' '#!/usr/bin/env bash' 'echo "$1" >>"$T/green.calls"' 'exit "${GREEN_RC:-0}"' >"$T/green.sh"
+git fetch -q origin main
+lane laneQ1 c/c.go 'package c
+func C() int { return 21 }'
+lane laneQ2 b/b.go 'package b
+import "example.com/t/a"
+func B() int { return a.A() + 22 }'
+git checkout -q --detach "$base"
+rm -f "$T/green.calls"
+out=$(cd "$W" && LAND_QUEUE_GREEN="bash $T/green.sh" LAND_QUEUE_LOGS=$T/qlogs bash "$QUEUE" --local laneQ1 laneQ2 2>&1); rc=$?
+expect "queue: both lanes land" 0 $rc
+git fetch -q origin main
+q1=$(git log --format='%H %s' origin/main | awk '$2=="lane" && $3=="laneQ1"{print $1}')
+q2=$(git log --format='%H %s' origin/main | awk '$2=="lane" && $3=="laneQ2"{print $1}')
+expect "queue: lane 2's push waited for lane 1, then the queue for lane 2" "$q1 $q2" "$(tr '\n' ' ' <"$T/green.calls" | sed 's/ $//')"
+lane laneQ3 c/c.go 'package c
+func C() int { return 23 }'
+lane laneQ4 b/b.go 'package b
+import "example.com/t/a"
+func B() int { return a.A() + 24 }'
+git checkout -q --detach "$base"
+out=$(cd "$W" && GREEN_RC=1 LAND_QUEUE_GREEN="bash $T/green.sh" LAND_QUEUE_LOGS=$T/qlogs2 bash "$QUEUE" --local laneQ3 laneQ4 2>&1); rc=$?
+expect "queue: a red landing stops the queue" 1 $rc
+git fetch -q origin main
+expect "queue: lane 3 landed before it went red" 1 "$(git log --format=%s origin/main | grep -c '^lane laneQ3$')"
+expect "queue: lane 4 was not pushed" 0 "$(git log --format=%s origin/main | grep -c '^lane laneQ4$')"
+case "$out" in *"Queue stopped"*) ok "queue names the stop";; *) bad "queue stop message" "$out";; esac
 
 # guards
 out=$(cd "$M" && "$LAND" --dry-run laneA 2>&1); rc=$?

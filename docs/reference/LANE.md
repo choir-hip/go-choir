@@ -32,8 +32,8 @@ to `.git/info/exclude`, so nothing under it is committed by the primary
 checkout.
 
 Push from a lane as from any worktree (`git push origin HEAD:main` for docs,
-`scripts/land` for a landing). We do not use `lane merge` or `lane push`:
-the landing loop is `scripts/land`.
+`scripts/land` for a landing, `scripts/land-queue` for several in a row). We
+do not use `lane merge` or `lane push`: the landing loop is `scripts/land`.
 
 ## Rules
 

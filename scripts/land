@@ -11,8 +11,16 @@
 #        7 fetch again, rebase if main moved (rerun once if it touched a tested
 #          package or its dependencies), push, report Ring-Expedite status.
 #
+# A conflict only in docs/changes.md or the calibration ledger (every lane adds
+# at the top) keeps both sides; any other conflict stops. A changed agentcore or
+# textureowner runs its race suite in LAND_RACE_SHARDS shards side by side
+# (default 4; 1 keeps one process). To land several lanes one after another
+# with each one's suites overlapping the last one's CI and deploy, use
+# scripts/land-queue.
+#
 # Hidden modes (used by scripts/land.test.sh): --select <from-ref> prints the
-# test plan for the diff <from-ref>..HEAD of the current tree and exits.
+# test plan for the diff <from-ref>..HEAD of the current tree and exits;
+# --print-runner prints the VM runner for the train and exits.
 #
 # Environment: LAND_VM (ssh host, default choir-agents), LAND_VM_MIRROR (a bare
 # repository on the VM that is its checkout's origin; set it for a VM with no
@@ -121,12 +129,13 @@ if [ "${1:-}" = "--select" ]; then
 fi
 
 # ---------------------------------------------------------------- arguments
-DRY=0; NOPUSH=0; LOCAL=0; LANES=()
+DRY=0; NOPUSH=0; LOCAL=0; PRINT_RUNNER=0; LANES=()
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY=1 ;;
     --no-push) NOPUSH=1 ;;
     --local) LOCAL=1 ;;
+    --print-runner) PRINT_RUNNER=1 ;;  # hidden (scripts/land.test.sh): print the VM runner for the train and exit
     -h|--help) sed -n 2,5p "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown flag $a (usage: scripts/land [--dry-run] [--no-push] [--local] <branch-or-sha>...)" ;;
     *) LANES+=("$a") ;;
@@ -170,6 +179,25 @@ git fetch -q origin main "+refs/heads/lane/*:refs/remotes/origin/lane/*" 2>/dev/
 BASE=$(git rev-parse origin/main) || die "no origin/main"
 
 # ------------------------------------------------------------ 2. the train
+# Every lane adds its entry at the top of the change log and its row to the
+# ledger, so two lanes in a row conflict there and nowhere else. union_docs
+# resolves a cherry-pick whose only conflicts are in those two append-only files
+# by keeping both sides (ours, then theirs) and continues; any other conflict
+# returns 1 and the caller stops.
+UNION_DOCS="docs/changes.md docs/calibration/claude-ledger.md"
+union_docs() {
+  local f u
+  u=$(git diff --name-only --diff-filter=U)
+  [ -n "$u" ] || return 1
+  for f in $u; do case " $UNION_DOCS " in *" $f "*) ;; *) return 1 ;; esac; done
+  for f in $u; do
+    awk '/^<<<<<<< /{s=1;next} s==1&&/^\|\|\|\|\|\|\| /{s=3;next} (s==1||s==3)&&/^=======$/{if(last!="")print "";s=2;next} s==2&&/^>>>>>>> /{s=0;next} s==3{next} {print;last=$0}' "$f" >"$f.union" && mv "$f.union" "$f" || return 1
+    grep -qE '^(<<<<<<<|>>>>>>>) ' "$f" && return 1
+    git add "$f" || return 1
+  done
+  GIT_EDITOR=true git -c core.editor=true cherry-pick --continue >/dev/null 2>&1 || return 1
+  say "lane $lane: kept both sides of a conflict in $(printf '%s ' $u)"
+}
 git checkout -q --detach "$BASE" || die "cannot check out origin/main"
 TRAIN_LANES=(); skipped=0
 for lane in "${LANES[@]}"; do
@@ -179,7 +207,7 @@ for lane in "${LANES[@]}"; do
   n=$(printf '%s\n' "$commits" | wc -l | tr -d ' ')
   say "lane $lane: cherry-picking $n commit(s)"
   for c in $commits; do
-    if ! git cherry-pick --empty=drop "$c" >/dev/null 2>&1; then
+    if ! git cherry-pick --empty=drop "$c" >/dev/null 2>&1 && ! union_docs; then
       files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
       git cherry-pick --abort >/dev/null 2>&1; restore
       die "CONFLICT in lane '$lane' at $(git log -1 --format='%h %s' "$c"): $files(rebase that lane onto origin/main and retry)"
@@ -271,11 +299,32 @@ EOF
     echo 'run scripts/go-test-with-timing ./internal/agentcore -count=1 -timeout 15m -run "$(grep -v '"'"'^\s*$'"'"' scripts/go-test-scale-tests | grep -v '"'"'^#'"'"' | paste -sd'"'"'|'"'"')"' >>"$1"
   fi
   for p in $H_PLAIN; do echo "run go test -count=1 -timeout 90m -p=1 $p" >>"$1"; done
+  # Changed agentcore/textureowner: the race run is dealt into RACE_SHARDS shards
+  # run side by side, each with its share of the VM's cores (one process of
+  # agentcore -race took 65 minutes on 4 of choir-runner's 8 cores, 2026-11-24).
+  # The test binaries are built once first, so the shards' discovery does not
+  # compile the same package RACE_SHARDS times. The load-sensitive tests stay out
+  # of the shards and run alone afterwards, as in CI.
+  local RT="" RS=${LAND_RACE_SHARDS:-4}
+  case "$RS" in ''|*[!0-9]*|0) die "LAND_RACE_SHARDS must be a positive integer, got: $RS" ;; esac
+  if [ "$LOCAL" = 0 ] && [ "$RS" -gt 1 ]; then
+    for p in ./internal/agentcore ./internal/textureowner; do
+      if printf ' %s ' "$H_RACE" | grep -q " $p "; then RT="$RT $p"; H_RACE=$(printf ' %s ' "$H_RACE" | sed "s# $p # #"); fi
+    done
+  fi
+  if [ -n "$RT" ]; then
+    for p in $RT; do echo "run go test -race -count=1 -c -o /dev/null $p" >>"$1"; done
+    echo "run env SHARD_PACKAGES=\"${RT# }\" QUARANTINE_FILE=scripts/go-test-scale-tests TOTAL_SHARDS=$RS PARALLEL_SHARDS=1 GOMAXPROCS=\$(( \$(nproc) / $RS > 0 ? \$(nproc) / $RS : 1 )) scripts/go-test-runtime-shards -race -timeout 60m" >>"$1"
+    if printf ' %s ' "$RT" | grep -q ' ./internal/agentcore '; then
+      echo 'run scripts/go-test-with-timing ./internal/agentcore -race -count=1 -timeout 30m -run "$(grep -v '"'"'^\s*$'"'"' scripts/go-test-scale-tests | grep -v '"'"'^#'"'"' | paste -sd'"'"'|'"'"')"' >>"$1"
+    fi
+  fi
   for p in $H_RACE; do echo "run go test -race -count=1 -timeout 90m -p=1 $p" >>"$1"; done
   [ "$FE" = 1 ] && echo '(cd frontend && run pnpm install --frozen-lockfile && run pnpm run build) || exit $?' >>"$1"
   echo "exit 0" >>"$1"
 }
 have_work() { [ -n "$PKGS_ALL" ] || [ "$GH" = 1 ] || [ "$FE" = 1 ]; }
+if [ "$PRINT_RUNNER" = 1 ]; then LOCAL=0; write_runner /dev/stdout; restore; exit 0; fi
 
 run_suites_remote() {
   local short sha runner R W out last prog fails=0 code
@@ -411,6 +460,7 @@ git push origin HEAD:main || die "push to main was rejected (main moved at the l
 short=$(git rev-parse --short=10 HEAD)
 git push -q origin ":refs/heads/lane/land-$short" 2>/dev/null || true
 echo "=== pushed to origin/main ==="
+echo "land: main is now $(git rev-parse HEAD)"
 re=""
 [ -f .github/scripts/node-b-ci-deploy ] && re=$(awk -F"'" '/loop_hit=\$\(printf/ {print $4; exit}' .github/scripts/node-b-ci-deploy)
 [ -n "$re" ] || echo "  (path-based expedite rule not found in .github/scripts/node-b-ci-deploy; path column unknown)"

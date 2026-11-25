@@ -26,6 +26,13 @@ Proof: the served file has no tag or placeholder (grep); not proved deployed yet
 Replaced: the October policy (kept in git history).
 Undo: revert the commit.
 
+## 2026-11-25: landings run faster: the race suite is split, and a queue overlaps lanes (yellow; lane `land-fast`)
+
+What: (1) `scripts/land` runs a changed agentcore or textureowner's race suite in `LAND_RACE_SHARDS` shards side by side (default 4, each with its share of the VM's cores), builds the race binaries once first, and runs the load-sensitive tests alone afterwards; `scripts/go-test-runtime-shards` takes `SHARD_PACKAGES`. (2) A cherry-pick conflict only in `docs/changes.md` or the calibration ledger keeps both sides instead of stopping the landing. (3) `scripts/land-queue` lands lanes in order and starts each lane's checks as soon as the one before is on main; its push waits until that one's CI passed and staging serves it, and a red one stops the queue. `TestManagementTasksRunKAtOnceAndTheQueueDrains` (it times three calls starting together) joins the tests that run alone.
+Why: owner, 2026-11-24: "why is landing so slow?". The landing of `corpus-repl` spent 65 minutes in one process of agentcore's race suite, on 4 of choir-runner's 8 cores, and each lane waited about 25 minutes for the one before it to pass CI and deploy before its own checks began.
+Proof: `scripts/land.test.sh` 54 passed, 0 failed (new cases: change-log union, race shards in the runner, the queue waiting on the previous landing and stopping on a red one). On choir-runner, agentcore and textureowner's race suites in 4 shards took 22 minutes (one 60 s build first) while another landing's suites ran beside them; one timing test failed under that load and now runs alone. Not yet measured on a quiet VM or on a real queue.
+Replaced: one race process per heavy package; a lane-by-lane wait for CI and deploy. Undo: revert; `LAND_RACE_SHARDS=1` gives the old single process.
+
 ## 2026-11-24: the privacy policy and terms load again on choir.news
 
 What: the web build's nix source filter now keeps every file under `frontend/public/`. It kept only listed suffixes (.js, .ts, .svelte, .css, .html and a few named files), so `public/legal/privacy-policy.md`, `public/legal/terms-of-service.md` and the reader's sample PDF never reached the deployed site, and `/legal/*.md` answered with the app's HTML shell. The Privacy and Terms pages (and the app's links to them) showed that HTML as text.

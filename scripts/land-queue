@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# scripts/land-queue [--tree DIR] [--local] <lane>...
+#
+# Lands lanes in order with scripts/land, overlapping each lane's suites with the
+# previous landing's CI and deploy. Lane N+1 starts as soon as lane N is on main
+# (its train already holds lane N), and its push waits until lane N's CI passed
+# and staging serves lane N's commit or a later one. Done one after the other,
+# each lane waited about 25 minutes for the one before it to pass CI and deploy
+# before its own suites even started (2026-11-24).
+#
+# A red CI or a deploy that never arrives stops the queue: the waiting lane exits
+# without pushing and no later lane runs. A lane that fails its own checks (a
+# conflict, a red suite) is reported and skipped; the queue goes on.
+#
+#   --tree DIR   the lane worktree scripts/land runs in (default: this checkout;
+#                never the primary checkout, which scripts/land refuses)
+#   --local      passed to scripts/land
+#   --wait-green <sha>   (used by the queue itself) wait for <sha>'s CI and deploy
+#
+# Environment: LAND_QUEUE_LOGS (directory for one log per lane, default a new
+# temporary one), LAND_QUEUE_GREEN (a command run with a sha instead of
+# --wait-green; the selftest uses it), LAND_QUEUE_CI_APPEAR (seconds a CI run
+# has to appear before a push counts as docs-only, default 300),
+# LAND_QUEUE_TIMEOUT (seconds to wait for CI and for the deploy, each, default
+# 3600), STAGING_URL (default https://choir.news/). Every LAND_* variable
+# scripts/land reads is passed through.
+set -uo pipefail
+
+if [ -z "${LAND_QUEUE_STAGE:-}" ]; then
+  # Run from a copy, with the scripts/land and gates beside it: scripts/land
+  # checks out other commits in the tree.
+  stage=$(mktemp -d "${TMPDIR:-/tmp}/land-queue.XXXXXX") || exit 1
+  src=$(cd "$(dirname "$0")" && pwd -P)
+  cp "$0" "$stage/land-queue" && cp "$src/land" "$stage/land" || exit 1
+  cp "$src/gates" "$stage/gates" 2>/dev/null || true
+  LAND_QUEUE_STAGE=$stage exec bash "$stage/land-queue" "$@"
+fi
+STAGE=$LAND_QUEUE_STAGE
+[ "${1:-}" = "--wait-green" ] || trap 'rm -rf "$STAGE"' EXIT
+say() { echo "land-queue: $*"; }
+
+wait_green() { # sha
+  local sha=$1 t0 r c appear=${LAND_QUEUE_CI_APPEAR:-300} limit=${LAND_QUEUE_TIMEOUT:-3600}
+  t0=$(date +%s); r=""
+  while :; do
+    r=$(gh run list --branch main --workflow CI --limit 30 --json headSha,status,conclusion \
+          -q ".[]|select(.headSha==\"$sha\")|.status+\" \"+.conclusion" 2>/dev/null | head -1)
+    case "$r" in
+      "completed success") break ;;
+      "completed "*) say "CI for ${sha:0:9} ended: $r"; return 1 ;;
+      "") if [ $(( $(date +%s) - t0 )) -ge "$appear" ]; then
+            say "no CI run for ${sha:0:9} after ${appear}s: a docs-only push, which neither runs CI nor deploys"; return 0; fi ;;
+    esac
+    [ $(( $(date +%s) - t0 )) -lt "$limit" ] || { say "CI for ${sha:0:9} did not finish in ${limit}s"; return 1; }
+    sleep 30
+  done
+  say "CI for ${sha:0:9} passed; waiting for staging to serve it"
+  t0=$(date +%s)
+  while :; do
+    c=$(curl -s -m 20 -D- -o /dev/null "${STAGING_URL:-https://choir.news/}" | tr -d '\r' | awk 'tolower($1)=="x-choir-build-commit:"{print $2}')
+    if [ -n "$c" ]; then
+      [ "$c" = "$sha" ] && { say "staging serves ${sha:0:9}"; return 0; }
+      git fetch -q origin main 2>/dev/null
+      if git cat-file -e "$c^{commit}" 2>/dev/null && git merge-base --is-ancestor "$sha" "$c" 2>/dev/null; then
+        say "staging serves ${c:0:9}, which holds ${sha:0:9}"; return 0; fi
+    fi
+    [ $(( $(date +%s) - t0 )) -lt "$limit" ] || { say "staging did not serve ${sha:0:9} in ${limit}s (it serves ${c:-nothing readable})"; return 1; }
+    sleep 30
+  done
+}
+
+if [ "${1:-}" = "--wait-green" ]; then
+  wait_green "${2:?usage: land-queue --wait-green <sha>}"; exit $?
+fi
+
+TREE=$(pwd -P); LANDFLAGS=(); LANES=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --tree) TREE=$(cd "${2:?--tree needs a directory}" && pwd -P) || exit 1; shift ;;
+    --local) LANDFLAGS+=(--local) ;;
+    -h|--help) sed -n 2,26p "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) echo "land-queue: unknown flag $1" >&2; exit 2 ;;
+    *) LANES+=("$1") ;;
+  esac
+  shift
+done
+[ "${#LANES[@]}" -gt 0 ] || { echo "usage: scripts/land-queue [--tree DIR] [--local] <lane>..." >&2; exit 2; }
+LOGS=${LAND_QUEUE_LOGS:-$(mktemp -d "${TMPDIR:-/tmp}/land-queue-logs.XXXXXX")}; mkdir -p "$LOGS"
+GREEN=${LAND_QUEUE_GREEN:-bash $STAGE/land-queue --wait-green}
+say "logs in $LOGS"
+cd "$TREE" || exit 1
+
+prev=""; landed=(); failed=()
+for lane in "${LANES[@]}"; do
+  log=$LOGS/$(printf '%s' "$lane" | tr '/' '_').log
+  hook=""
+  [ -n "$prev" ] && hook="$GREEN $prev || exit 6"
+  say "$(date -u +%H:%M:%SZ) $lane: starting${prev:+ (its push waits for ${prev:0:9})}"
+  git fetch -q origin main && git checkout -q --detach origin/main || { say "cannot check out origin/main in $TREE"; exit 1; }
+  LAND_HOOK_AFTER_VERIFY=$hook bash "$STAGE/land" "${LANDFLAGS[@]}" "$lane" >"$log" 2>&1
+  rc=$?
+  case $rc in
+    0) prev=$(sed -n 's/^land: main is now \([0-9a-f]*\)$/\1/p' "$log" | tail -n1)
+       [ -n "$prev" ] || { say "$lane: landed but its log names no commit; stopping"; exit 1; }
+       landed+=("$lane ${prev:0:9}"); say "$(date -u +%H:%M:%SZ) $lane: on main as ${prev:0:9}" ;;
+    6) say "$lane: not pushed: the landing before it (${prev:0:9}) did not pass CI or deploy. Queue stopped."
+       say "not run: the lanes after $lane"; exit 1 ;;
+    *) failed+=("$lane"); say "$lane: did not land (exit $rc); see $log"
+       grep -E 'FAILED|CONFLICT|--- FAIL|refus' "$log" | head -5 | sed 's/^/    /' ;;
+  esac
+done
+if [ -n "$prev" ]; then
+  $GREEN "$prev" || { say "the last landing (${prev:0:9}) did not pass CI or deploy"; exit 1; }
+fi
+say "landed: ${landed[*]:-none}"
+[ "${#failed[@]}" = 0 ] || { say "did not land: ${failed[*]}"; exit 1; }

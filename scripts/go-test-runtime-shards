@@ -7,7 +7,15 @@ if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-packages=(./internal/agentcore ./internal/textureowner)
+# SHARD_PACKAGES narrows the set (scripts/land shards only the heavy packages a
+# change selects); CI leaves it unset and gets both.
+read -r -a packages <<<"${SHARD_PACKAGES:-./internal/agentcore ./internal/textureowner}"
+for package in "${packages[@]}"; do
+  case "$package" in
+    ./internal/agentcore|./internal/textureowner) ;;
+    *) echo "SHARD_PACKAGES may name only ./internal/agentcore and ./internal/textureowner, got: $package" >&2; exit 2 ;;
+  esac
+done
 
 weights_list="$(dirname "$0")/go-test-runtime-weights"
 [[ -f "$weights_list" ]] || weights_list=""

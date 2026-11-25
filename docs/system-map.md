@@ -345,11 +345,13 @@ Not true, though a reader would assume it:
 
 A lead (a Claude session) fans builders into git worktrees ("lanes"), lands
 trains onto main through `scripts/land` (cherry-pick, build, vet, gates,
-whole suites on the build VM, push), and CI deploys to staging. Memory is
+whole suites on the build VM, push), and CI deploys to staging. Several lanes
+go through `scripts/land-queue`, which starts the next lane's suites while the
+last one's CI and deploy run and holds its push until they pass. Memory is
 CLAUDE.md (301 lines), 1,692 files under docs/ (43 MB), and a calibration
 ledger of the lead's own claims (C20 to C198) [8].
 
-Key paths: `scripts/land`, `scripts/gates`, `docs/calibration/claude-ledger.md`,
+Key paths: `scripts/land`, `scripts/land-queue`, `scripts/gates`, `docs/calibration/claude-ledger.md`,
 `docs/current-architecture.md`, `docs/ACTIVE.md`, `docs/changes.md`,
 `docs/definitions/choir-standing-metamission-2026-11-22.md`.
 

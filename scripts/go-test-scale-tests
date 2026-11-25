@@ -4,3 +4,4 @@
 # go-test-scale CI job (execution with one retry).
 ^TestCancelRunTrajectoryDrainsMoreThanOneActivePage$
 ^TestProbeAtANonzeroTrimBoundary$
+^TestManagementTasksRunKAtOnceAndTheQueueDrains$
