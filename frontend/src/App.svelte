@@ -67,7 +67,7 @@
   let sessionCheckSeq = 0;
   let lastPrewarmStartedAt = 0;
   let publicRoutePath = '';
-  let legalDocumentKind: 'privacy' | 'terms' = 'privacy';
+  let legalDocumentKind: 'privacy' | 'terms' | 'support' = 'privacy';
   let isLegalDocumentRoute = false;
   /** /recover: landing page for an account-recovery email link. */
   let isRecoverRoute = false;
@@ -474,9 +474,10 @@
     return pathname === '/device' || pathname === '/device/';
   }
 
-  function legalDocumentKindFromPath(pathname): '' | 'privacy' | 'terms' {
+  function legalDocumentKindFromPath(pathname): '' | 'privacy' | 'terms' | 'support' {
     if (pathname === '/privacy' || pathname === '/privacy/') return 'privacy';
     if (pathname === '/terms' || pathname === '/terms/') return 'terms';
+    if (pathname === '/support' || pathname === '/support/') return 'support';
     return '';
   }
 
