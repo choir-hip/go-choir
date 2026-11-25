@@ -104,7 +104,7 @@ final class ModelListTests: XCTestCase {
     //  W1 the built-in list carries every generated voice row, English only, with the credit of its model, and survives JSON.
     //  W2 a voice row with no credit is not offered (dropped on decode), and a row with no name, voice or model likewise.
     //  W3 every voice row names a model the catalog knows, and its stage is one the voice runtime makes.
-    //  W4 the catalog's cards are the list's rows, with the default (Heart) first and the system voice last.
+    //  W4 the catalog's cards are the list's rows: the bundled voices first (F2 is the default), then the generated rows, then Pocket's card.
     func testTheListCarriesTheVoiceRowsWithTheirCredits() throws {                                   // W1
         let l = ModelList.builtIn()
         XCTAssertEqual(l.voices.map(\.id), VoiceRows.all.map(\.id))
@@ -129,9 +129,10 @@ final class ModelListTests: XCTestCase {
     }
     func testTheCatalogsCardsAreTheListsRows() {                                                     // W4
         let ids = VoiceCatalog.options.map(\.id)
-        XCTAssertEqual(Array(ids.prefix(VoiceRows.all.count)), VoiceRows.all.map(\.id))
-        XCTAssertEqual(VoiceCatalog.defaultOption.id, "kokoro:af_heart")
-        XCTAssertEqual(VoiceCatalog.options.last?.id, "system")
+        XCTAssertEqual(Array(ids.prefix(2)), ["tiny-voca:F2", "tiny-voca:M2"], "the bundled voice is offered first, F2 as the default")
+        XCTAssertEqual(Array(ids.dropFirst(2).prefix(VoiceRows.all.count)), VoiceRows.all.map(\.id), "the generated rows follow in the list's own order")
+        XCTAssertEqual(VoiceCatalog.defaultOption.id, "tiny-voca:F2")
+        XCTAssertEqual(VoiceCatalog.options.last?.id, "pocket-tts:alba")
         XCTAssertTrue(ids.contains("pocket-tts:alba"))
         for r in VoiceRows.all { XCTAssertEqual(VoiceCatalog.option(id: r.id)?.setting, StageSetting(id: r.stageID, params: ["voice": .string(r.voice)]), "\(r.id): the voice id reaches the stage as its \"voice\" parameter") }
         XCTAssertEqual(Set(ids).count, ids.count)

@@ -15,19 +15,18 @@ final class SoundPathsTests: XCTestCase {
             }
         }
         // LiveAudio: the programme node and the voice node, both held by the gate (voice line, session switch). RemoteAudioPlayer: AVPlayer,
-        // held through `setHeld` (a voice line) and `setLevel` (the listener speaking). AppleStages: the system voice is synthesised to buffers
-        // (`write`), which LiveAudio plays; it never calls `speak(_:)` on the synthesizer.
+        // held through `setHeld` (a voice line) and `setLevel` (the listener speaking). The Apple speech synthesiser is gone (bundled Tiny
+        // Voca speaks), so no AVSpeechSynthesizer call may come back anywhere: the patterns below still catch it.
         let known: [String: Set<String>] = [
             "LiveAudio.swift": ["AVAudioPlayerNode("],
             "RemoteAudioPlayer.swift": ["AVPlayer("],
-            "AppleStages.swift": ["AVSpeechSynthesizer("],
             // The take's review playback (the listener's own recording): played only while the take holds the gate (the radio is paused, hands-free
             // off, the capture session taken: TakeGate), stopped by Re-record, Discard and Publish.
             "TakeSession.swift": ["AVAudioPlayer("],
         ]
         XCTAssertEqual(found.mapValues { $0 }, known, "a new place that makes sound must go behind the single-voice gate (LiveAudio.holdForSessionSwitch / onVoiceHold) and be named here")
-        let apple = try String(contentsOf: dir.appendingPathComponent("AppleStages.swift"), encoding: .utf8)
-        XCTAssertFalse(apple.contains(".speak(utterance") || apple.contains("speak(u)"), "the system voice must be written to buffers, never spoken by the synthesizer itself")
+        XCTAssertFalse(found.values.contains { $0.contains("AVSpeechSynthesizer(") || $0.contains("AVSpeechSynthesizer.") || $0.contains(".speakUtterance(") },
+                       "the Apple speech synthesiser is not a voice any more: nothing may build or speak one")
     }
 
     @MainActor func testRemoteAudioIsHeldWithAVoiceLine() async {

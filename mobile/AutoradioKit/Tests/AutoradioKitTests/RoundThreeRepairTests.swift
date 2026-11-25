@@ -170,10 +170,13 @@ final class ModelStoreResumeTests: XCTestCase {
 }
 
 final class ManagedModelCleanupTests: XCTestCase {
+    override func tearDown() { KnownModels.ttsRootProvider = KnownModels.defaultTtsRoot }
     func testARejectedCoreMLModelIsFoundOnDiskAndDeletedAndOtherFoldersStay() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("fluid-\(UUID().uuidString)", isDirectory: true)
         let fm = FileManager.default
         for d in ["parakeet-tdt-0.6b-v2", "kokoro-82m-coreml", "someone-elses"] { try fm.createDirectory(at: root.appendingPathComponent(d), withIntermediateDirectories: true) }
+        // The voice models live under the library's TTS root (TtsRootTests), not under the recognisers' root the backend is given.
+        KnownModels.ttsRootProvider = { root }
         let backend = LiveConfigBackend(store: ModelStore(root: root.appendingPathComponent("gguf")), managedRoot: root)
         let parakeet = try XCTUnwrap(CandidateTable.all.first { $0.id == "parakeet-tdt-0.6b-v2" })
         let kokoro = try XCTUnwrap(CandidateTable.all.first { $0.id == "kokoro-82m-ane" })

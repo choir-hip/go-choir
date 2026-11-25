@@ -77,7 +77,7 @@ final class AudioSessionHoldTests: XCTestCase {
     func testStoppingSpokenDoesNotReportAProgrammeThatRanDry() async {
         let a = virtualAudio()
         let r = StageRegistry.builtIn()
-        var cfg = StageRegistry.defaultConfiguration(); cfg.set(.voice, .init(id: "avspeech"))
+        var cfg = StageRegistry.defaultConfiguration(); cfg.set(.voice, .init(id: VoiceCatalog.bundledStageID))
         let p = ProgrammePlayer(audio: a, registry: r, log: EventLog(clock: LabClock()), configuration: cfg, document: ProgrammeDocument(id: "none", title: "", blocks: []))
         let told = Locked<[String]>([])
         p.onRanDry = { id, _ in told.write { $0.append(id) } }

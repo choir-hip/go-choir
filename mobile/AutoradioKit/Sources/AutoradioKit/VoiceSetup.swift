@@ -6,7 +6,7 @@ import Foundation
 //
 // Ways it can fail (written before the code, per the repo testing rule). Each has a test in VoiceSetupTests.
 //  1. A phone with little memory: the pick must start the ladder at the first model that fits, never at one that will
-//     not load; the floor of every ladder (energy detector, Apple's recogniser, the system voice, System 1 through the
+//     not load; the floor of every ladder (energy detector, Apple's recogniser, bundled Tiny Voca, System 1 through the
 //     listener's computer) needs no download and is always present.
 //  2. The downloader stalls silently for minutes (the models lane found this): a watchdog sees no bytes for
 //     `stallSeconds`, cancels that transfer, marks the row "stalled" and offers "Try again" and the fallback; with no

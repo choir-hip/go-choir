@@ -21,7 +21,7 @@ final class ModelOfferTests: XCTestCase {
         XCTAssertEqual(jobs.first { $0.job == "decision" }?.options.first?.id, "qwen3-0.6b-q8_0")
         // Every stage the setup runs that has a download is offered: nothing is fetched that is not here.
         for st in SetupStage.allCases where SetupCatalog.ladder(st).contains(where: { $0.bytes > 0 }) { XCTAssertTrue(jobs.contains { $0.job == st.rawValue }, "\(st)") }
-        XCTAssertFalse(jobs.flatMap(\.options).contains { ["apple-speech", "energy", "system-voice", "cue-only", "system1-computer"].contains($0.id) }, "a built-in floor is never an offer")
+        XCTAssertFalse(jobs.flatMap(\.options).contains { ["apple-speech", "energy", VoiceCatalog.bundledStageID, "cue-only", "system1-computer"].contains($0.id) }, "a built-in floor is never an offer")
         let ready = ModelOffer.jobs(profile: phone, ready: ["voice": jobs.first { $0.job == "voice" }!.options[0].id])
         XCTAssertTrue(ready.first { $0.job == "voice" }!.options[0].ready); XCTAssertFalse(ready.first { $0.job == "transcriber" }!.options.contains { $0.ready })
     }

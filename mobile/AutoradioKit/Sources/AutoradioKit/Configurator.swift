@@ -97,7 +97,7 @@ public struct ConfigThresholds: Codable, Equatable, Sendable {
     public var responderMinWriteTPS = 15.0
     /// Tokens per second the responder must read: a 400-token page cold in about 3 s (a warm cache reads only the question). Mac runs: 900 to 2,700.
     public var responderMinReadTPS = 150.0
-    /// First sound of a voice, ms. A voice that takes longer than about 1.5 s to its first sound makes the hand-over from the phone's voice awkward. Mac: Kokoro 243, Pocket 98.
+    /// First sound of a voice, ms. A voice that takes longer than about 1.5 s to its first sound makes the hand-over from the built-in voice awkward. Mac: Kokoro 243, Pocket 98.
     public var ttsMaxFirstSoundMs = 1500.0
     /// Speech recogniser speed as a fraction of real time: it must keep up with speech using half the compute. Mac: 0.04 to 0.18.
     public var asrMaxRealTimeFactor = 0.5
@@ -153,7 +153,8 @@ public enum ConfigPlanner {
         return c.bytes + companions(of: [c.role: c], table: table).reduce(0) { $0 + $1.bytes }
     }
 
-    /// Every configuration that could fit this device, best quality first. Ties go to the one that uses less memory. A floor-only configuration is last and always possible.
+    /// Every configuration that could fit this device, best quality first. Ties go to the one that uses less memory. An all-floor configuration
+    /// is always possible; it need not be last, because the bundled voice is both a floor and the best-ranked voice.
     public static func plan(device: DeviceProbe, thresholds: ConfigThresholds = .standard, table: [ModelCandidate] = CandidateTable.all, excluding: Set<String> = []) -> [Configuration] {
         guard device.supported else { return [] }
         let budget = (device.availableMB ?? DeviceProbe.assumedAvailableMB(tier: device.tier)) - thresholds.planningHeadroomMB

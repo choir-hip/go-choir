@@ -17,7 +17,7 @@ import Foundation
 public struct VoiceOption: Codable, Equatable, Sendable, Identifiable {
     public var id: String
     public var stageID: String
-    /// The stage's `voice` parameter; empty for the system voice.
+    /// The stage's `voice` parameter; "F2"/"M2" for the bundled voice, which needs no download.
     public var voice: String
     public var name: String
     public var blurb: String
@@ -31,8 +31,12 @@ public struct VoiceOption: Codable, Equatable, Sendable, Identifiable {
     public var setting: StageSetting {
         voice.isEmpty ? StageSetting(id: stageID) : StageSetting(id: stageID, params: ["voice": .string(voice)])
     }
-    /// Display group and licence attribution for the model that makes this voice.
-    public var group: String { VoiceRows.all.first { $0.id == id }?.group ?? (modelID == VoiceCatalog.pocketModel ? "PocketTTS 100M" : "") }
+    /// Display group and licence attribution for the model that makes this voice. The bundled voice is its own group (the shared interface's
+    /// `voiceCards` contract names it "Tiny Voca"); every other row groups under its model.
+    public var group: String {
+        if stageID == VoiceCatalog.bundledStageID { return VoiceCatalog.bundledGroup }
+        return VoiceRows.all.first { $0.id == id }?.group ?? (modelID == VoiceCatalog.pocketModel ? "PocketTTS 100M" : "")
+    }
     public var credit: String {
         if stageID == VoiceCatalog.bundledStageID { return VoiceCatalog.bundledCredit }
         return VoiceRows.all.first { $0.id == id }?.credit ?? KnownModels.managed.first { $0.id == modelID }?.credit ?? ""
@@ -51,6 +55,8 @@ public enum VoiceCatalog {
     public static let phononModel = "phonon-31m"
     /// The same bundled stage is the default and the fallback when an optional voice is unavailable.
     public static let bundledStageID = "tiny-voca"
+    /// The group heading the bundled voice's cards sit under (the shared interface's `voiceCards` contract).
+    public static let bundledGroup = "Tiny Voca"
     public static let bundledCredit = "Tiny Voca by Muhammed Nazeem, Core ML port by razorback16. Apache-2.0."
     /// Stages that need a model on the phone; only these get the readiness check and the fall back.
     public static let neuralStageIDs: Set<String> = ["kokoro", "phonon", "pocket-tts"]

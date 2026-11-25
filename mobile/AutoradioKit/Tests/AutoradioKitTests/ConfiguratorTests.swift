@@ -120,7 +120,11 @@ final class ConfiguratorTests: XCTestCase {
             XCTAssertEqual(plan.map(\.score), plan.map(\.score).sorted(by: >), "best quality first")
             let budget = d.availableMB! - ConfigThresholds.standard.planningHeadroomMB
             XCTAssertTrue(plan.allSatisfy { $0.estimatedMB <= budget + 0.001 }, "\(tier.label): every configuration fits the planner's budget")
-            XCTAssertTrue(plan.last!.picks.values.allSatisfy { id in CandidateTable.all.first { $0.id == id }!.isFloor }, "a floor-only configuration is last")
+            // The bundled voice is both a floor and the best-ranked voice, so the all-floor configuration is always possible but is not the
+            // weakest: the weakest is the lowest-ranked downloaded voice beside everything else on its floor.
+            XCTAssertTrue(plan.contains { $0.picks.values.allSatisfy { id in CandidateTable.all.first { $0.id == id }!.isFloor } },
+                          "an all-floor configuration is always possible")
+            XCTAssertEqual(plan.last?.score, plan.map(\.score).min(), "the weakest configuration is last")
         }
     }
 
@@ -161,7 +165,9 @@ final class ConfiguratorTests: XCTestCase {
         let hot = ConfigPlanner.verdict(FakeConfigBackend.good(thermal: "serious"), config: cfg, device: d)
         XCTAssertTrue(hot.reasons.joined().contains("serious"), "\(hot.reasons)")
         var late = FakeConfigBackend.good(); late.ttsFirstSoundMs = 4000
-        XCTAssertFalse(ConfigPlanner.verdict(late, config: cfg, device: d).ok)
+        XCTAssertTrue(ConfigPlanner.verdict(late, config: cfg, device: d).ok, "the first plan's voice is bundled Tiny Voca, a floor: no first-sound measurement applies to it")
+        let downloaded = ConfigPlanner.plan(device: d).first { $0.pick(.voice) == "kokoro-82m-ane" }!
+        XCTAssertFalse(ConfigPlanner.verdict(late, config: downloaded, device: d).ok, "a voice that must be loaded is judged on its first sound")
         var asr = FakeConfigBackend.good(); asr.asrRealTimeFactor = 0.9
         XCTAssertFalse(ConfigPlanner.verdict(asr, config: cfg, device: d).ok)
         var failed = FakeConfigBackend.good(); failed.failedRoles["responder"] = "no sentence"

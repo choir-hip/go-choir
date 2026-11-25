@@ -6,7 +6,7 @@ import Foundation
 //  1. A tap while another sample is playing: the first stops (the host's `halt`), only the newest plays; a late finish of the old one
 //     changes nothing.
 //  2. A voice whose model is not on the phone: its card shows progress while the model downloads, the voice is chosen at once (the
-//     radio speaks with the system voice until the model is ready, `makeSpeaker`), and the sample plays when the download ends, unless
+//     radio speaks with bundled Tiny Voca until the model is ready, `makeSpeaker`), and the sample plays when the download ends, unless
 //     the listener tapped something else meanwhile.
 //  3. Two voices share one model (all Kokoro voices): one download serves every card of it, and a second tap during it does not start a
 //     second download.
@@ -26,7 +26,8 @@ public struct VoiceCardState: Codable, Equatable, Sendable {
     public var selected: Bool
     public var playing: Bool
     public var note: String
-    /// The model it is a voice of: its id (for a stable name in the page), its name, and the credit its licence asks for. All empty for the system voice.
+    /// The model it is a voice of: its id (for a stable name in the page), its name, and the credit its licence asks for. `model` is empty for
+    /// the bundled voice, which needs no download.
     public var model: String = ""
     public var group: String = ""
     public var credit: String = ""
@@ -123,7 +124,7 @@ public final class VoiceSampler: @unchecked Sendable {
             do { try await self.say(o) }
             catch is CancellationError {}
             catch {
-                self.st.write { s in if s.generation == gen { s.sampleFailed[o.id] = "That voice could not play just now. The radio will use the phone's voice until it can." } }
+                self.st.write { s in if s.generation == gen { s.sampleFailed[o.id] = "That voice could not play just now. The radio will use its built-in voice until it can." } }
             }
             self.st.write { s in if s.generation == gen, s.playing == o.id { s.playing = nil } }
             self.onChange?()

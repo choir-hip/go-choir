@@ -304,7 +304,7 @@ extension ModelDeletion {
 
 /// What the radio is using right now, DERIVED: the models the registry's descriptors of the configured stages need (the voice whatever its saved parameter, the decision model, the recogniser, the speech detector), the models of a composite transcriber's two halves, and the answering model.
 public enum ModelInUse {
-    /// A library-managed model that is configured but has not passed its check is not "in use": the radio is speaking with the phone's voice (`makeSpeaker` refuses an unready neural voice), and the kept half pack of the voice the person tapped must be removable. The files the answering stages load (GGUFs, the bundle) stay protected whether or not they passed a check.
+    /// A library-managed model that is configured but has not passed its check is not "in use": the radio is speaking with bundled Tiny Voca (`makeSpeaker` refuses an unready neural voice), and the kept half pack of the voice the person tapped must be removable. The files the answering stages load (GGUFs, the bundle) stay protected whether or not they passed a check.
     public static func ids(config: LabConfiguration, registry: StageRegistry, responder: String?, decision: String? = nil, readiness: VoiceReadiness = Voices.readiness, pins: (String) -> ModelPin? = { ModelPins.current($0) }) -> Set<String> {
         var out = ModelStore.needed(by: config, registry: registry)
         if let st = config.setting(.transcriber), st.id == ListenerPipeline.liveThenFinalStageID {

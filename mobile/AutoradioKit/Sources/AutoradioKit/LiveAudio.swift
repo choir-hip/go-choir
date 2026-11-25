@@ -969,7 +969,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         switch b {
         case .speech(let t), .listenerPassage(let t, _):
             // The block after this one is synthesised while this one plays (`lookahead`), so a long story starts after its first short
-            // block and then runs without a gap; the voice itself falls back to the system voice line by line (`makeSpeaker`).
+            // block and then runs without a gap; the voice itself falls back to bundled Tiny Voca line by line (`makeSpeaker`).
             lock.lock(); let current = configuration; lock.unlock()
             let key = Self.lookaheadKey(t, current)
             let hit = ahead.write { a -> Task<Synthesized?, Never>? in

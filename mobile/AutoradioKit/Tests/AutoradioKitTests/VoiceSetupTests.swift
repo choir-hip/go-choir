@@ -26,7 +26,7 @@ final class VoiceSetupTests: XCTestCase {
         XCTAssertEqual(mid[.voice]!.first?.id, "kokoro-82m-ane")
         let small = SetupCatalog.plan(for: device(2))
         XCTAssertEqual(small[.transcriber]!.map(\.id), ["apple-speech"])
-        XCTAssertEqual(small[.voice]!.map(\.id), ["system-voice"])
+        XCTAssertEqual(small[.voice]!.map(\.id), [VoiceCatalog.bundledStageID], "no download needed: the bundled voice is the voice ladder's floor")
         for s in SetupStage.allCases { XCTAssertTrue(SetupCatalog.plan(for: device(0.5))[s]!.last!.isFloor, "every ladder ends in something that exists") }
         XCTAssertEqual(SetupCatalog.plan(for: device(8), smaller: true)[.transcriber]!.first?.id, "fluid-speech-mini")
     }
@@ -121,7 +121,7 @@ final class VoiceSetupTests: XCTestCase {
         let s = VoiceSetup(backend: Offline(), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1, verifier: ReadinessVerifier(record: MemoryVoiceReadiness()))
         await s.run()
         XCTAssertEqual(s.choices[.transcriber], "apple-speech")
-        XCTAssertEqual(s.choices[.voice], "avspeech")
+        XCTAssertEqual(s.choices[.voice], VoiceCatalog.bundledStageID, "every download failed: the bundled voice speaks, and it needs none")
         XCTAssertEqual(s.choices[.speechBounds], "energy-vad")
         XCTAssertEqual(s.choices[.system1], "choir-system1")
         XCTAssertTrue(s.rows.allSatisfy { $0.state == "ready" }, "\(s.rows)")

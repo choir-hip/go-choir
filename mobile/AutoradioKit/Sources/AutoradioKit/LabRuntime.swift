@@ -77,8 +77,8 @@ public final class LabRuntime: @unchecked Sendable {
         self.log = log
         let voiceStore = VoiceChoiceStore(file: supportDir.appendingPathComponent("voice-choice.json"))
         self.voiceStore = voiceStore
-        // The saved voice, or on a fresh install the neural default. The model stages register after this runs, so the stage is not checked
-        // here: `makeSpeaker` falls back to the system voice for a stage that is not registered.
+        // The saved voice, or on a fresh install the bundled default. The model stages register after this runs, so the stage is not checked
+        // here: `makeSpeaker` falls back to bundled Tiny Voca for a stage that is not registered.
         let cfg = StageRegistry.listenerConfiguration(voice: voiceStore.current(), registry: registry, readiness: readiness)
         self.config = cfg
         let policyBox = PolicyBox(cfg.audio)

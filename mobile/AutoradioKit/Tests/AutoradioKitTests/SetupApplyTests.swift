@@ -8,6 +8,16 @@ import XCTest
 final class SetupApplyTests: XCTestCase {
     func dir() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("apply-\(UUID().uuidString)") }
     func tiny() -> DeviceProfile { DeviceProfile(chip: "test", memoryGB: 1, freeDiskGB: 40, onWiFi: true) }       // every ladder ends on its built-in floor
+    /// The bundled voice is native (AutoradioModels); this stands in for it in a Kit test so the registry has the stage the setup chose.
+    final class Bundled: Voice, @unchecked Sendable {
+        static let stageID = VoiceCatalog.bundledStageID
+        static var descriptor: StageDescriptor { StageDescriptor(displayName: "Tiny Voca") }
+        init(_ p: StageParams) {}
+        func speak(_ text: AsyncStream<String>) -> AsyncThrowingStream<AudioFrame, Error> { AsyncThrowingStream { $0.finish() } }
+    }
+    func registry() -> StageRegistry {
+        let r = StageRegistry.builtIn(); r.register(.voice, Bundled.self) { Bundled($0) }; return r
+    }
     struct Backend: SetupBackend {
         func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws {}
         func check(_ c: SetupCandidate) async throws -> SetupCheck { SetupCheck(loadMs: 1, speed: 0.1, unit: "x", memoryMB: 0, outputOK: true, note: "") }
@@ -26,7 +36,7 @@ final class SetupApplyTests: XCTestCase {
         XCTAssertEqual(rt.configuration, before, "a row's Download never changes the configuration, the listener or the voice")
     }
     func testA2AFinishedFirstRunSetupAppliesItsChoices() async {
-        let rt = LabRuntime(supportDir: dir(), session: NullSessionOwner())
+        let rt = LabRuntime(supportDir: dir(), session: NullSessionOwner(), registry: registry())
         rt.setStage(.voice, id: "pocket-tts")
         let s = await setup(row: false)
         rt.applySetupChoices(s)
