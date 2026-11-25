@@ -20,3 +20,10 @@ shape SignInView
 shape SignInEnd
   phase: string
   rev: number
+
+// The launch's account settle (account.ts settleAccount), answered by its own resource: what it did, and how many settles this process has published (the sources that read the account are asked again
+// when it moves).
+shape AccountSettle
+  epoch: number
+  action: string
+  failed: string

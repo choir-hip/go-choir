@@ -5,7 +5,7 @@
 // Held in memory for the session (never on disk: nothing here is stored, so nothing here needs a wipe beyond forgetting); keyed on the account generation, so another account never sees a held
 // document and an answer that began under an older generation is never held. A story and a revision never change, so they are held; a document's head changes (an edit, the desk's revision),
 // so it is asked for again each time and the held copy only stands in when the ask fails. Logs carry counts only, never a title.
-import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
+import { accountGeneration, authedJSON, getJSON, HTTPError, isRefusal, joinOrRedo, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
 import { lapYield } from './lap.ts';
 import { blankDoc, parseAddress, parseBundleAsync, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
 import { WORDS } from './words.ts';
@@ -110,12 +110,13 @@ async function ask(address: string, net: Net, prefetch = false): Promise<ReaderD
   if (have && (cacheable(address) || (bare(address) && (prefetch || unseen.has(address))))) { held.delete(address); held.set(address, have); if (!prefetch) unseen.delete(address); return have; }
   const key = address;
   const shared = inflight.get(key);
-  if (shared) return shared;
+  if (shared) return joinOrRedo(shared, () => ask(address, net, prefetch));     // a fetch another answer started and was let go in is asked again by this one
   let self: Promise<ReaderDoc> | undefined;                     // this ask, to tell whether a reload dropped it while it was on its way
   const p = (async (): Promise<ReaderDoc> => {
     let d: ReaderDoc;
     try { d = await fetchDoc(address, net); }
     catch (e) {
+      if (isRefusal(e)) throw e;                                                  // its answer was let go: not a failure of the story (no error page for the answer that waits on it)
       if (gen !== accountGeneration()) return blankDoc(address, 'loading');
       return !(e instanceof SignedOutError) && held.get(address) ? held.get(address)! : failDoc(address, e);
     }

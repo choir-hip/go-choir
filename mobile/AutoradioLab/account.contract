@@ -4,11 +4,20 @@ use choirAuth, choirPlayer from "@choir/autoradio"
 use choirRefresh from "@choir/autoradio"
 use ChoirAuth, ChoirPlayer from "@choir/autoradio"
 use LabState, SettingsAck from "@choir/autoradio"
-use SignOutResult, SignInView, SignInEnd from "./account-types.contract"
+use SignOutResult, SignInView, SignInEnd, AccountSettle from "./account-types.contract"
 use AccountView, HostPage from "./account-state-types.contract"
 
 members Autoradio
   resource au = choirAuth() as shape ChoirAuth else empty()
+  // The launch's account settle (account.ts): its own answer, with constant arguments so nothing lets it go; every other shared source waits for its value. Asked again when it failed (a second later)
+  // and after a sign-in (`signedRun` refreshes it). Not kept across launches (`transient`): each launch settles.
+  resource acctSettle = accountSettle() as shape AccountSettle else empty() transient
+  state settleTries = 0
+  action retrySettle
+    settleTries = settleTries + 1
+    refresh acctSettle
+  task settleAgain when failed(acctSettle) key=settleTries
+    after(1000, retrySettle)
   resource pl = choirPlayer() as shape ChoirPlayer else empty()
   // What the app says about the account (account-state.ts): asked again when anything that can change it happened: a sign-in or a sign-out, a page change, the app coming back to the front (the phone
   // unlocked: a key that could not be read yet is read again). An unreadable key is "locked", never "signed out".
@@ -44,7 +53,7 @@ members Autoradio
   // The card is the first thing in the bar's own column (bar.contract), so it sits whole above the bar at every bar height (the "On:" line, the now-playing strip, the answer card). Not over the code screen, a
   // sheet, the launcher, the bar's field or any keyboard (exactViewport: the one general keyboard fact), the content controls, the reader's aim row or a web layer.
   derive bannerOn = acs.message != "" and not authOpen and not siv.pending and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
-  resource acs = accountState(`${au.signedIn}|${siv.phase}|${siv.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${hpg.platform}`, pg.top, hc.mode, hpg.platform) as shape AccountView else empty()
+  resource acs = accountState(`${acctSettle.epoch}|${au.signedIn}|${siv.phase}|${siv.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${hpg.platform}`, pg.top, hc.mode, hpg.platform) as shape AccountView else empty()
   mutation acct as shape LabState
   mutation racct as shape SettingsAck refreshes rpulse
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
@@ -60,7 +69,7 @@ members Autoradio
   // SIGN-IN and ACCOUNT CREATION are one attempt with an id, a state machine owned in one place (app-signin.ts): the platform's passkey screen (Exact's @exact/passkeys), no code, no browser sheet.
   // This file only renders the machine's view and sends the person's presses; it keeps no copy of its state. Each press answers with the machine's `rev` after its last change, and settling
   // bumps the tick (`then`): the view is always read once more after the attempt's LAST transition.
-  mutation signedRun as shape SignInEnd then bumpSiv
+  mutation signedRun as shape SignInEnd refreshes acctSettle then bumpSiv
   mutation signedCancel as shape SignInEnd then bumpSiv
   mutation signedOpen as shape SignInEnd then bumpSiv
   // The sign-in screen is up (the card, Settings and the first-run page open it through `signIn`) and the email typed for a new account.

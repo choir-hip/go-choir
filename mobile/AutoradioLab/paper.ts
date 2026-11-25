@@ -16,7 +16,7 @@ import {
   FRONT, FRONT_LIMIT, LIST_LIMIT, MINE, buildMine, belongs, dateLine, display, isCategory, parseList, parseLiveSections, relative, resolveView, sections,
   type LiveSection, type Section, type Story,
 } from './paper-model.ts';
-import { getJSON, writeCurrent, accountGeneration } from './api.ts';
+import { getJSON, writeCurrent, accountGeneration, isRefusal, joinOrRedo } from './api.ts';
 
 export const FRONT_PATH = '/api/platform/publications/front';
 /** The last good front list, kept for an offline start. */
@@ -52,12 +52,12 @@ async function writeCache(storage: Storage | undefined, raw: string, gen: number
 /** The front list (`section` empty) or one category's list. Only the front list is written to the phone. */
 export function listing(section: string, storage: Storage | undefined): Promise<Listing> {
   const hit = kept.get(section);
-  if (hit) return hit;
+  if (hit) return joinOrRedo(hit, () => listing(section, storage));         // a list another answer asked and was let go before it came is asked again by this one
   // The promise is kept, so two answers asked together (the picks arrive a moment after the page) make one request.
   const p = load(section, storage).then((r) => {
     if (!(r.status === 'ready' && (r.stories.length > 0 || section !== ''))) kept.delete(section);
     return r;
-  });
+  }, (e: unknown) => { kept.delete(section); throw e; });
   kept.set(section, p);
   return p;
 }
@@ -74,6 +74,7 @@ async function load(section: string, storage: Storage | undefined): Promise<List
     console.log(`paper: list ${section === '' ? 'front' : 'section ' + section} stories=${stories.length}`);
     return res;
   } catch (e) {
+    if (isRefusal(e)) throw e;                                                    // its answer was let go: not a fact about the network (no offline copy, no error state for others)
     console.log(`paper: list ${section === '' ? 'front' : 'section ' + section} failed`);
     if (section === '') {
       const body = await readCache(storage);

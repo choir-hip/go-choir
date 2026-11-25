@@ -5,7 +5,7 @@
 //                       from the clock 1_700_000_000_000 (Nov 2023) minus a set number of days, which a real file does not share together with the path and size
 //   open-pages-shared.json   an address is demo's only when it is one of the ids demo mode served (the five stories, five Texture documents, four mailbox states, the demo
 //                            messages, the sample book, a demo message's attachment path)
-// "Once": ONE attempt per process (a shared promise), run by app.ts before any source answers, so pages.ts and files.ts have not loaded their state yet and read what is on disk
+// "Once": ONE attempt per process, run by the account settle's answer (account.ts) before any other source answers, so pages.ts and files.ts have not loaded their state yet and read what is on disk
 // after it. The marker is written AFTER the removals; a failed write leaves it unset and the next launch retries (that process loads the uncleaned file again, so nothing in memory
 // can undo a cleaned file within a process). An unreadable file is never rewritten. Sign-out removes the marker
 // with the rest (account.ts), which only means the pass may run once more, and finds nothing.
@@ -63,13 +63,14 @@ async function rewrite(storage: Storage, file: string, change: (v: unknown) => u
   try { await storage.fs.atomicWriteFile(file, new TextEncoder().encode(JSON.stringify(next))); return 'rewritten'; } catch { return 'failed'; }
 }
 
-let attempt: Promise<void> | null = null;
-/** One attempt per process: every caller gets the same promise. (For tests: `resetDemoLeftovers`.) */
-export function clearDemoLeftovers(storage: Storage | undefined): Promise<void> {
-  if (!attempt) attempt = run(storage);
-  return attempt;
+let attempted = false;
+/** One attempt per process, run by the account settle's own answer (account.ts settleRun) before any other source answers; a value, not a shared promise. (For tests: `resetDemoLeftovers`.) */
+export async function clearDemoLeftovers(storage: Storage | undefined): Promise<void> {
+  if (attempted) return;
+  attempted = true;                                     // claimed before the first await: a second caller (a settle run that superseded another) makes no second attempt
+  await run(storage);
 }
-export function resetDemoLeftovers(): void { attempt = null; }
+export function resetDemoLeftovers(): void { attempted = false; }
 
 async function run(storage: Storage | undefined): Promise<void> {
   if (!storage) return;

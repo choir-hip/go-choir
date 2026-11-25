@@ -41,7 +41,8 @@ export async function canSeal(): Promise<boolean> {
   if (sealingBlocked()) return false;
   const later = nativeLater(); if (!later) return false;
   if (sealable === null) {
-    try { const r = (await bounded(later({ op: 'mailCan' }))) as { ok?: boolean } | null; sealable = !!r && r.ok === true; } catch { sealable = false; }
+    // Only an ANSWER is kept for the session: a call that threw, timed out or was refused (its answer let go) says nothing about the cipher, and is asked again next time.
+    try { const r = (await bounded(later({ op: 'mailCan' }))) as { ok?: boolean } | null; sealable = !!r && r.ok === true; } catch { return false; }
   }
   return sealable;
 }

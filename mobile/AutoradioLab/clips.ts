@@ -15,7 +15,7 @@
 //     or range is picked up); ids absent from a response are kept.   11. The whole set is asked again each time a story page is reached from another page and on a retry tick; a failed ask is retried then.
 
 import type { Result } from './app.contract.d.ts';
-import { accountGeneration, getJSON } from './api.ts';
+import { accountGeneration, getJSON, isRefusal } from './api.ts';
 import { episodeAddress, feedKey, parseShow } from './podcast-model.ts';
 
 export const CLIPS_PATH = '/api/platform/podcast-clips';
@@ -105,7 +105,7 @@ function ensureAll(): Promise<void> {
   if (asked) return asking ?? Promise.resolve();
   asked = true;                                                       // once a retry: a failure is asked again by the next one, never on every draw
   const gen = accountGeneration();                                    // a clip set that lands after the account changed is not kept
-  const mine = (async () => { try { const body = (await getJSON(CLIPS_PATH, { limit: 200 })).body; if (gen === accountGeneration()) merge(parseClips(body), true); } catch { /* the route is missing or down: nothing, silently */ } })();
+  const mine = (async () => { try { const body = (await getJSON(CLIPS_PATH, { limit: 200 })).body; if (gen === accountGeneration()) merge(parseClips(body), true); } catch (e) { if (isRefusal(e)) asked = false; /* else the route is missing or down: nothing, silently; a refusal (its answer let go) is asked again */ } })();
   asking = mine;
   return mine;
 }

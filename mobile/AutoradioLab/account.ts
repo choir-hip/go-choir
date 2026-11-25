@@ -36,8 +36,8 @@ import { wipeTold, TOLD_FILE } from './cards.ts';
 import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
 import { wipeSteer, STEER_FILE } from './steer.ts';
 import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
-import { DEMO_MARKER } from './demo-leftovers.ts';
-import { accountGeneration, announceGeneration, authedJSON, authedURL, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, HTTPError, type KeyState } from './api.ts';
+import { DEMO_MARKER, clearDemoLeftovers } from './demo-leftovers.ts';
+import { accountGeneration, announceGeneration, authedJSON, authedURL, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, isRefusal, HTTPError, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
 import { keepKey, KEY_ID_NAME, KEY_NAME } from './app-signin.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
@@ -191,11 +191,10 @@ async function sharedWipeThen(storage: Storage | undefined, store: Store | undef
 }
 
 /** The one function: read the three facts, decide, act. Run at launch (`settleAccount`) and at the end of every sign-out attempt. */
-export async function reconcile(storage: Storage | undefined, store: Store | undefined, native: Native, seen?: { keyError: boolean }): Promise<Reconciled> {
+export async function reconcile(storage: Storage | undefined, store: Store | undefined, native: Native): Promise<Reconciled> {
   if (!storage) return { action: 'nothing', failed: [] };
   for (let round = 0; round < 2; round++) {
     const k = await keyState();
-    if (k.error && seen) seen.keyError = true;          // the native read threw (a let-go answer's call is refused so): the caller does not take "nothing" as this launch's answer
     const marker: MarkerFact = (await exists(storage, PENDING_FILE)) ? 'pending' : 'none';
     const stamp: StampFact = k.state === 'present' ? await stampFact(storage, k.digest) : (await exists(storage, STAMP_FILE)) ? 'other' : 'none';
     const action = decide({ key: k.state, stamp, marker });
@@ -402,50 +401,63 @@ async function signOutInner(
   return { done: true, failed: failed.join(','), message: `Signed out, but these could not be cleared yet: ${failed.join(', ')}. They will be cleared the next time the app starts.${note ? ' ' + note : ''}` };
 }
 
-// The launch's settle is shared as a VALUE, never as a kept promise (docs/problems/shared-settle-promise-fails-every-request-2026-11-25.md). Exact resumes every step of an async function under the answer that
-// called it, and refuses a timer, a fetch or a native call once that answer is let go (asked again with new arguments): a run another answer started can end refused, and a kept promise would carry
-// that refusal to every later answer for the life of the process. So: a run that rejects is not kept, a run whose key read threw is not taken by another answer as the launch's answer, and the run
-// arms no timer of its own (the pending-revoke retry is bounded by its requests' `exactTimeout`). While a run is in flight a later answer waits on it (one reconcile at a time: the wipes run once).
-type SettleRun = { result: Reconciled; sure: boolean; counted?: boolean };
-let settledValue: Reconciled | null = null;
-let settling: Promise<SettleRun> | null = null;
-let settleEpoch = 0;
-let unsureRuns = 0;
-/** A run whose key read threw is taken as the launch's answer after this many (a bridge that always throws: the launch then does nothing, as an unreadable key does). */
-const UNSURE_RUNS_KEPT = 3;
-/** The pending-revoke retry at launch: its requests share this deadline (each its share, as `exactTimeout`), so the first answer is never held longer by it. */
+// ---- the launch's settle: ONE answer owns it, every other answer waits for its VALUE (docs/problems/shared-settle-promise-fails-every-request-2026-11-25.md)
+// Exact runs each step of an async function as the answer that called it, refuses that answer's timers, fetches and native calls once it is let go (asked again with new arguments), and DROPS its
+// timers, so what awaits them stays pending. Work started by one answer and awaited by others therefore fails or hangs all of them when its answer is let go. So the settle is the work of the
+// `accountSettle` resource (account.contract: constant arguments, nothing lets it go; the contract asks it again when it failed and after a sign-in). Every other answer waits for the settled VALUE
+// (`awaitSettled`), with a timer of its own: it never awaits the settle's promise, and Exact always has something of its own to wake it by.
+let settledValue: { epoch: number; result: Reconciled } | null = null;
+let settleEpoch = 0;          // moved by `resetSettled` (a sign-in's adoptKey): a value of an earlier epoch is not this one's
+let runs = 0;                 // each run's number: only the newest run publishes (an earlier one was superseded: its answer was asked again)
+let settledCount = 0;         // how many times a settle was published: the contract's sources that read the account are asked again when it moves
+type Wake = { p: Promise<void>; resolve: () => void };
+const newWake = (): Wake => { let resolve!: () => void; const p = new Promise<void>((r) => { resolve = r; }); return { p, resolve }; };
+// Resolved (never rejected) when a value is published, then replaced. A waiter races it with a timer of its own, so it does not depend on it.
+let wake: Wake = newWake();
+/** A waiter's own timer: the longest it sleeps between looks when the publication's wake does not reach it. */
+export const SETTLE_POLL_MS = 250;
+/** The pending-revoke retry at launch: its requests share this deadline (each its share, as `exactTimeout`). */
 export const LAUNCH_REVOKE_BUDGET_MS = 3000;
 
-async function settleRun(storage: Storage | undefined, store: Store | undefined, native: Native): Promise<SettleRun> {
+/** The settled value of this epoch, or null. */
+export const settledNow = (): Reconciled | null => (settledValue !== null && settledValue.epoch === settleEpoch ? settledValue.result : null);
+export const settledTimes = (): number => settledCount;
+
+async function settleRun(storage: Storage | undefined, store: Store | undefined, native: Native): Promise<Reconciled> {
   await forgetOldCopy(storage);
-  const seen = { keyError: false };
-  const result = await reconcile(storage, store, native, seen);
+  const result = await reconcile(storage, store, native);
   await retryPendingRevoke(storage, store, { budgetMs: LAUNCH_REVOKE_BUDGET_MS }).catch(() => undefined);
-  return { result, sure: !seen.keyError };
+  await clearDemoLeftovers(storage);                     // what demo mode left in the shared files, once per process, before any other source answers (demo-leftovers.ts)
+  return result;
 }
 
-/** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops, once per launch (and again after `adoptKey`). */
-export async function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
+/** The settle, run by the answer that calls it: the `accountSettle` source (and tests). A value settled for this epoch answers at once. Publishes only a run that was neither refused (its answer let go:
+ * a native step refused is not a fact about the phone) nor superseded; otherwise it throws or answers without publishing, and the contract asks again. */
+export async function settleAccount(storage: Storage | undefined, store: Store | undefined, native?: Native): Promise<Reconciled> {
+  const now = settledNow(); if (now) return now;
+  const epoch = settleEpoch, run = ++runs;
+  const seen = { refused: false };
+  const later = nativeLater();
+  const watched = later ? (r: { op: string; gen?: number }) => later(r).catch((e: unknown) => { if (isRefusal(e)) seen.refused = true; throw e; }) : null;
+  const result = await settleRun(storage, store, native ?? nativeOf(watched));
+  if (seen.refused) throw new Error('the account settle was refused (its answer was let go): it is asked again');
+  if (run !== runs || epoch !== settleEpoch) return result;                          // superseded or reset meanwhile: not published
+  settledValue = { epoch, result }; settledCount += 1;
+  const w = wake; wake = newWake(); w.resolve();
+  return result;
+}
+
+/** Every answer but the settle's own and sign-out's: wait for the settled value. Each look is this answer's own (a timer it arms), never another answer's promise alone. */
+export async function awaitSettled(pollMs = SETTLE_POLL_MS): Promise<Reconciled> {
   for (;;) {
-    if (settledValue) return settledValue;
-    const epoch = settleEpoch;
-    const mine = !settling;
-    const run = settling ?? (settling = settleRun(storage, store, native));
-    let out: SettleRun;
-    try { out = await run; } catch (e) {
-      if (settling === run) settling = null;                                    // not kept: the next answer reconciles again
-      if (mine) throw e;
-      continue;                                                                  // another answer's run failed: this answer runs its own
-    }
-    if (settling === run) settling = null;
-    if (epoch !== settleEpoch) return out.result;                               // a sign-in reset it meanwhile: this answer goes on with what it saw, the next one reconciles the new key
-    if (!out.sure && !out.counted) { out.counted = true; unsureRuns += 1; }
-    if (out.sure || unsureRuns >= UNSURE_RUNS_KEPT) { settledValue = out.result; unsureRuns = 0; return out.result; }
-    if (mine) return out.result;                                                 // its own run, as before; not kept for the others
+    const v = settledNow(); if (v) return v;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([wake.p, new Promise<void>((r) => { timer = setTimeout(r, pollMs); })]);
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
-/** For tests. */
-export function resetSettled(): void { settledValue = null; settling = null; unsureRuns = 0; settleEpoch += 1; }
+/** A sign-in (adoptKey) and tests: the next settle reconciles again; the answers wait for it. */
+export function resetSettled(): void { settledValue = null; settleEpoch += 1; runs += 1; }
 
 /** Keep the key a sign-in made and have the account reconciled again at the next answer: the new key may be another account's (the old one was refused), and `settleAccount` runs once per launch otherwise, so the old account's stored data would be read under the new key. `reconcile` then sees a stamp that is not this key's and wipes. */
 export function adoptKey(store: { set(n: string, v: string): void; forget(n: string): void }, key: string, keyId: string): void {

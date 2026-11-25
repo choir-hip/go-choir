@@ -14,7 +14,7 @@
 //  C7 A pick of a model for a job (the download step) is kept across a restart, read by shape (only string ids), changes nothing when it is the same, and goes with the rest at sign-out.
 import type { Storage } from './app.contract.d.ts';
 import { askText, type AskText } from './consent-text.ts';
-import { accountGeneration, keyState, nativeLater, writeCurrent } from './api.ts';
+import { accountGeneration, isRefusal, keyState, nativeLater, writeCurrent } from './api.ts';
 import { MIC_TEXT } from './micask.ts';
 
 export const CONSENT_FILE = 'app:/data/consent.json';
@@ -59,14 +59,17 @@ async function load(storage: Storage | undefined): Promise<Mem> {
 }
 
 /** DOOR A: native's download door holds a copy of what was agreed and refuses every fetch without it. Pushed at load, at every change and at sign-out; a failed push leaves the door as it was (closed until the next one). */
+// A push refused because its answer was let go never reached native: the next view pushes again.
+let pushAgain = false;
 async function pushAgreement(agreed: Record<string, string>): Promise<void> {
-  try { await nativeLater()?.({ op: 'obConsent', agreed }); } catch { /* the door stays as it was */ }
+  pushAgain = false;
+  try { await nativeLater()?.({ op: 'obConsent', agreed }); } catch (e) { if (isRefusal(e)) pushAgain = true; /* else the door stays as it was */ }
 }
 
 const view = (m: Mem): ConsentView => ({ rev: m.rev, ...askText(), micPre: MIC_TEXT.pre, micOff: MIC_TEXT.off, micContinue: MIC_TEXT.continue, micNotNow: MIC_TEXT.notNow, micOk: MIC_TEXT.ok });
 
 /** Source: what has been agreed, and the words of the sign-in prompt. */
-export async function consentView(storage: Storage | undefined): Promise<ConsentView> { return view(await load(storage)); }
+export async function consentView(storage: Storage | undefined): Promise<ConsentView> { const m = await load(storage); if (pushAgain && m.loaded) await pushAgreement({ ...m.c.agreed }); return view(m); }
 
 /** The person's picks, job -> model id (an unread file is no picks: the list's recommendations). */
 export async function consentPicks(storage: Storage | undefined): Promise<Record<string, string>> { const m = await load(storage); return { ...m.c.picks }; }

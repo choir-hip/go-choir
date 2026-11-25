@@ -10,8 +10,7 @@ import { activityPage } from './activity.ts';
 import { onboardingPage, onboardingAct, liveEnv as onboardingEnv } from './onboarding.ts';
 import * as cards from './cards.ts';
 import { aboutBuild } from './about.ts';
-import { accountSignOut, adoptKey, settleAccount } from './account.ts';
-import { clearDemoLeftovers } from './demo-leftovers.ts';
+import { accountSignOut, adoptKey, awaitSettled, settleAccount, settledTimes } from './account.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
@@ -214,6 +213,8 @@ const sources: Sources = {
   signInOpen: (_a, store) => signInReset(signInEnv(store)),
   signInView: ([_tick]) => signInView(),
   accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
+  // The launch's account settle (account.ts), as an answer of its own that nothing lets go: every other answer waits for its value (`answer` below).
+  accountSettle: async (_a, store, storage) => { const r = await settleAccount(storage, store); return { epoch: settledTimes(), action: r.action, failed: r.failed.join(',') }; },
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
   podcastEpisode: ([address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev], _store, storage) =>
@@ -272,10 +273,8 @@ const sources: Sources = {
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
   bindStore(store as never);
-  // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
-  if (source !== 'accountSignOut') await settleAccount(storage, store);
-  // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, finished before the first source runs, so the
-  // modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.
-  if (source !== 'accountSignOut') await clearDemoLeftovers(storage);
+  // No source answers before the launch's account settle (account.ts): it finishes a sign-out that was cut short, or wipes another account's data, and clears what demo mode left. It is the
+  // `accountSettle` resource's own work; every other answer waits for its VALUE with a timer of its own, never on another answer's promise (an answer let go would fail or hang every waiter).
+  if (source !== 'accountSignOut' && source !== 'accountSettle') await awaitSettled();
   return sources[source](args, store, storage, native);
 };

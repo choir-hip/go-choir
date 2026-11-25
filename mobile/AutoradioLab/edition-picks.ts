@@ -14,7 +14,7 @@
 // (the DJ request, the on-device retrieval) its copy; `editionHeard`/`editionSaid` carry the words the voice heard at the setup screen to shared code and its one-line answer back,
 // because Exact has no call from native code into shared code (native-modules.md, "Out"): shared code asks, on the screen's own timer.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, nativeLater, writeCurrent } from './api.ts';
+import { accountGeneration, isRefusal, nativeLater, writeCurrent } from './api.ts';
 import { Selection, suggestions, resolve, treeRows, key, tidy, EXPLAINER, VOICE_HINT, selectionLine, type TopicRow } from './edition-model.ts';
 import { listing } from './paper.ts';
 
@@ -125,11 +125,11 @@ function pushMirror(env: Env, gen: number, topics: string[] | null, force = fals
   const dev = env.device; if (!dev) return Promise.resolve(true);
   const p = mirrorTail.then(async (): Promise<boolean> => {
     if (!force && gen !== accountGeneration()) return true;                  // an account that moved on: nothing to send, nothing to resend
-    const r = await Promise.race([(topics === null ? dev.forget() : dev.mirror(topics, gen)).catch(() => undefined), delay(env.mirrorDeadlineMs ?? MIRROR_DEADLINE_MS, undefined)]);
+    const r = await Promise.race([(topics === null ? dev.forget() : dev.mirror(topics, gen)).catch((e: unknown) => (isRefusal(e) ? false : undefined)), delay(env.mirrorDeadlineMs ?? MIRROR_DEADLINE_MS, undefined)]);
     return r !== false;                                                      // native's refusal is false: the copy is sent again (the next time the picks open or change)
   });
   mirrorTail = p.catch(() => undefined);
-  return p.catch(() => true);
+  return p.catch((e: unknown) => !isRefusal(e));                            // refused (the answer that ran this link was let go): not sent, so sent again at the next open
 }
 
 // ---- the page

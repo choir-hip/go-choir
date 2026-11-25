@@ -77,6 +77,7 @@ describe('the notebook page is idle when it is not on top', () => {
     let fetches = 0; globalThis.fetch = (async () => { fetches++; return new Response('{}', { status: 200 }); }) as never;
     const { answer } = await import('./app.ts');
     const storage = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => undefined } } as never;
+    await answer('accountSettle' as never, [] as never, undefined as never, storage, undefined as never);         // the launch's settle answers first (account.contract acctSettle); the page waits for it otherwise
     const n = await answer('notebookPageShared' as never, ['', 0, false, ''] as never, undefined as never, storage, undefined as never) as { docState: string };
     expect(n.docState).toBe('loading'); expect(fetches).toBe(0);
   });

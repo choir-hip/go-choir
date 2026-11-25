@@ -69,6 +69,16 @@ export class HTTPError extends Error {
   constructor(status: number, message: string, retryAfter: number | null = null) { super(message); this.name = 'HTTPError'; this.status = status; this.retryAfter = retryAfter; }
 }
 
+/** Exact refusing an answer's own work because that answer was let go, has replied, or is background work (pinned fetch.js:207-212, prelude.js `__exact_forget` and `timerOwner`): not a fact
+ * about the network, the server or the phone, so nothing learned from such a failure is kept for other answers (docs/problems/shared-settle-promise-fails-every-request-2026-11-25.md). */
+export const isRefusal = (e: unknown): boolean => /was let go|let go before|background work|outside an answer|is unavailable here/.test(e instanceof Error ? e.message : String(e));
+
+/** Join a READ another answer may have started (`shared`): when it failed with Exact's refusal of that answer (it was let go), the failure is not this answer's, so this answer reads for itself
+ * (`redo`). Only for reads safe to repeat (a GET), never a write; and only for work of fetches and storage, never one that waits on a timer of the other answer's (a dropped timer never settles). */
+export async function joinOrRedo<T>(shared: Promise<T>, redo: () => Promise<T>): Promise<T> {
+  try { return await shared; } catch (e) { if (isRefusal(e)) return redo(); throw e; }
+}
+
 export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string>; timeoutMs?: number };
 
 /** The three accounts the sign-in keeps (their secret names are in app-signin.ts); the credential source answers no other name. */
@@ -131,7 +141,7 @@ export function nativeLater(): ((request: { op: string; account?: Account; b64?:
   // goes over: native adopts a boot even when it is below the newest generation it saw in an earlier context, so a restart at 0 is not refused for the life of the process (AutoradioKit `SharedGeneration.boot`).
   // Sent first, not waited for: native takes its calls in the order they arrive, and a native that never answers the announcement must not stop every call behind it.
   return (r) => {
-    if (r.op !== 'generation' && !bootSent) bootSent = Promise.resolve(native.later({ op: 'generation', gen: generation, boot: true })).then(() => undefined, (e: unknown) => { console.log(`api: the boot announcement failed (${e instanceof Error ? e.message : 'threw'}): native keeps the generation it last saw`); });
+    if (r.op !== 'generation' && !bootSent) bootSent = Promise.resolve(native.later({ op: 'generation', gen: generation, boot: true })).then(() => undefined, (e: unknown) => { console.log(`api: the boot announcement failed (${e instanceof Error ? e.message : 'threw'}): native keeps the generation it last saw`); if (isRefusal(e)) bootSent = null; });       // refused because its answer was let go: never reached native, so the next call sends it
     return native.later(r);
   };
 }
@@ -281,6 +291,7 @@ async function computerId(key: string, kept: string): Promise<string> {
   const digest = await digestOf(key);
   if (discovered && discovered.digest === digest) return discovered.id;
   if (discovering && discovering.digest !== digest) discovering = null;
+  const joined = discovering !== null;
   if (!discovering) {
     const gen = generation;
     let mine!: Promise<string>;
@@ -303,7 +314,7 @@ async function computerId(key: string, kept: string): Promise<string> {
     })();
     discovering = { digest, p: mine };
   }
-  return discovering.p;
+  return joined ? joinOrRedo(discovering.p, () => computerId(key, kept)) : discovering.p;       // another answer's discovery refused (it was let go) is asked again by this one
 }
 
 /** The digest of the key the server last refused (a 401): the account state says "rejected" while that key is the stored one, and another key clears it. */

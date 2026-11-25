@@ -17,7 +17,7 @@ members Autoradio
   // once per request id and gives the new view; the set is read again after it.
   resource preq = pageRequest() as shape PageRequest else empty()
   resource preqd = pageRequested(preq.id, preq.address, preq.title) as shape PageList else empty()
-  resource pgs = pagesView(signedOutTick, preqd.top) as shape PageList else empty()
+  resource pgs = pagesView(signedOutTick, preqd.top, acctSettle.epoch) as shape PageList else empty()
   derive pg = pgs
   resource pmod = pageModel(address=pg.top) as shape PageModel else empty()
   // The themes are shared code (themes.ts, both platforms). The system's scheme and Reduce Motion are Exact's own facts (`vp`, members-stack.contract); the first frame shows the whole bundled light default (every field; themes.test.ts P1 keeps it in step) until the answer lands.
