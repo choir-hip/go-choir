@@ -7,12 +7,14 @@ OUT="${2:?output directory}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 [ -f "$SRC/dizione.h" ] || { echo "missing $SRC/dizione.h" >&2; exit 1; }
 mkdir -p "$OUT/dizione.xcframework"
-for platform in ios macos; do
+for platform in ios sim macos; do
   case "$platform" in
     ios) sdk=iphoneos; sysroot="$(xcrun --sdk iphoneos --show-sdk-path)"
-         triple=arm64-apple-ios18.0; suffix=ios-arm64; variant='' ;;
+         triple=arm64-apple-ios18.0; suffix=ios-arm64 ;;
+    sim) sdk=iphonesimulator; sysroot="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+         triple=arm64-apple-ios18.0-simulator; suffix=ios-arm64-simulator ;;
     macos) sdk=macosx; sysroot="$(xcrun --sdk macosx --show-sdk-path)"
-         triple=arm64-apple-macos15.0; suffix=macos-arm64; variant='' ;;
+         triple=arm64-apple-macos15.0; suffix=macos-arm64 ;;
   esac
   work="$OUT/dizione-$platform"
   mkdir -p "$work/include" "$OUT/dizione.xcframework/$suffix/Headers"
@@ -42,6 +44,11 @@ cat > "$OUT/dizione.xcframework/Info.plist" <<'PLIST'
       <key>LibraryPath</key><string>libdizione.a</string>
       <key>SupportedArchitectures</key><array><string>arm64</string></array>
       <key>SupportedPlatform</key><string>ios</string></dict>
+    <dict><key>LibraryIdentifier</key><string>ios-arm64-simulator</string>
+      <key>LibraryPath</key><string>libdizione.a</string>
+      <key>SupportedArchitectures</key><array><string>arm64</string></array>
+      <key>SupportedPlatform</key><string>ios</string>
+      <key>SupportedPlatformVariant</key><string>simulator</string></dict>
     <dict><key>LibraryIdentifier</key><string>macos-arm64</string>
       <key>LibraryPath</key><string>libdizione.a</string>
       <key>SupportedArchitectures</key><array><string>arm64</string></array>
