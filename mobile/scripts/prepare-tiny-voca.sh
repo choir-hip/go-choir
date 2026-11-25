@@ -20,6 +20,12 @@ if [ "${1:-}" = --stage ]; then
   rm -rf "$dst"
   cp -R "$src" "$dst"
   check "$dst" "$1"
+  # The Dizione XCFramework is linked, not a resource: it goes where Exact links modules from.
+  X="$CACHE/$1/dizione.xcframework"
+  [ -d "$X" ] || fail "run mobile/scripts/prepare-tiny-voca.sh outside the Mac build lock first (no $X)"
+  mkdir -p "$(dirname "$2")/.deps/xcframeworks"
+  rm -rf "$(dirname "$2")/.deps/xcframeworks/dizione.xcframework"
+  cp -R "$X" "$(dirname "$2")/.deps/xcframeworks/"
   exit 0
 fi
 [ "$#" -eq 0 ] || fail 'usage: prepare-tiny-voca.sh'
