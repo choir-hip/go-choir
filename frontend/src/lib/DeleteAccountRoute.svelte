@@ -27,7 +27,7 @@
     DeletionPendingError, DeletionPurgingError, plainDeletionDate, AuthRequiredError,
   } from './auth.js';
 
-  type RouteState = 'checking' | 'signin' | 'info' | 'sure' | 'working' | 'scheduled' | 'offer' | 'cancelled';
+  type RouteState = 'checking' | 'signin' | 'reviewer' | 'info' | 'sure' | 'working' | 'scheduled' | 'offer' | 'cancelled';
 
   let state: RouteState = 'checking';
   let email = '';
@@ -38,7 +38,7 @@
   onMount(async () => {
     try {
       const session = await getSession();
-      state = session?.authenticated ? 'info' : 'signin';
+      state = !session?.authenticated ? 'signin' : session.user?.reviewer === true ? 'reviewer' : 'info';
     } catch (_err) {
       state = 'signin';
     }
@@ -52,8 +52,8 @@
     }
     state = 'working';
     try {
-      await loginPasskey(email.trim());
-      state = 'info';
+      const signedIn = await loginPasskey(email.trim());
+      state = signedIn?.user?.reviewer === true ? 'reviewer' : 'info';
     } catch (err) {
       if (err instanceof DeletionPendingError) {
         offer = err;
@@ -116,6 +116,9 @@
 
     {#if state === 'checking'}
       <h1>One moment…</h1>
+    {:else if state === 'reviewer'}
+      <h1>Delete your account</h1>
+      <p class="body" data-delete-reviewer>This account is kept for App Review and cannot be deleted here. To try account deletion, sign out, create a separate account with a passkey, and return here.</p>
     {:else if state === 'signin' || (state === 'working' && !offer && !purgeOn && email)}
       <h1>Delete your account</h1>
       <p class="body">Sign in with your passkey first, so Choir knows which account this is.</p>

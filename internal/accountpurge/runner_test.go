@@ -162,7 +162,7 @@ func newEnv(t *testing.T) *env {
 	}
 	f := &fakeSteps{store: s, fail: map[string]error{}, computers: []vmctl.AccountComputer{{ComputerID: "computer-abc", VMID: "vm-1", DesktopID: "primary", State: "stopped", Class: "primary"}},
 		tape: TapeResult{Counts: Counts{"files_deleted": 9}}}
-	e := &env{r: New(s, f), s: s, f: f, user: u, clock: time.Now().UTC()}
+	e := &env{r: New(s, f, func(string) error { return nil }), s: s, f: f, user: u, clock: time.Now().UTC()}
 	e.r.SetClock(func() time.Time { return e.clock })
 	return e
 }
@@ -175,6 +175,50 @@ func (e *env) request(t *testing.T) {
 }
 
 func (e *env) pass() { e.r.Tick(context.Background()) }
+
+// A pre-existing record cannot act on the reviewer, or act when its identity
+// cannot be read. This applies before the hold and after a restart in purging.
+func TestRunnerRechecksReviewerProtectionForExistingRecords(t *testing.T) {
+	for _, alreadyPurging := range []bool{false, true} {
+		e := newEnv(t)
+		e.request(t)
+		e.clock = e.clock.Add(73 * time.Hour)
+		if alreadyPurging {
+			if _, err := e.s.BeginPurge(e.user.ID, e.clock); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, reason := range []error{auth.ErrDeletionRefused, errors.New("reviewer ID unreadable")} {
+			e.r.checkAccount = func(id string) error {
+				if id == e.user.ID {
+					return reason
+				}
+				return nil
+			}
+			e.pass()
+			if len(e.f.calls) != 0 {
+				t.Fatalf("protected existing record changed the host: %v", e.f.calls)
+			}
+			if _, err := e.s.GetUserByID(e.user.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func TestDeletionWithNoComputerStillPurgesAccountData(t *testing.T) {
+	e := newEnv(t)
+	e.f.computers = nil
+	e.request(t)
+	e.clock = e.clock.Add(73 * time.Hour)
+	e.pass()
+	if e.f.count("mail") != 1 || e.f.count("data") != 1 || e.f.count("gateway") != 0 {
+		t.Fatalf("account without a computer took the wrong steps: %v", e.f.calls)
+	}
+	if _, err := e.s.GetUserByID(e.user.ID); err == nil {
+		t.Fatal("account without a computer was not deleted")
+	}
+}
 
 // Failure 1: nothing is destroyed before 72 hours, or with no record.
 func TestNothingIsDestroyedBeforeTheGracePeriod(t *testing.T) {

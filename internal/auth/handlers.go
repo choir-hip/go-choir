@@ -80,8 +80,10 @@ type Handler struct {
 	device deviceState
 
 	// The phone app's sign-in challenges (app_ceremony.go), held in memory.
-	appChallenges appChallenges
-	demoGate      *demoGate // the reviewer sign-in's bounds (demo_account.go)
+	appChallenges     appChallenges
+	demoGate          *demoGate // the reviewer sign-in's bounds (demo_account.go)
+	demoIdentityMu    sync.Mutex
+	lastDemoAccountID string
 	// demoMintHook runs between the off check and the key insert; tests only (nil in service).
 	demoMintHook func()
 
@@ -199,6 +201,14 @@ type userInfo struct {
 	ID        string `json:"id"`
 	Email     string `json:"email"`
 	CreatedAt string `json:"created_at"`
+	Reviewer  bool   `json:"reviewer"`
+}
+
+func (h *Handler) browserUserInfo(user *User) *userInfo {
+	return &userInfo{
+		ID: user.ID, Email: user.Email, CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		Reviewer: h.IsDemoAccount(user.ID),
+	}
 }
 
 // errorResponse is a generic JSON error envelope.
@@ -496,11 +506,7 @@ func (h *Handler) issueSessionRow(w http.ResponseWriter, r *http.Request, user *
 
 	h.setAuthCookiesFor(w, accessToken, refreshToken, h.refreshCookieTTL(method, expiresAt))
 
-	return &userInfo{
-		ID:        user.ID,
-		Email:     user.Email,
-		CreatedAt: user.CreatedAt.Format(time.RFC3339),
-	}, rs, nil
+	return h.browserUserInfo(user), rs, nil
 }
 
 // signInSession is the sign-in endpoints' session issuer: issueSession plus
@@ -1289,11 +1295,7 @@ func (h *Handler) HandleSession(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, sessionResponse{
 		Authenticated: true,
-		User: &userInfo{
-			ID:        user.ID,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt.Format(time.RFC3339),
-		},
+		User:          h.browserUserInfo(user),
 	})
 }
 
@@ -1320,16 +1322,12 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if this token was recently rotated within the grace window (e.g. concurrent request).
-	if grace, ok := h.getRotatedGrace(hashHex); ok && !h.store.AccountAccessRevoked(grace.user.ID) {
+	if grace, ok := h.getRotatedGrace(hashHex); ok && !h.store.AccountAccessRevoked(grace.user.ID) && !h.demoOff(grace.user.ID) {
 		log.Printf("[auth] operation=session_refresh user_id=%s result=success step=grace_window_hit", grace.user.ID)
 		h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
 		writeJSON(w, http.StatusOK, sessionResponse{
 			Authenticated: true,
-			User: &userInfo{
-				ID:        grace.user.ID,
-				Email:     grace.user.Email,
-				CreatedAt: grace.user.CreatedAt.Format(time.RFC3339),
-			},
+			User:          h.browserUserInfo(grace.user),
 		})
 		return
 	}
@@ -1337,16 +1335,12 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 	rs, user, err := h.validateRefreshCookie(r)
 	if err != nil {
 		// Check grace window once more in case of a race where another concurrent request rotated it while validating.
-		if grace, ok := h.getRotatedGrace(hashHex); ok && !h.store.AccountAccessRevoked(grace.user.ID) {
+		if grace, ok := h.getRotatedGrace(hashHex); ok && !h.store.AccountAccessRevoked(grace.user.ID) && !h.demoOff(grace.user.ID) {
 			log.Printf("[auth] operation=session_refresh user_id=%s result=success step=grace_window_race_hit", grace.user.ID)
 			h.setAuthCookies(w, grace.accessJWT, grace.newRefresh)
 			writeJSON(w, http.StatusOK, sessionResponse{
 				Authenticated: true,
-				User: &userInfo{
-					ID:        grace.user.ID,
-					Email:     grace.user.Email,
-					CreatedAt: grace.user.CreatedAt.Format(time.RFC3339),
-				},
+				User:          h.browserUserInfo(grace.user),
 			})
 			return
 		}
@@ -1374,11 +1368,7 @@ func (h *Handler) tryRefreshRotation(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, sessionResponse{
 		Authenticated: true,
-		User: &userInfo{
-			ID:        user.ID,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt.Format(time.RFC3339),
-		},
+		User:          h.browserUserInfo(user),
 	})
 }
 
@@ -1877,7 +1867,7 @@ func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) (*U
 			if err == nil && ak != nil && ak.RevokedAt == nil &&
 				(ak.ExpiresAt == nil || ak.ExpiresAt.After(time.Now())) {
 				user, err := h.store.GetUserByID(ak.UserID)
-				if err == nil && !h.store.AccountAccessRevoked(ak.UserID) {
+				if err == nil && !h.store.AccountAccessRevoked(ak.UserID) && !h.demoOff(ak.UserID) {
 					// Update last_used_at (best-effort, ignore errors).
 					_ = h.store.TouchAPIKeyLastUsed(r.Context(), ak.ID)
 					return user, ak

@@ -144,6 +144,9 @@ auth service holds a `account_deletions` record per account that asked, and a
 loop in the auth process (`internal/accountpurge`) holds its computer stopped
 and, after 72 hours, purges through vmctl, corpusd, maild and the gateway. Read
 `docs/changes.md` (2026-11-24) before saying what a deleted account leaves.
+The App Review account is protected at request and purge time; a bad configured
+reviewer identity pauses deletion (`docs/ship/demo-account.md`). An ordinary
+account does not need to have created a computer to use deletion.
 
 Numbers: ring-walk history has 380 walks started, 292 complete, 2 rolled
 back; 294 `expedited` events (77%) [1]. 267 files in `deploy-failures/`,

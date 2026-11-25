@@ -85,7 +85,7 @@ func main() {
 	// the loop that holds a pending account's computer stopped and takes
 	// suspended, and purges after 72 hours. It re-reads the deletion table
 	// every minute; a boot only closes an attempt a crash left open.
-	purge := accountpurge.New(store, accountpurge.NewHost(cfg.VMCTLURL, cfg.CorpusdURL, cfg.MaildURL, cfg.GatewayURL))
+	purge := accountpurge.New(store, accountpurge.NewHost(cfg.VMCTLURL, cfg.CorpusdURL, cfg.MaildURL, cfg.GatewayURL), handler.CheckDeletionAccount)
 	// The ledger of deletions (begun and finished) sits beside auth.db, not in
 	// it. Each backup run copies it off-host with auth.db's snapshot
 	// (scripts/off-host-backup.sh): after a restore, `auth deletion-restore-check`
@@ -93,8 +93,6 @@ func main() {
 	// that must be deleted again.
 	purge.LedgerPath = filepath.Join(filepath.Dir(cfg.DBPath), "account-deletion-ledger.jsonl")
 	handler.SetDeletionHost(purge)
-	// The reviewer account may not be deleted by anyone (deletionRefused reads
-	// Handler.IsDemoAccount; TestTheReviewerAccountCannotBeDeleted).
 	purge.Start(context.Background())
 	handler.StartDeviceSweeper(context.Background(), 0)
 

@@ -141,7 +141,7 @@ func TestRunnerOverHTTPWithRealMaildAndGateway(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := NewHost(vmSrv.URL, cdSrv.URL, maildSrv.URL, gwSrv.URL)
-	r := New(s, host)
+	r := New(s, host, func(string) error { return nil })
 	if err := r.AtOnce(context.Background(), u.ID); err != nil {
 		t.Fatalf("at once: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestServiceRefusalStopsThePurge(t *testing.T) {
 	if _, _, err := s.RequestAccountDeletion(u.ID, time.Now().Add(-100*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	r := New(s, NewHost(vm.URL, cd.URL, ml.URL, "http://127.0.0.1:1"))
+	r := New(s, NewHost(vm.URL, cd.URL, ml.URL, "http://127.0.0.1:1"), func(string) error { return nil })
 	r.Tick(context.Background())
 	if !mailCalled {
 		t.Fatal("mail is the first step")

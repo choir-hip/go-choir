@@ -380,6 +380,72 @@ func TestNoSessionKeyOrCredentialIsWrittenForAPendingAccount(t *testing.T) { // 
 	}
 }
 
+// Round 8 failures: unknown configured identity allows a request; an old
+// offer changes durable state after off; live bearer routes ignore off.
+func TestDeletionCannotProceedWithAnUnreadableReviewerIdentity(t *testing.T) {
+	e := newDelEnv(t, "identity-unavailable")
+	cookies := e.cookies(t, AuthMethodPasskey)
+	opts := e.begin(t, cookies, "")
+	e.h.config.DemoAccountIDFile = filepath.Join(t.TempDir(), "missing")
+	if w := e.call(e.h.HandleDeleteBegin, "/auth/account/delete/begin", nil, cookies, ""); w.Code != http.StatusServiceUnavailable {
+		t.Errorf("begin with configured ID missing: %d", w.Code)
+	}
+	if w := e.call(e.h.HandleDeleteFinish, "/auth/account/delete/finish", e.assertion(t, opts), cookies, ""); w.Code != http.StatusServiceUnavailable {
+		t.Errorf("finish with configured ID missing: %d", w.Code)
+	}
+	e.noRecord(t)
+}
+
+func TestOffReviewerCannotReceiveOrRedeemADeletionCancel(t *testing.T) {
+	for _, app := range []string{"", "news.choir.autoradio"} {
+		t.Run("app="+app, func(t *testing.T) {
+			e := newDelEnv(t, "cancel-off")
+			deleteAccount(t, e)
+			var offer deletionOffer
+			if w := e.passkeySignIn(t); json.Unmarshal(w.Body.Bytes(), &offer) != nil || offer.CancelToken == "" {
+				t.Fatalf("control: %d %s", w.Code, w.Body)
+			}
+			e.h.config.DemoAccountID = e.user.ID
+			if w := e.passkeySignIn(t); w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), `"code":"account_off"`) || strings.Contains(w.Body.String(), "cancel_token") {
+				t.Errorf("offer after off: %d %s", w.Code, w.Body)
+			}
+			body, _ := json.Marshal(cancelRequest{CancelToken: offer.CancelToken, App: app})
+			if w := e.call(e.h.HandleDeleteCancel, "/auth/account/delete/cancel", body, nil, ""); w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), `"code":"account_off"`) {
+				t.Errorf("redeem after off: %d %s", w.Code, w.Body)
+			}
+			if d, err := e.h.store.PeekCancelOffer(offer.CancelToken, time.Now()); err != nil || d == nil || d.State != DeletionPending || len(e.host.restore) != 0 {
+				t.Fatal("off redeemed or replaced the offer, or restored takes")
+			}
+		})
+	}
+}
+
+func TestKnownOffReviewerBearerIsRefusedEvenIfIdentityFileDisappears(t *testing.T) {
+	e := newDelEnv(t, "off-bearer")
+	key := e.bearer(t)
+	path := filepath.Join(t.TempDir(), "reviewer-id")
+	if err := os.WriteFile(path, []byte(e.user.ID+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.h.config.DemoAccountIDFile = path
+	if !e.h.IsDemoAccount(e.user.ID) {
+		t.Fatal("control: identity was not read")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/auth/whoami", nil)
+	req.Header.Set("Authorization", "Bearer "+key)
+	rec := httptest.NewRecorder()
+	e.h.HandleWhoami(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("whoami for an off account: %d", rec.Code)
+	}
+	if w := e.call(e.h.HandleDeleteBegin, "/auth/account/delete/begin", nil, nil, key); w.Code != http.StatusUnauthorized {
+		t.Errorf("delete begin for an off account: %d", w.Code)
+	}
+}
+
 func TestTheReviewerAccountCannotBeDeleted(t *testing.T) { // V8
 	e := newDelEnv(t, "v8")
 	cookies := e.cookies(t, AuthMethodPasskey)
@@ -397,6 +463,24 @@ func TestTheReviewerAccountCannotBeDeleted(t *testing.T) { // V8
 	cfg := *e.h.config
 	cfg.DemoAccountID, cfg.DemoCredentialFile = e.user.ID, file
 	e.h.config = &cfg
+	for _, tc := range []struct {
+		cookies        []*http.Cookie
+		auth, reviewer bool
+	}{{nil, false, false}, {cookies, true, true}} {
+		r := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+		for _, cookie := range tc.cookies {
+			r.AddCookie(cookie)
+		}
+		w := httptest.NewRecorder()
+		e.h.HandleSession(w, r)
+		var got struct {
+			Authenticated bool
+			User          *struct{ Reviewer bool }
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || w.Code != http.StatusOK || got.Authenticated != tc.auth || (got.User != nil && got.User.Reviewer) != tc.reviewer {
+			t.Errorf("web session: %d %s", w.Code, w.Body)
+		}
+	}
 	if rec := e.call(e.h.HandleDeleteBegin, "/auth/account/delete/begin", nil, cookies, ""); rec.Code != http.StatusForbidden {
 		t.Fatalf("begin for the reviewer account: %d", rec.Code)
 	}

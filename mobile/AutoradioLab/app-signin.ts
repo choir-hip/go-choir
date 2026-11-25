@@ -223,6 +223,7 @@ const REVIEWER_WORDS: Record<number, string> = {
  * passkey flow; the server answers a key for one account with a narrow grant. Nothing here logs the user name or the password, and neither is kept: they live in this call's arguments only. */
 export async function reviewerRun(env: SignInEnv, username: string, password: string): Promise<{ phase: Phase; rev: number }> {
   if (cur && cur.phase === 'working') dispatch(env, { t: 'cancel', id: cur.id });
+  offer = null;
   const id = env.newId();
   adopt(env, begin(id, 'reviewer'));
   let minted: Minted | null = null;

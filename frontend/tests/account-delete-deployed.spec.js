@@ -1,6 +1,6 @@
 /**
  * Deployed proof of account deletion on the web (docs/design/account-create-delete-2026-11-23.md).
- * RED surfaces: run on staging with a throwaway account only (an example.com address made here),
+ * RED surfaces: run on staging with a fresh throwaway mailbox you control,
  * never on the paper's or the owner's accounts. Not run by the author of the change: it needs the
  * deployed host (auth, vmctl, corpusd, maild, gateway).
  *
@@ -21,20 +21,36 @@
  * still public with the byline `former-writer`, and a line in account-deletion-ledger.jsonl. Never the
  * paper's or the owner's account or computers; the drill address must not be on an ephemeral domain.
  *
- * Env: BASE_URL (default https://choir.news).
+ * Env: BASE_URL (default https://choir.news), E2E_DELETE_ADDRESS (fresh throwaway
+ * mailbox), E2E_DELETE_CODE_FILE (initially absent file outside the repo). After
+ * the spec requests the mailed code, put the eight digits in that file (0600),
+ * and remove the file after the run. Never supply a real account's address.
  */
 import { expect } from '@playwright/test';
+import { readFile, stat } from 'node:fs/promises';
 import { test } from './helpers/fixtures.js';
-import { registerPasskey, getSession } from './helpers/auth.js';
+import { registerAccount, getSession } from './helpers/auth.js';
 
 const BASE_URL = process.env.BASE_URL || 'https://choir.news';
 
 test('delete an account with a passkey, find it scheduled, and cancel it by signing in', async ({ page, authenticator }) => {
   test.setTimeout(300_000);
   void authenticator;
-  const email = `delete-e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+  const email = process.env.E2E_DELETE_ADDRESS;
+  const codeFile = process.env.E2E_DELETE_CODE_FILE;
+  expect(Boolean(email && codeFile), 'set E2E_DELETE_ADDRESS and E2E_DELETE_CODE_FILE').toBe(true);
+  const exists = await stat(codeFile).then(() => true, err => { if (err.code === 'ENOENT') return false; throw err; });
+  expect(exists, 'start with an absent code file').toBe(false);
   await page.goto(BASE_URL);
-  const reg = await registerPasskey(page, email, BASE_URL);
+  const reg = await registerAccount(page, email, BASE_URL, async () => {
+    console.info('Registration code requested. Put the eight digits in E2E_DELETE_CODE_FILE.');
+    let code = '';
+    await expect.poll(async () => {
+      code = await readFile(codeFile, 'utf8').then(s => s.trim(), err => { if (err.code === 'ENOENT') return ''; throw err; });
+      return /^\d{8}$/.test(code);
+    }, { timeout: 180_000 }).toBe(true);
+    return code;
+  });
   expect(reg && reg.ok !== false, 'registration did not complete').toBeTruthy();
 
   await page.goto(`${BASE_URL}/account/delete`);

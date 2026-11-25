@@ -140,9 +140,10 @@ type Steps interface {
 
 // Runner is the loop and the auth.DeletionHost.
 type Runner struct {
-	store *auth.Store
-	steps Steps
-	now   func() time.Time
+	store        *auth.Store
+	steps        Steps
+	now          func() time.Time
+	checkAccount func(string) error
 	// Interval is the tick; zero is one minute.
 	Interval time.Duration
 	mu       sync.Mutex // one pass at a time
@@ -158,8 +159,8 @@ type Runner struct {
 }
 
 // New makes a runner.
-func New(store *auth.Store, steps Steps) *Runner {
-	return &Runner{store: store, steps: steps, now: func() time.Time { return time.Now().UTC() }}
+func New(store *auth.Store, steps Steps, checkAccount func(string) error) *Runner {
+	return &Runner{store: store, steps: steps, checkAccount: checkAccount, now: func() time.Time { return time.Now().UTC() }}
 }
 
 // SetClock replaces the clock (tests).
@@ -205,6 +206,9 @@ func (r *Runner) Restore(ctx context.Context, userID string) error {
 // computers and holding the takes back are independent: one failing never
 // skips the other, and both errors are reported.
 func (r *Runner) assertPending(ctx context.Context, d *auth.AccountDeletion) error {
+	if err := r.checkAccount(d.UserID); err != nil {
+		return err
+	}
 	computers, err := r.steps.Computers(ctx, d.UserID)
 	if err != nil {
 		return err
@@ -382,6 +386,9 @@ func (r *Runner) Tick(ctx context.Context) {
 // authorize is the only maker of an Authz: it re-reads the record and applies
 // the rule at the moment of the call.
 func (r *Runner) authorize(userID string, now time.Time) (Authz, error) {
+	if err := r.checkAccount(userID); err != nil {
+		return Authz{}, err
+	}
 	if err := r.store.PurgeEligible(userID, now); err != nil {
 		return Authz{}, err
 	}
@@ -613,6 +620,9 @@ func (r *Runner) purge(ctx context.Context, d *auth.AccountDeletion) (err error)
 	// Durable before the transaction that deletes the user row: a crash between
 	// the two leaves a ledger line and a record (the next pass finishes), never
 	// a deleted account that no ledger knows.
+	if _, err := r.authorize(d.UserID, r.now()); err != nil {
+		return err
+	}
 	if err := r.writeLedger(d, "finishing"); err != nil {
 		return err
 	}

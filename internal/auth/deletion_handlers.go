@@ -39,6 +39,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -74,10 +75,36 @@ func (h *Handler) SetDeletionHost(host DeletionHost) { h.deletionHost = host }
 // ErrDeletionRefused is a Precheck refusal the person is told about.
 var ErrDeletionRefused = errors.New("this account cannot be deleted here")
 
-// deletionRefused names the accounts a person may not delete: the reviewer
-// account (demo_account.go), whether or not its sign-in is on.
-func (h *Handler) deletionRefused(userID string) bool {
-	return h.IsDemoAccount(userID)
+// CheckDeletionAccount is shared by the request and the runner. A broken
+// configured identity is not evidence that the target is an ordinary account.
+func (h *Handler) CheckDeletionAccount(userID string) error {
+	id, err := h.demoAccountID()
+	if err != nil {
+		return err
+	}
+	if id == "" {
+		return nil
+	}
+	if id == userID {
+		return ErrDeletionRefused
+	}
+	if _, err := h.store.GetUserByID(id); err != nil {
+		return fmt.Errorf("cannot verify configured reviewer identity: %w", err)
+	}
+	return nil
+}
+
+func (h *Handler) deletionCancelAllowed(w http.ResponseWriter, userID string) bool {
+	id, err := h.demoAccountID()
+	if err != nil {
+		h.writePrecheckRefusal(w, userID, err)
+		return false
+	}
+	if id == userID && h.demoCredentialOff() {
+		writeAccountOff(w)
+		return false
+	}
+	return true
 }
 
 func writeDeletionPending(w http.ResponseWriter) {
@@ -122,6 +149,9 @@ func (h *Handler) offerDeletionCancel(w http.ResponseWriter, userID string) bool
 	}
 	if d == nil {
 		return false
+	}
+	if !h.deletionCancelAllowed(w, userID) {
+		return true
 	}
 	if d.State != DeletionPending {
 		// The purge has begun; there is nothing to cancel and no session, and
@@ -174,9 +204,8 @@ func (h *Handler) HandleDeleteBegin(w http.ResponseWriter, r *http.Request) {
 	if user == nil {
 		return
 	}
-	if h.deletionRefused(user.ID) {
-		log.Printf("[auth] operation=delete_begin user_id=%s result=refused reason=reviewer_account", user.ID)
-		writeJSON(w, http.StatusForbidden, errorResponse{Error: ErrDeletionRefused.Error()})
+	if err := h.CheckDeletionAccount(user.ID); err != nil {
+		h.writePrecheckRefusal(w, user.ID, err)
 		return
 	}
 	if h.deletionHost != nil {
@@ -244,9 +273,8 @@ func (h *Handler) HandleDeleteFinish(w http.ResponseWriter, r *http.Request) {
 	if caller == nil {
 		return
 	}
-	if h.deletionRefused(caller.ID) {
-		log.Printf("[auth] operation=delete_finish user_id=%s result=refused reason=reviewer_account", caller.ID)
-		writeJSON(w, http.StatusForbidden, errorResponse{Error: ErrDeletionRefused.Error()})
+	if err := h.CheckDeletionAccount(caller.ID); err != nil {
+		h.writePrecheckRefusal(w, caller.ID, err)
 		return
 	}
 	body, err := readBody(r)
@@ -310,6 +338,10 @@ func (h *Handler) HandleDeleteFinish(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := h.CheckDeletionAccount(caller.ID); err != nil {
+		h.writePrecheckRefusal(w, caller.ID, err)
+		return
+	}
 	d, _, err := h.store.RequestAccountDeletion(caller.ID, now)
 	if err != nil {
 		log.Printf("[auth] operation=delete_finish user_id=%s result=error step=request error=%q", caller.ID, err)
@@ -371,6 +403,9 @@ func (h *Handler) HandleDeleteCancel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "the cancel offer is invalid or expired; sign in again"})
 		return
 	}
+	if !h.deletionCancelAllowed(w, peek.UserID) {
+		return
+	}
 	// The cancel is the one durable act and comes first: it leaves a tombstone
 	// the runner finishes. The takes are served again after it, never before,
 	// so a pass that was holding them back cannot undo the restore (it finds
@@ -409,7 +444,7 @@ func (h *Handler) HandleDeleteCancel(w http.ResponseWriter, r *http.Request) {
 	if req.App != "" {
 		key, err := h.mintAppKey(r.Context(), user, req.App)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create the key"})
+			writeIssueError(w, err, "delete_cancel", user.ID, "failed to create the key")
 			return
 		}
 		log.Printf("[auth] operation=delete_cancel user_id=%s job_id=%s app=%s result=success", d.UserID, d.JobID, req.App)
@@ -418,7 +453,7 @@ func (h *Handler) HandleDeleteCancel(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := h.signInSession(w, r, user, AuthMethodPasskey)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
+		writeIssueError(w, err, "delete_cancel", user.ID, "failed to create session")
 		return
 	}
 	log.Printf("[auth] operation=delete_cancel user_id=%s job_id=%s result=success", d.UserID, d.JobID)

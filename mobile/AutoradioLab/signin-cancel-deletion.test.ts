@@ -9,7 +9,7 @@
 //  C5 a late cancel answer of a replaced attempt keeps a key.
 //  C6 the date the removal would have happened is missing from the words.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { resetAttempt, signInCancelDeletion, signInReset, signInRun, signInView, type SignInEnv } from './app-signin.ts';
+import { resetAttempt, reviewerRun, signInCancelDeletion, signInReset, signInRun, signInView, type SignInEnv } from './app-signin.ts';
 
 const ORIGIN = 'https://choir.news';
 const KEY = 'choir_sk_test-key-cancel-not-real';
@@ -70,6 +70,15 @@ describe('a pending account signs in', () => {
     const h = harness({ login: () => json(403, { error: 'forbidden', cancel_token: TOKEN }) });
     await signInRun(h.env, 'signin');
     expect(signInView().offer).toBe(false);
+  });
+  test('starting reviewer sign-in drops the previous account’s cancel offer', async () => {
+    const h = harness();
+    await signInRun(h.env, 'signin');
+    expect(signInView().offer).toBe(true);
+    await reviewerRun(h.env, 'reviewer', 'test password');
+    expect(signInView().offer).toBe(false);
+    await signInCancelDeletion(h.env);
+    expect(h.posts.filter(p => p.path === '/auth/account/delete/cancel')).toEqual([]);
   });
 });
 
