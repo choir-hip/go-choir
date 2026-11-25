@@ -305,8 +305,19 @@ proved, and the design is tried offline before it is wired in.
    for one day of research questions and arriving captures, the density of
    the region each fell in, against what then happened (did the run find its
    answer in the corpus; did the capture open or feed a story). If density
-   does not separate those outcomes, section 6a is rethought before anything
-   is built on it.
+    does not separate those outcomes, section 6a is rethought before anything
+    is built on it.
+    **First measurement (2026-11-23, `density-2a`): C203 remains open.** The
+    run found 476 judged captures in just under two hours, but the console
+    logged counts, not capture IDs. There was no per-capture outcome to join
+    to the vectors. In a separate exploratory cut, 39 research runs had both
+    a summary and vector measurements. Tenth-neighbor density separated runs
+    that did at least half their corpus reads from held pages (AUC 0.72,
+    bootstrap 95% interval 0.55–0.86). The cutoff was chosen after reading the
+    data, and the sample covers one window, not a day. This does not test the
+    feed-versus-open claim. For the next run, check coverage in the landed
+    decision-record route before joining outcomes to vectors. Neighbor rows
+    have day-level timestamps, so same-day neighbors are not necessarily earlier.
 3. The hot path live, written beside the three old mechanisms and compared
    with them. Nothing a reader or a desk sees changes.
 4. Predictions, settlement and the score, as host code and records.

@@ -300,21 +300,18 @@ Not true, though a reader would assume it:
 
 ## 7. The phone app [6]
 
-Autoradio is an Exact app (pinned, pre-1.0): shared TypeScript and Contract
-pages in `mobile/AutoradioLab`, a native module in
-`mobile/exact-package/apple`, and `mobile/AutoradioKit` Swift. Rule: only
-voice is native [CL]. Three code states exist:
-- main: logic still mostly Swift. 94 non-voice Swift files, 17,664 lines [6].
-- `lane/exact-train1` ("the train"): 109 commits ahead, moves most pages to
-  shared code (non-voice Swift 46 files, 6,224 lines). Not landed; its own
-  real-host proof had 7 MISSING checks [6][CH].
-- `lane/account-partition-s1`: sign-in and account wipe in shared code; 12
-  review rounds; real-host run had 18 MISSING checks [6][CH].
+Updated 2026-11-25: Autoradio ships one Exact app from `mobile/AutoradioLab`.
+Shared TypeScript and Contract pages own the run sheet, queue, reader and
+onboarding. The native modules handle the deck, voice, model execution and
+remaining platform seams. See the [shipped package map](reference/exact/build-and-ship.md#which-packages-autoradio-actually-builds-2026-11-25).
+The older Swift-heavy build and the Exact migration lanes in map [6] are
+historical snapshots.
 
-Later [CH]: "Autoradio 1", the train as a second app beside the first, has
-been on the owner's phone since 2026-11-23 01:33Z, with seven defects
-found there. Map 6 had the owner's phone on the 2026-11-20 build
-(`bfc1492c6`); that is the older install.
+Build `473021` was archived from `16f04df4d` and submitted for App Review.
+This confirms the store artifact's source, not what is installed on the
+owner's phone. See the [submission checkpoint](ship/submission-checklist.md#submission-checkpoint--2026-11-25)
+and [launch measurements](problems/radio-restore-empty-after-let-go-2026-11-25.md)
+for the playback and Desk work that remains.
 
 Key paths: `mobile/AutoradioLab/app.ts`, `radio-runtime.ts`,
 `radio-bridge.ts`, `mobile/AutoradioKit/`, `docs/reference/exact/deck.md`,

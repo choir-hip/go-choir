@@ -38,7 +38,8 @@ do not use `lane merge` or `lane push`: the landing loop is `scripts/land`.
 ## Rules
 
 - Always pass `--base origin/main` after a fetch. The default base is the
-  local `main`, which lags here.
+  local `main`, which can lag behind the remote. Fast-forward a clean main
+  checkout after a landing.
 - A lane holds a copy of `.env` and `.envrc.local`. They are ignored files
   and stay local; the secret rules apply to a lane as to the primary
   checkout.
@@ -62,10 +63,12 @@ do not use `lane merge` or `lane push`: the landing loop is `scripts/land`.
 - 2026-11-14: adopted "when convenient" and never installed. Workers kept
   making full worktrees with cold caches; `.claude/worktrees` reached 95 GB
   across 282 worktrees.
-- `lane rm` on a lane cut from `origin/main` says "commits main does not
-  have" when the local `main` is behind. That is the lagging local branch,
-  not lost work; check `git log origin/main..<name>` and use `--force` when
-  it is empty.
+- `lane rm` checks local ancestry. A lane can already be on `origin/main`
+  even if local `main` lags or the lane was rebased or squash-merged. Fetch
+  before comparing. An empty `git log --right-only --cherry-pick --no-merges
+  origin/main...<name>` accounts for equivalent patches but says nothing
+  about merge commits or uncommitted changes. For a squash, compare the
+  paths the lane changed against the landing tree.
 
 - **Relative worktree paths broke the landing gate (2026-11-15).** Lane was
   first installed with relative paths, which set the repository extension
@@ -76,9 +79,28 @@ do not use `lane merge` or `lane push`: the landing loop is `scripts/land`.
   false. A rebuild of lane from upstream must carry that patch or pass the
   equivalent flag, and the test is `nix eval` in a fresh lane, not `lane
   new` succeeding.
-- **`lane rm` refuses a lane whose commits local `main` does not have.**
-  Local `main` lags `origin/main` here by design, so the refusal is common.
-  Check the branch is pushed, then `lane rm <name> --force`.
+## Retiring lanes
+
+Retire a lane after its work lands or is explicitly dropped. Check tracked
+and untracked changes, review receipts, pending notes and whether the lane
+is in use. A pushed branch alone is not evidence its work is on main.
+Before forcing removal of an accounted-for lane, save its tip with a verified
+Git bundle or an archive ref. A bundle saves commits, not a dirty worktree.
+Before deleting a pushed lane, check open PRs and use a lease against the
+inspected remote tip. Leave the pinned `qa-mac` build tree in place.
+
+The 2026-11-25 audit's inventory, tip bundles and deletion logs live under
+`~/.local/share/choir/lane-archive-2026-11-25/` on the Mac. The inventory
+records the original refs and SHAs; the cleanup plans map bundled refs back
+to lane names. Check `git bundle verify` and `git bundle list-heads` first.
+Tips already reachable from main may be recorded by SHA only. Recover an
+archived tip to a new branch, without moving `main`.
+
+That pass removed 78 local lanes and 88 pushed `lane/*` branches, and
+pruned 98 registrations for directories already missing. A remaining branch
+can carry real work or an old draft that still needs comparison. In
+particular, keep the unfinished `unified-voice-download` edits and the
+deferred `move-b` and `settle-once` work out of a bulk landing.
 
 ## Sources
 
