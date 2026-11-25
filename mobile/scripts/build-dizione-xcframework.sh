@@ -18,7 +18,7 @@ for platform in ios sim macos; do
   esac
   work="$OUT/dizione-$platform"
   mkdir -p "$work/include"
-  cp "$SRC/dizione.h" "$work/include/"
+  cp "$SRC"/*.h "$work/include/"
   # A Swift module for Exact's app module: `-I Headers` finds this map.
   cat > "$work/include/module.modulemap" <<'EOF'
 module dizione {
