@@ -8,7 +8,7 @@ Write to 000@choir.news. Say what you were doing, what you expected and what hap
 
 ## Deleting your account
 
-To delete your account, write to 000@choir.news from the email address of the account. We confirm by email before we delete anything. What is deleted and what is kept is set out in section 9 of the privacy policy, Deleting your account, at https://choir.news/privacy.
+To delete your account, write to 000@choir.news from the email address of the account. The privacy policy at https://choir.news/privacy says what is deleted and what is kept.
 
 ## Reporting a story
 
