@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { setAnnounceDeadlineForTest, abortSignOut, adoptNative, accountGeneration, beginSignOut, nextGeneration, nativeLater, resetBootForTest, resetSeam } from './api.ts';
 import { wipeAll } from './account.ts';
 import { sealingBlocked } from './api.ts';
-import { radioPulse, wipeRadio, getRadio, SHEET_FILE } from './radio-bridge.ts';
+import { radioHold, radioPulse, wipeRadio, getRadio, SHEET_FILE } from './radio-bridge.ts';
 import { nativeDevice, forgetPicks, picksPage, type Device } from './edition-picks.ts';
 
 type Call = { op: string; gen?: number; boot?: boolean; [k: string]: unknown };
@@ -172,6 +172,7 @@ describe('G7 never restored or restamped across a wipe', () => {
     const files = new Map<string, Uint8Array>([[SHEET_FILE, new TextEncoder().encode(oldSheet)]]);
     const f = fakeNative(0); adoptNative(f.native as never, 'test');
     const s = store(files, { n: 0 }) as never;
+    await radioHold(s, f.native as never);                                          // the sheet is read by a hold (a mutation), never by a read
     const r = await getRadio(s, f.native as never);
     expect(r.rt.store.entry('old-1')).toBeDefined();
     r.rt.signOut = async () => { throw new Error('the wipe threw'); };
@@ -182,9 +183,10 @@ describe('G7 never restored or restamped across a wipe', () => {
     const files = new Map<string, Uint8Array>([[SHEET_FILE, new TextEncoder().encode(oldSheet)]]);
     const f = fakeNative(0); adoptNative(f.native as never, 'test');
     const s = store(files, { n: 2 }) as never;      // the store's own removal and the bridge's both fail
-    await getRadio(s, f.native as never);
+    await radioHold(s, f.native as never);
     await wipeRadio(s);                                                             // the removal fails once: the file is still there
     expect(files.has(SHEET_FILE)).toBe(true);
+    await radioHold(s, f.native as never);
     const next = await getRadio(s, f.native as never);
     expect(next.rt.store.entry('old-1')).toBeUndefined();                           // not restored
     expect(files.has(SHEET_FILE)).toBe(false);                                      // and removed again

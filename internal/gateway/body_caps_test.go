@@ -120,6 +120,8 @@ func bodyRouteCases() []bodyRouteCase {
 			serve: func(h *Handler) http.HandlerFunc { return h.HandleIssueCredential }},
 		{name: "credentials ensure", path: "/provider/v1/credentials/ensure", limit: 1 << 10, host: true,
 			serve: func(h *Handler) http.HandlerFunc { return h.HandleEnsureCredential }},
+		{name: "credentials forget", path: "/provider/v1/credentials/forget", limit: 1 << 10, host: true,
+			serve: func(h *Handler) http.HandlerFunc { return h.HandleForgetCredential }},
 		{name: "search health reset", path: "/provider/v1/search/health/reset", limit: 1 << 10, host: true,
 			serve: func(h *Handler) http.HandlerFunc { return h.HandleSearchHealthReset }},
 		{name: "breakers reset", path: "/provider/v1/breakers/reset", limit: 1 << 10, host: true,

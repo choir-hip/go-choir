@@ -4,8 +4,11 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/yusefmosiah/go-choir/internal/accountpurge"
 	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -15,6 +18,16 @@ type authRouteRegistrar interface {
 }
 
 func main() {
+	// `auth deletion-restore-check`: after a restore from backup, find the
+	// accounts deleted since (restore_check.go). It does not start the service.
+	if len(os.Args) > 1 && os.Args[1] == "deletion-restore-check" {
+		os.Exit(runDeletionRestoreCheck(os.Args[2:], os.Stdout))
+	}
+	// `auth deletion-ops`: list the open account deletions and run a stuck
+	// purge's steps again (deletion_ops.go). It does not start the service.
+	if len(os.Args) > 1 && os.Args[1] == "deletion-ops" {
+		os.Exit(runDeletionOps(os.Args[2:], os.Stdout))
+	}
 	cfg, err := auth.LoadConfig()
 	if err != nil {
 		log.Fatalf("auth config: %v", err)
@@ -67,6 +80,20 @@ func main() {
 	}
 	handler.StartEmailSweeper(context.Background(), 0)
 	handler.StartNumberReconciler(context.Background(), 0)
+
+	// Account deletion (docs/design/account-create-delete-2026-11-23.md):
+	// the loop that holds a pending account's computer stopped and takes
+	// suspended, and purges after 72 hours. It re-reads the deletion table
+	// every minute; a boot only closes an attempt a crash left open.
+	purge := accountpurge.New(store, accountpurge.NewHost(cfg.VMCTLURL, cfg.CorpusdURL, cfg.MaildURL, cfg.GatewayURL), handler.CheckDeletionAccount)
+	// The ledger of deletions (begun and finished) sits beside auth.db, not in
+	// it. Each backup run copies it off-host with auth.db's snapshot
+	// (scripts/off-host-backup.sh): after a restore, `auth deletion-restore-check`
+	// reads the newest ledger against the restored auth.db and finds the accounts
+	// that must be deleted again.
+	purge.LedgerPath = filepath.Join(filepath.Dir(cfg.DBPath), "account-deletion-ledger.jsonl")
+	handler.SetDeletionHost(purge)
+	purge.Start(context.Background())
 	handler.StartDeviceSweeper(context.Background(), 0)
 
 	s := server.NewServer("auth", cfg.Port)
@@ -141,6 +168,13 @@ func authRoutes(handler *auth.Handler) []authRoute {
 		{"DELETE /auth/credentials/{id}", act, handler.HandleDeleteCredential},
 		{"GET /auth/sessions", read, handler.HandleListSessions},
 		{"DELETE /auth/sessions/{id}", act, handler.HandleRevokeSession},
+
+		// Account deletion (docs/design/account-create-delete-2026-11-23.md):
+		// a fresh passkey assertion starts it; a passkey sign-in during the
+		// 72 hours offers the cancel.
+		{"POST /auth/account/delete/begin", sensitive, handler.HandleDeleteBegin},
+		{"POST /auth/account/delete/finish", sensitive, handler.HandleDeleteFinish},
+		{"POST /auth/account/delete/cancel", ceremony, handler.HandleDeleteCancel},
 
 		// Email sign-in and address verification (switch auth.email_sign_in).
 		{"POST /auth/email/begin", sensitive, handler.HandleEmailBegin},

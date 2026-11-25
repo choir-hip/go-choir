@@ -59,6 +59,13 @@ type Config struct {
 	// configured.
 	MaildURL string
 
+	// VMCTLURL, CorpusdURL and GatewayURL are the host-local services the
+	// account-deletion runner calls (internal/accountpurge): AUTH_VMCTL_URL,
+	// AUTH_CORPUSD_URL and AUTH_GATEWAY_URL, loopback defaults.
+	VMCTLURL   string
+	CorpusdURL string
+	GatewayURL string
+
 	// Room bounds sign-ups by what the host can hold (AUTH_ROOM_RESERVE_GIB,
 	// AUTH_ROOM_FOOTPRINT_GIB, AUTH_ROOM_OWNERS_PATH; host_room.go). Nil, or a
 	// plan that did not load whole (Err), closes sign-up: there is no
@@ -125,6 +132,10 @@ const (
 
 	// DefaultMaildURL is the loopback maild endpoint on the host.
 	DefaultMaildURL = "http://127.0.0.1:8087"
+	// Loopback endpoints of the services an account deletion calls.
+	DefaultVMCTLURL   = "http://127.0.0.1:8083"
+	DefaultCorpusdURL = "http://127.0.0.1:8086"
+	DefaultGatewayURL = "http://127.0.0.1:8084"
 )
 
 // LoadConfig resolves a Config from AUTH_* environment variables.
@@ -144,6 +155,9 @@ func LoadConfig() (*Config, error) {
 		RotationGraceTTL:  envDuration("AUTH_ROTATION_GRACE_TTL", 15*time.Second),
 		CookieSecure:      envBool("AUTH_COOKIE_SECURE", false),
 		MaildURL:          envOr("AUTH_MAILD_URL", DefaultMaildURL),
+		VMCTLURL:          envOr("AUTH_VMCTL_URL", DefaultVMCTLURL),
+		CorpusdURL:        envOr("AUTH_CORPUSD_URL", DefaultCorpusdURL),
+		GatewayURL:        envOr("AUTH_GATEWAY_URL", DefaultGatewayURL),
 	}
 
 	cfg.Room = roomConfigFromEnv()

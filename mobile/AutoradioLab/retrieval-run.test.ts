@@ -188,6 +188,15 @@ const fast = { first: 1, settle: 1, rest: 1, poll: 10 };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('R5 the embedding pass', () => {
+  // The press on Settings > Voice and models > Search: it records the agreement and asks for the model. It must fetch
+  // even when there is nothing to index yet, and even though no voice turn has attached the native embedder.
+  test('a press fetches the model with no work to index and no earlier ask', async () => {
+    const dev = new FakeDevice();
+    const r = new Retrieval({ storage: fakeStorage(new Map()), native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D, mayDownload: async () => ({ ok: true, mobile: false }) });
+    await r.fetchModel();
+    expect(dev.downloads).toBe(1);
+    expect(r.modelState).toBe('ok');
+  });
   test('downloads once on Wi-Fi, embeds everything, saves, and retrieval fuses', async () => {
     const dev = new FakeDevice(); const files = new Map<string, Uint8Array>();
     const r = new Retrieval({ storage: fakeStorage(files), native: dev, now: () => NOW, delays: fast, engine: 'fake-1', dimension: D, mayDownload: async () => ({ ok: true, mobile: false }) });

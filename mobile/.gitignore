@@ -12,3 +12,4 @@ exact-package/apple/exact.json
 *.mlmodelc/
 AutoradioLab/modules/apple/Models_*.swift
 AutoradioLab/modules/apple/*.xcframework
+AutoradioLab/tiny-voca-resources/

@@ -1,9 +1,9 @@
 // The spine's members of the root: the layer in front, the theme, the bar's state. Owned by the spine (round 3: SHELL);
 // a lane does not edit this file (its own members go in members-<lane>.contract). The page stack (open, close, jump, the
 // pager) is in members-stack.contract.
-use pageModel, pageRequest, barFacts, deckState, radioNote from "@choir/autoradio"
-use PageList, PageModel, PageRequest, Theme, ThemeList, SettingsAck, BarFacts, DeckState, RadioNote from "@choir/autoradio"
-use RadioTick from "./radio-types.contract"
+use pageRequest, barFacts, deckState, radioNote from "@choir/autoradio"
+use PageList, PageRequest, Theme, ThemeList, SettingsAck, BarFacts, DeckState, RadioNote from "@choir/autoradio"
+use RadioTick, Heartbeat from "./radio-types.contract"
 use BarInfo, BarRun from "./bar-types.contract"
 use HostCaps from "./host-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
@@ -19,7 +19,6 @@ members Autoradio
   resource preqd = pageRequested(preq.id, preq.address, preq.title) as shape PageList else empty()
   resource pgs = pagesView(signedOutTick, preqd.top) as shape PageList else empty()
   derive pg = pgs
-  resource pmod = pageModel(address=pg.top) as shape PageModel else empty()
   // The themes are shared code (themes.ts, both platforms). The system's scheme and Reduce Motion are Exact's own facts (`vp`, members-stack.contract); the first frame shows the whole bundled light default (every field; themes.test.ts P1 keeps it in step) until the answer lands.
   resource th = theme(vp.prefersColorScheme, vp.prefersReducedMotion) as shape Theme else empty(id="chrome-pastel", name="Chrome Pastel", scheme="light", schemes="light", paper="#F7FBFE", paper2="#EAF4FA", fg="#16232E", muted="#41596B", accent="#1F6E8C", accent2="#2F6F8F", success="#146B4A", danger="#9C2440", onAccent="#FFFFFF", rule="rgba(31,110,140,.18)", scrim="rgba(22,35,46,.84)", onScrim="#FFFFFF", fontRead="system-ui", fontUi="system-ui", fontMono="ui-monospace", fontHead="ui-serif", fontText="ui-serif", fontLabel="system-ui", fontAction="system-ui", scale="editorial", radiusCard=12, radiusControl=6, radiusPill=6, radiusRules=0, shadow1="0 8px 20px rgba(18,52,74,.14), inset 0 1px 0 rgba(255,255,255,.9)", shadow2="0 14px 34px rgba(18,52,74,.16)", shadow3="0 24px 64px rgba(18,52,74,.22), inset 0 0 0 1px rgba(255,255,255,.55)", edge1="inset 0 1px 0 rgba(255,255,255,.9)", edge2="inset 0 0 0 1px rgba(255,255,255,.55)", edge3="inset 0 0 0 1px rgba(255,255,255,.55)", material1="solid", material2="glass", material3="glass", press1=0.98, behindScale3=0.96, behindDim3=0.08, barBacking=0.94, layerBacking=0.86, lensStyle="A", lensWash=0, motionFastMs=120, motionEnterMs=340, motionSheetMs=260, staggerMs=40, springStiffness=240, springDamping=26, springMass=1, reducedMotion=false, markDriftS=60, markListenScale=1.15, markTumble="3.3s,5.9s")
   resource thl = themeList(vp.prefersColorScheme, vp.prefersReducedMotion) as shape ThemeList else empty(mode="system", themeID="chrome-pastel", scheme="light", locked="")
@@ -33,14 +32,23 @@ members Autoradio
     barTick = barTick + 1
   task barTimed when bi.until > 0 key=barTick
     after(250, barBump)
+  // The heartbeat (heartbeat.ts): one log line every five seconds, so a runtime that stopped running turns shows as a gap (docs/problems/phone-pages-stall-placard-2026-11-24.md).
+  state hbTick = 0
+  action hbBump
+    hbTick = hbTick + 1
+  resource hb = heartbeat(hbTick) as shape Heartbeat else empty()
+  task hbTimer when hb.n >= 0 key=hbTick
+    after(5000, hbBump)
   // The radio (radio-bridge.ts): the pump reads the deck's journal and what native handed over, applies them, keeps the desk writing, and answers a number the screens ask again on. It runs when the deck changes
-  // (`ds.seq`), when native says something did (`rnote`), and every second (the position labels, the writer's clock).
+  // (`ds`), when native says something did (`rnote`), and every second (the position labels, the writer's clock).
+  // The deck's state is read HERE, once per radio tick (the position, and the deck's `sounding` line, which a read writes), and handed to the pulse whole: the pulse makes no deck call of its own
+  // (docs/problems/radio-restore-empty-after-let-go-2026-11-25.md).
   state radioTick = 0
   action radioBump
     radioTick = radioTick + 1
-  resource ds = deckState() as shape DeckState else empty()
+  resource ds = deckState(tick=radioTick) as shape DeckState else empty()
   resource rnote = radioNote() as shape RadioNote else empty()
-  resource rpulse = radioPulse(ds.seq, rnote.tick, radioTick) as shape RadioTick else empty()
+  resource rpulse = radioPulse(ds, rnote.tick, radioTick) as shape RadioTick else empty()
   // One second while something sounds in front or something is due; five when nothing is (the pulse says `slow`): an idle, paused or locked phone is not asked about once a second. What native has to say moves `ds.seq`
   // or `rnote.tick`, which ask the pulse at once, whatever the clock.
   task radioClock when rpulse.tick >= 0 and not rpulse.slow key=radioTick
@@ -108,9 +116,9 @@ members Autoradio
       send up = choirHandsFreeToggle()
     if micOn == false and askGate != ""
       gate = askGate
-    // Signed in but the hearing models are not on the phone: voice is offered as ready only once they are (owner, 2026-11-23), so the Downloads page opens with the files, their sizes and the one press; the microphone is not asked.
+    // Signed in but the hearing models are not on the phone: voice is offered as ready only once they are (owner, 2026-11-23), so Voice and models opens with every model, its size and its Download; the microphone is not asked.
     if micOn == false and askGate == "" and dl.hearingReady == false
-      send pms = pagesOpen("settings:downloads", "Downloads")
+      send pms = pagesOpen("settings:voice", "Voice and models")
       layer = ""
     if micOn == false and askGate == "" and dl.hearingReady and micperm.gate != ""
       micFor = "voice"

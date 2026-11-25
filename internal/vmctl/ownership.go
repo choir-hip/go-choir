@@ -698,7 +698,15 @@ type OwnershipRegistry struct {
 
 	// retentionPrune controls durable VM-state deletion for explicitly
 	// disposable computers such as staging Playwright accounts.
-	retentionPrune      RetentionPruneConfig
+	retentionPrune RetentionPruneConfig
+	// accountPurgeAuthDB is the auth database whose deletion records the
+	// account destroy route reads; accountPurgeEligible replaces that read in
+	// tests (account_deletion.go).
+	accountPurgeAuthDB   string
+	accountPurgeEligible func(userID string, now time.Time) error
+	// accountDeleting replaces the read of the auth database's live deletion
+	// records in tests (accountIsDeleting).
+	accountDeleting     func(userID string) bool
 	retentionUserEmails map[string]string
 	// retentionClock is time.Now outside tests (the test-class idle rule
 	// and the quarantine age-out compare ages against it).
@@ -2189,10 +2197,11 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 		r.mu.Unlock()
 		return
 	}
-	peer, product := "", ""
+	peer, product, owner := "", "", ""
 	if own := r.vmByID[vmID]; own != nil {
 		peer = guestAddressOf(own.ComputerURL)
 		product = gatewayProductComputerID(own)
+		owner = strings.TrimSpace(own.UserID)
 	}
 	if nextCheck, ok := r.gatewayCredentialNextCheck[vmID]; ok && now.Before(nextCheck) && r.gatewayCredentialPeer[vmID] == peer {
 		r.mu.Unlock()
@@ -2202,6 +2211,16 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 	// gateway is temporarily unavailable or starting during deploy.
 	r.gatewayCredentialNextCheck[vmID] = now.Add(gatewayCredentialEnsureFailureInterval)
 	r.mu.Unlock()
+
+	// An account with a live deletion record had its computer's gateway
+	// identity forgotten at the request: the computer's own token is not
+	// imported again while the record stands (a cancel removes the record, and
+	// the next resolve imports it). An unreadable record list does not stop an
+	// ensure: the ordinary path must not break on a read error.
+	if owner != "" && r.accountIsDeleting(owner) {
+		log.Printf("vmctl: gateway credential ensure skipped for VM %s: the account's deletion is pending", vmID)
+		return
+	}
 
 	rawToken, err := reader.ReadGatewayToken(vmID)
 	if err != nil {

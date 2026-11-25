@@ -27,9 +27,14 @@ Part of [EXACT.md](../EXACT.md). Read against the pinned checkout `f53347503` (`
   3. **a provisioning profile that carries Associated Domains**: "the team's wildcard profile cannot carry Associated Domains" (`checklist.md`, iPhone step 1): each App ID on the list needs the
      capability enabled in the Apple Developer account and a development (and later a distribution) profile that names it;
   4. on a development build, Settings > Developer > Associated Domains Development turned on, or the phone reads the file through Apple's CDN, which can lag a deploy by hours.
+     A development build signs `webcredentials:choir.news?mode=developer` (Exact `host/apple/presence.mjs`, `associatedDomains`), so with the switch off the phone asks Apple's CDN and passkey sign-in fails with "The app could not be verified for choir.news" (a `SecurityError`) although the server answers `/auth/app/login/begin` with 200. Seen 2026-11-24: the owner turned the switch on and sign-in worked.
 - The simulator drives no passkey sheet; `getClientCapabilities` there answers by the host's default. **The sheet is seen only on a device** [unrun].
 - Android (`packages/passkeys/android/Passkeys.kt`) exists and takes `assetlinks.json` and the app's certificate fingerprints. **Not wired for Autoradio**: the server accepts no `android:apk-key-hash:`
   origin yet, so the app offers no sign-in on `exactPage().platform == 'android'` (`passkeySupport`) and says so; the shared sign-in code needs no other change once the origin is accepted [unrun].
+
+## A fresh assertion for account deletion
+
+Deletion uses the same `credentials.get` with options from `POST /auth/account/delete/begin` (sent with the app's key; the options name this account's credentials and require user verification, unlike sign-in's discoverable request). The answer goes unchanged to `/auth/account/delete/finish`. `account-delete.ts` owns the run; it never keeps the assertion and logs no body. A cancelled sheet leaves everything as it was; only a 200 from finish signs the phone out and wipes it. [unrun on a device]
 
 ## The secret store (where the app's key lives)
 

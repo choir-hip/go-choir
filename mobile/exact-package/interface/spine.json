@@ -14,14 +14,6 @@
    "topTitle": "string",
    "count": "number"
   },
-  "PageModel": {
-   "address": "string",
-   "kind": "string",
-   "title": "string",
-   "status": "string",
-   "lines": "string[]",
-   "message": "string"
-  },
   "Theme": {
    "id": "string",
    "name": "string",
@@ -108,24 +100,6 @@
   }
  },
  "names": [
-  {
-   "source": "pageModel",
-   "live": true,
-   "answers": "PageModel",
-   "options": {
-    "address": "string"
-   },
-   "substitute": {
-    "default": {
-     "address": "",
-     "kind": "",
-     "title": "",
-     "status": "loading",
-     "lines": [],
-     "message": ""
-    }
-   }
-  },
   {
    "source": "pageRequest",
    "live": true,

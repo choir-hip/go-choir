@@ -199,7 +199,10 @@ func (h *Handler) startRecovery(r *http.Request, email string) (int, any) {
 	// Only a real account gets mail, and only at its stored address. The
 	// dummy row for an unknown email exists for rate limiting alone. Delivery
 	// runs off the request path, so both cases answer alike and equally fast.
-	if user != nil && userID != "" {
+	// An account that asked to be deleted gets no link: mail proves the inbox,
+	// and an inbox must not be able to add a passkey (and so cancel the
+	// deletion) during the 72 hours. The answer is the same.
+	if user != nil && userID != "" && !h.store.AccountAccessRevoked(userID) {
 		h.sendRecoveryMail(user.Email, emailHash, userID, token)
 	}
 
@@ -243,6 +246,14 @@ func (h *Handler) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
 
 	emailHash := hashEmail(rt.Email)
 	log.Printf("[auth] operation=recovery_verify email_hash=%s user_id=%s step=token_valid", emailHash, rt.UserID)
+
+	// The same refusal at redemption: a link minted before the deletion was
+	// requested starts nothing and marks nothing verified.
+	if h.store.AccountAccessRevoked(rt.UserID) {
+		log.Printf("[auth] operation=recovery_verify email_hash=%s user_id=%s result=refused reason=deletion_pending", emailHash, rt.UserID)
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid or expired recovery token"})
+		return
+	}
 
 	// Look up the user.
 	user, err := h.store.GetUserByID(rt.UserID)

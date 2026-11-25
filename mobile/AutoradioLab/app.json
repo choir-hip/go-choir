@@ -18,11 +18,15 @@
       "launchImage": { "src": "launch-mark.png", "width": 96 },
       "minimumOS": "18.0",
       "deviceFamily": ["iphone"],
-      "backgroundModes": ["audio"]
+      "backgroundModes": ["audio"],
+      "link": ["-lc++"],
+      "resources": [{ "from": "tiny-voca-resources/TinyVoca", "to": "Resources/TinyVoca" }]
     },
     "macos": {
       "minimumOS": "15.0",
-      "window": { "width": 430, "height": 900, "minWidth": 360, "minHeight": 560 }
+      "window": { "width": 430, "height": 900, "minWidth": 360, "minHeight": 560 },
+      "link": ["-lc++"],
+      "resources": [{ "from": "tiny-voca-resources/TinyVoca", "to": "Resources/TinyVoca" }]
     },
     "web": {},
     "android": {}

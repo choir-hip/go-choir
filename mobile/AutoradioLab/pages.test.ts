@@ -70,6 +70,7 @@ describe('pages', () => {
   test('P7 kinds and titles are the Swift ones', async () => {
     expect(P.kindOf('mailbox:inbox')).toBe('mailbox'); expect(P.kindOf('podcast:show/x')).toBe('podcast'); expect(P.kindOf('weird')).toBe('unknown');
     expect(P.defaultTitle('paper:section/science')).toBe('Paper · science'); expect(P.defaultTitle('mailbox:sent')).toBe('Mail · sent'); expect(P.defaultTitle('podcast:episode/x')).toBe('Episode');
+    expect(P.canonical('texture:abc123')).toBe('texture:abc123'); expect(P.kindOf('onboarding:edit')).toBe('onboarding'); expect(P.defaultTitle('onboarding:edit')).toBe('My edition');
     expect(P.canonical(' Texture:My-Edition ')).toBe('onboarding:edit'); expect(P.canonical('doc:abc@12')).toBe('doc:abc');
     expect((await P.pagesOpen(storage, 'texture:my-edition', '')).top).toBe('onboarding:edit');
   });

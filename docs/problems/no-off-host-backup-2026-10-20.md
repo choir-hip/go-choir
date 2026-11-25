@@ -801,3 +801,16 @@ Setup, once, in this order:
 
 Open: a shard-aware `restic check` and the old giant trees in pre-split
 snapshots go away with the first prunes.
+
+## Deleted accounts and a restore (2026-11-24, lane account-delete)
+
+The backup holds an account until it ages out: the daily set keeps `auth.db`, `mail.db`, the `control` and `graph` dumps and `$ART` (tape, chunks, object-graph bodies, take audio), and the weekly prune keeps the last two sets, so a deleted account is in a backup for up to about two weeks (the app and the policy say three). The `archive` repository (the tape-cleanup archive) is never pruned; an account purge asks for no archive.
+
+**A restore resurrects every account deleted since the snapshot**, with its mail, tape and passkeys. The purge runner therefore appends one line per finished deletion to `account-deletion-ledger.jsonl` beside the live `auth.db` (the hash of the opaque user id, the job id, the time; no email, no id): a file outside what the backup copies. After any restore of `auth.db`, before the restored host serves anyone:
+
+1. Put the ledger beside the restored file (it is on the live host; copy it from there, or from where the owner keeps its copy).
+2. `auth deletion-restore-check -db <restored auth.db> -ledger <ledger>` lists the restored accounts whose deletion was finished (exit 1 when there are any). With `-reapply` it writes each a deletion record that is already due; the running purge runner then carries the deletion out against every service (mail, data, computers, gateway, tape), as it did the first time.
+3. Do not start `auth` for users until the list is empty or reapplied.
+
+**Owner residual:** the ledger lives on Node B, so a host lost with its disks loses it. A copy of it kept somewhere else (it holds hashes only) is what makes step 1 possible after a total loss; nothing in the repository does that copy. Until it exists, a restore after a total loss cannot know which accounts to delete again.
+

@@ -1,28 +1,24 @@
-# App Store texts for Autoradio 1
+# App Store texts for Autoradio 1 (final, 2026-11-24)
 
-Limits are from the research doc (read 2026-11-23): name 30 characters, subtitle 30, promotional text 170, description 4,000, keywords 100 bytes. No other platforms' names (2.3.10), no prices (2.3.7), no unverifiable claims, no placeholder text. The description is written for the one app the owner uses, with every page (radio, paper, reader, voice, podcasts, mail, files, takes, notebook), per the ruling of 2026-11-23. [WHEN-BUILT] marks a sentence that is not true of today's code (in-app account creation and deletion, the consent screen). Remove tags before pasting. The publisher is Choir Harmonic Intelligence Platform, Inc.
+Limits (research doc, read 2026-11-23): name 30 characters, subtitle 30, promotional text 170, description 4,000, keywords 100 bytes. No other platforms' names (2.3.10), no prices (2.3.7), no unverifiable claims, no placeholder text. Every sentence below is true of origin/main plus the lanes landing on 2026-11-24 (exact-rest-a, exact-editor, voice-models, demo-account, account-delete, dev-profile); where a sentence depends on a lane, the line "Depends on" under each block says which. The publisher is Choir Harmonic Intelligence Platform, Inc.
 
-Still open for the owner:
+Cut from the earlier draft because it is not built or not true (2026-11-24): the line that the app asks agreement "before the first request" (the agreement is the create-account screen, there is no separate screen: owner, 2026-11-24); "There are no passwords and no codes" (a new account types an 8-digit code mailed to its address: `app-signin.ts`, `onboarding.contract`); "Voice can stay on for up to three minutes with the screen locked" (the microphone closes when the screen locks: `b53276cba`; only the idle-off of three minutes remains, and it is not worth a sentence); "report a problem with a story" (no report action exists); screen 2 stays only if the lead sees it on a device.
 
-- Territories and price: the owner left this to the lead (2026-11-24). TestFlight needs neither. For the App Store release the default is free, United States only at first, widened later; the owner confirms before release.
-- Secondary category: none or Reference.
-- Whether the model files move to our own host before release.
+Open for the owner (all with a default; see submission-checklist.md): territories and price (default free, United States first); secondary category (default none); whether the model files move to our own host (the text names Hugging Face until then); the support page (section "URLs").
 
-Rulings applied (owner, 2026-11-23): minimum age 16 (age rating 16+); one app; passkey accounts made and deleted inside the app; downloads only after agreement; during the beta every account is free tier and providers may train on what is sent.
+Rulings applied (owner, 2026-11-23 and 24): minimum age 16 (age rating 16+); one app; passkey accounts made and deleted inside the app; model files only after the person agrees in voice setup (one agreement, the total size shown); during the beta every account is free tier and providers may train on what is sent.
 
 ## Name
 
-Autoradio 1 (11 characters). Check that the name is free when the app record is made.
+Autoradio 1 (11 characters). Already set on the app record (the record exists, see submission-checklist.md).
 
-## Subtitle candidates (30 characters or fewer)
+## Subtitle (chosen)
 
-1. News read aloud, with sources (29)
-2. A radio that reads the news (27)
-3. Spoken news from cited sources (30)
-4. Listen to AI-written news (25)
-5. The paper, read to you (22)
+```
+News read aloud, with sources
+```
 
-Recommended: 1 or 3. Both say what it does and name the sources. 4 says AI in the first line, which helps the review.
+29 characters. It says what the app does and that sources are named. (Alternatives dropped: "Listen to AI-written news" is also true, but the AI line is in the first sentence of the description and the AI label inside the app.)
 
 ## Promotional text (170 characters or fewer)
 
@@ -30,7 +26,7 @@ Recommended: 1 or 3. Both say what it does and name the sources. 4 says AI in th
 Autoradio 1 reads the day's news aloud. Every story is written by AI from cited web sources and links to them. Listen with no account. Make one to shape your own edition.
 ```
 
-(Exactly 170 characters. Description is about 2,700 characters. Keywords are 91 bytes.)
+170 characters. True of the build: the paper plays signed out; a personal edition needs an account.
 
 ## Description (under 4,000 characters)
 
@@ -39,13 +35,13 @@ Autoradio 1 is a radio that reads a news paper aloud.
 
 The paper is called Autopaper. Its stories are written by AI agents from cited web sources. Every story shows its sources as links, so you can open the original and check it. Stories can contain mistakes. The app says plainly that they are written by AI.
 
-Press Play and listen. You do not need an account. The radio reads the front page with the voice built into your iPhone, and it keeps playing with the screen locked, with controls on the lock screen.
+Press Play and listen. You do not need an account. The radio reads the front page with the voice built into your iPhone until you add a better one, and it keeps playing with the screen locked, with controls on the lock screen.
 
 With an account you get more:
 
 A personal edition. Choose the topics you care about, by tapping or by speaking. Tap more of this or less of this on any story and the radio adjusts.
 
-Talk to it. Turn on Voice and ask about the story you are hearing, or tell the radio to skip, pause or play something next. Your speech is turned into text on your phone. The text of a request is sent to your account's computer on our server and to outside AI models that write the answer. During the beta every account is on the free tier, and some of those companies may keep what is sent and use it to train their models. The app asks for your agreement before the first request that does this. [WHEN-BUILT]
+Talk to it. Turn on Voice and ask about the story you are hearing, or tell the radio to skip, pause or play something next. Your speech is turned into text on your phone. The text of a request is sent to your account's computer on our server and to outside AI models that write the answer. During the beta every account is on the free tier, and some of those companies may keep what is sent and use it to train their models. You agree to this when you create your account, and the screen says so above the button.
 
 A reader. Read a story or a document, see its sources and its versions, and hear it read aloud.
 
@@ -61,19 +57,31 @@ Your computer. Each account has its own computer on our server. It holds what yo
 
 Sign in with a passkey. You make an account in the app with your email address, which we check once with a code we send, and a passkey, and you can delete it in the app. Access ends at once, and your account, your computer and your data are permanently removed after 72 hours. You must be 16 or older. [WHEN-BUILT]
 
+Sign in with a passkey. There are no passwords. A new account first checks your email address with a code we send, and you make the passkey on your phone. You can delete the account in the app, in Settings. Your access ends at once, and your account, your computer and your data are permanently removed after 72 hours. You must be 16 or older.
+
 What to know before you use it:
 
 Stories are written by AI, not by reporters. The sources are cited and linked. Please check them for anything that matters.
 
-Voice and takes use the microphone only when you turn them on. With the screen locked, Voice can stay on for up to three minutes after you last speak. The iPhone shows its microphone indicator while it is on.
+Voice and takes use the microphone only when you turn them on. The iPhone shows its microphone indicator while it is on.
 
-The app can download speech and language model files to your phone. They are large, so the app tells you the size and downloads only after you agree. [WHEN-BUILT]
+When you set up voice, the app recommends the speech and language models that fit your phone, shows their total size, and downloads them from Hugging Face only after you agree. In Settings, Voice and models, you can try, switch or remove models.
 
 The news can include war, crime and other serious subjects.
 
-Privacy policy: PRIVACY_POLICY_URL
-Support: SUPPORT_URL
+Privacy policy: https://choir.news/privacy
 ```
+
+Depends on: lane account-delete (the deletion sentence, with its 72 hour hold), lane voice-models (first-run voice setup's recommendation and agreement, and the Voice and models page), origin/main (the create-account line above the button, `onboarding.contract`; the "Written by AI" label, `reader-parse.ts` DISCLOSURE_STORY; takes 3 to 60 seconds, `takes.ts`). Not proven on a phone, and the lead must see each on the build before upload: lock-screen controls and playing with the screen locked (docs/current-architecture.md says built, not run on a phone), the Voice and models page, and the deletion path. If the lead cannot see one, cut its sentence.
+
+The support URL goes in its own field only (section "URLs"), so no placeholder is in the description.
+
+## URLs
+
+- Privacy policy URL: `https://choir.news/privacy` (typed into the app info localization). Blocker: that route renders `frontend/public/legal/privacy-policy.md`, effective 2026-10-31, which does not mention the Autoradio app, outside AI companies training on requests, 16+, in-app deletion or the 72 hours, and names `privacy@choir.news` as its contact. The new policy (`docs/ship/privacy-policy.md`, still waiting for the owner's read, with tags and DATE_OF_PUBLICATION) must replace it before submission; the create-account line in the app also links to it.
+- Terms: `https://choir.news/terms` (linked from the create-account screen; the route exists in `frontend/src/App.svelte`). Same check: it is the older web terms.
+- Support URL: `https://choir.news/support`. Built in lane `support-page`: a `support` kind in `LegalDocument.svelte` beside privacy and terms, rendering `frontend/public/legal/support.md` (what the app is, write to 000@choir.news, account deletion by writing from the account's address, with the privacy policy for what is deleted, reporting a story, the policy addresses, the company's postal address). In-app deletion and the 72 hours are not on the page because the code does not do them yet. Every path on choir.news answers 200 with the app's shell, so a 200 proves nothing: the deployed check is that `/support` shows "Autoradio 1 Support". Until that is seen, the field is blocked; do not use `/privacy` as the support URL (it is not support, and 1.5 asks for a way to contact).
+- Marketing URL: `https://choir.news`.
 
 ## Keywords (100 bytes or fewer, comma separated)
 
@@ -81,14 +89,18 @@ Support: SUPPORT_URL
 news,radio,audio news,podcast,headlines,briefing,listen,voice,sources,current events,reader
 ```
 
-(Count the bytes in App Store Connect; the field counts commas. Do not repeat words from the name or subtitle. Do not use competitor names, "AI" as a rank trick, or other platforms.)
+91 bytes (counted 2026-11-24, ASCII only). No name or subtitle words are repeated except "news" inside "audio news": drop "audio news" and add "daily" if App Store Connect warns. No competitor names, no other platforms.
 
-## Categories
+## Copyright
 
-- Primary: News.
-- Secondary: leave empty, or Reference. Do not choose Music or Entertainment. Do not choose Kids.
-- Age rating: 16+, and the minimum age for an account is 16 (owner, 2026-11-23). Answer the questionnaire honestly (frequent mature themes in news, no unrestricted web access).
-- Content rights: answer yes to "contains third-party content" and state that stories cite sources with links and podcasts stream from publishers' own feeds. [CHECK]
+`2026 Choir Harmonic Intelligence Platform, Inc.`
+
+## Categories and ratings
+
+- Primary: News. Secondary: none (owner may choose Reference). Not Music, Entertainment or Kids.
+- Age rating: 16+. Answers, one by one, are in submission-checklist.md ("Age rating declaration"). The minimum age for an account is 16; the app asks for no birth date.
+- Content rights: "Contains third-party content": yes. Stories cite web sources with links and podcasts stream from publishers' own feeds; the paper's stories are our own AI-written text. Owner confirms he holds or is licensed for what is shown, the one right the form asks him to affirm.
+- Export compliance: the build sets ITSAppUsesNonExemptEncryption false (`mobile/scripts/check-store-ipa.py` refuses an upload without it); HTTPS and system encryption only.
 
 ## Screenshot plan (iPhone only, one large size)
 
@@ -107,7 +119,7 @@ Capture at 1320 x 2868 on a slim simulator named for the run; Apple scales to sm
 | 9 | Mail and files | The mail list and a file open on your computer. | Mail and files, on your computer |
 | 10 | Takes and notebook | A take being recorded, or the notebook with a note. | Notes and takes, yours to keep |
 
-Screens 4 and 8 need the AI label and the in-app passkey screen to exist in the build. [WHEN-BUILT]
+Screens 4 and 8 exist in the build: the label is the "Written by AI" line on a story (`reader-parse.ts`), and the passkey screen is the create-account screen (`onboarding.contract`). The lead's job: capture them from a build, one at a time, on a slim simulator.
 
 If voice, sound, the lock screen, mail, files or takes have not been used on the owner's phone by the time of capture, drop their screens. Show only what has been used. (Research risk 4.)
 

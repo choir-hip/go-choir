@@ -1,8 +1,10 @@
 import Foundation
 
 // DOOR A: the ONE way a model file reaches the phone (review round 3; docs/problems/onboard-consent-rules-escape-by-another-path-2026-11-24.md).
-// Every fetch in the app (setup, Settings > Downloads, the voice cards, a retry, a resume, the search pass, the voice print) asks this door for its transport, and the door
-//  - refuses a model whose group the person has not agreed to (the agreement is Exact's consent record, pushed here by shared code: `sync`), and a model that is in no group (a model that is not offered cannot be fetched);
+// Every fetch in the app (setup, Settings > Voice and models, the voice cards, a retry, a resume, the search pass, the voice print) asks this door for its transport, and the door
+//  - refuses a model the person has not agreed to (the agreement is Exact's consent record, pushed here by shared code: `sync`), and a model that is in no group (a model that is not offered cannot be fetched).
+//    The agreement is PER MODEL: a press on a model's row in Voice and models records the agreement under that model's id, and it covers that model's files only (owner, 2026-11-24). A record under a group's
+//    name still covers the models of that group (the search pass keeps its agreement under "search"); nothing the app writes now is a group record except that one;
 //  - hands back a URLSession whose configuration forbids what the agreement forbids: Wi-Fi only (`agreed`) turns cellular, expensive and constrained access OFF in the transport itself, so a network change during a
 //    download, a retry and a resume cannot spend mobile data; only `agreed-mobile` leaves it on.
 // What the door cannot reach: a library that downloads on its own session (FluidAudio's recogniser and voices). For those `authorizeLibrary` refuses a start without consent and a start on a path the agreement does not cover.
@@ -20,7 +22,7 @@ public final class DownloadDoor: @unchecked Sendable {
         /// What the person is told (the voice cards and the rows say this, not the code's words).
         public var person: String {
             switch self {
-            case .noConsent: return "Agree to this download in Settings, Downloads first: that is where you see its size and who it comes from."
+            case .noConsent: return "Press Download on this model's own row first: that press is your agreement to this download."
             case .notOffered: return "This is not offered for download."
             case .pathNotAgreed: return "This needs Wi-Fi: you agreed to it on Wi-Fi only. It will go on when you are back on Wi-Fi."
             case .timedOut: return "This took too long and was stopped. Try it again."
@@ -75,7 +77,7 @@ public final class DownloadDoor: @unchecked Sendable {
     public func authorize(model id: String) throws -> Agreement {
         if allowAll { return .mobile }
         guard let g = groups[id] else { throw Refusal.notOffered(model: id) }
-        lock.lock(); let a = agreed[g]; lock.unlock()
+        lock.lock(); let a = agreed[id] ?? agreed[g]; lock.unlock()
         guard let a else { throw Refusal.noConsent(group: g) }
         return a
     }
@@ -223,9 +225,10 @@ public final class DownloadDoor: @unchecked Sendable {
         if allowAll { a = .mobile; g = groups[id] ?? "" }
         else {
             guard let grp = groups[id] else { lock.unlock(); throw Refusal.notOffered(model: id) }
-            guard let ag = agreed[grp] else { lock.unlock(); throw Refusal.noConsent(group: grp) }
+            let key = agreed[id] != nil ? id : grp                                                 // the model's own agreement, else its group's
+            guard let ag = agreed[key] else { lock.unlock(); throw Refusal.noConsent(group: grp) }
             if ag == .wifi, !onWiFi() { lock.unlock(); throw Refusal.pathNotAgreed(group: grp) }
-            a = ag; g = grp
+            a = ag; g = key
         }
         live[key] = Window(group: g, agreement: a, cancel: { box.kill() })
         let hook = registryHook

@@ -1,31 +1,20 @@
-// The notebook page's state in shared code: what the Swift NotebookStore kept for the page (the last reads, the selected line, the refresh) and the one
-// narrow native call. The model is notebook.ts; tests are notebook-run.test.ts (R1 to R7).
-//
-// The native call, `{op: 'notebookState'}` on the app module (AutoradioModule+Notebook.swift `notebookOp`), with the reason only native code can meet:
-//  - notebookState: the steer taps waiting (the more / less taps are queued by the Swift cards and sent by the Swift steer queue, which the Swift run sheet feeds) and the write of the
-//    listener's topics into the notebook (a Texture canonical write through the Swift TextureEditor: red, it stays native until that editor moves). Answers `{steerQueued}`.
-// With no module (Android, the web) there is no call and no steer line.
+// The notebook page's state in shared code: what the Swift NotebookStore kept for the page (the last reads, the selected line, the refresh). The model is notebook.ts; tests are
+// notebook-run.test.ts (R1 to R7). Nothing here is native any more: the listener's topics are written into the notebook by notebook-topics.ts (it was the one native call, `notebookState`,
+// because the write went through the Swift Texture editor), and the waiting steer taps are steer.ts's.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, nativeLater } from './api.ts';
-import { picksText } from './edition-picks.ts';
+import { accountGeneration } from './api.ts';
+import { writeTopics } from './notebook-topics.ts';
 import { queued as steerQueued } from './steer.ts';
 import { loadDoc, readLearning, page, seamGet, type Get, type PageInfo } from './notebook.ts';
 
-export interface Device { state(): Promise<void>; }
-export type Env = { get: Get; device: Device | null; deviceDeadlineMs?: number };
-export const DEVICE_DEADLINE_MS = 20000;
-/** The page waits at most this long for the native steer count (the topics write is native's and may take longer: the page is not held for it). */
+/** The topics write, as the page asks for it on every read: true when the notebook holds them (or there is nothing to write). */
+export interface Writer { write(): Promise<boolean>; }
+export type Env = { get: Get; writer: Writer | null; writerDeadlineMs?: number };
+export const WRITER_DEADLINE_MS = 20000;
+/** The page waits at most this long for the topics write (it may take longer: the page is not held for it). */
 export const STATE_WAIT_MS = 4000;
 
-export function nativeDevice(): Device | null {
-  const raw = nativeLater();
-  if (!raw) return null;
-  const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
-  return {
-    async state() { await later({ op: 'notebookState' }); },
-  };
-}
-export const liveEnv = (): Env => ({ get: seamGet, device: nativeDevice() });
+export const liveEnv = (storage: Storage | undefined): Env => ({ get: seamGet, writer: { write: () => writeTopics(storage) } });
 
 /** The line after a tap: the same id again clears the selection. */
 export const selectedAfter = (current: string, id: string): string => (current === id ? '' : id);
@@ -39,16 +28,15 @@ const within = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
   Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
 
 async function readAll(storage: Storage | undefined, env: Env, gen: number): Promise<Read> {
-  const d = env.device, ms = env.deviceDeadlineMs ?? DEVICE_DEADLINE_MS;
-  if (d) await picksText(storage).catch(() => undefined);                     // the picks reach the native copy first (the topics write reads it)
-  if (d) await within(d.state(), Math.min(ms, STATE_WAIT_MS), undefined);   // first: the topics are in the notebook before it is read (when native is quick; the page is not held for it)
+  const w = env.writer, ms = env.writerDeadlineMs ?? WRITER_DEADLINE_MS;
+  if (w) await within(w.write(), Math.min(ms, STATE_WAIT_MS), false);       // first: the topics are in the notebook before it is read (when it is quick; the page is not held for it)
   const steer = await steerQueued(storage);                                   // the waiting more / less taps are shared code's (steer.ts)
   const [{ load }, learning] = await Promise.all([loadDoc(env.get, storage), readLearning(env.get)]);
   return { doc: load, learning, steer };
 }
 
 /** The page's source. `tick` is the Refresh press, `signedOutTick` a sign-out; a select changes only `selected` and reads nothing. Never throws. */
-export async function notebookShared(a: { selected: string; tick: number | string; active: boolean; signedOutTick: string }, storage: Storage | undefined, env: Env = liveEnv()): Promise<PageInfo> {
+export async function notebookShared(a: { selected: string; tick: number | string; active: boolean; signedOutTick: string }, storage: Storage | undefined, env: Env = liveEnv(storage)): Promise<PageInfo> {
   if (!a.active) { memo = null; return idle(); }
   const gen = accountGeneration();
   const key = `${a.tick}|${a.signedOutTick}|${gen}`;

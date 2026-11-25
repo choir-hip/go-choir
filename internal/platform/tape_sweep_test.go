@@ -230,21 +230,32 @@ func listedDigests(items []tapeSweepItem, sweep string) map[string]bool {
 	return out
 }
 
-// insertClosure records a code closure (and a route slot for routedComputer
-// when non-empty) whose JSON names digest.
-func (f *tapeFixture) insertClosure(codeRef, digest, routedComputer string) {
+// routedOwner and routedDesktop name the route slot the tests below give a
+// computer; the computer the slot realizes is routedComputerID. A route slot is
+// computer:<owner>:<desktop>, and the computer's id is made from the pair
+// (internal/vmctl stableComputerID), never read from the slot.
+const (
+	routedOwner   = "owner-1"
+	routedDesktop = "primary"
+)
+
+func routedComputerID() string { return computerIDForRouteSlot(routedOwner, routedDesktop) }
+
+// insertClosure records a code closure (and the route slot of routedOwner and
+// routedDesktop when routed) whose JSON names digest.
+func (f *tapeFixture) insertClosure(codeRef, digest string, routed bool) {
 	f.t.Helper()
 	now := time.Now().UTC()
 	if _, err := f.store.db.Exec(`INSERT INTO computer_version_code_closures (code_ref, source_commit, closure_json, created_at) VALUES (?,?,?,?)`, codeRef, "abc", `{"artifacts":[{"uri":"x","sha256":"`+digest+`"}]}`, now); err != nil {
 		f.t.Fatal(err)
 	}
-	if routedComputer == "" {
+	if !routed {
 		return
 	}
 	if _, err := f.store.db.Exec(`INSERT INTO computer_version_artifact_programs (artifact_program_ref, program_json, created_at) VALUES (?,?,?)`, "prog-"+codeRef, `{}`, now); err != nil {
 		f.t.Fatal(err)
 	}
-	if _, err := f.store.db.Exec(`INSERT INTO computer_version_route_slots (route_slot_id, current_code_ref, current_artifact_program_ref, generation, latest_receipt_id, updated_at) VALUES (?,?,?,?,?,?)`, "computer:owner-1:"+routedComputer, codeRef, "prog-"+codeRef, 1, "rcpt", now); err != nil {
+	if _, err := f.store.db.Exec(`INSERT INTO computer_version_route_slots (route_slot_id, current_code_ref, current_artifact_program_ref, generation, latest_receipt_id, updated_at) VALUES (?,?,?,?,?,?)`, "computer:"+routedOwner+":"+routedDesktop, codeRef, "prog-"+codeRef, 1, "rcpt", now); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -261,7 +272,7 @@ func TestTapeSweepKeepsEveryReferencedFile(t *testing.T) {
 	f.appendSeq(live, shared, tapeAged)
 	deadShared := f.appendSeq(dead, shared, tapeAged)
 	closureNamed := f.put(tapeNSPayload, []byte("named by a closure"), tapeAged)
-	f.insertClosure("code-1", closureNamed, "")
+	f.insertClosure("code-1", closureNamed, false)
 	orphanPayload := f.put(tapeNSPayload, []byte("orphan payload"), tapeAged)
 	orphanReceipt := f.put(tapeNSReceipt, []byte(`{"computer_id":"live-1","artifact_digest":"`+orphanPayload+`"}`), tapeAged)
 	orphanEvent := f.put(tapeNSEvent, []byte(`{"computer_id":"live-1","sequence":9}`), tapeAged)
@@ -423,8 +434,8 @@ func TestTapeSweepNeverDeletesALiveComputer(t *testing.T) {
 	listed := f.chain("listed-1", 1, tapeAged)
 	f.reg.owned["owned-1"] = true
 	owned := f.chain("owned-1", 1, tapeAged)
-	routed := f.chain("routed-1", 1, tapeAged)
-	f.insertClosure("code-r", platformTestDigest('9'), "routed-1")
+	routed := f.chain(routedComputerID(), 1, tapeAged)
+	f.insertClosure("code-r", platformTestDigest('9'), true)
 	recent := f.chain("recent-1", 1, 2*24*time.Hour)
 	revived := f.chain("revived-1", 1, tapeAged)
 	appended := f.chain("appended-1", 1, tapeAged)

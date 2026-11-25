@@ -27,8 +27,10 @@
   import RecoverRoute from './lib/RecoverRoute.svelte';
   import EmailSignInRoute from './lib/EmailSignInRoute.svelte';
   import DeviceApproveRoute from './lib/DeviceApproveRoute.svelte';
+  import DeleteAccountRoute from './lib/DeleteAccountRoute.svelte';
+  import DeletionCancelOffer from './lib/DeletionCancelOffer.svelte';
   import { legacyAutopaperRedirect } from './lib/autopaper';
-  import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
+  import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError, DeletionPendingError, DeletionPurgingError } from './lib/auth.js';
   import { markReturning, onAccountSwitched, scopedKey, setLastUserId, switchAccount } from './lib/accounts.js';
   import { prepareAccountSwitch } from './lib/shell-services';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
@@ -67,7 +69,7 @@
   let sessionCheckSeq = 0;
   let lastPrewarmStartedAt = 0;
   let publicRoutePath = '';
-  let legalDocumentKind: 'privacy' | 'terms' = 'privacy';
+  let legalDocumentKind: 'privacy' | 'terms' | 'support' = 'privacy';
   let isLegalDocumentRoute = false;
   /** /recover: landing page for an account-recovery email link. */
   let isRecoverRoute = false;
@@ -75,6 +77,10 @@
   let isEmailSignInRoute = false;
   /** /device: approve a `choir login` from another device. */
   let isDeviceApproveRoute = false;
+  /** /account/delete: delete the account (docs/design/account-create-delete-2026-11-23.md). */
+  let isDeleteAccountRoute = false;
+  /** A passkey sign-in of an account with a pending deletion: no session, the offer to cancel. */
+  let deletionOffer = null;
   const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
 
   $: isAuthenticated = authState === 'signed_in';
@@ -310,7 +316,15 @@
       // state and display a retryable error message.
       // (An add-account ceremony leaves the signed-in account as it is.)
       if (!isAuthenticated) authState = 'signed_out';
-      passkeyError = passkeyErrorMessage(err, type);
+      if (err instanceof DeletionPendingError) {
+        // The account asked to be deleted: no session was made; the offer cancels it.
+        deletionOffer = err;
+        passkeyError = '';
+      } else if (err instanceof DeletionPurgingError) {
+        passkeyError = 'This account is being removed now. The removal has begun and cannot be cancelled.';
+      } else {
+        passkeyError = passkeyErrorMessage(err, type);
+      }
     } finally {
       ceremonyInProgress = false;
     }
@@ -474,9 +488,14 @@
     return pathname === '/device' || pathname === '/device/';
   }
 
-  function legalDocumentKindFromPath(pathname): '' | 'privacy' | 'terms' {
+  function isDeleteAccountPath(pathname) {
+    return pathname === '/account/delete' || pathname === '/account/delete/';
+  }
+
+  function legalDocumentKindFromPath(pathname): '' | 'privacy' | 'terms' | 'support' {
     if (pathname === '/privacy' || pathname === '/privacy/') return 'privacy';
     if (pathname === '/terms' || pathname === '/terms/') return 'terms';
+    if (pathname === '/support' || pathname === '/support/') return 'support';
     return '';
   }
 
@@ -487,6 +506,7 @@
     isRecoverRoute = isRecoverPath(window.location.pathname);
     isEmailSignInRoute = isEmailSignInPath(window.location.pathname);
     isDeviceApproveRoute = isDeviceApprovePath(window.location.pathname);
+    isDeleteAccountRoute = isDeleteAccountPath(window.location.pathname);
     // The standalone /autopaper pages are gone: an old link replaces the
     // address with the story's public Texture route (the desktop opens it
     // in a Texture window) or the desktop home.
@@ -501,7 +521,7 @@
     // computer-surface handoff (a handoff reload would drop the in-memory
     // recovery token). Deep links and public routes are the packages'
     // contributes.links, read once the in-tree contributions have applied.
-    if (!isRecoverRoute && !isEmailSignInRoute && !isDeviceApproveRoute) contributionsSettled().then(() => {
+    if (!isRecoverRoute && !isEmailSignInRoute && !isDeviceApproveRoute && !isDeleteAccountRoute) contributionsSettled().then(() => {
       // A package's public route (/pub/<package>/...) opens its app on the desktop.
       publicRoutePath = links.resolveRoute(window.location.pathname) ? window.location.pathname : '';
       return initialAppIntentFromURL();
@@ -590,6 +610,8 @@
     <EmailSignInRoute />
   {:else if isDeviceApproveRoute}
     <DeviceApproveRoute />
+  {:else if isDeleteAccountRoute}
+    <DeleteAccountRoute />
   {:else if authState === 'checking' || authState === 'reconnecting'}
     <div class="loading" role="status" aria-live="polite">
       <span class="loading-orbit" aria-hidden="true"></span>
@@ -619,6 +641,13 @@
           >
             ×
           </button>
+          {#if deletionOffer}
+            <DeletionCancelOffer
+              offer={deletionOffer}
+              on:cancelled={() => window.location.replace(window.location.href)}
+              on:leave={() => (deletionOffer = null)}
+            />
+          {:else}
           <AuthEntry
             {passkeyError}
             {ceremonyInProgress}
@@ -628,6 +657,7 @@
             on:emailsignedin={handleEmailSignedIn}
             on:clearpasskeyerror={handleClearPasskeyError}
           />
+          {/if}
         </div>
       </div>
     {/if}

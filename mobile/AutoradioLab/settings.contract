@@ -2,23 +2,23 @@
 //   settings:root (or settings:)  the list, with the theme picker and light/dark/system inline
 //   settings:appearance           themes as preview cards, light/dark/system, a theme from a Texture, the type and depth specimens
 //   settings:account              who am I, the device's key label, sign out
-//   settings:voice                voice and models: Components, and the voice setup card (lane 8)
-//   settings:downloads            the model files voice needs, with sizes, the host and one press each (downloads.ts)
+//   settings:delete               delete the account: what goes, what stays, the 72 hours, then the passkey (account-delete.ts)
+//   settings:voice                voice and models: every model of every job, each downloaded, used, tested and removed from its own row (models.ts), and the voice cards
 //   settings:computer             status, Wake, Restart to update
 //   settings:learned              what the paper has learned, with Reset
 //   settings:about                app and server builds (commit rows: about.ts)
 // testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-components, settings-theme-problems,
 //   settings-nav-<screen>, settings-back, settings-theme-doc, settings-theme-load,
-//   settings-theme-status, settings-theme-remove-<id>, settings-signout, settings-account-*,
+//   settings-theme-status, settings-theme-remove-<id>, settings-signout, settings-account-*, settings-delete-*,
 //   settings-choice-<setting>-<option>, settings-wake, settings-update, settings-computer-*, settings-learned-reset, settings-learned-row,
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, ThemeCard, ThemeExtras, LearnedInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
 use SettingsAccount, AboutBuild, SettingsComputer, AboutInfo from "./settings-types.contract"
 use AccountView from "./account-state-types.contract"
+use DeleteView from "./account-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
-use VoiceCardsList from "./voice.contract"
-use DownloadCard from "./downloads.contract"
+use ModelsTabBar, ModelsTabBody from "./models.contract"
 use LearnCard from "./learn.contract"
 use SkeletonLine from "./transitions.contract"
 
@@ -32,10 +32,10 @@ component SettingsPage
       AppearanceScreen()
     if screen == "account"
       AccountScreen()
+    if screen == "delete"
+      DeleteScreen()
     if screen == "voice"
       VoiceScreen()
-    if screen == "downloads"
-      DownloadsScreen()
     if screen == "voiceprint"
       VoiceprintScreen()
     if screen == "computer"
@@ -44,7 +44,7 @@ component SettingsPage
       LearnedScreen()
     if screen == "about"
       AboutScreen()
-    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "downloads" and screen != "voiceprint" and screen != "computer" and screen != "learned" and screen != "about"
+    if screen != "appearance" and screen != "account" and screen != "delete" and screen != "voice" and screen != "voiceprint" and screen != "computer" and screen != "learned" and screen != "about"
       RootScreen()
 
 // ---------------------------------------------------------------- shared pieces
@@ -234,9 +234,7 @@ component RootScreen
       PlainList(testId="settings-card-listening")
         NavRow(address="onboarding:setup", title="Voice setup", subtitle="Download the voice models and check the microphone", testId="settings-setup-voice")
         Hairline()
-        NavRow(address="settings:downloads", title="Downloads", subtitle="The voice and search files, with their sizes", testId="settings-nav-downloads")
-        Hairline()
-        NavRow(address="settings:voice", title="Voice and models", subtitle="The voice, and the models that hear you", testId="settings-nav-voice")
+        NavRow(address="settings:voice", title="Voice and models", subtitle="Every model: its size, download, test and removal", testId="settings-nav-voice")
         Hairline()
         // Lane autoradio-talk: the reader's voice, learned on this phone so the radio can tell you from a TV.
         column width="100%" box-sizing="border-box" padding="14px 16px" gap=8 align-items="flex-start" testId="settings-my-voice"
@@ -366,6 +364,57 @@ component AccountScreen
         if au.signedIn
           button press=signOut testId="settings-signout" appearance="none"
             ActionButton(label=(acs.state == "rejected" ? "Clear this phone" : "Sign out"), testId="settings-signout-box", primary=false, danger=true)
+      // Delete account is its own page (Apple 5.1.1(v): deletion starts inside the app). A phone with no key has nothing to prove the account with, so the row is for a signed-in phone.
+      if au.signedIn
+        Hairline()
+        NavRow(address="settings:delete", title="Delete account", subtitle="Removes your account, your computer and your data", testId="settings-nav-delete")
+
+// ---------------------------------------------------------------- delete account
+
+// The words are the whole of what the server does (internal/auth/deletion_*.go, internal/accountpurge): takes removed; published stories kept with the author detached; access
+// revoked at once; the irreversible purge after 72 hours; signing in with the passkey in that time offers Cancel deletion; a receipt kept, and server logs for as long as the privacy policy says.
+// LEAD: the words below say "kept for a limited time" because nothing enforces 30 days yet (docs/ship/data-inventory.md section 7). Say "30 days" when the log retention is enforced.
+component DeleteScreen
+  inject
+    th: Theme
+    tx: ThemeExtras
+    au: ChoirAuth
+    acctInfo: SettingsAccount
+    delv: DeleteView
+    delAsk: bool
+    askDelete: action
+    keepAccount: action
+    confirmDelete: action
+  view
+    ToolScroll(id="settings")
+      ScreenTitle(label="Delete your account", back=true)
+      if delv.phase == "done"
+        text delv.message testId="settings-delete-done" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      // The App Review account cannot be deleted in the app (owner, 2026-11-25; the server refuses it): no confirmation, the way to try deletion instead.
+      // The words are REVIEWER_DELETE_WORDS in account-delete.ts, verbatim (account-delete.test.ts holds them equal).
+      if acctInfo.reviewer
+        text "This account is kept for App Review and cannot be deleted from the app. To try account deletion, sign out, create a new account with a passkey (Create account, your email, the 8-digit code we send, then the passkey), and delete that account here." testId="settings-delete-reviewer" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      if delv.phase != "done" and not acctInfo.reviewer
+        SectionLabel(label="What is removed")
+        text "Your account and your passkey. Your computer, with its disk, its stored history and the key that seals it: your edition, notes, documents, files, mail and its address, and your listening history. Your synced documents. Any takes you published, their words and their audio." testId="settings-delete-removed" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+        SectionLabel(label="What stays")
+        text "Stories you published stay public, with your name taken off. A short receipt that the deletion happened, with no personal details, and server logs, which are kept for a limited time. Mail you sent or received stays with the people on the other end and with our mail provider. Our encrypted backups still hold a copy of the account for about ten days, longer if a clean-up fails, and it is deleted with them; if a backup is ever restored, the deletion is carried out again. Outside AI providers keep what they already hold under their own terms; we cannot promise they delete it." testId="settings-delete-stays" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+        SectionLabel(label="When")
+        text "Your access ends the moment you confirm, on every device. The removal waits at least 72 hours. Until it begins you can change your mind: sign in with your passkey and choose Cancel deletion; nothing will have been removed. Once the removal has begun it cannot be undone." testId="settings-delete-when" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+        if delv.message != ""
+          text delv.message testId="settings-delete-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=(delv.phase == "failed" ? th.danger : th.fg)
+        if delv.pending
+          text "Waiting for your passkey and the server…" testId="settings-delete-working" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.muted
+        if not delv.pending and not delAsk
+          button press=askDelete testId="settings-delete-ask" appearance="none"
+            ActionButton(label="Delete account", testId="settings-delete-ask-box", primary=false, danger=true)
+        if not delv.pending and delAsk
+          text "Delete this account? You will be asked for your passkey." testId="settings-delete-sure" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.fg
+          column gap=8 width="100%"
+            button press=confirmDelete testId="settings-delete-confirm" appearance="none" width="100%"
+              ActionButton(label="Delete my account", testId="settings-delete-confirm-box", primary=false, danger=true)
+            button press=keepAccount testId="settings-delete-keep" appearance="none" width="100%"
+              ActionButton(label="Keep my account", testId="settings-delete-keep-box", primary=false, danger=false)
 
 // ---------------------------------------------------------------- voice and models
 
@@ -376,25 +425,9 @@ component VoiceScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Voice and models", back=true)
-      text "The voice that reads the paper, and the models that hear you, run on this phone." font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
-      VoiceCardsList()
-      text "Voice setup, with the model downloads and the checks for this device, opens from here once first run has it." testId="settings-voice-note" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-
-// ---------------------------------------------------------------- downloads
-
-component DownloadsScreen
-  inject
-    th: Theme
-    tx: ThemeExtras
-  view
-    ToolScroll(id="settings")
-      ScreenTitle(label="Downloads", back=true)
-      text "Voice needs these files on the phone. Choose a model for each job, or keep the one recommended for this phone. Each group is fetched only when you press its button, and the sizes are the real files." testId="settings-downloads-note" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
-      DownloadCard(group="voice")
-      Hairline()
-      DownloadCard(group="voice-rest")
-      Hairline()
-      DownloadCard(group="search")
+      text "One tab for each kind of model, the same row on every tab: what it is, its size, who made it, and where it stands. A model is fetched only when you press Download on its row; then Test it, make it the one in Use, or Remove it." testId="settings-voice-note" font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      ModelsTabBar()
+      ModelsTabBody()
 
 // ---------------------------------------------------------------- your voice
 

@@ -104,6 +104,14 @@ if args.contains("--configure") {
     _exit(failed ? 3 : 0)
 }
 
+// Responders compared on ten asks, straight from GGUF files: --bench-responder id=path,id=path (nothing is fetched, nothing is written to the store).
+if let spec = take("--bench-responder") {
+    let models = spec.split(separator: ",").compactMap { kv -> (id: String, path: String)? in
+        let p = kv.split(separator: "=", maxSplits: 1).map(String.init); return p.count == 2 ? (p[0], p[1]) : nil }
+    for l in await HubModelProvider.benchResponders(models) { print(l); fflush(stdout) }
+    _exit(0)
+}
+
 if args.contains("--setup") {
     args.removeAll { $0 == "--setup" }
     let registry = StageRegistry.builtIn()

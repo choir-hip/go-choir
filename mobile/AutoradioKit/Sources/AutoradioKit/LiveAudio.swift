@@ -738,11 +738,11 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         var why = ""
         return await synthesize("Ready.", with: cfg, why: &why, timed: false) != nil
     }
-    /// Make the audio of one block for the cache: the chosen voice only (a fall back to the system voice would be cached under the wrong name).
+    /// Make the audio of one block for the cache: only the chosen voice belongs under its cache key.
     public func synthesizeForCache(_ text: String) async -> PreparedAudio? {
         lock.lock(); let cfg = configuration; lock.unlock()
         var why = ""
-        guard let m = await synthesize(text, with: cfg, why: &why, timed: false) else { return nil }
+        guard let m = await synthesize(text, with: cfg, why: &why, timed: false, allowFallback: false) else { return nil }
         return PreparedAudio(text: text, samples: m.samples, rate: m.rate)
     }
     /// Per-document state dies with the document: the block index, where the loop ran dry (`resumeAt`), and the tracker's open and
@@ -1024,23 +1024,13 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         "\(String(describing: cfg.setting(.voice)))|\(text)"
     }
 
-    /// Make the audio of one block with the configured voice (the neural voice, the system voice as its fall back). nil when nothing could be
+    /// Make the audio of one block with the configured voice (or bundled Tiny Voca for an unavailable download). nil when nothing could be
     /// made; the failure is on the log (the trace's "voice" errors).
     func synthesize(_ text: String) async -> Synthesized? {
         lock.lock(); let cfg = configuration; lock.unlock()
-        let want = cfg.setting(.voice)?.id ?? ""
         var failure = ""
         if let made = await synthesize(text, with: cfg, why: &failure) { setFailure(nil); return made }
         if Task.isCancelled { return nil }
-        // The chosen voice made nothing: the system voice speaks instead, and the listener is told why.
-        if VoiceCatalog.neuralStageIDs.contains(want) {   // a chosen on-device voice; any other id that cannot be made is an error, not a guess
-            log.emit(.note("voice: \(want) made no sound (\(failure)); the system voice speaks"))
-            var system = cfg
-            system.set(.voice, StageSetting(id: VoiceCatalog.fallbackStageID))
-            var second = ""
-            if let made = await synthesize(text, with: system, why: &second) { setFailure(nil); return made }
-            if !second.isEmpty { failure += "; the system voice: \(second)" }
-        }
         setFailure(failure)
         return nil
     }
@@ -1053,13 +1043,13 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// True while a block of speech is being made (the vector job waits on it).
     public var synthesisBusy: Bool { synthDepth.read { $0 > 0 } }
     private let synthDepth = Locked(0)
-    private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String, timed: Bool = true) async -> Synthesized? {
+    private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String, timed: Bool = true, allowFallback: Bool = true) async -> Synthesized? {
         synthDepth.write { $0 += 1 }; defer { synthDepth.write { $0 -= 1 } }
         let voice: Voice
         let t0 = Date()
         var loaded = t0
         defer { if timed { LaunchTimings.shared.mark("synth", ms: Date().timeIntervalSince(loaded) * 1000) } }
-        do { voice = try registry.makeSpeaker(cfg, log: log); loaded = Date(); if timed { LaunchTimings.shared.mark("voice_load", ms: loaded.timeIntervalSince(t0) * 1000) } } catch {
+        do { voice = try registry.makeSpeaker(cfg, log: log, allowFallback: allowFallback); loaded = Date(); if timed { LaunchTimings.shared.mark("voice_load", ms: loaded.timeIntervalSince(t0) * 1000) } } catch {
             why = "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)"
             log.emit(.error(stage: "voice", message: why)); return nil
         }

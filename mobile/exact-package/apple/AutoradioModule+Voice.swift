@@ -1,6 +1,6 @@
 // The voice cards: tap a voice, hear a line in it, and that is the voice the radio speaks with (first-run's voice step and Settings).
 // The logic is the kit's VoiceSampler (with tests); this file holds what only the app can do: play the sample through the radio's own
-// audio engine, fetch a model through the model provider, and answer the contract.
+// audio engine, and answer the contract. (Every download is Settings > Voice and models' own: a card only shows it.)
 import AVFoundation
 import Foundation
 
@@ -9,6 +9,9 @@ private final class SampleOutcome: @unchecked Sendable {
     private let lock = NSLock()
     private var error: Error?
     private var frames = 0
+    private var first: Double?
+    func firstSound(_ ms: Double) { lock.lock(); if first == nil { first = ms }; lock.unlock() }
+    var firstMs: Double { lock.lock(); defer { lock.unlock() }; return first ?? 0 }
     func fail(_ e: Error) { lock.lock(); error = e; lock.unlock() }
     func got(_ n: Int) { lock.lock(); frames += n; lock.unlock() }
     func result() -> (Error?, Int) { lock.lock(); defer { lock.unlock() }; return (error, frames) }
@@ -31,33 +34,20 @@ final class VoiceController: @unchecked Sendable {
         sampler = VoiceSampler(
             options: VoiceCatalog.offered(),            // a voice no download group contains is not shown
             selected: current, readiness: readiness,
-            fetch: { model, onBytes in
-                if virtual {                              // no models and no network under the agent: a short, honest-looking wait
-                    for i in 1...4 { try await Task.sleep(nanoseconds: 300_000_000); onBytes(Int64(i) * 50_000_000) }
-                    return
-                }
-                guard let p = ModelProviders.current else { throw LabError.unavailable(ModelProviders.missingNote) }
-                try await p.fetch(model, role: "", onBytes: onBytes)
-            },
-            verify: { model in
-                let r = await verifier.verify(model: model, check: {
-                    if virtual { return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: true) }
-                    guard let p = ModelProviders.current else { throw LabError.unavailable(ModelProviders.missingNote) }
-                    return try await p.check(model, role: "")
-                })
-                return r.outputOK ? nil : (r.note.isEmpty ? "That voice did not work on this phone. The radio will use the phone's voice." : r.note)
-            },
             say: { option in
                 if virtual { try await Task.sleep(nanoseconds: 1_200_000_000); return }
                 try await VoiceController.play(option, on: rt)
             },
             halt: { rt.audio.stopVoice() },
-            choose: { rt.setVoice($0) })
+            choose: { rt.setVoice($0) },
+            running: { OnboardingController.shared?.runningProgress(model: $0) })      // Voice and models downloads every model from its own row; a card only shows that row's progress
         sampler.onChange = { [weak module] in module?.touch(["voiceCards"]) }
     }
 
     /// Say the option's sample in THAT voice. There is no fall back here: a card for Heart that played the phone's voice would be a lie.
-    static func play(_ option: VoiceOption, on rt: LabRuntime) async throws {
+    @discardableResult
+    static func play(_ option: VoiceOption, on rt: LabRuntime) async throws -> Double {
+        let t0 = DispatchTime.now()
         await rt.start(virtual: false)                            // does nothing when the radio is already running
         var cfg = rt.configuration
         cfg.set(.voice, option.setting)
@@ -66,7 +56,7 @@ final class VoiceController: @unchecked Sendable {
         let frames = AsyncThrowingStream<AudioFrame, Error> { c in
             let t = Task {
                 do {
-                    for try await f in voice.speak(AsyncStream<String> { $0.yield(option.sample); $0.finish() }) { outcome.got(f.samples.count); c.yield(f) }
+                    for try await f in voice.speak(AsyncStream<String> { $0.yield(option.sample); $0.finish() }) { outcome.firstSound(Double(DispatchTime.now().uptimeNanoseconds - t0.uptimeNanoseconds) / 1e6); outcome.got(f.samples.count); c.yield(f) }
                 } catch { outcome.fail(error) }
                 c.finish()
             }
@@ -76,6 +66,7 @@ final class VoiceController: @unchecked Sendable {
         let (error, n) = outcome.result()
         if let error { throw error }
         if n == 0 && !Task.isCancelled { throw LabError.unavailable("the voice \(option.id) made no sound") }
+        return outcome.firstMs                                    // milliseconds from the start to the first sound (the Test button shows it)
     }
 
     /// Speak one line with the voice the listener has chosen (the neural one; the phone's voice if it is not ready). The radio must be running.
@@ -99,7 +90,7 @@ final class VoiceController: @unchecked Sendable {
         if let o = VoiceCatalog.option(matching: rt.configuration.setting(.voice) ?? VoiceCatalog.defaultOption.setting) { sampler.syncSelected(o.id) }
         let cards: [[String: Any]] = sampler.cards().map { c in
             ["id": c.id, "name": c.name, "blurb": c.blurb, "sizeLabel": c.sizeLabel, "state": c.state, "note": c.note,
-             "progress": c.progress, "selected": c.selected, "playing": c.playing]
+             "progress": c.progress, "selected": c.selected, "playing": c.playing, "model": c.model, "group": c.group, "credit": c.credit]
         }
         return ["selected": sampler.selectedID, "message": "", "cards": cards]
     }
@@ -111,6 +102,8 @@ extension AutoradioModule {
         VoiceController.shared = c
         handle("voiceCards") { _, reply in reply(c.view()) }
         handle("voicePick") { args, reply in c.sampler.pick(args["id"] as? String ?? ""); reply(c.view()) }
+        // Test on a voice (Voice and models): its sample plays, nothing is chosen. Native because the audio engine plays it.
+        handle("voiceHear") { args, reply in c.sampler.hear(args["id"] as? String ?? ""); reply(c.view()) }
         handle("voiceStop") { _, reply in c.sampler.stop(); reply(c.view()) }
         // First-run: the voice stays as chosen, the sample stops, the interview is next.
         handle("voiceContinue") { _, reply in
