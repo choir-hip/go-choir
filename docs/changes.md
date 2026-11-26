@@ -1,3 +1,13 @@
+## 2026-11-26: Android model routes are researched and separated from device proof (green; lane `android-model-research`)
+
+What: `docs/reference/ON-DEVICE-MODELS.md` now records the Android route for every current iOS model job: Silero and WeSpeaker through ONNX Runtime/sherpa-onnx, Parakeet EOU INT8 ONNX, Fluid Speech Mini GGUF through parakeet.cpp, Qwen3 and EmbeddingGemma through llama.cpp, and Tiny Voca or Phonon for speech. It distinguishes identical weights, new conversions and substitutes; lists sizes, licenses and primary sources; and states what has not been measured on the Motorola. The Android goal now uses the package-first ExactExtension seam and extends the landed ASR benchmark instead of creating a second one. The stale foreground-only Android deck note is corrected: pinned Exact already has Media3 background playback, but Autoradio's Kotlin deck is still absent.
+
+Why: the owner, 2026-11-25: "need to find alternative on-device models. basically same models but compiled differently." Core ML/Core AI bundles cannot be made Android-compatible by recompiling the app.
+
+Proof: source audit against current `main`, the pinned Exact checkout, calibration C198, the landed Motorola ASR dataset and primary vendor/model sources fetched 2026-11-25. No new device benchmark is claimed.
+
+Replaced: Kokoro as the assumed Android voice candidate and the stale claim that Exact Android has no background media service. Undo: revert the commit; no runtime behavior changes.
+
 ## 2026-11-25: Tiny Voca is the radio's voice; the search model downloads
 
 **What.** The radio speaks with Tiny Voca, bundled in the app (Core ML; F2 and

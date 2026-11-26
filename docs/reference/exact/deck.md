@@ -95,8 +95,10 @@ the sheet's order. The server contract is `internal/runsheet/apply.go` and `inte
 
 ## Android
 
-Kotlin implements the same five names with Media3 (audio) and `TextToSpeech` (speech) behind a media session. Station X6 adds the
-media-playback service. Until then it plays only while the app is on screen.
+Kotlin must implement the same five names with Media3 (audio) and speech playback behind a media session. The Kotlin deck does not exist yet.
+The pinned Exact Android host already contains Media3 `PlaybackService`, `MediaSessionService`, audio focus and a foreground media-playback
+notification, so the old claim that Android must remain foreground-only is stale. Autoradio still owes its own deck state, journal, held-entry
+rules, remote-command mapping and reconciliation with shared code.
 
 ## Not yet proven
 

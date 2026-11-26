@@ -43,6 +43,10 @@ start:
       owner: unknown
       touch: forbidden
       recovery: leave in place; reconcile with lane ls, git worktree list and the 2026-11-25 lane audit before any nearby mutation
+  start_correction:
+    on: 2026-11-26
+    evidence: 'calibration C198; docs/evidence/model-bench-2026-11-22/README.md; pinned Exact host/android PlaybackService.kt; read-only Android parity audit'
+    what_changed: 'An older signed-out shell did run on the Motorola (100 stories fetched, 26 rows drawn, 22 native reads substituted), and a CPU ASR benchmark is already landed. Pinned Exact already has Android Media3 background playback. Neither fact proves current-main parity, the Autoradio Kotlin deck, voice or auth.'
   what_is_true_now:
     - 'The connected Motorola is serial ZY22H5K8QR, moto g stylus 5G - 2023, Android 14, arm64-v8a, MemTotal 3,589,868 kB, about 70 GiB free. adb is authorised and shell input works; the device is awake. adb is not on PATH: use /Users/wiz/Library/Android/sdk/platform-tools/adb or export that directory.'
     - 'news.choir.autoradio.lab versionName 0.1.0 versionCode 1 is installed from 2026-11-22. Its APK is signed by the standard Android debug certificate, SHA-256 dfe9767c642a2f864b297049bde97c0836cb58d5ce516ffe7a7da11f6fec9ea7. This certificate fingerprint is public; no private key belongs in the repository or output.'
@@ -56,7 +60,7 @@ start:
     - 'All pre-existing lanes are forbidden unless the lead explicitly assigns one. In particular do not alter move-a, move-b, unified-voice-download, the voice lanes, the shipping lanes or qa-mac history.'
 finish:
   deliver: 'Autoradio 1 runs on the connected Motorola from the same Exact source as iOS, with feature parity for the shipped user journeys: signed-out and signed-in pages, passkey account access, radio and podcasts in the background, reader/files/mail/textures/notebook/takes/settings, and a complete on-device voice configuration. The result is an installable version 1.0 APK, a rerunnable physical-device proof, and a sourced model-portability and benchmark record.'
-  artifact: 'on main: the Android implementation of @choir/autoradio and the narrow app-module platform seams; Android passkey association and server-origin support; a version 1.0 lab-one APK with its SHA-256; scripts/proofs and docs/evidence from serial ZY22H5K8QR; updated Exact and on-device-model reference pages; and this existing Android goal plus ACTIVE/mission-graph reconciled to the proved state'
+  artifact: 'on main: the package-first Android ExactExtension implementation of @choir/autoradio, its native web view and genuine platform seams; Android passkey association and server-origin support; a version 1.0 lab-one APK with its SHA-256; scripts/proofs and docs/evidence from serial ZY22H5K8QR; updated Exact and on-device-model reference pages; and this existing Android goal plus ACTIVE/mission-graph reconciled to the proved state'
   acceptance:
     - action: 'from a frozen candidate on current main, build and install news.choir.autoradio.lab.one on ZY22H5K8QR under the Mac build lock, then drive the signed-out paper and a story with Exact agent/android and adb'
       proves: 'the current shared Exact app runs on the physical phone without hand edits or an emulator'
@@ -160,7 +164,7 @@ stations:
     status: pending
   - id: A3
     name: Android platform shell
-    scope: 'implement only genuine platform seams: native web page, external links, file/audio hand-off, reader follow/aim, podcast clip location and any remaining shipped native view/call found by A0; keep all decisions and parsing in shared Exact code'
+    scope: 'create mobile/exact-package/android as an ExactExtension and implement only genuine platform seams: the declared web-page view, external links, file/audio hand-off, reader follow, podcast clip location and any remaining shipped native source/send found by A0; keep all decisions and parsing in shared Exact code'
     class: orange
     review: one seat on a frozen candidate
     depends_on: [A0]
@@ -176,7 +180,7 @@ stations:
     status: pending
   - id: A5
     name: Model portability matrix and old-phone benchmark
-    scope: 'verify each model/runtime from primary sources; distinguish identical portable weights from Android substitutes for CoreML-only builds; build a rerunnable Android benchmark on fixed audio/text fixtures; select one complete configuration that fits and meets the existing speed/headroom thresholds'
+    scope: 'verify each model/runtime from primary sources; distinguish identical portable weights from Android substitutes for CoreML-only builds; extend the landed scripts/model-bench ASR harness rather than rewrite it; benchmark Silero/EOU, Fluid Speech Mini GGUF through parakeet.cpp, Qwen3 and EmbeddingGemma through llama.cpp, Tiny Voca/Phonon speech and WeSpeaker on fixed fixtures; select one complete configuration that fits and meets the existing speed/headroom thresholds'
     class: yellow
     review: none
     depends_on: [A0]
@@ -230,15 +234,15 @@ owner_rulings:
 now:
   status: working
   slice: 'A0: reconcile and establish the current-main physical Android baseline'
-  source_ref: origin/main c1c5f4c40e2e3c789615597ccce65cbb1f0896c1
+  source_ref: origin/main cdb219cc8a4ff5a8d5fdffd0c7927b8ac5f1bc6c
   deploy_identity: staging proxy/platform 16f04df4d1dcda2b4a2777968c27926dfed485ba
   candidate:
-    id: none
-    state: none
-    ref: none
-    base: origin/main c1c5f4c40e2e3c789615597ccce65cbb1f0896c1
+    id: android-build-harness
+    state: rehearsing
+    ref: .lane/trees/android-build-harness
+    base: origin/main cdb219cc8a4ff5a8d5fdffd0c7927b8ac5f1bc6c
     digest: none
-    scope: []
+    scope: [mobile/scripts, mobile/AutoradioLab/store-build.test.ts, mobile/README.md, docs/changes.md, docs/reference/exact/build-and-ship.md]
   conjecture:
     id: Android-parity-bridge
     calibration_claim: C254
@@ -256,11 +260,11 @@ now:
     evidence_ref: owner statement of 2026-11-25
     owner_ratification_ref: owner statement of 2026-11-25
   belief:
-    believed_state: 'Exact already supplies the shared Android host and the app already draws there; the missing work is the Kotlin native package/app-module layer, Android auth association, and verified model runtimes'
+    believed_state: 'Exact already supplies the shared Android host, Media3 background service and passkey package; the missing work is the package-first Kotlin ExactExtension, Android auth association, and verified model runtimes'
     main_uncertainty: 'how much of the current train is alive on the physical phone, whether background media needs an Exact patch, and which local model configuration fits and performs acceptably'
     next_observation: 'A0 current-main lab-one build and page/native-call inventory on ZY22H5K8QR'
   blocker_or_risk: 'adb is not on PATH; the system passkey/biometric prompt may not be drivable by adb; CoreML model bundles are not Android artifacts; Exact Android background media and model fitness are unproved; only one native build may run at a time'
-  next_action: 'land the goal/registry/calibration receipts, then run A0 in qa-mac under the build lock with ANDROID_SERIAL=ZY22H5K8QR'
+  next_action: 'finish the android-build-harness whole-suite check, land it, then run A0 in qa-mac under the build lock with ANDROID_SERIAL=ZY22H5K8QR'
 weak_measures:
   - name: required native calls answering a substitute
     kind: gate
@@ -319,13 +323,16 @@ recompiling the app. For every job, A5 records one of:
    Android-native model fills the same job and is named honestly in the UI and
    benchmark.
 
-The starting candidates are Silero VAD, Qwen3 GGUF through llama.cpp,
-EmbeddingGemma GGUF, Kokoro ONNX and WeSpeaker ONNX for portable or convertible
-weights; and Android Parakeet/streaming recognisers plus Android TTS as possible
-substitutes for Core ML Fluid Speech, Parakeet EOU and FluidAudio voice packs.
-These are research leads, not settled facts. A5 must verify current primary
-sources, licenses, ABI/API requirements and real Android support before choosing.
-A vendor Mac/iPhone number never enters the device result column.
+The researched starting stack is Silero v6.2.1 ONNX, Parakeet EOU 120M INT8
+ONNX, Fluid Speech Mini GGUF through `parakeet.cpp`, Qwen3 GGUF and
+EmbeddingGemma 2 text GGUF through llama.cpp, Tiny Voca's GGUF+mmproj (or ONNX)
+for speech, and WeSpeaker ResNet34-LM ONNX through sherpa-onnx. Qwen3 Q4_K_M is
+the first low-memory rung; Q8_0 remains the exact-iOS-parity option. Phonon
+31M Q4K is the temporary speech substitute if Tiny Voca fails its device spike;
+Parakeet TDT v3 INT8 is the final-ASR substitute if Mini fails. These are
+research leads, not device results. A5 must pin artifacts and verify current
+primary sources, licenses, ABI/API requirements and real Android support before
+choosing. A vendor Mac/iPhone number never enters the device result column.
 
 ## Build and proof discipline
 

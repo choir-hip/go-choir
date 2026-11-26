@@ -680,3 +680,55 @@ and stops. A ten-ask read by eye is not a score: it is the reason for rank 89 an
 **Not proved until a phone.** That the static iOS build of llama.cpp loads it (the Mac used the dynamic release framework of the same tag); the peak memory beside the recogniser, the voice
 and the app on an 8 GB phone (about 2 GB on the Mac for this one model, plus its context); speed and heat on an A18; whether 8 GB is the right line (a starting guess from file size, to be set
 from the phone's measured peak).
+
+## 14. Android builds and substitutes for the same jobs (researched 2026-11-25, target Motorola SM6450)
+
+The current iOS defaults are Silero v6.2.1, Parakeet EOU 120M for live words,
+Fluid Speech Mini for the final transcript, Qwen3-0.6B Q8_0 for the local
+responder, Tiny Voca F2 for speech, WeSpeaker ResNet34-LM for the speaker
+profile, and EmbeddingGemma 2 text Q8_0 for retrieval. Core ML and Core AI model
+bundles do not run on Android by recompiling the app. Android needs the same
+weights in a portable format, a new conversion with its own hash, or an
+honestly named substitute.
+
+**Runtime route.** Use CPU-first `arm64-v8a` code. ONNX Runtime Android carries
+Silero, Parakeet EOU and WeSpeaker; `parakeet.cpp` carries the Fluid Speech Mini
+GGUF; llama.cpp carries Qwen3, EmbeddingGemma and Tiny Voca. Start with four
+fast cores, not one thread per core. Load one heavyweight model at a time:
+Silero/EOU while listening; Mini after EOU and Qwen unload; Qwen for the local
+answer; Tiny Voca or Phonon for speech; WeSpeaker only for enrolment/check;
+EmbeddingGemma only while indexing or querying. ONNX Runtime's official Android
+AAR is the preferred Silero/WeSpeaker route; NNAPI is not the SM6450 baseline.
+
+| Job | Same-model Android route | Size and licence | Closest practical substitute | Evidence and limit |
+| --- | --- | --- | --- | --- |
+| Speech bounds | Silero v6.2.1 `silero_vad_16k_op15.onnx` through ONNX Runtime; 512-sample/32 ms frames, iterator state and hysteresis stay in app code | 1,289,603 B; MIT | Energy/WebRTC VAD only as a floor; v6.3 is a separately tested candidate because its threshold behaviour changed | Android route established; no v6.2.1 measurement on this Motorola |
+| Live words and end of utterance | Soniqo's exact Parakeet EOU 120M INT8 ONNX export (encoder, decoder, joint and cache handoff), or the same model's GGUF through `parakeet.cpp` streaming C API | 153,106,291 B; NVIDIA Open Model License; English | Fixed VAD-silence endpointing is cheaper but not equivalent | Exact INT8 export measured on Galaxy S23 Ultra at RTF 0.21 and 232 MB peak; not this phone |
+| Final transcript | `FluidVoice-Labs/fluid-speech-mini-q2k-q4k.gguf` through stock `parakeet.cpp` C API/JNI | 347,357,184 B; CC BY 4.0 | Parakeet TDT 0.6B v3 INT8 through sherpa-onnx (offline, not live EOU) | No Mini Android handset proof; the existing Motorola benchmark already measured TDT v2 at 2.16% WER, RTF 0.29 and about 2.0 GiB peak |
+| Local answer and decisions | Qwen3-0.6B Q8_0 GGUF through llama.cpp; Q4_K_M is the first low-memory rung, Q8_0 remains the exact-iOS-parity option | Q8_0 639,446,688 B; Q4_K_M 396,705,472 B; Apache-2.0 | LFM2.5-350M Q4_K_M for decisions only, under the LFM Open License | Official Android arm64 binaries exist; a Galaxy S20 FE report measured Q4_K_M at 16.9 tok/s; no Motorola result |
+| Speech out | Tiny Voca's official llama.cpp GGUF pack plus mmproj, or its ONNX model with a Kotlin/C++ Dizione port; sentence chunking is mandatory | 25,811,168 B for the llama pack; Apache-2.0; keep phonemizer notices | Phonon 31M Q4K (55,075,168 B, Apache-2.0) through `libptts_ffi.so`; Pocket TTS or Kokoro are larger fallbacks | No Tiny Voca Android handset proof; Phonon has an official tested Android CPU wrapper; use CPU on SM6450, not a missing QNN bundle |
+| Speaker profile | WeSpeaker ResNet34-LM ONNX through sherpa-onnx `SpeakerEmbeddingExtractor` (the frontend matters) | 26,530,309 B; 256-D; CC BY 4.0 | CAM++ or ReDimNet requires re-enrolment; vectors and thresholds cannot be mixed | Exact-model arm64 Android APK exists; no published handset latency/accuracy |
+| Retrieval embedding | EmbeddingGemma 2 text-270M Q8_0 GGUF through llama.cpp embedding C API/JNI; no multimodal mmproj for text search | 309,855,456 B; Apache-2.0 plus Gemma Prohibited Use Policy | Same text model in LiteRT-LM INT4 QAT (164,626,432 B); changing runtime/quantisation requires re-embedding | Official Android runtimes exist; no Q8_0 Motorola result |
+
+**Sources, fetched 2026-11-25.** [ONNX Runtime Android](https://onnxruntime.ai/docs/build/android.html),
+[llama.cpp Android](https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md),
+[parakeet.cpp C API](https://raw.githubusercontent.com/mudler/parakeet.cpp/master/docs/capi.md),
+[Silero v6.2.1](https://github.com/snakers4/silero-vad/releases/tag/v6.2.1),
+[Parakeet EOU](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1),
+[EOU INT8 ONNX](https://huggingface.co/soniqo/Parakeet-EOU-120M-ONNX-INT8),
+[Fluid Speech Mini GGUF](https://huggingface.co/FluidVoice-Labs/fluid-speech-mini-gguf),
+[Qwen3 GGUF](https://huggingface.co/api/models/Qwen/Qwen3-0.6B-GGUF/tree/main?recursive=1),
+[Tiny Voca](https://huggingface.co/n4ze3m/tiny-voca),
+[llama.cpp TTS](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal/tts.md),
+[Phonon Android](https://github.com/gradium-ai/xn-ptts/blob/main/android/README.md),
+[WeSpeaker Android APKs](https://k2-fsa.github.io/sherpa/onnx/speaker-identification/apk.html),
+[EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2).
+
+**What is not proved.** No complete configuration, Fluid Speech Mini, Tiny
+Voca, exact Silero, Qwen Q8_0 or EmbeddingGemma Q8_0 has been measured on this
+Motorola. File sizes are payload sizes, not RSS. The benchmark must record
+model/runtime hashes, cold and warm load, first-token/first-audio latency, RTF,
+WER where applicable, total PSS/native high-water, available memory, thermal
+state and battery delta on fixed fixtures. The existing
+`docs/evidence/model-bench-2026-11-22/` is the starting ASR dataset, not proof
+for these additional jobs.

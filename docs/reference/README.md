@@ -23,8 +23,10 @@ Pages:
 
 - [SYSTEM1.md](SYSTEM1.md): System 1 decision models (Jev today, via OpenRouter): rules, wire shape, surprises, patterns, our measurements; eight evidence subpages in [system1/](system1/).
 - [ON-DEVICE-MODELS.md](ON-DEVICE-MODELS.md): models and runtimes for the
-  Autoradio phone app; sources fetched 2026-11-11 (section 8); only Silero
-  and Parakeet EOU are measured on a phone by us.
+  Autoradio phone app, including the 2026-11-25 Android portability matrix and
+  its unproved target-device rows (section 14); only Silero and Parakeet EOU
+  were measured on a phone by us in the earlier 2026-11-11 work, and the
+  Motorola ASR benchmark is in `docs/evidence/model-bench-2026-11-22/`.
 - [EMBEDDINGGEMMA.md](EMBEDDINGGEMMA.md): EmbeddingGemma 2 (Core AI port by Everpaper, macOS 27 only as declared; files, prompts, Matryoshka, licence), the GGUF alternative, the on-device vector store pick (brute force first, sqlite-vec later) and BM25 + RRF hybrid ranking; sources fetched 2026-11-17, nothing measured on a phone.
 - [EXACT.md](EXACT.md): the Exact app-shell runtime (pinned commit, model, surprises, decision guide), with subpages in [exact/](exact/): ui-model, native-modules, deck, audio, build-and-ship, testing-and-debugging, internals, gaps, auth-session. The runnable example is [mobile/exact-spike/](../../mobile/exact-spike/README.md).
 - [CERAMIC.md](CERAMIC.md): Ceramic, a lexical web search service (English pages, keyword queries, 50 words, 20 results): the call, query rules, errors, limits, price, and what its documents do not say.
