@@ -1,0 +1,63 @@
+Seat 1 review, Android model runtime candidate
+==============================================
+
+Date: 2026-11-26
+Lane: android-native-models
+Candidate: 91baf9752 "mobile: add the Android JNI model runtime and its 16 KiB source build (orange; rollback: revert)"
+Base: origin/main at the time of the diff (4db4fa6b6, the EmbeddingGemma benchmark)
+Diff SHA-256: 292dd5810bb13fad17cd6f547fa92a3c3439987a0e189f75aae15771a656bcb0
+
+Seat: Gemini 4 Hydrogen (high) through the official `agy` CLI,
+`agy --model gemini-4-hydrogen-high --mode plan --dangerously-skip-permissions`,
+run in a frozen `git archive` of the candidate with no repository metadata. The
+seat was given the diff and the tree, not the author's conclusions. The author
+was not a seat.
+
+Rounds
+------
+
+Round 1 found seven blocking defects: a C++ exception thrown from JNI catch
+handlers (process termination); batched decoding of a non-causal embedding model
+(pooling only the last chunk); a missing `ACCESS_NETWORK_STATE` permission; UTF-8
+validation that admitted sequences the Java conversion rejected; `modelWork`
+catching `Exception` rather than `Throwable` (an unanswered reply); a
+cancel/close race that could throw out of teardown and block the main thread;
+and patch 0002 accepting a zero-LOAD or non-ELF file while the build could stage
+a stale or missing runtime.
+
+Round 2 confirmed repairs 1-6 and found two remaining: the runtime check was
+wired only into `stage-app.sh`, so a direct `exact.sh android` bypassed it; and
+patch 0002 still accepted a symlinked `.so` resolving outside the package.
+
+Round 3 confirmed the symlink rule and the checker's coverage, and found that
+the app's own launcher (`mobile/AutoradioLab/exact.mjs`, used by
+`bun exact.mjs android`) still bypassed the check.
+
+Round 4 found that `env -i` dropped `ALLOW_NO_MODELS` before the launcher's new
+check, which would have broken the one model-less escape, and that two documents
+named the wrong caller.
+
+Round 5 (final) verified: `ALLOW_NO_MODELS` reaches the launcher for every
+Android verb; `exact-env.sh` and the launcher agree on the literal `1` escape;
+the checker's deduplication and empty-alignment guard do not weaken it; and the
+documentation names the real callers. It ran the Python suite (13/13), the
+shared native-model test (4/4), the Android build-harness tests, the catalog
+check, the strings check and the app-identity script on the frozen tree.
+
+Verdict: may land.
+
+Non-blocking notes carried as residuals
+---------------------------------------
+
+- The Silero device proof runs the packaged ONNX Runtime through its C API with
+  the same windows/context/state as `SileroVad.kt`, not that Kotlin class
+  itself; the class and its iterator have no device or JVM test.
+- The proof runs under `app_process`, not the normal app process: the download
+  path, `AutoradioModule`, and `NativeModels.cancel/close` are compiled and
+  reviewed but not driven in-app.
+- A `.so` symlink may target another package's `jniLibs/<abi>/<name>`; the
+  structural name check refuses arbitrary files but not that case (packages are
+  repository code; not treated as a security boundary).
+- The self-test seam (`nativeModelFacts/Ensure/Remove/Proof`) is not declared in
+  the shared interface, so it is unreachable from shared code until A6 wires the
+  models page; it ships in Android builds (no store strip path exists yet).
