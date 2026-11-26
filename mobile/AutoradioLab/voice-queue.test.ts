@@ -9,7 +9,7 @@ import type { DeckPort, DeckState } from './deck.ts';
 import type { Entry } from './runsheet-model.ts';
 
 const EMPTY: DeckState = { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [] };
-const deck: DeckPort = { state: async () => EMPTY, play: async () => EMPTY, enqueue: async () => EMPTY, act: async () => EMPTY, ack: async () => EMPTY };
+const deck: DeckPort = { state: async () => EMPTY, play: async () => EMPTY, enqueue: async () => EMPTY, act: async () => EMPTY, ack: async () => EMPTY, wipe: async () => EMPTY };
 const story = (id: string): Entry => ({ id, kind: 'story', placed_by: 'desk', state: 'ahead', title: `T ${id}`, text: 'W.', est_seconds: 5, revision: 0 });
 let rt: RadioRuntime;
 beforeEach(() => { rt = new RadioRuntime({ deck, now: () => new Date('2023-11-14T22:00:00Z') }); resetTurnLog(); });

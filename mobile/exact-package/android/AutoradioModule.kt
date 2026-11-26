@@ -28,6 +28,11 @@ import java.net.URI
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 private enum class LinkRoute { inApp, external, refused }
 
@@ -53,6 +58,7 @@ private fun route(raw: String?): LinkRoute {
 
 /** The package's Android implementation. Unknown names are a refusal, never a silent substitute. */
 class AutoradioModule(context: ExtensionContext) : ExactExtension(context) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val main = Handler(Looper.getMainLooper())
     private val modelExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "AutoradioModelProof").apply { isDaemon = true }
@@ -75,9 +81,28 @@ class AutoradioModule(context: ExtensionContext) : ExactExtension(context) {
             "nativeModelEnsure" -> modelWork(reply) { selfTest.ensure(args.getString("id")) }
             "nativeModelRemove" -> modelWork(reply) { selfTest.remove(args.getString("id")) }
             "nativeModelProof" -> modelWork(reply) { selfTest.proof(args) }
+            "deckState" -> reply(DeckAndroid.state(context))
+            "deckPlay", "deckEnqueue", "deckAct", "deckAck", "deckWipe" -> scope.launch {
+                val answer = try {
+                    when (name) {
+                        "deckPlay" -> DeckAndroid.play(context, args)
+                        "deckEnqueue" -> DeckAndroid.enqueue(context, args)
+                        "deckAct" -> DeckAndroid.act(context, args)
+                        "deckAck" -> DeckAndroid.ack(context, args)
+                        else -> DeckAndroid.wipe(context)
+                    }
+                } catch (_: Exception) { JSONObject().put("error", "InvalidStateError") }
+                reply(answer)
+            }
             else -> reply(JSONObject().put("error", "NotSupportedError"))
         }
     }
+
+    /** A live source's last reader going does not own the process-wide audio session. */
+    override fun release(name: String) { if (name == "deckState") Unit }
+
+    /** Activity visibility never pauses the media service. Focus and noisy-route events do. */
+    override fun foreground(shown: Boolean) = Unit
 
     override fun view(tag: String, session: String, id: String, context: Context, props: JSONObject, emit: (String, String) -> Unit): View {
         if (tag != "web-page") throw IllegalArgumentException("Autoradio serves no view $tag")
@@ -109,7 +134,9 @@ class AutoradioModule(context: ExtensionContext) : ExactExtension(context) {
             if (nativeModelsLazy.isInitialized()) nativeModels.close()
         } finally {
             modelExecutor.shutdown()
-            done()
+        }
+        scope.launch {
+            try { DeckAndroid.destroy(context) } finally { scope.cancel(); done() }
         }
     }
 

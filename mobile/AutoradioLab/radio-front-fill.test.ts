@@ -33,7 +33,7 @@ beforeEach(async () => {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const u = String(input);
     if (u.includes('/publications/front')) return new Response(JSON.stringify({ stories }), { status: 200, headers: { 'content-type': 'application/json' } });
-    if (u.includes('/publications/resolve') || u.includes('/publications/')) return new Response(JSON.stringify({ publication: { title: 'Full' }, payload: { text: '# Full\n\nWords of the story.' } }), { status: 200 });
+    if (u.includes('/publications/resolve') || u.includes('/publications/')) return new Response(JSON.stringify({ publication: { id: 'p', title: 'Full' }, payload: { revision: 1, text: '# Full\n\nWords of the story.' } }), { status: 200 });   // the shape Go's bundle has: publication.id and payload.revision are the fields story-text anchors on
     return new Response('no desk here', { status: 503 });
   }) as typeof fetch;
 });

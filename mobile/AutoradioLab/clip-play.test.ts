@@ -5,7 +5,7 @@
 //  P3 the episode id is the podcast key of the feed and the guid, else of the feed and the audio address; no feed, no id.
 //  P5 "Keep listening" to a clip asks the deck to stop ending it (`deckAct clearEnd`), through the app module's one `deck` op.
 //  P4 queue adds, play plays now; any other op does nothing; a record that is not that clip says it is not available; a missing record likewise.
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { parseClips } from './clips.ts';
 import { clipEntryOf, radioPlayClip } from './clip-play.ts';
@@ -16,6 +16,9 @@ import { getRadio, radioPlayAudio, wipeRadio } from './radio-bridge.ts';
 import { forgetOnboarding } from './onboarding.ts';
 import { adoptNative, resetSeam } from './api.ts';
 import { podcastNow } from './podcast-now.ts';
+afterEach(() => { delete (globalThis as typeof globalThis & { __autoradioDeckPackage?: unknown }).__autoradioDeckPackage; });
+const globals = globalThis as typeof globalThis & { __autoradioDeckPackage?: (name: string, args: Record<string, unknown>) => Promise<unknown> };
+const emptyDeck = { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [] };
 
 const body = JSON.parse(readFileSync(new URL('../fixtures/podcasts/clips.json', import.meta.url), 'utf8')) as { clips: Record<string, unknown>[] };
 const all = parseClips(body);
@@ -63,10 +66,13 @@ describe('the act, on the real path', () => {
   test('P4b with no injected placer a play puts the clip entry on the run sheet and tells the deck (the radio\'s own verb)', async () => {
     resetSeam(); forgetOnboarding(); await wipeRadio(undefined);
     const seen: { op: string; name?: string; args?: Record<string, unknown> }[] = [];
+    globals.__autoradioDeckPackage = async (name, args) => {
+      seen.push({ op: 'deck', name, args });
+      return name === 'deckPlay' ? { ...emptyDeck, why: 'playing', item: String((args.item as { id?: unknown } | undefined)?.id ?? ''), seq: 1 } : name === 'deckState' ? { ...emptyDeck, seq: 1 } : { ...emptyDeck, seq: 1 };
+    };
     const native = { available: true, later: async (r: { op: string; name?: string; args?: Record<string, unknown> }) => {
       seen.push(r);
       if (r.op === 'radioFacts') return { at: 0, ready: true, inbox: [], position: { block: 0, seconds: 0 }, foreground: true, sentences: [], sentenceIndex: 0, progress: 0 };
-      if (r.op === 'deck') return { why: r.name === 'deckPlay' ? 'playing' : 'empty', item: r.name === 'deckPlay' ? String(r.args?.id) : '', block: 0, seconds: 0, duration: 100, held: [], seq: 1, acked: 0, journal: [] };
       return { ok: true };
     } };
     adoptNative(native as never, 'test');
@@ -85,10 +91,14 @@ describe('keep listening', () => {
     resetSeam(); forgetOnboarding(); await wipeRadio(undefined);
     const seen: { op: string; name?: string; args?: Record<string, unknown> }[] = [];
     let item = '';
+    globals.__autoradioDeckPackage = async (name, args) => {
+      seen.push({ op: 'deck', name, args });
+      if (name === 'deckPlay') item = String((args.item as { id?: unknown } | undefined)?.id ?? '');
+      return { ...emptyDeck, why: item ? 'playing' : 'empty', item, block: 0, seconds: 3, duration: 100, seq: 1 };
+    };
     const native = { available: true, later: async (r: { op: string; name?: string; args?: Record<string, unknown> }) => {
       seen.push(r);
       if (r.op === 'radioFacts') return { at: 0, ready: true, inbox: [], position: { block: 0, seconds: 0 }, foreground: true, sentences: [], sentenceIndex: 0, progress: 0 };
-      if (r.op === 'deck') { if (r.name === 'deckPlay') item = String(r.args?.id); return { why: item ? 'playing' : 'empty', item, block: 0, seconds: 3, duration: 100, held: [], seq: 1, acked: 0, journal: [] }; }
       return { ok: true };
     } };
     adoptNative(native as never, 'test');
@@ -115,7 +125,8 @@ describe('keep listening', () => {
     const air = r.rt.store.onAir()!;
     const was = seen.length;
     // the deck has moved on to another item; the run sheet still has the first clip on air
-    const moved = { available: true, later: async (q: { op: string; name?: string; args?: Record<string, unknown> }) => { seen.push(q); if (q.op === 'deck') return { why: 'playing', item: 'the-next-clip', block: 0, seconds: 1, duration: 100, held: [], seq: 2, acked: 0, journal: [] }; return (native as { later: (x: unknown) => Promise<unknown> }).later(q); } };
+    globals.__autoradioDeckPackage = async (name, args) => { seen.push({ op: 'deck', name, args }); return { ...emptyDeck, why: 'playing', item: 'the-next-clip', block: 0, seconds: 1, duration: 100, seq: 2 }; };
+    const moved = { available: true, later: async (q: { op: string; name?: string; args?: Record<string, unknown> }) => (native as { later: (x: unknown) => Promise<unknown> }).later(q) };
     adoptNative(moved as never, 'test');
     await radioPlayAudio(undefined, moved as never, 'keep', String(audioEpisode(air)), '', '', '', 0);
     expect(seen.slice(was).some((x) => x.op === 'deck' && x.name === 'deckAct' && x.args?.op === 'clearEnd')).toBe(false);

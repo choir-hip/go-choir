@@ -108,6 +108,21 @@
     "CardAck": {
       "message": "string"
     },
+    "DeckItem": {
+      "id": "string",
+      "kind": "string",
+      "title": "string",
+      "show": "string",
+      "document": "string",
+      "paragraphs": "string",
+      "url": "string",
+      "start": "number",
+      "end": "number",
+      "block": "number",
+      "seconds": "number",
+      "requiresPreviousHeard": "bool",
+      "segment": "string"
+    },
     "DeckEvent": {
       "seq": "number",
       "type": "string",
@@ -784,6 +799,40 @@
       "options": {
         "tick": "number"
       }
+    },
+    {
+      "send": "deckPlay",
+      "options": {
+        "item": "DeckItem"
+      },
+      "answers": "DeckState"
+    },
+    {
+      "send": "deckEnqueue",
+      "options": {
+        "item": "DeckItem",
+        "at": "number"
+      },
+      "answers": "DeckState"
+    },
+    {
+      "send": "deckAct",
+      "options": {
+        "op": "string",
+        "value": "number"
+      },
+      "answers": "DeckState"
+    },
+    {
+      "send": "deckAck",
+      "options": {
+        "through": "number"
+      },
+      "answers": "DeckState"
+    },
+    {
+      "send": "deckWipe",
+      "answers": "DeckState"
     },
     {
       "source": "importedFollow",

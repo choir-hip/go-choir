@@ -24,7 +24,7 @@ describe('D16b the generated interface agrees', () => {
     expect(JSON.stringify(j.shapes.DeckState ?? {})).not.toContain('rate');
     expect(JSON.stringify(j)).not.toMatch(/"level":\s*"string"[^}]*deck/i);
     const deck = (j.names as { source?: string; send?: string }[]).map((n) => n.source ?? n.send ?? '').filter((n) => n.startsWith('deck'));
-    expect(deck).toEqual(['deckState']);                    // the sends go through the app module's one `deck` op; no contract called the package's
+    expect(deck).toEqual(['deckState', 'deckPlay', 'deckEnqueue', 'deckAct', 'deckAck', 'deckWipe']);
   });
 });
 
@@ -76,6 +76,7 @@ function fakeDeck(over: Partial<DeckState>, calls: string[] = []): DeckPort {
     enqueue: async (i, at) => { calls.push(`enqueue:${i.id}@${at}`); return s; },
     act: async (op, v) => { calls.push(`act:${op}:${v}`); return s; },
     ack: async (n) => { calls.push('ack:' + n); s = { ...s, acked: n, journal: s.journal.filter((l) => l.seq > n) }; return s; },
+    wipe: async () => { calls.push('wipe'); s = state(); return s; },
   };
 }
 
@@ -84,12 +85,12 @@ describe('D13 one list of names', () => {
   const contract = readFileSync(join(import.meta.dir, 'deck-types.contract'), 'utf8');
   test('names', () => {
     const names = iface.names.map((n: { source?: string; send?: string }) => n.source ?? n.send).sort();
-    expect(names).toEqual(['deckState']);
-    expect(DECK_NAMES[0]).toBe('deckState');
+    expect(names).toEqual(['deckAck', 'deckAct', 'deckEnqueue', 'deckPlay', 'deckState', 'deckWipe']);
+    expect(DECK_NAMES).toEqual(['deckState', 'deckPlay', 'deckEnqueue', 'deckAct', 'deckAck', 'deckWipe']);
     expect(iface.names[0].options).toEqual({ tick: 'number' });                   // read once per radio tick by the contract (spine.contract `ds`)
   });
   test('shape fields match in the interface and the contract', () => {
-    for (const shape of ['DeckEvent', 'DeckState']) {
+    for (const shape of ['DeckItem', 'DeckEvent', 'DeckState']) {
       const fields = Object.keys(iface.shapes[shape]);
       const block = contract.split(`shape ${shape}\n`)[1].split(/\n\n|\nshape /)[0];
       const have = block.split('\n').map((l) => l.trim().split(':')[0]).filter(Boolean);

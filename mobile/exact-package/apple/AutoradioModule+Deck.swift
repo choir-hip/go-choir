@@ -1,7 +1,5 @@
-// The deck's package name (interface/deck.json): deckState (live; the contract reads it once per radio tick and hands it to the pulse). Play, enqueue, act and ack come through the app module's one
-// `deck` op (ModelsEntry.swift -> `deckCall`), the same as a state read from shared code. The deck itself is Deck.swift in the Kit; this
-// file only reads the options and answers the state. Native because the audio session, the engine and the lock screen are native: shared code
-// (deck.ts) commands the deck and reads its journal; nothing here decides what plays next.
+// The deck's six @choir/autoradio package names (interface/deck.json). Exact generates their TypeScript functions, so shared code no longer needs an Apple-only app-module op.
+// The deck itself is Deck.swift in the Kit; this adapter only reads scalar options and answers its state. Native because the audio session, engine and lock-screen controls are native.
 import Foundation
 
 extension AutoradioModule {
@@ -27,25 +25,33 @@ extension AutoradioModule {
         return FileManager.default.fileExists(atPath: url.path) ? url.absoluteString : address
     }
 
-    /// The deck's five names for shared code, through the app module's one `deck` op (ModelsEntry.swift): `{op: "deck", name, args}` answers the deck's state. Native because only native code
-    /// plays an item and keeps the journal; the names are item-shaped (docs/reference/exact/deck.md), nothing here decides what plays next.
-    @MainActor public func deckCall(name: String, args: [String: Any]) async -> [String: Any] {
-        switch name {
-        case "deckPlay":
-            if !runtime.snapshot().running { await runtime.start(virtual: virtualEngine) }
-            _ = await Deck.shared.play(deckItem(args))
-        case "deckEnqueue":
-            let at = (args["at"] as? NSNumber).map { Int(truncating: $0) }
-            Deck.shared.enqueue(deckItem(args), at: (at ?? -1) < 0 ? nil : at)
-        case "deckAct": await Deck.shared.act(args["op"] as? String ?? "", value: num(args, "value"))
-        case "deckAck": Deck.shared.ack(through: Int(num(args, "through")))
-        default: break
+    /// One package send, answered after its deck mutation. Every name answers the same DeckState shape.
+    private func deckSend(_ name: String, _ args: [String: Any], _ reply: @escaping ([String: Any]) -> Void) {
+        Task { @MainActor in
+            switch name {
+            case "deckPlay":
+                if !runtime.snapshot().running { await runtime.start(virtual: virtualEngine) }
+                _ = await Deck.shared.play(deckItem(args["item"] as? [String: Any] ?? [:]))
+            case "deckEnqueue":
+                let at = (args["at"] as? NSNumber).map { Int(truncating: $0) }
+                Deck.shared.enqueue(deckItem(args["item"] as? [String: Any] ?? [:]), at: (at ?? -1) < 0 ? nil : at)
+            case "deckAct": await Deck.shared.act(args["op"] as? String ?? "", value: num(args, "value"))
+            case "deckAck": Deck.shared.ack(through: Int(num(args, "through")))
+            case "deckWipe": Deck.shared.wipe()
+            default: break
+            }
+            reply(json(Deck.shared.snapshot()))
         }
-        return json(Deck.shared.snapshot())
     }
 
     func registerDeck() {
+        Deck.shared.boot() // a kill leaves no item open when the first package state is read
         onMainThread { Deck.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["deckState"]) } } }
         handle("deckState") { [unowned self] _, reply in reply(self.json(onMainThread { Deck.shared.snapshot() })) }
+        handle("deckPlay") { [unowned self] args, reply in self.deckSend("deckPlay", args, reply) }
+        handle("deckEnqueue") { [unowned self] args, reply in self.deckSend("deckEnqueue", args, reply) }
+        handle("deckAct") { [unowned self] args, reply in self.deckSend("deckAct", args, reply) }
+        handle("deckAck") { [unowned self] args, reply in self.deckSend("deckAck", args, reply) }
+        handle("deckWipe") { [unowned self] args, reply in self.deckSend("deckWipe", args, reply) }
     }
 }

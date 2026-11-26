@@ -4,7 +4,7 @@
 // shelf is native until it moves) and the voice turn's queue snapshot and server ops (`radioSet`, and the inbox in `radioFacts`): the turn engine is native and Exact has no call from native into shared code,
 // so shared code PUSHES the snapshot and native hands back the server's `queue_ops` text, which the pump applies (the retrieval lane's pattern).
 import { authedText, authedToFile, getJSON, nativeLater, accountGeneration, sealingBlocked, signOutUncertain, type NativeReader } from './api.ts';
-import { contractDeck, nativeDeck } from './deck-native.ts';
+import { contractDeck, deckPort } from './deck-native.ts';
 import { refusedHere } from './refused.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
 import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH, frontFill } from './radio-writer.ts';
@@ -13,8 +13,8 @@ import { routePoster, signedInRequester } from './runsheet-store.ts';
 import { authedJSON } from './api.ts';
 import { audioSpec, audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds, heldStory, forgetLongURLs } from './runsheet-entries.ts';
 import { offlineStories } from './content-run.ts';
-import { loadReader } from './reader.ts';
-import { sentenceTexts } from './reader-parse.ts';
+import { getText } from './api.ts';
+import { storyWords } from './story-text.ts';
 import { fileOpen } from './files.ts';
 import { lapYield, lap } from './lap.ts';
 import { firstRunOver } from './onboarding.ts';
@@ -56,6 +56,8 @@ export async function wipeRadio(storage: Store | undefined): Promise<void> {
   forgetLongURLs();                                                                          // the long web addresses of this account's entries (runsheet-entries.ts)
   try { if (r) { r.writer.stop(); await r.rt.signOut(); } }
   finally {
+    // The package owns the native current/held items, journal and synthesized-audio cache. This is an explicit account-boundary send, not an overloaded stop; on a host without the package it is the empty state.
+    await deckPort().wipe();
     // The old account's sheet file goes whatever the wipe did (a throw above must not leave it for the next radio to restore); a removal that fails is remembered and tried again before any radio restores.
     if (storage) { try { await storage.fs.rm(SHEET_FILE); sheetFileStuck = false; } catch (e) { if (!/ENOENT|no such file|not found/i.test(String((e as Error)?.message ?? e))) sheetFileStuck = true; } }
     if (storage) { try { await storage.fs.rm(SHEET_BAD_FILE); } catch { /* absent; a set-aside sheet is the old account's too */ } }
@@ -96,14 +98,31 @@ async function readFacts(r: { inbox: string[] } & Partial<Radio>): Promise<Nativ
   } catch { return NO_FACTS; }
 }
 
+/** The story words the desk's writer has already fetched, by route: the deck's start uses them, so a
+ *  pump never waits on the network (an answer that waits is let go and its deck call with it). */
+const wordCache = new Map<string, { title: string; paragraphs: string[] }>();
+const cacheWords = (route: string, words: { title: string; paragraphs: string[] }): void => {
+  wordCache.delete(route); wordCache.set(route, words);
+  while (wordCache.size > 48) { const first = wordCache.keys().next().value as string | undefined; if (first === undefined) break; wordCache.delete(first); }
+};
+
+/** A story's words from its resolve bundle without parsing the bundle: one JSON.parse of a 1.4 MB
+ *  bundle is over Exact's turn budget on the phone and the radio is refused (`story-text.ts`).
+ *  The reader page still parses it for its blocks and citations. */
+async function storyText(route: string): Promise<{ title: string; paragraphs: string[] } | undefined> {
+  // The server's route (`/pub/texture/…`), not the app's address (`pub:…`): the plan hands the
+  // route, and a caller that hands the address loses its scheme here.
+  const path = route.startsWith('pub:') ? route.slice(4) : route;
+  const held = wordCache.get(path);
+  if (held) return held;
+  const words = storyWords(await getText('/api/platform/publications/resolve', { route: path }));
+  if (words) cacheWords(path, words);
+  return words;
+}
+
 function resolvers(storage: Store | undefined): Partial<Resolvers> {
-  const words = async (address: string): Promise<{ title: string; paragraphs: string[] } | undefined> => {
-    const d = await loadReader(address);
-    const ps = d.blocks.map((b) => sentenceTexts(b).join(' ').trim()).filter((p) => p !== '');
-    return ps.length ? { title: d.title, paragraphs: ps } : undefined;
-  };
   return {
-    story: (route) => words('pub:' + route),
+    story: (route) => storyText(route),
     webPage: async (url, title) => {
       const res = await fetch(url, { method: 'GET', headers: { accept: 'text/html' } } as RequestInit);
       if (!res.ok) return undefined;
@@ -127,7 +146,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
   const state: Radio = { restoreFails: 0, restoreTold: false, pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [], stories: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
-    deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
+    deck: deckPort(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage), hasWords: (route) => wordCache.has(route), prefetchWords: async (route) => { await storyText(route); },
     native: { facts: () => readFacts(state) },
     fill: (removed) => frontFill(state.front.stories, state.rt.store.sheet.entries, undefined, removed),
     onChange: () => { state.tick += 1; },
@@ -157,7 +176,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
     texts: async (routes) => {
       // the writer sends the first 8 KB of each: the rest of a 1.6 MB story is not read
       const out: Record<string, string[]> = {};
-      await Promise.race([Promise.all(routes.map(async (r) => { try { const d = await loadReader('pub:' + r); lap(`texts: ${r.slice(-20)} read (${d.blocks.length} blocks)`); { const ps: string[] = []; let n = 0; for (const b of d.blocks) { const t = sentenceTexts(b).join(' '); ps.push(t); n += t.length; if (n > 24 * 1024) break; } out[r] = ps; } } catch { /* goes without text */ } })), new Promise((res) => setTimeout(res, 3000))]);
+      await Promise.race([Promise.all(routes.map(async (r) => { try { const w = await storyText(r); if (!w) return; const ps: string[] = []; let n = 0; for (const p of w.paragraphs) { ps.push(p); n += p.length; if (n > 24 * 1024) break; } out[r] = ps; } catch { /* goes without text */ } })), new Promise((res) => setTimeout(res, 3000))]);
       return out;
     },
     takes: async () => {
@@ -232,8 +251,17 @@ async function restoreOf(r: Radio, storage: Store | undefined): Promise<boolean>
 async function workRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
   const r = await getRadio(storage, native);
   if (!(await restoreOf(r, storage))) throw new Error('The radio is still reading its list. Try again in a moment.');
+  await turnEnd();
   return radio === r ? r : workRadio(storage, native);
 }
+
+/** Ends the turn before the expensive half of a mutation: Exact allows about 100 ms of CPU per turn, and a
+ *  first tap restores and parses the sheet (over 100 ms on the phone). The mutation still completes; it needs
+ *  its own turn rather than being refused. */
+const turnEnd = async (): Promise<void> => {
+  const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  if (sc?.yield) await sc.yield();
+};
 
 // ---- the entries the screens ask for ----
 
@@ -305,9 +333,10 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   const second = Math.floor(clock.ms / 1000);
   if (live && (second !== r.beatSecond || clock.ms <= 0)) { r.beat += 1; r.beatSecond = second; }
   r.pulses += 1;
-  const writeDue = restored && !flagBusy(r, r.writeFlag) && (r.writer.wouldAsk() || posting);
+  const awaitingWords = r.rt.wantsWords();
+  const writeDue = restored && !flagBusy(r, r.writeFlag) && (r.writer.wouldAsk() || posting || awaitingWords);
   if (writeDue) r.writeFlag = { phase: 'due', at: flagNow(r) };            // marked by the pulse that calls for it: a pulse computed before the mutation's body starts cannot call for a second send (the gate closing cancels the first's pending `after`)
-  const holdDue = !flagBusy(r, r.holdFlag, HOLD_DUE_STALE_MS) && (!restored || r.rt.needsWork() || r.inbox.length > 0 || startDue(r));
+  const holdDue = !flagBusy(r, r.holdFlag, HOLD_DUE_STALE_MS, HOLD_RUNNING_STALE_MS) && (!restored || r.rt.needsWork() || r.inbox.length > 0 || startDue(r));
   if (holdDue) r.holdFlag = { phase: 'due', at: flagNow(r) };              // marked like the write: a second hold sent before the first's body starts would replace it (the first let go mid-restore)
   const out = { tick: r.tick, write: writeDue, live, beat: r.beat, hold: holdDue, slow: false };
   out.slow = !out.live && !out.write && !out.hold && !r.writer.inFlight;          // nothing sounds in front, nothing is due: the clock asks again in five seconds, not one (what native has to say wakes it at once: the deck's seq and the radio note are keys of the pulse)
@@ -324,30 +353,69 @@ let lastPulse = '';
 /** The flags are the RADIO's (a sign-out replaces the radio and its flags go with it), and they go stale: a body whose continuation never runs (an answer let go) must not stop the radio for good. `running` after 260 s (just over the
  *  240 s at which a writer abandons its ask), `due` (called for, the mutation not started: the gate closed, the send never came) after 5 s. Device time; with none known, one pulse counts as a second. */
 export const WORK_STALE_MS = 260_000, DUE_STALE_MS = 5_000;
+/** A hold whose answer was let go must not stop the radio for the write's 260 s: it starts audio in the
+ *  background and normally finishes in well under a second, so a running flag older than this is stale. */
+export const HOLD_RUNNING_STALE_MS = 8_000;
 /** A hold called for and not begun goes stale sooner than a write: the pulse that marked it may itself be let go (launch re-asks it often), and the restore and the start wait on the hold. */
 export const HOLD_DUE_STALE_MS = 2_000;
 const flagNow = (r: Radio): number => (clock.ms > 0 ? clock.ms : r.pulses * 1000);
-const flagBusy = (r: Radio, f: Flag | undefined, dueStale = DUE_STALE_MS): boolean => f !== undefined && flagNow(r) - f.at < (f.phase === 'running' ? WORK_STALE_MS : dueStale);
+const flagBusy = (r: Radio, f: Flag | undefined, dueStale = DUE_STALE_MS, runningStale = WORK_STALE_MS): boolean => f !== undefined && flagNow(r) - f.at < (f.phase === 'running' ? runningStale : dueStale);
 // one radioHold at a time: a second send would take the first's place, and the first would be let go
 export async function radioHold(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   const r = await getRadio(storage, native);
   const mine: Flag = { phase: 'running', at: flagNow(r) }; r.holdFlag = mine;
   try { return await holdInner(storage, native); } finally { if (r.holdFlag === mine) r.holdFlag = undefined; }
 }
+const EMPTY_PULSE: Pulse = { tick: 0, write: false, hold: false, live: false, beat: 0, slow: false };
 async function holdInner(storage: Store | undefined, native: NativeReader | undefined): Promise<Pulse> {
   const r = await getRadio(storage, native);
+  // A sign-out (wipeRadio) can run while this answer is yielded: its radio is discarded, and
+  // nothing more may start on it (a deck play after the wipe would speak the old account's entry).
+  const gone = (): boolean => radio !== r;
   if (!(await restoreOf(r, storage))) return { tick: r.tick, write: false, hold: false, live: false, beat: 0, slow: false };       // not read yet: the pulse says hold again
+  if (gone()) return EMPTY_PULSE;
+
   await r.rt.pump();
+  if (gone()) return EMPTY_PULSE;
+
+  await turnEnd();
+  if (gone()) return EMPTY_PULSE;
   if (!r.ready) r.ready = await firstRunOver(storage as never);
-  while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
+  if (gone()) return EMPTY_PULSE;
+
+  await turnEnd();
+  if (gone()) return EMPTY_PULSE;
+  while (r.inbox.length > 0) { if (gone()) return EMPTY_PULSE; await handle(r, r.inbox.shift() as string); }
+
+  await turnEnd();
+  if (gone()) return EMPTY_PULSE;
+  // Replay only after the turn's own messages (a `turnEnded` advances an entry that ended while the
+  // listener was speaking): otherwise a finished entry is sent to the deck again from its start.
+  await r.rt.replayOnAir();
+  if (gone()) return EMPTY_PULSE;
+
+  await turnEnd();
+  if (gone()) return EMPTY_PULSE;
   if (startDue(r)) {
     if (r.readySince === 0) r.readySince = clock.ms;
     // The front page it speaks from is fetched first and the radio opens in this same answer once it is held, or once 2 s have passed since the first run was over (the opening then says it has no front page yet).
     // (It used to fetch in one answer and open in the next: with nothing else moving the tick, no next answer was asked, and a plain launch never started.)
     if (r.front.lines.length === 0) { try { await r.fetchFront(); } catch { /* none yet */ } }
+    if (gone()) return EMPTY_PULSE;
+
+    await turnEnd();
+    if (gone()) return EMPTY_PULSE;
     if (r.front.lines.length > 0 || clock.ms - r.readySince > 2000) await openRadioOf(r);
+    if (gone()) return EMPTY_PULSE;
+
+    await turnEnd();
+    if (gone()) return EMPTY_PULSE;
   }
+
+  await turnEnd();
+  if (gone()) return EMPTY_PULSE;
   await r.rt.peek();
+
   console.log(`radio: hold: ${r.rt.store.ahead().length} ahead on the sheet, the deck holds ${r.rt.deckLine().held}, playing ${r.rt.deckLine().item || 'nothing'}`);
   return { tick: r.tick, write: false, hold: false, live: false, beat: 0, slow: false };
 }
@@ -363,6 +431,7 @@ async function writeInner(storage: Store | undefined, native: NativeReader | und
   lap('radioWrite: start');
   const r = await workRadio(storage, native);
   lap('radioWrite: radio ready');
+  await r.rt.prefetchOnAir();                                      // the words the deck's next start needs, fetched here (not in a pump)
   r.rt.store.flush();
   const asked = r.writer.checkAhead(), mine = r.writer.lastId;     // the ask THIS answer started: it waits for that one and abandons only that one
   const waits: Promise<unknown>[] = [];
@@ -447,6 +516,7 @@ async function radioPlayPauseOf(r: Radio): Promise<void> {
 /** The radio opens: the phone's opening plays at once, from the front titles it holds, and the desk is asked for more. */
 async function openRadioOf(r: Radio): Promise<void> {
   if (r.front.lines.length === 0) { try { await r.fetchFront(); } catch { /* the opening says it has no front page yet */ } }
+  if (radio !== r) return;                                   // a sign-out ran while the front page was fetched
   const lines = r.front.lines;
   r.rt.director.open(phoneOpening(lines, clockNow(), -clockNow().getTimezoneOffset(), mintId('p-')));
   r.writer.openAhead(false);
@@ -493,6 +563,7 @@ export async function radioStart(storage: Store | undefined, native: NativeReade
 export async function radioPlayStory(storage: Store | undefined, native: NativeReader | undefined, route: string, title: string): Promise<Ack> {
   const r = await workRadio(storage, native); r.writer.listenerActed();
   if (route !== '') r.rt.play(paperStory(route, title));
+  await turnEnd();
   await r.rt.pump();
   const air = r.rt.store.onAir();
   console.log(`radio: play story ${route === '' ? '(no route)' : route.slice(0, 60)}: on air ${air ? air.id + ' ' + air.state : 'nothing'}, ahead ${r.rt.store.ahead().length}, director playing ${r.rt.director.playingId ?? 'none'}, message "${r.rt.director.message}"`);

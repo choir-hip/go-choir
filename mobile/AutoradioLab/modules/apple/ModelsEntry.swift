@@ -41,10 +41,9 @@ final class ModelsModule: ExactModule {
         return MailSeal().reply(request) ?? [:]
     }
     override func later(_ request: [String: Any], reply plain: ExactReply) {
-        // The ledger (NativeOpLog.swift): op name only (the deck's call name too: a constant, never an argument). A reply never called is named.
+        // The ledger (NativeOpLog.swift): op name only, never an argument. A reply never called is named.
         let op = request["op"] as? String
-        let logName = op == "deck" ? "deck." + (request["name"] as? String ?? "") : (op ?? "none")
-        let reply = LoggedReply(NativeOpLog.shared.wrap(op: logName, reply: { plain.send($0) }))
+        let reply = LoggedReply(NativeOpLog.shared.wrap(op: op ?? "none", reply: { plain.send($0) }))
         if op == "generation" {      // shared code says the generation it is at: the first call of a JS context is a boot (it may be below the newest seen: a reload), the wipe's last act a floor
             let g = (request["gen"] as? NSNumber)?.intValue ?? 0
             if request["boot"] as? Bool == true { SharedGeneration.boot(g) } else { SharedGeneration.announce(g) }
@@ -61,12 +60,6 @@ final class ModelsModule: ExactModule {
                 // nothing shared (the key remains: the marker goes); at a launch (account.ts reconcile) the shared stores of the account being left are wiped regardless of this answer and the marker stays. Idempotent: with the key already gone it only runs the Swift wipe again.
                 reply.send(["done": op == "wipe" || !KeychainKeyStore.keyRemains()])
             }
-            return
-        }
-        // The deck (shared code's radio runtime commands it): one op, `{op: "deck", name: deckState|deckPlay|deckEnqueue|deckAct|deckAck, args}`, answering the deck's state. Native because the deck is
-        // the audio: the session, the engine and the journal that survives a kill (AutoradioModule+Deck.swift `deckCall`). It decides nothing.
-        if op == "deck" {
-            Task { @MainActor in reply.send(await AutoradioModule.current?.deckCall(name: request["name"] as? String ?? "", args: request["args"] as? [String: Any] ?? [:]) ?? [:]) }
             return
         }
         // Open a page by its address (the shell's: shared code names the address, only the shell shows a page): the clip's episode page from the queue's "Open episode".

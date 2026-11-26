@@ -27,6 +27,17 @@ patch edits, `MarkupEditor.swift` and `MarkupHidden.swift`, are byte-identical b
 read from `f53347503` (`GIT_INDEX_FILE=<scratch> git read-tree f53347503`, no working files touched) **passed on 2026-11-20** [run]; `MarkupSyntaxHiding.swift` is a new file that upstream's `Sources/ExactMarkdown` directory target (path-based, no file list)
 compiles. Still **not compiled or run** by us.
 
+## 0003 Media3 and the playback service for an app that plays in the background
+
+Autoradio's deck plays spoken and remote audio under a media session. Exact linked Media3 and its `PlaybackService` only when the
+plan made a `video` node, or for a development build without Maven libraries; an app whose `audio_session` is `playback` had no
+service and nothing kept the sound alive with the activity gone. The patch:
+- `scripts/agent-android.mjs` (`assembleApk`): `-Pvideo=1` also when `app.json`'s `audio_session` is `"playback"`, so the app links
+  the `:video` project (Media3) and the `backgroundPlayback` blocks in `host/android/app/build.gradle.kts` add the playback service,
+  its permissions and its manifest entry. Nothing changes for an app that neither plays in the background nor makes media nodes.
+- Verified by building the Autoradio lab-one APK and driving it on the Motorola: the service starts (`Background started FGS`), the
+  media session reports our metadata and position, and playback survives Home (`docs/evidence/android-a2-deck-2026-11-26/`).
+
 ## 0002 a bound package's shared libraries reach the APK
 
 Autoradio's Android models are native code (`libautoradio_models.so` plus llama.cpp and ONNX Runtime), and the package's

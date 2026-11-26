@@ -12,7 +12,7 @@ import type { DeckPort, DeckState } from './deck.ts';
 const NOW = new Date('2023-11-14T22:00:00Z');
 const row = (route: string, importance: number) => ({ route, title: `Title ${route}`, dek: `Dek of ${route}.`, importance, sources: 3, version_count: 2, updated_at: '2023-11-14T20:00:00Z' });
 const EMPTY: DeckState = { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [] };
-const deck: DeckPort = { state: async () => EMPTY, play: async () => EMPTY, enqueue: async () => EMPTY, act: async () => EMPTY, ack: async () => EMPTY };
+const deck: DeckPort = { state: async () => EMPTY, play: async () => EMPTY, enqueue: async () => EMPTY, act: async () => EMPTY, ack: async () => EMPTY, wipe: async () => EMPTY };
 let rt: RadioRuntime, w: Writer, posts: number, textCalls: number, fr: unknown, mode: () => Promise<'desk' | 'listening'>;
 const settle = async () => { await w.settle(); await new Promise((r) => setTimeout(r, 0)); await w.settle(); };
 const stories = () => rt.store.sheet.entries.filter((e) => e.kind === 'page').map((e) => e.source?.ref);

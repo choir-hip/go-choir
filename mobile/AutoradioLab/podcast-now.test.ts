@@ -1,6 +1,6 @@
 // "What the player is playing" (podcast-now.ts) is read by the root every second while something sounds: it must NOT read the native facts a second time (the pulse's read is the one), and it answers from the
 // run sheet's entry on air and the deck's state.
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { adoptNative } from './api.ts';
 import { forgetOnboarding } from './onboarding.ts';
 import { getRadio, radioPlayAudio, wipeRadio } from './radio-bridge.ts';
@@ -8,17 +8,21 @@ import { podcastNow } from './podcast-now.ts';
 
 let calls: string[] = [];
 let playing = '';
-const native = { available: true, later: async (r: { op: string; name?: string; args?: Record<string, unknown> }) => {
-  calls.push(r.op === 'deck' ? `deck:${r.name}` : r.op);
+// The deck is the package's six names now: under Bun the stub package routes them to this hook.
+afterEach(() => { delete (globalThis as typeof globalThis & { __autoradioDeckPackage?: unknown }).__autoradioDeckPackage; });
+const globals = globalThis as typeof globalThis & { __autoradioDeckPackage?: (name: string, args: Record<string, unknown>) => Promise<unknown> };
+const deckState = () => ({ why: playing ? 'playing' : 'empty', item: playing, block: 0, seconds: 12, duration: 300, held: [], seq: 1, acked: 0, journal: [] });
+const native = { available: true, later: async (r: { op: string; [key: string]: unknown }) => {
+  calls.push(r.op);
   if (r.op === 'radioFacts') return { foreground: true, at: 1_700_000_000_000, ready: true, turnOpen: false, position: { block: 0, seconds: 0 }, wants: false, inbox: [], sentences: [], sentenceIndex: 0, progress: 0 };
-  if (r.op === 'deck') {
-    if (r.name === 'deckPlay') playing = String(r.args?.id ?? '');
-    return { why: playing ? 'playing' : 'empty', item: playing, block: 0, seconds: 12, duration: 300, held: [], seq: 1, acked: 0, journal: [] };
-  }
   return {};
 } };
 
-beforeEach(async () => { forgetOnboarding(); await wipeRadio(undefined); adoptNative(native as never, 'test'); calls = []; playing = ''; });
+beforeEach(async () => {
+  forgetOnboarding(); await wipeRadio(undefined); adoptNative(native as never, 'test');
+  globals.__autoradioDeckPackage = async (name, args) => { calls.push(`deck:${name}`); if (name === 'deckPlay') playing = String((args.item as { id?: unknown } | undefined)?.id ?? ''); return deckState(); };
+  calls = []; playing = '';
+});
 
 describe('podcastNow', () => {
   test('P6 it reads the store and the deck, and never the native facts (the pulse reads them)', async () => {

@@ -1,0 +1,17 @@
+diff --git a/scripts/agent-android.mjs b/scripts/agent-android.mjs
+index 54089c0a4..2ae508d32 100644
+--- a/scripts/agent-android.mjs
++++ b/scripts/agent-android.mjs
+@@ -1162,8 +1162,10 @@ function assembleApk(app, env, profile, writeLocks, bundle, abis, dirs) {
+   // A `video` or `audio` plays on Media3, linked for a plan that makes one, and for every development build, whose
+   // plan may gain one and has no fallback (LLP 1042.001 D2). An app whose Maven graph is locked (LLP 1133.008 D8 item
+   // 5) is the exception: its lock is the graph each of its APKs resolves, development or production, so Media3 joins
+-  // it only with a plan's video, and the app writes its locks again then.
+-  const video = uses.includes('video') || (development && !maven.length) ? ['-Pvideo=1'] : [];
++  // it only with a plan's video or a playback audio session, and the app writes its locks again then.
++  // An app whose audio session is "playback" plays in the background: it links Media3 and the
++  // host's PlaybackService even when no page makes a video node (Autoradio's deck is the case).
++  const video = uses.includes('video') || app.manifest?.audio_session === 'playback' || (development && !maven.length) ? ['-Pvideo=1'] : [];
+   // The token names its hatches read (LLP 1121 D12), beside them in the build.
+   if (existsSync(resolve(app.dir, 'modules/android'))) writeFormaNames(app, 'kotlin');
+   const graph = mavenGraph(app, writeLocks, maven, env);

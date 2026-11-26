@@ -1,13 +1,10 @@
-// The real deck port: shared code's five deck names over the app module's ONE `deck` op (modules/apple/ModelsEntry.swift -> AutoradioModule+Deck.swift `deckCall`).
-// Why it is native and why it is a single op: the deck is the audio (the session, the engine, the lock screen, interruptions), so only native code can play an item and keep
-// the journal that survives a kill; shared code cannot call a package's names from a function (only a contract can), so it reaches them through the module's `later` like the
-// key and the mail cipher. The interface is item-shaped and says nothing of AVPlayer: Exact's own `audio` element could play a remote item behind the same five names (docs/reference/exact/deck.md).
-// An absent module answers the EMPTY state. A `deckPlay`, `deckEnqueue`, `deckAct` or `deckAck` that fails does too (shared code goes on, the next pump asks again), but a failed `deckState` THROWS: an unreadable deck is not an
-// empty one (the pump would hand the sounding entry over again, restart it, and re-enqueue the held list), so its callers keep what they last knew.
-import { nativeLater } from './api.ts';
+// The real deck port: shared code's six generated @choir/autoradio package names. Exact's bake writes these functions from interface/deck.json and routes them to the Apple or Android implementation;
+// Android has no Apple app-module bus. Native because the session, engine, media controls and durable journal are platform work; shared code still decides what plays next and what is posted.
+// An absent package answers the EMPTY state. A failed send answers it too (the next pump asks again), but a failed deckState THROWS: an unreadable deck is not an empty one.
+import { deckAck, deckAct, deckEnqueue, deckPlay, deckState, deckWipe } from '@choir/autoradio';
 import type { DeckEvent, DeckItem, DeckOp, DeckPort, DeckState, DeckWhy } from './deck.ts';
 
-type Later = (request: { op: string; [key: string]: unknown }) => Promise<unknown>;
+type PackageCall = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 
 const WHYS: readonly string[] = ['playing', 'paused_listener', 'paused_system', 'held_session', 'held_engine', 'stopped', 'empty'];
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
@@ -39,19 +36,48 @@ export function contractDeck(raw: unknown): DeckState | undefined {
   return WHYS.includes(str(obj(raw).why)) ? readState(raw) : undefined;
 }
 
-/** The deck port over the app module. `later` is read at each call (the module can bind late): `nativeLater` by default. */
-export function nativeDeck(later: () => Later | null = nativeLater as () => Later | null): DeckPort {
-  const call = async (name: string, args: Record<string, unknown> = {}): Promise<DeckState> => {
-    const l = later();
-    if (!l) { if (name === 'deckPlay') console.log('deck: play asked and the app module is not bound here: nothing plays'); return EMPTY_STATE; }
-    try { return readState(await l({ op: 'deck', name, args })); } catch (e) { console.log(`deck: ${name} failed: ${e instanceof Error ? e.message : String(e)}`); if (name === 'deckState') throw e; return EMPTY_STATE; }
+// A *start* is dispatched and not waited for: the deck acts natively at once, and its journal and
+// state reach shared code through `deckState` on the next radio tick. Waiting here held a data
+// answer open across the deck's start (seconds of on-device speech, a foreground service) and the
+// answer was let go, so a media-session Next could never land. A send that fails is logged; the
+// state source is the truth. The deck's other operations are fast (a player pause, a journal ack, a
+// wipe) and are waited for: their own answer is the state after the act, and a caller such as
+// "Keep listening" must not record the act before the deck has taken it.
+const packageDeck: PackageCall = async (name, args) => {
+  const sent = (call: Promise<unknown>): DeckState => { call.catch((e: unknown) => console.log(`deck: ${name} failed: ${e instanceof Error ? e.message : String(e)}`)); return EMPTY_STATE; };
+  switch (name) {
+    case 'deckState': return deckState({ tick: num(args.tick) });
+    case 'deckPlay': return sent(deckPlay(args as unknown as Parameters<typeof deckPlay>[0]));
+    case 'deckEnqueue': return sent(deckEnqueue(args as unknown as Parameters<typeof deckEnqueue>[0]));
+    case 'deckAct': return deckAct(args as unknown as Parameters<typeof deckAct>[0]);
+    case 'deckAck': return deckAck(args as unknown as Parameters<typeof deckAck>[0]);
+    case 'deckWipe': return deckWipe();
+    default: throw new Error(`unknown deck package name ${name}`);
+  }
+};
+
+/** The app's deck port; a test replaces it with a fake (the generated package names have no host under Bun). */
+let portForTest: (() => DeckPort) | undefined;
+export function setDeckPortForTest(port: (() => DeckPort) | undefined): void { portForTest = port; }
+export function deckPort(): DeckPort { return portForTest ? portForTest() : nativeDeck(); }
+
+/** The deck port over the generated package functions. The injectable call is for tests; the app uses Exact's binding. */
+export function nativeDeck(call: PackageCall = packageDeck): DeckPort {
+  const send = async (name: string, args: Record<string, unknown> = {}): Promise<DeckState> => {
+    try { return readState(await call(name, args)); } catch (e) {
+      const absent = (e as { name?: unknown } | null)?.name === 'NotSupportedError' || (e as { code?: unknown } | null)?.code === 'NotSupportedError';
+      if (name === 'deckState' && !absent) throw e;
+      if (absent && name === 'deckPlay') console.log('deck: play asked and the deck package is not bound here: nothing plays');
+      else if (!absent) console.log(`deck: ${name} failed: ${e instanceof Error ? e.message : String(e)}`);
+      return EMPTY_STATE;
+    }
   };
-  const fields = (i: DeckItem): Record<string, unknown> => ({ ...i });
   return {
-    state: () => call('deckState'),
-    play: (i) => call('deckPlay', fields(i)),
-    enqueue: (i, at) => call('deckEnqueue', { ...fields(i), at: at ?? -1 }),
-    act: (op: DeckOp, value?: number) => call('deckAct', { op, value: value ?? 0 }),
-    ack: (seq) => call('deckAck', { through: seq }),
+    state: () => send('deckState', { tick: 0 }),
+    play: (i) => send('deckPlay', { item: i }),
+    enqueue: (i, at) => send('deckEnqueue', { item: i, at: at ?? -1 }),
+    act: (op: DeckOp, value?: number) => send('deckAct', { op, value: value ?? 0 }),
+    ack: (seq) => send('deckAck', { through: seq }),
+    wipe: () => send('deckWipe'),
   };
 }

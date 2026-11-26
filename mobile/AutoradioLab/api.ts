@@ -23,6 +23,13 @@ export function url(path: string, query: Query = {}): string {
   return ORIGIN + path + '?' + keys.map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(query[k]))}`).join('&');
 }
 
+/** GET a public route as text, for a body too large to parse whole (a published story's bundle). */
+export async function getText(path: string, query: Query = {}): Promise<string> {
+  const response = await fetch(url(path, query), { method: 'GET', headers: { accept: 'application/json' }, exactTimeout: TIMEOUT_MS } as RequestInit);
+  if (!response.ok) throw new Error(`${path} answered ${response.status}`);
+  return response.text();
+}
+
 /** A JSON reply and the server's own clock (the `Date` header, as epoch milliseconds; null when it sent none). */
 export type Reply = { body: unknown; serverTime: number | null; raw: string };
 
@@ -122,6 +129,9 @@ export function adoptNative(native: NativeReader | null | undefined, source = ''
   if (state !== lastNative) { lastNative = state; console.log(`api: native handle ${state} (answering ${source})`); }
   if (usable) reader = native!; else if (!reader) reader = native ?? undefined;
 }
+
+/** The native handle tests adopted (the deck package's fallback under `bun test` reads it). */
+export function adoptedNative(): NativeReader | undefined { return reader; }
 
 /** The app module's `later`, for the native pair that seals mail (mail-seal.ts); null when there is no module. */
 export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }) => Promise<unknown>) | null {

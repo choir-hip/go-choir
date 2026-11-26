@@ -66,6 +66,10 @@ export type RuntimeDeps = {
   onChange?: () => void;
   /** What plays when nothing is ahead (the director's `fill`): the paper's front stories the phone holds and the sheet does not. */
   fill?: (removed: ReadonlySet<string>) => Entry[];
+  /** Whether a story's words are already held (the writer's prefetch), and the fetch that holds them.
+   *  A pump must not fetch: an answer that waits on the network is let go, and its deck call with it. */
+  hasWords?: (route: string) => boolean;
+  prefetchWords?: (route: string) => Promise<void>;
 };
 
 const SPEAKS = new Set<Entry['kind']>(['opening', 'transition', 'story', 'answer', 'result']);
@@ -79,6 +83,8 @@ export class RadioRuntime {
   private resolvers: Partial<Resolvers>;
   private native?: { facts(): Promise<NativeFacts> };
   private onChange?: () => void;
+  private hasWords: (route: string) => boolean = () => true;                 // a host with no prefetcher (tests, the web) starts from its resolver
+  private prefetchWords: (route: string) => Promise<void> = async () => undefined;
   private facts: NativeFacts = NO_FACTS;
   private deckState?: DeckState;
   /** The time the voice has run on the spoken entry on air (milliseconds): counted from the device's clock while the deck says it plays, held when it does not. A spoken entry may carry no estimate (one played from a paper page
@@ -96,6 +102,7 @@ export class RadioRuntime {
 
   constructor(d: RuntimeDeps) {
     this.deck = d.deck; this.resolvers = d.resolvers ?? {}; this.native = d.native; this.onChange = d.onChange;
+    this.hasWords = d.hasWords ?? this.hasWords; this.prefetchWords = d.prefetchWords ?? this.prefetchWords;
     this.store = new RunSheetStore({ storage: d.storage, poster: d.poster, now: d.now, generation: d.generation });
     this.director = new Director(this.store, {
       turnOpen: () => this.facts.turnOpen,
@@ -161,7 +168,8 @@ export class RadioRuntime {
     if (episodeId !== '' && spec.episode_id !== episodeId) return;                          // the page asked about another episode than the one on air
     const st = await this.deck.state(); this.deckState = st;                               // the deck's own word first: the clip may have ended and the deck gone on to the next (its ended line not pumped yet)
     if (st.item !== air.id || st.why === 'stopped' || st.why === 'empty' || this.kept.has(air.id)) return;
-    await this.deck.act('clearEnd');
+    const after = await this.deck.act('clearEnd');
+    if (!after || after.why === 'empty') return;                              // the deck did not take it: the clip would still end, so it is not recorded as kept
     this.kept.add(air.id);
     this.onChange?.();
   }
@@ -213,7 +221,9 @@ export class RadioRuntime {
   }
 
   private async pumpOnce(): Promise<void> {
+    this.pumpCount += 1;
     const epoch = this.epoch;
+    await RadioRuntime.turnEnd();
     await this.refreshFacts();
     let st: DeckState;
     try { st = await this.deck.state(); } catch { return; }              // the deck could not be read: it is not an empty deck. Nothing is decided from nothing; the next pump reads again
@@ -230,11 +240,13 @@ export class RadioRuntime {
       await this.deck.ack(this.lastSeq);
     }
     if (epoch !== this.epoch) return;
+    await RadioRuntime.turnEnd();
     const starts = this.pendingStarts; this.pendingStarts = [];
     this.inPump = false;
     if (starts.length > 0) console.log(`radio: pump starts ${starts.map((e) => e.id + (this.director.playingId === e.id ? '' : ' (not playing id ' + (this.director.playingId ?? 'none') + ')')).join(', ')}; deck item ${st.item || 'none'}`);
     for (const e of starts) if (this.director.playingId === e.id) await this.startEntry(e, st);
     if (epoch !== this.epoch) return;
+    await RadioRuntime.turnEnd();
     await this.keepHeld();
     this.onChange?.();
   }
@@ -299,8 +311,24 @@ export class RadioRuntime {
   private heldSent = new Map<string, string>();
   /** Clips the listener kept listening to: the episode went on past the clip's end. */
   private kept = new Set<string>();
+  /** Story routes and the pulse the writer last tried their words: a failed fetch waits five pulses. */
+  private wordsTriedAt = new Map<string, number>();
+  /** Failed fetches since the words were last held: at the bound the entry fails and the station goes on. */
+  private wordsTries = new Map<string, number>();
+  /** Pulse number of the last dispatched start per entry, so a start that is in flight is not sent twice. */
+  private startedAt = new Map<string, number>();
+  /** Entries a start is running for right now (past its first await). */
+  private starting = new Set<string>();
+  private pumpCount = 0;
 
+  /** One start at a time per entry: a pump and a replay can both see the deck without it. */
   private async startEntry(e: Entry, st: DeckState): Promise<void> {
+    if (this.starting.has(e.id)) return;
+    this.starting.add(e.id);
+    try { await this.startEntryInner(e, st); } finally { this.starting.delete(e.id); }
+  }
+
+  private async startEntryInner(e: Entry, st: DeckState): Promise<void> {
     if (st.item === e.id) return;                               // the deck is already playing it
     const gen = this.director.generation, epoch = this.epoch, pe = this.pauseEpoch;
     const p = planEntry(e, this.director.provided.get(e.id), audioSpec(e));
@@ -309,7 +337,11 @@ export class RadioRuntime {
     try {
       switch (p.kind) {
         case 'speak': item = speech(e.id, e.title, p.document, p.paragraphs); break;
-        case 'story': { const w = await this.resolvers.story?.(p.route); if (w) item = speech(e.id, w.title || e.title, 'pub:' + p.route, w.paragraphs); else why = 'the story could not be loaded'; break; }
+        case 'story': {
+          // The words come from the writer's cache when it has them; a miss fetches here (a pump on a
+          // slow network can be let go, and `replayOnAir` sends the start again on the next hold).
+          const w = await this.resolvers.story?.(p.route); if (w) item = speech(e.id, w.title || e.title, 'pub:' + p.route, w.paragraphs); else why = 'the story could not be loaded'; break;
+        }
         case 'webPage': { const w = await this.resolvers.webPage?.(p.url, p.title); if (w) item = speech(e.id, w.title || e.title, 'rs:' + e.id, w.paragraphs); else why = 'the page could not be read'; break; }
         case 'book': { const w = await this.resolvers.book?.(p.id, p.at); if (w) item = speech(e.id, w.title || e.title, 'rs:' + e.id, w.paragraphs); else why = 'the book could not be read'; break; }
         case 'take': { const t = await this.resolvers.take?.(p.id); if (t) item = deckItem({ id: e.id, kind: 'audio', title: e.title, show: e.source?.label ?? '', url: t.url }); else why = 'the take could not be had'; break; }
@@ -317,11 +349,12 @@ export class RadioRuntime {
         case 'audio': item = deckItem({ id: e.id, kind: 'audio', title: p.title, show: p.show, url: p.url, start: p.start ?? 0, end: p.end ?? 0 }); break;
         case 'cannot': why = p.why; break;
       }
-    } catch { why = 'it could not be loaded'; }
+    } catch (e) { if (refusedHere(e)) return; why = 'it could not be loaded'; }   // an Exact refusal is this answer let go, not a failed story: the next hold starts it again
     // cut, skipped or signed out while the words were being fetched: never played late
     if (epoch !== this.epoch || this.director.generation !== gen || this.director.playingId !== e.id) return;
     if (!item) { console.log(`radio: ${e.id} did not start: ${why}`); this.director.failedToStart(e.id, why); return; }
     this.known.set(e.id, item);
+    this.startedAt.set(e.id, this.pumpCount);
     await this.deck.play(item);
     if (this.pauseEpoch !== pe && this.listenerPaused) await this.deck.act('pause');        // the listener pressed Pause while the words were on their way: the entry is on air, and paused (Play starts it)
     await this.keepHeld();
@@ -355,6 +388,74 @@ export class RadioRuntime {
   /** The native facts a caller has just read (the bridge's `getRadio`): kept as `refreshFacts` would keep them. */
   useFacts(f: NativeFacts): void { this.facts = f; }
   /** One read of the deck and the native facts, no more (a mutation's last look, `radioHold`): the pump is `radioHold`'s. */
+  /** The route of the on-air story whose words are not held, if any. The plan (not the entry's kind)
+   *  says what is a story: `plan` turns a `page` whose ref is `pub:` into a story. */
+  private missingWordsRoute(): string | undefined {
+    const air = this.store.onAir();
+    if (!air) return undefined;
+    const p = planEntry(air, this.director.provided.get(air.id), audioSpec(air));
+    if (p.kind !== 'story') return undefined;
+    const route = p.route.split('@')[0];
+    if (this.hasWords(route)) { this.wordsTriedAt.delete(route); this.wordsTries.delete(route); return undefined; }
+    return route;
+  }
+
+  /** Is a fetch for the on-air story's words due now? A failed fetch backs off five pulses, never
+   *  stops: a story that could not be had once is tried again, so a transient network failure
+   *  cannot leave the station silent forever. */
+  private wordsDue(route: string): boolean {
+    const at = this.wordsTriedAt.get(route);
+    return at === undefined || this.pumpCount - at >= 5;
+  }
+  wantsWords(): boolean { const route = this.missingWordsRoute(); return route !== undefined && this.wordsDue(route); }
+
+  /** Fetch the on-air story's words outside a pump (a pump that waits on the network is let go, and
+   *  its deck call with it). The write asks each pulse while it is due; a failure waits five pulses. */
+  async prefetchOnAir(): Promise<void> {
+    const route = this.missingWordsRoute();
+    if (route === undefined || !this.wordsDue(route)) return;
+    this.wordsTriedAt.set(route, this.pumpCount);
+    try { await this.prefetchWords(route); } catch { /* counted below */ }
+    if (!this.hasWords(route)) this.wordsTries.set(route, (this.wordsTries.get(route) ?? 0) + 1);
+  }
+
+  /** On air but not in the deck (a send let go, or words that were not held): start it from the held words. */
+  async replayOnAir(): Promise<void> {
+    const air = this.store.onAir();
+    if (!air || this.director.playingId !== air.id) return;
+    if (this.facts.turnOpen) return;                       // the listener is speaking: an entry that ended waits for the turn, and so does its replay
+    if (this.inPump || this.starting.has(air.id) || this.pendingStarts.some((e) => e.id === air.id)) return;   // a pump is already starting it (a screen verb's own pump)
+    const epoch = this.epoch;
+    // The deck's state NOW (not the pump's read before it started anything): if the start landed,
+    // its item is this entry; only a start that never reached the deck is sent again.
+    let st: DeckState;
+    try { st = await this.deck.state(); } catch { return; }
+    if (epoch !== this.epoch || this.director.playingId !== air.id || this.store.onAir()?.id !== air.id) return;
+    if (this.inPump || this.starting.has(air.id) || this.pendingStarts.some((e) => e.id === air.id)) return;   // the pump that was just asked has it
+    if (st.item === air.id) return;
+    // The deck's own last word wins: an entry it stopped, the listener paused, or that ended or
+    // failed since the pump read its journal is not played again.
+    if (st.why === 'stopped') return;
+    if (st.journal.some((l) => l.item === air.id && l.seq > this.lastSeq && (l.type === 'ended' || l.type === 'system'))) return;   // ended, failed, stopped or replaced: the deck's own word stands
+    // Words that are not held are fetched here (the hold), not left to the write: the write backs
+    // off after a failure, and this is the only path that starts an entry the pump let go.
+    if (this.missingWordsRoute() !== undefined) {
+      await this.prefetchOnAir();
+      if (epoch !== this.epoch) return;
+      const route = this.missingWordsRoute();
+      if (route !== undefined) {
+        // Twelve failed fetches (about a minute with the five-pulse backoff): the story cannot be
+        // had, so it is failed and the station goes on rather than staying silent forever.
+        if ((this.wordsTries.get(route) ?? 0) >= 12) { this.wordsTries.delete(route); this.wordsTriedAt.delete(route); this.director.failedToStart(air.id, 'the story could not be loaded'); }
+        return;
+      }
+    }
+    // A start this process dispatched a moment ago is in flight (deckPlay is not waited for): the
+    // deck's next state will show it, and sending it twice would restart the spoken item.
+    if (this.pumpCount - (this.startedAt.get(air.id) ?? -1_000) < 3) return;
+    await this.startEntry(air, st);
+  }
+
   async peek(): Promise<void> { await this.refreshFacts(); try { this.deckState = await this.deck.state(); } catch { /* the next pulse reads again */ } this.countSpoken(); }
   /** The deck's state as the contract read it (the package source `deckState`, handed to the pulse): the pulse makes no deck call of its own. */
   seeDeck(st: DeckState): void { this.deckState = st; this.countSpoken(); }
@@ -368,6 +469,9 @@ export class RadioRuntime {
   }
   needsWork(): boolean {
     if (this.pendingStarts.length > 0) return true;
+    const air = this.store.onAir();
+    const why = this.deckState?.why;
+    if (air && this.deckState && this.deckState.item !== air.id && why !== 'stopped' && !this.facts.turnOpen) return true;   // on air, not in the deck: the start must be sent again (an open turn is the turn's own business)
     if (this.deckState?.journal.some((l) => l.seq > this.lastSeq)) return true;               // lines the deck wrote that the pump has not read
     const wanted = this.director.wants || this.store.onAir() ? this.holdable() : [];
     const held = this.deckState?.held ?? [];
@@ -396,6 +500,13 @@ export class RadioRuntime {
   /** The sheet from the runtime's own file. Nothing plays. A read Exact refused THROWS and leaves it not restored (the caller restores again later): it is never taken as an empty sheet.
    *  Two restores may overlap (two mutations): each reads, and only the first to finish takes what it read. A sign-out while it read (`epoch` moved) drops what it read: the old account's sheet is
    *  never taken, nor written back after the wipe removed its file. */
+  /** Ends the turn before the sheet is parsed: the parse of a large sheet is over Exact's 100 ms turn
+   *  budget on the phone (the first restore was refused at 108 ms), and the mutation must complete. */
+  private static async turnEnd(): Promise<void> {
+    const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+    if (sc?.yield) await sc.yield();
+  }
+
   async restore(): Promise<void> {
     if (this.isRestored) return;
     const epoch = this.epoch;
@@ -404,8 +515,10 @@ export class RadioRuntime {
     const text = await this.store.readSaved();
     if (this.isRestored || epoch !== this.epoch) return;
     this.isRestored = true;
+    if (text !== '') await RadioRuntime.turnEnd();
     this.store.restoreFrom(text, (store) => { if (st) this.recover(store, st); });
     if (st && this.lastSeq > st.acked) { try { await this.deck.ack(this.lastSeq); } catch { /* acknowledged at the next pump */ } }
+    await RadioRuntime.turnEnd();
   }
 
   /** At launch: the deck's journal outlived the process, and it says what happened while shared code was not running. An entry the deck began and finished is aired and ended on the sheet

@@ -61,9 +61,8 @@ export type DeckState = {
 /** `deckAct` operations. `clearEnd`: the clip playing no longer ends (the episode goes on from where it is). `value` is the seconds for `seekTo` and `seekBy`, and for `trim` how many held items to keep (the rest are dropped). */
 export type DeckOp = 'pause' | 'resume' | 'stop' | 'skip' | 'seekTo' | 'seekBy' | 'trim' | 'clearEnd';
 
-/** The deck's names, over the app module's one `deck` op (deck-native.ts); each answers the deck's state. Only `deckState` is also a package name (interface/deck.json): the live source the contract reads
- *  and hands to the pulse. */
-export const DECK_NAMES = ['deckState', 'deckPlay', 'deckEnqueue', 'deckAct', 'deckAck'] as const;
+/** The deck's generated @choir/autoradio package names (interface/deck.json); each answers the deck's state. `deckState` is also the live source the contract reads and hands to the pulse. */
+export const DECK_NAMES = ['deckState', 'deckPlay', 'deckEnqueue', 'deckAct', 'deckAck', 'deckWipe'] as const;
 
 /** How many items after the one playing the deck holds, so it plays on while shared code is not running. It is every entry the sheet can have ahead (the phone's MAX_AHEAD, 100):
  *  what the deck holds is bounded by the sheet's own bound, and each item is a bounded text or an address (the server's entry bounds), a few hundred kilobytes at most. */
@@ -83,6 +82,8 @@ export type DeckPort = {
   act(op: DeckOp, value?: number): Promise<DeckState>;
   /** Journal lines up to `seq` are posted: the deck forgets them. */
   ack(seq: number): Promise<DeckState>;
+  /** Account boundary: stop and forget the current item, held items, journal and synthesized-audio cache. */
+  wipe(): Promise<DeckState>;
 };
 
 export const EMPTY_ITEM: DeckItem = {

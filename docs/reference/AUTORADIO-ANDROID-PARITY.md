@@ -27,11 +27,11 @@ control, an emulator or a Kotlin copy of page logic does not pass.
 | P06 | Share a document | `reader.contract`, `content.contract` | Platform share sheet / exported file | **unproved** | No Android share/export proof. | A3 |
 | P07 | Files browse, upload, open, rename, delete, share | `files.contract`, `files.ts` | System picker, file provider, viewers, audio hand-off | **blocked** | No physical Android Files journey; picker/file-provider/preview paths are not proved. | A3 |
 | P08 | Imported PDF/EPUB reading and read-aloud | `imported-docs.contract`, `imported.ts` | `importedFollow`, `radioHandWords`, picker, deck | **blocked** | A0 recorded `importedFollow` substituted; no import/open/read-aloud proof. | A2/A3 |
-| P09 | Radio page, queue and run-sheet state | `radio.contract`, `radio-runtime.ts`, `radio-director.ts` | `radioNote`, `radioView`, `deckState` | **partial** | A0/A3 drew the radio page and ahead list from shared state; native deck and journal remain absent. | A2 |
-| P10 | Radio speech playback | `radio-runtime.ts`, `deck-native.ts` | `deckPlay`, `deckEnqueue`, `deckAct`, `deckAck`, local TTS | **blocked** | No Android audio has played. The transport still targets the Apple app-module op on current main. | A2/A6 |
+| P09 | Radio page, queue and run-sheet state | `radio.contract`, `radio-runtime.ts`, `radio-director.ts` | `radioNote`, `radioView`, `deckState` | **partial** | The deck's state, journal, held list and wipe are native and drive the station on the phone (`docs/evidence/android-a2-deck-2026-11-26/`); `radioNote`/`radioView` are still substituted, so the page's own facts are not all native-proved. | A2 |
+| P10 | Radio speech playback | `radio-runtime.ts`, `deck-native.ts` | `deckPlay`, `deckEnqueue`, `deckAct`, `deckAck`, local TTS | **proved** | A signed-out station played on the phone through the package names (on-device speech to Media3), kept playing with the activity hidden, and answered pause/play/next; the APK and raw session states are in `docs/evidence/android-a2-deck-2026-11-26/`. | A2 |
 | P11 | Podcast browse, search and subscribe | `podcasts.contract`, `podcast.ts` | Shared network/storage | **unproved** | No physical Android podcast browse/subscribe drive. | A3/A7 |
 | P12 | Podcast playback, queue, resume and clips | `podcasts.contract`, `podcast.ts`, `clips.ts` | Deck, clip location, file/audio hand-off | **blocked** | No Android playback/background/clip-location proof. | A2/A3 |
-| P13 | Lock-screen/headset media controls | `radio.contract`, `deck-native.ts` | Media3 `MediaSessionService`, audio focus, noisy-route receiver | **blocked** | Exact supplies the service, but Autoradio has no Kotlin deck/player claim. | A2 |
+| P13 | Lock-screen/headset media controls | `radio.contract`, `deck-native.ts` | Media3 `MediaSessionService`, audio focus, noisy-route receiver | **partial** | The service, the session and its pause/play/next were driven on the phone; a physical headset/route change, a phone call's transient loss and a locked screen are unproved. | A2 |
 | P14 | Passkey sign-in and relaunch | `app-signin.ts`, `passkey-ceremony.ts` | `@exact/passkeys`, Android asset association, server RP origin | **blocked** | Android sign-in is deliberately refused; no association/origin. Device has zero enrolled biometrics, so the final prompt is an owner action. | A1 |
 | P15 | Account state, sign-out and account wipe | `account.ts`, `account-state.ts`, `api.ts` | `choirAuth`, Exact secrets, `signOut`/`wipe`, deck/mail/model wipe | **blocked** | `choirAuth` substitutes signed out; Android has no app-module sign-out/wipe path. | A1/A2/A4/A6 |
 | P16 | Account deletion | `account-delete.ts`, `settings.contract` | Passkey plus A1 account boundary | **blocked** | No Android deletion proof; must use d@e only. | A1/A7 |
@@ -46,13 +46,14 @@ control, an emulator or a Kotlin copy of page logic does not pass.
 | P25 | Hands-free local voice and streamed desk turn | `voice.contract`, `radio-bridge.ts`, `retrieval-live.ts` | Mic, VAD, live/final ASR, local Qwen, TTS, speaker, embedding | **blocked** | No real-microphone Android turn; no network/code-path proof that audio stays local. | A6 |
 | P26 | Activity, Computer and About | `activity.contract`, `settings.contract`, `computer.ts` | `settingsFacts`, `choirAuth`, shared server reads | **blocked** | A0 recorded `settingsFacts`/`choirAuth` substituted; no authenticated Android proof. | A1/A3 |
 | P27 | Launcher search over held pages/files/stories | `launcher.contract`, `retrieval-live.ts`, `search.ts` | `retrievalAsk`, optional embedding model | **unproved** | No Android search proof; lexical/vector behavior is not inferred from Paper. | A5/A6 |
-| P28 | Full shipped-iOS parity and Autoradio 1 APK | All of the above | Every required row | **not complete** | Only P01–P04 have physical Android evidence. | A7 |
+| P28 | Full shipped-iOS parity and Autoradio 1 APK | All of the above | Every required row | **not complete** | P01–P04 and P10 have physical Android evidence; the rest are partial, blocked or unproved. | A7 |
 
 ## Native package sources and views
 
 A0 recorded 17 package sources substituted. The Android package now implements
-only the two entries marked proved; all others still answer
-`NotSupportedError` until their station lands.
+the entries marked proved (the `web-page` view, `readerOpenExternal`, `deckState`
+and the deck's sends); every other entry still answers `NotSupportedError` until
+its station lands.
 
 | Package name | Purpose | Android state | Station |
 | --- | --- | --- | --- |
@@ -63,11 +64,12 @@ only the two entries marked proved; all others still answer
 | `readerAim` | Aimed reader block | missing | A3 |
 | `importedFollow` | Current imported-document block | missing | A3 |
 | `choirAuth` | Signed-in fact | missing; A1 moves it shared | A1 |
-| `choirPlayer` | Native player fact | missing | A2/A6 |
+| `choirPlayer` | Native player fact | missing; the deck now plays, the page's fact is still substituted | A2/A6 |
 | `barFacts` | Voice/player bar fact | missing | A2/A6 |
 | `radioNote` | Radio pulse | missing | A2 |
 | `radioView` | Radio native view | missing | A2 |
-| `deckState` | Durable deck state/journal | missing | A2 |
+| `deckState` | Durable deck state/journal | **proved** (native source; the station plays) | A2 |
+| `deckPlay`, `deckEnqueue`, `deckAct`, `deckAck`, `deckWipe` | The deck's commands | **proved** for play and the media session's pause/play/next, which act on the deck; enqueue/ack/wipe are code- and test-proved | A2 |
 | `settingsFacts` | Build/clock/radio facts | missing | A3/A6 |
 | `conversationEntries` | Native conversation entries | missing | A6 |
 | `retrievalAsk` | Native ask for shared retrieval | missing | A6 |
@@ -88,7 +90,7 @@ module seam needs an explicit Android implementation.
 | `generation` | Account-generation fence | missing | A1 |
 | `keystate`, `session`, `get` | Exact secret reads | missing app-module path; A1 can use shared secret store | A1 |
 | `signOut`, `wipe` | Native account wipe | missing | A1 |
-| `deck` | Five deck commands | missing; A2 replaces with package sends | A2 |
+| `deck` | Five deck commands | **replaced**: the package names `deckPlay`/`deckEnqueue`/`deckAct`/`deckAck`/`deckWipe` are implemented and physically proved | A2 |
 | `openPage` | Native page request | missing | A3 |
 | `radioFacts`, `radioSet` | Voice/audio mailbox | missing | A2/A6 |
 | `ob*` | Onboarding/model setup/mic/TTS | missing | A6 |
@@ -112,6 +114,8 @@ module seam needs an explicit Android implementation.
   `docs/evidence/model-bench-android-2026-11-26/`.
 - The APK's compiled JNI/ONNX Runtime through its own `NativeModels`, on the phone:
   `docs/evidence/android-a6-model-runtime-2026-11-26/`.
+- The deck's playback, background survival and media-session controls on the phone:
+  `docs/evidence/android-a2-deck-2026-11-26/`.
 
 The matrix is updated in the same change that lands or proves a row. A7 may
 close the mission only when every required row has named evidence.

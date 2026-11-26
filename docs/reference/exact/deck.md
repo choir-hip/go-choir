@@ -3,7 +3,7 @@
 Station X4 of the Exact cutover. Read this before changing `mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift`,
 `mobile/AutoradioLab/deck*.ts`, `mobile/exact-package/interface/deck.json` or the Kotlin deck. Design:
 [autoradio-in-exact-2026-11-18.md](../../design/autoradio-in-exact-2026-11-18.md), "The deck applies named rules" and "The journal
-is the evidence". Status of what exists (2026-11-21): shared code commands the deck. `mobile/AutoradioLab/deck-native.ts` is the real `DeckPort`: the five names over the app module's one `deck` op (`modules/apple/ModelsEntry.swift` -> `AutoradioModule+Deck.swift` `deckCall`), because only a contract can call a package's names and shared code has to; `radio-runtime.ts` hands it items and reads its journal (the Swift run sheet player is deleted). The Kotlin deck does not exist.
+is the evidence". Status of what exists (2026-11-26): shared code commands the deck. `mobile/AutoradioLab/deck-native.ts` is the real `DeckPort`: the six names are the package's (`interface/deck.json`), imported from `@choir/autoradio`, so the Apple and Android implementations serve one call shape (the app-module `deck` op is gone); `radio-runtime.ts` hands it items and reads its journal (the Swift run sheet player is deleted). The Kotlin deck exists and plays on the phone (2026-11-26).
 
 ## What it is
 
@@ -34,11 +34,12 @@ entry before this one (the sheet's heard list), and anything that needs the desk
 
 ## Names (shapes in `mobile/AutoradioLab/deck-types.contract`; types in `deck.ts`)
 
-Shared code reaches all five through the app module's one `deck` op (`{op: "deck", name, args}`, `deck-native.ts` → `ModelsEntry.swift` →
-`AutoradioModule+Deck.swift` `deckCall`). Only `deckState` is also a package name (`interface/deck.json`): the live source the contract reads
-once per radio tick (`deckState(tick=radioTick)`, spine.contract `ds`) and hands whole to the radio's pulse, which makes no deck call of its own
-(2026-11-25, `docs/problems/radio-restore-empty-after-let-go-2026-11-25.md`). The four sends were package names too until then; no contract
-called them, and they were deleted.
+Shared code reaches all six through the package's names (`interface/deck.json`; `deck-native.ts` imports them from `@choir/autoradio`):
+Exact's bake writes the package functions and routes them to the Apple or the Android implementation, so there is no app-module `deck` op and no
+per-platform call shape. `deckState` is the live source the contract reads once per radio tick (`deckState(tick=radioTick)`, spine.contract
+`ds`) and hands whole to the radio's pulse, which makes no deck call of its own
+(docs/problems/radio-restore-empty-after-let-go-2026-11-25.md). The sends were package names from 2026-11-26 (Android needs the same names as
+Apple: its host has no app-module bus).
 
 | Name | Kind | Does |
 |---|---|---|
@@ -47,6 +48,7 @@ called them, and they were deleted.
 | `deckEnqueue` | op name | hold this item after the playing one at place `at` (0 is next; -1 or absent is the end); the held items from `at` on are dropped first; an id already held is removed first; at most 100 are held (the sheet's bound) |
 | `deckAct` | op name | `op` is `pause`, `resume`, `stop`, `skip`, `seekTo`, `seekBy`, `trim` or `clearEnd` (a clip no longer ends: the episode goes on from where it is); `value` as the op needs |
 | `deckAck` | op name | the journal lines up to `through` are posted; the deck forgets them |
+| `deckWipe` | op name | the account boundary: the deck forgets the current item, the held list and the journal, and its synthesized files |
 
 An item is scalars only (the gate refuses a name that takes an opaque payload): `id`, `kind` (`speech` or `audio`), `title`, `show`,
 `document`, `paragraphs` (the text, a blank line between paragraphs), `url`, `start`, `end` (0: to the end), `block`, `seconds`
@@ -93,12 +95,23 @@ the sheet's order. The server contract is `internal/runsheet/apply.go` and `inte
 `mobile/fixtures/deck` are applied by the Go reducer (`internal/runsheet/deck_fixtures_test.go`), built from in TypeScript
 (`deck-ops.test.ts`) and read by the Swift twin of the ended-line reading (`DeckTests`).
 
-## Android
+## Android (built 2026-11-26)
 
-Kotlin must implement the same five names with Media3 (audio) and speech playback behind a media session. The Kotlin deck does not exist yet.
-The pinned Exact Android host already contains Media3 `PlaybackService`, `MediaSessionService`, audio focus and a foreground media-playback
-notification, so the old claim that Android must remain foreground-only is stale. Autoradio still owes its own deck state, journal, held-entry
-rules, remote-command mapping and reconciliation with shared code.
+The six names are the package's (`interface/deck.json`): `deck-native.ts` imports them from `@choir/autoradio`, and the
+Android implementation is `mobile/exact-package/android/Deck{Controller,Journal,Android,MediaEngine}.kt` over Media3.
+`DeckController` holds the Apple deck's rules (why, held list, retries, journal lines, remote commands), `DeckJournal`
+is bounded and atomic, and `DeckMediaEngine` is one ExoPlayer for remote/file audio and speech synthesised to files,
+the process's audio-focus claim, and the host's `dev.exact.video.PlaybackService` (a `MediaSessionService`, linked for
+an app whose `audio_session` is `playback` by Exact patch 0003). The media session wraps the deck's forwarding player,
+not ExoPlayer, so a notification or headset command reaches the deck's rules; a `next`/`previous` is journalled and
+shared code starts the entry on its next pulse (starting it from the native callback would be a call outside a data
+answer). A spoken story synthesises one chunk ahead while the first plays: `TextToSpeech.voices` took 83 s and the whole
+story 42 s on the Motorola, the first sentence about half a second.
+
+Proved on the phone: a cold launch plays signed out, Home keeps it playing (position advanced with the session in the
+foreground), pause/play/next work through `cmd media_session`, and a second cold launch plays
+(`docs/evidence/android-a2-deck-2026-11-26/`). Not proved: route changes, a phone call's transient focus loss, touch on
+the notification, a locked screen, and long-run battery/heat.
 
 ## Not yet proven
 

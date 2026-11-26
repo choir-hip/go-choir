@@ -16,7 +16,7 @@ const NOW = new Date('2023-11-14T22:00:00Z');
 const row = (route: string, o: Record<string, unknown> = {}) => ({ route, title: `Title ${route}`, dek: `Dek of ${route}.`, importance: 5, sources: 3, version_count: 2, updated_at: '2023-11-14T20:00:00Z', ...o });
 const front = (rows: unknown[]) => ({ stories: rows });
 const EMPTY: DeckState = { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [] };
-const deck: DeckPort = { state: async () => EMPTY, play: async () => EMPTY, enqueue: async () => EMPTY, act: async () => EMPTY, ack: async () => EMPTY };
+const deck: DeckPort = { state: async () => EMPTY, play: async () => EMPTY, enqueue: async () => EMPTY, act: async () => EMPTY, ack: async () => EMPTY, wipe: async () => EMPTY };
 const seg = (o: Record<string, unknown>) => 'event: segment\ndata: ' + JSON.stringify({ stretch_id: 'st-1', ...o }) + '\n\n';
 const answer = (...segs: string[]) => segs.join('') + 'event: done\ndata: {"stretch_id":"st-1"}\n\n';
 

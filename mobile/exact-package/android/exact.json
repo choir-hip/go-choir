@@ -18,7 +18,9 @@
     ]
   },
   "maven": [
-    "com.microsoft.onnxruntime:onnxruntime-android:1.32.0"
+    "com.microsoft.onnxruntime:onnxruntime-android:1.32.0",
+    "androidx.media3:media3-exoplayer:1.11.1",
+    "androidx.media3:media3-session:1.11.1"
   ],
   "manifest": {
     "permissions": [

@@ -149,6 +149,7 @@ class Deck implements DeckPort {
   async enqueue(): Promise<DeckState> { return this.state(); }
   async act(): Promise<DeckState> { return this.state(); }
   async ack(s: number): Promise<DeckState> { this.acked = s; return this.state(); }
+  async wipe(): Promise<DeckState> { this.item = ''; this.why = 'empty'; this.journal = []; this.seq = 0; this.acked = 0; return this.state(); }
   end(): void { this.seq += 1; this.journal.push({ seq: this.seq, type: 'ended', item: this.item, at: '', block: 0, seconds: 5, final: 0, rendered: true, end: 'finished', command: '', reason: '' }); this.item = ''; this.why = 'empty'; }
 }
 describe('through the runtime and a deck', () => {

@@ -57,6 +57,7 @@ class FakeDeck implements DeckPort {
     return this.state();
   }
   async ack(seq: number): Promise<DeckState> { this.acks.push(seq); this.acked = Math.max(this.acked, seq); return this.state(); }
+  async wipe(): Promise<DeckState> { this.current = undefined; this.item = ''; this.held = []; this.why = 'empty'; this.journal = []; this.seq = 0; this.acked = 0; return this.state(); }
   // ---- what the audio does, from the test
   /** The playing item ends; the deck plays on through its held items by itself (shared code may be frozen). */
   end(end: DeckEvent['end'] = 'finished', o: { rendered?: boolean; block?: number; seconds?: number; final?: number; reason?: string } = {}): void {
