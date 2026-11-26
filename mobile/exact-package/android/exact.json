@@ -1,0 +1,22 @@
+{
+  "kind": "implementation",
+  "implements": "@choir/autoradio@^1.0",
+  "platform": "android",
+  "targets": [
+    "android"
+  ],
+  "shapes": {},
+  "options": {},
+  "names": [],
+  "views": [
+    "web-page"
+  ],
+  "hatches": [],
+  "sources": {
+    "kotlin": [
+      "."
+    ]
+  },
+  "artifacts": [],
+  "class": "choir.autoradio.AutoradioModule"
+}

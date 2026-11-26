@@ -58,6 +58,9 @@ for f in sorted(os.listdir(IFACE)) if os.path.isdir(IFACE) else []:
 
 json.dump({"kind": "interface", "name": "@choir/autoradio", "version": "1.0.0", "substitute": "implementation",
            "shapes": shapes, **({"views": views} if views else {}), "names": names}, open(os.path.join(HERE, "exact.json"), "w"), indent=2)
+exports = {".": "./exact.json", "./apple": "./apple/exact.json"}
+if os.path.isfile(os.path.join(HERE, "android", "exact.json")):
+    exports["./android"] = "./android/exact.json"
 json.dump({"name": "@choir/autoradio", "version": "1.0.0", "private": True,
-           "exports": {".": "./exact.json", "./apple": "./apple/exact.json"}}, open(os.path.join(HERE, "package.json"), "w"), indent=2)
+           "exports": exports}, open(os.path.join(HERE, "package.json"), "w"), indent=2)
 print("wrote", HERE)
