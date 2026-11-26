@@ -298,6 +298,8 @@ the stations above.
 
 Parity is the shipped iOS user journey, not visual similarity. A0 writes the
 matrix from the current iOS build and A7 fills its Android column with evidence.
+The checked inventory lives in
+[`docs/reference/AUTORADIO-ANDROID-PARITY.md`](../reference/AUTORADIO-ANDROID-PARITY.md).
 At minimum it covers signed-out paper/radio, passkey sign-in and account wipe,
 paper/story/reader, queue/run sheet, podcasts and clips, files and imported
 documents, mail, Textures/editor, notebook, takes, themes, onboarding, Voice and

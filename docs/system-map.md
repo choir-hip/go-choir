@@ -325,7 +325,9 @@ survives force-stop/cold relaunch. The full external matrix, file/audio hand-off
 reader follow/aim, podcast clip location, Kotlin deck, auth, audio and voice are
 still missing. Artifacts: `docs/evidence/android-a0-2026-11-26/`,
 `docs/evidence/android-a3-web-view-2026-11-26/` and
-`docs/evidence/android-package-seat1-*-2026-11-26.txt`.
+`docs/evidence/android-package-seat1-*-2026-11-26.txt`. The checked journey and
+native-call inventory is
+[`docs/reference/AUTORADIO-ANDROID-PARITY.md`](reference/AUTORADIO-ANDROID-PARITY.md).
 
 Key paths: `mobile/AutoradioLab/app.ts`, `radio-runtime.ts`,
 `radio-bridge.ts`, `mobile/AutoradioKit/`, `docs/reference/exact/deck.md`,

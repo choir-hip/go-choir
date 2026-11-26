@@ -27,6 +27,7 @@ Pages:
   its unproved target-device rows (section 14); only Silero and Parakeet EOU
   were measured on a phone by us in the earlier 2026-11-11 work, and the
   Motorola ASR benchmark is in `docs/evidence/model-bench-2026-11-22/`.
+- [AUTORADIO-ANDROID-PARITY.md](AUTORADIO-ANDROID-PARITY.md): the checked shipped-iOS journey and native-call inventory for the Motorola, with physical evidence, missing seams and owning stations.
 - [EMBEDDINGGEMMA.md](EMBEDDINGGEMMA.md): EmbeddingGemma 2 (Core AI port by Everpaper, macOS 27 only as declared; files, prompts, Matryoshka, licence), the GGUF alternative, the on-device vector store pick (brute force first, sqlite-vec later) and BM25 + RRF hybrid ranking; sources fetched 2026-11-17, nothing measured on a phone.
 - [EXACT.md](EXACT.md): the Exact app-shell runtime (pinned commit, model, surprises, decision guide), with subpages in [exact/](exact/): ui-model, native-modules, deck, audio, build-and-ship, testing-and-debugging, internals, gaps, auth-session. The runnable example is [mobile/exact-spike/](../../mobile/exact-spike/README.md).
 - [CERAMIC.md](CERAMIC.md): Ceramic, a lexical web search service (English pages, keyword queries, 50 words, 20 results): the call, query rules, errors, limits, price, and what its documents do not say.

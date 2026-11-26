@@ -1,3 +1,13 @@
+## 2026-11-26: the Android shipped-iOS parity inventory is checked (green; lane `android-parity-matrix`)
+
+What: `docs/reference/AUTORADIO-ANDROID-PARITY.md` names every required page/journey, its shared TypeScript/Contract authority, native package/app-module dependencies, current Android evidence, missing seam and owning A0–A7 station. It separately inventories the 17 package sources A0 saw substituted and the Apple-style app-module operation families that Android still lacks.
+
+Why: the mission requires parity against the shipped iOS journeys, not an inference from one working Paper page.
+
+Proof: source check against `mobile/AutoradioLab/*.contract`, `app.ts`, the Exact package interfaces and the A0/A3 physical logs. Only launcher/Paper, story reading, in-app source WebView and one HTTPS external hand-off have physical Android evidence; every other row is partial, blocked or unproved.
+
+Replaced: the missing A0 page-by-page/native-call inventory. Undo: revert this documentation commit; no runtime behavior changes.
+
 ## 2026-11-26: Android source WebView and external hand-off are physically proved (green; lane `android-web-proof`)
 
 What: `scripts/proofs/android-a3-web-view.sh` now reproduces the package-first source-page journey on the connected Motorola: discover a current Paper story, open a source in the native WebView, capture the rendered page, hand an HTTPS source to Chrome, close the in-app layer, then force-stop and cold-launch the normal app. Raw logs, screenshots, package/certificate readback and activity/relaunch evidence are in `docs/evidence/android-a3-web-view-2026-11-26/`.
