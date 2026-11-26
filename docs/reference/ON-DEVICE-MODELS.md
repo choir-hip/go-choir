@@ -730,12 +730,15 @@ with 872 MiB peak RSS, Q8_0 at 248.5 / 19.4 tok/s with 1,332 MiB, and Tiny Voca
 F2 produced 2.36 s of speech in 0.19 s process time with 64 MiB peak RSS. Exact
 Silero v6.2.1 op15 through sherpa-onnx processed a 4.010 s fixture in 0.341 s
 (including load), found the 0.542-4.000 s speech segment and peaked at 58.2 MiB.
-The SoC-tuned Snapdragon archive selected Adreno/Hexagon and then exited 132
+EmbeddingGemma 2 Q8_0 returned 768-dimensional vectors on three fixed text
+fixtures, loading in 0.734–0.758 s, prefilling at 163.9–213.7 tok/s and peaking
+at 528.7–529.0 MiB. The SoC-tuned Snapdragon archive selected Adreno/Hexagon and then exited 132
 (`SIGILL`), so it is not used. Raw rows, hashes and logs:
 `docs/evidence/model-bench-android-2026-11-26/`.
 
 **What is not proved.** No complete configuration, Fluid Speech Mini, Parakeet
-EOU, WeSpeaker, EmbeddingGemma Q8_0 or Phonon has been measured on this Motorola. File sizes are payload sizes, not RSS. The benchmark must
+EOU, WeSpeaker or Phonon has been measured on this Motorola. EmbeddingGemma's
+speed is measured; its retrieval quality and cosine floor are not. File sizes are payload sizes, not RSS. The benchmark must
 record model/runtime hashes, cold and warm load, first-token/first-audio
 latency, RTF, WER where applicable, total PSS/native high-water, available
 memory, thermal state and battery delta on fixed fixtures. The existing

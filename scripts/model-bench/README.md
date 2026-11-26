@@ -135,6 +135,8 @@ python3 -I scripts/model-bench/native.py --job tiny-voca-f2 --threads 4 --repeat
   --out-dir /path/to/tiny-voca-f2 --tsv /path/to/rows.tsv
 python3 -I scripts/model-bench/vad.py --input /path/to/16k-mono.wav --threads 4 \
   --out-dir /path/to/silero --tsv /path/to/rows.tsv
+python3 -I scripts/model-bench/embed.py --threads 4 \
+  --out-dir /path/to/embeddinggemma-q8 --tsv /path/to/rows.tsv
 python3 -I -m unittest discover -s scripts/model-bench
 ```
 
@@ -150,5 +152,5 @@ First-partial latency of streaming models (the online binary decodes a wav as
 fast as it can), noisy or far-field audio, speech over radio, battery draw
 (the phone is plugged in), sustained 10-minute thermal behaviour, cold page
 cache, any accelerator (CPU only), and the iPhone. The native slice has measured
-Qwen3-0.6B Q4_K_M/Q8_0, Tiny Voca F2 and exact Silero v6.2.1; EOU, Fluid Speech
-Mini, WeSpeaker, EmbeddingGemma and Phonon remain open.
+Qwen3-0.6B Q4_K_M/Q8_0, Tiny Voca F2, exact Silero v6.2.1 and EmbeddingGemma 2
+Q8_0; EOU, Fluid Speech Mini, WeSpeaker and Phonon remain open.

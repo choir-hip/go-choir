@@ -20,6 +20,7 @@ phone directory on success, failure, timeout or Ctrl-C.
 | Qwen3-0.6B | Q8_0 | 248.474 | 19.374 | - | - | 14.508 | 1331.8 | ok |
 | Tiny Voca F2 | F32 + mmproj | - | - | 2.36 | 0.19 | 0.625 | 64.2 | ok |
 | Silero VAD v6.2.1 | op15 ONNX | - | - | 4.010 | 0.341 | 0.341 | 58.2 | ok |
+| EmbeddingGemma 2 | Q8_0 | 163.9–213.7 | - | - | 1.07–1.11 | 1.07–1.11 | 528.7–529.0 | ok |
 
 Q4_K_M is the prudent first Android responder: it clears the existing 15
 tok/s decode and 150 tok/s prefill bars with margin and leaves much more memory
@@ -31,6 +32,16 @@ decode margin and about 460 MiB more peak RSS. Tiny Voca F2 produced 2.36 s of
 (including load), found the 0.542-4.000 s speech segment and peaked at 58.2 MiB;
 its output WAV SHA-256 is
 `9ef6159930472d26f4b6e9bab3c7897a5a6e2fafec52542653122699ed0624ad`.
+
+EmbeddingGemma 2 Q8_0 (`309,855,456` B, SHA-256
+`2188ac1deca4b77dffefd603c2776a9d76d9d74ec01841392982ebb840b09135`) returned
+768-dimensional vectors on three fixed text fixtures. Each process loaded in
+0.734–0.758 s and prefilled at 163.9–213.7 tok/s; peak RSS was 528.7–529.0 MiB.
+The compiled benchmark binary SHA-256 is
+`7444a78ef2112722fbf1f9feaec552dcbea20dfdd95f91551b29113c1c958960`.
+`embeddinggemma-q8/results.json` is the parsed result and `rows.tsv` has the
+per-fixture rows. This proves fitness and speed, not retrieval quality; the
+cosine floor and re-embedding remain app-level checks.
 
 `rows.tsv` is the machine-readable result. `qwen-q4/bench.json` and
 `qwen-q8/bench.json` are llama.cpp's raw JSON. Each job directory keeps its
@@ -48,8 +59,8 @@ SoC-tuned binary for the generic one.
 
 ## Not measured yet
 
-Parakeet EOU, Fluid Speech Mini GGUF, WeSpeaker, EmbeddingGemma, Phonon, a whole
-voice turn, noisy/far-field speech, battery draw and sustained heat.
+Parakeet EOU, Fluid Speech Mini GGUF, WeSpeaker, Phonon, a whole voice turn,
+noisy/far-field speech, battery draw and sustained heat.
 The existing CPU ASR measurements remain in
 `docs/evidence/model-bench-2026-11-22/`; this directory extends that harness
 rather than replacing it.

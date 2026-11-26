@@ -1,0 +1,41 @@
+{
+  "binary_sha256": "7444a78ef2112722fbf1f9feaec552dcbea20dfdd95f91551b29113c1c958960",
+  "results": [
+    {
+      "prompt_index": 1,
+      "prompt": "task: search result | query: why did the harbor close?",
+      "dim": 768,
+      "tokens": 15,
+      "load_seconds": 0.758185,
+      "prefill_seconds": 0.076771,
+      "raw_norm": 1092.753281,
+      "first": 39.5812149,
+      "thermal_before": 0,
+      "thermal_after": 0
+    },
+    {
+      "prompt_index": 2,
+      "prompt": "title: Harbor barrier | text: The harbor council voted to approve a tide barrier across the east channel.",
+      "dim": 768,
+      "tokens": 23,
+      "load_seconds": 0.742908,
+      "prefill_seconds": 0.107644,
+      "raw_norm": 1176.267363,
+      "first": -1.78026402,
+      "thermal_before": 0,
+      "thermal_after": 0
+    },
+    {
+      "prompt_index": 3,
+      "prompt": "task: search result | query: harbor council barrier",
+      "dim": 768,
+      "tokens": 12,
+      "load_seconds": 0.734153,
+      "prefill_seconds": 0.0732,
+      "raw_norm": 1232.447847,
+      "first": 47.5944023,
+      "thermal_before": 0,
+      "thermal_after": 0
+    }
+  ]
+}

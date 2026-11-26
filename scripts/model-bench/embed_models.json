@@ -1,0 +1,20 @@
+{
+  "model": {
+    "name": "EmbeddingGemma 2 text Q8_0",
+    "url": "https://huggingface.co/ggml-org/embeddinggemma-2-GGUF/resolve/main/embeddinggemma-2-Q8_0.gguf",
+    "sha256": "2188ac1deca4b77dffefd603c2776a9d76d9d74ec01841392982ebb840b09135",
+    "bytes": 309855456
+  },
+  "runtime": {
+    "name": "llama.cpp b12497 generic android arm64 (3574df84b)",
+    "archive": "llama-b12497-bin-android-arm64.tar.gz",
+    "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12497/llama-b12497-bin-android-arm64.tar.gz",
+    "sha256": "543ef84950b07750899fff83c1b5e2718fe332c55f605867cb9b2cf42099722c",
+    "bytes": 80710755
+  },
+  "prompts": [
+    "task: search result | query: why did the harbor close?",
+    "title: Harbor barrier | text: The harbor council voted to approve a tide barrier across the east channel.",
+    "task: search result | query: harbor council barrier"
+  ]
+}

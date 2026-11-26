@@ -1,3 +1,13 @@
+## 2026-11-26: EmbeddingGemma 2 is measured on the Motorola through llama.cpp (yellow; lane `android-embed-bench`)
+
+What: `scripts/model-bench/embed.py` compiles a C++ harness against the pinned llama.cpp `b12497` archive and runs EmbeddingGemma 2 Q8_0 on the named phone through the public C API (`llama_batch_ext`/`llama_process`, explicit pool=unspecified). Three fixed text fixtures return 768-dimensional vectors; each process loads in 0.734–0.758 s, prefills at 163.9–213.7 tok/s and peaks at 528.7–529.0 MiB RSS. `embed_models.json` pins the model and runtime URLs, sizes and SHA-256. Raw rows, per-run logs and `results.json` are in `docs/evidence/model-bench-android-2026-11-26/embeddinggemma-q8/`.
+
+Why: A5 names EmbeddingGemma Q8_0 as the on-device embedder behind search, and the research record listed it as unmeasured. Measuring it through the same C API the APK will call checks both model fitness and the intended integration path rather than only a vendor figure.
+
+Proof: `python3 -I scripts/model-bench/embed.py --threads 4 ...` exited 0 on `ZY22H5K8QR`; the model SHA-256 is `2188ac1d…09135`, the generic llama.cpp archive SHA-256 is `543ef849…99722c`, and the compiled benchmark binary SHA-256 is `7444a78e…c958960`. `python3 -I -m unittest discover -s scripts/model-bench` passes 47 tests. This proves dimensions, load and prefill speed; retrieval quality and the 0.67 cosine floor are not proved here.
+
+Replaced: the "EmbeddingGemma Q8_0 unmeasured on the Motorola" note in `docs/reference/ON-DEVICE-MODELS.md`. Undo: revert this commit; no runtime behavior changes.
+
 ## 2026-11-26: the Android shipped-iOS parity inventory is checked (green; lane `android-parity-matrix`)
 
 What: `docs/reference/AUTORADIO-ANDROID-PARITY.md` names every required page/journey, its shared TypeScript/Contract authority, native package/app-module dependencies, current Android evidence, missing seam and owning A0–A7 station. It separately inventories the 17 package sources A0 saw substituted and the Apple-style app-module operation families that Android still lacks.
