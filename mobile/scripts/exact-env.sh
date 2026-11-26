@@ -25,6 +25,20 @@ exact_run() {
     else unset EXACT_PROFILE      # nothing else of a dev build is signed with a provisioning profile: a caller's stale one (a store or lab profile) is not handed on
     fi
   fi
+  _android=""; case "${1:-}:${2:-}" in android:*|agent:android|test:android|verify:android) _android=1 ;; esac
+  _path="$(dirname "${BUN:-$HOME/.bun-1.4.2/bin/bun}"):$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"
+  if [ -n "$_android" ]; then
+    # env -i below deliberately drops the caller's shell. Give Exact's Android host the SDK, JDK and selected device explicitly.
+    if [ -z "${JAVA_HOME:-}" ] && [ -x /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home/bin/java ]; then
+      JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+    fi
+    if [ -z "${ANDROID_HOME:-}" ] && [ -d "$HOME/Library/Android/sdk" ]; then ANDROID_HOME="$HOME/Library/Android/sdk"; fi
+    if [ -z "${EXACT_VERSION+x}" ]; then EXACT_VERSION="$("$HERE/scripts/app-identity.sh" version)" || return 1; fi
+    if [ -z "${EXACT_BUILD_NUMBER+x}" ]; then
+      EXACT_BUILD_NUMBER="$(/usr/bin/python3 -I -c 'import datetime; n=datetime.datetime.now(datetime.timezone.utc)-datetime.datetime(2026,1,1,tzinfo=datetime.timezone.utc); print(int(n.total_seconds()//60))')" || return 1
+    fi
+    [ -z "${ANDROID_HOME:-}" ] || _path="$ANDROID_HOME/platform-tools:$_path"
+  fi
   _bun="${BUN:-$HOME/.bun-1.4.2/bin/bun}"
   set -- "$_bun" exact.mjs "$@"
   _n=$#
@@ -32,13 +46,19 @@ exact_run() {
     eval "_isset=\${$_v+set}"
     if [ -n "$_isset" ]; then eval "_val=\$$_v"; set -- "$@" "$_v=$_val"; fi       # a value may hold spaces (a profile's path): one argument each
   done
+  if [ -n "$_android" ]; then
+    [ -z "${JAVA_HOME:-}" ] || set -- "$@" "JAVA_HOME=$JAVA_HOME"
+    [ -z "${ANDROID_HOME:-}" ] || set -- "$@" "ANDROID_HOME=$ANDROID_HOME"
+    [ -z "${ANDROID_SERIAL:-}" ] || set -- "$@" "ANDROID_SERIAL=$ANDROID_SERIAL"
+    [ -z "${ANDROID_NDK_HOME:-}" ] || set -- "$@" "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+  fi
   [ -z "${EXACT_SIM:-}" ] || set -- "$@" "EXACT_SIM=$EXACT_SIM"            # one argument each, whatever the value holds (a simulator name has spaces)
   [ -z "$_variant" ] || set -- "$@" "EXACT_VARIANT=$_variant"
   while [ "$_n" -gt 0 ]; do _a="$1"; shift; set -- "$@" "$_a"; _n=$((_n - 1)); done   # the assignments first, then the command
   "$HERE/scripts/gen-build-info.sh" || return 1     # About names the commit: never build from the previous commit's build-info.gen.ts
   ( cd "$HERE/AutoradioLab" || exit 1
     exec env -i HOME="$HOME" USER="${USER:-$(id -un)}" TMPDIR="${TMPDIR:-/tmp}" BUN="$_bun" APP_ID="$_scheme" \
-      PATH="$(dirname "$_bun"):$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin" \
+      PATH="$_path" \
       DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer EXACT2="$HERE/.exact-src" EXACT_FEEDBACK=0 EXACT_DEV_MENU=0 \
       "$@" )
 }

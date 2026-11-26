@@ -551,6 +551,23 @@ mobile/scripts/check-all.sh                    # every check that needs no simul
 mobile/scripts/proof-real.sh                   # real data on staging as the drill account; last line PROOF OK or PROOF FAILED at <step>; NOBUILD=1 skips the build
 ```
 
+**Android physical device.** In the lead's build tree, under the Mac build lock:
+
+```sh
+B=$(mobile/scripts/build-tree.sh path)
+cd "$B"
+/usr/bin/lockf -k -t 7200 ~/.cache/autoradio-mac-build.lock \
+  env AR_VARIANT=lab-one ANDROID_SERIAL=ZY22H5K8QR \
+      JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home \
+      ANDROID_HOME="$HOME/Library/Android/sdk" \
+      scripts/build-lab.sh android --install
+```
+
+The Android path stages only the shared Exact package; it does not stage or
+remove Apple model artifacts. The wrapper carries the Android environment and
+app version, and refuses a development Android build outside the build tree.
+Drive with `AR_VARIANT=lab-one ANDROID_SERIAL=ZY22H5K8QR scripts/exact.sh agent android ...`.
+
 **Why "the app never opened its agent socket" (cause, from Exact's source).** Three things, all of them outside our package:
 
 1. *Two drivers on one simulator.* Exact allows one app per bundle id per simulator and every launch uses `simctl launch --terminate-running-process` (`scripts/agent.mjs:529`, `:569`). Another builder's drive of `news.choir.autoradio.lab` on the same simulator kills our running copy: the driver sees "the app hung up (exit code 0)" (the exit is `Agent.exitAfterLanding`, `Agent.swift:140-146`, which runs when the socket closes: it is the other driver's launch, not a crash) or never gets its socket. Fix: `sim-device.sh` creates and boots a simulator of our own; `exact.sh` passes `EXACT_SIM` through its `env -i`.

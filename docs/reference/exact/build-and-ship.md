@@ -242,6 +242,29 @@ says `"10"` or `"11"` (`:22`, `:1545-1548`); `arm64-v8a` only (`:23`); its
 controls are the desktop painter's shapes and a sheet or chooser is refused
 (`:1642`); `check` is refused for every Android carrier (`:326`).
 
+### Autoradio's guarded Android route (2026-11-26)
+
+Run from the lead's one build tree, under the same Mac build lock as iOS:
+
+```sh
+B=$(mobile/scripts/build-tree.sh path)
+cd "$B"
+/usr/bin/lockf -k -t 7200 ~/.cache/autoradio-mac-build.lock \
+  env AR_VARIANT=lab-one ANDROID_SERIAL=ZY22H5K8QR \
+      JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home \
+      ANDROID_HOME="$HOME/Library/Android/sdk" \
+      scripts/build-lab.sh android --install
+```
+
+`build-lab.sh android` refreshes the shared package but leaves `modules/apple`
+and its xcframeworks untouched. `exact.sh` passes `JAVA_HOME`, `ANDROID_HOME`,
+`ANDROID_SERIAL`, `ANDROID_NDK_HOME` (when set) and platform-tools through its
+`env -i`; Android gets `EXACT_VERSION` from `app.json` (1.0) and a default build
+number of whole minutes since 2026-01-01 UTC unless `EXACT_BUILD_NUMBER` is
+given. Production and `dev` identities remain refused, and every development
+Android build/drive outside the build tree is refused before Exact runs.
+[unrun: current-main physical-phone proof is station A0.]
+
 ## Signing and device install (free provisioning)
 
 **Exact never creates provisioning profiles.** It signs with "a development

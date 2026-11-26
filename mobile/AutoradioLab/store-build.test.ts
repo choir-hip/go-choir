@@ -56,6 +56,11 @@
 //  D5 AR_APP_JSON (another identity file) reaches archive-store.sh or upload-store.sh and ships another version.
 //  D6 two archive runs (or a run after the record was lost) are given one build number; an override already given is given again.
 //  R11 check-store-signing.py refuses a valid App Store profile that omits get-task-allow, or one whose App ID prefix is not its team id (legacy prefix).
+//  Android build harness (failure list written before the code):
+//  H1 stage-app.sh treats android as a real platform but does not stage or delete the Apple model/module artifacts.
+//  H2 build-lab.sh android stages the shared package, runs Exact with the lab-one identity, app version 1.0 and an explicit build number.
+//  H3 exact.sh passes JAVA_HOME, ANDROID_HOME, ANDROID_SERIAL and platform-tools to an Android command, and does not leak them into an iOS command.
+//  H4 a development Android build or drive outside the one build tree is refused before Exact runs; production and dev identities remain refused.
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 // The store scripts run only on macOS: they call codesign, ditto, security and plutil at their system paths (F3), and the store archive is made only on the
 // lead's Mac. The groups that execute those tools run there and are skipped on the Linux CI runner, where the tools do not exist; every other group runs everywhere.
@@ -196,7 +201,7 @@ function tree(opts: TreeOpts = {}): Tree {
 D="${bin}"
 [ "\${1:-}" = install ] && exit 0
 printf 'exact\\n' >> "${t}/order.log"
-{ printf 'staged=[%s]\\n' "$(ls modules/apple 2>/dev/null | tr '\\n' ' ')"; printf 'args=[%s]\\n' "$*"; for v in EXACT_VARIANT APP_ID EXACT_VERSION EXACT_BUILD_NUMBER EXACT_NON_EXEMPT_ENCRYPTION EXACT_DEV_MENU EXACT_IDENTITY EXACT_PROFILE EXACT_FEEDBACK EXACT_SIM; do eval "x=\\\${$v-unset}"; printf '%s=[%s]\\n' "$v" "$x"; done; } > "$D/bun.last"
+{ printf 'staged=[%s]\\n' "$(ls modules/apple 2>/dev/null | tr '\\n' ' ')"; printf 'args=[%s]\\n' "$*"; for v in EXACT_VARIANT APP_ID EXACT_VERSION EXACT_BUILD_NUMBER EXACT_NON_EXEMPT_ENCRYPTION EXACT_DEV_MENU EXACT_IDENTITY EXACT_PROFILE EXACT_FEEDBACK EXACT_SIM JAVA_HOME ANDROID_HOME ANDROID_SERIAL ANDROID_NDK_HOME; do eval "x=\\\${$v-unset}"; printf '%s=[%s]\\n' "$v" "$x"; done; printf 'PATH=[%s]\\n' "$PATH"; } > "$D/bun.last"
 out=""; prev=""; for a in "$@"; do [ "$prev" = --archive ] && out="$a"; prev="$a"; done
 [ -n "$out" ] || exit 0
 mode="$(cat "$D/mode" 2>/dev/null || echo ok)"
@@ -1536,6 +1541,74 @@ describe.skipIf(!MAC)('N4 the check says when it is looking at little', () => {
       const ok = addToIpa(makeIpa(tr, 'two.ipa', { exe: 'MZ clean' }), { 'Payload/A.app/Frameworks/ExactModules.framework/ExactModules': Buffer.concat([MACHO, Buffer.from('ModelProof AutoradioModule')]) });
       r = uploadOf(tr, ok); expect(r.code, r.err).toBe(0);
       expect(r.out).not.toContain('WARNING'); expect(r.out).toContain('product code found in: Frameworks/ExactModules.framework/ExactModules');
+    } finally { tr.cleanup(); }
+  });
+});
+
+describe('the Android build harness', () => {
+  test('H1 stage-app android does not stage or delete the Apple model/module artifacts', () => {
+    const tr = tree();
+    try {
+      const apple = join(tr.m, 'AutoradioLab', 'modules', 'apple');
+      mkdirSync(apple, { recursive: true });
+      writeFileSync(join(apple, 'Models_Keep.swift'), '// keep\n');
+      mkdirSync(join(apple, 'FluidAudio.xcframework'), { recursive: true });
+      rmSync(join(tr.t, 'order.log'), { force: true });
+      const r = run(['/bin/sh', join(tr.m, 'scripts', 'stage-app.sh'), 'android', 'development'], tr.env({ AR_VARIANT: 'lab-one' }));
+      expect(r.code, r.err).toBe(0);
+      expect(readFileSync(join(apple, 'Models_Keep.swift'), 'utf8')).toBe('// keep\n');
+      expect(existsSync(join(apple, 'FluidAudio.xcframework'))).toBe(true);
+      expect(existsSync(join(tr.t, 'order.log'))).toBe(false); // no Apple sync and no Exact run
+    } finally { tr.cleanup(); }
+  });
+
+  test('H2 build-lab android carries the lab-one identity, version 1.0, build number and Android environment', () => {
+    const tr = tree();
+    try {
+      const r = run(['/bin/sh', join(tr.m, 'scripts', 'build-lab.sh'), 'android', '--install'], tr.env({
+        AR_VARIANT: 'lab-one', JAVA_HOME: '/jdk-21', ANDROID_HOME: '/android-sdk', ANDROID_SERIAL: 'ZY22H5K8QR', EXACT_BUILD_NUMBER: '42',
+      }));
+      expect(r.code, r.err).toBe(0);
+      const seen = readFileSync(join(tr.bin, 'bun.last'), 'utf8');
+      expect(seen).toContain('args=[exact.mjs android --install');
+      expect(seen).toContain(`APP_ID=[${LABONE}]`);
+      expect(seen).toContain('EXACT_VARIANT=[lab-one]');
+      expect(seen).toContain('EXACT_VERSION=[1.0]');
+      expect(seen).toContain('EXACT_BUILD_NUMBER=[42]');
+      expect(seen).toContain('JAVA_HOME=[/jdk-21]');
+      expect(seen).toContain('ANDROID_HOME=[/android-sdk]');
+      expect(seen).toContain('ANDROID_SERIAL=[ZY22H5K8QR]');
+      expect(seen).toContain('PATH=[/android-sdk/platform-tools:');
+      expect(readFileSync(join(tr.t, 'order.log'), 'utf8')).not.toContain('sync kind=');
+    } finally { tr.cleanup(); }
+  });
+
+  test('H3 an iOS command does not inherit the Android-only environment', () => {
+    const tr = tree();
+    try {
+      const r = run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), 'ios'], tr.env({
+        AR_VARIANT: 'lab-one', JAVA_HOME: '/jdk-21', ANDROID_HOME: '/android-sdk', ANDROID_SERIAL: 'ZY22H5K8QR',
+      }));
+      expect(r.code, r.err).toBe(0);
+      const seen = readFileSync(join(tr.bin, 'bun.last'), 'utf8');
+      expect(seen).toContain('JAVA_HOME=[unset]');
+      expect(seen).toContain('ANDROID_HOME=[unset]');
+      expect(seen).toContain('ANDROID_SERIAL=[unset]');
+    } finally { tr.cleanup(); }
+  });
+
+  test('H4 a development Android build or drive outside the build tree is refused before Exact runs', () => {
+    const tr = tree();
+    try {
+      for (const args of [['android'], ['agent', 'android', 'tree'], ['test', 'android']]) {
+        rmSync(join(tr.bin, 'bun.last'), { force: true });
+        const r = run(['/bin/sh', join(tr.m, 'scripts', 'exact.sh'), ...args], tr.env({
+          AR_VARIANT: 'lab-one', AUTORADIO_BUILD_TREE_FILE: join(tr.t, 'nowhere'),
+        }));
+        expect(r.code, args.join(' ') + r.err).not.toBe(0);
+        expect(r.err).toContain('build tree');
+        expect(existsSync(join(tr.bin, 'bun.last'))).toBe(false);
+      }
     } finally { tr.cleanup(); }
   });
 });

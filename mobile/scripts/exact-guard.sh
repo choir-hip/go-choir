@@ -20,7 +20,7 @@
 # linux, windows, android, and every `--device` build (a development install of the production id).
 # AR_VARIANT=dev (the production id as a development app, with Associated Domains) runs that list and an iOS phone build, nothing else (see DEV below).
 # With a development app chosen (AR_VARIANT=lab or lab-one) the list is the development app's, and it is a list of REFUSALS: everything is run except an archive and `share`; a
-# phone build needs the build tree. That is deliberate: a verb Exact adds later runs for a development app (its blast radius is a lab build, which is not the store app) and is
+# phone or Android build/drive needs the build tree. That is deliberate: a verb Exact adds later runs for a development app (its blast radius is a lab build, which is not the store app) and is
 # refused for the production app until it is listed. A development app's variant is only AR_VARIANT / AR_APP_ID: `--variant` and EXACT_VARIANT are refused.
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -49,6 +49,7 @@ if [ "$VERB" = share ] && [ -n "$VARIANT" ]; then no "share is not run for a dev
 DEV=""; [ "$VARIANT" != dev ] || DEV=1
 if [ -n "$VARIANT" ] && [ -z "$DEV" ]; then
   [ -z "$HAS_DEVICE" ] || in_tree "a phone build"
+  case "$VERB:${2:-}" in android:*|agent:android|test:android|verify:android) in_tree "an Android build or drive" ;; esac
   exit 0
 fi
 

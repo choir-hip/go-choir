@@ -3,13 +3,14 @@
 # run an Exact command in the app:  build-lab.sh ios   |   build-lab.sh ios --device --phone <udid>
 #                                   build-lab.sh mac --run     (the native AppKit app on this Mac; ALLOW_NO_MODELS=1 until the
 #                                                               macOS slices of the model libraries exist: scripts/ensure-deps.sh macos)
+#                                   build-lab.sh android --install [--run]  (the physical device named by ANDROID_SERIAL)
 # No choice builds the production app's id ("Autoradio 1"). AR_VARIANT=lab or lab-one (or AR_APP_ID=<its id>, app-identity.sh) builds a development app under its own
 # bundle id: Exact's own variant, so the tracked app.json is not changed (nothing to restore). The identity is checked here, before the sync, and again by exact.sh.
 # With no choice only what exact-guard.sh lists runs (the simulator, the web, this Mac, the checks); a build for a phone names its development app: the production id reaches phones
 # through the store (archive-store.sh), never as a development install. This script never archives (the guard refuses --archive) and always stages the development kind
 # (stage-app.sh): a store archive is archive-store.sh's alone, which stages the store kind (the Swift without the developer launch hooks) itself immediately before it builds.
 # AR_BUILD_KIND is not read here.
-# The ios path takes no build lock: its caller holds ~/.cache/autoradio-mac-build.lock. The mac path takes it itself, for the
+# The ios and android paths take no build lock: their caller holds ~/.cache/autoradio-mac-build.lock. The mac path takes it itself, for the
 # build only (a `--run` app that stays open must not hold it), unless AUTORADIO_MAC_LOCK_HELD is set by a caller that holds it.
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -22,7 +23,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 # What Exact may be asked to do (exact-guard.sh: a list, the same for exact.sh), checked before anything is synced or built.
 "$HERE/scripts/exact-guard.sh" build-lab "$@" || exit 1
 PLATFORM=ios
-case "${1:-}" in mac|macos) PLATFORM=macos ;; esac
+case "${1:-}" in mac|macos) PLATFORM=macos ;; android) PLATFORM=android ;; esac
 if [ "$PLATFORM" = macos ] && [ -z "${AUTORADIO_MAC_LOCK_HELD:-}" ]; then
   LOCK="${AUTORADIO_MAC_BUILD_LOCK:-$HOME/.cache/autoradio-mac-build.lock}"
   mkdir -p "$(dirname "$LOCK")"
