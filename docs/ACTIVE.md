@@ -29,21 +29,25 @@ Five missions were added as intentions, each with its own file:
 [shipping the app](definitions/choir-shipping-the-app-2026-11-23.md),
 [operations](definitions/choir-operations-podcasts-and-providers-2026-11-23.md) and
 [Autoradio in the desktop](definitions/choir-autoradio-in-the-desktop-2026-11-23.md) (deferred).
-Android is deferred on the owner's word; storage runs in the background. The
-design is being worked through with the owner in conversation
+Android is live again on the owner's 2026-11-25 word: build Autoradio 1 for the
+connected Motorola with feature parity with the shipped Exact iOS app. Storage
+runs in the background. The design is being worked through with the owner in conversation
 ([session record](design/design-session-2026-11-23.md),
 [ideal-form draft](design/ideal-form-draft-2026-11-23.md)); experiments come
 before the engine's design is decided.
 
-## Live goal from 2026-11-22: Autoradio on Android
+## Live goal: Autoradio 1 on Android, reactivated 2026-11-25
 
-The owner, 2026-11-22, with two old Android phones plugged in: "lets try to
-get autoradio running on it... thats a new mission to add to the
-metamission". Goal:
+The owner, 2026-11-25: "we have a choir platform... it should stay as is. we
+have web. same, stay. ios with exact (research exact). it should stay. just got
+to app store. what we need is android... need to get feature parity with exact
+ios for exact android... goal is to build autoradio 1 for the connected
+android." Goal:
 [`definitions/choir-autoradio-on-android-2026-11-22.md`](definitions/choir-autoradio-on-android-2026-11-22.md).
-The Motorola (64-bit, 3.4 GiB) is the target and the low-end model
-benchmark; the Samsung runs a 32-bit system Exact does not build for and is
-left out by default. Only the voice is native there too.
+The Motorola (64-bit, 3.4 GiB) is the physical target and low-end model
+benchmark. The mission keeps Choir, web and iOS unchanged, implements only the
+missing Kotlin native seams in the shared Exact app, and proves the version 1.0
+APK on the phone. The Samsung remains out by default.
 
 ## Live goal from 2026-11-22: storage efficiency
 

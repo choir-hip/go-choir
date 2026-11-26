@@ -31,7 +31,7 @@ metamission:
     readiness: executable
     status: working
     depends_on: []
-    note: 'Android: Autoradio running on an old Motorola from the shared codebase, and a measured table of which on-device models such a phone can run. Stations A0 to A5. Added on the owner''s word, 2026-11-22. Deferred on the owner''s word, 2026-11-23: no station starts until they say.'
+    note: 'Android: Autoradio 1 with shipped-iOS feature parity on the connected Motorola from the shared Exact codebase, plus a measured table of which on-device models the old phone can run. Stations A0 to A7. Added on the owner''s word, 2026-11-22; deferred 2026-11-23; reactivated and expanded on the owner''s word, 2026-11-25: "what we need is android... feature parity with exact ios for exact android... build autoradio 1 for the connected android."'
   - id: M5
     path: docs/definitions/choir-records-and-measurement-2026-11-23.md
     readiness: executable

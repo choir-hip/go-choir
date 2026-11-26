@@ -1501,17 +1501,20 @@ nodes:
       Owner 2026-11-23: "i want the metamission to contain all of our plans
       going forward". Recorded as an intention that day.
   - id: choir-autoradio-on-android-2026-11-22
-    title: Autoradio on Android — the shared codebase running on an old Motorola, and the model benchmark on it
+    title: Autoradio 1 on Android — shipped-iOS feature parity on the connected Motorola, with measured on-device models
     path: docs/definitions/choir-autoradio-on-android-2026-11-22.md
-    status: working  # 2026-11-22 on the owner's word
+    status: working  # reactivated and expanded 2026-11-25 on the owner's word
     kind: station
     entrypoint: true
     depends_on: []
     enables: []
     settled_by: owner
     note: >-
-      Owner 2026-11-22: "lets try to get autoradio running on it... thats a
-      new mission to add to the metamission".
+      Owner 2026-11-25: "we have a choir platform... it should stay as is.
+      we have web. same, stay. ios with exact (research exact). it should stay.
+      just got to app store. what we need is android... need to get feature
+      parity with exact ios for exact android... goal is to build autoradio 1
+      for the connected android." The 2026-11-23 deferral is lifted.
   - id: choir-storage-efficiency-2026-11-22
     title: Storage efficiency — no routine second copy of a store, restore inside its budget, the store measured by kind and cut
     path: docs/definitions/choir-storage-efficiency-2026-11-22.md
