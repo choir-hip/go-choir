@@ -95,3 +95,12 @@ name deck* the deck: play, hold, pause, seek, acknowledge, and the state and jou
 #   Conversation.swift              the turn engine's record of the question, the answers and their words (state of the voice turn; a candidate for the voice list when it is shown to be only that).
 #   RunSheetTypes.swift, RadioBridge.swift, BarState.swift, ChoirApp.swift, ChoirClient.swift, RadioProgramme.swift, the rest of the counted files: see the checker's list (scripts/check-autoradio-native-boundary).
 # AutoradioLab/modules/apple/ModelsEntry.swift (the app's own native module) is counted too since the checker reads that folder.
+# --- the on-device models (owner rule: "the on-device models are native"; Kotlin, Android)
+path mobile/exact-package/android/NativeModels.kt the one heavyweight llama.cpp model at a time, its executor, cancellation and close
+path mobile/exact-package/android/NativeBridge.kt the JNI surface libautoradio_models.so implements; no fallback loader
+path mobile/exact-package/android/NativeModelCatalog.kt the generated execution mirror of the pinned model ids, files and hashes
+path mobile/exact-package/android/ModelDownloadManager.kt manifest-pinned, Wi-Fi-only model download with SHA-256 and an atomic final file
+path mobile/exact-package/android/SileroState.kt Silero v6.2.1's exact 16 kHz context and [2,1,128] recurrent state
+path mobile/exact-package/android/SileroVad.kt Silero v6.2.1 op15 ONNX execution and its iterator hysteresis
+path mobile/exact-package/android/NativeModelSelfTest.kt the native model proof seam shared code drives; chooses nothing
+path mobile/exact-package/android/NativeTts.kt the Tiny Voca seam, which refuses until a real Android synthesis exists

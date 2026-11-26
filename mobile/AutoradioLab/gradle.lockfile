@@ -128,6 +128,7 @@ com.google.jimfs:jimfs:1.1=androidLintTool
 com.google.protobuf:protobuf-java:3.25.5=androidLintTool,unified-test-platform-gradle-work-action
 com.google.testparameterinjector:test-parameter-injector:1.22=debugUnitTestLintChecksClasspath,debugUnitTestRuntimeClasspath
 com.ibm.icu:icu4j:78.3=debugUnitTestCompileClasspath,debugUnitTestLintChecksClasspath,debugUnitTestRuntimeClasspath
+com.microsoft.onnxruntime:onnxruntime-android:1.32.0=debugAndroidTestCompileClasspath,debugAndroidTestLintChecksClasspath,debugCompileClasspath,debugLintChecksClasspath,debugRuntimeClasspath,debugUnitTestCompileClasspath,debugUnitTestLintChecksClasspath,debugUnitTestRuntimeClasspath,releaseCompileClasspath,releaseLintChecksClasspath,releaseRuntimeClasspath
 com.sun.istack:istack-commons-runtime:3.0.8=androidLintTool
 com.sun.xml.fastinfoset:FastInfoset:1.2.16=androidLintTool
 commons-codec:commons-codec:1.17.1=androidLintTool

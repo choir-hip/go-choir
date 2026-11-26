@@ -1,0 +1,1 @@
+windows=108 speech_windows=100 probability_min=0.015065 mean=0.932352 max=0.999999 total_ms=43.040 vmhwm_kb=56628

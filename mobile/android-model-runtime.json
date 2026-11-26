@@ -1,0 +1,168 @@
+{
+  "api": 34,
+  "pageAlignment": 16384,
+  "ndk": {
+    "version": "r27d",
+    "revision": "27.3.13750724"
+  },
+  "onnxRuntime": {
+    "version": "1.32.0",
+    "maven": "com.microsoft.onnxruntime:onnxruntime-android:1.32.0"
+  },
+  "llamaCpp": {
+    "release": "b12497",
+    "commit": "3574df84b776611928d9b227bf614be71fbb9849",
+    "sourceUrl": "https://github.com/ggml-org/llama.cpp/archive/3574df84b776611928d9b227bf614be71fbb9849.tar.gz",
+    "sourceSha256": "c8e5eaaa53640084d18a4b1c45eefad3d914f26adf523524b75a1afcdb3db092",
+    "sourceBytes": 39578878,
+    "sourceRoot": "llama.cpp-3574df84b776611928d9b227bf614be71fbb9849",
+    "licenseSha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+    "cmake": {
+      "buildType": "Release",
+      "sharedLibs": "ON",
+      "armArch": "armv8.2-a+dotprod+fp16",
+      "sharedLinkerFlags": "-Wl,-z,max-page-size=16384",
+      "targets": [
+        "llama",
+        "ggml",
+        "ggml-base",
+        "ggml-cpu"
+      ]
+    },
+    "libraries": [
+      "libllama.so",
+      "libggml.so",
+      "libggml-base.so",
+      "libggml-cpu.so"
+    ],
+    "systemLibraries": [
+      "libc.so",
+      "libdl.so",
+      "libm.so"
+    ],
+    "requiredSymbols": [
+      "llama_version",
+      "llama_model_default_params",
+      "llama_context_default_params",
+      "llama_backend_init",
+      "llama_log_set",
+      "llama_model_load_from_file",
+      "llama_model_free",
+      "llama_model_get_vocab",
+      "llama_model_n_embd_out",
+      "llama_init_from_model",
+      "llama_free",
+      "llama_get_memory",
+      "llama_memory_clear",
+      "llama_vocab_n_tokens",
+      "llama_tokenize",
+      "llama_batch_get_one",
+      "llama_decode",
+      "llama_get_embeddings_seq",
+      "llama_n_ctx",
+      "llama_vocab_is_eog",
+      "llama_sampler_chain_default_params",
+      "llama_sampler_chain_init",
+      "llama_sampler_chain_add",
+      "llama_sampler_free",
+      "llama_sampler_init_greedy",
+      "llama_sampler_init_top_k",
+      "llama_sampler_init_top_p",
+      "llama_sampler_init_temp",
+      "llama_sampler_init_dist",
+      "llama_sampler_sample",
+      "llama_token_to_piece"
+    ],
+    "wrapper": "libautoradio_models.so"
+  },
+  "tts": {
+    "available": false,
+    "reason": "Tiny Voca synthesis is not implemented on Android."
+  },
+  "models": [
+    {
+      "id": "qwen3-0.6b-q4_k_m",
+      "kind": "text",
+      "bytes": 396705472,
+      "embeddingDimension": 0,
+      "supportedVoices": [],
+      "files": [
+        {
+          "name": "Qwen3-0.6B-Q4_K_M.gguf",
+          "url": "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf",
+          "sha256": "ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a",
+          "bytes": 396705472
+        }
+      ]
+    },
+    {
+      "id": "qwen3-0.6b-q8_0",
+      "kind": "text",
+      "bytes": 639446688,
+      "embeddingDimension": 0,
+      "supportedVoices": [],
+      "files": [
+        {
+          "name": "Qwen3-0.6B-Q8_0.gguf",
+          "url": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf",
+          "sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+          "bytes": 639446688
+        }
+      ]
+    },
+    {
+      "id": "embeddinggemma-2-q8_0",
+      "kind": "embedding",
+      "bytes": 309855456,
+      "embeddingDimension": 768,
+      "supportedVoices": [],
+      "files": [
+        {
+          "name": "embeddinggemma-2-Q8_0.gguf",
+          "url": "https://huggingface.co/ggml-org/embeddinggemma-2-GGUF/resolve/main/embeddinggemma-2-Q8_0.gguf",
+          "sha256": "2188ac1deca4b77dffefd603c2776a9d76d9d74ec01841392982ebb840b09135",
+          "bytes": 309855456
+        }
+      ]
+    },
+    {
+      "id": "silero-vad-v6.2.1",
+      "kind": "vad",
+      "bytes": 1289603,
+      "embeddingDimension": 0,
+      "supportedVoices": [],
+      "files": [
+        {
+          "name": "silero_vad_16k_op15.onnx",
+          "url": "https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.1/src/silero_vad/data/silero_vad_16k_op15.onnx",
+          "sha256": "7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49",
+          "bytes": 1289603
+        }
+      ]
+    },
+    {
+      "id": "tiny-voca",
+      "kind": "tts",
+      "bytes": 25811168,
+      "embeddingDimension": 0,
+      "supportedVoices": [
+        "F2",
+        "M2"
+      ],
+      "files": [
+        {
+          "name": "tiny-voca-F32.gguf",
+          "url": "https://huggingface.co/ggml-org/tiny-voca-GGUF/resolve/main/tiny-voca-F32.gguf",
+          "sha256": "6cc38fe1a32ac312d906da6549a142de8cb6a2d0d1f10e63966a8f7c49be72cc",
+          "bytes": 12169280
+        },
+        {
+          "name": "mmproj-tiny-voca-F32.gguf",
+          "url": "https://huggingface.co/ggml-org/tiny-voca-GGUF/resolve/main/mmproj-tiny-voca-F32.gguf",
+          "sha256": "c70b6ba351335bb72bdd1ae42412f64490816c3accaec2a2c2990fbcfc33c48c",
+          "bytes": 13641888
+        }
+      ]
+    }
+  ]
+}

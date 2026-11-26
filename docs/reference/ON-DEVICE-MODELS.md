@@ -736,9 +736,42 @@ at 528.7–529.0 MiB. The SoC-tuned Snapdragon archive selected Adreno/Hexagon a
 (`SIGILL`), so it is not used. Raw rows, hashes and logs:
 `docs/evidence/model-bench-android-2026-11-26/`.
 
+**The APK's runtime (2026-11-26).** The shipped model code is compiled from
+llama.cpp's source at the pinned `b12497` commit with NDK r27d/API 34 rather
+than from the official prebuilt archive, whose `LOAD` segments are 4 KiB
+aligned and would fail on a 16 KiB-page device
+(`docs/problems/android-native-runtime-archive-2026-11-26.md`). The build links
+one CPU backend (`armv8.2-a+dotprod+fp16`) with
+`-Wl,-z,max-page-size=16384`, verifies every library's AArch64 ELF, SONAME,
+`DT_NEEDED` list and page alignment, and stages `libllama.so`, `libggml.so`,
+`libggml-base.so`, `libggml-cpu.so` and the JNI wrapper `libautoradio_models.so`
+into the package's `jniLibs/arm64-v8a`. Exact carries them into the APK under
+`lib/arm64-v8a` (patch 0002). ONNX Runtime `1.32.0` arrives through the package's
+`maven` line for Silero. The libraries are about 57 MB before the APK's own
+content; the APK is a lab build, not a store artifact.
+
+**Measured through the installed APK (2026-11-26).** The lab-one APK (versionCode
+474790, SHA-256 `977dfbeb1019387796b156055a682998839b134d632bafdde5ac0f144b333ce6`)
+was pulled back off the Motorola, and its packaged `lib/arm64-v8a` libraries were
+each confirmed AArch64 and 16 KiB aligned. Run through the APK's own
+`choir.autoradio.NativeModels` (Kotlin + JNI, not a separate binary): Qwen3-0.6B
+Q4_K_M loaded in 1.91 s and answered "The capital of France is Paris." at 22.6
+decode tok/s with 1,092 MiB peak RSS; EmbeddingGemma 2 Q8_0 loaded in 1.37 s and
+returned a 768-dimensional unit vector (`norm=1.000000`) in 104 ms with 618 MiB
+peak RSS; Silero v6.2.1 through the packaged ONNX Runtime C API (the same
+windows, context and state as `SileroVad.kt`, which the proof does not itself
+execute) scored 108 windows of the repository's 3.458 s speech fixture, 100 at
+or above 0.5, mean 0.932, in 43.0 ms with 55.3 MiB peak RSS. The proof is
+`scripts/proofs/android-a6-model-runtime.sh`; raw output is in
+`docs/evidence/android-a6-model-runtime-2026-11-26/`. No shared page or voice
+turn drives the runtime yet: that is A6's remaining work.
+
 **What is not proved.** No complete configuration, Fluid Speech Mini, Parakeet
 EOU, WeSpeaker or Phonon has been measured on this Motorola. EmbeddingGemma's
-speed is measured; its retrieval quality and cosine floor are not. File sizes are payload sizes, not RSS. The benchmark must
+speed is measured; its retrieval quality and cosine floor are not. The model
+runtime has no shared-page call path and no real-microphone turn yet, Tiny Voca
+synthesis has no Android implementation (it refuses), and the measured decode
+rate is a single short prompt, not a sustained or thermal run. File sizes are payload sizes, not RSS. The benchmark must
 record model/runtime hashes, cold and warm load, first-token/first-audio
 latency, RTF, WER where applicable, total PSS/native high-water, available
 memory, thermal state and battery delta on fixed fixtures. The existing

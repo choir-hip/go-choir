@@ -1,0 +1,7 @@
+probe=start kind=embedding model=embeddinggemma-2-q8_0 threads=4
+runtime=llama.cpp version=1.0.0-dev abi=1 available=true
+load_ms=1369 model=embeddinggemma-2-q8_0 bytes=309855456
+embed_ms=104
+dim=768 norm=1.000000 first=-0.0015134859
+vmhwm_kb=633388
+probe=done

@@ -1,0 +1,5 @@
+package=news.choir.autoradio.lab.one
+apk=/data/app/~~ukFKCCBvvgK_ommtUAuPnA==/news.choir.autoradio.lab.one-iTcilqpxV07ZBRLlItKgAQ==/base.apk
+apk_sha256=977dfbeb1019387796b156055a682998839b134d632bafdde5ac0f144b333ce6
+apk_bytes=91475679
+installed=versionCode=474790 minSdk=31 targetSdk=36 versionName=1.0

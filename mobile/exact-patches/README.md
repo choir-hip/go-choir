@@ -26,3 +26,21 @@ patch edits, `MarkupEditor.swift` and `MarkupHidden.swift`, are byte-identical b
 (`exact_markup_style`, whose `u32::MAX` selection the patch relies on), so every hunk's context matches. `git apply --cached --check` of this patch against a scratch index
 read from `f53347503` (`GIT_INDEX_FILE=<scratch> git read-tree f53347503`, no working files touched) **passed on 2026-11-20** [run]; `MarkupSyntaxHiding.swift` is a new file that upstream's `Sources/ExactMarkdown` directory target (path-based, no file list)
 compiles. Still **not compiled or run** by us.
+
+## 0002 a bound package's shared libraries reach the APK
+
+Autoradio's Android models are native code (`libautoradio_models.so` plus llama.cpp and ONNX Runtime), and the package's
+`android` directory is where its Kotlin lives. Exact passed only a package's Kotlin to Gradle, so a package could not ship a
+`.so`. The patch:
+- `scripts/agent-android.mjs` (`extensionArgs`): each bound package's `jniLibs/<abi>/` directory, when it exists, is
+  checked (it must resolve inside its package; only `.so` files; each file starts with the ELF magic and has a LOAD
+  segment at least 16 KiB aligned, so a zero-LOAD or non-ELF file cannot slip through) and passed as
+  `-PextensionJniLibs`; `mobile/scripts/check-android-model-runtime.py` independently refuses a missing, stale or
+  foreign staged runtime before an Android build;
+- `host/android/app/build.gradle.kts`: that property adds each directory to `sourceSets["main"].jniLibs`, so the libraries
+  are packaged uncompressed where `System.loadLibrary` finds them.
+- The check refuses a 4 KiB library by name before Gradle runs, so a package cannot ship an APK that fails on a 16 KiB-page
+  device. Not changed: the app's own Rust libraries, GPU modules and assets, which keep their existing staging.
+- Verified by `git apply --check -R` against the pin at `f53347503` with 0001 applied (2026-11-26) and by building the
+  Autoradio lab-one APK, whose `lib/arm64-v8a` carries the package's five libraries, all 16 KiB aligned, and by running
+  that APK's JNI runtime on the Motorola (`docs/evidence/android-a6-model-runtime-2026-11-26/`).

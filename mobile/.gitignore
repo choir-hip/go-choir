@@ -10,6 +10,10 @@ exact-package/apple/exact.json
 .deps
 *.gguf
 *.mlmodelc/
+# The Android model runtime built from pinned source in the lead's build tree (scripts/build_android_model_runtime.py).
+exact-package/android/jniLibs/
+exact-package/android/jniLibs.receipt.json
+exact-package/android/.jniLibs-*/
 AutoradioLab/modules/apple/Models_*.swift
 AutoradioLab/modules/apple/*.xcframework
 AutoradioLab/tiny-voca-resources/

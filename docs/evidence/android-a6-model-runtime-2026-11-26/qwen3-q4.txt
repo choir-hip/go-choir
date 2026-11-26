@@ -1,0 +1,14 @@
+probe=start kind=text model=qwen3-0.6b-q4_k_m threads=4
+runtime=llama.cpp version=1.0.0-dev abi=1 available=true
+load_ms=1910 model=qwen3-0.6b-q4_k_m bytes=396705472
+generate_ms=572
+gen_text=The capital of France is Paris.
+gen_promptTokens=36
+gen_generatedTokens=8
+gen_prefillMs=219.881
+gen_firstTokenMs=222.95
+gen_decodeMs=309.081
+gen_tokensPerSecond=22.648
+gen_cancelled=false
+vmhwm_kb=1118160
+probe=done

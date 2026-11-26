@@ -26,6 +26,11 @@ exact_run() {
     fi
   fi
   _android=""; case "${1:-}:${2:-}" in android:*|agent:android|test:android|verify:android) _android=1 ;; esac
+  # Every Android build or drive goes through here, including a direct `exact.sh android`: refuse a
+  # missing, stale or foreign compiled model runtime (gitignored build output) before Exact runs.
+  if [ -n "$_android" ] && [ "${ALLOW_NO_MODELS:-}" != "1" ]; then
+    /usr/bin/python3 -I "$HERE/scripts/check-android-model-runtime.py" || return 1
+  fi
   _path="$(dirname "${BUN:-$HOME/.bun-1.4.2/bin/bun}"):$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"
   if [ -n "$_android" ]; then
     # env -i below deliberately drops the caller's shell. Give Exact's Android host the SDK, JDK and selected device explicitly.
@@ -51,6 +56,7 @@ exact_run() {
     [ -z "${ANDROID_HOME:-}" ] || set -- "$@" "ANDROID_HOME=$ANDROID_HOME"
     [ -z "${ANDROID_SERIAL:-}" ] || set -- "$@" "ANDROID_SERIAL=$ANDROID_SERIAL"
     [ -z "${ANDROID_NDK_HOME:-}" ] || set -- "$@" "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+    [ -z "${ALLOW_NO_MODELS:-}" ] || set -- "$@" "ALLOW_NO_MODELS=$ALLOW_NO_MODELS"   # the one model-less escape, read again by the app's launcher
   fi
   [ -z "${EXACT_SIM:-}" ] || set -- "$@" "EXACT_SIM=$EXACT_SIM"            # one argument each, whatever the value holds (a simulator name has spaces)
   [ -z "$_variant" ] || set -- "$@" "EXACT_VARIANT=$_variant"

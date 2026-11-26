@@ -1,0 +1,73 @@
+diff --git a/host/android/app/build.gradle.kts b/host/android/app/build.gradle.kts
+index 9f869205b..c11c975d3 100644
+--- a/host/android/app/build.gradle.kts
++++ b/host/android/app/build.gradle.kts
+@@ -117,6 +117,9 @@ android {
+     // The modules' implementations the app binds (LLP 1133.001 D5): their Kotlin, and the roster naming them that
+     // `agent-android.mjs` writes (`-PextensionDirs`).
+     providers.gradleProperty("extensionDirs").orNull?.split(',')?.filter { it.isNotEmpty() }?.forEach { sourceSets["main"].kotlin.directories.add(it) }
++    // A bound package's shared libraries (`jniLibs/<abi>/*.so`): packaged uncompressed where System.loadLibrary finds
++    // them. agent-android.mjs passes only directories whose every ELF is at least 16 KiB page aligned.
++    providers.gradleProperty("extensionJniLibs").orNull?.split(',')?.filter { it.isNotEmpty() }?.forEach { sourceSets["main"].jniLibs.directories.add(it) }
+     // The runtime permissions the app's grant lines derive (`-Ppermissions`, LLP 1133.002 D6), and the queries and
+     // components its packages' manifest fragments declare (`-PmanifestFragment`, checked and written by
+     // scripts/android-manifest.mjs, LLP 1133.030 D9, LLP 1133.026 D19 item 3; with the share target's filters on the
+diff --git a/scripts/agent-android.mjs b/scripts/agent-android.mjs
+index 54089c0a4..8558848a5 100644
+--- a/scripts/agent-android.mjs
++++ b/scripts/agent-android.mjs
+@@ -33,7 +33,7 @@ import { writeFormaNames } from './forma-names.mjs';
+ import { spawn, spawnSync } from 'node:child_process';
+ import { createHash, randomUUID } from 'node:crypto';
+ import { inflateRawSync } from 'node:zlib';
+-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
++import { closeSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, readSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+ import { createConnection } from 'node:net';
+ import { homedir, tmpdir, userInfo } from 'node:os';
+ import { basename, dirname, resolve } from 'node:path';
+@@ -1329,9 +1329,44 @@ function extensionArgs(app, out, config, bound, firebase, development) {
+   const fragment = withAuthCallbacks(withAppLinks(withProtocolHandlers(withMetaData(manifestFragment(bound, { privacyPolicy: app.manifest?.privacy_policy ?? null }), [...configMetaData(config), ...(androidShareActivity(app.manifest?.share_target) ?? []), ...(notify ? CHANNELS_RECEIVER : [])]), handlers), links), callbacks), fragmentFile = resolve(apkDirs(app).app, 'manifest-fragment.xml');
+   rmSync(fragmentFile, { force: true });
+   if (fragment) { mkdirSync(dirname(fragmentFile), { recursive: true }); writeFileSync(fragmentFile, fragment); }
++  const extensionJniLibs = extensionLibraries(bound);
+   return [...(bound.length ? [`-PextensionDirs=${[...bound.flatMap((b) => b.dirs), generated].join(',')}`] : []), ...(permissions.length ? [`-Ppermissions=${permissions.join(',')}`] : []),
+     ...(fragment ? [`-PmanifestFragment=${fragmentFile}`] : []), ...(Object.keys(services).length ? [`-PforegroundServices=${JSON.stringify(services)}`] : []),
+-    ...(features.length ? [`-PandroidFeatures=${features.join(',')}`] : [])];
++    ...(features.length ? [`-PandroidFeatures=${features.join(',')}`] : []), ...(extensionJniLibs.length ? [`-PextensionJniLibs=${extensionJniLibs.join(',')}`] : [])];
++}
++
++/** Each bound package's own shared libraries (`jniLibs/<abi>/*.so`), shipped uncompressed in the APK where
++ * `System.loadLibrary` finds them. Every ELF's LOAD segments must meet Android's 16 KiB page-size contract: a library
++ * built for 4 KiB pages fails on a 16 KiB-page device, which is refused here rather than at the store. */
++function extensionLibraries(bound) {
++  const directories = [...new Set(bound.flatMap((b) => b.dirs.map((dir) => resolve(dir, 'jniLibs'))))].filter((dir) => existsSync(dir));
++  const elfMagic = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
++  for (const dir of directories) {
++    // The directory must stay inside the package it belongs to: a link out of it would ship a file
++    // the package's own manifest never named.
++    const packageDir = realpathSync(resolve(dir, '..'));
++    const real = realpathSync(dir);
++    if (real !== packageDir && !real.startsWith(packageDir + '/')) throw new Error(`${dir}: a package's jniLibs is a link outside its package`);
++    for (const abi of readdirSync(real)) {
++      const abiDir = resolve(real, abi);
++      if (!lstatSync(abiDir).isDirectory()) throw new Error(`${abiDir}: a package's jniLibs holds one directory per ABI`);
++      for (const name of readdirSync(abiDir)) {
++        const library = resolve(abiDir, name);
++        const stat = statSync(library);
++        if (!name.endsWith('.so') || !stat.isFile()) throw new Error(`${library}: a package's jniLibs holds only .so files`);
++        // A file may be a link (bun's file: dependency links into node_modules), but it must resolve to
++        // the same name under a jniLibs/<abi> directory, never to an arbitrary file outside one.
++        const realLibrary = realpathSync(library);
++        if (!realLibrary.endsWith(`/jniLibs/${abi}/${name}`)) throw new Error(`${library}: a package's shared library resolves outside a jniLibs/${abi} directory`);
++        const handle = openSync(library, 'r'), head = Buffer.alloc(4);
++        try { readSync(handle, head, 0, 4, 0); } finally { closeSync(handle); }
++        if (!head.equals(elfMagic)) throw new Error(`${library}: a package's jniLibs holds a file that is not an ELF`);
++        const alignment = loadAlignment(library);
++        if (!Number.isFinite(alignment) || alignment < 16384) throw new Error(`${abi}/${name}: a package's shared library has no 16 KB page-aligned LOAD segment`);
++      }
++    }
++  }
++  return directories;
+ }
+ 
+ /** The `am start` arguments that launch the app `id`, following the dev loop at `url` when there is one (LLP 1122 D4):

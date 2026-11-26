@@ -17,6 +17,14 @@
       "."
     ]
   },
+  "maven": [
+    "com.microsoft.onnxruntime:onnxruntime-android:1.32.0"
+  ],
+  "manifest": {
+    "permissions": [
+      "android.permission.ACCESS_NETWORK_STATE"
+    ]
+  },
   "artifacts": [],
   "class": "choir.autoradio.AutoradioModule"
 }

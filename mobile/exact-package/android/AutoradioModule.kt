@@ -5,7 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.RenderProcessGoneDetail
@@ -17,9 +21,13 @@ import android.webkit.WebViewClient
 import dev.exact.canvas.ExactExtension
 import dev.exact.canvas.ExtensionContext
 import dev.exact.canvas.ViewLifecycle
+import org.json.JSONException
 import org.json.JSONObject
+import java.io.File
 import java.net.URI
 import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 private enum class LinkRoute { inApp, external, refused }
 
@@ -45,12 +53,28 @@ private fun route(raw: String?): LinkRoute {
 
 /** The package's Android implementation. Unknown names are a refusal, never a silent substitute. */
 class AutoradioModule(context: ExtensionContext) : ExactExtension(context) {
+    private val main = Handler(Looper.getMainLooper())
+    private val modelExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "AutoradioModelProof").apply { isDaemon = true }
+    }
+    private val destroyed = AtomicBoolean(false)
+    private val nativeModelsLazy = lazy { NativeModels() }
+    private val nativeModels get() = nativeModelsLazy.value
+    private val downloadsLazy = lazy { ModelDownloadManager(File(context.data, "native-models"), ::onWifi) }
+    private val downloads get() = downloadsLazy.value
+    private val selfTestLazy = lazy { NativeModelSelfTest(nativeModels, downloads) }
+    private val selfTest get() = selfTestLazy.value
+
     override fun later(name: String, args: JSONObject, reply: (JSONObject) -> Unit) {
         when (name) {
             "readerOpenExternal" -> {
                 val ok = openExternal(Uri.parse(args.optString("url").trim()))
                 reply(JSONObject().put("ok", ok))
             }
+            "nativeModelFacts" -> modelWork(reply) { selfTest.facts() }
+            "nativeModelEnsure" -> modelWork(reply) { selfTest.ensure(args.getString("id")) }
+            "nativeModelRemove" -> modelWork(reply) { selfTest.remove(args.getString("id")) }
+            "nativeModelProof" -> modelWork(reply) { selfTest.proof(args) }
             else -> reply(JSONObject().put("error", "NotSupportedError"))
         }
     }
@@ -77,6 +101,48 @@ class AutoradioModule(context: ExtensionContext) : ExactExtension(context) {
 
     override fun destroyView(view: View) {
         (view as? PageWebView)?.destroyPage()
+    }
+
+    override fun destroy(done: () -> Unit) {
+        if (!destroyed.compareAndSet(false, true)) { done(); return }
+        try {
+            if (nativeModelsLazy.isInitialized()) nativeModels.close()
+        } finally {
+            modelExecutor.shutdown()
+            done()
+        }
+    }
+
+    /** Native model execution is the only reason these package names exist; shared TypeScript owns policy. */
+    private fun modelWork(reply: (JSONObject) -> Unit, work: () -> JSONObject) {
+        if (destroyed.get()) return reply(closed())
+        try {
+            modelExecutor.execute {
+                val answer = try {
+                    if (destroyed.get()) closed() else work()
+                } catch (error: NativeModelException) {
+                    JSONObject().put("error", error.code).put("message", error.message ?: error.code)
+                } catch (_: JSONException) {
+                    JSONObject().put("error", "INVALID_INPUT")
+                } catch (error: Throwable) {
+                    // A link error or an OOM on the worker must still answer exactly once; silence
+                    // would leave the shared caller waiting behind a reply that never comes.
+                    JSONObject().put("error", "NATIVE_MODEL_FAILED").put("message", error.message ?: error.javaClass.name)
+                }
+                main.post { reply(answer) }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            reply(closed())
+        }
+    }
+
+    private fun closed() = JSONObject().put("error", "CLOSED")
+
+    private fun onWifi(): Boolean {
+        val manager = context.application.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     private fun openExternal(uri: Uri): Boolean {
