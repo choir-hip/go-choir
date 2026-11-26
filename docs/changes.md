@@ -48,6 +48,16 @@ backfilled from the commit and nobody re-read the evidence for this page.
 Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 169 docs-only and 72 that change behavior.
 
+## 2026-11-26: Qwen3 and Tiny Voca run on the Motorola with pinned native artifacts (yellow; lane `android-model-bench`)
+
+What: `scripts/model-bench` gains a native llama.cpp job runner and pinned artifact manifest. It verifies runtime/model SHA-256 values, runs only on the named Motorola under a bounded `/data/local/tmp/mbench-native-*` directory, samples peak RSS, records thermal/battery state and cleans up on every exit. The first physical results measure Qwen3-0.6B Q4_K_M at 204.8 prefill / 36.0 decode tok/s and 872 MiB peak RSS, Q8_0 at 248.5 / 19.4 tok/s and 1,332 MiB, and Tiny Voca F2 at 2.36 s of speech in 0.19 s process time. The SoC-tuned llama.cpp archive is explicitly rejected after `SIGILL`; the generic Android arm64 build is used.
+
+Why: the owner, 2026-11-25: "need to find alternative on-device models. basically same models but compiled differently." The old Android phone is the baseline that decides the model ladder.
+
+Proof: `docs/evidence/model-bench-android-2026-11-26/` holds raw JSON/logs/meta, the generated WAV and its SHA-256, the TSV rows and the failed SoC binary record. Python native-harness tests pass. Not proved: EOU, Fluid Speech Mini, Silero, WeSpeaker, EmbeddingGemma, Phonon or a whole voice turn.
+
+Replaced: one-off manual llama.cpp commands. Undo: revert the harness/evidence commit; downloaded artifacts remain outside the repo and no app behavior changes.
+
 ## 2026-11-26: current-main Autoradio 1 runs signed out on the Motorola (yellow; lane `android-a0`)
 
 What: Exact's Android dependency lock and verification metadata are committed, and the current shared app is built as `news.choir.autoradio.lab.one` version 1.0 on the physical Motorola. The rerunnable A0 drive opens the launcher, Paper and a story, fetches 100 front stories and records the native gaps: 39 substituted reads across 17 package sources and 48 Apple-style app-module calls with no Android extension. The older `.lab` install is unchanged.

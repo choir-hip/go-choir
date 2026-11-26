@@ -1,0 +1,11 @@
+0.00.128.629 W load: SPM vocabulary, but newline token not found: unordered_map::at: key not found! Using special_pad_id instead.0.00.135.288 W embeddings enabled: setting n_batch = n_ubatch = 512
+0.00.137.622 I cmn          init: llama threadpool init, n_threads = 4
+0.00.137.863 W init: embeddings required but some input tokens were not marked as outputs -> overriding
+0.00.147.611 W load: adding 1 dummy tokens
+0.00.152.454 W load: adding 1 dummy tokens
+0.00.340.332 W llama_init_from_model: model default pooling_type is [-1], but [0] was specified
+0.00.370.103 W llama_init_from_model: model default pooling_type is [-1], but [0] was specified
+0.00.489.485 I generated 0 frames, 113196 bytes of WAV audio (24000 Hz)
+0.00.489.503 I timings: prompt eval 0.03s + generation 0.00s + vocoder 0.15s = total 0.19s
+0.00.489.504 I          output audio = 2.36s (audio time = 12.60x process time)
+0.00.489.766 I wrote tiny-voca-f2.wav

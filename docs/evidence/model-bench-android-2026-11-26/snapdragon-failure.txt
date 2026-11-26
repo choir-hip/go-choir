@@ -1,0 +1,23 @@
+Observed 2026-11-26 on ZY22H5K8QR. Command shape:
+
+  cd /data/local/tmp/mbench-llama-help
+  LD_LIBRARY_PATH=$PWD ./llama-bench -m Qwen3-0.6B-Q4_K_M.gguf \
+      -p 512 -n 64 -t 4 -ngl 0 -r 2 -o json
+
+Runtime archive:
+  llama-b12497-bin-android-arm64-snapdragon.tar.gz
+  SHA-256 230daf40746d3a7b3bd7a0e34549394e08c62bd9cc05b0cd80b01e8388ce09be
+
+Observed output:
+
+  ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+  ggml_opencl: device: 'QUALCOMM Adreno(TM) (OpenCL 3.0 Adreno(TM) 710)'
+  ggml-hex: Loading driver libcdsprpc.so
+  ggml-hex: forcing ndev to 1 for SoCs archs lower than v75.
+  ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+  ggml-hex: Hexagon Arch version v73, DMA64 disabled
+  ggml-hex: device 0: HTP0 (phys=0, virt=0, domain=cdsp:3)
+  Illegal instruction
+  exit 132
+
+No benchmark row was produced from this binary.

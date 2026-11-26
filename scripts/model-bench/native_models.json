@@ -1,0 +1,58 @@
+{
+  "runtime": {
+    "name": "llama.cpp b12497 generic android arm64 (3574df84b)",
+    "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12497/llama-b12497-bin-android-arm64.tar.gz",
+    "archive_sha256": "543ef84950b07750899fff83c1b5e2718fe332c55f605867cb9b2cf42099722c",
+    "archive_bytes": 80710755
+  },
+  "jobs": {
+    "qwen-q4": {
+      "dir": "qwen-q4",
+      "quant": "Q4_K_M",
+      "executable": "llama-bench",
+      "parser": "llama_bench",
+      "args": ["-m", "Qwen3-0.6B-Q4_K_M.gguf", "-p", "512", "-n", "64", "-t", "{threads}", "-ngl", "0", "-r", "{repeats}", "-o", "json"],
+      "files": {
+        "Qwen3-0.6B-Q4_K_M.gguf": {
+          "url": "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf",
+          "sha256": "ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a",
+          "bytes": 396705472
+        }
+      }
+    },
+    "qwen-q8": {
+      "dir": "qwen-q8",
+      "quant": "Q8_0",
+      "executable": "llama-bench",
+      "parser": "llama_bench",
+      "args": ["-m", "Qwen3-0.6B-Q8_0.gguf", "-p", "512", "-n", "64", "-t", "{threads}", "-ngl", "0", "-r", "{repeats}", "-o", "json"],
+      "files": {
+        "Qwen3-0.6B-Q8_0.gguf": {
+          "url": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf",
+          "sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+          "bytes": 639446688
+        }
+      }
+    },
+    "tiny-voca-f2": {
+      "dir": "tiny-voca",
+      "quant": "F32",
+      "executable": "llama-tts",
+      "parser": "tts",
+      "args": ["-m", "tiny-voca-F32.gguf", "-mm", "mmproj-tiny-voca-F32.gguf", "-t", "{threads}", "-ngl", "0", "--tts-voice", "F2", "-p", "Hello from Autoradio on Android.", "-o", "tiny-voca-f2.wav"],
+      "outputs": ["tiny-voca-f2.wav"],
+      "files": {
+        "tiny-voca-F32.gguf": {
+          "url": "https://huggingface.co/ggml-org/tiny-voca-GGUF/resolve/main/tiny-voca-F32.gguf",
+          "sha256": "6cc38fe1a32ac312d906da6549a142de8cb6a2d0d1f10e63966a8f7c49be72cc",
+          "bytes": 12169280
+        },
+        "mmproj-tiny-voca-F32.gguf": {
+          "url": "https://huggingface.co/ggml-org/tiny-voca-GGUF/resolve/main/mmproj-tiny-voca-F32.gguf",
+          "sha256": "c70b6ba351335bb72bdd1ae42412f64490816c3accaec2a2c2990fbcfc33c48c",
+          "bytes": 13641888
+        }
+      }
+    }
+  }
+}

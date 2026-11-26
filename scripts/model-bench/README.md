@@ -121,9 +121,32 @@ the one serial in the source, or send any request to the network (downloads
 are done by hand, from official release URLs, with sizes and SHA-256
 recorded). It does not run anything it downloaded on the Mac.
 
+## Native llama.cpp jobs (Android text and speech)
+
+`native.py` extends the same phone-safety rules to pinned native binaries and
+GGUF models. `native_models.json` records every URL, byte length and SHA-256;
+`fetch_native.py` downloads or verifies them under `~/.cache/model-bench`.
+
+```sh
+python3 -I scripts/model-bench/fetch_native.py
+python3 -I scripts/model-bench/native.py --job qwen-q4 --threads 4 --repeats 2 \
+  --out-dir /path/to/qwen-q4 --tsv /path/to/rows.tsv --json-out /path/to/bench.json
+python3 -I scripts/model-bench/native.py --job tiny-voca-f2 --threads 4 --repeats 1 \
+  --out-dir /path/to/tiny-voca-f2 --tsv /path/to/rows.tsv
+python3 -I -m unittest discover -s scripts/model-bench
+```
+
+The wrapper runs the command detached, samples `VmHWM` every 50 ms, saves
+stdout/stderr/meta and any declared output, computes the job metrics, appends a
+stable TSV row, and removes only its `/data/local/tmp/mbench-native-*` directory.
+The first Motorola results are in
+`docs/evidence/model-bench-android-2026-11-26/`.
+
 ## Not measured yet
 
 First-partial latency of streaming models (the online binary decodes a wav as
 fast as it can), noisy or far-field audio, speech over radio, battery draw
 (the phone is plugged in), sustained 10-minute thermal behaviour, cold page
-cache, any accelerator (CPU only), and the iPhone.
+cache, any accelerator (CPU only), and the iPhone. The native llama.cpp slice
+has measured Qwen3-0.6B Q4_K_M/Q8_0 and Tiny Voca F2 only; Silero, EOU, Fluid
+Speech Mini, WeSpeaker, EmbeddingGemma and Phonon remain open.

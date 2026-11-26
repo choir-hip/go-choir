@@ -1,0 +1,2 @@
+load_backend: loaded RPC backend from /data/local/tmp/mbench-native-qwen-q4-1795672566/libggml-rpc.so
+load_backend: loaded CPU backend from /data/local/tmp/mbench-native-qwen-q4-1795672566/libggml-cpu-android_armv8.2_2.so
