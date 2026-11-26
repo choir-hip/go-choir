@@ -117,3 +117,14 @@ defaults in the table: `owner_act_mode` is misfiled (it is the observe
 stage of an auth refusal, which the owner ruled to keep on 2026-10-24), and
 shipping twelve dispatch slots on every computer is not a change to make
 while the owner sleeps.
+
+## 2026-11-26: the walk-by date passed again
+
+The entries were moved to their own expiry (2026-11-25) with the note "not
+to be moved again: start E1 or delete it". The date has now passed with E1
+never started, so the same five `FAIL` lines returned and main's CI was red
+again. The registry now records `retire: "delete"` for each arm (the gate's
+declared path for a switch that stays off) and the holds name this date; no
+setting, no `rlm_reduce.go` code and no experiment design changed. This is
+the stopgap, not the read-out: deleting the arms remains the red change the
+2026-11-19 record describes and is still calibration's to make.

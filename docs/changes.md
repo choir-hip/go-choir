@@ -1,3 +1,13 @@
+## 2026-11-26: the expired E1 arms stop blocking every deploy (yellow; rollback: revert)
+
+What: `switches/registry.yaml`'s five calibration E1 arms (`calibration_e1_restate`, `_pull`, `_stub`, `_two_stage`, `_baseline`) record `retire: "delete"`, the gate's own declared path for a switch that stays off, and each `hold` names the 2026-11-26 walk-by and says the arms and their code are untouched.
+
+Why: the arms' `grandfathered_off_until` (2026-11-25, moved once from 2026-11-18 in the 2026-11-19 incident) passed with E1 never started (starting it is the owner's act), so `scripts/check-switch-registry` failed and every CI run on main was red; nothing deployed, which also blocks the Android auth assetlinks. Deleting the arms is the red change the 2026-11-19 record says is not the lead's to make; recording the verdict unblocks the lint without changing a setting or a line of runtime code.
+
+Proof: `python3 scripts/check-switch-registry` -> `check-switch-registry: ok (65 switches, 49 warning(s))` on this tree; `python3 -I scripts/selftest-switch-registry` -> 0 failures. Not proved: that E1 itself is resolved; calibration still owns deleting the five arms and their code.
+
+Replaced: the temporary date move of 2026-11-19. Undo: revert this commit (the lint fails again at the next run).
+
 ## 2026-11-26: the Android deck plays the radio and survives the screen (orange; lane `android-deck`)
 
 What: `@choir/autoradio`'s Android implementation now has the deck: `DeckController` (the Apple deck's named rules over a replaceable engine), `DeckJournal` (a bounded, atomic durable journal), `DeckAndroid` (the process's one deck and its Exact source) and `DeckMediaEngine` (Media3 `ExoPlayer`, speech synthesised to files through the device's `TextToSpeech`, the process's audio-focus claim, and the host's `PlaybackService`/`MediaSessionService`). The six deck names (`deckState`, `deckPlay`, `deckEnqueue`, `deckAct`, `deckAck`, `deckWipe`) are declared once in `mobile/exact-package/interface/deck.json`, so shared code calls the same package names on both phones; `deck-native.ts` reads them from `@choir/autoradio`. Exact patch `0003-media-player-for-background-playback.patch` links Media3 and the playback service for any app whose `audio_session` is `playback`, not only one whose plan makes a video node. `mobile/AutoradioLab/story-text.ts` reads a published story's title and text from its resolve bundle without `JSON.parse`ing the 1.4 MB bundle, which alone took a phone turn over Exact's 100 ms budget; `radio-bridge.ts` uses it for the station's words and the writer's texts and yields the turn around the sheet's parse.

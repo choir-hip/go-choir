@@ -1794,8 +1794,8 @@
    "expires": "2026-11-25",
    "ring": "none",
    "grandfathered_off_until": "2026-11-25",
-   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it",
-   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it. On 2026-11-26 the gate passed its walk-by date with E1 never started; the registry records the verdict delete (this is not the deletion: the arms, rlm_reduce.go and the E1 design are untouched), so the lint stops blocking every deploy while calibration deletes the arms",
+   "retire": "delete",
    "note": "E1-M: management restates each engineering Cast's predictions once (p1), shown its own per-kind record for the Casts in the record arm (salted hash of the Cast id). Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
   },
   {
@@ -1816,8 +1816,8 @@
    "expires": "2026-11-25",
    "ring": "none",
    "grandfathered_off_until": "2026-11-25",
-   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it",
-   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it. On 2026-11-26 the gate passed its walk-by date with E1 never started; the registry records the verdict delete (this is not the deletion: the arms, rlm_reduce.go and the E1 design are untouched), so the lint stops blocking every deploy while calibration deletes the arms",
+   "retire": "delete",
    "note": "E1-E (b) pull: no digest turn; choir.Calibration() returns the record to every engineer run. Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
   },
   {
@@ -1838,8 +1838,8 @@
    "expires": "2026-11-25",
    "ring": "none",
    "grandfathered_off_until": "2026-11-25",
-   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it",
-   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it. On 2026-11-26 the gate passed its walk-by date with E1 never started; the registry records the verdict delete (this is not the deletion: the arms, rlm_reduce.go and the E1 design are untouched), so the lint stops blocking every deploy while calibration deletes the arms",
+   "retire": "delete",
    "note": "E1-E (c) stub: a short headline pushed at activation start naming choir.Calibration(). Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
   },
   {
@@ -1860,8 +1860,8 @@
    "expires": "2026-11-25",
    "ring": "none",
    "grandfathered_off_until": "2026-11-25",
-   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it",
-   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it. On 2026-11-26 the gate passed its walk-by date with E1 never started; the registry records the verdict delete (this is not the deletion: the arms, rlm_reduce.go and the E1 design are untouched), so the lint stops blocking every deploy while calibration deletes the arms",
+   "retire": "delete",
    "note": "E1-E (d3) two-stage: the engineer restates its first Precommits once, shown its record in the record arm. Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
   },
   {
@@ -1882,8 +1882,8 @@
    "expires": "2026-11-25",
    "ring": "none",
    "grandfathered_off_until": "2026-11-25",
-   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it",
-   "retire": "delete when E1 reads out: the winning delivery becomes the default and the arm settings go",
+   "hold": "an experiment arm, not a feature switch: E1 starts by the owner's act after the 12-hour no-change baseline on the five test arms (docs/design/calibration-experiment-e1-2026-11-04.md). The walk-by date was moved once, from 2026-11-18 to the entry's own expiry, on 2026-11-19, when it turned CI red at midnight UTC with E1 neither started nor deleted (docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md); it is not to be moved again: start E1 or delete it. On 2026-11-26 the gate passed its walk-by date with E1 never started; the registry records the verdict delete (this is not the deletion: the arms, rlm_reduce.go and the E1 design are untouched), so the lint stops blocking every deploy while calibration deletes the arms",
+   "retire": "delete",
    "note": "E1-E no seed: nothing pushed, nothing to pull. Off on every computer is the shipped behaviour and E1's comparator, not a disabled mechanism. Each claim records the delivery it actually got (calibration_delivery)."
   }
  ]
