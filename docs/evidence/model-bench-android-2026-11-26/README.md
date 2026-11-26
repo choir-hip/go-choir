@@ -19,6 +19,7 @@ phone directory on success, failure, timeout or Ctrl-C.
 | Qwen3-0.6B | Q4_K_M | 204.755 | 36.039 | - | - | 12.317 | 872.2 | ok |
 | Qwen3-0.6B | Q8_0 | 248.474 | 19.374 | - | - | 14.508 | 1331.8 | ok |
 | Tiny Voca F2 | F32 + mmproj | - | - | 2.36 | 0.19 | 0.625 | 64.2 | ok |
+| Silero VAD v6.2.1 | op15 ONNX | - | - | 4.010 | 0.341 | 0.341 | 58.2 | ok |
 
 Q4_K_M is the prudent first Android responder: it clears the existing 15
 tok/s decode and 150 tok/s prefill bars with margin and leaves much more memory
@@ -26,7 +27,10 @@ than Q8_0. Q8_0 also clears the bars on this phone but has roughly half the
 decode margin and about 460 MiB more peak RSS. Tiny Voca F2 produced 2.36 s of
 24 kHz speech in 0.19 s of process time; its WAV SHA-256 is
 `4da2362cfaf40ae89abc5329e656636c5020e09092cf43915be22609fc36097d`
-(113,196 bytes).
+(113,196 bytes). Silero v6.2.1 processed a 4.010 s fixture in 0.341 s
+(including load), found the 0.542-4.000 s speech segment and peaked at 58.2 MiB;
+its output WAV SHA-256 is
+`9ef6159930472d26f4b6e9bab3c7897a5a6e2fafec52542653122699ed0624ad`.
 
 `rows.tsv` is the machine-readable result. `qwen-q4/bench.json` and
 `qwen-q8/bench.json` are llama.cpp's raw JSON. Each job directory keeps its
@@ -44,8 +48,8 @@ SoC-tuned binary for the generic one.
 
 ## Not measured yet
 
-Silero, Parakeet EOU, Fluid Speech Mini GGUF, WeSpeaker, EmbeddingGemma, Phonon,
-a whole voice turn, noisy/far-field speech, battery draw and sustained heat.
+Parakeet EOU, Fluid Speech Mini GGUF, WeSpeaker, EmbeddingGemma, Phonon, a whole
+voice turn, noisy/far-field speech, battery draw and sustained heat.
 The existing CPU ASR measurements remain in
 `docs/evidence/model-bench-2026-11-22/`; this directory extends that harness
 rather than replacing it.

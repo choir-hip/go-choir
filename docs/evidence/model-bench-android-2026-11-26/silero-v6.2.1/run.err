@@ -1,0 +1,5 @@
+/k2-fsa/sherpa-onnx/sherpa-onnx/csrc/parse-options.cc:Read:379 ./sherpa-onnx-vad --silero-vad-model=silero_vad_16k_op15.onnx --silero-vad-window-size=512 --vad-num-threads=4 input.wav output.wav 
+
+VadModelConfig(silero_vad=SileroVadModelConfig(model="silero_vad_16k_op15.onnx", threshold=0.5, min_silence_duration=0.5, min_speech_duration=0.25, max_speech_duration=20, window_size=512, neg_threshold=-1), ten_vad=TenVadModelConfig(model="", threshold=0.5, min_silence_duration=0.5, min_speech_duration=0.25, max_speech_duration=20, window_size=256), sample_rate=16000, num_threads=4, provider="cpu", debug=False)
+0.542 -- 4.000
+Saved to output.wav

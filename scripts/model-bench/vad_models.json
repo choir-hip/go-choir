@@ -1,0 +1,16 @@
+{
+  "model": {
+    "name": "Silero VAD v6.2.1 op15",
+    "url": "https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.1/src/silero_vad/data/silero_vad_16k_op15.onnx",
+    "sha256": "7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49",
+    "bytes": 1289603
+  },
+  "runtime": {
+    "name": "sherpa-onnx v2.0.3 android-aarch64-termux-shared + hash_memory shim",
+    "archive": "sherpa-onnx-v2.0.3-android-aarch64-termux-shared.tar.bz2",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.3/sherpa-onnx-v2.0.3-android-aarch64-termux-shared.tar.bz2",
+    "sha256": "f3175bb258db62badcaa0d7b6a3da4bd898bc80d567944511ca30c0f08aee4fb",
+    "bytes": 17867876,
+    "directory": "sherpa-onnx-v2.0.3-android-aarch64-termux-shared"
+  }
+}

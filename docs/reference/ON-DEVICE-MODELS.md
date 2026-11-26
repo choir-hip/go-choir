@@ -727,14 +727,15 @@ AAR is the preferred Silero/WeSpeaker route; NNAPI is not the SM6450 baseline.
 **Measured on this Motorola (2026-11-26).** The generic llama.cpp `b12497`
 Android arm64 build ran Qwen3-0.6B Q4_K_M at 204.8 prefill / 36.0 decode tok/s
 with 872 MiB peak RSS, Q8_0 at 248.5 / 19.4 tok/s with 1,332 MiB, and Tiny Voca
-F2 produced 2.36 s of speech in 0.19 s process time with 64 MiB peak RSS. The
-SoC-tuned Snapdragon archive selected Adreno/Hexagon and then exited 132
+F2 produced 2.36 s of speech in 0.19 s process time with 64 MiB peak RSS. Exact
+Silero v6.2.1 op15 through sherpa-onnx processed a 4.010 s fixture in 0.341 s
+(including load), found the 0.542-4.000 s speech segment and peaked at 58.2 MiB.
+The SoC-tuned Snapdragon archive selected Adreno/Hexagon and then exited 132
 (`SIGILL`), so it is not used. Raw rows, hashes and logs:
 `docs/evidence/model-bench-android-2026-11-26/`.
 
-**What is not proved.** No complete configuration, Fluid Speech Mini, exact
-Silero, Parakeet EOU, WeSpeaker, EmbeddingGemma Q8_0 or Phonon has been measured
-on this Motorola. File sizes are payload sizes, not RSS. The benchmark must
+**What is not proved.** No complete configuration, Fluid Speech Mini, Parakeet
+EOU, WeSpeaker, EmbeddingGemma Q8_0 or Phonon has been measured on this Motorola. File sizes are payload sizes, not RSS. The benchmark must
 record model/runtime hashes, cold and warm load, first-token/first-audio
 latency, RTF, WER where applicable, total PSS/native high-water, available
 memory, thermal state and battery delta on fixed fixtures. The existing
