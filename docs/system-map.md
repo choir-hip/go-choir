@@ -317,8 +317,12 @@ Android A0 (2026-11-26): current main built `news.choir.autoradio.lab.one`
 version 1.0 and ran it on the physical Motorola. The signed-out Paper fetched
 100 stories and a story opened; 39 native reads were substituted and 48
 Apple-style extension calls failed. This proves the shared Android host and
-build route, not feature parity. The Kotlin package, auth, audio and voice are
-still missing. Artifact: `docs/evidence/android-a0-2026-11-26/`.
+build route, not feature parity. The package-first Kotlin `ExactExtension` now
+serves `readerOpenExternal` and `web-page`; its APK compiled and installed, and
+seat 1 accepted the repaired candidate `c1d29501e`. The physical WebView drill,
+Kotlin deck, auth, audio and voice are still missing. Artifacts:
+`docs/evidence/android-a0-2026-11-26/` and
+`docs/evidence/android-package-seat1-*-2026-11-26.txt`.
 
 Key paths: `mobile/AutoradioLab/app.ts`, `radio-runtime.ts`,
 `radio-bridge.ts`, `mobile/AutoradioKit/`, `docs/reference/exact/deck.md`,

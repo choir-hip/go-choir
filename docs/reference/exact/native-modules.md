@@ -37,6 +37,17 @@ ExtensionContext) : ExactExtension(context)`). Android runs one session a
 process. Native views are Kotlin `ExactExtension.view`
 (`docs/contract-for-agents.md:3315-3325`).
 
+Autoradio's Android implementation (2026-11-26) is
+`mobile/exact-package/android/AutoradioModule.kt`, an `ExactExtension` exported
+as `@choir/autoradio/android`. It currently serves `readerOpenExternal` and the
+`web-page` package view; every other name answers `NotSupportedError` until its
+station implements it. The generator emits the Android export only when the
+implementation manifest exists. The package APK compiled and installed on the
+Motorola, and seat 1 accepted the repaired frozen candidate `c1d29501e` after a
+send-back on event ordering, failed-load completion, renderer death, URL
+validation and attached-view destruction. Physical WebView interaction remains
+a named proof obligation; see `docs/evidence/android-package-seat1-*-2026-11-26.txt`.
+
 What a platform does with an interface name it has no implementation for:
 Exact's standard packages answer `NotSupportedError` and `available: false`
 (`docs/reference.md:3143`), and under the agent an interface that is its own

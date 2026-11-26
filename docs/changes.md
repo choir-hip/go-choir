@@ -1,3 +1,13 @@
+## 2026-11-26: Autoradio has a package-first Android extension (orange; lane `android-package`)
+
+What: `@choir/autoradio` now exports an Android `ExactExtension`. It implements the shared `readerOpenExternal` send and the `web-page` package view with strict URL routing, WebView lifecycle/error/renderer handling, external-app hand-off and safe destruction. The interface generator preserves the Android export without changing Apple or web behavior. Unknown native names still refuse explicitly rather than silently substituting.
+
+Why: the A0 physical drive recorded 48 Apple-style app-module calls with no Android extension. The package seam is the correct Android path; porting `ModelsEntry.swift` would recreate the wrong boundary.
+
+Proof: the APK compiled and installed on `ZY22H5K8QR`; focused package tests pass 4/4, the whole shared Bun suite passes 1,785 with 1 skip, and the native-boundary gate holds at 34 files / 3,406 lines / 18 names with the Android platform seam explicitly listed and its reason written beside it. Seat 1 first sent back five lifecycle/security defects, then accepted the repaired frozen candidate `c1d29501e` (diff SHA-256 `25d635360b66aed2f7d79965703be35ecad4c76706a993da6d0b9269170edb55`); both receipts are in `docs/evidence/android-package-seat1-*-2026-11-26.txt`. Not proved yet: the physical WebView interaction, external-link matrix and teardown drill.
+
+Replaced: the absent Android package export. Undo: revert the commit; the shared web and iOS paths are unchanged.
+
 ## 2026-11-26: Android model routes are researched and separated from device proof (green; lane `android-model-research`)
 
 What: `docs/reference/ON-DEVICE-MODELS.md` now records the Android route for every current iOS model job: Silero and WeSpeaker through ONNX Runtime/sherpa-onnx, Parakeet EOU INT8 ONNX, Fluid Speech Mini GGUF through parakeet.cpp, Qwen3 and EmbeddingGemma through llama.cpp, and Tiny Voca or Phonon for speech. It distinguishes identical weights, new conversions and substitutes; lists sizes, licenses and primary sources; and states what has not been measured on the Motorola. The Android goal now uses the package-first ExactExtension seam and extends the landed ASR benchmark instead of creating a second one. The stale foreground-only Android deck note is corrected: pinned Exact already has Media3 background playback, but Autoradio's Kotlin deck is still absent.

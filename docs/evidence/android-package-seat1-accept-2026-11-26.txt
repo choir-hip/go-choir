@@ -1,0 +1,59 @@
+**ACCEPT**
+
+All five prior blocking findings are closed in commit `c1d29501e` (diff SHA-256 `25d635360b66aed2f7d79965703be35ecad4c76706a993da6d0b9269170edb55`), with no new blocking defects found.
+
+---
+
+### Verification of Prior Blockers
+
+1. **Initial `show()` before event binding — Closed**
+   - [AutoradioModule.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L58-L66) now returns `PageWebView(context, emit, ::openExternal)` from `view(...)` without calling `show()`, and loads only when `update(...)` runs.
+   - Verified against [Natives.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/qa-mac/mobile/.exact-src/host/android/canvas/src/main/java/dev/exact/canvas/Natives.kt#L620-L653) and [Extensions.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/qa-mac/mobile/.exact-src/host/android/canvas/src/main/java/dev/exact/canvas/Extensions.kt#L736-L743): `PackageView.events` is bound in `bindEvents(e)` (and in `unpark(e)` at lines 859–861) before `apply(e, ...)` calls `PackageView.update(...)`, so initial `"loading"` / `"failed"` messages are no longer dropped.
+
+2. **`done`/`load` emitted after a failed main-frame load — Closed**
+   - [AutoradioModule.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L110-L153) resets `mainFrameFailed = false` in `show()` and `onPageStarted()`, sets `mainFrameFailed = true` and emits `("message", "failed")` in `onReceivedError()` when `request.isForMainFrame` is true, and returns early in `onPageFinished()` if `mainFrameFailed` is true before emitting `"done"` or `"load"`.
+
+3. **Missing `onRenderProcessGone` — Closed**
+   - [AutoradioModule.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L155-L160) overrides `onRenderProcessGone`, marks `mainFrameFailed = true`, emits `("message", "failed")`, calls `destroyPage()`, and returns `true` so Android does not terminate the host process.
+
+4. **Permissive `Uri.parse` and external launch from `page` prop — Closed**
+   - `route(raw)` ([AutoradioModule.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L27-L44)) trims whitespace, rejects whitespace, ISO control characters, and `\`, parses with `java.net.URI(text)`, requires `isAbsolute`, requires non-empty `host` and `rawAuthority` for `http`/`https`, and requires non-empty `rawSchemeSpecificPart` for `mailto`/`tel`/`sms`/`facetime`.
+   - `PageWebView.show(page)` ([AutoradioModule.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L171-L175)) loads in-place only on `LinkRoute.inApp` and emits `("message", "failed")` on `LinkRoute.external` and `LinkRoute.refused`.
+   - `openExternal` ([AutoradioModule.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L82-L100)) validates with `route()`, checks `context.leave(uri.toString(), "external")`, adds `Intent.CATEGORY_BROWSABLE` for `http`/`https`, adds `Intent.FLAG_ACTIVITY_NEW_TASK` when `context.activity == null`, and catches `ActivityNotFoundException` and `SecurityException`.
+
+5. **`WebView.destroy()` while attached — Closed**
+   - `PageWebView.destroyPage()` ([AutoradioModule.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L186-L193)) guards with `destroyed`, calls `stopLoading()`, detaches via `(parent as? ViewGroup)?.removeView(this)` before resetting `webViewClient` and calling `destroy()`.
+   - Lifecycle forwarding (`RESUME` -> `resumePage()`, `PAUSE`/`STOP` -> `pausePage()`, `DESTROY` -> `destroyPage()`) and `destroyView()` match [HostedLifecycle.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/qa-mac/mobile/.exact-src/host/android/canvas/src/main/java/dev/exact/canvas/HostedLifecycle.kt#L52-L57) and [Natives.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/qa-mac/mobile/.exact-src/host/android/canvas/src/main/java/dev/exact/canvas/Natives.kt#L1449-L1453).
+
+---
+
+### Contract & Cross-Cutting Checks
+
+- **Reply-once behavior**: `later()` ([AutoradioModule.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L48-L56)) synchronously calls `reply(...)` once in both `"readerOpenExternal"` and `else` branches (`openExternal` returns `Boolean` on all caught exceptions).
+- **`shouldOverrideUrlLoading` & `about:`**: [AutoradioModule.kt](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L122-L135) allows `http`/`https` (`false`), hands off `mailto`/`tel`/`sms`/`facetime` via `openExternal` and cancels WebView navigation (`true`), allows `about:` and subframes (`request.isForMainFrame && !about` -> `false`), and blocks other schemes on the main frame (`true`), matching [AutoradioModule+Reader.swift](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/apple/AutoradioModule+Reader.swift#L56-L63).
+- **Generator / export / manifest**: [gen-exact-interface.py](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/scripts/gen-exact-interface.py#L61-L65), [package.json](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/package.json#L5-L9), and [android/exact.json](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/exact.json#L1-L22) match Exact's Android package discovery in [typescript.mjs](file:///Users/wiz/Dev/go-choir/.lane/trees/qa-mac/mobile/.exact-src/js/bake/src/typescript.mjs#L1278-L1284) and [agent-android.mjs](file:///Users/wiz/Dev/go-choir/.lane/trees/qa-mac/mobile/.exact-src/scripts/agent-android.mjs#L1278-L1310).
+
+---
+
+### Non-Blocking Findings
+
+1. **Uppercase schemes in `openExternal` (`Intent` matching on Android)** — [AutoradioModule.kt:51,88](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L51)
+   - `route()` lowercases `scheme` when validating, so `"HTTPS://Example.org/x"` (tested in [SourceLinkTests.swift:8](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/AutoradioKit/Tests/AutoradioKitTests/SourceLinkTests.swift#L8)) or `"MAILTO:a@example.org"` is accepted, but `Uri.parse(...)` preserves the uppercase scheme in `Intent(Intent.ACTION_VIEW, uri)`. Because Android `IntentFilter` scheme matching is case-sensitive lowercase, `startActivity` will throw `ActivityNotFoundException` and `openExternal` will return `false` unless `.normalizeScheme()` is applied.
+
+2. **`java.net.URI` RFC 2396 strictness on query/path characters** — [AutoradioModule.kt:33](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L33)
+   - `java.net.URI` rejects unencoded `[` `]` `|` `^` `{` `}` in query strings/paths (e.g., `https://example.com/?filter[tag]=news`) and leaves `parsed.host` null for hostnames containing `_`, whereas `Foundation.URL(string:)` on modern iOS/macOS accepts `[`/`]` in queries. On Android `shouldOverrideUrlLoading`, an in-page link/redirect with unencoded `[`/`]` in its query falls into `LinkRoute.refused` and is blocked on main-frame navigation.
+
+3. **Updating `page` prop after `onRenderProcessGone` leaves `PageWebView` inert** — [AutoradioModule.kt:155-165](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/exact-package/android/AutoradioModule.kt#L155-L165)
+   - `onRenderProcessGone` calls `destroyPage()` (`destroyed = true`). If the `web-page` node stays mounted and receives a new `page` prop without unmounting first (e.g., `BarWebLayer` updating `qv.webUrl` directly), `show()` returns early on `if (destroyed) return` without emitting `"failed"` or recreating the `WebView` (since `PageWebView` subclasses `WebView` rather than wrapping a replaceable `WebView` in a `FrameLayout`).
+
+4. **Kotlin behavior is not executed by unit tests** — [android-package.test.ts:51-80](file:///Users/wiz/Dev/go-choir/.lane/trees/android-package/mobile/AutoradioLab/android-package.test.ts#L51-L80)
+   - `P3` and `P4` are source-substring assertions only; they do not compile or run `AutoradioModule.kt` (e.g., under Robolectric/JUnit).
+
+---
+
+### Remaining Device-Proof Obligation
+
+Before considering Android `web-page` / `readerOpenExternal` runtime behavior proved, verify on an Android device/emulator:
+1. Opening a source link in `Reader` (`WebLayer`) and a bar URL (`BarWebLayer`) renders the `web-page` WebView transparently sized between status bar and lens, and transitions `webBusy` through `"loading"` -> `"done"` (and `"failed"` without a trailing `"done"` on an unreachable host).
+2. Tapping an in-page `mailto:`/`tel:` link and triggering `readerOpenExternal` (`Open in Safari` / external button) launches the external app (`CATEGORY_BROWSABLE` for `http`/`https`) while `mailto:`/`tel:` passed via the `page` prop refuses in-app load with `"failed"`.
+3. Backgrounding/resuming (`PAUSE`/`RESUME`/`STOP`) and closing `WebLayer` (`DESTROY` / `destroyView`) do not crash or leak/destroy an attached `WebView`.
